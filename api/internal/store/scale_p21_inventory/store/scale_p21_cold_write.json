@@ -2,6 +2,15 @@
   "source": "store/scale_p21_cold_write.go",
   "unmigrated": 0,
   "consumers": {
+    "withColdMutation": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Private COLD wrapper retains the literal public aggregate dispatcher, callback audit collection and original full/user-settings/standalone-favorite/feature-flag/team/loop-contract writer choice. These writers prepare installed postimages before commit and publish through the shared native source boundary. TestScaleP21ColdPreferences, ColdTeam and ColdLoopContract compare original callback inputs, native output, canonical/search/audit rows and sinks, including no-op, merged/skipped canonical rows, odd-offset JSON timestamps, rollback, commit/admission/cancellation failure, HOT refresh, coordinator binding and retry. Fresh JSON timestamp receipts are audited before restoring native import inputs and released on retry/close. Loop forced-full and unintegrated issue/content writers are rejected before execution; general COLD routing and original consumer guards remain unchanged.",
+      "accessors": ["MutateWorkspaceWithAggregate"],
+      "temperature": "cold",
+      "temperatureReason": "Trusted on-demand legacy mutation executor; HOT mutations use their existing bounded writers.",
+      "callers": ["Private COLD dispatcher boundary; currently targeted integration tests"]
+    },
     "withColdFullMutation": {
       "owner": "P21",
       "status": "reviewed",
@@ -14,11 +23,11 @@
     "installColdFullWriteLocked": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Transfers precommit-prepared native source and policy to the bounded parent under the shared writer lock without postcommit allocation or hydration. Parent retains policy only; original exact/unknown metadata-write proof controls the logical stamp. TestScaleP21ColdFullWrite checks both sink ordering, rollback, policy-only residency, same-version conflict retry and commit-stamp distinctions.",
+      "reason": "Transfers precommit-prepared native source and policy to the bounded parent under the shared writer lock without postcommit allocation or hydration. Parent retains policy only; original exact/unknown metadata-write proof controls the logical stamp, including the loop writer's unknown stamp. TestScaleP21ColdFullWrite, ColdPreferences, ColdTeam and ColdLoopContract check sink ordering, rollback, policy-only residency, same-version retry and commit-stamp distinctions.",
       "accessors": ["workspaces"],
       "temperature": "cold",
       "temperatureReason": "Only the private COLD full-writer publication hook installs this pre-admitted postimage.",
-      "callers": ["store/metadata_copy_revision.go:installWrittenWorkspaceLocked"]
+      "callers": ["store/metadata_copy_revision.go:installWrittenWorkspaceLocked", "store/loop_contract_mutation.go:mutateLoopContract"]
     }
   }
 }

@@ -44,9 +44,23 @@ func (s *SQLiteStore) mutateFeatureFlags(ctx context.Context, workspace string, 
 		workspace = s.lastWorkspaceKey
 		s.mu.RUnlock()
 	}
+	if s.coldWrite != nil {
+		s.coldWrite.requested = workspace
+	}
 	var event domain.DomainEvent
 	apply := func() error {
-		s.lockWorkspaceWrites()
+		if s.coldWrite != nil {
+			s.writeMu.Lock()
+			var err error
+			workspace, err = s.refreshColdFullWriteLocked(ctx)
+			if err != nil {
+				s.writeMu.Unlock()
+				return err
+			}
+			s.mu.Lock()
+		} else {
+			s.lockWorkspaceWrites()
+		}
 		defer s.unlockWorkspaceWrites()
 		current, ok := s.workspaces[workspace]
 		if !ok {
@@ -128,6 +142,13 @@ func (s *SQLiteStore) mutateFeatureFlags(ctx context.Context, workspace string, 
 		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "workspace_preferences.updated", AggregateID: id, Payload: eventRaw, CreatedAt: now}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(event.PreviousValues), CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
 			return err
+		}
+		if s.coldWrite != nil {
+			installed := current
+			installed.WorkspaceSettings = next.WorkspaceSettings
+			if err := s.prepareColdFullWrite(ctx, tx, workspace, installed); err != nil {
+				return err
+			}
 		}
 		if err := tx.Commit(); err != nil {
 			return err

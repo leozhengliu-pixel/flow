@@ -1089,6 +1089,10 @@ func rebaseMetadataRecordWrite(ctx context.Context, tx *sqlTx, workspace string,
 // the others and dropping deleted records (nil). Writers use it to keep the
 // copy they install equal to what a merge wrote.
 func setMetadataRecords(data *domain.Bootstrap, records map[metadataRecordKey][]byte) error {
+	return setMetadataRecordsDecoded(data, records, nil)
+}
+
+func setMetadataRecordsDecoded(data *domain.Bootstrap, records map[metadataRecordKey][]byte, decoded func(reflect.Value) error) error {
 	root := reflect.ValueOf(data).Elem()
 	for key, raw := range records {
 		field, kind, ok := metadataRecordType(key.field)
@@ -1108,6 +1112,11 @@ func setMetadataRecords(data *domain.Bootstrap, records map[metadataRecordKey][]
 		record, err := decodeMetadataRecord(kind, raw, old)
 		if err != nil {
 			return err
+		}
+		if decoded != nil {
+			if err := decoded(record); err != nil {
+				return err
+			}
 		}
 		keepImportInputs(key.field, record, old)
 		switch {

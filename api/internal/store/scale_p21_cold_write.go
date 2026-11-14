@@ -45,6 +45,7 @@ type coldFullWrite struct {
 	workspace string
 	source    *metadataLogicalSource
 	prepared  *coldFullPublication
+	decoded   *metadataLogicalBuilder
 }
 
 type coldFullPublication struct {
@@ -63,6 +64,10 @@ func (w *coldFullWrite) close() {
 	if w.source != nil {
 		w.source.Release()
 	}
+	if w.decoded != nil {
+		w.decoded.Close()
+	}
+	w.decoded = nil
 	w.prepared, w.source = nil, nil
 }
 
@@ -80,6 +85,32 @@ func (s *SQLiteStore) withColdFullMutation(ctx context.Context, workspace, event
 		event == "loop.output_contract" || event == "workspace_preferences.updated" && featureFlagsOnly(payload) {
 		return fmt.Errorf("%w: cold mutation requires original full metadata dispatch", ErrBoundedMetadataCoverage)
 	}
+	return s.withColdMutationStore(ctx, workspace, func(ctx context.Context, facade *SQLiteStore) error {
+		return facade.mutateFull(ctx, workspace, event, payload, mutate)
+	})
+}
+
+// withColdMutation retains the original public aggregate dispatcher, including
+// audit collection. Only writer paths with precommit publication hooks qualify.
+func (s *SQLiteStore) withColdMutation(ctx context.Context, workspace, event string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	if s.metadataResidency == nil {
+		return s.MutateWorkspaceWithAggregate(ctx, workspace, event, payload, mutate)
+	}
+	_, scoped := mutationScopeFromContext(ctx)
+	loopContract := event == "loop.output_contract" && !fullMutationsForced.Load()
+	if mutate == nil || scoped || UsesIssueRecordMutations(ctx) || projectRecordSelectionEnabled(ctx) ||
+		metadataRecordVerificationEnabled(ctx) || !metadataOnlyMutation(event, payload) && !loopContract && !metadataTeamMutation(event, payload) {
+		return fmt.Errorf("%w: cold mutation writer is not integrated", ErrBoundedMetadataCoverage)
+	}
+	return s.withColdMutationStore(ctx, workspace, func(ctx context.Context, facade *SQLiteStore) error {
+		return facade.MutateWorkspaceWithAggregate(ctx, workspace, event, payload, mutate)
+	})
+}
+
+func (s *SQLiteStore) withColdMutationStore(ctx context.Context, workspace string, run func(context.Context, *SQLiteStore) error) error {
+	if s.metadataResidency == nil {
+		return run(ctx, s)
+	}
 	return s.withColdMetadataRead(ctx, func(ctx context.Context, facade *SQLiteStore) error {
 		if facade.coldWrite != nil {
 			return ErrMetadataRecordQuery
@@ -90,7 +121,7 @@ func (s *SQLiteStore) withColdFullMutation(ctx context.Context, workspace, event
 			state.close()
 			facade.coldWrite, facade.writeMu.shared = nil, nil
 		}()
-		return facade.mutateFull(ctx, workspace, event, payload, mutate)
+		return run(ctx, facade)
 	})
 }
 
@@ -116,6 +147,10 @@ func (s *SQLiteStore) refreshColdFullWriteLocked(ctx context.Context) (string, e
 				state.prepared.source.Release()
 			}
 			state.prepared = nil
+			if state.decoded != nil {
+				state.decoded.Close()
+				state.decoded = nil
+			}
 			return selected, nil
 		}
 	}
@@ -152,6 +187,24 @@ func (s *SQLiteStore) refreshColdFullWriteLocked(ctx context.Context) (string, e
 	return workspace, nil
 }
 
+// Only the fresh standard JSON decode is audited, before native import inputs
+// are restored. The operation owns these bounded location receipts until retry
+// or publication; the installed graph itself is never treated as JSON input.
+func (s *SQLiteStore) setColdMetadataRecords(ctx context.Context, data *domain.Bootstrap, records map[metadataRecordKey][]byte) error {
+	state := s.coldWrite
+	if state == nil || state.source == nil {
+		return ErrMetadataRecordQuery
+	}
+	if state.decoded == nil {
+		var err error
+		state.decoded, err = newMetadataLogicalBuilder(metadataLogicalSourceScratchContext(ctx, state.source))
+		if err != nil {
+			return err
+		}
+	}
+	return setMetadataRecordsDecoded(data, records, state.decoded.auditJSONLocations)
+}
+
 func (s *SQLiteStore) prepareColdFullWrite(ctx context.Context, tx *sqlTx, workspace string, data domain.Bootstrap) (err error) {
 	state := s.coldWrite
 	if state.prepared != nil || state.source == nil {
@@ -168,6 +221,11 @@ func (s *SQLiteStore) prepareColdFullWrite(ctx context.Context, tx *sqlTx, works
 	defer builder.Close()
 	for _, storage := range state.source.stores {
 		if err := builder.inheritLocations(storage); err != nil {
+			return err
+		}
+	}
+	if state.decoded != nil {
+		if err := builder.inheritLocations(state.decoded.storage); err != nil {
 			return err
 		}
 	}

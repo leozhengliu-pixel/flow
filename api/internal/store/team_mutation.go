@@ -92,6 +92,9 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		workspaceKey = s.lastWorkspaceKey
 		s.mu.RUnlock()
 	}
+	if s.coldWrite != nil {
+		s.coldWrite.requested = workspaceKey
+	}
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
 	var deletedIssues bool
@@ -99,12 +102,23 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
 	traceStart(ctx, "team")
 	apply := func() error {
-		s.lockWorkspaceWrites()
+		if s.coldWrite != nil {
+			s.writeMu.Lock()
+			var err error
+			workspaceKey, err = s.refreshColdFullWriteLocked(ctx)
+			if err != nil {
+				s.writeMu.Unlock()
+				return err
+			}
+			s.mu.Lock()
+		} else {
+			s.lockWorkspaceWrites()
+		}
 		defer s.unlockWorkspaceWrites()
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
 		event, realtimePayload = domain.DomainEvent{}, nil
-		if s.coordinator != nil {
+		if s.coordinator != nil && s.coldWrite == nil {
 			if err := s.refreshWorkspaceCopyLocked(ctx, workspaceKey); err != nil {
 				return fmt.Errorf("reload workspace before mutation: %w", err)
 			}
@@ -172,6 +186,12 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			membersChanged = false
 			teamMembersChanged = false
 		}
+		var prepare func(*sqlTx) error
+		if s.coldWrite != nil {
+			prepare = func(tx *sqlTx) error {
+				return s.prepareColdTeamWrite(ctx, tx, workspaceKey, next, upserts)
+			}
+		}
 		if len(upserts) > 0 || membersChanged || teamMembersChanged {
 			payloadRaw, err := json.Marshal(payload)
 			if err != nil {
@@ -180,7 +200,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			}
 			event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
 			realtimePayload = enrichRealtimePayload(payloadRaw, teamMutationEntity(&next, aggregateID, snap.teamsLen), eventType)
-			removedIssues, err := s.persistTeamMetadata(ctx, workspaceKey, next, &event, upserts, membersChanged, teamMembersChanged)
+			removedIssues, err := s.persistTeamMetadata(ctx, workspaceKey, next, &event, upserts, membersChanged, teamMembersChanged, prepare)
 			if snap.deletion != nil {
 				snap.deletion.removedIssues = removedIssues
 			}
@@ -189,6 +209,20 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 				if snap.deletion != nil {
 					s.setWorkspaceLocked(workspaceKey, next)
 				}
+				return err
+			}
+		} else if prepare != nil {
+			// The original still installs in-memory callback changes when no
+			// tracked rows changed. Admit that exact image before publication.
+			tx, err := s.db.BeginTx(ctx, nil)
+			if err != nil {
+				return err
+			}
+			defer tx.Rollback()
+			if err := prepare(tx); err != nil {
+				return err
+			}
+			if err := tx.Commit(); err != nil {
 				return err
 			}
 		}
@@ -781,7 +815,58 @@ func lenForField(next domain.Bootstrap, field string) int {
 	}
 }
 
-func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey string, next domain.Bootstrap, event *domain.DomainEvent, upserts []metadataRecordChange, membersChanged, teamMembersChanged bool) (int64, error) {
+// Mirror the original postcommit installation on a detached cold graph after
+// SQL has selected merged/skipped rows, while preparation can still roll back.
+func (s *SQLiteStore) prepareColdTeamWrite(ctx context.Context, tx *sqlTx, workspace string, next domain.Bootstrap, upserts []metadataRecordChange) error {
+	installed := next
+	merged := map[metadataRecordKey][]byte{}
+	for _, change := range upserts {
+		if change.skipped {
+			merged[metadataRecordKey{change.field, change.key}] = nil
+		} else if change.merged {
+			merged[metadataRecordKey{change.field, change.key}] = change.raw
+		}
+	}
+	if len(merged) > 0 {
+		root := reflect.ValueOf(&installed).Elem()
+		cloned := map[int]bool{}
+		for key := range merged {
+			field, _, ok := metadataRecordType(key.field)
+			if !ok || cloned[field.index] {
+				continue
+			}
+			cloned[field.index] = true
+			value := root.Field(field.index)
+			switch value.Kind() {
+			case reflect.Slice:
+				if value.IsNil() {
+					continue
+				}
+				copy := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+				reflect.Copy(copy, value)
+				value.Set(copy)
+			case reflect.Map:
+				if value.IsNil() {
+					continue
+				}
+				copy := reflect.MakeMapWithSize(value.Type(), value.Len())
+				iter := value.MapRange()
+				for iter.Next() {
+					copy.SetMapIndex(iter.Key(), iter.Value())
+				}
+				value.Set(copy)
+			}
+		}
+		if err := s.setColdMetadataRecords(ctx, &installed, merged); err != nil {
+			return err
+		}
+	}
+	// Directory updates touch only json:"-" fields, which source preparation
+	// already clears. The original postcommit path still applies them once.
+	return s.prepareColdFullWrite(ctx, tx, workspace, collectionMetadata(installed))
+}
+
+func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey string, next domain.Bootstrap, event *domain.DomainEvent, upserts []metadataRecordChange, membersChanged, teamMembersChanged bool, prepare func(*sqlTx) error) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -843,6 +928,11 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 	}
 	if err := writeAccountMetadata(ctx, tx, workspaceKey, viewerRaw); err != nil {
 		return 0, err
+	}
+	if prepare != nil {
+		if err := prepare(tx); err != nil {
+			return 0, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
