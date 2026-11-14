@@ -1,10 +1,11 @@
 {
   "source": "server/document_notifications.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "workspaceMemberDirectory": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads only the exact installed workspace ID through the existing independently admitted identity handle, retained until cache lookup, membership SQL and cache publication finish. Off mode keeps the original WorkspaceMetadataFields accessor; the bounded identity copy preserves its contextless cache-hit semantics while ListMembers retains the original caller context. Membership/departure authority, active-status filtering, role/user fields, the existing 30-second cache and auth-disabled behavior are unchanged. TestScaleP21SW43MemberDirectoryDifferential compares all M principal/session/key classes as a trusted nonprojected directory, exact missing references, cross-workspace isolation, cached versus uncached cancellation, queued/replayed suspension and expiry/resume; persistent SQLite runs twice and bounded full metadata decodes remain zero. The separate membership SQL result/cache capacity is unchanged by this identity-access migration; no full-directory capacity claim is made.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
