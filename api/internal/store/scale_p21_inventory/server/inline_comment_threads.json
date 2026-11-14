@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/initiatives/{id}/comments/{commentId}/subscription (server/main.go)"
       ]
     },
     "setInitiativeThreadSubscription": {
@@ -16,6 +21,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PUT /api/initiatives/{id}/comments/{commentId}/subscription (server/main.go)"
       ]
     }
   }

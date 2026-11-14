@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "runAgentSession -> deferred live.release() (agent_stream.go:378); actual AI run completion, separate from sweepAgentLiveReplies ticker"
       ]
     },
     "sweepAgentLiveReplies": {
@@ -17,6 +22,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Always-started cleanup ticker probes installed agent sessions even without interactive agent use.",
+      "callers": [
+        "newHandler -> startAgentLiveReplySweeper -> sweepAgentLiveReplies -> sweepWorkerChatReplies"
       ]
     },
     "write": {
@@ -25,6 +35,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/agentLiveReply.run"
       ]
     }
   }

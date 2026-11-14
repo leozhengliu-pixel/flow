@@ -17,6 +17,11 @@
       "reason": "Nonempty no-membership fallback is explicitly held until a logical source adapter can preserve warm inline member IDs/status across full workspace writes. A supported Members delta followed by UpdateWorkspace(Name) retains NUL in the ordinary warm copy while canonical persistence removes it. The bounded raw-only typed fallback cannot reconstruct that source; positive canonical decoding fixtures do not certify activation.",
       "accessors": [
         "MetadataCollectionsInSnapshot"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records",
+      "callers": [
+        "store/SQLiteStore.BeginFormerMembersRead"
       ]
     }
   }

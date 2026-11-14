@@ -8,6 +8,12 @@
       "reason": "Blocked on bounded installed-source Members and IntegrationConnections with exact labels, role/status/provider predicates and ordering, plus resident workspace settings. TestScaleP21SW18LoopSettingsSourceHold uses an accepted trusted mutation, actual UpdateWorkspace rewrite and actual handler to prove canonical NUL stripping changes app/integration labels and connected-status selection.",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/loop-config (server/main.go:593)",
+        "GET /api/workspace/loop-settings (server/main.go:594)"
       ]
     },
     "updateLoopSettings": {
@@ -17,6 +23,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/workspace/loop-settings (server/main.go:595)"
       ]
     }
   }

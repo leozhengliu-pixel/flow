@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/custom-emojis (api/cmd/server/main.go:576)"
       ]
     },
     "createReleasePipeline": {
@@ -16,6 +21,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/release-pipelines (api/cmd/server/main.go:561)"
       ]
     },
     "updateCustomEmoji": {
@@ -24,6 +34,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/custom-emojis/{id} (api/cmd/server/main.go:577)"
       ]
     },
     "updateReleasePipeline": {
@@ -32,6 +47,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/release-pipelines/{id} (api/cmd/server/main.go:574)"
       ]
     }
   }

@@ -7,6 +7,16 @@
       "status": "unmigrated",
       "accessors": [
         "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.chatDMMessage",
+        "server/server.chatDMCardAction",
+        "server/server.chatDMCreateIssue",
+        "server/server.chatDMLinkPreview",
+        "server/server.processChatDMReplyJob",
+        "server/server.chatGroupAgentMessage"
       ]
     },
     "chatDMMarkSessionRead": {
@@ -15,6 +25,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/chatDMReply.follow"
       ]
     },
     "stopForUnlink": {
@@ -22,6 +37,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/chatDMReply.follow"
       ]
     }
   }

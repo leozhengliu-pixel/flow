@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/account/mfa/start (api/cmd/server/main.go:440)"
       ]
     },
     "finishMFA": {
@@ -17,6 +22,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/account/mfa/finish (api/cmd/server/main.go:441)"
       ]
     }
   }

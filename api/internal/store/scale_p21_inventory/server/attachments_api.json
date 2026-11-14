@@ -8,6 +8,13 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issues/{id}/link-attachments",
+      "callers": [
+        "server/server.upsertLinkAttachment",
+        "server/server.saveMCPLinkAttachment",
+        "server/server.attachCustomerRequestLink"
       ]
     },
     "updateLinkAttachment": {
@@ -16,6 +23,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issues/{id}/attachments/{attachmentId}",
+      "callers": [
+        "PATCH /api/issues/{id}/attachments/{attachmentId} (server/public_api_routes.go:35)",
+        "PATCH /api/issue-records/{id}/attachments/{attachmentId} (server/public_api_routes.go:36)"
       ]
     }
   }

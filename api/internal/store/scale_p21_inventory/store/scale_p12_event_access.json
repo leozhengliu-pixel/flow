@@ -8,6 +8,12 @@
       "reason": "Pending exact typed policy-header compatibility. SQL projection uses exact JSON tags, whereas legacy encoding/json accepts case-folded aliases and duplicate fields; accepted sparse Team Private:true can be private in legacy while the lowercase SQL predicate misses it. Escaped tags, duplicate tags, wrong scalar types and MySQL literal string null need conservative typed fallback. Ordinary principal/key and header budget differentials do not certify these cases. Keep activation blocked until the bounded reader reproduces Go typed decoding.",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/realtime/changes",
+      "callers": [
+        "server/server.sharedEventPolicy",
+        "store/SQLiteStore.ResolveEventAccess"
       ]
     }
   }

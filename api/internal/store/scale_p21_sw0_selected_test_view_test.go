@@ -49,12 +49,12 @@ func TestScaleP21SW0SelectedTestViewIsolatesMalformedWorkspace(t *testing.T) {
 	if err := json.Unmarshal(original, &root); err != nil {
 		t.Fatal(err)
 	}
-	root["members"] = json.RawMessage(`[{"user":{"id":"fixture-only"},"status":"suspended"}]`)
+	root["teamParents"] = json.RawMessage(`{"fixture-only":"unsupported-inline-policy"}`)
 	var shapes map[string]string
 	if err := json.Unmarshal(root[metadataCollectionsKey], &shapes); err != nil {
 		t.Fatal(err)
 	}
-	delete(shapes, "members")
+	delete(shapes, "teamParents")
 	encoded, err := json.Marshal(shapes)
 	if err != nil {
 		t.Fatal(err)

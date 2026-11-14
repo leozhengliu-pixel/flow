@@ -8,6 +8,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from DELETE /api/issue-records/{id}/comments/{commentId}/subscription",
+      "callers": [
+        "DELETE /api/issue-records/{id}/comments/{commentId}/subscription (server/main.go:935)",
+        "DELETE /api/issues/{id}/comments/{commentId}/subscription (server/main.go:1080)"
       ]
     },
     "setThreadSubscription": {
@@ -16,6 +22,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PUT /api/issue-records/{id}/comments/{commentId}/subscription",
+      "callers": [
+        "PUT /api/issue-records/{id}/comments/{commentId}/subscription (server/main.go:934)",
+        "PUT /api/issues/{id}/comments/{commentId}/subscription (server/main.go:1079)"
       ]
     }
   }

@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/favorites/{type}/{id} (server/main.go:764)"
       ]
     },
     "addSubscription": {
@@ -16,6 +21,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/subscriptions/{type}/{id} (server/main.go:771)"
       ]
     },
     "commitImport": {
@@ -24,6 +34,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/imports/{id}/commit (api/cmd/server/main.go:776)"
       ]
     },
     "commitImportSync": {
@@ -32,6 +47,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "commitImport (api/cmd/server/advanced_features.go:3471)"
       ]
     },
     "completeExport": {
@@ -41,6 +61,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "createExport (api/cmd/server/advanced_features.go:3826)",
+        "retryExport (api/cmd/server/analytics_imports.go:245)"
       ]
     },
     "createAsk": {
@@ -49,6 +75,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/asks (server/main.go:578)"
       ]
     },
     "createCustomerRequest": {
@@ -57,6 +88,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/customer-requests (server/main.go:528)"
       ]
     },
     "createCustomerRequestAttachment": {
@@ -66,6 +102,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/customer-requests/{id}/attachments (server/main.go:531)"
       ]
     },
     "createDocument": {
@@ -74,6 +115,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents (server/main.go)"
       ]
     },
     "createDocumentComment": {
@@ -82,6 +128,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents/{id}/comments (server/main.go)"
       ]
     },
     "createDraft": {
@@ -90,6 +141,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/drafts (server/main.go:760)"
       ]
     },
     "createExport": {
@@ -99,6 +155,11 @@
         "Bootstrap",
         "MutateWorkspaceWithAggregate",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/exports (api/cmd/server/main.go:782)"
       ]
     },
     "createFavoriteFolder": {
@@ -107,6 +168,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/favorite-folders (server/main.go:768)"
       ]
     },
     "createProjectTemplate": {
@@ -116,6 +182,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "POST /api/project-templates (server/main.go)",
+        "POST /api/project-templates (api/cmd/server/main.go:605)"
       ]
     },
     "createRelease": {
@@ -124,6 +196,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/releases (server/main.go:555)"
       ]
     },
     "createSLARule": {
@@ -132,6 +209,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/sla-rules (server/main.go:754)"
       ]
     },
     "decideAsk": {
@@ -140,6 +222,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/asks/{id}/decision (server/main.go:580)"
       ]
     },
     "deleteAllDrafts": {
@@ -148,6 +235,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/drafts (server/main.go:761)"
       ]
     },
     "deleteAsk": {
@@ -156,6 +248,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/asks/{id} (server/main.go:581)"
       ]
     },
     "deleteCustomerRequest": {
@@ -164,6 +261,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/customer-requests/{id} (server/main.go:530)"
       ]
     },
     "deleteCustomerRequestAttachment": {
@@ -173,6 +275,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/customer-requests/{id}/attachments/{attachmentId} (server/main.go:532)"
       ]
     },
     "deleteDocument": {
@@ -181,6 +288,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/documents/{id} (server/main.go)"
       ]
     },
     "deleteDocumentComment": {
@@ -189,6 +301,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/documents/{id}/comments/{commentId} (server/main.go)"
       ]
     },
     "deleteDraft": {
@@ -198,6 +315,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/drafts/{id} (server/main.go:763)"
       ]
     },
     "deleteFavoriteFolder": {
@@ -206,6 +328,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/favorite-folders/{id} (server/main.go:770)"
       ]
     },
     "deleteProjectTemplate": {
@@ -215,6 +342,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "DELETE /api/project-templates/{id} (server/main.go)",
+        "DELETE /api/project-templates/{id} (api/cmd/server/main.go:607)"
       ]
     },
     "deleteRelease": {
@@ -223,6 +356,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/releases/{id} (server/main.go:560)"
       ]
     },
     "deleteSLARule": {
@@ -231,6 +369,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/sla-rules/{id} (server/main.go:757)"
       ]
     },
     "downloadExport": {
@@ -238,6 +381,11 @@
       "status": "unmigrated",
       "accessors": [
         "BeginWorkspaceRead"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/exports/{id}/download (api/cmd/server/main.go:786)"
       ]
     },
     "listDocuments": {
@@ -245,6 +393,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Normal GET /api/documents list, including legacy fallback when record-read mode is off/shadow.",
+      "callers": [
+        "GET /api/documents (server/main.go)"
       ]
     },
     "listProjectTemplates": {
@@ -262,6 +415,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Every ordinary workspace bootstrap checks advanced reminders/schedules.",
+      "callers": [
+        "GET /api/bootstrap -> bootstrap -> maintainAdvancedSchedules"
       ]
     },
     "previewImport": {
@@ -270,6 +428,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/imports/preview (api/cmd/server/main.go:775)"
       ]
     },
     "purgeTrashEntry": {
@@ -278,6 +441,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/trash/{id} (server/main.go:774)"
       ]
     },
     "removeFavorite": {
@@ -286,6 +454,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/favorites/{type}/{id} (server/main.go:767)"
       ]
     },
     "removeSubscription": {
@@ -294,6 +467,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/subscriptions/{type}/{id} (server/main.go:772)"
       ]
     },
     "reorderSLARules": {
@@ -302,6 +480,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/sla-rules/reorder (server/main.go:755)"
       ]
     },
     "restoreDocumentRevision": {
@@ -310,6 +493,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents/{id}/restore/{revisionId} (server/main.go)"
       ]
     },
     "restoreTrashEntry": {
@@ -318,6 +506,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/trash/{id}/restore (server/main.go:773)"
       ]
     },
     "toggleDocumentCommentReaction": {
@@ -326,6 +519,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents/{id}/comments/{commentId}/reactions (server/main.go)"
       ]
     },
     "updateAsk": {
@@ -335,6 +533,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/asks/{id} (server/main.go:579)"
       ]
     },
     "updateCustomerRequest": {
@@ -343,6 +546,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/customer-requests/{id} (server/main.go:529)"
       ]
     },
     "updateDocument": {
@@ -351,6 +559,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu); promoted from static COLD. On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/documents/{id} (server/main.go)"
       ]
     },
     "updateDocumentComment": {
@@ -359,6 +572,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/documents/{id}/comments/{commentId} (server/main.go)"
       ]
     },
     "updateDraft": {
@@ -367,6 +585,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/drafts/{id} (server/main.go:762)"
       ]
     },
     "updateFavorite": {
@@ -375,6 +598,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/favorites/{type}/{id} (server/main.go:766)"
       ]
     },
     "updateFavoriteFolder": {
@@ -384,6 +612,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/favorite-folders/{id} (server/main.go:769)"
       ]
     },
     "updateProjectTemplate": {
@@ -393,6 +626,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "PATCH /api/project-templates/{id} (server/main.go)",
+        "PATCH /api/project-templates/{id} (api/cmd/server/main.go:606)"
       ]
     },
     "updateProjectUpdateSettings": {
@@ -402,6 +641,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PUT /api/project-update-settings (server/main.go)"
       ]
     },
     "updateRelease": {
@@ -410,6 +654,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/releases/{id} (server/main.go:559)"
       ]
     },
     "updateSLARule": {
@@ -418,6 +667,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/sla-rules/{id} (server/main.go:756)"
       ]
     },
     "updateSLASettings": {
@@ -427,6 +681,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/sla-settings (server/main.go:758)"
       ]
     }
   }

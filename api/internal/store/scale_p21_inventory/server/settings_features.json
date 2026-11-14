@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PUT /api/integrations/{provider} (api/cmd/server/main.go:698)"
       ]
     },
     "createAPIKey": {
@@ -16,6 +21,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/api-keys (api/cmd/server/main.go:635)"
       ]
     },
     "createDocumentTemplate": {
@@ -24,6 +34,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "POST /api/document-templates (server/main.go)",
+        "POST /api/document-templates (api/cmd/server/main.go:612)"
       ]
     },
     "createLabelGroup": {
@@ -32,6 +48,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/label-groups (server/main.go:621)"
       ]
     },
     "createOAuthApplication": {
@@ -40,6 +61,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/oauth-applications (api/cmd/server/main.go:640)"
       ]
     },
     "createProjectStatus": {
@@ -48,6 +74,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/project-statuses (server/main.go)",
+        "POST /api/project-statuses (api/cmd/server/main.go:624)"
       ]
     },
     "createWorkspaceIssueTemplate": {
@@ -56,6 +88,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/issue-templates (api/cmd/server/main.go:609)"
       ]
     },
     "createWorkspaceLabel": {
@@ -64,6 +101,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/labels (server/main.go:616)"
       ]
     },
     "deleteDocumentTemplate": {
@@ -73,6 +115,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "DELETE /api/document-templates/{id} (server/main.go)",
+        "DELETE /api/document-templates/{id} (api/cmd/server/main.go:614)"
       ]
     },
     "deleteOAuthApplication": {
@@ -82,6 +130,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/oauth-applications/{id} (api/cmd/server/main.go:642)"
       ]
     },
     "deleteProjectStatus": {
@@ -90,6 +143,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/project-statuses/{id} (server/main.go)",
+        "DELETE /api/project-statuses/{id} (api/cmd/server/main.go:626)"
       ]
     },
     "deleteWorkspaceIssueTemplate": {
@@ -99,6 +158,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/issue-templates/{id} (api/cmd/server/main.go:611)"
       ]
     },
     "disconnectIntegration": {
@@ -108,6 +172,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/integrations/{provider} (api/cmd/server/main.go:720)"
       ]
     },
     "disconnectIntegrationConnection": {
@@ -117,6 +186,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/integrations/{provider}/{id} (api/cmd/server/main.go:731)"
       ]
     },
     "finishIntegrationOAuth": {
@@ -126,6 +200,12 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/integrations/{provider}/oauth/callback (api/cmd/server/main.go:716)",
+        "finishIntegrationOAuthJSON (api/cmd/server/settings_features.go:2173)"
       ]
     },
     "getOAuthApplication": {
@@ -133,6 +213,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/oauth-applications/{id} (api/cmd/server/oauth_platform.go:31)"
       ]
     },
     "listAPIKeys": {
@@ -140,6 +225,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/api-keys (api/cmd/server/main.go:634)"
       ]
     },
     "listIntegrations": {
@@ -147,6 +237,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/integrations (api/cmd/server/main.go:664)"
       ]
     },
     "listOAuthApplications": {
@@ -154,6 +249,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/oauth-applications (api/cmd/server/main.go:639)"
       ]
     },
     "listWorkspaceIssueTemplates": {
@@ -161,6 +261,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/issue-templates (api/cmd/server/main.go:608)"
       ]
     },
     "listWorkspaceLabels": {
@@ -168,6 +273,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/labels (server/main.go:615)"
       ]
     },
     "moveWorkspaceLabelToTeams": {
@@ -176,6 +286,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/labels/{id}/move-to-teams (server/main.go:618)"
       ]
     },
     "refreshIntegrationOAuth": {
@@ -186,6 +301,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/integrations/{provider}/{id}/oauth/refresh (api/cmd/server/main.go:718)"
       ]
     },
     "reorderProjectStatuses": {
@@ -194,6 +314,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/project-statuses/reorder (server/main.go)",
+        "POST /api/project-statuses/reorder (api/cmd/server/main.go:627)"
       ]
     },
     "requestActor": {
@@ -212,6 +338,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/api-keys/{id} (api/cmd/server/main.go:637)"
       ]
     },
     "revokeIntegrationOAuth": {
@@ -222,6 +353,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/integrations/{provider}/{id}/oauth/token (api/cmd/server/main.go:719)"
       ]
     },
     "rotateAPIKeySecret": {
@@ -231,6 +367,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/api-keys/{id}/rotate-secret (api/cmd/server/main.go:638)"
       ]
     },
     "startIntegrationOAuth": {
@@ -239,6 +380,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/integrations/{provider}/oauth/start (api/cmd/server/main.go:715)"
       ]
     },
     "updateAPIKey": {
@@ -247,6 +393,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/api-keys/{id} (api/cmd/server/main.go:636)"
       ]
     },
     "updateAccountProfile": {
@@ -256,6 +407,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/account/profile (api/cmd/server/main.go:435)"
       ]
     },
     "updateDocumentTemplate": {
@@ -265,6 +421,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "PATCH /api/document-templates/{id} (server/main.go)",
+        "PATCH /api/document-templates/{id} (api/cmd/server/main.go:613)"
       ]
     },
     "updateIntegration": {
@@ -274,6 +436,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/integrations/{provider}/{id} (api/cmd/server/main.go:730)"
       ]
     },
     "updateLabelGroup": {
@@ -282,6 +449,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/label-groups/{id} (server/main.go:622)"
       ]
     },
     "updateOAuthApplication": {
@@ -290,6 +462,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/oauth-applications/{id} (api/cmd/server/main.go:641)"
       ]
     },
     "updateProjectStatus": {
@@ -298,6 +475,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/project-statuses/{id} (server/main.go)",
+        "PATCH /api/project-statuses/{id} (api/cmd/server/main.go:625)"
       ]
     },
     "updateUserSettings": {
@@ -306,6 +489,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/account/settings (api/cmd/server/main.go:431)"
       ]
     },
     "updateWorkspaceIssueTemplate": {
@@ -314,6 +502,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/issue-templates/{id} (api/cmd/server/main.go:610)"
       ]
     },
     "updateWorkspaceLabel": {
@@ -322,6 +515,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/labels/{id} (server/main.go:617)"
       ]
     },
     "updateWorkspacePreferences": {
@@ -330,6 +528,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/workspace/preferences (api/cmd/server/main.go:629)"
       ]
     }
   }

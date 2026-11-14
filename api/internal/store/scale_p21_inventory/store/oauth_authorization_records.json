@@ -7,6 +7,20 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.InstallApplication",
+        "store/SQLiteStore.EnsureBuiltinApplication",
+        "store/SQLiteStore.syncInstallationIdentity",
+        "store/SQLiteStore.UninstallApplication",
+        "store/SQLiteStore.IssueApplicationCredential",
+        "store/SQLiteStore.CreateOAuthAuthorizationGrant",
+        "store/SQLiteStore.RequestOAuthApplicationApproval",
+        "store/SQLiteStore.RevokeOAuthAuthorizationRecords",
+        "store/SQLiteStore.RevokeOAuthAccessToken",
+        "store/SQLiteStore.revokeOAuthAccessFamily"
       ]
     }
   }

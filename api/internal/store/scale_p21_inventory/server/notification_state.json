@@ -8,6 +8,12 @@
       "accessors": [
         "BeginWorkspaceRead",
         "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Notification-state polling and realtime invalidation for selected-team API keys.",
+      "callers": [
+        "notificationState -> scopedNotificationState",
+        "projectNotificationState -> scopedNotificationState"
       ]
     }
   }

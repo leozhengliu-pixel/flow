@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/account/passkeys/register/start (api/cmd/server/main.go:442)"
       ]
     },
     "deletePasskey": {
@@ -17,6 +22,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/account/passkeys/{id} (api/cmd/server/main.go:445)"
       ]
     },
     "finishPasskeyRegistration": {
@@ -26,6 +36,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/account/passkeys/register/finish (api/cmd/server/main.go:443)"
       ]
     },
     "updatePasskey": {
@@ -35,6 +50,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/account/passkeys/{id} (api/cmd/server/main.go:444)"
       ]
     }
   }

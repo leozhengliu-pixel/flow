@@ -16,6 +16,20 @@
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.chatInitiativeBindingSession",
+        "server/server.chatSettings",
+        "server/server.saveChatIntegration",
+        "server/server.disconnectChatIntegration",
+        "server/server.testChatIntegration",
+        "server/server.startChatIdentity",
+        "server/server.deleteChatIdentity",
+        "server/server.listChatProjectGroups",
+        "server/server.chatBindingSession",
+        "server/server.deleteChatBinding"
       ]
     },
     "chatSettingsMetadata": {
@@ -25,6 +39,13 @@
         "Bootstrap",
         "PagedWorkspaceMetadata",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.chatSession",
+        "server/server.saveChatIntegration",
+        "server/server.testChatIntegration"
       ]
     },
     "disconnectChatIntegration": {
@@ -33,6 +54,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/integrations/{provider}/chat (server/chat_integrations.go:258)"
       ]
     },
     "recordChatDeliveryResultLocked": {
@@ -41,6 +67,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.recordChatDeliveryResult",
+        "server/server.processChatJobs"
       ]
     },
     "syncChatConnection": {
@@ -50,6 +82,13 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.saveChatIntegration",
+        "server/server.testChatIntegration",
+        "server/server.runChatTenantCheck"
       ]
     }
   }

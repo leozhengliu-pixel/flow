@@ -7,6 +7,12 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.codeWebhook",
+        "server/server.applyGitHubAppWorkspaceEvent"
       ]
     },
     "applyGitHubReviewActivity": {
@@ -16,6 +22,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.afterCodeReviewWebhook"
       ]
     }
   }

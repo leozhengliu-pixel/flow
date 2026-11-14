@@ -8,6 +8,14 @@
       "reason": "The identity portion is resident core, but issueCollectionCounts still materializes every count row, including orphan/purging workspace keys outside that resident catalog. It needs a bounded count selection tied to the account/catalog snapshot before this complete response can be certified. The small core differential does not certify that aggregate input bound.",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/account/bootstrap",
+      "callers": [
+        "server/server.authenticate",
+        "server/server.authSession",
+        "server/server.accountBootstrap",
+        "server/server.oauthRequestUser"
       ]
     },
     "Bootstrap": {
@@ -16,6 +24,12 @@
       "accessors": [
         "Bootstrap",
         "BootstrapFor"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issues/{id}",
+      "callers": [
+        "server/server.updateIssue",
+        "server/server.deleteIssue"
       ]
     },
     "BootstrapFor": {
@@ -24,6 +38,26 @@
       "accessors": [
         "Bootstrap",
         "BootstrapForContext"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from audited HOT server/issue_share.go:getSharedIssue",
+      "callers": [
+        "server/server.listProjectTemplates",
+        "server/server.getSharedDashboard",
+        "server/server.inviteLinkPreview",
+        "server/server.getSharedIssue",
+        "server/server.updateWorkspace",
+        "server/server.uploadWorkspaceLogo",
+        "server/server.deleteWorkspaceLogo",
+        "server/server.workspaceData",
+        "server/server.getSharedView",
+        "server/server.purgeWorkspace",
+        "store/SQLiteStore.Bootstrap",
+        "store/SQLiteStore.CancelWorkspaceDeletion",
+        "store/SQLiteStore.DeleteWorkspace",
+        "store/SQLiteStore.BeginWorkspacePurge",
+        "store/SQLiteStore.RemoveWorkspaceFromCatalog",
+        "store/SQLiteStore.PurgeWorkspaceRows"
       ]
     },
     "BootstrapForContext": {
@@ -31,6 +65,12 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issues",
+      "callers": [
+        "store/SQLiteStore.BootstrapForUser",
+        "store/SQLiteStore.BootstrapFor"
       ]
     },
     "CancelWorkspaceDeletion": {
@@ -40,6 +80,11 @@
         "Bootstrap",
         "BootstrapFor",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.cancelWorkspaceDeletion"
       ]
     },
     "CycleForCalendar": {
@@ -47,6 +92,11 @@
       "status": "unmigrated",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.cycleCalendar"
       ]
     },
     "DeleteWorkspace": {
@@ -54,6 +104,11 @@
       "status": "unmigrated",
       "accessors": [
         "BootstrapFor"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "No production callers; exported immediate administrative deletion API used by test cleanup (for example scale_p01_database_test.go:41); production scheduled deletion uses separate purge flow"
       ]
     },
     "Mutate": {
@@ -62,6 +117,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "No production callers; legacy default-workspace wrapper used by customer_settings_test.go:180 -> Mutate -> MutateWorkspace"
       ]
     },
     "MutateWithAggregate": {
@@ -70,6 +130,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "No production callers; legacy default-workspace wrapper used by sqlite_test.go:34 -> MutateWithAggregate -> MutateWorkspaceWithAggregate"
       ]
     },
     "MutateWorkspace": {
@@ -78,6 +143,351 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/batch",
+      "callers": [
+        "server/server.updateWebhook",
+        "server/server.deleteWebhook",
+        "server/server.rotateWebhookSecret",
+        "server/server.revokeWebhookSecret",
+        "server/server.updateDocument",
+        "server/server.restoreDocumentRevision",
+        "server/server.deleteDocument",
+        "server/server.createDocumentComment",
+        "server/server.updateDocumentComment",
+        "server/server.deleteDocumentComment",
+        "server/server.toggleDocumentCommentReaction",
+        "server/server.updateCustomerRequest",
+        "server/server.deleteCustomerRequest",
+        "server/server.updateRelease",
+        "server/server.deleteRelease",
+        "server/server.updateAsk",
+        "server/server.decideAsk",
+        "server/server.deleteAsk",
+        "server/server.updateProjectTemplate",
+        "server/server.updateSLARule",
+        "server/server.reorderSLARules",
+        "server/server.deleteSLARule",
+        "server/server.updateDraft",
+        "server/server.deleteAllDrafts",
+        "server/server.addFavorite",
+        "server/server.removeFavorite",
+        "server/server.updateFavorite",
+        "server/server.createFavoriteFolder",
+        "server/server.deleteFavoriteFolder",
+        "server/server.addSubscription",
+        "server/server.removeSubscription",
+        "server/server.restoreTrashEntry",
+        "server/server.purgeTrashEntry",
+        "server/server.commitImport",
+        "server/server.commitImportSync",
+        "server/server.maintainAdvancedSchedules",
+        "server/server.beginAgentSession",
+        "server/server.appendAgentSessionMessage",
+        "server/server.replaceAgentSessionMessage",
+        "server/server.updateAgentSession",
+        "server/server.markAgentSessionRead",
+        "server/server.updateAgentMessageFeedback",
+        "server/server.createAgentSessionFeedback",
+        "server/server.deleteAgentSession",
+        "server/server.restoreAgentSession",
+        "server/server.purgeDeletedAgentSessions",
+        "server/server.createAgentSkill",
+        "server/server.updateAgentSkill",
+        "server/server.deleteAgentSkill",
+        "server/server.resumeAgentApproval",
+        "server/server.applyAgentMessageChangesLocked",
+        "server/agentLiveReply.write",
+        "server/agentLiveReply.release",
+        "server/server.sweepAgentLiveReplies",
+        "server/server.notifyAgentReply",
+        "server/server.startAgentSessionTitle",
+        "server/server.persistAgentCompletion",
+        "server/server.runAgentSessionOnWorker",
+        "server/workerChatReply.save",
+        "server/server.cancelImport",
+        "server/server.retryImport",
+        "server/server.resumeImport",
+        "server/server.retryExport",
+        "server/server.updateApplicationWebhook",
+        "server/server.storeApplicationWebhookSecret",
+        "server/server.reconcileApplicationWebhooksWith",
+        "server/server.createAttachmentFromURL",
+        "server/server.saveLinkAttachment",
+        "server/server.updateLinkAttachment",
+        "server/server.createInvitation",
+        "server/server.revokeInvitation",
+        "server/server.resendInvitation",
+        "server/server.acceptInvitation",
+        "server/server.updateMemberRole",
+        "server/server.suspendMember",
+        "server/server.resumeMember",
+        "server/server.removeMember",
+        "server/server.updateTeamMember",
+        "server/server.updateTriageResponsibility",
+        "server/server.deleteTriageResponsibility",
+        "server/server.updateTriageRule",
+        "server/server.deleteTriageRule",
+        "server/server.updateWorkflowDefinition",
+        "server/server.deleteWorkflowDefinition",
+        "server/server.runWorkflow",
+        "server/server.chatDMMarkSessionRead",
+        "server/server.chatDMInterruptSavedReply",
+        "server/server.syncChatConnection",
+        "server/server.recordChatDeliveryResultLocked",
+        "server/server.disconnectChatIntegration",
+        "server/server.applyCodeReviewEvent",
+        "server/server.slackWebhook",
+        "server/server.recordCodingSessionArchived",
+        "server/codingTriggerNotifier.notifyApprovers",
+        "server/codingTriggerNotifier.SessionArchived",
+        "server/server.generateCommentActions",
+        "server/server.resolveCommentAction",
+        "server/server.mergeCustomer",
+        "server/server.createCustomerTaxonomy",
+        "server/server.updateCustomerTaxonomy",
+        "server/server.deleteCustomerTaxonomy",
+        "server/server.updateCycleCapacity",
+        "server/server.createCycleResource",
+        "server/server.deleteCycleResource",
+        "server/server.cycleCalendarToken",
+        "server/server.createDashboard",
+        "server/server.updateDashboard",
+        "server/server.deleteDashboard",
+        "server/server.subscribeDashboard",
+        "server/server.shareDashboard",
+        "server/server.createPost",
+        "server/server.updatePost",
+        "server/server.deletePost",
+        "server/server.createMeeting",
+        "server/server.updateMeeting",
+        "server/server.deleteMeeting",
+        "server/server.applyDeploymentWebhook",
+        "server/server.putReviewPreview",
+        "server/server.recordDocumentAttachment",
+        "server/server.saveDocumentLinkAttachment",
+        "server/server.deleteDocumentAttachment",
+        "server/server.restoreDeletedDocument",
+        "server/server.changeDocumentSubscribers",
+        "server/server.setDocumentThreadSubscription",
+        "server/server.importDocumentRevision",
+        "server/server.replaceDocumentPermissions",
+        "server/server.updateDocumentPermission",
+        "server/server.deleteDocumentPermission",
+        "server/server.createDocumentReminder",
+        "server/server.updateEmailIntakeAddress",
+        "server/server.verifyEmailIntakeAddress",
+        "server/server.rotateEmailIntakeAddress",
+        "server/server.deleteEmailIntakeAddress",
+        "server/server.createIdentityProvider",
+        "server/server.upsertGitAutomation",
+        "server/server.deleteGitAutomation",
+        "server/server.upsertTargetBranch",
+        "server/server.deleteTargetBranch",
+        "server/server.createIntegrationDelivery",
+        "server/server.processIntegrationDelivery",
+        "server/server.createReleasePipeline",
+        "server/server.updateReleasePipeline",
+        "server/server.createCustomEmoji",
+        "server/server.updateCustomEmoji",
+        "server/server.refreshGitLabOAuthConnection",
+        "server/server.connectGitLabToken",
+        "server/server.handleGitLabReleaseHook",
+        "server/server.setInitiativeThreadSubscription",
+        "server/server.clearInitiativeThreadSubscription",
+        "server/server.mutateInternalConversation",
+        "server/server.joinOrganization",
+        "server/server.replaceIssuePermissions",
+        "server/server.updateIssuePermission",
+        "server/server.deleteIssuePermission",
+        "server/server.shareIssue",
+        "server/server.unshareIssue",
+        "server/server.createJiraLink",
+        "server/server.uploadLoopAttachment",
+        "server/server.storeLoopContract",
+        "server/server.startLoopRun",
+        "server/server.setLoopNextRun",
+        "server/server.updateLoopSettings",
+        "server/server.restoreLoopVersion",
+        "server/server.updateLoop",
+        "server/server.deleteLoop",
+        "server/server.describeLoopAsync",
+        "server/server.updateWorkspaceSettings",
+        "server/server.createTeam",
+        "server/server.updateTeam",
+        "server/server.purgeTeam",
+        "server/server.createCustomer",
+        "server/server.updateCustomer",
+        "server/server.deleteCustomer",
+        "server/server.updateSavedView",
+        "server/server.deleteSavedView",
+        "server/server.shareSavedView",
+        "server/server.unshareSavedView",
+        "server/server.deleteTeamCycles",
+        "server/server.updateCycleSettings",
+        "server/server.updateCycle",
+        "server/server.startCycle",
+        "server/server.updateProject",
+        "server/server.deleteProject",
+        "server/server.updateInitiative",
+        "server/server.deleteInitiative",
+        "server/server.createInitiativeReminder",
+        "server/server.createInitiativeResource",
+        "server/server.updateInitiativeResource",
+        "server/server.deleteInitiativeResource",
+        "server/server.createInitiativeComment",
+        "server/server.updateInitiativeComment",
+        "server/server.deleteInitiativeComment",
+        "server/server.toggleInitiativeCommentReaction",
+        "server/server.createInitiativeUpdate",
+        "server/server.updateInitiativeUpdate",
+        "server/server.deleteInitiativeUpdate",
+        "server/server.createInitiativeUpdateComment",
+        "server/server.toggleInitiativeUpdateReaction",
+        "server/server.createProjectResource",
+        "server/server.updateProjectResource",
+        "server/server.deleteProjectResource",
+        "server/server.createProjectMilestone",
+        "server/server.updateProjectMilestone",
+        "server/server.reorderProjectMilestones",
+        "server/server.deleteProjectMilestone",
+        "server/server.createProjectComment",
+        "server/server.updateProjectComment",
+        "server/server.deleteProjectComment",
+        "server/server.toggleProjectCommentReaction",
+        "server/server.deleteProjectUpdate",
+        "server/server.updateProjectUpdate",
+        "server/server.createProjectUpdateComment",
+        "server/server.toggleProjectUpdateReaction",
+        "server/server.updateIssue",
+        "server/server.deleteIssue",
+        "server/server.batchUpdate",
+        "server/server.createComment",
+        "server/server.updateComment",
+        "server/server.deleteComment",
+        "server/server.toggleCommentReaction",
+        "server/server.toggleIssueReaction",
+        "server/server.createRelation",
+        "server/server.deleteRelation",
+        "server/server.createAttachment",
+        "server/server.createIssueLink",
+        "server/server.createIssueReminder",
+        "server/server.createProjectReminder",
+        "server/server.createIssueLoopRun",
+        "server/server.deleteAttachment",
+        "server/server.attachStoredObject",
+        "server/server.createMCPLabel",
+        "server/server.saveMCPIssue",
+        "server/server.saveMCPRelease",
+        "server/server.mutateAnyComment",
+        "server/server.resolveMCPDiffThread",
+        "server/server.deleteMCPDiffComment",
+        "server/server.beginMFA",
+        "server/server.finishMFA",
+        "server/server.scanLinearMigrationTarget",
+        "server/server.persistLinearMigration",
+        "server/server.failLinearMigration",
+        "server/server.updateMigrationMappings",
+        "server/server.inviteMigrationUsers",
+        "server/server.executeMigration",
+        "server/server.rollbackMigration",
+        "server/server.acknowledgeDesktopNotifications",
+        "server/server.retryNotificationDelivery",
+        "server/server.updateWorkflowState",
+        "server/server.reorderWorkflowStates",
+        "server/server.updateStructuredTeamSettings",
+        "server/server.updateIssueTemplate",
+        "server/server.maintainCycleSchedule",
+        "server/server.updateOAuthApplicationFromManifest",
+        "server/server.createProjectRelation",
+        "server/server.createInitiativeRelation",
+        "server/server.updateInitiativeRelation",
+        "server/server.deleteInitiativeRelation",
+        "server/server.createDocumentDraft",
+        "server/server.updateDocumentDraft",
+        "server/server.publishDocumentDraft",
+        "server/server.deleteDocumentDraft",
+        "server/server.createTeamResourceSection",
+        "server/server.deleteTeamResourceSection",
+        "server/server.createTeamPinnedResource",
+        "server/server.createAgentActivity",
+        "server/server.createAIConversation",
+        "server/server.beginPasskeyRegistration",
+        "server/server.finishPasskeyRegistration",
+        "server/server.updatePasskey",
+        "server/server.deletePasskey",
+        "server/server.auditPersonalConnection",
+        "server/server.erasePersonInWorkspace",
+        "server/server.storeCommentAttachment",
+        "server/server.setProjectThreadSubscription",
+        "server/server.clearProjectThreadSubscription",
+        "server/server.createPulseUpdateAttachment",
+        "server/server.deletePulseUpdateAttachment",
+        "server/server.postPulseSeen",
+        "server/server.setPulseSubscription",
+        "server/server.setInitiativeProjectUpdatesSubscription",
+        "server/server.preparePulseSummaries",
+        "server/server.normalizeLegacyRecurringIssues",
+        "server/server.rotateReleasePipelineAccessKey",
+        "server/server.revokeReleasePipelineAccessKey",
+        "server/server.touchReleaseAccessKey",
+        "server/server.applyReleaseCIOperation",
+        "server/server.setIssueReleases",
+        "server/server.reorderReleases",
+        "server/server.reorderReleasePipelines",
+        "server/server.deleteReleasePipeline",
+        "server/reviewImportRun.apply",
+        "server/server.toggleReviewReaction",
+        "server/server.syncReview",
+        "server/server.applyGitHubReviewActivity",
+        "server/server.writeBackReviewChange",
+        "server/server.updateReview",
+        "server/server.submitReview",
+        "server/server.commentOnReview",
+        "server/server.resolveReviewThread",
+        "server/server.pruneProjectRecordSuggestions",
+        "server/server.updateUserSettings",
+        "server/server.updateAccountProfile",
+        "server/server.updateWorkspacePreferences",
+        "server/server.updateWorkspaceLabel",
+        "server/server.updateLabelGroup",
+        "server/server.updateProjectStatus",
+        "server/server.deleteProjectStatus",
+        "server/server.reorderProjectStatuses",
+        "server/server.updateWorkspaceIssueTemplate",
+        "server/server.updateOAuthApplication",
+        "server/server.connectIntegration",
+        "server/server.startIntegrationOAuth",
+        "server/server.finishIntegrationOAuth",
+        "server/server.disconnectIntegrationConnection",
+        "server/server.disconnectIntegration",
+        "server/server.addCommitSigningKey",
+        "server/server.removeCommitSigningKey",
+        "server/server.purgeExpiredTrash",
+        "server/server.deleteTeam",
+        "server/server.recordTeamMemberAudit",
+        "server/server.maintainTeamSettings",
+        "server/server.setThreadSubscription",
+        "server/server.clearThreadSubscription",
+        "server/server.pruneIssueSuggestionTargets",
+        "server/server.generateTriageIntelligenceForIssues",
+        "server/server.updateIssueSuggestionState",
+        "server/server.runTriageIntelligence",
+        "server/server.disableFailingWebhook",
+        "server/server.recordWebhookFailure",
+        "server/server.sendWelcomeMessage",
+        "server/server.testWelcomeMessage",
+        "store/SQLiteStore.cleanupTeamMemberData",
+        "store/SQLiteStore.migrateCommentActions",
+        "store/SQLiteStore.migrateIntegrationOAuthTokens",
+        "store/SQLiteStore.syncMemberDirectory",
+        "store/SQLiteStore.MutateWorkspaceAppending",
+        "store/SQLiteStore.MutateWorkspaceResolved",
+        "store/SQLiteStore.MutateWorkspaceScoped",
+        "store/SQLiteStore.Mutate",
+        "store/SQLiteStore.ScheduleWorkspaceDeletion",
+        "store/SQLiteStore.CancelWorkspaceDeletion"
       ]
     },
     "ReloadAllWorkspaces": {
@@ -103,6 +513,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.deleteWorkspace"
       ]
     },
     "WorkspaceAccessStatus": {
@@ -110,6 +525,12 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.eraseMemberWorkspaceID",
+        "server/server.workspaceAccessStatus"
       ]
     },
     "WorkspaceKeys": {
@@ -125,6 +546,11 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.CreateWorkspaceWith"
       ]
     },
     "dispatchMutation": {
@@ -162,6 +588,11 @@
       "accessors": [
         "Bootstrap",
         "loadWorkspaceStamped"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "No production callers; metadata_record_races_test.go:49 and other store persistence tests -> loadWorkspaceState -> loadWorkspaceStamped"
       ]
     },
     "mutateFull": {
@@ -187,6 +618,11 @@
       "accessors": [
         "Bootstrap",
         "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.UpdateWorkspace"
       ]
     },
     "webhookNeeded": {
@@ -194,6 +630,16 @@
       "status": "unmigrated",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issue-records/{id}",
+      "callers": [
+        "store/SQLiteStore.UpdateIssueRecord",
+        "store/SQLiteStore.mutateLoopContract",
+        "store/SQLiteStore.mutateProjectRecordSelection",
+        "store/SQLiteStore.mutateScoped",
+        "store/SQLiteStore.mutateFull",
+        "store/SQLiteStore.mutateTeamMetadata"
       ]
     }
   }

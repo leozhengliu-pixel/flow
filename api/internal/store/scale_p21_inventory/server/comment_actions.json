@@ -10,6 +10,11 @@
         "MutateWorkspace",
         "PagedWorkspaceMetadata",
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Conditional asynchronous child of the hot create-comment path; keeping it HOT avoids a hidden hot-to-cold transition when the existing AI feature is enabled.",
+      "callers": [
+        "createComment -> startCommentActions -> goroutine -> generateCommentActions"
       ]
     },
     "listCommentActions": {
@@ -18,6 +23,12 @@
       "accessors": [
         "WorkspaceMetadata",
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue ActivityTimeline mounts useCommentActions and loads this endpoint on issue view/comment changes, including when actions are unavailable.",
+      "callers": [
+        "ActivityTimeline -> useCommentActions -> GET /api/issue-records/{id}/comment-actions",
+        "GET /api/issues/{id}/comment-actions"
       ]
     },
     "resolveCommentAction": {
@@ -26,6 +37,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue activity action acceptance performs an issue update; it is part of the same issue-comment UI flow.",
+      "callers": [
+        "useCommentActions.resolve -> POST /api/issue-records/{id}/comment-actions/{actionId}"
       ]
     },
     "startCommentActions": {
@@ -33,6 +49,12 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Successful issue-comment creation calls this helper, and it reads workspaceData before testing the optional AI policy.",
+      "callers": [
+        "POST /api/issues/{id}/comments -> createComment -> startCommentActions",
+        "POST /api/issue-records/{id}/comments -> issueRecordAlias -> createComment -> startCommentActions"
       ]
     }
   }

@@ -1,13 +1,19 @@
 {
   "source": "server/pulse_feed.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "postPulseSeen": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes only userSettings/viewer.ID through MutateWorkspaceScoped with the original request context and unchanged callback. Existing Pulse feature and live workspace membership checks remain in pulseRequestContext; content-team key restrictions do not restrict this viewer-owned preference, and guests remain forbidden. The callback rechecks canonical FeedLastSeenTime, preserving monotonic/no-op behavior even when the independent PulseFeed resident snapshot omits userSettings in bounded mode; missing records retain PulseSchedule default and all existing settings fields survive. TestScaleP21HotPulseSeenDifferential compares responses, canonical rows, webhook payload/previous values/snapshot and realtime across the M principal/key matrix, missing/existing settings, backward acknowledgements, disabled feature, foreign/revoked membership, cancellation and explicit oversized-target budget rejection/recovery, with unrelated oversized rows unchanged and zero full metadata decodes. PulseFeed and full HTTP middleware remain independent activation blockers.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Repeated pulse feed read-state acknowledgement.",
+      "callers": [
+        "POST /api/pulse/seen"
       ]
     },
     "setInitiativeProjectUpdatesSubscription": {
@@ -16,6 +22,15 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "PUT /api/pulse/subscriptions/initiative/{id}/project-updates -> setInitiativeProjectUpdatesSubscription",
+        "DELETE /api/pulse/subscriptions/initiative/{id}/project-updates -> setInitiativeProjectUpdatesSubscription",
+        "PUT /api/pulse/subscriptions/initiative/{id}/project-updates (server/main.go)",
+        "DELETE /api/pulse/subscriptions/initiative/{id}/project-updates (server/main.go)",
+        "server/main.go:newHandler:341"
       ]
     },
     "setPulseSubscription": {
@@ -24,6 +39,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "PUT /api/pulse/subscriptions/{type}/{id} -> setPulseSubscription",
+        "DELETE /api/pulse/subscriptions/{type}/{id} -> setPulseSubscription"
       ]
     }
   }

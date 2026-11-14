@@ -8,6 +8,13 @@
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "server/chat_initiative_bindings.go:listChatInitiativeBindings -> chatInitiativeBindingSession",
+        "server/chat_initiative_bindings.go:saveChatInitiativeBinding -> chatInitiativeBindingSession",
+        "server/chat_initiative_bindings.go:chatInitiativeBindingManaged -> chatInitiativeBindingSession"
       ]
     },
     "chatInitiativeOwnerRequest": {
@@ -16,6 +23,11 @@
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "server/chat_team_bindings.go:chatBindingSession -> chatInitiativeOwnerRequest"
       ]
     },
     "chatSendInitiativeBindingUpdate": {
@@ -23,6 +35,12 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Configured initiative notification event queuing and delivery run from chat scheduler ticks.",
+      "callers": [
+        "queueChatDomainEvent -> queueChatInitiativeBindingEvent",
+        "processChatNotification -> chatSendInitiativeBindingUpdate"
       ]
     },
     "queueChatInitiativeBindingEvent": {
@@ -30,6 +48,12 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Configured initiative notification event queuing and delivery run from chat scheduler ticks.",
+      "callers": [
+        "queueChatDomainEvent -> queueChatInitiativeBindingEvent",
+        "processChatNotification -> chatSendInitiativeBindingUpdate"
       ]
     }
   }

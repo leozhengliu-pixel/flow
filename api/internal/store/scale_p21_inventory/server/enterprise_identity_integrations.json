@@ -9,6 +9,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/identity-providers (api/cmd/server/main.go:668)"
       ]
     },
     "createIntegrationDelivery": {
@@ -17,6 +22,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/integration-deliveries (server/main.go:732)"
       ]
     },
     "deleteGitAutomation": {
@@ -25,6 +35,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/git-automations/{id} (server/main.go:736)"
       ]
     },
     "deleteIdentityProvider": {
@@ -34,6 +49,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/identity-providers/{id} (api/cmd/server/main.go:670)"
       ]
     },
     "deleteTargetBranch": {
@@ -42,6 +62,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/target-branches/{id} (server/main.go:739)"
       ]
     },
     "discoverWorkspaceSSO": {
@@ -49,6 +74,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/auth/discovery (api/cmd/server/main.go:411)"
       ]
     },
     "enterpriseOIDCClient": {
@@ -64,6 +94,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/attachments/by-url (server/main.go:740)"
       ]
     },
     "listIdentityProviders": {
@@ -71,6 +106,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/identity-providers (api/cmd/server/main.go:667)"
       ]
     },
     "processIntegrationDelivery": {
@@ -80,6 +120,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Actual delivery work dispatched by the every-tick integration-delivery scheduler; integration setup remains cold.",
+      "callers": [
+        "processDueDeliveries -> processIntegrationDelivery"
       ]
     },
     "updateIdentityProvider": {
@@ -89,6 +134,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/identity-providers/{id} (api/cmd/server/main.go:669)"
       ]
     },
     "upsertGitAutomation": {
@@ -97,6 +147,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/git-automations (server/main.go:734)",
+        "PUT /api/git-automations/{id} (server/main.go:735)"
       ]
     },
     "upsertTargetBranch": {
@@ -105,6 +161,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/target-branches (server/main.go:737)",
+        "PUT /api/target-branches/{id} (server/main.go:738)"
       ]
     },
     "verifyIdentityProvider": {
@@ -115,6 +177,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/identity-providers/{id}/verify (api/cmd/server/main.go:671)"
       ]
     }
   }

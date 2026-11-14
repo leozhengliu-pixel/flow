@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/teams/{id}/email-intake-addresses (api/cmd/server/main.go:978)"
       ]
     },
     "deleteEmailIntakeAddress": {
@@ -17,6 +22,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/teams/{id}/email-intake-addresses/{addressId} (api/cmd/server/main.go:982)"
       ]
     },
     "listEmailIntakeAddresses": {
@@ -24,6 +34,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/teams/{id}/email-intake-addresses (api/cmd/server/main.go:977)"
       ]
     },
     "rotateEmailIntakeAddress": {
@@ -33,6 +48,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/teams/{id}/email-intake-addresses/{addressId}/rotate (api/cmd/server/main.go:981)"
       ]
     },
     "updateEmailIntakeAddress": {
@@ -41,6 +61,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/teams/{id}/email-intake-addresses/{addressId} (api/cmd/server/main.go:979)"
       ]
     },
     "verifyEmailIntakeAddress": {
@@ -50,6 +75,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/teams/{id}/email-intake-addresses/{addressId}/verify (api/cmd/server/main.go:980)"
       ]
     }
   }

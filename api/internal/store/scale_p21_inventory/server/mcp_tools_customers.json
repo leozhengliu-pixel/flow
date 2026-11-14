@@ -8,6 +8,14 @@
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.getMCPCustomer",
+        "server/server.saveMCPCustomerRequest",
+        "server/server.mcpResolveDeletion",
+        "server/server.listMCPCustomers"
       ]
     }
   }

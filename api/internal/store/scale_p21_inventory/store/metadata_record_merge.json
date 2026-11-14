@@ -7,6 +7,14 @@
       "status": "unmigrated",
       "accessors": [
         "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issue-records/{id}",
+      "callers": [
+        "store/SQLiteStore.createIssueRecords",
+        "store/SQLiteStore.mutateIssueScope",
+        "store/SQLiteStore.RefreshMetadataRecord",
+        "store/SQLiteStore.refreshConflictedMetadata"
       ]
     }
   }

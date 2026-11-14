@@ -9,7 +9,13 @@
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
       ],
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. A representable pre-existing object can match the generated webhook ID before Webhooks; random allocation is not a compatibility invariant. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. A representable pre-existing object can match the generated webhook ID before Webhooks; random allocation is not a compatibility invariant. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes.",
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/workspace/audit-log-stream -> createAuditStream",
+        "POST /api/workspace/audit-log-stream (api/cmd/server/main.go:506)"
+      ]
     },
     "deleteAuditStream": {
       "owner": "P21",
@@ -18,7 +24,13 @@
         "Bootstrap",
         "MutateWorkspace"
       ],
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes.",
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "DELETE /api/workspace/audit-log-stream -> deleteAuditStream",
+        "DELETE /api/workspace/audit-log-stream (api/cmd/server/main.go:508)"
+      ]
     },
     "getAuditStream": {
       "owner": "P21",
@@ -35,7 +47,12 @@
         "Bootstrap",
         "MutateWorkspace"
       ],
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes.",
+      "temperature": "hot",
+      "temperatureReason": "Runtime cursor/health maintenance for the audit stream on delivery ticks.",
+      "callers": [
+        "processDueDeliveries -> streamAuditLog -> audit-stream success/failure -> mutateAuditStream"
+      ]
     },
     "streamAuditLog": {
       "owner": "P21",
@@ -52,7 +69,13 @@
         "Bootstrap",
         "MutateWorkspace"
       ],
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes.",
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "PATCH /api/workspace/audit-log-stream -> updateAuditStream",
+        "PATCH /api/workspace/audit-log-stream (api/cmd/server/main.go:507)"
+      ]
     }
   }
 }

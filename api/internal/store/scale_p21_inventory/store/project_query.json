@@ -7,6 +7,12 @@
       "status": "unmigrated",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/projects",
+      "callers": [
+        "store/SQLiteStore.queryProjectDirectoryLegacy",
+        "store/SQLiteStore.queryProjectDirectoryAdapter"
       ]
     }
   }

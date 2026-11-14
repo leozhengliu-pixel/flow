@@ -8,6 +8,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Agent-run reconciliation posts error activities through the store's registered reply listener; this cleanup path reaches the callback without an active HTTP AI request.",
+      "callers": [
+        "newHandler -> SetAgentReplyListener(s.notifyAgentReply) (main.go:369)",
+        "startAgentRunReconciler 30s cleanup -> reconcileAgentRuns -> AppendAgentActivity(Type=error) (agent_runtime_api.go:757-800) -> registered listener (agent_tasks.go:354-355)"
       ]
     }
   }

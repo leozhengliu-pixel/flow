@@ -8,6 +8,16 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Explicit media-upload endpoint for project/initiative/review composers; ordinary view/comment text handlers do not call it.",
+      "callers": [
+        "createProjectCommentAttachment",
+        "createInitiativeCommentAttachment",
+        "createReviewCommentAttachment",
+        "server/project_comment_attachments.go:createProjectCommentAttachment:17",
+        "server/project_comment_attachments.go:createInitiativeCommentAttachment:31",
+        "server/review_reactions.go:createReviewCommentAttachment:49"
       ]
     }
   }

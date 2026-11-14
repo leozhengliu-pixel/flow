@@ -105,6 +105,9 @@ func TestScaleP21SW3SettingsPropertyBudgetDifferential(t *testing.T) {
 			return data
 		}
 		reset(true, true)
+		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+			t.Fatal(err)
+		}
 		if _, _, err := f.probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}}); !errors.Is(err, store.ErrMetadataPageBudget) {
 			t.Fatalf("oversized whole-settings read must exceed the scope budget: %v", err)
 		}
@@ -221,6 +224,9 @@ func TestScaleP21SW3SettingsPropertyBudgetDifferential(t *testing.T) {
 						t.Fatalf("cross-workspace SCIM credential accepted: status=%d", missingW.Code)
 					}
 					reset(true, true)
+					if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+						t.Fatal(err)
+					}
 					auth.SetPathValue("workspace", workspace)
 					disabledW := httptest.NewRecorder()
 					if _, _, ok := s.authenticateSCIMRequest(disabledW, auth); ok || disabledW.Code != http.StatusForbidden {

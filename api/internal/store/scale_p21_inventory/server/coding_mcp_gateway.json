@@ -9,6 +9,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.codingMCPGatewayCall"
       ]
     },
     "codingMCPGatewayPolicy": {
@@ -16,6 +21,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.codingMCPGateway"
       ]
     },
     "codingMCPServers": {
@@ -23,6 +33,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "initCodingCore -> services.service.MCPServers = s.codingMCPServers (coding_runtime.go:148); coding.Service.buildBootstrap -> s.MCPServers callback (internal/coding/bootstrap.go:68)"
       ]
     }
   }

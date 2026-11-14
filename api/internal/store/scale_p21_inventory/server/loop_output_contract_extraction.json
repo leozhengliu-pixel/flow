@@ -8,6 +8,11 @@
       "accessors": [
         "WorkspaceMetadata",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/loops/{id}/output-contract (server/main.go:587)"
       ]
     },
     "extractLoopContractAsync": {
@@ -15,6 +20,13 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.restoreLoopVersion",
+        "server/server.createLoop",
+        "server/server.updateLoop"
       ]
     },
     "readLoopContract": {
@@ -22,6 +34,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.loopContractFor"
       ]
     },
     "startLoopContractMigration": {
@@ -29,6 +46,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/newHandler"
       ]
     },
     "storeLoopContract": {
@@ -37,6 +59,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.readLoopContract",
+        "server/server.analyzeLoopOutputs"
       ]
     }
   }

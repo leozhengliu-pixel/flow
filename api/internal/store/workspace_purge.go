@@ -1021,12 +1021,17 @@ func (s *SQLiteStore) removeWorkspaceFromCatalog(ctx context.Context, workspaceK
 		delete(residency.policy, workspaceKey)
 		delete(residency.stamps, workspaceKey)
 		delete(residency.applied, workspaceKey)
+		removedSource := residency.logical[workspaceKey]
+		delete(residency.logical, workspaceKey)
 		for key, element := range residency.cache {
 			if key.workspace == workspaceKey {
 				residency.removeCacheEntry(element)
 			}
 		}
 		residency.mu.Unlock()
+		if removedSource != nil {
+			removedSource.Release()
+		}
 	}
 	for key := range s.copyRevisions {
 		if _, ok := remaining[key]; !ok {

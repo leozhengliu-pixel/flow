@@ -9,6 +9,11 @@
         "Bootstrap",
         "MutateWorkspaceWithAggregate",
         "PagedWorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Explicit recurring-series setup endpoint; the every-minute ticker uses createRecurringOccurrence, not this HTTP handler.",
+      "callers": [
+        "POST /api/teams/{id}/recurring-issues"
       ]
     }
   }

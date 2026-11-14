@@ -9,6 +9,14 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Conditional dependency of successful issue creation/update (including the paged update handler).",
+      "callers": [
+        "createIssue -> generateTriageIntelligenceForIssue",
+        "updateIssue -> generateTriageIntelligenceForIssue",
+        "updateIssueRecord -> generateTriageIntelligenceForIssue",
+        "batchUpdate -> generateTriageIntelligenceForIssues"
       ]
     },
     "listIssueSuggestions": {
@@ -17,6 +25,12 @@
       "accessors": [
         "WorkspaceMetadata",
         "mcpWorkspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue-detail triage suggestion component fetches/polls this endpoint.",
+      "callers": [
+        "TriageIntelligenceSuggestions -> fetchIssueSuggestions -> GET /api/issue-records/{id}/suggestions",
+        "GET /api/issues/{id}/suggestions"
       ]
     },
     "previewIssueSuggestions": {
@@ -26,6 +40,12 @@
         "Bootstrap",
         "WorkspaceMetadata",
         "mcpWorkspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue-create suggestion preview endpoint; conservative HOT for the ordinary issue-creation flow.",
+      "callers": [
+        "GET /api/issue-suggestions -> previewIssueSuggestions",
+        "web/src/lib/api.ts issue-suggestion preview"
       ]
     },
     "pruneIssueSuggestionTargets": {
@@ -35,6 +55,16 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Callers are issue/project deletion and user/label deactivation/purge; no issue create/update/comment/reaction caller was found.",
+      "callers": [
+        "deleteIssue",
+        "deleteProject",
+        "remove user",
+        "delete label/merge labels",
+        "personal-data cleanup",
+        "pruneRecordIssueSuggestionTargets"
       ]
     },
     "refreshIssueSuggestions": {
@@ -53,6 +83,12 @@
         "MutateWorkspace",
         "WorkspaceMetadata",
         "mcpWorkspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Acceptance/dismissal route updates an issue from its detail suggestion UI.",
+      "callers": [
+        "acceptIssueSuggestion/dismissIssueSuggestion -> updateIssueSuggestionState",
+        "POST /api/issue-records/{id}/suggestions/{suggestionId}/accept|dismiss"
       ]
     }
   }

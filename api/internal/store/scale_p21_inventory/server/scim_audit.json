@@ -9,6 +9,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "scimUsers (api/cmd/server/scim.go:345)",
+        "scimUser (api/cmd/server/scim.go:397)"
       ]
     },
     "recordSCIMAudit": {
@@ -18,6 +24,14 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "scimUsers (api/cmd/server/scim.go:345)",
+        "scimUser (api/cmd/server/scim.go:397)",
+        "deprovisionSCIMUser (api/cmd/server/scim.go:529)",
+        "auditSCIMGroupWrite (api/cmd/server/scim.go:911)"
       ]
     }
   }

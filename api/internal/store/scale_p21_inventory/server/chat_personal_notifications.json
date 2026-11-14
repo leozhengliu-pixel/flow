@@ -15,6 +15,13 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Notification-delivery rendering uses these metadata helpers; not only interactive chat setup.",
+      "callers": [
+        "processDueDeliveries -> dispatchChatNotifications -> processChatPersonalNotification -> chatPersonalNotificationItem/chatPersonalNotificationCard",
+        "processChatNotification -> chatSendIssueCardFrom -> chatGroupQuickControls",
+        "chatPersonalNotificationCard -> chatPersonalIssueCard"
       ]
     }
   }

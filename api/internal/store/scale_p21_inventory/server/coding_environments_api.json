@@ -9,6 +9,21 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "createCodingEnvironment (api/cmd/server/coding_environments_api.go:510)",
+        "updateCodingEnvironment (api/cmd/server/coding_environments_api.go:587)",
+        "setCodingEnvironmentArchived (api/cmd/server/coding_environments_api.go:646)",
+        "addCodingEnvironmentSecrets (api/cmd/server/coding_environments_api.go:672)",
+        "deleteCodingEnvironmentSecret (api/cmd/server/coding_environments_api.go:721)",
+        "refreshCodingSnapshot (api/cmd/server/coding_environments_api.go:810)",
+        "cancelCodingSnapshot (api/cmd/server/coding_environments_api.go:852)",
+        "startCodingEnvironmentSession (api/cmd/server/coding_environments_api.go:928)",
+        "applyCodingEnvironmentProposal (api/cmd/server/coding_environments_api.go:1013)",
+        "codingEnvironmentTerminal (api/cmd/server/coding_terminal.go:94)",
+        "runCodingTerminalPrepareScript (api/cmd/server/coding_terminal.go:439)"
       ]
     },
     "codingEnvironmentAccess": {

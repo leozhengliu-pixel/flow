@@ -15,6 +15,16 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issue-records/{id}",
+      "callers": [
+        "store/SQLiteStore.mutateStandaloneFavorite",
+        "store/SQLiteStore.mutateFeatureFlags",
+        "store/SQLiteStore.installWrittenWorkspace",
+        "store/SQLiteStore.mutateProjectRecordSelection",
+        "store/SQLiteStore.mutateTeamMetadata",
+        "store/SQLiteStore.mutateUserSettingsRecord"
       ]
     },
     "refreshWorkspaceCopy": {
@@ -22,6 +32,12 @@
       "status": "unmigrated",
       "accessors": [
         "loadWorkspaceStamped"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.mutateScoped",
+        "store/SQLiteStore.mutateFull"
       ]
     },
     "refreshWorkspaceCopyLocked": {
@@ -29,6 +45,12 @@
       "status": "unmigrated",
       "accessors": [
         "loadWorkspaceStamped"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.mutateProjectRecordSelection",
+        "store/SQLiteStore.mutateTeamMetadata"
       ]
     },
     "setWorkspaceLocked": {
@@ -36,6 +58,26 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "store/SQLiteStore.writeAPIKeyUse",
+        "store/SQLiteStore.migrateIssueCollections",
+        "store/SQLiteStore.MutateLabelDeletion",
+        "store/SQLiteStore.migrateLoopRunRecords",
+        "store/SQLiteStore.oauthMetadataTransaction",
+        "store/SQLiteStore.ExchangeOAuthGrant",
+        "store/SQLiteStore.backfillWorkspaceProjectProgress",
+        "store/SQLiteStore.mutateProjectRecordSelection",
+        "store/SQLiteStore.installWorkspace",
+        "store/SQLiteStore.ReloadWorkspace",
+        "store/SQLiteStore.loadOrSeed",
+        "store/SQLiteStore.createWorkspace",
+        "store/SQLiteStore.updateWorkspace",
+        "store/SQLiteStore.mutateTeamMetadata",
+        "store/SQLiteStore.DeleteWorkflowStateRecords",
+        "store/SQLiteStore.migrateWorkspaceMetadataRecords"
       ]
     }
   }

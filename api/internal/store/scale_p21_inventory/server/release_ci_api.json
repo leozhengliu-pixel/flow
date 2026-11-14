@@ -8,6 +8,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.applyGitLabReleaseHook",
+        "server/server.releaseCIMutation"
       ]
     },
     "pipelineForAccessKey": {
@@ -16,6 +22,11 @@
       "reason": "Pending exact warm-versus-persisted access-key source compatibility. An accepted trusted MutateWorkspace producer retains an embedded NUL in current or previous AccessKeyHash in the warm typed pipeline, while canonical persistence strips it. TestScaleP21SW25ReleaseKeySourceCompatibilityHold exercises the actual registered releaseCIRecentReleases handler with an ordinary bearer and invalid limit: legacy rejects the NUL-containing hash with 401, whereas bounded canonical lookup authenticates and reaches 400 limit validation before any independently pending read or touch mutation. Ordinary current/previous controls agree. Both mismatch cases reproduced twice on persistent SQLite without cold reload or output normalization. This is a trusted producer contract witness, not a claim about public multipart migration execution. Keep pending until the logical source view is preserved; the raw canonical scalar helper alone does not prove warm authentication parity.",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.authenticateReleaseCI"
       ]
     },
     "releaseCIPipelineSettings": {
@@ -23,6 +34,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/release-ci/pipeline (server/main.go:569)"
       ]
     },
     "releaseCIRecentReleases": {
@@ -30,6 +46,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/release-ci/releases (server/main.go:570)"
       ]
     },
     "revokeReleasePipelineAccessKey": {
@@ -38,6 +59,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/release-pipelines/{id}/access-key (server/main.go:566)"
       ]
     },
     "rotateReleasePipelineAccessKey": {
@@ -46,6 +72,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/release-pipelines/{id}/access-key (server/main.go:565)"
       ]
     },
     "touchReleaseAccessKey": {
@@ -56,6 +87,12 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.releaseCIPipelineSettings",
+        "server/server.releaseCIRecentReleases"
       ]
     }
   }

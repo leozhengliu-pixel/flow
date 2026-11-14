@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Minute ticker creates due issue instances; it is a hot background dependency even when no due issue exists in a particular load sample.",
+      "callers": [
+        "runRecurringIssueScheduler -> runRecurringIssueTick -> generateRecurringIssues -> generateWorkspaceRecurringIssues -> createRecurringOccurrence"
       ]
     },
     "normalizeLegacyRecurringIssues": {
@@ -16,6 +21,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "First per-workspace recurring-issue tick invokes this before querying due rows; failed normalization is retried on later ticks.",
+      "callers": [
+        "runRecurringIssueScheduler -> generateWorkspaceRecurringIssues -> normalizeLegacyRecurringIssues"
       ]
     }
   }

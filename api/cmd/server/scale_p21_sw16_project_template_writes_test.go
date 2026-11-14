@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 func TestScaleP21SW16ProjectTemplateWriteAggregateHold(t *testing.T) {
@@ -52,18 +54,20 @@ func TestScaleP21SW16ProjectTemplateWriteAggregateHold(t *testing.T) {
 			} else {
 				service.updateProjectTemplate(w, r)
 			}
+			repo.SetRealtimeSink(nil)
 			if w.Code != http.StatusOK && w.Code != http.StatusNoContent {
 				t.Fatal("real legacy template writer failed", w.Code, w.Body.String())
 			}
+			legacyStatus := w.Code
 			if deleting && (!strings.Contains(string(event.Payload), `"marker":"earlier-template-reference"`) || !strings.Contains(string(event.Payload), `"hiddenCount":37`)) ||
 				!deleting && !strings.Contains(string(event.Payload), `"label":"Earlier template form field"`) {
 				t.Fatal("real legacy template write no longer uses its earlier aggregate closure", string(event.Payload))
 			}
 			if !deleting {
+				// The update handler still uses the registered full writer.
 				continue
 			}
-			// Existing scoped delete writes the same canonical target but
-			// lacks the earlier aggregate source after removing the template.
+			// Deletion retains the exact earlier nested aggregate.
 			seed(deleting)
 			view, err := repo.BoundedMetadataViewForTesting(t.Context())
 			if err != nil {
@@ -71,17 +75,33 @@ func TestScaleP21SW16ProjectTemplateWriteAggregateHold(t *testing.T) {
 			}
 			var bounded domain.RealtimeEvent
 			view.SetRealtimeSink(func(_ string, next domain.RealtimeEvent) { bounded = next })
-			r, w = f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
+			r, w = f.request(f.data.Viewer, nil, map[string]any{"name": "After"}), httptest.NewRecorder()
 			r.SetPathValue("id", id)
-			(&server{store: view}).deleteProjectTemplate(w, r)
-			if w.Code != http.StatusNoContent || strings.Contains(string(bounded.Payload), `"marker":"earlier-template-reference"`) {
-				t.Fatal("scoped deletion evidence unexpectedly changed", w.Code, string(bounded.Payload))
+			if deleting {
+				(&server{store: view}).deleteProjectTemplate(w, r)
+			} else {
+				(&server{store: view}).updateProjectTemplate(w, r)
 			}
-			var decoded map[string]any
-			if json.Unmarshal(event.Payload, &decoded) != nil || json.Unmarshal(bounded.Payload, &decoded) != nil {
+			if w.Code != legacyStatus {
+				t.Fatal("bounded template writer failed", w.Code, string(bounded.Payload))
+			}
+			var left, right map[string]any
+			if json.Unmarshal(event.Payload, &left) != nil || json.Unmarshal(bounded.Payload, &right) != nil {
 				t.Fatal("aggregate witness payload was not valid JSON")
 			}
-			t.Log("actual template deletion: same canonical target removed; legacy aggregate has earlier document marker, scoped path omits it")
+			if !reflect.DeepEqual(left, right) {
+				t.Fatalf("template write effects differ deleting=%v: legacy=%s bounded=%s", deleting, event.Payload, bounded.Payload)
+			}
+			canonical, err := view.HydrateWorkspaceMetadata(t.Context(), f.data.Workspace.URLKey, store.MetadataRecordScope{
+				Read: []store.RecordKey{{Kind: "projectTemplates", ID: id}},
+			})
+			if err != nil {
+				t.Fatal("canonical template control", err)
+			}
+			if deleting && len(canonical.Data.ProjectTemplates) != 0 ||
+				!deleting && (len(canonical.Data.ProjectTemplates) != 1 || canonical.Data.ProjectTemplates[0].Name != "After") {
+				t.Fatal("bounded canonical template effect changed", canonical.Data.ProjectTemplates)
+			}
 		}
 	}
 }

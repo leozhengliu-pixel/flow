@@ -573,7 +573,9 @@ func (s *server) postPulseSeen(w http.ResponseWriter, r *http.Request) {
 	}
 	value := at.Format(time.RFC3339Nano)
 	saved := at
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "user_settings.updated", viewer.ID, map[string]string{"feedLastSeenTime": value}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "user_settings.updated", viewer.ID, map[string]string{"feedLastSeenTime": value}, store.MetadataRecordScope{
+		Write: []store.RecordKey{{Kind: "userSettings", ID: viewer.ID}},
+	}, func(data *domain.Bootstrap) error {
 		settings, ok := data.UserSettings[viewer.ID]
 		if !ok {
 			settings = domain.UserSettings{UserID: viewer.ID, PulseSchedule: "default"}

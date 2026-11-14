@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/projects normal project directory/list view.",
+      "callers": [
+        "GET /api/projects (server/main.go)"
       ]
     }
   }

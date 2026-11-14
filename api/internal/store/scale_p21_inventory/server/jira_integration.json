@@ -9,6 +9,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/jira/links (api/cmd/server/main.go:700)"
       ]
     },
     "deleteJiraLink": {
@@ -18,6 +23,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/jira/links/{id} (api/cmd/server/main.go:702)"
       ]
     },
     "listJiraLinks": {
@@ -26,6 +36,11 @@
       "reason": "Pending complete exact installed-source streaming and retained-output bounds. The endpoint returns the whole ordered JiraLinks collection, including arbitrary status maps; generic complete-field selection has a finite input cap and cannot certify an unbounded list. TestScaleP21SW20JiraLinksInstalledSourceHold uses an accepted trusted write and the actual handler across five principals and session/unrestricted/selected-empty/selected-set credentials to show literal NUL-bearing project fields/status-map bodies survive in installed output while canonical SQL strips them. Canonical record streaming alone does not preserve this source.",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/jira/links (api/cmd/server/main.go:699)"
       ]
     },
     "listJiraRemoteProjects": {
@@ -34,6 +49,11 @@
       "reason": "Pending exact installed first-Jira-provider scalar source. Only the first literal provider, Status, OAuthAuthorized, OAuthCompletedAt and LastError affect the static response; no remote fetch occurs. TestScaleP21SW20JiraRemoteInstalledSourceHold exercises accepted trusted provider/status/LastError NUL writes through the actual handler across five principals and four credential classes: the installed response requires connection while canonical SQL reports connected. Integration records are not resident policy, so a SQL-only selector or empty resident view changes behavior.",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/jira/remote/projects (api/cmd/server/main.go:703)"
       ]
     },
     "listJiraRemoteStatuses": {
@@ -42,6 +62,11 @@
       "reason": "Pending exact installed first-Jira-provider scalar source, shared with remote-project discovery. Missing project ID must still fail before metadata access, and valid IDs retain normalization and echoed output. TestScaleP21SW20JiraRemoteInstalledSourceHold proves the actual static status response depends on exact installed provider/status/LastError after accepted trusted writes across five principals and four credential classes; canonical SQL strips NUL and changes the connected decision. No bounded exact installed integration source is available yet.",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/jira/remote/projects/{projectId}/statuses (api/cmd/server/main.go:704)"
       ]
     },
     "updateJiraLink": {
@@ -51,6 +76,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/jira/links/{id} (api/cmd/server/main.go:701)"
       ]
     }
   }

@@ -8,6 +8,12 @@
       "accessors": [
         "WorkspaceMetadata",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Normal scheduler/publication unconditionally enumerates loop trigger metadata; actual AI run execution is a separate conditional boundary.",
+      "callers": [
+        "processDueDeliveries -> runDueLoops",
+        "ordinary issue/project event -> dispatchDomainEvent -> dispatchLoopTriggers"
       ]
     }
   }

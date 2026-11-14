@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "BootstrapFor"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Read-only issue-detail view for old/shared-link clients.",
+      "callers": [
+        "GET /api/shared/issues/{token}"
       ]
     },
     "shareIssue": {
@@ -15,6 +20,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Explicit issue link-sharing configuration, separate from issue read/update/comment routes.",
+      "callers": [
+        "POST /api/issues/{id}/share"
       ]
     },
     "unshareIssue": {
@@ -23,6 +33,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Explicit issue link-sharing configuration, separate from issue read/update/comment routes.",
+      "callers": [
+        "DELETE /api/issues/{id}/share"
       ]
     }
   }

@@ -85,6 +85,9 @@ type metadataResidency struct {
 	stamps                   map[string]copyStamp
 	applied                  map[string]int64
 	work                     *metadataWorkBudget
+	logical                  map[string]*metadataLogicalSource
+	coldOnce                 sync.Once
+	coldSlot                 chan struct{}
 }
 
 type metadataResidentCacheKey struct {

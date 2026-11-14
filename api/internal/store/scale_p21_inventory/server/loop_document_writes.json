@@ -7,6 +7,15 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.prepareLoopDocumentWrite",
+        "server/server.settleLoopDocumentClaim",
+        "server/server.verifyLoopDocumentWrite",
+        "server/server.loopContractCallRefusal",
+        "server/loopScope.check"
       ]
     }
   }

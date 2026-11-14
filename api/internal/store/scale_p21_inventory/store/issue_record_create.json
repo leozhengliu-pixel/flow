@@ -9,6 +9,11 @@
         "Bootstrap",
         "WorkspaceMetadata",
         "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu; setup-only); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.dispatchMutation"
       ]
     }
   }

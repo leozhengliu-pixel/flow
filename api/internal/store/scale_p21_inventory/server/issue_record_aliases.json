@@ -8,6 +8,13 @@
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue alias authorization and handoff shared by comment/reaction/create/update routes.",
+      "callers": [
+        "resourceAllowed -> issueRecordAuthorizationData",
+        "issueRecordAlias -> issueRecordAuthorizationData",
+        "POST/PATCH /api/issue-records/*"
       ]
     }
   }

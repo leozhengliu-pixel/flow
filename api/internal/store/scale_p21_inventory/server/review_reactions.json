@@ -9,6 +9,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Code-review reaction endpoint, not issue/comment reactions in the owner hot workload.",
+      "callers": [
+        "POST /api/reviews/{id}/reactions"
       ]
     }
   }

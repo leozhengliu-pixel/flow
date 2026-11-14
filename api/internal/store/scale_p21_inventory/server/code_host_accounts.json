@@ -9,6 +9,13 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "saveCodeHostAccount (api/cmd/server/code_host_accounts.go:715)",
+        "unlinkCodeHostAccount (api/cmd/server/code_host_accounts.go:941)",
+        "removeGitHubAppAuthorization (api/cmd/server/github_app.go:255)"
       ]
     },
     "codeHostWorkspaceURLKey": {

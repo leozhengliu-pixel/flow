@@ -7,6 +7,12 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.chatGroupAgentMessage",
+        "server/server.chatGroupContext"
       ]
     }
   }

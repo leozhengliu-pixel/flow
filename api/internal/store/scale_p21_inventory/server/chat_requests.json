@@ -8,6 +8,12 @@
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.executeChatGroupRequest",
+        "server/server.chatCreateRequest"
       ]
     },
     "chatRecordRequestAsk": {
@@ -16,6 +22,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.chatFileRequest"
       ]
     },
     "chatSendRequestResult": {
@@ -23,6 +34,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from audited HOT server/chat_notifications.go:processChatNotification",
+      "callers": [
+        "server/server.processChatNotification"
       ]
     },
     "chatSendRequestStatus": {
@@ -30,6 +46,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from audited HOT server/chat_notifications.go:processChatNotification",
+      "callers": [
+        "server/server.processChatNotification"
       ]
     },
     "processChatRequest": {
@@ -38,6 +59,11 @@
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.processChatInbound"
       ]
     }
   }

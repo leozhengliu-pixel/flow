@@ -30,6 +30,16 @@ func compactImportInputs(data domain.Bootstrap) domain.Bootstrap {
 }
 
 func writeImportInputs(ctx context.Context, tx *sqlTx, workspace string, data domain.Bootstrap) error {
+	if scoped, _ := ctx.Value(scopedMetadataWriteKey{}).(bool); scoped {
+		if selected, ok := ctx.Value(scopedMetadataImportInputsKey{}).(scopedMetadataImportInputs); ok {
+			return writeScopedImportInputs(ctx, tx, workspace, *selected.data, selected.scope)
+		}
+		scope, ok := metadataRecordScopeFromContext(ctx)
+		if !ok {
+			return ErrMetadataRecordQuery
+		}
+		return writeScopedImportInputs(ctx, tx, workspace, data, scope)
+	}
 	type input struct {
 		kind  string
 		value importInput

@@ -7,6 +7,12 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "codingTriggers registers codingTriggerNotifier (coding_webhook_dispatch.go:80); coding.Triggers approval expiry/decision -> notifier().ApprovalResolved (internal/coding/triggers_approval.go:144,161)",
+        "notifyCodingApprovalExpired -> codingTriggerNotifier.ApprovalResolved (coding_webhook_dispatch.go:479)"
       ]
     },
     "ResolveCommenter": {
@@ -14,6 +20,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "codingWebhookDispatcher registers Commenters: codingCommenterResolver{s:s} (coding_webhook_dispatch.go:144); coding.WebhookDispatcher resolves author through Commenters.ResolveCommenter (internal/coding/webhooks.go:510)"
       ]
     },
     "SessionArchived": {
@@ -22,6 +33,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "codingWebhookDispatcher registers Archiver: codingTriggerNotifier (coding_webhook_dispatch.go:158); coding.WebhookDispatcher archive handling -> Archiver.SessionArchived (internal/coding/webhooks.go:402)"
       ]
     },
     "codingTriggers": {
@@ -54,6 +70,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/codingTriggerNotifier.ApprovalRequested"
       ]
     }
   }

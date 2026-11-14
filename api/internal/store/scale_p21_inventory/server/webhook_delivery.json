@@ -15,6 +15,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Ordinary issue/project/document mutation publication synchronously classifies and queues configured webhooks.",
+      "callers": [
+        "store webhook sink -> dispatchDomainEvent -> dispatchWebhookEvent -> describeWebhookEvent/enqueueWebhookEvent"
       ]
     },
     "disableFailingWebhook": {
@@ -23,6 +28,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Due webhook delivery tick records outcomes and automatic failure disablement.",
+      "callers": [
+        "processDueDeliveries -> processDueWebhookDeliveries -> send webhook -> updateWebhookHealth/recordWebhookFailure/disableFailingWebhook",
+        "streamAuditLog -> recordWebhookFailure"
       ]
     },
     "dispatchWebhookEvent": {
@@ -30,6 +41,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Ordinary issue/project/document mutation publication synchronously classifies and queues configured webhooks.",
+      "callers": [
+        "store webhook sink -> dispatchDomainEvent -> dispatchWebhookEvent -> describeWebhookEvent/enqueueWebhookEvent"
       ]
     },
     "enqueueWebhookEvent": {
@@ -39,6 +55,11 @@
         "Bootstrap",
         "WorkspaceMetadata",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Ordinary issue/project/document mutation publication synchronously classifies and queues configured webhooks.",
+      "callers": [
+        "store webhook sink -> dispatchDomainEvent -> dispatchWebhookEvent -> describeWebhookEvent/enqueueWebhookEvent"
       ]
     },
     "recordWebhookFailure": {
@@ -47,6 +68,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Due webhook delivery tick records outcomes and automatic failure disablement.",
+      "callers": [
+        "processDueDeliveries -> processDueWebhookDeliveries -> send webhook -> updateWebhookHealth/recordWebhookFailure/disableFailingWebhook",
+        "streamAuditLog -> recordWebhookFailure"
       ]
     },
     "updateWebhookHealth": {
@@ -56,6 +83,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Due webhook delivery tick records outcomes and automatic failure disablement.",
+      "callers": [
+        "processDueDeliveries -> processDueWebhookDeliveries -> send webhook -> updateWebhookHealth/recordWebhookFailure/disableFailingWebhook",
+        "streamAuditLog -> recordWebhookFailure"
       ]
     }
   }

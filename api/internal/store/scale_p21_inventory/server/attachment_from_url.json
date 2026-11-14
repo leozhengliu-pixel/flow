@@ -8,6 +8,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/attachments/from-url",
+      "callers": [
+        "POST /api/issue-records/{id}/attachments/from-url (server/main.go:942)",
+        "POST /api/issues/{id}/attachments/from-url (server/main.go:1087)"
       ]
     }
   }

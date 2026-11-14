@@ -8,6 +8,12 @@
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Document GET/comment/subscriber read authorization and fallback are reached from normal document views.",
+      "callers": [
+        "server/auth.go:resourceAllowedLegacy:996",
+        "server/document_record_scopes.go:documentWorkspaceData:173"
       ]
     },
     "documentWorkspaceData": {
@@ -16,6 +22,16 @@
       "accessors": [
         "Bootstrap",
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Called by getDocument, listDocumentComments and listDocumentSubscribers; therefore a document-view read boundary.",
+      "callers": [
+        "server/advanced_features.go:restoreDocumentRevision:769",
+        "server/document_lifecycle.go:getDocument:206",
+        "server/document_lifecycle.go:listDocumentSubscribers:318",
+        "server/document_permissions.go:listDocumentPermissions:13",
+        "server/document_permissions.go:replaceDocumentPermissions:45",
+        "server/document_permissions.go:listDocumentComments:201"
       ]
     }
   }

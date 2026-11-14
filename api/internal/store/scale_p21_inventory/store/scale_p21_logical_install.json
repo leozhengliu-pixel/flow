@@ -1,0 +1,18 @@
+{
+  "source": "store/scale_p21_logical_install.go",
+  "unmigrated": 0,
+  "consumers": {
+    "RefreshInstalledMetadataViewForTesting": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Testing-only differential fixture reset selects the exact literal owner's installed preimage, captures bounded typed disk state and derives only capped policy. It performs no canonical hydration and cannot activate production coverage. M2/M3 paired controls reset both SQL and the logical source before each on/off phase; retained source handles remain independent.",
+      "accessors": ["resident-state"]
+    },
+    "captureLogicalTestView": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Testing-only source transfer captures the owning store's exact typed installed generation under its read lock into a process-budgeted immutable disk source. Unknown copy revisions stay explicitly unknown; no SQL latest-generation substitution is used. SW27 tests compare warm and reloaded values, selected-view reads, retained handoffs, large streaming, cancellation and source accounting. Owning store Close releases view references without closing shared SQL.",
+      "accessors": ["resident-state"]
+    }
+  }
+}

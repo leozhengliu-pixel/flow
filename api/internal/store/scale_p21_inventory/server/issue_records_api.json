@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Direct issue-create route in the owner hot workload.",
+      "callers": [
+        "POST /api/issue-records"
       ]
     },
     "issueRecordsBootstrapData": {
@@ -16,6 +21,11 @@
         "Bootstrap",
         "PagedWorkspaceMetadata",
         "WorkspaceMetadataForRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Metadata bootstrap for paged issue list/detail/board clients.",
+      "callers": [
+        "GET /api/issue-records/bootstrap -> issueRecordsBootstrap"
       ]
     },
     "issueRecordsQuery": {
@@ -24,6 +34,17 @@
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Shared access/query metadata for issue list, board grouping, detail, create and update requests.",
+      "callers": [
+        "listIssueRecords",
+        "listIssueRecordGroups",
+        "searchIssueRecordIDs",
+        "getIssueRecord",
+        "createIssueRecord",
+        "updateIssueRecord",
+        "buildIssueRecordAuthorizationData"
       ]
     },
     "updateIssueRecord": {
@@ -32,6 +53,11 @@
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Direct issue-update route in the owner hot workload.",
+      "callers": [
+        "PATCH /api/issue-records/{id}"
       ]
     }
   }

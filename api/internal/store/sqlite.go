@@ -43,6 +43,7 @@ type SQLiteStore struct {
 	// hydration does not count as a full workspace decode.
 	metadataDecodes   atomic.Int64
 	metadataResidency *metadataResidency
+	logicalTestViews  []*metadataResidency
 	viewer            domain.User
 	// The sinks are read after every committed write; atomics keep that
 	// read from queueing behind a writer holding mu.
@@ -158,6 +159,7 @@ func (s *SQLiteStore) Close() error {
 	}
 	s.apiKeyUseMu.Unlock()
 	s.apiKeyUseWorkers.Wait()
+	s.releaseMetadataLogicalSources()
 	return s.db.Close()
 }
 func (s *SQLiteStore) WorkerContext() context.Context {

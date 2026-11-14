@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "loopRunContext.runToolCall -> scope.check before tool execution (loop_run_steps.go:156,182,192); actual AI tool execution beyond startLoopRun cold boundary"
       ]
     },
     "getLoopRun": {
@@ -30,6 +35,12 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Normal scheduler/publication unconditionally enumerates loop trigger metadata; actual AI run execution is a separate conditional boundary.",
+      "callers": [
+        "processDueDeliveries -> runDueLoops",
+        "ordinary issue/project event -> dispatchDomainEvent -> dispatchLoopTriggers"
       ]
     },
     "runLoopNow": {
@@ -37,6 +48,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/loops/{id}/runs (server/main.go:589)"
       ]
     },
     "setLoopNextRun": {
@@ -46,6 +62,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Due-loop ticker updates schedule bookkeeping before dispatching conditional AI execution.",
+      "callers": [
+        "processDueDeliveries -> runDueLoops -> setLoopNextRun"
       ]
     },
     "startLoopRun": {
@@ -55,6 +76,13 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.runLoopNow",
+        "server/server.runDueLoops",
+        "server/server.dispatchLoopTriggers"
       ]
     },
     "teamKeyAllowed": {

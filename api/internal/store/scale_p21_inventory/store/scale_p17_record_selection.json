@@ -7,6 +7,13 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from audited HOT server/document_record_scopes.go:documentAuthorizationMetadata",
+      "callers": [
+        "server/server.documentAuthorizationMetadata",
+        "server/server.projectRecordAuthorizationMetadata",
+        "server/server.scaleP20DocumentMetadata"
       ]
     }
   }

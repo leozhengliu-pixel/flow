@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "server/mcp_tools_attachments.go:deleteMCPAttachment:391"
       ]
     },
     "recordDocumentAttachment": {
@@ -16,6 +21,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "server/document_attachments.go:createDocumentAttachment:21",
+        "server/mcp_tools_attachments.go:attachMCPFile:288"
       ]
     },
     "saveDocumentLinkAttachment": {
@@ -24,6 +35,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "server/attachments_api.go:saveMCPLinkAttachment:338"
       ]
     }
   }

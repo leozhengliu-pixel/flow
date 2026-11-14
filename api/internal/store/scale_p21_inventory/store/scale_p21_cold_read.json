@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_cold_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "withColdMetadataRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Private trusted pinned-snapshot materializer for future COLD read boundaries. One replica-wide cancellable slot owns the complete legacy graph through callback encoding; installed logical sources preserve native values outside HOT page limits. TestScaleP21ColdRead covers flag-off forwarding, warm/reloaded values, directory lookup, ownership, nested reads, source retirement, cancellation, panic and release. No production caller or activation exemption is installed; writes and per-access freshness remain unsupported.",
+      "accessors": ["workspaces"],
+      "temperature": "cold",
+      "temperatureReason": "Explicit full-hydration executor prerequisite for administrative or rare reads; it has no production call sites and must not be invoked by a HOT route or ticker.",
+      "callers": ["Private COLD read boundary; currently test-only callers"]
+    },
+    "pinColdMetadataRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Captures physical registry identity, defaults, viewer and retained logical generations atomically under owner locks. Builds a fresh legacy facade without copying locks or closing shared services; TestScaleP21ColdRead verifies pin retirement, cancellation, exact installed identity, owned viewer values and missing-source failure.",
+      "accessors": ["workspaces"],
+      "temperature": "cold",
+      "temperatureReason": "Only the private full-hydration COLD read executor uses this registry pin.",
+      "callers": ["store/scale_p21_cold_read.go:withColdMetadataRead"]
+    }
+  }
+}

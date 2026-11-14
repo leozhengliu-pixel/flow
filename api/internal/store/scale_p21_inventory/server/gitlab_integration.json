@@ -10,6 +10,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "connectIntegration (api/cmd/server/settings_features.go:1857)"
       ]
     },
     "gitlabConnectionSnapshot": {
@@ -19,6 +24,16 @@
       "accessors": [
         "Bootstrap",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "getGitLabMemberOAuthApplication (api/cmd/server/code_host_accounts.go:1010)",
+        "putGitLabMemberOAuthApplication (api/cmd/server/code_host_accounts.go:1022)",
+        "deleteGitLabMemberOAuthApplication (api/cmd/server/code_host_accounts.go:1065)",
+        "updateGitLabToken (api/cmd/server/gitlab_integration.go:512)",
+        "rotateGitLabToken (api/cmd/server/gitlab_integration.go:615)",
+        "setGitLabRotation (api/cmd/server/gitlab_integration.go:639)"
       ]
     },
     "rotateDueGitLabTokens": {
@@ -36,6 +51,15 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "putGitLabMemberOAuthApplication (api/cmd/server/code_host_accounts.go:1022)",
+        "deleteGitLabMemberOAuthApplication (api/cmd/server/code_host_accounts.go:1065)",
+        "updateGitLabToken (api/cmd/server/gitlab_integration.go:512)",
+        "rotateGitLabTokenNow (api/cmd/server/gitlab_integration.go:561)",
+        "setGitLabRotation (api/cmd/server/gitlab_integration.go:639)"
       ]
     }
   }

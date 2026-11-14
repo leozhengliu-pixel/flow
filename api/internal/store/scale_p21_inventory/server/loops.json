@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/loops (server/main.go:583)"
       ]
     },
     "deleteLoop": {
@@ -16,6 +21,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/loops/{id} (server/main.go:586)"
       ]
     },
     "describeLoopAsync": {
@@ -24,6 +34,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.createLoop",
+        "server/server.updateLoop"
       ]
     },
     "duplicateLoop": {
@@ -32,6 +48,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/loops/{id}/duplicate (server/main.go:591)"
       ]
     },
     "getLoop": {
@@ -47,6 +68,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/loops (server/main.go:582)"
       ]
     },
     "updateLoop": {
@@ -55,6 +81,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/loops/{id} (server/main.go:585)"
       ]
     },
     "withLoopRef": {
@@ -62,6 +93,26 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/loops/{id} (server/main.go:584)",
+        "PATCH /api/loops/{id} (server/main.go:585)",
+        "DELETE /api/loops/{id} (server/main.go:586)",
+        "POST /api/loops/{id}/output-contract (server/main.go:587)",
+        "GET /api/loops/{id}/runs (server/main.go:588)",
+        "POST /api/loops/{id}/runs (server/main.go:589)",
+        "GET /api/loops/{id}/runs/{runId} (server/main.go:590)",
+        "POST /api/loops/{id}/duplicate (server/main.go:591)",
+        "GET /api/loops/{id}/versions (server/main.go:597)",
+        "GET /api/loops/{id}/versions/{versionId} (server/main.go:598)",
+        "POST /api/loops/{id}/versions/{versionId}/restore (server/main.go:599)",
+        "POST /api/loops/{id}/runs/{runId}/feedback (server/main.go:600)",
+        "POST /api/loops/{id}/runs/{runId}/replies (server/main.go:601)",
+        "POST /api/loops/{id}/runs/{runId}/cancel (server/main.go:602)",
+        "GET /api/loops/{id}/runs/{runId}/events (server/main.go:603)",
+        "server/newHandler"
       ]
     }
   }

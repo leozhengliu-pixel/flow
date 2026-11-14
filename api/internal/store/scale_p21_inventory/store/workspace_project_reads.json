@@ -7,6 +7,12 @@
       "status": "unmigrated",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/realtime/changes",
+      "callers": [
+        "server/server.agentTaskRealtimeVisible",
+        "server/realtimeViewer.projectVisible"
       ]
     }
   }

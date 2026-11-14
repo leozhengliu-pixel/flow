@@ -9,6 +9,11 @@
         "Bootstrap",
         "MutateWorkspaceWithAggregate",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/customers (server/public_api_routes.go:31)"
       ]
     }
   }

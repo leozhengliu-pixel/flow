@@ -5,7 +5,15 @@
     "pruneProjectRecordSuggestions": {
       "owner": "P16",
       "status": "unmigrated",
-      "accessors": ["WorkspaceMetadataFields"]
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Invoked only after updateProject/deleteProject mutations, which are COLD absent profile reachability under the owner-approved view-only boundary.",
+      "callers": [
+        "server/main.go:updateProject:3427",
+        "server/main.go:deleteProject:3471"
+      ]
     }
   }
 }

@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "mcpWorkspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/suggestions/refresh",
+      "callers": [
+        "server/server.runTriageIntelligence"
       ]
     },
     "runTriageIntelligence": {
@@ -16,6 +21,12 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/suggestions/refresh",
+      "callers": [
+        "server/server.refreshIssueSuggestions",
+        "server/server.startTriageIntelligenceRun"
       ]
     }
   }

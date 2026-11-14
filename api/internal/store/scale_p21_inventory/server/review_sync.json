@@ -9,6 +9,13 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/reviewImportRun.sync",
+        "server/server.syncReviewFromCodeHost",
+        "server/server.queueReviewSync"
       ]
     },
     "syncReviewFromCodeHost": {
@@ -16,6 +23,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/reviews/{id}/sync (server/main.go:750)"
       ]
     }
   }

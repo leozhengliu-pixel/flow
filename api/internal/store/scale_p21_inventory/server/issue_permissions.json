@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Explicit issue sharing/permission administration; not called by normal issue list/detail/create/update/comment/reaction handlers.",
+      "callers": [
+        "DELETE /api/issues/{id}/permissions/{permissionId}"
       ]
     },
     "findIssueForPermissions": {
@@ -16,6 +21,12 @@
       "accessors": [
         "Bootstrap",
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Used by the read-only permission endpoint in issue detail, independently of rare permission writes.",
+      "callers": [
+        "GET /api/issues/{id}/permissions -> listIssuePermissions",
+        "GET /api/issue-records/{id}/permissions -> issueRecordAlias -> listIssuePermissions"
       ]
     },
     "replaceIssuePermissions": {
@@ -24,6 +35,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Explicit issue sharing/permission administration; not called by normal issue list/detail/create/update/comment/reaction handlers.",
+      "callers": [
+        "PUT /api/issues/{id}/permissions"
       ]
     },
     "updateIssuePermission": {
@@ -32,6 +48,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Explicit issue sharing/permission administration; not called by normal issue list/detail/create/update/comment/reaction handlers.",
+      "callers": [
+        "PATCH /api/issues/{id}/permissions/{permissionId}"
       ]
     }
   }

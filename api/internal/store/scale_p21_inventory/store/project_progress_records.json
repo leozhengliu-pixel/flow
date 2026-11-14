@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.backfillAllProjectProgress"
       ]
     },
     "persistIssueMetadata": {
@@ -14,6 +19,11 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issue-records/{id}",
+      "callers": [
+        "store/SQLiteStore.UpdateIssueRecord"
       ]
     }
   }

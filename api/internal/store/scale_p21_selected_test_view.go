@@ -78,6 +78,9 @@ func (s *SQLiteStore) BoundedMetadataViewForWorkspacesForTesting(ctx context.Con
 			return nil, fmt.Errorf("recover selected test workspace %q: %w", key, err)
 		}
 	}
+	if err := view.captureLogicalTestView(ctx, s, keys); err != nil {
+		return nil, err
+	}
 	if !selected[last] {
 		last = firstWorkspaceKey(view.workspaces)
 	}

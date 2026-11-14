@@ -10,7 +10,12 @@
         "MutateWorkspace",
         "workspaceData"
       ],
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential.",
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/application-policies/{id} (api/cmd/server/main.go:714)"
+      ]
     },
     "listApplicationPolicies": {
       "owner": "P21",
@@ -28,7 +33,12 @@
         "MutateWorkspace",
         "workspaceData"
       ],
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential.",
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PUT /api/application-policies (api/cmd/server/main.go:713)"
+      ]
     }
   }
 }

@@ -9,6 +9,12 @@
         "Bootstrap",
         "WorkspaceMetadataFields",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.startIssueCodingSession",
+        "server/server.startReviewCodingSession"
       ]
     },
     "startReviewCodingSession": {
@@ -16,6 +22,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/reviews/{id}/coding-session (server/coding_triggers_api.go:25)"
       ]
     }
   }

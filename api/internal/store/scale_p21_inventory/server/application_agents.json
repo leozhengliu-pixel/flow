@@ -16,6 +16,15 @@
       "accessors": [
         "Bootstrap",
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/realtime/changes",
+      "callers": [
+        "server/server.builtinRunRequest",
+        "server/server.authorizedAgentTask",
+        "server/server.listApplicationAgentTasks",
+        "server/server.deliverApplicationTask",
+        "server/server.builtinApplicationContext"
       ]
     },
     "authorizedAgentTask": {
@@ -41,6 +50,11 @@
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.deliverApplicationTask"
       ]
     },
     "listApplicationAgentTasks": {

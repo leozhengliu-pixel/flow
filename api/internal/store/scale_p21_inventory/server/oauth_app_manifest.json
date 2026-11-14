@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/oauth-applications/manifest (api/cmd/server/oauth_platform.go:27)"
       ]
     },
     "exportOAuthApplicationManifest": {
@@ -16,6 +21,11 @@
       "reason": "Pending warm-state/canonical compatibility. The production manifest decoder and validator accept NUL in client_name; applying that accepted manifest through the normal store mutation preserves it in legacy warm metadata while canonical SQL strips it. SW24's actual export-handler differential returns different client_name values. The complete create HTTP stack was not executed by that probe. The existing principal/key, revocation and budget matrix covers ordinary values only. Keep activation blocked until the accepted input and canonical representation can preserve the legacy response; do not normalize the oracle or force a cold reload.",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/oauth-applications/{id}/manifest (api/cmd/server/oauth_platform.go:29)"
       ]
     },
     "updateOAuthApplicationFromManifest": {
@@ -24,6 +34,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PUT /api/oauth-applications/{id}/manifest (api/cmd/server/oauth_platform.go:30)"
       ]
     }
   }

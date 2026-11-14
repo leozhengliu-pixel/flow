@@ -9,6 +9,11 @@
         "Bootstrap",
         "MutateWorkspaceWithAggregate",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/push-subscriptions -> createPushSubscription"
       ]
     },
     "createTriageResponsibility": {
@@ -17,6 +22,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/teams/{id}/triage-responsibilities -> createTriageResponsibility"
       ]
     },
     "createTriageRule": {
@@ -25,6 +35,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/teams/{id}/triage-rules -> createTriageRule"
       ]
     },
     "createWorkflowDefinition": {
@@ -33,6 +48,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/workflows -> createWorkflowDefinition"
       ]
     },
     "deletePushSubscription": {
@@ -43,6 +63,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "DELETE /api/push-subscriptions/{id} -> deletePushSubscription"
       ]
     },
     "deleteTriageResponsibility": {
@@ -51,6 +76,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "DELETE /api/teams/{id}/triage-responsibilities/{responsibilityId} -> deleteTriageResponsibility"
       ]
     },
     "deleteTriageRule": {
@@ -60,6 +90,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "DELETE /api/teams/{id}/triage-rules/{ruleId} -> deleteTriageRule"
       ]
     },
     "deleteWorkflowDefinition": {
@@ -69,6 +104,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "DELETE /api/workflows/{id} -> deleteWorkflowDefinition"
       ]
     },
     "listPushSubscriptions": {
@@ -76,6 +116,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "GET /api/push-subscriptions -> listPushSubscriptions"
       ]
     },
     "listTriageResponsibilities": {
@@ -83,6 +128,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "GET /api/teams/{id}/triage-responsibilities -> listTriageResponsibilities"
       ]
     },
     "listTriageRules": {
@@ -90,6 +140,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "GET /api/teams/{id}/triage-rules -> listTriageRules"
       ]
     },
     "listWorkflowDefinitions": {
@@ -97,6 +152,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "GET /api/workflows -> listWorkflowDefinitions"
       ]
     },
     "listWorkflowRuns": {
@@ -104,6 +164,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "GET /api/workflow-runs -> listWorkflowRuns"
       ]
     },
     "receiveEmailIntake": {
@@ -113,6 +178,11 @@
         "Bootstrap",
         "MutateWorkspaceWithAggregate",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/email-intake/{token}/receive -> receiveEmailIntake"
       ]
     },
     "retryWorkflowRun": {
@@ -120,6 +190,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/workflow-runs/{runId}/retry -> retryWorkflowRun"
       ]
     },
     "runWorkflow": {
@@ -128,6 +203,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "15-second workflow ticker reads definitions/runs and executes due or retried work; setup CRUD remains cold.",
+      "callers": [
+        "newHandler -> startWorkflowScheduler -> runWorkflow"
       ]
     },
     "startWorkflowScheduler": {
@@ -135,6 +215,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "15-second workflow ticker reads definitions/runs and executes due or retried work; setup CRUD remains cold.",
+      "callers": [
+        "newHandler -> startWorkflowScheduler -> runWorkflow"
       ]
     },
     "updateTriageResponsibility": {
@@ -143,6 +228,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "PATCH /api/teams/{id}/triage-responsibilities/{responsibilityId} -> updateTriageResponsibility"
       ]
     },
     "updateTriageRule": {
@@ -152,6 +242,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "PATCH /api/teams/{id}/triage-rules/{ruleId} -> updateTriageRule"
       ]
     },
     "updateWorkflowDefinition": {
@@ -160,6 +255,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "PATCH /api/workflows/{id} -> updateWorkflowDefinition"
       ]
     }
   }

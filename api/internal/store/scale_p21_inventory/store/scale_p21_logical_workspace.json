@@ -1,0 +1,12 @@
+{
+  "source": "store/scale_p21_logical_workspace.go",
+  "unmigrated": 0,
+  "consumers": {
+    "readMetadataLogicalWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Cold lifecycle constructs a fully validated typed disk source, compares its raw workspace identity before normalization, and derives only admitted resident core/policy. The source owns no SQL snapshot after return. SW27/SW30 cold and warm normalization differentials plus SW33 complete large-Members, real peer reload and cancellation controls cover publication and cleanup. Production catalog/journal readiness remains mandatory.",
+      "accessors": ["readRawMetadataLogicalSourceValidated"]
+    }
+  }
+}

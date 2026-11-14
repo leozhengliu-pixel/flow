@@ -110,6 +110,9 @@ func TestScaleP21M1ConnectorDiscoveryDifferential(t *testing.T) {
 			t.Fatal(err)
 		}
 		grant := &agentRunGrant{run: store.AgentRun{WorkspaceKey: workspace, Kind: store.AgentRunKindChat}, principal: agentRunPrincipal{UserID: f.data.Viewer.ID}}
+		if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+			t.Fatal(err)
+		}
 		for _, phase := range []string{"queued", "replay"} {
 			for _, s := range []*server{legacy, bounded} {
 				tools, err := s.discoverAgentRunConnectors(t.Context(), grant)
@@ -128,6 +131,9 @@ func TestScaleP21M1ConnectorDiscoveryDifferential(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
+		if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+			t.Fatal(err)
+		}
 		if tools, err := bounded.discoverAgentRunConnectors(t.Context(), grant); err != nil || len(tools) != 0 {
 			t.Fatal("disabled connectors unnecessarily loaded oversized policy")
 		}
@@ -136,6 +142,9 @@ func TestScaleP21M1ConnectorDiscoveryDifferential(t *testing.T) {
 			data.WorkspaceSettings.MCPConnectors = &on
 			return nil
 		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := bounded.discoverAgentRunConnectors(t.Context(), grant); !errors.Is(err, store.ErrMetadataPageBudget) {

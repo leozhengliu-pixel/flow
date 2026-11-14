@@ -24,6 +24,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Assignment notification side effects on ordinary issue domain events.",
+      "callers": [
+        "issue write -> store publishMutation -> dispatchWebhookEvent -> dispatchAppAssignmentNotifications"
       ]
     },
     "getApplicationWebhook": {
@@ -39,6 +44,12 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "server/application_webhooks.go:reconcileAllApplicationWebhooks -> oauthApplicationsByClient",
+        "server/application_webhooks.go:reconcileApplicationWebhooks -> oauthApplicationsByClient"
       ]
     },
     "reconcileApplicationWebhooksWith": {
@@ -48,6 +59,12 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "server/application_webhooks.go:reconcileAllApplicationWebhooks -> reconcileApplicationWebhooksWith",
+        "server/application_webhooks.go:reconcileApplicationWebhooks -> reconcileApplicationWebhooksWith"
       ]
     },
     "rotateApplicationWebhookSecret": {
@@ -56,6 +73,11 @@
       "reason": "Retains original accessors pending aggregate compatibility: its storeApplicationWebhookSecret writer can resolve an earlier Document.ContentData value with the application ID; a scoped application-only writer publishes a different realtime/webhook entity. SW22 reproduced the mismatch in sw22-collision.log and reverted the attempted migration.",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/oauth-applications/{id}/webhook/rotate-secret -> rotateApplicationWebhookSecret"
       ]
     },
     "storeApplicationWebhookSecret": {
@@ -65,6 +87,13 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "server/application_webhooks.go:updateApplicationWebhook -> storeApplicationWebhookSecret",
+        "server/application_webhooks.go:rotateApplicationWebhookSecret -> storeApplicationWebhookSecret",
+        "server/oauth_app_manifest.go:respondManifestApplication -> storeApplicationWebhookSecret"
       ]
     },
     "sweepAppUserNotifications": {
@@ -72,6 +101,12 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Delivery scheduler workspace tick and once-per-minute SLA notification sweep.",
+      "callers": [
+        "processDueDeliveries -> sweepAppUserNotifications",
+        "processDueDeliveries -> sweepIssueSLAWebhooks"
       ]
     },
     "sweepIssueSLAWebhooks": {
@@ -79,6 +114,12 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Delivery scheduler workspace tick and once-per-minute SLA notification sweep.",
+      "callers": [
+        "processDueDeliveries -> sweepAppUserNotifications",
+        "processDueDeliveries -> sweepIssueSLAWebhooks"
       ]
     },
     "updateApplicationWebhook": {
@@ -87,6 +128,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "PUT /api/oauth-applications/{id}/webhook -> updateApplicationWebhook"
       ]
     }
   }

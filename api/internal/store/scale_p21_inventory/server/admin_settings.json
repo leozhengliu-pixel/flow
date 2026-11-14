@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/webhooks (api/cmd/server/main.go:649)"
       ]
     },
     "deleteWebhook": {
@@ -17,6 +22,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/webhooks/{id} (api/cmd/server/main.go:651)"
       ]
     },
     "listWebhookFailures": {
@@ -24,6 +34,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/webhooks/{id}/failures (api/cmd/server/main.go:652)"
       ]
     },
     "listWebhooks": {
@@ -31,6 +46,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/webhooks (api/cmd/server/main.go:648)"
       ]
     },
     "manageableWebhook": {
@@ -38,6 +58,16 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "getWebhook (api/cmd/server/admin_settings.go:97)",
+        "listWebhookFailures (api/cmd/server/admin_settings.go:108)",
+        "listWebhookDeliveries (api/cmd/server/admin_settings.go:544)",
+        "getWebhookDelivery (api/cmd/server/admin_settings.go:564)",
+        "redeliverWebhookDelivery (api/cmd/server/admin_settings.go:585)",
+        "testWebhook (api/cmd/server/admin_settings.go:613)"
       ]
     },
     "revokeWebhookSecret": {
@@ -47,6 +77,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/webhooks/{id}/revoke-secret (api/cmd/server/main.go:654)"
       ]
     },
     "rotateWebhookSecret": {
@@ -56,6 +91,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/webhooks/{id}/rotate-secret (api/cmd/server/main.go:653)"
       ]
     },
     "testWebhook": {
@@ -63,6 +103,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/webhooks/{id}/test (api/cmd/server/main.go:659)"
       ]
     },
     "updateWebhook": {
@@ -71,6 +116,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/webhooks/{id} (api/cmd/server/main.go:650)"
       ]
     }
   }

@@ -15,6 +15,13 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.requestResourceRead",
+        "store/SQLiteStore.AuthorizedProjectRecord",
+        "store/SQLiteStore.AuthorizedInitiativeRecord"
       ]
     }
   }

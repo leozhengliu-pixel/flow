@@ -2,29 +2,46 @@
   "source": "server/migration_import.go",
   "unmigrated": 3,
   "consumers": {
-    "fail\u004cinearMigration": {
+    "failLinearMigration": {
       "owner": "P21",
       "status": "unmigrated",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "executeLinearMigration (api/cmd/server/migration_import.go:179)"
       ]
     },
-    "persist\u004cinearMigration": {
+    "persistLinearMigration": {
       "owner": "P21",
       "status": "unmigrated",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "executeLinearMigration (api/cmd/server/migration_import.go:179)",
+        "failLinearMigrationJob (api/cmd/server/migration_import.go:925)",
+        "rollbackLinearMigration (api/cmd/server/migration_import.go:932)"
       ]
     },
-    "scan\u004cinearMigrationTarget": {
+    "scanLinearMigrationTarget": {
       "owner": "P21",
       "status": "unmigrated",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/migrations/{id}/linear/scan (api/cmd/server/main.go:793)"
       ]
     }
   }

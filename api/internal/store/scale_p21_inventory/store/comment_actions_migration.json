@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "OpenDatabase dataMigrations -> runDataMigrations -> dataMigrations.apply callback 'personal comment action preference' (document_access_migration.go:41)"
       ]
     }
   }

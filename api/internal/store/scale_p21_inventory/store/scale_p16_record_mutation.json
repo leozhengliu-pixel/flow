@@ -5,7 +5,14 @@
     "mutateProjectRecordSelection": {
       "owner": "P16",
       "status": "unmigrated",
-      "accessors": ["resident-state"]
+      "accessors": [
+        "resident-state"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.dispatchMutation"
+      ]
     }
   }
 }

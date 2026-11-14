@@ -118,15 +118,31 @@ func (s *server) workspaceMemberDirectory(ctx context.Context, workspace string)
 	if s.authDisabled {
 		return directory
 	}
-	metadata, ok := s.store.WorkspaceMetadataFields(workspace, "workspace")
-	if !ok || metadata.Workspace.ID == "" {
+	workspaceID := ""
+	if !s.store.BoundedMetadataEnabled() {
+		metadata, ok := s.store.WorkspaceMetadataFields(workspace, "workspace")
+		if !ok {
+			return directory
+		}
+		workspaceID = metadata.Workspace.ID
+	} else {
+		// The original identity accessor ignores cancellation, including
+		// cache hits. Membership SQL below still uses the caller's context.
+		identity, found, err := s.store.BeginInstalledWorkspaceIdentityRead(context.WithoutCancel(ctx), workspace)
+		if err != nil || !found {
+			return directory
+		}
+		defer identity.Close()
+		workspaceID = identity.Identity.ID
+	}
+	if workspaceID == "" {
 		return directory
 	}
-	key := fmt.Sprintf("%p:%s", s.store, metadata.Workspace.ID)
+	key := fmt.Sprintf("%p:%s", s.store, workspaceID)
 	if cached, ok := memberDirectories.Load(key); ok && time.Since(cached.(cachedMemberDirectory).loadedAt) < memberDirectoryTTL {
 		return cached.(cachedMemberDirectory).directory
 	}
-	members, err := s.store.ListMembers(ctx, metadata.Workspace.ID)
+	members, err := s.store.ListMembers(ctx, workspaceID)
 	if err != nil {
 		return directory
 	}

@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/workspaces/{workspaceKey}/teams/{teamId} (api/cmd/server/main.go:500)"
       ]
     },
     "listDeletedTeams": {
@@ -15,6 +20,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/workspaces/{workspaceKey}/deleted-teams (api/cmd/server/main.go:501)"
       ]
     },
     "purgeExpiredTeams": {

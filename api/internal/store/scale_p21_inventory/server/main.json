@@ -8,6 +8,12 @@
       "accessors": [
         "PagedWorkspaceMetadata",
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /uploads/{name}",
+      "callers": [
+        "server/server.fileReadable",
+        "server/server.serveUpload"
       ]
     },
     "batchUpdate": {
@@ -17,6 +23,12 @@
         "Bootstrap",
         "MutateWorkspace",
         "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/batch",
+      "callers": [
+        "POST /api/issue-records/batch (server/main.go:913)",
+        "POST /api/issues/batch (server/main.go:1073)"
       ]
     },
     "bootstrap": {
@@ -24,6 +36,11 @@
       "status": "unmigrated",
       "accessors": [
         "BeginWorkspaceRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/bootstrap",
+      "callers": [
+        "GET /api/bootstrap (server/main.go:869)"
       ]
     },
     "createAttachment": {
@@ -32,6 +49,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/attachments",
+      "callers": [
+        "POST /api/issue-records/{id}/attachments (server/main.go:941)",
+        "POST /api/issues/{id}/attachments (server/main.go:1086)"
       ]
     },
     "createComment": {
@@ -40,6 +63,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/comments",
+      "callers": [
+        "POST /api/issue-records/{id}/comments (server/main.go:933)",
+        "POST /api/issues/{id}/comments (server/main.go:1074)"
       ]
     },
     "createCustomer": {
@@ -48,6 +77,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/customers (server/main.go:524)"
       ]
     },
     "createInitiative": {
@@ -56,6 +90,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives (server/main.go:1049)"
       ]
     },
     "createInitiativeComment": {
@@ -64,6 +103,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/comments (server/main.go:1056)"
       ]
     },
     "createInitiativeReminder": {
@@ -72,6 +116,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/reminders (server/main.go:1052)"
       ]
     },
     "createInitiativeResource": {
@@ -80,6 +129,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/resources (server/main.go:1053)"
       ]
     },
     "createInitiativeUpdate": {
@@ -88,6 +142,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/updates (server/main.go:1062)"
       ]
     },
     "createInitiativeUpdateComment": {
@@ -96,6 +155,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/updates/{updateId}/comments (server/main.go:1065)"
       ]
     },
     "createIssue": {
@@ -106,6 +170,12 @@
         "BootstrapForUser",
         "MutateWorkspaceWithAggregate",
         "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issues",
+      "callers": [
+        "POST /api/issues (server/main.go:952)",
+        "server/server.createIssueRecord"
       ]
     },
     "createIssueLink": {
@@ -114,6 +184,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/links",
+      "callers": [
+        "POST /api/issue-records/{id}/links (server/main.go:943)",
+        "POST /api/issues/{id}/links (server/main.go:1088)"
       ]
     },
     "createIssueLoopRun": {
@@ -122,6 +198,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/issue-records/{id}/loop-runs (server/main.go:946)",
+        "POST /api/issues/{id}/loop-runs (server/main.go:1090)"
       ]
     },
     "createIssueReminder": {
@@ -130,6 +212,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/issue-records/{id}/reminders (server/main.go:945)",
+        "POST /api/issues/{id}/reminders (server/main.go:1089)"
       ]
     },
     "createProject": {
@@ -139,6 +227,11 @@
         "Bootstrap",
         "MutateWorkspaceWithAggregate",
         "PagedWorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects (server/main.go:1005)"
       ]
     },
     "createProjectComment": {
@@ -147,6 +240,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/comments (server/main.go:1016)"
       ]
     },
     "createProjectMilestone": {
@@ -155,6 +253,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/milestones (server/main.go:1012)"
       ]
     },
     "createProjectReminder": {
@@ -163,6 +266,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/reminders (server/main.go:1008)"
       ]
     },
     "createProjectResource": {
@@ -171,6 +279,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/resources (server/main.go:1009)"
       ]
     },
     "createProjectUpdate": {
@@ -179,6 +292,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/updates (server/main.go:1042)"
       ]
     },
     "createProjectUpdateComment": {
@@ -187,6 +305,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/updates/{updateId}/comments (server/main.go:1045)"
       ]
     },
     "createRelation": {
@@ -195,6 +318,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/relations",
+      "callers": [
+        "POST /api/issue-records/{id}/relations (server/main.go:939)",
+        "POST /api/issues/{id}/relations (server/main.go:1084)"
       ]
     },
     "createSavedView": {
@@ -203,6 +332,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/views (server/main.go:890)"
       ]
     },
     "createTeam": {
@@ -211,6 +345,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu; setup-only); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/workspaces/{workspaceKey}/teams (server/main.go:498)"
       ]
     },
     "deleteAttachment": {
@@ -219,6 +358,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/issue-records/{id}/attachments/{attachmentId} (server/main.go:944)",
+        "DELETE /api/issues/{id}/attachments/{attachmentId} (server/main.go:1091)"
       ]
     },
     "deleteComment": {
@@ -227,6 +372,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from DELETE /api/issue-records/{id}/comments/{commentId}",
+      "callers": [
+        "DELETE /api/issue-records/{id}/comments/{commentId} (server/main.go:937)",
+        "DELETE /api/issues/{id}/comments/{commentId} (server/main.go:1082)"
       ]
     },
     "deleteCustomer": {
@@ -235,6 +386,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/customers/{id} (server/main.go:526)"
       ]
     },
     "deleteInitiative": {
@@ -243,6 +399,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/initiatives/{id} (server/main.go:1051)"
       ]
     },
     "deleteInitiativeComment": {
@@ -251,6 +412,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/initiatives/{id}/comments/{commentId} (server/main.go:1058)"
       ]
     },
     "deleteInitiativeResource": {
@@ -259,6 +425,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/initiatives/{id}/resources/{resourceId} (server/main.go:1055)"
       ]
     },
     "deleteInitiativeUpdate": {
@@ -267,6 +438,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/initiatives/{id}/updates/{updateId} (server/main.go:1064)"
       ]
     },
     "deleteIssue": {
@@ -275,6 +451,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/issue-records/{id} (server/main.go:925)",
+        "DELETE /api/issues/{id} (server/main.go:1071)"
       ]
     },
     "deleteProject": {
@@ -283,6 +465,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/projects/{id} (server/main.go:1007)"
       ]
     },
     "deleteProjectComment": {
@@ -291,6 +478,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/projects/{id}/comments/{commentId} (server/main.go:1018)"
       ]
     },
     "deleteProjectMilestone": {
@@ -299,6 +491,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/projects/{id}/milestones/{milestoneId} (server/main.go:1015)"
       ]
     },
     "deleteProjectResource": {
@@ -307,6 +504,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/projects/{id}/resources/{resourceId} (server/main.go:1011)"
       ]
     },
     "deleteProjectUpdate": {
@@ -315,6 +517,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/projects/{id}/updates/{updateId} (server/main.go:1044)"
       ]
     },
     "deleteRelation": {
@@ -323,6 +530,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/issue-records/{id}/relations/{relationId} (server/main.go:940)",
+        "DELETE /api/issues/{id}/relations/{relationId} (server/main.go:1085)"
       ]
     },
     "deleteSavedView": {
@@ -331,6 +544,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/views/{id} (server/main.go:892)"
       ]
     },
     "deleteTeamCycles": {
@@ -339,6 +557,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/teams/{id}/cycles (server/main.go:962)"
       ]
     },
     "deleteWorkspaceLogo": {
@@ -346,6 +569,11 @@
       "status": "unmigrated",
       "accessors": [
         "BootstrapFor"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/workspaces/{workspaceKey}/logo (server/main.go:494)"
       ]
     },
     "getSharedView": {
@@ -354,6 +582,11 @@
       "reason": "Prepared typed selected-view reader passed its initial matrix and persistent SQLite repetition, but SW26 audit found an unresolved K/privacy gap: native SQL exact JSON tags and duplicate-key semantics differ from encoding/json's case-insensitive tagged fields and last-occurrence decoding. A sparse Team record with Private:true can be private in legacy while the SQL lowercase private predicate permits the public link; token/scope/team/project aliases have analogous selection gaps. Keep pending until canonical header normalization with writer coverage or a bounded typed header reader preserves these semantics. Adaptive selected-body admission and output spooling alone do not certify the privacy facts.",
       "accessors": [
         "BootstrapFor"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/shared/views/{token} (server/main.go:895)"
       ]
     },
     "listNotifications": {
@@ -361,6 +594,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/notifications",
+      "callers": [
+        "GET /api/notifications (server/main.go:872)"
       ]
     },
     "purgeTeam": {
@@ -369,6 +607,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.purgeExpiredTeams"
       ]
     },
     "reorderProjectMilestones": {
@@ -377,6 +620,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/milestones/reorder (server/main.go:1013)"
       ]
     },
     "shareSavedView": {
@@ -385,6 +633,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/views/{id}/share (server/main.go:893)"
       ]
     },
     "startCycle": {
@@ -393,6 +646,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/cycles/{id}/start (server/main.go:999)"
       ]
     },
     "toggleCommentReaction": {
@@ -401,6 +659,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/comments/{commentId}/reactions",
+      "callers": [
+        "POST /api/issue-records/{id}/comments/{commentId}/reactions (server/main.go:938)",
+        "POST /api/issues/{id}/comments/{commentId}/reactions (server/main.go:1083)"
       ]
     },
     "toggleInitiativeCommentReaction": {
@@ -409,6 +673,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/comments/{commentId}/reactions (server/main.go:1059)"
       ]
     },
     "toggleInitiativeUpdateReaction": {
@@ -417,6 +686,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/updates/{updateId}/reactions (server/main.go:1066)"
       ]
     },
     "toggleIssueReaction": {
@@ -425,6 +699,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/reactions",
+      "callers": [
+        "POST /api/issue-records/{id}/reactions (server/main.go:932)",
+        "POST /api/issues/{id}/reactions (server/main.go:1072)"
       ]
     },
     "toggleProjectCommentReaction": {
@@ -433,6 +713,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/comments/{commentId}/reactions (server/main.go:1019)"
       ]
     },
     "toggleProjectUpdateReaction": {
@@ -441,6 +726,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/updates/{updateId}/reactions (server/main.go:1046)"
       ]
     },
     "unshareSavedView": {
@@ -449,6 +739,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/views/{id}/share (server/main.go:894)"
       ]
     },
     "updateComment": {
@@ -457,6 +752,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issue-records/{id}/comments/{commentId}",
+      "callers": [
+        "PATCH /api/issue-records/{id}/comments/{commentId} (server/main.go:936)",
+        "PATCH /api/issues/{id}/comments/{commentId} (server/main.go:1081)"
       ]
     },
     "updateCustomer": {
@@ -465,6 +766,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/customers/{id} (server/main.go:525)"
       ]
     },
     "updateCycle": {
@@ -473,6 +779,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/cycles/{id} (server/main.go:995)"
       ]
     },
     "updateCycleSettings": {
@@ -481,6 +792,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/teams/{id}/cycle-settings (server/main.go:961)"
       ]
     },
     "updateInitiative": {
@@ -489,6 +805,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/initiatives/{id} (server/main.go:1050)"
       ]
     },
     "updateInitiativeComment": {
@@ -497,6 +818,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/initiatives/{id}/comments/{commentId} (server/main.go:1057)"
       ]
     },
     "updateInitiativeResource": {
@@ -505,6 +831,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/initiatives/{id}/resources/{resourceId} (server/main.go:1054)"
       ]
     },
     "updateInitiativeUpdate": {
@@ -513,6 +844,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/initiatives/{id}/updates/{updateId} (server/main.go:1063)"
       ]
     },
     "updateIssue": {
@@ -521,6 +857,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issues/{id}",
+      "callers": [
+        "PATCH /api/issues/{id} (server/main.go:1069)"
       ]
     },
     "updateProject": {
@@ -529,6 +870,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/projects/{id} (server/main.go:1006)"
       ]
     },
     "updateProjectComment": {
@@ -537,6 +883,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/projects/{id}/comments/{commentId} (server/main.go:1017)"
       ]
     },
     "updateProjectDisplayDefault": {
@@ -546,6 +897,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/workspace/project-display-default (server/main.go:870)"
       ]
     },
     "updateProjectMilestone": {
@@ -554,6 +910,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/projects/{id}/milestones/{milestoneId} (server/main.go:1014)"
       ]
     },
     "updateProjectResource": {
@@ -562,6 +923,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/projects/{id}/resources/{resourceId} (server/main.go:1010)"
       ]
     },
     "updateProjectUpdate": {
@@ -570,6 +936,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/projects/{id}/updates/{updateId} (server/main.go:1043)"
       ]
     },
     "updateSavedView": {
@@ -578,6 +949,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/views/{id} (server/main.go:891)"
       ]
     },
     "updateTeam": {
@@ -586,6 +962,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/workspaces/{workspaceKey}/teams/{teamId} (server/main.go:499)"
       ]
     },
     "updateWorkspace": {
@@ -593,6 +974,11 @@
       "status": "unmigrated",
       "accessors": [
         "BootstrapFor"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/workspaces/{workspaceKey} (server/main.go:492)"
       ]
     },
     "updateWorkspaceSettings": {
@@ -601,6 +987,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/workspace/settings (server/main.go:871)"
       ]
     },
     "uploadWorkspaceLogo": {
@@ -608,6 +999,11 @@
       "status": "unmigrated",
       "accessors": [
         "BootstrapFor"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/workspaces/{workspaceKey}/logo (server/main.go:493)"
       ]
     },
     "workspaceData": {
@@ -619,6 +1015,141 @@
         "BootstrapForUser",
         "PagedWorkspaceMetadata",
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/realtime/presence",
+      "callers": [
+        "server/server.listWebhooks",
+        "server/server.manageableWebhook",
+        "server/server.listWebhookFailures",
+        "server/server.testWebhook",
+        "server/server.listDocuments",
+        "server/server.createExport",
+        "server/server.checkAgentMentions",
+        "server/server.listAgentSessions",
+        "server/server.getAgentSession",
+        "server/server.listAgentSkillsHTTP",
+        "server/server.applyAgentMessageChangesLocked",
+        "server/server.resolveAgentElicitation",
+        "server/server.resolveAgentApproval",
+        "server/server.runAgentSession",
+        "server/server.stopAgentSession",
+        "server/server.runAgentSessionOnWorker",
+        "server/server.listAgentFeedback",
+        "server/server.listImports",
+        "server/server.getImport",
+        "server/server.listExports",
+        "server/server.getExport",
+        "server/server.workspaceAnalytics",
+        "server/server.applicationTaskContext",
+        "server/server.applicationWebhookDataScoped",
+        "server/server.rotateApplicationWebhookSecret",
+        "server/server.listTriageResponsibilities",
+        "server/server.listTriageRules",
+        "server/server.listWorkflowDefinitions",
+        "server/server.listWorkflowRuns",
+        "server/server.retryWorkflowRun",
+        "server/server.listPushSubscriptions",
+        "server/server.createPushSubscription",
+        "server/server.deletePushSubscription",
+        "server/server.codingTriggerRequestContext",
+        "server/server.startReviewCodingSession",
+        "server/server.startCommentActions",
+        "server/server.listCommentActions",
+        "server/server.connectorForRequest",
+        "server/server.listCustomerTaxonomy",
+        "server/server.getCycleGraph",
+        "server/server.getCycleCapacity",
+        "server/server.listDashboards",
+        "server/server.createDashboard",
+        "server/server.updateDashboard",
+        "server/server.deleteDashboard",
+        "server/server.subscribeDashboard",
+        "server/server.shareDashboard",
+        "server/server.dashboardResults",
+        "server/server.previewDashboardWidget",
+        "server/server.exportDashboard",
+        "server/server.listPosts",
+        "server/server.createPost",
+        "server/server.updatePost",
+        "server/server.deletePost",
+        "server/server.listMeetings",
+        "server/server.createMeeting",
+        "server/server.updateMeeting",
+        "server/server.deleteMeeting",
+        "server/server.listFeedItems",
+        "server/server.filterSuggestions",
+        "server/server.documentWorkspaceData",
+        "server/server.listEmailIntakeAddresses",
+        "server/server.verifyEmailIntakeAddress",
+        "server/server.listIdentityProviders",
+        "server/server.createIdentityProvider",
+        "server/server.findAttachmentsByURL",
+        "server/server.filePreview",
+        "server/server.connectGitLabToken",
+        "server/server.gitlabConnectionSnapshot",
+        "server/server.listOAuthAppFailures",
+        "server/server.listOAuthSyncGroupRequests",
+        "server/server.findIssueForPermissions",
+        "server/server.listJiraLinks",
+        "server/server.listJiraRemoteProjects",
+        "server/server.listJiraRemoteStatuses",
+        "server/server.finishMFA",
+        "server/server.scanLinearMigrationTarget",
+        "server/server.listMigrations",
+        "server/server.getMigration",
+        "server/server.downloadMigrationManifest",
+        "server/server.previewMigration",
+        "server/server.inviteMigrationUsers",
+        "server/server.executeMigration",
+        "server/server.rollbackMigration",
+        "server/server.downloadMigrationBundle",
+        "server/server.getNotificationPreferences",
+        "server/server.updateNotificationPreferences",
+        "server/server.listNotificationDeliveries",
+        "server/server.acknowledgeDesktopNotifications",
+        "server/server.retryNotificationDelivery",
+        "server/server.listWorkflowStates",
+        "server/server.getTeamSettings",
+        "server/server.listIssueTemplates",
+        "server/server.listTeamLabels",
+        "server/server.exportOAuthApplicationManifest",
+        "server/server.developerTokenApplication",
+        "server/server.workspaceOAuthApplication",
+        "server/server.getApplicationWebhookSecret",
+        "server/server.listOAuthApplicationInstalls",
+        "server/server.listProjectRelations",
+        "server/server.listInitiativeRelations",
+        "server/server.listDocumentDrafts",
+        "server/server.documentContentHistory",
+        "server/server.listReleaseNotes",
+        "server/server.releaseHistory",
+        "server/server.listAgentActivities",
+        "server/server.listAIConversations",
+        "server/server.finishPasskeyRegistration",
+        "server/server.updatePresence",
+        "server/server.listPresence",
+        "server/server.listReleases",
+        "server/server.getRelease",
+        "server/server.listReleasePipelines",
+        "server/server.getReleasePipeline",
+        "server/server.syncReviewFromCodeHost",
+        "server/server.listReviews",
+        "server/server.getReview",
+        "server/server.updateReview",
+        "server/server.submitReview",
+        "server/server.commentOnReview",
+        "server/server.resolveReviewThread",
+        "server/server.workspaceDataScoped",
+        "server/server.listWorkspaceLabels",
+        "server/server.listWorkspaceIssueTemplates",
+        "server/server.listAPIKeys",
+        "server/server.revokeAPIKey",
+        "server/server.listOAuthApplications",
+        "server/server.getOAuthApplication",
+        "server/server.listIntegrations",
+        "server/server.disconnectIntegrationConnection",
+        "server/server.disconnectIntegration"
       ]
     }
   }

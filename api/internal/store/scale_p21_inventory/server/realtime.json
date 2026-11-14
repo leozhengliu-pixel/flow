@@ -7,6 +7,12 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Normal realtime presence read/write endpoints.",
+      "callers": [
+        "GET /api/realtime/presence -> listPresence",
+        "POST /api/realtime/presence -> updatePresence"
       ]
     },
     "updatePresence": {
@@ -14,6 +20,12 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Normal realtime presence read/write endpoints.",
+      "callers": [
+        "GET /api/realtime/presence -> listPresence",
+        "POST /api/realtime/presence -> updatePresence"
       ]
     }
   }

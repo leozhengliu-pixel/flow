@@ -7,6 +7,12 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from audited HOT server/chat_notifications.go:processChatNotification",
+      "callers": [
+        "server/server.chatSendIssueCardFrom",
+        "server/server.chatRefreshIssueCards"
       ]
     },
     "chatSendUpdateForm": {
@@ -15,6 +21,11 @@
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.processChatInbound"
       ]
     }
   }

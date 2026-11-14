@@ -8,6 +8,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/projects/{id}/updates/{updateId}/attachments -> createPulseUpdateAttachment",
+        "POST /api/initiatives/{id}/updates/{updateId}/attachments -> createPulseUpdateAttachment"
       ]
     },
     "deletePulseUpdateAttachment": {
@@ -16,6 +22,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "DELETE /api/projects/{id}/updates/{updateId}/attachments/{attachmentId} -> deletePulseUpdateAttachment",
+        "DELETE /api/initiatives/{id}/updates/{updateId}/attachments/{attachmentId} -> deletePulseUpdateAttachment"
       ]
     }
   }

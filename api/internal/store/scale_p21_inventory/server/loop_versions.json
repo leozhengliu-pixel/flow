@@ -8,6 +8,11 @@
       "reason": "Needs exact installed Loop/LoopVersions and Users for synthesized legacy v1 actor lookup, complete newest-first version semantics and retained output lifetime. TestScaleP21SW18LoopVersionsSourceHold proves actual selected-version output preserves an accepted NUL-bearing definition that canonical rows strip. Canonical point lookup alone is not source equivalent.",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/loops/{id}/versions/{versionId} (server/main.go:598)"
       ]
     },
     "listLoopVersions": {
@@ -16,6 +21,11 @@
       "reason": "Needs bounded complete per-loop installed history with exact definitions/actors, latest-first ordering, nil summary defaults and synthesized v1 from installed Loop/Users when history is absent. TestScaleP21SW18LoopVersionsSourceHold proves actual listing differs from sanitized canonical history after an accepted trusted mutation. Installed-source baseline/typed exception foundation remains missing.",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/loops/{id}/versions (server/main.go:597)"
       ]
     },
     "restoreLoopVersion": {
@@ -25,6 +35,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/loops/{id}/versions/{versionId}/restore (server/main.go:599)"
       ]
     },
     "setLoopRunFeedback": {

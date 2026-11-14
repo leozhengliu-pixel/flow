@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceReadSnapshotReservation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "signedFileURLs -> boundHydratedLegacyDownloads(..., s.hydratedLegacySnapshotReservation) method-value estimator (files_api.go:510); GET /api/bootstrap and /api/issue-records/bootstrap admission"
       ]
     }
   }

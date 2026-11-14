@@ -30,10 +30,12 @@ func recordSpoolMaxBytes() int64 {
 // Close removes the private TMPDIR file and returns its written-byte
 // reservation to the budget.
 type RecordSpool struct {
-	file  *os.File
-	bytes int64
-	once  sync.Once
-	err   error
+	file    *os.File
+	bytes   int64
+	once    sync.Once
+	err     error
+	counter *atomic.Int64
+	limit   int64
 }
 
 func NewRecordSpool() (*RecordSpool, error) {
@@ -49,19 +51,19 @@ func NewRecordSpool() (*RecordSpool, error) {
 
 func (s *RecordSpool) Write(p []byte) (int, error) {
 	length := int64(len(p))
-	limit := recordSpoolMaxBytes()
+	counter, limit := s.byteBudget()
 	for {
-		used := recordSpoolBytes.Load()
+		used := counter.Load()
 		if length > limit-used {
 			return 0, ErrRecordSpoolBudget
 		}
-		if recordSpoolBytes.CompareAndSwap(used, used+length) {
+		if counter.CompareAndSwap(used, used+length) {
 			break
 		}
 	}
 	n, err := s.file.Write(p)
 	s.bytes += int64(n)
-	recordSpoolBytes.Add(int64(n) - length)
+	counter.Add(int64(n) - length)
 	return n, err
 }
 
@@ -77,7 +79,15 @@ func (s *RecordSpool) Stat() (os.FileInfo, error) { return s.file.Stat() }
 // CanAppend is an advisory size check before encoding a known large response.
 // Write still reserves bytes atomically against concurrent spool writers.
 func (s *RecordSpool) CanAppend(size int64) bool {
-	return size >= 0 && size <= recordSpoolMaxBytes()-recordSpoolBytes.Load()
+	counter, limit := s.byteBudget()
+	return size >= 0 && size <= limit-counter.Load()
+}
+
+func (s *RecordSpool) byteBudget() (*atomic.Int64, int64) {
+	if s.counter != nil {
+		return s.counter, s.limit
+	}
+	return &recordSpoolBytes, recordSpoolMaxBytes()
 }
 
 func (s *RecordSpool) Close() error {
@@ -90,7 +100,8 @@ func (s *RecordSpool) Close() error {
 		// Keep charging an orphan if removal fails, so later requests cannot
 		// reuse space that is still occupied on the temporary volume.
 		if removeErr == nil || errors.Is(removeErr, os.ErrNotExist) {
-			recordSpoolBytes.Add(-s.bytes)
+			counter, _ := s.byteBudget()
+			counter.Add(-s.bytes)
 			removeErr = nil
 		}
 		s.err = errors.Join(closeErr, removeErr)

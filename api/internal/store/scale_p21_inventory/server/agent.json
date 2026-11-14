@@ -8,6 +8,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.createAgentSessionMessage",
+        "server/server.createAgentSessionMessageStream"
       ]
     },
     "beginAgentSession": {
@@ -16,6 +22,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.createAgentSession",
+        "server/server.createAgentSessionStream"
       ]
     },
     "checkAgentMentions": {
@@ -23,6 +35,12 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.decodeAgentMessageInput",
+        "server/server.beginAgentSession"
       ]
     },
     "createAgentSessionFeedback": {
@@ -31,6 +49,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/sessions/{id}/feedback (server/main.go:483)"
       ]
     },
     "createAgentSkill": {
@@ -40,6 +63,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/skills (server/main.go:488)"
       ]
     },
     "deleteAgentSession": {
@@ -48,6 +76,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/agent/sessions/{id} (server/main.go:473)"
       ]
     },
     "deleteAgentSkill": {
@@ -57,6 +90,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/agent/skills/{id} (server/main.go:490)"
       ]
     },
     "getAgentSession": {
@@ -64,6 +102,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/agent/sessions/{id} (server/main.go:471)"
       ]
     },
     "listAgentSessions": {
@@ -71,6 +114,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/agent/sessions (server/main.go:467)"
       ]
     },
     "listAgentSkillsHTTP": {
@@ -78,6 +126,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/agent/skills (server/main.go:487)"
       ]
     },
     "markAgentSessionRead": {
@@ -86,6 +139,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/sessions/{id}/read (server/main.go:482)"
       ]
     },
     "purgeDeletedAgentSessions": {
@@ -95,6 +153,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.maintainStorage"
       ]
     },
     "replaceAgentSessionMessage": {
@@ -103,6 +166,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.updateAgentSessionMessage",
+        "server/server.updateAgentSessionMessageStream"
       ]
     },
     "restoreAgentSession": {
@@ -111,6 +180,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/sessions/{id}/restore (server/main.go:474)"
       ]
     },
     "updateAgentMessageFeedback": {
@@ -119,6 +193,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/agent/sessions/{id}/messages/{messageId}/feedback (server/main.go:484)"
       ]
     },
     "updateAgentSession": {
@@ -127,6 +206,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/agent/sessions/{id} (server/main.go:472)"
       ]
     },
     "updateAgentSkill": {
@@ -136,6 +220,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/agent/skills/{id} (server/main.go:489)"
       ]
     }
   }

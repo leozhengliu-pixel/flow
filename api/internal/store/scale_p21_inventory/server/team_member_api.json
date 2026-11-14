@@ -8,6 +8,17 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.acceptInvitation",
+        "server/server.removeMember",
+        "server/server.createTeam",
+        "server/server.removeSCIMMember",
+        "server/server.changeTeamMember",
+        "server/server.syncTeamMemberships",
+        "server/server.syncSCIMGroupTeam"
       ]
     },
     "teamForMemberRequest": {
@@ -16,6 +27,14 @@
       "accessors": [
         "Bootstrap",
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.listTeamMemberships",
+        "server/server.putTeamMembership",
+        "server/server.deleteTeamMembership",
+        "server/server.syncTeamMemberships"
       ]
     },
     "teamMemberNames": {
@@ -23,6 +42,13 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.recordTeamMemberAudit",
+        "server/server.deleteTeamMembership",
+        "server/server.syncTeamMemberships"
       ]
     }
   }

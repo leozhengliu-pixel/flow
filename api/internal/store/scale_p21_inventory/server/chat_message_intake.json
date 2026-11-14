@@ -8,6 +8,13 @@
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.chatCreateFromMessage",
+        "server/server.chatMessageIntakeResult",
+        "server/server.chatRequestExists"
       ]
     }
   }

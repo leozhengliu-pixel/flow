@@ -15,6 +15,7 @@ type sw26MigrationStage struct {
 	db       *sql.DB
 	path     string
 	reserved int64
+	logical  bool
 }
 
 func sw26MigrationReserve(bytes int64) error {
@@ -33,16 +34,18 @@ func sw26NewMigrationStage(ctx context.Context) (_ *sw26MigrationStage, err erro
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := sw26MigrationReserve(sw26MigrationStageChunk); err != nil {
+	config, _ := ctx.Value(metadataLogicalScratchKey{}).(metadataLogicalScratch)
+	stage := &sw26MigrationStage{logical: config.logical}
+	if err := stage.reserve(sw26MigrationStageChunk); err != nil {
 		return nil, err
 	}
-	stage := &sw26MigrationStage{reserved: sw26MigrationStageChunk}
+	stage.reserved = sw26MigrationStageChunk
 	defer func() {
 		if err != nil {
 			err = errors.Join(err, stage.Close())
 		}
 	}()
-	file, err := os.CreateTemp("", "flow-p21-sw26-stage-*.db")
+	file, err := os.CreateTemp(config.directory, "flow-p21-sw26-stage-*.db")
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +87,7 @@ func (s *sw26MigrationStage) exec(ctx context.Context, bytes int64, query string
 	want := pages*pageSize + bytes*4 + 64<<10
 	if want > s.reserved {
 		grow := ((want - s.reserved + sw26MigrationStageChunk - 1) / sw26MigrationStageChunk) * sw26MigrationStageChunk
-		if err := sw26MigrationReserve(grow); err != nil {
+		if err := s.reserve(grow); err != nil {
 			return nil, err
 		}
 		s.reserved += grow
@@ -120,9 +123,23 @@ func (s *sw26MigrationStage) Close() error {
 		}
 		s.path = ""
 	}
-	recordSpoolBytes.Add(-s.reserved)
+	if s.logical {
+		metadataLogicalDiskUsed.Add(-s.reserved)
+	} else {
+		recordSpoolBytes.Add(-s.reserved)
+	}
 	s.reserved = 0
 	return result
+}
+
+func (s *sw26MigrationStage) reserve(bytes int64) error {
+	if !s.logical {
+		return sw26MigrationReserve(bytes)
+	}
+	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, bytes, metadataLogicalDiskBytes) {
+		return ErrRecordSpoolBudget
+	}
+	return nil
 }
 
 type sw26EventReaderAt struct {

@@ -45,11 +45,12 @@ func TestScaleP21SW20JiraRemoteInstalledSourceHold(t *testing.T) {
 				if !found || len(warm.IntegrationConnections) != 2 || jiraConnected(jiraConnection(&warm)) {
 					t.Fatal("exact installed disconnected witness changed")
 				}
-				canonical, found, err := f.probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{
+				hydrated, err := f.probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{
 					Fields: []string{"integrationConnections"},
 				})
-				if err != nil || !found || !jiraConnected(jiraConnection(&canonical)) {
-					t.Fatal("canonical connected witness changed", found, err)
+				canonical := hydrated.Data
+				if err != nil || !jiraConnected(jiraConnection(&canonical)) {
+					t.Fatal("canonical connected witness changed", err)
 				}
 				f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 					for _, endpoint := range []struct {
@@ -103,11 +104,12 @@ func TestScaleP21SW20JiraLinksInstalledSourceHold(t *testing.T) {
 		}); err != nil {
 			t.Fatal("accepted trusted producer", err)
 		}
-		canonical, found, err := f.probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{
+		hydrated, err := f.probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{
 			Read: []store.RecordKey{{Kind: "jiraLinks", ID: link.ID}},
 		})
-		if err != nil || !found || len(canonical.JiraLinks) != 1 || canonical.JiraLinks[0].JiraProjectName != "warmname" || reflect.DeepEqual(canonical.JiraLinks[0], link) {
-			t.Fatal("canonical source witness changed", found, err)
+		canonical := hydrated.Data
+		if err != nil || len(canonical.JiraLinks) != 1 || canonical.JiraLinks[0].JiraProjectName != "warmname" || reflect.DeepEqual(canonical.JiraLinks[0], link) {
+			t.Fatal("canonical source witness changed", err)
 		}
 		service := &server{store: repo}
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {

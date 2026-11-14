@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Notion integration's inbound /api/notion/link-preview endpoint is not a normal Flow document/project view.",
+      "callers": [
+        "GET /api/notion/link-preview (server/personal_connections.go)"
       ]
     }
   }

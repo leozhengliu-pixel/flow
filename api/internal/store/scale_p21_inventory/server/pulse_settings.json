@@ -9,6 +9,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Once-per-minute branch of the every-tick delivery scheduler; scans pulse delivery inputs.",
+      "callers": [
+        "processDueDeliveries -> preparePulseSummaries"
       ]
     }
   }

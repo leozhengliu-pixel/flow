@@ -9,6 +9,12 @@
         "Bootstrap",
         "PagedWorkspaceMetadata",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.resourcePreferences",
+        "server/server.recordRecentResource"
       ]
     },
     "preferenceReviewVisible": {
@@ -16,6 +22,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.resourceAllowedLegacy"
       ]
     }
   }

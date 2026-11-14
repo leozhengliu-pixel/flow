@@ -49,12 +49,13 @@ func TestScaleP21SW19GitLabInstalledSourceHold(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				data, found, err := probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{
+				hydrated, err := probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{
 					Read: []store.RecordKey{{Kind: "integrationConnections", ID: id}},
 				})
-				if err != nil || !found || len(data.IntegrationConnections) != 1 {
-					t.Fatal("canonical candidate", found, err)
+				if err != nil || len(hydrated.Data.IntegrationConnections) != 1 {
+					t.Fatal("canonical candidate", err)
 				}
+				data := hydrated.Data
 				selected := 0
 				for _, item := range data.IntegrationConnections {
 					if item.Provider == "gitlab" && (item.Status == "configured" || item.Status == "connected") {
@@ -144,17 +145,19 @@ func TestScaleP21SW19GitLabAggregateSourceHold(t *testing.T) {
 			if !ok || entity["id"] != id {
 				t.Fatal("actual event entity missing", string(event.Payload))
 			}
-			want := "Earlier unrelated aggregate"
-			if bounded {
-				want = "Connection"
-			}
-			if entity["name"] != want {
+			if entity["name"] != "Earlier unrelated aggregate" {
 				t.Fatalf("aggregate collision witness changed: bounded=%v entity=%v", bounded, entity)
+			}
+			canonical, err := source.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{
+				Read: []store.RecordKey{{Kind: "integrationConnections", ID: id}},
+			})
+			if err != nil || len(canonical.Data.IntegrationConnections) != 1 || canonical.Data.IntegrationConnections[0].Config["rotationEnabled"] != "true" {
+				t.Fatal("canonical connection update changed", err)
 			}
 			payloads = append(payloads, event.Payload)
 		}
-		if reflect.DeepEqual(payloads[0], payloads[1]) {
-			t.Fatal("aggregate source hold disappeared")
+		if !reflect.DeepEqual(payloads[0], payloads[1]) {
+			t.Fatalf("aggregate effects differ: legacy=%s bounded=%s", payloads[0], payloads[1])
 		}
 	}
 }

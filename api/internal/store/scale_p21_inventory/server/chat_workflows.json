@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.processChatInbound"
       ]
     },
     "processChatInbound": {
@@ -16,6 +21,11 @@
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.processChatJob"
       ]
     }
   }

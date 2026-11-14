@@ -91,8 +91,12 @@ func TestScaleP21SW24ApplicationDefaultSourceHold(t *testing.T) {
 		}
 		left, ok := repo.WorkspaceMetadata("")
 		right, found, err := probe.WorkspaceMetadataScoped(t.Context(), "", store.MetadataRecordScope{})
-		if !ok || !found || err != nil || left.Workspace.URLKey != physical || right.Workspace.URLKey != strings.ReplaceAll(physical, "\x00", "") {
+		if !ok || !found || err != nil || left.Workspace.URLKey != physical || right.Workspace.URLKey != physical {
 			t.Fatalf("default core old=%q/%v bounded=%q/%v err=%v", left.Workspace.URLKey, ok, right.Workspace.URLKey, found, err)
+		}
+		canonical, err := probe.HydrateWorkspaceMetadata(t.Context(), physical, store.MetadataRecordScope{})
+		if err != nil || canonical.Data.Workspace.URLKey != strings.ReplaceAll(physical, "\x00", "") {
+			t.Fatal("canonical physical-key transformation changed", err)
 		}
 		task := domain.AgentTask{
 			ID: idgen.New("mention_"), WorkspaceKey: physical, AppUserID: f.data.Viewer.ID,
@@ -121,7 +125,7 @@ func TestScaleP21SW24ApplicationDefaultSourceHold(t *testing.T) {
 			oldAllowed, oldSize := observe(repo)
 			newAllowed, newSize := observe(probe)
 			if !oldAllowed || newAllowed || !reflect.DeepEqual([]int{oldSize, newSize}, []int{1, 0}) {
-				t.Fatalf("source hold disappeared: authorized old/new=%v/%v list sizes=%d/%d; re-review consumers before changing this assertion", oldAllowed, newAllowed, oldSize, newSize)
+				t.Fatalf("installed identity helper hold disappeared: authorized old/new=%v/%v list sizes=%d/%d; re-review its consumer before certification", oldAllowed, newAllowed, oldSize, newSize)
 			}
 		}
 	}
@@ -160,6 +164,12 @@ func TestScaleP21SW24WorkerDefinitionSourceHold(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		canonical, err := probe.HydrateWorkspaceMetadata(t.Context(), f.data.Workspace.URLKey, store.MetadataRecordScope{
+			Read: []store.RecordKey{{Kind: "loops", ID: created.ID}},
+		})
+		if err != nil || len(canonical.Data.Loops) != 1 || canonical.Data.Loops[0].Instructions != "Inspect beforeafter" {
+			t.Fatal("canonical loop transformation changed", err)
+		}
 		for range 2 {
 			left, ok, err := service.workerLoopDefinition(t.Context(), f.data.Workspace.URLKey, created.ID)
 			if err != nil || !ok || left == nil {
@@ -169,10 +179,13 @@ func TestScaleP21SW24WorkerDefinitionSourceHold(t *testing.T) {
 			if err != nil || !ok || right == nil {
 				t.Fatal("bounded worker input", err)
 			}
-			if left.Instructions != "Inspect before\x00after" || right.Instructions != "Inspect beforeafter" ||
-				loopModelInstructions(*left) == loopModelInstructions(*right) || loopContractHashOf(*left) == loopContractHashOf(*right) {
-				t.Fatal("source hold disappeared; re-review worker input before changing this assertion")
+			if left.Instructions != "Inspect before\x00after" || !reflect.DeepEqual(left, right) ||
+				loopModelInstructions(*left) != loopModelInstructions(*right) || loopContractHashOf(*left) != loopContractHashOf(*right) {
+				t.Fatal("installed worker definition differs")
 			}
+		}
+		if err := repo.RefreshMetadataRecord(t.Context(), f.data.Workspace.URLKey, "loops", created.ID); err != nil {
+			t.Fatal(err)
 		}
 		if err := repo.ReloadWorkspace(t.Context(), f.data.Workspace.URLKey); err != nil {
 			t.Fatal(err)

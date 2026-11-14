@@ -1260,7 +1260,12 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 			scope.Read = append(scope.Read, store.RecordKey{Kind: "cycles", ID: labelID})
 		}
 	}
-	err := s.store.MutateWorkspaceResolved(r.Context(), workspaceKey(r), "issue_label.updated", labelID, input, store.MetadataResolvedScope{
+	writeCtx := r.Context()
+	var timestamps *store.MetadataTimestampInputs
+	if s.store.BoundedMetadataEnabled() {
+		writeCtx, timestamps = s.store.WithMetadataTimestampInputs(writeCtx)
+	}
+	err := s.store.MutateWorkspaceResolved(writeCtx, workspaceKey(r), "issue_label.updated", labelID, input, store.MetadataResolvedScope{
 		MetadataRecordScope: scope,
 		ResolveRead:         teamMetadataProjectDisplayReads,
 	}, func(data *domain.Bootstrap) error {
@@ -1286,10 +1291,22 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 			value := strings.TrimSpace(*input.ArchivedAt)
 			if value == "" {
 				data.Labels[index].ArchivedAt = nil
-			} else if parsed, parseErr := time.Parse(time.RFC3339, value); parseErr == nil {
-				data.Labels[index].ArchivedAt = &parsed
 			} else {
-				return errInvalid
+				var parsed time.Time
+				var parseErr error
+				if timestamps == nil {
+					parsed, parseErr = time.Parse(time.RFC3339, value)
+				} else {
+					parsed, parseErr = timestamps.ParseRFC3339(value)
+				}
+				if parseErr != nil {
+					var syntax *time.ParseError
+					if errors.As(parseErr, &syntax) {
+						return errInvalid
+					}
+					return parseErr
+				}
+				data.Labels[index].ArchivedAt = &parsed
 			}
 		}
 		updated = data.Labels[index]

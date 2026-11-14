@@ -9,6 +9,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/customer-requests/{id}/archive (server/main.go:847)",
+        "DELETE /api/customer-requests/{id}/archive (server/main.go:848)"
       ]
     },
     "createAIConversation": {
@@ -18,6 +24,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/ai/conversations (server/main.go:865)"
       ]
     },
     "createAIPromptProgress": {
@@ -27,6 +38,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/ai/prompt-progress (server/main.go:867)"
       ]
     },
     "createAgentActivity": {
@@ -36,6 +52,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/activities (server/main.go:862)"
       ]
     },
     "createDocumentDraft": {
@@ -44,6 +65,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents/{id}/drafts (server/main.go)"
       ]
     },
     "createInitiativeRelation": {
@@ -52,6 +78,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/initiatives/{id}/relations (server/main.go)"
       ]
     },
     "createProjectRelation": {
@@ -60,6 +91,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/projects/{id}/relations (server/main.go)"
       ]
     },
     "createReleaseNote": {
@@ -69,6 +105,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/releases/{id}/notes (server/main.go:850)"
       ]
     },
     "createTeamPinnedResource": {
@@ -77,6 +118,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/teams/{id}/resources (server/main.go)"
       ]
     },
     "createTeamResourceSection": {
@@ -85,6 +131,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/teams/{id}/resource-sections (server/main.go)"
       ]
     },
     "deleteDocumentDraft": {
@@ -93,6 +144,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/documents/{id}/drafts/{draftId} (server/main.go)"
       ]
     },
     "deleteInitiativeRelation": {
@@ -101,6 +157,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/initiatives/{id}/relations/{relationId} (server/main.go)"
       ]
     },
     "deleteProjectRelation": {
@@ -110,6 +171,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/projects/{id}/relations/{relationId} (server/main.go)"
       ]
     },
     "deleteReleaseNote": {
@@ -119,6 +185,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/releases/{id}/notes/{noteId} (server/main.go:852)"
       ]
     },
     "deleteTeamResource": {
@@ -128,6 +199,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/teams/{id}/resources/{resourceId} (server/main.go)"
       ]
     },
     "deleteTeamResourceSection": {
@@ -136,6 +212,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/teams/{id}/resource-sections/{sectionId} (server/main.go)"
       ]
     },
     "documentContentHistory": {
@@ -143,6 +224,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/documents/{id}/history is the document history view; preserves old-client fallback when P20 history is off.",
+      "callers": [
+        "GET /api/documents/{id}/history (server/main.go)"
       ]
     },
     "initiativeHistory": {
@@ -158,6 +244,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/ai/conversations (server/main.go:864)"
       ]
     },
     "listAgentActivities": {
@@ -165,6 +256,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/agent/activities (server/main.go:861)"
       ]
     },
     "listDocumentDrafts": {
@@ -172,6 +268,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/documents/{id}/drafts is the document editor/view draft lookup.",
+      "callers": [
+        "GET /api/documents/{id}/drafts (server/main.go)"
       ]
     },
     "listInitiativeRelations": {
@@ -179,6 +280,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/initiatives/{id}/relations populates the initiative view.",
+      "callers": [
+        "GET /api/initiatives/{id}/relations (server/main.go)"
       ]
     },
     "listProjectRelations": {
@@ -186,6 +292,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/projects/{id}/relations populates the project view.",
+      "callers": [
+        "GET /api/projects/{id}/relations (server/main.go)"
       ]
     },
     "listReleaseNotes": {
@@ -193,6 +304,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/releases/{id}/notes (server/main.go:849)"
       ]
     },
     "projectHistory": {
@@ -209,6 +325,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents/{id}/drafts/{draftId}/publish (server/main.go)"
       ]
     },
     "releaseHistory": {
@@ -216,6 +337,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/releases/{id}/history (server/main.go:853)"
       ]
     },
     "updateAgentActivity": {
@@ -225,6 +351,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/agent/activities/{id} (server/main.go:863)"
       ]
     },
     "updateDocumentDraft": {
@@ -233,6 +364,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/documents/{id}/drafts/{draftId} (server/main.go)"
       ]
     },
     "updateInitiativeRelation": {
@@ -241,6 +377,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/initiatives/{id}/relations/{relationId} (server/main.go)"
       ]
     },
     "updateProjectRelation": {
@@ -250,6 +391,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/projects/{id}/relations/{relationId} (server/main.go)"
       ]
     },
     "updateReleaseNote": {
@@ -259,6 +405,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/releases/{id}/notes/{noteId} (server/main.go:851)"
       ]
     },
     "updateTeamResource": {
@@ -268,6 +419,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/teams/{id}/resources/{resourceId} (server/main.go)"
       ]
     },
     "updateTeamResourceSection": {
@@ -277,6 +433,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/teams/{id}/resource-sections/{sectionId} (server/main.go)"
       ]
     }
   }

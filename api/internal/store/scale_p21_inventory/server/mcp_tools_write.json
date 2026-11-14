@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
       ]
     },
     "deleteMCPComment": {
@@ -15,6 +20,11 @@
       "status": "unmigrated",
       "accessors": [
         "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
       ]
     },
     "deleteMCPDiffComment": {
@@ -23,6 +33,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
       ]
     },
     "mutateAnyComment": {
@@ -31,6 +46,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.saveMCPComment",
+        "server/server.deleteMCPComment"
       ]
     },
     "resolveMCPDiffThread": {
@@ -40,6 +61,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
       ]
     },
     "saveMCPIssue": {
@@ -48,6 +74,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
       ]
     },
     "saveMCPProject": {
@@ -56,6 +87,11 @@
       "accessors": [
         "Bootstrap",
         "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
       ]
     },
     "saveMCPRelease": {
@@ -64,6 +100,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
       ]
     }
   }

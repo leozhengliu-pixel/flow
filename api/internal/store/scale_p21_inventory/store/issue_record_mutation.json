@@ -8,6 +8,12 @@
       "accessors": [
         "Bootstrap",
         "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issue-records/{id}",
+      "callers": [
+        "server/server.updateIssueRecord",
+        "server/server.maintainTeamSettings"
       ]
     }
   }

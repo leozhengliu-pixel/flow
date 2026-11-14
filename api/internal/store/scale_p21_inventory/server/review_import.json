@@ -8,6 +8,22 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "applyStored (api/cmd/server/agent_worker_chat.go:685)",
+        "mutateAuditStream (api/cmd/server/audit_stream.go:342)",
+        "push (api/cmd/server/redis_coordination.go:157)",
+        "execute (api/cmd/server/review_import.go:529)",
+        "scimUsers (api/cmd/server/scim.go:345)",
+        "scimUser (api/cmd/server/scim.go:397)",
+        "scimGroups (api/cmd/server/scim.go:640)",
+        "scimGroup (api/cmd/server/scim.go:785)",
+        "scimGroupPatchChange (api/cmd/server/scim_patch.go:686)",
+        "scimRootSearch (api/cmd/server/scim_search.go:64)",
+        "finalize (api/cmd/server/security_headers.go:379)",
+        "updateWebhookHealth (api/cmd/server/webhook_delivery.go:1160)"
       ]
     },
     "execute": {
@@ -15,6 +31,14 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "executeBuiltinApplication (api/cmd/server/application_agents.go:651)",
+        "builtinCodingTransfer (api/cmd/server/builtin_coding_transfer.go:22)",
+        "runToolCall (api/cmd/server/loop_run_steps.go:148)",
+        "runReviewImport (api/cmd/server/review_import.go:393)"
       ]
     },
     "importLinkedMembers": {
@@ -22,6 +46,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "scanRepository (api/cmd/server/review_import.go:575)"
       ]
     },
     "updateReviewImport": {
@@ -30,6 +59,11 @@
       "reason": "Pending exact installed source-state compatibility: trusted typed MutateWorkspace producers may retain NUL in warm connection Provider/Status while canonical storage strips it, changing github/gitlab and disconnected decisions. HTTP create/update sanitization alone does not certify the trusted-store contract. Canonical summary preparation remains held until compact exact installed headers have a compatible lifecycle; do not normalize the legacy oracle.",
       "accessors": [
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/reviews/import (api/cmd/server/main.go:753)"
       ]
     }
   }

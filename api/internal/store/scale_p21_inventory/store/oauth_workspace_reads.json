@@ -7,6 +7,19 @@
       "status": "unmigrated",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/issues/{id}/comment-actions",
+      "callers": [
+        "server/codingDirectory.CodingUser",
+        "server/server.userHasLegacySigningKey",
+        "server/server.startCommentActions",
+        "server/server.listCommentActions",
+        "server/server.accountPasskeys",
+        "server/server.listPasskeys",
+        "server/server.getUserSettings",
+        "server/server.getCommitSigningKey",
+        "server/server.removeCommitSigningKey"
       ]
     },
     "DocumentByID": {
@@ -14,6 +27,14 @@
       "status": "unmigrated",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/realtime/presence",
+      "callers": [
+        "server/server.BuildEventSource",
+        "server/server.pagedPresenceFor",
+        "server/server.documentPresenceAllowed",
+        "server/server.pagedDocumentEvent"
       ]
     },
     "ResolveTeamID": {
@@ -37,6 +58,12 @@
       "status": "unmigrated",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.restoreAgentChangeEntity",
+        "server/server.authorizeWorkspaceRequest"
       ]
     }
   }

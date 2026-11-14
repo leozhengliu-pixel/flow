@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/organization (server/public_api_routes.go:10)"
       ]
     },
     "listCommentsConnection": {
@@ -14,6 +19,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Read-only issue/document/project/initiative comments connection for compatible clients.",
+      "callers": [
+        "GET /api/comments?issueId|documentId|projectId|initiativeId"
       ]
     },
     "listCustomerNeedsConnection": {
@@ -21,6 +31,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/customer-requests (server/public_api_routes.go:32)"
       ]
     },
     "listCustomersConnection": {
@@ -28,6 +43,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/customers (server/public_api_routes.go:29)"
       ]
     },
     "listCyclesConnection": {
@@ -35,6 +55,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/cycles (server/public_api_routes.go:20)"
       ]
     },
     "listDocumentsConnection": {
@@ -42,6 +67,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Connection branch of the same GET /api/documents view endpoint; old clients remain supported.",
+      "callers": [
+        "GET /api/documents (server/main.go)"
       ]
     },
     "listInitiativesConnection": {
@@ -49,6 +79,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/initiatives is the normal initiative list endpoint.",
+      "callers": [
+        "GET /api/initiatives (server/public_api_routes.go)"
       ]
     },
     "listIssueLabelsConnection": {
@@ -56,6 +91,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Read-only issue-label directory supporting issue filters and board/list clients.",
+      "callers": [
+        "GET /api/issue-labels"
       ]
     },
     "listProjectMilestonesConnection": {
@@ -63,6 +103,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/project-milestones supplies project-view milestone metadata.",
+      "callers": [
+        "GET /api/project-milestones (server/public_api_routes.go)"
       ]
     },
     "listProjectsConnection": {
@@ -70,6 +115,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Connection branch of the same GET /api/projects view endpoint.",
+      "callers": [
+        "GET /api/projects (server/main.go)"
       ]
     },
     "listReleasesConnection": {
@@ -77,6 +127,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/releases (server/main.go:556)"
       ]
     },
     "listTeamsConnection": {
@@ -84,6 +139,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/teams (server/public_api_routes.go:11)"
       ]
     },
     "listUsersConnection": {
@@ -91,6 +151,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/users (server/public_api_routes.go:14)"
       ]
     },
     "listWorkflowStatesConnection": {
@@ -98,6 +163,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/workflow-states (server/public_api_routes.go:16)"
       ]
     },
     "publicMetadata": {
@@ -107,6 +177,38 @@
         "Bootstrap",
         "PagedWorkspaceMetadata",
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Shared HOT detail/list read fallback: getProjectRecord/getInitiativeRecord and selected-key listProjectRecords invoke it; it cannot be assigned to the cold semaphore.",
+      "callers": [
+        "server/link_previews.go:getLinkPreview:35",
+        "server/main.go:listNotifications:2601",
+        "server/project_directory_api.go:listProjectRecords:18",
+        "server/public_api_records.go:getTeamRecord:27",
+        "server/public_api_records.go:getUserRecord:91",
+        "server/public_api_records.go:getWorkflowStateRecord:111",
+        "server/public_api_records.go:getIssueLabelRecord:129",
+        "server/public_api_records.go:getCycleRecord:154",
+        "server/public_api_records.go:getProjectRecord:180",
+        "server/public_api_records.go:getInitiativeRecord:200",
+        "server/public_api_records.go:getCustomerRecord:220",
+        "server/public_api_resources.go:getOrganization:174",
+        "server/public_api_resources.go:listTeamsConnection:190",
+        "server/public_api_resources.go:listUsersConnection:216",
+        "server/public_api_resources.go:listWorkflowStatesConnection:248",
+        "server/public_api_resources.go:listIssueLabelsConnection:274",
+        "server/public_api_resources.go:listCyclesConnection:315",
+        "server/public_api_resources.go:listProjectsConnection:364",
+        "server/public_api_resources.go:listProjectMilestonesConnection:421",
+        "server/public_api_resources.go:listInitiativesConnection:458",
+        "server/public_api_resources.go:listDocumentsConnection:492",
+        "server/public_api_resources.go:listCustomersConnection:548",
+        "server/public_api_resources.go:listCustomerNeedsConnection:582",
+        "server/public_api_resources.go:listReleasesConnection:614",
+        "server/public_api_resources.go:listCommentsConnection:763",
+        "server/pulse_diff.go:listProjectUpdates:241",
+        "server/pulse_diff.go:listInitiativeUpdates:274",
+        "server/team_member_api.go:teamForMemberRequest:351"
       ]
     }
   }

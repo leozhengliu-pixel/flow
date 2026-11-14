@@ -9,6 +9,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "OpenDatabase dataMigrations -> runDataMigrations -> dataMigrations.apply callback 'integration OAuth tokens in encrypted storage' (document_access_migration.go:43)"
       ]
     }
   }

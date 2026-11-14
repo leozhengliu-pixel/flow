@@ -17,6 +17,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/customer-statuses (api/cmd/server/main.go:841)",
+        "POST /api/customer-tiers (api/cmd/server/main.go:844)"
       ]
     },
     "deleteCustomerTaxonomy": {
@@ -26,6 +32,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/customer-statuses/{id} (api/cmd/server/main.go:843)",
+        "DELETE /api/customer-tiers/{id} (api/cmd/server/main.go:846)"
       ]
     },
     "listCustomerTaxonomy": {
@@ -34,6 +46,11 @@
       "reason": "Pending installed logical nonpolicy collection read with bounded response spool. workspaceData reads installed taxonomy including load defaults and accepted warm values; canonical SQL strips accepted NULs. TestScaleP21SW22CustomerTaxonomySourceHold verifies exact legacy values across admin/member/guest and session/unrestricted/selected-empty/selected-set credentials.",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/customer-taxonomy (api/cmd/server/main.go:840)"
       ]
     },
     "updateCustomerTaxonomy": {
@@ -43,6 +60,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/customer-statuses/{id} (api/cmd/server/main.go:842)",
+        "PATCH /api/customer-tiers/{id} (api/cmd/server/main.go:845)"
       ]
     }
   }

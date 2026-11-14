@@ -144,7 +144,7 @@ func TestScaleP21SW16ProjectTemplateLegacyLargeBaseline(t *testing.T) {
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := scaleP21M2Setup(t, repo)
 		body := strings.Repeat("x", 2<<20) + " /uploads/sw16-description.png"
-		r, w := f.request(f.data.Viewer, nil, map[string]any{"name": "Large template", "description": body}), httptest.NewRecorder()
+		r, w := f.literalRequest(f.data.Viewer, nil, map[string]any{"name": "Large template", "description": body}), httptest.NewRecorder()
 		(&server{store: repo}).createProjectTemplate(w, r)
 		if w.Code != http.StatusCreated {
 			t.Fatalf("legal 2 MiB description rejected by existing writer: %d %.160s", w.Code, w.Body.String())
@@ -155,7 +155,7 @@ func TestScaleP21SW16ProjectTemplateLegacyLargeBaseline(t *testing.T) {
 		}
 		call := func(signed bool) *httptest.ResponseRecorder {
 			t.Helper()
-			r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
+			r, w := f.literalRequest(f.data.Viewer, nil, nil), httptest.NewRecorder()
 			r.Method, r.URL.Path = http.MethodGet, "/api/project-templates"
 			if signed {
 				r.Header.Set("X-Flow-File-Urls-Expire-In", "3600")
@@ -188,7 +188,7 @@ func TestScaleP21SW16ProjectTemplateLegacyLargeBaseline(t *testing.T) {
 				runtime.GC()
 				runtime.ReadMemStats(&before)
 				sql := 0
-				r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
+				r, w := f.literalRequest(f.data.Viewer, nil, nil), httptest.NewRecorder()
 				r = r.WithContext(store.WithSQLStatementObserver(r.Context(), func(string) { sql++ }))
 				if candidate {
 					(&server{store: repo}).scaleP21SW16ListProjectTemplates(w, r)

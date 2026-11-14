@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from audited HOT server/chat_notifications.go:processChatNotification",
+      "callers": [
+        "server/server.processChatNotification"
       ]
     }
   }

@@ -8,6 +8,11 @@
       "reason": "Pending exact installed-member source closure: legacy codingMemberRoleOf returns the first stored Members.User.ID match's Role, with guest fallback, rather than SQL WorkspaceRole. Ordinary inline Members deltas preserve NUL, but the actual UpdateWorkspace name-edit path full-writes a NUL-stripped root then installs unchanged warm Members. A verified SW20 producer probe finds warm/raw Role admin-NUL/admin after that edit for the same ordinary User.ID, without reloading the baseline; raw-only scalar lookup can change effective privileges. Members also require repeated-root backing merge because WorkspaceMember has no top-level ID. Do not replace this with SQL membership or certify a canonical-only selector.",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.codingAnchorActivity"
       ]
     }
   }

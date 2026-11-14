@@ -8,6 +8,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.codeWebhook",
+        "server/server.applyGitHubAppWorkspaceEvent"
       ]
     },
     "codeReviewLinkedMembers": {
@@ -16,6 +22,11 @@
       "reason": "Pending warm metadata versus canonical normalization parity: this trusted helper reads raw cached Users and Members, with last active/empty-status member overlay, then SQL-linked account ordering. A native selected-user/member resolver and narrow GitLab host reader passed ordinary principal/key differentials, but legal direct-store Config.host containing NUL remains in the legacy warm snapshot while writeMetadataRecordRow strips it from canonical JSON. Legacy host validation therefore rejects that host and tries gitlabUrl, whereas SQL selects the stripped host and attributes a different account set. TestScaleP21SW18LinkedMembersDifferential/nul-host reproduced the mismatch; failed attempt and logs are preserved outside the repository. Case-varied/duplicate typed keys and repeated inline-array merging also require the shared raw reader. The old helper is retained exactly; no bounded fallback or reviewed-count decrement is claimed.",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.applyCodeReviewEvent"
       ]
     },
     "persistIntegrationTestError": {
@@ -25,6 +36,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.testIntegrationConnection"
       ]
     },
     "persistIntegrationTestSuccess": {
@@ -34,6 +50,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.testIntegrationConnection"
       ]
     },
     "slackWebhook": {
@@ -42,6 +63,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.codeWebhook"
       ]
     },
     "testIntegrationConnection": {

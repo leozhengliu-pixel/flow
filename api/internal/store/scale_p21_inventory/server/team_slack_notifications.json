@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Ordinary domain-event publication synchronously dispatches configured team notifications.",
+      "callers": [
+        "store webhook sink -> dispatchDomainEvent -> dispatchTeamSlackEvent"
       ]
     }
   }

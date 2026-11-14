@@ -16,10 +16,13 @@ import (
 var metadataConsumerFiles embed.FS
 
 type metadataConsumerReview struct {
-	Owner     string   `json:"owner"`
-	Status    string   `json:"status"`
-	Reason    string   `json:"reason,omitempty"`
-	Accessors []string `json:"accessors"`
+	Owner             string   `json:"owner"`
+	Status            string   `json:"status"`
+	Reason            string   `json:"reason,omitempty"`
+	Accessors         []string `json:"accessors"`
+	Temperature       string   `json:"temperature,omitempty"`
+	TemperatureReason string   `json:"temperatureReason,omitempty"`
+	Callers           []string `json:"callers,omitempty"`
 }
 
 type metadataConsumerFile struct {
@@ -80,6 +83,18 @@ func readMetadataConsumerInventory(files fs.FS) (metadataConsumerInventory, erro
 			if len(review.Accessors) == 0 {
 				return result, fmt.Errorf("%s: missing accessor classification for %s", path, name)
 			}
+			switch review.Temperature {
+			case "":
+				review.Temperature = "hot"
+			case "hot":
+			case "cold":
+				if strings.TrimSpace(review.TemperatureReason) == "" {
+					return result, fmt.Errorf("%s: missing cold reason for %s", path, name)
+				}
+			default:
+				return result, fmt.Errorf("%s: invalid consumer temperature for %s", path, name)
+			}
+			file.Consumers[name] = review
 			result.Consumers[file.Source+":"+name] = review
 		}
 		if count != file.Unmigrated {
@@ -99,6 +114,25 @@ func registeredMetadataConsumers() map[string]metadataFullWorkspaceConsumer {
 	result := map[string]metadataFullWorkspaceConsumer{}
 	for name, review := range inventory.Consumers {
 		if review.Status == "unmigrated" {
+			result[name] = metadataFullWorkspaceConsumer{owner: review.Owner}
+		}
+	}
+	return result
+}
+
+func registeredHotMetadataConsumers() map[string]metadataFullWorkspaceConsumer {
+	inventory, err := metadataConsumerReviews()
+	if err != nil {
+		return map[string]metadataFullWorkspaceConsumer{"inventory/invalid": {owner: "P21"}}
+	}
+	return hotMetadataConsumers(inventory)
+}
+
+func hotMetadataConsumers(inventory metadataConsumerInventory) map[string]metadataFullWorkspaceConsumer {
+	result := map[string]metadataFullWorkspaceConsumer{}
+	for name, review := range inventory.Consumers {
+		cold := review.Temperature == "cold" && strings.TrimSpace(review.TemperatureReason) != ""
+		if review.Status == "unmigrated" && !cold {
 			result[name] = metadataFullWorkspaceConsumer{owner: review.Owner}
 		}
 	}

@@ -9,6 +9,13 @@
         "Bootstrap",
         "PagedWorkspaceMetadata",
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Document collaboration socket authorization and live access refresh.",
+      "callers": [
+        "realtimeSocket -> handleCollaborationCommand -> socketWorkspaceMetadata",
+        "socketDocumentRole -> socketWorkspaceMetadata",
+        "former-member collaboration -> socketWorkspaceMetadata"
       ]
     }
   }

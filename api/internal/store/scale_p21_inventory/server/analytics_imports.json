@@ -9,6 +9,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/imports/{id}/cancel (api/cmd/server/main.go:779)"
       ]
     },
     "getExport": {
@@ -17,6 +22,11 @@
       "reason": "The installed physical namespace and retained scalar lifetime are repaired, but the body source still changes from warm installed ExportJobs to canonical native records. TestScaleP21SW24ExportCompletionSourceHold creates an accepted physical-NUL workspace and uses the real completeExport producer, whose Filename embeds the warm logical URLKey; actual old/new getExport both return HTTP 200 but the canonical response strips that NUL. Keep the original consumer pending until complete payload provenance is equivalent; the namespace helper review does not certify this body closure.",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/exports/{id} (api/cmd/server/main.go:784)"
       ]
     },
     "getImport": {
@@ -25,6 +35,11 @@
       "reason": "The legacy GET reads the exact installed or one-shot request projection ImportJob. TestScaleP21SW24ImportMultipartSourceHold uses actual HTTP 201 previewImport with a NUL CSV header, then proves legacy getImport HTTP 200 retains that header while a canonical scoped importJobs point strips it. The preview has complete uploaded Rows, but both normal monitor and canonical metadata point omit them through collectionMetadata compaction; that omission is preserved explicitly. ImportHandoffSource proves an earlier request snapshot wins over current installed jobs and is consumed once. A native metadata-row replacement must preserve exact header values and projection source rather than silently substitute canonical/current state.",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/imports/{id} (api/cmd/server/main.go:778)"
       ]
     },
     "listExports": {
@@ -33,6 +48,11 @@
       "reason": "Native count/page now uses the exact selected installed physical collection namespace and retains identity admission through output, but actual completeExport embeds an accepted physical-NUL workspace URLKey in warm Filename. TestScaleP21SW24ExportCompletionSourceHold compares actual lists after that ordinary producer: old/new both return HTTP 200 and one job, with different Filename bytes after canonical stripping. Keep this body-source activation blocker independently of the verified namespace/page/permission behavior.",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/exports (api/cmd/server/main.go:783)"
       ]
     },
     "listImports": {
@@ -41,6 +61,11 @@
       "reason": "The legacy monitor lists owned jobs from its exact installed or matching one-shot request projection, preserving multipart headers, order and array/total/cursor semantics. TestScaleP21SW24ImportMultipartSourceHold compares actual HTTP 201 multipart preview and HTTP 200 list output with a canonical scoped control: accepted NUL headers differ, while both metadata readers correctly omit uploaded Rows after collectionMetadata compaction. ImportHandoffSource proves request-snapshot precedence and one-shot consumption. A bounded page must preserve that exact job source and existing authorization/error boundary rather than silently page canonical headers or current state.",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/imports (api/cmd/server/main.go:777)"
       ]
     },
     "resumeImport": {
@@ -50,6 +75,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/imports/{id}/resume (api/cmd/server/main.go:781)"
       ]
     },
     "retryExport": {
@@ -58,6 +88,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/exports/{id}/retry (api/cmd/server/main.go:785)"
       ]
     },
     "retryImport": {
@@ -67,6 +102,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/imports/{id}/retry (api/cmd/server/main.go:780)"
       ]
     },
     "workspaceAnalytics": {
@@ -74,6 +114,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/analytics/overview (api/cmd/server/main.go:797)"
       ]
     }
   }

@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Loop write-tool authorization is invoked by loopScope.check, not a project/initiative read or unconditional tick; parent loop classification may promote it if a HOT caller reaches it.",
+      "callers": [
+        "server/loop_runtime.go:check:1219"
       ]
     }
   }

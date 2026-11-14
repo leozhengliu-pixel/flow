@@ -186,6 +186,9 @@ func TestScaleP21SW19SCIMGroupOrTeamDifferential(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
+		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+			t.Fatal(err)
+		}
 		if _, _, err := (&server{store: f.probe}).scimGroupOrTeam(t.Context(), workspace, f.data.Workspace.ID, targetID, false); !errors.Is(err, store.ErrMetadataPageBudget) {
 			t.Fatalf("oversized selected team was silently omitted: %v", err)
 		}
@@ -201,6 +204,9 @@ func TestScaleP21SW19SCIMGroupOrTeamDifferential(t *testing.T) {
 			}
 			return nil
 		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 			t.Fatal(err)
 		}
 		if _, team, err := (&server{store: f.probe}).scimGroupOrTeam(t.Context(), workspace, f.data.Workspace.ID, targetID, false); err != nil || team == nil || team.ID != targetID {

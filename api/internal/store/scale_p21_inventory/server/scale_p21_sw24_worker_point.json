@@ -8,6 +8,11 @@
       "reason": "The earlier TrustedSourceKeys empty/nil proof covers only that field. TestScaleP21SW24WorkerDefinitionSourceHold shows a distinct accepted typed MutateWorkspace Loop.Instructions NUL retained by legacy WorkspaceMetadataFields but stripped by the canonical selected record, changing both actual model instructions and contract hash. HTTP create strips NUL as a control, and ReloadWorkspace makes the old value canonical; no raw SQL or synthetic struct injection is used. Retain this helper as an activation blocker until every consumed warm value has a compatible source.",
       "accessors": [
         "WorkspaceMetadataFieldsScoped"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.workerLoopContext"
       ]
     }
   }

@@ -7,6 +7,13 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Notification-delivery rendering uses these metadata helpers; not only interactive chat setup.",
+      "callers": [
+        "processDueDeliveries -> dispatchChatNotifications -> processChatPersonalNotification -> chatPersonalNotificationItem/chatPersonalNotificationCard",
+        "processChatNotification -> chatSendIssueCardFrom -> chatGroupQuickControls",
+        "chatPersonalNotificationCard -> chatPersonalIssueCard"
       ]
     },
     "chatPersonalIssueCard": {
@@ -14,6 +21,13 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Notification-delivery rendering uses these metadata helpers; not only interactive chat setup.",
+      "callers": [
+        "processDueDeliveries -> dispatchChatNotifications -> processChatPersonalNotification -> chatPersonalNotificationItem/chatPersonalNotificationCard",
+        "processChatNotification -> chatSendIssueCardFrom -> chatGroupQuickControls",
+        "chatPersonalNotificationCard -> chatPersonalIssueCard"
       ]
     },
     "chatPersonalNotificationCard": {
@@ -22,6 +36,13 @@
       "accessors": [
         "WorkspaceMetadataFields",
         "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Notification-delivery rendering uses these metadata helpers; not only interactive chat setup.",
+      "callers": [
+        "processDueDeliveries -> dispatchChatNotifications -> processChatPersonalNotification -> chatPersonalNotificationItem/chatPersonalNotificationCard",
+        "processChatNotification -> chatSendIssueCardFrom -> chatGroupQuickControls",
+        "chatPersonalNotificationCard -> chatPersonalIssueCard"
       ]
     },
     "chatRunQuickAction": {
@@ -30,6 +51,11 @@
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "server/chat_card_actions.go:chatRunExtendedAction -> chatRunQuickAction"
       ]
     }
   }

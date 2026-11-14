@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/release-pipelines/{id} (server/main.go:575)"
       ]
     },
     "getRelease": {
@@ -15,6 +20,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/releases/{id} (server/main.go:557)"
       ]
     },
     "getReleasePipeline": {
@@ -22,6 +32,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/release-pipelines/{id} (server/main.go:563)"
       ]
     },
     "listReleasePipelines": {
@@ -29,6 +44,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/release-pipelines (server/main.go:562)"
       ]
     },
     "listReleases": {
@@ -36,6 +56,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/releases (server/main.go:556)"
       ]
     },
     "reorderReleasePipelines": {
@@ -44,6 +69,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/release-pipelines/reorder (server/main.go:564)"
       ]
     },
     "reorderReleases": {
@@ -52,6 +82,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/releases/reorder (server/main.go:558)"
       ]
     },
     "setIssueReleases": {
@@ -60,6 +95,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "An issue-update operation exposed directly and through the paged alias.",
+      "callers": [
+        "PUT /api/issues/{id}/releases",
+        "PUT /api/issue-records/{id}/releases"
       ]
     }
   }

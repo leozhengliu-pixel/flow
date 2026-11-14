@@ -7,6 +7,12 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Delivery worker tick drains committed domain events and sends configured issue/project/initiative chat notifications.",
+      "callers": [
+        "startDeliveryScheduler -> runChatWorkerLoop -> processChatIntegrationTick -> queueCommittedChatEvents -> queueChatDomainEvent",
+        "processChatIntegrationTick -> processChatJob -> processChatNotification"
       ]
     },
     "processChatNotification": {
@@ -15,6 +21,12 @@
       "accessors": [
         "WorkspaceMetadataFields",
         "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Delivery worker tick drains committed domain events and sends configured issue/project/initiative chat notifications.",
+      "callers": [
+        "startDeliveryScheduler -> runChatWorkerLoop -> processChatIntegrationTick -> queueCommittedChatEvents -> queueChatDomainEvent",
+        "processChatIntegrationTick -> processChatJob -> processChatNotification"
       ]
     },
     "queueChatDomainEvent": {
@@ -23,6 +35,12 @@
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Delivery worker tick drains committed domain events and sends configured issue/project/initiative chat notifications.",
+      "callers": [
+        "startDeliveryScheduler -> runChatWorkerLoop -> processChatIntegrationTick -> queueCommittedChatEvents -> queueChatDomainEvent",
+        "processChatIntegrationTick -> processChatJob -> processChatNotification"
       ]
     }
   }

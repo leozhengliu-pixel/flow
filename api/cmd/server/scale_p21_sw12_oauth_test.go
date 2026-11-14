@@ -145,8 +145,9 @@ func TestScaleP21SW12SecretRotationDifferential(t *testing.T) {
 					if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 						t.Fatal(err)
 					}
-					current, ok, err := f.probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "oauthApplications", ID: target.ID}}})
-					if err != nil || !ok || len(current.OAuthApplications) != 1 {
+					hydrated, err := f.probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "oauthApplications", ID: target.ID}}})
+					current := hydrated.Data
+					if err != nil || len(current.OAuthApplications) != 1 {
 						t.Fatal("read rotated application", err)
 					}
 					if missing {
@@ -389,6 +390,9 @@ func TestScaleP21SW12OAuthAuthorityAndWorkspaceIsolation(t *testing.T) {
 		}
 		f.resources.workspaces = append(f.resources.workspaces, foreign.Workspace.URLKey)
 		if err := f.probe.ReloadWorkspace(t.Context(), foreign.Workspace.URLKey); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, foreign.Workspace.URLKey); err != nil {
 			t.Fatal(err)
 		}
 		original := scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications")

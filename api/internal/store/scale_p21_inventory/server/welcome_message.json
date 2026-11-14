@@ -9,6 +9,12 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "acceptInvitation (api/cmd/server/auth.go:2289)",
+        "joinOrganization (api/cmd/server/invite_links.go:140)"
       ]
     },
     "testWelcomeMessage": {
@@ -17,6 +23,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/workspace/welcome-message/test (api/cmd/server/main.go:633)"
       ]
     }
   }

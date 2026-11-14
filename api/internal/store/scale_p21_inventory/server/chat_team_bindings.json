@@ -9,6 +9,13 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.auditChatIntegration",
+        "server/server.auditChatTenantKey",
+        "server/server.auditChatTenant"
       ]
     },
     "chatBindingAuthorizerValid": {
@@ -24,6 +31,14 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from audited HOT server/chat_notifications.go:processChatNotification",
+      "callers": [
+        "server/server.chatSendMessageActionForm",
+        "server/server.saveChatBinding",
+        "server/server.chatBindingByID",
+        "server/server.chatBindingForChat"
       ]
     },
     "chatManageableTeamIDs": {
@@ -32,6 +47,13 @@
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.writeChatSettings",
+        "server/server.listChatProjectGroups",
+        "server/server.chatBindingSession"
       ]
     },
     "chatPermissions": {
@@ -40,6 +62,11 @@
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.writeChatSettings"
       ]
     },
     "saveChatBinding": {
@@ -47,6 +74,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/integrations/{provider}/chat/bindings (server/chat_integrations.go:261)"
       ]
     }
   }

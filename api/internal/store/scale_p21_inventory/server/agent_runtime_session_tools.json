@@ -8,6 +8,11 @@
       "reason": "Accepted ordinary typed producer states change this predicate: agent.session_updated callbacks can retain a warm AgentSession.UserID or Loop.Status containing NUL while split canonical JSON removes NUL, giving legacy false versus bounded true. Duplicate accepted AgentSession IDs keep the collection inline; legacy selects its first owned session while the raw SQL predicate sees no split rows, giving true versus false. TestScaleP21SW16RuntimeTypedSourceHold executes those three producers and the actual workerChatAsksLoopQuestions off/on branches without reloading the legacy oracle. Request-reference NUL rejection and ordinary permission differentials do not certify stored logical source parity. Keep pending until the bounded predicate preserves that source.",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.agentRunSessionTools"
       ]
     },
     "workerChatSession": {
@@ -16,6 +21,12 @@
       "reason": "The legacy metadata branch can return assembled warm-cache Agent messages while canonical point readers retain offloaded references; it also accepts legal session headers beyond the ordinary 256 KiB selected-record limit. A scoped body read or unconditional native authorization would change this helper's existing contracts. Keep pending until bounded full-session output and both internal-record flag branches are covered.",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.agentRunSessionToolContext",
+        "server/server.workerChatAsksLoopQuestions"
       ]
     }
   }

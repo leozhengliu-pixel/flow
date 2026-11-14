@@ -235,6 +235,9 @@ func (s *SQLiteStore) scaleP21SW16TemplateValidationHeaders(ctx context.Context,
 	if count < 0 || count > 64 || bytes < 0 || bytes > (metadataWorkBytes-count*256-(64<<10))/3 {
 		return nil, nil, ErrMetadataWorkBudget
 	}
+	if count == 0 {
+		return nil, func() {}, nil
+	}
 	headerCtx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(bytes)*3+int(count)*256+64<<10)
 	if err != nil {
 		return nil, nil, err

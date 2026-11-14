@@ -15,6 +15,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Unconditional delivery scheduler tick scans each workspace and dispatches due notification/integration work.",
+      "callers": [
+        "startDeliveryScheduler -> runDeliverySchedulerTick -> processDueDeliveries"
       ]
     }
   }

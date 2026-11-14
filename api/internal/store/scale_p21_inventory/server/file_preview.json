@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Optional external code-host file preview is outside the specified metadata view workload; profile promotion remains possible.",
+      "callers": [
+        "GET /api/integrations/file-preview (server/main.go)"
       ]
     }
   }

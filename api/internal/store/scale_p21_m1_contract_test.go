@@ -68,6 +68,8 @@ func TestScaleP21M1ActorDirectorySharedPrerequisite(t *testing.T) {
 		data.Settings["m1-target"] = "updated"
 		return nil
 	}
+	preimage, _ := f.storedWorkspace(workspace)
+	preimage = cloneBootstrap(preimage)
 	if err := f.MutateWorkspaceScoped(ctx, workspace, "application_policy.updated", "m1-target", nil, scope, callback); err != nil {
 		t.Fatal(err)
 	}
@@ -82,6 +84,9 @@ func TestScaleP21M1ActorDirectorySharedPrerequisite(t *testing.T) {
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='users' AND record_key=?`, original, workspace, actor.ID); err != nil {
 		t.Fatal(err)
 	}
+	f.mu.Lock()
+	f.setWorkspaceLocked(workspace, preimage)
+	f.mu.Unlock()
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)

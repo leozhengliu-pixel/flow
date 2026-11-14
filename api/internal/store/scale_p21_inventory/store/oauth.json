@@ -23,6 +23,11 @@
       "status": "unmigrated",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /uploads/{name}",
+      "callers": [
+        "server/server.resolveOAuthAppIcon"
       ]
     }
   }

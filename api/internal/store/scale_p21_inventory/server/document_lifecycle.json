@@ -8,6 +8,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "server/document_lifecycle.go:addDocumentSubscribers:330",
+        "server/document_lifecycle.go:removeDocumentSubscriber:338"
       ]
     },
     "importDocumentRevision": {
@@ -16,6 +22,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Revision import is an explicit on-demand import operation, not a view/tick dependency.",
+      "callers": [
+        "POST /api/workspace/documents/{id}/revisions/import (server/main.go)"
       ]
     },
     "restoreDeletedDocument": {
@@ -24,6 +35,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents/{id}/restore (server/main.go)"
       ]
     },
     "setDocumentThreadSubscription": {
@@ -32,6 +48,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PUT /api/documents/{id}/comments/{commentId}/subscription (server/main.go)",
+        "DELETE /api/documents/{id}/comments/{commentId}/subscription (server/main.go)"
       ]
     }
   }

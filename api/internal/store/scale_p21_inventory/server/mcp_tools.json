@@ -8,6 +8,22 @@
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/issue-records/{id}/suggestions",
+      "callers": [
+        "server/server.agentEntitySnapshot",
+        "server/server.mcpWorkspaceDataForTool",
+        "server/server.appendMCPDocumentEmbed",
+        "server/server.deleteMCPResource",
+        "server/server.flowDeletePreview",
+        "server/server.deleteMCPDocument",
+        "server/server.saveMCPProject",
+        "server/server.deleteMCPComment",
+        "server/server.previewIssueSuggestions",
+        "server/server.listIssueSuggestions",
+        "server/server.updateIssueSuggestionState",
+        "server/server.requestTriageAIPlan"
       ]
     },
     "mcpWorkspaceDataForTool": {
@@ -17,6 +33,11 @@
         "Bootstrap",
         "WorkspaceMetadataFields",
         "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.runFlowTool"
       ]
     },
     "runFlowTool": {
@@ -24,6 +45,11 @@
       "status": "unmigrated",
       "accessors": [
         "mcpWorkspaceDataForTool"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowTool"
       ]
     }
   }

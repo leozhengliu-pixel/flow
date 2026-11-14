@@ -9,6 +9,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Once-per-minute delivery tick performs retirement/settings maintenance, rather than an admin request.",
+      "callers": [
+        "processDueDeliveries -> maintainTeamSettings"
       ]
     }
   }

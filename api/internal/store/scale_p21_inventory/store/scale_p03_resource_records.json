@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "store/SQLiteStore.resourceReadRecords"
       ]
     }
   }

@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "server/chat_dm_jobs.go:processChatDMReplyJob -> chatDMInterruptSavedReply"
       ]
     },
     "chatDMResumeWorkerReply": {
@@ -15,6 +20,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "server/chat_dm_jobs.go:processChatDMReplyJob -> chatDMResumeWorkerReply"
       ]
     },
     "processChatDMReplyJob": {
@@ -22,6 +32,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "server/chat_dm_jobs.go:startChatDMReplyJobs -> processChatDMReplyJob"
       ]
     }
   }

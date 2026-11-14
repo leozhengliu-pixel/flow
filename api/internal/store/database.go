@@ -118,13 +118,14 @@ type sqlTx struct {
 	numbering bool
 	// audit: the mutation whose staged audit entries this transaction
 	// inserts when it commits (audit_events.go).
-	audit         *auditCollector
-	journalToken  string
-	journalRepair bool
-	journalBudget *recordJournalBudgetState
-	journalFinal  bool
-	journalCounts map[string]bool
-	journalOrder  recordJournalOrder
+	audit                *auditCollector
+	journalToken         string
+	journalRepair        bool
+	journalBudget        *recordJournalBudgetState
+	journalFinal         bool
+	journalCounts        map[string]bool
+	journalOrder         recordJournalOrder
+	metadataCommitStamps map[string]*metadataCommitStamp
 }
 
 // notificationSignal names a notification that is news to its recipient.
@@ -197,6 +198,11 @@ func (tx *sqlTx) Commit() error {
 			revisionErr = errors.New("workspace replaced")
 		}
 	}
+	for workspace, capture := range tx.metadataCommitStamps {
+		if capture.base != nil && tx.cacheRevisions[cacheRevisionKey{workspace, cacheKindMetadata}] {
+			capture.ownAdvance = 1
+		}
+	}
 	if lateJournal {
 		// SQLite has one writer. After audit/count work and the copy's stamp
 		// read, bounded maintenance can also flush queued cache revisions.
@@ -211,6 +217,13 @@ func (tx *sqlTx) Commit() error {
 		}
 	}
 	if err := tx.flushCacheRevisions(); err != nil {
+		_ = tx.Rollback()
+		if write != nil {
+			write.fail()
+		}
+		return err
+	}
+	if err := tx.readMetadataCommitStamps(); err != nil {
 		_ = tx.Rollback()
 		if write != nil {
 			write.fail()
@@ -243,6 +256,9 @@ func (tx *sqlTx) Commit() error {
 		}
 	}
 	tx.signals = nil
+	for _, capture := range tx.metadataCommitStamps {
+		capture.ready = true
+	}
 	return nil
 }
 

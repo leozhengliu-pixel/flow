@@ -8,6 +8,11 @@
       "accessors": [
         "Bootstrap",
         "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
       ]
     },
     "flowDeletePreview": {
@@ -15,6 +20,11 @@
       "status": "unmigrated",
       "accessors": [
         "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "No production caller or registration found; TestMCPDeleteProjectMovesItToTrashWithItsCounts -> flowDeletePreview (mcp_tools_delete_test.go:56) is the only invocation"
       ]
     }
   }

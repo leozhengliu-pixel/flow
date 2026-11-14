@@ -9,6 +9,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "createPersonalDataExport (api/cmd/server/personal_data.go:83)"
       ]
     },
     "eraseMember": {
@@ -26,6 +31,12 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "eraseAccount (api/cmd/server/personal_data.go:631)",
+        "eraseMember (api/cmd/server/personal_data.go:758)"
       ]
     },
     "refuseSoleAdmin": {
@@ -41,6 +52,11 @@
       "status": "unmigrated",
       "accessors": [
         "BeginWorkspaceRead"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "writePersonalData (api/cmd/server/personal_data.go:295)"
       ]
     }
   }

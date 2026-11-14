@@ -9,6 +9,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Normal desktop notification acknowledgement endpoint.",
+      "callers": [
+        "POST /api/desktop-notifications/ack -> acknowledgeDesktopNotifications"
       ]
     },
     "createIssueTemplate": {
@@ -17,6 +22,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/teams/{id}/templates -> createIssueTemplate"
       ]
     },
     "createTeamLabel": {
@@ -26,6 +36,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/teams/{id}/labels -> createTeamLabel"
       ]
     },
     "createWorkflowState": {
@@ -34,6 +49,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/teams/{id}/states -> createWorkflowState"
       ]
     },
     "deleteIssueTemplate": {
@@ -43,6 +63,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "DELETE /api/teams/{id}/templates/{templateId} -> deleteIssueTemplate"
       ]
     },
     "dispatchNotificationEmails": {
@@ -51,6 +76,12 @@
       "reason": "Only the no-mailer full=false branch is migrated: due rows retain an independent read handle through unchanged claims and pending-disabled updates, with exact off method-value dispatch and SW15 repeated canonical state differential. The mailer-enabled full snapshot still needs complete installed recipient/review source and bounded rendering inputs; the legacy by-value API explicitly refuses bounded use. This partial branch does not certify full email rendering.",
       "accessors": [
         "BeginDueNotificationDeliveryRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Delivery tick and ordinary issue/comment/project/document writes synchronously invoke notification delivery.",
+      "callers": [
+        "processDueDeliveries -> dispatchNotificationEmails",
+        "createIssue/updateIssue/createComment/updateDocument -> dispatchNotificationEmails"
       ]
     },
     "getNotificationPreferences": {
@@ -66,6 +97,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "GET /api/teams/{id}/settings -> getTeamSettings"
       ]
     },
     "listIssueTemplates": {
@@ -73,6 +109,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "GET /api/teams/{id}/templates -> listIssueTemplates"
       ]
     },
     "listNotificationDeliveries": {
@@ -80,6 +121,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "GET /api/notification-deliveries -> listNotificationDeliveries"
       ]
     },
     "listTeamLabels": {
@@ -87,6 +133,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "GET /api/teams/{id}/labels -> listTeamLabels"
       ]
     },
     "listWorkflowStates": {
@@ -94,6 +145,11 @@
       "status": "unmigrated",
       "accessors": [
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "GET /api/teams/{id}/states -> listWorkflowStates"
       ]
     },
     "maintainCycleSchedule": {
@@ -103,6 +159,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Every ordinary workspace bootstrap checks cycle maintenance before constructing its response.",
+      "callers": [
+        "GET /api/bootstrap -> bootstrap -> maintainCycleSchedule"
       ]
     },
     "reorderWorkflowStates": {
@@ -111,6 +172,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/teams/{id}/states/reorder -> reorderWorkflowStates"
       ]
     },
     "retryNotificationDelivery": {
@@ -120,6 +186,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "POST /api/notification-deliveries/{id}/retry -> retryNotificationDelivery"
       ]
     },
     "updateIssueTemplate": {
@@ -128,6 +199,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "PATCH /api/teams/{id}/templates/{templateId} -> updateIssueTemplate"
       ]
     },
     "updateNotificationPreferences": {
@@ -138,6 +214,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "PATCH /api/notification-preferences -> updateNotificationPreferences"
       ]
     },
     "updateStructuredTeamSettings": {
@@ -146,12 +227,17 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "PATCH /api/teams/{id}/settings -> updateStructuredTeamSettings"
       ]
     },
     "updateTeamLabel": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Writes labels/labelID and reads exact providerJobs/users/teams/customers/states predecessors plus recognized typed targets; label_ success omits unnecessary reads and missing special team-resource prefixes retain no fallback. Selected Project Lead/Creator users resolve inside the transaction for legacy event-only display enrichment. Shared resolved-adapter tests and SW10/SW20 label matrix, aggregate-closure/project-reference tests pass, including persistent SQLite count2, 22 precedence cases, actor/ref principal-key matrix, stale/missing/inactive actors, unchanged canonical read rows, complete sinks, exact off dispatch and zero full decodes.",
+      "reason": "Writes labels/labelID and reads exact providerJobs/users/teams/customers/states predecessors plus recognized typed targets; label_ success omits unnecessary reads and missing special team-resource prefixes retain no fallback. Selected Project Lead/Creator users resolve inside the transaction for legacy event-only display enrichment. Shared resolved-adapter tests and SW10/SW20 label matrix, aggregate-closure/project-reference tests pass, including persistent SQLite count2, 22 precedence cases, actor/ref principal-key matrix, stale/missing/inactive actors, unchanged canonical read rows, complete sinks, exact off dispatch and zero full decodes. Bounded archivedAt parsing uses the store-owned per-operation RFC3339 receipt parser under its live mutation lease; the off branch retains literal time.Parse and target-before-input validation. TestScaleP21SW31TimeInputTeamLabelHTTP compares exact offset/precision and response JSON, subsequent bounded reads/updates with native timestamp identity, malformed input and missing-target precedence. TestScaleP21SW31TimestampInputs tests cold registry order, retry reset, finite receipt limits, foreign/concurrent/canceled misuse and replaced-local/private-location holds; TestScaleP21SW29LogicalWrite rejects new unreceipted leaves before commit while preserving untouched opaque siblings. The combined tests pass race/count2 against persistent SQLite.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -163,6 +249,11 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "PATCH /api/teams/{id}/states/{stateId} -> updateWorkflowState"
       ]
     },
     "workflowStateEditMetadataOnly": {
@@ -170,6 +261,11 @@
       "status": "unmigrated",
       "accessors": [
         "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "callers": [
+        "updateWorkflowState -> workflowStateEditMetadataOnly"
       ]
     }
   }

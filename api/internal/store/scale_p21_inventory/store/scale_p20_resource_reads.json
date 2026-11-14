@@ -8,6 +8,11 @@
       "reason": "Complete summary and identity sets are projected before response paging; residency and CPU remain to migrate.",
       "accessors": [
         "Bootstrap"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/sync/manifest",
+      "callers": [
+        "server/server.scaleP20Metadata"
       ]
     }
   }

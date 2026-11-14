@@ -7,6 +7,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/customers/{id} (server/public_api_routes.go:30)"
       ]
     },
     "getCycleRecord": {
@@ -14,6 +19,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/cycles/{id} (server/public_api_routes.go:21)"
       ]
     },
     "getInitiativeRecord": {
@@ -21,6 +31,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/initiatives/{id} is the ordinary initiative detail endpoint despite the public_api filename.",
+      "callers": [
+        "GET /api/initiatives/{id} (server/public_api_routes.go)"
       ]
     },
     "getIssueLabelRecord": {
@@ -28,6 +43,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Read-only issue-label detail for compatible clients.",
+      "callers": [
+        "GET /api/issue-labels/{id}"
       ]
     },
     "getProjectRecord": {
@@ -35,6 +55,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/projects/{id} is the ordinary project detail endpoint despite the public_api filename.",
+      "callers": [
+        "GET /api/projects/{id} (server/public_api_routes.go)"
       ]
     },
     "getTeamRecord": {
@@ -50,6 +75,11 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/users/{id} (server/public_api_routes.go:15)"
       ]
     },
     "getWorkflowStateRecord": {
@@ -58,6 +88,11 @@
       "reason": "Deferred after SW22 same-snapshot typed reader and ordinary M2 differential passed twice: the full legacy logical copy normalizes builtin Default/Reserved/colors on reload, while a bounded raw reader preserves the persisted warm values. A disposition probe on one persistent SQLite file proves the difference; unconditional normalization would instead corrupt freshly written warm values. The actual stamped logical source must be preserved before this handler can be reviewed. Implementation and evidence are archived under the task temporary directory.",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/workflow-states/{id} (server/public_api_routes.go:17)"
       ]
     }
   }

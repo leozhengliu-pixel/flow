@@ -9,6 +9,12 @@
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from audited HOT server/delivery_scheduler.go:processDueDeliveries",
+      "callers": [
+        "store/SQLiteStore.NotificationDeliveries",
+        "store/SQLiteStore.NotificationDeliverySnapshot"
       ]
     }
   }

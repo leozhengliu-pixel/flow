@@ -7,6 +7,25 @@
       "status": "unmigrated",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/projects/{id}/updates",
+      "callers": [
+        "server/server.chatLinkPreviewFor",
+        "server/server.chatSendProjectUpdate",
+        "server/server.chatInitiativeUpdateCard",
+        "server/server.createProjectUpdate",
+        "server/server.projectUpdateDiffPreview",
+        "server/server.initiativeUpdateDiffPreview",
+        "server/server.listProjectUpdates",
+        "server/server.listInitiativeUpdates",
+        "server/server.pulseRequestContext",
+        "server/server.preparePulseSummaries",
+        "server/server.pulseSummaryUpdates",
+        "server/server.pulseWorkspaceKey",
+        "server/server.pulseSummaryNotification",
+        "server/server.loadPulseSummary",
+        "server/server.webhookChildEntity"
       ]
     },
     "PulseSources": {
@@ -14,6 +33,12 @@
       "status": "unmigrated",
       "accessors": [
         "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/realtime/changes",
+      "callers": [
+        "server/server.pagedPulseSourceEvent",
+        "server/server.buildPulseEventSource"
       ]
     },
     "prunePulseIndexes": {

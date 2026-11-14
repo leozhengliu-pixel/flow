@@ -7,6 +7,12 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Normal project/initiative view pulse histories.",
+      "callers": [
+        "GET project/initiative updates -> listProjectUpdates/listInitiativeUpdates",
+        "GET /api/initiatives/{id}/updates (server/main.go)"
       ]
     },
     "listProjectUpdates": {
@@ -14,6 +20,12 @@
       "status": "unmigrated",
       "accessors": [
         "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Normal project/initiative view pulse histories.",
+      "callers": [
+        "GET project/initiative updates -> listProjectUpdates/listInitiativeUpdates",
+        "GET /api/projects/{id}/updates (server/main.go)"
       ]
     }
   }

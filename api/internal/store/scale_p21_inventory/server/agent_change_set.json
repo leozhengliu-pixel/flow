@@ -7,6 +7,13 @@
       "status": "unmigrated",
       "accessors": [
         "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.beginAgentChange",
+        "server/server.finishAgentChange",
+        "server/server.applyAgentFieldChange"
       ]
     },
     "applyAgentMessageChangesLocked": {
@@ -16,6 +23,11 @@
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.applyAgentMessageChanges"
       ]
     }
   }
