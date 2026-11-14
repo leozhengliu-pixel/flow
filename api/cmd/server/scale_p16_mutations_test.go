@@ -190,7 +190,7 @@ func scaleP16MutationScript(t *testing.T) map[string]string {
 		"searchSQL":         "SELECT issue_id,content FROM issue_search_documents WHERE workspace_key=? ORDER BY issue_id",
 		"metadataSearchSQL": "SELECT field,record_key,content FROM metadata_search_documents WHERE workspace_key=? ORDER BY field,record_key",
 		"auditSQL":          "SELECT seq,actor_type,actor_id,user_id,actor,action,resource_type,resource_id,result,metadata FROM audit_events WHERE workspace_id=? ORDER BY seq",
-		"eventsSQL":         "SELECT event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY created_at,id",
+		"eventsSQL":         "SELECT event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY seq",
 	} {
 		arg := db.key
 		if name == "eventsSQL" || name == "auditSQL" {
