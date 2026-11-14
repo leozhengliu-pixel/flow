@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded timestamp output preserves legacy JSON and encoding errors for detached native timezones, while native mutation inputs keep their existing availability checks. Bounded metadata stays off by default.
 - Bounded OAuth icon and review-reference permission checks read only their installed lookup fields. Pulse acknowledgement no-ops retain the viewer's installed timestamp without a write transaction, and webhook checks preserve warm native predicates. Cold metadata snapshots can refresh explicitly; the original full metadata writer prepares bounded publication before commit. Other cold writers and startup remain guarded, and bounded metadata stays off by default.
 - Metadata consumer inventory records HOT/COLD reachability and treats unclassified consumers as HOT. Pulse acknowledgements select only the viewer's settings, and a cancellable single-slot legacy read snapshot primitive owns full hydration through encoding. Cold routing and writes remain guarded; bounded metadata stays off by default.
 - Scoped metadata writes preserve uploaded inputs for undeclared import and migration jobs. Catalog backfill accepts complete numeric settings at end of input, and document notifications retain bounded workspace identity through directory lookup.
