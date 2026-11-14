@@ -1,0 +1,12 @@
+{
+  "source": "store/scale_p21_installed_principal.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginInstalledPrincipalRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["retainInstalledMetadataRead"],
+      "reason": "Authority-only constructor retains the exact incoming installed source, checks physical tenant origin and active live membership, preflights scalar identity/status bytes before bounded SQL fetch, and independently owns raw principal, SQL viewer identity and effective credential through one-shot Prepare/Publish. It grants no team/content projection and does not replace BootstrapForUser hydration, decoration or partial-error boundaries; app decoration is an explicit coverage hold. SW52 principal and Retain tests run twice on persistent SQLite and with race, covering owner-job M/key classes, raw versus SQL identity, origin recreation, revocation, suspension, cross-workspace, credential mutation, cancellation and owned publication. No caller family is certified by this primitive."
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "source": "store/scale_p21_installed_metadata_retain.go",
+  "unmigrated": 0,
+  "consumers": {
+    "retainInstalledMetadataRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "reason": "Ownership constructor honors an incoming exact-store/workspace source before consulting the installed default. Retain independently admits a descriptor and clones the key while retaining the exact immutable source under the original owner lock; its children and Close are independent. It rejects expired or foreign bindings without current-source fallback. SW52 tests twice on persistent SQLite and targeted race cover parent Close, later publication/reload, default changes, cancellation, saturation and tenant identity. This root constructor grants no viewer or family permissions."
+    }
+  }
+}
