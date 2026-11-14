@@ -28,6 +28,16 @@ func TestIssueMutationLoadsHistoryOnlyForTouchedIssues(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// Backdate the target (past the creator grace window) before the probe.
+	// Moving the project's earliest issue to the previous UTC day rebuilds
+	// its progress history from every member's activity, so doing it inside
+	// the probed edit read the malformed head between 00:00 and 01:00 UTC.
+	if _, err := repo.UpdateIssueRecord(t.Context(), workspace, target.ID, nil, IssueMutationScope{IncludeFamily: true}, func(_ *domain.Bootstrap, issue *domain.Issue) error {
+		issue.CreatedAt = time.Now().UTC().Add(-time.Hour)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	// An invalid, untouched head makes an accidental family/workspace scan
 	// fail loudly. The target's lazy head lookup must never inspect it.
 	if _, err := repo.db.ExecContext(t.Context(), `INSERT INTO workspace_content_records(workspace_key,kind,resource_id,id,created_at,data,owner_id,parent_id,status,next_attempt_at,record_version) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, workspace, "activity", child.ID, "malformed-history", time.Now().UTC().Format(time.RFC3339Nano), []byte("{"), "", "", "", "", 1); err != nil {
@@ -42,7 +52,6 @@ func TestIssueMutationLoadsHistoryOnlyForTouchedIssues(t *testing.T) {
 	_, err = repo.UpdateIssueRecord(ctx, workspace, target.ID, nil, IssueMutationScope{IncludeFamily: true}, func(data *domain.Bootstrap, issue *domain.Issue) error {
 		before := issue.Title
 		issue.Title = "history scope target"
-		issue.CreatedAt = time.Now().UTC().Add(-time.Hour)
 		RecordIssueActivity(data, issue.ID, domain.ActivityEvent{ID: "history-scope-event", Type: "issue.updated", CreatedAt: time.Now().UTC(), Actor: data.Viewer, Metadata: domain.ActivityMetadata{"titleBefore": before, "title": "history scope target"}})
 		return nil
 	})
