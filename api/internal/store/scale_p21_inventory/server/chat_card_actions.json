@@ -19,10 +19,20 @@
     "chatPersonalNotificationCard": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "SW48 migrates only the independent language lookup through chatReadLanguage and proves the complete plain-notification response for the principal/key matrix, missing/cross workspace and revocation, with primary SQL1->1. This function remains pending its chatAuthorizedMutation and chatPersonalIssueCard route/card branches; the language-only repair does not certify downstream controls or publication.",
       "accessors": [
         "WorkspaceMetadataFields",
         "chatAuthorizedMutation"
       ]
+    },
+    "chatReadLanguage": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "WorkspaceMetadataFields"
+      ],
+      "reason": "Flag off invokes the literal original userSettings field accessor and unchanged chatLanguage. Bounded mode pins the installed logical generation, selects the exact native userSettings map key and scalar language via indexed Child, and consumes at most8 bytes before returning only static en/zh. No decoded parent or borrowed value escapes. SW48 tests run twice on persistent SQLite cover warm NUL values, NUL native keys distinct from inner UserID, reloaded and refreshed-peer semantics, legal>3MiB parent and scalar tails, exhaustive Unicode classifier equivalence, invalid UTF8, errors/cancellation, whole plain-card permission/key matrix and cross/missing workspace with no full decode. Primary SQL is0 for language alone and1->1 for the actual plain notification fallback. Caller guards remain independent."
     },
     "chatRunQuickAction": {
       "owner": "P18",

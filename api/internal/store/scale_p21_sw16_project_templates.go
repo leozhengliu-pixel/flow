@@ -21,6 +21,8 @@ type ProjectTemplatesRead struct {
 	templates []domain.ProjectTemplate
 	release   func()
 	once      sync.Once
+	logical   *InstalledMetadataRead
+	ctx       context.Context
 }
 
 type scaleP21SW16TemplateValidationHeader struct {
@@ -37,6 +39,7 @@ func (r *ProjectTemplatesRead) Close() {
 			if r.release != nil {
 				r.release()
 			}
+			r.logical, r.ctx = nil, nil
 		})
 	}
 }
@@ -45,6 +48,35 @@ func (r *ProjectTemplatesRead) Close() {
 // BootstrapFor, including warm null slices and values sanitized only in SQL.
 // It does not authorize or replace the route's existing middleware.
 func (s *SQLiteStore) BeginProjectTemplatesRead(ctx context.Context, workspace string) (*ProjectTemplatesRead, bool, error) {
+	if s.BoundedMetadataEnabled() {
+		read, found, err := s.BeginProjectTemplatesStream(ctx, workspace)
+		if err != nil || !found {
+			return nil, found, err
+		}
+		retained, err := read.logical.Reduce(ctx, scaleP21SW16ProjectTemplateMaxWork, func(ctx context.Context) (any, error) {
+			var templates []domain.ProjectTemplate
+			err := read.logical.Child(ctx, []string{"projectTemplates"}, func(ctx context.Context, shape InstalledMetadataShape, ref InstalledMetadataRef) error {
+				if !shape.Found {
+					return ErrBoundedMetadataCoverage
+				}
+				return ref.WithValue(ctx, 64<<10, func(value any) error {
+					var ok bool
+					templates, ok = value.([]domain.ProjectTemplate)
+					if !ok {
+						return ErrBoundedMetadataCoverage
+					}
+					return nil
+				})
+			})
+			return templates, err
+		})
+		if err != nil {
+			read.Close()
+			return nil, true, err
+		}
+		read.templates = retained.Data.([]domain.ProjectTemplate)
+		return read, true, nil
+	}
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -142,6 +174,136 @@ func (s *SQLiteStore) BeginProjectTemplatesRead(ctx context.Context, workspace s
 		}
 		return &ProjectTemplatesRead{templates: templates, release: release}, true, nil
 	}
+}
+
+type scaleP21SW45TemplateBootstrapHeader struct {
+	Workspace string
+	Nil       [5]bool
+}
+
+// BeginProjectTemplatesStream owns the exact installed generation and keeps
+// only one template's typed and encoding work live during Visit.
+func (s *SQLiteStore) BeginProjectTemplatesStream(ctx context.Context, workspace string) (_ *ProjectTemplatesRead, found bool, err error) {
+	if !s.BoundedMetadataEnabled() {
+		return s.BeginProjectTemplatesRead(ctx, workspace)
+	}
+	read, found, err := s.BeginInstalledMetadataRead(ctx, workspace)
+	if err != nil || !found {
+		return nil, found, err
+	}
+	defer func() {
+		if err != nil || !found {
+			read.Close()
+		}
+	}()
+	urlBytes := 0
+	err = read.Child(ctx, []string{"workspace", "urlKey"}, func(ctx context.Context, shape InstalledMetadataShape, ref InstalledMetadataRef) error {
+		if !shape.Found {
+			return ErrBoundedMetadataCoverage
+		}
+		return ref.WithValue(ctx, 0, func(value any) error {
+			key, ok := value.(string)
+			if !ok {
+				return ErrBoundedMetadataCoverage
+			}
+			urlBytes = len(key)
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, true, err
+	}
+	if urlBytes > (scaleP21SW16ProjectTemplateMaxWork-(128<<10))/33 {
+		return nil, true, ErrMetadataWorkBudget
+	}
+	header, err := read.Reduce(ctx, urlBytes*33+128<<10, func(ctx context.Context) (any, error) {
+		var result scaleP21SW45TemplateBootstrapHeader
+		err := read.Child(ctx, []string{"workspace", "urlKey"}, func(ctx context.Context, _ InstalledMetadataShape, ref InstalledMetadataRef) error {
+			return ref.WithValue(ctx, 0, func(value any) error {
+				result.Workspace = strings.Clone(value.(string))
+				return nil
+			})
+		})
+		if err != nil {
+			return nil, err
+		}
+		for index, field := range []string{"issues", "activities", "comments", "notifications", "notificationDeliveries"} {
+			err := read.Child(ctx, []string{field}, func(_ context.Context, shape InstalledMetadataShape, _ InstalledMetadataRef) error {
+				if !shape.Found {
+					return ErrBoundedMetadataCoverage
+				}
+				result.Nil[index] = shape.Nil
+				return nil
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
+	})
+	if err != nil {
+		return nil, true, err
+	}
+	defer header.Close()
+	value := header.Data.(scaleP21SW45TemplateBootstrapHeader)
+	if value.Nil[0] {
+		err = s.scaleP21SW16ValidateTemplateBootstrapRows(ctx, value.Workspace, "", func() any { return new(domain.Issue) })
+	}
+	kinds := []string{"import_input", "migration_input"}
+	for index, kind := range []string{"activity", "comment", "notification", "delivery"} {
+		if value.Nil[index+1] {
+			kinds = append(kinds, kind)
+		}
+	}
+	for _, kind := range kinds {
+		if err != nil {
+			break
+		}
+		var target func() any
+		switch kind {
+		case "import_input", "migration_input":
+			target = func() any { return new(importInput) }
+		case "activity":
+			target = func() any { return new(domain.ActivityEvent) }
+		case "comment":
+			target = func() any { return new(domain.Comment) }
+		case "notification":
+			target = func() any { return new(domain.Notification) }
+		case "delivery":
+			target = func() any { return new(domain.NotificationDelivery) }
+		}
+		err = s.scaleP21SW16ValidateTemplateBootstrapRows(ctx, value.Workspace, kind, target)
+	}
+	if err != nil {
+		if errors.Is(err, ErrMetadataWorkBudget) {
+			return nil, true, err
+		}
+		return nil, false, nil
+	}
+	return &ProjectTemplatesRead{logical: read, ctx: ctx, release: read.Close}, true, nil
+}
+
+// Visit retains each decoded row and its encoding allowance through fn. Nil
+// distinguishes the literal null collection from an empty array.
+func (r *ProjectTemplatesRead) Visit(fn func(context.Context, domain.ProjectTemplate) error) (nilCollection bool, err error) {
+	if r.logical == nil {
+		for _, template := range r.templates {
+			if err := fn(context.Background(), template); err != nil {
+				return false, err
+			}
+		}
+		return r.templates == nil, nil
+	}
+	shape, err := r.logical.Visit(r.ctx, []string{"projectTemplates"}, func(ctx context.Context, entry InstalledMetadataEntry) error {
+		return entry.Value.WithValueForEncoding(ctx, 128<<10, func(value any) error {
+			template, ok := value.(domain.ProjectTemplate)
+			if !ok {
+				return ErrBoundedMetadataCoverage
+			}
+			return fn(ctx, template)
+		})
+	})
+	return shape.Nil, err
 }
 
 func scaleP21SW16ProjectTemplateSourceCost(source domain.Bootstrap) (int, error) {

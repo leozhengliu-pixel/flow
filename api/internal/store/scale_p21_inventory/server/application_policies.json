@@ -1,7 +1,16 @@
 {
   "source": "server/application_policies.go",
-  "unmigrated": 2,
+  "unmigrated": 4,
   "consumers": {
+    "applicationPolicyRead": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "workspaceDataScoped"
+      ],
+      "reason": "Actual-owner SW48 differential proves a legal 12000-entry applicationPolicies setting yields literal HTTP 200 with 4488002 response bytes while this owned selection returns HTTP 503 before reading the complete setting. The collection has no matching product count/byte cap; a 2 MiB selection allowance cannot certify it. Requires streamed policy lookup/list output and owned encoding while preserving exact visibility and save authorization keys. Small whole-M and disabled/HIPAA differences are repaired, but do not waive this legal-large failure."
+    },
     "deleteApplicationPolicy": {
       "owner": "P21",
       "status": "unmigrated",
@@ -10,15 +19,15 @@
         "MutateWorkspace",
         "workspaceData"
       ],
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
+      "reason": "SW48 now proves canonical mutation, owner/admin/key decisions, and complete earlier Document.ContentData aggregate Snapshot/PreviousValues/realtime parity, including a warm NUL marker and an aggregate larger than256KiB. The read is retained through the response by applicationPolicyRead. Keep this mutation consumer pending G1 indexed work, G6 legal-large aggregate publication, G7 inline-root/physical binding closure, and explicit ownership of callback-captured output through encoding; the small differential does not certify those remaining contracts."
     },
     "listApplicationPolicies": {
       "owner": "P21",
-      "status": "reviewed",
+      "status": "unmigrated",
       "accessors": [
         "workspaceData"
       ],
-      "reason": "Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
+      "reason": "Actual-owner SW48 differential proves a legal 12000-entry applicationPolicies setting returns literal HTTP 200 with 4488002 response bytes versus bounded HTTP 503. Existing save validation imposes no matching collection count/byte cap. Requires a streamed exact policy filter/list and owned response encoding rather than complete-setting Select under 2 MiB. Small whole-M/source/lifetime proofs do not certify legal complete-collection output."
     },
     "saveApplicationPolicy": {
       "owner": "P21",
@@ -28,7 +37,7 @@
         "MutateWorkspace",
         "workspaceData"
       ],
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
+      "reason": "SW48 now proves canonical mutation, owner/admin/key decisions, complete earlier warm aggregate effects and the whole M request matrix. applicationPolicyRead retains the installed read through response and selects the exact MCP enable/HIPAA flags; disabled connector saves now match the literal403 instead of incorrectly succeeding. Keep the mutation consumer pending G1 indexed work, G6 legal-large aggregate publication, G7 inline-root/physical bindings and explicit callback-output ownership through encode; no mutation guard is removed by the read repair."
     }
   }
 }

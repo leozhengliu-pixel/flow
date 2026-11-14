@@ -452,9 +452,19 @@ func (s *server) createWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := requestActor(s, r)
 	var created domain.IssueLabel
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "label.created", input, func(data *domain.Bootstrap) (string, error) {
+	writeCtx := r.Context()
+	var timestamps *store.MetadataTimestampInputs
+	scope := store.MetadataAppendScope{AppendKinds: []string{"labels"}}
+	if s.store.BoundedMetadataEnabled() {
+		writeCtx, timestamps = s.store.WithMetadataTimestampInputs(writeCtx)
+		if input.GroupID != nil && strings.TrimSpace(*input.GroupID) != "" &&
+			(input.ResourceType == nil || validLabelResourceType(strings.TrimSpace(*input.ResourceType))) {
+			scope.Read = []store.RecordKey{{Kind: "labelGroups", ID: strings.TrimSpace(*input.GroupID)}}
+		}
+	}
+	err := s.store.MutateWorkspaceAppendingWithAggregate(writeCtx, workspaceKey(r), "label.created", input, scope, func(data *domain.Bootstrap) (string, error) {
 		var err error
-		created, err = newLabel(data, actor.ID, "Workspace", input)
+		created, err = newLabel(data, actor.ID, "Workspace", input, timestamps)
 		if err != nil {
 			return "", err
 		}
@@ -474,7 +484,28 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	// The event carries the updated label (payload.label) so clients patch their
 	// embedded copies without refetching; it is filled in by the mutation.
 	payload := inputEventPayload(input)
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "label.updated", id, payload, func(data *domain.Bootstrap) error {
+	writeCtx := r.Context()
+	var timestamps *store.MetadataTimestampInputs
+	if s.store.BoundedMetadataEnabled() {
+		writeCtx, timestamps = s.store.WithMetadataTimestampInputs(writeCtx)
+	}
+	err := s.store.MutateWorkspaceResolved(writeCtx, workspaceKey(r), "label.updated", id, payload, store.MetadataResolvedScope{
+		MetadataRecordScope: store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "labels", ID: id}}},
+		ResolveRead: func(data domain.Bootstrap) ([]store.RecordKey, error) {
+			index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
+			if index < 0 || input.ResourceType != nil && !validLabelResourceType(strings.TrimSpace(*input.ResourceType)) {
+				return nil, nil
+			}
+			groupID := data.Labels[index].GroupID
+			if input.GroupID != nil {
+				groupID = strings.TrimSpace(*input.GroupID)
+			}
+			if groupID == "" {
+				return nil, nil
+			}
+			return []store.RecordKey{{Kind: "labelGroups", ID: groupID}}, nil
+		},
+	}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
 		if index < 0 {
 			return errNotFound
@@ -495,7 +526,9 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 			return errInvalid
 		}
 		before := data.Labels[index]
-		applyLabelInput(&data.Labels[index], input)
+		if err := applyLabelInput(&data.Labels[index], input, timestamps); err != nil {
+			return err
+		}
 		updated = data.Labels[index]
 		if unchangedEdit(before, updated, "IssueCount") {
 			return store.ErrNoMutation
@@ -510,7 +543,7 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
-func newLabel(data *domain.Bootstrap, actorID, scope string, input labelInput) (domain.IssueLabel, error) {
+func newLabel(data *domain.Bootstrap, actorID, scope string, input labelInput, timestamps ...*store.MetadataTimestampInputs) (domain.IssueLabel, error) {
 	resource := "issue"
 	if input.ResourceType != nil {
 		resource = strings.TrimSpace(*input.ResourceType)
@@ -519,7 +552,9 @@ func newLabel(data *domain.Bootstrap, actorID, scope string, input labelInput) (
 		return domain.IssueLabel{}, errInvalid
 	}
 	created := domain.IssueLabel{ID: idgen.New("label_"), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: scope, ResourceType: resource, CreatorID: actorID, CreatedAt: time.Now().UTC()}
-	applyLabelInput(&created, input)
+	if err := applyLabelInput(&created, input, timestamps...); err != nil {
+		return domain.IssueLabel{}, err
+	}
 	if !validLabelGroup(data, resource, created.Scope, created.GroupID) {
 		return domain.IssueLabel{}, errInvalid
 	}
@@ -550,7 +585,7 @@ func labelScopesMatch(left, right string) bool {
 	return left == right
 }
 
-func applyLabelInput(label *domain.IssueLabel, input labelInput) {
+func applyLabelInput(label *domain.IssueLabel, input labelInput, timestamps ...*store.MetadataTimestampInputs) error {
 	if input.Name != nil && strings.TrimSpace(*input.Name) != "" {
 		label.Name = strings.TrimSpace(*input.Name)
 	}
@@ -570,10 +605,23 @@ func applyLabelInput(label *domain.IssueLabel, input labelInput) {
 		value := strings.TrimSpace(*input.ArchivedAt)
 		if value == "" {
 			label.ArchivedAt = nil
-		} else if parsed, err := time.Parse(time.RFC3339, value); err == nil {
-			label.ArchivedAt = &parsed
+		} else if len(timestamps) == 0 || timestamps[0] == nil {
+			if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+				label.ArchivedAt = &parsed
+			}
+		} else {
+			parsed, err := timestamps[0].ParseRFC3339(value)
+			if err == nil {
+				label.ArchivedAt = &parsed
+			} else {
+				var syntax *time.ParseError
+				if !errors.As(err, &syntax) {
+					return err
+				}
+			}
 		}
 	}
+	return nil
 }
 
 func labelScopeIsWorkspace(scope string) bool {

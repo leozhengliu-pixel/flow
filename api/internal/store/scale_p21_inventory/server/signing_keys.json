@@ -5,6 +5,7 @@
     "addCommitSigningKey": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Preparatory userSettings actor point scope preserves literal flag-off dispatch. SW46 compares successful add/replace, invalid input, cancellation, canonical account metadata, encrypted material compensation and webhook/realtime under the full role/key matrix; known missing-workspace error-body divergence remains an explicit source hold. Current request SQL is 14 legacy versus 35 bounded because shared policy/root precommit validation still repeats canonical work. G1 lookup and G7 large-root transport/validation remain pending; these partial proofs do not certify activation.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -13,6 +14,7 @@
     "removeCommitSigningKey": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Preparatory actor userSettings point writer remains blocked on the owned account scalar read: AccountCollections sees no nonresident UserSettings in bounded policy, skips encrypted key deletion, and removes only metadata. TestScaleP21SW46SigningRemovalAccountSourceHold proves legacy deletes material while bounded retains it. The shared installed child/projection bridge must preserve exact CommitSigningKey presence without decoding giant unrelated settings. G1/G7 and missing-workspace semantics also remain pending; no consumer certification is claimed.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

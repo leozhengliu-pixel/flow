@@ -98,6 +98,12 @@ func (s *SQLiteStore) captureLogicalTestView(ctx context.Context, owner *SQLiteS
 		if err != nil {
 			return err
 		}
+		packed, err := metadataLogicalUnitsForInstalled(ctx, source)
+		if err != nil {
+			source.Release()
+			return err
+		}
+		source = packed
 		s.installMetadataLogicalSource(workspace, source)
 	}
 	return nil

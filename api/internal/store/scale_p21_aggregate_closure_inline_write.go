@@ -11,77 +11,100 @@ import (
 
 const metadataLogicalInlineWorkLimit = 2 << 20
 
-// persistMetadataLogicalInlineField uses the existing field-delta writer,
-// preserving its root merge, null/empty shapes, timestamps and journal hooks.
-// The current scoped producer already requires a root of at most 256 KiB.
-// This adapter also preflights its decoded field and encoding work separately.
+// Reference refresh serializes one member at a time. The unrelated root and
+// the complete decoded Members collection never enter Go working memory.
 func (s *SQLiteStore) persistMetadataLogicalInlineField(ctx context.Context, tx *sqlTx, workspace, name string, before, after metadataLogicalNode) error {
 	field, ok := metadataFieldByName(name)
 	if !ok || before.typ != after.typ || before.typ != reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type {
 		return ErrMetadataRecordQuery
 	}
-	var rootBytes int64
-	lock := ""
-	if tx.dialect != "sqlite" {
-		lock = " FOR UPDATE"
-	}
-	if err := tx.QueryRowContext(ctx, "SELECT LENGTH(data) FROM workspace_states WHERE workspace_key=?"+lock, workspace).Scan(&rootBytes); err != nil {
+	root, closeRoot, err := s.metadataLogicalRootSnapshot(ctx, tx, workspace)
+	if err != nil {
 		return err
 	}
-	if rootBytes < 0 || rootBytes > MetadataRecordPageMaxBytes ||
-		before.cost > metadataLogicalInlineWorkLimit || after.cost > metadataLogicalInlineWorkLimit {
-		return ErrMetadataWorkBudget
+	defer closeRoot()
+	if root.shapes[name] != "" {
+		return fmt.Errorf("%w: %s is a split field, not an inline field", ErrBoundedMetadataCoverage, name)
 	}
-	required := (before.cost+after.cost)*8 + uint64(rootBytes)*12 + 64<<10
-	if required > metadataLogicalInlineWorkLimit {
-		return ErrMetadataWorkBudget
+	var count int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field=?", workspace, name).Scan(&count); err != nil {
+		return err
 	}
-	_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(required))
+	if count != 0 {
+		return fmt.Errorf("%w: inline %s has unexpected split rows", ErrBoundedMetadataCoverage, name)
+	}
+	value, release, err := s.spoolMetadataLogicalInline(ctx, workspace, after)
 	if err != nil {
 		return err
 	}
 	defer release()
-	var workspaceID string
-	var raw []byte
-	if err := tx.QueryRowContext(ctx, "SELECT workspace_id,CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?"+lock,
-		MetadataRecordPageMaxBytes, workspace).Scan(&workspaceID, &raw); err != nil {
+	return s.patchMetadataLogicalRoot(ctx, tx, workspace, root.stamp.workspaceID, map[string]metadataLogicalRootReplacement{name: value}, true)
+}
+
+func (s *SQLiteStore) spoolMetadataLogicalInline(ctx context.Context, workspace string, node metadataLogicalNode) (_ metadataLogicalRootReplacement, closeSpool func(), err error) {
+	spool, err := newMetadataLogicalRecordSpool(s.metadataLogicalScratchContext(ctx, workspace))
+	if err != nil {
+		return metadataLogicalRootReplacement{}, nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = spool.Close()
+		}
+	}()
+	write := func(raw []byte) error {
+		if int64(len(raw)) > int64(s.maxStateBytes)-spool.bytes {
+			return fmt.Errorf("workspace state exceeds %d bytes", s.maxStateBytes)
+		}
+		_, err := spool.Write(raw)
 		return err
 	}
-	if raw == nil || int64(len(raw)) != rootBytes {
-		return ErrConcurrentWrite
-	}
-	var root map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &root); err != nil {
-		return err
-	}
-	var shapes map[string]string
-	if encoded := root[metadataCollectionsKey]; encoded != nil {
-		if err := json.Unmarshal(encoded, &shapes); err != nil {
+	encode := func(value metadataLogicalNode) error {
+		if value.cost > uint64(metadataWorkBytes/8) {
+			return ErrMetadataWorkBudget
+		}
+		required := int(value.cost)*8 + 128<<10
+		release, err := s.reserveMetadataLogicalRootWork(ctx, required)
+		if err != nil {
 			return err
 		}
+		defer release()
+		decoded, err := value.Value(ctx, required)
+		if err != nil {
+			return err
+		}
+		raw, err := json.Marshal(decoded.Interface())
+		if err != nil {
+			return err
+		}
+		return write(raw)
 	}
-	if shapes[name] != "" {
-		return fmt.Errorf("%w: %s is a split field, not an inline field", ErrBoundedMetadataCoverage, name)
+	if node.typ.Kind() == reflect.Slice && node.typ.Elem().Kind() != reflect.Uint8 {
+		isNil, err := node.isNil(ctx)
+		if err != nil {
+			return metadataLogicalRootReplacement{}, nil, err
+		}
+		if isNil {
+			err = write([]byte("null"))
+		} else if err = write([]byte("[")); err == nil {
+			first := true
+			err = node.Children(ctx, func(_ reflect.Value, child metadataLogicalNode) error {
+				if !first {
+					if err := write([]byte(",")); err != nil {
+						return err
+					}
+				}
+				first = false
+				return encode(child)
+			})
+			if err == nil {
+				err = write([]byte("]"))
+			}
+		}
+	} else {
+		err = encode(node)
 	}
-	var splitRows int
-	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field=?", workspace, name).Scan(&splitRows); err != nil {
-		return err
-	}
-	if splitRows != 0 {
-		return fmt.Errorf("%w: inline %s has unexpected split rows", ErrBoundedMetadataCoverage, name)
-	}
-	oldValue, err := before.Value(ctx, int(required))
 	if err != nil {
-		return err
+		return metadataLogicalRootReplacement{}, nil, err
 	}
-	nextValue, err := after.Value(ctx, int(required))
-	if err != nil {
-		return err
-	}
-	oldData := domain.Bootstrap{Workspace: domain.Workspace{ID: workspaceID}}
-	nextData := oldData
-	reflect.ValueOf(&oldData).Elem().Field(field.index).Set(oldValue)
-	reflect.ValueOf(&nextData).Elem().Field(field.index).Set(nextValue)
-	_, err = s.writeWorkspaceMetadataDelta(ctx, tx, workspace, oldData, &nextData)
-	return err
+	return metadataLogicalRootReplacement{spool: spool, size: spool.bytes}, func() { _ = spool.Close() }, nil
 }

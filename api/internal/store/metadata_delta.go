@@ -215,6 +215,9 @@ func metadataValueEqual(a, b reflect.Value) bool {
 // target then holds the merged record. It reports whether anything was
 // written.
 func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx, workspace string, before domain.Bootstrap, target *domain.Bootstrap) (bool, error) {
+	if s.BoundedMetadataEnabled() {
+		return s.writeMetadataLogicalDelta(ctx, tx, workspace, before, target)
+	}
 	before, after := compactImportInputs(collectionMetadata(before)), compactImportInputs(collectionMetadata(*target))
 	changed := changedMetadataFields(before, after)
 	if len(changed) > 0 {

@@ -144,6 +144,12 @@ func metadataAggregateRefreshUser(ctx context.Context, source *metadataLogicalSo
 }
 
 func metadataAggregateLookupUser(ctx context.Context, source *metadataLogicalSource, id metadataAggregateNode) (metadataAggregateNode, error) {
+	if source.units != nil && id != nil && id.nodeType().Kind() == reflect.String {
+		field, _, _ := metadataLogicalField("users")
+		if !source.fields[field].blocked {
+			return metadataAggregateIndexedLookupUser(ctx, source.unitCorpus(ctx), id)
+		}
+	}
 	var found metadataAggregateNode
 	err := source.VisitFields(ctx, func(name string, users metadataLogicalNode) error {
 		if name != "users" {

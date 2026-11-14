@@ -1,6 +1,6 @@
 {
   "source": "server/notifications_workflow.go",
-  "unmigrated": 19,
+  "unmigrated": 18,
   "consumers": {
     "acknowledgeDesktopNotifications": {
       "owner": "P18",
@@ -167,9 +167,11 @@
     },
     "workflowStateEditMetadataOnly": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Own trusted boolean read only: literal flag-off accessor/predicate remains unchanged; bounded mode compares state TeamID bytes and delegates root/descendant inheritance to the shared disk-indexed predicate over one pinned installed generation. It streams arbitrary native TeamID/map keys/parents with fixed buffers, collision-verifies keys byte-for-byte, keeps last duplicate retirement, missing/empty parents, retired cuts and cycles exact, and retains no whole hierarchy or whole selected string. A fixed owned work allowance and capped local SQLite caches cover processing; graph/key growth uses existing logical disk admission with enforced physical page ceilings and cleanup on all exits. SW43 persistent count2 on actual Wave13 core compares the literal predicate across warm/reloaded NUL values, inherited/retired/duplicate/cyclic teams, more than 50 states, multi-MiB unused names and a 12 MiB native key repeated three times that exceeds the withdrawn 64 MiB graph cap. Shared tests cover 20 randomized graph differentials, collision verification, 20 MiB streamed keys without whole-key Go allocation, cancellation, scratch cleanup and 32768-key admitted disk growth. This function has no viewer projection or publication; updateWorkflowState remains independently guarded, and this review does not certify its domain writer, permissions or response.",
       "accessors": [
-        "WorkspaceMetadataFields"
+        "WorkspaceMetadataFields",
+        "BeginInstalledMetadataRead"
       ]
     }
   }

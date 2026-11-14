@@ -121,7 +121,9 @@ func (s *server) addCommitSigningKey(w http.ResponseWriter, r *http.Request) {
 		}
 		storedMaterial = true
 	}
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "commit_signing_key.added", actor.ID, map[string]string{"name": input.Name, "type": key.Type, "fingerprint": key.Fingerprint}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "commit_signing_key.added", actor.ID, map[string]string{"name": input.Name, "type": key.Type, "fingerprint": key.Fingerprint}, store.MetadataRecordScope{
+		Write: []store.RecordKey{{Kind: "userSettings", ID: actor.ID}},
+	}, func(data *domain.Bootstrap) error {
 		settings := data.UserSettings[actor.ID]
 		settings.UserID = actor.ID
 		settings.CommitSigningKey = &key
@@ -149,7 +151,9 @@ func (s *server) removeCommitSigningKey(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "commit_signing_key.removed", actor.ID, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "commit_signing_key.removed", actor.ID, nil, store.MetadataRecordScope{
+		Write: []store.RecordKey{{Kind: "userSettings", ID: actor.ID}},
+	}, func(data *domain.Bootstrap) error {
 		settings := data.UserSettings[actor.ID]
 		if settings.CommitSigningKey == nil {
 			return errNotFound

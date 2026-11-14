@@ -235,7 +235,9 @@ func (s *server) updatePasskey(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := requestActor(s, r)
 	var updated domain.Passkey
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "passkey.updated", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "passkey.updated", r.PathValue("id"), input, store.MetadataRecordScope{
+		Write: []store.RecordKey{{Kind: "passkeys", ID: r.PathValue("id")}},
+	}, func(data *domain.Bootstrap) error {
 		for index := range data.Passkeys {
 			if data.Passkeys[index].ID == r.PathValue("id") && data.Passkeys[index].UserID == actor.ID {
 				if data.Passkeys[index].Name == name {
@@ -258,7 +260,9 @@ func (s *server) updatePasskey(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deletePasskey(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "passkey.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "passkey.deleted", r.PathValue("id"), nil, store.MetadataRecordScope{
+		Write: []store.RecordKey{{Kind: "passkeys", ID: r.PathValue("id")}},
+	}, func(data *domain.Bootstrap) error {
 		before := len(data.Passkeys)
 		kept := make([]domain.Passkey, 0, before)
 		for _, item := range data.Passkeys {

@@ -16,6 +16,8 @@ type metadataAggregatePlan struct {
 	RequiredBytes, WinnerBytes int
 	before, after              metadataAggregateNode
 	previous                   bool
+	sources                    []*metadataLogicalSource
+	chunked                    bool
 }
 
 func planMetadataAggregate(ctx context.Context, before, after metadataAggregateImage, id string, previous bool, payloadBytes int) (*metadataAggregatePlan, error) {
@@ -54,44 +56,197 @@ func planMetadataAggregateWork(ctx context.Context, before, after metadataAggreg
 	if err != nil {
 		return nil, err
 	}
-	// Source costs include doubled string/container storage plus per-node
-	// overhead. Sixteen copies of that conservative charge cover the maximum
-	// six-byte JSON escape expansion, marshal buffer growth, generic JSON
-	// decode, diff maps and the separately encoded publication envelopes.
-	const copies = uint64(16)
-	base := uint64(128 << 10)
-	if oldCost > metadataWorkBytes || nextCost > metadataWorkBytes || payloadWork > metadataWorkBytes {
-		return nil, ErrMetadataWorkBudget
+	oldProfile, oldPlain, err := metadataAggregateJSONProfile(ctx, plan.before, 0)
+	if err != nil {
+		return nil, err
 	}
-	cost := base + (oldCost+nextCost)*copies + payloadWork
-	if cost > metadataWorkBytes {
-		return nil, ErrMetadataWorkBudget
+	nextProfile, nextPlain, err := metadataAggregateJSONProfile(ctx, plan.after, 0)
+	if err != nil {
+		return nil, err
 	}
-	plan.RequiredBytes = int(cost)
-	// This is a materialization limit backed by the larger reservation,
-	// rather than the former fixed encoded page limit.
-	plan.WinnerBytes = int(max(oldCost, nextCost)) * 8
+	shell := max(oldProfile.shell, nextProfile.shell)
+	// Keep the standard encoder's pooled shell finite independently of a
+	// legal large string winner. Wider shells retain the existing allowance.
+	if oldPlain && nextPlain && shell <= 2<<20 {
+		unchanged, err := metadataAggregateSameFrame(ctx, plan.before, plan.after)
+		if err != nil {
+			return nil, err
+		}
+		if unchanged {
+			plan.previous, plan.before = false, nil
+			oldCost, oldProfile = 0, metadataAggregateJSONWork{}
+		}
+		// Native decoding and proxy normalization precede fixed-size output
+		// encoding. Their temporary graphs do not coexist with both final
+		// publication envelopes; charge the largest actual lifetime phase.
+		normalizeOld := oldCost + oldProfile.generic + 3*oldProfile.shell
+		// encoding/json pools its shell buffer. It can retain the larger
+		// earlier shell through later phases, even after its raw copy dies.
+		shell = max(oldProfile.shell, nextProfile.shell)
+		normalizeNext := oldProfile.generic + nextCost + nextProfile.generic + nextProfile.shell + 2*shell
+		diff := 2*oldProfile.generic + nextProfile.generic + oldProfile.encoded + 2*shell
+		publish := oldProfile.encoded + nextProfile.generic + nextProfile.encoded + 2*shell
+		// Packed readers retain two 32 KiB arena cache slots and at most
+		// the current SQL chunk's driver/Scan copies. Neither escapes its
+		// read, so the same fixed scratch covers FILE and packed sources.
+		cost := uint64(2<<20) + payloadWork + max(normalizeOld, normalizeNext, diff, publish)
+		if cost > metadataWorkBytes {
+			return nil, ErrMetadataWorkBudget
+		}
+		plan.RequiredBytes = int(cost)
+		plan.WinnerBytes = int(max(oldCost, nextCost))
+		plan.chunked = true
+	} else {
+		// Source costs include doubled string/container storage plus per-node
+		// overhead. Sixteen copies of that conservative charge cover the maximum
+		// six-byte JSON escape expansion, marshal buffer growth, generic JSON
+		// decode, diff maps and the separately encoded publication envelopes.
+		const copies = uint64(16)
+		base := uint64(128 << 10)
+		if oldCost > metadataWorkBytes || nextCost > metadataWorkBytes || payloadWork > metadataWorkBytes {
+			return nil, ErrMetadataWorkBudget
+		}
+		cost := base + (oldCost+nextCost)*copies + payloadWork
+		if cost > metadataWorkBytes {
+			return nil, ErrMetadataWorkBudget
+		}
+		plan.RequiredBytes = int(cost)
+		// This is a materialization limit backed by the larger reservation,
+		// rather than the former fixed encoded page limit.
+		plan.WinnerBytes = int(max(oldCost, nextCost)) * 8
+	}
+	for _, image := range []struct {
+		node   metadataAggregateNode
+		source *metadataLogicalSource
+	}{{plan.before, before.Source}, {plan.after, after.Source}} {
+		if image.node == nil || image.source == nil {
+			continue
+		}
+		duplicate := false
+		for _, source := range plan.sources {
+			duplicate = duplicate || source == image.source
+		}
+		if duplicate {
+			continue
+		}
+		if err := image.source.Retain(); err != nil {
+			plan.Close()
+			return nil, err
+		}
+		plan.sources = append(plan.sources, image.source)
+	}
 	return plan, nil
 }
 
+func (p *metadataAggregatePlan) Close() {
+	for _, source := range p.sources {
+		source.Release()
+	}
+	p.sources = nil
+	p.before, p.after = nil, nil
+}
+
 func (p *metadataAggregatePlan) Values(ctx context.Context) (json.RawMessage, any, error) {
+	defer p.Close()
 	var oldValue any
 	var err error
 	if p.previous {
-		oldValue, err = metadataAggregateJSONNode(ctx, p.before, p.WinnerBytes)
+		oldValue, err = p.normalized(ctx, p.before)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
-	nextValue, err := metadataAggregateJSONNode(ctx, p.after, p.WinnerBytes)
+	nextValue, err := p.normalized(ctx, p.after)
 	if err != nil {
 		return nil, nil, err
 	}
-	previous := metadataAggregateDiffValues(oldValue, nextValue)
+	var previous json.RawMessage
+	if p.chunked {
+		previous, err = metadataAggregateChunkedDiff(ctx, oldValue, nextValue)
+	} else {
+		previous = metadataAggregateDiffValues(oldValue, nextValue)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
 	return previous, nextValue, nil
+}
+
+func (p *metadataAggregatePlan) normalized(ctx context.Context, node metadataAggregateNode) (any, error) {
+	if !p.chunked {
+		return metadataAggregateJSONNode(ctx, node, p.WinnerBytes)
+	}
+	if node == nil {
+		return nil, ctx.Err()
+	}
+	value, err := node.nodeValue(ctx, p.WinnerBytes)
+	if err != nil {
+		return nil, err
+	}
+	// Stored node materialization already owns its decoded strings; native
+	// callback values still need the legacy normalization's detached copy.
+	_, owned := node.(metadataAggregateStoredNode)
+	proxy := metadataAggregateJSONProxy{ownedStrings: owned}
+	masked, err := proxy.value(ctx, value, 0)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(masked.Interface())
+	if cancelled := ctx.Err(); cancelled != nil {
+		return nil, cancelled
+	}
+	if err != nil {
+		return nil, nil
+	}
+	var result any
+	if json.Unmarshal(raw, &result) != nil {
+		return nil, nil
+	}
+	return proxy.restore(ctx, result, 0)
+}
+
+func (p *metadataAggregatePlan) Realtime(ctx context.Context, payload json.RawMessage, entity any, event string) (json.RawMessage, error) {
+	var fields map[string]any
+	if len(payload) > 0 && json.Unmarshal(payload, &fields) != nil {
+		var input any
+		if json.Unmarshal(payload, &input) == nil {
+			fields = map[string]any{"input": input}
+		}
+	}
+	if fields == nil {
+		fields = map[string]any{}
+	}
+	if entity != nil {
+		fields["entity"] = entity
+	}
+	if strings.HasSuffix(event, ".deleted") {
+		fields["deleted"] = true
+	}
+	return metadataAggregateMarshalNormalized(ctx, fields)
+}
+
+func metadataAggregateChunkedDiff(ctx context.Context, old, next any) (json.RawMessage, error) {
+	if old == nil {
+		return nil, ctx.Err()
+	}
+	oldMap, oldOK := old.(map[string]any)
+	nextMap, nextOK := next.(map[string]any)
+	if next == nil || !oldOK || !nextOK {
+		return metadataAggregateMarshalNormalized(ctx, old)
+	}
+	diff := map[string]any{}
+	for key, value := range oldMap {
+		if changed, found := nextMap[key]; !found || !reflect.DeepEqual(value, changed) {
+			diff[key] = value
+		}
+	}
+	if len(diff) == 0 {
+		return nil, ctx.Err()
+	}
+	return metadataAggregateMarshalNormalized(ctx, diff)
 }
 
 func metadataAggregateNodeCost(ctx context.Context, node metadataAggregateNode) (uint64, error) {

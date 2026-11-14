@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // writeArrayPage preserves the legacy array response while bounding job-list
@@ -65,7 +66,7 @@ func (s *server) getImport(w http.ResponseWriter, r *http.Request) {
 func (s *server) cancelImport(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var updated domain.ImportJob
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "import.cancelled", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "import.cancelled", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "importJobs", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ImportJobs, func(item domain.ImportJob) bool {
 			return item.ID == id && (s.authDisabled || item.UserID == data.Viewer.ID)
 		})
@@ -91,7 +92,7 @@ func (s *server) cancelImport(w http.ResponseWriter, r *http.Request) {
 func (s *server) retryImport(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var updated domain.ImportJob
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "import.retried", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "import.retried", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "importJobs", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ImportJobs, func(item domain.ImportJob) bool {
 			return item.ID == id && (s.authDisabled || item.UserID == data.Viewer.ID)
 		})
@@ -123,7 +124,7 @@ func (s *server) resumeImport(w http.ResponseWriter, r *http.Request) {
 	// mapping and row-level diagnostics for the next commit request.
 	id := r.PathValue("id")
 	var updated domain.ImportJob
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "import.resumed", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "import.resumed", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "importJobs", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ImportJobs, func(item domain.ImportJob) bool {
 			return item.ID == id && (s.authDisabled || item.UserID == data.Viewer.ID)
 		})

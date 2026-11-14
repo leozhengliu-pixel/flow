@@ -126,6 +126,21 @@ func (n metadataLogicalRetainedRecord) nodeChildren(ctx context.Context, visit f
 func metadataLogicalFirstRecord(ctx context.Context, collection metadataAggregateNode, key string) (metadataAggregateNode, error) {
 	var result metadataAggregateNode
 	var err error
+	if stored, ok := collection.(metadataAggregateStoredNode); ok && stored.value.collection != nil {
+		node := stored.value
+		r := node.collection.root
+		name := jsonFieldName(reflect.TypeFor[domain.Bootstrap]().Field(node.collection.field))
+		c := &sw29LogicalCorpus{
+			index:  &sw29LogicalIndex{stage: r.arena.index.stage, seed: r.arena.index.seed},
+			fields: map[string]metadataLogicalNode{name: node}, points: r.trees[1],
+			unitRoot: r, unitArena: r.arena, unitContext: ctx,
+		}
+		err := c.Point(ctx, name, key, func(value metadataLogicalNode) error {
+			result = metadataAggregateStoredNode{value}
+			return sw29LogicalIndexStop
+		})
+		return result, err
+	}
 	if collection.nodeType().Kind() == reflect.Map {
 		err = metadataLogicalMapEntries(ctx, collection, func(id, value metadataAggregateNode) error {
 			match, err := metadataAggregateStringEqual(ctx, id, key)
@@ -238,6 +253,9 @@ func metadataLogicalPatchRecords(ctx context.Context, source *metadataLogicalSou
 	}
 	if bytes > MetadataRecordPageMaxBytes {
 		return nil, ErrMetadataPageBudget
+	}
+	if source.units != nil {
+		return metadataLogicalPatchUnitRecords(ctx, source, patches)
 	}
 	fresh, err := newMetadataLogicalBuilder(metadataLogicalSourceScratchContext(ctx, source))
 	if err != nil {

@@ -843,7 +843,9 @@ func (s *server) createAgentActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var item domain.AgentActivity
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.activity_created", input.SessionID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceAppending(r.Context(), workspaceKey(r), "agent.activity_created", input.SessionID, input, store.MetadataAppendScope{
+		AppendKinds: []string{"agentActivities"},
+	}, func(data *domain.Bootstrap) error {
 		if input.SessionID == "" || input.Type == "" {
 			return errInvalid
 		}
@@ -905,7 +907,9 @@ func (s *server) createAIConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var item domain.AIConversation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "ai.conversation_created", "ai", input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceAppending(r.Context(), workspaceKey(r), "ai.conversation_created", "ai", input, store.MetadataAppendScope{
+		AppendKinds: []string{"aiConversations"},
+	}, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		input.ID = parityID("ai_conversation")
 		input.UserID = data.Viewer.ID

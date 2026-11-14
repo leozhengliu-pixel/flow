@@ -1,11 +1,11 @@
 {
   "source": "store/scale_p21_sw24_application_identity_ids.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
     "beginApplicationIdentityIDsRead": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Private installed-source ID reader counts every app before allocation and charges 4096 plus 128 bytes per input entry and twice ClientID byte lengths under an explicit 64MiB bound, including duplicate list storage and batch error-interface/Join slots. Only ClientID is strings.Clone detached under the same read lock; names, logos, canonical rows and default workspace resolution are not inputs. Independent nonwaiting admission stays live until SyncAllApplicationIdentities finishes sorted compact dispatch and errors.Join. TestScaleP21SW24ApplicationIdentityIDsSource/Ownership/Bounds/Allocations/Producer prove exact same installed source, string-backing detachment, parent/cancellation semantics, bounds/recovery, ignored-body independence and real downstream identity updates. Both persistent SQLite runs passed. Downstream error objects and application readers/writers retain their independent contracts and activation blockers.",
+      "status": "unmigrated",
+      "reason": "SW52 actual owner-produced bounded test view and real bounded reload retain OAuthApplications only in the installed logical source; the resident policy map has an empty field. This helper still enumerates s.workspaces and returns no IDs. Earlier tests attached metadataResidency to a full legacy map and did not exercise the actual bounded representation. Requires one atomic source-backed registry snapshot and admitted scalar ID collection; the TEMP G5 repair is not yet integrated or certified.",
       "accessors": [
         "resident-state"
       ]

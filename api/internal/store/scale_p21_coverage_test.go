@@ -20,6 +20,10 @@ import (
 
 var scaleP21SnapshotMethods = strings.Fields(`WorkspaceMetadata WorkspaceMetadataForRead WorkspaceReadSnapshotReservation WorkspaceMetadataFields Bootstrap BootstrapFor BootstrapForContext BootstrapForUser PagedWorkspaceMetadata BeginWorkspaceRead MutateWorkspace MutateWorkspaceWithAggregate MutateWorkspaceAudited MutateWorkspaceMetadata workspaceData publicMetadata mcpWorkspaceData mcpWorkspaceDataForTool chatAuthorizedMutation storedWorkspace loadWorkspaceState loadWorkspaceStamped decodeWorkspaceMetadata mutateFull mutateScoped mutateTeamMetadata WorkspaceMetadataScoped WorkspaceMetadataFieldsScoped MutateWorkspaceScoped MutateWorkspaceScopedWithAggregate MutateWorkspaceAppending MutateWorkspaceAppendingWithAggregate MutateWorkspaceResolved MutateWorkspaceResolvedWithAggregate ProjectScopedMetadata workspaceDataScoped applicationWebhookDataScoped ScanMetadataRecords StreamMetadataRecords BeginMetadataCollectionRead BeginMetadataArrayRead StreamMetadataArray MetadataCollectionsInSnapshot metadataCollectionsInSnapshot metadataRootCursorInSnapshot readRawMetadataLogicalSource readRawMetadataLogicalSourceValidated readRawMetadataLogicalSourceRoot workerLoopDefinition BeginFormerMembersRead ViewerVisibilityKeys BeginViewerVisibilityKeysRead BeginInstalledWorkspaceIdentityRead BeginInstalledTeamsWireRead BeginProjectTemplatesRead BeginGitLabConnectionConfigsRead BeginDueNotificationDeliveryRead BeginInstalledMetadataRead`)
 
+func init() {
+	scaleP21SnapshotMethods = append(scaleP21SnapshotMethods, "BeginProjectTemplatesStream", "retainInstalledMetadataRead", "BeginInstalledPrincipalRead", "TrustedWorkflowHierarchyIndependent")
+}
+
 func scaleP21RouteBinding(set *token.FileSet, call *ast.CallExpr) (string, error) {
 	var handler bytes.Buffer
 	if err := printer.Fprint(&handler, set, call.Args[1]); err != nil {
@@ -288,6 +292,10 @@ func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 		`package probe; func request() { _ = s.BeginInstalledWorkspaceIdentityRead(ctx, key) }`,
 		`package probe; func request() { _ = s.BeginInstalledTeamsWireRead(ctx, key) }`,
 		`package probe; func request() { _ = s.BeginProjectTemplatesRead(ctx, key) }`,
+		`package probe; var callback = s.BeginProjectTemplatesStream`,
+		`package probe; func request() { _ = s.retainInstalledMetadataRead(ctx, key) }`,
+		`package probe; func request() { _ = s.BeginInstalledPrincipalRead(ctx, key, principal, credential) }`,
+		`package probe; var callback = read.TrustedWorkflowHierarchyIndependent`,
 		`package probe; func job() { _ = s.BeginGitLabConnectionConfigsRead(ctx, key) }`,
 		`package probe; func job() { _ = s.BeginDueNotificationDeliveryRead(ctx, key, statuses, now) }`,
 	} {

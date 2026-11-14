@@ -102,6 +102,46 @@ func applicationPolicyScope() store.MetadataRecordScope {
 	return store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "settings", ID: "applicationPolicies"}}}
 }
 
+func (s *server) applicationPolicyRead(w http.ResponseWriter, r *http.Request) (domain.Bootstrap, func(), bool) {
+	if !s.store.BoundedMetadataEnabled() {
+		data, ok := s.workspaceDataScoped(w, r, applicationPolicyScope())
+		return data, func() {}, ok
+	}
+	scope := applicationPolicyScope()
+	scope.Read = []store.RecordKey{
+		{Kind: "workspaceSettings", ID: "mcpConnectors"},
+		{Kind: "workspaceSettings", ID: "hipaaCompliance"},
+	}
+	for {
+		read, found, err := s.store.BeginInstalledMetadataRead(r.Context(), workspaceKey(r))
+		if err != nil {
+			issueRecordsError(w, err)
+			return domain.Bootstrap{}, func() {}, false
+		}
+		if !found {
+			// Preserve the existing missing-workspace response. A workspace
+			// created during that check must acquire an owned generation.
+			if _, ok := s.workspaceDataScoped(w, r, scope); !ok {
+				return domain.Bootstrap{}, func() {}, false
+			}
+			continue
+		}
+		parent := r.Context()
+		ctx, err := read.Context(parent)
+		if err != nil {
+			read.Close()
+			issueRecordsError(w, err)
+			return domain.Bootstrap{}, func() {}, false
+		}
+		*r = *r.WithContext(ctx)
+		data, ok := s.workspaceDataScoped(w, r, scope)
+		return data, func() {
+			*r = *r.WithContext(parent)
+			read.Close()
+		}, ok
+	}
+}
+
 func applicationApproved(data *domain.Bootstrap, clientID string, scopes []string) bool {
 	for _, app := range data.OAuthApplications {
 		if app.ClientID == clientID {
@@ -120,7 +160,8 @@ func applicationApproved(data *domain.Bootstrap, clientID string, scopes []strin
 }
 
 func (s *server) listApplicationPolicies(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.workspaceDataScoped(w, r, applicationPolicyScope())
+	data, release, ok := s.applicationPolicyRead(w, r)
+	defer release()
 	if !ok {
 		return
 	}
@@ -146,7 +187,8 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	view, ok := s.workspaceDataScoped(w, r, applicationPolicyScope())
+	view, release, ok := s.applicationPolicyRead(w, r)
+	defer release()
 	if !ok {
 		return
 	}
@@ -253,7 +295,8 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteApplicationPolicy(w http.ResponseWriter, r *http.Request) {
-	view, ok := s.workspaceDataScoped(w, r, applicationPolicyScope())
+	view, release, ok := s.applicationPolicyRead(w, r)
+	defer release()
 	if !ok {
 		return
 	}

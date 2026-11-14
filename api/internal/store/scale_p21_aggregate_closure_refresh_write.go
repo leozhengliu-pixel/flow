@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"slices"
 
@@ -31,23 +32,15 @@ func (s *SQLiteStore) persistMetadataLogicalRefresh(ctx context.Context, tx *sql
 	var shapes map[string]string
 	checkShape := func(name string) error {
 		if shapes == nil {
-			var raw []byte
-			if err := tx.QueryRowContext(ctx, "SELECT CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?", MetadataRecordPageMaxBytes, workspace).Scan(&raw); err != nil {
+			root, closeRoot, err := s.metadataLogicalRootSnapshot(ctx, tx, workspace)
+			if err != nil {
 				return err
 			}
-			if raw == nil {
-				return ErrMetadataPageBudget
+			shapes = make(map[string]string, len(root.shapes))
+			for name, shape := range root.shapes {
+				shapes[name] = shape
 			}
-			var root struct {
-				Shapes map[string]string `json:"_flowCollections"`
-			}
-			if err := json.Unmarshal(raw, &root); err != nil {
-				return err
-			}
-			shapes = root.Shapes
-			if shapes == nil {
-				shapes = map[string]string{}
-			}
+			closeRoot()
 		}
 		expected := "array"
 		if updateMetadataField(name) {
@@ -311,9 +304,20 @@ type metadataLogicalPairCursor struct {
 	node  metadataLogicalNode
 	read  metadataLogicalCursor
 	count uint64
+	last  []byte
+	root  *metadataLogicalUnitsRoot
 }
 
 func newMetadataLogicalPairCursor(ctx context.Context, node metadataLogicalNode) (*metadataLogicalPairCursor, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if node.collection != nil {
+		if err := node.collection.root.Retain(); err != nil {
+			return nil, err
+		}
+		return &metadataLogicalPairCursor{node: node, count: node.collection.count, root: node.collection.root}, nil
+	}
 	c := &metadataLogicalPairCursor{node: node, read: metadataLogicalCursor{node: node, offset: node.offset + 16, ctx: ctx}}
 	present, err := c.read.byte()
 	if err != nil || present == 0 {
@@ -321,6 +325,58 @@ func newMetadataLogicalPairCursor(ctx context.Context, node metadataLogicalNode)
 	}
 	c.count, err = c.read.uint()
 	return c, err
+}
+
+func (c *metadataLogicalPairCursor) Close() {
+	if c.root != nil {
+		c.root.Release()
+		c.root = nil
+	}
+}
+
+func (c *metadataLogicalPairCursor) next(ctx context.Context) (metadataLogicalNode, metadataLogicalNode, error) {
+	if c.node.collection == nil {
+		var key metadataLogicalNode
+		var err error
+		if c.node.typ.Kind() == reflect.Map {
+			key, err = c.read.child(c.node.typ.Key())
+			if err != nil {
+				return key, metadataLogicalNode{}, err
+			}
+		}
+		value, err := c.read.child(c.node.typ.Elem())
+		return key, value, err
+	}
+	collection := c.node.collection
+	prefix := metadataLogicalUnitsOrderKey(collection.field, 0)[:2]
+	lo := prefix
+	if c.last != nil {
+		lo = append(slices.Clone(c.last), 0)
+	}
+	var raw []byte
+	err := c.root.Range(ctx, 0, lo, sw29LogicalPrefixEnd(prefix), func(key, value []byte) error {
+		c.last, raw = slices.Clone(key), slices.Clone(value)
+		return sw29LogicalIndexStop
+	})
+	if err != nil {
+		return metadataLogicalNode{}, metadataLogicalNode{}, err
+	}
+	if raw == nil {
+		return metadataLogicalNode{}, metadataLogicalNode{}, io.ErrUnexpectedEOF
+	}
+	leaf, err := metadataLogicalUnitsDecodeLeaf(raw)
+	if err != nil {
+		return metadataLogicalNode{}, metadataLogicalNode{}, err
+	}
+	var key metadataLogicalNode
+	if c.node.typ.Kind() == reflect.Map {
+		key, err = c.root.node(ctx, leaf, c.node.typ.Key(), true)
+		if err != nil {
+			return key, metadataLogicalNode{}, err
+		}
+	}
+	value, err := c.root.node(ctx, leaf, c.node.typ.Elem(), false)
+	return key, value, err
 }
 
 func metadataLogicalPairs(ctx context.Context, before, after metadataLogicalNode, visit func(metadataLogicalNode, metadataLogicalNode, metadataLogicalNode) error) error {
@@ -331,40 +387,32 @@ func metadataLogicalPairs(ctx context.Context, before, after metadataLogicalNode
 	if err != nil {
 		return err
 	}
+	defer a.Close()
 	b, err := newMetadataLogicalPairCursor(ctx, after)
 	if err != nil {
 		return err
 	}
+	defer b.Close()
 	if a.count != b.count {
 		return ErrMetadataRecordQuery
 	}
 	for range a.count {
-		var parent metadataLogicalNode
+		parent, old, err := a.next(ctx)
+		if err != nil {
+			return err
+		}
+		nextKey, next, err := b.next(ctx)
+		if err != nil {
+			return err
+		}
 		if before.typ.Kind() == reflect.Map {
-			key, err := a.read.child(before.typ.Key())
-			if err != nil {
-				return err
-			}
-			nextKey, err := b.read.child(after.typ.Key())
-			if err != nil {
-				return err
-			}
-			equal, err := metadataAggregateStringsEqual(ctx, metadataAggregateStoredNode{key}, metadataAggregateStoredNode{nextKey})
+			equal, err := metadataAggregateStringsEqual(ctx, metadataAggregateStoredNode{parent}, metadataAggregateStoredNode{nextKey})
 			if err != nil {
 				return err
 			}
 			if !equal {
 				return ErrMetadataRecordQuery
 			}
-			parent = key
-		}
-		old, err := a.read.child(before.typ.Elem())
-		if err != nil {
-			return err
-		}
-		next, err := b.read.child(after.typ.Elem())
-		if err != nil {
-			return err
 		}
 		if before.typ.Kind() == reflect.Map {
 			if err := metadataLogicalPairs(ctx, old, next, func(_ metadataLogicalNode, old, next metadataLogicalNode) error { return visit(parent, old, next) }); err != nil {

@@ -14,7 +14,7 @@
     "createAIConversation": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Needs shared aggregate compatibility: the original event's literal aggregate ID ai can match an existing unrelated record or nested settings object through aggregateJSONValue. A bare append scope would omit that realtime entity; retain the original writer until the bounded reference closure is covered.",
+      "reason": "Append adapter now declares aiConversations creation while the off branch retains the original accessor/context and callback. TestScaleP21SW50AppendDifferential compares the direct-handler principal/key matrix, two ordered creations after 61 warm records, unchanged canonical siblings, owner/status replacement, earlier Document.ContentData aggregate larger than 256 KiB, webhook Snapshot/PreviousValues, realtime/client fields and canceled rollback; persistent SQLite twice passed. Still guarded for shared indexed source/aggregate work, legal-large publication and inline physical-locator limits, plus response work ownership through HTTP encoding. The current measured generic writer uses 36 SQL statements versus 12 literal; no performance certification follows from this small fixture.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -32,7 +32,7 @@
     "createAgentActivity": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Needs shared aggregate compatibility: the original SessionID aggregate can include an existing session or another legacy aggregate match in realtime. The callback also accepts arbitrary nonempty session strings, so a mandatory canonical-key read would introduce new key-validation failures. Retain the original writer until those effects are covered.",
+      "reason": "Append adapter now declares agentActivities creation without turning arbitrary nonempty SessionID into a mandatory record key; the original off accessor/context and callback remain literal. TestScaleP21SW50AppendDifferential compares the direct-handler principal/key matrix, accepted SessionID longer than 191 bytes, supplied actor/status semantics, two ordered creations after 61 warm records, unchanged canonical siblings, earlier large nested aggregate Snapshot/PreviousValues, realtime/client fields and canceled rollback; persistent SQLite twice passed. Shared indexed source/aggregate work, legal-large publication, inline physical-locator bounds and response ownership remain activation blockers. Current SQL is 36 versus 12 literal statements; no gain or consumer review is claimed.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

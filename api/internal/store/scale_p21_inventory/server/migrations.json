@@ -70,7 +70,7 @@
     "updateMigrationMappings": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "The callback only edits migrationJobs/id, but legacy event enrichment can select an earlier Draft.ContentData object whose id matches the migration ID. TestScaleP21SW25AggregateCollisionEvidence preserves this existing wire behavior. A target-only scope cannot be reviewed until a bounded aggregate closure also preserves it.",
+      "reason": "Candidate uses the shared scoped writer for migrationJobs/id with its original callback. TestScaleP21SW45MigrationMapping and AggregateCollision pass twice on persistent SQLite, covering normal/invalid/no-op whole-M behavior, warm NUL mappings, earlier large nested Draft matches and Document-before-Draft precedence, actual target/unrelated migration inputs, cancellation and explicit oversized-target rollback. Keep pending G1 indexed lookup, G6 legal-large publication and G7 complete inline/physical locator support; the small paired fixture also regresses from 15 to 36 SQL statements through shared policy/core preflight, so no scale or activation claim is made.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

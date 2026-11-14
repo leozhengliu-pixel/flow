@@ -321,20 +321,11 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			return err
 		}
 		defer tx.Rollback()
+		ctx, closeRootSnapshots := s.withMetadataLogicalRootSnapshots(ctx, tx, workspace)
+		defer closeRootSnapshots()
 		// Serialize collection membership as well as existing rows. This is
 		// required for callbacks that allocate IDs or validate uniqueness.
-		lock := ""
-		if tx.dialect != "sqlite" {
-			lock = " FOR UPDATE"
-		}
-		var raw []byte
-		if err := tx.QueryRowContext(ctx, `SELECT CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?`+lock, MetadataRecordPageMaxBytes, workspace).Scan(&raw); err != nil {
-			return err
-		}
-		if raw == nil {
-			return ErrMetadataPageBudget
-		}
-		if _, _, err := residentMetadataRoot(raw); err != nil {
+		if err := s.validateMetadataLogicalRootSnapshot(ctx, tx, workspace); err != nil {
 			return err
 		}
 		if s.metadataResidency.requireCoverage {
@@ -350,7 +341,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if s.coordinator != nil && !exactSource {
 			return ErrConcurrentWrite
 		}
-		storageBefore, err := s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+		storageBefore, err := s.readMetadataLogicalScopedRoot(ctx, tx, workspace, scope)
 		if err != nil {
 			return err
 		}
@@ -371,16 +362,9 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		}
 		callbackSource := eventSource
 		refreshComplete := !legacyFieldScoped || slices.Contains(fields, "users")
-		if refreshComplete {
-			callbackSource, err = eventSource.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
-				base := metadataAggregateNode(metadataAggregateStoredNode{node})
-				if legacyFieldScoped && !slices.Contains(fields, name) {
-					return base, false, nil
-				}
-				refreshed := metadataAggregateRefreshField(eventSource, name, base)
-				_, changed := refreshed.(metadataAggregateRefreshCollection)
-				return refreshed, changed, nil
-			})
+		deferredRefresh := refreshComplete && metadataOnly && eventSource.units != nil
+		if refreshComplete && !deferredRefresh {
+			callbackSource, err = metadataAggregateDisplaySource(ctx, eventSource, fields, legacyFieldScoped)
 			if err != nil {
 				return err
 			}
@@ -403,7 +387,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				return err
 			}
 			ctx = WithMetadataRecords(ctx, scope)
-			storageBefore, err = s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+			storageBefore, err = s.readMetadataLogicalScopedRoot(ctx, tx, workspace, scope)
 			if err != nil {
 				return err
 			}
@@ -418,6 +402,26 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		next, err := callbackSource.Select(ctx, scope, 2<<20)
 		if err != nil {
 			return err
+		}
+		if deferredRefresh {
+			err = refreshSelectedMetadataLogicalReferences(ctx, eventSource, &next, scope, fields, legacyFieldScoped, 2<<20)
+			if err != nil {
+				if cancelErr := ctx.Err(); cancelErr != nil {
+					return cancelErr
+				}
+				// Unsupported selected layouts keep the original streamed
+				// transform and selection path, with its original errors.
+				callbackSource, err = metadataAggregateDisplaySource(ctx, eventSource, fields, legacyFieldScoped)
+				if err != nil {
+					return err
+				}
+				defer callbackSource.Release()
+				deferredRefresh = false
+				next, err = callbackSource.Select(ctx, scope, 2<<20)
+				if err != nil {
+					return err
+				}
+			}
 		}
 		originalRole := next.ViewerRole
 		refreshDisplayReferences(&next)
@@ -445,6 +449,13 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		next.ViewerRole, next.ViewerTeamIDs, next.FormerMembers, next.CollaborationUpdates = originalRole, nil, nil, nil
 		if err != nil {
 			return err
+		}
+		if deferredRefresh {
+			callbackSource, err = metadataAggregateDisplaySource(ctx, eventSource, fields, legacyFieldScoped)
+			if err != nil {
+				return err
+			}
+			defer callbackSource.Release()
 		}
 		if legacyFieldScoped && !slices.Contains(fields, "viewer") {
 			next.Viewer = before.Viewer
@@ -494,6 +505,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if err != nil {
 			return err
 		}
+		defer plan.Close()
 		releaseExtra := func() {}
 		if extra := plan.RequiredBytes - payloadWork; extra > 0 {
 			_, releaseExtra, err = s.tryAdmitAdditionalMetadataWork(ctx, extra)
@@ -512,7 +524,10 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			return err
 		}
 		committed.PreviousValues = previous
-		realtime = enrichRealtimePayload(payloadRaw, entity, event)
+		realtime, err = plan.Realtime(ctx, payloadRaw, entity, event)
+		if err != nil {
+			return err
+		}
 		// Complete fields use the proven delta writer. Point records are
 		// written separately so a deletion never scans the whole collection.
 		complete := cloneBootstrap(next)
@@ -551,12 +566,12 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				return fmt.Errorf("%w: point creation requires a complete field or a dedicated creation writer", ErrMetadataRecordQuery)
 			}
 			if change.insert && (actorInsert || appended) {
-				if err := ensureOAuthMetadataShape(ctx, tx, workspace, change.field, "array", lock); err != nil {
+				if err := s.ensureMetadataLogicalShape(ctx, tx, workspace, change.field, "array"); err != nil {
 					return err
 				}
 			}
 			if change.insert && isMap {
-				if err := ensureOAuthMetadataShape(ctx, tx, workspace, change.field, "map", lock); err != nil {
+				if err := s.ensureMetadataLogicalShape(ctx, tx, workspace, change.field, "map"); err != nil {
 					return err
 				}
 			}
@@ -608,10 +623,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if policyWrite {
 			// Check the candidate policy before commit, without asking the
 			// transaction's not-yet-flushed journal to certify itself.
-			probe := &SQLiteStore{db: s.db, dialect: s.dialect, metadataResidency: newMetadataResidency()}
-			probe.metadataResidency.requireCoverage = false
-			policy, _, cost, err = probe.readResidentWorkspace(ctx, tx, workspace)
-			if err != nil {
+			if err := s.validateMetadataLogicalRootSnapshot(ctx, tx, workspace); err != nil {
 				return err
 			}
 			policy, cost, err = s.metadataLogicalPolicy(ctx, candidate)

@@ -5,7 +5,7 @@
     "cancelImport": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Legacy aggregate lookup traverses earlier document ContentData before ImportJobs: a nested id equal to this job ID wins the realtime entity and webhook previous values. A point scope changes that valid payload; retain the original writer until the bounded aggregate resolver preserves this precedence. SW24 collision probe reproduced the difference.",
+      "reason": "Candidate now declares only importJobs/id and retains the original callback, owner/status checks, timestamp and audit; off mode still invokes the literal original writer. SW45 persistent differential twice covers the whole principal/key matrix, missing/foreign/revoked/error paths, exact warm NUL preimages, a legal earlier large Document.ContentData aggregate, webhook Snapshot/PreviousValues/realtime and uploaded input byte preservation after the shared scope-aware input-sync repair. Keep this guard until G1 indexed routing, legal-large target/publication handling and G7 physical occurrence coverage are complete; current oversized targets explicitly fail before persistence.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -46,7 +46,7 @@
     "resumeImport": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Needs the same bounded aggregate compatibility resolver as cancelImport: nested IDs in earlier document ContentData can win legacy entity enrichment before this job. A point callback alone is not equivalent; retain the original writer.",
+      "reason": "Candidate now declares only importJobs/id while preserving checkpoint/mapping/row diagnostics, owner/status validation, timestamp and audit. Literal off delegation is unchanged. SW45 persistent M/key and source/effect differentials passed twice, including a freshly inserted warm NUL job and earlier large nested aggregate; actual target and unrelated uploaded inputs remain byte-identical after shared input-sync repair. Indexed source/aggregate routing, legal-large target/publication handling and exact physical occurrence coverage remain shared G1/G6/G7 blockers; no activation certification is claimed.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -63,7 +63,7 @@
     "retryImport": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Needs the same bounded aggregate compatibility resolver as cancelImport: nested IDs in earlier document ContentData can win legacy entity enrichment before this job. A point callback alone is not equivalent; retain the original writer.",
+      "reason": "Candidate now uses the importJobs/id writer without changing the callback's reset of progress/imported/errors/checkpoint/retry count or its ownership/status/audit behavior. SW45 M/key, canonical, warm NUL, large nested aggregate and complete event differentials passed twice on persistent SQLite; explicit uploaded-input fingerprints cover both the target and another live job after shared scope-aware sync repair. Preserve this guard for pending G1 indexing, legal-large target/publication and G7 physical occurrence obligations; generic budget errors are tested for rollback rather than treated as complete feature coverage.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

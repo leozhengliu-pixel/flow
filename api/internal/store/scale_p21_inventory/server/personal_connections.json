@@ -5,6 +5,7 @@
     "auditPersonalConnection": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Callback now uses the shared empty-scope writer because it only stages one audit; original detached cancellation and request-context precedence remain. SW49 passed twice on persistent SQLite across the principal/key matrix, queued/replayed revocation, cancellation, first-prefix/nested/prefix-miss/missing aggregate IDs, exact audit/webhook/realtime effects and unchanged viewer/canonical rows. Retain the guard until shared indexed aggregate lookup, legal-large publication and physical-source obligations G1/G6/G7 are certified; this semantic fixture alone does not certify every accepted legacy aggregate or large root.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

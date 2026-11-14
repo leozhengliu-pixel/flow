@@ -178,7 +178,9 @@ func (s *server) updateMigrationMappings(w http.ResponseWriter, r *http.Request)
 	}
 	id := r.PathValue("id")
 	var updated domain.MigrationJob
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "migration.mappings_updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "migration.mappings_updated", id, input, store.MetadataRecordScope{
+		Write: []store.RecordKey{{Kind: "migrationJobs", ID: id}},
+	}, func(data *domain.Bootstrap) error {
 		job, err := migrationByID(data, id)
 		if err != nil {
 			return err

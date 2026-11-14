@@ -52,8 +52,10 @@ func TestScaleP21SW28AggregateLateCancellationRetainsPublicationWork(t *testing.
 		if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Entity.ID != id || envelope.Entity.Body != body {
 			t.Errorf("publication lost nested winner: bytes=%d err=%v", len(raw), err)
 		}
-		if held() <= 8<<20 {
-			t.Error("publication released winner reservation before sink returned")
+		// The encoded event and its decoded winner coexist until each
+		// synchronous sink returns, independent of the planner's formula.
+		if held() < len(raw)+len(body) {
+			t.Error("publication released encoded event or decoded winner ownership before sink returned")
 		}
 	}
 	repo.SetWebhookSink(func(_ string, event domain.DomainEvent) {

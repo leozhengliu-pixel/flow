@@ -61,6 +61,7 @@
     "createWorkspaceLabel": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Verified append candidate after A/B: existing shared MutateWorkspaceAppendingWithAggregate appends one labels record without hydrating collection membership or unrelated bodies; reads only a supplied nonempty labelGroups/groupId after preserving invalid-resource precedence. The optional MetadataTimestampInputs producer retains accepted RFC3339 fixed-zone values and the original ignored syntax errors; flag-off forwards the original context/accessor. TestScaleP21SW41WorkspaceLabelCreateDifferential ran twice on persistent SQLite across five principal classes and four credential classes, comparing responses, exact supplied timestamps, canonical new record, all eighty existing labels and their order, webhook/realtime payloads and actors, with oversized unrelated label/group records. Guard remains pending shared G1 affected-unit refresh, G6 legal-large publication, G7 physical/duplicate occurrence closure and independently registered HTTP authorization.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
@@ -319,6 +320,7 @@
     "updateWorkspaceLabel": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Verified point candidate after A/B: writes labels/path-id and resolves only its effective labelGroups/groupId after preserving missing-target and invalid-resource precedence. Bounded-only MetadataTimestampInputs retains native RFC3339 locations across subsequent edits; the original helper still ignores timestamp syntax errors while provenance, admission and cancellation errors propagate. TestScaleP21SW41LabelPointDifferential covers the principal/credential matrix, cross-workspace and queued/replayed revocation under the original live membership boundary; lifecycle tests compare canonical state, exact responses and webhook/realtime effects with an earlier warm NUL-bearing aggregate larger than 256KiB. Flag-off dispatches the literal original accessor and context. Guard remains pending shared G1 affected-unit refresh, G6 legal-large publication and G7 physical/duplicate occurrence closure, plus independently registered HTTP authorization.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

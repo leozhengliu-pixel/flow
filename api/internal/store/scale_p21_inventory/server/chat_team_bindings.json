@@ -5,7 +5,7 @@
     "auditChatIntegrationContext": {
       "owner": "P18",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The native audit resource ID can match an unrelated Document.ContentData object omitted by the empty scope. Previous review: Empty metadata scope retains captured audit actor/action/metadata and transaction staging; no audit history input. TestScaleP21M2IdentityDifferential compares persisted chat audits including actor and metadata.",
+      "reason": "Empty metadata scope retains captured audit actor/action/metadata and transaction staging without loading audit history. SW48 whole-M and complete-effect tests now match the literal earlier warm Document.ContentData aggregate, including>256KiB body, snapshot/previous values, realtime and persisted actor/metadata. Retain the guard for shared G1/G6/G7 work/publication/inline-root closure; the generic writer still requires a<=256KiB canonical root even for this audit-only callback. No per-consumer large-root substitute or false certification is introduced.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

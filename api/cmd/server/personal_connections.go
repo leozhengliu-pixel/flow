@@ -535,7 +535,7 @@ func (s *server) auditPersonalConnection(ctx context.Context, r *http.Request, w
 		auditCtx = store.WithMetadataFields(context.WithoutCancel(r.Context()), "auditLog")
 	}
 	metadata := map[string]any{"provider": connection.Provider, "account": connection.Account, "userId": connection.UserID}
-	if err := s.store.MutateWorkspace(auditCtx, workspace, "audit.personal_connection", connection.ID, map[string]any{"action": action}, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspaceScoped(auditCtx, workspace, "audit.personal_connection", connection.ID, map[string]any{"action": action}, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
 		appendAudit(data, action, "personal_connection", connection.ID, metadata)
 		return nil
 	}); err != nil {

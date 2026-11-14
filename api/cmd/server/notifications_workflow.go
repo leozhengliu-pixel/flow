@@ -422,7 +422,12 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 	teamID, stateID := r.PathValue("id"), r.PathValue("stateId")
 	var updated domain.WorkflowState
 	ctx := r.Context()
-	if workflowStateEditMetadataOnly(s.store, workspaceKey(r), teamID, input) {
+	metadataOnly, readErr := workflowStateEditMetadataOnly(s.store, workspaceKey(r), teamID, input)
+	if readErr != nil {
+		respondMutation(w, readErr, http.StatusOK, nil)
+		return
+	}
+	if metadataOnly {
 		// Issues resolve their status display data on read; with no type
 		// change, no materialization and no inheriting sub-team, the write
 		// touches no issue record.
@@ -1677,20 +1682,52 @@ func inheritParentTeamConfiguration(data *domain.Bootstrap, teamID, parentID str
 // issue record unchanged: the team already owns its statuses (no
 // materialization remap), the type is unchanged (it is an indexed issue
 // column) and no sub-team inherits the statuses (no name-based remap).
-func workflowStateEditMetadataOnly(repository *store.SQLiteStore, workspace, teamID string, input domain.WorkflowStateMutationInput) bool {
+func workflowStateEditMetadataOnly(repository *store.SQLiteStore, workspace, teamID string, input domain.WorkflowStateMutationInput) (bool, error) {
 	if input.Type != nil {
-		return false
+		return false, nil
 	}
-	data, ok := repository.WorkspaceMetadataFields(workspace, "teams", "states", "teamSettings")
-	if !ok || !slices.ContainsFunc(data.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID }) {
-		return false
-	}
-	for _, id := range append([]string{teamID}, teamDescendantIDs(&data, teamID)...) {
-		if settings := data.TeamSettings[id]; settings.InheritWorkflowStatuses && settings.ParentTeamID != "" {
-			return false
+	independent := func(data *domain.Bootstrap) bool {
+		for _, id := range append([]string{teamID}, teamDescendantIDs(data, teamID)...) {
+			if settings := data.TeamSettings[id]; settings.InheritWorkflowStatuses && settings.ParentTeamID != "" {
+				return false
+			}
 		}
+		return true
 	}
-	return true
+	if !repository.BoundedMetadataEnabled() {
+		data, ok := repository.WorkspaceMetadataFields(workspace, "teams", "states", "teamSettings")
+		if !ok || !slices.ContainsFunc(data.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID }) {
+			return false, nil
+		}
+		return independent(&data), nil
+	}
+	ctx := context.Background()
+	read, found, err := repository.BeginInstalledMetadataRead(ctx, workspace)
+	if err != nil || !found {
+		return false, err
+	}
+	defer read.Close()
+	ownsStates := false
+	_, err = read.Visit(ctx, []string{"states"}, func(ctx context.Context, entry store.InstalledMetadataEntry) error {
+		return entry.Value.Child(ctx, []string{"teamId"}, func(ctx context.Context, shape store.InstalledMetadataShape, value store.InstalledMetadataRef) error {
+			if !shape.Found {
+				return nil
+			}
+			match, err := value.StringEqual(ctx, teamID)
+			if err == nil && match {
+				ownsStates = true
+				return store.ErrMetadataIterationDone
+			}
+			return err
+		})
+	})
+	if err != nil && !errors.Is(err, store.ErrMetadataIterationDone) {
+		return false, err
+	}
+	if !ownsStates {
+		return false, nil
+	}
+	return read.TrustedWorkflowHierarchyIndependent(ctx, teamID)
 }
 
 func remapInheritedWorkflowIssues(data *domain.Bootstrap, rootTeamID string) {

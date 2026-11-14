@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"slices"
@@ -106,6 +107,39 @@ func chatLanguage(metadata domain.Bootstrap, userID, provider string) string {
 		return "zh"
 	}
 	return "en"
+}
+
+func chatReadLanguagePrefix(input io.Reader, userID, provider string) (string, error) {
+	prefix, err := io.ReadAll(io.LimitReader(input, 8))
+	if err != nil {
+		return "", err
+	}
+	// Only zh-prefix, empty, system and auto differ from English.
+	data := domain.Bootstrap{UserSettings: map[string]domain.UserSettings{userID: {Language: string(prefix)}}}
+	return chatLanguage(data, userID, provider), nil
+}
+
+func (s *server) chatReadLanguage(ctx context.Context, workspace, userID, provider string) (string, error) {
+	if !s.store.BoundedMetadataEnabled() {
+		data, _ := s.store.WorkspaceMetadataFields(workspace, "userSettings")
+		return chatLanguage(data, userID, provider), nil
+	}
+	language := chatLanguage(domain.Bootstrap{}, userID, provider)
+	read, found, err := s.store.BeginInstalledMetadataRead(ctx, workspace)
+	if err != nil || !found {
+		return language, err
+	}
+	defer read.Close()
+	err = read.Child(ctx, []string{"userSettings", userID, "language"}, func(ctx context.Context, shape store.InstalledMetadataShape, value store.InstalledMetadataRef) error {
+		if !shape.Found {
+			return nil
+		}
+		return value.StreamBytes(ctx, func(input io.Reader) error {
+			language, err = chatReadLanguagePrefix(input, userID, provider)
+			return err
+		})
+	})
+	return language, err
 }
 
 func chatActionErrorText(code, language string) string {
@@ -233,8 +267,11 @@ func (s *server) chatPersonalIssueCard(ctx context.Context, record domain.ChatIn
 // controls when it is about an issue the recipient can open, otherwise the
 // notification with Open in Flow.
 func (s *server) chatPersonalNotificationCard(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, payload chatPersonalJob, item notificationEmailItem, job domain.ChatJob) (map[string]any, []domain.ChatAction, error) {
-	settings, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "userSettings")
-	plain := chatCard(item.Title, chatCardText(item.Line), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain(chatT(chatLanguage(settings, identity.UserID, record.Provider), "open_in_flow")), "url": item.URL}}})
+	language, err := s.chatReadLanguage(ctx, record.WorkspaceKey, identity.UserID, record.Provider)
+	if err != nil {
+		return nil, nil, err
+	}
+	plain := chatCard(item.Title, chatCardText(item.Line), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain(chatT(language, "open_in_flow")), "url": item.URL}}})
 	notification, err := s.store.NotificationRecord(ctx, record.WorkspaceKey, payload.UserID, payload.NotificationID)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && (notification.IssueID == "" || notification.ReviewID != "") {
 		return plain, nil, nil

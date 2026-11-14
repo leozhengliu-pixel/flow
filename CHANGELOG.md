@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded installed metadata gains immutable indexed units, legacy-ranked aggregate lookup, exact framed byte streams, and owned visitors/reducers. Callback declines avoid unrelated reference refresh; successful full refresh remains streamed. Consumer migration and activation verification continue with bounded metadata off.
 - Scoped metadata writes preserve uploaded inputs for undeclared import and migration jobs. Catalog backfill accepts complete numeric settings at end of input, and document notifications retain bounded workspace identity through directory lookup.
 - Bounded metadata gains immutable typed sources for installed values and cold recovery, retained read ownership, and legacy nested aggregate lookup for scoped writes. Source publication follows the final committed metadata revision, while webhook and realtime values retain work admission through synchronous delivery. Consumer migration and capacity verification remain incomplete; bounded metadata stays off by default.
 - Bounded template lists preserve legacy hydration failures and signed output, GitLab rotation and application identity batches retain owned inputs, and due-notification scheduling holds decoded rows through updates. Canonical Team policy reads preserve typed aliases; rename seeding uses bounded disk staging. Source fidelity gaps remain activation blockers and bounded metadata stays off.

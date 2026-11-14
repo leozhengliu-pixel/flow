@@ -27,7 +27,7 @@ func (c *metadataLogicalCursor) read(p []byte) error {
 	if int64(len(p)) > c.node.offset+c.node.size-c.offset {
 		return io.ErrUnexpectedEOF
 	}
-	_, err := c.node.source.file.ReadAt(p, c.offset)
+	_, err := metadataLogicalReadAt(c.ctx, c.node.source.file, p, c.offset)
 	c.offset += int64(len(p))
 	return err
 }
@@ -61,6 +61,9 @@ func (c *metadataLogicalCursor) child(t reflect.Type) (metadataLogicalNode, erro
 // Value admits the entire decoded object before allocation. The caller must
 // hold a work lease until the returned value is no longer retained.
 func (n metadataLogicalNode) Value(ctx context.Context, maxBytes int) (reflect.Value, error) {
+	if n.collection != nil {
+		return n.collection.Value(ctx, maxBytes)
+	}
 	if err := ctx.Err(); err != nil {
 		return reflect.Value{}, err
 	}
@@ -263,6 +266,9 @@ func (n metadataLogicalNode) value(ctx context.Context, depth int) (reflect.Valu
 // Children borrows framed child nodes without decoding their bodies. Map keys
 // are decoded under a fixed bound; captures reject unsupported key graphs.
 func (n metadataLogicalNode) Children(ctx context.Context, visit func(reflect.Value, metadataLogicalNode) error) error {
+	if n.collection != nil {
+		return n.collection.Children(ctx, visit)
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -375,6 +381,9 @@ func (n metadataLogicalNode) StringEqual(ctx context.Context, want string) (bool
 // MapEntries leaves keys in their framed representation, so an unrelated
 // legal large property name can be skipped without allocating it.
 func (n metadataLogicalNode) MapEntries(ctx context.Context, visit func(metadataLogicalNode, metadataLogicalNode) error) error {
+	if n.collection != nil {
+		return n.collection.MapEntries(ctx, visit)
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -414,6 +423,13 @@ func (n metadataLogicalNode) MapEntries(ctx context.Context, visit func(metadata
 }
 
 func (s *metadataLogicalSource) Select(ctx context.Context, scope MetadataRecordScope, maxBytes int) (domain.Bootstrap, error) {
+	if err := s.Retain(); err != nil {
+		return domain.Bootstrap{}, err
+	}
+	defer s.Release()
+	if s.units != nil {
+		return s.unitCorpus(ctx).Select(ctx, scope, maxBytes)
+	}
 	var data domain.Bootstrap
 	result := reflect.ValueOf(&data).Elem()
 	remaining := maxBytes

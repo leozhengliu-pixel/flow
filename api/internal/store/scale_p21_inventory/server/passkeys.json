@@ -13,7 +13,7 @@
     "deletePasskey": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Blocked by legacy aggregate enrichment: an earlier Document.ContentData object with id equal to a normal passkey ID remains the realtime entity after deletion. A target-only scoped writer emits no entity. SW18 reproduced the wire difference and restored the original writer; shared bounded aggregate compatibility is required.",
+      "reason": "Target-only scoped implementation is in place. TestScaleP21SW41PasskeyPointDifferential and DeletePermissionDifferential compare live-principal/credential classes, missing/foreign ownership, exact canonical state, account audit attribution and retained unrelated records. SW41AggregateSourceDifferential proves an earlier warm Document.ContentData object above 256 KiB remains the webhook/realtime winner after deletion with A/B. Guard remains for production source/aggregate indexes and affected-unit reference transforms (G1), legal-large publication limits (G6), and physical/duplicate logical occurrence semantics (G7); small fixtures do not certify those obligations. Original flag-off accessor and account-audit ordering are unchanged.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -31,7 +31,7 @@
     "updatePasskey": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Blocked by legacy aggregate enrichment: an earlier Document.ContentData object with id equal to a normal passkey ID wins the reflective lookup. A target-only scoped writer emits the passkey instead. SW18 reproduced the wire difference and restored the original writer; shared bounded aggregate compatibility is required.",
+      "reason": "Target-only scoped implementation is in place. TestScaleP21SW41PasskeyPointDifferential compares principal/credential classes, renamed/no-op/invalid/missing records, canonical state and publication. SW41AggregateSourceDifferential proves earlier warm NUL-bearing Document.ContentData above 256 KiB wins the exact webhook/realtime envelope; SW41CancellationAndTargetBudget proves no mutation or publication on rejected work. Guard remains for production source/aggregate indexes and affected-unit reference transforms (G1), legal-large publication limits (G6), and physical/duplicate logical occurrence semantics (G7). The measured small no-op currently grows from 2 to 7 SQL statements and about 65 KiB to 810-817 KiB allocation; no performance gain is claimed. Original flag-off dispatch is unchanged.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

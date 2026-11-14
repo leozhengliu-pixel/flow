@@ -2779,7 +2779,7 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) recordMemberStatusAudit(r *http.Request, action string) {
-	err := s.store.MutateWorkspaceScoped(store.WithMetadataFields(r.Context(), "auditLog"), r.PathValue("workspaceKey"), "audit.workspace_member", r.PathValue("userId"), nil, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "users", ID: r.PathValue("userId")}}}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(store.WithMetadataFields(r.Context(), "auditLog"), r.PathValue("workspaceKey"), "audit.workspace_member", r.PathValue("userId"), nil, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
 		appendAudit(data, action, "workspace_member", r.PathValue("userId"), nil)
 		return nil
 	})
