@@ -633,7 +633,7 @@ func (b *metadataLogicalBuilder) writeTime(node metadataLogicalNode, value time.
 	receipt := slices.Index(b.storage.locations, location)
 	if location != time.UTC && location != metadataLogicalProcessLocal && receipt < 0 {
 		node.unavailable, node.blocked = true, true
-		return node, nil
+		return b.writeWireTime(node, value)
 	}
 	plain := time.Unix(value.Unix(), int64(value.Nanosecond())).In(location)
 	if value == plain {

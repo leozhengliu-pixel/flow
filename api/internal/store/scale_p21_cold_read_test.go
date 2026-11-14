@@ -333,3 +333,151 @@ func TestScaleP21ColdReadErrorPanicAndMissingSource(t *testing.T) {
 	}
 	assertReleased()
 }
+
+func TestScaleP21ColdReadRefreshLatestInstalledGeneration(t *testing.T) {
+	f, parent, workspace := scaleP21ColdReadFixture(t)
+	physical := workspace + "\x00latest"
+	var facade *SQLiteStore
+	var stale context.Context
+	err := parent.withColdMetadataRead(t.Context(), func(ctx context.Context, source *SQLiteStore) error {
+		facade, stale = source, ctx
+		before, found := source.WorkspaceMetadata("")
+		if !found {
+			t.Fatal("initial default workspace missing")
+		}
+		owned := cloneBootstrap(before)
+		old, err := parent.retainMetadataLogicalSource(ctx, workspace)
+		if err != nil {
+			return err
+		}
+		path := old.stores[0].file.Name()
+		old.Release()
+		latest := cloneBootstrap(before)
+		latest.Settings["cold-refresh"] = map[string]any{"native": int64(9007199254740993), "nul": "latest\x00value"}
+		latest.Workspace.Name = "latest name"
+		next, err := captureMetadataLogicalSource(ctx, latest, copyStamp{workspaceID: before.Workspace.ID, revision: -1})
+		if err != nil {
+			return err
+		}
+		// This is the same source/registry publication boundary used by a
+		// parent HOT install, including a changed physical default.
+		parent.mu.Lock()
+		parent.metadataResidency.mu.Lock()
+		previous := parent.metadataResidency.logical[workspace]
+		delete(parent.metadataResidency.logical, workspace)
+		delete(parent.workspaces, workspace)
+		parent.metadataResidency.logical[physical] = next
+		parent.workspaces[physical] = domain.Bootstrap{Workspace: latest.Workspace}
+		parent.lastWorkspaceKey = physical
+		parent.viewer = domain.User{ID: "latest\x00viewer", AppScopes: []string{"latest"}}
+		parent.metadataResidency.mu.Unlock()
+		parent.mu.Unlock()
+		previous.Release()
+		if _, err := os.Stat(path); err != nil {
+			t.Fatal("callback lost original generation before refresh", err)
+		}
+		return parent.withColdMetadataRead(ctx, func(nested context.Context, same *SQLiteStore) error {
+			if same != source || nested != ctx {
+				t.Fatal("nested refresh changed owner or context")
+			}
+			if err := same.refreshColdMetadataRead(nested, ""); err != nil {
+				return err
+			}
+			got, found := same.WorkspaceMetadata("")
+			if !found || !reflect.DeepEqual(got, latest) || same.lastWorkspaceKey != physical {
+				t.Fatal("refresh missed latest source or physical default")
+			}
+			if !reflect.DeepEqual(before, owned) {
+				t.Fatal("refresh mutated earlier owned result")
+			}
+			if _, found := same.WorkspaceMetadata(workspace); found {
+				t.Fatal("refresh retained removed physical registry key")
+			}
+			if same.viewer.ID != "latest\x00viewer" {
+				t.Fatal("refresh did not atomically replace installed viewer")
+			}
+			same.viewer.AppScopes[0] = "mutated"
+			if parent.viewer.AppScopes[0] != "latest" {
+				t.Fatal("refresh borrowed parent viewer's mutable slice")
+			}
+			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("refresh retained previous generation's pins", err)
+			}
+			// A missing exact key stays missing after a successful refresh.
+			return same.refreshColdMetadataRead(nested, workspace)
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := facade.refreshColdMetadataRead(stale, physical); err == nil {
+		t.Fatal("closed callback context allowed refresh")
+	}
+	if err := f.refreshColdMetadataRead(t.Context(), workspace); !errors.Is(err, ErrBoundedMetadataCoverage) {
+		t.Fatal("non-facade receiver allowed refresh", err)
+	}
+}
+
+func TestScaleP21ColdReadRefreshBoundariesAndInheritedSnapshot(t *testing.T) {
+	f, parent, workspace := scaleP21ColdReadFixture(t)
+	second := scaleP21SW0SelectedExtraWorkspace(t, f, idgen.New("p21-cold-refresh-")).Workspace.URLKey
+	parent.metadataResidency.work.limit = metadataWorkBytes
+	if err := parent.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, second); err != nil {
+		t.Fatal(err)
+	}
+	parent.metadataResidency.work.limit = 1
+	inherited := workspaceRead{
+		database: f.db, workspace: workspace,
+		metadata: domain.Bootstrap{Workspace: domain.Workspace{ID: f.data.Workspace.ID, Name: "explicit snapshot"}},
+	}
+	ctx := context.WithValue(t.Context(), workspaceReadKey{}, inherited)
+	if err := parent.withColdMetadataRead(ctx, func(bound context.Context, facade *SQLiteStore) error {
+		before, _ := facade.WorkspaceMetadata(second)
+		updated := cloneBootstrap(before)
+		updated.Workspace.Name = "cross-workspace latest"
+		next, err := captureMetadataLogicalSource(bound, updated, copyStamp{workspaceID: updated.Workspace.ID, revision: -1})
+		if err != nil {
+			return err
+		}
+		parent.installMetadataLogicalSource(second, next)
+		unbound := context.WithValue(bound, coldMetadataReadKey{}, nil)
+		if err := facade.refreshColdMetadataRead(unbound, second); !errors.Is(err, ErrBoundedMetadataCoverage) {
+			t.Fatal("unbound caller refreshed another lifetime", err)
+		}
+		cancelled, cancel := context.WithCancel(bound)
+		cancel()
+		if err := facade.refreshColdMetadataRead(cancelled, second); !errors.Is(err, context.Canceled) {
+			t.Fatal("cancelled refresh entered", err)
+		}
+		if err := facade.refreshColdMetadataRead(bound, second); err != nil {
+			return err
+		}
+		got, _ := facade.WorkspaceMetadata(second)
+		if got.Workspace.Name != updated.Workspace.Name || before.Workspace.Name == updated.Workspace.Name {
+			t.Fatal("cross-workspace refresh changed previous result or stayed stale")
+		}
+		_, snapshot, found := facade.workspaceReadSource(bound, workspace)
+		if !found || snapshot.Workspace.Name != "explicit snapshot" || bound.Value(workspaceReadKey{}).(workspaceRead).metadata.Workspace.Name != "explicit snapshot" {
+			t.Fatal("refresh discarded explicitly inherited snapshot")
+		}
+		// Decode failure is atomic: existing facade graph and pins survive.
+		index, _, _ := metadataLogicalField("settings")
+		parent.metadataResidency.mu.Lock()
+		current := parent.metadataResidency.logical[second]
+		parent.metadataResidency.mu.Unlock()
+		original := current.fields[index]
+		current.fields[index].unavailable = true
+		err = facade.refreshColdMetadataRead(bound, second)
+		current.fields[index] = original
+		if !errors.Is(err, ErrBoundedMetadataCoverage) {
+			t.Fatal("unavailable refresh fell back", err)
+		}
+		retained, _ := facade.WorkspaceMetadata(second)
+		if !reflect.DeepEqual(retained, got) {
+			t.Fatal("failed refresh partially replaced graph")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}

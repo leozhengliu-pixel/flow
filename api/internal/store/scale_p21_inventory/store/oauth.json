@@ -1,6 +1,6 @@
 {
   "source": "store/oauth.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "FindAPIKey": {
       "owner": "P21",
@@ -20,7 +20,8 @@
     },
     "OAuthApplicationsWithLogo": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Literal legacy full-return accessor retained only behind the flag-off owned-image resolver. Every production resolution/permission boundary now dispatches to VisitOAuthApplicationLogos when bounded mode is enabled; its borrowed scalar result replaces the application slice. This review certifies caller routing, not bounded direct use of this legacy API. TestScaleP21HotOAuthLogoNativeProjection and AtomicRegistryAndErrors compare native duplicate/order/scalar semantics; AccessDifferential and OwnedImageBoundary prove the bounded caller bypass.",
       "accessors": [
         "resident-state"
       ],

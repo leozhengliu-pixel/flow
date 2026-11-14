@@ -194,6 +194,35 @@ func compareResidentRecordKeys(a, b RecordKey) int {
 }
 
 func (s *SQLiteStore) residentWebhookNeeded(ctx context.Context, workspace string) (bool, error) {
+	if s.BoundedMetadataEnabled() {
+		read, found, err := s.BeginInstalledMetadataRead(ctx, workspace)
+		if err != nil {
+			return false, err
+		}
+		if !found {
+			if workspace == "" {
+				s.mu.RLock()
+				workspace = s.lastWorkspaceKey
+				s.mu.RUnlock()
+			}
+			needed := s.chatSnapshotFlag(ctx, workspace)
+			if err := ctx.Err(); err != nil {
+				return false, err
+			}
+			return needed, nil
+		}
+		defer read.Close()
+		// The handle pins the exact installed generation and physical default
+		// key while the predicate streams its scalar inputs.
+		needed, err := s.logicalWebhookNeeded(ctx, read.source, read.workspace)
+		if err == nil {
+			err = ctx.Err()
+		}
+		if err != nil {
+			return false, err
+		}
+		return needed, nil
+	}
 	enabled := s.jsonText("data", "enabled") + ` IN ('1','true')`
 	if s.dialect == "sqlite" {
 		enabled = s.jsonText("data", "enabled") + `=1`

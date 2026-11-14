@@ -29,7 +29,9 @@ type SQLiteStore struct {
 	// install the result (installWorkspace), so readers never wait on a
 	// database round trip.
 	mu               sync.RWMutex
-	writeMu          sync.Mutex
+	writeMu          coldWriteMutex
+	coldWrite        *coldFullWrite
+	coldParent       *SQLiteStore
 	pulseIndexes     pulseIndexCache
 	issueGroupCounts issueGroupCountCache
 	workspaces       map[string]domain.Bootstrap
@@ -1613,6 +1615,9 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		workspaceKey = s.lastWorkspaceKey
 		s.mu.RUnlock()
 	}
+	if s.coldWrite != nil {
+		s.coldWrite.requested = workspaceKey
+	}
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
@@ -1622,6 +1627,13 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		// transaction runs; readers keep reading the committed snapshot.
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
+		if s.coldWrite != nil {
+			var err error
+			if workspaceKey, err = s.refreshColdFullWriteLocked(ctx); err != nil {
+				return err
+			}
+			webhookEnabled = s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
+		}
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
 		if s.coordinator != nil {
@@ -1975,6 +1987,11 @@ func (s *SQLiteStore) persistWorkspaceOnto(ctx context.Context, workspaceKey str
 	defer tx.Rollback()
 	if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, before, data, raw, event, base); err != nil {
 		return err
+	}
+	if s.coldWrite != nil {
+		if err := s.prepareColdFullWrite(ctx, tx, workspaceKey, *data); err != nil {
+			return err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return err

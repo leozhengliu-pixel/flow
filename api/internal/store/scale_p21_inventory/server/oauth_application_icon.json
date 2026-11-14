@@ -2,6 +2,19 @@
   "source": "server/oauth_application_icon.go",
   "unmigrated": 0,
   "consumers": {
+    "boundedOAuthAppIconAccess": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded icon permission checks visit one pinned installed logical registry generation and select only exact native logo, public flag and lazily needed client ID. The original resolver and authorization bodies remain the flag-off path. TestScaleP21HotOAuthLogoAccessDifferential and OwnedImageBoundary compare the principal/credential matrix, owner preview, public/private apps, duplicate references, native unavailable timestamps and large bodies, physical owner isolation, installation membership, cancellation and signed bypass.",
+      "accessors": [
+        "VisitOAuthApplicationLogos"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Uploaded application icons are loaded by ordinary views and appeared in the activation profile.",
+      "callers": [
+        "server/server.ownedImageAccess"
+      ]
+    },
     "checkOAuthAppLogoInput": {
       "owner": "P21",
       "status": "reviewed",

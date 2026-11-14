@@ -22,6 +22,9 @@ func (s *SQLiteStore) mutateLoopContract(ctx context.Context, workspace string, 
 		workspace = s.lastWorkspaceKey
 		s.mu.RUnlock()
 	}
+	if s.coldWrite != nil {
+		s.coldWrite.requested = workspace
+	}
 	loopID := mutationAggregateID(ctx)
 	if loopID == "" {
 		return errors.New("loop contract mutation requires a loop ID")
@@ -33,6 +36,14 @@ func (s *SQLiteStore) mutateLoopContract(ctx context.Context, workspace string, 
 	apply := func(ctx context.Context) error {
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
+		if s.coldWrite != nil {
+			var err error
+			workspace, err = s.refreshColdFullWriteLocked(ctx)
+			if err != nil {
+				return err
+			}
+			webhookEnabled = s.webhookConfigured() && s.webhookNeeded(ctx, workspace)
+		}
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
 		event, realtimePayload = domain.DomainEvent{}, nil
@@ -139,20 +150,44 @@ func (s *SQLiteStore) mutateLoopContract(ctx context.Context, workspace string, 
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: event.Payload, PreviousValues: event.PreviousValues, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
 			return err
 		}
+		var installed domain.Bootstrap
+		if s.coldWrite != nil {
+			installed = current
+			installed.Loops = slices.Clone(current.Loops)
+			installed.LoopVersions = slices.Clone(current.LoopVersions)
+			for _, change := range changes {
+				before[metadataRecordKey{change.field, change.key}] = change.raw
+			}
+			if err := s.setColdMetadataRecords(ctx, &installed, before); err != nil {
+				return err
+			}
+			if err := s.prepareColdFullWrite(ctx, tx, workspace, installed); err != nil {
+				return err
+			}
+		}
 		if err := tx.Commit(); err != nil {
 			return err
 		}
 		traceMark(ctx, "persist")
 		// Keep unrelated cached metadata as-is; readers never share these slices.
-		current.Loops = slices.Clone(current.Loops)
-		current.LoopVersions = slices.Clone(current.LoopVersions)
-		for _, change := range changes {
-			before[metadataRecordKey{change.field, change.key}] = change.raw
-		}
-		if err := setMetadataRecords(&current, before); err != nil {
-			return err
+		if s.coldWrite != nil {
+			current = installed
+		} else {
+			current.Loops = slices.Clone(current.Loops)
+			current.LoopVersions = slices.Clone(current.LoopVersions)
+			for _, change := range changes {
+				before[metadataRecordKey{change.field, change.key}] = change.raw
+			}
+			if err := setMetadataRecords(&current, before); err != nil {
+				return err
+			}
 		}
 		s.installWorkspace(workspace, current, true)
+		if s.coldWrite != nil {
+			s.mu.Lock()
+			s.installColdFullWriteLocked(workspace, nil, copyRevision{}, false)
+			s.mu.Unlock()
+		}
 		return nil
 	}
 	err := mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {

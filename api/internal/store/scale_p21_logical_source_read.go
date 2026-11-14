@@ -78,6 +78,16 @@ func (n metadataLogicalNode) Value(ctx context.Context, maxBytes int) (reflect.V
 }
 
 func (n metadataLogicalNode) value(ctx context.Context, depth int) (reflect.Value, error) {
+	return n.materialize(ctx, depth, false)
+}
+
+func (n metadataLogicalNode) materialize(ctx context.Context, depth int, wire bool) (reflect.Value, error) {
+	if wire && n.unavailable && metadataLogicalWireCustomMarshaler(n.typ) {
+		return reflect.Value{}, ErrBoundedMetadataCoverage
+	}
+	if wire && n.blocked && n.typ != reflect.TypeFor[time.Time]() {
+		return reflect.Value{}, fmt.Errorf("%w: opaque wire subtree %s", ErrBoundedMetadataCoverage, n.typ)
+	}
 	if depth >= metadataLogicalDepth {
 		return reflect.Value{}, ErrMetadataWorkBudget
 	}
@@ -87,6 +97,12 @@ func (n metadataLogicalNode) value(ctx context.Context, depth int) (reflect.Valu
 		mode, err := c.byte()
 		if err != nil {
 			return v, err
+		}
+		if mode == metadataLogicalWireTime {
+			if !wire {
+				return v, ErrBoundedMetadataCoverage
+			}
+			return n.wireTimeValue(&c)
 		}
 		first, err := c.uint()
 		if err != nil {
@@ -174,7 +190,7 @@ func (n metadataLogicalNode) value(ctx context.Context, depth int) (reflect.Valu
 			if err != nil {
 				return v, err
 			}
-			owned, err := node.value(ctx, depth+1)
+			owned, err := node.materialize(ctx, depth+1, wire)
 			if err != nil {
 				return v, err
 			}
@@ -214,7 +230,11 @@ func (n metadataLogicalNode) value(ctx context.Context, depth int) (reflect.Valu
 				if err != nil {
 					return v, err
 				}
-				key, err = node.value(ctx, depth+1)
+				// Detached wire times must not change native map-key identity.
+				if wire && node.unavailable {
+					return v, ErrBoundedMetadataCoverage
+				}
+				key, err = node.materialize(ctx, depth+1, wire)
 				if err != nil {
 					return v, err
 				}
@@ -223,7 +243,7 @@ func (n metadataLogicalNode) value(ctx context.Context, depth int) (reflect.Valu
 			if err != nil {
 				return v, err
 			}
-			owned, err := node.value(ctx, depth+1)
+			owned, err := node.materialize(ctx, depth+1, wire)
 			if err != nil {
 				return v, err
 			}
@@ -247,7 +267,7 @@ func (n metadataLogicalNode) value(ctx context.Context, depth int) (reflect.Valu
 			if err != nil {
 				return v, err
 			}
-			owned, err := node.value(ctx, depth+1)
+			owned, err := node.materialize(ctx, depth+1, wire)
 			if err != nil {
 				return v, err
 			}
