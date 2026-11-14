@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_sw20_installed_viewer.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginInstalledViewerRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "resident-state"
+      ],
+      "reason": "Trusted installed core Viewer wire/instant snapshot, never SQL reinterpretation or authorization. Two-pass adaptive cost under a 64 MiB cap accounts cloned strings/slices and 4 KiB for each timestamp plus encoder work; unreviewed User field shapes fail closed. Non-UTC OutOfOfficeUntil locations detach into fixed offsets, preserving JSON/errors, instant equality, nil and IsZero without retaining arbitrary source timezone graphs; UTC remains exact. Native Location identity and monotonic readings are outside this API. Clone preserves nil/empty and drops json-minus Via like legacy cloneBootstrap. Independent nonwaiting admission remains charged until Close. SW20 lifecycle/ownership/budget tests and SW15 full-User wire/error, large-zone, source-replacement and independent-lease tests cover the sole production triage caller contract. The selected scope limit is explicit and does not certify every legally stored User size."
+    }
+  }
+}

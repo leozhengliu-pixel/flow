@@ -1,10 +1,11 @@
 {
   "source": "server/application_agents.go",
-  "unmigrated": 7,
+  "unmigrated": 2,
   "consumers": {
     "applicationConsentTeams": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Direct trusted Teams input uses BeginInstalledTeamsWireRead on the SAME actual installed source as literal WorkspaceMetadata after unchanged OAuth workspace/admin gates. The independently admitted handle owns all Team strings, detached JSON-equivalent timestamps and encoding work through writeJSON; off mode keeps WorkspaceMetadata. WithoutCancel on only the final nonwaiting read preserves legacy canceled-admin publication. SW24 ConsentWireMatrix/Shapes/TimestampErrors compare exact status, content type, bytes and encoding errors across the principal/key matrix, warm/full, resident and reloaded sources, default/missing/case bindings, nil/order/NUL/invalid UTF8 and all four timestamp fields. ApplicationConsentSourceHold is unchanged and retains the independent warm-owner versus cold-resident loader mismatch. This direct input review does not certify OAuth helpers, source loading, native time identity or complete endpoint activation.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -19,7 +20,8 @@
     },
     "authorizedAgentTask": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Default selection reads only the exact installed logical Workspace.URLKey through BeginInstalledWorkspaceIdentityRead, with its independent owned allowance deferred through native task lookup and downstream authorization. The unchanged original WorkspaceMetadata accessor runs off mode; explicit bindings still bypass default selection. TestScaleP21SW24InstalledDefaultTaskSourceDifferential compares literal pre-SW20 methods against the new methods on the SAME actual installed warm/full and resident sources, before and after ReloadWorkspace, including physical-NUL defaults, explicit references, existing/missing tasks and read/edit paths. The original ApplicationDefaultSourceHold remains intact: warm owner-store versus cold resident loader logical-source fidelity is a separate pending loadResidentWorkspaces contract, not waived by this direct-input review. Resource contexts and full endpoints remain independently pending.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata"
@@ -27,7 +29,8 @@
     },
     "configureApplicationInstallation": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Direct projection consumes only Workspace.URLKey, Viewer.ID and ViewerRole; empty projected scope retains live identity and exact off accessor. SW20 application differentials compare those exact inputs and handler admin/missing/builtin-disabled/scope/client denials across the permission/key matrix, development identity and queued revocation. Validation, secret work and installation service ordering remain unchanged; downstream installation/client/list services are not certified by this direct-input review.",
       "accessors": [
         "workspaceData"
       ]
@@ -42,14 +45,16 @@
     },
     "listApplicationAgentTasks": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Empty-bound default selection retains the exact installed logical URLKey with an independent identity handle held through native listing, per-task authorization and response encoding. Off mode retains WorkspaceMetadata, and explicit bindings are unchanged. TestScaleP21SW24InstalledDefaultTaskSourceDifferential compares literal pre-SW20 lists and authorization on each SAME installed source across warm/full, resident and reloaded states, physical-NUL/default/explicit bindings, missing tasks, read/edit and includeArchived modes. Existing task permission differential remains required. ApplicationDefaultSourceHold still proves the independent warm owner versus cold resident loader mismatch; no source normalization, loader or complete endpoint readiness is certified.",
       "accessors": [
         "WorkspaceMetadata"
       ]
     },
     "listApplicationInstallations": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Direct projection only supplies Workspace.URLKey to unchanged ListApplications; empty projected scope retains live identity and exact off accessor. SW20 application tests compare successful empty lists, exact identity inputs, full principal/key matrix, development stored viewer, foreign workspace, queued membership revocation and cancellation with unrelated bodies excluded. ListApplications/resolveApplicationAccess remain separately inventoried; this does not certify general installation output or endpoint readiness.",
       "accessors": [
         "workspaceData"
       ]

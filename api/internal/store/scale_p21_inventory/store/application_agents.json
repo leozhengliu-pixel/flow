@@ -5,6 +5,7 @@
     "resolveApplicationAccess": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Native all-match application policy reader was held after a valid OAuth manifest client_name containing NUL remained in the warm legacy registration while canonical SQL stripped it. SW24 persistent differential reproduced differing application names; the original resolver is retained until this transient compatibility contract is resolved. Shared HTTP request NUL filtering does not cover the manifest decoder.",
       "accessors": [
         "resident-state"
       ]

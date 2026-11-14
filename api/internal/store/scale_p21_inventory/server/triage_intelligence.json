@@ -1,6 +1,6 @@
 {
   "source": "server/triage_intelligence.go",
-  "unmigrated": 6,
+  "unmigrated": 5,
   "consumers": {
     "generateTriageIntelligenceForIssues": {
       "owner": "P21",
@@ -39,7 +39,8 @@
     },
     "refreshIssueSuggestions": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Direct read only: absent request actor uses an owned BeginInstalledViewerRead snapshot of exact installed core Viewer, held through the run service and response. Off mode retains the literal WorkspaceMetadata branch; supplied actors/API keys and run ordering are unchanged. The adaptive clone has an independent work allowance, preserves NUL/nil/empty fields and legacy Via omission, and keeps exact default/missing/NUL Go workspace lookup. SW20 triage differentials cover full principal/key matrix, actual Viewer delta plus full UpdateWorkspace warm/canonical divergence, actor-ID authorization outcome, default/missing/foreign bindings and legacy canceled handler output, with zero full decodes. runTriageIntelligence remains independently pending for complete heuristic inputs and mutations; this review certifies the direct fallback source, not successful endpoint readiness.",
       "accessors": [
         "WorkspaceMetadata"
       ]

@@ -1,0 +1,22 @@
+{
+  "source": "store/scale_p21_sw0_installed_workspace.go",
+  "unmigrated": 0,
+  "consumers": {
+    "installedWorkspaceIdentityCost": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted exact installed-map identity size preflight reads only registry/logical URLKey/ID string lengths under the read lock, never copies unrelated fields, and rejects an explicit 1MiB combined identity-byte budget before allocation. BeginInstalledWorkspaceIdentityRead rechecks the current source after independent admission. Tests cover exact registry keys, stale/default/deleted catalogs and retained allowance.",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "BeginInstalledWorkspaceIdentityRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted exact installed-map reader clones only RegistryKey, logical installed URLKey and ID under one read lock after independent retained admission. Caller keeps its original accessor off mode and uses the same logical field rather than substituting a physical key. TestScaleP21SW0InstalledWorkspaceExactRegistry covers case/trailing/NUL/missing/default/deleted/empty semantics; OwnedAdmission covers parent lifetime, cancellation, budget/exhaustion/recovery; ConstantWork compares fixed allocations with 64KiB and 8MiB ignored bodies and accepted long SQLite keys. Producer proves normal CreateWorkspace warm/resident/reload logical source equality and catalog removal. This read does not authorize or pin future membership.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

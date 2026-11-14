@@ -1,13 +1,14 @@
 {
   "source": "store/workspace_rename_migration.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "seedWorkspaceKeyRenames": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "resident-state"
-      ]
+      ],
+      "reason": "Flag off preserves the literal original installed-ID snapshot, event traversal and native inserts. Bounded mode stages only installed workspace ID/key pairs in a private quota-charged SQLite B-tree, reads at most 500 fixed-size event headers per repeatable snapshot, validates/projects URLKey through fixed SQL chunks with encoding/json ignored-type-error/null/alias behavior, and groups latest lexical timestamps on disk. Sorted 64-pair pages preserve native ON CONFLICT, partial autocommit count and idempotent resume. Stage cache/mmap/journal settings, before-growth page_count/page_size/max_page_count admission, physical ceiling and cleanup are tested. SW26 targeted tests compare actual legacy payload decoding, large ignored/Unicode/escaped bodies, over-500 paging, maximum timestamps, pool-one reads, partial failure/resume, cancellation and quota denial. This certifies only the registered seed consumer; downstream content-body recovery helpers remain separately reported native-memory limitations."
     }
   }
 }

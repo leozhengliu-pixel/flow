@@ -145,6 +145,50 @@ func (s *server) resumeImport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listExports(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		workspace, owner, access, read, err := s.boundedExportJobAccess(r)
+		if err != nil {
+			scaleP21SW24ExportReadError(w, err)
+			return
+		}
+		if read != nil {
+			defer read.Close()
+		}
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		if limit < 1 || limit > 100 {
+			limit = 50
+		}
+		offset := 0
+		if raw := r.URL.Query().Get("cursor"); raw != "" {
+			if decoded, err := base64.RawURLEncoding.DecodeString(raw); err == nil {
+				offset, _ = strconv.Atoi(string(decoded))
+			}
+		}
+		jobs := []domain.ExportJob{}
+		total := 0
+		if workspace != "" {
+			jobs, total, err = s.store.ExportJobPage(r.Context(), workspace, owner, s.authDisabled, offset, limit)
+			if !s.authDisabled {
+				if accessErr := s.store.ValidateAccess(r.Context(), access); accessErr != nil {
+					scaleP21SW24ExportReadError(w, accessErr)
+					return
+				}
+			}
+		}
+		if err != nil {
+			scaleP21SW24ExportReadError(w, err)
+			return
+		}
+		if offset < 0 || offset > total {
+			offset = 0
+		}
+		w.Header().Set("X-Total-Count", strconv.Itoa(total))
+		if offset+len(jobs) < total {
+			w.Header().Set("X-Next-Cursor", base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(offset+len(jobs)))))
+		}
+		writeJSON(w, http.StatusOK, jobs)
+		return
+	}
 	data := s.workspaceData(r)
 	jobs := make([]domain.ExportJob, 0)
 	for _, job := range data.ExportJobs {
@@ -156,6 +200,37 @@ func (s *server) listExports(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getExport(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		workspace, owner, access, read, err := s.boundedExportJobAccess(r)
+		if err != nil {
+			scaleP21SW24ExportReadError(w, err)
+			return
+		}
+		if read != nil {
+			defer read.Close()
+		}
+		if workspace != "" {
+			var job domain.ExportJob
+			var found bool
+			job, found, err = s.store.ExportJobRecord(r.Context(), workspace, owner, r.PathValue("id"), s.authDisabled)
+			if !s.authDisabled {
+				if accessErr := s.store.ValidateAccess(r.Context(), access); accessErr != nil {
+					scaleP21SW24ExportReadError(w, accessErr)
+					return
+				}
+			}
+			if err != nil {
+				scaleP21SW24ExportReadError(w, err)
+				return
+			}
+			if found {
+				writeJSON(w, http.StatusOK, job)
+				return
+			}
+		}
+		writeError(w, http.StatusNotFound, "export not found")
+		return
+	}
 	data := s.workspaceData(r)
 	id := r.PathValue("id")
 	for _, job := range data.ExportJobs {

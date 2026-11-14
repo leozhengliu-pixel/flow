@@ -1,0 +1,18 @@
+{
+  "source": "store/scale_p21_sw24_native_reads.go",
+  "unmigrated": 0,
+  "consumers": {
+    "ClassicGitHubSyncConfigured": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Known-workspace identity lookup plus SQL boolean over canonical integration provider/status and secret/env non-whitespace predicates. Only a boolean crosses SQL; Go Unicode whitespace is matched exactly with binary MySQL replacement and byte-length checks. TestScaleP21SW24ClassicGitHubPredicate and ClassicHTTPConfiguration cover exhaustive unicode.IsSpace agreement, large scalar/config values, missing/case/disabled states, actual request NUL stripping and cancellation before any downstream event. Persistent SQLite repetition passed; the trusted primitive adds no authorization.",
+      "accessors": ["resident-state"]
+    },
+    "readExportJobPage": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Known-workspace identity lookup plus native owner predicate, count and canonical-order offset page. One repeatable snapshot binds header size checks to subsequent bounded body transfer, with decoded/output budgets and explicit failure instead of partial rows. TestScaleP21SW24ExportNativePage and OwnedExportsDifferential compare owned/unowned/admin/development cases, limits/cursors/counts/order and response shapes, high row counts, oversized hidden/selected jobs, cross-workspace and queued/replayed revocation, cancellation/recovery, unchanged canonical state and zero full decodes. Persistent SQLite repetition passed. Caller retains live authorization.",
+      "accessors": ["resident-state"]
+    }
+  }
+}

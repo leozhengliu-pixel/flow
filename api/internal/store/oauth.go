@@ -194,6 +194,9 @@ func (s *SQLiteStore) OAuthApplicationClient(clientID string) (domain.OAuthClien
 }
 
 func (s *SQLiteStore) scaleP21SW17OAuthClient(clientID string) (domain.OAuthClient, bool) {
+	if strings.ContainsRune(clientID, '\x00') {
+		return domain.OAuthClient{}, false
+	}
 	stringColumn := func(field string) string {
 		if s.dialect == "mysql" {
 			column := "JSON_EXTRACT(CONVERT(data USING utf8mb4),'$." + field + "')"

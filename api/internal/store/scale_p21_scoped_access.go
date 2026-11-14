@@ -64,10 +64,19 @@ func (s *SQLiteStore) readScopedMetadata(ctx context.Context, workspace string, 
 	if !RecordHydrationEnabled() {
 		return domain.Bootstrap{}, ErrBoundedMetadataCoverage
 	}
+	s.mu.RLock()
 	if workspace == "" {
-		s.mu.RLock()
 		workspace = s.lastWorkspaceKey
-		s.mu.RUnlock()
+	}
+	_, installed := s.workspaces[workspace]
+	s.mu.RUnlock()
+	// The legacy accessor uses exact installed-map identity. SQL collations
+	// and Postgres text normalization must not turn a missing key into one.
+	if !installed || s.dialect == "postgres" && strings.ContainsRune(workspace, '\x00') {
+		if err := ctx.Err(); err != nil {
+			return domain.Bootstrap{}, err
+		}
+		return domain.Bootstrap{}, sql.ErrNoRows
 	}
 	ctx = WithMetadataRecords(ctx, scope)
 	read, release, err := s.BeginWorkspaceRead(ctx, workspace)
@@ -169,6 +178,9 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		return mode == "policy" || mode == "core"
 	})
 	reservation := 8 << 20
+	if metadataScopeResolver(ctx) != nil {
+		reservation += 8 << 20
+	}
 	if policyWrite {
 		reservation += metadataPolicyBytes
 	}
@@ -188,6 +200,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	var committed domain.DomainEvent
 	var realtime json.RawMessage
 	apply := func(ctx context.Context) error {
+		scope := scope
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
 		actor := mutationInputActor(actor)
@@ -238,6 +251,24 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if before.Workspace.ID != workspaceID {
 			return ErrResourceAccessChanged
 		}
+		if resolve := metadataScopeResolver(ctx); resolve != nil {
+			keys, err := resolve(cloneBootstrap(before))
+			if err != nil {
+				return err
+			}
+			scope, err = extendMetadataReadScope(scope, keys)
+			if err != nil {
+				return err
+			}
+			ctx = WithMetadataRecords(ctx, scope)
+			before, err = s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+			if err != nil {
+				return err
+			}
+			if before.Workspace.ID != workspaceID {
+				return ErrResourceAccessChanged
+			}
+		}
 		next := cloneBootstrap(before)
 		originalRole := next.ViewerRole
 		refreshDisplayReferences(&next)
@@ -254,6 +285,11 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				}
 			}
 		}
+		validationBefore := before
+		if metadataScopeResolver(ctx) != nil {
+			validationBefore = cloneBootstrap(next)
+			validationBefore.ViewerRole, validationBefore.ViewerTeamIDs = originalRole, nil
+		}
 		next.FormerMembers = s.formerMemberLookup(ctx, tx, &next)
 		next.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
 		aggregate, err := callback(&next)
@@ -268,7 +304,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if err != nil {
 			return err
 		}
-		if err := validateScopedMetadataChanges(before, next, writeScope); err != nil {
+		if err := validateScopedMetadataChanges(validationBefore, next, writeScope); err != nil {
 			return err
 		}
 		encoded, err := json.Marshal(next)
@@ -317,7 +353,15 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if err != nil {
 			return err
 		}
-		changes = slices.DeleteFunc(changes, func(change metadataRecordChange) bool { return slices.Contains(scope.Fields, change.field) })
+		changes = slices.DeleteFunc(changes, func(change metadataRecordChange) bool {
+			if slices.Contains(scope.Fields, change.field) {
+				return true
+			}
+			// The resolved callback was checked against its refreshed input.
+			// Reference-only changes to read records enrich events but must
+			// not rewrite canonical rows, as on the legacy delta path.
+			return metadataScopeResolver(ctx) != nil && !metadataRecordSelected(scope, change.field, change.key, true)
+		})
 		for _, change := range changes {
 			field, _, typed := metadataRecordType(change.field)
 			isMap := typed && reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type.Kind() == reflect.Map || change.field == "workspaceSettings"
@@ -533,6 +577,17 @@ func (s *SQLiteStore) StreamMetadataRecords(ctx context.Context, workspace, kind
 }
 
 func scanMetadataHeaders(ctx context.Context, tx *sqlTx, workspace, kind string, visit func(RecordKey, int64) error) error {
+	// Chunk readers use bytes; tied keys follow sortMetadataRecordRows.
+	keyOrder, keyBound, bodyLength := "record_key", "?", "LENGTH(data)"
+	switch tx.dialect {
+	case "sqlite":
+		keyOrder, keyBound = "CAST(record_key AS BLOB)", "CAST(? AS BLOB)"
+		bodyLength = "LENGTH(CAST(data AS BLOB))"
+	case "mysql":
+		keyOrder, keyBound = "CAST(record_key AS BINARY)", "CAST(? AS BINARY)"
+	case "postgres":
+		keyOrder, keyBound = `record_key COLLATE "C"`, `? COLLATE "C"`
+	}
 	last, started, ordinal := "", false, int64(0)
 	for {
 		if err := ctx.Err(); err != nil {
@@ -540,10 +595,10 @@ func scanMetadataHeaders(ctx context.Context, tx *sqlTx, workspace, kind string,
 		}
 		where, args := "workspace_key=? AND field=?", []any{workspace, kind}
 		if started {
-			where += " AND (collection_order>? OR (collection_order=? AND record_key>?))"
+			where += " AND (collection_order>? OR (collection_order=? AND " + keyOrder + ">" + keyBound + "))"
 			args = append(args, ordinal, ordinal, last)
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT record_key,collection_order,LENGTH(data) FROM workspace_metadata_records WHERE "+where+" ORDER BY collection_order,record_key LIMIT 50", args...)
+		rows, err := tx.QueryContext(ctx, "SELECT record_key,collection_order,"+bodyLength+" FROM workspace_metadata_records WHERE "+where+" ORDER BY collection_order,"+keyOrder+" LIMIT 50", args...)
 		if err != nil {
 			return err
 		}

@@ -1,6 +1,6 @@
 {
   "source": "server/release_ci_api.go",
-  "unmigrated": 6,
+  "unmigrated": 7,
   "consumers": {
     "applyReleaseCIOperation": {
       "owner": "P21",
@@ -12,8 +12,8 @@
     },
     "pipelineForAccessKey": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Off mode retains the original workspace/canonical-pipeline iteration and constant-time hash checks. Bounded mode reads only matching hash decisions and expiry scalars through ReleasePipelineForKeyHash, paging candidates in canonical order under one SQL snapshot without transferring pipeline bodies; request errors propagate explicitly. TestScaleP21SW25ReleaseKeyScalars and ReleaseKeyDifferential cover large targets, over 50 expired candidates, current/previous/grace/revoked keys, exact IDs and case, malformed/missing/foreign references, the principal/key matrix, independent CI authority, queued/replayed key revocation, cancellation/recovery, unchanged canonical bytes and zero full decodes. The targeted set passed twice on one persistent SQLite database.",
+      "status": "unmigrated",
+      "reason": "Pending exact warm-versus-persisted access-key source compatibility. An accepted trusted MutateWorkspace producer retains an embedded NUL in current or previous AccessKeyHash in the warm typed pipeline, while canonical persistence strips it. TestScaleP21SW25ReleaseKeySourceCompatibilityHold exercises the actual registered releaseCIRecentReleases handler with an ordinary bearer and invalid limit: legacy rejects the NUL-containing hash with 401, whereas bounded canonical lookup authenticates and reaches 400 limit validation before any independently pending read or touch mutation. Ordinary current/previous controls agree. Both mismatch cases reproduced twice on persistent SQLite without cold reload or output normalization. This is a trusted producer contract witness, not a claim about public multipart migration execution. Keep pending until the logical source view is preserved; the raw canonical scalar helper alone does not prove warm authentication parity.",
       "accessors": [
         "WorkspaceMetadata"
       ]

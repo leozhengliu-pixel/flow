@@ -20,6 +20,9 @@ func (s *SQLiteStore) NotificationDeliverySnapshot(ctx context.Context, workspac
 }
 
 func (s *SQLiteStore) notificationDeliverySnapshot(ctx context.Context, workspace string, statuses []string, now time.Time, full bool) (domain.Bootstrap, error) {
+	if s.BoundedMetadataEnabled() {
+		return domain.Bootstrap{}, ErrBoundedMetadataCoverage
+	}
 	// The scheduler asks every few seconds and usually finds nothing due; only
 	// clone the workspace metadata when there is a delivery to process.
 	data, ok := s.WorkspaceSettingsMetadata(workspace)

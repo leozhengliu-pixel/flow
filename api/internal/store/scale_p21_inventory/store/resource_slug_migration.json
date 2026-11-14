@@ -7,7 +7,8 @@
       "status": "unmigrated",
       "accessors": [
         "storedWorkspace"
-      ]
+      ],
+      "reason": "Held for exact installed source semantics: the old migration derives slugs from cached typed names before persistMetadataTx rebases the changed rows. TestScaleP21SW26ResourceSlugWarmColdBeforeImage proves identical canonical input with an accepted warm Project\\u0000Name yields project-name-<suffix>, while actual reload yields projectname-<suffix>. A fresh canonical streamed scan cannot reconstruct that warm source; a startup-only narrower entry contract or bounded source-provenance snapshot is required before review. No partial raw SQL slug patch is wired."
     }
   }
 }

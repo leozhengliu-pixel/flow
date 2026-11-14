@@ -5,6 +5,7 @@
     "previousOAuthConsent": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "A one-snapshot bounded typed reader preserves ordinary first-app/first-approved-policy, alias, duplicate-key and partial-policy-error semantics, but persisted NUL stripping can widen automatic consent. With the normal requested read scope, a live warm grant containing rea\\u0000d or an approved policy ID containing NUL requires consent; canonical rows strip the NUL and incorrectly skip consent. TestScaleP21SW25ConsentWarmNULDifferential demonstrates both mismatches without reloading or normalizing the warm oracle. Keep pending until the persistence compatibility contract is resolved; the unneeded native reader and caller wiring are held outside the verified batch.",
       "accessors": [
         "WorkspaceMetadata"
       ]

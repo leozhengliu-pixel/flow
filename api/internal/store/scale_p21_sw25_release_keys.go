@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 )
 
@@ -11,6 +12,14 @@ import (
 // never transferred. Callers retain workspace selection and key hashing.
 func (s *SQLiteStore) ReleasePipelineForKeyHash(ctx context.Context, workspace, hash, pipelineID string, now time.Time) (string, bool, error) {
 	if hash == "" {
+		return "", false, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return "", false, err
+	}
+	// PostgreSQL text parameters discard NULs. Raw references containing one
+	// cannot match the legacy Go predicate and must never reach that rewrite.
+	if strings.ContainsRune(workspace, '\x00') || strings.ContainsRune(hash, '\x00') || strings.ContainsRune(pipelineID, '\x00') {
 		return "", false, nil
 	}
 	ctx, release, err := s.admitMetadataWork(ctx, 2<<20)
@@ -28,7 +37,7 @@ func (s *SQLiteStore) ReleasePipelineForKeyHash(ctx context.Context, workspace, 
 	revoked, expires := s.jsonText("data", "accessKeyRevokedAt"), s.jsonText("data", "previousAccessKeyExpiresAt")
 	order, id, continued := int64(0), "", false
 	for {
-		where := `workspace_key=? AND field='releasePipelines' AND (` + current + ` OR ` + previous + `)`
+		where := s.metadataRecordKeyEquals("workspace_key", "?") + ` AND field='releasePipelines' AND (` + current + ` OR ` + previous + `)`
 		args := []any{hash, hash, workspace, hash, hash}
 		if pipelineID != "" {
 			where += " AND " + s.metadataRecordKeyEquals("record_key", "?")

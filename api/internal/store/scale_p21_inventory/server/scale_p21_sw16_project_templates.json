@@ -1,0 +1,14 @@
+{
+  "source": "server/scale_p21_sw16_project_templates.go",
+  "unmigrated": 0,
+  "consumers": {
+    "scaleP21SW16ListProjectTemplates": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted direct list adapter preserves BootstrapFor's context-insensitive source read with WithoutCancel, exact installed workspace lookup and missing response. BeginProjectTemplatesRead returns an independently admitted owned wire snapshot; Close remains deferred through synchronous writeJSON and hydrated/legacy URL signing. The helper introduces no authorization or visibility filter; original middleware is independently tracked. Same actual warm/reloaded/policy-only source comparisons, native null/NUL/invalid UTF-8/timestamp cases, signed output, principal/key classes, missing/default/logical empty source and cancellation/error/admission cases pass targeted twice on persistent SQLite. Loader/source production remains independently pending and is not replaced by a fake populated bounded test view.",
+      "accessors": [
+        "BeginProjectTemplatesRead"
+      ]
+    }
+  }
+}

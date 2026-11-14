@@ -291,7 +291,18 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 		// workspace metadata used to render emails is not needed.
 		snapshot = s.store.NotificationDeliveries
 	}
-	data, snapshotErr := snapshot(ctx, key, []string{"pending"}, time.Now().UTC())
+	var data domain.Bootstrap
+	var snapshotErr error
+	if s.store.BoundedMetadataEnabled() && s.mailer == nil {
+		read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, []string{"pending"}, time.Now().UTC())
+		if readErr != nil {
+			return
+		}
+		defer read.Close()
+		data.NotificationDeliveries = read.Deliveries
+	} else {
+		data, snapshotErr = snapshot(ctx, key, []string{"pending"}, time.Now().UTC())
+	}
 	if snapshotErr != nil {
 		return
 	}
@@ -1226,7 +1237,33 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	teamID, labelID := r.PathValue("id"), r.PathValue("labelId")
 	var updated domain.IssueLabel
-	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "issue_label.updated", labelID, input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "labels", ID: labelID}}}, func(data *domain.Bootstrap) error {
+	scope := store.MetadataRecordScope{}
+	if labelID != "" && len(labelID) <= 191 && !strings.ContainsRune(labelID, '\x00') {
+		scope.Write = []store.RecordKey{{Kind: "labels", ID: labelID}}
+		scope.Read = []store.RecordKey{
+			{Kind: "providerJobs", ID: labelID},
+			{Kind: "users", ID: labelID},
+			{Kind: "teams", ID: labelID},
+			{Kind: "customers", ID: labelID},
+			{Kind: "states", ID: labelID},
+		}
+		switch {
+		case strings.HasPrefix(labelID, "label_"):
+			scope.Read = nil
+		case strings.HasPrefix(labelID, "team_resource_section_"):
+			scope.Read = []store.RecordKey{{Kind: "teamResourceSections", ID: labelID}}
+		case strings.HasPrefix(labelID, "team_resource_"):
+			scope.Read = []store.RecordKey{{Kind: "teamPinnedResources", ID: labelID}}
+		case strings.HasPrefix(labelID, "project_"):
+			scope.Read = append(scope.Read, store.RecordKey{Kind: "projects", ID: labelID})
+		case strings.HasPrefix(labelID, "cycle_"):
+			scope.Read = append(scope.Read, store.RecordKey{Kind: "cycles", ID: labelID})
+		}
+	}
+	err := s.store.MutateWorkspaceResolved(r.Context(), workspaceKey(r), "issue_label.updated", labelID, input, store.MetadataResolvedScope{
+		MetadataRecordScope: scope,
+		ResolveRead:         teamMetadataProjectDisplayReads,
+	}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Labels, func(item domain.IssueLabel) bool { return item.ID == labelID && item.Scope == teamID })
 		if index < 0 {
 			return errNotFound
@@ -1269,6 +1306,18 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func teamMetadataProjectDisplayReads(data domain.Bootstrap) ([]store.RecordKey, error) {
+	var keys []store.RecordKey
+	for _, project := range data.Projects {
+		for _, user := range []*domain.User{project.Lead, project.Creator} {
+			if user != nil && user.ID != "" && len(user.ID) <= 191 && !strings.ContainsRune(user.ID, '\x00') {
+				keys = append(keys, store.RecordKey{Kind: "users", ID: user.ID})
+			}
+		}
+	}
+	return keys, nil
 }
 
 func (s *server) deleteTeamLabel(w http.ResponseWriter, r *http.Request) {

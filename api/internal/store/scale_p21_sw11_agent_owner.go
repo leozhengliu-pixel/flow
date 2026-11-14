@@ -1,6 +1,10 @@
 package store
 
-import "context"
+import (
+	"context"
+	"database/sql"
+	"strings"
+)
 
 // AgentSessionOwnedBy is a trusted ownership predicate, not an authorization
 // boundary. Only the two scalar fields enter the application working set; a
@@ -12,6 +16,12 @@ func (s *SQLiteStore) AgentSessionOwnedBy(ctx context.Context, workspace, sessio
 		return false, err
 	}
 	defer release()
+	if strings.ContainsRune(workspace, '\x00') {
+		return false, sql.ErrNoRows
+	}
+	if strings.ContainsRune(sessionID, '\x00') || strings.ContainsRune(userID, '\x00') {
+		return false, nil
+	}
 	if workspace == "" {
 		s.mu.RLock()
 		workspace = s.lastWorkspaceKey
@@ -21,6 +31,6 @@ func (s *SQLiteStore) AgentSessionOwnedBy(ctx context.Context, workspace, sessio
 	var owned int
 	err = s.db.QueryRowContext(ctx, `SELECT CASE WHEN r.record_key IS NOT NULL AND `+s.metadataRecordKeyEquals(owner, "?")+` AND `+s.jsonText("r.data", "deletedAt")+` IS NULL THEN 1 ELSE 0 END
 		FROM workspace_states w LEFT JOIN workspace_metadata_records r ON r.workspace_key=w.workspace_key AND r.field='agentSessions' AND `+s.metadataRecordKeyEquals("r.record_key", "?")+`
-		WHERE w.workspace_key=?`, userID, sessionID, workspace).Scan(&owned)
+		WHERE `+s.metadataRecordKeyEquals("w.workspace_key", "?"), userID, sessionID, workspace).Scan(&owned)
 	return owned != 0, err
 }

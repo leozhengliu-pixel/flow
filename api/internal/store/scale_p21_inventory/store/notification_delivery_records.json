@@ -5,6 +5,7 @@
     "notificationDeliverySnapshot": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Full rendering remains pending: resident startup omits Users/Reviews, while the original full snapshot renders recipients and review references from the installed source. A same-source nil projection cannot certify original-server delivery parity. Native full=false scheduling now uses BeginDueNotificationDeliveryRead with guarded due rows and a retained allowance through scheduler, chat and no-mailer updates; full rendering and the unowned compatibility API explicitly refuse bounded use. No full-consumer review is claimed.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata"

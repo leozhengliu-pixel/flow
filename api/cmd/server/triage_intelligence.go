@@ -1168,7 +1168,19 @@ func (s *server) refreshIssueSuggestions(w http.ResponseWriter, r *http.Request)
 		actor.APIKey = key
 	}
 	if actor.User.ID == "" {
-		if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
+		if s.store.BoundedMetadataEnabled() {
+			// Legacy WorkspaceMetadata ignores cancellation; the run service
+			// still receives the original request context and error ordering.
+			read, ok, err := s.store.BeginInstalledViewerRead(context.WithoutCancel(r.Context()), actor.WorkspaceKey)
+			if err != nil {
+				respondMutation(w, err, http.StatusOK, nil)
+				return
+			}
+			if ok {
+				defer read.Close()
+				actor.User = read.Viewer()
+			}
+		} else if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
 			actor.User = metadata.Viewer
 		}
 	}

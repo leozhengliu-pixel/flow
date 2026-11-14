@@ -14,6 +14,7 @@
     "workspaceConnections": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "The actual installed selector preserves first-provider/status/config bytes and source order, including accepted NUL values that canonical storage removes. TestScaleP21SW19GitLabInstalledSourceHold exercises actual workspaceConnections and GitLabConnections plus canonical/reload controls. The bounded policy-only representation independently omits this records family. Its ConnectionSource [] result also has no owned lifetime handle; same-installed snapshot adapters for request configs do not certify retained coding connection output or OAuth expiry semantics. Keep pending until admitted output lifetime and exact source closure are provided.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

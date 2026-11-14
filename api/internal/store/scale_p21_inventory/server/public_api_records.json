@@ -1,6 +1,6 @@
 {
   "source": "server/public_api_records.go",
-  "unmigrated": 8,
+  "unmigrated": 7,
   "consumers": {
     "getCustomerRecord": {
       "owner": "P21",
@@ -39,7 +39,8 @@
     },
     "getTeamRecord": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode resolves live AccessContext and reads one complete Team through TeamRecordForAccess using settings-directory visibility, credential team intersection, exact visible ID then current EqualFold key order, and transaction/live authority validation. Auth-disabled mode uses the trusted bounded reader and retains raw private/archived rows and credential bypass; off mode keeps the exact publicMetadata path. TestScaleP21SW22TeamHandlerDifferential, TeamLargeBodyAndCurrentKey and native tests compare full M2 principal/key matrix, private admin settings versus content, inherited/retired/directory/archived rows, duplicate/hidden-ID/key/Unicode collisions, full fields and pointer ownership, cross-workspace/malformed/NUL/case bindings, current-key rename, queued/replayed/in-flight revocation, legal large fields, explicit budget/cancellation/storage failures and recovery with zero full decodes. Tests passed twice on one persistent SQLite file; shared HTTP authorization remains separately inventoried.",
       "accessors": [
         "publicMetadata"
       ]
@@ -54,6 +55,7 @@
     "getWorkflowStateRecord": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Deferred after SW22 same-snapshot typed reader and ordinary M2 differential passed twice: the full legacy logical copy normalizes builtin Default/Reserved/colors on reload, while a bounded raw reader preserves the persisted warm values. A disposition probe on one persistent SQLite file proves the difference; unconditional normalization would instead corrupt freshly written warm values. The actual stamped logical source must be preserved before this handler can be reviewed. Implementation and evidence are archived under the task temporary directory.",
       "accessors": [
         "publicMetadata"
       ]

@@ -46,6 +46,9 @@ func writeAttachmentIndex(ctx context.Context, tx *sqlTx, workspace string, issu
 }
 
 func (s *SQLiteStore) migrateAttachmentIndex(ctx context.Context) error {
+	if s.BoundedMetadataEnabled() {
+		return s.scaleP21SW16MigrateTypedAttachmentIndex(ctx)
+	}
 	for workspace := range s.workspaces {
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO issue_attachment_migrations(workspace_key,last_id,complete) VALUES(?,'',0) ON CONFLICT DO NOTHING`, workspace); err != nil {
 			return err

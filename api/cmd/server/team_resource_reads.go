@@ -52,6 +52,10 @@ func (s *server) listTeamResources(w http.ResponseWriter, r *http.Request) {
 	}
 	// Development mode skips authorization middleware. Read metadata explicitly
 	// so this endpoint can never fall back to a legacy collection bootstrap.
+	if s.store.BoundedMetadataEnabled() {
+		s.writeBoundedTeamResources(w, r, teamID)
+		return
+	}
 	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")

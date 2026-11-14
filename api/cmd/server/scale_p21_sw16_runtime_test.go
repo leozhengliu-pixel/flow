@@ -89,9 +89,13 @@ func TestScaleP21SW16WorkerDraftLoopDifferential(t *testing.T) {
 						{"session-slug", id + "-old-slug", true, nil, false},
 						{"long-id", strings.Repeat("x", 192), true, nil, false},
 						{"nul-id", id + "\x00", true, nil, false},
+						{"nul-id-prefix", "\x00" + id, true, nil, false},
 						{"questions-disabled", id, false, nil, false},
 						{"foreign-owner", id, true, func(run *store.AgentRun) {
 							run.Principal, _ = json.Marshal(agentRunPrincipal{Mode: agentRunModeUser, UserID: user.ID + "-other"})
+						}, false},
+						{"nul-owner", id, true, func(run *store.AgentRun) {
+							run.Principal, _ = json.Marshal(agentRunPrincipal{Mode: agentRunModeUser, UserID: user.ID + "\x00"})
 						}, false},
 						{"app-mode-uses-original-user-boundary", id, true, func(run *store.AgentRun) {
 							run.Principal, _ = json.Marshal(agentRunPrincipal{Mode: agentRunModeApp, UserID: user.ID, AppUserID: "sw16-app-user"})
@@ -100,6 +104,7 @@ func TestScaleP21SW16WorkerDraftLoopDifferential(t *testing.T) {
 							run.Principal, _ = json.Marshal(agentRunPrincipal{Mode: agentRunModeApp, UserID: user.ID})
 						}, false},
 						{"missing-workspace", id, true, func(run *store.AgentRun) { run.WorkspaceKey += "-missing" }, false},
+						{"nul-workspace", id, true, func(run *store.AgentRun) { run.WorkspaceKey += "\x00" }, false},
 						{"invalid-principal", id, true, func(run *store.AgentRun) { run.Principal = json.RawMessage(`{"mode":"unknown"}`) }, false},
 						{"invalid-chat", id, true, func(run *store.AgentRun) { run.Kind = "other" }, false},
 					} {

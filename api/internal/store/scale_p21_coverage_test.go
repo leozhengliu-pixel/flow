@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-var scaleP21SnapshotMethods = strings.Fields(`WorkspaceMetadata WorkspaceMetadataForRead WorkspaceReadSnapshotReservation WorkspaceMetadataFields Bootstrap BootstrapFor BootstrapForContext BootstrapForUser PagedWorkspaceMetadata BeginWorkspaceRead MutateWorkspace MutateWorkspaceWithAggregate MutateWorkspaceAudited MutateWorkspaceMetadata workspaceData publicMetadata mcpWorkspaceData mcpWorkspaceDataForTool chatAuthorizedMutation storedWorkspace loadWorkspaceState loadWorkspaceStamped decodeWorkspaceMetadata mutateFull mutateScoped mutateTeamMetadata WorkspaceMetadataScoped WorkspaceMetadataFieldsScoped MutateWorkspaceScoped MutateWorkspaceScopedWithAggregate MutateWorkspaceAppending MutateWorkspaceAppendingWithAggregate ProjectScopedMetadata workspaceDataScoped applicationWebhookDataScoped ScanMetadataRecords StreamMetadataRecords`)
+var scaleP21SnapshotMethods = strings.Fields(`WorkspaceMetadata WorkspaceMetadataForRead WorkspaceReadSnapshotReservation WorkspaceMetadataFields Bootstrap BootstrapFor BootstrapForContext BootstrapForUser PagedWorkspaceMetadata BeginWorkspaceRead MutateWorkspace MutateWorkspaceWithAggregate MutateWorkspaceAudited MutateWorkspaceMetadata workspaceData publicMetadata mcpWorkspaceData mcpWorkspaceDataForTool chatAuthorizedMutation storedWorkspace loadWorkspaceState loadWorkspaceStamped decodeWorkspaceMetadata mutateFull mutateScoped mutateTeamMetadata WorkspaceMetadataScoped WorkspaceMetadataFieldsScoped MutateWorkspaceScoped MutateWorkspaceScopedWithAggregate MutateWorkspaceAppending MutateWorkspaceAppendingWithAggregate MutateWorkspaceResolved MutateWorkspaceResolvedWithAggregate ProjectScopedMetadata workspaceDataScoped applicationWebhookDataScoped ScanMetadataRecords StreamMetadataRecords BeginMetadataCollectionRead BeginMetadataArrayRead StreamMetadataArray MetadataCollectionsInSnapshot workerLoopDefinition BeginFormerMembersRead ViewerVisibilityKeys BeginViewerVisibilityKeysRead BeginInstalledWorkspaceIdentityRead BeginInstalledTeamsWireRead BeginProjectTemplatesRead BeginGitLabConnectionConfigsRead BeginDueNotificationDeliveryRead`)
 
 func scaleP21RouteBinding(set *token.FileSet, call *ast.CallExpr) (string, error) {
 	var handler bytes.Buffer
@@ -277,6 +277,19 @@ func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 		`package probe; func handler() { callback := s.workspaceData; _ = callback }`,
 		`package probe; func background() { _ = s.workspaces[key] }`,
 		`package probe; var callback = s.workspaceData`,
+		`package probe; func background() { read, _ := s.BeginMetadataCollectionRead(ctx, key, "users"); _ = read }`,
+		`package probe; func background() { callback := s.MetadataCollectionsInSnapshot; _ = callback }`,
+		`package probe; func background() { _ = s.BeginMetadataArrayRead(ctx, key, "users") }`,
+		`package probe; var callback = s.StreamMetadataArray`,
+		`package probe; func worker() { _ = s.workerLoopDefinition(ctx, key, id) }`,
+		`package probe; func request() { _ = s.BeginFormerMembersRead(ctx, key) }`,
+		`package probe; var callback = s.BeginViewerVisibilityKeysRead`,
+		`package probe; func background() { _ = s.ViewerVisibilityKeys(ctx, key) }`,
+		`package probe; func request() { _ = s.BeginInstalledWorkspaceIdentityRead(ctx, key) }`,
+		`package probe; func request() { _ = s.BeginInstalledTeamsWireRead(ctx, key) }`,
+		`package probe; func request() { _ = s.BeginProjectTemplatesRead(ctx, key) }`,
+		`package probe; func job() { _ = s.BeginGitLabConnectionConfigsRead(ctx, key) }`,
+		`package probe; func job() { _ = s.BeginDueNotificationDeliveryRead(ctx, key, statuses, now) }`,
 	} {
 		file, err := parser.ParseFile(token.NewFileSet(), "new.go", source, 0)
 		if err != nil {

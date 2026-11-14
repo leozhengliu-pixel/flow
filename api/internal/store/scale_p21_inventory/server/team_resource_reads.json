@@ -1,10 +1,11 @@
 {
   "source": "server/team_resource_reads.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "listTeamResources": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Only the auth-disabled full metadata fallback changes: native root/team checks and 50 sorted ID/size headers share one repeatable snapshot; typed visitors encode one complete selected row at a time through the existing compatibility spool and signed-URL encoder. Adaptive max-selected-row work is held through encoding; inactive root collections hide stale rows, unsplit nonempty arrays and process-cap failures are explicit errors. Off mode and the normal preauthorized context/live middleware path remain exact and independently inventoried. TestScaleP21SW18TeamResourceVisitors, TypedDefaults and TeamResourcesDifferential cover large complete rows, over 50 rows, equal/negative/near-float ordering, mixed-version defaults/unknown-field omission, snapshot consistency, missing/default/foreign/NUL identities, principal/key contexts, hidden references, queued/replay revocation, spool zero/cap/unavailable, valid signed URLs, cancellation/client failure/recovery, unchanged canonical state and zero full decodes. Tests passed twice on persistent SQLite. Direct spool fallback can retain this bounded SQL snapshot while the client drains it.",
       "accessors": [
         "WorkspaceMetadata"
       ]

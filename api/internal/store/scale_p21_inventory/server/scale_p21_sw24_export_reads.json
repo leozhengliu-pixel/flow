@@ -1,0 +1,14 @@
+{
+  "source": "server/scale_p21_sw24_export_reads.go",
+  "unmigrated": 0,
+  "consumers": {
+    "boundedExportJobAccess": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted namespace input now owns an InstalledWorkspaceIdentityRead until get/list callers finish native SQL, ValidateAccess and encoding. It uses the selected physical RegistryKey for the collection whose old WorkspaceMetadata map entry supplied ExportJobs, while normal principals and keys still resolve live AccessContext on that exact registry. TestScaleP21SW24InstalledExportNamespaceDifferential compares actual flag-off/on get/list outputs for physical-NUL/default/missing/stripped-alias bindings, warm and reloaded states, sessions/read-only/unrestricted/selected-empty keys and development mode; ExportIdentityLifetime proves helper lifetime transfer and cancellation. ExportNamespaceSourceDifferential replaces the prior namespace failure with equality. The full get/list consumers stay pending: actual completeExport can retain NUL in warm Filename while the canonical row strips it, proved by ExportCompletionSourceHold.",
+      "accessors": [
+        "WorkspaceMetadataScoped"
+      ]
+    }
+  }
+}

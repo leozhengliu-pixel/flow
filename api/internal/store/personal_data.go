@@ -556,11 +556,38 @@ func (s *SQLiteStore) ScrubPersonCopies(ctx context.Context, workspaceKey, userI
 		return 0, ErrAuthForbidden
 	}
 	anonymous := domain.DeletedUserIdentity(userID)
+	bounded := s.BoundedMetadataEnabled()
+	writeCtx, release := ctx, func() {}
+	if bounded {
+		if parent, ok := ctx.Value(metadataWorkLeaseKey{}).(*metadataWorkLease); ok && parent.budget == s.metadataResidency.work {
+			budget := s.metadataResidency.work
+			budget.mu.Lock()
+			// ReloadWorkspace borrows this same caller lease after commit:
+			// it needs the resident policy allowance plus its 2 MiB parser.
+			insufficient := parent.live && parent.bytes < metadataPolicyBytes+scaleP21SW21ScrubFixedWork
+			budget.mu.Unlock()
+			if insufficient {
+				return 0, ErrMetadataWorkBudget
+			}
+		}
+		var err error
+		writeCtx, release, err = s.admitMetadataWork(ctx, scaleP21SW21ScrubFixedWork)
+		if err != nil {
+			return 0, err
+		}
+		defer release()
+	}
 	changed := 0
 	apply := func() error {
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
-		count, err := s.scrubPersonCopies(ctx, workspaceKey, data.Workspace.ID, anonymous)
+		var count int
+		var err error
+		if bounded {
+			count, err = s.scrubPersonCopiesBounded(writeCtx, workspaceKey, data.Workspace.ID, anonymous)
+		} else {
+			count, err = s.scrubPersonCopies(ctx, workspaceKey, data.Workspace.ID, anonymous)
+		}
 		changed = count
 		return err
 	}
@@ -570,6 +597,7 @@ func (s *SQLiteStore) ScrubPersonCopies(ctx context.Context, workspaceKey, userI
 	} else {
 		err = apply()
 	}
+	release()
 	if err != nil {
 		return changed, err
 	}

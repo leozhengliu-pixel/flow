@@ -1,10 +1,11 @@
 {
   "source": "store/agent_web_access_migration.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "migrateWorkspaceAgentWebAccess": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Off mode retains the exact legacy migration. Bounded mode locks and reads four workspaceSettings properties, writes only the three web-access booleans without an event or UpdatedAt/root changes, stages a complete capped resident policy before commit and installs/invalidates caches afterward. The driver history scan also uses a capped header spool and fixed-chunk payload projection preserving case/duplicate/type/time semantics. TestScaleP21SW23AgentWebAccess and History tests compare canonical rows/root/shapes and resident settings, null/false/true/historical choices, over 50 unrelated settings and large ignored guidance, idempotence, rollback, stale-peer policy, capacity/cancellation recovery, zero publications/complete decodes and released work/spool reservations.",
       "accessors": [
         "storedWorkspace"
       ]

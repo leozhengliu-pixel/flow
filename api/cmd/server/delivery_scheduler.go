@@ -184,7 +184,18 @@ func (s *server) prepareDueNotificationDeliveries(ctx context.Context, key strin
 	if s.mailer != nil {
 		statuses = append(statuses, "pending-disabled")
 	}
-	snapshot, err := s.store.NotificationDeliveries(ctx, key, statuses, now)
+	var snapshot domain.Bootstrap
+	var err error
+	if s.store.BoundedMetadataEnabled() {
+		read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, statuses, now)
+		if readErr != nil {
+			return readErr
+		}
+		defer read.Close()
+		snapshot.NotificationDeliveries = read.Deliveries
+	} else {
+		snapshot, err = s.store.NotificationDeliveries(ctx, key, statuses, now)
+	}
 	if err != nil {
 		return err
 	}

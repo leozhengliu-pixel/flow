@@ -1,6 +1,6 @@
 {
   "source": "store/personal_data.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "ErasePersonFromWorkspace": {
       "owner": "P21",
@@ -20,8 +20,8 @@
     },
     "ScrubPersonCopies": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "The wrapper reads only core Workspace.ID, but scrubPersonCopies scans complete body columns, decodes each JSON and retains every rewritten value in one updates slice before an atomic transaction. It needs bounded staging or a streamed typed scrubber with atomic publication; a wrapper identity scope would not bound downstream work.",
+      "status": "reviewed",
+      "reason": "Genuine erasure full scan keeps the native five-table SQL baseline and resident core Workspace.ID. Bounded mode keysets at most 50 headers, reads fixed byte chunks and preflights each JSON structure before separately admitting its decoded/encoded rewrite within the process 256 MiB work budget; one repeatable-read write transaction preserves atomic publication without an accumulating update slice. Header keys are capped at 8 KiB, above schema limits; oversized structure/output fails with rollback rather than omission. The original ScrubPersonJSON codec preserves first-value/trailing-byte, duplicate-key, number and NUL semantics. TestScaleP21SW21PersonalScrub compares exact SQL bytes and 76 changed values across all targets, a multi-megabyte expanding record, Unicode TEXT across chunk boundaries, trusted actor classes, matching foreign-workspace copies, idempotence, cancellation and transaction/child-admission rollback, pool-one/spool-zero reload, zero full decodes and released work. Persistent SQLite count=2 passes; credentials and team visibility are upstream of this trusted operation. Long erasure snapshots remain an explicit tradeoff; flag-off uses the untouched legacy implementation.",
       "accessors": [
         "storedWorkspace"
       ]

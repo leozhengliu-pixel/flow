@@ -2249,6 +2249,9 @@ func titleRole(value string) string {
 // a caller that only counts shared resources can project once per key
 // instead of once per member. Inactive members are left out.
 func (s *SQLiteStore) ViewerVisibilityKeys(ctx context.Context, workspace string) (map[string]string, error) {
+	if s.BoundedMetadataEnabled() {
+		return nil, fmt.Errorf("%w: ViewerVisibilityKeys requires BeginViewerVisibilityKeysRead", ErrBoundedMetadataCoverage)
+	}
 	data, ok := s.WorkspaceMetadataFields(workspace, "teams", "teamSettings")
 	if !ok {
 		return nil, ErrAuthForbidden

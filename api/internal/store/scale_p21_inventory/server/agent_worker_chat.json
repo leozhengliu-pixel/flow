@@ -22,6 +22,7 @@
     "sweepWorkerChatReplies": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Pending exact installed worker-header lifecycle: normal worker producers mint IDs and fixed status, but accepted trusted agent.session_updated mutations retain NUL in warm session ID/owner/message ID/status while canonical metadata StripJSONNUL removes it. TestScaleP21SW18WorkerTrustedSourceHold proves status streaming+NUL and a NUL inside the worker-message prefix change legacy candidate count zero to canonical one; owner/session-ID NUL changes candidate identity and missing-run attribution. A detached streamed header implementation passed ordinary producer, permission and repeated-array tests but was withdrawn after this trusted-source audit. The original sweeper stays exact until bounded logical-source headers preserve installed values; workerChatStoredReply/save remain separate blockers.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

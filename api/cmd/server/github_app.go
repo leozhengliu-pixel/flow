@@ -641,7 +641,15 @@ var codeReviewGitHubEvents = []string{"pull_request", "pull_request_review", "pu
 
 func (s *server) applyGitHubAppWorkspaceEvent(ctx context.Context, workspace, githubEvent string, event codehost.WebhookEvent, body []byte) error {
 	reviewID := ""
-	if slices.Contains(codeReviewGitHubEvents, githubEvent) && !s.classicGitHubSync(workspace) {
+	classic := false
+	if slices.Contains(codeReviewGitHubEvents, githubEvent) {
+		var err error
+		classic, err = s.classicGitHubSync(ctx, workspace)
+		if err != nil {
+			return err
+		}
+	}
+	if slices.Contains(codeReviewGitHubEvents, githubEvent) && !classic {
 		var review externalCodeReviewEvent
 		if err := json.Unmarshal(body, &review); err != nil {
 			return err
@@ -672,15 +680,18 @@ func (s *server) applyGitHubAppWorkspaceEvent(ctx context.Context, workspace, gi
 // classicGitHubSync reports whether a classic GitHub connection with a
 // webhook secret already syncs this workspace's pull requests, in which case
 // the App's copy of the same events is not applied twice.
-func (s *server) classicGitHubSync(workspace string) bool {
+func (s *server) classicGitHubSync(ctx context.Context, workspace string) (bool, error) {
+	if s.store.BoundedMetadataEnabled() {
+		return s.store.ClassicGitHubSyncConfigured(ctx, workspace)
+	}
 	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok {
-		return false
+		return false, nil
 	}
 	return slices.ContainsFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
 		return item.Provider == domain.CodeHostGitHub && slices.Contains([]string{"configured", "connected"}, item.Status) &&
 			(strings.TrimSpace(item.Config["webhookSecret"]) != "" || strings.TrimSpace(item.Config["webhookSecretEnv"]) != "")
-	})
+	}), nil
 }
 
 // updateSessionPullRequests mirrors PR state changes (opened, reopened,

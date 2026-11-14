@@ -1,0 +1,23 @@
+{
+  "source": "store/scale_p21_sw16_former_members.go",
+  "unmigrated": 1,
+  "consumers": {
+    "BeginFormerMembersRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Off mode delegates the exact original FormerMembers accessor and preserves nonnil partial/error maps. Bounded mode copies only installed workspace identity, then uses the original membership/departure UNION and active-rejoin precedence in one snapshot; length/count preflight and byte-gated 64-row pages bound driver transfer and the owned map. Owned SQL/parser lifetime ends before return while adaptive output admission stays with FormerMembersRead until idempotent Close. All three production callers retain the handle through full map use; no old bounded map call remains. TestScaleP21SW16FormerMembersHandleLifetime and server CollaborationLease prove real saturation, caller-owned output charge, pool-one SQL detach, failure cleanup and exact off errors. Native M/key request matrix, suspend/rejoin queued/replayed checks, cross-workspace/exact identities and zero full decodes passed twice on one persistent SQLite file. The separately registered development no-membership fallback remains explicitly blocked for proven warm/canonical source divergence.",
+      "accessors": [
+        "FormerMembers",
+        "resident-state"
+      ]
+    },
+    "scaleP21SW16FallbackFormerMembers": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Nonempty no-membership fallback is explicitly held until a logical source adapter can preserve warm inline member IDs/status across full workspace writes. A supported Members delta followed by UpdateWorkspace(Name) retains NUL in the ordinary warm copy while canonical persistence removes it. The bounded raw-only typed fallback cannot reconstruct that source; positive canonical decoding fixtures do not certify activation.",
+      "accessors": [
+        "MetadataCollectionsInSnapshot"
+      ]
+    }
+  }
+}

@@ -19,7 +19,10 @@ import (
 )
 
 func (s *server) listApplicationInstallations(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	items, err := s.store.ListApplications(r.Context(), data.Workspace.URLKey)
 	if err != nil {
 		respondMutation(w, err, 200, nil)
@@ -40,7 +43,10 @@ func (s *server) configureApplicationInstallation(w http.ResponseWriter, r *http
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	if !s.authDisabled && !workspaceAdminRole(data.ViewerRole) {
 		writeError(w, 403, "Workspace admin access required")
 		return
@@ -171,6 +177,21 @@ func (s *server) applicationConsentTeams(w http.ResponseWriter, r *http.Request)
 		writeError(w, 403, "Administrator required to install an application")
 		return
 	}
+	if s.store.BoundedMetadataEnabled() {
+		// The legacy final directory read ignores request cancellation.
+		read, err := s.store.BeginInstalledTeamsWireRead(context.WithoutCancel(r.Context()), data.Workspace.URLKey)
+		if err != nil {
+			if errors.Is(err, store.ErrMetadataWorkBudget) {
+				writeError(w, http.StatusServiceUnavailable, err.Error())
+			} else {
+				issueRecordsError(w, err)
+			}
+			return
+		}
+		defer read.Close()
+		writeJSON(w, 200, read.Teams)
+		return
+	}
 	metadata, _ := s.store.WorkspaceMetadata(data.Workspace.URLKey)
 	writeJSON(w, 200, metadata.Teams)
 }
@@ -178,8 +199,18 @@ func (s *server) applicationConsentTeams(w http.ResponseWriter, r *http.Request)
 func (s *server) authorizedAgentTask(r *http.Request, id string, editing bool) (domain.AgentTask, domain.Bootstrap, error) {
 	workspace := workspaceKey(r)
 	if workspace == "" {
-		if metadata, ok := s.store.WorkspaceMetadata(""); ok {
+		if !s.store.BoundedMetadataEnabled() {
+			metadata, _ := s.store.WorkspaceMetadata("")
 			workspace = metadata.Workspace.URLKey
+		} else {
+			read, found, err := s.store.BeginInstalledWorkspaceIdentityRead(r.Context(), "")
+			if err != nil {
+				return domain.AgentTask{}, domain.Bootstrap{}, err
+			}
+			if found {
+				defer read.Close()
+				workspace = read.Identity.URLKey
+			}
 		}
 	}
 	task, err := s.store.AgentTask(r.Context(), workspace, id)
@@ -285,8 +316,19 @@ func (s *server) listApplicationAgentTasks(w http.ResponseWriter, r *http.Reques
 	}
 	workspace := workspaceKey(r)
 	if workspace == "" {
-		if metadata, ok := s.store.WorkspaceMetadata(""); ok {
+		if !s.store.BoundedMetadataEnabled() {
+			metadata, _ := s.store.WorkspaceMetadata("")
 			workspace = metadata.Workspace.URLKey
+		} else {
+			read, found, err := s.store.BeginInstalledWorkspaceIdentityRead(r.Context(), "")
+			if err != nil {
+				respondMutation(w, err, 200, nil)
+				return
+			}
+			if found {
+				defer read.Close()
+				workspace = read.Identity.URLKey
+			}
 		}
 	}
 	// Archived sessions are not part of the resource's activity; MCP's

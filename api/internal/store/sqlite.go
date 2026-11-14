@@ -101,6 +101,9 @@ func (s *SQLiteStore) unlockWorkspaceWrites() {
 // storedWorkspace reads a workspace snapshot. Copy-on-write writers call it
 // while holding writeMu, so the snapshot cannot change until they install
 // their result.
+// In bounded mode this is the exact installed core/policy borrow under the
+// process resident cap. It never hydrates omitted records; each writer must
+// declare its own complete inputs before treating those records as available.
 func (s *SQLiteStore) storedWorkspace(workspaceKey string) (domain.Bootstrap, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

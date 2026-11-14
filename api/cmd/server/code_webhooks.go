@@ -38,7 +38,13 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "could not read webhook")
 		return
 	}
-	connection := s.webhookConnection(r, provider)
+	credentials, release, err := s.webhookConnection(r, provider)
+	defer release()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "webhook configuration unavailable")
+		return
+	}
+	connection := integrationWebhookConnection(credentials)
 	if connection == nil || !verifyCodeWebhook(provider, connection, r, body) {
 		writeError(w, http.StatusUnauthorized, "invalid webhook signature")
 		return
@@ -240,7 +246,13 @@ func (s *server) slackWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "could not read webhook")
 		return
 	}
-	connection := s.webhookConnection(r, "slack")
+	credentials, release, err := s.webhookConnection(r, "slack")
+	defer release()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "webhook configuration unavailable")
+		return
+	}
+	connection := integrationWebhookConnection(credentials)
 	if connection == nil || !verifySlackWebhook(connection, r, body) {
 		writeError(w, http.StatusUnauthorized, "invalid webhook signature")
 		return
@@ -513,17 +525,25 @@ func persistIntegrationTestSuccess(s *server, r *http.Request, provider, id stri
 	})
 }
 
-func (s *server) webhookConnection(r *http.Request, provider string) *domain.IntegrationConnection {
+func (s *server) webhookConnection(r *http.Request, provider string) (*store.IntegrationWebhookCredentials, func(), error) {
+	if s.store.BoundedMetadataEnabled() {
+		credentials, found, release, err := s.store.BeginIntegrationWebhookCredentials(r.Context(), workspaceKey(r), provider)
+		if err != nil || !found {
+			return nil, release, err
+		}
+		return &credentials, release, nil
+	}
 	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
 	if !ok {
-		return nil
+		return nil, func() {}, nil
 	}
 	for index := range data.IntegrationConnections {
 		if data.IntegrationConnections[index].Provider == provider && slices.Contains([]string{"configured", "connected"}, data.IntegrationConnections[index].Status) {
-			return &data.IntegrationConnections[index]
+			credentials := integrationWebhookCredentials(data.IntegrationConnections[index])
+			return &credentials, func() {}, nil
 		}
 	}
-	return nil
+	return nil, func() {}, nil
 }
 
 func verifyCodeWebhook(provider string, connection *domain.IntegrationConnection, r *http.Request, body []byte) bool {

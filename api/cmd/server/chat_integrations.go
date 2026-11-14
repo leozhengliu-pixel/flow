@@ -413,7 +413,13 @@ func (s *server) writeChatSettings(w http.ResponseWriter, r *http.Request, data 
 				}
 			}
 			result["bindings"] = visible
-			result["bindableTeamIds"] = s.chatBindableTeamIDs(record.WorkspaceKey, manageable)
+			ids, policy, err := s.chatBindableTeamIDsRead(r.Context(), record.WorkspaceKey, manageable)
+			if err != nil {
+				writeChatError(w, 500, "Could not read chat integration")
+				return
+			}
+			defer policy.Close()
+			result["bindableTeamIds"] = ids
 		}
 		if canManage {
 			result["webhookURL"] = s.chatAppOrigin() + "/api/integrations/" + record.Provider + "/" + record.ConnectionID + "/chat/webhook"
@@ -436,6 +442,15 @@ func (s *server) writeChatSettings(w http.ResponseWriter, r *http.Request, data 
 // copies it. A private team is bindable by those who administer it; the
 // binding then records that authorization.
 func (s *server) chatBindableTeamIDs(workspace string, manageable []string) []string {
+	if s.store.BoundedMetadataEnabled() {
+		ids, policy, err := s.chatBindableTeamIDsRead(context.Background(), workspace, manageable)
+		if err != nil {
+			log.Printf("chat bindable team policy workspace=%s: %v", workspace, err)
+			return []string{}
+		}
+		defer policy.Close()
+		return ids
+	}
 	ids := []string{}
 	data, ok := s.store.WorkspaceMetadataFields(workspace, "teams", "teamSettings", "workspaceSettings")
 	if !ok {
@@ -455,6 +470,40 @@ func (s *server) chatBindableTeamIDs(workspace string, manageable []string) []st
 		}
 	}
 	return ids
+}
+
+func (s *server) chatBindableTeamIDsRead(ctx context.Context, workspace string, manageable []string) ([]string, *store.ChatTeamPolicyRead, error) {
+	if !s.store.BoundedMetadataEnabled() {
+		return s.chatBindableTeamIDs(workspace, manageable), nil, nil
+	}
+	policy, found, err := s.store.BeginChatTeamPolicyRead(ctx, workspace)
+	if err != nil || !found {
+		return []string{}, nil, err
+	}
+	data := policy.Metadata()
+	ids := []string{}
+	for _, team := range data.Teams {
+		if err := ctx.Err(); err != nil {
+			policy.Close()
+			return nil, nil, err
+		}
+		if !slices.Contains(manageable, team.ID) {
+			continue
+		}
+		_, private := chatTeamState(data, team.ID)
+		probe := domain.ChatBinding{TeamID: team.ID}
+		if private {
+			probe.Authorization = &domain.ChatBindingAuthorization{PrivateTeam: true}
+		}
+		if chatBindingScopePermitted(data, probe) {
+			ids = append(ids, team.ID)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		policy.Close()
+		return nil, nil, err
+	}
+	return ids, policy, nil
 }
 
 func (s *server) syncChatConnection(ctx context.Context, record domain.ChatIntegrationRecord, userID, status, testStatus, lastError string) error {

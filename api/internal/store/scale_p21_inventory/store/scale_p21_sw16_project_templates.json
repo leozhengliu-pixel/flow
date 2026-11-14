@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_sw16_project_templates.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginProjectTemplatesRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Resident access reads only exact/default workspace membership, the complete selected ProjectTemplates field, logical URLKey and five nil hydration flags under RLock. It preflights native string/container/encoding work, independently admits before cloning and rechecks source growth. The retained handle owns detached native text/slices/pointers and wire-equivalent fixed-offset timestamps through response encoding. It validates original BootstrapFor issue/import/content typed sources one body at a time under per-collection repeatable snapshots with 64-row keyset/header preflights and independent header/raw/typed leases. Original source missing and SQL/decode failure semantics are retained; oversized work fails explicitly, with no full-metadata fallback or decoded-row accumulation. Targeted native/source/lifecycle/error/default/logical empty/content/admission tests and server signing/principal/key differentials pass twice on persistent SQLite. This direct accessor review does not certify the independently pending bounded source loader.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

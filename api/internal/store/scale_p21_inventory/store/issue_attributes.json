@@ -1,20 +1,22 @@
 {
   "source": "store/issue_attributes.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "migrateIssueAttributes": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "resident-state"
-      ]
+      ],
+      "reason": "Off mode retains the exact startup migration. Bounded mode uses only catalog workspace keys, 250 ordered key/size headers and one independently admitted typed Issue at a time; retains admitted sparse index projections and preserves 250-record checkpoint commits, old-version reset and typed-body-ID batch union. Trusted startup maintenance adds no principal authorization boundary. Persistent SQLite differentials twice cover fresh/completed/resumed/versioned state, typed aliases/null/Unicode/duplicate IDs, source and outside-workspace identity, rollback, cancellation, pool-one and explicit admission failure; no full metadata decode. Extra SQL and allocation cost is reported."
     },
     "migrateRecurrenceInstances": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "resident-state"
-      ]
+      ],
+      "reason": "Off mode retains the exact startup migration. Bounded mode uses only catalog workspace keys, the original unordered SQL LIKE source cursor, independently admitted one-Issue decoding and a process-byte-budgeted sparse projection spool. Source rows close before replay in the original 250-selected groups, preserving duplicate winners and one whole-workspace transaction/marker; SQL snapshot remains open through staging and replay. Trusted startup maintenance adds no principal authorization boundary. Persistent SQLite differentials twice cover typed candidate false positives, aliases/null/Unicode, duplicate IDs across groups and reverse scan order, rollback, cancellation, pool-one, admission/spool exhaustion and unchanged canonical/outside-workspace data; no full metadata decode. Snapshot duration, disk use and increased allocations are reported."
     }
   }
 }

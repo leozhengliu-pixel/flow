@@ -1,6 +1,6 @@
 {
   "source": "server/scim.go",
-  "unmigrated": 4,
+  "unmigrated": 2,
   "consumers": {
     "authenticateSCIMRequest": {
       "owner": "P21",
@@ -64,7 +64,8 @@
     },
     "scimTeamForGroup": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode uses one trusted repeatable-read SCIMTeamRead: only the explicit scimTeamGroupMapping property and ordered team ID/key scalars enter selection, preserving explicit-map precedence, exact existence checks, Go EqualFold Unicode behavior, first canonical match and no implicit display-name matching. Off mode retains exact WorkspaceMetadata dispatch. TestScaleP21SW19NativeSCIMTeamRead and SCIMNativeDirectoryDifferential compare full principal/key matrix, duplicate keys, mapping fallbacks, missing/cross-workspace/default keys, legal large unrelated bodies, cancellation/recovery and work admission; actual SCIM HTTP shape and queued/replayed token revocation remain equivalent. Request-context link/apply callers propagate native errors. No whole metadata decode or unrelated team bodies are loaded.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -79,7 +80,8 @@
     },
     "unlinkedSCIMTeams": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode resolves all linked IDs in one canonical SQL snapshot, scans fixed-size ordered headers and decodes only unlinked typed Team rows. An adaptive whole-result allowance, capped at 64 MiB including selector storage, remains held during typed result and list resource construction; raw future-schema fields never reach the wire. Exact legacy accessor/order/nil behavior remains off mode. TestScaleP21SW19NativeSCIMTeamRead and SCIMNativeDirectoryDifferential cover over 125 teams, linked exclusion, legal oversized names, schema exclusion, canonical byte preservation, explicit output-budget failure and recovery, return ownership, cancellation, full principal/key matrix and actual SCIM filter/member/count/sort/page/projection responses, workspace binding and token revocation. Existing SQL group/member output collections remain the list caller's independent contract. Both tests passed twice on persistent SQLite with zero full decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]

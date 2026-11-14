@@ -5,7 +5,7 @@
     "codingMemberRoleOf": {
       "owner": "P18",
       "status": "unmigrated",
-      "reason": "SW11 inspection: legacy codingMemberRoleOf consumes the stored metadata Members list, including its missing-user guest fallback, rather than authoritative SQL WorkspaceRole. WorkspaceMember has no direct ID and is an unsplittable metadata root array, so existing point scopes cannot select one member. Requires bounded legacy-member storage support; replacing it with SQL WorkspaceRole changes semantics.",
+      "reason": "Pending exact installed-member source closure: legacy codingMemberRoleOf returns the first stored Members.User.ID match's Role, with guest fallback, rather than SQL WorkspaceRole. Ordinary inline Members deltas preserve NUL, but the actual UpdateWorkspace name-edit path full-writes a NUL-stripped root then installs unchanged warm Members. A verified SW20 producer probe finds warm/raw Role admin-NUL/admin after that edit for the same ordinary User.ID, without reloading the baseline; raw-only scalar lookup can change effective privileges. Members also require repeated-root backing merge because WorkspaceMember has no top-level ID. Do not replace this with SQL membership or certify a canonical-only selector.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

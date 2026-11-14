@@ -28,6 +28,7 @@
     "getMigration": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "The owner-concealed canonical typed point reader passes the normal permission/shape/source/large-record and live-revocation matrix, but actual multipart preview accepts NUL in source mapping IDs and names. Its warm legacy GET returns those NULs while canonical rows have stripped them. TestScaleP21SW25MigrationMultipartNULDifferential demonstrates the wire mismatch. Keep this consumer pending until that input/canonical compatibility decision is resolved; do not normalize or force a cold oracle.",
       "accessors": [
         "workspaceData"
       ]

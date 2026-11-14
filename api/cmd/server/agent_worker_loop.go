@@ -225,11 +225,13 @@ func (s *server) workerLoopContext(ctx context.Context, run store.AgentRun, info
 	if !workerLoopRecorderRunning(rec) {
 		return nil, &loopRunError{reason: "unavailable", message: "The loop run is no longer running"}
 	}
-	data, ok := s.store.WorkspaceMetadataFields(run.WorkspaceKey, "loops")
+	loop, ok, err := s.workerLoopDefinition(ctx, run.WorkspaceKey, info.LoopID)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, errNotFound
 	}
-	loop := loopByID(&data, info.LoopID)
 	if loop == nil {
 		return nil, &loopRunError{reason: "unavailable", message: "The loop no longer exists"}
 	}

@@ -90,7 +90,9 @@ func TestScaleP21SW16AgentSessionDraftLoop(t *testing.T) {
 		{"sw16-blank-status", userID, false}, {"sw16-text-null", "null", true},
 		{"sw16-text-null", "", false}, {"sw16-blank-owner", "", true},
 		{"", userID, false}, {strings.Repeat("s", 192), userID, false},
-		{"sw16-session\x00", userID, false}, {"sw16-session' OR 1=1 --", userID, false},
+		{"sw16-session\x00", userID, false}, {"\x00sw16-session", userID, false},
+		{"sw16-session", userID + "\x00", false}, {"sw16-session", "\x00" + userID, false},
+		{"sw16-session' OR 1=1 --", userID, false},
 	} {
 		t.Run(test.id+"/"+test.owner, func(t *testing.T) {
 			for _, repo := range []*SQLiteStore{f.SQLiteStore, view} {
@@ -101,7 +103,7 @@ func TestScaleP21SW16AgentSessionDraftLoop(t *testing.T) {
 			}
 		})
 	}
-	for _, key := range []string{"", workspace + "-missing", strings.ToUpper(workspace), workspace + " "} {
+	for _, key := range []string{"", workspace + "-missing", strings.ToUpper(workspace), workspace + " ", workspace + "\x00", "\x00" + workspace} {
 		got, err := view.AgentSessionHasDraftLoop(t.Context(), key, "sw16-session", userID)
 		if err != nil || got != (key == "") {
 			t.Fatalf("workspace %q draft=%t err=%v", key, got, err)
@@ -111,6 +113,22 @@ func TestScaleP21SW16AgentSessionDraftLoop(t *testing.T) {
 	cancel()
 	if got, err := view.AgentSessionHasDraftLoop(cancelled, workspace, "sw16-session", userID); got || !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled scalar draft=%t err=%v", got, err)
+	}
+	for _, refs := range [][3]string{
+		{workspace + "\x00", "sw16-session", userID},
+		{workspace, "sw16-session\x00", userID},
+		{workspace, "sw16-session", userID + "\x00"},
+	} {
+		for _, repo := range []*SQLiteStore{f.SQLiteStore, view} {
+			queries := 0
+			ctx := WithSQLStatementObserver(t.Context(), func(string) { queries++ })
+			if got, err := repo.AgentSessionHasDraftLoop(ctx, refs[0], refs[1], refs[2]); err != nil || got || queries != 0 {
+				t.Fatalf("malformed identity reached SQL: got=%t err=%v queries=%d", got, err, queries)
+			}
+			if got, err := repo.AgentSessionHasDraftLoop(cancelled, refs[0], refs[1], refs[2]); got || !errors.Is(err, context.Canceled) {
+				t.Fatalf("cancellation lost precedence for malformed identity: %t %v", got, err)
+			}
+		}
 	}
 	if got, err := view.AgentSessionHasDraftLoop(t.Context(), workspace, "sw16-session", userID); err != nil || !got {
 		t.Fatalf("scalar admission after cancellation: %t %v", got, err)

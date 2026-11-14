@@ -138,13 +138,7 @@ func (s *SQLiteStore) ensureMetadataSearchIndex(ctx context.Context) error {
 
 func (s *SQLiteStore) migrateMetadataSearchIndex(ctx context.Context) error {
 	if s.BoundedMetadataEnabled() {
-		var release func()
-		var err error
-		ctx, release, err = s.admitMetadataWork(ctx, 2<<20)
-		if err != nil {
-			return err
-		}
-		defer release()
+		return s.sw17MigrateMetadataSearchIndexBounded(ctx)
 	}
 	for workspace := range s.workspaces {
 		for _, kind := range searchMetadataKinds {

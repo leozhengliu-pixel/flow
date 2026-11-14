@@ -98,7 +98,14 @@ func refuseFormerMemberRichMentions(data *domain.Bootstrap, beforeData any, befo
 }
 
 func (s *server) refuseFormerMemberCollaborationUpdate(r *http.Request, client *realtimeSocketClient, documentID string, update []byte) error {
-	former, err := s.store.FormerMembers(r.Context(), client.workspace)
+	read, err := s.store.BeginFormerMembersRead(r.Context(), client.workspace)
+	if read != nil {
+		defer read.Close()
+	}
+	var former map[string]bool
+	if read != nil {
+		former = read.Members()
+	}
 	if err != nil || len(former) == 0 {
 		return err
 	}

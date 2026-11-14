@@ -1,0 +1,12 @@
+{
+  "source": "store/scale_p21_sw26_workspace_keys.go",
+  "unmigrated": 0,
+  "consumers": {
+    "seedWorkspaceKeyRenamesBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["resident-state"],
+      "reason": "Reads only installed core workspace IDs and map keys under the original read lock into a private disk B-tree, not Bootstrap collections. An 8 MiB work lease covers fixed event/pair pages, streaming payload parser and fixed 512 KiB SQLite cache; spool-ledger admission and max_page_count bound physical staging growth. No native history writes occur before source staging finishes; sorted insertion retains old per-pair autocommit, counts and resume behavior. SW26 focused payload, event-page, quota/cleanup and partial native-write tests cover this trusted startup primitive."
+    }
+  }
+}

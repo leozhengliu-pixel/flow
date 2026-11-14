@@ -1,11 +1,14 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Single-record reads of the public REST API: GET /api/<resource>/{id} for
@@ -22,6 +25,52 @@ func writePublicRecordNotFound(w http.ResponseWriter, name string) {
 
 // GET /api/teams/{id}: the id or the team key (ENG).
 func (s *server) getTeamRecord(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		workspace := workspaceKey(r)
+		var item domain.Team
+		var err error
+		if s.authDisabled {
+			var workspaceExists bool
+			item, workspaceExists, err = s.store.TeamRecordForWorkspace(r.Context(), workspace, r.PathValue("id"))
+			if err == nil && !workspaceExists {
+				writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "workspace not found")
+				return
+			}
+		} else {
+			if workspace == "" {
+				writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header (API keys and OAuth tokens select it automatically)")
+				return
+			}
+			var credential *domain.APIKey
+			if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+				credential = &key
+			}
+			var access store.AccessContext
+			access, err = s.store.ResolveAccess(r.Context(), workspace, authUser(r).ID, credential)
+			if errors.Is(err, sql.ErrNoRows) {
+				err = store.ErrAuthForbidden
+			}
+			if err == nil {
+				item, err = s.store.TeamRecordForAccess(r.Context(), access, r.PathValue("id"))
+			}
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			writePublicRecordNotFound(w, "team")
+			return
+		}
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) {
+				writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+			} else if errors.Is(err, store.ErrMetadataPageBudget) || errors.Is(err, store.ErrMetadataWorkBudget) {
+				writeAPIError(w, http.StatusServiceUnavailable, apiErrorUnavailable, err.Error())
+			} else {
+				writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+		return
+	}
 	data, ok := s.publicMetadata(w, r)
 	if !ok {
 		return

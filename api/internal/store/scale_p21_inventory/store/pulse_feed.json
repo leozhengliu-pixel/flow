@@ -1,6 +1,6 @@
 {
   "source": "store/pulse_feed.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "PulseFeed": {
       "owner": "P21",
@@ -18,7 +18,8 @@
     },
     "prunePulseIndexes": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Registry-only cache housekeeping retains the exact installed Go workspace-key membership check under the existing store/cache locks. It reads no Bootstrap field value, body, principal, permission, count or actor, and retains no per-workspace output; the complete scan visits only existing cache keys with O(1) extra memory. TestScaleP21SW23PulsePruneRegistryDifferential preserves off/on live/deleted keys, case, trailing-space and NUL key distinctions, index identity and untouched private metadata. TestScaleP21SW23PulsePruneConstantAllocation measured zero allocations per operation across 1000 workspace keys with 64 KiB and 8 MiB ignored bodies, and both tests passed default plus twice on persistent SQLite. PulseFeed and PulseSources remain independent blockers.",
       "accessors": [
         "resident-state"
       ]

@@ -1,10 +1,11 @@
 {
   "source": "store/application_identity.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "SyncAllApplicationIdentities": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Direct startup enumeration now owns only installed OAuthApplications.ClientID strings under an independent bounded allowance retained through the entire sync/error-join batch; the literal legacy source, sort, compact and calls remain off mode. TestScaleP21SW24ApplicationIdentityIDsSource compares exact same-installed global enumeration including duplicates, empty/NUL/invalid-UTF8/case/long IDs, stable sorted dispatch, original downstream context and ordered errors.Join. Ownership and Bounds prove detached backing after source replacement, independent parent lifetime, explicit 64MiB/process limits, no waiting and recovery. Producer exercises real InstallApplication and SyncAll name/logo/user updates plus cancellation on the same actual installed source in both representations. Enumeration still ignores cancellation while downstream receives the original context. Persistent SQLite repetition passed. OAuthApplicationByClientID, oauthMetadataTransaction and the resident loader retain independent activation blockers; installation reads, syncInstallationIdentity and complete startup readiness are not certified by this direct-input review.",
       "accessors": [
         "resident-state"
       ]

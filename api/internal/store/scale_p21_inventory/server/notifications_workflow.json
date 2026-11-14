@@ -1,6 +1,6 @@
 {
   "source": "server/notifications_workflow.go",
-  "unmigrated": 18,
+  "unmigrated": 19,
   "consumers": {
     "acknowledgeDesktopNotifications": {
       "owner": "P18",
@@ -21,8 +21,8 @@
     },
     "createTeamLabel": {
       "owner": "P18",
-      "status": "reviewed",
-      "reason": "Reads only teams/pathTeamID and optional labelGroups/inputGroupID, appending labels with indexed canonical order. Original callback, group scope/resource/archive validation and off-mode accessor remain exact; malformed absent keys preserve callback error precedence. The generated label_ aggregate resolves to the newly created label through the typed lookup. TestScaleP21SW15TeamLabelCreationDifferential and Boundaries compare the full principal/key matrix including private/inherited team rows, canonical actor/new label and existing order/bytes, complete webhook/realtime payloads, missing/foreign/malformed references, queued/replay revocation, cancellation, explicit selected/output budgets and recovery with zero full decodes.",
+      "status": "unmigrated",
+      "reason": "Pending complete before-image aggregate closure. The new label_ record makes the post-image typed lookup safe, but the ID is absent before insertion and legacy lookup can select an earlier nested object with that ID. The bounded selection then loses webhook PreviousValues. SW26's creation-before-image differential reproduces canonical/post-event parity with missing previous values. Existing SW15 matrix proves ordinary inputs, canonical ordering, callbacks and off-mode behavior only; it does not certify this before-image case.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
@@ -43,6 +43,14 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
+      ]
+    },
+    "dispatchNotificationEmails": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Only the no-mailer full=false branch is migrated: due rows retain an independent read handle through unchanged claims and pending-disabled updates, with exact off method-value dispatch and SW15 repeated canonical state differential. The mailer-enabled full snapshot still needs complete installed recipient/review source and bounded rendering inputs; the legacy by-value API explicitly refuses bounded use. This partial branch does not certify full email rendering.",
+      "accessors": [
+        "BeginDueNotificationDeliveryRead"
       ]
     },
     "getNotificationPreferences": {
@@ -142,8 +150,8 @@
     },
     "updateTeamLabel": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "Pending complete aggregate-reference closure for accepted legacy IDs or missing subjects. Success requires actual Labels target. label_ positive shortcut wins; missing targets return error before publication. No persisted namespace constraint forces a pre-existing label ID to start label_, so imported/legacy IDs require additional differential.",
+      "status": "reviewed",
+      "reason": "Writes labels/labelID and reads exact providerJobs/users/teams/customers/states predecessors plus recognized typed targets; label_ success omits unnecessary reads and missing special team-resource prefixes retain no fallback. Selected Project Lead/Creator users resolve inside the transaction for legacy event-only display enrichment. Shared resolved-adapter tests and SW10/SW20 label matrix, aggregate-closure/project-reference tests pass, including persistent SQLite count2, 22 precedence cases, actor/ref principal-key matrix, stale/missing/inactive actors, unchanged canonical read rows, complete sinks, exact off dispatch and zero full decodes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

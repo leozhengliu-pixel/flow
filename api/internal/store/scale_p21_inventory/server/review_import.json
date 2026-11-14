@@ -27,6 +27,7 @@
     "updateReviewImport": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Pending exact installed source-state compatibility: trusted typed MutateWorkspace producers may retain NUL in warm connection Provider/Status while canonical storage strips it, changing github/gitlab and disconnected decisions. HTTP create/update sanitization alone does not certify the trusted-store contract. Canonical summary preparation remains held until compact exact installed headers have a compatible lifecycle; do not normalize the legacy oracle.",
       "accessors": [
         "WorkspaceMetadata"
       ]

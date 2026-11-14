@@ -1,6 +1,6 @@
 {
   "source": "server/advanced_features.go",
-  "unmigrated": 52,
+  "unmigrated": 51,
   "consumers": {
     "addFavorite": {
       "owner": "P21",
@@ -112,6 +112,7 @@
     "createProjectTemplate": {
       "owner": "P16",
       "status": "unmigrated",
+      "reason": "The template list's installed-source adapter does not certify this writer. Existing projectTemplateScope supplies issue inputs to applyProjectTemplateInput and arbitrary nested reference validation; a generic metadata-only scoped writer rejects that MutationScope and cannot reproduce legal large-body creation or exact aggregate/previous-value closure. Keep this creator pending for a dedicated writer with complete native source, reference validation, creation ordering and side-effect coverage; generated IDs are not a compatibility waiver.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
@@ -210,7 +211,7 @@
     "deleteProjectTemplate": {
       "owner": "P16",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. After deleting the selected template, legacy lookup can fall through to a matching Document.ContentData object. Previous review: Writes/deletes projectTemplates/id only; existing missing semantics and transaction-staged deletion audit remain unchanged. TestScaleP21SW4PointDeletesDifferential compares response, canonical target/other records, audit/webhook/realtime across the helper principal/key matrix, missing IDs and live cross-workspace/revocation boundaries. TestScaleP21SW4ForeignDraftAndPointBudgets checks explicit oversized-target rejection with no canonical change. Route authorization is independently registered and no complete template collection is loaded.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. TestScaleP21SW16ProjectTemplateWriteAggregateHold executes both actual delete branches: both remove the canonical target, but legacy falls through to a matching Document.ContentData marker/count after deletion while the scoped branch omits it. The template list migration does not certify this writer. Previous review: Writes/deletes projectTemplates/id only; existing missing semantics and transaction-staged deletion audit remain unchanged. TestScaleP21SW4PointDeletesDifferential compares response, canonical target/other records, audit/webhook/realtime across the helper principal/key matrix, missing IDs and live cross-workspace/revocation boundaries. TestScaleP21SW4ForeignDraftAndPointBudgets checks explicit oversized-target rejection with no canonical change. Route authorization is independently registered and no complete template collection is loaded.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -248,7 +249,8 @@
     },
     "listProjectTemplates": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded dispatch uses BeginProjectTemplatesRead at the same actual installed-store boundary as BootstrapFor, preserving exact/default lookup, native warm NUL/invalid UTF-8, nil/empty, creator/nested fields and time JSON/error behavior. It owns only admitted detached templates and logical workspace identity, retains the handle through signed/ordinary response encoding, and validates the same conditional issue plus always-import/conditional four-content typed sources in bounded keyset snapshots so unrelated hydration failures still return the legacy missing-workspace response. Off branch is unchanged. Store/server TestScaleP21SW16ProjectTemplate tests pass twice on persistent SQLite across large admitted values, source/reload shape witness, malformed later-page content, logical empty/default identities, admission and original cancellation, and direct principal/key matrix. This is direct accessor decomposition only: the bounded source loader still independently omits templates and remains pending; no populated test-view injection or source-loader parity claim is made. Existing route authorization remains independently registered. Exact failure compatibility adds per-row SQL; no latency/capacity gain is claimed.",
       "accessors": [
         "BootstrapFor"
       ]
@@ -387,6 +389,7 @@
     "updateProjectTemplate": {
       "owner": "P16",
       "status": "unmigrated",
+      "reason": "The callback still requires complete native template/validation inputs, existing issue MutationScope semantics and exact legacy aggregate closure. TestScaleP21SW16ProjectTemplateWriteAggregateHold executes the real update with an accepted earlier IssueTemplate.FormField whose ID equals the target template and proves that nested form field wins realtime entity lookup. A target-only scoped image would emit the template instead. Keep pending until a bounded writer preserves complete callback inputs, no-op, audit/webhook previous values/realtime and large legal body behavior; the list adapter does not certify this writer.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

@@ -5,6 +5,7 @@
     "getLoopVersion": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Needs exact installed Loop/LoopVersions and Users for synthesized legacy v1 actor lookup, complete newest-first version semantics and retained output lifetime. TestScaleP21SW18LoopVersionsSourceHold proves actual selected-version output preserves an accepted NUL-bearing definition that canonical rows strip. Canonical point lookup alone is not source equivalent.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -12,6 +13,7 @@
     "listLoopVersions": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Needs bounded complete per-loop installed history with exact definitions/actors, latest-first ordering, nil summary defaults and synthesized v1 from installed Loop/Users when history is absent. TestScaleP21SW18LoopVersionsSourceHold proves actual listing differs from sanitized canonical history after an accepted trusted mutation. Installed-source baseline/typed exception foundation remains missing.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -19,6 +21,7 @@
     "restoreLoopVersion": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Needs logical-source-aware writer for target Loop, complete per-loop history creation/pruning, editor authority (viewer/role/team membership graph), owner Users and team validation, plus audit/events and postcommit extraction/response. TestScaleP21SW18LoopVersionsSourceHold verifies actual restore retains accepted NUL-bearing source definitions while canonical history loses them. Generic canonical scoped selection cannot certify parity or complete history topology.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

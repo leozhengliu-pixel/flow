@@ -40,6 +40,10 @@ func (s *SQLiteStore) resourcePolicyHeaderJSON(field string) string {
 
 func (s *SQLiteStore) scanResourcePolicyHeaders(ctx context.Context, workspace, field string, visit func([]metadataCacheRow) error) error {
 	projection := s.resourcePolicyHeaderJSON(field)
+	length := "OCTET_LENGTH(" + projection + ")"
+	if s.dialect == "sqlite" {
+		length = "LENGTH(CAST(" + projection + " AS BLOB))"
+	}
 	last, started := "", false
 	for {
 		if err := ctx.Err(); err != nil {
@@ -51,7 +55,7 @@ func (s *SQLiteStore) scanResourcePolicyHeaders(ctx context.Context, workspace, 
 			where += " AND record_key>?"
 			args = append(args, last)
 		}
-		rows, err := s.db.QueryContext(ctx, `SELECT record_key,collection_order,LENGTH(`+projection+`),CASE WHEN LENGTH(`+projection+`)<=? THEN `+projection+` ELSE NULL END FROM workspace_metadata_records WHERE `+where+` ORDER BY record_key LIMIT 32`, args...)
+		rows, err := s.db.QueryContext(ctx, `SELECT record_key,collection_order,`+length+`,CASE WHEN `+length+`<=? THEN `+projection+` ELSE NULL END FROM workspace_metadata_records WHERE `+where+` ORDER BY record_key LIMIT 32`, args...)
 		if err != nil {
 			return err
 		}

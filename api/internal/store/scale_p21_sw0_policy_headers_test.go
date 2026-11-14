@@ -27,6 +27,12 @@ func TestScaleP21SW0PolicyHeaders(t *testing.T) {
 		for i := range 70 {
 			id := idgen.New("team_sw0_policy_")
 			team := domain.Team{ID: id, Key: id, Name: strings.Repeat("unused name ", 200), Private: i%2 == 0, ExternalSource: "source"}
+			if i == 1 {
+				team.Key = "\u212a"
+			}
+			if i == 2 {
+				team.Key = "\u017f"
+			}
 			if i%3 == 0 {
 				team.ArchivedAt = &archived
 			}
@@ -39,8 +45,8 @@ func TestScaleP21SW0PolicyHeaders(t *testing.T) {
 				LabelPermission: "members", MemberPermission: "admin", ParentTeamID: data.Teams[0].ID,
 				Description: "unused guidance",
 			}
-			if i == 0 {
-				settings.Description = strings.Repeat("unused policy guidance ", 15000)
+			if i < 2 {
+				settings.Description = strings.Repeat("unused policy guidance ", 6000)
 			}
 			data.TeamSettings[id] = settings
 		}
@@ -106,7 +112,9 @@ func TestScaleP21SW0PolicyHeaders(t *testing.T) {
 		t.Fatal("policy read accepted foreign workspace binding", err)
 	}
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "teams"), workspace, "team.updated", "", nil, func(data *domain.Bootstrap) error {
-		data.Teams[0].Key = strings.Repeat("large policy key ", 20000)
+		for i := range 3 {
+			data.Teams[i].Key = strings.Repeat("large policy key ", 6000)
+		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)

@@ -1,10 +1,11 @@
 {
   "source": "store/coding_environments.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "migrateWorkspaceCodingEnvironments": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Off mode retains the original storedWorkspace path and context. Bounded mode detaches one canonical codingAgentSettings record through fixed chunks into a process-byte-budgeted spool, scans JSON boundaries without retaining the legacy array and decodes one environment with a size-checked work allowance. Original global-ID skip, repository/archive fallback, index-derived IDs, timestamps, per-environment autocommit and late-failure partial inserts are retained. Only codingAgentSettings is cleared in the final canonical metadata transaction, preserving the measured legacy last-writer behavior for concurrent changes inside that struct property and retaining other settings properties. A complete resident policy candidate is checked before commit and installed afterward; no extra event is emitted. TestScaleP21SW17CodingMigration differentials cover over 50 environments, a legal escaped script whose JSON exceeds 256 KiB, UTF-8 offsets, canonical native data/indexes, fixed/zero timestamps, invalid/existing/generated IDs, idempotence, two-store concurrent add/edit/delete cases, single-connection operation, cancellation, metadata rollback, spool/policy budgets and released work with zero full decodes. Targets passed twice on persistent SQLite and the two-store target passed under race. Large legacy policy rows before startup recovery remain a separately reported foundation-ordering blocker.",
       "accessors": [
         "storedWorkspace"
       ]

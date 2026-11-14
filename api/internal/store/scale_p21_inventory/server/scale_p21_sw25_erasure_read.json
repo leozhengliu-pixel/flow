@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_sw25_erasure_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "eraseMemberWorkspaceID": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Returns only the immutable workspace ID and found bit. Off mode forwards the original WorkspaceMetadata read; bounded nonempty keys use WorkspaceAccessStatus with an empty principal, which reads the installed core under its lock without membership SQL, object decoding or cloning body collections. The empty key preserves the selected store's default through its core-only workspace field accessor. This read remains independent of principal, key restrictions and cancellation just like the legacy trusted read. TestScaleP21SW25ErasureIdentityDifferential covers the full principal/key input matrix, foreign/exact/default/missing/case/trailing-space/NUL keys, queued/replayed membership changes, cancellation-insensitive semantics, unchanged unrelated bytes and zero full decodes. The final targeted set passed twice on persistent SQLite.",
+      "accessors": [
+        "WorkspaceMetadata",
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

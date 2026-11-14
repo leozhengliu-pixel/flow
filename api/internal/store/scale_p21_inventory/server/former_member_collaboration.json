@@ -1,0 +1,14 @@
+{
+  "source": "server/former_member_collaboration.go",
+  "unmigrated": 0,
+  "consumers": {
+    "refuseFormerMemberCollaborationUpdate": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Only the former-member map acquisition changes: the nonnil BeginFormerMembersRead handle closes after source lookup, existing pending-update application and final mention refusal, including all error returns. Empty/error behavior, issue/document checks and collaboration semantics stay unchanged. TestScaleP21SW16FormerMemberCollaborationLease saturates real shared admission and proves the retained result remains charged during the actual issue source SQL, then is released on the existing missing-source error. Static production caller audit and the native permission/revocation matrix pass; the storage no-membership fallback remains independently pending.",
+      "accessors": [
+        "BeginFormerMembersRead"
+      ]
+    }
+  }
+}

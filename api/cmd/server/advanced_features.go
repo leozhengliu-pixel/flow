@@ -1861,6 +1861,10 @@ func (s *server) deleteAsk(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listProjectTemplates(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.scaleP21SW16ListProjectTemplates(w, r)
+		return
+	}
 	data, ok := s.store.BootstrapFor(workspaceKey(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")

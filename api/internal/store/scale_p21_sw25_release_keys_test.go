@@ -66,6 +66,7 @@ func TestScaleP21SW25ReleaseKeyScalars(t *testing.T) {
 		{"previous-missing", "", ""},
 		{"", "", ""},
 		{"PAGED", "", ""},
+		{"paged\x00", "", ""},
 		{"paged", "SW25-CURRENT", ""},
 		{"paged", "sw25-current\x00", ""},
 		{"paged", strings.Repeat("x", 192), ""},
@@ -82,10 +83,24 @@ func TestScaleP21SW25ReleaseKeyScalars(t *testing.T) {
 	if id, ok, err := probe.ReleasePipelineForKeyHash(t.Context(), workspace+"-missing", "paged", "", now); err != nil || ok || id != "" {
 		t.Fatalf("cross-workspace key lookup=%q/%t err=%v", id, ok, err)
 	}
+	if id, ok, err := probe.ReleasePipelineForKeyHash(t.Context(), workspace+"\x00", "paged", "sw25-current", now); err != nil || ok || id != "" {
+		t.Fatalf("raw NUL workspace matched after parameter rewriting: %q/%t err=%v", id, ok, err)
+	}
+	for _, altered := range []string{strings.ToUpper(workspace), workspace + " "} {
+		if id, ok, err := probe.ReleasePipelineForKeyHash(t.Context(), altered, "paged", "sw25-current", now); err != nil || ok || id != "" {
+			t.Fatalf("noncanonical workspace matched by SQL collation: %q/%t err=%v", id, ok, err)
+		}
+	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if id, ok, err := probe.ReleasePipelineForKeyHash(ctx, workspace, "paged", "", now); !errors.Is(err, context.Canceled) || ok || id != "" {
 		t.Fatalf("cancelled key lookup=%q/%t err=%v", id, ok, err)
+	}
+	if id, ok, err := probe.ReleasePipelineForKeyHash(ctx, workspace, "paged", "sw25-current\x00", now); !errors.Is(err, context.Canceled) || ok || id != "" {
+		t.Fatalf("NUL lookup lost cancellation precedence: %q/%t err=%v", id, ok, err)
+	}
+	if id, ok, err := probe.ReleasePipelineForKeyHash(ctx, workspace, "", "sw25-current\x00", now); err != nil || ok || id != "" {
+		t.Fatalf("empty hash lost its existing no-query precedence: %q/%t err=%v", id, ok, err)
 	}
 	if id, ok, err := probe.ReleasePipelineForKeyHash(t.Context(), workspace, "paged", "", now); err != nil || !ok || id != "sw25-current" {
 		t.Fatal("key lookup did not recover from cancellation", id, ok, err)

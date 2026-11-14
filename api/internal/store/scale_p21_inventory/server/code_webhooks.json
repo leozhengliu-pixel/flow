@@ -1,6 +1,6 @@
 {
   "source": "server/code_webhooks.go",
-  "unmigrated": 6,
+  "unmigrated": 5,
   "consumers": {
     "applyCodeReviewEvent": {
       "owner": "P21",
@@ -13,6 +13,7 @@
     "codeReviewLinkedMembers": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Pending warm metadata versus canonical normalization parity: this trusted helper reads raw cached Users and Members, with last active/empty-status member overlay, then SQL-linked account ordering. A native selected-user/member resolver and narrow GitLab host reader passed ordinary principal/key differentials, but legal direct-store Config.host containing NUL remains in the legacy warm snapshot while writeMetadataRecordRow strips it from canonical JSON. Legacy host validation therefore rejects that host and tries gitlabUrl, whereas SQL selects the stripped host and attributes a different account set. TestScaleP21SW18LinkedMembersDifferential/nul-host reproduced the mismatch; failed attempt and logs are preserved outside the repository. Case-varied/duplicate typed keys and repeated inline-array merging also require the shared raw reader. The old helper is retained exactly; no bounded fallback or reviewed-count decrement is claimed.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
@@ -53,7 +54,8 @@
     },
     "webhookConnection": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Off mode retains WorkspaceMetadata and the original exact provider/status first-match loop. Bounded mode reads only the selected connection ID and webhookSecret/webhookSecretEnv/signingSecret/signingSecretEnv/username scalars in canonical order, with an adaptive lease held through verification/dispatch. Root collection shape, literal-null strings and exact PostgreSQL NUL lookup semantics are preserved; SQL/budget failures propagate explicitly rather than becoming invalid signatures. TestScaleP21SW18WebhookCredentials and TestScaleP21SW18WebhookSelectionDifferential cover large unrelated/selected config, row counts, first-match/case/status/missing/workspace behavior, complete principal/key classes, HMAC/environment precedence, actual Slack challenges, cancellation/recovery, work release and zero full decodes. Targeted tests passed twice against one persistent SQLite file. Downstream webhook mutation consumers remain separately pending.",
       "accessors": [
         "WorkspaceMetadata"
       ]

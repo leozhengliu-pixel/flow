@@ -1,10 +1,11 @@
 {
   "source": "server/chat_integrations.go",
-  "unmigrated": 6,
+  "unmigrated": 5,
   "consumers": {
     "chatBindableTeamIDs": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode snapshots only ordered team ID/private/archive/retire headers, team parent/access/membership rules and workspace HIPAA status from the selected process-capped resident policy. Existing chatTeamState/chatBindingScopePermitted helpers and manageable-team authorization remain unchanged; exact original WorkspaceMetadataFields dispatch stays off mode. A preflight/recheck work allowance capped at 64 MiB charges typed map/slice storage, strings, timestamps, ancestry scratch and output IDs, and the actual writeChatSettings caller retains it through JSON encoding. TestScaleP21SW19ChatTeamPolicySnapshot, ChatTeamPolicyAdmissionRecheck, ChatBindablePolicyDifferential and ChatPolicyHTTPAdmission cover ownership, over 75 teams, large unused fields, required-policy budget failures/recovery, queue cancellation/growth, full M/key matrix, private/restricted/archived/retired/deep inheritance/cycles/order, live owner revocation during queued/replayed requests, cross-workspace refusal, HIPAA and actual HTTP admission lifetime. All targeted tests passed twice on persistent SQLite with zero full native metadata decodes. Other chat settings/session/permission consumers retain their independent inventory status.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

@@ -1,6 +1,6 @@
 {
   "source": "server/loop_runtime.go",
-  "unmigrated": 6,
+  "unmigrated": 5,
   "consumers": {
     "check": {
       "owner": "P18",
@@ -59,7 +59,8 @@
     },
     "teamKeyAllowed": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Off mode retains the exact WorkspaceMetadataFields teams accessor and original first EqualFold key/name loop. Bounded mode uses LoopTeamKeyAllowed to scan the same installed resident Teams under the store read lock with O(1) extra memory and no copied strings, containers, SQL, normalization or source-stamp switch. It returns only the caller's existing allowed-team bool at the first match; private/retired filtering, principal/credential grants and live authorization remain upstream. TestScaleP21SW23LoopTeamKeyInstalledDifferential compares role-independent scope sets, nil/empty/selected sets, denied-first duplicate collisions, default/missing/case/trailing-space/NUL workspace keys, Unicode folding and warm/stale installed source values. TestScaleP21SW23LoopTeamKeyDispatchDifferential compares the actual off/on consumer with aliases, a large name and unchanged canonical bytes. Own store/server tests passed default plus twice on persistent SQLite; allocation tests measured legacy 7 versus native 0 allocations/op for both 64 KiB and 8 MiB names. Other loop readers and validators remain independently pending.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

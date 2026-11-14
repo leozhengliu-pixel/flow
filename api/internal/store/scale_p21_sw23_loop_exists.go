@@ -1,6 +1,9 @@
 package store
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 // LoopRecordExists is a trusted exact-ID predicate. It does not authorize a
 // viewer and never transfers loop instructions or other metadata bodies.
@@ -29,4 +32,24 @@ func (s *SQLiteStore) LoopRecordExists(ctx context.Context, workspace, id string
 		ON r.workspace_key=w.workspace_key AND r.field='loops' AND `+s.metadataRecordKeyEquals("r.record_key", "?")+`
 		WHERE w.workspace_key=?`, id, id, workspace).Scan(&found)
 	return found != 0, err
+}
+
+// LoopTeamKeyAllowed retains the installed team's first-match order. The
+// caller supplies its existing allowed-team set; this predicate adds no grant.
+func (s *SQLiteStore) LoopTeamKeyAllowed(workspace, key string, allowed map[string]bool) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	data, ok := s.workspaces[workspace]
+	if !ok {
+		return false
+	}
+	for _, team := range data.Teams {
+		if strings.EqualFold(team.Key, key) || strings.EqualFold(team.Name, key) {
+			return allowed[team.ID]
+		}
+	}
+	return false
 }

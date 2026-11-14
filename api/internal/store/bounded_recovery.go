@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"slices"
 	"strings"
@@ -14,6 +15,182 @@ import (
 )
 
 const metadataRecoveryPageRows = 32
+
+// Canonical policy projections remain admitted through their final consumer.
+// This is separate from installed recovery, which must retain complete Teams.
+type scaleP21SW23TeamPolicyRowsRead struct {
+	rows    []metadataCacheRow
+	release func()
+}
+
+func (r *scaleP21SW23TeamPolicyRowsRead) Close() {
+	if r != nil && r.release != nil {
+		r.rows = nil
+		r.release()
+		r.release = nil
+	}
+}
+
+// Read only canonical Team policy fields within the caller's SQL snapshot.
+// Installed recovery still retains complete Teams from its own source.
+func (s *SQLiteStore) scaleP21SW23ReadTeamPolicyRows(ctx context.Context, tx *sqlTx, workspace string) (_ *scaleP21SW23TeamPolicyRowsRead, err error) {
+	if tx == nil || tx.database != s.db || tx.dialect != s.dialect {
+		return nil, ErrMetadataRecordQuery
+	}
+	// The 12 MiB independent allowance covers retained <=256 KiB rows,
+	// bounded headers, marshal's 6x escaping/growth and temporary typed
+	// copies. Each row also owns the projector's 4 MiB until encoded.
+	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, 12<<20)
+	if err != nil {
+		return nil, err
+	}
+	result := &scaleP21SW23TeamPolicyRowsRead{release: release}
+	defer func() {
+		if err != nil {
+			result.Close()
+		}
+	}()
+	byteLength, keyType := "LENGTH", "''"
+	if s.dialect == "postgres" {
+		byteLength = "OCTET_LENGTH"
+	}
+	keyLength, bodyLength := byteLength+"(record_key)", byteLength+"(data)"
+	if s.dialect == "sqlite" {
+		keyLength, bodyLength = "LENGTH(CAST(record_key AS BLOB))", "LENGTH(CAST(data AS BLOB))"
+		keyType = "typeof(record_key)"
+	}
+	preflight := `SELECT 1 FROM workspace_metadata_records WHERE workspace_key=? AND field='teams' AND ` + keyLength + `>191 LIMIT 1`
+	args := []any{workspace}
+	var invalid int
+	if check := tx.QueryRowContext(ctx, preflight, args...).Scan(&invalid); check == nil {
+		return nil, ErrMetadataRecordQuery
+	} else if !errors.Is(check, sql.ErrNoRows) {
+		return nil, check
+	}
+	last, lastOrder, started := any(""), 0, false
+	used := metadataPageOverhead
+	budget := newMetadataHydrationBudget()
+	for {
+		where := "workspace_key=? AND field='teams'"
+		args = []any{workspace}
+		if started {
+			where += " AND (collection_order>? OR (collection_order=? AND record_key>?))"
+			args = append(args, lastOrder, lastOrder, last)
+		}
+		// Preserve the old column collation and SQLite TEXT/BLOB ordering.
+		// The cursor and point read retain the physical SQLite storage class.
+		rows, err := tx.QueryContext(ctx, `SELECT record_key,`+keyType+`,collection_order,`+bodyLength+` FROM workspace_metadata_records WHERE `+where+` ORDER BY collection_order,record_key LIMIT 32`, args...)
+		if err != nil {
+			return nil, err
+		}
+		type header struct {
+			key, storage string
+			order        int
+			size         int64
+		}
+		page := make([]header, 0, 32)
+		for rows.Next() {
+			var item header
+			if err := rows.Scan(&item.key, &item.storage, &item.order, &item.size); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if !validMetadataKey(RecordKey{"teams", item.key}) || item.size < 0 {
+				rows.Close()
+				return nil, ErrMetadataRecordQuery
+			}
+			page = append(page, item)
+		}
+		readErr, closeErr := rows.Err(), rows.Close()
+		if err := errors.Join(readErr, closeErr); err != nil {
+			return nil, err
+		}
+		if len(page) == 0 {
+			return result, nil
+		}
+		for _, item := range page {
+			input := &scaleP21SW23TeamPolicyReaderAt{
+				ctx: ctx, tx: tx, workspace: workspace, key: item.key,
+				blob: s.dialect == "mysql" || item.storage == "blob", size: item.size,
+			}
+			projected, err := s.scaleP21SW23BeginTeamProjection(ctx, MetadataArrayRecord{
+				Reader: io.NewSectionReader(input, 0, item.size), EncodedBytes: item.size,
+			})
+			if err != nil {
+				return nil, err
+			}
+			encoded, encodeErr := json.Marshal(projected.Team)
+			projected.Close()
+			if encodeErr != nil {
+				return nil, encodeErr
+			}
+			cost := len(encoded) + len(item.key) + 128
+			if cost > MetadataRecordPageMaxBytes-used {
+				return nil, ErrMetadataPageBudget
+			}
+			used += cost
+			if err := budget.consume(encoded); err != nil {
+				return nil, err
+			}
+			result.rows = append(result.rows, metadataCacheRow{Field: "teams", Key: item.key, Order: item.order, Data: encoded})
+		}
+		tail := page[len(page)-1]
+		last, lastOrder, started = tail.key, tail.order, true
+		if s.dialect == "mysql" || tail.storage == "blob" {
+			last = []byte(tail.key)
+		}
+	}
+}
+
+type scaleP21SW23TeamPolicyReaderAt struct {
+	ctx            context.Context
+	tx             *sqlTx
+	workspace, key string
+	blob           bool
+	size           int64
+}
+
+func (r *scaleP21SW23TeamPolicyReaderAt) ReadAt(p []byte, offset int64) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	if offset < 0 {
+		return 0, ErrMetadataRecordQuery
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if offset >= r.size {
+		return 0, io.EOF
+	}
+	n := 0
+	key := any(r.key)
+	if r.blob {
+		key = []byte(r.key)
+	}
+	body := "data"
+	if r.tx.dialect == "sqlite" {
+		body = "CAST(data AS BLOB)"
+	}
+	for n < len(p) && offset+int64(n) < r.size {
+		size := min(int64(metadataRecordChunkBytes), int64(len(p)-n), r.size-offset-int64(n))
+		var chunk []byte
+		err := r.tx.QueryRowContext(r.ctx, `SELECT SUBSTR(`+body+`,?,?) FROM workspace_metadata_records
+			WHERE workspace_key=? AND field='teams' AND record_key=?`,
+			offset+int64(n)+1, size, r.workspace, key).Scan(&chunk)
+		if err != nil {
+			return n, err
+		}
+		if int64(len(chunk)) != size {
+			return n, io.ErrUnexpectedEOF
+		}
+		n += copy(p[n:], chunk)
+	}
+	if n < len(p) {
+		return n, io.EOF
+	}
+	return n, nil
+}
 
 // Catalog completion is necessary, but cannot certify an old writer's later
 // changes. Verify trigger dirty keys and canonical/sidecar coverage together
@@ -49,17 +226,63 @@ func (s *SQLiteStore) scanResidentMetadataField(ctx context.Context, reader meta
 	if metadataResidencyFields()[field] != "policy" {
 		return fmt.Errorf("%w: unregistered resident field %q", ErrBoundedMetadataCoverage, field)
 	}
-	last, started := "", false
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	keyOrder, keyBound, bodyLength := "record_key", "?", "LENGTH(data)"
+	keyLength := "LENGTH(record_key)"
+	if s.dialect == "sqlite" {
+		keyOrder, keyBound = "CAST(record_key AS BLOB)", "CAST(? AS BLOB)"
+		bodyLength = "LENGTH(CAST(data AS BLOB))"
+		keyLength = "LENGTH(CAST(record_key AS BLOB))"
+	} else if s.dialect == "postgres" {
+		keyLength = "OCTET_LENGTH(record_key)"
+	}
+	structOrder := field == "workspaceSettings"
+	if structOrder && s.dialect == "postgres" {
+		keyOrder = `record_key COLLATE "C"`
+	}
+	// Validate byte-sized keys before transferring them. Distinct SQLite
+	// storage classes must not alias the same string-keyed cache identity.
+	preflight := `SELECT 1 FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND ` + keyLength + `>191 LIMIT 1`
+	preflightArgs := []any{workspace, field}
+	if s.dialect == "sqlite" {
+		preflight = `SELECT 1 WHERE EXISTS(SELECT 1 FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND ` + keyLength + `>191)
+			OR EXISTS(SELECT 1 FROM workspace_metadata_records WHERE workspace_key=? AND field=? GROUP BY ` + keyOrder + ` HAVING COUNT(*)>1)`
+		preflightArgs = append(preflightArgs, workspace, field)
+	}
+	rows, err := reader.QueryContext(ctx, preflight, preflightArgs...)
+	if err != nil {
+		return err
+	}
+	invalid := rows.Next()
+	readErr, closeErr := rows.Err(), rows.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		return err
+	}
+	if invalid {
+		return ErrMetadataRecordQuery
+	}
+	last, lastOrder, started := "", 0, false
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		where, args := "workspace_key=? AND field=?", []any{workspace, field}
 		if started {
-			where += " AND record_key>?"
-			args = append(args, last)
+			if structOrder {
+				where += " AND (collection_order>? OR (collection_order=? AND " + keyOrder + ">" + keyBound + "))"
+				args = append(args, lastOrder, lastOrder, last)
+			} else {
+				where += " AND " + keyOrder + ">" + keyBound
+				args = append(args, last)
+			}
 		}
-		rows, err := reader.QueryContext(ctx, `SELECT record_key,collection_order,LENGTH(data) FROM workspace_metadata_records WHERE `+where+` ORDER BY record_key LIMIT 32`, args...)
+		orderBy := keyOrder
+		if structOrder {
+			orderBy = "collection_order," + keyOrder
+		}
+		rows, err := reader.QueryContext(ctx, `SELECT record_key,collection_order,`+bodyLength+` FROM workspace_metadata_records WHERE `+where+` ORDER BY `+orderBy+` LIMIT 32`, args...)
 		if err != nil {
 			return err
 		}
@@ -111,9 +334,14 @@ func (s *SQLiteStore) scanResidentMetadataField(ctx context.Context, reader meta
 			}
 		}
 		if len(missing) > 0 {
-			clause, values := bindList("record_key", missing)
+			clause, values := bindList(keyOrder, missing)
+			if s.dialect == "sqlite" {
+				for index, key := range missing {
+					values[index] = []byte(key)
+				}
+			}
 			args = append([]any{MetadataRecordPageMaxBytes - metadataPageOverhead, workspace, field}, values...)
-			rows, err = reader.QueryContext(ctx, `SELECT record_key,collection_order,LENGTH(data),CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause+` ORDER BY record_key`, args...)
+			rows, err = reader.QueryContext(ctx, `SELECT record_key,collection_order,`+bodyLength+`,CASE WHEN `+bodyLength+`<=? THEN data ELSE NULL END FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause+` ORDER BY `+keyOrder, args...)
 			if err != nil {
 				return err
 			}
@@ -153,12 +381,17 @@ func (s *SQLiteStore) scanResidentMetadataField(ctx context.Context, reader meta
 		for _, row := range batch {
 			s.metadataResidency.cacheRow(metadataResidentCacheKey{workspace, stamp.workspaceID, stamp.revision, field, row.Key}, row)
 		}
-		// Canonical collection order is restored after decoding all policy
-		// rows. Keyset pagination itself always follows the primary key.
+		// Repeated physical aliases can update the same typed struct field.
+		// Apply them in the legacy decoder's order even on mixed cache hits.
+		if structOrder {
+			sortMetadataRecordRows(batch)
+		}
+		// Teams restore canonical order after decoding. Struct properties
+		// already use canonical order because aliases can update one field.
 		if err := visit(batch); err != nil {
 			return err
 		}
-		last, started = keys[len(keys)-1], true
+		last, lastOrder, started = keys[len(keys)-1], headers[len(keys)-1].order, true
 	}
 }
 
@@ -175,8 +408,12 @@ func residentMetadataRoot(raw []byte) ([]byte, map[string]string, error) {
 		return nil, nil, fmt.Errorf("%w: split metadata backfill is required", ErrBoundedMetadataCoverage)
 	}
 	for name, shape := range shapes {
-		if _, ok := metadataResidencyFields()[name]; !ok {
+		mode, ok := metadataResidencyFields()[name]
+		if !ok {
 			return nil, nil, fmt.Errorf("%w: unknown collection %q", ErrBoundedMetadataCoverage, name)
+		}
+		if mode == "core" {
+			return nil, nil, fmt.Errorf("%w: core field %q must remain inline", ErrBoundedMetadataCoverage, name)
 		}
 		if shape != "array" && shape != "map" && shape != "updates" {
 			return nil, nil, ErrMetadataRecordQuery
@@ -206,9 +443,16 @@ func residentMetadataRoot(raw []byte) ([]byte, map[string]string, error) {
 func (s *SQLiteStore) readResidentWorkspace(ctx context.Context, tx *sqlTx, workspace string) (domain.Bootstrap, copyStamp, int, error) {
 	var data domain.Bootstrap
 	var stamp copyStamp
+	if err := ctx.Err(); err != nil {
+		return data, stamp, 0, err
+	}
 	var raw []byte
 	var size int
-	if err := tx.QueryRowContext(ctx, `SELECT `+metadataStampColumns+`,LENGTH(data),CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?`, workspace, cacheKindMetadata, MetadataRecordPageMaxBytes, workspace).Scan(&stamp.workspaceID, &stamp.revision, &size, &raw); err != nil {
+	bodyLength := "LENGTH(data)"
+	if s.dialect == "sqlite" {
+		bodyLength = "LENGTH(CAST(data AS BLOB))"
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT `+metadataStampColumns+`,`+bodyLength+`,CASE WHEN `+bodyLength+`<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?`, workspace, cacheKindMetadata, MetadataRecordPageMaxBytes, workspace).Scan(&stamp.workspaceID, &stamp.revision, &size, &raw); err != nil {
 		return data, stamp, 0, err
 	}
 	if size > MetadataRecordPageMaxBytes || raw == nil {
@@ -247,6 +491,7 @@ func (s *SQLiteStore) readResidentWorkspace(ctx context.Context, tx *sqlTx, work
 	if data.Workspace.ID != stamp.workspaceID {
 		return data, stamp, 0, ErrMetadataRecordQuery
 	}
+	inlineTeams := len(data.Teams)
 	fields := []string{}
 	for name, mode := range metadataResidencyFields() {
 		if mode == "policy" && shapes[name] != "" {
@@ -254,9 +499,12 @@ func (s *SQLiteStore) readResidentWorkspace(ctx context.Context, tx *sqlTx, work
 		}
 	}
 	slices.Sort(fields)
-	orders := map[string]map[string]int{}
+	type teamOrder struct {
+		key          string
+		order, index int
+	}
+	teamOrders := []teamOrder{}
 	for _, field := range fields {
-		orders[field] = map[string]int{}
 		err := s.scanResidentMetadataField(ctx, tx, workspace, field, stamp, func(rows []metadataCacheRow) error {
 			for _, row := range rows {
 				rowCost, err := metadataResidentCost(row.Data)
@@ -267,9 +515,11 @@ func (s *SQLiteStore) readResidentWorkspace(ctx context.Context, tx *sqlTx, work
 					return ErrMetadataWorkBudget
 				}
 				cost += rowCost
-				orders[field][row.Key] = row.Order
 				if err := appendResidentMetadataRow(&data, row, shapes[field]); err != nil {
 					return err
+				}
+				if field == "teams" {
+					teamOrders = append(teamOrders, teamOrder{row.Key, row.Order, len(data.Teams) - inlineTeams - 1})
 				}
 			}
 			return nil
@@ -278,18 +528,33 @@ func (s *SQLiteStore) readResidentWorkspace(ctx context.Context, tx *sqlTx, work
 			return data, stamp, 0, err
 		}
 	}
-	// Only Teams is an array in the resident policy. Preserve its persisted
-	// order, including an ordinal tie's canonical record-key tiebreaker.
-	slices.SortStableFunc(data.Teams, func(a, b domain.Team) int {
-		left, right := orders["teams"][a.ID], orders["teams"][b.ID]
-		if left < right {
+	// The typed decoder keeps inline Teams first, then appends split rows in
+	// canonical order. Reorder only that suffix, without a second Team slice.
+	slices.SortStableFunc(teamOrders, func(a, b teamOrder) int {
+		if a.order < b.order {
 			return -1
 		}
-		if left > right {
+		if a.order > b.order {
 			return 1
 		}
-		return strings.Compare(a.ID, b.ID)
+		return strings.Compare(a.key, b.key)
 	})
+	for index := range teamOrders {
+		if teamOrders[index].index == index {
+			continue
+		}
+		saved := data.Teams[inlineTeams+index]
+		for current := index; ; {
+			from := teamOrders[current].index
+			teamOrders[current].index = current
+			if from == index {
+				data.Teams[inlineTeams+current] = saved
+				break
+			}
+			data.Teams[inlineTeams+current] = data.Teams[inlineTeams+from]
+			current = from
+		}
+	}
 	domain.RebuildTeamDirectory(&data)
 	return data, stamp, cost, nil
 }
@@ -323,7 +588,7 @@ func appendResidentMetadataRow(data *domain.Bootstrap, row metadataCacheRow, sha
 			known := false
 			for i := 0; i < target.NumField(); i++ {
 				name, _, _ := strings.Cut(target.Type().Field(i).Tag.Get("json"), ",")
-				if name == row.Key {
+				if name == row.Key || strings.EqualFold(name, row.Key) {
 					known = true
 					break
 				}
@@ -335,6 +600,8 @@ func appendResidentMetadataRow(data *domain.Bootstrap, row metadataCacheRow, sha
 			if err != nil {
 				return err
 			}
+			// Keep the original property spelling: encoding/json chooses its
+			// exact-name match first and its own folded-name match otherwise.
 			return json.Unmarshal(encoded, target.Addr().Interface())
 		}
 		return fmt.Errorf("%w: invalid resident shape %s/%s", ErrMetadataRecordQuery, row.Field, shape)

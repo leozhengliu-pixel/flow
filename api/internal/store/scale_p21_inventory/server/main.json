@@ -351,6 +351,7 @@
     "getSharedView": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Prepared typed selected-view reader passed its initial matrix and persistent SQLite repetition, but SW26 audit found an unresolved K/privacy gap: native SQL exact JSON tags and duplicate-key semantics differ from encoding/json's case-insensitive tagged fields and last-occurrence decoding. A sparse Team record with Private:true can be private in legacy while the SQL lowercase private predicate permits the public link; token/scope/team/project aliases have analogous selection gaps. Keep pending until canonical header normalization with writer coverage or a bounded typed header reader preserves these semantics. Adaptive selected-body admission and output spooling alone do not certify the privacy facts.",
       "accessors": [
         "BootstrapFor"
       ]

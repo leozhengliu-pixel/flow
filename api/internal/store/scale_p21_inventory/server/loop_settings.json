@@ -5,6 +5,7 @@
     "getLoopConfig": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Blocked on bounded installed-source Members and IntegrationConnections with exact labels, role/status/provider predicates and ordering, plus resident workspace settings. TestScaleP21SW18LoopSettingsSourceHold uses an accepted trusted mutation, actual UpdateWorkspace rewrite and actual handler to prove canonical NUL stripping changes app/integration labels and connected-status selection.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -12,6 +13,7 @@
     "updateLoopSettings": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "The settings writer also returns loopConfig(updated), which consumes complete installed Members and IntegrationConnections; selecting only workspaceSettings drops trusted source options and rereading canonical rows changes accepted warm labels/status. TestScaleP21SW18LoopSettingsSourceHold verifies the actual mutation response preserves these inputs. Needs logical-source-aware policy writer and retained bounded response projection, with existing audit/event side effects.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

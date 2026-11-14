@@ -1,0 +1,12 @@
+{
+  "source": "store/scale_p21_installed_teams_wire.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginInstalledTeamsWireRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["WorkspaceMetadata", "resident-state"],
+      "reason": "Trusted wire-only snapshot of the exact installed Teams source, with all seven strings detached and all four timestamp locations replaced by fixed offsets preserving complete JSON bytes, encoding errors and instant comparisons. The independent nonwaiting allowance includes cloned rows, strings, timestamps and encoding work, remains held through caller Close, and rejects selected output over 64 MiB before cloning. SW0 installed-team wire tests cover native warm/full, policy-only and reloaded sources, nil/order, custom and very large locations, invalid years/offsets, ownership, cancellation, parent release and budget errors. Off mode invokes literal WorkspaceMetadata. It does not authorize or certify resident loader provenance, arbitrary native time.Location identity, or an entire endpoint."
+    }
+  }
+}

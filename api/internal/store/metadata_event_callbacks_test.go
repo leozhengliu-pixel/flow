@@ -42,7 +42,8 @@ func TestAuditedMetadataCallbackReads(t *testing.T) {
 			}
 			// The P21 scoped writers take the event and the callback in the same positions as the legacy ones.
 			switch selector.Sel.Name {
-			case "MutateWorkspace", "MutateWorkspaceWithAggregate", "MutateWorkspaceScoped", "MutateWorkspaceScopedWithAggregate":
+			case "MutateWorkspace", "MutateWorkspaceWithAggregate", "MutateWorkspaceScoped", "MutateWorkspaceScopedWithAggregate",
+				"MutateWorkspaceAppending", "MutateWorkspaceAppendingWithAggregate", "MutateWorkspaceResolved", "MutateWorkspaceResolvedWithAggregate":
 			default:
 				ok = false
 			}

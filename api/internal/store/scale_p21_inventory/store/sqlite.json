@@ -1,6 +1,6 @@
 {
   "source": "store/sqlite.go",
-  "unmigrated": 17,
+  "unmigrated": 16,
   "consumers": {
     "Account": {
       "owner": "P21",
@@ -175,7 +175,8 @@
     },
     "storedWorkspace": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Exact O(1) installed-map borrow under the store read lock and caller writeMu. The bounded representation contains only globally capped core/policy state; this helper does not clone or hydrate record bodies and preserves physical key and missing semantics. TestScaleP21SW18StoredWorkspaceResidentBoundary compares real legacy/resident sources with large unrelated records, verifies omitted fields, zero full decodes, no leaked work and zero allocations. Callers must still declare complete callback inputs and remain independently guarded; this review does not certify source loading or those writers.",
       "accessors": [
         "Bootstrap"
       ]

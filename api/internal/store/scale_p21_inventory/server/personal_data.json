@@ -1,6 +1,6 @@
 {
   "source": "server/personal_data.go",
-  "unmigrated": 4,
+  "unmigrated": 3,
   "consumers": {
     "auditPersonalData": {
       "owner": "P21",
@@ -13,9 +13,11 @@
     },
     "eraseMember": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Only the initial trusted workspace identity selection is migrated. Off mode still calls the exact original WorkspaceMetadata accessor; bounded mode takes only the installed core Workspace.ID through eraseMemberWorkspaceID. The former-member read uses BeginFormerMembersRead and defers Close through every map use, retaining the original ignored-error and partial-map behavior. TestScaleP21SW25ErasureIdentityDifferential compares exact success inputs and refusal responses across the principal/key matrix, exact/default/missing/case/NUL keys, cross-workspace bindings and queued/replayed revocation without adding authorization to this trusted read; unrelated body bytes and full decode count stay unchanged. TestScaleP21SW25ErasureLegacySuccessAndRemainingWriter proves complete off-mode account erasure still succeeds and bounded erasure still refuses at the independently pending erasePersonInWorkspace writer. This is not a claim that the erasure endpoint is ready in bounded mode. The final targeted set passed twice on persistent SQLite.",
       "accessors": [
-        "WorkspaceMetadata"
+        "WorkspaceMetadata",
+        "BeginFormerMembersRead"
       ]
     },
     "erasePersonInWorkspace": {

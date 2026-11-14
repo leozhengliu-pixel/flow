@@ -670,9 +670,24 @@ func (s *server) rotateDueGitLabTokens(ctx context.Context, key string, now time
 	if !store.ConnectorSecretsConfigured() {
 		return
 	}
-	data, ok := s.store.WorkspaceMetadataFields(key, "integrationConnections")
-	if !ok {
-		return
+	var data domain.Bootstrap
+	if !s.store.BoundedMetadataEnabled() {
+		var ok bool
+		data, ok = s.store.WorkspaceMetadataFields(key, "integrationConnections")
+		if !ok {
+			return
+		}
+	} else {
+		read, found, err := s.store.BeginGitLabConnectionConfigsRead(context.WithoutCancel(ctx), key)
+		if err != nil {
+			log.Printf("GitLab token rotation workspace=%s snapshot failed: %s", key, err.Error())
+			return
+		}
+		if !found {
+			return
+		}
+		defer read.Close()
+		data = domain.Bootstrap{Workspace: domain.Workspace{URLKey: read.WorkspaceURLKey}, IntegrationConnections: read.Connections}
 	}
 	for _, connection := range data.IntegrationConnections {
 		if connection.Provider != "gitlab" || connection.Config["rotationEnabled"] != "true" || connection.Config["canSelfRotate"] != "true" || connection.Config["rotationFailureReason"] != "" {

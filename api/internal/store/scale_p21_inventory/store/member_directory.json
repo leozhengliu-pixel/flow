@@ -1,10 +1,11 @@
 {
   "source": "store/member_directory.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "FormerMembers": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Legacy-only map API preserves the exact original WorkspaceMetadataFields accessor and context off mode. Bounded mode rejects before SQL because its returned map has no lease lifetime; all three production server callers now use BeginFormerMembersRead and defer Close through their complete map use. TestScaleP21SW16FormerMembersHandleLifetime compares off partial/error maps and proves the old bounded API makes no SQL calls; TestScaleP21SW16FormerMemberProductionCallers AST-audits the three production handle callers and no remaining store-map calls. Native membership behavior, output lifetime and pool-one detach are covered by the SW16 differential/matrix tests. The no-membership logical-source fallback remains an independent pending consumer.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

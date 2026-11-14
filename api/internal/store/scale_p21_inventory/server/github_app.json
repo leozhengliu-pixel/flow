@@ -1,6 +1,6 @@
 {
   "source": "server/github_app.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "checkGitHubAppMember": {
       "owner": "P21",
@@ -12,7 +12,8 @@
     },
     "classicGitHubSync": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Exact legacy WorkspaceMetadata branch off mode; bounded mode asks native SQL for the provider/status/config-secret boolean only. The internal webhook caller propagates native query errors before review or coding effects, preserving the existing failed-delivery retry path. TestScaleP21SW24ClassicGitHubPredicate and ClassicHTTPConfiguration cover all Go Unicode whitespace, large ignored/config values, exact provider/status case, missing workspace, supported request/canonical NUL stripping and cancellation before side effects with zero full decodes. No viewer content is read; the HMAC and workspace binding remain unchanged outside this helper. Tests passed twice against one persistent SQLite database.",
       "accessors": [
         "WorkspaceMetadata"
       ]

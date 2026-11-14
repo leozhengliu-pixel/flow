@@ -1,12 +1,14 @@
 {
   "source": "server/workspace_deletion.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "purgeWorkspace": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The initial purge catalog lookup consumes only workspace identity/existence. Bounded mode uses WorkspaceMetadataScoped with an empty record scope, reports storage failures through the existing catalog-failure path and keeps the exact BootstrapFor branch off mode. TestScaleP21SW22WorkspacePurgeIdentityDifferential passed twice on one persistent SQLite file using uniquely owned workspaces/receipts, a legal large unrelated project, reused-key rejection, matching saved failure receipts, cancellation, unchanged workspace existence and zero full metadata decodes. Downstream object, credential and row deletion helpers retain their existing behavior and are independently inventoried; this review certifies only this function's former full-snapshot input.",
       "accessors": [
-        "BootstrapFor"
+        "BootstrapFor",
+        "WorkspaceMetadataScoped"
       ]
     }
   }

@@ -605,6 +605,19 @@ func scimTeamResource(base string, team domain.Team, members []domain.TeamMember
 
 // unlinkedSCIMTeams returns workspace teams no SCIM group is linked to.
 func (s *server) unlinkedSCIMTeams(workspaceKey string, groups []store.SCIMGroup) []domain.Team {
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginSCIMTeamRead(context.Background(), workspaceKey, groups)
+		if err != nil || !found {
+			return nil
+		}
+		defer read.Close()
+		teams, err := read.Teams()
+		if err != nil {
+			log.Printf("SCIM team directory unavailable: %v", err)
+			return nil
+		}
+		return teams
+	}
 	data, ok := s.store.WorkspaceMetadata(workspaceKey)
 	if !ok {
 		return nil
@@ -696,7 +709,23 @@ func (s *server) listSCIMGroupResources(ctx context.Context, workspaceKey, works
 	for _, group := range groups {
 		all = append(all, scimGroupResourceFromStore(base, group, withMembers))
 	}
-	for _, team := range s.unlinkedSCIMTeams(workspaceKey, groups) {
+	var teams []domain.Team
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginSCIMTeamRead(ctx, workspaceKey, groups)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			defer read.Close()
+			teams, err = read.Teams()
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		teams = s.unlinkedSCIMTeams(workspaceKey, groups)
+	}
+	for _, team := range teams {
 		all = append(all, scimTeamResource(base, team, teamMembers, withMembers))
 	}
 	matched := []map[string]any{}
@@ -709,7 +738,11 @@ func (s *server) listSCIMGroupResources(ctx context.Context, workspaceKey, works
 }
 
 func (s *server) syncSCIMGroupTeamIfLinked(r *http.Request, workspaceKey, workspaceID string, group store.SCIMGroup) error {
-	if teamID := s.scimTeamForGroup(workspaceKey, group); teamID != "" {
+	teamID, err := s.scimTeamForGroupContext(r.Context(), workspaceKey, group)
+	if err != nil {
+		return err
+	}
+	if teamID != "" {
 		return s.syncSCIMGroupTeam(r, workspaceKey, workspaceID, group, teamID)
 	}
 	return nil
@@ -937,7 +970,10 @@ func (s *server) applySCIMGroupChange(r *http.Request, workspaceKey, workspaceID
 	}
 	role := scimGroupRole(s.scimWorkspaceSettings(workspaceKey), displayName)
 	var err error
-	linkedTeam := s.scimTeamForGroup(workspaceKey, group)
+	linkedTeam, err := s.scimTeamForGroupContext(ctx, workspaceKey, group)
+	if err != nil {
+		return store.SCIMGroup{}, err
+	}
 	if change.clearExternalID && group.ExternalID != "" {
 		if group, err = s.store.ClearSCIMGroupExternalID(ctx, workspaceID, group.ID); err != nil {
 			return store.SCIMGroup{}, err
@@ -948,7 +984,14 @@ func (s *server) applySCIMGroupChange(r *http.Request, workspaceKey, workspaceID
 			return store.SCIMGroup{}, err
 		}
 	}
-	if linkedTeam != "" && linkedTeam != s.scimTeamForGroup(workspaceKey, group) {
+	currentTeam := ""
+	if linkedTeam != "" {
+		currentTeam, err = s.scimTeamForGroupContext(ctx, workspaceKey, group)
+		if err != nil {
+			return store.SCIMGroup{}, err
+		}
+	}
+	if linkedTeam != "" && linkedTeam != currentTeam {
 		// No longer linked to that team: its members stay as ordinary
 		// members, as when the group is deleted.
 		if err := s.store.DetachSCIMGroupTeams(ctx, workspaceID, group.ID); err != nil {
@@ -980,6 +1023,13 @@ func (s *server) scimWorkspaceSettings(workspaceKey string) domain.WorkspaceSett
 // externalId is the Flow team ID/key. Display names are not matched implicitly
 // because IdP group labels are not guaranteed to be unique.
 func (s *server) scimTeamForGroup(workspaceKey string, group store.SCIMGroup) string {
+	if s.store.BoundedMetadataEnabled() {
+		teamID, err := s.scimTeamForGroupContext(context.Background(), workspaceKey, group)
+		if err != nil {
+			log.Printf("SCIM team mapping unavailable: %v", err)
+		}
+		return teamID
+	}
 	data, ok := s.store.WorkspaceMetadata(workspaceKey)
 	if !ok {
 		return ""
@@ -997,6 +1047,18 @@ func (s *server) scimTeamForGroup(workspaceKey string, group store.SCIMGroup) st
 		}
 	}
 	return ""
+}
+
+func (s *server) scimTeamForGroupContext(ctx context.Context, workspace string, group store.SCIMGroup) (string, error) {
+	if !s.store.BoundedMetadataEnabled() {
+		return s.scimTeamForGroup(workspace, group), nil
+	}
+	read, found, err := s.store.BeginSCIMTeamRead(ctx, workspace, []store.SCIMGroup{group})
+	if err != nil || !found {
+		return "", err
+	}
+	defer read.Close()
+	return read.TeamID(0), nil
 }
 
 func scimGroupRole(settings domain.WorkspaceSettings, displayName string) string {

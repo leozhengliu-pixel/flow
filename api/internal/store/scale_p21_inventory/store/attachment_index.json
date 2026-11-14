@@ -1,10 +1,11 @@
 {
   "source": "store/attachment_index.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "migrateAttachmentIndex": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded branch reads the original 64 physical keyset headers under one repeatable-read transaction, preflights/admit-charges each complete canonical body and its structural typed expansion, and json.Unmarshal decodes one domain.Issue at a time. Only admitted cloned decoded IDs and attachment URL hashes remain through the original syncIssueIndexRows diff writer and atomic decoded-last-ID checkpoint. This preserves same-page duplicate-ID union, later-page replacement, legacy repeating/skipping checkpoint quirks, complete unrelated-field type errors, full URL bytes and null/alias semantics. The accepted public ImportIssues NUL-ID witness now compares equal decoded index keys and checkpoints across actual dispatch branches. Targeted 140-row, legal 2MiB+ body/URL, rollback/write-budget/cancellation/admission/no-op and persistent SQLite twice tests cover canonical byte ownership and zero full-workspace decodes/work leaks. This trusted startup sidecar scan introduces no user authorization boundary and leaves flag-off implementation unchanged.",
       "accessors": [
         "resident-state"
       ]

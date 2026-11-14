@@ -1,6 +1,9 @@
 package store
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 // AgentSessionHasDraftLoop is a trusted exact-owner predicate. It transfers no
 // transcript or loop body, including when either exceeds the detail budget.
@@ -11,6 +14,14 @@ func (s *SQLiteStore) AgentSessionHasDraftLoop(ctx context.Context, workspace, s
 		return false, err
 	}
 	defer release()
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	// PostgreSQL's text adapter removes NULs. Preserve exact Go identity
+	// comparisons instead of letting a malformed reference name a real row.
+	if strings.ContainsRune(workspace, '\x00') || strings.ContainsRune(sessionID, '\x00') || strings.ContainsRune(userID, '\x00') {
+		return false, nil
+	}
 	if workspace == "" {
 		s.mu.RLock()
 		workspace = s.lastWorkspaceKey

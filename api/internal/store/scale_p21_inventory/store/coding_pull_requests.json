@@ -5,6 +5,7 @@
     "IntegrationConnections": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "The installed provider-filtering compatibility method has no production invocations; only the codehost Installations interface still requires it. Off mode preserves the original exact-key lookup, EqualFold provider selection, ordering and owned values. Bounded mode explicitly refuses this unowned slice API until a real caller can retain a read handle; an unused replacement does not certify this consumer.",
       "accessors": [
         "WorkspaceMetadata"
       ]

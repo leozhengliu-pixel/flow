@@ -760,7 +760,14 @@ func (s *server) eraseMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key, userID := r.PathValue("workspaceKey"), r.PathValue("userId")
-	data, ok := s.store.WorkspaceMetadata(key)
+	var workspaceID string
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		workspaceID, ok = s.eraseMemberWorkspaceID(r.Context(), key)
+	} else {
+		data, found := s.store.WorkspaceMetadata(key)
+		workspaceID, ok = data.Workspace.ID, found
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -781,26 +788,31 @@ func (s *server) eraseMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "member not found")
 		return
 	}
-	member, err := s.store.HasWorkspaceMembership(r.Context(), data.Workspace.ID, userID)
+	member, err := s.store.HasWorkspaceMembership(r.Context(), workspaceID, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if erased, _ := s.store.ErasedFromWorkspace(r.Context(), data.Workspace.ID, userID); erased {
+	if erased, _ := s.store.ErasedFromWorkspace(r.Context(), workspaceID, userID); erased {
 		writeError(w, http.StatusNotFound, "member not found")
 		return
 	}
-	former, _ := s.store.FormerMembers(r.Context(), key)
+	formerRead, _ := s.store.BeginFormerMembersRead(r.Context(), key)
+	var former map[string]bool
+	if formerRead != nil {
+		defer formerRead.Close()
+		former = formerRead.Members()
+	}
 	if !member && !former[userID] {
 		writeError(w, http.StatusNotFound, "member not found")
 		return
 	}
-	if s.refuseSCIMManagedMember(w, r, data.Workspace.ID, userID) {
+	if s.refuseSCIMManagedMember(w, r, workspaceID, userID) {
 		return
 	}
 	if member {
-		role, status, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
-		actorRole, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, actor.ID)
+		role, status, _ := s.store.WorkspaceRole(r.Context(), workspaceID, userID)
+		actorRole, _, _ := s.store.WorkspaceRole(r.Context(), workspaceID, actor.ID)
 		if role == "owner" && actorRole != "owner" {
 			writeError(w, http.StatusForbidden, "Only an owner can erase another owner")
 			return
@@ -816,7 +828,7 @@ func (s *server) eraseMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Type the member's email address to confirm")
 		return
 	}
-	other, err := s.store.OtherWorkspaceMemberships(r.Context(), data.Workspace.ID, userID)
+	other, err := s.store.OtherWorkspaceMemberships(r.Context(), workspaceID, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

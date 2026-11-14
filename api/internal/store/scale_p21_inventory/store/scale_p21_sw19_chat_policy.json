@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_sw19_chat_policy.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginChatTeamPolicyRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted resident-state read copies only ordered Team ID/private/archive-presence/retire-presence headers, TeamSettings parent/access/membership scalars and HIPAA status. ArchivedAt/RetiredAt are owned zero-time presence sentinels, never original dates or locations; Metadata is partial bindability input and must not be encoded as complete Team records. It preserves exact Go workspace lookup/default semantics, owns maps/slices/sentinels, and never loads bodies or authorizes a viewer. Concrete typed storage, map slack, cloned strings/sentinel storage, ancestry scratch and output IDs are preflighted under a 64 MiB cap; admission waits outside the store mutex and rechecks current policy before allocating. Incoming same-store work leases receive an independent nonwaiting allowance, so releasing a parent cannot uncharge retained output; ordinary calls retain queued admission. The caller holds the lease through HTTP encoding. TestScaleP21SW19ChatTeamPolicySnapshot/AdmissionRecheck/ParentLease cover ownership, admission and lifecycle. ChatTeamPolicyTimestampPresence and ChatPolicyTimestampDecisionDifferential compare unchanged exact installed-source helpers across UTC/Local/DST/huge FixedZone values, preserve source dates and prove retired headers retain no source location. ChatBindablePolicyDifferential and ChatPolicyHTTPAdmission compare actual HTTP across the M/key matrix and lease lifetime. Tests passed twice on persistent SQLite.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

@@ -219,7 +219,7 @@ func TestScaleP21SW17NativeOAuthDifferential(t *testing.T) {
 			}
 		}
 	}
-	for _, value := range []string{prefix + "-missing", strings.ToUpper(app.ClientID), app.ID, app.ClientID + "' OR 1=1 --", app.ClientID + "\x00"} {
+	for _, value := range []string{prefix + "-missing", strings.ToUpper(app.ClientID), app.ID, app.ClientID + "' OR 1=1 --", app.ClientID + "\x00", "\x00" + app.ClientID, app.ClientID[:len(app.ClientID)/2] + "\x00" + app.ClientID[len(app.ClientID)/2:]} {
 		if old, found := f.OAuthApplicationClient(value); found {
 			if current, present := bounded.OAuthApplicationClient(value); !present || !reflect.DeepEqual(old, current) {
 				t.Fatal("an exact client reference changed")
@@ -228,7 +228,7 @@ func TestScaleP21SW17NativeOAuthDifferential(t *testing.T) {
 			t.Fatal("a missing, differently cased or malformed client reference matched")
 		}
 	}
-	for _, hash := range []string{prefix + "-missing", strings.ToUpper(keys[0].SecretHash), keys[0].ID, keys[0].SecretHash + "\x00"} {
+	for _, hash := range []string{prefix + "-missing", strings.ToUpper(keys[0].SecretHash), keys[0].ID, keys[0].SecretHash + "\x00", "\x00" + keys[0].SecretHash} {
 		if _, _, found := bounded.FindAPIKey(hash); found {
 			t.Fatal("a missing, differently cased or malformed credential hash matched")
 		}

@@ -1,10 +1,11 @@
 {
   "source": "server/gitlab_integration.go",
-  "unmigrated": 4,
+  "unmigrated": 3,
   "consumers": {
     "connectGitLabToken": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Connection creation still needs the complete installed provider-order source and original legacy aggregate lookup for aggregate gitlab, including earlier nested ID collisions. The canonical source changes accepted typed provider/config NUL and warm values. The rotation sweep now has a separately admitted installed-config read, but that does not certify this request boundary, append/replace callback, credential rollback, or webhook/realtime aggregate closure.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -14,6 +15,7 @@
     "gitlabConnectionSnapshot": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Request snapshot still needs an owned bounded workspace-identity authorization input before config admission, without changing forbidden/cancellation error precedence. A borrowed installed Workspace.ID across native auth SQL can pin uncharged backing; admitting it before auth can return a budget error where the original workspaceData discards forbidden projection errors and yields a missing connection. The attempted request adapter and caller lifetime changes were withdrawn; original signature/accessor/callers remain exact. Accepted typed provider/config NUL and the independent installed-owner versus policy-only absent-family mismatch also remain. The trusted rotation config reader does not certify this request boundary.",
       "accessors": [
         "Bootstrap",
         "workspaceData"
@@ -21,7 +23,8 @@
     },
     "rotateDueGitLabTokens": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Flag-off retains the exact WorkspaceMetadataFields integrationConnections call. Bounded mode snapshots only installed workspace URLKey and all exact GitLab IDs/configs in source order with detached map/string ownership and independent admission retained through the full rotation sweep. Snapshot-only WithoutCancel preserves the original context-insensitive field read; credential/provider/mutation work still receives the original context. All rotation eligibility predicates, date-string parsing, fallback workspace key and credential exchange/storage/save ordering remain unchanged. Config selection covers duplicate/empty IDs, nil/empty maps and accepted NUL values; full warm/reload and actual policy-only sources are compared without injecting connection fixtures into the view. The separate loader/source mismatch and downstream aggregate writer remain activation blockers; this review certifies only bounded access to the source the original direct accessor sees.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

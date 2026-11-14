@@ -41,8 +41,11 @@ func (s *server) formerMemberOutsideWrite(ctx context.Context, workspace, id str
 	if id == "" {
 		return false
 	}
-	former, err := s.store.FormerMembers(ctx, workspace)
-	return err == nil && former[id]
+	read, err := s.store.BeginFormerMembersRead(ctx, workspace)
+	if read != nil {
+		defer read.Close()
+	}
+	return err == nil && read != nil && read.Members()[id]
 }
 
 // errFormerMemberMention is the 400 a write gets for content that newly

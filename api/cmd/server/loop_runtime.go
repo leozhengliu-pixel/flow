@@ -1291,6 +1291,9 @@ func (scope *loopScope) toolKey() domain.APIKey {
 }
 
 func (scope *loopScope) teamKeyAllowed(key string) bool {
+	if scope.s.store.BoundedMetadataEnabled() {
+		return scope.s.store.LoopTeamKeyAllowed(scope.workspace, key, scope.teams)
+	}
 	data, ok := scope.s.store.WorkspaceMetadataFields(scope.workspace, "teams")
 	if !ok {
 		return false

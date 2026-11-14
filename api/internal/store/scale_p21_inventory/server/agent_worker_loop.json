@@ -13,6 +13,7 @@
     "workerLoopContext": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Accepted typed MutateWorkspace with the loops field can retain NUL in warm Loop.Instructions while the selected canonical record strips it. workerLoopDefinition then supplies different real loopModelInstructions and loopContractHashOf values to worker setup; terminal and missing-owner precondition tests do not establish successful input equality. TestScaleP21SW24WorkerDefinitionSourceHold proves the accepted typed write, model input/hash mismatch and reload control, preserving the exact off-mode loops-field reader.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields"

@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_sw23_loop_exists.go",
+  "unmigrated": 0,
+  "consumers": {
+    "LoopTeamKeyAllowed": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted boolean lookup scans only installed resident Teams, in their existing logical order, under the store read lock. It preserves the first EqualFold key/name match and exact workspace map/default lookup, then intersects only the caller's existing allowed-team set. No SQL, normalization, copied field/body, result container, allocation or new authorization grant occurs. TestScaleP21SW23LoopTeamKeyInstalledDifferential covers scope sets, private/retired first matches, Unicode/NUL/space aliases, missing/default/case-sensitive workspace binding and stale/unknown stamp source preservation. Constant-allocation tests measured legacy 7 versus native 0 allocations/op at 64 KiB and 8 MiB names; actual server dispatch and canonical-byte comparisons passed default plus twice on one persistent SQLite file.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

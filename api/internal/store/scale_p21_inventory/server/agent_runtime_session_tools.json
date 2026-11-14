@@ -1,11 +1,11 @@
 {
   "source": "server/agent_runtime_session_tools.go",
-  "unmigrated": 1,
+  "unmigrated": 2,
   "consumers": {
     "workerChatAsksLoopQuestions": {
       "owner": "P18",
-      "status": "reviewed",
-      "reason": "Bounded mode uses trusted AgentSessionHasDraftLoop SQL scalars for exact session owner and draft-loop membership, without hydrating either legal oversized session or loop bodies. Original off branch and internal-conversation flag behavior remain: native reads retain live ResolveAccess/ValidateAccess; metadata mode delegates run authority to its separately registered tool boundary. TestScaleP21SW16AgentSessionDraftLoop and TestScaleP21SW16WorkerDraftLoopDifferential passed twice on one persistent SQLite file, covering principal/key matrix, both internal-record modes, valid/invalid app principals, exact IDs/case/old slugs/malformed references, deleted sessions, missing/foreign owners/workspaces, queued/replayed revocation, unchanged canonical state, cancellation recovery and zero full decodes/work leaks.",
+      "status": "unmigrated",
+      "reason": "Accepted ordinary typed producer states change this predicate: agent.session_updated callbacks can retain a warm AgentSession.UserID or Loop.Status containing NUL while split canonical JSON removes NUL, giving legacy false versus bounded true. Duplicate accepted AgentSession IDs keep the collection inline; legacy selects its first owned session while the raw SQL predicate sees no split rows, giving true versus false. TestScaleP21SW16RuntimeTypedSourceHold executes those three producers and the actual workerChatAsksLoopQuestions off/on branches without reloading the legacy oracle. Request-reference NUL rejection and ordinary permission differentials do not certify stored logical source parity. Keep pending until the bounded predicate preserves that source.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

@@ -64,6 +64,7 @@ func TestScaleP21SW11AgentSessionOwnedBy(t *testing.T) {
 		{"sw11-empty-owner", "", true},
 		{"sw11-missing", "", false},
 		{"sw11-owned", strings.ToUpper(owner), false},
+		{"sw11-owned", owner + "\x00", false},
 		{"SW11-owned", owner, false},
 		{"sw11-old-slug", owner, false},
 		{"", owner, false},
@@ -83,6 +84,12 @@ func TestScaleP21SW11AgentSessionOwnedBy(t *testing.T) {
 	}
 	if got, err := view.AgentSessionOwnedBy(t.Context(), workspace+"-missing", "sw11-owned", owner); got || !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("missing workspace ownership=%v err=%v", got, err)
+	}
+	if got, err := view.AgentSessionOwnedBy(t.Context(), workspace+"\x00", "sw11-owned", owner); got || !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("NUL workspace ownership=%v err=%v", got, err)
+	}
+	if got, err := view.AgentSessionOwnedBy(t.Context(), strings.ToUpper(workspace), "sw11-owned", owner); got || !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("workspace case ownership=%v err=%v", got, err)
 	}
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()

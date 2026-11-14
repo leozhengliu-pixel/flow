@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_sw17_search_migration.go",
+  "unmigrated": 0,
+  "consumers": {
+    "sw17MigrateMetadataSearchIndexBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "resident-state"
+      ],
+      "reason": "Trusted complete search-index repair iterates catalog workspace keys only and retains the exact existing SQL-native extraction/upsert, stale cleanup and checkpoint semantics. Read-only repeatable-read snapshots scalar-preflight checkpoint bytes and 128-key page byte totals before raw transfer; independent nonwaiting work leases cover returned strings, SQL arguments and the retained seek cursor. No record body enters Go and no authorization boundary changes. TestScaleP21SW17SearchKeyBoundDifferential/Budget plus NativeSearchRepairDifferential pass twice on persistent SQLite: complete rows/checkpoint parity, Unicode raw keys beyond 191 bytes within 191 characters, large legal SQLite raw key, constrained admission failure without first-page publication, recovery, cancellation, canonical retention and released work. Extra SQL and per-statement resumable publication are reported; no whole-repair atomicity claim."
+    }
+  }
+}

@@ -167,6 +167,9 @@ func (s *SQLiteStore) formerMemberLookup(ctx context.Context, q metadataReader, 
 // viewer's directory, which leaves removed people out, use it to let the
 // write answer with its own refusal.
 func (s *SQLiteStore) FormerMembers(ctx context.Context, workspaceKey string) (map[string]bool, error) {
+	if s.BoundedMetadataEnabled() {
+		return map[string]bool{}, ErrBoundedMetadataCoverage
+	}
 	data, ok := s.WorkspaceMetadataFields(workspaceKey, "workspace", "members")
 	if !ok {
 		return map[string]bool{}, nil

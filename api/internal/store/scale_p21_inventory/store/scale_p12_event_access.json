@@ -1,11 +1,11 @@
 {
   "source": "store/scale_p12_event_access.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
     "ReadEventPolicySource": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Native bounded resource policy projects exactly the Team and TeamSettings fields consumed by resourcePolicyMetadata before SQL transfer, in 32-row keyset batches with aggregate decoded/encoded budget. Unrelated guidance/descriptions cannot exhaust the policy input. TestScaleP21M1CoreReadsDifferential covers the principal/key permission matrix, event source fingerprints and queued authority; TestScaleP21SW0PolicyHeaders compares over 70 ordered teams, private/archived/retired flags and hierarchy with large unrelated guidance, full event policy source, ownership, cancellation, workspace binding and explicit required-field budget failure. Full P15/P21 and affected business groups passed; the old off representation is unchanged.",
+      "status": "unmigrated",
+      "reason": "Pending exact typed policy-header compatibility. SQL projection uses exact JSON tags, whereas legacy encoding/json accepts case-folded aliases and duplicate fields; accepted sparse Team Private:true can be private in legacy while the lowercase SQL predicate misses it. Escaped tags, duplicate tags, wrong scalar types and MySQL literal string null need conservative typed fallback. Ordinary principal/key and header budget differentials do not certify these cases. Keep activation blocked until the bounded reader reproduces Go typed decoding.",
       "accessors": [
         "resident-state"
       ]

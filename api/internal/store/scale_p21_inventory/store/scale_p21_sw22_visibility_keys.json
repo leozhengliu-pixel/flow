@@ -1,0 +1,18 @@
+{
+  "source": "store/scale_p21_sw22_visibility_keys.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginViewerVisibilityKeysRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Off mode delegates to the exact legacy visibility-map entry; bounded mode independently admits 128 MiB without borrowing a caller's lease and retains it in ViewerVisibilityKeysRead until Close invalidates Keys. No SQL cursor remains open during consumption. Native account/membership headers, complete typed app error validation and exact zero-Viewer named-field policy preserve global key semantics; excess work is explicit, never a partial map. TestScaleP21SW22VisibilityKeysDifferential and BoundsAndRecovery passed twice on one persistent SQLite file, covering live reservation after parent release, idempotent close, legacy bounded rejection, all role/private/inheritance classes, app-base viewer zeroing, malformed/missing/null/empty app rows, decorated ID overwrites, Unicode TEXT byte limits and legal large TEXT, workspace isolation/defaults, cancel/storage/budget recovery, owned keys and released admission.",
+      "accessors": ["ViewerVisibilityKeys"]
+    },
+    "scaleP21SW22VisibilityPolicy": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Copies only workspace identity and the resource policy headers consumed by teamVisibleToUser/visibleIssueTeams. Viewer remains zero exactly as WorkspaceMetadataFields with the original teams/teamSettings list; neither the base viewer nor its unused flags are copied or charged. An 8 MiB preflight precedes cloning under the read lock, excluding guidance, skills, members and entity bodies. TestScaleP21SW22VisibilityKeysDifferential and BoundsAndRecovery passed twice on one persistent SQLite file, including an active app base viewer with implicit grants, private admin row/content and inheritance semantics, exact global keys, missing/default/case/NUL workspaces, policy budget rejection/recovery and live handle ownership. The independently inventoried resident-policy producer retains its own source fidelity gate.",
+      "accessors": ["resident-state"]
+    }
+  }
+}

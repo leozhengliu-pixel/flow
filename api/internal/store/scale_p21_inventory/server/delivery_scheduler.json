@@ -2,6 +2,14 @@
   "source": "server/delivery_scheduler.go",
   "unmigrated": 1,
   "consumers": {
+    "prepareDueNotificationDeliveries": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded retry preparation owns only the original native due rows through all unchanged MutateNotificationDelivery retries and status updates; literal off NotificationDeliveries call/context remains exact. The SW15 caller differential repeats failed, pending-disabled, pending and future cases five times per ordinary/resident representation, comparing canonical statuses, attempts, errors and next-attempt nilness. The independent processDueDeliveries metadata consumer remains pending.",
+      "accessors": [
+        "BeginDueNotificationDeliveryRead"
+      ]
+    },
     "processDueDeliveries": {
       "owner": "P21",
       "status": "unmigrated",

@@ -1,6 +1,6 @@
 {
   "source": "server/team_archive.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "deleteTeam": {
       "owner": "P21",
@@ -19,8 +19,8 @@
     },
     "purgeExpiredTeams": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "The due-team scan can use bounded resident policy, but positive execution invokes main.go purgeTeam, whose atomic entity cascade and suggestion pruning still use full metadata. Keep this caller pending until its complete positive path can be differentially verified.",
+      "status": "reviewed",
+      "reason": "Direct scan snapshots only expired Team IDs from installed resident Teams with the exact ArchivedAt.Add(window) predicate and original array order. BeginExpiredTeamPolicyRead admits/clones only due IDs under a 64 MiB work cap, retains the lease through sequential processing and preserves exact default/missing/NUL Go workspace lookup. Off mode retains the original field accessor and loop. SW20 policy/input tests pass twice on persistent SQLite for the full principal/key matrix, nanosecond boundary, callback order/not-found/stop semantics, ownership, budgets, cancellation and unchanged off positive purge/event order, with zero full decodes. main.go purgeTeam remains independently pending for its atomic cascade and suggestion pruning; no positive bounded downstream writer or full-job readiness is certified.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
@@ -28,7 +28,7 @@
     "restoreDeletedTeam": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Writes teams/teamID and reads exact users/teamID plus providerJobs/teamID to preserve every persisted Bootstrap predecessor in legacy aggregate lookup; scoped root retains Workspace/Viewer. Callback, audit, missing/malformed ID behavior and exact off accessor remain unchanged. TestScaleP21SW20RestoreTeamDifferential compares full principal/key matrix, canonical target/actor rows, audits and complete sinks, >60 unrelated teams/large unrelated project, nested document collision, immediate native policy installation, cross-workspace and queued/replayed revocation, cancellation and explicit budget rollback/recovery. TestScaleP21SW20ImportedTeamAggregateCollision proves arbitrary imported IDs preserve earlier user/provider-job aggregate precedence, read-only user values and virtual settings defaults.",
+      "reason": "Writes teams/teamID, reads earlier providerJobs/users plus recognized typed targets and resolves selected Project Lead/Creator user inputs inside the transaction. Repairs the earlier omitted accepted alternate typed prefixes. SW20 restore/imported-collision/typed-prefix tests and shared resolved-adapter tests pass twice on persistent SQLite across the principal/key matrix, canonical rows, audits/sinks, event-only stale actor refresh, >60 unrelated teams, native policy installation, malformed/foreign IDs, revocation, cancellation and budgets; exact original off dispatch remains.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

@@ -2,6 +2,14 @@
   "source": "server/chat_personal_notifications.go",
   "unmigrated": 1,
   "consumers": {
+    "dispatchChatNotifications": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded dispatch owns native due rows through unchanged per-delivery claim, downstream live chat integration/identity/access handling, enqueue and final status persistence. Literal off NotificationDeliveries dispatch/context is unchanged. SW15 repeated caller effects compare pending chat claims, unlinked refusal code, attempts and final canonical status with the old representation, and store tests cover row ordering, malformed/budget rejection and retained lifetime. The downstream chatPersonalNotificationItem metadata and authorization consumer remains pending independently.",
+      "accessors": [
+        "BeginDueNotificationDeliveryRead"
+      ]
+    },
     "chatPersonalNotificationItem": {
       "owner": "P18",
       "status": "unmigrated",

@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_sw24_application_identity_ids.go",
+  "unmigrated": 0,
+  "consumers": {
+    "beginApplicationIdentityIDsRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Private installed-source ID reader counts every app before allocation and charges 4096 plus 128 bytes per input entry and twice ClientID byte lengths under an explicit 64MiB bound, including duplicate list storage and batch error-interface/Join slots. Only ClientID is strings.Clone detached under the same read lock; names, logos, canonical rows and default workspace resolution are not inputs. Independent nonwaiting admission stays live until SyncAllApplicationIdentities finishes sorted compact dispatch and errors.Join. TestScaleP21SW24ApplicationIdentityIDsSource/Ownership/Bounds/Allocations/Producer prove exact same installed source, string-backing detachment, parent/cancellation semantics, bounds/recovery, ignored-body independence and real downstream identity updates. Both persistent SQLite runs passed. Downstream error objects and application readers/writers retain their independent contracts and activation blockers.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}
