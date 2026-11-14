@@ -52,6 +52,10 @@ func (s *server) preferenceReviewVisible(r *http.Request, id string) bool {
 	if err != nil {
 		return false
 	}
+	if s.store.BoundedMetadataEnabled() {
+		visible, err := s.store.InstalledReviewReferenceVisible(r.Context(), data.Workspace.URLKey, id, query)
+		return err == nil && visible
+	}
 	// The general metadata projection omits reviews whose linked issues were
 	// not loaded. Resolve just these links through the indexed access query.
 	raw, ok := s.store.WorkspaceMetadata(data.Workspace.URLKey)

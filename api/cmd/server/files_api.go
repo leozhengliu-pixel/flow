@@ -269,8 +269,11 @@ func (s *server) serveUploadOrAsset(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if name != "" && filepath.Base(name) == name {
-		if image, ok := s.resolveOwnedImage(r.Context(), name); ok {
-			if !s.authDisabled && !image.readable(r.Context(), authUser(r).ID) {
+		if image, ok, readable, err := s.ownedImageAccess(r.Context(), name, authUser(r).ID, !s.authDisabled); err != nil {
+			writeAPIError(w, http.StatusServiceUnavailable, apiErrorUnavailable, "File metadata unavailable")
+			return
+		} else if ok {
+			if !readable {
 				http.NotFound(w, r)
 				return
 			}
@@ -376,7 +379,10 @@ func (s *server) serveSignedFile(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "Invalid file URL signature")
 		return
 	}
-	if image, ok := s.resolveOwnedImage(r.Context(), name); ok {
+	if image, ok, _, err := s.ownedImageAccess(r.Context(), name, "", false); err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, apiErrorUnavailable, "File metadata unavailable")
+		return
+	} else if ok {
 		s.serveOwnedImage(w, r, image)
 		return
 	}
@@ -443,8 +449,10 @@ func (s *server) fileReadable(r *http.Request, name string) bool {
 	if upload, err := s.store.FileUploadByObject(r.Context(), name); err == nil && upload.Purpose == "asset" && s.assetReadable(r, upload) {
 		return true
 	}
-	if image, ok := s.resolveOwnedImage(r.Context(), name); ok {
-		return image.readable(r.Context(), authUser(r).ID)
+	if _, ok, readable, err := s.ownedImageAccess(r.Context(), name, authUser(r).ID, true); err != nil {
+		return false
+	} else if ok {
+		return readable
 	}
 	user := authUser(r)
 	account, err := s.store.AccountForUser(r.Context(), user.ID)

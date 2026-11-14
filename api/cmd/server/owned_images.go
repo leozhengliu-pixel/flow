@@ -47,6 +47,31 @@ func (s *server) resolveOwnedImage(ctx context.Context, name string) (ownedImage
 	return ownedImage{}, false
 }
 
+// ownedImageAccess keeps the bounded icon source alive through the permission
+// decision. The off branch preserves the original resolver and callback order.
+func (s *server) ownedImageAccess(ctx context.Context, name, userID string, checkPermission bool) (ownedImage, bool, bool, error) {
+	if !s.store.BoundedMetadataEnabled() {
+		image, found := s.resolveOwnedImage(ctx, name)
+		return image, found, found && (!checkPermission || image.readable(ctx, userID)), nil
+	}
+	var owner *store.FileUpload
+	if upload, err := s.store.FileUploadByObject(ctx, name); err == nil {
+		owner = &upload
+	}
+	icon, found, readable, err := s.boundedOAuthAppIconAccess(ctx, name, owner, userID, checkPermission)
+	if err != nil {
+		return ownedImage{}, false, false, err
+	}
+	if found {
+		return ownedImage{name: name, contentType: icon.contentType}, true, readable, nil
+	}
+	if logo, found := s.resolveWorkspaceLogo(name, owner); found {
+		return ownedImage{name: name, contentType: logo.contentType}, true,
+			!checkPermission || s.activeWorkspaceMember(ctx, logo.workspaceKey, userID, false), nil
+	}
+	return ownedImage{}, false, false, nil
+}
+
 // workspaceLogo is an uploaded workspace logo that is its workspace's logo now.
 type workspaceLogo struct {
 	contentType  string

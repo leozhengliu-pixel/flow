@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_oauth_logo_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "VisitOAuthApplicationLogos": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Captures retained installed logical sources and exact physical keys atomically under registry locks after nonwaiting admission. Visits original-order duplicate application scalar fields without decoding unrelated legal large bodies or unavailable native timestamps. Client IDs are borrowed and decoded only for installation membership checks. TestScaleP21HotOAuthLogoNativeProjection, AtomicRegistryAndErrors and WarmAndReloaded prove exact native matching, atomic source replacement, warm/reloaded behavior, cancellation, saturation and released work.",
+      "accessors": [
+        "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Bounded scalar replacement for profile-observed uploaded application icon reads.",
+      "callers": [
+        "server/server.boundedOAuthAppIconAccess"
+      ]
+    }
+  }
+}

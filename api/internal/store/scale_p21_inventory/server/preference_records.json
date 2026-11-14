@@ -1,6 +1,6 @@
 {
   "source": "server/preference_records.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "preferenceMetadata": {
       "owner": "P21",
@@ -19,7 +19,8 @@
     },
     "preferenceReviewVisible": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Keeps issueRecordsQuery and the literal WorkspaceMetadata(data.Workspace.URLKey) scan off mode. Bounded mode invokes the installed review-reference predicate with that same logical-field accessor key and existing issue query, preserving first ordered ID-or-SlugID matches, duplicate/collision precedence, zero-link visibility, selected-empty/set key intersections and false-on-query-error. Only review ID/SlugID/IssueIDs nodes are visited; review bodies and unrelated metadata never enter this predicate. The source-only read preserves the original contextless cancellation behavior, while issue visibility SQL retains request cancellation and every linked-issue batch completes before a true result. TestScaleP21HotPreferenceReviewVisible covers the M principal/key matrix, explicit guest grants, hidden/private links, aliases/NUL/case/missing references, collisions/duplicates, oversized ignored bodies, live cross-workspace/revoked membership, auth-disabled canceled zero/nonzero-link paths and unchanged canonical rows with zero full metadata decodes. Same-fixture linked-review SQL count is 4 statements off and bounded. preferenceMetadata, issueRecordsQuery and the full HTTP authorization adapter remain independent consumers.",
       "accessors": [
         "WorkspaceMetadata"
       ],
