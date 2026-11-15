@@ -17,11 +17,14 @@ type issueEditorLookups struct {
 	ctx                    context.Context
 	store                  *SQLiteStore
 	tx                     *sqlTx
+	reader                 metadataReader
+	legacy                 bool
 	source                 *metadataLogicalSource
 	workspace, workspaceID string
 	documentID             string
 	former                 map[string]bool
 	updates                [][]byte
+	legacyUpdates          [][][]byte
 	updateBytes            uint64
 	formerLoaded           bool
 	updatesLoaded          bool
@@ -57,7 +60,7 @@ func (r *issueEditorLookups) close() {
 		return
 	}
 	r.closed = true
-	r.former, r.updates = nil, nil
+	r.former, r.updates, r.legacyUpdates = nil, nil, nil
 	if r.source != nil {
 		r.source.Release()
 		r.source = nil
@@ -87,7 +90,8 @@ func (r *issueEditorLookups) failure(err error) error {
 }
 
 func (r *issueEditorLookups) check() error {
-	if r.closed || r.tx == nil || r.tx.database != r.store.db {
+	if r.closed || r.store == nil || r.source == nil || r.legacy && r.reader == nil ||
+		!r.legacy && (r.tx == nil || r.tx.database != r.store.db) {
 		return r.failure(ErrMetadataRecordQuery)
 	}
 	if err := r.ctx.Err(); err != nil {
@@ -128,6 +132,9 @@ func (r *issueEditorLookups) formerMembers() map[string]bool {
 }
 
 func (r *issueEditorLookups) loadFormer() error {
+	if r.legacy {
+		return r.loadLegacyFormer()
+	}
 	if r.workspaceID == "" {
 		return nil
 	}
@@ -224,6 +231,9 @@ func (r *issueEditorLookups) loadNativeFormer() error {
 }
 
 func (r *issueEditorLookups) collaborationUpdates(documentID string) ([][]byte, error) {
+	if r.legacy {
+		return r.legacyCollaborationUpdates(documentID)
+	}
 	if err := r.check(); err != nil {
 		return nil, err
 	}

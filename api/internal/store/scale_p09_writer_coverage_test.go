@@ -55,6 +55,7 @@ oauth_token_exchange.go:ExchangeOAuthGrant
 personal_data.go:EraseAccount
 personal_data.go:ErasePersonFromWorkspace
 scale_p01_seed.go:SeedScaleP01Principals
+scale_p21_legacy_record_base.go:persistIssues
 scale_p21_webhook_failure_write.go:RecordWebhookDeliveryFailure
 scim.go:CreateSCIMUser
 scim.go:DeprovisionSCIMUser
@@ -95,6 +96,7 @@ personal_data.go:DeleteAgentSessionRuns
 record_journal.go:maintainRecordSummary
 scale_p09_journal_schema.go:recordJournalTriggerSpecs
 scale_p09_journal_repair.go:pruneOrphanRecordCatalog
+scale_p21_legacy_record_base.go:persistIssues
 secret_reseal.go:resealTextSecrets
 team_deletion.go:deleteRowsByIDs
 workspace_purge.go:PurgeWorkspaceRows
@@ -204,7 +206,7 @@ func TestScaleP09WriterCoverage(t *testing.T) {
 		}
 	}
 	// These dynamic writers must continue through the transaction wrapper.
-	for _, path := range []string{"personal_data.go", "workspace_purge.go", "workspace_rename.go", "issue_index_delta.go", "issue_scope_mutation.go", "team_deletion.go"} {
+	for _, path := range []string{"personal_data.go", "workspace_purge.go", "workspace_rename.go", "issue_index_delta.go", "issue_scope_mutation.go", "team_deletion.go", "scale_p21_legacy_record_base.go"} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

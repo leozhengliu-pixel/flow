@@ -12,7 +12,7 @@ import (
 
 // prepareLegacyContentImage supplies only the four missing content fields.
 // The caller's transaction is borrowed throughout this synchronous transform.
-func (s *SQLiteStore) prepareLegacyContentImage(ctx context.Context, tx *sqlTx, workspace string, source *metadataLogicalSource) (_ *metadataLogicalSource, err error) {
+func (s *SQLiteStore) prepareLegacyContentImage(ctx context.Context, tx *sqlTx, workspace string, source *metadataLogicalSource, selectedKinds ...string) (_ *metadataLogicalSource, err error) {
 	if s == nil || !s.BoundedMetadataEnabled() || source == nil || tx == nil || tx.database != s.db || tx.dialect != s.dialect {
 		return nil, ErrBoundedMetadataCoverage
 	}
@@ -55,6 +55,15 @@ func (s *SQLiteStore) prepareLegacyContentImage(ctx context.Context, tx *sqlTx, 
 	// Prepare in literal hydration order, independently of Bootstrap's field
 	// declaration order, so the first SQL/JSON failure remains the same.
 	for i := range fields {
+		if len(selectedKinds) > 0 {
+			selected := false
+			for _, kind := range selectedKinds {
+				selected = selected || kind == fields[i].kind
+			}
+			if !selected {
+				continue
+			}
+		}
 		index, _, ok := metadataLogicalField(fields[i].name)
 		if !ok {
 			return nil, ErrMetadataRecordQuery
@@ -254,7 +263,29 @@ func (n legacyContentImageNode) withCursor(ctx context.Context, visit func(*lega
 
 func (n legacyContentImageNode) stageRows(ctx context.Context, stage *sw26MigrationStage, frames *metadataLogicalBuilder, typ reflect.Type, keyLength, bodyLength string, maxKey, maxBody int64) (err error) {
 	query := "SELECT " + keyLength + "," + bodyLength + ",CASE WHEN " + keyLength + "<=? THEN resource_id ELSE NULL END,CASE WHEN " + bodyLength + "<=? THEN data ELSE NULL END FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY created_at,id"
-	rows, err := n.tx.QueryContext(ctx, query, maxKey, maxBody, n.workspace, n.kind)
+	args := []any{maxKey, maxBody, n.workspace, n.kind}
+	base := legacyRecordBaseCapture(ctx)
+	if base != nil && !base.loaded[n.kind] {
+		base = nil
+	}
+	var maxID int64
+	if base != nil {
+		physical := &ResourceRead{store: n.store}
+		defer physical.Close()
+		idLength := physical.byteLength("id")
+		if err := n.tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+idLength+"),0) FROM workspace_content_records WHERE workspace_key=? AND kind=?", n.workspace, n.kind).Scan(&maxID); err != nil {
+			return err
+		}
+		if maxID < 0 || uint64(maxID) > (metadataWorkBytes-(64<<10))/8 {
+			return ErrMetadataWorkBudget
+		}
+		if err := physical.reserve(ctx, uint64(maxID)*8+64<<10); err != nil {
+			return err
+		}
+		query = "SELECT " + keyLength + "," + bodyLength + ",CASE WHEN " + keyLength + "<=? THEN resource_id ELSE NULL END,CASE WHEN " + bodyLength + "<=? THEN data ELSE NULL END,CASE WHEN " + idLength + "<=? THEN id ELSE NULL END," + idLength + " FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY created_at,id"
+		args = []any{maxKey, maxBody, maxID, n.workspace, n.kind}
+	}
+	rows, err := n.tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -268,8 +299,19 @@ func (n legacyContentImageNode) stageRows(ctx context.Context, stage *sw26Migrat
 		var keySize, bodySize sql.NullInt64
 		var resource sql.NullString
 		var raw []byte
-		if err := rows.Scan(&keySize, &bodySize, &resource, &raw); err != nil {
+		var physicalID sql.NullString
+		var idSize sql.NullInt64
+		if base == nil {
+			err = rows.Scan(&keySize, &bodySize, &resource, &raw)
+		} else {
+			err = rows.Scan(&keySize, &bodySize, &resource, &raw, &physicalID, &idSize)
+		}
+		if err != nil {
 			return err
+		}
+		if base != nil && (!physicalID.Valid || !idSize.Valid || idSize.Int64 < 0 ||
+			idSize.Int64 > maxID || int64(len(physicalID.String)) != idSize.Int64) {
+			return ErrConcurrentWrite
 		}
 		if !keySize.Valid || !bodySize.Valid || !resource.Valid || keySize.Int64 < 0 || bodySize.Int64 < 0 ||
 			keySize.Int64 > maxKey || bodySize.Int64 > maxBody || int64(len(resource.String)) != keySize.Int64 || int64(len(raw)) != bodySize.Int64 {
@@ -278,6 +320,11 @@ func (n legacyContentImageNode) stageRows(ctx context.Context, stage *sw26Migrat
 		frame, err := legacyContentImageFrame(ctx, n.store, frames, typ, raw)
 		if err != nil {
 			return err
+		}
+		if base != nil {
+			if err := base.RememberStored(ctx, n.kind, resource.String, physicalID.String, raw); err != nil {
+				return err
+			}
 		}
 		if _, err := stage.exec(ctx, keySize.Int64+256, `INSERT INTO content(resource,ordinal,frame_offset,frame_size,frame_cost) VALUES(?,?,?,?,?)`, []byte(resource.String), ordinal, frame.offset, frame.size, int64(frame.cost)); err != nil {
 			return err

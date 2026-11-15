@@ -69,6 +69,11 @@ func (n legacyIssueImageNode) nodeValue(ctx context.Context, limit int) (reflect
 func (n legacyIssueImageNode) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
 	ordinal := 0
 	return n.store.scanLegacyIssueRows(ctx, n.tx, n.workspace, func(row *legacyIssueRow) error {
+		if base := legacyRecordBaseCapture(ctx); base != nil {
+			if err := base.RememberStored(ctx, "issue", "", row.PhysicalID, row.Record.raw); err != nil {
+				return err
+			}
+		}
 		value := reflect.ValueOf(row.Record.issue)
 		cost, err := metadataAggregateNativeCost(ctx, value, 0)
 		if err != nil {

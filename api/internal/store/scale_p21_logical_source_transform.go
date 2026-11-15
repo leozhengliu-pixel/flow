@@ -98,19 +98,40 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 		return b.writeValue(native.value, depth, false)
 	}
 	t := value.nodeType()
-	if t.Kind() == reflect.Pointer {
+	if t.Kind() == reflect.Pointer || t.Kind() == reflect.Interface {
 		node = metadataLogicalNode{source: b.storage, offset: b.offset, cost: uint64(t.Size())*2 + 128, typ: t}
 		if err := b.write(make([]byte, 16)); err != nil {
 			return node, err
 		}
 		seen := false
 		err = value.nodeChildren(b.ctx, func(_ reflect.Value, child metadataAggregateNode) error {
-			if seen || child.nodeType() != t.Elem() {
+			if seen || child == nil {
+				return ErrMetadataRecordQuery
+			}
+			dynamic := child.nodeType()
+			if dynamic == nil || t.Kind() == reflect.Pointer && dynamic != t.Elem() ||
+				t.Kind() == reflect.Interface && !dynamic.AssignableTo(t) {
 				return ErrMetadataRecordQuery
 			}
 			seen = true
 			if err := b.write([]byte{1}); err != nil {
 				return err
+			}
+			if t.Kind() == reflect.Interface {
+				index := slices.Index(b.storage.types, dynamic)
+				if index < 0 {
+					if len(b.storage.types) >= metadataLogicalTypes {
+						return ErrMetadataWorkBudget
+					}
+					if err := validateMetadataLogicalTypes(append(slices.Clone(b.storage.types), dynamic)); err != nil {
+						return err
+					}
+					index = len(b.storage.types)
+					b.storage.types = append(b.storage.types, dynamic)
+				}
+				if err := b.writeUint(uint64(index)); err != nil {
+					return err
+				}
 			}
 			written, err := b.writeAggregateNode(child, depth+1)
 			node.cost += written.cost
@@ -128,7 +149,7 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 		node.size = b.offset - node.offset
 		return node, b.patch(node)
 	}
-	if t.Kind() != reflect.Struct && t.Kind() != reflect.Slice && t.Kind() != reflect.Map {
+	if t.Kind() != reflect.Struct && t.Kind() != reflect.Slice && t.Kind() != reflect.Map && t.Kind() != reflect.Array {
 		owned, err := value.nodeValue(b.ctx, 2<<20)
 		if err != nil {
 			return node, err
@@ -192,6 +213,10 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 				if count >= uint64(t.NumField()) || !key.IsValid() || key.String() != t.Field(int(count)).Name || item.nodeType() != t.Field(int(count)).Type {
 					return ErrMetadataRecordQuery
 				}
+			} else if t.Kind() == reflect.Array {
+				if count >= uint64(t.Len()) || !key.IsValid() || key.Kind() != reflect.Int || key.Int() != int64(count) || item.nodeType() != t.Elem() {
+					return ErrMetadataRecordQuery
+				}
 			} else {
 				node.cost += uint64(t.Elem().Size())*2 + 64
 			}
@@ -204,6 +229,10 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 	}
 	if t.Kind() == reflect.Struct {
 		if count != uint64(t.NumField()) {
+			return node, ErrMetadataRecordQuery
+		}
+	} else if t.Kind() == reflect.Array {
+		if count != uint64(t.Len()) {
 			return node, ErrMetadataRecordQuery
 		}
 	} else {

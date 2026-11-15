@@ -164,7 +164,13 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 	}
 	var previous []byte
 	var version int
-	err = tx.QueryRowContext(ctx, `SELECT data,record_version FROM workspace_content_records WHERE workspace_key=? AND kind=? AND resource_id=? AND id=?`, workspace, kind, resource, id).Scan(&previous, &version)
+	if budgetStore, ok := ctx.Value(legacyContentWriteBudgetKey{}).(*SQLiteStore); ok {
+		var release func()
+		previous, version, release, err = readLegacyContentBefore(ctx, tx, workspace, kind, resource, id, budgetStore)
+		defer release()
+	} else {
+		err = tx.QueryRowContext(ctx, `SELECT data,record_version FROM workspace_content_records WHERE workspace_key=? AND kind=? AND resource_id=? AND id=?`, workspace, kind, resource, id).Scan(&previous, &version)
+	}
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}

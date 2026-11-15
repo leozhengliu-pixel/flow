@@ -16,7 +16,11 @@ type legacyIssueKey struct {
 // retaining the issue population. Overrides use SQL physical keys, including
 // deletions, so decoded IDs never change replacement or duplicate semantics.
 func (s *SQLiteStore) refreshLegacyResourceCounts(ctx context.Context, tx *sqlTx, workspace string, source *metadataLogicalSource, overrides map[legacyIssueKey]*domain.Issue) (_ *metadataLogicalSource, err error) {
-	if s == nil || !s.BoundedMetadataEnabled() || source == nil || tx == nil || tx.database != s.db {
+	return s.refreshLegacyResourceCountsSource(ctx, tx, workspace, source, overrides, false)
+}
+
+func (s *SQLiteStore) refreshLegacyResourceCountsSource(ctx context.Context, tx *sqlTx, workspace string, source *metadataLogicalSource, overrides map[legacyIssueKey]*domain.Issue, fromImage bool) (_ *metadataLogicalSource, err error) {
+	if s == nil || !s.BoundedMetadataEnabled() || source == nil || !fromImage && (tx == nil || tx.database != s.db) {
 		return nil, ErrBoundedMetadataCoverage
 	}
 	ctx = metadataLogicalSourceScratchContext(ctx, source)
@@ -25,12 +29,14 @@ func (s *SQLiteStore) refreshLegacyResourceCounts(ctx context.Context, tx *sqlTx
 	if err := owner.reserve(ctx, 64<<10); err != nil {
 		return nil, err
 	}
-	stamp, err := readMetadataStamp(ctx, tx, workspace)
-	if err != nil {
-		return nil, err
-	}
-	if stamp.workspaceID == "" || source.Stamp().workspaceID != stamp.workspaceID {
-		return nil, ErrMetadataRecordQuery
+	if !fromImage {
+		stamp, err := readMetadataStamp(ctx, tx, workspace)
+		if err != nil {
+			return nil, err
+		}
+		if stamp.workspaceID == "" || source.Stamp().workspaceID != stamp.workspaceID {
+			return nil, ErrMetadataRecordQuery
+		}
 	}
 	// Membership and deduplication live on disk. Only one row or projected
 	// directory entry is materialized at a time.
@@ -101,27 +107,33 @@ func (s *SQLiteStore) refreshLegacyResourceCounts(ctx context.Context, tx *sqlTx
 		}
 		return ctx.Err()
 	}
-	if err := s.scanLegacyIssueRows(ctx, tx, workspace, func(row *legacyIssueRow) error {
-		issue := &row.Record.issue
-		if replacement, found := overrides[legacyIssueKey{ID: row.PhysicalID, Blob: row.idBlob}]; found {
-			issue = replacement
-			if _, err := stage.exec(ctx, int64(len(row.PhysicalID)+256),
-				`INSERT INTO legacy_count_seen(id,is_blob) VALUES(?,?) ON CONFLICT(id,is_blob) DO NOTHING`, row.PhysicalID, row.idBlob); err != nil {
-				return err
-			}
-		}
-		return addIssue(issue)
-	}); err != nil {
-		return nil, err
-	}
-	for physical, issue := range overrides {
-		var seen bool
-		if err := stage.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM legacy_count_seen WHERE id=? AND is_blob=?)`, physical.ID, physical.Blob).Scan(&seen); err != nil {
+	if fromImage {
+		if err := s.countLegacyImageIssues(ctx, source, counts, beginLabels, addLabel); err != nil {
 			return nil, err
 		}
-		if !seen {
-			if err := addIssue(issue); err != nil {
+	} else {
+		if err := s.scanLegacyIssueRows(ctx, tx, workspace, func(row *legacyIssueRow) error {
+			issue := &row.Record.issue
+			if replacement, found := overrides[legacyIssueKey{ID: row.PhysicalID, Blob: row.idBlob}]; found {
+				issue = replacement
+				if _, err := stage.exec(ctx, int64(len(row.PhysicalID)+256),
+					`INSERT INTO legacy_count_seen(id,is_blob) VALUES(?,?) ON CONFLICT(id,is_blob) DO NOTHING`, row.PhysicalID, row.idBlob); err != nil {
+					return err
+				}
+			}
+			return addIssue(issue)
+		}); err != nil {
+			return nil, err
+		}
+		for physical, issue := range overrides {
+			var seen bool
+			if err := stage.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM legacy_count_seen WHERE id=? AND is_blob=?)`, physical.ID, physical.Blob).Scan(&seen); err != nil {
 				return nil, err
+			}
+			if !seen {
+				if err := addIssue(issue); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}

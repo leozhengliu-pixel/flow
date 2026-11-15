@@ -1575,6 +1575,9 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 		if IsIssueDiscussionMutation(ctx) && boundedIssueDiscussionEvent(eventType) {
 			return s.mutateBoundedIssueDiscussion(ctx, workspaceKey, eventType, payload, mutate)
 		}
+		if !UsesIssueRecordMutations(ctx) && boundedIssueDiscussionEvent(eventType) && mutationAggregateID(ctx) != "" {
+			return s.mutateBoundedLegacyDiscussion(ctx, workspaceKey, eventType, payload, mutate)
+		}
 		return s.mutateResidentRecords(ctx, workspaceKey, eventType, payload, mutate)
 	}
 	if projectRecordSelectionEnabled(ctx) {

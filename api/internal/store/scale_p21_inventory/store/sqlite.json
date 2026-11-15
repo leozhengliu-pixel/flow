@@ -1,6 +1,6 @@
 {
   "source": "store/sqlite.go",
-  "unmigrated": 16,
+  "unmigrated": 14,
   "consumers": {
     "Account": {
       "owner": "P21",
@@ -139,7 +139,8 @@
     },
     "MutateWorkspace": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Forwarding adapter only: the unchanged callback adapter preserves the fixed aggregate/context, payload, callback result/error and ErrNoMutation while the reviewed dispatcher owns bounded selection and admission. SW103 compares literal and bounded supported point writes, default workspace, empty aggregate, errors, results and events. This review does not certify any leaf callback; those consumers retain their independent guards.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
@@ -627,7 +628,8 @@
     },
     "webhookNeeded": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The original complete predicate is retained only off or inside the serialized cold view. SW102 closes all nine direct references and four upstream mutation-helper callsets, rejecting aliases, new callers and bypasses of the bounded dispatcher. Bounded HOT writers use their owned logical predicate; SW97 proves exact native/reloaded enabled webhook, loop, connection and authoritative chat fallback behavior with cancellation, admission, persistent SQLite and race coverage.",
       "accessors": [
         "resident-state"
       ],
