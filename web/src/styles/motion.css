@@ -13,7 +13,10 @@
   animation: flow-floating-exit 200ms var(--flow-popover-exit) both !important;
   pointer-events: none;
 }
-[data-flow-motion="dialog"] { animation: flow-dialog-enter 300ms var(--flow-surface-ease) both !important; }
+/* The enter effect fills backwards only: once it finishes, the dialog is painted from its own styles. A filled finished
+   scale effect kept the layer composited and Chromium could keep a raster from mid-animation, so the Close icon's edge
+   pixels varied between otherwise identical dialogs. The end keyframe equals the static style, so nothing moves. */
+[data-flow-motion="dialog"] { animation: flow-dialog-enter 300ms var(--flow-surface-ease) backwards !important; }
 [data-flow-motion="dialog"][data-state="closed"] { animation: flow-dialog-exit 300ms var(--flow-surface-ease) both !important; pointer-events: none; }
 [data-flow-motion="backdrop"] { animation: flow-fade-enter 150ms ease-out both !important; }
 [data-flow-motion="backdrop"][data-state="closed"] { animation: flow-fade-exit 200ms ease-out both !important; pointer-events: none; }
