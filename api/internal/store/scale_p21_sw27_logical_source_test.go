@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -505,6 +506,11 @@ func TestScaleP21SW27LogicalSourceAcceptedOpaqueTimestampHold(t *testing.T) {
 
 func scaleP21SW27CompareRawLogicalRecovery(t *testing.T, f scaleP09Fixture) {
 	t.Helper()
+	scaleP21SW27CompareRawLogicalRecoveryWithTx(t, f, nil)
+}
+
+func scaleP21SW27CompareRawLogicalRecoveryWithTx(t *testing.T, f scaleP09Fixture, tx *sqlTx) {
+	t.Helper()
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, maxStateBytes: f.maxStateBytes, metadataResidency: newMetadataResidency()}
 	view.metadataResidency.requireCoverage = false
 	ctx, release, err := view.admitMetadataWork(t.Context(), 64<<20)
@@ -512,9 +518,11 @@ func scaleP21SW27CompareRawLogicalRecovery(t *testing.T, f scaleP09Fixture) {
 		t.Fatal(err)
 	}
 	defer release()
-	tx, err := f.db.BeginTx(ctx, metadataReadOptions(f.dialect))
-	if err != nil {
-		t.Fatal(err)
+	if tx == nil {
+		tx, err = f.db.BeginTx(ctx, metadataReadOptions(f.dialect))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	defer tx.Rollback()
 	workspace := f.data.Workspace.URLKey
@@ -717,12 +725,23 @@ func TestScaleP21SW27RawLogicalRecoveryPhysicalOrder(t *testing.T) {
 	if f.dialect != "sqlite" {
 		t.Skip("mixed TEXT/BLOB physical record identities are a SQLite storage case")
 	}
+	journalOn := recordJournalMode() == "on"
+	if journalOn && !f.RecordJournalReady() {
+		t.Fatal("historical fixture requires the inherited journal to stay ready")
+	}
+	tx, err := f.db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
 	workspace := f.data.Workspace.URLKey
-	if _, err := f.db.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=?`, workspace); err != nil {
+	// Imported physical identities use the installed old-writer capture path.
+	// Keep their construction and reader oracle in one rollback-only snapshot.
+	if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `DELETE FROM workspace_metadata_records WHERE workspace_key=?`, workspace); err != nil {
 		t.Fatal(err)
 	}
 	root := []byte(`{"_flowCollections":{"users":"array"}}`)
-	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_states SET data=? WHERE workspace_key=?`, root, workspace); err != nil {
+	if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `UPDATE workspace_states SET data=? WHERE workspace_key=?`, root, workspace); err != nil {
 		t.Fatal(err)
 	}
 	for _, row := range []struct {
@@ -739,11 +758,23 @@ func TestScaleP21SW27RawLogicalRecoveryPhysicalOrder(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := f.db.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'users',?,0,?)`, workspace, row.key, raw); err != nil {
+		if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'users',?,0,?)`, workspace, row.key, raw); err != nil {
 			t.Fatal(err)
 		}
 	}
-	scaleP21SW27CompareRawLogicalRecovery(t, f)
+	if journalOn {
+		var enabled, capturing int
+		if err := tx.QueryRowContext(t.Context(), `SELECT enabled,capturing FROM record_journal_mode WHERE id=1`).Scan(&enabled, &capturing); err != nil || enabled != 1 || capturing != 1 || !f.RecordJournalReady() {
+			t.Fatal("historical fixture disabled inherited journal capture", enabled, capturing, err)
+		}
+		for _, table := range []string{"workspace_metadata_records", "record_journal_dirty"} {
+			var rows, storageClasses int
+			if err := tx.QueryRowContext(t.Context(), `SELECT COUNT(*),COUNT(DISTINCT typeof(record_key)) FROM `+table+` WHERE workspace_key=? AND field='users' AND CAST(record_key AS BLOB)=CAST(? AS BLOB)`, workspace, "same").Scan(&rows, &storageClasses); err != nil || rows != 2 || storageClasses != 2 {
+				t.Fatal("historical fixture lost physical aliases or durable journal capture", table, rows, storageClasses, err)
+			}
+		}
+	}
+	scaleP21SW27CompareRawLogicalRecoveryWithTx(t, f, tx)
 }
 
 func TestScaleP21SW27RawLogicalRecoveryOrphanOffloadValidation(t *testing.T) {
@@ -842,12 +873,12 @@ func TestScaleP21SW27LogicalSourceNativeMonotonicTime(t *testing.T) {
 
 type scaleP21SW27CancelAfterChecks struct {
 	context.Context
-	checks, limit int
+	checks atomic.Int64
+	limit  int64
 }
 
 func (ctx *scaleP21SW27CancelAfterChecks) Err() error {
-	ctx.checks++
-	if ctx.checks >= ctx.limit {
+	if ctx.checks.Add(1) >= ctx.limit {
 		return context.Canceled
 	}
 	return ctx.Context.Err()
@@ -881,8 +912,8 @@ func TestScaleP21SW27LogicalSourceCaptureQuotasAndCleanup(t *testing.T) {
 	t.Run("mid-capture-cancel", func(t *testing.T) {
 		ctx := &scaleP21SW27CancelAfterChecks{Context: t.Context(), limit: 12}
 		source, err := captureMetadataLogicalSource(ctx, data, copyStamp{})
-		if source != nil || !errors.Is(err, context.Canceled) || ctx.checks < ctx.limit {
-			t.Fatal("capture ignored cancellation after storage creation", source != nil, err, ctx.checks)
+		if source != nil || !errors.Is(err, context.Canceled) || ctx.checks.Load() < ctx.limit {
+			t.Fatal("capture ignored cancellation after storage creation", source != nil, err, ctx.checks.Load())
 		}
 	})
 	if metadataLogicalDiskUsed.Load() != diskBefore || metadataLogicalDescriptorsUsed.Load() != descriptorsBefore {

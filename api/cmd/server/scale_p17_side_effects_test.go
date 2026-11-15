@@ -106,7 +106,7 @@ func scaleP17SideEffects(t *testing.T, mode string) mutationScriptResult {
 		"metadataSQL": "SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key",
 		"contentSQL":  "SELECT kind,resource_id,id,data FROM workspace_content_records WHERE workspace_key=? ORDER BY kind,resource_id,created_at,id",
 		"searchSQL":   "SELECT field,record_key,content FROM metadata_search_documents WHERE workspace_key=? ORDER BY field,record_key",
-		"eventsSQL":   "SELECT event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY created_at,id",
+		"eventsSQL":   scaleP16DomainEventsSQL,
 		"auditSQL":    "SELECT action,resource_type,resource_id,actor,user_id,metadata,result FROM audit_events WHERE workspace_id=? ORDER BY seq",
 	} {
 		arg := db.key

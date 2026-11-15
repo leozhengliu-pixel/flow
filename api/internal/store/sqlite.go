@@ -40,6 +40,7 @@ type SQLiteStore struct {
 	// at, when known (metadata_copy_revision.go). Guarded by mu.
 	copyRevisions     map[string]copyRevision
 	copyRevisionEpoch uint64
+	resourceWireCache resourceReadWireCache
 	peerApplied       map[string]peerAppliedWorkspace // installed journal cursors; guarded by writeMu (scale_p11_peer_apply.go)
 	// metadataDecodes keeps the legacy decode-call diagnostic. Scoped bounded
 	// hydration does not count as a full workspace decode.

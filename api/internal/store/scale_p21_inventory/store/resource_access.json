@@ -1,13 +1,19 @@
 {
   "source": "store/resource_access.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
-    "ResolveAccess": {
+    "installedResourcePolicy": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests. Owned directory operations may reuse one canonical team-policy result only within the same store/workspace/stamp/epoch/SQL transaction; installed and event-source precedence, both live principal reads, credential hashing and trailing authority validation remain unchanged. TestScaleP21SW0ResourcePolicyMemo proves binding, quota, cancellation and independent close; directory tests prove installed/event precedence and scope/key-revocation/principal/epoch changes, with persistent SQLite twice and race. Same-fixture directory SQL falls124 to76, with remaining overhead explicitly reported.",
+      "status": "unmigrated",
+      "reason": "Small immutable policy is copied before SQL acquisition and used only when its installed revision matches the SQL snapshot. Caller-owned snapshots never wait for the store mutex: TryRLock preserves an immediately available certified installed policy ahead of the operation memo, otherwise SQL supplies policy; TestScaleP12GatesAccessPolicyLockOrder covers member and application principals with the existing one-connection fixture. The nonbounded ReadEventPolicySource residency access delegates here. Its bounded branch retains the separately reviewed readBoundedEventPolicySource and trusted legacy SQL policy constructor from main, including retained and foreign version labels; their SW73 coverage and inventory remain in scale_p21_event_policy_source. P21-off complete and scoped snapshots preserve pre-SQL installed policy at matching stamps. SQL-only fallback preserves six selected strings with typed alias, duplicate, null and scalar semantics; canonical/distinct keys and differently ordered physical aliases are covered. Equal-order SQLite TEXT/BLOB aliases without certified owned policy, including internally modified low-level transactions, remain uncertified against the full reader's deterministic global unstable sort; an ordered policy cursor has a different tie rule. Legacy principal/key, header-budget and lock-order differentials do not certify every remaining policy source reached by other callers. Owned directory policy memoization remains bound to store, workspace, stamp, epoch and SQL transaction, with live principal and credential validation. This helper remains unmigrated; no source-fidelity hold is promoted by moving the installed-policy read.",
       "accessors": [
-        "Bootstrap"
+        "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/realtime/changes through ReadEventPolicySource",
+      "callers": [
+        "server/server.sharedEventPolicy",
+        "store/SQLiteStore.ResolveEventAccess"
       ]
     },
     "ResourceReadMetadata": {

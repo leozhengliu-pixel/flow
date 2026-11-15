@@ -62,6 +62,38 @@ func TestScaleP21WebhookDisableWriteDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	f := scaleP09Database(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("wh-disable-")
+	restorePhysicalIDs := func(ctx context.Context) error {
+		if f.dialect != "sqlite" {
+			return nil
+		}
+		// Keep imported BLOB identities through comparison. On retirement,
+		// this id-only UPDATE does not fire the content journal trigger.
+		_, err := f.db.ExecContext(ctx, `UPDATE workspace_content_records SET id=CAST(id AS TEXT) WHERE workspace_key=? AND typeof(id)='blob'`, workspace)
+		return err
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := restorePhysicalIDs(ctx); err != nil {
+			t.Errorf("retire owned historical content identities: %v", err)
+		}
+	})
+	assertPhysicalInputs := func() {
+		t.Helper()
+		if f.dialect != "sqlite" {
+			return
+		}
+		var blobs int
+		if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM workspace_content_records WHERE workspace_key=? AND typeof(id)='blob'`, workspace).Scan(&blobs); err != nil || blobs != 3 {
+			t.Fatal("historical content inputs lost their physical BLOB identities", blobs, err)
+		}
+		if recordJournalMode() != "off" {
+			var enabled, capturing int
+			if err := f.db.QueryRowContext(t.Context(), `SELECT enabled,capturing FROM record_journal_mode WHERE id=1`).Scan(&enabled, &capturing); err != nil || enabled != 1 || capturing != 1 || !f.RecordJournalReady() {
+				t.Fatal("historical content fixture disabled inherited journal capture", enabled, capturing, err)
+			}
+		}
+	}
 	at := time.Date(2026, 11, 14, 3, 4, 5, 6, time.UTC)
 	type effects struct {
 		Hooks, Documents                    [][]any
@@ -73,6 +105,9 @@ func TestScaleP21WebhookDisableWriteDifferential(t *testing.T) {
 	for _, reload := range []bool{false, true} {
 		var want effects
 		for _, bounded := range []bool{false, true} {
+			if err := restorePhysicalIDs(t.Context()); err != nil {
+				t.Fatal(err)
+			}
 			if err := f.ReloadWorkspace(t.Context(), workspace); err != nil {
 				t.Fatal(err)
 			}
@@ -121,6 +156,7 @@ func TestScaleP21WebhookDisableWriteDifferential(t *testing.T) {
 			if err := tx.Commit(); err != nil {
 				t.Fatal(err)
 			}
+			assertPhysicalInputs()
 			if reload {
 				if err := f.ReloadWorkspace(t.Context(), workspace); err != nil {
 					t.Fatal(err)
@@ -157,6 +193,7 @@ func TestScaleP21WebhookDisableWriteDifferential(t *testing.T) {
 			got.Hooks = scaleP21WebhookFailureRows(t, source, workspace, "webhooks")
 			got.Documents = scaleP21WebhookFailureRows(t, source, workspace, "documents")
 			got.Content = scaleP21DisableContent(t, source, workspace)
+			assertPhysicalInputs()
 			got.Audits, err = source.ListAuditEntries(t.Context(), f.data.Workspace.ID, AuditQuery{ResourceID: target})
 			if err != nil {
 				t.Fatal(err)

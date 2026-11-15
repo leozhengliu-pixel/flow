@@ -539,18 +539,22 @@ func (s *server) startSocketAccessSweep() {
 	if s.coordinationContext != nil {
 		done = s.coordinationContext.Done()
 	}
-	go func() {
-		ticker := time.NewTicker(socketAccessSweepInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-done:
-				return
-			case <-ticker.C:
-				s.queueAllSocketAccessChecks()
-			}
+	go s.runSocketAccessSweep(done, s.store.WorkerContext().Done())
+}
+
+func (s *server) runSocketAccessSweep(done, storeDone <-chan struct{}) {
+	ticker := time.NewTicker(socketAccessSweepInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-storeDone:
+			return
+		case <-ticker.C:
+			s.queueAllSocketAccessChecks()
 		}
-	}()
+	}
 }
 
 // socketCredentialValid reports whether the session or API key a socket

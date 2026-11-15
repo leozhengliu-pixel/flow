@@ -80,7 +80,7 @@ func scaleP16DatabaseState(t *testing.T, db *scaleP04Database) map[string]string
 		"issues":   "SELECT id,data FROM issue_records WHERE workspace_key=? ORDER BY id",
 		"content":  "SELECT kind,resource_id,id,data FROM workspace_content_records WHERE workspace_key=? ORDER BY kind,resource_id,created_at,id",
 		"search":   "SELECT field,record_key,content FROM metadata_search_documents WHERE workspace_key=? ORDER BY field,record_key",
-		"events":   "SELECT event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY created_at,id",
+		"events":   scaleP16DomainEventsSQL,
 		"audit":    "SELECT actor_type,actor_id,user_id,actor,action,resource_type,resource_id,result,metadata FROM audit_events WHERE workspace_id=? ORDER BY seq",
 	} {
 		arg := db.key

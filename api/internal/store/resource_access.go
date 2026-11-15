@@ -48,6 +48,9 @@ func (s *SQLiteStore) ResolveAccess(ctx context.Context, workspace, principal st
 	if workspace == "" || principal == "" {
 		return AccessContext{}, ErrAuthForbidden
 	}
+	// Writers can hold mu while acquiring a SQL connection. Copy the small
+	// policy before opening our snapshot, then validate its revision in SQL.
+	data, known, current := s.installedResourcePolicy(ctx, workspace)
 	if s.db.journalReady.Load() {
 		if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); !ok || snapshot.database != s.db {
 			tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
@@ -62,14 +65,7 @@ func (s *SQLiteStore) ResolveAccess(ctx context.Context, workspace, principal st
 	if err != nil {
 		return AccessContext{}, err
 	}
-	s.mu.RLock()
-	data, ok := s.workspaces[workspace]
-	known, exact := s.copyRevisionLocked(workspace)
-	current := ok && exact && known.workspaceID == stamp.workspaceID && known.revision == stamp.revision
-	if current {
-		data = resourcePolicyMetadata(data)
-	}
-	s.mu.RUnlock()
+	current = current && known.workspaceID == stamp.workspaceID && known.revision == stamp.revision
 	if shared, ok := eventPolicySourceFor(ctx, s, workspace, stamp); ok {
 		data, current = shared, true
 	}
@@ -128,6 +124,25 @@ func (s *SQLiteStore) ResolveAccess(ctx context.Context, workspace, principal st
 	}
 	policy.epoch = fmt.Sprintf("compat:%x", sha256.Sum256(raw))
 	return AccessContext{data.Workspace.ID, principal, policy.scope, policy.epoch, policy}, nil
+}
+
+func (s *SQLiteStore) installedResourcePolicy(ctx context.Context, workspace string) (domain.Bootstrap, copyRevision, bool) {
+	// A caller-owned SQL snapshot may use an immediately available installed
+	// policy, but must never wait for a writer holding mu and waiting for SQL.
+	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == s.db {
+		if !s.mu.TryRLock() {
+			return domain.Bootstrap{}, copyRevision{}, false
+		}
+	} else {
+		s.mu.RLock()
+	}
+	defer s.mu.RUnlock()
+	data, ok := s.workspaces[workspace]
+	known, exact := s.copyRevisionLocked(workspace)
+	if !ok || !exact {
+		return domain.Bootstrap{}, known, false
+	}
+	return resourcePolicyMetadata(data), known, true
 }
 
 // One statement observes the principal, workspace role and explicit team
@@ -356,14 +371,37 @@ func (s *SQLiteStore) ResourceReadMetadata(ctx context.Context, access AccessCon
 		return data, false, err
 	}
 	p := access.policy
-	s.mu.RLock()
-	source, ok := s.workspaces[p.workspace]
-	known, exact := s.copyRevisionLocked(p.workspace)
-	current := ok && exact && known.workspaceID == p.stamp.workspaceID && known.revision == p.stamp.revision
-	if current {
-		data, allowed, err = resourceReadMetadata(p, source, kind, ref)
+	snapshot, pinned := ctx.Value(workspaceReadKey{}).(workspaceRead)
+	pinned = pinned && snapshot.database == s.db
+	var source domain.Bootstrap
+	current := false
+	if pinned {
+		// A held sole connection cannot confirm live authority. Preserve the
+		// trailing epoch check's fail-closed result before touching targets.
+		if s.db.journalReady.Load() && s.db.Stats().MaxOpenConnections == 1 {
+			return data, false, ErrRecordJournalUnavailable
+		}
+		stamp, stampErr := readMetadataStamp(ctx, s.db, p.workspace)
+		if stampErr != nil {
+			return data, false, stampErr
+		}
+		if stamp != p.stamp {
+			return data, false, errors.Join(ErrAuthForbidden, ErrResourceAccessChanged)
+		}
+		// Snapshot metadata may contain summaries or selected records.
+		// Read full targets in SQL without taking a SQL-held -> mu edge.
+	} else {
+		s.mu.RLock()
+		var ok, exact bool
+		var known copyRevision
+		source, ok = s.workspaces[p.workspace]
+		known, exact = s.copyRevisionLocked(p.workspace)
+		current = ok && exact && known.workspaceID == p.stamp.workspaceID && known.revision == p.stamp.revision
+		if current {
+			data, allowed, err = resourceReadMetadata(p, source, kind, ref)
+		}
+		s.mu.RUnlock()
 	}
-	s.mu.RUnlock()
 	if !current {
 		source, err = s.resourceReadRecords(ctx, p, kind, ref)
 		if err == nil {

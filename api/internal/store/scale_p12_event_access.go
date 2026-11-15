@@ -80,14 +80,8 @@ func (s *SQLiteStore) ReadEventPolicySource(ctx context.Context, workspace strin
 	if s.BoundedMetadataEnabled() {
 		return s.readBoundedEventPolicySource(ctx, workspace, version)
 	}
-	s.mu.RLock()
-	data, ok := s.workspaces[workspace]
-	known, exact := s.copyRevisionLocked(workspace)
-	current := ok && exact && known.workspaceID == version.WorkspaceID && known.revision == version.Metadata
-	if current {
-		data = resourcePolicyMetadata(data)
-	}
-	s.mu.RUnlock()
+	data, known, current := s.installedResourcePolicy(ctx, workspace)
+	current = current && known.workspaceID == version.WorkspaceID && known.revision == version.Metadata
 	if !current {
 		var err error
 		data, err = s.resourcePolicyRecords(ctx, workspace, version.WorkspaceID)

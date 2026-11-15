@@ -117,6 +117,9 @@ func (s *SQLiteStore) setCopyRevisionLocked(workspace string, stamp copyStamp) {
 // forgetCopyRevisionLocked marks the copy's revision unknown: the next check
 // reloads it. The caller holds mu.
 func (s *SQLiteStore) forgetCopyRevisionLocked(workspace string) {
+	// Unknown-revision publications can still replace fresh resource bodies.
+	// Invalidate pre-SQL wire identities without certifying a SQL revision.
+	s.copyRevisionEpoch++
 	delete(s.copyRevisions, workspace)
 }
 

@@ -25,7 +25,7 @@ func scaleP21SW0ResidentBoundsFixture(t *testing.T) (scaleP09Fixture, *SQLiteSto
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='teams'`, f.data.Workspace.URLKey); err != nil {
+	if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='teams'`, f.data.Workspace.URLKey); err != nil {
 		t.Fatal(err)
 	}
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency(), workspaces: map[string]domain.Bootstrap{}}
@@ -58,7 +58,7 @@ func TestScaleP21SW0ResidentBoundsOversizedKeyNoTransfer(t *testing.T) {
 			if fixture.blob {
 				key = []byte(fixture.key)
 			}
-			if _, err := tx.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'teams',?,0,?)`, workspace, key, []byte(`{"id":"oversized"}`)); err != nil {
+			if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'teams',?,0,?)`, workspace, key, []byte(`{"id":"oversized"}`)); err != nil {
 				t.Fatal(err)
 			}
 			queries, transferred := 0, false
@@ -75,7 +75,7 @@ func TestScaleP21SW0ResidentBoundsOversizedKeyNoTransfer(t *testing.T) {
 			if !errors.Is(err, ErrMetadataRecordQuery) || transferred || queries != 1 {
 				t.Fatalf("key crossed driver before bounds error: error=%v queries=%d keyQuery=%v", err, queries, transferred)
 			}
-			if _, err := tx.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='teams'`, workspace); err != nil {
+			if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='teams'`, workspace); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -95,7 +95,7 @@ func TestScaleP21SW0ResidentBoundsAcceptedKeysAndPoolOne(t *testing.T) {
 		if f.dialect == "sqlite" && index%2 == 0 {
 			physicalKey = []byte(key)
 		}
-		if _, err := tx.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'teams',?,?,?)`, workspace, physicalKey, index-3, body); err != nil {
+		if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'teams',?,?,?)`, workspace, physicalKey, index-3, body); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -138,7 +138,7 @@ func TestScaleP21SW0ResidentBoundsPhysicalKeyAliasesFailClosed(t *testing.T) {
 	workspace := f.data.Workspace.URLKey
 	for index, key := range []any{"same-key", []byte("same-key")} {
 		raw := []byte(fmt.Sprintf(`{"id":"body-%d"}`, index))
-		if _, err := tx.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'teams',?,?,?)`, workspace, key, index, raw); err != nil {
+		if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'teams',?,?,?)`, workspace, key, index, raw); err != nil {
 			t.Fatal(err)
 		}
 	}
