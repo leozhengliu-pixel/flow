@@ -265,6 +265,17 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 }
 
 func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRecordQuery) (ProjectRecordPage, error) {
+	if s.BoundedMetadataEnabled() {
+		read, err := s.BeginProjectDirectoryQuery(ctx, query)
+		if err != nil {
+			return ProjectRecordPage{}, err
+		}
+		if !registerMetadataOutputClose(ctx, read.Close) {
+			read.Close()
+			return ProjectRecordPage{}, recordMetadataOutputError(ctx, ErrBoundedMetadataCoverage)
+		}
+		return read.Page, nil
+	}
 	return s.queryProjectDirectoryAdapter(ctx, query)
 }
 

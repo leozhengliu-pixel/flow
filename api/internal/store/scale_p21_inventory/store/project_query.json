@@ -1,10 +1,20 @@
 {
   "source": "store/project_query.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
+    "QueryProjectDirectory": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded compatibility calls use BeginProjectDirectoryQuery and transfer page ownership to the containing output owner before returning. Missing ownership is explicit. The literal adapter remains off-only. SW90 proves installed, canonical, catalog, cache, cursor, predicate, occurrence, pin and lifetime behavior; its complete AST boundary pins owner transfer before the adapter and all old helper callsites. Persistent SQLite repeats and race pass.",
+      "accessors": ["BeginProjectDirectoryQuery"],
+      "temperature": "hot",
+      "temperatureReason": "Shared project-directory query used by the project list.",
+      "callers": ["server/server.listProjectRecords", "store/SQLiteStore.QueryProjectDirectoryWithAccess"]
+    },
     "projectSnapshot": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Literal off-mode installed-project compatibility accessor. SW90 scans every production store declaration, guards its complete two-caller set and all legacy adapter entry points, and proves that QueryProjectDirectory dispatches bounded calls to the owned reader before any old adapter. The reader preserves cache precedence, exact current installed order and nil/empty distinction, canonical fallback SQL collation and page projection without materializing stripped details. SW90 and SW87 exact differentials, ownership, persistent SQLite and race pass.",
       "accessors": [
         "resident-state"
       ],

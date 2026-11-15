@@ -1,10 +1,11 @@
 {
   "source": "server/project_directory_api.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "listProjectRecords": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded raw, indexed and selected/app project-list paths use owned project-directory pages; the selected/app path reuses the proven resource-directory projection, exact handoff/gate and credential filtering instead of publicMetadata. Both source and page survive final JSON/customer-envelope encoding. Existing filter validation, customer SQL behavior, old errors and flag-off branches are retained. SW87 compares complete route output across the role/key/app matrix, indexed modes, filters, aliases, handoffs, development, cancellation and refusal; SW90/SW94 supply shared primitive and cache admission proof.",
       "accessors": [
         "Bootstrap",
         "publicMetadata"

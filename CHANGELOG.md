@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Project lists retain owned list-only values through output, preserving filters, permissions, cache precedence and canonical fallback while guarding cache bytes before transfer and decoding.
 - Realtime visibility owns exact project IDs and metadata rule headers through event construction, preserving legacy signals, private-team checks and encoding failures.
 - Shared legacy metadata persistence rebases actor, display, count and subscription changes together before writing; unported callbacks remain guarded.
 - Realtime policy sources preserve certified native generations and retained-version SQL policy labels while keeping live authorization checks and bounded admission.

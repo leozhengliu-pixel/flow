@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 	"strconv"
@@ -56,12 +58,57 @@ func (s *server) listProjectRecords(w http.ResponseWriter, r *http.Request) {
 		Filters:      filters,
 	}
 	var projected *domain.Bootstrap
+	var boundedProjects *store.ResourceDirectoryRead
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && (apiKeyTeamRestrictionSelected(key) || key.Actor == "app") {
-		data, ok := s.publicMetadata(w, r)
-		if !ok {
-			return
+		if s.store.BoundedMetadataEnabled() {
+			workspace, userID := workspaceKey(r), ""
+			if workspace == "" && !s.authDisabled {
+				writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header (API keys and OAuth tokens select it automatically)")
+				return
+			}
+			ctx := r.Context()
+			var credential *domain.APIKey
+			var handed *domain.Bootstrap
+			if s.authDisabled {
+				ctx = context.WithoutCancel(ctx)
+			} else {
+				userID, credential = authUser(r).ID, &key
+				if data, ok := takePagedMetadata(r, workspace, userID); ok {
+					handed = &data
+				} else if !acquireProjection(r) {
+					if retryAfter, refused := projectionRefused(r); refused {
+						writeProjectionBusy(w, retryAfter)
+					}
+					return
+				}
+			}
+			boundedProjects, err = s.store.BeginResourceDirectoryRead(ctx, workspace, userID, credential, "projects", handed)
+			if err != nil {
+				if s.authDisabled && errors.Is(err, store.ErrAuthForbidden) {
+					writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "workspace not found")
+				} else if errors.Is(err, store.ErrAuthForbidden) {
+					writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+				} else {
+					writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+				}
+				return
+			}
+			defer boundedProjects.Close()
+			if !s.authDisabled {
+				filterBootstrapForAPIKey(&boundedProjects.Data, r)
+				if err := s.filterPreferenceIssueTeams(r, &boundedProjects.Data); err != nil {
+					issueRecordsError(w, err)
+					return
+				}
+			}
+			projected = &boundedProjects.Data
+		} else {
+			data, ok := s.publicMetadata(w, r)
+			if !ok {
+				return
+			}
+			projected = &data
 		}
-		projected = &data
 	}
 	if !query.Admin {
 		query.AllowedTeamIDs = access.VisibleTeamIDs
@@ -90,12 +137,16 @@ func (s *server) listProjectRecords(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var page store.ProjectRecordPage
+	var boundedPage *store.ProjectDirectoryQueryRead
 	indexed := false
 	if projected == nil && syncFlagEnabled("FLOW_INDEXED_READS") && !s.authDisabled {
 		status, statusErr := s.store.MetadataCatalogStatus(r.Context(), query.Workspace, "projects")
 		indexed = statusErr == nil && status.Ready
 	}
-	if projected != nil {
+	if boundedProjects != nil {
+		query.Admin = true
+		boundedPage, err = boundedProjects.QueryProjectDirectory(r.Context(), query)
+	} else if projected != nil {
 		query.Admin = true
 		page = store.QueryProjectedProjectDirectory(projected.Projects, query)
 	} else if indexed {
@@ -108,9 +159,19 @@ func (s *server) listProjectRecords(w http.ResponseWriter, r *http.Request) {
 			issueRecordsError(w, accessErr)
 			return
 		}
-		page, err = s.store.QueryProjectDirectoryWithAccess(r.Context(), recordAccess, query)
+		if s.store.BoundedMetadataEnabled() {
+			boundedPage, err = s.store.BeginProjectDirectoryQueryWithAccess(r.Context(), recordAccess, query)
+		} else {
+			page, err = s.store.QueryProjectDirectoryWithAccess(r.Context(), recordAccess, query)
+		}
+	} else if s.store.BoundedMetadataEnabled() {
+		boundedPage, err = s.store.BeginProjectDirectoryQuery(r.Context(), query)
 	} else {
 		page, err = s.store.QueryProjectDirectory(r.Context(), query)
+	}
+	if boundedPage != nil {
+		defer boundedPage.Close()
+		page = boundedPage.Page
 	}
 	if err != nil {
 		issueRecordsError(w, err)

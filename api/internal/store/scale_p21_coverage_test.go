@@ -45,7 +45,7 @@ func scaleP21SnapshotConsumer(node ast.Node) bool {
 		if !ok {
 			return true
 		}
-		if selector.Sel.Name == "workspaces" || selector.Sel.Name == "BeginProjectVisibilityRead" || selector.Sel.Name == "BeginRealtimeRecordRead" {
+		if selector.Sel.Name == "workspaces" || selector.Sel.Name == "BeginProjectVisibilityRead" || selector.Sel.Name == "BeginRealtimeRecordRead" || selector.Sel.Name == "BeginProjectDirectoryQuery" || selector.Sel.Name == "BeginProjectDirectoryQueryWithAccess" {
 			found = true
 		}
 		if slices.Contains([]string{"sweepWorkerChatWorkspace", "BeginAskStatusRead", "BeginResourceRelationRead", "BeginSlackNotificationRead", "BeginMetadataJSONRead", "chatAuthorizedPointRead", "BeginIssueWriteAuthorizationRead", "BeginPresenceDocumentRead", "LoadWorkflow"}, selector.Sel.Name) || slices.Contains(scaleP21SnapshotMethods, selector.Sel.Name) ||
