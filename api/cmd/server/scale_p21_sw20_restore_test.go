@@ -111,7 +111,9 @@ func TestScaleP21SW20RestoreTeamDifferential(t *testing.T) {
 								if object["archivedAt"] != nil || object["archivedById"] != nil {
 									t.Fatal("restored team retained archive metadata")
 								}
-								generated[object["updatedAt"].(string)] = "<restored-clock>"
+								// Audit and resource clocks may coincide. A single
+								// token keeps normalization independent of equality.
+								generated[object["updatedAt"].(string)] = "<generated-clock>"
 								policy, ok := source.IssueAccessMetadata(t.Context(), workspace)
 								index := slices.IndexFunc(policy.Teams, func(team domain.Team) bool { return team.ID == targetID })
 								if !ok || index < 0 || policy.Teams[index].ArchivedAt != nil ||
@@ -133,7 +135,7 @@ func TestScaleP21SW20RestoreTeamDifferential(t *testing.T) {
 						}
 						for i := range audits {
 							generated[audits[i].ID] = "<restored-audit>"
-							generated[audits[i].CreatedAt.Format(time.RFC3339Nano)] = "<audit-clock>"
+							generated[audits[i].CreatedAt.Format(time.RFC3339Nano)] = "<generated-clock>"
 							audits[i].Seq, audits[i].Hash = 0, ""
 						}
 						outcomes = append(outcomes, scaleP21SW6GeneratedJSON(t, []any{w.Code, response, rows, audits, scaleP21SW20Effects(events, realtime)}, generated))

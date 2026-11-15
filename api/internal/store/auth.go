@@ -855,6 +855,11 @@ func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID
 }
 
 func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.Bootstrap, userID string) (domain.Bootstrap, bool, error) {
+	if s.BoundedMetadataEnabled() && !metadataOutputOwnerPresent(ctx) {
+		// Even an unowned legacy caller must observe a newly introduced
+		// bounded-read failure rather than silently emptying its directory.
+		ctx = WithMetadataOutputOwner(ctx, nil)
+	}
 	data.CommentActions = nil // Proposals are returned only by their permission-checked issue endpoint.
 	role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, userID)
 	if err != nil || status != "active" {
@@ -885,6 +890,11 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 		data.DepartedMembers, _ = s.ListDepartedMembers(ctx, data.Workspace.ID, data.Workspace.URLKey)
 	} else {
 		data.Invitations = []domain.Invitation{}
+	}
+	if s.BoundedMetadataEnabled() {
+		if err := metadataOutputError(ctx); err != nil {
+			return domain.Bootstrap{}, false, err
+		}
 	}
 	data.Users = make([]domain.User, 0, len(data.Members))
 	for _, member := range data.Members {

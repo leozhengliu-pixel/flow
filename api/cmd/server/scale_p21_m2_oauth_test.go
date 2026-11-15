@@ -48,7 +48,7 @@ func TestScaleP21M2OAuthDifferential(t *testing.T) {
 					access := f.data
 					access.Viewer, access.ViewerRole = user, role
 					r = r.WithContext(context.WithValue(r.Context(), oauthWorkspaceAccessKey{}, oauthWorkspaceAccess{workspace: workspace, userID: user.ID, data: access}))
-					s.revokeOAuthAuthorization(w, r)
+					scaleP21CallWithOutputOwner(s, w, r, (*server).revokeOAuthAuthorization)
 					outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, false)})
 					if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 						t.Fatal(err)
@@ -73,7 +73,7 @@ func TestScaleP21M2OAuthDifferential(t *testing.T) {
 					r, w = f.request(user, key, nil), httptest.NewRecorder()
 					r.URL.RawQuery = "workspace=" + workspace + "&client_id=" + app.ClientID
 					r = r.WithContext(context.WithValue(r.Context(), oauthWorkspaceAccessKey{}, oauthWorkspaceAccess{workspace: workspace, userID: user.ID, data: access}))
-					s.oauthConsentInstallation(w, r)
+					scaleP21CallWithOutputOwner(s, w, r, (*server).oauthConsentInstallation)
 					outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, false)})
 				}
 				if !reflect.DeepEqual(outcomes[0:2], outcomes[2:4]) || !reflect.DeepEqual(effects[0], effects[1]) || len(audits) == 2 && !reflect.DeepEqual(audits[0], audits[1]) {

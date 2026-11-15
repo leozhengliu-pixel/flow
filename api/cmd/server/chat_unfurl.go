@@ -94,7 +94,11 @@ func (s *server) writeChatLinkPreview(ctx context.Context, w http.ResponseWriter
 		return
 	}
 	event := callback.Event
-	preview, resource := s.chatLinkPreviewFor(ctx, record, event.Operator.TenantKey, event.Operator.OpenID, event.Context.URL, event.Context.ChatID)
+	preview, resource, err := s.chatLinkPreviewFor(ctx, record, event.Operator.TenantKey, event.Operator.OpenID, event.Context.URL, event.Context.ChatID)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
 	if resource != "" && event.Context.PreviewToken != "" {
 		s.chatRememberPreviewToken(ctx, record, resource, event.Context.PreviewToken, event.Operator.OpenID)
 	}
@@ -382,28 +386,28 @@ func (viewer chatPreviewViewer) time(at time.Time) string {
 // chatLinkPreview is the url.preview.get answer for one viewer; {} leaves
 // the link unexpanded.
 func (s *server) chatLinkPreview(ctx context.Context, record domain.ChatIntegrationRecord, tenantKey, openID, rawURL, chatID string) map[string]any {
-	preview, _ := s.chatLinkPreviewFor(ctx, record, tenantKey, openID, rawURL, chatID)
+	preview, _, _ := s.chatLinkPreviewFor(ctx, record, tenantKey, openID, rawURL, chatID)
 	return preview
 }
 
 // chatLinkPreviewFor answers a preview request and names the item it
 // described ("" for none), whose changes refresh the preview.
-func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatIntegrationRecord, tenantKey, openID, rawURL, chatID string) (map[string]any, string) {
+func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatIntegrationRecord, tenantKey, openID, rawURL, chatID string) (map[string]any, string, error) {
 	none := map[string]any{}
 	if tenantKey != record.TenantKey || openID == "" {
-		return none, ""
+		return none, "", nil
 	}
 	target, ok := s.chatLinkTarget(record, rawURL)
 	if !ok {
-		return none, ""
+		return none, "", nil
 	}
 	identity, err := s.store.ChatIdentityForOpenID(ctx, record.WorkspaceKey, record.ConnectionID, openID)
 	if err != nil || identity.TenantKey != record.TenantKey {
-		return chatPreviewHint(record), ""
+		return chatPreviewHint(record), "", nil
 	}
 	data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "workspace", "teams", "teamSettings", "projects", "issueTemplates", "workspaceSettings", "userSettings", "users")
 	if !ok || data.WorkspaceSettings.HIPAACompliance {
-		return none, ""
+		return none, "", nil
 	}
 	viewer := chatPreviewViewer{language: chatLanguage(data, identity.UserID, record.Provider), zone: data.UserSettings[identity.UserID].Timezone, users: data.Users}
 	neutral := chatPreviewNeutral(viewer.language)
@@ -411,18 +415,18 @@ func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatInteg
 	base := s.chatAppOrigin() + "/" + url.PathEscape(record.WorkspaceKey)
 	switch target.kind {
 	case "unknown":
-		return neutral, ""
+		return neutral, "", nil
 	case "workspace":
 		name := firstNonEmpty(data.Workspace.Name, record.WorkspaceKey)
-		return chatPreviewAnswer(viewer.language, chatPreviewContent{title: name, link: base}), ""
+		return chatPreviewAnswer(viewer.language, chatPreviewContent{title: name, link: base}), "", nil
 	case "issue", "comment":
 		var issue domain.Issue
 		if s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(target.id), nil, &issue) != nil || issue.ID == "" {
-			return neutral, ""
+			return neutral, "", nil
 		}
 		scope := s.chatPreviewScope(ctx, record, data, chatID)
 		if !scope.team(issue.Team.ID) || !scope.personal && len(issue.Permissions) > 0 {
-			return neutral, ""
+			return neutral, "", nil
 		}
 		content := chatIssuePreview(viewer, issue, base)
 		if target.kind == "comment" {
@@ -433,11 +437,11 @@ func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatInteg
 				content.link += "#comment-" + url.PathEscape(comment.ID)
 			}
 		}
-		return chatPreviewAnswer(viewer.language, content), "issue:" + issue.ID
+		return chatPreviewAnswer(viewer.language, content), "issue:" + issue.ID, nil
 	}
 	var metadata domain.Bootstrap
 	if s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata) != nil {
-		return neutral, ""
+		return neutral, "", nil
 	}
 	matches := func(id, slug string, previous []string) bool {
 		return target.id == id || target.id == slug || slices.Contains(previous, target.id)
@@ -450,21 +454,41 @@ func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatInteg
 				continue
 			}
 			if len(project.TeamIDs) > 0 && !slices.ContainsFunc(project.TeamIDs, func(id string) bool { return teamContentVisible(metadata, id) }) || !scope().teams(project.TeamIDs...) {
-				return neutral, ""
+				return neutral, "", nil
 			}
 			updates := []domain.ProjectUpdate{}
-			if feed, ok := s.store.PulseFeed(record.WorkspaceKey); ok {
+			if s.store.BoundedMetadataEnabled() {
+				read, found, err := s.store.BeginPulseRead(ctx, record.WorkspaceKey, false)
+				if err != nil {
+					return neutral, "", err
+				}
+				if found {
+					if target.kind == "project_update" {
+						err = read.LoadUpdates(ctx, "project", project.ID, []string{target.anchor})
+					} else {
+						_, err = read.LoadUpdatePage(ctx, "project", project.ID, 0, 1)
+					}
+					if err != nil {
+						read.Close()
+						return neutral, "", err
+					}
+					if err := read.TransferOutput(ctx); err != nil {
+						return neutral, "", err
+					}
+					updates = read.Snapshot.ProjectUpdates[project.ID]
+				}
+			} else if feed, ok := s.store.PulseFeed(record.WorkspaceKey); ok {
 				updates = feed.ProjectUpdates[project.ID]
 			}
 			link := base + "/project/" + url.PathEscape(firstNonEmpty(project.SlugID, project.ID)) + "/overview"
 			if target.kind == "project_update" {
 				index := slices.IndexFunc(updates, func(update domain.ProjectUpdate) bool { return update.ID == target.anchor })
 				if index < 0 {
-					return neutral, ""
+					return neutral, "", nil
 				}
-				return chatPreviewAnswer(viewer.language, chatProjectUpdatePreview(viewer, project, updates[index], link, s.chatAppOrigin())), "project:" + project.ID
+				return chatPreviewAnswer(viewer.language, chatProjectUpdatePreview(viewer, project, updates[index], link, s.chatAppOrigin())), "project:" + project.ID, nil
 			}
-			return chatPreviewAnswer(viewer.language, chatProjectPreview(viewer, data, project, updates, link)), "project:" + project.ID
+			return chatPreviewAnswer(viewer.language, chatProjectPreview(viewer, data, project, updates, link)), "project:" + project.ID, nil
 		}
 	case "initiative":
 		for _, initiative := range metadata.Initiatives {
@@ -473,7 +497,7 @@ func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatInteg
 			}
 			teams := append([]string{initiative.LeadTeamID}, initiative.ContributingTeamIDs...)
 			if !scope().teams(teams...) {
-				return neutral, ""
+				return neutral, "", nil
 			}
 			health, template := chatHealthText(viewer.language, initiative.Health)
 			content := chatPreviewContent{
@@ -486,23 +510,23 @@ func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatInteg
 				},
 				summary: chatPreviewEscape(chatPreviewSnippet(initiative.Summary, chatPreviewSummaryLimit)),
 			}
-			return chatPreviewAnswer(viewer.language, content), "initiative:" + initiative.ID
+			return chatPreviewAnswer(viewer.language, content), "initiative:" + initiative.ID, nil
 		}
 	case "document":
 		document, err := documentByID(&metadata, target.id)
 		if err != nil || documentRole(s, metadata, *document) == "none" {
-			return neutral, ""
+			return neutral, "", nil
 		}
 		teams := append(append(slices.Clone(document.TeamIDs), document.InheritedTeamIDs...), document.IssueTeamID)
 		current := scope()
 		if !current.teams(teams...) {
-			return neutral, ""
+			return neutral, "", nil
 		}
 		// A document shared with specific people is not shown to a group.
 		if !current.personal && len(document.Permissions) > 0 && !slices.ContainsFunc(document.Permissions, func(permission domain.DocumentPermission) bool { return permission.SubjectType == "workspace" }) {
-			return neutral, ""
+			return neutral, "", nil
 		}
-		return chatPreviewAnswer(viewer.language, chatDocumentPreview(viewer, data, *document, base)), "document:" + document.ID
+		return chatPreviewAnswer(viewer.language, chatDocumentPreview(viewer, data, *document, base)), "document:" + document.ID, nil
 	case "view":
 		for _, view := range metadata.SavedViews {
 			if !matches(view.ID, view.SlugID, nil) {
@@ -511,40 +535,40 @@ func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatInteg
 			current := scope()
 			// A personal view stays with its owner; a team's view follows the team.
 			if view.SharedAt == nil && view.OwnerID != "" && (!current.personal || view.OwnerID != identity.UserID) || !current.teams(view.TeamID) {
-				return neutral, ""
+				return neutral, "", nil
 			}
 			content := chatPreviewContent{title: view.Name, link: base + "/view/" + url.PathEscape(firstNonEmpty(view.SlugID, view.ID)), template: "indigo",
 				fields:  []chatPreviewField{{chatT(viewer.language, "team"), chatTeamNames(data, []string{view.TeamID})}},
 				summary: chatPreviewEscape(chatPreviewSnippet(view.Description, chatPreviewSummaryLimit))}
-			return chatPreviewAnswer(viewer.language, content), ""
+			return chatPreviewAnswer(viewer.language, content), "", nil
 		}
 	case "team", "cycle":
 		index := slices.IndexFunc(metadata.Teams, func(team domain.Team) bool { return strings.EqualFold(team.Key, target.team) })
 		if index < 0 {
-			return neutral, ""
+			return neutral, "", nil
 		}
 		team := metadata.Teams[index]
 		if !teamContentVisible(metadata, team.ID) || !scope().team(team.ID) {
-			return neutral, ""
+			return neutral, "", nil
 		}
 		if target.kind == "team" {
 			content := chatPreviewContent{title: team.Name, link: base + "/team/" + url.PathEscape(team.Key) + "/active", template: "indigo",
 				fields:  []chatPreviewField{{chatT(viewer.language, "team_key"), team.Key}},
 				summary: chatPreviewEscape(chatPreviewSnippet(teamSettings(&data, team.ID).Description, chatPreviewSummaryLimit))}
-			return chatPreviewAnswer(viewer.language, content), ""
+			return chatPreviewAnswer(viewer.language, content), "", nil
 		}
 		number, err := strconv.Atoi(target.id)
 		if err != nil {
-			return neutral, ""
+			return neutral, "", nil
 		}
 		for _, cycle := range metadata.Cycles {
 			if cycle.TeamID != team.ID || cycle.Number != number {
 				continue
 			}
-			return chatPreviewAnswer(viewer.language, chatCyclePreview(viewer, team, cycle, base, time.Now())), ""
+			return chatPreviewAnswer(viewer.language, chatCyclePreview(viewer, team, cycle, base, time.Now())), "", nil
 		}
 	}
-	return neutral, ""
+	return neutral, "", nil
 }
 
 func chatIssuePreview(viewer chatPreviewViewer, issue domain.Issue, base string) chatPreviewContent {

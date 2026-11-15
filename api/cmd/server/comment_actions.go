@@ -39,9 +39,22 @@ func (s *server) startCommentActions(r *http.Request, issueID string, comment do
 	if comment.User.App || comment.BotActor != nil || comment.User.Via != nil {
 		return
 	}
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	if read, bounded := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); bounded {
+		data = read.Data
+	} else {
+		data = s.workspaceData(r)
+	}
 	data.Viewer = requestActor(s, r)
-	if _, settings, ok := s.store.AccountCollections(data.Workspace.URLKey, data.Viewer.ID); ok && settings.UserID != "" {
+	if read, bounded := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); bounded {
+		settings, ok, err := read.CurrentCommentActionSettings(r.Context(), data.Viewer.ID)
+		if err != nil {
+			return
+		}
+		if ok && settings.UserID != "" {
+			data.UserSettings = map[string]domain.UserSettings{data.Viewer.ID: settings}
+		}
+	} else if _, settings, ok := s.store.AccountCollections(data.Workspace.URLKey, data.Viewer.ID); ok && settings.UserID != "" {
 		data.UserSettings = map[string]domain.UserSettings{data.Viewer.ID: settings}
 	}
 	issue, err := issueByID(&data, issueID)

@@ -5,11 +5,12 @@
     "SelectedDocumentMetadata": {
       "owner": "P17",
       "status": "unmigrated",
+      "reason": "Arbitrary selectors explicitly reject bounded stores. Owned document and P20 paths have typed reader branches, but P16 project/initiative mutation authorization still calls this selector and has not migrated its complete project/customer/relation closure. Keep pending independently of document reader verification.",
       "accessors": [
         "Bootstrap"
       ],
       "temperature": "hot",
-      "temperatureReason": "Reachable from audited HOT server/document_record_scopes.go:documentAuthorizationMetadata",
+      "temperatureReason": "P16 project and initiative write authorization still reaches the arbitrary selector; document and P20 bounded paths now use their owned typed reader.",
       "callers": [
         "server/server.documentAuthorizationMetadata",
         "server/server.projectRecordAuthorizationMetadata",

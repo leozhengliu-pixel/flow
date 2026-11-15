@@ -1,6 +1,6 @@
 {
   "source": "server/public_api_resources.go",
-  "unmigrated": 15,
+  "unmigrated": 10,
   "consumers": {
     "getOrganization": {
       "owner": "P21",
@@ -64,7 +64,8 @@
     },
     "listDocumentsConnection": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode streams the exact installed/caller/handoff document headers and loads complete Content/Attachments only for admitted page winners; ContentState, ContentData, Revisions and Permissions stay absent from output. Viewer/key/direct-team/archive predicates remain literal. Search preserves the global SQL cap before authorized last-duplicate intersection, exact term/ranking/snippet helpers and search-before-pagination-error precedence, with one admitted body/scratch lifetime at a time. Shared 4670-case five-family HTTP table verifies warm/reloaded/unknown sources, principal/key/app matrix, duplicate titles, filters/cursors/search, development and handoff cases. Store primitive and encoder lifetime pass persistent SQLite twice and race without full metadata decodes or retained work.",
       "accessors": [
         "publicMetadata"
       ],
@@ -76,7 +77,8 @@
     },
     "listInitiativesConnection": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode uses the owned directory's compact global project/initiative/team/parent/label/favorite closure and literal viewer/key projection, then restores actual source names/actors for transient filters and bounded page keys. Complete page outputs omit only Comments/DescriptionHistory, preserving CommentAttachments and all other fields. Duplicate occurrences and stable equal-key cursor behavior remain literal. The shared 4670-case table and primitive/lifetime persistent SQLite twice plus race passed; nonbounded publicMetadata remains literal.",
       "accessors": [
         "publicMetadata"
       ],
@@ -88,7 +90,8 @@
     },
     "listIssueLabelsConnection": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode retains label/group visibility and computes authenticated counts from all visible nonarchived project occurrences and every visible initiative occurrence, deduplicating label IDs only within each resource; development retains stored counters and bypasses credential projection. Actual label names feed filters, complete Description/count/group output loads only for selected ordinals, and scope/resourceType/archive/includeWorkspace quirks remain literal. Shared 4670-case HTTP table and new primitive/encoder persistent SQLite twice plus race passed with zero complete metadata decodes or retained admission.",
       "accessors": [
         "publicMetadata"
       ],
@@ -100,7 +103,8 @@
     },
     "listProjectMilestonesConnection": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode streams visible parent and milestone headers in native occurrence order, including parents without milestones when building the last-wins project-name map. Parent projectId ID-or-slug and archive filters remain literal; milestone ProjectID may differ from its containing parent and duplicate IDs retain separate ordinal tokens. Full winner descriptions load without DescriptionRevisions. Shared 4670-case table proves derived last-duplicate parent names, filters and cursor behavior; persistent SQLite twice and primitive/encoder race passed.",
       "accessors": [
         "publicMetadata"
       ],
@@ -112,7 +116,8 @@
     },
     "listProjectsConnection": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode streams exact installed/caller/handoff filter headers, retains only an admitted page of keys/occurrence tokens, and loads complete winner descriptions/resources/milestones with the literal lightweight history exclusions. Compact global visibility/reference/count policy preserves viewer/key redaction, stored embedded actors and duplicate occurrence semantics; nested milestone histories are never materialized. Shared 4670-case HTTP table covers source modes, full principal/credential matrix, duplicate names, filters/cursors/error/development/handoff cases. Primitive and spool/passthrough normal/cancel/panic ownership passed persistent SQLite twice and race.",
       "accessors": [
         "publicMetadata"
       ],
@@ -169,6 +174,15 @@
       "callers": [
         "GET /api/workflow-states (server/public_api_routes.go:16)"
       ]
+    },
+    "listBoundedResourceConnection": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Typed five-family producer applies existing credential/preferences/coarse/filter/search semantics to real source headers and retains at most one admitted page of sort keys. Global compact policy preserves duplicate counts and references; internal ordinal tags never enter filter/search/sort or derived names. Per-header, per-search-body/scratch and per-output ownership is independent, page leases clear before detached transport, and trailing live validation precedes successful completion. 4670 exact HTTP cases passed; primitive and encoder ownership passed persistent SQLite twice and targeted race.",
+      "accessors": ["BeginResourceDirectoryRead"],
+      "temperature": "hot",
+      "temperatureReason": "Bounded representation's public project, milestone, initiative, document and issue-label connections.",
+      "callers": ["server/server.listProjectsConnection", "server/server.listProjectMilestonesConnection", "server/server.listInitiativesConnection", "server/server.listDocumentsConnection", "server/server.listIssueLabelsConnection"]
     },
     "publicMetadata": {
       "owner": "P21",

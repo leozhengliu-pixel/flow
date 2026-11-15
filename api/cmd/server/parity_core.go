@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
 	"flow/api/internal/store"
@@ -43,6 +44,40 @@ func writePage[T any](w http.ResponseWriter, r *http.Request, items []T) {
 func parityID(kind string) string { return idgen.New(kind + "_") }
 
 func (s *server) listProjectRelations(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		ctx, userID := r.Context(), authUser(r).ID
+		var credential *domain.APIKey
+		if s.authDisabled {
+			ctx, userID = context.WithoutCancel(ctx), ""
+		} else if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			credential = &key
+		}
+		if !s.authDisabled && userID == "" {
+			writePage(w, r, []domain.ProjectRelation(nil))
+			return
+		}
+		read, err := s.store.BeginResourceRelationRead(ctx, workspaceKey(r), userID, credential, "projects")
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) || errors.Is(err, context.Canceled) {
+				writePage(w, r, []domain.ProjectRelation(nil))
+			} else {
+				issueRecordsError(w, err)
+			}
+			return
+		}
+		defer read.Close()
+		if !s.authDisabled {
+			filterBootstrapForAPIKey(&read.Data, r)
+		}
+		if err := read.Select(ctx, r.PathValue("id")); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		items := read.ProjectRelations
+		sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
+		writePage(w, r, items)
+		return
+	}
 	data := s.workspaceData(r)
 	id := r.PathValue("id")
 	items := slices.DeleteFunc(slices.Clone(data.ProjectRelations), func(item domain.ProjectRelation) bool { return item.ProjectID != id && item.RelatedProjectID != id })
@@ -140,6 +175,40 @@ func (s *server) projectHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listInitiativeRelations(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		ctx, userID := r.Context(), authUser(r).ID
+		var credential *domain.APIKey
+		if s.authDisabled {
+			ctx, userID = context.WithoutCancel(ctx), ""
+		} else if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			credential = &key
+		}
+		if !s.authDisabled && userID == "" {
+			writePage(w, r, []domain.InitiativeRelation(nil))
+			return
+		}
+		read, err := s.store.BeginResourceRelationRead(ctx, workspaceKey(r), userID, credential, "initiatives")
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) || errors.Is(err, context.Canceled) {
+				writePage(w, r, []domain.InitiativeRelation(nil))
+			} else {
+				issueRecordsError(w, err)
+			}
+			return
+		}
+		defer read.Close()
+		if !s.authDisabled {
+			filterBootstrapForAPIKey(&read.Data, r)
+		}
+		if err := read.Select(ctx, r.PathValue("id")); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		items := read.InitiativeRelations
+		sort.Slice(items, func(i, j int) bool { return items[i].SortOrder < items[j].SortOrder })
+		writePage(w, r, items)
+		return
+	}
 	data := s.workspaceData(r)
 	id := r.PathValue("id")
 	items := slices.DeleteFunc(slices.Clone(data.InitiativeRelations), func(item domain.InitiativeRelation) bool {

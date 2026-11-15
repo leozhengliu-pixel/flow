@@ -1,10 +1,11 @@
 {
   "source": "server/chat_message_intake.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "chatMessageIntakeExists": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Rechecks the existing item's GET Issue through proven chatAuthorizedPointRead with an independent output owner spanning issue/form/link use and error handling. Off mode forwards to the exact original GET helper. Ordinary missing/authorization failures retain the private generic existing-item message; bounded cancellation, work/page admission and coverage failures propagate instead of falling through as missing. Existing issue/request headings, optional form redraw, private text, dedup keys and durable intake are unchanged. The passing SW41 actual off/on output table compares complete platform method/path/query/body, returned errors and delivery progress, plus unchanged durable intake; the retained small Tier B table covers the changed output branches. Bounded quota/canceled cases produce no send, zero full decodes and zero retained work. Caller-supplied metadata is used unchanged for language and is not certified here; callers' bootstrap and creation/write closures remain independently pending.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"

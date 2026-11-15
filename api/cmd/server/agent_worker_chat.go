@@ -1891,44 +1891,67 @@ func (s *server) sweepWorkerChatReplies(ctx context.Context, now time.Time) int 
 		if ctx.Err() != nil {
 			return swept
 		}
-		data, ok := s.store.WorkspaceMetadataFields(key, "agentSessions")
-		if !ok {
-			continue
-		}
-		for _, session := range data.AgentSessions {
-			for _, message := range session.Messages {
-				if message.Status != agentMessageStreaming || !workerChatMessage(message.ID) {
-					continue
-				}
-				run, info, abandoned := s.workerChatReplyAbandoned(ctx, key, session.ID, message, now)
-				if !abandoned {
-					if run.ID != "" && s.expireWorkerChatRun(ctx, run, info, now) {
-						swept++
-					}
-					continue
-				}
-				if run.ID == "" {
-					// No run names the reply: interrupt it as the conversation holds it.
-					run = store.AgentRun{ID: strings.TrimPrefix(message.ID, "agent_message_"), WorkspaceKey: key, SessionID: session.ID, Kind: store.AgentRunKindChat}
-					run.Principal, _ = json.Marshal(agentRunPrincipal{Mode: agentRunModeUser, UserID: session.UserID})
-					info = workerChatRunInfo{MessageID: message.ID}
-				}
-				reply, err := s.workerChatReplyFor(ctx, run, info)
-				if err != nil {
-					continue
-				}
-				canceled := run.Status == store.AgentRunCanceled
-				if _, err := reply.update(ctx, true, func(d *workerChatDraft) {
-					if canceled {
-						d.fail("", agentReasonUserStop, true, reply.durationMS())
-					} else {
-						d.interrupt(reply.durationMS())
-					}
-				}); err == nil {
+		swept += s.sweepWorkerChatWorkspace(ctx, key, now)
+	}
+	return swept
+}
+
+func (s *server) sweepWorkerChatWorkspace(ctx context.Context, key string, now time.Time) int {
+	swept := 0
+	visit := func(session domain.AgentSession) {
+		for _, message := range session.Messages {
+			if message.Status != agentMessageStreaming || !workerChatMessage(message.ID) {
+				continue
+			}
+			run, info, abandoned := s.workerChatReplyAbandoned(ctx, key, session.ID, message, now)
+			if !abandoned {
+				if run.ID != "" && s.expireWorkerChatRun(ctx, run, info, now) {
 					swept++
 				}
+				continue
+			}
+			if run.ID == "" {
+				// No run names the reply: interrupt it as the conversation holds it.
+				run = store.AgentRun{ID: strings.TrimPrefix(message.ID, "agent_message_"), WorkspaceKey: key, SessionID: session.ID, Kind: store.AgentRunKindChat}
+				run.Principal, _ = json.Marshal(agentRunPrincipal{Mode: agentRunModeUser, UserID: session.UserID})
+				info = workerChatRunInfo{MessageID: message.ID}
+			}
+			reply, err := s.workerChatReplyFor(ctx, run, info)
+			if err != nil {
+				continue
+			}
+			canceled := run.Status == store.AgentRunCanceled
+			if _, err := reply.update(ctx, true, func(d *workerChatDraft) {
+				if canceled {
+					d.fail("", agentReasonUserStop, true, reply.durationMS())
+				} else {
+					d.interrupt(reply.durationMS())
+				}
+			}); err == nil {
+				swept++
 			}
 		}
+	}
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginAgentSessionRead(ctx, key)
+		if err == nil && found {
+			defer read.Close()
+			err = read.VisitHeaders(ctx, store.AgentSessionMatch{}, func(session domain.AgentSession) error {
+				visit(session)
+				return nil
+			})
+		}
+		if err != nil && ctx.Err() == nil {
+			log.Printf("sweep worker chat replies workspace=%s: %v", key, err)
+		}
+		return swept
+	}
+	data, ok := s.store.WorkspaceMetadataFields(key, "agentSessions")
+	if !ok {
+		return swept
+	}
+	for _, session := range data.AgentSessions {
+		visit(session)
 	}
 	return swept
 }

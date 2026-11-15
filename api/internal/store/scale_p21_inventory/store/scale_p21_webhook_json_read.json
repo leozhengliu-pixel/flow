@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_webhook_json_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginWebhookAggregateRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["resident-state"],
+      "temperature": "hot",
+      "temperatureReason": "Selected-team webhook routing for ordinary metadata and issue mutations.",
+      "callers": ["server/server.enqueueWebhookEvent"],
+      "reason": "Owned installed WorkspaceMetadata JSON view preserves literal heavy-collection omission, current-generation lazy capture independent of caller pins, JSON names/omission/quoted fields, supported codecs, raw JSON and last duplicate keys, normalized UTF-8 keys/strings, array order and own-ID-before-child lookup. Each lookup constructs fresh Go maps rather than memoizing a duplicate-ID winner. A complete validity pass fails closed on unrelated marshal or generic-unmarshal failures before allowing any hook; negative lookups need not serialize unrelated scalars. Scalar bodies remain framed and unrelated strings are never decoded. Object headers, selected codec/raw values, JSON round trips and per-handle static struct plans have independent dynamic leases under the existing 256 MiB process work cap, all released at Close, with no full metadata hydration or new SQL. Struct children are framed once per object, avoiding quadratic field scans. TestScaleP21WebhookJSON passes differentials, warm/reloaded output, cancellation, partial quota cleanup, retained generations, concurrent readers and legal large raw records; persistent SQLite twice and targeted race pass. Observed peak work is 1414088 B for 1x/10x unrelated body growth, zero SQL/full decodes/retained work. Trusted routing input only; this does not replace viewer authorization."
+    }
+  }
+}

@@ -1,12 +1,14 @@
 {
   "source": "server/chat_card_actions.go",
-  "unmigrated": 4,
+  "unmigrated": 1,
   "consumers": {
     "chatGroupQuickControls": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Uses the owned chat workflow closure before durable action writes; off mode keeps the literal states/teamSettings accessor. Existing workflow/default/sort helpers receive exact raw ancestor settings and terminal/global state headers. SW53 compares actual enabled group cards and all four live durable actions across 18 direct/inherited/global/missing/default/tie/duplicate/cycle/100-option scenarios, retaining output through encoding and releasing afterward. The shared loading primitive passes Tier A SW54.",
       "accessors": [
-        "WorkspaceMetadataFields"
+        "WorkspaceMetadataFields",
+        "chatCardMetadata"
       ],
       "temperature": "hot",
       "temperatureReason": "Notification-delivery rendering uses these metadata helpers; not only interactive chat setup.",
@@ -18,9 +20,11 @@
     },
     "chatPersonalIssueCard": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Uses the proven display directory/language projection plus owned workflow closure through card encoding; off mode keeps the literal accessor. SW53 compares actual personal cards, options/defaults and all three persisted live actions for 18 direct/inherited/global/missing/default/tie/duplicate/cycle/100-option and language scenarios. Directory order, source generation and durable payloads remain unchanged; no consumer loading logic, cache or lock was added.",
       "accessors": [
-        "WorkspaceMetadataFields"
+        "WorkspaceMetadataFields",
+        "chatCardMetadata"
       ],
       "temperature": "hot",
       "temperatureReason": "Notification-delivery rendering uses these metadata helpers; not only interactive chat setup.",
@@ -32,10 +36,12 @@
     },
     "chatPersonalNotificationCard": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Uses the proven point GET and owned selected language source, then the migrated personal card workflow closure. Off mode retains the literal settings accessor and point adapter's literal legacy dispatch. Existing SW42 point/error behavior and SW43 regressions remain unchanged. SW55 compares twelve actual complete encoded cards and durable actions across missing/review/private unauthorized/allowed issue outcomes and English/Chinese/provider-default languages, asserting hidden-title exclusion, zero or three live controls, actual Status options, localized labels and owned output through encoding with zero leaks/full decodes. No consumer loading logic, cache or lock was added.",
       "accessors": [
         "WorkspaceMetadataFields",
-        "chatAuthorizedMutation"
+        "chatAuthorizedPointRead",
+        "chatCardMetadata"
       ],
       "temperature": "hot",
       "temperatureReason": "Notification-delivery rendering uses these metadata helpers; not only interactive chat setup.",
@@ -48,6 +54,7 @@
     "chatRunQuickAction": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "SW42 switches only the GET Issue pre-read to chatAuthorizedPointRead under an enclosing beginMetadataOutputReads scope spanning ordinary refusal mapping, private error send and subsequent processing. Literal off GET behavior comes from the helper; the PATCH writer, supplied bootstrap permission/workflow inputs and refresh/personal-card helpers remain unchanged and independently pending. NotificationPointDifferential compares actual invalid-priority/identifier/expired/missing-issue/wrong-user error messages and output ownership without exercising a write. This partial point closure does not certify the COLD quick-action consumer or its writes.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"

@@ -23,7 +23,32 @@ func beginRequestResourceReads(r *http.Request) (*http.Request, func()) {
 		return r, func() {}
 	}
 	scope := &requestResourceReads{reads: map[*resourceReadHandoff]struct{}{}}
-	return r.WithContext(context.WithValue(r.Context(), requestResourceReadsKey{}, scope)), scope.close
+	ownerContext := context.WithValue(r.Context(), requestResourceReadsKey{}, scope)
+	ctx := store.WithMetadataOutputOwner(ownerContext, func(close func()) bool {
+		return registerRequestReadClose(ownerContext, close)
+	})
+	return r.WithContext(ctx), scope.close
+}
+
+func beginMetadataOutputReads(ctx context.Context) (context.Context, func()) {
+	if _, ok := ctx.Value(requestResourceReadsKey{}).(*requestResourceReads); ok {
+		return ctx, func() {}
+	}
+	scope := &requestResourceReads{reads: map[*resourceReadHandoff]struct{}{}}
+	ownerContext := context.WithValue(ctx, requestResourceReadsKey{}, scope)
+	ctx = store.WithMetadataOutputOwner(ownerContext, func(close func()) bool {
+		return registerRequestReadClose(ownerContext, close)
+	})
+	return ctx, scope.close
+}
+
+func beginIndependentMetadataOutputReads(ctx context.Context) (context.Context, func()) {
+	scope := &requestResourceReads{reads: map[*resourceReadHandoff]struct{}{}}
+	ownerContext := context.WithValue(ctx, requestResourceReadsKey{}, scope)
+	ctx = store.WithMetadataOutputOwner(ownerContext, func(close func()) bool {
+		return registerRequestReadClose(ownerContext, close)
+	})
+	return ctx, scope.close
 }
 
 func (s *requestResourceReads) add(read *resourceReadHandoff) bool {

@@ -185,7 +185,13 @@ func chatIssueSummaryLine(language string, issue domain.Issue, directory []domai
 // Like the card's other shared actions they are tied to the issue version
 // the card shows, and messageID is filled in once the card is sent.
 func (s *server) chatGroupQuickControls(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, issue domain.Issue, key, messageID, sourceMessage string) ([]map[string]any, []domain.ChatAction, error) {
-	metadata, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "states", "teamSettings")
+	metadata, handled, err := s.chatCardMetadata(ctx, record.WorkspaceKey, store.ChatDisplayRequest{TeamID: issue.Team.ID}, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !handled {
+		metadata, _ = s.store.WorkspaceMetadataFields(record.WorkspaceKey, "states", "teamSettings")
+	}
 	ids := map[string]string{}
 	actions := []domain.ChatAction{}
 	for _, kind := range []string{chatQuickAssign, chatQuickState, chatQuickPriority} {
@@ -209,7 +215,13 @@ func chatPersonalActionID(record domain.ChatIntegrationRecord, cardKey, kind str
 // controls belong to the recipient only and stay usable for the card's
 // lifetime: each click reads the issue's current state.
 func (s *server) chatPersonalIssueCard(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, issue domain.Issue, action chatExtendedAction) (map[string]any, []domain.ChatAction, error) {
-	metadata, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "states", "teamSettings", "userSettings", "users")
+	metadata, handled, err := s.chatCardMetadata(ctx, record.WorkspaceKey, store.ChatDisplayRequest{TeamID: issue.Team.ID, UserID: identity.UserID, Directory: true}, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !handled {
+		metadata, _ = s.store.WorkspaceMetadataFields(record.WorkspaceKey, "states", "teamSettings", "userSettings", "users")
+	}
 	language := chatLanguage(metadata, identity.UserID, record.Provider)
 	ids := map[string]string{}
 	actions := []domain.ChatAction{}
@@ -233,7 +245,13 @@ func (s *server) chatPersonalIssueCard(ctx context.Context, record domain.ChatIn
 // controls when it is about an issue the recipient can open, otherwise the
 // notification with Open in Flow.
 func (s *server) chatPersonalNotificationCard(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, payload chatPersonalJob, item notificationEmailItem, job domain.ChatJob) (map[string]any, []domain.ChatAction, error) {
-	settings, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "userSettings")
+	settings, handled, err := s.chatCardMetadata(ctx, record.WorkspaceKey, store.ChatDisplayRequest{UserID: identity.UserID}, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !handled {
+		settings, _ = s.store.WorkspaceMetadataFields(record.WorkspaceKey, "userSettings")
+	}
 	plain := chatCard(item.Title, chatCardText(item.Line), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain(chatT(chatLanguage(settings, identity.UserID, record.Provider), "open_in_flow")), "url": item.URL}}})
 	notification, err := s.store.NotificationRecord(ctx, record.WorkspaceKey, payload.UserID, payload.NotificationID)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && (notification.IssueID == "" || notification.ReviewID != "") {
@@ -243,7 +261,7 @@ func (s *server) chatPersonalNotificationCard(ctx context.Context, record domain
 		return nil, nil, err
 	}
 	var issue domain.Issue
-	if err := s.chatAuthorizedMutation(withChatIdentityAuthentication(ctx, identity), record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(notification.IssueID), nil, &issue); err != nil {
+	if err := s.chatAuthorizedPointRead(withChatIdentityAuthentication(ctx, identity), record.WorkspaceKey, identity.UserID, "/api/issue-records/"+url.PathEscape(notification.IssueID), &issue); err != nil {
 		var failure *chatMutationError
 		if errors.As(err, &failure) {
 			return plain, nil, nil
@@ -277,6 +295,11 @@ func (s *server) chatAttachPersonalActions(ctx context.Context, actions []domain
 }
 
 func (s *server) chatRunQuickAction(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, metadata domain.Bootstrap, job domain.ChatJob, command chatInboundCommand, stored domain.ChatAction) error {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = beginMetadataOutputReads(ctx)
+		defer close()
+	}
 	var action chatExtendedAction
 	if json.Unmarshal(stored.Payload, &action) != nil {
 		return chatInvalid("invalid card action")
@@ -305,7 +328,7 @@ func (s *server) chatRunQuickAction(ctx context.Context, record domain.ChatInteg
 		return fail("chat_action_expired")
 	}
 	var issue domain.Issue
-	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(action.IssueID), nil, &issue); err != nil {
+	if err := s.chatAuthorizedPointRead(ctx, record.WorkspaceKey, identity.UserID, "/api/issue-records/"+url.PathEscape(action.IssueID), &issue); err != nil {
 		code, err := chatMutationCode(err, "chat_issue_unavailable")
 		if err != nil {
 			return err

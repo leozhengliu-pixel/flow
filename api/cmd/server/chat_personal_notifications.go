@@ -160,6 +160,11 @@ func chatUnavailableToUser(err error) bool {
 }
 
 func (s *server) processChatPersonalNotification(ctx context.Context, record domain.ChatIntegrationRecord, job domain.ChatJob) error {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = beginMetadataOutputReads(ctx)
+		defer close()
+	}
 	var payload chatPersonalJob
 	if json.Unmarshal(job.Payload, &payload) != nil || payload.DeliveryID == "" {
 		return chatInvalid("invalid stored personal notification")
@@ -229,7 +234,26 @@ func (s *server) setChatPersonalDeliveryState(ctx context.Context, record domain
 // code of why it is not sent: the member is no longer active, can no longer
 // open the issue, or the workspace keeps content away from chat applications.
 func (s *server) chatPersonalNotificationItem(ctx context.Context, record domain.ChatIntegrationRecord, payload chatPersonalJob) (notificationEmailItem, string, error) {
-	data, ok := s.store.WorkspaceMetadata(record.WorkspaceKey)
+	var data domain.Bootstrap
+	var display *store.ChatDisplayRead
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		var found bool
+		var err error
+		display, found, err = s.store.BeginChatDisplayRead(ctx, record.WorkspaceKey, store.ChatDisplayRequest{Directory: true, UserID: payload.UserID})
+		if err != nil {
+			return notificationEmailItem{}, "", err
+		}
+		if !found {
+			return notificationEmailItem{}, "", chatInvalid("workspace unavailable")
+		}
+		if err := display.TransferOutput(ctx); err != nil {
+			return notificationEmailItem{}, "", err
+		}
+		data, ok = display.Data, true
+	} else {
+		data, ok = s.store.WorkspaceMetadata(record.WorkspaceKey)
+	}
 	if !ok {
 		return notificationEmailItem{}, "", chatInvalid("workspace unavailable")
 	}
@@ -255,6 +279,12 @@ func (s *server) chatPersonalNotificationItem(ctx context.Context, record domain
 	}
 	if err != nil {
 		return notificationEmailItem{}, "", err
+	}
+	if display != nil && notification.ReviewID != "" {
+		if err := display.LoadReview(ctx, notification.ReviewID); err != nil {
+			return notificationEmailItem{}, "", err
+		}
+		data.Reviews = display.Data.Reviews
 	}
 	if notification.IssueID != "" && notification.ReviewID == "" {
 		issue, err := s.store.IssueRecord(ctx, record.WorkspaceKey, notification.IssueID)

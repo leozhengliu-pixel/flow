@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -272,6 +275,10 @@ func (s *server) listWorkflowStatesConnection(w http.ResponseWriter, r *http.Req
 // GET /api/issue-labels
 
 func (s *server) listIssueLabelsConnection(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.listBoundedResourceConnection(w, r, "labels")
+		return
+	}
 	data, ok := s.publicMetadata(w, r)
 	if !ok {
 		return
@@ -362,6 +369,10 @@ func lightweightProject(project domain.Project) domain.Project {
 // GET /api/projects?first=… (connection form of the project directory)
 
 func (s *server) listProjectsConnection(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.listBoundedResourceConnection(w, r, "projects")
+		return
+	}
 	data, ok := s.publicMetadata(w, r)
 	if !ok {
 		return
@@ -419,6 +430,10 @@ func relationList(ids []string, relation func(string) any) any {
 // GET /api/project-milestones
 
 func (s *server) listProjectMilestonesConnection(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.listBoundedResourceConnection(w, r, "projectMilestones")
+		return
+	}
 	data, ok := s.publicMetadata(w, r)
 	if !ok {
 		return
@@ -456,6 +471,10 @@ func (s *server) listProjectMilestonesConnection(w http.ResponseWriter, r *http.
 // GET /api/initiatives
 
 func (s *server) listInitiativesConnection(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.listBoundedResourceConnection(w, r, "initiatives")
+		return
+	}
 	data, ok := s.publicMetadata(w, r)
 	if !ok {
 		return
@@ -490,6 +509,10 @@ func (s *server) listInitiativesConnection(w http.ResponseWriter, r *http.Reques
 // GET /api/documents?first=…
 
 func (s *server) listDocumentsConnection(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.listBoundedResourceConnection(w, r, "documents")
+		return
+	}
 	data, ok := s.publicMetadata(w, r)
 	if !ok {
 		return
@@ -541,6 +564,475 @@ func (s *server) listDocumentsConnection(w http.ResponseWriter, r *http.Request)
 	}, func(d domain.Document, orderBy string) pageKey {
 		return orderedKey(orderBy, d.ID, d.CreatedAt, d.UpdatedAt)
 	})
+}
+
+type resourceConnectionSelection struct {
+	token    store.ResourceDirectoryToken
+	key      pageKey
+	sequence int
+	snippet  string
+	terms    []string
+	release  func()
+}
+
+type resourceConnectionMatch struct {
+	token   store.ResourceDirectoryToken
+	score   int
+	updated time.Time
+	snippet string
+	terms   []string
+}
+
+func publicResourceDirectoryError(w http.ResponseWriter, err error) {
+	if errors.Is(err, store.ErrAuthForbidden) {
+		writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+		return
+	}
+	if errors.Is(err, store.ErrMetadataWorkBudget) {
+		writeAPIError(w, http.StatusServiceUnavailable, apiErrorInternal, "Workspace snapshot is busy; retry later")
+		return
+	}
+	writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+}
+
+// listBoundedResourceConnection retains the policy graph and at most one page
+// of sort keys. Filter headers, search bodies and encoded output each have
+// independent owners; no collection of full output bodies is materialized.
+func (s *server) listBoundedResourceConnection(w http.ResponseWriter, r *http.Request, kind string) {
+	workspace := workspaceKey(r)
+	if workspace == "" && !s.authDisabled {
+		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header (API keys and OAuth tokens select it automatically)")
+		return
+	}
+	ctx := r.Context()
+	if s.authDisabled {
+		ctx = context.WithoutCancel(ctx)
+	}
+	userID := ""
+	var key *domain.APIKey
+	var handed *domain.Bootstrap
+	if !s.authDisabled {
+		userID = authUser(r).ID
+		if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			key = &credential
+		}
+		if data, ok := takePagedMetadata(r, workspace, userID); ok {
+			handed = &data
+		} else if !acquireProjection(r) {
+			if retryAfter, refused := projectionRefused(r); refused {
+				writeProjectionBusy(w, retryAfter)
+			}
+			return
+		}
+	}
+	read, err := s.store.BeginResourceDirectoryRead(ctx, workspace, userID, key, kind, handed)
+	if err != nil {
+		if s.authDisabled && errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, store.ErrResourceAccessChanged) {
+			writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "workspace not found")
+			return
+		}
+		publicResourceDirectoryError(w, err)
+		return
+	}
+	defer read.Close()
+	if !s.authDisabled {
+		filterBootstrapForAPIKey(&read.Data, r)
+		if err := s.filterPreferenceIssueTeams(r, &read.Data); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+	}
+	teams := visibleTeamSet(read.Data)
+	names := map[string]string{}
+	coarse := func(value *store.ResourceDirectoryValue) bool {
+		archived, filterTeams := includeArchived(r), queryValues(r, "teamId")
+		switch kind {
+		case "projects":
+			p := value.Project
+			return (archived || p.ArchivedAt == nil) && (len(filterTeams) == 0 || slices.ContainsFunc(p.TeamIDs, func(id string) bool { return slices.Contains(filterTeams, id) }))
+		case "projectMilestones":
+			p, ids := value.Project, queryValues(r, "projectId")
+			return (archived || p.ArchivedAt == nil) && (len(ids) == 0 || slices.Contains(ids, p.ID) || slices.Contains(ids, p.SlugID))
+		case "labels":
+			label, resourceType := value.Label, r.URL.Query().Get("resourceType")
+			if resourceType == "" {
+				resourceType = "issue"
+			}
+			if !archived && label.ArchivedAt != nil || resourceType != "all" && labelResourceType(label) != resourceType {
+				return false
+			}
+			if !labelScopeIsWorkspace(label.Scope) {
+				if _, visible := teams[label.Scope]; !visible {
+					return false
+				}
+			}
+			return len(filterTeams) == 0 || slices.Contains(filterTeams, label.Scope) || labelScopeIsWorkspace(label.Scope) && r.URL.Query().Get("includeWorkspace") != "false"
+		case "documents":
+			d := value.Document
+			return documentVisibleToViewer(s, read.Data, d) && (archived || d.ArchivedAt == nil) && (len(filterTeams) == 0 || slices.ContainsFunc(d.TeamIDs, func(id string) bool { return slices.Contains(filterTeams, id) }))
+		}
+		return true
+	}
+	if kind == "projectMilestones" {
+		if err := read.Visit(ctx, func(value *store.ResourceDirectoryValue) error {
+			if value.Token.Child != -1 || !coarse(value) {
+				return nil
+			}
+			if err := read.Reserve(ctx, uint64(len(value.Project.ID)+len(value.Project.Name))*8+256); err != nil {
+				return err
+			}
+			names[strings.Clone(value.Project.ID)] = strings.Clone(value.Project.Name)
+			return nil
+		}); err != nil {
+			publicResourceDirectoryError(w, err)
+			return
+		}
+	}
+	query := strings.TrimSpace(r.URL.Query().Get("query"))
+	var search []resourceConnectionMatch
+	if kind == "documents" && query != "" {
+		// SQL's global cap precedes the authorized candidate intersection.
+		byID := map[string]store.ResourceDirectoryToken{}
+		err = read.Visit(ctx, func(value *store.ResourceDirectoryValue) error {
+			if !coarse(value) {
+				return nil
+			}
+			if err := read.Reserve(ctx, uint64(len(value.Document.ID))*8+256); err != nil {
+				return err
+			}
+			byID[strings.Clone(value.Document.ID)] = value.Token
+			return nil
+		})
+		terms := documentSearchTerms(query)
+		if err == nil && len(terms) > 0 {
+			var ids []string
+			ids, err = s.store.SearchDocumentIDs(r.Context(), read.Data.Workspace.URLKey, terms, true, documentSearchCandidates)
+			for _, id := range ids {
+				token, found := byID[id]
+				if !found || err != nil {
+					continue
+				}
+				value, loadErr := read.SearchDocument(ctx, token)
+				if loadErr != nil {
+					err = loadErr
+					break
+				}
+				match := scoreDocumentMatch(value.Document, terms)
+				if len(match.terms) > 0 {
+					size := uint64(len(match.snippet))*8 + 4096
+					if reserveErr := read.Reserve(ctx, size); reserveErr != nil {
+						err = reserveErr
+					} else {
+						search = append(search, resourceConnectionMatch{token: token, score: match.score, updated: value.Document.UpdatedAt, snippet: strings.Clone(match.snippet), terms: slices.Clone(match.terms)})
+					}
+				}
+				match.document = domain.Document{}
+				value.Close()
+			}
+			slices.SortStableFunc(search, func(a, b resourceConnectionMatch) int {
+				if a.score != b.score {
+					if a.score > b.score {
+						return -1
+					}
+					return 1
+				}
+				return b.updated.Compare(a.updated)
+			})
+		}
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not search documents")
+			return
+		}
+	}
+	orderings := []string{"createdAt", "updatedAt"}
+	if kind == "labels" {
+		orderings = []string{"createdAt"}
+	}
+	args, err := parsePageArgs(r, orderings...)
+	if err != nil {
+		writePageArgsError(w, err)
+		return
+	}
+	fields := resourceConnectionFields(kind, teams, names)
+	filter, err := parseResourceFilter(r.URL.Query().Get("filter"))
+	if err == nil && filter != nil {
+		err = validateFilter(filter, fields, 0)
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, err.Error())
+		return
+	}
+	if err := read.Reserve(ctx, uint64(args.Size)*512+128<<10); err != nil {
+		publicResourceDirectoryError(w, err)
+		return
+	}
+	winners := make([]resourceConnectionSelection, 0, args.Size+1)
+	defer func() {
+		for index := range winners {
+			if winners[index].release != nil {
+				winners[index].release()
+			}
+			winners[index] = resourceConnectionSelection{}
+		}
+	}()
+	total, start, eligible, sequence := 0, 0, 0, 0
+	selectValue := func(value *store.ResourceDirectoryValue, snippet string, terms []string) error {
+		if kind == "projectMilestones" && value.Token.Child < 0 || !coarse(value) {
+			return nil
+		}
+		if kind == "documents" && query != "" {
+			value.Document.SearchSnippet, value.Document.MatchedTerms = snippet, terms
+		}
+		item, sortKey := resourceConnectionItem(kind, value, args.OrderBy)
+		if !matchesFilter(item, filter, fields) {
+			return nil
+		}
+		total++
+		if args.After != nil && comparePageKeys(sortKey, args.After.key()) <= 0 {
+			start++
+			return nil
+		}
+		if args.Before != nil && comparePageKeys(sortKey, args.Before.key()) >= 0 {
+			return nil
+		}
+		eligible++
+		sequence++
+		candidate := resourceConnectionSelection{token: value.Token, key: sortKey, sequence: sequence, snippet: snippet, terms: terms}
+		compare := func(a, b resourceConnectionSelection) int {
+			if order := comparePageKeys(a.key, b.key); order != 0 {
+				return order
+			}
+			if a.sequence < b.sequence {
+				return -1
+			}
+			if a.sequence > b.sequence {
+				return 1
+			}
+			return 0
+		}
+		index, _ := slices.BinarySearchFunc(winners, candidate, compare)
+		if len(winners) == args.Size && (!args.Backward && index == len(winners) || args.Backward && index == 0) {
+			return nil
+		}
+		release, err := read.RetainSelection(ctx, uint64(len(sortKey.ID))*8+1024)
+		if err != nil {
+			return err
+		}
+		candidate.release, candidate.key.ID = release, strings.Clone(sortKey.ID)
+		winners = slices.Insert(winners, index, candidate)
+		if len(winners) > args.Size {
+			drop := len(winners) - 1
+			if args.Backward {
+				drop = 0
+			}
+			winners[drop].release()
+			winners = slices.Delete(winners, drop, drop+1)
+		}
+		return nil
+	}
+	if kind == "documents" && query != "" {
+		for _, match := range search {
+			value, loadErr := read.LoadHeader(ctx, match.token)
+			if loadErr != nil {
+				err = loadErr
+				break
+			}
+			err = selectValue(value, match.snippet, match.terms)
+			value.Close()
+			if err != nil {
+				break
+			}
+		}
+	} else {
+		err = read.Visit(ctx, func(value *store.ResourceDirectoryValue) error { return selectValue(value, "", nil) })
+	}
+	if err != nil {
+		publicResourceDirectoryError(w, err)
+		return
+	}
+	from := start
+	if args.Backward {
+		from += eligible - len(winners)
+	}
+	info := pageInfo{HasPreviousPage: from > 0, HasNextPage: from+len(winners) < total}
+	if len(winners) > 0 {
+		first, last := winners[0].key.cursor(args.OrderBy), winners[len(winners)-1].key.cursor(args.OrderBy)
+		info.StartCursor, info.EndCursor = &first, &last
+	}
+	s.writeResourceConnection(w, r.WithContext(ctx), read, kind, winners, info)
+}
+
+func resourceConnectionItem(kind string, value *store.ResourceDirectoryValue, order string) (any, pageKey) {
+	switch kind {
+	case "projects":
+		p := value.Project
+		return p, orderedKey(order, p.ID, p.CreatedAt, p.UpdatedAt)
+	case "projectMilestones":
+		m := value.Milestone
+		return m, orderedKey(order, m.ID, m.CreatedAt, m.UpdatedAt)
+	case "initiatives":
+		i := value.Initiative
+		return i, orderedKey(order, i.ID, i.CreatedAt, i.UpdatedAt)
+	case "labels":
+		l := value.Label
+		return l, pageKey{ID: l.ID, At: l.CreatedAt}
+	default:
+		d := value.Document
+		return d, orderedKey(order, d.ID, d.CreatedAt, d.UpdatedAt)
+	}
+}
+
+func (s *server) writeResourceConnection(w http.ResponseWriter, r *http.Request, read *store.ResourceDirectoryRead, kind string, winners []resourceConnectionSelection, info pageInfo) {
+	release, err := legacyStreamLease(r.Context(), 256<<10)
+	if err != nil {
+		publicResourceDirectoryError(w, err)
+		return
+	}
+	defer release()
+	file, _ := newLegacySpool()
+	defer removeLegacySpool(file)
+	spool := &legacyResponseSpool{ResponseWriter: w, ctx: r.Context(), file: file}
+	spool.Header().Set("Content-Type", "application/json; charset=utf-8")
+	spool.WriteHeader(http.StatusOK)
+	encodingContext := hydratedSigningContext(r.Context(), spool)
+	buffer := bufio.NewWriterSize(spool, 32<<10)
+	err = func() error {
+		if _, err := buffer.WriteString(`{"nodes":[`); err != nil {
+			return err
+		}
+		for index, winner := range winners {
+			if err := func() error {
+				value, err := read.Load(r.Context(), winner.token)
+				if err != nil {
+					return err
+				}
+				defer value.Close()
+				if kind == "documents" && strings.TrimSpace(r.URL.Query().Get("query")) != "" {
+					value.Document.SearchSnippet, value.Document.MatchedTerms = winner.snippet, winner.terms
+				}
+				if index > 0 {
+					if err := buffer.WriteByte(','); err != nil {
+						return err
+					}
+				}
+				item, _ := resourceConnectionItem(kind, value, "")
+				return encodeHydratedJSON(encodingContext, buffer, reflect.ValueOf(item), 0)
+			}(); err != nil {
+				return err
+			}
+		}
+		if err := read.Validate(r.Context()); err != nil {
+			return err
+		}
+		if _, err := buffer.WriteString(`],"pageInfo":`); err != nil {
+			return err
+		}
+		if err := encodeHydratedJSON(encodingContext, buffer, reflect.ValueOf(info), 0); err != nil {
+			return err
+		}
+		if _, err := buffer.WriteString("}\n"); err != nil {
+			return err
+		}
+		return buffer.Flush()
+	}()
+	read.Close()
+	for index := range winners {
+		winners[index].release()
+		winners[index] = resourceConnectionSelection{}
+	}
+	releaseHydratedProducer(r.Context())
+	if err != nil || spool.err != nil || r.Context().Err() != nil {
+		if !spool.passthrough && r.Context().Err() == nil {
+			publicResourceDirectoryError(w, errors.Join(err, spool.err))
+			return
+		}
+		panic(http.ErrAbortHandler)
+	}
+	if !spool.passthrough && file != nil {
+		if err := sendLegacySpool(r.Context(), w, spool.status, file); err != nil {
+			panic(http.ErrAbortHandler)
+		}
+	}
+}
+
+func resourceConnectionFields(kind string, teams map[string]domain.Team, names map[string]string) filterFields {
+	switch kind {
+	case "projects":
+		return typedFields(map[string]func(domain.Project) any{
+			"id": func(p domain.Project) any { return p.ID }, "name": func(p domain.Project) any { return p.Name },
+			"slugId": func(p domain.Project) any { return p.SlugID }, "health": func(p domain.Project) any { return p.Health },
+			"priority": func(p domain.Project) any { return p.Priority },
+			"status": func(p domain.Project) any {
+				return filterRelation(p.Status.ID, map[string]any{"name": p.Status.Name, "type": p.Status.Type})
+			},
+			"lead": func(p domain.Project) any { return userRelation(p.Lead) },
+			"teams": func(p domain.Project) any {
+				return relationList(p.TeamIDs, func(id string) any { return teamRelation(teams, id) })
+			},
+			"labels": func(p domain.Project) any {
+				return relationList(p.LabelIDs, func(id string) any { return filterRelation(id, nil) })
+			},
+			"members": func(p domain.Project) any {
+				return relationList(p.MemberIDs, func(id string) any { return filterRelation(id, nil) })
+			},
+			"initiatives": func(p domain.Project) any {
+				return relationList(p.Initiatives, func(id string) any { return filterRelation(id, nil) })
+			},
+			"startDate": func(p domain.Project) any { return filterDate(p.StartDate) }, "targetDate": func(p domain.Project) any { return filterDate(p.TargetDate) },
+			"createdAt": func(p domain.Project) any { return p.CreatedAt }, "updatedAt": func(p domain.Project) any { return p.UpdatedAt },
+			"archivedAt": func(p domain.Project) any { return filterTime(p.ArchivedAt) },
+		})
+	case "projectMilestones":
+		return typedFields(map[string]func(domain.ProjectMilestone) any{
+			"id": func(m domain.ProjectMilestone) any { return m.ID }, "name": func(m domain.ProjectMilestone) any { return m.Name },
+			"project": func(m domain.ProjectMilestone) any {
+				return filterRelation(m.ProjectID, map[string]any{"name": names[m.ProjectID]})
+			},
+			"targetDate": func(m domain.ProjectMilestone) any { return filterDate(m.TargetDate) },
+			"createdAt":  func(m domain.ProjectMilestone) any { return m.CreatedAt }, "updatedAt": func(m domain.ProjectMilestone) any { return m.UpdatedAt },
+		})
+	case "initiatives":
+		return typedFields(map[string]func(domain.Initiative) any{
+			"id": func(i domain.Initiative) any { return i.ID }, "name": func(i domain.Initiative) any { return i.Name },
+			"slugId": func(i domain.Initiative) any { return i.SlugID }, "status": func(i domain.Initiative) any { return i.Status },
+			"health": func(i domain.Initiative) any { return i.Health }, "owner": func(i domain.Initiative) any { return userRelation(i.Owner) },
+			"creator": func(i domain.Initiative) any { return userRelation(&i.Creator) }, "targetDate": func(i domain.Initiative) any { return filterDate(i.TargetDate) },
+			"projects": func(i domain.Initiative) any {
+				return relationList(i.ProjectIDs, func(id string) any { return filterRelation(id, nil) })
+			},
+			"parentInitiatives": func(i domain.Initiative) any {
+				return relationList(i.ParentInitiativeIDs, func(id string) any { return filterRelation(id, nil) })
+			},
+			"createdAt": func(i domain.Initiative) any { return i.CreatedAt }, "updatedAt": func(i domain.Initiative) any { return i.UpdatedAt },
+		})
+	case "labels":
+		return typedFields(map[string]func(domain.IssueLabel) any{
+			"id": func(l domain.IssueLabel) any { return l.ID }, "name": func(l domain.IssueLabel) any { return l.Name },
+			"color": func(l domain.IssueLabel) any { return l.Color },
+			"team": func(l domain.IssueLabel) any {
+				if labelScopeIsWorkspace(l.Scope) {
+					return nil
+				}
+				return teamRelation(teams, l.Scope)
+			},
+			"parent": func(l domain.IssueLabel) any { return filterRelation(l.GroupID, nil) }, "createdAt": func(l domain.IssueLabel) any { return l.CreatedAt },
+			"archivedAt": func(l domain.IssueLabel) any { return filterTime(l.ArchivedAt) },
+		})
+	default:
+		return typedFields(map[string]func(domain.Document) any{
+			"id": func(d domain.Document) any { return d.ID }, "title": func(d domain.Document) any { return d.Title },
+			"searchSnippet": func(d domain.Document) any { return d.SearchSnippet }, "matchedTerms": func(d domain.Document) any { return d.MatchedTerms },
+			"slugId": func(d domain.Document) any { return d.SlugID }, "creator": func(d domain.Document) any { return userRelation(&d.Creator) },
+			"teams": func(d domain.Document) any {
+				return relationList(d.TeamIDs, func(id string) any { return teamRelation(teams, id) })
+			},
+			"projects": func(d domain.Document) any {
+				return relationList(d.ProjectIDs, func(id string) any { return filterRelation(id, nil) })
+			},
+			"issue": func(d domain.Document) any { return filterRelation(d.IssueID, nil) }, "createdAt": func(d domain.Document) any { return d.CreatedAt },
+			"updatedAt": func(d domain.Document) any { return d.UpdatedAt }, "archivedAt": func(d domain.Document) any { return filterTime(d.ArchivedAt) },
+		})
+	}
 }
 
 // GET /api/customers

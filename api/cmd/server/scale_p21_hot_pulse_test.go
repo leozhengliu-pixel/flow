@@ -58,7 +58,7 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 				r = r.WithContext(store.WithSQLStatementObserver(r.Context(), sqlSink))
 			}
 			w := httptest.NewRecorder()
-			(&server{store: source}).postPulseSeen(w, r)
+			scaleP21CallWithOutputOwner(&server{store: source}, w, r, (*server).postPulseSeen)
 			return w
 		}
 		var sqlCounts [2][2]int
@@ -154,7 +154,7 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 			ctx, cancel := context.WithCancel(r.Context())
 			cancel()
 			w = httptest.NewRecorder()
-			(&server{store: source}).postPulseSeen(w, r.WithContext(ctx))
+			scaleP21CallWithOutputOwner(&server{store: source}, w, r.WithContext(ctx), (*server).postPulseSeen)
 			if w.Code < http.StatusBadRequest ||
 				!reflect.DeepEqual(before, scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "userSettings", ID: f.data.Viewer.ID})) {
 				t.Fatalf("cancelled acknowledgement changed state: %d %s", w.Code, w.Body.String())
@@ -209,7 +209,7 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 				r.SetPathValue("workspace", key)
 				r.SetPathValue("workspaceKey", key)
 				w := httptest.NewRecorder()
-				(&server{store: source}).postPulseSeen(w, r)
+				scaleP21CallWithOutputOwner(&server{store: source}, w, r, (*server).postPulseSeen)
 				if w.Code != http.StatusForbidden {
 					t.Fatalf("%s accepted acknowledgement: %d %s", phase, w.Code, w.Body.String())
 				}

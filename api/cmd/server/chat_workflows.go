@@ -461,54 +461,62 @@ func (s *server) processChatJobs(ctx context.Context, workspace string) error {
 			if len(jobs) == 0 {
 				break
 			}
-			job := jobs[0]
-			jobCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-			progress := &chatDeliveryProgress{}
-			jobCtx = context.WithValue(jobCtx, chatDeliveryProgressKey{}, progress)
-			err = s.processChatJob(jobCtx, job)
-			cancel()
-			status, message, runAt := "completed", "", time.Time{}
-			if err != nil {
-				message = "Chat operation failed; check application permissions and connection health."
-				var platform *chatPlatformError
-				errors.As(err, &platform)
-				if chatJobFinal(err, job) {
-					status = "failed"
-				} else {
-					status = "pending"
-					delay := time.Duration(1<<min(job.Attempts, 8))*5*time.Second + time.Duration(job.ID[len(job.ID)-1]%5)*time.Second
-					if platform != nil && platform.RetryAfter > delay {
-						delay = platform.RetryAfter
-					}
-					runAt = time.Now().UTC().Add(delay)
-				}
-			}
-			var platformFailure *chatPlatformError
-			if status == "failed" && errors.As(err, &platformFailure) {
-				if healthErr := s.chatDeliveryHealth(ctx, job, platformFailure, false); healthErr != nil && !errors.Is(healthErr, store.ErrNoMutation) {
-					return healthErr
-				}
-			} else if processing := chatProcessingErrorMessage(err); status == "failed" && processing != "" {
-				// Failed inside Flow: the integration page shows it, the job
-				// keeps the reason, the log names the job and the step.
-				message = processing
-				slog.WarnContext(ctx, "chat job failed", "job_id", job.ID, "kind", job.Kind, "connection_id", job.ConnectionID, "attempts", job.Attempts, "error_kind", chatFailureKind(err))
-				if record, recordErr := s.chatJobIntegration(ctx, job); recordErr == nil {
-					if healthErr := s.recordChatDeliveryResultLocked(ctx, record, err); healthErr != nil && !errors.Is(healthErr, store.ErrNoMutation) {
-						return healthErr
-					}
-				}
-			} else if err == nil && progress.sent {
-				if healthErr := s.chatDeliveryHealth(ctx, job, nil, true); healthErr != nil && !errors.Is(healthErr, store.ErrNoMutation) {
-					return healthErr
-				}
-			}
-			if finishErr := s.store.FinishChatJob(ctx, job, status, runAt, message); finishErr != nil {
-				return finishErr
+			if err := s.processChatClaimedJob(ctx, jobs[0]); err != nil {
+				return err
 			}
 		}
 	}
 	return s.startChatDMReplyJobs(ctx, workspace)
+}
+
+func (s *server) processChatClaimedJob(ctx context.Context, job domain.ChatJob) error {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = beginIndependentMetadataOutputReads(ctx)
+		defer close()
+	}
+	jobCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	progress := &chatDeliveryProgress{}
+	jobCtx = context.WithValue(jobCtx, chatDeliveryProgressKey{}, progress)
+	err := s.processChatJob(jobCtx, job)
+	cancel()
+	status, message, runAt := "completed", "", time.Time{}
+	if err != nil {
+		message = "Chat operation failed; check application permissions and connection health."
+		var platform *chatPlatformError
+		errors.As(err, &platform)
+		if chatJobFinal(err, job) {
+			status = "failed"
+		} else {
+			status = "pending"
+			delay := time.Duration(1<<min(job.Attempts, 8))*5*time.Second + time.Duration(job.ID[len(job.ID)-1]%5)*time.Second
+			if platform != nil && platform.RetryAfter > delay {
+				delay = platform.RetryAfter
+			}
+			runAt = time.Now().UTC().Add(delay)
+		}
+	}
+	var platformFailure *chatPlatformError
+	if status == "failed" && errors.As(err, &platformFailure) {
+		if healthErr := s.chatDeliveryHealth(ctx, job, platformFailure, false); healthErr != nil && !errors.Is(healthErr, store.ErrNoMutation) {
+			return healthErr
+		}
+	} else if processing := chatProcessingErrorMessage(err); status == "failed" && processing != "" {
+		// Failed inside Flow: the integration page shows it, the job
+		// keeps the reason, the log names the job and the step.
+		message = processing
+		slog.WarnContext(ctx, "chat job failed", "job_id", job.ID, "kind", job.Kind, "connection_id", job.ConnectionID, "attempts", job.Attempts, "error_kind", chatFailureKind(err))
+		if record, recordErr := s.chatJobIntegration(ctx, job); recordErr == nil {
+			if healthErr := s.recordChatDeliveryResultLocked(ctx, record, err); healthErr != nil && !errors.Is(healthErr, store.ErrNoMutation) {
+				return healthErr
+			}
+		}
+	} else if err == nil && progress.sent {
+		if healthErr := s.chatDeliveryHealth(ctx, job, nil, true); healthErr != nil && !errors.Is(healthErr, store.ErrNoMutation) {
+			return healthErr
+		}
+	}
+	return s.store.FinishChatJob(ctx, job, status, runAt, message)
 }
 
 func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {

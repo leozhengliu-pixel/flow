@@ -1,6 +1,6 @@
 {
   "source": "server/chat_requests.go",
-  "unmigrated": 5,
+  "unmigrated": 3,
   "consumers": {
     "chatFileRequest": {
       "owner": "P18",
@@ -31,7 +31,8 @@
     },
     "chatSendRequestResult": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "After the unchanged successful group card send, nonempty personal recipient and exact linked identity/tenant checks, bounded mode uses proven BeginChatDisplayRead(UserID) for only the recipient's installed language/timezone keys. The read stays open through translated text construction, JSON encoding and platform personal send, then closes on success or failure; read errors propagate for retry. Its original lookup remains a separate boundary after the card send, so a settings replacement during that send is observed. Missing workspace/settings retain the provider fallback; literal off WorkspaceMetadataFields arguments remain unchanged. TestScaleP21ChatRequestResultDifferential compares actual platform message paths/query/decoded bodies and errors across ten language/provider/missing/no-recipient/unlinked/card-failure/personal-failure/source-replacement cases, asserts admitted work during personal output, and leaves zero work/full decodes. The unported chatIssueCard and quick-control children remain independent HOT consumers; this review covers only the direct language adapter, with no new cache/loading primitive.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -43,7 +44,8 @@
     },
     "chatSendRequestStatus": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "After the unchanged SQL intake-request lookup and group/created-status predicate, the explicit bounded branch composes owned BeginAskStatusRead for the exact first Ask.ID, rejected Status and final rejected approval Note. strings.TrimSpace, truncation, translations, outcome replay suppression, thread rebuild/send ordering and SQL request Outcome update remain literal shared code; the off branch retains its original WorkspaceMetadataFields accessor and backward approval loop. The read remains open through card encoding, platform sends and final outcome persistence; errors propagate before publication. TestScaleP21ChatRequestStatusDifferential compares actual platform paths/query/decoded bodies, errors and persisted request/thread values across 19 active/completed/canceled/reopened/rejected/empty-note/nil-approvals/nonrejected/duplicate/empty-ID/missing/replay/thread-rebuild/send-failure/large-note cases. Both modes use the same installed Ask fixture so canonical normalization does not change the oracle between runs; native reader tests independently prove NUL identity/note preservation. Ask rows remain unchanged, full decodes stay zero, and every result releases admitted work. Independent issue-card and other request creation children remain pending.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],

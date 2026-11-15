@@ -1,10 +1,11 @@
 {
   "source": "server/chat_group_agent.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "chatGroupBindings": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Tier B composition of proven readers: at the original metadata lookup boundary one installed Context generation supplies Pulse project headers, ChatDisplay bindability scalars and selected ChatEventPolicy template headers. Literal off accessor/predicate, initial SQL binding read and ID order, full returned binding payloads, first team/project match, every matching template refusal and original live private-team authorizer context/order remain unchanged; bounded reader errors propagate. TestScaleP21SW51ChatGroupBindingsDifferential compares actual complete return values and errors across 19 cases covering defaults, disabled/revoked/other chats, native duplicate team/project/template precedence, missing references/workspace, private/inherited/retired/cyclic scope, authorizer loss, cancellation and HIPAA with zero full decodes or retained work. This reviews the direct binding selection only; caller-supplied group context metadata remains independent.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],

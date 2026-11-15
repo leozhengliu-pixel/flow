@@ -87,6 +87,7 @@ type chatMutationResponse struct {
 	// overflow is the size the response reached when it exceeded the limit;
 	// the body is then incomplete and the operation fails.
 	overflow int
+	owned    *chatPointReadOutput
 }
 
 func (w *chatMutationResponse) Header() http.Header { return w.header }
@@ -100,6 +101,11 @@ func (w *chatMutationResponse) Write(data []byte) (int, error) {
 	if w.overflow > 0 || w.body.Len()+len(data) > chatOperationResponseLimit {
 		w.overflow = max(w.overflow, w.body.Len()) + len(data)
 		return 0, errors.New("chat operation response exceeds limit")
+	}
+	if w.owned != nil {
+		if err := w.owned.work.ReserveEncoded(w.owned.ctx, w.body.Len()+len(data)); err != nil {
+			return 0, err
+		}
 	}
 	return w.body.Write(data)
 }
@@ -183,6 +189,17 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 		return errors.New("unsupported chat operation")
 	}
 	w := &chatMutationResponse{header: make(http.Header)}
+	if point, _ := ctx.Value(chatPointReadKey{}).(bool); point && s.store.BoundedMetadataEnabled() {
+		if method != http.MethodGet || inProcess {
+			return store.ErrBoundedMetadataCoverage
+		}
+		output, err := s.beginChatPointReadOutput(r.Context(), w)
+		if err != nil {
+			return err
+		}
+		w.owned = output
+		r = r.WithContext(output.ctx)
+	}
 	if s.authorizeWorkspaceRequest(w, r, user) {
 		if key := store.ChatMutationKey(ctx); key != "" && method == http.MethodPatch {
 			issueID, applied, receiptErr := s.store.ChatMutationReceipt(ctx, workspace, userID, key)
@@ -199,6 +216,11 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 		}
 		handler(w, r)
 	}
+	if w.owned != nil {
+		if err := w.owned.work.Err(); err != nil {
+			return err
+		}
+	}
 	if w.status == 0 {
 		return &chatMutationError{Status: http.StatusForbidden, Message: "This action is not allowed by your workspace"}
 	}
@@ -211,6 +233,11 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 		var payload struct {
 			Error string `json:"error"`
 		}
+		if w.owned != nil {
+			if err := w.owned.work.ReserveDecode(w.owned.ctx, w.body.Bytes(), &payload); err != nil {
+				return err
+			}
+		}
 		_ = json.Unmarshal(w.body.Bytes(), &payload)
 		if payload.Error == "" {
 			payload.Error = fmt.Sprintf("Flow could not complete this action (HTTP %d)", w.status)
@@ -218,6 +245,11 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 		return &chatMutationError{Status: w.status, Message: payload.Error}
 	}
 	if result != nil && !inProcess {
+		if w.owned != nil {
+			if err := w.owned.work.ReserveDecode(w.owned.ctx, w.body.Bytes(), result); err != nil {
+				return err
+			}
+		}
 		if err := json.Unmarshal(w.body.Bytes(), result); err != nil {
 			slog.WarnContext(ctx, "chat operation response invalid", "method", method, "endpoint", chatOperationEndpoint(path), "status", w.status, "size_bytes", w.body.Len())
 			return &chatOperationError{Path: chatOperationEndpoint(path), Reason: "response_invalid"}

@@ -239,11 +239,15 @@ func issueHotMentionIDs(value any, add func(string) error) error {
 }
 
 func (s *SQLiteStore) loadIssueHotInputs(ctx context.Context, workspace string, data *domain.Bootstrap, target domain.Issue, input domain.IssueUpdateInput) (_ *issueHotInputs, err error) {
-	if _, found := s.storedWorkspace(workspace); !found {
-		return nil, sql.ErrNoRows
-	}
 	if !issueHotInputsSupported(data.Issues, target, input) {
 		return nil, ErrBoundedMetadataCoverage
+	}
+	return s.loadIssueSelectedInputs(ctx, workspace, data, target, input)
+}
+
+func (s *SQLiteStore) loadIssueSelectedInputs(ctx context.Context, workspace string, data *domain.Bootstrap, target domain.Issue, input domain.IssueUpdateInput) (_ *issueHotInputs, err error) {
+	if _, found := s.storedWorkspace(workspace); !found {
+		return nil, sql.ErrNoRows
 	}
 	read := &issueHotInputs{store: s}
 	defer func() {

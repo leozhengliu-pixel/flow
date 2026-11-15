@@ -4638,7 +4638,23 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var created domain.ProjectUpdate
 	var snapshot *domain.PulseSnapshot
-	if feed, ok := s.store.PulseFeed(workspaceKey(r)); ok {
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginPulseRead(r.Context(), workspaceKey(r), false)
+		if err != nil {
+			if r.Context().Err() != nil {
+				respondMutation(w, err, http.StatusCreated, nil)
+			} else {
+				issueRecordsError(w, err)
+			}
+			return
+		}
+		if found {
+			defer read.Close()
+			if project := pulseProjectIn(read.Snapshot, id); project != nil {
+				snapshot = s.projectPulseSnapshot(r.Context(), read.Snapshot.Workspace.URLKey, *project, time.Now().UTC())
+			}
+		}
+	} else if feed, ok := s.store.PulseFeed(workspaceKey(r)); ok {
 		if project := pulseProjectIn(feed, id); project != nil {
 			snapshot = s.projectPulseSnapshot(r.Context(), feed.Workspace.URLKey, *project, time.Now().UTC())
 		}
@@ -7338,6 +7354,9 @@ func writeVersionConflict(w http.ResponseWriter, current any) {
 	writeJSON(w, http.StatusConflict, map[string]any{"error": "This item changed in another session", "code": "VERSION_CONFLICT", "current": current})
 }
 func writeJSON(w http.ResponseWriter, status int, value any) {
+	if err := prepareJSONOutput(w, value); err != nil {
+		return
+	}
 	if writeHydratedSignedJSON(w, status, value) {
 		return
 	}

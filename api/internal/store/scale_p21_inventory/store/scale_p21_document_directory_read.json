@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_document_directory_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginDocumentDirectoryRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns exact installed/caller-snapshot fallback policy and dynamically admitted body-free headers keyed by occurrence ordinal, preserving duplicate IDs and native UpdatedAt ordering. Reuses proven live SQL/application projection admission and trailing live authority checks. Exact Unicode Title-space-Content search streams without retaining bodies; each complete read-only output and actual inflated revision graph stays admitted through encoding and releases independently. Cache, missing, corrupt gzip, invalid JSON, duplicate/empty ref and partial hydration semantics retain the literal loader. Persistent SQLite count2 and store/server ownership race passed, including body-independent header work, cancellation/budget release, mutable ownership, pool-one caller snapshots and queued revocation; exact 1,500-case HTTP table passed.",
+      "accessors": ["resident-state"],
+      "temperature": "hot",
+      "temperatureReason": "Full legacy document list directory, body search and output are reached from normal document views.",
+      "callers": ["server/server.serveBoundedDocumentDirectoryList"]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "source": "server/public_api_records.go",
-  "unmigrated": 7,
+  "unmigrated": 4,
   "consumers": {
     "getCustomerRecord": {
       "owner": "P21",
@@ -28,7 +28,8 @@
     },
     "getInitiativeRecord": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Initial serveResourceRead remains literal for default/on record access. Bounded authenticated off/shadow uses live ResolveAccess plus the owned native/caller-snapshot point projection, retaining native target/policy provenance, existing paged handoff precedence and credential/preference filtering, projection refusal and error envelopes. Auth-disabled fallback uses the trusted installed point read with original cancellation semantics and raw private/archive/count/stale-actor output; all handles remain open through encoding. Nonbounded publicMetadata stays literal. TestScaleP21PublicResourceRecordHandlerDifferential passes 2304 exact project/initiative comparisons across warm/reloaded-known-current/unknown sources, all record-access modes, principals/API/app keys, references, missing/refused/handoff/development cases and 24 actual resource authorization-gate hidden-exact/visible-alias denials; NUL identity cases also pass. New primitive suite passes persistent SQLite twice and race; no full metadata decodes or retained work. Extra ResolveAccess Team-policy SQL is explicitly reported without a speed/capacity claim.",
       "accessors": [
         "publicMetadata"
       ],
@@ -40,7 +41,8 @@
     },
     "getIssueLabelRecord": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded detail reuses the proven owned ResourceDirectoryRead labels graph without reader changes, applies the original API/application credential and preference filters before selection, and retains the first exact-ID occurrence that passes the original visibleTeamSet scope check. Full IssueLabel Load preserves Description, projected GroupID/counts, native names/times and archived/project-resource output; both source and selected-value owners remain live through JSON encoding. Original publicMetadata runs unchanged off mode. Missing binding/workspace, projection handoff/refusal, authenticated error envelopes and auth-disabled raw/key-bypass/cancellation behavior remain exact. TestScaleP21PublicLabelRecordDifferential passes 476 byte-identical status/content-type/retry-header/body comparisons across warm/reload, principal/key matrix, duplicate/hidden-first labels, workspace/private/archive scopes, complete detail, list-query-parameter bypass and dev/error/handoff cases, with held encoding admission, zero full decodes and zero final retained work. Shared directory primitive persistent SQLite twice and race are independently verified.",
       "accessors": [
         "publicMetadata"
       ],
@@ -52,7 +54,8 @@
     },
     "getProjectRecord": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Initial serveResourceRead remains literal for default/on record access. Bounded authenticated off/shadow uses live ResolveAccess plus the owned native/caller-snapshot point projection, retaining native target/policy provenance, existing paged handoff precedence and credential/preference filtering, projection refusal and error envelopes. Auth-disabled fallback uses the trusted installed point read with original cancellation semantics and raw private/archive/count/stale-actor output; all handles remain open through encoding. Nonbounded publicMetadata stays literal. TestScaleP21PublicResourceRecordHandlerDifferential passes 2304 exact project/initiative comparisons across warm/reloaded-known-current/unknown sources, all record-access modes, principals/API/app keys, references, missing/refused/handoff/development cases and 24 actual resource authorization-gate hidden-exact/visible-alias denials; NUL identity cases also pass. New primitive suite passes persistent SQLite twice and race; no full metadata decodes or retained work. Extra ResolveAccess Team-policy SQL is explicitly reported without a speed/capacity claim.",
       "accessors": [
         "publicMetadata"
       ],

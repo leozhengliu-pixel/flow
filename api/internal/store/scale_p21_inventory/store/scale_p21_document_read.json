@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_document_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginDocumentRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned native/canonical document and reciprocal-project selection preserves native mutation inputs, read-only wire values, trash/alias rules and strict indexed failure semantics. Same-snapshot byte/count admission covers every transferred member/identity, principal grant, team membership, invitation JSON, departure and default-favorite/override column; the shared application reader owns installation JSON and derived users through output closure. Owned snapshots validate live AuthzEpoch after rollback with credentials bound to the captured policy; borrowed snapshots preserve pool-one and delegate final revalidation to the enclosing boundary. Full persistent SQLite count2 and store race passed for warm/reloaded/canonical/large/native ownership, actual app/latch, all eight SQL growth/rejection cases and queued session/key revocation; exact HTTP matrix twice and server encoding/batch race passed.",
+      "accessors": ["resident-state"],
+      "temperature": "hot",
+      "temperatureReason": "Owned document detail, comment, subscriber and permission authorization and handler input.",
+      "callers": ["server/server.documentAuthorizationMetadata"]
+    }
+  }
+}

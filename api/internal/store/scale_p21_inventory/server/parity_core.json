@@ -1,6 +1,6 @@
 {
   "source": "server/parity_core.go",
-  "unmigrated": 32,
+  "unmigrated": 30,
   "consumers": {
     "archiveCustomerNeed": {
       "owner": "P21",
@@ -277,7 +277,8 @@
     },
     "listInitiativeRelations": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded path reuses BeginResourceRelationRead with the exact fresh Bootstrap source boundary and existing API/application credential filters. The projected initiative relation slice retains legacy guest survivors even after guest initiative rows are cleared; development bypass retains raw hidden/dangling/empty endpoints and context-free cancellation behavior. Literal path-ID incoming/outgoing filtering, duplicates/source order, original SortOrder sort.Slice and writePage limit/cursor/total behavior remain unchanged; off mode keeps literal workspaceData. TestScaleP21ResourceRelationListDifferential passes2624 exact two-handler comparisons across warm/reload, principal/key/app scope matrix, guest/development/default/missing/canceled, ignored handoffs/gates, aliases and tied duplicate pagination, with held JSON output ownership and zero full decodes/retained work. Shared Tier A new loader passes persistent SQLite twice and race.",
       "accessors": [
         "workspaceData"
       ],
@@ -289,7 +290,8 @@
     },
     "listProjectRelations": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded path reuses BeginResourceRelationRead's compact directory policy and streamed native project relation source, then applies existing API/application credential filtering before exact both-endpoint visible-ID selection. Development retains raw hidden/dangling/empty endpoints; caller projected/point handoffs remain ignored as by the original Bootstrap source boundary. Literal path-ID matching, all incoming/outgoing occurrences, complete milestone/type/time fields, duplicates, source order, original CreatedAt sort.Slice and writePage behavior remain exact; off mode keeps literal workspaceData. TestScaleP21ResourceRelationListDifferential passes2624 exact two-handler comparisons across warm/reload, principal/key/app matrices, native tied duplicate pagination, aliases, missing/canceled/default/dev and ignored handoff/gate cases, with held encoding ownership and zero full decodes/retained work. Tier A loader persistent SQLite twice and race pass, including body10x stable work.",
       "accessors": [
         "workspaceData"
       ],

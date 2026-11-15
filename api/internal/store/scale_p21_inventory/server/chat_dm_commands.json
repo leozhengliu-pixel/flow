@@ -1,11 +1,13 @@
 {
   "source": "server/chat_dm_commands.go",
-  "unmigrated": 4,
+  "unmigrated": 3,
   "consumers": {
     "chatDMComment": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "GET issue preflight now uses chatAuthorizedPointRead with a containing metadata output lifetime through notices, the unchanged POST and the actual final platform send. SW40 Tier B table passes 13 exact legacy/bounded GET/card/error cases and verifies point work remains held during actual platform use and releases after return. A separate boundary witness preserves full-hydration POST success versus bounded 403 This resource is outside your teams, unchanged between the preexisting bounded old-GET adapter and the new point-GET adapter. The POST chatAuthorizedMutation remains independently pending, so this whole consumer is not partially reviewed.",
       "accessors": [
+        "chatAuthorizedPointRead",
         "chatAuthorizedMutation"
       ],
       "temperature": "hot",
@@ -28,7 +30,8 @@
     },
     "chatDMInbox": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Tier B substitution uses proven ChatDisplayRead at the original metadata lookup boundary and lazily loads first ID/current-slug review title/slug headers from that same installed generation. The owner remains live through actual card encoding/platform send and releases on errors; new bounded loading errors propagate. Literal off WorkspaceMetadata remains, while original native QueryNotifications latest10 selection and unfiltered unread count, IssueQueryAccess/VisibleIssueRecordIDs, native issue fetches, missing-source skips, embedded actors, markdown/redaction, language and send/dedup arguments are unchanged. TestScaleP21SW56DMInboxDifferential compares complete actual fake-platform payloads and returned errors across nine empty/mixed/unavailable/review-order/limit/Chinese/platform-failure/missing-workspace/inactive-viewer cases, including native duplicate review and slug-before-ID precedence, no backfill after filtering, held admission during sends, zero full decodes and zero retained work. Create/comment/foreign-preview siblings and upstream authorization retain independent status.",
       "accessors": [
         "WorkspaceMetadata"
       ],
@@ -41,8 +44,9 @@
     "chatDMLinkPreview": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Local issue GET now uses chatAuthorizedPointRead and an outer metadata output lifetime through card construction, command failure notices and platform send/errors; caller-project preview selection is unchanged. SW40 Tier B table passes 13 exact legacy/bounded GET/card/error cases, including selected-empty denial, reconnect, Chinese, platform failure and caller-project/unlinked-workspace paths, with output held during actual use and released after return. A linked foreign-workspace branch still calls pending chatDMAuthorize and its bootstrap projection, so the complete consumer remains pending.",
       "accessors": [
-        "chatAuthorizedMutation"
+        "chatAuthorizedPointRead"
       ],
       "temperature": "hot",
       "temperatureReason": "Reachable from owner hot middleware/ticker",

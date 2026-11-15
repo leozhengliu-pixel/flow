@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_installed_resource_point_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginProjectedInstalledResourcePointRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Narrow projects/initiatives composition gives a matching caller metadata snapshot precedence, otherwise independently retains the actual or explicitly pinned installed source; only native policy/reference headers and complete matching targets are framed. Minimal native team policy, including an actual empty JSON Team identity and its settings, intersects live principal/membership authority before existing resource projection, scalar favorite/default lookup and final ValidateAccess. No canonical target fallback or actor refresh changes literal off/shadow output. TestScaleP21InstalledResourcePointRead compares installed/caller/private-caller/pinned provenance, native NUL/stale actors, hidden exact versus visible aliases, empty-ID policy, supported SQL physical-key identities and revocation; final five-test suite passes twice on one persistent SQLite file and under race. Handler differential additionally preserves exact selected-key authorization gate denials. Existing ResolveAccess performs extra canonical Team-policy SQL before native composition; this is recorded without a speed or capacity claim.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Authenticated public project and initiative detail in legacy off/shadow record-access modes.",
+      "callers": ["server/server.getProjectRecord", "server/server.getInitiativeRecord"]
+    },
+    "BeginInstalledResourcePointRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted projects/initiatives point output independently owns the exact installed physical/default or explicitly pinned logical generation through ResourceRead admission and framing. Existing nativeRank preserves first-best ID/current-slug, suffix and previous-slug precedence; only the winner materializes with read-only WireValue. There is no authorization, SQL, canonical fallback, actor/default normalization or count/favorite recomputation. TestScaleP21InstalledResourcePointRead compares literal WorkspaceMetadata output across native duplicate/collision/private/archive/NUL/count/stale-actor and warm/reloaded/unknown-revision states, cancellation and partial admission cleanup, pinned-child/source replacement and concurrent reads. Persistent SQLite twice and targeted race pass with zero SQL/full decodes and constant admitted output work under 10x unrelated bodies; these counters are not a capacity claim.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Development-mode public project and initiative detail output.",
+      "callers": ["server/server.getProjectRecord", "server/server.getInitiativeRecord"]
+    }
+  }
+}

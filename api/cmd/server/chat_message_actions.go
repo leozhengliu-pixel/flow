@@ -744,17 +744,48 @@ func (s *server) chatCreateFromMessage(ctx context.Context, record domain.ChatIn
 // bot could read the message), otherwise the issue card in the member's bot
 // conversation. Workspaces with sensitive data protection get the link only.
 func (s *server) processChatMessageResult(ctx context.Context, record domain.ChatIntegrationRecord, job domain.ChatJob, payload chatNotificationJob) error {
+	if s.store.BoundedMetadataEnabled() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		var close func()
+		ctx, close = beginIndependentMetadataOutputReads(ctx)
+		defer close()
+	}
 	identity, err := s.store.ChatIdentityForOpenID(ctx, record.WorkspaceKey, record.ConnectionID, payload.PersonalOpenID)
+	if s.store.BoundedMetadataEnabled() && chatMessagePointReadTransient(err) {
+		return err
+	}
 	if err != nil || identity.TenantKey != record.TenantKey {
 		return chatInvalid("result recipient unbound")
 	}
 	var issue domain.Issue
-	if err := s.chatAuthorizedMutation(withChatIdentityAuthentication(ctx, identity), record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(payload.IssueID), nil, &issue); err != nil {
+	if err := s.chatAuthorizedPointRead(withChatIdentityAuthentication(ctx, identity), record.WorkspaceKey, identity.UserID, "/api/issue-records/"+url.PathEscape(payload.IssueID), &issue); err != nil {
+		if s.store.BoundedMetadataEnabled() && ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if s.store.BoundedMetadataEnabled() && chatMessagePointReadTransient(err) {
+			return err
+		}
 		return chatInvalid("result recipient access revoked")
 	}
-	data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "teams", "teamSettings", "workspaceSettings", "userSettings")
-	if !ok {
-		return chatInvalid("workspace unavailable")
+	var data domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		display, found, err := s.store.BeginChatDisplayRead(ctx, record.WorkspaceKey, store.ChatDisplayRequest{Policy: true, UserID: identity.UserID})
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("workspace unavailable")
+		}
+		defer display.Close()
+		data = display.Data
+	} else {
+		var ok bool
+		data, ok = s.store.WorkspaceMetadataFields(record.WorkspaceKey, "teams", "teamSettings", "workspaceSettings", "userSettings")
+		if !ok {
+			return chatInvalid("workspace unavailable")
+		}
 	}
 	link := fmt.Sprintf("%s/%s/issue/%s", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey), url.PathEscape(issue.Identifier))
 	language := chatLanguage(data, identity.UserID, record.Provider)

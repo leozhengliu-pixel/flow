@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_application_access.go",
+  "unmigrated": 0,
+  "consumers": {
+    "applicationAccessRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded server application reads return explicit local ownership with user/delivery/full projection. Delivery holds the primary read and descendant output context through completion; watcher, append and elicitation probes close after each authorization decision, and tool execution retains its current application and descendant context through the invocation. Off mode calls ApplicationByUser with its original context. TestScaleP21ApplicationAccessServerLifetimeDifferential compares complete User/credential and delivery inputs across warm/reloaded sources, denied/missing/canceled probes, 240 watcher-style reads without accumulated owners and descendant context transfer/rejection.",
+      "accessors": ["BeginApplicationAccessRead"],
+      "temperature": "hot",
+      "temperatureReason": "Application worker delivery and live revocation probes.",
+      "callers": ["server/server.deliverApplicationTask", "server/server.executeBuiltinApplication", "server/server.applicationTaskAccessActive"]
+    }
+  }
+}

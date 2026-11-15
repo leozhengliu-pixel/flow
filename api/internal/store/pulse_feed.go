@@ -144,6 +144,7 @@ func pulseIndexFingerprint(projectUpdates map[string][]domain.ProjectUpdate, ini
 // PulseSources is PulseFeed without the ordered update index (Recent and
 // Popular are nil): visibility checks on projects and initiatives, such as
 // filtering realtime events per connection, need no fingerprint or index.
+// This is an off-only legacy accessor; bounded callers use BeginPulseRead.
 func (s *SQLiteStore) PulseSources(workspace string) (*PulseFeedSnapshot, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -172,7 +173,8 @@ func (s *SQLiteStore) PulseIndexBuilds() int64 { return s.pulseIndexes.builds.Lo
 // PulseFeed returns the Pulse view of a workspace. The ordered update index
 // is rebuilt only when its inputs changed; other requests (and writes that
 // only copied the workspace) reuse it, and concurrent requests share one
-// rebuild.
+// rebuild. This is an off-only legacy accessor; bounded callers use the
+// owned BeginPulseRead API through their final output.
 func (s *SQLiteStore) PulseFeed(workspace string) (*PulseFeedSnapshot, bool) {
 	s.mu.RLock()
 	if workspace == "" {

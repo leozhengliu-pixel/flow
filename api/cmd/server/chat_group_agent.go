@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Mentions of the workspace's Lark or Feishu bot in a group.
@@ -250,6 +251,47 @@ func (s *server) chatGroupBindings(ctx context.Context, record domain.ChatIntegr
 	bindings, err := s.store.ChatBindings(ctx, record.WorkspaceKey, record.ConnectionID)
 	if err != nil {
 		return nil, err
+	}
+	if s.store.BoundedMetadataEnabled() {
+		owner, found, err := s.store.BeginInstalledMetadataRead(ctx, record.WorkspaceKey)
+		if err != nil || !found {
+			return nil, err
+		}
+		defer owner.Close()
+		bound, err := owner.Context(ctx)
+		if err != nil {
+			return nil, err
+		}
+		pulse, found, err := s.store.BeginPulseRead(bound, record.WorkspaceKey, false)
+		if err != nil || !found {
+			return nil, err
+		}
+		defer pulse.Close()
+		policy, found, err := s.store.BeginChatDisplayRead(bound, record.WorkspaceKey, store.ChatDisplayRequest{Policy: true})
+		if err != nil || !found {
+			return nil, err
+		}
+		defer policy.Close()
+		var ids []string
+		for _, binding := range bindings {
+			if binding.TemplateID != "" {
+				ids = append(ids, binding.TemplateID)
+			}
+		}
+		var headers []store.ChatEventTemplateHeader
+		if len(ids) > 0 {
+			templates, found, err := s.store.BeginChatEventPolicyRead(bound, record.WorkspaceKey, store.ChatEventPolicyRequest{TemplateIDs: ids})
+			if err != nil || !found {
+				return nil, err
+			}
+			defer templates.Close()
+			headers = templates.Templates
+		}
+		data := policy.Data
+		data.Projects = pulse.Snapshot.Projects
+		return slices.DeleteFunc(bindings, func(binding domain.ChatBinding) bool {
+			return binding.ChatID != chatID || !binding.Enabled || binding.RevokedAt != nil || !chatEventBindingScopePermitted(data, binding, headers) || !s.chatBindingAuthorizerValid(ctx, record.WorkspaceKey, binding)
+		}), nil
 	}
 	data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "teams", "teamSettings", "projects", "issueTemplates", "workspaceSettings")
 	if !ok {

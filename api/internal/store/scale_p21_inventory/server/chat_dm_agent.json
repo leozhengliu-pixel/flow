@@ -1,6 +1,6 @@
 {
   "source": "server/chat_dm_agent.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "chatDMAuthorize": {
       "owner": "P18",
@@ -34,7 +34,8 @@
     },
     "stopForUnlink": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The literal WorkspaceMetadata loop remains off mode. Bounded mode uses AgentSessionRead to stream every exact ID/owner occurrence, including deleted and duplicate sessions, into the existing synchronous stopWorkerChat while each header loan owns its source/output allowance. Only session ID plus ordered message ID/status/native UpdatedAt are loaded; bodies and offloaded content are untouched. The original nonempty-session and same-workspace in-process cancellation short circuits remain intact. Missing workspace still skips worker stopping and sends the final stopped card; bounded read/cancellation/budget errors become deliveryErr without suppressing that final attempt. TestScaleP21ChatUnlinkDifferential has 11 flag-off/on cases comparing real queued-run cancellation statuses, worker-state deletion/isolation, local cancel effects, final card JSON and persisted lease checkpoints for duplicate/deleted, empty session/owner, missing session/workspace, foreign owner/workspace run, Chinese, canceled reader and platform refusal. Cancellation explicitly returns context.Canceled in bounded mode. No full metadata decodes or retained work occur. Separate worker body readers/writers and DM authority/read-marker consumers remain pending.",
       "accessors": [
         "WorkspaceMetadata"
       ],

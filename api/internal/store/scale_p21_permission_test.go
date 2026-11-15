@@ -105,6 +105,7 @@ func TestScaleP21ResidentPolicyPermissionDifferential(t *testing.T) {
 						{"selected-set", &domain.APIKey{ID: "p21-key", Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{public}}},
 					} {
 						t.Run(credential.name, func(t *testing.T) {
+							outputContext := scaleP21ResourceOutputContext(t)
 							legacy, err := f.ResolveAccess(t.Context(), workspace, principal.user.ID, credential.key)
 							if err != nil {
 								t.Fatal(err)
@@ -124,7 +125,7 @@ func TestScaleP21ResidentPolicyPermissionDifferential(t *testing.T) {
 							}
 							for _, key := range []RecordKey{{"projects", "p21-public-project"}, {"projects", "p21-old-slug"}, {"projects", "p21-private-project"}, {"projects", "p21-child-project"}, {"initiatives", "p21-initiative"}} {
 								before, beforeAllowed, beforeErr := f.ResourceReadMetadata(t.Context(), legacy, key.Kind, key.ID)
-								after, afterAllowed, afterErr := probe.ResourceReadMetadata(t.Context(), resident, key.Kind, key.ID)
+								after, afterAllowed, afterErr := probe.ResourceReadMetadata(outputContext, resident, key.Kind, key.ID)
 								if beforeErr != nil || afterErr != nil || beforeAllowed != afterAllowed || !reflect.DeepEqual(before, after) {
 									t.Fatalf("%s/%s changed fields or authorization: legacy=%v/%v resident=%v/%v", key.Kind, key.ID, beforeAllowed, beforeErr, afterAllowed, afterErr)
 								}

@@ -95,7 +95,9 @@ func (s *SQLiteStore) scaleP21SW23ReadTeamPolicyRows(ctx context.Context, tx *sq
 				rows.Close()
 				return nil, err
 			}
-			if !validMetadataKey(RecordKey{"teams", item.key}) || item.size < 0 {
+			// These are trusted physical SQL locators, not external record
+			// requests. The preflight bounds bytes; preserve empty/NUL keys.
+			if item.size < 0 {
 				rows.Close()
 				return nil, ErrMetadataRecordQuery
 			}

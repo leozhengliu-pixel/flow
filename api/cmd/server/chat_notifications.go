@@ -13,7 +13,30 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
+
+func chatEventBindingScopePermitted(data domain.Bootstrap, binding domain.ChatBinding, templates []store.ChatEventTemplateHeader) bool {
+	scope := binding
+	scope.TemplateID = ""
+	if !chatBindingScopePermitted(data, scope) {
+		return false
+	}
+	if binding.TemplateID == "" {
+		return true
+	}
+	found := false
+	for _, template := range templates {
+		if template.ID != binding.TemplateID {
+			continue
+		}
+		if template.TemplateType == "form" || template.FormFields > 0 || template.TeamID != "" && template.TeamID != binding.TeamID || template.VisibilityTeamID != "" && template.VisibilityTeamID != binding.TeamID || template.ProjectID != "" && !chatBindingLimitedToProject(binding, template.ProjectID) {
+			return false
+		}
+		found = true
+	}
+	return found
+}
 
 type chatNotificationJob struct {
 	BindingID       string `json:"bindingId"`
@@ -79,19 +102,35 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 		return nil
 	}
 	if event.Type == "ask.decided" {
-		data, ok := s.store.WorkspaceMetadataFields(workspace, "asks")
-		if !ok {
-			return chatInvalid("request metadata unavailable")
+		if s.store.BoundedMetadataEnabled() {
+			read, found, err := s.store.BeginChatEventPolicyRead(ctx, workspace, store.ChatEventPolicyRequest{AskID: &event.AggregateID})
+			if err != nil {
+				return err
+			}
+			if !found {
+				return chatInvalid("request metadata unavailable")
+			}
+			defer read.Close()
+			if !read.AskFound || read.AskIssueID == "" {
+				return nil
+			}
+			event.AggregateID = read.AskIssueID
+		} else {
+			data, ok := s.store.WorkspaceMetadataFields(workspace, "asks")
+			if !ok {
+				return chatInvalid("request metadata unavailable")
+			}
+			index := slices.IndexFunc(data.Asks, func(ask domain.Ask) bool { return ask.ID == event.AggregateID })
+			if index < 0 || data.Asks[index].IssueID == "" {
+				return nil
+			}
+			event.AggregateID = data.Asks[index].IssueID
 		}
-		index := slices.IndexFunc(data.Asks, func(ask domain.Ask) bool { return ask.ID == event.AggregateID })
-		if index < 0 || data.Asks[index].IssueID == "" {
-			return nil
-		}
-		event.AggregateID = data.Asks[index].IssueID
 	}
 	projectUpdate := slices.Contains(kinds, "project.update_created")
 	var issue *domain.Issue
 	var projectMetadata domain.Bootstrap
+	var metadataCtx context.Context
 	resourceLoaded := false
 	for _, provider := range []string{"feishu", "lark"} {
 		record, err := s.store.ChatIntegration(ctx, workspace, provider)
@@ -116,7 +155,41 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 		}
 		if !resourceLoaded {
 			var ok bool
-			projectMetadata, ok = s.store.WorkspaceMetadataFields(workspace, "projects", "initiatives", "teams", "teamSettings", "issueTemplates", "workspaceSettings")
+			if s.store.BoundedMetadataEnabled() {
+				owner, found, err := s.store.BeginInstalledMetadataRead(ctx, workspace)
+				if err != nil {
+					return err
+				}
+				if !found {
+					return chatInvalid("chat notification metadata unavailable")
+				}
+				defer owner.Close()
+				metadataCtx, err = owner.Context(ctx)
+				if err != nil {
+					return err
+				}
+				pulse, found, err := s.store.BeginPulseRead(metadataCtx, workspace, false)
+				if err != nil {
+					return err
+				}
+				if !found {
+					return chatInvalid("chat notification metadata unavailable")
+				}
+				defer pulse.Close()
+				policy, found, err := s.store.BeginChatDisplayRead(metadataCtx, workspace, store.ChatDisplayRequest{Policy: true})
+				if err != nil {
+					return err
+				}
+				if !found {
+					return chatInvalid("chat notification metadata unavailable")
+				}
+				defer policy.Close()
+				projectMetadata = policy.Data
+				projectMetadata.Projects, projectMetadata.Initiatives = pulse.Snapshot.Projects, pulse.Snapshot.Initiatives
+				ok = true
+			} else {
+				projectMetadata, ok = s.store.WorkspaceMetadataFields(workspace, "projects", "initiatives", "teams", "teamSettings", "issueTemplates", "workspaceSettings")
+			}
 			if !ok {
 				return chatInvalid("chat notification metadata unavailable")
 			}
@@ -132,6 +205,26 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 			}
 			resourceLoaded = true
 		}
+		var templates []store.ChatEventTemplateHeader
+		if s.store.BoundedMetadataEnabled() {
+			var ids []string
+			for _, binding := range bindings {
+				if binding.TemplateID != "" {
+					ids = append(ids, binding.TemplateID)
+				}
+			}
+			if len(ids) > 0 {
+				read, found, err := s.store.BeginChatEventPolicyRead(metadataCtx, workspace, store.ChatEventPolicyRequest{TemplateIDs: ids})
+				if err != nil {
+					return err
+				}
+				if !found {
+					return chatInvalid("chat notification metadata unavailable")
+				}
+				defer read.Close()
+				templates = read.Templates
+			}
+		}
 		// Requests made in the connection's groups (chat_requests.go).
 		var requests []domain.ChatIntakeRequest
 		if issue != nil {
@@ -140,7 +233,16 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 			}
 		}
 		for _, binding := range bindings {
-			if !binding.Enabled || !binding.CreatedAt.IsZero() && event.CreatedAt.Before(binding.CreatedAt) || !chatBindingScopePermitted(projectMetadata, binding) || !s.chatBindingAuthorizerValid(ctx, workspace, binding) {
+			if !binding.Enabled || !binding.CreatedAt.IsZero() && event.CreatedAt.Before(binding.CreatedAt) {
+				continue
+			}
+			var permitted bool
+			if s.store.BoundedMetadataEnabled() {
+				permitted = chatEventBindingScopePermitted(projectMetadata, binding, templates)
+			} else {
+				permitted = chatBindingScopePermitted(projectMetadata, binding)
+			}
+			if !permitted || !s.chatBindingAuthorizerValid(ctx, workspace, binding) {
 				continue
 			}
 			if issue != nil && !chatIssueMatchesBinding(*issue, binding) {
@@ -201,6 +303,11 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 }
 
 func (s *server) processChatNotification(ctx context.Context, record domain.ChatIntegrationRecord, job domain.ChatJob) error {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = beginMetadataOutputReads(ctx)
+		defer close()
+	}
 	var payload chatNotificationJob
 	if json.Unmarshal(job.Payload, &payload) != nil {
 		return chatInvalid("invalid stored notification")
@@ -275,11 +382,26 @@ func (s *server) processChatNotification(ctx context.Context, record domain.Chat
 			return chatInvalid("result recipient unbound")
 		}
 		var authorized domain.Issue
-		if err := s.chatAuthorizedMutation(withChatIdentityAuthentication(ctx, identity), record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(issue.ID), nil, &authorized); err != nil {
+		if err := s.chatAuthorizedPointRead(withChatIdentityAuthentication(ctx, identity), record.WorkspaceKey, identity.UserID, "/api/issue-records/"+url.PathEscape(issue.ID), &authorized); err != nil {
+			if s.store.BoundedMetadataEnabled() && chatMessagePointReadTransient(err) {
+				return err
+			}
 			return chatInvalid("result recipient access revoked")
 		}
 		link := fmt.Sprintf("%s/%s/issue/%s", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey), url.PathEscape(issue.Identifier))
-		settings, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "userSettings")
+		var settings domain.Bootstrap
+		if s.store.BoundedMetadataEnabled() {
+			display, found, err := s.store.BeginChatDisplayRead(ctx, record.WorkspaceKey, store.ChatDisplayRequest{UserID: identity.UserID})
+			if err != nil {
+				return err
+			}
+			if found {
+				defer display.Close()
+				settings = display.Data
+			}
+		} else {
+			settings, _ = s.store.WorkspaceMetadataFields(record.WorkspaceKey, "userSettings")
+		}
 		if err := s.chatSendPersonalText(ctx, record, payload.PersonalOpenID, chatT(chatLanguage(settings, identity.UserID, record.Provider), "saved_link", issue.Identifier, link), chatKey(job.DedupKey, "success")); err != nil {
 			return err
 		}
@@ -331,6 +453,70 @@ func chatInitiativeMatchesBinding(data domain.Bootstrap, binding domain.ChatBind
 
 func (s *server) chatSendInitiativeUpdate(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, job domain.ChatJob, payload chatNotificationJob) error {
 	initiativeID := payload.InitiativeID
+	if s.store.BoundedMetadataEnabled() {
+		owner, found, err := s.store.BeginInstalledMetadataRead(ctx, record.WorkspaceKey)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("initiative metadata unavailable")
+		}
+		defer owner.Close()
+		bound, err := owner.Context(ctx)
+		if err != nil {
+			return err
+		}
+		pulse, found, err := s.store.BeginPulseRead(bound, record.WorkspaceKey, false)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("initiative metadata unavailable")
+		}
+		defer pulse.Close()
+		policy, found, err := s.store.BeginChatDisplayRead(bound, record.WorkspaceKey, store.ChatDisplayRequest{Policy: true})
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("initiative metadata unavailable")
+		}
+		defer policy.Close()
+		data := policy.Data
+		data.Initiatives = pulse.Snapshot.Initiatives
+		if !chatInitiativeMatchesBinding(data, binding, initiativeID) {
+			return nil
+		}
+		if err := pulse.LoadSource(bound, "initiative", initiativeID); err != nil {
+			return err
+		}
+		data.Initiatives = pulse.Snapshot.Initiatives
+		initiative, found := chatFindInitiative(data, initiativeID)
+		if !found {
+			return nil
+		}
+		display, found, err := s.store.BeginChatDisplayRead(bound, record.WorkspaceKey, store.ChatDisplayRequest{Directory: true, TeamID: initiative.LeadTeamID})
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("initiative metadata unavailable")
+		}
+		defer display.Close()
+		data.Users, data.TeamSettings = display.Data.Users, display.Data.TeamSettings
+		var ids []string
+		if payload.UpdateID != "" {
+			ids = []string{payload.UpdateID}
+		}
+		if err := pulse.LoadUpdates(bound, "initiative", initiativeID, ids); err != nil {
+			return err
+		}
+		slug := firstNonEmpty(initiative.SlugID, initiative.ID)
+		link := fmt.Sprintf("%s/%s/initiative/%s/overview", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey), url.PathEscape(slug))
+		card := s.chatInitiativeUpdateCardFrom(chatGroupLanguage(record, binding), data, initiative, link, payload, pulse.Snapshot.InitiativeUpdates[initiativeID])
+		content, _ := json.Marshal(card)
+		return s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages?receive_id_type=chat_id", map[string]any{"receive_id": binding.ChatID, "msg_type": "interactive", "content": string(content), "uuid": chatKey(job.DedupKey, "initiative")[:32]}, nil)
+	}
 	data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "initiatives", "teams", "teamSettings", "workspaceSettings", "users")
 	if !ok {
 		return chatInvalid("initiative metadata unavailable")
@@ -374,6 +560,11 @@ func (s *server) chatSendIssueCard(ctx context.Context, record domain.ChatIntegr
 // chatSendIssueCardFrom posts the card into the issue's thread in the group
 // (chat_issue_threads.go); a thread it starts mirrors comments from syncFrom.
 func (s *server) chatSendIssueCardFrom(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, issue domain.Issue, key, sourceMessage, kind string, syncFrom time.Time) error {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = beginMetadataOutputReads(ctx)
+		defer close()
+	}
 	card, actions, err := s.chatIssueCard(ctx, record, binding, issue, key, "", sourceMessage)
 	if err != nil {
 		return err
@@ -400,6 +591,11 @@ func (s *server) chatSendIssueCardFrom(ctx context.Context, record domain.ChatIn
 }
 
 func (s *server) chatRefreshIssueCards(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, issue domain.Issue) error {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = beginMetadataOutputReads(ctx)
+		defer close()
+	}
 	messages, err := s.store.ChatMessagesForIssue(ctx, record.WorkspaceKey, record.ConnectionID, issue.ID)
 	if err != nil {
 		return err

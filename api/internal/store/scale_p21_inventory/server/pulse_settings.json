@@ -1,11 +1,11 @@
 {
   "source": "server/pulse_settings.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "preparePulseSummaries": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Read inputs now use owned BeginPulseScheduleRead, LoadSchedule and LoadFeed with native installed scalar/cursor projection and admission retained through processing. The remaining MutateWorkspace callback atomically updates pulseDeliveryCursors, appends notifications and creates delivery rows; it still requires a dedicated bounded summary writer preserving the all-due-member atomic publication and preference/schedule rechecks. Read-side migration alone does not certify this ticker.",
+      "status": "reviewed",
+      "reason": "Owned BeginPulseScheduleRead/LoadSchedule/LoadFeed retain their already-reviewed source/admission lifetime through processing. Only the bounded branch now uses CommitPulseSummaries for one atomic all-due-member cursor plus notification/delivery commit, with installed native feature/schedule/preferences/push rechecks and the unchanged defaultPreferences/category/delivery decisions. The original MutateWorkspace callback remains literal off mode. Strict native/canonical policy table covers absent, present-zero, nil/empty and disabled categories, operator defaults, digest/chat/push, feature/schedule changes, prior cursor and cursor-only recipients; actual preparePulseSummaries flag differential compares complete update references, canonical cursor, notification/delivery output and recipient/summary signals, including second-tick no-op. Writer Tier A rollback/retry/quota/cancel, warm/reloaded, large-cursor/1000-recipient/stale-peer, persistent SQLite twice and targeted race passed; focused invited-member, daily-to-weekly and per-visibility business regressions passed.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

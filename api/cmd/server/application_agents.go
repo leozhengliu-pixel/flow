@@ -256,7 +256,65 @@ func (s *server) applicationTaskContext(r *http.Request, task domain.AgentTask, 
 		metadata.Issues = nil
 		return metadata, nil
 	}
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	var resourceRead *store.ApplicationTaskContextRead
+	if s.store.BoundedMetadataEnabled() {
+		var supplied bool
+		filterCredential := !s.authDisabled
+		if metadataReadRequest(r) {
+			if !s.authDisabled {
+				data, supplied = takePagedMetadata(r, workspaceKey(r), authUser(r).ID)
+				if !supplied && !acquireProjectionWaiting(r) {
+					return data, errNotFound
+				}
+			}
+		} else if authorized, ok := r.Context().Value(issueRecordAuthorizationContext{}).(domain.Bootstrap); ok {
+			data, supplied = authorized, true
+			filterCredential = false
+		} else if pagedRealtimeRequest(r) {
+			var err error
+			data, _, err = s.pagedRealtimeMetadata(r)
+			if err != nil {
+				return data, errNotFound
+			}
+			supplied = true
+			filterCredential = false
+		}
+		if !supplied {
+			if task.ResourceType != "document" && task.ResourceType != "project" && task.ResourceType != codingEnvironmentAnchorResource {
+				return data, errNotFound
+			}
+			ctx, userID := r.Context(), authUser(r).ID
+			if s.authDisabled {
+				ctx, userID = context.WithoutCancel(ctx), ""
+			}
+			var err error
+			resourceRead, err = s.store.BeginApplicationTaskContextRead(ctx, workspaceKey(r), userID, documentRecordCredential(r), store.ApplicationTaskContextRequest{
+				ResourceType: task.ResourceType, ResourceID: task.ResourceID, TeamID: task.TeamID, MetadataOnly: metadataReadRequest(r),
+			})
+			if errors.Is(err, store.ErrMetadataWorkBudget) || errors.Is(err, store.ErrBoundedMetadataCoverage) {
+				return data, err
+			}
+			if err == nil {
+				if err := resourceRead.TransferOutput(r.Context()); err != nil {
+					return data, err
+				}
+				data = resourceRead.Data
+			}
+		}
+		if filterCredential {
+			filterBootstrapForAPIKey(&data, r)
+		}
+		if resourceRead != nil && !metadataReadRequest(r) {
+			for index := range data.Projects {
+				if data.Projects[index].ID == task.ResourceID {
+					data.Projects[index].IssueCount = resourceRead.ProjectIssueCount
+				}
+			}
+		}
+	} else {
+		data = s.workspaceData(r)
+	}
 	if task.ResourceType == "document" {
 		doc, err := documentByID(&data, task.ResourceID)
 		if err != nil {
@@ -526,12 +584,18 @@ func (s *server) runApplicationAgentWorker(ctx context.Context) {
 }
 
 func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTask) {
+	if s.store.BoundedMetadataEnabled() {
+		var closeOutputs func()
+		ctx, closeOutputs = applicationOutputContext(ctx)
+		defer closeOutputs()
+	}
 	// coding sessions (track B): a coding anchor is driven by its session, never by the application worker.
 	if s.codingAnchorTask(ctx, task) {
 		_ = s.store.FinishApplicationDelivery(ctx, task.ID, task.Version, true)
 		return
 	}
-	app, err := s.store.ApplicationByUser(ctx, task.AppUserID)
+	app, closeApp, err := s.applicationAccessRead(ctx, task.AppUserID, "delivery")
+	defer closeApp()
 	if err != nil || !app.Active || !slices.Contains(app.AccessTeamIDs(), task.TeamID) {
 		_, _ = s.store.AppendAgentActivity(ctx, task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{Type: "canceled", Body: "Application access was revoked."})
 		return
@@ -552,8 +616,7 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 						cancel()
 						return
 					}
-					installation, err := s.store.ApplicationByUser(ctx, task.AppUserID)
-					if err != nil || !installation.Active || !slices.Contains(installation.AccessTeamIDs(), task.TeamID) {
+					if !s.applicationTaskAccessActive(ctx, task) {
 						cancel()
 						return
 					}
@@ -650,8 +713,7 @@ func appendBuiltinActivity(ctx context.Context, repo *store.SQLiteStore, task do
 
 func (s *server) executeBuiltinApplication(r *http.Request, app domain.ApplicationInstallation, task domain.AgentTask, data domain.Bootstrap) {
 	appendAgentActivity := func(activity domain.AgentActivity) error {
-		current, err := s.store.ApplicationByUser(r.Context(), task.AppUserID)
-		if err != nil || !current.Active || !slices.Contains(current.AccessTeamIDs(), task.TeamID) {
+		if !s.applicationTaskAccessActive(r.Context(), task) {
 			return store.ErrAuthForbidden
 		}
 		activity.ActorID = task.AppUserID
@@ -665,12 +727,19 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 		return appendAgentActivity(domain.AgentActivity{Type: kind, Body: body})
 	}
 	execute := func(call domain.AgentToolCall) ([]byte, error) {
-		current, err := s.store.ApplicationByUser(r.Context(), task.AppUserID)
+		ctx := r.Context()
+		if s.store.BoundedMetadataEnabled() {
+			var closeOutputs func()
+			ctx, closeOutputs = applicationOutputContext(ctx)
+			defer closeOutputs()
+		}
+		current, closeCurrent, err := s.applicationAccessRead(ctx, task.AppUserID, "user")
+		defer closeCurrent()
 		if err != nil || !current.Active || !slices.Contains(current.AccessTeamIDs(), task.TeamID) {
 			return nil, store.ErrAuthForbidden
 		}
 		key := domain.APIKey{CreatorID: current.UserID, SubjectUserID: current.UserID, Actor: "app", Scopes: current.Scopes, TeamRestriction: "selected", TeamIDs: current.AccessTeamIDs(), OAuthClientID: current.ClientID}
-		req := r.WithContext(context.WithValue(r.Context(), apiKeyContextKey{}, key))
+		req := r.WithContext(context.WithValue(ctx, apiKeyContextKey{}, key))
 		req, scoped, err := s.builtinApplicationContext(req, current, task)
 		if err != nil {
 			return nil, err
@@ -939,8 +1008,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 					choices = append(choices, map[string]any{"label": option.Label, "value": option.Value})
 				}
 				body := strings.TrimSpace(strings.TrimSpace(turn.Text) + "\n\n" + question)
-				current, err := s.store.ApplicationByUser(r.Context(), task.AppUserID)
-				if err != nil || !current.Active || !slices.Contains(current.AccessTeamIDs(), task.TeamID) {
+				if !s.applicationTaskAccessActive(r.Context(), task) {
 					return
 				}
 				if next, err := s.store.AppendAgentActivity(r.Context(), task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{ActorID: task.AppUserID, Type: "elicitation", Body: body, Signal: "select", SignalMetadata: map[string]any{"options": choices}}); err == nil {
@@ -1001,8 +1069,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 					metadata["approval"] = summary
 				}
 			}
-			current, err := s.store.ApplicationByUser(r.Context(), task.AppUserID)
-			if err != nil || !current.Active || !slices.Contains(current.AccessTeamIDs(), task.TeamID) {
+			if !s.applicationTaskAccessActive(r.Context(), task) {
 				return
 			}
 			if next, err := s.store.AppendAgentActivity(r.Context(), task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{ActorID: task.AppUserID, Type: "elicitation", Body: body, Signal: "select", SignalMetadata: metadata, ToolCall: &pendingCall}); err == nil {

@@ -1,6 +1,6 @@
 {
   "source": "server/webhook_delivery.go",
-  "unmigrated": 4,
+  "unmigrated": 0,
   "consumers": {
     "attemptWebhookDelivery": {
       "owner": "P21",
@@ -25,8 +25,8 @@
     },
     "disableFailingWebhook": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Exact atomic writer blocker: the original MutationScope transaction changes webhook enablement, stages its audit, creates the creator inbox notification and notification deliveries together. Generic scoped metadata writers reject notification/delivery content changes; separate webhook and content commits lose the enabled-check exactly-once behavior. Cancellation of queued webhook deliveries and dispatchNotificationEmails remain post-commit. No split transaction or cold fallback is introduced.",
+      "status": "reviewed",
+      "reason": "Shares the literal disable callback between the original off-mode MutateWorkspace and the dedicated bounded MutateFailingWebhookDisable transaction. The first native hook enabled guard, audit, creator inbox notification and channel deliveries commit atomically; queued-webhook cancellation and immediate email dispatch retain their post-commit order. TestScaleP21HotWebhookDisableCallbackDifferential compares all outputs across scoped/full oracle and warm/reloaded modes for digest timezone, urgent/breached empty-ID issues, operator defaults, channel/category flags, missing/inactive/duplicate creator and missing/already-disabled hooks, including repeated no-op, native hook state, audit, notification/deliveries and payload/previous/snapshot/realtime images. The Tier A primitive passes persistent SQLite twice and race with rollback, exactly-once concurrency, inline/native and imported physical-row coverage, stable body10x admission and zero full decodes/retained work. No cold fallback or split commit.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -40,8 +40,8 @@
     },
     "dispatchWebhookEvent": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Owned installed routing projection and independent actor/identity accessor generations pass TestScaleP21HotWebhookDeliveryRoutingAndActors twice on persistent SQLite: 20 actual stored envelopes match per warm/reloaded generation, including v1/v2 private/selected-empty routing, actor and full member output, deletion stripping and milestone reorder, with zero bounded full decodes/work retained. This caller still reaches the independently pending enqueueWebhookEvent whole-graph team fallback and remains conservatively unreviewed; routing/identity coverage does not establish bounded activation.",
+      "status": "reviewed",
+      "reason": "Owned installed routing projection and independent actor/identity accessor generations retain literal v1/v2 selected-team routing, actor/member output, deletion stripping and reordered milestones. Previously proven readers remain unchanged. The remaining enqueue closure now uses the Tier A owned legacy JSON view, preserving nested JSON aggregate precedence and the existing DomainEvent.ID lookup. TestScaleP21WebhookJSONRoutingDifferential compares actual queued rows and complete envelopes across direct teams, terminal false/empty payload teamId, nonmatching payload teamIds falling through, raw nested metadata IDs and differing event/aggregate IDs, with zero bounded full decodes/retained work. TestScaleP21HotWebhookDeliveryRoutingAndActors continues to cover the surrounding dispatch family. Literal off accessors and network/queue order remain unchanged.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -53,8 +53,8 @@
     },
     "enqueueWebhookEvent": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Organization identity has an owned installed scalar read, but selected-team events with no direct subject teams retain the original webhookTeamAllowed fallback. That fallback JSON-marshals the whole legacy WorkspaceMetadata graph, fails closed on an unrelated encoding error, then uses map-iteration DFS over arbitrary nested id objects. The typed aggregate resolver has different traversal semantics and is not an exact replacement. Metadata identity alone does not review this consumer; no full-hydration cold fallback is introduced.",
+      "status": "reviewed",
+      "reason": "Retains the proven owned organization identity read and switches only the selected-team whole-graph fallback to BeginWebhookAggregateRead. Lazy source capture is independent of earlier identity reads; payload teamId is terminal even when false/empty, a nonmatching teamIds list still falls through, and lookup continues to use event.eventID rather than AggregateID. Tier A JSON-view proof covers full validity, raw JSON, codec/UTF-8/duplicate-key behavior, own/nested precedence, fresh Go map traversal, warm/reload, cancellation, quotas, race and persistent SQLite repeats. TestScaleP21WebhookJSONRoutingDifferential compares actual stored queue rows and complete v1/v2 envelopes across eight exact routing cases. All ownership closes after the last hook; literal off callback/accessors, direct subject-team path and envelope/queue order remain unchanged. No full-hydration fallback is used in bounded mode.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata",
@@ -68,8 +68,8 @@
     },
     "recordWebhookFailure": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Exact retention writer blocker: append one audit-stream failure and keep the newest 50 matching WebhookID records in native global order, preserving every unrelated failure record atomically. A complete webhookFailureEvents field exceeds the bounded scope at many hooks; precomputed retention IDs race concurrent appends. No root-locked filtered retention/append resolver is currently available. This is reached by processDueDeliveries -> streamAuditLog -> recordWebhookFailure; no whole-field or split fallback is introduced.",
+      "status": "reviewed",
+      "reason": "Bounded audit-stream failures call the dedicated root-locked RecordWebhookDeliveryFailure writer after unchanged ID/time, status-pointer, default error text and byte truncation preparation; the literal MutateWorkspace callback remains exact off mode. Hook existence, newest-50 matching retention and unrelated global order, missing-hook event behavior and native/canonical lifecycle commit atomically with the domain event before publication. The Tier A writer passes warm/reloaded persistent SQLite twice and race, including actual inline duplicates, rollback/cancellation, quotas, concurrent appends, body10x admission and aggregate collisions. TestScaleP21HotWebhookFailureAdapter passes twice on persistent SQLite comparing actual rows and one event per mode for positive/negative statuses, default text, 4096-byte truncation, attempted URL and retained order, with zero bounded full decodes/retained work. Enqueue whole-graph routing and automatic disablement remain independently pending.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

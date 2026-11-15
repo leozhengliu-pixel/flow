@@ -149,6 +149,7 @@ func TestScaleP21MigratePolicyPermissionDifferential(t *testing.T) {
 			{"selected-set", &domain.APIKey{ID: "p21-migrate-key", Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{public}}},
 		} {
 			t.Run(principal.name+"/"+credential.name, func(t *testing.T) {
+				outputContext := scaleP21ResourceOutputContext(t)
 				before, err := f.ResolveAccess(t.Context(), workspace, principal.user.ID, credential.key)
 				if err != nil {
 					t.Fatal(err)
@@ -173,7 +174,7 @@ func TestScaleP21MigratePolicyPermissionDifferential(t *testing.T) {
 				}
 				for _, key := range []string{"p21-migrate-shared", "p21-migrate-old", "p21-migrate-hidden", "p21-migrate-inherited"} {
 					left, leftAllowed, leftErr := f.ResourceReadMetadata(t.Context(), before, "projects", key)
-					right, rightAllowed, rightErr := probe.ResourceReadMetadata(t.Context(), after, "projects", key)
+					right, rightAllowed, rightErr := probe.ResourceReadMetadata(outputContext, after, "projects", key)
 					if leftErr != nil || rightErr != nil || leftAllowed != rightAllowed || !reflect.DeepEqual(left, right) {
 						t.Fatalf("detail authorization, hidden references, counts or actors changed for %s", key)
 					}

@@ -528,7 +528,19 @@ func (s *server) chatSendRequestResult(ctx context.Context, record domain.ChatIn
 	if err != nil || identity.TenantKey != record.TenantKey {
 		return nil
 	}
-	data, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "userSettings")
+	var data domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginChatDisplayRead(ctx, record.WorkspaceKey, store.ChatDisplayRequest{UserID: identity.UserID})
+		if err != nil {
+			return err
+		}
+		if found {
+			defer read.Close()
+			data = read.Data
+		}
+	} else {
+		data, _ = s.store.WorkspaceMetadataFields(record.WorkspaceKey, "userSettings")
+	}
 	text := chatT(chatLanguage(data, identity.UserID, record.Provider), "request_saved_link", issue.Identifier, chatRequestIssueURL(s, record, issue))
 	return s.chatSendPersonalText(ctx, record, identity.OpenID, text, chatKey(job.DedupKey, "success"))
 }
@@ -560,7 +572,18 @@ func (s *server) chatSendRequestStatus(ctx context.Context, record domain.ChatIn
 		return err
 	}
 	outcome, reason := issue.State.Type, ""
-	if data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "asks"); ok {
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginAskStatusRead(ctx, record.WorkspaceKey, request.AskID)
+		if err != nil {
+			return err
+		}
+		if found {
+			defer read.Close()
+			if read.AskFound && read.Status == "rejected" {
+				outcome, reason = "rejected", strings.TrimSpace(read.Note)
+			}
+		}
+	} else if data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "asks"); ok {
 		if index := slices.IndexFunc(data.Asks, func(ask domain.Ask) bool { return ask.ID == request.AskID }); index >= 0 && data.Asks[index].Status == "rejected" {
 			outcome = "rejected"
 			for _, approval := range slices.Backward(data.Asks[index].Approvals) {

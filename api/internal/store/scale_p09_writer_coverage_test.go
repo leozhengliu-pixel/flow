@@ -55,6 +55,7 @@ oauth_token_exchange.go:ExchangeOAuthGrant
 personal_data.go:EraseAccount
 personal_data.go:ErasePersonFromWorkspace
 scale_p01_seed.go:SeedScaleP01Principals
+scale_p21_webhook_failure_write.go:RecordWebhookDeliveryFailure
 scim.go:CreateSCIMUser
 scim.go:DeprovisionSCIMUser
 scim.go:SyncSCIMGroupTeamChanges

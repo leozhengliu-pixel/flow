@@ -49,6 +49,15 @@ func (r *PulseRead) Close() {
 	})
 }
 
+// TransferOutput retains selected values through the containing operation.
+func (r *PulseRead) TransferOutput(ctx context.Context) error {
+	if r == nil || !registerMetadataOutputClose(ctx, r.Close) {
+		r.Close()
+		return recordMetadataOutputError(ctx, ErrBoundedMetadataCoverage)
+	}
+	return nil
+}
+
 func (r *PulseRead) reserve(ctx context.Context, cost uint64) (func(), error) {
 	if cost > metadataWorkBytes {
 		return nil, ErrMetadataWorkBudget

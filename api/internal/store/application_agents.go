@@ -60,6 +60,17 @@ func (s *SQLiteStore) ensureApplicationAgents(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) ApplicationByUser(ctx context.Context, id string) (domain.ApplicationInstallation, error) {
+	if s.BoundedMetadataEnabled() {
+		read, err := s.BeginApplicationAccessRead(ctx, id, "full")
+		if err != nil {
+			return domain.ApplicationInstallation{}, recordMetadataOutputError(ctx, err)
+		}
+		if !registerMetadataOutputClose(ctx, read.Close) {
+			read.Close()
+			return domain.ApplicationInstallation{}, recordMetadataOutputError(ctx, ErrBoundedMetadataCoverage)
+		}
+		return read.Installation, nil
+	}
 	var a domain.ApplicationInstallation
 	var raw []byte
 	err := s.db.QueryRowContext(ctx, `SELECT data FROM application_installations WHERE user_id=?`, id).Scan(&raw)
@@ -73,6 +84,17 @@ func (s *SQLiteStore) ApplicationByUser(ctx context.Context, id string) (domain.
 }
 
 func (s *SQLiteStore) ListApplications(ctx context.Context, workspace string) ([]domain.ApplicationInstallation, error) {
+	if s.BoundedMetadataEnabled() {
+		read, err := s.BeginApplicationListRead(ctx, workspace)
+		if err != nil {
+			return nil, recordMetadataOutputError(ctx, err)
+		}
+		if !registerMetadataOutputClose(ctx, read.Close) {
+			read.Close()
+			return nil, recordMetadataOutputError(ctx, ErrBoundedMetadataCoverage)
+		}
+		return read.Applications, nil
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT data FROM application_installations WHERE workspace_key=? ORDER BY id`, workspace)
 	if err != nil {
 		return nil, err
@@ -290,6 +312,18 @@ func revokeApplicationCredentialsTx(ctx context.Context, tx *sqlTx, workspace, u
 
 func (s *SQLiteStore) decorateAppUser(ctx context.Context, u *domain.User) error {
 	if !strings.HasPrefix(u.ID, "app_") {
+		return nil
+	}
+	if s.BoundedMetadataEnabled() {
+		read, err := s.BeginApplicationAccessRead(ctx, u.ID, "user")
+		if err != nil {
+			return recordMetadataOutputError(ctx, err)
+		}
+		if !registerMetadataOutputClose(ctx, read.Close) {
+			read.Close()
+			return recordMetadataOutputError(ctx, ErrBoundedMetadataCoverage)
+		}
+		*u = read.User
 		return nil
 	}
 	a, err := s.ApplicationByUser(ctx, u.ID)

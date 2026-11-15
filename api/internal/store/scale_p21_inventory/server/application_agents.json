@@ -1,6 +1,6 @@
 {
   "source": "server/application_agents.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "applicationConsentTeams": {
       "owner": "P18",
@@ -12,7 +12,8 @@
     },
     "applicationTaskContext": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Off mode retains workspaceData and existing issue/anchor branches literally. Bounded non-issue contexts preserve authorized/realtime/paged handoff precedence and use BeginApplicationTaskContextRead for exact installed targets, raw-JSON issue counts, workspace/team/user guidance, live actors and policy, holding output through downstream use. TestScaleP21ApplicationTaskContext compares 1260 complete project/document/environment/read/edit/rendering outputs across warm/reloaded/unknown sources, M principals/credentials, previous slugs, missing references and development bypass; output ownership and cancellation pass. The shared primitive passes persistent SQLite twice and race. Its measured SQL increase and bounded chunk/preflight formula are recorded in its inventory review and the task report.",
       "accessors": [
         "Bootstrap",
         "workspaceData"

@@ -10,9 +10,11 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Team Slack notification keys, as stored in TeamSettings.SlackNotifications.
@@ -45,19 +47,79 @@ func (s *server) dispatchTeamSlackEvent(workspace string, event domain.DomainEve
 	if !strings.HasPrefix(event.Type, "issue.") && event.Type != "comment.created" && event.Type != "project.update_created" && event.Type != "initiative.update_created" {
 		return
 	}
-	if connections, ok := s.store.WorkspaceMetadataFields(workspace, "integrationConnections"); !ok {
-		return
-	} else if _, connected := slackConnection(connections); !connected {
-		return
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginSlackNotificationRead(context.Background(), workspace)
+		if err != nil {
+			log.Printf("Flow team Slack preflight workspace=%s: %v", workspace, err)
+			return
+		}
+		if !found {
+			return
+		}
+		_, connected := slackConnection(read.Data)
+		read.Close()
+		if !connected {
+			return
+		}
+	} else {
+		if connections, ok := s.store.WorkspaceMetadataFields(workspace, "integrationConnections"); !ok {
+			return
+		} else if _, connected := slackConnection(connections); !connected {
+			return
+		}
 	}
 	// Only the collections the messages read; never the whole workspace.
-	data, ok := s.store.WorkspaceMetadataFields(workspace, "integrationConnections", "teamSettings", "projects", "initiatives")
+	var data domain.Bootstrap
+	var read *store.SlackNotificationRead
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		var err error
+		read, ok, err = s.store.BeginSlackNotificationRead(context.Background(), workspace)
+		if err != nil {
+			log.Printf("Flow team Slack source workspace=%s: %v", workspace, err)
+			return
+		}
+		if ok {
+			defer func() {
+				if read != nil {
+					read.Close()
+				}
+			}()
+			kind := ""
+			if event.Type == "project.update_created" {
+				kind = "project"
+			} else if event.Type == "initiative.update_created" {
+				kind = "initiative"
+			}
+			if kind != "" {
+				if err := read.LoadTarget(context.Background(), kind, event.AggregateID); err != nil {
+					log.Printf("Flow team Slack target workspace=%s: %v", workspace, err)
+					return
+				}
+			}
+			data = read.Data
+		}
+	} else {
+		data, ok = s.store.WorkspaceMetadataFields(workspace, "integrationConnections", "teamSettings", "projects", "initiatives")
+	}
 	if !ok {
 		return
 	}
 	type delivery struct{ channel, text string }
 	deliveries := []delivery{}
-	for _, message := range s.teamSlackMessages(workspace, data, event) {
+	messages := s.teamSlackMessages(workspace, data, event)
+	if read != nil {
+		teams := make([]store.SlackNotificationTeam, 0, len(messages))
+		for _, message := range messages {
+			teams = append(teams, store.SlackNotificationTeam{TeamID: message.teamID, Key: message.key})
+		}
+		if err := read.LoadTeams(context.Background(), teams); err != nil {
+			log.Printf("Flow team Slack settings workspace=%s: %v", workspace, err)
+			return
+		}
+		data = read.Data
+	}
+	for _, message := range messages {
 		settings, exists := data.TeamSettings[message.teamID]
 		// chat.postMessage accepts a channel ID or a channel name.
 		channel := settings.SlackChannelID
@@ -78,9 +140,33 @@ func (s *server) dispatchTeamSlackEvent(workspace string, event domain.DomainEve
 	if token == "" {
 		return
 	}
+	if read != nil {
+		var inputBytes uint64
+		for _, item := range deliveries {
+			inputBytes += uint64(len(item.channel)) + uint64(len(item.text)) + uint64(len(token))
+		}
+		if err := read.ReservePosts(context.Background(), len(deliveries), inputBytes); err != nil {
+			log.Printf("Flow team Slack output workspace=%s: %v", workspace, err)
+			return
+		}
+	}
+	var posts sync.WaitGroup
+	owned := read != nil
+	if owned {
+		posts.Add(len(deliveries))
+		output := read
+		read = nil
+		go func() {
+			posts.Wait()
+			output.Close()
+		}()
+	}
 	for _, item := range deliveries {
 		channel, text := item.channel, item.text
 		go func() {
+			if owned {
+				defer posts.Done()
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			if err := postSlackMessage(ctx, token, channel, text); err != nil {

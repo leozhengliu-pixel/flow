@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type chatMessageResult struct {
@@ -207,9 +208,14 @@ func chatTeamName(metadata domain.Bootstrap, teamID string) string {
 }
 
 func (s *server) chatSendUpdateForm(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, identity domain.ChatIdentity, metadata domain.Bootstrap, job domain.ChatJob, command chatInboundCommand, original chatCardAction) error {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = beginMetadataOutputReads(ctx)
+		defer close()
+	}
 	language := chatLanguage(metadata, identity.UserID, record.Provider)
 	var issue domain.Issue
-	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(original.IssueID), nil, &issue); err != nil {
+	if err := s.chatAuthorizedPointRead(ctx, record.WorkspaceKey, identity.UserID, "/api/issue-records/"+url.PathEscape(original.IssueID), &issue); err != nil {
 		return s.chatMutationFailure(ctx, record, job, command.OpenID, err, chatT(language, "issue_outside_scope"))
 	}
 	if !chatIssueMatchesBinding(issue, binding) {
@@ -286,7 +292,13 @@ func chatSharedActionID(record domain.ChatIntegrationRecord, binding domain.Chat
 func (s *server) chatIssueCard(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, issue domain.Issue, key, messageID, sourceMessage string) (map[string]any, []domain.ChatAction, error) {
 	language := chatGroupLanguage(record, binding)
 	link := fmt.Sprintf("%s/%s/issue/%s", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey), url.PathEscape(issue.Identifier))
-	users, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "users")
+	users, handled, err := s.chatCardMetadata(ctx, record.WorkspaceKey, store.ChatDisplayRequest{Directory: true}, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !handled {
+		users, _ = s.store.WorkspaceMetadataFields(record.WorkspaceKey, "users")
+	}
 	assignee := chatT(language, "unassigned")
 	if label := chatPersonLabel(issue.Assignee, users.Users); label != "" {
 		assignee = label

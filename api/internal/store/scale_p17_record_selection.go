@@ -143,6 +143,11 @@ func mergeDocumentRecordMutation(ctx context.Context, data *domain.Bootstrap, st
 // selection through the existing policy, including favorites and trash access.
 // The selector must only inspect the immutable input; it may not retain it.
 func (s *SQLiteStore) SelectedDocumentMetadata(ctx context.Context, workspace, userID string, key *domain.APIKey, selectScope func(domain.Bootstrap) (MetadataRecordScope, bool)) (domain.Bootstrap, error) {
+	if s.BoundedMetadataEnabled() {
+		// An arbitrary selector can inspect any collection. Bounded callers
+		// must use an owned reader with an explicit selection contract.
+		return domain.Bootstrap{}, ErrBoundedMetadataCoverage
+	}
 	if workspace == "" {
 		s.mu.RLock()
 		workspace = s.lastWorkspaceKey

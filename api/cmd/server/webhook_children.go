@@ -78,7 +78,7 @@ func webhookChildOf(payload json.RawMessage) (child webhookChild, found bool, st
 
 // webhookChildEntity returns the nested entity of a project_updates,
 // milestones or initiative_updates event as JSON, and the page it lives on.
-func (s *server) webhookChildEntity(ctx context.Context, workspace string, event domain.DomainEvent, resource string, child webhookChild, parent map[string]any, root string) (map[string]any, string) {
+func (s *server) webhookChildEntity(ctx context.Context, workspace string, event domain.DomainEvent, resource string, child webhookChild, parent map[string]any, root string) (map[string]any, string, error) {
 	var entity map[string]any
 	toMap := func(value any) map[string]any {
 		raw, err := json.Marshal(value)
@@ -107,7 +107,36 @@ func (s *server) webhookChildEntity(ctx context.Context, workspace string, event
 			}
 		}
 	case resource == "project_updates" || resource == "initiative_updates":
-		if feed, ok := s.store.PulseFeed(workspace); ok {
+		if s.store.BoundedMetadataEnabled() {
+			read, found, err := s.store.BeginPulseRead(ctx, workspace, false)
+			if err != nil {
+				return nil, "", err
+			}
+			if found {
+				kind := "project"
+				if resource == "initiative_updates" {
+					kind = "initiative"
+				}
+				if err := read.LoadUpdates(ctx, kind, event.AggregateID, []string{child.ID}); err != nil {
+					read.Close()
+					return nil, "", err
+				}
+				if err := read.TransferOutput(ctx); err != nil {
+					return nil, "", err
+				}
+				if resource == "project_updates" {
+					if updates := read.Snapshot.ProjectUpdates[event.AggregateID]; len(updates) > 0 {
+						update := updates[0]
+						update.Snapshot = nil
+						entity = toMap(update)
+					}
+				} else if updates := read.Snapshot.InitiativeUpdates[event.AggregateID]; len(updates) > 0 {
+					update := updates[0]
+					update.Snapshot = nil
+					entity = toMap(update)
+				}
+			}
+		} else if feed, ok := s.store.PulseFeed(workspace); ok {
 			if resource == "project_updates" {
 				if index := slices.IndexFunc(feed.ProjectUpdates[event.AggregateID], func(update domain.ProjectUpdate) bool { return update.ID == child.ID }); index >= 0 {
 					update := feed.ProjectUpdates[event.AggregateID][index]
@@ -122,7 +151,7 @@ func (s *server) webhookChildEntity(ctx context.Context, workspace string, event
 		}
 	}
 	if entity == nil {
-		return nil, ""
+		return nil, "", nil
 	}
 	if _, ok := entity["id"]; !ok {
 		entity["id"] = child.ID
@@ -138,7 +167,7 @@ func (s *server) webhookChildEntity(ctx context.Context, workspace string, event
 			page = root + "/initiative/" + url.PathEscape(slug) + "/activity#" + url.PathEscape(child.ID)
 		}
 	}
-	return entity, page
+	return entity, page, nil
 }
 
 // milestoneURL is the page of a project milestone.

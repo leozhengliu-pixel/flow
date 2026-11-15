@@ -2,7 +2,7 @@
   "source": "store/scale_p21_hot_issue_inputs.go",
   "unmigrated": 0,
   "consumers": {
-    "loadIssueHotInputs": {
+    "loadIssueSelectedInputs": {
       "owner": "P21",
       "status": "reviewed",
       "reason": "Trusted owned installed-source selection for the explicitly guarded typed non-project/non-team-move/non-opaque-editor issue update subset; no authorization is replaced. Retains native users in original order including duplicate IDs, exact plain/structured mention behavior, recipient map-key preferences, projected push flags/viewer AssignStarted/current or payload cycles, selected labels/group archive flags, settings/sla and ordered relevant SLA rules/issue SLAs plus suspended-member fallback inputs. Unrelated bodies and map keys remain framed; transient headers, retained values, key sets and baseline copies are independently charged through callback/commit. TestScaleP21HotIssueInputs covers 10x unrelated users/bodies with constant 553784-byte held work, more than 50 relevant people, large relevant input, empty-key/literal empty-name mention semantics, cancellation/partial-budget cleanup, mutable baseline isolation and real literal/bounded UpdateIssueRecord output under P04 verification. Persistent SQLite count2 passed. This helper review does not certify project/document persistence, opaque editor payloads, membership/former-member allocation or arbitrary callbacks; the enclosing writer remains pending.",
@@ -12,7 +12,8 @@
       "temperature": "hot",
       "temperatureReason": "Shared callback input selection for supported HOT typed issue updates.",
       "callers": [
-        "store/SQLiteStore.UpdateIssueRecord"
+        "store/SQLiteStore.loadIssueHotInputs",
+        "store/SQLiteStore.loadIssueProjectInputs"
       ]
     }
   }

@@ -1,6 +1,6 @@
 {
   "source": "server/pulse_diff.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "pulseSourceRead": {
       "owner": "P21",
@@ -10,11 +10,22 @@
       ],
       "temperature": "hot",
       "temperatureReason": "Project and initiative update histories and composer previews.",
-      "reason": "Retains the original PulseFeed accessor off mode; bounded mode uses a trusted installed source projection without visiting updates until a target history or latest composer snapshot is requested. Errors remain distinct from missing workspaces, and every caller defers Close through response encoding. TestScaleP21HotPulseGroupHandlerDifferential proves complete legacy project/initiative history values and stored-snapshot stripping; store NativeOwnership and WarmReload prove complete comments/reactions ownership and native latest snapshot reads. Selected-key history redaction still calls publicMetadata and remains registered as unmigrated."
+      "reason": "Retains the original PulseFeed accessor off mode; bounded mode uses a trusted installed source projection without visiting updates until a target history or latest composer snapshot is requested. Errors remain distinct from missing workspaces, and every caller defers Close through response encoding. TestScaleP21HotPulseGroupHandlerDifferential proves complete legacy project/initiative history values and stored-snapshot stripping; store NativeOwnership and WarmReload prove complete comments/reactions ownership and native latest snapshot reads. The separately reviewed history adapters now compose the proven selected-credential reference visibility reader; TestScaleP21PulseHistoryDifferential covers their exact output and cursor binding without repeating this reader's Tier A proof."
+    },
+    "pulseHistoryReferenceRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "BeginNotificationVisibilityRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Selected-key project and initiative update-history reference redaction.",
+      "reason": "Thin bounded selected-key adapter resolves the same authenticated viewer/credential and delegates reference extraction to the already-reviewed BeginNotificationVisibilityRead. Existing ReferenceVisible handles only project/initiative predicates; callers FinishReferences before window/JSON output for live authority validation and defer Close through encoding. Error envelopes and workspace-header requirements retain publicMetadata semantics. TestScaleP21PulseHistoryDifferential compares complete legacy/bounded outputs across five principal classes and session/unrestricted/selected-empty/selected-set credentials, full/partial projects and initiatives, hidden/duplicate/missing/old-slug references, actor team redaction, nil/empty diffs, legal large bodies/comments, empty/missing resources, window and detail legacy cursor reuse and auth-disabled output; all calls release work and full metadata decodes remain zero. No new loading, cache or locking logic."
     },
     "listInitiativeUpdates": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Keeps the existing owned pulseSourceRead and complete target LoadUpdates, stored snapshot stripping and scaleP19 window/content-hash/detail path unchanged. Only the bounded selected-key branch replaces publicMetadata with the proven reference visibility predicate, retains unconditional initiative partial aggregate redaction and exact update actor team filtering, finishes authority validation before encoding and closes both read owners. Auth-disabled output uses a fresh existing compact Pulse source for the legacy unfiltered existence lookup. TestScaleP21PulseHistoryDifferential provides one exact flag-off/on route table, including full principal/key matrix, hidden references/actors, nil/empty/full detail values and cross-mode window/detail continuation cursors. No existing primitive was modified or re-proved.",
       "accessors": [
         "publicMetadata"
       ],
@@ -27,7 +38,8 @@
     },
     "listProjectUpdates": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Keeps the existing owned pulseSourceRead and complete target LoadUpdates, stored snapshot stripping and scaleP19 window/content-hash/detail path unchanged. Only the bounded selected-key branch replaces publicMetadata with the proven reference visibility predicate; the project's original source TeamIDs still determine partial aggregate redaction and update actor teams retain the selected-key intersection. Authority extraction finishes before window/JSON output and all handles remain open through encoding. Auth-disabled existence lookup uses a fresh existing compact Pulse source, matching the original second metadata read. TestScaleP21PulseHistoryDifferential compares full versus mixed-team projects across the exact principal/key table, hidden/duplicate/missing/old-slug refs, actors, complete large histories/comments, nil/empty diffs and legacy cursors consumed in bounded mode. No new loading logic or primitive proof.",
       "accessors": [
         "publicMetadata"
       ],

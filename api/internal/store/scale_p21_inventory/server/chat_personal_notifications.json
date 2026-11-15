@@ -1,6 +1,6 @@
 {
   "source": "server/chat_personal_notifications.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "dispatchChatNotifications": {
       "owner": "P21",
@@ -12,7 +12,8 @@
     },
     "chatPersonalNotificationItem": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded personal rendering uses owned installed HIPAA, ordered user display fields, exact member language/timezone and first ID/current-slug review headers. Deferred review selection stays on the original pinned generation. Existing active-user, IssueQueryAccess, native notification/issue and visibility checks and refusal precedence remain unchanged. Display ownership transfers to processChatPersonalNotification's output lifetime through final card encoding/posting; an absent registrar fails explicitly. Literal off WorkspaceMetadata remains. TestScaleP21HotChatSourcesRenderingDifferential compares exact issue, review-precedence, standalone-title, missing-review, HIPAA and absent-user summaries/refusals and verifies admission remains held while returned values encode, then releases without full decodes. Downstream personal card controls retain independent migration status.",
       "accessors": [
         "WorkspaceMetadata"
       ],

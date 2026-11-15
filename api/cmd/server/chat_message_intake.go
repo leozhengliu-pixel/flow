@@ -4,11 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"net/http"
 	"net/url"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
+
+func chatMessagePointReadTransient(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, store.ErrMetadataWorkBudget) || errors.Is(err, store.ErrMetadataPageBudget) ||
+		errors.Is(err, store.ErrBoundedMetadataCoverage)
+}
 
 func (s *server) chatMessageIntakeResult(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, metadata domain.Bootstrap, job domain.ChatJob, action chatExtendedAction) (bool, error) {
 	intake, err := s.store.ChatIntakeRequestForMessage(ctx, record.WorkspaceKey, record.ConnectionID, action.SourceMessageID)
@@ -27,6 +33,14 @@ func (s *server) chatMessageIntakeResult(ctx context.Context, record domain.Chat
 // Both shortcut buttons share the message's durable intake reservation.
 // Keep the result private and re-check access before naming the existing item.
 func (s *server) chatMessageIntakeExists(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, metadata domain.Bootstrap, job domain.ChatJob, intake domain.ChatIntakeRequest, formMessage string) error {
+	if s.store.BoundedMetadataEnabled() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		var close func()
+		ctx, close = beginIndependentMetadataOutputReads(ctx)
+		defer close()
+	}
 	language := chatLanguage(metadata, identity.UserID, record.Provider)
 	issueKind := intake.Kind == "issue"
 	key := "message_is_request"
@@ -35,9 +49,16 @@ func (s *server) chatMessageIntakeExists(ctx context.Context, record domain.Chat
 	}
 	text := chatT(language, key)
 	var issue domain.Issue
-	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(intake.IssueID), nil, &issue); err == nil {
+	if err := s.chatAuthorizedPointRead(ctx, record.WorkspaceKey, identity.UserID, "/api/issue-records/"+url.PathEscape(intake.IssueID), &issue); err == nil {
 		text = chatT(language, key+"_link", issue.Identifier+" "+chatRequestIssueURL(s, record, issue))
 		if err := s.chatUpdateMessageFormResult(ctx, record, language, formMessage, issue, issueKind); err != nil {
+			return err
+		}
+	} else if s.store.BoundedMetadataEnabled() {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if chatMessagePointReadTransient(err) {
 			return err
 		}
 	}

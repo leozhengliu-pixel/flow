@@ -1,0 +1,16 @@
+{
+  "source": "store/scale_p21_pulse_summary_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "CommitPulseSummaries": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "decodeWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Dedicated atomic writer for the once-per-minute Pulse summary batch.",
+      "reason": "Trusted atomic Pulse scheduler writer admits at most 1000 typed candidates, reads only native workspace schedule/feature and recipient schedule/preferences/push decisions from the installed logical source, and dynamically admits both the native and locked canonical pulseDeliveryCursors preimages. One transaction preserves complete cursor advancement, notification/delivery appends, journal, notification-state and event hooks; its private cursor source is installed with the captured commit stamp before summary publication. Existing issues/content and unrelated metadata bodies are not hydrated. Legacy/warm/reloaded row, cursor, webhook/realtime, state and audit differentials, exact nil/empty/operator-default policy and actual scheduler cases, rollback/retry/cancellation/quota tests, 432001-to-512001-byte cursor with 1000 recipients and stale-peer no-op, persistent SQLite twice and targeted race all passed. The caller retains its literal off-mode callback."
+    }
+  }
+}

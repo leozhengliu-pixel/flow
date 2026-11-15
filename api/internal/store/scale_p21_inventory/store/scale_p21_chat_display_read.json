@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_chat_display_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginChatDisplayRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted owned display projection pins the exact physical/default installed M, inheriting an explicit Context pin through independently owned child descriptors. It dynamically admits HIPAA, ordered user ID/name/display/username/email scalars, exact user language/timezone and team TeamID/timezone keys, and first review ID/current-slug/title. Optional Policy adds only the existing bindability scalar set: ordered team ID/private/archive/retire presence sentinels and all exact parent/access/membership setting keys. Empty/NUL keys and duplicate/empty identities preserve order; TeamID retains the legacy timezone-default predicate. LoadReview discovers a later reference on the same generation. TransferOutput registers the containing lifetime or closes with explicit coverage failure; cancellation cannot free values still encoding. NativeOwnership, PinnedReview, ComposedGeneration and WarmReloadBodyBound cover projection/order, missing/default selection, isolation, cancellation/budget cleanup, encoding ownership, concurrent reads, two source replacements between child opens and continued source/update/review use after parent close. Display and optional-policy projections retain exactly 167408 and 163856 admitted bytes respectively for warm/reloaded 10x unrelated bodies, with zero full decodes/leaks. Latest four source tests pass -race and persistent SQLite count2; 31 actual adapter differentials provide independent proof. Root batches final inventory/vet. No cache, SQL reader, lock or mutation preimage is introduced.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Targeted installed display inputs for chat notification delivery rendering.",
+      "callers": [
+        "server/chat_update_cards.go:chatSendProjectUpdate",
+        "server/chat_initiative_bindings.go:chatSendInitiativeBindingUpdate",
+        "server/chat_personal_notifications.go:chatPersonalNotificationItem"
+      ]
+    }
+  }
+}

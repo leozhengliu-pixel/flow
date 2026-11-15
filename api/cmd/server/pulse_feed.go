@@ -454,6 +454,40 @@ func (s *server) pulseRequestViewer(r *http.Request, snapshot *store.PulseFeedSn
 }
 
 func (s *server) pulseRequestContext(w http.ResponseWriter, r *http.Request) (*store.PulseFeedSnapshot, *pulseRules, pulseViewer, bool) {
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginPulseRead(r.Context(), workspaceKey(r), false)
+		if err != nil {
+			if r.Context().Err() != nil {
+				respondMutation(w, err, http.StatusOK, nil)
+			} else {
+				issueRecordsError(w, err)
+			}
+			return nil, nil, pulseViewer{}, false
+		}
+		if !found {
+			writeError(w, http.StatusNotFound, "workspace not found")
+			return nil, nil, pulseViewer{}, false
+		}
+		if !registerRequestReadClose(r.Context(), read.Close) {
+			read.Close()
+			issueRecordsError(w, store.ErrBoundedMetadataCoverage)
+			return nil, nil, pulseViewer{}, false
+		}
+		if !workspaceFeatureEnabled(read.Snapshot.WorkspaceSettings, "pulse") {
+			writeError(w, http.StatusForbidden, "This workspace feature is disabled")
+			return nil, nil, pulseViewer{}, false
+		}
+		viewer, err := s.pulseRequestViewer(r, read.Snapshot)
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) {
+				writeError(w, http.StatusForbidden, "Guests cannot access Pulse")
+			} else {
+				issueRecordsError(w, err)
+			}
+			return nil, nil, pulseViewer{}, false
+		}
+		return read.Snapshot, newPulseRules(read.Snapshot), viewer, true
+	}
 	snapshot, ok := s.store.PulseFeed(workspaceKey(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")

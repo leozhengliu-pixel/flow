@@ -247,60 +247,71 @@ func (s *server) scaleP20Members(w http.ResponseWriter, r *http.Request) {
 	s.scaleP20Page(w, r, kind)
 }
 
-func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request, ref string, trashOnly bool) (domain.Bootstrap, domain.Document, *domain.TrashEntry, bool) {
+func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request, ref string, trashOnly bool) (domain.Bootstrap, domain.Document, *domain.TrashEntry, func(), bool) {
 	userID := authUser(r).ID
 	if s.authDisabled {
 		userID = ""
 	}
-	data, err := s.store.SelectedDocumentMetadata(r.Context(), workspaceKey(r), userID, documentRecordCredential(r), func(source domain.Bootstrap) (store.MetadataRecordScope, bool) {
-		scope := store.MetadataRecordScope{Fields: documentRecordReadFields}
-		if !trashOnly {
-			if doc, err := scaleP20DocumentByRef(&source, ref); err == nil {
-				scope = documentRecordRequirements(source, *doc, nil)
-				scope.Fields = documentRecordReadFields
-			}
+	closeRead := func() {}
+	var data domain.Bootstrap
+	var err error
+	if s.store.BoundedMetadataEnabled() {
+		var read *store.DocumentRead
+		read, err = s.store.BeginDocumentRead(r.Context(), workspaceKey(r), userID, documentRecordCredential(r), store.DocumentReadRequest{Ref: ref, Trash: true, TrashOnly: trashOnly, Suffix: true, ReadOnly: true})
+		if err == nil {
+			data, closeRead = read.Data, read.Close
 		}
-		exact := slices.ContainsFunc(source.Trash, func(entry domain.TrashEntry) bool {
-			return entry.ResourceType == "document" && (entry.ResourceID == ref || entry.ID == ref)
+	} else {
+		data, err = s.store.SelectedDocumentMetadata(r.Context(), workspaceKey(r), userID, documentRecordCredential(r), func(source domain.Bootstrap) (store.MetadataRecordScope, bool) {
+			scope := store.MetadataRecordScope{Fields: documentRecordReadFields}
+			if !trashOnly {
+				if doc, err := scaleP20DocumentByRef(&source, ref); err == nil {
+					scope = documentRecordRequirements(source, *doc, nil)
+					scope.Fields = documentRecordReadFields
+				}
+			}
+			exact := slices.ContainsFunc(source.Trash, func(entry domain.TrashEntry) bool {
+				return entry.ResourceType == "document" && (entry.ResourceID == ref || entry.ID == ref)
+			})
+			for _, entry := range source.Trash {
+				if entry.ResourceType != "document" {
+					continue
+				}
+				match := entry.ResourceID == ref || entry.ID == ref
+				if !match && !exact {
+					var header struct {
+						ID, SlugID      string
+						PreviousSlugIDs []string
+					}
+					if json.Unmarshal(entry.Payload, &header) == nil {
+						match = header.ID == ref || header.SlugID == ref || slices.Contains(header.PreviousSlugIDs, ref) || scaleP20SameDocumentSuffix(header.SlugID, ref)
+					}
+				}
+				if match {
+					scope.Read = append(scope.Read, store.RecordKey{Kind: "trash", ID: entry.ID})
+				}
+			}
+			return scope, true
 		})
-		for _, entry := range source.Trash {
-			if entry.ResourceType != "document" {
-				continue
-			}
-			match := entry.ResourceID == ref || entry.ID == ref
-			if !match && !exact {
-				var header struct {
-					ID, SlugID      string
-					PreviousSlugIDs []string
-				}
-				if json.Unmarshal(entry.Payload, &header) == nil {
-					match = header.ID == ref || header.SlugID == ref || slices.Contains(header.PreviousSlugIDs, ref) || scaleP20SameDocumentSuffix(header.SlugID, ref)
-				}
-			}
-			if match {
-				scope.Read = append(scope.Read, store.RecordKey{Kind: "trash", ID: entry.ID})
-			}
-		}
-		return scope, true
-	})
+	}
 	if err != nil {
 		writeSyncError(w, err)
-		return data, domain.Document{}, nil, false
+		return data, domain.Document{}, nil, closeRead, false
 	}
 	filterBootstrapForAPIKey(&data, r)
 	if doc, err := scaleP20DocumentByRef(&data, ref); !trashOnly && err == nil && documentRole(s, data, *doc) != "none" {
-		return data, *doc, nil, true
+		return data, *doc, nil, closeRead, true
 	}
 	for _, entry := range data.Trash {
 		var doc domain.Document
 		if json.Unmarshal(entry.Payload, &doc) == nil && documentRole(s, data, doc) != "none" {
 			at := entry.DeletedAt
 			doc.DeletedAt = &at
-			return data, doc, &entry, true
+			return data, doc, &entry, closeRead, true
 		}
 	}
 	writeError(w, http.StatusNotFound, "document not found")
-	return data, domain.Document{}, nil, false
+	return data, domain.Document{}, nil, closeRead, false
 }
 
 func scaleP20SameDocumentSuffix(slug, ref string) bool {
@@ -362,7 +373,8 @@ func (s *server) scaleP20DocumentRead(w http.ResponseWriter, r *http.Request) bo
 	if !allowed {
 		return true
 	}
-	_, doc, _, ok := s.scaleP20DocumentMetadata(w, r, r.PathValue("id"), false)
+	_, doc, _, closeRead, ok := s.scaleP20DocumentMetadata(w, r, r.PathValue("id"), false)
+	defer closeRead()
 	if ok {
 		if err := s.store.ValidateAccess(r.Context(), access); err != nil {
 			writeSyncError(w, err)
@@ -383,7 +395,8 @@ func (s *server) scaleP20Trash(w http.ResponseWriter, r *http.Request) {
 	if !allowed {
 		return
 	}
-	_, doc, entry, ok := s.scaleP20DocumentMetadata(w, r, ref, true)
+	_, doc, entry, closeRead, ok := s.scaleP20DocumentMetadata(w, r, ref, true)
+	defer closeRead()
 	if !ok {
 		return
 	}
@@ -404,7 +417,8 @@ func (s *server) scaleP20History(w http.ResponseWriter, r *http.Request) bool {
 	if !allowed {
 		return true
 	}
-	_, doc, _, ok := s.scaleP20DocumentMetadata(w, r, r.PathValue("id"), false)
+	_, doc, _, closeRead, ok := s.scaleP20DocumentMetadata(w, r, r.PathValue("id"), false)
+	defer closeRead()
 	if ok {
 		if err := s.store.ValidateAccess(r.Context(), access); err != nil {
 			writeSyncError(w, err)
@@ -420,7 +434,8 @@ func (s *server) scaleP20Revision(w http.ResponseWriter, r *http.Request) {
 	if !allowed {
 		return
 	}
-	data, doc, _, ok := s.scaleP20DocumentMetadata(w, r, r.PathValue("id"), false)
+	data, doc, _, closeRead, ok := s.scaleP20DocumentMetadata(w, r, r.PathValue("id"), false)
+	defer closeRead()
 	if !ok {
 		return
 	}
@@ -469,9 +484,10 @@ func (s *server) scaleP20Batch(w http.ResponseWriter, r *http.Request, keys []st
 		probe := *r
 		probe.SetPathValue("id", key.ID)
 		recorder := newScaleP20ReadRecorder()
-		_, doc, _, found := s.scaleP20DocumentMetadata(recorder, &probe, key.ID, false)
+		_, doc, _, closeRead, found := s.scaleP20DocumentMetadata(recorder, &probe, key.ID, false)
 		item := store.MetadataRecord{Key: key, Missing: !found}
 		if !found && recorder.code != http.StatusNotFound {
+			closeRead()
 			writeSyncError(w, errors.New("record read unavailable"))
 			return true
 		}
@@ -487,6 +503,7 @@ func (s *server) scaleP20Batch(w http.ResponseWriter, r *http.Request, keys []st
 				}
 			}
 		}
+		closeRead()
 		encoded, _ := json.Marshal(item)
 		remaining -= len(encoded) + 1
 		batch.Items = append(batch.Items, item)

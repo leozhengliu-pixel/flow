@@ -5,6 +5,7 @@
     "chatLinkPreviewFor": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "P21 closes this function's PulseFeed selector behind an explicit store-mode branch: the bounded branch owns only the selected update ID or first complete target history item and transfers admission through the HTTP callback's final JSON output. Read/load/ownership failures propagate to the callback's retryable 503 response; the legacy test wrapper preserves its neutral answer contract. Independent WorkspaceMetadataFields and authorized complete bootstrap inputs retain their committed COLD classification and remain pending cold routing; this consumer is not certified from the PulseFeed closure.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields",

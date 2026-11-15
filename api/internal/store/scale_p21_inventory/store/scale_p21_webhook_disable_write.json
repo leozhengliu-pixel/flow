@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_webhook_disable_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "MutateFailingWebhookDisable": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Dedicated root-locked atomic adapter owns the first complete native webhook, viewer/audit actor, first creator, consumed preference/channel scalars and enabled-push predicate. Normal Resources scope loads no issues; the forced-full testing oracle additionally selects only empty-ID issue urgency/timezone/SLA headers while streaming full event images. Exact resource-scoped external images preserve physical SQLite BLOB/text locators, JSON notification-ID delivery selection including empty IDs, row order and nested aggregate precedence. Admitted owned scoped content uses existing persistence hooks; audit, inbox notification, deliveries, native hook update and prepared source publication share one commit. Store persistent SQLite count2 and race pass with native inline duplicate/empty hooks, physical/JSON identity mismatch, cancellation/quota/rollback, 8-way exactly-once and retained generations. Unrelated body10x has identical 136528352-byte admitted peak, zero full decodes and zero retained work. Changed split-hook JSON key ordering alone is structurally compared with exact numeric values; unrelated rows and event images remain exact. No generic callback or capacity claim.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Due webhook delivery failure handling disables a persistently failing webhook and notifies its creator.",
+      "callers": ["server/server.disableFailingWebhook"]
+    }
+  }
+}

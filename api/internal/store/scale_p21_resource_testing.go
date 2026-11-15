@@ -2,6 +2,16 @@ package store
 
 import "testing"
 
+func (s *SQLiteStore) ForgetInstalledMetadataRevisionForTesting(workspace string) error {
+	if !testing.Testing() || s == nil {
+		return ErrBoundedMetadataCoverage
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.forgetCopyRevisionLocked(workspace)
+	return nil
+}
+
 func (s *SQLiteStore) MetadataWorkUsedForTesting() int {
 	if !testing.Testing() || s == nil || s.metadataResidency == nil {
 		return 0

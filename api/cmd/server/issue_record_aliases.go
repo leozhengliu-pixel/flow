@@ -51,12 +51,24 @@ func (s *server) issueRecordAuthorizationData(r *http.Request) (domain.Bootstrap
 	}
 	data, err := s.buildIssueRecordAuthorizationData(r)
 	if err == nil {
-		*r = *r.WithContext(context.WithValue(r.Context(), issueRecordAuthorizationKey{}, &issueRecordAuthorization{path: r.URL.Path, workspace: workspaceKey(r), userID: userID, data: data}))
+		cached := &issueRecordAuthorization{path: r.URL.Path, workspace: workspaceKey(r), userID: userID, data: data}
+		if _, bounded := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); bounded {
+			if !registerRequestReadClose(r.Context(), func() {
+				cached.taken.Store(true)
+				cached.data = domain.Bootstrap{}
+			}) {
+				return domain.Bootstrap{}, store.ErrBoundedMetadataCoverage
+			}
+		}
+		*r = *r.WithContext(context.WithValue(r.Context(), issueRecordAuthorizationKey{}, cached))
 	}
 	return data, err
 }
 
 func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Bootstrap, error) {
+	if data, handled, err := s.boundedIssueWriteAuthorizationMetadata(r); handled {
+		return data, err
+	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
 		return metadata, err
@@ -250,7 +262,9 @@ func (s *server) issueRecordAlias(handler http.HandlerFunc) http.HandlerFunc {
 			}
 			ctx = store.WithIssueDiscussionMutation(r.Context(), r.PathValue("id"), commentID)
 		}
-		ctx = context.WithValue(ctx, issueRecordAuthorizationContext{}, data)
+		if _, bounded := ctx.Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); !bounded {
+			ctx = context.WithValue(ctx, issueRecordAuthorizationContext{}, data)
+		}
 		handler(w, r.WithContext(ctx))
 	}
 }

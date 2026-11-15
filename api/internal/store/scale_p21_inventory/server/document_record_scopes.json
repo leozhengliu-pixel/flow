@@ -1,10 +1,11 @@
 {
   "source": "server/document_record_scopes.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "documentAuthorizationMetadata": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded document authorization uses the owned typed BeginDocumentRead selection, live membership projection and shared application reader through response encoding; native mutation inputs, trash/private-team rules and API-key filtering retain their existing boundaries. The literal off branch and normal-only projection fallback remain unchanged. Verified by the exact 5,850-case document/P20 HTTP matrix twice on persistent SQLite, full shared-reader persistent/race proof, actual installed-app identities, queued authority revocation and normal/cancel/panic encoding lifetime cases.",
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata"
@@ -18,7 +19,8 @@
     },
     "documentWorkspaceData": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded handler input reuses the owned document authorization handoff and its response owner, preserving native callback preimages and the existing API-key filtering; the off branch calls the literal workspaceData accessor. Shared selection owns only the document/reciprocal project closure, exact live SQL projection and application users, with final live epoch validation for owned snapshots. Exact HTTP differentials, persistent shared-reader repeats, full store race and server normal/cancel/panic encoding race passed; arbitrary P16 selectors remain independently pending.",
       "accessors": [
         "Bootstrap",
         "workspaceData"

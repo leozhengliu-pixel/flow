@@ -1,22 +1,23 @@
 {
   "source": "store/resource_access.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "ResolveAccess": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests. Owned directory operations may reuse one canonical team-policy result only within the same store/workspace/stamp/epoch/SQL transaction; installed and event-source precedence, both live principal reads, credential hashing and trailing authority validation remain unchanged. TestScaleP21SW0ResourcePolicyMemo proves binding, quota, cancellation and independent close; directory tests prove installed/event precedence and scope/key-revocation/principal/epoch changes, with persistent SQLite twice and race. Same-fixture directory SQL falls124 to76, with remaining overhead explicitly reported.",
       "accessors": [
         "Bootstrap"
       ]
     },
     "ResourceReadMetadata": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap"
       ],
       "temperature": "hot",
+      "reason": "Tier B adapter transfers the already-proven BeginResourceRead output owner to its containing request or operation in bounded mode; unowned outputs fail explicitly and release admission. The literal legacy body remains unchanged off mode. TestScaleP21ResourceReadMetadataAdapter compares exact old/new JSON and allowed/missing behavior for project IDs, old slugs and initiative reads under session, unrestricted, selected-empty and selected-set credentials, then verifies retained output, release, absent-owner rejection and the bounded error latch. Loading, permission projection and native/canonical selection remain the certified Tier A resource primitive's responsibility.",
       "temperatureReason": "Reachable from owner hot middleware/ticker",
       "callers": [
         "server/server.requestResourceRead",

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"strconv"
@@ -261,6 +262,52 @@ func (s *server) pulseSourceRead(w http.ResponseWriter, r *http.Request) (*store
 	return read, true
 }
 
+func pulseHistoryReferenceError(w http.ResponseWriter, err error) {
+	if errors.Is(err, store.ErrAuthForbidden) {
+		writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+	} else {
+		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+	}
+}
+
+func (s *server) pulseHistoryReferenceRead(w http.ResponseWriter, r *http.Request) (*store.NotificationVisibilityRead, bool) {
+	if workspaceKey(r) == "" {
+		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header (API keys and OAuth tokens select it automatically)")
+		return nil, false
+	}
+	key := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	access, err := s.store.ResolveAccess(r.Context(), workspaceKey(r), authUser(r).ID, &key)
+	var read *store.NotificationVisibilityRead
+	if err == nil {
+		read, err = s.store.BeginNotificationVisibilityRead(r.Context(), access)
+	}
+	if err != nil {
+		pulseHistoryReferenceError(w, err)
+		return nil, false
+	}
+	return read, true
+}
+
+func redactPulseHistoryReferences(read *store.NotificationVisibilityRead, snapshot *store.PulseFeedSnapshot, diff *domain.PulseDiff, partial bool) (*domain.PulseDiff, error) {
+	var err error
+	visible := func(kind, id string) bool {
+		if err != nil {
+			return false
+		}
+		if read == nil {
+			if kind == "project" {
+				return pulseProjectIn(snapshot, id) != nil
+			}
+			return pulseInitiativeIn(snapshot, id) != nil
+		}
+		var allowed bool
+		allowed, err = read.ReferenceVisible(kind, id)
+		return allowed
+	}
+	result := redactPulseReferences(diff, func(id string) bool { return visible("project", id) }, func(id string) bool { return visible("initiative", id) }, partial)
+	return result, err
+}
+
 // listProjectUpdates serves a project's updates (newest first) for paged
 // clients, which no longer receive updates in the workspace bootstrap.
 func (s *server) listProjectUpdates(w http.ResponseWriter, r *http.Request) {
@@ -281,14 +328,49 @@ func (s *server) listProjectUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 	updates := append([]domain.ProjectUpdate{}, snapshot.ProjectUpdates[id]...)
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
-		data, ok := s.publicMetadata(w, r)
-		if !ok {
-			return
-		}
-		partial := slices.ContainsFunc(pulseProjectIn(snapshot, id).TeamIDs, func(id string) bool { return !slices.Contains(key.TeamIDs, id) })
-		for i := range updates {
-			updates[i].Diff = redactPulseReferences(updates[i].Diff, func(id string) bool { return resourceExists(&data, "project", id) }, func(id string) bool { return resourceExists(&data, "initiative", id) }, partial)
-			store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+		if s.store.BoundedMetadataEnabled() {
+			var references *store.NotificationVisibilityRead
+			referenceSnapshot := snapshot
+			if s.authDisabled {
+				current, found := s.pulseSourceRead(w, r)
+				if !found {
+					return
+				}
+				defer current.Close()
+				referenceSnapshot = current.Snapshot
+			} else {
+				references, ok = s.pulseHistoryReferenceRead(w, r)
+				if !ok {
+					return
+				}
+				defer references.Close()
+			}
+			partial := slices.ContainsFunc(pulseProjectIn(snapshot, id).TeamIDs, func(id string) bool { return !slices.Contains(key.TeamIDs, id) })
+			for i := range updates {
+				var err error
+				updates[i].Diff, err = redactPulseHistoryReferences(references, referenceSnapshot, updates[i].Diff, partial)
+				if err != nil {
+					pulseHistoryReferenceError(w, err)
+					return
+				}
+				store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+			}
+			if references != nil {
+				if err := references.FinishReferences(); err != nil {
+					pulseHistoryReferenceError(w, err)
+					return
+				}
+			}
+		} else {
+			data, ok := s.publicMetadata(w, r)
+			if !ok {
+				return
+			}
+			partial := slices.ContainsFunc(pulseProjectIn(snapshot, id).TeamIDs, func(id string) bool { return !slices.Contains(key.TeamIDs, id) })
+			for i := range updates {
+				updates[i].Diff = redactPulseReferences(updates[i].Diff, func(id string) bool { return resourceExists(&data, "project", id) }, func(id string) bool { return resourceExists(&data, "initiative", id) }, partial)
+				store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+			}
 		}
 	}
 	for index := range updates {
@@ -319,13 +401,47 @@ func (s *server) listInitiativeUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 	updates := append([]domain.InitiativeUpdate{}, snapshot.InitiativeUpdates[id]...)
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
-		data, ok := s.publicMetadata(w, r)
-		if !ok {
-			return
-		}
-		for i := range updates {
-			updates[i].Diff = redactPulseReferences(updates[i].Diff, func(id string) bool { return resourceExists(&data, "project", id) }, func(id string) bool { return resourceExists(&data, "initiative", id) }, true)
-			store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+		if s.store.BoundedMetadataEnabled() {
+			var references *store.NotificationVisibilityRead
+			referenceSnapshot := snapshot
+			if s.authDisabled {
+				current, found := s.pulseSourceRead(w, r)
+				if !found {
+					return
+				}
+				defer current.Close()
+				referenceSnapshot = current.Snapshot
+			} else {
+				references, ok = s.pulseHistoryReferenceRead(w, r)
+				if !ok {
+					return
+				}
+				defer references.Close()
+			}
+			for i := range updates {
+				var err error
+				updates[i].Diff, err = redactPulseHistoryReferences(references, referenceSnapshot, updates[i].Diff, true)
+				if err != nil {
+					pulseHistoryReferenceError(w, err)
+					return
+				}
+				store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+			}
+			if references != nil {
+				if err := references.FinishReferences(); err != nil {
+					pulseHistoryReferenceError(w, err)
+					return
+				}
+			}
+		} else {
+			data, ok := s.publicMetadata(w, r)
+			if !ok {
+				return
+			}
+			for i := range updates {
+				updates[i].Diff = redactPulseReferences(updates[i].Diff, func(id string) bool { return resourceExists(&data, "project", id) }, func(id string) bool { return resourceExists(&data, "initiative", id) }, true)
+				store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+			}
 		}
 	}
 	for index := range updates {

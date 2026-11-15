@@ -148,10 +148,18 @@ func (s *SQLiteStore) verifyMutationCallback(ctx context.Context, tx *sqlTx, kin
 }
 
 func (s *SQLiteStore) compareMutationCallback(ctx context.Context, tx *sqlTx, kind string, stored domain.Bootstrap, data *domain.Bootstrap, fields []string, payload any, mutate func(*domain.Bootstrap) (string, error), panicOnDifference, record bool) (string, error) {
+	lookups, err := mutationCallbackLookupsFor(ctx, s, tx, kind)
+	if err != nil {
+		return "", err
+	}
 	before := fullCallbackInput(stored, *data, fields)
 	full := cloneCallbackInput(before)
 	narrow := cloneCallbackInput(*data)
 	prepare := func(input *domain.Bootstrap) {
+		if lookups != nil {
+			input.FormerMembers, input.CollaborationUpdates = lookups.former, lookups.updates
+			return
+		}
 		input.FormerMembers = s.formerMemberLookup(ctx, tx, input)
 		input.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, stored.Workspace.URLKey)
 	}

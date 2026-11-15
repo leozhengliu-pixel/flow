@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_issue_authorization_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginIssueWriteAuthorizationRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns selected issue-child authorization headers and the original installed logical generation through explicit close/output transfer. Reuses legacy query authority, ordering, pagination, canonical reference refresh and first-page ancestor traversal. Principal and policy reads admit their output before allocation; selected raw records use bounded small batches or 32 KiB spool chunks and typed validation. Saved policy-key presence, development viewer, request handoffs, cancellation and release remain exact. Tests compare the literal full legacy child-authorization path, warm and reloaded, supported large bodies, keys, aliases, foreign targets, comments, body codecs, pagination and borrowed settings. This header-only result is not a mutation preimage and does not certify child writers.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared authorization input for issue comment, reaction, relation, attachment and link mutation routes.",
+      "callers": ["server/server.boundedIssueWriteAuthorizationMetadata"]
+    }
+  }
+}

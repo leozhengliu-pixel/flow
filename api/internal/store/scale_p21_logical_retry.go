@@ -407,6 +407,18 @@ func metadataLogicalMergedPostimage(ctx context.Context, source *metadataLogical
 // so only fresh canonical decoded Locations can require additional receipts.
 func metadataLogicalCompletePostimage(ctx context.Context, source *metadataLogicalSource, before, after domain.Bootstrap, scope MetadataRecordScope) (*metadataLogicalSource, error) {
 	left, right := reflect.ValueOf(before), reflect.ValueOf(after)
+	var fields []string
+	for _, name := range append(slices.Clone(scope.Fields), "viewer") {
+		index, _, ok := metadataLogicalField(name)
+		if ok && !metadataValueEqual(left.Field(index), right.Field(index)) {
+			fields = append(fields, name)
+		}
+	}
+	return metadataLogicalReplaceFields(ctx, source, after, fields)
+}
+
+func metadataLogicalReplaceFields(ctx context.Context, source *metadataLogicalSource, data domain.Bootstrap, fields []string) (*metadataLogicalSource, error) {
+	right := reflect.ValueOf(data)
 	var builders []*metadataLogicalBuilder
 	defer func() {
 		for _, builder := range builders {
@@ -415,8 +427,7 @@ func metadataLogicalCompletePostimage(ctx context.Context, source *metadataLogic
 	}()
 	return source.Transform(ctx, func(name string, original metadataLogicalNode) (metadataAggregateNode, bool, error) {
 		index, _, ok := metadataLogicalField(name)
-		if !ok || name != "viewer" && !slices.Contains(scope.Fields, name) ||
-			metadataValueEqual(left.Field(index), right.Field(index)) {
+		if !ok || !slices.Contains(fields, name) {
 			return metadataAggregateStoredNode{original}, false, nil
 		}
 		builder, err := newMetadataLogicalBuilder(metadataLogicalSourceScratchContext(ctx, source))

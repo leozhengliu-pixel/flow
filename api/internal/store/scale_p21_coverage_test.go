@@ -48,8 +48,8 @@ func scaleP21SnapshotConsumer(node ast.Node) bool {
 		if selector.Sel.Name == "workspaces" {
 			found = true
 		}
-		if slices.Contains(scaleP21SnapshotMethods, selector.Sel.Name) ||
-			slices.Contains([]string{"VisitOAuthApplicationLogos", "boundedOAuthAppIconAccess", "ownedImageAccess", "InstalledReviewReferenceVisible", "BeginResourceRead", "BeginTeamMaintenanceRead", "BeginPulseRead", "BeginPulseScheduleRead", "BeginNotificationVisibilityRead", "BeginMemberDirectoryRead", "BeginNotificationDeliveryContextRead", "DueIntegrationDeliveryIDs", "BeginDocumentRead", "BeginTeamMemberRequestRead", "BeginWebhookDeliveryRead", "BeginLoopScheduleRead"}, selector.Sel.Name) {
+		if slices.Contains([]string{"sweepWorkerChatWorkspace", "BeginAskStatusRead", "BeginResourceRelationRead", "BeginSlackNotificationRead", "BeginMetadataJSONRead", "chatAuthorizedPointRead", "BeginIssueWriteAuthorizationRead", "LoadWorkflow"}, selector.Sel.Name) || slices.Contains(scaleP21SnapshotMethods, selector.Sel.Name) ||
+			slices.Contains([]string{"VisitOAuthApplicationLogos", "boundedOAuthAppIconAccess", "ownedImageAccess", "InstalledReviewReferenceVisible", "BeginResourceRead", "BeginInstalledResourcePointRead", "BeginProjectedInstalledResourcePointRead", "BeginTeamMaintenanceRead", "BeginPulseRead", "BeginPulseScheduleRead", "BeginNotificationVisibilityRead", "BeginMemberDirectoryRead", "BeginNotificationDeliveryContextRead", "DueIntegrationDeliveryIDs", "BeginDocumentRead", "BeginDocumentDirectoryRead", "BeginTeamMemberRequestRead", "BeginWebhookDeliveryRead", "BeginWebhookAggregateRead", "BeginLoopScheduleRead", "BeginChatDisplayRead", "BeginChatEventPolicyRead", "BeginApplicationAccessRead", "BeginApplicationListRead", "BeginAgentSessionRead", "BeginApplicationWebhookSweepRead", "BeginApplicationSLAEventRead", "BeginApplicationTaskContextRead", "BeginResourceDirectoryRead", "CommitPulseSummaries", "RecordWebhookDeliveryFailure", "MutateFailingWebhookDisable"}, selector.Sel.Name) {
 			if qualifier, ok := selector.X.(*ast.Ident); !ok || qualifier.Name != "domain" {
 				found = true
 			}
@@ -283,6 +283,14 @@ func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 		`package probe; func background() { _ = s.BeginMetadataArrayRead(ctx, key, "users") }`,
 		`package probe; var callback = s.StreamMetadataArray`,
 		`package probe; func worker() { _ = s.workerLoopDefinition(ctx, key, id) }`,
+		`package probe; func worker() { _ = s.sweepWorkerChatWorkspace(ctx, key, now) }`,
+		`package probe; func worker() { _ = s.BeginAskStatusRead(ctx, key, id) }`,
+		`package probe; func request() { _ = s.BeginResourceRelationRead(ctx, key, user, credential, kind) }`,
+		`package probe; func worker() { _ = s.BeginSlackNotificationRead(ctx, key) }`,
+		`package probe; func request() { _ = s.BeginMetadataJSONRead(ctx) }`,
+		`package probe; var callback = s.BeginIssueWriteAuthorizationRead`,
+		`package probe; var callback = read.LoadWorkflow`,
+		`package probe; var callback = s.chatAuthorizedPointRead`,
 		`package probe; func request() { _ = s.BeginFormerMembersRead(ctx, key) }`,
 		`package probe; var callback = s.BeginViewerVisibilityKeysRead`,
 		`package probe; func background() { _ = s.ViewerVisibilityKeys(ctx, key) }`,
@@ -294,6 +302,8 @@ func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 		`package probe; func request() { _ = s.ownedImageAccess(ctx, name, userID, true) }`,
 		`package probe; func request() { _ = s.InstalledReviewReferenceVisible(ctx, key, ref, query) }`,
 		`package probe; func request() { _ = s.BeginResourceRead(ctx, access, kind, ref) }`,
+		`package probe; func request() { _ = s.BeginInstalledResourcePointRead(ctx, key, kind, ref) }`,
+		`package probe; func request() { _ = s.BeginProjectedInstalledResourcePointRead(ctx, access, kind, ref) }`,
 		`package probe; func request() { _ = s.BeginTeamMaintenanceRead(ctx, key) }`,
 		`package probe; func request() { _ = s.BeginPulseRead(ctx, key, true) }`,
 		`package probe; func request() { _ = s.BeginPulseScheduleRead(ctx, key) }`,
@@ -302,9 +312,23 @@ func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 		`package probe; func tick() { _ = s.BeginNotificationDeliveryContextRead(ctx, key, statuses, now) }`,
 		`package probe; func tick() { _ = s.DueIntegrationDeliveryIDs(ctx, key, now, visit) }`,
 		`package probe; func request() { _ = s.BeginDocumentRead(ctx, key, user, credential, request) }`,
+		`package probe; func request() { _ = s.BeginDocumentDirectoryRead(ctx, key, user, credential, request) }`,
 		`package probe; func request() { _ = s.BeginTeamMemberRequestRead(ctx, key, user, credential, ref, false) }`,
 		`package probe; func tick() { _ = s.BeginWebhookDeliveryRead(ctx, key, true) }`,
+		`package probe; func tick() { _ = s.BeginWebhookAggregateRead(ctx, key) }`,
 		`package probe; func tick() { _ = s.BeginLoopScheduleRead(ctx, key) }`,
+		`package probe; func job() { _ = s.BeginChatDisplayRead(ctx, key, request) }`,
+		`package probe; func job() { _ = s.BeginChatEventPolicyRead(ctx, key, request) }`,
+		`package probe; func request() { _ = s.BeginApplicationAccessRead(ctx, id, projection) }`,
+		`package probe; func request() { _ = s.BeginApplicationListRead(ctx, key) }`,
+		`package probe; func request() { _ = s.BeginAgentSessionRead(ctx, key, match) }`,
+		`package probe; func tick() { _ = s.BeginApplicationWebhookSweepRead(ctx, key) }`,
+		`package probe; func tick() { _ = s.BeginApplicationSLAEventRead(ctx, key) }`,
+		`package probe; func request() { _ = s.BeginApplicationTaskContextRead(ctx, key, user, request) }`,
+		`package probe; func request() { _ = s.BeginResourceDirectoryRead(ctx, access, request) }`,
+		`package probe; func tick() { _ = s.CommitPulseSummaries(ctx, key, candidates, prepare) }`,
+		`package probe; func tick() { _ = s.RecordWebhookDeliveryFailure(ctx, key, failure) }`,
+		`package probe; func tick() { _ = s.MutateFailingWebhookDisable(ctx, key, id, mutate) }`,
 		`package probe; func job() { _ = s.BeginGitLabConnectionConfigsRead(ctx, key) }`,
 		`package probe; func job() { _ = s.BeginDueNotificationDeliveryRead(ctx, key, statuses, now) }`,
 	} {

@@ -1,10 +1,11 @@
 {
   "source": "store/scale_p17_document_directory.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "DocumentDirectoryMetadata": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "This by-value arbitrary-field directory now explicitly rejects bounded stores before accessing resident metadata. Its sole normal list caller selects the owned typed BeginDocumentDirectoryRead branch in bounded mode, while off mode retains the literal directory and full-list fallbacks. Exact handler table and shared directory persistent/race proof passed; no generic field selection or unowned body graph is certified.",
       "accessors": [
         "resident-state"
       ],

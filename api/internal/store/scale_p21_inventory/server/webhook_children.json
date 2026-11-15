@@ -1,0 +1,17 @@
+{
+  "source": "server/webhook_children.go",
+  "unmigrated": 0,
+  "consumers": {
+    "webhookChildEntity": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "BeginPulseRead",
+        "PulseFeed"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Synchronous webhook event description after project and initiative update mutations.",
+      "reason": "The explicit bounded branch uses the proven BeginPulseRead(false) source and LoadUpdates for only the named aggregate/child ID, preserving installed history order and selecting the first match. It strips only stored snapshots, then transfers the read to dispatchWebhookEvent's containing output owner through map conversion, envelope encoding and queue publication. Read/load/ownership errors return to describeWebhookEvent's metadataErr and prevent enqueue; the off branch retains its original accessor and selectors literally. TestScaleP21PulseRemainingChildDifferential compares complete project/initiative children, large target and unrelated bodies, missing child/source/workspace, physical/default workspace, deletion payload and milestone duplicate semantics, with explicit missing-owner/cancellation errors, zero full decodes and no admission leaks."
+    }
+  }
+}

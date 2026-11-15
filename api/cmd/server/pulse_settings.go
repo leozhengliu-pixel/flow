@@ -226,6 +226,32 @@ func (s *server) preparePulseSummaries(ctx context.Context, key string, now time
 	}
 	// One write for every due member: cursors live in one settings value, so
 	// per-member writes would each rewrite it.
+	if s.store.BoundedMetadataEnabled() {
+		candidates := make([]store.PulseSummaryCandidate, 0, len(due))
+		for _, item := range due {
+			candidate := store.PulseSummaryCandidate{UserID: item.user.ID, Schedule: item.schedule, End: item.end}
+			if item.eligible && item.total > 0 {
+				notification := newPulseSummaryNotification(item, now)
+				candidate.Notification = &notification
+			}
+			candidates = append(candidates, candidate)
+		}
+		return s.store.CommitPulseSummaries(ctx, key, candidates, func(input store.PulseSummaryDispatchInput) (store.PulseSummaryDispatch, error) {
+			preferences := input.Preferences
+			if !input.HasPreferences {
+				preferences = defaultPreferences(input.Notification.RecipientID)
+			}
+			if !preferences.Inbox.Enabled || !categoryEnabled(preferences.Inbox, "pulse") {
+				return store.PulseSummaryDispatch{}, nil
+			}
+			data := domain.Bootstrap{}
+			if input.PushEnabled {
+				data.PushSubscriptions = []domain.PushSubscription{{UserID: input.Notification.RecipientID, Enabled: true}}
+			}
+			enqueueNotificationDeliveries(&data, input.Notification, preferences)
+			return store.PulseSummaryDispatch{Send: true, Deliveries: data.NotificationDeliveries}, nil
+		})
+	}
 	pulseCtx := store.WithMetadataFields(ctx, "settings", "workspaceSettings", "userSettings", "notificationPreferences", "pushSubscriptions")
 	return s.store.MutateWorkspace(pulseCtx, key, "pulse.summary_scheduled", "", nil, func(data *domain.Bootstrap) error {
 		if !workspaceFeatureEnabled(data.WorkspaceSettings, "pulse") {

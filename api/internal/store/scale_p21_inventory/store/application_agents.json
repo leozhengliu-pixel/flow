@@ -1,11 +1,38 @@
 {
   "source": "store/application_agents.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
+    "ApplicationByUser": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode reads a complete typed installation through BeginApplicationAccessRead and transfers independent output admission to the containing response/operation owner; a missing or closed owner returns explicit coverage failure. SQL user lookup columns do not replace JSON identities. Native installed home/global resolution preserves every matching registration and cumulative scopes. Off mode retains the literal original SQL decode/resolver. TestScaleP21ApplicationAccess covers typed aliases/null/duplicates, native warm/reloaded output, complete by-value and User equality, cancellation, borrowed pool-one snapshot, output transfer and denial/latch cleanup.",
+      "accessors": ["BeginApplicationAccessRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared application principal and application delivery identity.",
+      "callers": ["store/SQLiteStore.decorateAppUser", "server/server.applicationAccessRead"]
+    },
+    "ListApplications": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode owns complete ordered installation outputs through BeginApplicationListRead and transfers the list owner through final response encoding, or returns coverage error. Native SQL workspace selection/order and JSON-derived home/client/user identity are retained, with explicit all-or-none failure and no live row cursor during nested reads. Off mode retains the original query/decode/resolver verbatim. TestScaleP21ApplicationAccess compares ordered full outputs and tests owner transfer/release, budget failures and borrowed pool-one snapshots.",
+      "accessors": ["BeginApplicationListRead"],
+      "temperature": "hot",
+      "temperatureReason": "Application installation response and shared principal lookup.",
+      "callers": ["server/server.listApplicationInstallations"]
+    },
+    "decorateAppUser": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded application principals use the independently owned user projection and transfer its complete User graph to the containing output owner; admission/coverage failures are latched for legacy projections that ignore directory SQL/JSON errors. Non-application principals and literal off ApplicationByUser remain unchanged. TestScaleP21ApplicationAccess compares User fields and ownership; the installed-application document differential exercises Viewer/Users/Members and the ignored-ListMembers admission latch.",
+      "accessors": ["BeginApplicationAccessRead"],
+      "temperature": "hot",
+      "temperatureReason": "Per-request authentication and resource projection resolve application users.",
+      "callers": ["store/SQLiteStore.authUserByID"]
+    },
     "resolveApplicationAccess": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Native all-match application policy reader was held after a valid OAuth manifest client_name containing NUL remained in the warm legacy registration while canonical SQL stripped it. SW24 persistent differential reproduced differing application names; the original resolver is retained until this transient compatibility contract is resolved. Shared HTTP request NUL filtering does not cover the manifest decoder.",
+      "status": "reviewed",
+      "reason": "Literal legacy resolver is reached only after the bounded branches of ApplicationByUser and ListApplications have returned. TestScaleP21ApplicationAccessLegacyResolverBoundary guards the complete production reference set and bounded early-return boundary. The new independently owned reader preserves native installed NUL/duplicate/order/team/access and all matching registration scopes; warm/reloaded differentials retain the original resolver as oracle. No canonical SQL reconstruction substitutes for the warm logical registration.",
       "accessors": [
         "resident-state"
       ],

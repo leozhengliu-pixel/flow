@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_issue_child_authorization.go",
+  "unmigrated": 0,
+  "consumers": {
+    "boundedIssueWriteAuthorizationMetadata": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Thirteen native issue-record child mutation route forms use the owned authorization reader with the literal original ID/body/alias extraction and query authority. The containing request owns selected headers, the generation token and the one-shot cache through its final consumer. Header-only data is never supplied as the complete authorization Bootstrap to application contexts; comment-action gates read only their selected closure and retain the separate current-account override. Off mode does not read or change the request; all other issue routes keep the original builder. The actual middleware/header table, route-dispatch guard and policy differential cover this boundary. Child callback writers, create/update/bootstrap and legacy issue aliases remain separately pending.",
+      "accessors": ["BeginIssueWriteAuthorizationRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared issue-child authorization middleware.",
+      "callers": ["server/server.buildIssueRecordAuthorizationData"]
+    }
+  }
+}

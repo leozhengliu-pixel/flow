@@ -507,7 +507,10 @@ func (s *server) chatBindableTeamIDsRead(ctx context.Context, workspace string, 
 }
 
 func (s *server) syncChatConnection(ctx context.Context, record domain.ChatIntegrationRecord, userID, status, testStatus, lastError string) error {
-	return s.store.MutateWorkspace(store.WithMetadataFields(ctx, "integrationConnections"), record.WorkspaceKey, "integration.updated", record.ConnectionID, nil, func(data *domain.Bootstrap) error {
+	return s.store.MutateWorkspaceAppending(store.WithMetadataFields(ctx, "integrationConnections"), record.WorkspaceKey, "integration.updated", record.ConnectionID, nil, store.MetadataAppendScope{
+		MetadataRecordScope: store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: record.ConnectionID}}},
+		AppendKinds:         []string{"integrationConnections"},
+	}, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		index := slices.IndexFunc(data.IntegrationConnections, func(c domain.IntegrationConnection) bool { return c.ID == record.ConnectionID })
 		if index < 0 {
@@ -576,7 +579,9 @@ func (s *server) recordChatDeliveryResultLocked(ctx context.Context, record doma
 		if current.WorkspaceKey != record.WorkspaceKey || !current.Connected {
 			return nil
 		}
-		return s.store.MutateWorkspace(store.WithMetadataFields(ctx, "integrationConnections"), record.WorkspaceKey, "integration.updated", record.ConnectionID, nil, func(data *domain.Bootstrap) error {
+		return s.store.MutateWorkspaceScoped(store.WithMetadataFields(ctx, "integrationConnections"), record.WorkspaceKey, "integration.updated", record.ConnectionID, nil, store.MetadataRecordScope{
+			Write: []store.RecordKey{{Kind: "integrationConnections", ID: record.ConnectionID}},
+		}, func(data *domain.Bootstrap) error {
 			for index := range data.IntegrationConnections {
 				item := &data.IntegrationConnections[index]
 				if item.ID != record.ConnectionID {

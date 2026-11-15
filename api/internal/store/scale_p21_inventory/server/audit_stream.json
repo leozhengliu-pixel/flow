@@ -1,6 +1,6 @@
 {
   "source": "server/audit_stream.go",
-  "unmigrated": 4,
+  "unmigrated": 3,
   "consumers": {
     "createAuditStream": {
       "owner": "P21",
@@ -42,12 +42,12 @@
     },
     "mutateAuditStream": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
       ],
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes.",
+      "reason": "Uses the proven scoped writer for one webhook point, preserving its literal original writer and context off mode. TestScaleP21SW45DeliveryAuditDifferential compares the actual ticker helper's canonical webhook, complete webhook event including Snapshot/PreviousValues, realtime output and absence of audit side effects against full hydration. A nested earlier Draft.ContentData match with hidden marker/count proves aggregate precedence across the principal/key matrix. Existing callback, cursor/retry semantics and logging remain unchanged; all work is released after publication with zero full metadata decodes.",
       "temperature": "hot",
       "temperatureReason": "Runtime cursor/health maintenance for the audit stream on delivery ticks.",
       "callers": [

@@ -43,7 +43,18 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		mutationActor = actor.ID
 	}
-	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspace)
+	webhookEnabled := false
+	if s.BoundedMetadataEnabled() {
+		if s.webhookConfigured() {
+			var err error
+			webhookEnabled, err = s.issueMetadataWebhookNeeded(ctx, workspace)
+			if err != nil {
+				return domain.Issue{}, err
+			}
+		}
+	} else {
+		webhookEnabled = s.webhookConfigured() && s.webhookNeeded(ctx, workspace)
+	}
 	if len(scope.RelatedIDs) > 100 {
 		return domain.Issue{}, fmt.Errorf("too many related issues")
 	}
@@ -246,6 +257,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if target == nil {
 			return sql.ErrNoRows
 		}
+		var projectInputs *issueHotInputs
 		if s.BoundedMetadataEnabled() {
 			states, err := s.loadIssueWorkflowStates(ctx, workspace, &metadata, scope.Payload)
 			if err != nil {
@@ -261,6 +273,15 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 				}
 				defer inputs.close()
 				inputs.install(&metadata, &storedMetadata)
+			} else if input, ok := scope.Payload.(domain.IssueUpdateInput); ok && issueProjectInputsSupported(*target, input) {
+				projectInputs, err = s.loadIssueProjectInputs(ctx, workspace, &metadata, *target, input)
+				if err != nil {
+					return err
+				}
+				defer projectInputs.close()
+				projectInputs.installProjects(&metadata, &storedMetadata)
+			} else if _, ok := scope.Payload.(domain.IssueUpdateInput); ok {
+				return ErrBoundedMetadataCoverage
 			}
 		}
 		metadata.Activities = map[string][]domain.ActivityEvent{}
@@ -301,6 +322,9 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
 		metadata.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
 		if len(fields) > 0 && !slices.Contains(fields, "projects") {
+			if projectInputs != nil {
+				metadata.Projects = nil
+			}
 			copyMutationProjects(&metadata, storedMetadata)
 		}
 		if len(fields) > 0 && verifyNarrowMutationInputs() {
@@ -412,7 +436,16 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if original.Team.ID != result.Team.ID {
 			documents = metadata.Documents
 		}
-		if progressMetadata, err = s.persistIssueMetadata(ctx, tx, workspace, loadedIssues, metadata.Issues, documents); err != nil {
+		var publication *metadataLogicalPublication
+		if projectInputs != nil {
+			publication, err = s.persistSelectedIssueMetadata(ctx, tx, workspace, storedMetadata, loadedIssues, metadata.Issues, documents, projectInputs)
+			if publication != nil {
+				defer publication.Close()
+			}
+		} else {
+			progressMetadata, err = s.persistIssueMetadata(ctx, tx, workspace, loadedIssues, metadata.Issues, documents)
+		}
+		if err != nil {
 			return err
 		}
 		metadataWritten = tx.metadataWritten
@@ -457,6 +490,11 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		if err := tx.Commit(); err != nil {
 			return err
+		}
+		if publication != nil {
+			if err := publication.Install(); err != nil {
+				return err
+			}
 		}
 		if progressMetadata != nil {
 			s.installWrittenWorkspace(workspace, *progressMetadata, false, copyWrite)

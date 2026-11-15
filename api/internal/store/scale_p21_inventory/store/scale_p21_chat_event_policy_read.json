@@ -1,0 +1,18 @@
+{
+  "source": "store/scale_p21_chat_event_policy_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginChatEventPolicyRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted owned installed header reader inherits explicit Context pins through independent source descriptors. A nonnil AskID preserves the first matching ID, including empty/NUL IDs and empty IssueID; later duplicates cannot replace it. Selected issue-template headers retain all matching duplicates in installed order and only ID/type/team/visibility/project scalars plus the exact streamed FormFields child count, never form/body/approval payloads. ResourceRead admission remains held until Close and partial failures clear/release the source and selections. NativeOwnership and WarmReloadAndPin compare literal old projections, duplicate/empty keys, exact field counts, missing/default selection, cancellation, partial-budget cleanup, caller isolation and concurrent readers. Warm/reloaded 10x ignored Ask/template/form bodies retain exactly 147472 admitted bytes with zero SQL/full decodes/leaks; old pinned results survive source replacement and parent close. Targeted tests pass normally, with -race and persistent SQLite count2. Caller predicate/authorization and enqueue/delivery effects remain separately tested adapter boundaries. No cache, new lock or mutation preimage is introduced.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Owned Ask and issue-template predicate inputs for chat event queuing and binding rechecks.",
+      "callers": [
+        "server/chat_notifications.go:queueChatDomainEvent",
+        "server/chat_team_bindings.go:chatBindingPermitted"
+      ]
+    }
+  }
+}

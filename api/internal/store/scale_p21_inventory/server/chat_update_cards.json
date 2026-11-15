@@ -1,10 +1,11 @@
 {
   "source": "server/chat_update_cards.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "chatSendProjectUpdate": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded project delivery binds one InstalledMetadataRead.Context generation for owned Pulse source/selected complete updates and ChatDisplay policy/name/timezone children. Exact team ID/private/archive/retire presence and ancestry settings therefore share the original metadata generation; no independent resident-policy read remains. Handles stay open through card encoding, platform delivery and thread persistence. Literal off WorkspaceMetadataFields and PulseFeed accessors remain. TestScaleP21HotChatSourcesRenderingDifferential compares actual create, legacy event-time selection, edit, delete, hidden-project and missing-update payloads and thread fields. TestScaleP21ChatDisplayComposedGeneration replaces the source between child opens and retains original metadata/output even after parent close; shared source proof retains independent registration.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],

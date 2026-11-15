@@ -39,11 +39,40 @@ type OwnedMetadataSelection struct {
 // BeginInstalledMetadataRead preserves WorkspaceMetadataForRead's installed
 // source choice. Empty workspace resolves the default with the source under
 // the same lock. An unknown revision remains unknown; no SQL stamp is invented.
+// An explicit Context pin supplies its generation to independently owned children.
 func (s *SQLiteStore) BeginInstalledMetadataRead(ctx context.Context, workspace string) (*InstalledMetadataRead, bool, error) {
 	if !s.BoundedMetadataEnabled() {
 		// Callers preserve their particular literal accessor off mode. This
 		// helper cannot infer whether that accessor was full or field-only.
 		return nil, false, ErrBoundedMetadataCoverage
+	}
+	if parent, pinned, err := installedMetadataReadFromContext(ctx, s, workspace); pinned {
+		if err != nil {
+			return nil, false, err
+		}
+		source, err := parent.retainSource(ctx, parent.workspace)
+		if err != nil {
+			return nil, true, err
+		}
+		cost := 64<<10 + len(parent.workspace)*8
+		if cost > 2<<20 {
+			source.Release()
+			return nil, true, ErrMetadataWorkBudget
+		}
+		_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, cost)
+		if err != nil {
+			source.Release()
+			return nil, true, err
+		}
+		if err := ctx.Err(); err != nil {
+			source.Release()
+			release()
+			return nil, true, err
+		}
+		return &InstalledMetadataRead{
+			store: s, workspace: strings.Clone(parent.workspace), source: source,
+			release: release, selections: map[*OwnedMetadataSelection]struct{}{},
+		}, true, nil
 	}
 	for {
 		if err := ctx.Err(); err != nil {

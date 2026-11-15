@@ -99,9 +99,9 @@ func (s *SQLiteStore) BeginResourceRead(ctx context.Context, access AccessContex
 	current := found && source != nil && source.Stamp() == p.stamp
 	if source != nil {
 		err = source.Retain()
-	} else if found {
-		err = ErrBoundedMetadataCoverage
 	}
+	// Policy-only recovery uses the owned canonical path below; it cannot
+	// substitute its resident policy copy for the requested detail.
 	s.metadataResidency.mu.Unlock()
 	s.mu.RUnlock()
 	if err != nil {

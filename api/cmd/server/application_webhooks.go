@@ -532,11 +532,27 @@ func appUserNotificationAction(notification domain.Notification) string {
 // installed application's user to its webhook. Delivery ids are derived from
 // the notification and its update time, so each change is sent once.
 func (s *server) sweepAppUserNotifications(ctx context.Context, workspace string, now time.Time) {
-	hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	var hooks domain.Bootstrap
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginApplicationWebhookSweepRead(ctx, workspace, "app_user_notifications")
+		if err != nil || !found {
+			return
+		}
+		defer read.Close()
+		hooks, ok = read.Data, true
+	} else {
+		hooks, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	}
 	if !ok || !slices.ContainsFunc(hooks.Webhooks, func(item domain.Webhook) bool {
 		return item.ManagedBy == "application" && item.Enabled && slices.Contains(item.ResourceTypes, "app_user_notifications")
 	}) {
 		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = applicationOutputContext(ctx)
+		defer close()
 	}
 	installations, err := s.store.ListApplications(ctx, workspace)
 	if err != nil {
@@ -609,13 +625,29 @@ func (s *server) dispatchAppAssignmentNotifications(workspace string, event doma
 	if json.Unmarshal(event.PreviousValues, &previous) != nil || previous["assignee"] == nil && previous["delegate"] == nil {
 		return
 	}
-	hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	var hooks domain.Bootstrap
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginApplicationWebhookSweepRead(context.Background(), workspace, "app_user_notifications")
+		if err != nil || !found {
+			return
+		}
+		defer read.Close()
+		hooks, ok = read.Data, true
+	} else {
+		hooks, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	}
 	if !ok || !slices.ContainsFunc(hooks.Webhooks, func(item domain.Webhook) bool {
 		return item.ManagedBy == "application" && item.Enabled && slices.Contains(item.ResourceTypes, "app_user_notifications")
 	}) {
 		return
 	}
 	ctx := context.Background()
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = applicationOutputContext(ctx)
+		defer close()
+	}
 	installations, err := s.store.ListApplications(ctx, workspace)
 	if err != nil {
 		return
@@ -666,44 +698,59 @@ func (s *server) dispatchAppAssignmentNotifications(workspace string, event doma
 // sweepIssueSLAWebhooks sends IssueSLA events (set, highRisk, breached) for
 // SLA changes of the last 15 minutes to webhooks subscribed to issue_sla.
 func (s *server) sweepIssueSLAWebhooks(ctx context.Context, workspace string, now time.Time) {
-	hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	var hooks domain.Bootstrap
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginApplicationWebhookSweepRead(ctx, workspace, "issue_sla")
+		if err != nil || !found {
+			return
+		}
+		defer read.Close()
+		hooks, ok = read.Data, true
+	} else {
+		hooks, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	}
 	if !ok || !slices.ContainsFunc(hooks.Webhooks, func(item domain.Webhook) bool {
 		return !item.AuditLog && item.Enabled && slices.Contains(item.ResourceTypes, "issue_sla")
 	}) {
 		return
 	}
-	data, ok := s.store.WorkspaceMetadataFields(workspace, "issueSlas", "slaEvents", "users")
-	if !ok {
-		return
-	}
-	type slaEvent struct {
-		key, action, issueID string
-		sla                  domain.IssueSLA
-		at                   time.Time
-	}
-	events := []slaEvent{}
-	slas := map[string]domain.IssueSLA{}
-	for _, sla := range data.IssueSLAs {
-		slas[sla.ID] = sla
-	}
-	for _, event := range data.SLAEvents {
-		if now.Sub(event.CreatedAt) > 15*time.Minute {
-			continue
+	var events []store.ApplicationSLAWebhookEvent
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginApplicationSLAEventRead(ctx, workspace, now)
+		if err != nil || !found {
+			return
 		}
-		action := map[string]string{"started": "set", "breached": "breached"}[event.Type]
-		if action == "" {
-			continue
+		defer read.Close()
+		events = read.Events
+	} else {
+		data, ok := s.store.WorkspaceMetadataFields(workspace, "issueSlas", "slaEvents", "users")
+		if !ok {
+			return
 		}
-		events = append(events, slaEvent{key: event.ID, action: action, issueID: event.IssueID, sla: slas[event.SLAID], at: event.CreatedAt})
-	}
-	// High risk: less than a quarter of the SLA window (at most 24 hours) left.
-	for _, sla := range data.IssueSLAs {
-		if sla.Status != "active" || sla.BreachedAt != nil || !now.Before(sla.DueAt) {
-			continue
+		slas := map[string]domain.IssueSLA{}
+		for _, sla := range data.IssueSLAs {
+			slas[sla.ID] = sla
 		}
-		window := min(sla.DueAt.Sub(sla.StartedAt)/4, 24*time.Hour)
-		if sla.DueAt.Sub(now) <= window {
-			events = append(events, slaEvent{key: sla.ID + ":highRisk:" + sla.DueAt.UTC().Format(time.RFC3339), action: "highRisk", issueID: sla.IssueID, sla: sla, at: now})
+		for _, event := range data.SLAEvents {
+			if now.Sub(event.CreatedAt) > 15*time.Minute {
+				continue
+			}
+			action := map[string]string{"started": "set", "breached": "breached"}[event.Type]
+			if action == "" {
+				continue
+			}
+			events = append(events, store.ApplicationSLAWebhookEvent{Key: event.ID, Action: action, IssueID: event.IssueID, SLA: slas[event.SLAID], At: event.CreatedAt})
+		}
+		// High risk: less than a quarter of the SLA window (at most 24 hours) left.
+		for _, sla := range data.IssueSLAs {
+			if sla.Status != "active" || sla.BreachedAt != nil || !now.Before(sla.DueAt) {
+				continue
+			}
+			window := min(sla.DueAt.Sub(sla.StartedAt)/4, 24*time.Hour)
+			if sla.DueAt.Sub(now) <= window {
+				events = append(events, store.ApplicationSLAWebhookEvent{Key: sla.ID + ":highRisk:" + sla.DueAt.UTC().Format(time.RFC3339), Action: "highRisk", IssueID: sla.IssueID, SLA: sla, At: now})
+			}
 		}
 	}
 	if len(events) == 0 {
@@ -711,7 +758,7 @@ func (s *server) sweepIssueSLAWebhooks(ctx context.Context, workspace string, no
 	}
 	root := s.appBaseURL() + "/" + url.PathEscape(workspace)
 	for _, event := range events {
-		issue, err := s.store.IssueRecord(ctx, workspace, event.issueID)
+		issue, err := s.store.IssueRecord(ctx, workspace, event.IssueID)
 		if err != nil {
 			continue
 		}
@@ -724,14 +771,14 @@ func (s *server) sweepIssueSLAWebhooks(ctx context.Context, workspace string, no
 				continue
 			}
 			body, _ := json.Marshal(map[string]any{
-				"action": event.action, "type": "IssueSLA", "createdAt": event.at.UTC().Format("2006-01-02T15:04:05.000Z07:00"),
-				"issueData": issue, "url": issueURL, "organizationId": hooks.Workspace.ID, "webhookId": hook.ID, "eventId": event.key,
-				"data":  map[string]any{"id": event.sla.ID, "issueId": issue.ID, "ruleId": event.sla.RuleID, "startedAt": event.sla.StartedAt, "dueAt": event.sla.DueAt, "breachedAt": event.sla.BreachedAt, "status": event.sla.Status},
+				"action": event.Action, "type": "IssueSLA", "createdAt": event.At.UTC().Format("2006-01-02T15:04:05.000Z07:00"),
+				"issueData": issue, "url": issueURL, "organizationId": hooks.Workspace.ID, "webhookId": hook.ID, "eventId": event.Key,
+				"data":  map[string]any{"id": event.SLA.ID, "issueId": issue.ID, "ruleId": event.SLA.RuleID, "startedAt": event.SLA.StartedAt, "dueAt": event.SLA.DueAt, "breachedAt": event.SLA.BreachedAt, "status": event.SLA.Status},
 				"actor": nil,
 			})
 			s.queueWebhookDelivery(ctx, workspace, hook, domain.WebhookDelivery{
-				ID: webhookDeliveryID(hook.ID, "sla:"+event.key), Kind: domain.WebhookDeliveryKindEvent, EventID: "sla:" + event.key,
-				EventType: "IssueSLA", Action: event.action, Payload: body,
+				ID: webhookDeliveryID(hook.ID, "sla:"+event.Key), Kind: domain.WebhookDeliveryKindEvent, EventID: "sla:" + event.Key,
+				EventType: "IssueSLA", Action: event.Action, Payload: body,
 			})
 		}
 	}

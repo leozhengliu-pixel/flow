@@ -1,10 +1,11 @@
 {
   "source": "store/pulse_feed.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "PulseFeed": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Legacy by-value ordered index is unreachable from actual bounded store representations. All twelve production selectors are enumerated by TestScaleP21PulseLegacyFeedBoundary: constructor and explicit API dispatches are syntactically off-only; LoadFeed's source-nil case is protected by the reviewed constructor/Close/Snapshot invariants; chatSendProjectUpdate's bounded read-success/nonnil invariant and both initiative legacy-card callers dispatch through their owned alternatives; pulseWorkspaceKey has one off-only wrapper caller. Normalized AST digests conservatively require re-review if those state or transitive-call invariants change, and the scanner rejects new selectors, method-value escapes, helper callers, constructor literals and zero-value/alias constructors. The final four families use owned compact source or selected complete updates: pulseRequestContext transfers to the HTTP owner, createProjectUpdate holds through respondMutation, chatLinkPreviewFor transfers through HTTP output and propagates bounded errors, and webhookChildEntity transfers through dispatch envelope/queue lifetime with explicit metadataErr propagation. Tier B remaining request/child and existing seen differentials passed with zero full decodes/leaks. The COLD chat/main complete-input and writer consumers remain independently pending; their eventual cold facade has bounded representation disabled and intentionally retains the literal legacy branch. This certification concerns the shared accessor boundary, not those whole callers or overall activation.",
       "accessors": [
         "resident-state"
       ],
@@ -30,13 +31,15 @@
     },
     "PulseSources": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Legacy by-value source accessor is unreachable in bounded production paths. Its only three selectors are beginPulseRead's terminating off branch and the explicit off branches of pagedPulseSourceEvent/buildPulseEventSource; their bounded branches use the already-proven owned BeginInstalledMetadataRead/BeginPulseRead path. TestScaleP21PulseLegacySourcesBoundary scans every production Go file under api, enforces the exact three direct store selectors and owned-reader dispatch modes, and rejects new sites, method-value escapes, closures, other receivers, bounded or unproved environment guards. The test passed through heavy.sh; no reader Tier A proof was repeated. PulseFeed has its separate twelve-site boundary certification.",
       "accessors": [
         "resident-state"
       ],
       "temperature": "hot",
       "temperatureReason": "Reachable from GET /api/realtime/changes",
       "callers": [
+        "store/SQLiteStore.beginPulseRead (off branch)",
         "server/server.pagedPulseSourceEvent",
         "server/server.buildPulseEventSource"
       ]
@@ -44,7 +47,7 @@
     "prunePulseIndexes": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Registry-only cache housekeeping retains the exact installed Go workspace-key membership check under the existing store/cache locks. It reads no Bootstrap field value, body, principal, permission, count or actor, and retains no per-workspace output; the complete scan visits only existing cache keys with O(1) extra memory. TestScaleP21SW23PulsePruneRegistryDifferential preserves off/on live/deleted keys, case, trailing-space and NUL key distinctions, index identity and untouched private metadata. TestScaleP21SW23PulsePruneConstantAllocation measured zero allocations per operation across 1000 workspace keys with 64 KiB and 8 MiB ignored bodies, and both tests passed default plus twice on persistent SQLite. PulseFeed and PulseSources remain independent blockers.",
+      "reason": "Registry-only cache housekeeping retains the exact installed Go workspace-key membership check under the existing store/cache locks. It reads no Bootstrap field value, body, principal, permission, count or actor, and retains no per-workspace output; the complete scan visits only existing cache keys with O(1) extra memory. TestScaleP21SW23PulsePruneRegistryDifferential preserves off/on live/deleted keys, case, trailing-space and NUL key distinctions, index identity and untouched private metadata. TestScaleP21SW23PulsePruneConstantAllocation measured zero allocations per operation across 1000 workspace keys with 64 KiB and 8 MiB ignored bodies, and both tests passed default plus twice on persistent SQLite. PulseFeed and PulseSources have separate off-only boundary certifications.",
       "accessors": [
         "resident-state"
       ]

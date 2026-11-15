@@ -1219,8 +1219,20 @@ func (r *chatDMReply) stopForUnlink(ctx context.Context) {
 	r.mu.Lock()
 	sessionID := r.sessionID
 	r.mu.Unlock()
+	var stopErr error
 	if sessionID != "" && !r.s.stopAgentRun(r.dm.target.Workspace, sessionID) {
-		if data, ok := r.s.store.WorkspaceMetadata(r.dm.target.Workspace); ok {
+		if r.s.store.BoundedMetadataEnabled() {
+			var read *store.AgentSessionRead
+			var found bool
+			read, found, stopErr = r.s.store.BeginAgentSessionRead(ctx, r.dm.target.Workspace)
+			if stopErr == nil && found {
+				stopErr = read.VisitHeaders(ctx, store.AgentSessionMatch{ID: &sessionID, UserID: &r.dm.identity.UserID}, func(session domain.AgentSession) error {
+					r.s.stopWorkerChat(ctx, session, r.dm.target.Workspace)
+					return nil
+				})
+				read.Close()
+			}
+		} else if data, ok := r.s.store.WorkspaceMetadata(r.dm.target.Workspace); ok {
 			for _, session := range data.AgentSessions {
 				if session.ID == sessionID && session.UserID == r.dm.identity.UserID {
 					r.s.stopWorkerChat(ctx, session, r.dm.target.Workspace)
@@ -1228,9 +1240,16 @@ func (r *chatDMReply) stopForUnlink(ctx context.Context) {
 			}
 		}
 	}
+	if stopErr != nil {
+		r.deliveryErr = stopErr
+		log.Printf("Chat direct message workspace=%s: %v", r.dm.record.WorkspaceKey, stopErr)
+	}
 	view := chatDMReplyView{Status: "stopped", Failure: chatDMText(r.dm.zh, "Stopped: this chat account is no longer linked to Flow.", "已停止：这个聊天账号已不再关联 Flow。")}
 	if err := r.s.chatDMDeliverReplyFinal(r.lease, r.dm, view); err != nil {
 		r.deliveryErr = err
+		if stopErr != nil {
+			r.deliveryErr = errors.Join(stopErr, err)
+		}
 		log.Printf("Chat direct message workspace=%s: %v", r.dm.record.WorkspaceKey, err)
 	}
 }

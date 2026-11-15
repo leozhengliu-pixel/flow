@@ -135,6 +135,8 @@ func TestScaleP21HotNotificationsDifferential(t *testing.T) {
 			{"canonical-private", "user", []string{"scope-private"}, []string{"read", "initiative:read"}, true},
 		} {
 			t.Run(user.ID+"/"+keySpec.name, func(t *testing.T) {
+				outputContext, closeOutput := applicationOutputContext(t.Context())
+				defer closeOutput()
 				key := domain.APIKey{ID: idgen.New("hot-notification-key-"), CreatorID: user.ID, Actor: keySpec.actor, TeamRestriction: "selected", TeamIDs: keySpec.teams, Scopes: keySpec.scopes}
 				access, err := repo.ResolveAccess(t.Context(), workspace, user.ID, &key)
 				if err != nil {
@@ -171,12 +173,12 @@ func TestScaleP21HotNotificationsDifferential(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				boundedAccess, err := view.ResolveAccess(t.Context(), workspace, user.ID, &key)
+				boundedAccess, err := view.ResolveAccess(outputContext, workspace, user.ID, &key)
 				if err != nil {
 					t.Fatal(err)
 				}
 				service := &server{store: view}
-				gotState, err := service.scopedNotificationState(t.Context(), boundedAccess, &source)
+				gotState, err := service.scopedNotificationState(outputContext, boundedAccess, &source)
 				if err != nil || !reflect.DeepEqual(gotState, wantState) {
 					t.Fatalf("state=%+v want=%+v error=%v", gotState, wantState, err)
 				}
@@ -189,7 +191,7 @@ func TestScaleP21HotNotificationsDifferential(t *testing.T) {
 					query.Workspace, query.UserID = workspace, user.ID
 					for pageIndex := 0; pageIndex < 20; pageIndex++ {
 						want := scaleP21OldNotificationPage(t, f.service, user.ID, key, query)
-						read, err := view.BeginNotificationVisibilityRead(t.Context(), boundedAccess)
+						read, err := view.BeginNotificationVisibilityRead(outputContext, boundedAccess)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -222,7 +224,7 @@ func TestScaleP21HotNotificationsDifferential(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					got, err := service.scopedNotificationState(t.Context(), boundedAccess, &altered)
+					got, err := service.scopedNotificationState(outputContext, boundedAccess, &altered)
 					if err != nil || !reflect.DeepEqual(got, want) {
 						t.Fatalf("invalidated state=%+v want=%+v error=%v", got, want, err)
 					}

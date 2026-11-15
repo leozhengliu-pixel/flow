@@ -122,6 +122,37 @@ func documentReadRequirements(data domain.Bootstrap, r *http.Request) (store.Met
 // Keep the established authorization checks and API-key redaction. Only their
 // input changes; an unready canonical snapshot uses the old projection.
 func (s *server) documentAuthorizationMetadata(r *http.Request, workspace, userID string) (domain.Bootstrap, error, bool) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	documentPoint := len(parts) >= 3 && parts[0] == "api" && parts[1] == "documents"
+	if s.store.BoundedMetadataEnabled() && (documentRecordRequest(r) || documentPoint) {
+		request := store.DocumentReadRequest{Trash: len(parts) > 2, ReadOnly: r.Method == http.MethodGet || r.Method == http.MethodHead, ProjectionFallback: true}
+		if len(parts) > 2 {
+			request.Ref = parts[2]
+		}
+		if r.Method == http.MethodPatch {
+			var input documentInput
+			if peekRequestJSON(r, &input) && input.ProjectIDs != nil {
+				request.ProjectIDs = normalizedStrings(*input.ProjectIDs)
+			}
+		}
+		for attempt := 0; attempt < 3; attempt++ {
+			read, err := s.store.BeginDocumentRead(r.Context(), workspace, userID, documentRecordCredential(r), request)
+			if errors.Is(err, store.ErrResourceAccessChanged) && errors.Is(err, store.ErrAuthForbidden) && attempt < 2 {
+				continue
+			}
+			if err != nil {
+				return domain.Bootstrap{}, err, true
+			}
+			if !registerRequestReadClose(r.Context(), read.Close) {
+				read.Close()
+				return domain.Bootstrap{}, store.ErrMetadataRecordQuery, true
+			}
+			if read.Data.Comments == nil {
+				read.Data.Comments = map[string][]domain.Comment{}
+			}
+			return read.Data, nil, true
+		}
+	}
 	mode := documentRecordMode("FLOW_DOCUMENT_RECORDS")
 	if mode == "off" || !documentRecordRequest(r) {
 		return domain.Bootstrap{}, nil, false
@@ -171,7 +202,7 @@ func documentRecordCredential(r *http.Request) *domain.APIKey {
 }
 
 func (s *server) documentWorkspaceData(r *http.Request) domain.Bootstrap {
-	if documentRecordMode("FLOW_DOCUMENT_RECORDS") != "on" {
+	if !s.store.BoundedMetadataEnabled() && documentRecordMode("FLOW_DOCUMENT_RECORDS") != "on" {
 		return s.workspaceData(r)
 	}
 	userID := authUser(r).ID
@@ -188,6 +219,9 @@ func (s *server) documentWorkspaceData(r *http.Request) domain.Bootstrap {
 		}
 		filterBootstrapForAPIKey(&data, r)
 		return data
+	}
+	if s.store.BoundedMetadataEnabled() {
+		return domain.Bootstrap{}
 	}
 	return s.workspaceData(r)
 }

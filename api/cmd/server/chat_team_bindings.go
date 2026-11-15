@@ -136,6 +136,54 @@ func (e chatGroupRefusal) Error() string { return e.message }
 // group is an internal group of the application's tenant. checkMembership also
 // asks the platform whether the bot is in the group (when saving).
 func (s *server) chatBindingPermitted(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, checkMembership ...bool) error {
+	if s.store.BoundedMetadataEnabled() {
+		owner, found, err := s.store.BeginInstalledMetadataRead(ctx, record.WorkspaceKey)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return store.ErrAuthForbidden
+		}
+		defer owner.Close()
+		bound, err := owner.Context(ctx)
+		if err != nil {
+			return err
+		}
+		pulse, found, err := s.store.BeginPulseRead(bound, record.WorkspaceKey, false)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return store.ErrAuthForbidden
+		}
+		defer pulse.Close()
+		policy, found, err := s.store.BeginChatDisplayRead(bound, record.WorkspaceKey, store.ChatDisplayRequest{Policy: true})
+		if err != nil {
+			return err
+		}
+		if !found {
+			return store.ErrAuthForbidden
+		}
+		defer policy.Close()
+		var headers []store.ChatEventTemplateHeader
+		if binding.TemplateID != "" {
+			templates, found, err := s.store.BeginChatEventPolicyRead(bound, record.WorkspaceKey, store.ChatEventPolicyRequest{TemplateIDs: []string{binding.TemplateID}})
+			if err != nil {
+				return err
+			}
+			if !found {
+				return store.ErrAuthForbidden
+			}
+			defer templates.Close()
+			headers = templates.Templates
+		}
+		data := policy.Data
+		data.Projects = pulse.Snapshot.Projects
+		if !chatEventBindingScopePermitted(data, binding, headers) || !s.chatBindingAuthorizerValid(ctx, record.WorkspaceKey, binding) {
+			return store.ErrAuthForbidden
+		}
+		return s.chatGroupPermitted(ctx, record, binding.ChatID, len(checkMembership) > 0 && checkMembership[0])
+	}
 	data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "teams", "teamSettings", "projects", "issueTemplates", "workspaceSettings")
 	if !ok || !chatBindingScopePermitted(data, binding) || !s.chatBindingAuthorizerValid(ctx, record.WorkspaceKey, binding) {
 		return store.ErrAuthForbidden

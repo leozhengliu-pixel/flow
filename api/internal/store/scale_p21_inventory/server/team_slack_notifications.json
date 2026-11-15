@@ -1,10 +1,11 @@
 {
   "source": "server/team_slack_notifications.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "dispatchTeamSlackEvent": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded dispatch opens the proven SlackNotificationRead twice at the original independent connection-preflight and metadata lookup boundaries; no generation pin joins them. It selects the event aggregate by first exact ID and loads only message-target settings/notification keys. Existing teamSlackMessages native IssueRecord reads, project duplicate team deliveries, initiative empty-team filtering/deduplication, channel-ID precedence/name trimming, event/state predicates, link escaping, first connection token lookup and post payloads remain shared literal code. The off branches retain both original WorkspaceMetadataFields calls and lists. Before any goroutine launches, all outgoing work is atomically admitted; the second read transfers to one final WaitGroup closer and survives dispatcher return and partial post completion through every actual successful, failed or canceled post. New read/budget failures log and send nothing. TestScaleP21TeamSlackNotificationsDifferential compares actual HTTP method/path/auth/decoded bodies across 26 project/initiative/issue/comment/connection/flag/channel/token/missing/default/escaping/error cases and asserts held output through blocked responses and zero work after final completion. The duplicate-rewrite no-slug case uses stable literal off output as its oracle; independent native source tests retain exact first-ID/duplicate and no-slug fields. All source and server targeted tests passed, including race and source persistent SQLite count2, with zero full decodes/leaks.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],

@@ -289,6 +289,7 @@
     "createProjectUpdate": {
       "owner": "P16",
       "status": "unmigrated",
+      "reason": "P21 closes the pre-mutation PulseFeed snapshot lookup behind an explicit store-mode branch. Bounded mode keeps the proven BeginPulseRead(false) compact source admitted through respondMutation, preserving first duplicate project selection and all project snapshot status/priority/lead/date/milestone inputs; the literal off accessor remains unchanged. TestScaleP21PulseRemainingRequestDifferential compares fixed-clock derived snapshots using the same indexed issue summary. The update-create callback and its canonical writer remain independently pending, so this partial read closure does not certify the whole consumer.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"

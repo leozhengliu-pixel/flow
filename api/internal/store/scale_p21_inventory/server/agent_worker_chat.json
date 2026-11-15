@@ -1,6 +1,6 @@
 {
   "source": "server/agent_worker_chat.go",
-  "unmigrated": 4,
+  "unmigrated": 3,
   "consumers": {
     "runAgentSessionOnWorker": {
       "owner": "P18",
@@ -31,8 +31,8 @@
     },
     "sweepWorkerChatReplies": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "Pending exact installed worker-header lifecycle: normal worker producers mint IDs and fixed status, but accepted trusted agent.session_updated mutations retain NUL in warm session ID/owner/message ID/status while canonical metadata StripJSONNUL removes it. TestScaleP21SW18WorkerTrustedSourceHold proves status streaming+NUL and a NUL inside the worker-message prefix change legacy candidate count zero to canonical one; owner/session-ID NUL changes candidate identity and missing-run attribution. A detached streamed header implementation passed ordinary producer, permission and repeated-array tests but was withdrawn after this trusted-source audit. The original sweeper stays exact until bounded logical-source headers preserve installed values; workerChatStoredReply/save remain separate blockers.",
+      "status": "reviewed",
+      "reason": "The global ticker retains sorted WorkspaceKeys iteration, cancellation-before-workspace checks and accumulated changed count, delegating each workspace to the reviewed sweepWorkerChatWorkspace stage. The original WorkspaceMetadataFields classification remains for removal accounting; that accessor is now confined to the helper's literal off branch. Bounded work uses the proven owned AgentSessionRead native header stream instead of canonical SQL headers, preserving the trusted NUL/duplicate/deleted/empty selectors identified by the prior source hold. TestScaleP21WorkerChatSweepDifferential covers 21 exact off/on per-workspace cases plus the canceled global wrapper without reading or mutating unrelated external-database fixtures. Separate workerChatStoredReply and save boundaries remain pending.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -40,6 +40,20 @@
       "temperatureReason": "Always-started cleanup ticker probes installed agent sessions even without interactive agent use.",
       "callers": [
         "newHandler -> startAgentLiveReplySweeper -> sweepAgentLiveReplies -> sweepWorkerChatReplies"
+      ]
+    },
+    "sweepWorkerChatWorkspace": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Bounded mode holds AgentSessionRead over the exact owner-installed generation and independently lends each session header through the existing synchronous worker predicate, expire and recovery calls. Only session ID/owner and ordered message ID/status/native UpdatedAt are read; native duplicate/deleted/empty/NUL values remain exact and bodies/offloaded references are untouched. Incoming context is passed unchanged to downstream current-state worker boundaries, so the header pin does not force stale body/writer inputs. The literal WorkspaceMetadataFields(key, agentSessions) accessor and ordered loop remain off mode; new read errors are logged and terminate this workspace stage without fallback. TestScaleP21WorkerChatSweepDifferential passes 21 exact-ID/timestamp off/on cases comparing downstream SQL statement order, actual queued cancellation status/reason and resume-state deletion, sweep count and unchanged native transcripts for recent/expired, duplicate/deleted/empty/NUL, prefix/status, nil/empty messages, stale/recent/nil-stamp missing runs, missing workspace and cancellation. Zero full metadata decodes/work leaks. Unusable run principals and nonexistent owners keep independently pending full-message recovery readers/writers outside this header adapter proof.",
+      "accessors": [
+        "WorkspaceMetadataFields",
+        "BeginAgentSessionRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Per-workspace stage of the always-started worker reply cleanup ticker.",
+      "callers": [
+        "server/server.sweepWorkerChatReplies"
       ]
     },
     "workerChatStoredReply": {

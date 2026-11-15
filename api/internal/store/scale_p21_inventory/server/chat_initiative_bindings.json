@@ -1,6 +1,6 @@
 {
   "source": "server/chat_initiative_bindings.go",
-  "unmigrated": 4,
+  "unmigrated": 2,
   "consumers": {
     "chatInitiativeBindingSession": {
       "owner": "P18",
@@ -32,7 +32,8 @@
     },
     "chatSendInitiativeBindingUpdate": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded direct initiative delivery binds one InstalledMetadataRead.Context generation for owned Pulse source/full selected aggregate/update values and ChatDisplay HIPAA/team policy/name/timezone children. Team ID/private/archive/retire presence and ancestry rules preserve that original metadata generation. Original active binding, initiative match, live authorizer role and group rechecks stay unchanged; ownership survives card encoding and platform post. Literal off WorkspaceMetadataFields and old card/PulseFeed path remain. TestScaleP21HotChatSourcesRenderingDifferential compares exact payloads for named updates, legacy event-time selection, aggregate-health fallback and private-team refusal; ComposedGeneration proves replaced sources cannot mix into child reads, including after parent release.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -45,7 +46,8 @@
     },
     "queueChatInitiativeBindingEvent": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded event queuing binds one InstalledMetadataRead.Context generation for owned Pulse workspace/initiative owner headers and ChatDisplay HIPAA/team policy children, preserving team ID/private/archive/retire presence and ancestry inputs from one installed snapshot. Original binding order, active/timing predicate, live workspace authorizer role and dedup/payload/enqueue behavior stay intact through owner release. Literal off WorkspaceMetadataFields is preserved. TestScaleP21HotChatSourcesQueueDifferential compares exact jobs across owner/admin, HIPAA/private/retired/inherited teams, absent initiative, disabled/revoked/future bindings, lost/guest/missing authorizers and irrelevant events, with zero full decodes or retained work. ComposedGeneration proves original-generation child outputs across two installed replacements and parent close.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],

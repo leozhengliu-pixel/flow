@@ -258,7 +258,7 @@ func TestScaleP21PolicyCopiesDoNotReplaceCanonicalDetails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, allowed, err := probe.ResourceReadMetadata(t.Context(), access, "projects", "p21-canonical-detail")
+	data, allowed, err := probe.ResourceReadMetadata(scaleP21ResourceOutputContext(t), access, "projects", "p21-canonical-detail")
 	if err != nil || !allowed || len(data.Projects) != 1 || data.Projects[0].Description != "canonical body" {
 		t.Fatalf("partial residency hid canonical detail: allowed=%v error=%v projects=%d", allowed, err, len(data.Projects))
 	}

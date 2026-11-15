@@ -74,9 +74,21 @@ func (s *SQLiteStore) ResolveAccess(ctx context.Context, workspace, principal st
 		data, current = shared, true
 	}
 	if !current {
-		data, err = s.resourcePolicyRecords(ctx, workspace, stamp.workspaceID)
-		if err != nil {
-			return AccessContext{}, err
+		memo := resourcePolicyMemoFor(ctx, s, workspace)
+		var reused bool
+		if memo != nil {
+			data, reused = memo.lookup(stamp, epoch)
+		}
+		if !reused {
+			data, err = s.resourcePolicyRecords(ctx, workspace, stamp.workspaceID)
+			if err != nil {
+				return AccessContext{}, err
+			}
+			if memo != nil {
+				if err := memo.remember(ctx, stamp, epoch, data); err != nil {
+					return AccessContext{}, err
+				}
+			}
 		}
 	}
 	user, role, members, err := s.resourceAccessPrincipal(ctx, data.Workspace.ID, principal)
@@ -329,6 +341,17 @@ func resourceSlugIndex[T any](items []T, ref string, key func(T) (string, string
 // Access must be resolved for this request; retained contexts require an
 // explicit ValidateAccess before reading. The trailing stamp protects records.
 func (s *SQLiteStore) ResourceReadMetadata(ctx context.Context, access AccessContext, kind, ref string) (data domain.Bootstrap, allowed bool, err error) {
+	if s.BoundedMetadataEnabled() {
+		read, err := s.BeginResourceRead(ctx, access, kind, ref)
+		if err != nil {
+			return data, false, recordMetadataOutputError(ctx, err)
+		}
+		if !registerMetadataOutputClose(ctx, read.Close) {
+			read.Close()
+			return data, false, recordMetadataOutputError(ctx, ErrBoundedMetadataCoverage)
+		}
+		return read.Data, read.Allowed, nil
+	}
 	if err = access.checkBinding(s); err != nil {
 		return data, false, err
 	}

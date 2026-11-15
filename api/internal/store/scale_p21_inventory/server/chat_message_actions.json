@@ -1,6 +1,6 @@
 {
   "source": "server/chat_message_actions.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "chatCreateFromMessage": {
       "owner": "P18",
@@ -17,7 +17,8 @@
     },
     "processChatMessageResult": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "GET Issue now uses the proven chatAuthorizedPointRead inside an independent containing output owner through all rendering, send and error branches. Literal GET forwarding remains off mode; ordinary identity/access refusals retain their existing permanent result mapping, while bounded cancellation, work/page admission and coverage errors propagate without becoming access-revoked. The remaining bounded settings accessor uses proven BeginChatDisplayRead Policy/UserID for exactly HIPAA, language and active/public team-chain predicates; the original WorkspaceMetadataFields branch remains off. The passing SW41 actual off/on output table covers public thread/personal cards, HIPAA link-only, private/restricted/archive decisions, language, missing/unbound refusals, complete method/path/query/body/error/progress and unchanged durable intake; retained Tier B cases are a subset of that passing run. Quota/canceled checks produce no sends and retain no work; response-derived values remain owned through platform use and full metadata decodes remain zero. This direct consumer review does not certify chatCreateFromMessage's separate bootstrap/write closure.",
       "accessors": [
         "WorkspaceMetadataFields",
         "chatAuthorizedMutation"

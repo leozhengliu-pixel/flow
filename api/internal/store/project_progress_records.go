@@ -39,6 +39,11 @@ type progressReader interface {
 // workflow state, team and estimate) from the indexed issue columns and the
 // sparse estimate attribute, without decoding issue documents.
 func projectProgressIssues(ctx context.Context, reader progressReader, workspace, projectID string, states map[string]domain.WorkflowState) ([]progressIssue, error) {
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		if err := work.admitIssues(ctx, reader, workspace, projectID); err != nil {
+			return nil, err
+		}
+	}
 	rows, err := reader.QueryContext(ctx, `SELECT i.id,i.created_at,i.state_id,i.state_type,i.team_id,COALESCE(a.value,'') FROM issue_records i LEFT JOIN issue_attribute_records a ON a.workspace_key=i.workspace_key AND a.issue_id=i.id AND a.field='estimate' WHERE i.workspace_key=? AND i.project_id=?`, workspace, projectID)
 	if err != nil {
 		return nil, err
@@ -67,7 +72,16 @@ func projectProgressIssues(ctx context.Context, reader progressReader, workspace
 		}
 		issues = append(issues, issue)
 	}
-	return issues, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		if err := work.currentStates(ctx, issues); err != nil {
+			return nil, err
+		}
+	}
+	return issues, nil
 }
 
 // progressActivities loads the state and estimate transitions of the given
@@ -76,6 +90,11 @@ func progressActivities(ctx context.Context, reader progressReader, workspace st
 	result := map[string][]domain.ActivityEvent{}
 	for start := 0; start < len(ids); start += 500 {
 		clause, args := bindList("resource_id", ids[start:min(start+500, len(ids))])
+		if work := issueProgressWorkFrom(ctx); work != nil {
+			if err := work.admitActivities(ctx, reader, workspace, clause, args); err != nil {
+				return nil, err
+			}
+		}
 		rows, err := reader.QueryContext(ctx, `SELECT resource_id,data FROM workspace_content_records WHERE workspace_key=? AND kind='activity' AND `+clause+` ORDER BY created_at,id`, append([]any{workspace}, args...)...)
 		if err != nil {
 			return nil, err
@@ -113,6 +132,11 @@ func progressActivities(ctx context.Context, reader progressReader, workspace st
 		}
 		rows.Close()
 	}
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		if err := work.historicalStates(ctx, result); err != nil {
+			return nil, err
+		}
+	}
 	return result, nil
 }
 
@@ -122,6 +146,12 @@ func projectProgressStart(ctx context.Context, reader progressReader, workspace 
 	if project.StartDate != nil {
 		if date, err := time.Parse("2006-01-02", *project.StartDate); err == nil {
 			return date.UTC(), nil
+		}
+	}
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		if err := work.admitRows(ctx, reader, `FROM (SELECT MIN(created_at) AS first_created FROM issue_records WHERE workspace_key=? AND project_id=?) p21_progress_start`,
+			[]any{workspace, project.ID}, "first_created"); err != nil {
+			return time.Time{}, err
 		}
 	}
 	var earliest sql.NullString
@@ -305,6 +335,9 @@ func refreshIssueProjectProgress(ctx context.Context, reader progressReader, wor
 		return false, nil
 	}
 	states := progressStates(*data)
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		work.states = states
+	}
 	changed := false
 	for _, projectID := range sortedKeys(changes) {
 		index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == projectID })
@@ -328,6 +361,11 @@ func updateProjectProgress(ctx context.Context, reader progressReader, workspace
 	}
 	if start.IsZero() {
 		return clearProjectProgressHistories(project), nil
+	}
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		if err := work.admitGrid(ctx, start, now); err != nil {
+			return false, err
+		}
 	}
 	grid := progressGrid(start, now)
 	last := grid[len(grid)-1]

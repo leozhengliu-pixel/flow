@@ -32,6 +32,9 @@ func (d DocumentRecordDirectory) Load(id string) (domain.Document, bool) {
 }
 
 func (s *SQLiteStore) DocumentDirectoryMetadata(ctx context.Context, workspace, userID string, key *domain.APIKey, fields []string) (DocumentRecordDirectory, error) {
+	if s.BoundedMetadataEnabled() {
+		return DocumentRecordDirectory{}, ErrBoundedMetadataCoverage
+	}
 	if workspace == "" {
 		s.mu.RLock()
 		workspace = s.lastWorkspaceKey

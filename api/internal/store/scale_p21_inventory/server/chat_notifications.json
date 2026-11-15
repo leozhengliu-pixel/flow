@@ -1,10 +1,11 @@
 {
   "source": "server/chat_notifications.go",
-  "unmigrated": 3,
+  "unmigrated": 0,
   "consumers": {
     "chatSendInitiativeUpdate": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded team-group initiative cards bind one installed Context generation for Pulse source/selected update, exact ChatDisplay team-sharing policy and ordered names/timezone. Original lead/contributing-team predicate, first initiative/update match, event-time fallback, health fallback, link and platform UUID/post remain unchanged; owners survive final encoding/post. Literal off WorkspaceMetadataFields and old card/PulseFeed path remain. TestScaleP21ChatEventAdaptersDifferential compares actual named, legacy-event, health-fallback and private-contributor requests and also the processChatNotification initiative dispatch.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -17,7 +18,8 @@
     },
     "processChatNotification": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The bounded operation-result branch reads exact installed user language through owned ChatDisplayRead at its original lookup boundary and switches only the fixed GET Issue call to chatAuthorizedPointRead. The proven point helper preserves the literal off chatAuthorizedMutation arguments and owns encoded/decoded issue or error output under an enclosing beginMetadataOutputReads scope through personal text sends and refresh/error completion. Linked identity/tenant/session checks, binding fingerprint/event checks, dispatch order and ordinary refusal mapping remain unchanged; new bounded budget/coverage/cancellation errors propagate before the access-refused mapping. The original ChatEventAdaptersDifferential covers language/initiative composition; TestScaleP21SW42NotificationPointDifferential adds actual result sends/refusals/provider failure and explicit closed-owner coverage failure with no send, plus returned-card and actual personal-worker/quick-action output lifetimes. Normal cases compare exact off/bounded output, new admission failure is checked explicitly, and all operations release work with zero full decodes. This is the direct point/language adapter review only; generic bootstrap, issue-card, quick-control and independent child consumer closures remain pending.",
       "accessors": [
         "WorkspaceMetadataFields",
         "chatAuthorizedMutation"
@@ -31,7 +33,8 @@
     },
     "queueChatDomainEvent": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded queuing keeps the original independent Ask lookup and lazy resourceLoaded snapshot boundaries, including no-binding exits and provider/delegate order. Ask headers preserve first ID match and empty IssueID refusal. The original project/initiative/team/template projection binds one installed Context generation for Pulse headers, exact ChatDisplay sharing policy and selected ChatEventPolicy template headers across providers; every duplicate template must satisfy the original predicate. Existing native issue/intake rows, live authorizer checks, request/status/comment overrides, event filters, deterministic payload/dedup keys and enqueues are unchanged. Literal off WorkspaceMetadataFields branches remain. ChatEventAdaptersDifferential compares actual claimed jobs after replay for issue/project/initiative/Ask, empty-first/missing Ask, no/disabled/future bindings, form/field/duplicate/missing/foreign template constraints, HIPAA/retirement, request comments and refresh suppression; zero full decodes/leaks. Shared readers retain independent registrations.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields"

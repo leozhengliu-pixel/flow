@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p17_document_list.go",
+  "unmigrated": 0,
+  "consumers": {
+    "serveBoundedDocumentDirectoryList": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The bounded list keeps the existing viewer/API-key, direct-team, archived and exact title/body search predicates, stable descending UpdatedAt sort, complete document/version output and duplicate occurrences. Owned values close after each encoder; the existing P15 spool releases directory policy/source before slow socket transport, retaining passthrough ownership on spool failure. Detached producer failures return403/503 before sending, while already-streaming failures abort partial JSON. Exact HTTP table passed once; persistent count2 and race verified normal/cancel/panic exits with spool and passthrough.",
+      "accessors": ["BeginDocumentDirectoryRead"],
+      "temperature": "hot",
+      "temperatureReason": "Bounded representation's GET /api/documents list producer.",
+      "callers": ["server/server.serveDocumentRecordList"]
+    }
+  }
+}

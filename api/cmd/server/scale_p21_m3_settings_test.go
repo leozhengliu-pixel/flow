@@ -45,7 +45,7 @@ func scaleP21M3Call(s *server, w http.ResponseWriter, r *http.Request, handler f
 		writeError(w, http.StatusForbidden, "Workspace access required")
 		return
 	}
-	handler(s, w, r)
+	scaleP21CallWithOutputOwner(s, w, r, handler)
 }
 
 // Keep the same fixture and operation before and after migrating the handler.

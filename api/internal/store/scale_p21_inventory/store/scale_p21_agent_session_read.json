@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_agent_session_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginAgentSessionRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted installed agent-session reader pins the selected logical generation through BeginInstalledMetadataRead and independently admits its descriptor. NativeOwnership and WarmReloadAndPin cover first/all exact duplicate/deleted/empty/NUL-ID and owner matching, nil/empty messages and parts, ordered headers containing only session ID/owner plus message ID/status/native UpdatedAt, and complete selected native messages including untouched offloaded references. Normal, targeted race and persistent SQLite count2 pass. Warm/reloaded 10x ignored message/part/session-title/document bodies retain exactly 443936 admitted bytes with zero SQL/full metadata decodes or work leaks. It performs no authorization, mutation or offload hydration; callers keep their literal original accessor off mode.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Owned session headers and selected complete native message inputs for chat reply stopping and worker recovery.",
+      "callers": ["server/chat_dm_agent.go:stopForUnlink"]
+    },
+    "agentSessionPointSource": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Every selected header, streamed callback loan and complete message independently retains and admits the containing reader's exact installed source. NativeOwnership and WarmReloadAndPin prove point values survive parent Close and two source replacements, caller mutations do not affect later readers, streamed loans close before the next occurrence, cancellation propagates at construction/selection/callback boundaries, and partial header/full-message budget failures release descriptor and projected output. FirstMessage continues across earlier exact duplicate sessions lacking the selected message and stops at the first matching message occurrence. Normal/race/persistent count2 proofs pass. It never substitutes an omitted session for empty native state or hydrates offloaded bodies.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Independent output lifetime for selected AgentSessionRead headers and messages.",
+      "callers": ["store/scale_p21_agent_session_read.go:agentSessionHeader", "store/scale_p21_agent_session_read.go:FirstMessage"]
+    }
+  }
+}

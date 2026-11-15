@@ -1,6 +1,6 @@
 {
   "source": "server/advanced_features.go",
-  "unmigrated": 51,
+  "unmigrated": 50,
   "consumers": {
     "addFavorite": {
       "owner": "P21",
@@ -390,7 +390,8 @@
     },
     "listDocuments": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The bounded representation is completely handled by the owned directory branch in serveDocumentRecordList before workspaceData can run. The literal off branches retain the existing accessors, complete document/version output, team/archive/query predicates and stable UpdatedAt ordering. One exact 1,500-case HTTP table passed across off/on record mode, warm/reloaded/uncertified sources and principal/key classes; the shared directory has persistent SQLite count2 and race ownership/search/revision/authority proof.",
       "accessors": [
         "workspaceData"
       ],

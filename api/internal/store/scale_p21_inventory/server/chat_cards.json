@@ -1,12 +1,14 @@
 {
   "source": "server/chat_cards.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "chatIssueCard": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Owned display directory preserves ordered native person labels and the migrated quick-control helper supplies the proven workflow closure. Off mode keeps the literal users accessor and all durable action/card logic unchanged. SW53 compares actual enabled group cards and all four persisted live actions across 18 workflow, inheritance, default, duplicate, stable-tie, cycle and 100-option cases; it explicitly asserts the Status selector that the earlier partial migration omitted. The shared SW54 workflow reader passes Tier A proof; chatSendUpdateForm's independent supplied bootstrap remains pending.",
       "accessors": [
-        "WorkspaceMetadataFields"
+        "WorkspaceMetadataFields",
+        "chatCardMetadata"
       ],
       "temperature": "hot",
       "temperatureReason": "Reachable from audited HOT server/chat_notifications.go:processChatNotification",
@@ -18,9 +20,10 @@
     "chatSendUpdateForm": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "The issue point GET now uses chatAuthorizedPointRead with an operation owner retained through role/binding checks, durable form action persistence, personal card send and error delivery. TestScaleP21SW43ChatUpdateFormPointDifferential passed five actual off/on cases for state, assignee, comment, missing-issue error delivery and platform-send failure, comparing exact sent payloads and durable action payloads, with work live during sending and zero work/full decodes after return. Bootstrap input remains supplied by processChatInbound's broad metadata read and feeds language, role, workflow and assignee helpers; that dependency is not certified by this point adapter change. chatIssueCard and quick-control dependencies remain independently pending.",
       "accessors": [
         "Bootstrap",
-        "chatAuthorizedMutation"
+        "chatAuthorizedPointRead"
       ],
       "temperature": "hot",
       "temperatureReason": "Reachable from owner hot middleware/ticker",
