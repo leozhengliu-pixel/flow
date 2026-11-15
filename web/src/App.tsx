@@ -1563,7 +1563,7 @@ function App() {
     viewerId: data?.viewer.id,
     snapshot: data,
     syncV2: Boolean(syncClient),
-    syncCursor: syncClient?.manifest.head,
+    syncCursor: data?.sync?.head,
     issueId: selectedIssue?.id,
     route: location.pathname,
     onRemoteSync: async (event) => {

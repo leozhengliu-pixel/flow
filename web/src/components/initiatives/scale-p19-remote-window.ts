@@ -21,9 +21,11 @@ export function useScaleP19RemoteInitiativeWindow(query: ScaleP19ServerQuery, se
   const { context, client, enabled } = useScaleP19InitiativeSupport()
   const queryKey = JSON.stringify(query)
   const stableQuery = useMemo(() => JSON.parse(queryKey) as ScaleP19ServerQuery, [queryKey])
-  const key = `${queryKey}:${context?.data?.sync?.head}`
-  const [state, setState] = useState<{ key?: string; index: number; page?: ScaleP19ServerInitiativePage; loading: boolean; error?: string }>({ index: 0, loading: enabled })
-  const trail = useRef<{ key: string; cursors: Map<number, string | undefined>; clock?: { now: string; localMonth: string } }>({ key, cursors: new Map([[0, undefined]]) })
+  const key = queryKey
+  const head = context?.data?.sync?.head
+  const [state, setState] = useState<{ client?: typeof client; key?: string; index: number; page?: ScaleP19ServerInitiativePage; loading: boolean; error?: string }>({ index: 0, loading: enabled })
+  const trail = useRef<{ client: typeof client; key: string; head?: string; cursors: Map<number, string | undefined>; clock?: { now: string; localMonth: string } }>({ client, key, head, cursors: new Map([[0, undefined]]) })
+  const position = useRef(0)
   const request = useRef<AbortController | undefined>(undefined)
   const [selection, setSelection] = useState<{ key: string; page?: ScaleP19ServerInitiativePage; revision: number; items: Map<string, { value: Initiative; version: string }> }>({ key: '', revision: -1, items: new Map() })
   const selectionBytes = useRef(0)
@@ -31,35 +33,58 @@ export function useScaleP19RemoteInitiativeWindow(query: ScaleP19ServerQuery, se
   const mounted = useRef(false)
   const load = useCallback(async function readPage(index: number, retried = false): Promise<void> {
     if (!enabled || !client || client.disposed) return
+    if (trail.current.client !== client || trail.current.key !== key) { trail.current = { client, key, head, cursors: new Map([[0, undefined]]) }; index = 0 }
+    // Date filters refresh with the head; their cursors bind the same clock.
+    else if (trail.current.head !== head) trail.current = { client, key, head, cursors: new Map([[0, undefined]]) }
+    if (!trail.current.cursors.has(index) && index !== position.current) return
+    position.current = index
     request.current?.abort()
     const controller = request.current = new AbortController()
-    if (trail.current.key !== key) { trail.current = { key, cursors: new Map([[0, undefined]]) }; index = 0 }
-    if (!trail.current.cursors.has(index)) return
-    if (!trail.current.clock) { const now = new Date(); trail.current.clock = { now: now.toISOString(), localMonth: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` } }
-    setState(current => ({ key, index, page: current.key === key ? current.page : undefined, loading: true }))
+    setState(current => ({ client, key, index, page: current.client === client && current.key === key ? current.page : undefined, loading: true }))
     try {
-      const page = await readScaleP19Window<ScaleP19ServerInitiativePage>(client.manifest.core.workspace.urlKey, 'initiatives', { ...trail.current.clock, ...stableQuery }, trail.current.cursors.get(index), client.requestSignal(controller.signal))
-      if (controller.signal.aborted || !mounted.current || client.disposed) return
-      if (page.authzEpoch !== client.manifest.authzEpoch) { client.requestReset(); return }
-      const manifest = await fetchSyncManifest(client.manifest.core.workspace.urlKey, client.requestSignal(controller.signal))
-      if (controller.signal.aborted || !mounted.current || client.disposed) return
-      if (!scaleP19ManifestMatches(client.manifest, manifest)) { client.requestReset(); return }
-      if (!page.entries || !page.aggregates) throw new ApiError('Initiative aggregates unavailable', 501)
-      if (page.hasMore) trail.current.cursors.set(index + 1, page.nextCursor)
-      const bytes = cacheStringBytes(JSON.stringify(page)) + cacheStringBytes(JSON.stringify([...trail.current.cursors])) + selectionBytes.current
-      if (!retainScaleP19Bytes(owner.current, bytes)) { client.requestReset(true); return }
-      setState({ key, index, page, loading: false })
+      let pageIndex = trail.current.cursors.has(index) ? index : 0
+      for (;;) {
+        if (!trail.current.clock) { const now = new Date(); trail.current.clock = { now: now.toISOString(), localMonth: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` } }
+        let page: ScaleP19ServerInitiativePage
+        try {
+          page = await readScaleP19Window<ScaleP19ServerInitiativePage>(client.manifest.core.workspace.urlKey, 'initiatives', { ...trail.current.clock, ...stableQuery }, trail.current.cursors.get(pageIndex), client.requestSignal(controller.signal))
+        } catch (error) {
+          if (controller.signal.aborted || !mounted.current || client.disposed) return
+          if (!(error instanceof ApiError) || error.status !== 409 || retried) throw error
+          retried = true
+          trail.current.cursors = new Map([[0, undefined]])
+          trail.current.clock = undefined
+          pageIndex = 0
+          continue
+        }
+        if (controller.signal.aborted || !mounted.current || client.disposed) return
+        if (page.authzEpoch !== client.manifest.authzEpoch) { client.requestReset(); return }
+        const manifest = await fetchSyncManifest(client.manifest.core.workspace.urlKey, client.requestSignal(controller.signal))
+        if (controller.signal.aborted || !mounted.current || client.disposed) return
+        if (!scaleP19ManifestMatches(client.manifest, manifest)) { client.requestReset(); return }
+        if (!page.entries || !page.aggregates) throw new ApiError('Initiative aggregates unavailable', 501)
+        if (page.hasMore) trail.current.cursors.set(pageIndex + 1, page.nextCursor)
+        else for (const cursor of trail.current.cursors.keys()) if (cursor > pageIndex) trail.current.cursors.delete(cursor)
+        const bytes = cacheStringBytes(JSON.stringify(page)) + cacheStringBytes(JSON.stringify([...trail.current.cursors])) + selectionBytes.current
+        if (!retainScaleP19Bytes(owner.current, bytes)) { client.requestReset(true); return }
+        // Refreshing a cursor rebuilds only its trail, without publishing
+        // intermediate pages or replacing the user's navigation intent.
+        if (pageIndex < index && page.hasMore) { pageIndex++; continue }
+        position.current = pageIndex
+        setState({ client, key, index: pageIndex, page, loading: false })
+        return
+      }
     } catch (error) {
       if (controller.signal.aborted || !mounted.current || client.disposed) return
-      if (error instanceof ApiError && error.status === 409 && !retried) { trail.current = { key, cursors: new Map([[0, undefined]]) }; await readPage(0, true); return }
       if (error instanceof ApiError && [401, 403, 409].includes(error.status)) { client.requestReset(); return }
       if (error instanceof ApiError && [400, 404, 405, 501].includes(error.status)) { client.requestReset(true); return }
-      setState({ key, index, loading: false, error: error instanceof Error ? error.message : 'Could not load projects' })
+      setState({ client, key, index, loading: false, error: error instanceof Error ? error.message : 'Could not load projects' })
     }
-  }, [client, enabled, key, stableQuery])
+  }, [client, enabled, head, key, stableQuery])
   useEffect(() => { mounted.current = true; const token = owner.current; return () => { mounted.current = false; request.current?.abort(); releaseScaleP19Bytes(token) } }, [])
-  useEffect(() => { if (enabled) void load(0); return () => request.current?.abort() }, [enabled, load])
-  const page = state.key === key && !client?.disposed ? state.page : undefined
+  useEffect(() => { if (enabled) void load(position.current); return () => request.current?.abort() }, [enabled, load])
+  const current = state.client === client && state.key === key && !client?.disposed
+  const page = current ? state.page : undefined
   const byId = useMemo(() => new Map(page?.items.map(item => [item.id, item]) ?? []), [page])
   const selectedKey = JSON.stringify([...selected])
   const revision = context?.data?.sync?.revision ?? 0
@@ -88,5 +113,5 @@ export function useScaleP19RemoteInitiativeWindow(query: ScaleP19ServerQuery, se
     const initiative = byId.get(entry.id!)
     return initiative ? [{ ...entry, kind: 'initiative', initiative }] : []
   })
-  return { enabled, entries, page, selectedItems, index: state.key === key ? state.index : 0, loading: enabled && (state.key !== key || state.loading), error: state.key === key ? state.error : undefined, load }
+  return { enabled, entries, page, selectedItems, index: current ? state.index : 0, loading: enabled && (!current || state.loading), error: current ? state.error : undefined, load }
 }

@@ -16,7 +16,7 @@ import { clearNavigationCache } from '@/lib/navigation-cache'
 import type { BootstrapData, Presence, RealtimeEvent } from '@/types/flow'
 import { ISSUE_QUERY_INVALIDATED, type IssueQueryInvalidation } from '@/components/issue-explorer/paged-issue-invalidation'
 
-export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, syncV2 = false, syncCursor, onRemoteSync }: {
+export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, snapshot, syncV2 = false, syncCursor, onRemoteSync }: {
   workspaceKey?: string
   /** Tabs share one stream only with other tabs of the same user. */
   viewerId?: string
@@ -31,7 +31,10 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, s
   const [connected, setConnected] = useState(false)
   const syncRef = useLatestRef(onRemoteSync)
   const appliedCursor = syncV2 || appliedRealtimeCursorEnabled()
-  const cursorSchema = syncV2 ? SYNC_V2_STREAM_SCHEMA : APPLIED_CURSOR_SCHEMA
+  // Resource-window baselines use the workspace change log. The journal's
+  // numeric sequence is a different cursor domain, even when both flags are on.
+  const resourceWindows = syncV2 && Boolean(snapshot?.sync?.capabilities.includes('resource-windows'))
+  const cursorSchema = syncV2 && !resourceWindows ? SYNC_V2_STREAM_SCHEMA : APPLIED_CURSOR_SCHEMA
   const presenceViewerId = appliedCursor ? viewerId : undefined
   const boundedCache = boundedBrowserCacheEnabled()
 
@@ -159,7 +162,7 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, s
       url: cursor => {
         const params = new URLSearchParams({ workspace: workspaceKey })
         if (import.meta.env.VITE_PAGED_ISSUES === 'true') params.set('issues', 'paged')
-        if (syncV2) params.set('sync', '2')
+        if (syncV2 && !resourceWindows) params.set('sync', '2')
         if (cursor) params.set('since', cursor)
         return `/api/realtime/events?${params.toString()}`
       },
@@ -176,7 +179,7 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, s
       setConnected(false)
       setPresence([])
     }
-  }, [workspaceKey, viewerId, syncRef, appliedCursor, cursorSchema, syncV2, syncCursor])
+  }, [workspaceKey, viewerId, syncRef, appliedCursor, cursorSchema, syncV2, syncCursor, resourceWindows])
 
   useEffect(() => {
     if (!workspaceKey) return
