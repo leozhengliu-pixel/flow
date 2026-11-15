@@ -1,11 +1,11 @@
 {
   "source": "store/scale_p20_resource_reads.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "ResourceWindowMetadata": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Complete summary and identity sets are projected before response paging; residency and CPU remain to migrate.",
+      "status": "reviewed",
+      "reason": "On-only dispatch uses the certified owned ResourceWindowRead and registers its Close with the containing output owner; missing ownership fails and releases rather than exposing an uncharged graph. The original native/canonical implementation is literal off behavior. SW121 proves native/canonical M equivalence, cancellation/release, typed admission, 10x excluded bodies and persistent/race behavior; SW124 compares 382 actual P20 route pairs. Complete summaries remain admission-capped at 128 MiB, not 2 MiB page-sized; SQL matches legacy at both body scales.",
       "accessors": [
         "Bootstrap"
       ],

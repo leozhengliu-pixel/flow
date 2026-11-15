@@ -12,9 +12,10 @@ import (
 type issueProgressWorkKey struct{}
 
 type issueProgressWork struct {
-	inputs *issueHotInputs
-	states map[string]domain.WorkflowState
-	seen   map[string]bool
+	inputs       *issueHotInputs
+	states       map[string]domain.WorkflowState
+	seen         map[string]bool
+	prepareTeams func(context.Context, []progressIssue) error
 }
 
 func issueProgressWorkFrom(ctx context.Context) *issueProgressWork {
@@ -118,6 +119,9 @@ func (w *issueProgressWork) currentStates(ctx context.Context, issues []progress
 		if state, ok := w.states[issues[index].state.ID]; ok {
 			issues[index].state = state
 		}
+	}
+	if w.prepareTeams != nil {
+		return w.prepareTeams(ctx, issues)
 	}
 	return nil
 }

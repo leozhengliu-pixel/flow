@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_account_collection_settings.go",
+  "unmigrated": 0,
+  "consumers": {
+    "requestAccountSettings": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Thin settings-only adapter over the certified owned AccountCollectionRead, registered with the containing request/background output owner. Off calls literal AccountCollections; missing/closed owner errors release the graph. SW127 compares exact native/missing values and both owner lifetimes. This helper does not certify unmigrated AccountCollections consumers.",
+      "accessors": ["BeginAccountCollectionRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared adapter prepared for HOT account-settings consumers.",
+      "callers": []
+    }
+  }
+}

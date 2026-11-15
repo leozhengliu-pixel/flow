@@ -1180,7 +1180,18 @@ var staticAssetExtensions = map[string]bool{
 
 func (s *server) accountBootstrap(w http.ResponseWriter, r *http.Request) {
 	if s.authDisabled {
-		account := s.store.Account()
+		var account domain.AccountBootstrap
+		if s.store.BoundedMetadataEnabled() {
+			read, err := s.store.BeginAccountRead(r.Context())
+			if err != nil {
+				respondMutation(w, err, http.StatusOK, nil)
+				return
+			}
+			defer read.Close()
+			account = read.Account
+		} else {
+			account = s.store.Account()
+		}
 		account.WorkspaceRegionSelectorEnabled = s.regionSelectorEnabled()
 		account.WorkspaceDefaultRegion = s.defaultWorkspaceRegion()
 		account.ChatPlatform = chatPlatform()

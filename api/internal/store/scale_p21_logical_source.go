@@ -143,10 +143,16 @@ func captureMetadataLogicalSource(ctx context.Context, data domain.Bootstrap, st
 	for i := 0; i < value.NumField(); i++ {
 		field := value.Type().Field(i)
 		v := value.Field(i)
-		if field.Tag.Get("json") == "-" {
+		if field.Tag.Get("json") == "-" && field.Name != "NextIssueNumber" {
 			v = reflect.Zero(v.Type())
 		}
-		node, err := b.writeValue(v, 0, false)
+		var node metadataLogicalNode
+		var err error
+		if field.Name == "Viewer" {
+			node, err = b.writeAggregateNode(legacyActorUserNode{value: v}, 0)
+		} else {
+			node, err = b.writeValue(v, 0, false)
+		}
 		if err != nil {
 			return nil, err
 		}

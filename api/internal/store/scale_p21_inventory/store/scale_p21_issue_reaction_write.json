@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_issue_reaction_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedIssueReaction": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Only the existing single-target issue-record reaction callback uses this adapter. Retains canonical issue/content inputs and non-discussion persistence, global native reference refresh, sorted metadata rebase, exact scoped project-progress contributions and warm import compaction conflicts. No full-writer counts, PreviousValues or account write; restores native viewer/role and installs last=false. Output/admission stays owned through publication and response. SW116 compares both literal topologies across 66 warm/reloaded/error/native cases, SQL/index/event/search/webhook effects and cancellation/retry/release; SW117 proves actual ordinary and alias routes. Shared proof includes persistent SQLite twice and race.",
+      "accessors": ["storedWorkspace"],
+      "temperature": "hot",
+      "temperatureReason": "Existing issue-record reaction route.",
+      "callers": ["store/sqlite.go:dispatchMutation"]
+    }
+  }
+}

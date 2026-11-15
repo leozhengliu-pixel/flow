@@ -18,6 +18,7 @@ type legacyDiscussionInputs struct {
 	TargetIssueOrdinal                                                                int
 	IssueOrdinals, NotificationOrdinals, DeliveryOrdinals, ThreadSubscriptionOrdinals []int
 	input                                                                             *issueHotInputs
+	issueReaction                                                                     bool
 	once                                                                              sync.Once
 }
 
@@ -416,6 +417,10 @@ func (r *legacyDiscussionInputs) MergeCallback(ctx context.Context) (_ *metadata
 		switch name {
 		case "comments", "activities", "notifications", "notificationDeliveries", "threadSubscriptions":
 			continue
+		case "issues":
+			if r.issueReaction {
+				continue
+			}
 		}
 		if !reflect.DeepEqual(before.Field(index).Interface(), next.Field(index).Interface()) {
 			return nil, ErrBoundedMetadataCoverage
@@ -496,6 +501,20 @@ func (r *legacyDiscussionInputs) MergeCallback(ctx context.Context) (_ *metadata
 			return nil, err
 		}
 		changes[name] = patch
+	}
+	if r.issueReaction {
+		index, _, _ := metadataLogicalField("issues")
+		old, updated := before.Field(index), next.Field(index)
+		if old.Len() != updated.Len() {
+			return nil, ErrBoundedMetadataCoverage
+		}
+		if !reflect.DeepEqual(old.Interface(), updated.Interface()) {
+			patch, err := r.mergeFlat(ctx, frames, "issues", r.field("issues"), old, updated)
+			if err != nil {
+				return nil, err
+			}
+			changes["issues"] = patch
+		}
 	}
 	if len(changes) == 0 {
 		if err := source.Retain(); err != nil {
@@ -730,6 +749,9 @@ func (r *legacyDiscussionInputs) mergeFlat(ctx context.Context, frames *metadata
 				return patch, ErrBoundedMetadataCoverage
 			}
 		}
+	} else if name == "issues" && r.issueReaction {
+		ordinals = r.IssueOrdinals
+		allowed = []string{"Reactions", "Version", "UpdatedAt"}
 	}
 	deltas := map[int]legacyDiscussionRecordDelta{}
 	for index := range before.Len() {

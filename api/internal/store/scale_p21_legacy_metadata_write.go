@@ -20,6 +20,7 @@ type legacyMetadataWriteRow struct {
 	before, next        metadataLogicalNode
 	oldOrdinal, ordinal int
 	changed, deleted    bool
+	forced              bool
 }
 
 type legacyMetadataWriteField struct {
@@ -42,11 +43,26 @@ type legacyMetadataWritePlan struct {
 	frames            *metadataLogicalBuilder
 	requested, actual *metadataLogicalSource
 	fields            []*legacyMetadataWriteField
+	progress          legacyMetadataProgress
+}
+
+type legacyMetadataProgress interface {
+	HasProject(context.Context, string) (bool, error)
+	ForEachProject(context.Context, func(string) error) error
+	Rebuild(context.Context, *sqlTx, string, *metadataLogicalSource, time.Time) (*metadataLogicalSource, error)
+}
+
+type legacyMetadataImportBoundary interface {
+	legacyImportCompaction() bool
 }
 
 // persistLegacyMetadataImage owns the metadata phase of one literal full
 // discussion mutation. Its caller owns the transaction and publication.
 func (s *SQLiteStore) persistLegacyMetadataImage(ctx context.Context, tx *sqlTx, workspace string, before, target *metadataLogicalSource) (_ *metadataLogicalSource, err error) {
+	return s.persistLegacyMetadataImageWithProgress(ctx, tx, workspace, before, target, nil)
+}
+
+func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context, tx *sqlTx, workspace string, before, target *metadataLogicalSource, progress legacyMetadataProgress) (_ *metadataLogicalSource, err error) {
 	if s == nil || !s.BoundedMetadataEnabled() || tx == nil || tx.database != s.db || tx.dialect != s.dialect || before == nil || target == nil {
 		return nil, ErrBoundedMetadataCoverage
 	}
@@ -98,11 +114,14 @@ func (s *SQLiteStore) persistLegacyMetadataImage(ctx context.Context, tx *sqlTx,
 			}
 		}
 	}
-	plan := &legacyMetadataWritePlan{store: s, tx: tx, workspace: workspace, workspaceID: stamp.workspaceID, work: work, frames: frames, requested: target}
+	plan := &legacyMetadataWritePlan{store: s, tx: tx, workspace: workspace, workspaceID: stamp.workspaceID, work: work, frames: frames, requested: target, progress: progress}
 	allowed := map[string]bool{"viewer": true, "users": true, "members": true, "projects": true, "initiatives": true, "labels": true, "projectUpdates": true, "initiativeUpdates": true, "threadSubscriptions": true}
+	if boundary, ok := progress.(legacyMetadataImportBoundary); ok && boundary.legacyImportCompaction() {
+		allowed["importJobs"], allowed["migrationJobs"] = true, true
+	}
 	for _, field := range persistedMetadataFields() {
 		a, b := before.fields[field.index], target.fields[field.index]
-		if a == b {
+		if a == b && (progress == nil || field.name != "projects") {
 			continue
 		}
 		f := &legacyMetadataWriteField{field: field, before: a, next: b}
@@ -119,7 +138,7 @@ func (s *SQLiteStore) persistLegacyMetadataImage(ctx context.Context, tx *sqlTx,
 		if err := plan.headers(ctx, f); err != nil {
 			return nil, err
 		}
-		if f.changed {
+		if f.changed || progress != nil && field.name == "projects" {
 			plan.fields = append(plan.fields, f)
 		}
 	}
@@ -138,6 +157,40 @@ func (s *SQLiteStore) persistLegacyMetadataImage(ctx context.Context, tx *sqlTx,
 	}
 	if len(conflicts) > 0 {
 		return nil, &metadataConflictError{keys: conflicts}
+	}
+	if progress != nil {
+		rebased, err := plan.postimage(ctx, target)
+		if err != nil {
+			return nil, err
+		}
+		defer rebased.Release()
+		rebuilt, err := progress.Rebuild(ctx, tx, workspace, rebased, time.Now().UTC())
+		if err != nil {
+			return nil, err
+		}
+		defer rebuilt.Release()
+		for index, field := range plan.fields {
+			if field.field.name != "projects" {
+				continue
+			}
+			canonicalBefore := field.before
+			if !field.full {
+				canonicalBefore, err = frames.writeAggregateNode(legacyMetadataWriteCollection{field: field}, 0)
+				if err != nil {
+					return nil, err
+				}
+			}
+			replacement := &legacyMetadataWriteField{
+				field: field.field, before: canonicalBefore, next: rebuilt.fields[field.field.index],
+			}
+			if err := plan.headers(ctx, replacement); err != nil {
+				return nil, err
+			}
+			plan.fields[index] = replacement
+			break
+		}
+		target = rebuilt
+		plan.requested = rebuilt
 	}
 	// Canonical deletions/merges can make a previously changed field equal
 	// on both sides. The native postimage still needs those changes, while
@@ -640,6 +693,12 @@ func (p *legacyMetadataWritePlan) headers(ctx context.Context, f *legacyMetadata
 	}
 	for i := range f.rows {
 		row := &f.rows[i]
+		if p.progress != nil && f.field.name == "projects" {
+			row.forced, err = p.progress.HasProject(ctx, row.id)
+			if err != nil {
+				return err
+			}
+		}
 		same := false
 		if row.before.typ != nil && row.next.typ != nil {
 			var err error
@@ -671,7 +730,7 @@ func (p *legacyMetadataWritePlan) rebase(ctx context.Context, f *legacyMetadataW
 	}
 	order := make([]int, 0, len(f.rows))
 	for i, row := range f.rows {
-		if row.changed && row.before.typ != nil && row.next.typ != nil {
+		if (row.changed || row.forced) && row.before.typ != nil && row.next.typ != nil {
 			order = append(order, i)
 		}
 	}
@@ -746,7 +805,11 @@ func (p *legacyMetadataWritePlan) rebaseRow(ctx context.Context, f *legacyMetada
 	}
 	// The original rebaser owns normalization, duplicate/update precedence,
 	// deletion and conflict rules. Its second guarded read sees the same lock.
-	_, _, err = p.store.rebaseMetadata(guard, p.tx, p.workspace, &before, &next, []metadataField{f.field}, nil)
+	var extra map[string][]string
+	if row.forced {
+		extra = map[string][]string{name: {key}}
+	}
+	_, _, err = p.store.rebaseMetadata(guard, p.tx, p.workspace, &before, &next, []metadataField{f.field}, extra)
 	if err != nil {
 		return err
 	}
@@ -809,6 +872,20 @@ func (p *legacyMetadataWritePlan) rebaseFull(ctx context.Context, f *legacyMetad
 	reflect.ValueOf(&before).Elem().Field(f.field.index).Set(left)
 	reflect.ValueOf(&next).Elem().Field(f.field.index).Set(right)
 	guard := withLegacyMetadataDeltaReadBudget(ctx, work)
+	var extra map[string][]string
+	if p.progress != nil && f.field.name == "projects" {
+		ids := []string{}
+		if err := p.progress.ForEachProject(ctx, func(id string) error {
+			if err := work.reserve(ctx, uint64(len(id))*16+256); err != nil {
+				return err
+			}
+			ids = append(ids, id)
+			return nil
+		}); err != nil {
+			return err
+		}
+		extra = map[string][]string{"projects": ids}
+	}
 	var canonical [][]byte
 	if updateMetadataField(f.field.name) || rebaseableMetadataField(f.field, left.Type()) {
 		keys := map[string]bool{}
@@ -825,6 +902,16 @@ func (p *legacyMetadataWritePlan) rebaseFull(ctx context.Context, f *legacyMetad
 				value, _ := b.record(key)
 				if ok && !metadataValueEqual(old, value) {
 					keys[key] = true
+				}
+			}
+		}
+		if len(extra[f.field.name]) > 0 {
+			a, b := newMetadataCollection(f.field, left), newMetadataCollection(f.field, right)
+			for _, id := range extra[f.field.name] {
+				if _, inBefore := a.record(id); inBefore {
+					if _, inAfter := b.record(id); inAfter {
+						keys[id] = true
+					}
 				}
 			}
 		}
@@ -850,7 +937,7 @@ func (p *legacyMetadataWritePlan) rebaseFull(ctx context.Context, f *legacyMetad
 	if f.field.name != "users" {
 		before.Users, next.Users = legacyMetadataRefsUsers(refs), legacyMetadataRefsUsers(refs)
 	}
-	_, _, err = p.store.rebaseMetadata(guard, p.tx, p.workspace, &before, &next, []metadataField{f.field}, nil)
+	_, _, err = p.store.rebaseMetadata(guard, p.tx, p.workspace, &before, &next, []metadataField{f.field}, extra)
 	if err != nil {
 		return err
 	}

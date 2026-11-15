@@ -14,9 +14,9 @@ import (
 	"flow/api/internal/store"
 )
 
-// These ordinary-producer witnesses retain unresolved source transitions.
-// The export namespace control covers its repaired physical-key handoff.
-func TestScaleP21SW24ApplicationConsentSourceHold(t *testing.T) {
+// These ordinary-producer witnesses distinguish installed native values from
+// canonical reloads and verify that bounded test views preserve that source.
+func TestScaleP21SW24ApplicationConsentSourceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -58,8 +58,8 @@ func TestScaleP21SW24ApplicationConsentSourceHold(t *testing.T) {
 			return ""
 		}
 		for range 2 {
-			if left, right := observe(repo), observe(probe); left != "Consent before\x00after" || right != "Consent beforeafter" {
-				t.Fatalf("source hold disappeared: legacy=%q bounded=%q; re-review consumer before changing this assertion", left, right)
+			if left, right := observe(repo), observe(probe); left != "Consent before\x00after" || right != left {
+				t.Fatalf("installed consent source differs: legacy=%q bounded=%q", left, right)
 			}
 		}
 		if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
@@ -68,10 +68,17 @@ func TestScaleP21SW24ApplicationConsentSourceHold(t *testing.T) {
 		if got := observe(repo); got != "Consent beforeafter" {
 			t.Fatalf("canonical reload control=%q", got)
 		}
+		reloaded, err := repo.BoundedMetadataViewForTesting(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := observe(reloaded); got != observe(repo) {
+			t.Fatalf("reloaded consent source differs: bounded=%q", got)
+		}
 	}
 }
 
-func TestScaleP21SW24ApplicationDefaultSourceHold(t *testing.T) {
+func TestScaleP21SW24ApplicationDefaultSourceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -124,8 +131,8 @@ func TestScaleP21SW24ApplicationDefaultSourceHold(t *testing.T) {
 		for range 2 {
 			oldAllowed, oldSize := observe(repo)
 			newAllowed, newSize := observe(probe)
-			if !oldAllowed || newAllowed || !reflect.DeepEqual([]int{oldSize, newSize}, []int{1, 0}) {
-				t.Fatalf("installed identity helper hold disappeared: authorized old/new=%v/%v list sizes=%d/%d; re-review its consumer before certification", oldAllowed, newAllowed, oldSize, newSize)
+			if !oldAllowed || newAllowed != oldAllowed || oldSize != 1 || newSize != oldSize {
+				t.Fatalf("installed identity source differs: authorized old/new=%v/%v list sizes=%d/%d", oldAllowed, newAllowed, oldSize, newSize)
 			}
 		}
 	}

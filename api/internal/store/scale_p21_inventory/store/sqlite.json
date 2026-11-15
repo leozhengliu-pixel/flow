@@ -1,11 +1,11 @@
 {
   "source": "store/sqlite.go",
-  "unmigrated": 14,
+  "unmigrated": 13,
   "consumers": {
     "Account": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "The identity portion is resident core, but issueCollectionCounts still materializes every count row, including orphan/purging workspace keys outside that resident catalog. It needs a bounded count selection tied to the account/catalog snapshot before this complete response can be certified. The small core differential does not certify that aggregate input bound.",
+      "status": "reviewed",
+      "reason": "The literal full accessor remains unchanged and is bypassed by every supported bounded production caller: DefaultViewer handles the two scalar consumers and owned AccountRead handles both account responses. SW125 scans the entire production API callset and rejects any reachable bounded Account call, including adapter fallback mistakes; SW118/SW123 prove their respective native ownership and SQL bounds. This review does not claim direct Account() is bounded; direct tests retain it as the literal oracle.",
       "accessors": [
         "resident-state"
       ],

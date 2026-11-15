@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"slices"
 	"testing"
+
+	"flow/api/internal/domain"
 )
 
 type metadataLogicalReadKey struct{}
@@ -94,11 +96,58 @@ func (s *SQLiteStore) captureLogicalTestView(ctx context.Context, owner *SQLiteS
 			stamp = copyStamp{workspaceID: known.workspaceID, revision: known.revision}
 		}
 		source, err := captureMetadataLogicalSource(ctx, data, stamp)
+		cost := uint64(4096)
+		fields := metadataLogicalPolicyFields()
+		var policy domain.Bootstrap
+		if err == nil {
+			err = source.VisitFields(ctx, func(name string, node metadataLogicalNode) error {
+				if name == "workspace" || name == "viewer" || name == "viewerRole" || slices.Contains(fields, name) {
+					if s.metadataResidency.policyLimit < 0 || cost > uint64(s.metadataResidency.policyLimit) ||
+						node.cost > uint64(s.metadataResidency.policyLimit)-cost {
+						return ErrMetadataWorkBudget
+					}
+					cost += node.cost
+				}
+				return nil
+			})
+			if err == nil {
+				policy = metadataRecordSnapshot(data, MetadataRecordScope{Fields: fields}, fields)
+				domain.RebuildTeamDirectory(&policy)
+			}
+		}
 		owner.mu.RUnlock()
 		if err != nil {
+			if source != nil {
+				source.Release()
+			}
 			return err
 		}
-		s.installMetadataLogicalSource(workspace, source)
+		s.mu.Lock()
+		r := s.metadataResidency
+		r.mu.Lock()
+		if r.logical == nil {
+			r.logical = map[string]*metadataLogicalSource{}
+		}
+		if r.policy == nil {
+			r.policy = map[string]int{}
+		}
+		total := r.policyBytes - r.policy[workspace] + int(cost)
+		if total > r.policyLimit {
+			r.mu.Unlock()
+			s.mu.Unlock()
+			source.Release()
+			return ErrMetadataWorkBudget
+		}
+		previous := r.logical[workspace]
+		s.workspaces[workspace] = policy
+		s.forgetCopyRevisionLocked(workspace)
+		r.logical[workspace] = source
+		r.policy[workspace], r.policyBytes = int(cost), total
+		r.mu.Unlock()
+		s.mu.Unlock()
+		if previous != nil {
+			previous.Release()
+		}
 	}
 	return nil
 }
@@ -119,28 +168,7 @@ func (s *SQLiteStore) RefreshInstalledMetadataViewForTesting(ctx context.Context
 		workspace = owner.lastWorkspaceKey
 	}
 	owner.mu.RUnlock()
-	if err := s.captureLogicalTestView(ctx, owner, []string{workspace}); err != nil {
-		return err
-	}
-	source, err := s.retainMetadataLogicalSource(ctx, workspace)
-	if err != nil {
-		return err
-	}
-	defer source.Release()
-	probe := &SQLiteStore{metadataResidency: newMetadataResidency()}
-	policy, cost, err := probe.metadataLogicalPolicy(ctx, source)
-	if err != nil {
-		return err
-	}
-	s.mu.Lock()
-	s.workspaces[workspace] = policy
-	s.forgetCopyRevisionLocked(workspace)
-	s.metadataResidency.mu.Lock()
-	s.metadataResidency.policyBytes += cost - s.metadataResidency.policy[workspace]
-	s.metadataResidency.policy[workspace] = cost
-	s.metadataResidency.mu.Unlock()
-	s.mu.Unlock()
-	return nil
+	return s.captureLogicalTestView(ctx, owner, []string{workspace})
 }
 
 func (s *SQLiteStore) releaseMetadataLogicalSources() {

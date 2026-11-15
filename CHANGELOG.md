@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Account responses and resource windows retain admitted native values through encoding, while reaction writers preserve ordinary and scoped progress, counts, conflicts and publication effects. Bounded metadata stays off by default.
 - Issue permission reads retain complete grants and preserve legacy authorization behavior through bounded read ownership.
 - Project and initiative query windows retain admitted native summaries through output; bounded metadata stays off by default.
 - Thread subscriptions retain first-match edits, native duplicate occurrence order and atomic legacy effects through bounded discussion writers.

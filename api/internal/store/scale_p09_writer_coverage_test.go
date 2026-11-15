@@ -96,6 +96,7 @@ personal_data.go:DeleteAgentSessionRuns
 record_journal.go:maintainRecordSummary
 scale_p09_journal_schema.go:recordJournalTriggerSpecs
 scale_p09_journal_repair.go:pruneOrphanRecordCatalog
+scale_p21_legacy_progress_image.go:build
 scale_p21_legacy_record_base.go:persistIssues
 secret_reseal.go:resealTextSecrets
 team_deletion.go:deleteRowsByIDs

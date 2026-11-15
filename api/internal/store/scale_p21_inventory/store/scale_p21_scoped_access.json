@@ -2,6 +2,15 @@
   "source": "store/scale_p21_scoped_access.go",
   "unmigrated": 0,
   "consumers": {
+    "BoundedMetadataViewForTesting": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Testing-only all-workspace fixture view delegates to certified native-policy/logical-generation capture after canonical recovery. Testing.Testing guards production entry; owner must stay alive and registered logical sources release with it. SW125 native header witnesses, SW121 window proofs and the P21 differential groups cover the capture and ownership boundary. This helper cannot activate production bounded metadata.",
+      "accessors": ["captureLogicalTestView"],
+      "temperature": "cold",
+      "temperatureReason": "Testing-only fixture constructor, unreachable from production routes or tickers.",
+      "callers": ["P21 differential fixtures"]
+    },
     "readScopedMetadataResult": {
       "owner": "P21",
       "status": "reviewed",

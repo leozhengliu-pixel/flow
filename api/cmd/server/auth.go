@@ -92,7 +92,12 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			defer release()
 		}
 		if s.authDisabled {
-			viewer := s.store.Account().Viewer
+			var viewer domain.User
+			if s.store.BoundedMetadataEnabled() {
+				viewer = s.store.DefaultViewer()
+			} else {
+				viewer = s.store.Account().Viewer
+			}
 			ctx := context.WithValue(s.withAuditRequest(r, viewer, nil), authUserContextKey{}, viewer)
 			ctx = store.ContextWithActor(ctx, viewer)
 			ctx = store.ContextWithRealtimeClient(ctx, r.Header.Get("X-Client-ID"))
@@ -1959,7 +1964,18 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 func (s *server) authSession(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	if s.authDisabled {
-		account := s.store.Account()
+		var account domain.AccountBootstrap
+		if s.store.BoundedMetadataEnabled() {
+			read, err := s.store.BeginAccountRead(r.Context())
+			if err != nil {
+				respondMutation(w, err, http.StatusOK, nil)
+				return
+			}
+			defer read.Close()
+			account = read.Account
+		} else {
+			account = s.store.Account()
+		}
 		writeJSON(w, http.StatusOK, domain.AuthSession{User: account.Viewer, Memberships: account.Workspaces, ExpiresAt: time.Now().UTC().Add(24 * time.Hour)})
 		return
 	}

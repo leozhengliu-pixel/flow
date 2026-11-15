@@ -106,8 +106,11 @@ func metadataSQLStatements(t *testing.T) []metadataSQLStatement {
 							}
 						}
 					}
-					if !expanded && !nonMetadataTableBuilders[enclosingFunction(t, statement.position)] {
-						t.Errorf("%s: classify the dynamic table builder %q so metadata writes cannot escape this scan", statement.position, text)
+					if !expanded {
+						builder := enclosingFunction(t, statement.position)
+						if !nonMetadataTableBuilders[builder] && !nonMetadataTableBuilders[name+":"+builder] {
+							t.Errorf("%s: classify the dynamic table builder %q so metadata writes cannot escape this scan", statement.position, text)
+						}
 					}
 				} else {
 					statements = append(statements, statement)
@@ -184,6 +187,8 @@ var nonMetadataTableBuilders = map[string]bool{
 	"moveWorkspaceKeyRows":        true,
 	"conflictingKeyRowsStatement": true,
 	"rewriteWorkspaceKeyJSON":     true,
+	// Only private bounded SQLite stage tables, never the canonical database.
+	"scale_p21_legacy_progress_image.go:build": true,
 }
 
 // expectedWorkspaceArg is the index of the bound value naming the workspace a

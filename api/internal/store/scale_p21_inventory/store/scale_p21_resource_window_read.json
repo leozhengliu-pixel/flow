@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_resource_window_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginResourceWindowRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Preserves the literal native installed-summary versus canonical fallback decision, canonical snapshot order, permission projection and final revision validation. Guards SQL key transfer and admits actual typed JSON containers before decode, then retains complete summaries and encoding under a 128 MiB request ceiling/global work pool. This is not a 2 MiB page or row-count-independent graph. SW121 covers 60 M pairs, native NextIssueNumber/Via, duplicate/nil/trash payload semantics, canonical paths, strict 10x body independence, cancellation/release, persistent SQLite twice and race. SW124 covers 382 actual P20 route pairs and both output owners; SQL matches legacy.",
+      "accessors": ["resident-state"],
+      "temperature": "hot",
+      "temperatureReason": "Shared source for P20 manifest, resource and member windows.",
+      "callers": ["store/scale_p20_resource_reads.go:ResourceWindowMetadata"]
+    }
+  }
+}

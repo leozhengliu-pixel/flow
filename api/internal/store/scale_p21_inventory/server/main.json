@@ -1,7 +1,16 @@
 {
   "source": "server/main.go",
-  "unmigrated": 72,
+  "unmigrated": 71,
   "consumers": {
+    "accountBootstrap": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Development account output uses the certified owned AccountRead only in bounded mode, retaining the handle through settings decoration and encoding. Literal off Account and authenticated AccountForUser remain unchanged. SW125 compares actual warm/reopened routes, deployment settings, native NUL/timestamp values, output-owner lifetime and the complete off-only Account callset.",
+      "accessors": ["BeginAccountRead"],
+      "temperature": "hot",
+      "temperatureReason": "GET account bootstrap.",
+      "callers": ["GET /api/account/bootstrap"]
+    },
     "attachmentVisible": {
       "owner": "P21",
       "status": "unmigrated",
@@ -700,7 +709,8 @@
     },
     "toggleIssueReaction": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The unchanged first-match reaction callback reaches separate certified bounded ordinary and issue-record adapters. Preserves Reactions/Version/UpdatedAt, Added mutation, count aliases, nested aggregate precedence, global ordinary progress versus scoped contribution rules, native viewer/actor, SQL/index/search/event/webhook effects and publication topology. Literal flag-off dispatch is unchanged. SW116 covers 66 warm/reloaded/native/error cases including exact warm import conflicts, persistent SQLite twice and race; SW117 compares 18 actual ordinary/alias route cases. Statement counts increase with bounded admission/canonical preflights and are reported explicitly.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

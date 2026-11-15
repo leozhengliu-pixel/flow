@@ -303,9 +303,13 @@ func (s *SQLiteStore) prepareLegacyDiscussionAttempt(ctx context.Context, worksp
 	return r, nil
 }
 
+func boundedLegacyIssueEvent(event string) bool {
+	return boundedIssueDiscussionEvent(event) || event == "issue.reaction_toggled"
+}
+
 func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspace, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	issueID := mutationAggregateID(ctx)
-	if !s.BoundedMetadataEnabled() || !boundedIssueDiscussionEvent(eventType) || issueID == "" ||
+	if !s.BoundedMetadataEnabled() || !boundedLegacyIssueEvent(eventType) || issueID == "" ||
 		mutate == nil || !metadataOutputOwnerPresent(ctx) || UsesIssueRecordMutations(ctx) {
 		return ErrBoundedMetadataCoverage
 	}
@@ -361,6 +365,7 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 		if err != nil {
 			return err
 		}
+		attempt.inputs.issueReaction = eventType == "issue.reaction_toggled"
 		transferred := false
 		defer func() {
 			if !transferred {
@@ -414,6 +419,14 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 				return err
 			}
 		}
+		var progress *legacyProgressImage
+		if eventType == "issue.reaction_toggled" {
+			progress, err = s.prepareLegacyProgressImage(ctx, callback, time.Now().UTC())
+			if err != nil {
+				return err
+			}
+			defer progress.Close()
+		}
 		counted, err := s.refreshLegacyResourceCountsFromImage(ctx, callback)
 		if err != nil {
 			return err
@@ -440,8 +453,8 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 			return err
 		}
 		nextRealtime := enrichRealtimePayload(payloadRaw, entity, eventType)
-		// Comment events have no progress rebuild; the literal full writer
-		// opens its default transaction only after all callback planning.
+		// The literal full writer opens its default transaction only after
+		// callback, progress classification, count and realtime planning.
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
@@ -469,7 +482,11 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 		if err := attempt.PersistExternal(ctx, tx, counted); err != nil {
 			return err
 		}
-		merged, err := s.persistLegacyMetadataImage(ctx, tx, workspace, attempt.Stored, counted)
+		var progressPlan legacyMetadataProgress
+		if progress != nil {
+			progressPlan = progress
+		}
+		merged, err := s.persistLegacyMetadataImageWithProgress(ctx, tx, workspace, attempt.Stored, counted, progressPlan)
 		if err != nil {
 			return err
 		}

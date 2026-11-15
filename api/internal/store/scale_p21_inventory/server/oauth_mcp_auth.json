@@ -2,6 +2,15 @@
   "source": "server/oauth_mcp_auth.go",
   "unmigrated": 0,
   "consumers": {
+    "oauthRequestUser": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Development bounded mode uses literal shallow DefaultViewer; off calls Account().Viewer, and authenticated authUser lookup is unchanged. SW118 proves scalar native/no-SQL behavior, SW120 compares helper output including Via/scopes/inactive/deleted/time ownership, and SW125 enforces the terminating bounded-return dominance over the old Account call.",
+      "accessors": ["DefaultViewer"],
+      "temperature": "hot",
+      "temperatureReason": "OAuth user lookup.",
+      "callers": ["server/oauth_mcp_auth.go OAuth handlers"]
+    },
     "revokeOAuthAuthorization": {
       "owner": "P18",
       "status": "reviewed",

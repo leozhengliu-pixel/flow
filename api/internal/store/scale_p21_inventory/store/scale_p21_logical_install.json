@@ -5,7 +5,7 @@
     "RefreshInstalledMetadataViewForTesting": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Testing-only differential fixture reset selects the exact literal owner's installed preimage, captures bounded typed disk state and derives only capped policy. It performs no canonical hydration and cannot activate production coverage. M2/M3 paired controls reset both SQL and the logical source before each on/off phase; retained source handles remain independent.",
+      "reason": "Testing-only differential reset delegates to the shared native-policy/logical-generation capture, keeping both representations aligned under the policy cap. Native core headers are copied while the owner lock is held; unaudited time.Location objects are not materialized through production logical APIs. SW125 preserves supported native NUL/header/timestamp witnesses; SW121 preserves native NextIssueNumber/Via; retained source handles remain independent. No canonical hydration or production activation occurs.",
       "accessors": ["resident-state"]
     },
     "captureLogicalTestView": {

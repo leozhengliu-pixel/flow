@@ -25,6 +25,17 @@ func (s *SQLiteStore) ResourceWindowRevision(ctx context.Context, workspace stri
 // Only directory headers are copied; unrelated bodies and restore payloads stay
 // in the canonical records. Membership projection retains the legacy policy.
 func (s *SQLiteStore) ResourceWindowMetadata(ctx context.Context, workspace, userID string, key *domain.APIKey, kind string) (domain.Bootstrap, string, error) {
+	if s.BoundedMetadataEnabled() {
+		read, err := s.BeginResourceWindowRead(ctx, workspace, userID, key, kind)
+		if err != nil {
+			return domain.Bootstrap{}, "", err
+		}
+		if !registerMetadataOutputClose(ctx, read.Close) {
+			read.Close()
+			return domain.Bootstrap{}, "", recordMetadataOutputError(ctx, ErrBoundedMetadataCoverage)
+		}
+		return read.Data, read.Revision, nil
+	}
 	stamp, err := readMetadataStamp(ctx, s.db, workspace)
 	if err != nil {
 		return domain.Bootstrap{}, "", err

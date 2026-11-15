@@ -288,6 +288,9 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 
 func (s *server) oauthRequestUser(r *http.Request) domain.User {
 	if s.authDisabled {
+		if s.store.BoundedMetadataEnabled() {
+			return s.store.DefaultViewer()
+		}
 		return s.store.Account().Viewer
 	}
 	return authUser(r)
