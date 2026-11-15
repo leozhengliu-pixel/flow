@@ -77,7 +77,11 @@ func (s *SQLiteStore) ApplicationByUser(ctx context.Context, id string) (domain.
 	if err == nil {
 		err = json.Unmarshal(raw, &a)
 		if err == nil {
-			s.resolveApplicationAccess(&a)
+			if snapshot, pinned := ctx.Value(workspaceReadKey{}).(workspaceRead); pinned && snapshot.database == s.db {
+				err = s.resolveSnapshotApplicationAccess(ctx, &a)
+			} else {
+				s.resolveApplicationAccess(&a)
+			}
 		}
 	}
 	return a, err

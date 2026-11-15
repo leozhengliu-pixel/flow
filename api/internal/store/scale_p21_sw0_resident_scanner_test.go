@@ -41,7 +41,7 @@ func scaleP21SW0ResidentScannerFixture(t *testing.T) (scaleP09Fixture, *SQLiteSt
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='teams'`, f.data.Workspace.URLKey); err != nil {
+	if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='teams'`, f.data.Workspace.URLKey); err != nil {
 		t.Fatal(err)
 	}
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency(), workspaces: map[string]domain.Bootstrap{}}
@@ -78,7 +78,7 @@ func TestScaleP21SW0ResidentScannerMixedStorageOracle(t *testing.T) {
 				storedBody = string(body)
 			}
 		}
-		if _, err := tx.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'teams',?,?,?)`, workspace, storedKey, index%9-5, storedBody); err != nil {
+		if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'teams',?,?,?)`, workspace, storedKey, index%9-5, storedBody); err != nil {
 			t.Fatal(err)
 		}
 		expectedKeys = append(expectedKeys, key)

@@ -76,7 +76,7 @@ func TestScaleP21SW20TeamPolicyPhysicalKeyOrderDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer tx.Rollback()
-			if _, err := tx.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='teams'`, workspace); err != nil {
+			if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='teams'`, workspace); err != nil {
 				t.Fatal(err)
 			}
 			archived := time.Date(2026, 11, 13, 1, 2, 3, 0, time.UTC)
@@ -89,7 +89,7 @@ func TestScaleP21SW20TeamPolicyPhysicalKeyOrderDifferential(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := tx.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'teams',?,0,?)`, workspace, item.key, body); err != nil {
+				if _, err := scaleP12GatesHistoricalFixtureExec(t.Context(), tx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'teams',?,0,?)`, workspace, item.key, body); err != nil {
 					t.Fatal(err)
 				}
 			}

@@ -113,7 +113,6 @@ func TestScaleP21SW20RestoreTeamDifferential(t *testing.T) {
 								}
 								// Audit and resource clocks may coincide. A single
 								// token keeps normalization independent of equality.
-								generated[object["updatedAt"].(string)] = "<generated-clock>"
 								policy, ok := source.IssueAccessMetadata(t.Context(), workspace)
 								index := slices.IndexFunc(policy.Teams, func(team domain.Team) bool { return team.ID == targetID })
 								if !ok || index < 0 || policy.Teams[index].ArchivedAt != nil ||
@@ -135,10 +134,17 @@ func TestScaleP21SW20RestoreTeamDifferential(t *testing.T) {
 						}
 						for i := range audits {
 							generated[audits[i].ID] = "<restored-audit>"
-							generated[audits[i].CreatedAt.Format(time.RFC3339Nano)] = "<generated-clock>"
 							audits[i].Seq, audits[i].Hash = 0, ""
 						}
-						outcomes = append(outcomes, scaleP21SW6GeneratedJSON(t, []any{w.Code, response, rows, audits, scaleP21SW20Effects(events, realtime)}, generated))
+						outcome := []any{w.Code, response, rows, audits, scaleP21SW20Effects(events, realtime)}
+						if spec.publish == 1 {
+							normalized, err := scaleP12GatesNormalizeRestoreClocks(outcome, targetID)
+							if err != nil {
+								t.Fatal(err)
+							}
+							outcome = normalized
+						}
+						outcomes = append(outcomes, scaleP21SW6GeneratedJSON(t, outcome, generated))
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
 						t.Fatalf("restore differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))

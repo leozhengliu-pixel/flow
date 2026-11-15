@@ -18,6 +18,7 @@ import (
 // and a request's slot is free again when it ends.
 func TestResourceReadsAreBoundedByTheProjectionGate(t *testing.T) {
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
+	t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", "off")
 	repo := pulseTestRepo(t)
 	gate := newMetadataReadGate(1, 0, 50*time.Millisecond, 0)
 	host := httptest.NewServer(newHandler(&server{store: repo, uploadPath: t.TempDir(), projectionGate: gate}))

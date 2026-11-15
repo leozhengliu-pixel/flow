@@ -12,12 +12,25 @@ import (
 	"flow/api/internal/domain"
 )
 
-// When an installed copy has no certified revision, read only policy columns
-// and the target's reference closure. In particular, team guidance, unrelated
-// resource bodies and trash restore payloads never enter this fallback.
+// When an installed copy has no certified revision, retain policy and the
+// target's reference closure. Settings are scanned in fixed SQL chunks;
+// unrelated guidance, resource bodies and trash payloads are not retained.
 func (s *SQLiteStore) resourcePolicyRecords(ctx context.Context, workspace, workspaceID string) (domain.Bootstrap, error) {
+	if data, ok := s.ownedResourcePolicy(ctx, workspace, workspaceID); ok {
+		return data, nil
+	}
 	if s.metadataResidency != nil {
 		return s.readResidentResourcePolicy(ctx, workspace, workspaceID)
+	}
+	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); !ok || snapshot.database != s.db {
+		tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+		if err != nil {
+			return domain.Bootstrap{}, err
+		}
+		defer tx.Rollback()
+		ctx = context.WithValue(ctx, workspaceReadKey{}, workspaceRead{database: s.db, workspace: workspace, reader: tx})
+	} else if snapshot.reader == nil {
+		return domain.Bootstrap{}, ErrMetadataRecordQuery
 	}
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: workspaceID, URLKey: workspace}, TeamSettings: map[string]domain.TeamSettings{}}
 	rows, err := s.db.QueryContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='teams' ORDER BY collection_order,record_key`, workspace)
@@ -42,26 +55,7 @@ func (s *SQLiteStore) resourcePolicyRecords(ctx context.Context, workspace, work
 	if err != nil {
 		return data, err
 	}
-	columns := []string{"parentTeamId", "access", "membershipRestriction", "settingsPermission", "labelPermission", "memberPermission"}
-	query := "SELECT record_key"
-	for _, column := range columns {
-		query += "," + s.jsonText("data", column)
-	}
-	rows, err = s.db.QueryContext(ctx, query+` FROM workspace_metadata_records WHERE workspace_key=? AND field='teamSettings'`, workspace)
-	if err != nil {
-		return data, err
-	}
-	for rows.Next() {
-		var id string
-		var parent, access, restriction, settings, labels, members sql.NullString
-		if err := rows.Scan(&id, &parent, &access, &restriction, &settings, &labels, &members); err != nil {
-			rows.Close()
-			return data, err
-		}
-		data.TeamSettings[id] = domain.TeamSettings{ParentTeamID: parent.String, Access: access.String, MembershipRestriction: restriction.String, SettingsPermission: settings.String, LabelPermission: labels.String, MemberPermission: members.String}
-	}
-	err = rows.Err()
-	rows.Close()
+	err = s.readLegacyTeamPolicySettings(ctx, workspace, data.TeamSettings)
 	return resourcePolicyMetadata(data), err
 }
 
@@ -163,26 +157,58 @@ func (s *SQLiteStore) resourceReadCompatibility(ctx context.Context, p *resource
 	if read, ok := ctx.Value(resourceOwnedReadKey{}).(*ResourceRead); ok && read.store == s {
 		return read.compatibility(ctx, p, data)
 	}
-	s.mu.RLock()
-	source := s.workspaces[p.workspace]
-	for _, item := range data.Projects {
-		for _, cached := range source.Projects {
-			if item.ID == cached.ID && resourceWireEqual(item, cached) {
-				s.mu.RUnlock()
+	var retry func() (bool, error)
+	if snapshot, pinned := ctx.Value(workspaceReadKey{}).(workspaceRead); pinned && snapshot.database == s.db {
+		if captured, ok := ctx.Value(resourceReadCompatibilityKey{}).(resourceReadCompatibilitySnapshot); ok && captured.database == s.db &&
+			captured.workspace == p.workspace && captured.data.Workspace.ID == p.stamp.workspaceID {
+			retry = func() (bool, error) { return captured.matches(ctx, *data) }
+			matches, err := retry()
+			if err != nil {
+				return err
+			}
+			if matches {
 				return nil
 			}
-		}
-	}
-	for _, item := range data.Initiatives {
-		for _, cached := range source.Initiatives {
-			if item.ID == cached.ID && resourceWireEqual(item, cached) {
-				s.mu.RUnlock()
-				return nil
+			data.Viewer = cloneBootstrap(domain.Bootstrap{Viewer: captured.data.Viewer}).Viewer
+		} else if snapshot.workspace == p.workspace && snapshot.metadata.Workspace.ID == p.stamp.workspaceID {
+			_, scoped := metadataRecordScopeFromContext(ctx)
+			if !scoped {
+				retry = func() (bool, error) { return resourceReadMatchesInstalled(snapshot.metadata, *data), nil }
+				if matches, _ := retry(); matches {
+					return nil
+				}
+			}
+			data.Viewer = cloneBootstrap(domain.Bootstrap{Viewer: snapshot.metadata.Viewer}).Viewer
+		} else {
+			// A low-level transaction can have no owned metadata. The scalar
+			// root carries the installed/default viewer, not this principal.
+			var raw []byte
+			if err := s.db.QueryRowContext(ctx, `SELECT `+s.jsonText("data", "viewer")+` FROM workspace_states WHERE workspace_key=? AND workspace_id=?`, p.workspace, p.stamp.workspaceID).Scan(&raw); err != nil {
+				return err
+			}
+			if len(raw) > 0 {
+				if err := json.Unmarshal(raw, &data.Viewer); err != nil {
+					return err
+				}
 			}
 		}
+	} else {
+		retry = func() (bool, error) {
+			s.mu.RLock()
+			defer s.mu.RUnlock()
+			return resourceReadMatchesInstalled(s.workspaces[p.workspace], *data), nil
+		}
+		s.mu.RLock()
+		source := s.workspaces[p.workspace]
+		matches := resourceReadMatchesInstalled(source, *data)
+		if !matches {
+			data.Viewer = cloneBootstrap(domain.Bootstrap{Viewer: source.Viewer}).Viewer
+		}
+		s.mu.RUnlock()
+		if matches {
+			return nil
+		}
 	}
-	data.Viewer = cloneBootstrap(domain.Bootstrap{Viewer: source.Viewer}).Viewer
-	s.mu.RUnlock()
 	// Installed legacy metadata receives load-time defaults and refreshed
 	// display references. Reuse that normalizer with only the target and its
 	// indexed actor/status rows, preserving freshly written records verbatim.
@@ -193,18 +219,6 @@ func (s *SQLiteStore) resourceReadCompatibility(ctx context.Context, p *resource
 		}
 		if item.Creator != nil {
 			ids = append(ids, item.Creator.ID)
-		}
-		var raw []byte
-		err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='projectStatuses' AND `+s.metadataRecordKeyEquals("record_key", "?"), p.workspace, item.Status.ID).Scan(&raw)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if err == nil {
-			var status domain.ProjectStatus
-			if err := json.Unmarshal(raw, &status); err != nil {
-				return err
-			}
-			data.ProjectStatuses = append(data.ProjectStatuses, status)
 		}
 	}
 	for _, item := range data.Initiatives {
@@ -233,8 +247,64 @@ func (s *SQLiteStore) resourceReadCompatibility(ctx context.Context, p *resource
 		}
 		data.Users = append(data.Users, user)
 	}
+	// Display references can advance without rewriting a canonical body.
+	// Retry the witness before applying unrelated load-time defaults.
+	refreshDisplayReferences(data)
+	if retry != nil {
+		matches, err := retry()
+		if err != nil || matches {
+			return err
+		}
+	}
+	for _, item := range data.Projects {
+		var raw []byte
+		var ordinal int64
+		err := s.db.QueryRowContext(ctx, `SELECT chosen.data,(SELECT COUNT(*) FROM workspace_metadata_records prior_status
+			WHERE prior_status.workspace_key=chosen.workspace_key AND prior_status.field=chosen.field
+			AND (prior_status.collection_order<chosen.collection_order OR
+				(prior_status.collection_order=chosen.collection_order AND prior_status.record_key<chosen.record_key)))
+			FROM workspace_metadata_records chosen WHERE chosen.workspace_key=? AND chosen.field='projectStatuses' AND `+
+			s.metadataRecordKeyEquals("chosen.record_key", "?"), p.workspace, item.Status.ID).Scan(&raw, &ordinal)
+		if errors.Is(err, sql.ErrNoRows) {
+			// A missing target status is different from an empty catalog:
+			// only the latter receives the legacy canonical defaults.
+			err = s.db.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='projectStatuses' ORDER BY collection_order,record_key LIMIT 1`, p.workspace).Scan(&raw)
+			ordinal = 0
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if err == nil {
+			var status domain.ProjectStatus
+			if err := json.Unmarshal(raw, &status); err != nil {
+				return err
+			}
+			if status.Position == 0 && ordinal > 0 {
+				status.Position = float64(ordinal)
+			}
+			data.ProjectStatuses = append(data.ProjectStatuses, status)
+		}
+	}
 	normalizeStoredMetadata(data)
 	return nil
+}
+
+func resourceReadMatchesInstalled(source, data domain.Bootstrap) bool {
+	for _, item := range data.Projects {
+		for _, cached := range source.Projects {
+			if item.ID == cached.ID && resourceWireEqual(item, cached) {
+				return true
+			}
+		}
+	}
+	for _, item := range data.Initiatives {
+		for _, cached := range source.Initiatives {
+			if item.ID == cached.ID && resourceWireEqual(item, cached) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func resourceWireEqual(a, b any) bool {

@@ -1,20 +1,5 @@
 {
   "source": "store/scale_p12_event_access.go",
   "unmigrated": 0,
-  "consumers": {
-    "ReadEventPolicySource": {
-      "owner": "P21",
-      "status": "reviewed",
-      "reason": "Off mode retains the literal original method. Bounded mode projects only required workspace/team/settings fields from the exact certified installed logical generation; uncertified or retained versions use the trusted legacy SQL policy constructor, preserving supplied workspace labels, root-inline Team exclusion and sparse settings instead of introducing live-authority refusal. ResolveEventAccessFromSource still performs live principal/key/version validation. SW73 compares exact native policy, bytes, supplied versions, zero-SQL current reads, independent canonical recovery, retained/foreign/empty/missing labels, borrowed snapshots and four credential classes. A separately refreshed resident policy cannot replace the certified generation. Cancellation, admission refusal, output budgets, read-only state and release pass ordinary, persistent SQLite twice and race; existing P12 grant/revocation/replay groups remain green.",
-      "accessors": [
-        "resident-state"
-      ],
-      "temperature": "hot",
-      "temperatureReason": "Reachable from GET /api/realtime/changes",
-      "callers": [
-        "server/server.sharedEventPolicy",
-        "store/SQLiteStore.ResolveEventAccess"
-      ]
-    }
-  }
+  "consumers": {}
 }

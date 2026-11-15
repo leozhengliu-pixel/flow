@@ -5,7 +5,7 @@
     "BeginWorkspaceRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "The P21 bounded core adapter still requires explicit record scopes, process admission and coverage before decoding. Legacy compatibility captures owned metadata or exact resource wire identities before opening SQL, avoiding a SQL-held blocking store-mutex acquisition; identities preserve fresh-versus-load-normalized records, undeclared old-slug targets and the installed default viewer. A matching known SQL stamp validates the capture; otherwise a nonblocking publication-epoch check retains external-write compatibility or releases SQL before recapturing a newer local publication. Discarded attempt buffers are reclaimed after rollback, and validated buffers keep the original parent lifetime. TestScaleP12GatesInheritedResourceLockOrder, ResourceSnapshotPublicationGap, ResourceReadCaptureOwnership, ResourceSnapshotRetryCancellation and the fresh/large/writer-overlap regressions preserve pool limits and SQL policy authority. Bounded residency does not capture resident compatibility bodies.",
       "accessors": [
         "decodeWorkspaceMetadata"
       ]

@@ -78,6 +78,26 @@ func (s *SQLiteStore) BeginResourceRead(ctx context.Context, access AccessContex
 	if kind != "projects" && kind != "initiatives" {
 		return nil, sql.ErrNoRows
 	}
+	p := access.policy
+	existing, borrowed := ctx.Value(workspaceReadKey{}).(workspaceRead)
+	borrowed = borrowed && existing.database == s.db
+	if borrowed {
+		if existing.workspace != p.workspace || existing.reader == nil {
+			return nil, ErrMetadataRecordQuery
+		}
+		// A caller already holds SQL. Preserve the legacy live-authority
+		// boundary before taking any store lock or reading target bodies.
+		if s.db.journalReady.Load() && s.db.Stats().MaxOpenConnections == 1 {
+			return nil, ErrRecordJournalUnavailable
+		}
+		stamp, err := readMetadataStamp(ctx, s.db, p.workspace)
+		if err != nil {
+			return nil, err
+		}
+		if stamp != p.stamp {
+			return nil, errors.Join(ErrAuthForbidden, ErrResourceAccessChanged)
+		}
+	}
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
 	read := &ResourceRead{store: s}
 	defer func() {
@@ -88,44 +108,41 @@ func (s *SQLiteStore) BeginResourceRead(ctx context.Context, access AccessContex
 	if err := read.reserve(ctx, 2<<20); err != nil {
 		return nil, err
 	}
-	p := access.policy
-	s.mu.RLock()
-	_, found := s.workspaces[p.workspace]
-	s.metadataResidency.mu.Lock()
-	source := s.metadataResidency.logical[p.workspace]
-	if !found {
-		source = nil
+	current := false
+	if !borrowed {
+		s.mu.RLock()
+		_, found := s.workspaces[p.workspace]
+		s.metadataResidency.mu.Lock()
+		source := s.metadataResidency.logical[p.workspace]
+		if !found {
+			source = nil
+		}
+		current = found && source != nil && source.Stamp() == p.stamp
+		if source != nil {
+			err = source.Retain()
+		}
+		// Caller-owned SQL snapshots use their pre-SQL compatibility capture
+		// or canonical rows, never a live store-mutex lookup.
+		s.metadataResidency.mu.Unlock()
+		s.mu.RUnlock()
+		if err != nil {
+			return nil, err
+		}
+		read.source = source
 	}
-	current := found && source != nil && source.Stamp() == p.stamp
-	if source != nil {
-		err = source.Retain()
-	}
-	// Policy-only recovery uses the owned canonical path below; it cannot
-	// substitute its resident policy copy for the requested detail.
-	s.metadataResidency.mu.Unlock()
-	s.mu.RUnlock()
-	if err != nil {
-		return nil, err
-	}
-	read.source = source
 	var data domain.Bootstrap
 	if current {
 		data, err = read.installed(ctx, p, kind, ref)
 	} else {
-		var tx *sqlTx
-		borrowed := false
-		if existing, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && existing.database == s.db && existing.workspace == p.workspace {
-			if existing.reader == nil {
-				return nil, ErrMetadataRecordQuery
-			}
-			tx, borrowed = existing.reader, true
-		} else {
+		tx := existing.reader
+		snapshot := ctx
+		if !borrowed {
 			tx, err = s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 			if err != nil {
 				return nil, err
 			}
+			snapshot = context.WithValue(ctx, workspaceReadKey{}, workspaceRead{database: s.db, workspace: p.workspace, reader: tx})
 		}
-		snapshot := context.WithValue(ctx, workspaceReadKey{}, workspaceRead{database: s.db, workspace: p.workspace, reader: tx})
 		snapshot = context.WithValue(snapshot, resourceOwnedReadKey{}, read)
 		data, err = s.resourceReadRecords(snapshot, p, kind, ref)
 		if !borrowed {
@@ -808,55 +825,153 @@ func (r *ResourceRead) records(ctx context.Context, p *resourceAccessPolicy, kin
 }
 
 func (r *ResourceRead) compatibility(ctx context.Context, p *resourceAccessPolicy, data *domain.Bootstrap) error {
-	if r.source != nil {
-		for _, kind := range []string{"projects", "initiatives"} {
-			same := false
-			err := r.visitNative(ctx, kind, func(_ int, node metadataLogicalNode) error {
-				var candidate any
-				if kind == "projects" {
-					for _, item := range data.Projects {
-						matched, err := r.nativeID(ctx, node, item.ID)
-						if err != nil {
-							return err
-						}
-						if matched {
-							candidate = item
-						}
-					}
-				} else {
-					for _, item := range data.Initiatives {
-						matched, err := r.nativeID(ctx, node, item.ID)
-						if err != nil {
-							return err
-						}
-						if matched {
-							candidate = item
-						}
-					}
-				}
-				if candidate != nil {
-					scratch := &ResourceRead{store: r.store}
-					defer scratch.Close()
-					value, err := scratch.node(ctx, node, true)
-					if err != nil {
-						return err
-					}
-					same = same || resourceWireEqual(candidate, value.Interface())
-					if same {
-						return ErrMetadataIterationDone
-					}
-				}
-				return nil
-			})
-			if errors.Is(err, ErrMetadataIterationDone) {
-				err = nil
-			}
+	matchesSource := func(source domain.Bootstrap) (bool, error) {
+		compare := func(item, cached any) (bool, error) {
+			cost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(cached), 0)
 			if err != nil {
+				return false, err
+			}
+			if cost > (metadataWorkBytes-(128<<10))/8 {
+				return false, ErrMetadataWorkBudget
+			}
+			scratch := &ResourceRead{store: r.store}
+			defer scratch.Close()
+			if err := scratch.reserve(ctx, cost*8+128<<10); err != nil {
+				return false, err
+			}
+			left, err := resourceWireDigest(ctx, item)
+			if err != nil {
+				return false, err
+			}
+			right, err := resourceWireDigest(ctx, cached)
+			return left == right, err
+		}
+		for _, item := range data.Projects {
+			for _, cached := range source.Projects {
+				if item.ID == cached.ID {
+					if same, err := compare(item, cached); same || err != nil {
+						return same, err
+					}
+				}
+			}
+		}
+		for _, item := range data.Initiatives {
+			for _, cached := range source.Initiatives {
+				if item.ID == cached.ID {
+					if same, err := compare(item, cached); same || err != nil {
+						return same, err
+					}
+				}
+			}
+		}
+		return false, nil
+	}
+	setViewer := func(viewer domain.User) error {
+		cost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(viewer), 0)
+		if err != nil {
+			return err
+		}
+		if cost > (metadataWorkBytes-(128<<10))/8 {
+			return ErrMetadataWorkBudget
+		}
+		if err := r.reserve(ctx, cost*8+128<<10); err != nil {
+			return err
+		}
+		data.Viewer = cloneBootstrap(domain.Bootstrap{Viewer: viewer}).Viewer
+		return nil
+	}
+	snapshot, pinned := ctx.Value(workspaceReadKey{}).(workspaceRead)
+	pinned = pinned && snapshot.database == r.store.db
+	captured, capturedOK := ctx.Value(resourceReadCompatibilityKey{}).(resourceReadCompatibilitySnapshot)
+	var retry func() (bool, error)
+	if pinned && capturedOK && captured.database == r.store.db && captured.workspace == p.workspace &&
+		captured.data.Workspace.ID == p.stamp.workspaceID {
+		retry = func() (bool, error) {
+			if captured.digests != nil {
+				return captured.matches(ctx, *data)
+			}
+			return matchesSource(captured.data)
+		}
+		same, err := retry()
+		if err != nil || same {
+			return err
+		}
+		if err := setViewer(captured.data.Viewer); err != nil {
+			return err
+		}
+	} else if pinned && snapshot.workspace == p.workspace && snapshot.metadata.Workspace.ID == p.stamp.workspaceID {
+		if _, scoped := metadataRecordScopeFromContext(ctx); !scoped {
+			retry = func() (bool, error) { return matchesSource(snapshot.metadata) }
+			if same, err := retry(); same || err != nil {
 				return err
 			}
-			if same {
-				return nil
+		}
+		if err := setViewer(snapshot.metadata.Viewer); err != nil {
+			return err
+		}
+	} else if r.source != nil {
+		retry = func() (bool, error) {
+			for _, kind := range []string{"projects", "initiatives"} {
+				same := false
+				err := r.visitNative(ctx, kind, func(_ int, node metadataLogicalNode) error {
+					var candidate any
+					if kind == "projects" {
+						for _, item := range data.Projects {
+							matched, err := r.nativeID(ctx, node, item.ID)
+							if err != nil {
+								return err
+							}
+							if matched {
+								candidate = item
+							}
+						}
+					} else {
+						for _, item := range data.Initiatives {
+							matched, err := r.nativeID(ctx, node, item.ID)
+							if err != nil {
+								return err
+							}
+							if matched {
+								candidate = item
+							}
+						}
+					}
+					if candidate != nil {
+						scratch := &ResourceRead{store: r.store}
+						defer scratch.Close()
+						value, err := scratch.node(ctx, node, true)
+						if err != nil {
+							return err
+						}
+						left, err := resourceWireDigest(ctx, candidate)
+						if err != nil {
+							return err
+						}
+						right, err := resourceWireDigest(ctx, value.Interface())
+						if err != nil {
+							return err
+						}
+						same = same || left == right
+						if same {
+							return ErrMetadataIterationDone
+						}
+					}
+					return nil
+				})
+				if errors.Is(err, ErrMetadataIterationDone) {
+					err = nil
+				}
+				if err != nil {
+					return false, err
+				}
+				if same {
+					return true, nil
+				}
 			}
+			return false, nil
+		}
+		if same, err := retry(); same || err != nil {
+			return err
 		}
 		field, _, _ := metadataLogicalField("viewer")
 		value, err := r.node(ctx, r.source.fields[field], false)
@@ -864,6 +979,38 @@ func (r *ResourceRead) compatibility(ctx context.Context, p *resourceAccessPolic
 			return err
 		}
 		data.Viewer = value.Interface().(domain.User)
+	} else {
+		// A low-level transaction has no installed body witness. Its root
+		// viewer supplies legacy defaults independently of the principal.
+		s := r.store
+		expression := s.jsonText("data", "viewer")
+		where := ` FROM workspace_states WHERE workspace_key=? AND workspace_id=?`
+		var size int64
+		if err := s.db.QueryRowContext(ctx, `SELECT COALESCE(`+r.byteLength(expression)+`,0)`+where, p.workspace, p.stamp.workspaceID).Scan(&size); err != nil {
+			return err
+		}
+		if size < 0 || size > (metadataWorkBytes-4096)/32 {
+			return ErrMetadataWorkBudget
+		}
+		if err := r.reserve(ctx, uint64(size)*32+4096); err != nil {
+			return err
+		}
+		var raw []byte
+		if err := s.db.QueryRowContext(ctx, `SELECT `+expression+where, p.workspace, p.stamp.workspaceID).Scan(&raw); err != nil {
+			return err
+		}
+		if len(raw) > 0 {
+			work, err := metadataAggregatePayloadJSONWork(ctx, raw)
+			if err != nil {
+				return err
+			}
+			if err := r.reserve(ctx, work); err != nil {
+				return err
+			}
+			if err := json.Unmarshal(raw, &data.Viewer); err != nil {
+				return err
+			}
+		}
 	}
 	ids := []string{}
 	for _, item := range data.Projects {
@@ -872,17 +1019,6 @@ func (r *ResourceRead) compatibility(ctx context.Context, p *resourceAccessPolic
 		}
 		if item.Creator != nil {
 			ids = append(ids, item.Creator.ID)
-		}
-		raw, err := r.jsonRecord(ctx, p.workspace, "projectStatuses", item.Status.ID)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if err == nil {
-			var status domain.ProjectStatus
-			if err := json.Unmarshal(raw, &status); err != nil {
-				return err
-			}
-			data.ProjectStatuses = append(data.ProjectStatuses, status)
 		}
 	}
 	for _, item := range data.Initiatives {
@@ -909,6 +1045,65 @@ func (r *ResourceRead) compatibility(ctx context.Context, p *resourceAccessPolic
 			return err
 		}
 		data.Users = append(data.Users, user)
+	}
+	// Display references can advance without rewriting a canonical body.
+	// Retry the witness before applying unrelated load-time defaults.
+	refreshDisplayReferences(data)
+	if retry != nil {
+		if same, err := retry(); same || err != nil {
+			return err
+		}
+	}
+	for _, item := range data.Projects {
+		raw, err := r.jsonRecord(ctx, p.workspace, "projectStatuses", item.Status.ID)
+		var ordinal int64
+		if errors.Is(err, sql.ErrNoRows) {
+			// Keep an absent target in a nonempty catalog distinct from an
+			// empty catalog, which receives the canonical legacy defaults.
+			s := r.store
+			where := ` FROM workspace_metadata_records WHERE workspace_key=? AND field='projectStatuses' ORDER BY collection_order,record_key LIMIT 1`
+			var size int64
+			err = s.db.QueryRowContext(ctx, `SELECT `+r.byteLength("data")+where, p.workspace).Scan(&size)
+			if err == nil {
+				if size < 0 || size > (metadataWorkBytes-4096)/32 {
+					return ErrMetadataWorkBudget
+				}
+				if err := r.reserve(ctx, uint64(size)*32+4096); err != nil {
+					return err
+				}
+				err = s.db.QueryRowContext(ctx, `SELECT data`+where, p.workspace).Scan(&raw)
+				if err == nil {
+					work, workErr := metadataAggregatePayloadJSONWork(ctx, raw)
+					if workErr != nil {
+						return workErr
+					}
+					if err := r.reserve(ctx, work); err != nil {
+						return err
+					}
+				}
+			}
+		} else if err == nil {
+			s := r.store
+			err = s.db.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM workspace_metadata_records prior_status
+				WHERE prior_status.workspace_key=chosen.workspace_key AND prior_status.field=chosen.field
+				AND (prior_status.collection_order<chosen.collection_order OR
+					(prior_status.collection_order=chosen.collection_order AND prior_status.record_key<chosen.record_key)))
+				FROM workspace_metadata_records chosen WHERE chosen.workspace_key=? AND chosen.field='projectStatuses' AND `+
+				s.metadataRecordKeyEquals("chosen.record_key", "?"), p.workspace, item.Status.ID).Scan(&ordinal)
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if err == nil {
+			var status domain.ProjectStatus
+			if err := json.Unmarshal(raw, &status); err != nil {
+				return err
+			}
+			if status.Position == 0 && ordinal > 0 {
+				status.Position = float64(ordinal)
+			}
+			data.ProjectStatuses = append(data.ProjectStatuses, status)
+		}
 	}
 	normalizeStoredMetadata(data)
 	return nil

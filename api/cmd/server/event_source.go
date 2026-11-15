@@ -452,7 +452,7 @@ func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, er
 		default:
 			return nil
 		}
-		raw, err := json.Marshal(projected)
+		raw, err := marshalLegacyRealtimeEvent(projected)
 		if err != nil {
 			buildErr = err
 			return nil

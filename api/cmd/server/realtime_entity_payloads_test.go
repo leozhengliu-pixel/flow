@@ -211,7 +211,15 @@ func TestPagedDocumentEventsCarryTheDocument(t *testing.T) {
 	// Drafts: only the author's streams hear of them; publishing reaches every reader with the new body.
 	draft := authRequest[domain.DocumentContentDraft](t, fixture.admin, http.MethodPost, base+"/api/documents/"+public.ID+"/drafts", map[string]any{"content": "draft body"}, key, http.StatusCreated)
 	authRequest[domain.DocumentContentDraft](t, fixture.admin, http.MethodPatch, base+"/api/documents/"+public.ID+"/drafts/"+draft.ID, map[string]any{"content": "draft body 2"}, key, http.StatusOK)
+	// Publishing deletes the draft; first observe its author-only update.
+	waitForEvents(t, func() bool {
+		return fixture.adminSSE.has("document.draft_updated", draft.ID)
+	})
 	authRequest[domain.Document](t, fixture.admin, http.MethodPost, base+"/api/documents/"+public.ID+"/drafts/"+draft.ID+"/publish", nil, key, http.StatusOK)
+	// The next mutation revokes access, including to queued publication frames.
+	waitForEvents(t, func() bool {
+		return fixture.outsider.has("document.draft_published", draft.ID)
+	})
 	// Moving the public document into the private team: the outsider drops it.
 	authRequest[domain.Document](t, fixture.admin, http.MethodPatch, base+"/api/documents/"+public.ID, map[string]any{"teamIds": []string{fixture.private.ID}}, key, http.StatusOK)
 	waitForEvents(t, func() bool {

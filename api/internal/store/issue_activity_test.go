@@ -52,6 +52,8 @@ func TestIssueMutationLoadsHistoryOnlyForTouchedIssues(t *testing.T) {
 	_, err = repo.UpdateIssueRecord(ctx, workspace, target.ID, nil, IssueMutationScope{IncludeFamily: true}, func(data *domain.Bootstrap, issue *domain.Issue) error {
 		before := issue.Title
 		issue.Title = "history scope target"
+		// Keep the probed mutations to titles and activities; creation-day
+		// edits can rebuild progress from other issues' transitions.
 		RecordIssueActivity(data, issue.ID, domain.ActivityEvent{ID: "history-scope-event", Type: "issue.updated", CreatedAt: time.Now().UTC(), Actor: data.Viewer, Metadata: domain.ActivityMetadata{"titleBefore": before, "title": "history scope target"}})
 		return nil
 	})
@@ -81,7 +83,7 @@ func TestIssueMutationLoadsHistoryOnlyForTouchedIssues(t *testing.T) {
 				continue
 			}
 			before := item.Title
-			item.Title, item.CreatedAt = "Cascaded title", time.Now().UTC().Add(-time.Hour)
+			item.Title = "Cascaded title"
 			RecordIssueActivity(data, item.ID, domain.ActivityEvent{ID: "cascade-" + item.ID, Type: "issue.updated", CreatedAt: time.Now().UTC(), Actor: data.Viewer, Metadata: domain.ActivityMetadata{"titleBefore": before, "title": item.Title}})
 		}
 		return nil
@@ -91,7 +93,7 @@ func TestIssueMutationLoadsHistoryOnlyForTouchedIssues(t *testing.T) {
 	}
 	_, err = repo.UpdateIssueRecord(t.Context(), workspace, child.ID, nil, IssueMutationScope{Payload: domain.IssueUpdateInput{Title: new("Must roll back")}}, func(data *domain.Bootstrap, issue *domain.Issue) error {
 		before := issue.Title
-		issue.Title, issue.CreatedAt = "Must roll back", time.Now().UTC().Add(-time.Hour)
+		issue.Title = "Must roll back"
 		RecordIssueActivity(data, issue.ID, domain.ActivityEvent{ID: "failed-head-read", Type: "issue.updated", CreatedAt: time.Now().UTC(), Actor: data.Viewer, Metadata: domain.ActivityMetadata{"titleBefore": before, "title": issue.Title}})
 		return nil
 	})
