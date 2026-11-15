@@ -272,7 +272,7 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 				_ = writer.send(event)
 			}
 		case now := <-ticker.C:
-			if _, streaming := s.workerChatStoredReply(r.Context(), workspaceKey(r), session.ID, data.Viewer.ID, info.MessageID); !streaming {
+			if !s.workerChatStoredReplyStreaming(r.Context(), workspaceKey(r), session.ID, data.Viewer.ID, info.MessageID) {
 				settled = true
 				break
 			}
@@ -332,6 +332,9 @@ func (s *server) workerChatStoredReply(ctx context.Context, workspace, sessionID
 		}
 		return domain.AgentMessage{}, false
 	}
+	if s.store.BoundedMetadataEnabled() {
+		return s.workerChatStoredReplyBounded(ctx, workspace, sessionID, owner, messageID)
+	}
 	data, ok := s.store.WorkspaceMetadataFields(workspace, "agentSessions")
 	if !ok {
 		return domain.AgentMessage{}, false
@@ -347,6 +350,34 @@ func (s *server) workerChatStoredReply(ctx context.Context, workspace, sessionID
 		}
 	}
 	return domain.AgentMessage{}, false
+}
+
+func (s *server) workerChatStoredReplyBounded(outputCtx context.Context, workspace, sessionID, owner, messageID string) (domain.AgentMessage, bool) {
+	ctx := context.Background()
+	sessions, found, err := s.store.BeginAgentSessionRead(ctx, workspace)
+	if err != nil || !found {
+		return domain.AgentMessage{}, false
+	}
+	defer sessions.Close()
+	point, found, err := sessions.FirstMessage(ctx, sessionID, owner, messageID)
+	if err != nil || !found {
+		point.Close()
+		return domain.AgentMessage{}, false
+	}
+	if err := point.TransferOutput(outputCtx); err != nil {
+		return domain.AgentMessage{}, false
+	}
+	return point.Data, point.Data.Status == agentMessageStreaming
+}
+
+func (s *server) workerChatStoredReplyStreaming(ctx context.Context, workspace, sessionID, owner, messageID string) bool {
+	if s.store.BoundedMetadataEnabled() && !internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		owned, closeReply := beginIndependentMetadataOutputReads(ctx)
+		ctx = owned
+		defer closeReply()
+	}
+	_, streaming := s.workerChatStoredReply(ctx, workspace, sessionID, owner, messageID)
+	return streaming
 }
 
 // enqueueWorkerChatRun queues a chat run for the reply info names. run carries the id (generated when empty),
@@ -489,7 +520,7 @@ func (s *server) workerChatReplyFor(ctx context.Context, run store.AgentRun, inf
 	if err != nil {
 		return nil, err
 	}
-	if _, streaming := s.workerChatStoredReply(ctx, run.WorkspaceKey, run.SessionID, owner.ID, info.MessageID); !streaming {
+	if !s.workerChatStoredReplyStreaming(ctx, run.WorkspaceKey, run.SessionID, owner.ID, info.MessageID) {
 		return nil, errAgentLiveSkip
 	}
 	return &workerChatReply{s: s, run: run, info: info, owner: owner}, nil
@@ -544,6 +575,9 @@ func (c *workerChatReply) cursorStart(cursor *domain.AgentWorkerCursor) (int64, 
 // saved the reply first), each time on a fresh draft. It reports whether the reply is finished; errAgentLiveSkip
 // when the conversation no longer holds it streaming (finished, stopped or edited away).
 func (c *workerChatReply) update(ctx context.Context, final bool, change func(*workerChatDraft)) (bool, error) {
+	if c.s.store.BoundedMetadataEnabled() && !internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		return c.updateBounded(ctx, final, change)
+	}
 	for range workerChatUpdateAttempts {
 		stored, streaming := c.s.workerChatStoredReply(ctx, c.run.WorkspaceKey, c.run.SessionID, c.owner.ID, c.info.MessageID)
 		if !streaming {
@@ -577,6 +611,48 @@ func (c *workerChatReply) update(ctx context.Context, final bool, change func(*w
 		return draft.finished, nil
 	}
 	return false, errWorkerChatStale
+}
+
+func (c *workerChatReply) updateBounded(ctx context.Context, final bool, change func(*workerChatDraft)) (bool, error) {
+	for range workerChatUpdateAttempts {
+		finished, err := c.updateBoundedOnce(ctx, final, change)
+		if errors.Is(err, errWorkerChatStale) {
+			continue
+		}
+		return finished, err
+	}
+	return false, errWorkerChatStale
+}
+
+func (c *workerChatReply) updateBoundedOnce(ctx context.Context, final bool, change func(*workerChatDraft)) (bool, error) {
+	ctx, closeReply := beginIndependentMetadataOutputReads(ctx)
+	defer closeReply()
+	stored, streaming := c.s.workerChatStoredReply(ctx, c.run.WorkspaceKey, c.run.SessionID, c.owner.ID, c.info.MessageID)
+	if !streaming {
+		return true, errAgentLiveSkip
+	}
+	draft, err := c.draft(ctx, stored)
+	if err != nil {
+		return false, err
+	}
+	waiting, err := draft.applyStored(ctx, final)
+	if err != nil {
+		return false, err
+	}
+	if change != nil && !draft.finished {
+		change(draft)
+	}
+	if waiting {
+		c.updateLater("gap", workerChatGapWait)
+	}
+	if !draft.changed {
+		return draft.finished, nil
+	}
+	if err := c.save(ctx, stored, draft); err != nil {
+		return false, err
+	}
+	workerChatPublish(c.info.MessageID, draft.events...)
+	return draft.finished, nil
 }
 
 // draft is the saved reply with its offloaded text and results loaded, to change and save whole.
@@ -1550,6 +1626,11 @@ func (s *server) resumeWorkerChat(ctx context.Context, run store.AgentRun, info 
 	if err != nil || current.Status != store.AgentRunAwaiting {
 		return
 	}
+	if s.store.BoundedMetadataEnabled() && !internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		owned, closeReply := beginIndependentMetadataOutputReads(ctx)
+		ctx = owned
+		defer closeReply()
+	}
 	message, streaming := s.workerChatStoredReplyOf(ctx, current, info)
 	if !streaming {
 		return
@@ -1582,10 +1663,13 @@ func (s *server) resumeWorkerChat(ctx context.Context, run store.AgentRun, info 
 	}
 }
 
-func (s *server) workerChatStoredReplyOf(_ context.Context, run store.AgentRun, info workerChatRunInfo) (domain.AgentMessage, bool) {
+func (s *server) workerChatStoredReplyOf(ctx context.Context, run store.AgentRun, info workerChatRunInfo) (domain.AgentMessage, bool) {
 	principal, err := decodeAgentRunPrincipal(run)
 	if err != nil {
 		return domain.AgentMessage{}, false
+	}
+	if s.store.BoundedMetadataEnabled() && !internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		return s.workerChatStoredReplyBounded(ctx, run.WorkspaceKey, run.SessionID, principal.UserID, info.MessageID)
 	}
 	return s.workerChatStoredReply(context.Background(), run.WorkspaceKey, run.SessionID, principal.UserID, info.MessageID)
 }

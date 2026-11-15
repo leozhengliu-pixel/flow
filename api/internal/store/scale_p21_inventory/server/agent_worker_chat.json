@@ -1,6 +1,6 @@
 {
   "source": "server/agent_worker_chat.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "runAgentSessionOnWorker": {
       "owner": "P18",
@@ -58,7 +58,8 @@
     },
     "workerChatStoredReply": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The literal legacy and internal-conversation bodies remain unchanged. Bounded raw reads delegate to the proven installed FirstMessage selector with an independent output owner spanning final use. Boolean guards close after observing streaming; bounded draft attempts keep ownership through draft/use; resume keeps it through approval decisions and actual run enqueue. Contextless legacy lookup remains Background even when the processing context is canceled. SW159 passes 44 table rows (88 source executions) for all native message fields, duplicate/deleted/empty/NUL/slug identity, warm/reload/current source versus request pins, replacement and cancellation after return, internal-record flags, actual resume effects and lifetime, missing/unowned/closed/budget cases and release. The separately pending save writer still refuses coverage; its refusal is explicitly tested without adding test-only scopes and is not certified as a complete successful update. Zero whole metadata decodes and retained work are observed.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -70,6 +71,15 @@
         "server/workerChatReply.update",
         "server/server.workerChatStoredReplyOf"
       ]
+    },
+    "workerChatStoredReplyBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Uses existing AgentSessionRead.FirstMessage to select the first exact matching message across all ID/owner session occurrences from a fresh contextless installed source. It preserves deleted/duplicate/empty/NUL values, complete native message fields and offloaded references. The selected point transfers its independent lifetime to the caller's existing metadata output scope; parent source closes immediately, while final bool/draft/resume uses stay admitted. SW159 passes 44 exact/guard table rows with warm and reloaded native values, post-return source replacement and cancellation, actual resume decisions/enqueue, lifetime witnesses, zero full metadata decodes and final zero work. No new SQL, loading algorithm, cache, locking or policy is introduced. Successful save remains separately guarded.",
+      "accessors": ["BeginAgentSessionRead"],
+      "temperature": "hot",
+      "temperatureReason": "Selected saved reply used by worker guards, draft updates and resume decisions.",
+      "callers": ["server/agent_worker_chat.go:workerChatStoredReply", "server/agent_worker_chat.go:workerChatStoredReplyOf"]
     }
   }
 }
