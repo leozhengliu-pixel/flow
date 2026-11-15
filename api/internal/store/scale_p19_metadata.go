@@ -19,6 +19,20 @@ type ScaleP19Snapshot struct {
 // versions at one SQL revision. An uncertified copy takes the existing reload
 // recovery once; it cannot acquire newer versions for older row values.
 func (s *SQLiteStore) ReadScaleP19Snapshot(ctx context.Context, workspace, principal string, unfiltered bool) (ScaleP19Snapshot, error) {
+	if s.BoundedMetadataEnabled() {
+		if !metadataOutputOwnerPresent(ctx) {
+			return ScaleP19Snapshot{}, ErrBoundedMetadataCoverage
+		}
+		read, err := s.BeginP19SnapshotRead(ctx, workspace, principal, unfiltered)
+		if err != nil {
+			return ScaleP19Snapshot{}, err
+		}
+		if !registerMetadataOutputClose(ctx, read.Close) {
+			read.Close()
+			return ScaleP19Snapshot{}, ErrBoundedMetadataCoverage
+		}
+		return read.Snapshot, nil
+	}
 	for range 3 {
 		tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 		if err != nil {

@@ -1,10 +1,11 @@
 {
   "source": "store/scale_p19_metadata.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "scaleP19MetadataAt": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "ReadScaleP19Snapshot dispatches bounded stores to the owned P19 summary reader before this literal resident implementation. The new reader preserves the source certificate, three-attempt SQL revision/reload contract, native summary projections, viewer policy and version rows, and registers output ownership through the containing response. SW112 proves exact principal projections, warm/reload, stamps/pins, legal large records, cancellation/release, persistent SQLite twice and race; SW115 proves exact server manifests/windows and real credential intersections. Complete summaries have an explicit 128 MiB request admission ceiling under the replica work pool; this is not the 2 MiB page-allocation target. Flag-off remains literal.",
       "accessors": [
         "resident-state"
       ],

@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Issue permission reads retain complete grants and preserve legacy authorization behavior through bounded read ownership.
+- Project and initiative query windows retain admitted native summaries through output; bounded metadata stays off by default.
 - Thread subscriptions retain first-match edits, native duplicate occurrence order and atomic legacy effects through bounded discussion writers.
 - Document realtime preserves complete installed grants and selected values under bounded ownership, loading full payloads only on shared cache misses; bounded metadata stays off by default.
 - Owned legacy comment transactions preserve native hydration, actor, count, event and canonical merge behavior with bounded record staging; unported handlers remain guarded and bounded metadata stays off by default.

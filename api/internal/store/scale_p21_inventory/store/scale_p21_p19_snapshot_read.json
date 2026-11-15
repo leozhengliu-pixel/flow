@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_p19_snapshot_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "p19SnapshotAt": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Retains the certified complete installed logical source while reading only the resident scalar next-issue number. Projects, initiatives, documents and first update headers are projected before materialization; auxiliary fields and versions are admitted before transfer. Only the selected graph is cloned and normalized, with the original SQL snapshot and viewer projection preserved. SW112 covers exact native/canonical outputs, stamps/reload/pins, M principals, cancellation/ownership, persistent SQLite twice and race; SW115 covers server credential intersections. Admission stays 24266880 bytes across 10x excluded-body growth. Complete summary work has a 128 MiB request ceiling and adds one version-size preflight query; row-count-independent page memory is not claimed.",
+      "accessors": ["resident-state"],
+      "temperature": "hot",
+      "temperatureReason": "Owned P19 manifest/window summary source.",
+      "callers": ["store/SQLiteStore.BeginP19SnapshotRead"]
+    }
+  }
+}

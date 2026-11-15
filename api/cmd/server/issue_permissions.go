@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -84,7 +85,14 @@ func inheritedTeamOwner(data domain.Bootstrap, teamID, userID string) bool {
 }
 
 func (s *server) findIssueForPermissions(r *http.Request) (*domain.Bootstrap, *domain.Issue, bool) {
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() && boundedIssuePermissionReadRequest(r) {
+		if read, ok := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); ok && read != nil {
+			data = read.Data
+		}
+	} else {
+		data = s.workspaceData(r)
+	}
 	id := r.PathValue("id")
 	index := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == id })
 	if index < 0 {
@@ -94,6 +102,20 @@ func (s *server) findIssueForPermissions(r *http.Request) (*domain.Bootstrap, *d
 }
 
 func (s *server) listIssuePermissions(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() && boundedIssuePermissionReadRequest(r) && strings.HasPrefix(r.URL.Path, "/api/issues/") {
+		if read, ok := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); !ok || read == nil {
+			if _, _, err := s.boundedIssueWriteAuthorizationMetadata(r); err != nil {
+				if r.Context().Err() != nil {
+					issueRecordsError(w, r.Context().Err())
+				} else if errors.Is(err, store.ErrMetadataWorkBudget) || errors.Is(err, store.ErrMetadataPageBudget) || errors.Is(err, store.ErrBoundedMetadataCoverage) {
+					writeError(w, http.StatusServiceUnavailable, "Issue permissions are temporarily unavailable")
+				} else {
+					issueRecordsError(w, err)
+				}
+				return
+			}
+		}
+	}
 	data, issue, ok := s.findIssueForPermissions(r)
 	if !ok || issueRole(s, *data, *issue) == "none" {
 		writeError(w, http.StatusNotFound, "issue not found")

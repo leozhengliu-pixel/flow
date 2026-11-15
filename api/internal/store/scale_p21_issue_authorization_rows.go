@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"maps"
 	"math"
 	"reflect"
 	"slices"
@@ -26,6 +27,12 @@ var issueAuthorizationFields = map[reflect.Type][]string{
 	reflect.TypeFor[domain.ProjectSummary]():  {"ID"},
 	reflect.TypeFor[domain.IssueLabel]():      {"ID"},
 }
+
+var issueAuthorizationFullPermissionFields = func() map[reflect.Type][]string {
+	fields := maps.Clone(issueAuthorizationFields)
+	fields[reflect.TypeFor[domain.IssuePermission]()] = directoryOutputFields(reflect.TypeFor[domain.IssuePermission]())
+	return fields
+}()
 
 type issueAuthorizationRow struct {
 	id, resource, sort    string
@@ -412,7 +419,11 @@ func (r *IssueWriteAuthorizationRead) issueBatch(ctx context.Context, tx *sqlTx,
 func (r *IssueWriteAuthorizationRead) projectRow(ctx context.Context, input io.ReaderAt, size int64, target any) error {
 	typ := reflect.TypeOf(target).Elem()
 	part := metadataCollectionRange{size: size}
-	parser := taskIssueJSON{ctx: ctx, input: input, owner: r.owner, fields: issueAuthorizationFields}
+	fields := issueAuthorizationFields
+	if r.fullPermissions {
+		fields = issueAuthorizationFullPermissionFields
+	}
+	parser := taskIssueJSON{ctx: ctx, input: input, owner: r.owner, fields: fields}
 	if err := parser.validate(part, typ, 0); err != nil {
 		return err
 	}
