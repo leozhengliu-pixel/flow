@@ -1134,6 +1134,9 @@ func setMetadataRecordsDecoded(data *domain.Bootstrap, records map[metadataRecor
 // lockMetadataRecords reads (and on MySQL and PostgreSQL locks) the stored
 // rows of one field's records, in key order.
 func lockMetadataRecords(ctx context.Context, tx *sqlTx, workspace, field string, keys []string) (map[string][]byte, error) {
+	if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
+		return budget.lockRecords(ctx, tx, workspace, field, keys)
+	}
 	lock := ""
 	if tx.dialect != "sqlite" {
 		lock = " FOR UPDATE"

@@ -214,6 +214,9 @@ func syncMetadataRecordSet(ctx context.Context, tx *sqlTx, workspace string, ref
 // the database: stored payloads are taken from known, and fetched only for
 // rows known does not have.
 func syncMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, shapes map[string]string, wanted map[metadataRecordKey]metadataRecord, fields []string, known map[metadataRecordKey]metadataRecord) error {
+	if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
+		return budget.syncRecords(ctx, tx, workspace, refs, shapes, wanted, fields, known)
+	}
 	previous := map[metadataRecordKey]metadataRecord{}
 	columns := `field,record_key,collection_order,data`
 	if known != nil {

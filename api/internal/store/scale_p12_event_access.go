@@ -77,6 +77,9 @@ func (source *EventPolicySource) DocumentClosedTeams(document domain.Document) [
 }
 
 func (s *SQLiteStore) ReadEventPolicySource(ctx context.Context, workspace string, version EventSourceVersion) (*EventPolicySource, error) {
+	if s.BoundedMetadataEnabled() {
+		return s.readBoundedEventPolicySource(ctx, workspace, version)
+	}
 	s.mu.RLock()
 	data, ok := s.workspaces[workspace]
 	known, exact := s.copyRevisionLocked(workspace)

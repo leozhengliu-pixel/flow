@@ -1,11 +1,11 @@
 {
   "source": "store/scale_p12_event_access.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "ReadEventPolicySource": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "SW23 typed Team policy-header compatibility, including case-folded aliases, duplicate fields and physical order, is proved and used by readResidentResourcePolicy. Exact ReadEventPolicySource retained-version semantics remain pending: when the supplied EventSourceVersion.WorkspaceID differs from the current workspace ID, the legacy resourcePolicyRecords fallback returns current policy tagged with the supplied ID, while the bounded fallback rejects it with ErrResourceAccessChanged. SW73's excluded differential draft retains this previous-workspace-version witness; it has not been run or promoted. Keep activation blocked rather than certifying away the source-version mismatch.",
+      "status": "reviewed",
+      "reason": "Off mode retains the literal original method. Bounded mode projects only required workspace/team/settings fields from the exact certified installed logical generation; uncertified or retained versions use the trusted legacy SQL policy constructor, preserving supplied workspace labels, root-inline Team exclusion and sparse settings instead of introducing live-authority refusal. ResolveEventAccessFromSource still performs live principal/key/version validation. SW73 compares exact native policy, bytes, supplied versions, zero-SQL current reads, independent canonical recovery, retained/foreign/empty/missing labels, borrowed snapshots and four credential classes. A separately refreshed resident policy cannot replace the certified generation. Cancellation, admission refusal, output budgets, read-only state and release pass ordinary, persistent SQLite twice and race; existing P12 grant/revocation/replay groups remain green.",
       "accessors": [
         "resident-state"
       ],

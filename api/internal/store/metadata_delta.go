@@ -519,25 +519,33 @@ func writeArrayFieldDelta(ctx context.Context, tx *sqlTx, workspace string, refs
 	for _, item := range changed {
 		lookup = append(lookup, item.key.key)
 	}
-	clause, args := bindList("record_key", lookup)
-	rows, err := tx.QueryContext(ctx, `SELECT record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause, append([]any{workspace, field.name}, args...)...)
-	if err != nil {
-		return false, err
-	}
 	orders := map[string]int{}
-	for rows.Next() {
-		var key string
-		var order int
-		if err := rows.Scan(&key, &order); err != nil {
-			rows.Close()
+	if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
+		selected, err := budget.arrayOrders(ctx, tx, workspace, field.name, lookup)
+		if err != nil {
 			return false, err
 		}
-		orders[key] = order
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return false, err
+		orders = selected
+	} else {
+		clause, args := bindList("record_key", lookup)
+		rows, err := tx.QueryContext(ctx, `SELECT record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause, append([]any{workspace, field.name}, args...)...)
+		if err != nil {
+			return false, err
+		}
+		for rows.Next() {
+			var key string
+			var order int
+			if err := rows.Scan(&key, &order); err != nil {
+				rows.Close()
+				return false, err
+			}
+			orders[key] = order
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return false, err
+		}
 	}
 	for _, key := range lookup {
 		if _, ok := orders[key]; !ok {

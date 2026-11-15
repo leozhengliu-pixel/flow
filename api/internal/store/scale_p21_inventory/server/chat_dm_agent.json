@@ -5,6 +5,7 @@
     "chatDMAuthorize": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "SW79 Tier B inspection found no proven bounded primitive for this complete authority output. The in-process bootstrap call fills dm.metadata for downstream team visibility/archive/retirement checks, assignee directory choices, full project preview selection and group team/project context. chatAuthorizedPointRead explicitly rejects the in-process bootstrap path; an authorization-only check or partial header would change those consumers. Keep the original callback and localized refusal/HIPAA platform notices until an owned authority projection covers the complete downstream lifetime.",
       "accessors": [
         "chatAuthorizedMutation"
       ],
@@ -22,6 +23,7 @@
     "chatDMMarkSessionRead": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "The existing scoped writer already supplies this metadata-only event's actor, display and aggregate closure. Its point Select and Fork reject duplicate selected IDs before the unchanged callback can choose the first exact ID/owner nondeleted session; complete-field writes reject nonempty unsplittable arrays, including duplicate or empty IDs accepted by the installed native source constructor. Resolved scopes run after initial selection and add only reads. A thin switch therefore changes supported input behavior. Keep the literal first-occurrence callback, already-read no-op and max(now UTC, native UpdatedAt) timestamp pending an exact session writer.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
