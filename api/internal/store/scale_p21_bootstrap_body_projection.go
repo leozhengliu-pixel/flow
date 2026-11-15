@@ -21,6 +21,11 @@ const bootstrapBodyMarkerPrefix = "\x00flow-p21-bootstrap-body:"
 const bootstrapBodyRawMarkerPrefix = "\\u0000flow-p21-bootstrap-raw:"
 
 var bootstrapBodyPaths = [][]string{
+	{"AgentSessions", "*", "Messages", "*", "Content"},
+	{"AgentSessions", "*", "Messages", "*", "Parts", "*", "Text"},
+	{"AgentSessions", "*", "Messages", "*", "Parts", "*", "ToolCall", "Arguments"},
+	{"AgentSessions", "*", "Messages", "*", "Parts", "*", "ToolCall", "Result"},
+	{"AgentSessions", "*", "Messages", "*", "Parts", "*", "ToolCall", "Error"},
 	{"Projects", "*", "Description"},
 	{"Projects", "*", "Comments", "*", "Body"},
 	{"Projects", "*", "Comments", "*", "BodyData"},
@@ -123,7 +128,9 @@ func (p bootstrapBodyPath) opaque() bool {
 }
 
 func (p bootstrapBodyPath) raw() bool {
-	return p.matches([]string{"Trash", "*", "Payload"}, true)
+	return p.matches([]string{"Trash", "*", "Payload"}, true) ||
+		p.matches([]string{"AgentSessions", "*", "Messages", "*", "Parts", "*", "ToolCall", "Arguments"}, true) ||
+		p.matches([]string{"AgentSessions", "*", "Messages", "*", "Parts", "*", "ToolCall", "Result"}, true)
 }
 
 func (p bootstrapBodyPath) containsOpaque() bool {
@@ -178,21 +185,33 @@ type bootstrapBodyOrigin struct {
 // provenance, bound output source and all work. The input caller keeps its own
 // source reference. bind's returned source/replacements are borrowed until Close.
 type bootstrapBodyProjection struct {
-	Data         domain.Bootstrap
-	input        *metadataLogicalSource
-	output       *metadataLogicalSource
-	replacements map[int64]metadataLogicalNode
-	origins      map[bootstrapBodyIdentity]*bootstrapBodyOrigin
-	rawOrigins   map[string]*bootstrapBodyOrigin
-	ranges       []*bootstrapBodyOrigin
-	nativeMarker map[bootstrapBodyIdentity]string
-	prefix       string
-	rawPrefix    string
-	owner        *ResourceRead
-	work         uint64
-	bound        bool
-	closed       bool
-	once         sync.Once
+	Data                 domain.Bootstrap
+	input                *metadataLogicalSource
+	output               *metadataLogicalSource
+	replacements         map[int64]metadataLogicalNode
+	origins              map[bootstrapBodyIdentity]*bootstrapBodyOrigin
+	rawOrigins           map[string]*bootstrapBodyOrigin
+	ranges               []*bootstrapBodyOrigin
+	nativeMarker         map[bootstrapBodyIdentity]string
+	prefix               string
+	rawPrefix            string
+	owner                *ResourceRead
+	work                 uint64
+	bound                bool
+	stripUpdateSnapshots bool
+	closed               bool
+	once                 sync.Once
+}
+
+type bootstrapBodyProjectionOptions struct {
+	OmittedRootFields    []string
+	StripUpdateSnapshots bool
+}
+
+func (p *bootstrapBodyProjection) omits(path bootstrapBodyPath) bool {
+	return p.stripUpdateSnapshots &&
+		(path.matches([]string{"ProjectUpdates", "{}", "*", "Snapshot"}, true) ||
+			path.matches([]string{"InitiativeUpdates", "{}", "*", "Snapshot"}, true))
 }
 
 func (p *bootstrapBodyProjection) Close() {
@@ -238,6 +257,9 @@ func (p *bootstrapBodyProjection) projectedWork(ctx context.Context, node metada
 	if node.typ == nil {
 		return ErrBoundedMetadataCoverage
 	}
+	if p.omits(path) {
+		return bootstrapBodyAddWork(total, uint64(node.typ.Size())*8+512)
+	}
 	if path.opaque() {
 		if path.raw() {
 			if node.typ != reflect.TypeFor[json.RawMessage]() {
@@ -278,9 +300,10 @@ func (p *bootstrapBodyProjection) projectedWork(ctx context.Context, node metada
 	}
 	return node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
 		next := path
-		if node.typ.Kind() == reflect.Struct {
+		switch node.typ.Kind() {
+		case reflect.Struct:
 			next = path.field(key.String())
-		} else {
+		case reflect.Slice, reflect.Array:
 			next = path.row(int(key.Int()))
 		}
 		return p.projectedWork(ctx, child, next, total)
@@ -320,6 +343,9 @@ func (p *bootstrapBodyProjection) project(ctx context.Context, node metadataLogi
 	if err := ctx.Err(); err != nil {
 		return reflect.Value{}, err
 	}
+	if p.omits(path) {
+		return reflect.Zero(node.typ), nil
+	}
 	if path.opaque() {
 		if node.typ.Kind() == reflect.String {
 			empty, err := node.StringEqual(ctx, "")
@@ -355,6 +381,27 @@ func (p *bootstrapBodyProjection) project(ctx context.Context, node metadataLogi
 	}
 	result := reflect.New(node.typ).Elem()
 	switch node.typ.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		err := node.Children(ctx, func(_ reflect.Value, child metadataLogicalNode) error {
+			value, err := p.project(ctx, child, path)
+			if err != nil {
+				return err
+			}
+			if node.typ.Kind() == reflect.Pointer {
+				if value.Type() != node.typ.Elem() {
+					return ErrMetadataRecordQuery
+				}
+				result.Set(reflect.New(node.typ.Elem()))
+				result.Elem().Set(value)
+			} else {
+				if !value.Type().AssignableTo(node.typ) {
+					return ErrMetadataRecordQuery
+				}
+				result.Set(value)
+			}
+			return nil
+		})
+		return result, err
 	case reflect.Struct:
 		err := node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
 			value, err := p.project(ctx, child, path.field(key.String()))
@@ -417,6 +464,10 @@ func (p *bootstrapBodyProjection) project(ctx context.Context, node metadataLogi
 }
 
 func (s *SQLiteStore) beginBootstrapBodyProjection(ctx context.Context, source *metadataLogicalSource, omittedRootFields ...string) (_ *bootstrapBodyProjection, err error) {
+	return s.beginBootstrapBodyProjectionWithOptions(ctx, source, bootstrapBodyProjectionOptions{OmittedRootFields: omittedRootFields})
+}
+
+func (s *SQLiteStore) beginBootstrapBodyProjectionWithOptions(ctx context.Context, source *metadataLogicalSource, options bootstrapBodyProjectionOptions) (_ *bootstrapBodyProjection, err error) {
 	if !s.BoundedMetadataEnabled() || source == nil {
 		return nil, ErrBoundedMetadataCoverage
 	}
@@ -429,7 +480,8 @@ func (s *SQLiteStore) beginBootstrapBodyProjection(ctx context.Context, source *
 	p := &bootstrapBodyProjection{
 		input: source, owner: &ResourceRead{store: s, source: source},
 		origins: map[bootstrapBodyIdentity]*bootstrapBodyOrigin{}, nativeMarker: map[bootstrapBodyIdentity]string{},
-		rawOrigins: map[string]*bootstrapBodyOrigin{},
+		rawOrigins:           map[string]*bootstrapBodyOrigin{},
+		stripUpdateSnapshots: options.StripUpdateSnapshots,
 	}
 	defer func() {
 		if err != nil {
@@ -454,7 +506,7 @@ func (s *SQLiteStore) beginBootstrapBodyProjection(ctx context.Context, source *
 		return nil, ErrBoundedMetadataCoverage
 	}
 	omitted := make([]bool, target.NumField())
-	for _, name := range omittedRootFields {
+	for _, name := range options.OmittedRootFields {
 		matched := false
 		for index := range target.NumField() {
 			field := target.Type().Field(index)

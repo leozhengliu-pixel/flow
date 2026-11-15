@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_general_bootstrap_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginGeneralBootstrapRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns the literal general bootstrap SQL snapshot through cursor, outline, viewer projection and five streamed fields. Exact installed stamps retain native values; unknown/stale stamps recover and normalize canonical metadata under a live parser lease. Hidden struct fields are cloned away, pre-projection reference inputs have independent ownership, retained outlines and projection maps are admitted before allocation, and always-stripped update snapshots are omitted before decoding. Shared issue/content walkers preserve literal SQL ordering, physical key types and predicates with at most 32 rows/256KiB per raw batch, a large row alone, and no open rows during callbacks. SW162/SW163 prove walker differentials, permissions, large/dense records and lifecycle; SW165 proves warm/stale/unknown/reloaded source choices, nested transaction rejection, snapshot ownership, native maps, cancellation, admission and release; SW166 proves native session body codecs and constant header admission at 10x body growth. Each new primitive has normal, persistent SQLite twice and race proof. The HTTP adapter independently owns credential filtering and the exact final wire response.",
+      "accessors": ["readRawMetadataLogicalSource"],
+      "temperature": "hot",
+      "temperatureReason": "Owned snapshot and streamed metadata for general GET /api/bootstrap.",
+      "callers": ["server/server.generalBootstrapBounded"]
+    }
+  }
+}

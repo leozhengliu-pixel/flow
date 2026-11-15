@@ -310,6 +310,12 @@ func (s *logicalJSONStream) object(node metadataLogicalNode, depth int, tool boo
 		if child.typ == nil {
 			continue
 		}
+		if s.replace != nil {
+			child, err = s.replace(child)
+			if err != nil {
+				return err
+			}
+		}
 		omit, err := s.view.omitted(s.ctx, child, field)
 		if err != nil {
 			return err

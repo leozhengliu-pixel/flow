@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"reflect"
@@ -247,8 +248,17 @@ func (r *IssueBootstrapRead) favoriteWork(ctx context.Context) error {
 // WriteJSON is the only public encoding boundary for Data. Binding finishes
 // before the first write, and the encoder retains exact opaque source nodes.
 func (r *IssueBootstrapRead) WriteJSON(ctx context.Context, dst io.Writer, rewrite ...MetadataJSONRewriter) (err error) {
+	return r.WriteJSONWithFields(ctx, dst, nil, rewrite...)
+}
+
+// WriteJSONWithFields lets an owning snapshot stream SQL-backed root fields
+// while retaining the same native metadata and body restoration boundary.
+func (r *IssueBootstrapRead) WriteJSONWithFields(ctx context.Context, dst io.Writer, fieldWriter func(string, *bufio.Writer, *json.Encoder) (bool, error), rewrite ...MetadataJSONRewriter) (err error) {
 	if r == nil || r.body == nil || r.owner == nil || dst == nil || len(rewrite) > 1 {
 		return ErrBoundedMetadataCoverage
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	// A handed read keeps the caller's authority snapshot, as the original
 	// paged accessor does. A separate live read also cannot use its sole SQL
@@ -304,6 +314,7 @@ func (r *IssueBootstrapRead) WriteJSON(ctx context.Context, dst io.Writer, rewri
 		return err
 	}
 	first := true
+	encoder := json.NewEncoder(stream.out)
 	for _, field := range plan {
 		if len(field.index) != 1 {
 			return ErrBoundedMetadataCoverage
@@ -327,6 +338,15 @@ func (r *IssueBootstrapRead) WriteJSON(ctx context.Context, dst io.Writer, rewri
 		}
 		if err := stream.text(":"); err != nil {
 			return err
+		}
+		if fieldWriter != nil {
+			handled, err := fieldWriter(field.name, stream.out, encoder)
+			if err != nil {
+				return err
+			}
+			if handled {
+				continue
+			}
 		}
 		if err := stream.write(webhookJSONValue{node: node, quoted: field.quoted}, 1); err != nil {
 			return err

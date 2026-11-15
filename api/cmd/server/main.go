@@ -1221,6 +1221,10 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		s.issueRecordsBootstrap(w, r)
 		return
 	}
+	if s.store.BoundedMetadataEnabled() {
+		s.generalBootstrapBounded(w, r)
+		return
+	}
 	s.maintainCycleSchedule(r.Context(), workspaceKey(r))
 	s.maintainAdvancedSchedules(r.Context(), workspaceKey(r))
 	ctx, release, err := s.store.BeginWorkspaceRead(r.Context(), workspaceKey(r))

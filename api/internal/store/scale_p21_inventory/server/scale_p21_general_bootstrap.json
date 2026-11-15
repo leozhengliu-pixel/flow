@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_general_bootstrap.go",
+  "unmigrated": 0,
+  "consumers": {
+    "generalBootstrapBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns GeneralBootstrapRead through the literal credential/preference filters, decorated outlines, release/cycle/development/calendar/loop presentation and final signed output. Five streamed SQL fields preserve legacy last-outline precedence, actor overrides, visibility, notification/delivery membership and lean behavior, with retained maps admitted before allocation. Cursor, outlines and all body walks share one repeatable SQL snapshot; canceled/direct spool paths release producer work before replay. SW164 runs fifty-eight real legacy/bounded pairs across the full permission/key matrix, full/lean output, installed/canonical sources, old wire shapes, signing, spool fallback, missing/canceled requests and an actual peer commit between header and body. Two native development synthesis cases validate their sole wall-clock member timestamp within each request interval; all other decoded values, headers except numeric duration, signatures and cursors are exact. Shared primitive proof is in SW162/SW163/SW165/SW166. Scheduler execution remains separately guarded.",
+      "accessors": ["BeginGeneralBootstrapRead"],
+      "temperature": "hot",
+      "temperatureReason": "Owned general GET /api/bootstrap output.",
+      "callers": ["server/server.bootstrap"]
+    }
+  }
+}

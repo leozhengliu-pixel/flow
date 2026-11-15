@@ -1,6 +1,6 @@
 {
   "source": "server/main.go",
-  "unmigrated": 69,
+  "unmigrated": 68,
   "consumers": {
     "accountBootstrap": {
       "owner": "P21",
@@ -42,7 +42,8 @@
     },
     "bootstrap": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Only the bounded general HTTP route delegates to the owned snapshot/stream adapter; the literal flag-off and separately certified issue-detail paths remain unchanged. SW164 compares actual full/lean responses, all forty permission/credential pairs, installed and canonical sources, development, signing/spool fallback, missing/cancellation and a concurrent SQL snapshot witness. Fifty-eight pairs include two native development clock cases whose sole generated viewer lastSeenAt is interval-validated; all other values, headers except duration, cursor, counts and signatures are exact. SW162/SW163/SW165/SW166 prove the shared source, walkers, opaque bodies and work lifetimes. Existing pre-read maintenance ordering is preserved; due scheduler writers retain their independent pending guards.",
       "accessors": [
         "BeginWorkspaceRead"
       ],

@@ -33,8 +33,47 @@ var deliveryBoundarySites = map[string]deliveryBoundarySpec{
 }
 
 type deliveryBoundaryCatalog struct {
-	fields map[string]map[string]ast.Expr
-	result map[string][]ast.Expr
+	fields   map[string]map[string]ast.Expr
+	embedded map[string][]ast.Expr
+	result   map[string][]ast.Expr
+}
+
+// Go promotes a field at its shallowest unambiguous embedding depth. Unknown
+// and cyclic types stay unresolved, so they cannot hide legacy store methods.
+func (c deliveryBoundaryCatalog) fieldType(receiver ast.Expr, name string) ast.Expr {
+	level := []ast.Expr{receiver}
+	for depth := 0; depth < 30 && len(level) != 0; depth++ {
+		var found ast.Expr
+		matches := 0
+		unresolved := false
+		var next []ast.Expr
+		for _, value := range level {
+			typ := deliveryBoundaryTypeName(value)
+			fields, known := c.fields[typ]
+			if !known {
+				unresolved = true
+			}
+			if field := fields[name]; field != nil {
+				found = field
+				matches++
+			}
+			next = append(next, c.embedded[typ]...)
+			if len(next) > 1024 {
+				return nil
+			}
+		}
+		if matches == 1 {
+			if unresolved {
+				return nil
+			}
+			return found
+		}
+		if matches > 1 {
+			return nil
+		}
+		level = next
+	}
+	return nil
 }
 
 func deliveryBoundaryTypeName(value ast.Expr) string {
@@ -85,7 +124,7 @@ func (c deliveryBoundaryCatalog) expressionType(value ast.Expr, result, depth in
 	case *ast.StarExpr:
 		return recur(value.X, result)
 	case *ast.SelectorExpr:
-		return c.fields[deliveryBoundaryTypeName(recur(value.X, 0))][value.Sel.Name]
+		return c.fieldType(recur(value.X, 0), value.Sel.Name)
 	case *ast.IndexExpr:
 		switch indexed := recur(value.X, 0).(type) {
 		case *ast.MapType:
@@ -341,7 +380,7 @@ func deliveryBoundaryCheck(c deliveryBoundaryCatalog, function *ast.FuncDecl, sp
 }
 
 func TestScaleP21HotDeliveryLegacyBoundaryAST(t *testing.T) {
-	catalog := deliveryBoundaryCatalog{fields: map[string]map[string]ast.Expr{}, result: map[string][]ast.Expr{}}
+	catalog := deliveryBoundaryCatalog{fields: map[string]map[string]ast.Expr{}, embedded: map[string][]ast.Expr{}, result: map[string][]ast.Expr{}}
 	functions := map[string]*ast.FuncDecl{}
 	for prefix, directory := range map[string]string{"store": ".", "server": "../../cmd/server", "domain": "../domain"} {
 		paths, err := filepath.Glob(filepath.Join(directory, "*.go"))
@@ -367,6 +406,10 @@ func TestScaleP21HotDeliveryLegacyBoundaryAST(t *testing.T) {
 						if body, ok := item.Type.(*ast.StructType); ok {
 							fields := map[string]ast.Expr{}
 							for _, field := range body.Fields.List {
+								if len(field.Names) == 0 {
+									fields[deliveryBoundaryTypeName(field.Type)] = field.Type
+									catalog.embedded[item.Name.Name] = append(catalog.embedded[item.Name.Name], field.Type)
+								}
 								for _, name := range field.Names {
 									fields[name.Name] = field.Type
 								}
