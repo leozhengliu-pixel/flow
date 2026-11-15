@@ -33,7 +33,7 @@ ARG CARRY_RELEASES
 COPY --from=previous-release /app /previous
 RUN node release-assets.ts carry --current dist --previous /previous --out /out/web-previous --keep "${CARRY_RELEASES}"
 
-FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS api-build
+FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine AS api-build
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
