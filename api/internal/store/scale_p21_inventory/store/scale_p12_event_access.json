@@ -5,7 +5,7 @@
     "ReadEventPolicySource": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending exact typed policy-header compatibility. SQL projection uses exact JSON tags, whereas legacy encoding/json accepts case-folded aliases and duplicate fields; accepted sparse Team Private:true can be private in legacy while the lowercase SQL predicate misses it. Escaped tags, duplicate tags, wrong scalar types and MySQL literal string null need conservative typed fallback. Ordinary principal/key and header budget differentials do not certify these cases. Keep activation blocked until the bounded reader reproduces Go typed decoding.",
+      "reason": "SW23 typed Team policy-header compatibility, including case-folded aliases, duplicate fields and physical order, is proved and used by readResidentResourcePolicy. Exact ReadEventPolicySource retained-version semantics remain pending: when the supplied EventSourceVersion.WorkspaceID differs from the current workspace ID, the legacy resourcePolicyRecords fallback returns current policy tagged with the supplied ID, while the bounded fallback rejects it with ErrResourceAccessChanged. SW73's excluded differential draft retains this previous-workspace-version witness; it has not been run or promoted. Keep activation blocked rather than certifying away the source-version mismatch.",
       "accessors": [
         "resident-state"
       ],

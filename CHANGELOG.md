@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded issue mutation inputs retain complete SQL rows in bounded batches, preserve native actor images and stream legacy resource-count refreshes. Unported callbacks remain guarded; bounded metadata stays off by default.
 - Bounded presence checks retain exact document policy headers through permission and roster filtering, preserving current-slug selection and cancellation behavior.
 - Bounded chat thread synchronization retains directory and workflow inputs through message edits, sends and durable thread updates.
 - Scoped issue-record comment transactions retain selected native inputs and callback results through responses, with atomic issue, notification and metadata effects. Direct-message comments preserve successful cards and retry behavior. Bounded metadata stays off by default.
