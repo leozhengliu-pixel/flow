@@ -34,7 +34,15 @@ func (s *server) releaseTrashedUploads(ctx context.Context, workspace string, na
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
-	if data, ok := s.store.WorkspaceMetadataFields(workspace, "trash"); ok {
+	if s.store.BoundedMetadataEnabled() {
+		read, err := s.store.BeginRetainedUploadRead(ctx, workspace, names)
+		if err != nil {
+			log.Printf("Trash purge workspace=%s: check retained attachment files: %v", workspace, err)
+			return
+		}
+		defer read.Close()
+		names = read.Names
+	} else if data, ok := s.store.WorkspaceMetadataFields(workspace, "trash"); ok {
 		remaining := trashedUploads(data.Trash, func(domain.TrashEntry) bool { return true })
 		names = slices.DeleteFunc(slices.Clone(names), func(name string) bool {
 			_, found := slices.BinarySearch(remaining, name)

@@ -1,10 +1,11 @@
 {
   "source": "server/trash_uploads.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "releaseTrashedUploads": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode owns candidate names and scans only one Payload at a time from the current installed trash generation, preserving literal AttachmentUploads parsing and default/missing-workspace behavior. Each native payload, gzip expansion and JSON collector is admitted before materialization and released per row; errors stop deletion. Literal flag-off hydration, live/foreign attachment and ownership checks, storage failure handling and upload-record cleanup remain unchanged. SW132 covers native/warm/reloaded generations, SQL drift, bounded 10x trash scans, large raw/gzip payloads, cancellation and release; SW133 differentially covers actual deletion order/duplicates, own/foreign references and owners, missing/failed objects and detached cancellation.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],

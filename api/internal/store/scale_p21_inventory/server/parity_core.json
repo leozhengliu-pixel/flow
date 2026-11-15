@@ -1,6 +1,6 @@
 {
   "source": "server/parity_core.go",
-  "unmigrated": 30,
+  "unmigrated": 28,
   "consumers": {
     "archiveCustomerNeed": {
       "owner": "P21",
@@ -221,7 +221,8 @@
     },
     "documentContentHistory": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode reuses BeginDocumentAuxiliaryRead for ordered live reference occurrences and matching trash payloads, preserving ID/current-before-previous lookup, case-folded typed JSON aliases and invalid-payload skipping. Live role denial never activates trash fallback; restore Links and current body/attachments are excluded. Existing P20 dispatch remains first, while off mode retains workspaceData and LoadDocumentRevisionBodies. Only the selected page, at most 200 revisions, reaches the proven owned directory body loader; source, policy, payload decode and response work stay admitted through encoding. SW129 passes reader normal/persistent SQLite count2/race with source replacement, caller snapshots, cancellation, partial/late quota refusal, typed null expansion and independent close. SW130 passes 598 exact registered-handler comparisons across warm unknown and certified reloaded sources, five roles/four credential variants, live/trash aliases, role-denied fallback, nil/empty histories, pagination, missing/foreign IDs, development bypass and outer owners, with zero complete metadata decodes or retained work. Direct-handler proof leaves Account/authenticate as an independent boundary; no SQL reduction relative to legacy or capacity gain is claimed.",
       "accessors": [
         "workspaceData"
       ],
@@ -265,7 +266,8 @@
     },
     "listDocumentDrafts": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode reuses BeginDocumentAuxiliaryRead to select ordered native drafts for the literal route DocumentID and current user from the exact installed source or an explicit same-database caller snapshot. Existing document lookup, role checks and API-key filtering remain unchanged: a current/old slug can authorize without matching draft DocumentID, and development preserves context-free cancellation behavior, credential bypass and all-user raw-ID drafts. Nil/empty roots and native dynamic values remain intact; unrelated drafts are scanned by compact headers without materializing their bodies, and off mode retains workspaceData. Owned source, policy and complete response values survive through JSON encoding and release independently. SW129 normal/persistent SQLite count2/race covers warm/reloaded/unknown sources, native ownership, old pins/source replacement, caller snapshots, cancellation, late quota errors and concurrent double-close; 100/1000 unrelated large drafts both retain 3350016 admitted bytes. SW130 passes 598 exact two-route comparisons across five roles/four credential variants and warm unknown/certified reloaded sources, including raw old-slug drafts, pagination, development, missing/foreign IDs and outer output owners, with zero full metadata decodes or retained work. Direct-handler coverage leaves Account/authenticate independent.",
       "accessors": [
         "workspaceData"
       ],

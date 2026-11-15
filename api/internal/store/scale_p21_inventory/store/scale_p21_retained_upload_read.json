@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_retained_upload_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginRetainedUploadRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Retains the exact current installed trash independently of incidental logical pins, admits candidate names and one native payload at a time, then calls the literal AttachmentUploads collector. Fixed-buffer gzip preflight bounds expanded JSON admission; malformed JSON/gzip retain literal empty-reference semantics. Candidate indices preserve duplicate/order behavior without retaining decoded URL backing storage. Returned names remain owned through live and foreign upload ownership checks. SW132 normal, persistent SQLite twice and race prove warm/default/missing/current source, malformed and legal large raw/gzip payloads, cancellation, partial quotas and release; SW133 compares actual deletion effects, failures and foreign ownership. Twenty versus two hundred trash rows retain 132400 bytes, SQL0; release SQL4 versus4 legacy.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared remaining-trash reference check in scheduled upload cleanup.",
+      "callers": ["server/trash_uploads.go:releaseTrashedUploads"]
+    }
+  }
+}

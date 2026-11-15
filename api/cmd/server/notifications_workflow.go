@@ -247,8 +247,19 @@ func (s *server) acknowledgeDesktopNotifications(w http.ResponseWriter, r *http.
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	viewerID := s.workspaceData(r).Viewer.ID
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "notification.desktop_acknowledged", viewerID, input, func(data *domain.Bootstrap) error {
+	ctx := r.Context()
+	viewerID := ""
+	if s.store.BoundedMetadataEnabled() {
+		data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+		if !ok {
+			return
+		}
+		viewerID = data.Viewer.ID
+		ctx = store.ContextWithDesktopNotificationAcknowledgement(ctx)
+	} else {
+		viewerID = s.workspaceData(r).Viewer.ID
+	}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "notification.desktop_acknowledged", viewerID, input, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		for index := range data.NotificationDeliveries {
 			delivery := &data.NotificationDeliveries[index]

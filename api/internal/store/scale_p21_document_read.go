@@ -657,17 +657,26 @@ func (r *DocumentRead) documentPayloadHeader(ctx context.Context, node metadataL
 }
 
 func (r *DocumentRead) documentJSONHeader(ctx context.Context, source io.ReaderAt, offset, length int64, visit func(domain.Document) error) error {
+	scratch := &ResourceRead{store: r.owner.store}
+	defer scratch.Close()
+	if err := scratch.reserve(ctx, metadataRecordChunkBytes+4096); err != nil {
+		return err
+	}
 	reader := io.NewSectionReader(source, offset, length)
 	scanner := metadataCollectionScanner{ctx: ctx, input: bufio.NewReaderSize(reader, metadataRecordChunkBytes)}
 	if err := scanner.spaces(); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
 		return err
 	}
-	scratch := &ResourceRead{store: r.owner.store}
-	defer scratch.Close()
 	var header domain.Document
-	err := scanner.object(func(key, value metadataCollectionRange) error {
+	selectField := func(key, value metadataCollectionRange) error {
 		if key.size > 256 {
 			return nil
+		}
+		if err := scratch.reserve(ctx, uint64(key.size)*4+4096); err != nil {
+			return err
 		}
 		raw := make([]byte, int(key.size))
 		if _, err := source.ReadAt(raw, offset+key.offset); err != nil {
@@ -677,30 +686,49 @@ func (r *DocumentRead) documentJSONHeader(ctx context.Context, source io.ReaderA
 		if err := json.Unmarshal(raw, &name); err != nil {
 			return err
 		}
-		var target any
-		switch name {
-		case "id":
-			target = &header.ID
-		case "slugId":
-			target = &header.SlugID
-		case "previousSlugIds":
-			target = &header.PreviousSlugIDs
-		default:
+		field, found := resourceWindowJSONField(reflect.TypeFor[domain.Document](), name)
+		if !found || !slices.Contains([]string{"ID", "SlugID", "PreviousSlugIDs"}, field.Name) {
 			return nil
 		}
-		if value.size < 0 || uint64(value.size) > metadataWorkBytes/32 {
+		if value.size < 0 || uint64(value.size) > resourceWindowMaxWork {
 			return ErrMetadataWorkBudget
 		}
-		if err := scratch.reserve(ctx, uint64(value.size)*32+2048); err != nil {
+		if err := scratch.reserve(ctx, uint64(value.size)+4096); err != nil {
 			return err
 		}
 		raw = make([]byte, int(value.size))
 		if _, err := source.ReadAt(raw, offset+value.offset); err != nil {
 			return err
 		}
-		return json.Unmarshal(raw, target)
-	}, 0)
-	if errors.Is(err, errMetadataCollectionJSON) || errors.Is(err, io.ErrUnexpectedEOF) {
+		cost, err := resourceWindowTypedJSONWork(ctx, raw, field.Type)
+		if err != nil {
+			return err
+		}
+		if cost > resourceWindowMaxWork/3 {
+			return ErrMetadataWorkBudget
+		}
+		if err := scratch.reserve(ctx, cost*3+4096); err != nil {
+			return err
+		}
+		return json.Unmarshal(raw, reflect.ValueOf(&header).Elem().Field(field.Index[0]).Addr().Interface())
+	}
+	var err error
+	if next, peekErr := scanner.peek(); peekErr != nil {
+		err = peekErr
+	} else if next == 'n' {
+		err = scanner.literal("null")
+	} else {
+		err = scanner.object(selectField, 0)
+	}
+	if err == nil {
+		err = scanner.end()
+	}
+	if errors.Is(err, errMetadataCollectionJSON) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+		return nil
+	}
+	var syntax *json.SyntaxError
+	var valueType *json.UnmarshalTypeError
+	if errors.As(err, &syntax) || errors.As(err, &valueType) {
 		return nil
 	}
 	if err != nil {

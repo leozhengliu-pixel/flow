@@ -472,6 +472,13 @@ func TestScaleP21ResourceDirectoryMemoSourcePrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer view.releaseMetadataLogicalSources()
+	// Keep exercising the canonical fallback memo; exact installed generations
+	// have their own native-policy fast path.
+	unknown, err := captureMetadataLogicalSource(t.Context(), f.data, copyStamp{workspaceID: f.data.Workspace.ID, revision: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	view.installMetadataLogicalSource(workspace, unknown)
 	for _, source := range []string{"installed", "event"} {
 		t.Run(source, func(t *testing.T) {
 			tx, err := f.db.BeginTx(t.Context(), metadataReadOptions(f.dialect))
@@ -562,6 +569,11 @@ func TestScaleP21ResourceDirectoryMemoAuthorityBoundaries(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer view.releaseMetadataLogicalSources()
+			unknown, err := captureMetadataLogicalSource(t.Context(), f.data, copyStamp{workspaceID: f.data.Workspace.ID, revision: -1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			view.installMetadataLogicalSource(workspace, unknown)
 			principals, canonicalReads := 0, 0
 			var injected error
 			ctx := WithSQLStatementObserver(t.Context(), func(query string) {

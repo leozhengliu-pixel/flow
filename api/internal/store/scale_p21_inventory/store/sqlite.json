@@ -557,7 +557,7 @@
     "dispatchMutation": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests. Desktop acknowledgements dispatch only with the private certified callback marker and exact event, so arbitrary callbacks sharing the public event cannot receive a sparse input. SW134/SW135 prove ordinary full-writer hydration, actor/count/aggregate effects, canonical rebasing, audit transaction/rollback, account and last-workspace publication, empty aggregates, opt-in rejection and the actual route permission matrix; flag-off remains the original dispatcher.",
       "accessors": [
         "Bootstrap",
         "mutateFull",

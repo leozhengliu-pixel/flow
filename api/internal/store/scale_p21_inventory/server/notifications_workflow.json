@@ -1,14 +1,16 @@
 {
   "source": "server/notifications_workflow.go",
-  "unmigrated": 18,
+  "unmigrated": 17,
   "consumers": {
     "acknowledgeDesktopNotifications": {
-      "owner": "P18",
-      "status": "unmigrated",
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded requests reuse the proven scoped core viewer read and explicitly mark only this unchanged delivery callback for the owned legacy aggregate desktop writer; off requests retain the original workspaceData and request context. The actual route still assigns all matching recipient/desktop/notification-ID occurrences, with no status restriction or duplicate-ID collapse. SW134 proves the new full-writer pipeline including canonical/native source effects, all SQL/catalog rows, PreviousValues, resource counts, account/last-workspace and audit, cancellation/retry/release, persistent SQLite twice and race. SW135 compares 63 actual route principal/key/input pairs including duplicate and empty IDs, exact recipient/channel ownership, complete business/event/webhook/realtime output, queued/replayed revocation and auth-disabled stored viewer with a different request actor. Only callback-generated delivery clocks are normalized after validating exact equality and request interval; catalog assertions are untouched.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
-        "workspaceData"
+        "workspaceData",
+        "workspaceDataScoped"
       ],
       "temperature": "hot",
       "temperatureReason": "Normal desktop notification acknowledgement endpoint.",

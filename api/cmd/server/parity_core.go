@@ -332,7 +332,32 @@ func (s *server) initiativeHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listDocumentDrafts(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		ctx, userID, credential := r.Context(), authUser(r).ID, documentRecordCredential(r)
+		if s.authDisabled {
+			ctx, userID, credential = context.WithoutCancel(ctx), "", nil
+		}
+		read, err := s.store.BeginDocumentAuxiliaryRead(ctx, workspaceKey(r), userID, credential, store.DocumentAuxiliaryReadRequest{Ref: r.PathValue("id"), Drafts: true})
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) {
+				writeError(w, http.StatusNotFound, "document not found")
+			} else {
+				writeError(w, http.StatusServiceUnavailable, "document drafts are temporarily unavailable")
+			}
+			return
+		}
+		if err := read.TransferOutput(r.Context()); err != nil {
+			writeError(w, http.StatusServiceUnavailable, "document drafts are temporarily unavailable")
+			return
+		}
+		data = read.Data
+		if !s.authDisabled {
+			filterBootstrapForAPIKey(&data, r)
+		}
+	} else {
+		data = s.workspaceData(r)
+	}
 	id := r.PathValue("id")
 	document, err := documentByID(&data, id)
 	if err != nil || documentRole(s, data, *document) == "none" {
@@ -516,7 +541,34 @@ func (s *server) documentContentHistory(w http.ResponseWriter, r *http.Request) 
 	if s.scaleP20History(w, r) {
 		return
 	}
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	var auxiliary *store.DocumentAuxiliaryRead
+	if s.store.BoundedMetadataEnabled() {
+		ctx, userID, credential := r.Context(), authUser(r).ID, documentRecordCredential(r)
+		if s.authDisabled {
+			ctx, userID, credential = context.WithoutCancel(ctx), "", nil
+		}
+		var err error
+		auxiliary, err = s.store.BeginDocumentAuxiliaryRead(ctx, workspaceKey(r), userID, credential, store.DocumentAuxiliaryReadRequest{Ref: r.PathValue("id"), History: true})
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) {
+				writeError(w, http.StatusNotFound, "document not found")
+			} else {
+				writeError(w, http.StatusServiceUnavailable, "document history is temporarily unavailable")
+			}
+			return
+		}
+		if err := auxiliary.TransferOutput(r.Context()); err != nil {
+			writeError(w, http.StatusServiceUnavailable, "document history is temporarily unavailable")
+			return
+		}
+		data = auxiliary.Data
+		if !s.authDisabled {
+			filterBootstrapForAPIKey(&data, r)
+		}
+	} else {
+		data = s.workspaceData(r)
+	}
 	var revisions []domain.DocumentRevision
 	if document, err := documentByID(&data, r.PathValue("id")); err == nil && documentRole(s, data, *document) != "none" {
 		revisions = document.Revisions
@@ -531,7 +583,13 @@ func (s *server) documentContentHistory(w http.ResponseWriter, r *http.Request) 
 	// workspace snapshot's references.
 	revisions = slices.Clone(revisions)
 	start, end := pageBounds(r, len(revisions))
-	if err := s.store.LoadDocumentRevisionBodies(r.Context(), data.Workspace.URLKey, revisions[start:end]); err != nil {
+	var bodyErr error
+	if auxiliary != nil {
+		bodyErr = auxiliary.LoadRevisionBodies(r.Context(), revisions[start:end])
+	} else {
+		bodyErr = s.store.LoadDocumentRevisionBodies(r.Context(), data.Workspace.URLKey, revisions[start:end])
+	}
+	if bodyErr != nil {
 		writeError(w, http.StatusServiceUnavailable, "document history is temporarily unavailable")
 		return
 	}

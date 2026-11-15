@@ -65,6 +65,12 @@ func resourcePolicyMemoFor(ctx context.Context, s *SQLiteStore, workspace string
 	if !ok || memo == nil || memo.store != s || memo.workspace != workspace || !s.db.journalReady.Load() {
 		return nil
 	}
+	memo.mu.Lock()
+	memoClosed := memo.closed
+	memo.mu.Unlock()
+	if memoClosed {
+		return nil
+	}
 	snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead)
 	if !ok || snapshot.database != s.db || snapshot.workspace != workspace || snapshot.reader != memo.tx ||
 		snapshot.reader == nil || snapshot.reader.database != s.db {
@@ -107,4 +113,42 @@ func (m *resourcePolicyMemo) remember(ctx context.Context, stamp copyStamp, epoc
 	}
 	m.stamp, m.epoch, m.data, m.release, m.present = stamp, epoch, data, release, true
 	return nil
+}
+
+// A matching logical generation is the bounded equivalent of ResolveAccess's
+// current hydrated copy. A handed resource snapshot is deliberately not used:
+// policy must come from the installed generation matching the SQL stamp.
+func (m *resourcePolicyMemo) installed(ctx context.Context, stamp copyStamp, epoch string) (domain.Bootstrap, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Bootstrap{}, false, err
+	}
+	s := m.store
+	s.mu.RLock()
+	s.metadataResidency.mu.Lock()
+	_, found := s.workspaces[m.workspace]
+	source := s.metadataResidency.logical[m.workspace]
+	current := found && source != nil && stamp.revision >= 0 && source.Stamp() == stamp
+	var err error
+	if current {
+		err = source.Retain()
+	}
+	s.metadataResidency.mu.Unlock()
+	s.mu.RUnlock()
+	if err != nil || !current {
+		return domain.Bootstrap{}, false, err
+	}
+	work := &ResourceRead{store: s, source: source}
+	defer work.Close()
+	data, err := work.nativeEventPolicy(ctx)
+	if err != nil {
+		return domain.Bootstrap{}, false, err
+	}
+	if err := m.remember(ctx, stamp, epoch, data); err != nil {
+		return domain.Bootstrap{}, false, err
+	}
+	data, present := m.lookup(stamp, epoch)
+	if !present {
+		return domain.Bootstrap{}, false, nil
+	}
+	return data, true, nil
 }

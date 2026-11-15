@@ -78,6 +78,12 @@ func (s *SQLiteStore) ResolveAccess(ctx context.Context, workspace, principal st
 		var reused bool
 		if memo != nil {
 			data, reused = memo.lookup(stamp, epoch)
+			if !reused {
+				data, reused, err = memo.installed(ctx, stamp, epoch)
+				if err != nil {
+					return AccessContext{}, err
+				}
+			}
 		}
 		if !reused {
 			data, err = s.resourcePolicyRecords(ctx, workspace, stamp.workspaceID)
