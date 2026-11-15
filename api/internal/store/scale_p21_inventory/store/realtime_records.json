@@ -1,10 +1,11 @@
 {
   "source": "store/realtime_records.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "MetadataRecord": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "MetadataRecord remains the literal off-mode compatibility encoder. Its sole bounded production path now uses BeginRealtimeRecordRead, preserving current installed first exact ID, full selected-record encoding validity and exact eight-field JSON decoding while owning only rule inputs. Existing per-event cache construction holds the header through encoding and propagates read errors before any anonymous or invisible success. SW85 compares all persisted struct-slice families, supported codec/error/numeric/raw cases, generation selection, cancellation, admission and lifetimes; stable 1x/10x work, persistent SQLite repeats and race pass. SW84 compares role/key event and SSE outputs and guards all old callsites and bounded dispatch boundaries.",
       "accessors": [
         "resident-state"
       ],

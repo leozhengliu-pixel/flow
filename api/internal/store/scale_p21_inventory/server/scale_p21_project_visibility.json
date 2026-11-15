@@ -1,0 +1,33 @@
+{
+  "source": "server/scale_p21_project_visibility.go",
+  "unmigrated": 0,
+  "consumers": {
+    "boundedProjectVisible": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Holds the proven exact project header through the unchanged unscoped/any-visible-team predicate; read failures escape via the containing checked policy projection before delivery. SW84 compares exact event and SSE output across the existing role/key matrix, including private outsiders, inheritance, selected-empty keys, aliases and missing records.",
+      "accessors": ["BeginProjectVisibilityRead"],
+      "temperature": "hot",
+      "temperatureReason": "Realtime policy visibility predicate.",
+      "callers": ["server/realtimeViewer.projectVisible"]
+    },
+    "boundedAgentTaskRealtimeVisible": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Reuses owned exact project headers through the original AppUserID and issue-query visibility predicates. Existing task lookup errors retain false/nil behavior; new reader failures are explicit. Other task-resource branches remain literal. SW84 compares actual legacyPagedRealtimeEvent and SSE outputs across roles/keys, missing tasks/projects and foreign applications.",
+      "accessors": ["BeginProjectVisibilityRead"],
+      "temperature": "hot",
+      "temperatureReason": "Agent task realtime event delivery.",
+      "callers": ["server/server.legacyPagedRealtimeEvent"]
+    },
+    "boundedRealtimeRecordFor": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Uses the proven eight-field metadata header reader inside the existing per-event payload cache. Header owners remain live through encoding; loadResult propagates constructor failures to all waiters without caching a missing-record success. Payload-team and team-aggregate precedence are unchanged. SW84 proves exact record visibility, anonymous versus named signals, cancellation phase precedence and empty SSE on failure; SW85 supplies Tier A selection/encoding/ownership proof.",
+      "accessors": ["BeginRealtimeRecordRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared record rule input construction for realtime fan-out.",
+      "callers": ["server/server.boundedPagedPolicyEvent"]
+    }
+  }
+}

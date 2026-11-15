@@ -249,6 +249,7 @@ type realtimeViewer struct {
 	event  domain.RealtimeEvent
 	rows   map[string]bool
 	source *EventSource
+	err    error
 }
 
 func (v *realtimeViewer) id() string { return v.data.Viewer.ID }
@@ -315,6 +316,9 @@ func (v *realtimeViewer) projectVisible(id string) bool {
 		}
 		project := v.source.rules.projects[id]
 		return len(project.TeamIDs) == 0 || slices.ContainsFunc(project.TeamIDs, v.content)
+	}
+	if v.s.store.BoundedMetadataEnabled() {
+		return v.boundedProjectVisible(id)
 	}
 	project, ok := v.s.store.ProjectByID(workspaceKey(v.r), id)
 	return ok && (len(project.TeamIDs) == 0 || slices.ContainsFunc(project.TeamIDs, v.content))

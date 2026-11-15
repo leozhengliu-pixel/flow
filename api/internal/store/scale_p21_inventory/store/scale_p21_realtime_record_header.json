@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_realtime_record_header.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginRealtimeRecordRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted current-generation first nonempty exact ID selection mirrors MetadataRecord for persisted struct-slice collections, with actual JSON field-plan tags and folding. Reuses native parsing and Marshal-only validation before projecting only eight realtime rule inputs, preserving invalid-encoding and typed-header decode outcomes without loading large unrelated bodies. SW85 compares every persisted struct-slice family, duplicate IDs, raw JSON and supported codecs, numeric boundaries, current/stale/expired source pins, nil/empty headers, cancellation, admission and ownership. Warm/reloaded 1x/10x work remains 206352 bytes, zero SQL/full decodes; persistent SQLite repeats and race pass.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared metadata rule headers for realtime fan-out and replay.",
+      "callers": ["server/server.boundedRealtimeRecordFor"]
+    }
+  }
+}

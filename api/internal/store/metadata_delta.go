@@ -673,6 +673,21 @@ func writeUpdatesFieldDelta(ctx context.Context, tx *sqlTx, workspace string, re
 	previous := make(map[metadataRecordKey]metadataRecord, len(known))
 	for start := 0; start < len(lookup); start += 500 {
 		chunk := lookup[start:min(start+500, len(lookup))]
+		if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
+			orders, err := budget.arrayOrders(ctx, tx, workspace, field.name, chunk)
+			if err != nil {
+				return false, err
+			}
+			for id, order := range orders {
+				key := metadataRecordKey{field: field.name, key: id}
+				value := metadataRecord{order: order}
+				if stored, ok := known[key]; ok {
+					value.data = stored.data
+				}
+				previous[key] = value
+			}
+			continue
+		}
 		clause, args := bindList("record_key", chunk)
 		rows, err := tx.QueryContext(ctx, `SELECT record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause, append([]any{workspace, field.name}, args...)...)
 		if err != nil {

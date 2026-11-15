@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Realtime visibility owns exact project IDs and metadata rule headers through event construction, preserving legacy signals, private-team checks and encoding failures.
+- Shared legacy metadata persistence rebases actor, display, count and subscription changes together before writing; unported callbacks remain guarded.
 - Realtime policy sources preserve certified native generations and retained-version SQL policy labels while keeping live authorization checks and bounded admission.
 - Legacy mutation preparation preserves complete discussion content, native display references and actual actor/count merge results under bounded work admission. Remaining full-callback composition stays guarded; bounded metadata stays off by default.
 - Bounded issue mutation inputs retain complete SQL rows in bounded batches, preserve native actor images and stream legacy resource-count refreshes. Unported callbacks remain guarded; bounded metadata stays off by default.

@@ -137,6 +137,10 @@ func (s *server) legacyPagedRealtimeEvent(r *http.Request, event domain.Realtime
 		if json.Unmarshal(event.Payload, &payload) != nil || payload.TaskID == "" {
 			return event, false, nil
 		}
+		if s.store.BoundedMetadataEnabled() {
+			visible, err := s.boundedAgentTaskRealtimeVisible(r, payload.TaskID)
+			return event, visible, err
+		}
 		return event, s.agentTaskRealtimeVisible(r, payload.TaskID), nil
 	}
 	if strings.HasPrefix(event.Type, "coding_session.") {
@@ -298,6 +302,9 @@ func (s *server) legacyPagedRealtimeEvent(r *http.Request, event domain.Realtime
 	}
 	// Every other kind follows the read rule of the record it names
 	// (realtime_event_policy.go); its payload is never forwarded as it is.
+	if s.store.BoundedMetadataEnabled() {
+		return s.boundedPagedPolicyEvent(r, data, query, event)
+	}
 	projected, visible := s.pagedPolicyEvent(r, data, query, event)
 	return projected, visible, nil
 }

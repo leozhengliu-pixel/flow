@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_project_visibility.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginProjectVisibilityRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted first exact current-generation project-ID reader returns only owned ID and ordered TeamIDs. Reuses installed source retention and ResourceRead parsing/admission; empty IDs, duplicates, invalid UTF-8, default namespaces and stale/foreign request pins follow the literal ProjectByID lookup. SW82 proves complete headers, cancellation, budget refusal, output ownership, large selected headers and constant held work across warm/reloaded 1x/10x unrelated bodies. Tier A persistent SQLite repeats and race pass; server SW84 retains literal visibility predicates and output comparison.",
+      "accessors": ["resident-state", "BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared project visibility headers for realtime fan-out.",
+      "callers": ["server/realtimeViewer.boundedProjectVisible", "server/server.boundedAgentTaskRealtimeVisible"]
+    }
+  }
+}

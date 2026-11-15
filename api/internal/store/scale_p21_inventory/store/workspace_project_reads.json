@@ -1,10 +1,11 @@
 {
   "source": "store/workspace_project_reads.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "ProjectByID": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "ProjectByID remains the literal off-mode compatibility reader. Both production bounded callers now use the owned BeginProjectVisibilityRead header contract with exact first-ID/default-workspace/current-generation behavior and unchanged team predicates. SW82 supplies Tier A native, cancellation, quota, lifetime, large-header and warm/reloaded 1x/10x proof; SW84 compares actual event and SSE output across the role/key matrix and enforces the complete old-callsite set and preceding bounded dispatch with an AST guard. No bounded caller receives an unowned full Project.",
       "accessors": [
         "resident-state"
       ],
