@@ -1,0 +1,33 @@
+{
+  "source": "server/scale_p21_comment_action_reads.go",
+  "unmigrated": 0,
+  "consumers": {
+    "commentActionReadInputs": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Preserves the list's explicit legacy data handoff and start's bounded authorization priority. Otherwise composes the existing issue query/access and owned authorization reader, selecting Priority and Attachment.URL only for list validation. Caller-owned handoffs remain within the caller request; newly created inputs close after use. SW153 compares real route output and synchronous launch gates, including an earlier issue generation with fresh raw validation. SW154 proves the optional profile's complete old-query differential and independent flags across warm/reloaded state, persistent SQLite twice and race.",
+      "accessors": ["BeginIssueWriteAuthorizationRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared issue comment-action list/start inputs.",
+      "callers": ["server/scale_p21_comment_action_reads.go:commentActionStartRead", "server/scale_p21_comment_action_reads.go:listCommentActionsBounded"]
+    },
+    "commentActionReadSettings": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Uses the existing current-installed scalar settings selector on owned issue reads, or the proven independent settings-only AccountCollectionRead for caller-owned legacy handoffs. The literal contextless/current source and UserID-presence rule are preserved using WithoutCancel with no passkey read. SW153 proves preference and actor/source gate equivalence; existing SW49/SW122 establish each selected settings primitive and SW154 covers containing read ownership. Settings reads close after the gate or response.",
+      "accessors": ["BeginAccountCollectionRead"],
+      "temperature": "hot",
+      "temperatureReason": "Fresh actor preference check before comment-action reads/start.",
+      "callers": ["server/scale_p21_comment_action_reads.go:commentActionStartRead", "server/scale_p21_comment_action_reads.go:listCommentActionsBounded"]
+    },
+    "listCommentActionsBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Uses one fresh contextless installed generation for exact ordered action rows and compact raw validation directories, independently of earlier projected issue data. Preserves all original status, comment version/error, accepted bypass, target-user and duplicate behavior; FormerMembers remains absent. SW153's 41 route/gate pairs compare complete JSON and handed-generation cases. SW152 proves raw selectors, global CommentID existence and lazy same-source validation, warm/reloaded/unknown state, cancellation, quotas, output transfer, persistent SQLite twice and race. Output ownership lasts through JSON. Request-context SQL is 26 to 26 in the measured pair; separate installed selection/validation measures zero SQL, with admitted compact headers bounded by the shared work budget.",
+      "accessors": ["BeginInstalledMetadataRead", "ReadCommentActions", "LoadValidationHeaders"],
+      "temperature": "hot",
+      "temperatureReason": "Issue activity comment-action list output.",
+      "callers": ["server/comment_actions.go:listCommentActions"]
+    }
+  }
+}

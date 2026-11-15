@@ -15,17 +15,19 @@ type IssueWriteAuthorizationRequest struct {
 	IDs                       []string
 	CommentIssueID, CommentID string
 	FullPermissions           bool
+	CommentActionValidation   bool
 }
 
 // IssueWriteAuthorizationRead owns authorization headers, not a mutation
 // preimage. Callers must not use Data as a complete workspace projection.
 type IssueWriteAuthorizationRead struct {
-	Data            domain.Bootstrap
-	owner           *ResourceRead
-	installed       *InstalledMetadataRead
-	query           IssueRecordQuery
-	fullPermissions bool
-	once            sync.Once
+	Data                    domain.Bootstrap
+	owner                   *ResourceRead
+	installed               *InstalledMetadataRead
+	query                   IssueRecordQuery
+	fullPermissions         bool
+	commentActionValidation bool
+	once                    sync.Once
 }
 
 func (r *IssueWriteAuthorizationRead) Close() {
@@ -71,7 +73,7 @@ func (s *SQLiteStore) BeginIssueWriteAuthorizationRead(ctx context.Context, user
 		installed.Close()
 		return nil, err
 	}
-	read := &IssueWriteAuthorizationRead{owner: &ResourceRead{store: s, source: source}, installed: installed, query: request.Query, fullPermissions: request.FullPermissions}
+	read := &IssueWriteAuthorizationRead{owner: &ResourceRead{store: s, source: source}, installed: installed, query: request.Query, fullPermissions: request.FullPermissions, commentActionValidation: request.CommentActionValidation}
 	if read.query.Workspace == "" {
 		read.query.Workspace = installed.workspace
 	}

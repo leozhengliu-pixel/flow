@@ -419,10 +419,7 @@ func (r *IssueWriteAuthorizationRead) issueBatch(ctx context.Context, tx *sqlTx,
 func (r *IssueWriteAuthorizationRead) projectRow(ctx context.Context, input io.ReaderAt, size int64, target any) error {
 	typ := reflect.TypeOf(target).Elem()
 	part := metadataCollectionRange{size: size}
-	fields := issueAuthorizationFields
-	if r.fullPermissions {
-		fields = issueAuthorizationFullPermissionFields
-	}
+	fields := r.projectionFields()
 	parser := taskIssueJSON{ctx: ctx, input: input, owner: r.owner, fields: fields}
 	if err := parser.validate(part, typ, 0); err != nil {
 		return err
@@ -430,7 +427,15 @@ func (r *IssueWriteAuthorizationRead) projectRow(ctx context.Context, input io.R
 	if err := r.owner.reserve(ctx, uint64(typ.Size())*2+4096); err != nil {
 		return err
 	}
-	return parser.project(part, reflect.ValueOf(target).Elem(), 0)
+	if err := parser.project(part, reflect.ValueOf(target).Elem(), 0); err != nil {
+		return err
+	}
+	if r.commentActionValidation {
+		if issue, ok := target.(*domain.Issue); ok && issue.Attachments == nil {
+			issue.Attachments = []domain.Attachment{}
+		}
+	}
+	return nil
 }
 
 func (r *IssueWriteAuthorizationRead) streamRow(ctx context.Context, tx *sqlTx, table, payload, where string, args []any, size int64, target any) error {

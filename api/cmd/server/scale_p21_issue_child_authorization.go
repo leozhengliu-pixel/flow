@@ -24,6 +24,18 @@ func boundedIssuePermissionReadRequest(r *http.Request) bool {
 	return len(parts) == 4 && parts[0] == "api" && (parts[1] == "issue-records" || parts[1] == "issues") && parts[2] != "" && parts[3] == "permissions"
 }
 
+func boundedIssueCommentActionReadRequest(r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	path, absolute := strings.CutPrefix(r.URL.Path, "/")
+	if !absolute {
+		return false
+	}
+	parts := strings.Split(path, "/")
+	return len(parts) == 4 && parts[0] == "api" && (parts[1] == "issue-records" || parts[1] == "issues") && parts[2] != "" && parts[3] == "comment-actions"
+}
+
 // Keep this aligned with the issue-record child mutation routes. Other issue
 // routes retain the original authorization builder and its complete inputs.
 func boundedIssueChildWriteRequest(r *http.Request) bool {
@@ -74,7 +86,8 @@ func boundedIssueChildWriteRequest(r *http.Request) bool {
 
 func (s *server) boundedIssueWriteAuthorizationMetadata(r *http.Request) (domain.Bootstrap, bool, error) {
 	permissionRead := boundedIssuePermissionReadRequest(r)
-	if !s.store.BoundedMetadataEnabled() || !boundedIssueChildWriteRequest(r) && !permissionRead {
+	commentActionRead := boundedIssueCommentActionReadRequest(r)
+	if !s.store.BoundedMetadataEnabled() || !boundedIssueChildWriteRequest(r) && !permissionRead && !commentActionRead {
 		return domain.Bootstrap{}, false, nil
 	}
 	metadata, query, err := s.issueRecordsQuery(r)
@@ -106,7 +119,7 @@ func (s *server) boundedIssueWriteAuthorizationMetadata(r *http.Request) (domain
 			}
 		}
 	}
-	request := store.IssueWriteAuthorizationRequest{Query: query, IDs: ids, FullPermissions: permissionRead}
+	request := store.IssueWriteAuthorizationRequest{Query: query, IDs: ids, FullPermissions: permissionRead, CommentActionValidation: commentActionRead}
 	if len(parts) > 4 && parts[3] == "comments" {
 		request.CommentIssueID, request.CommentID = parts[2], parts[4]
 	}

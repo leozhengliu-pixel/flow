@@ -33,6 +33,10 @@ func (s *server) commentActionsAllowed(data domain.Bootstrap, issue domain.Issue
 }
 
 func (s *server) startCommentActions(r *http.Request, issueID string, comment domain.Comment) {
+	if s.store.BoundedMetadataEnabled() {
+		s.startCommentActionsBounded(r, issueID, comment)
+		return
+	}
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && !apiKeyHasScope(key, "write") {
 		return
 	}
@@ -300,6 +304,10 @@ func validateCommentAction(data *domain.Bootstrap, issue domain.Issue, action do
 }
 
 func (s *server) listCommentActions(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.listCommentActionsBounded(w, r)
+		return
+	}
 	data := s.workspaceData(r)
 	data.Viewer = requestActor(s, r)
 	if _, settings, ok := s.store.AccountCollections(data.Workspace.URLKey, data.Viewer.ID); ok && settings.UserID != "" {

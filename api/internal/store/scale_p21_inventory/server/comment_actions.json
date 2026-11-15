@@ -1,6 +1,6 @@
 {
   "source": "server/comment_actions.go",
-  "unmigrated": 4,
+  "unmigrated": 2,
   "consumers": {
     "generateCommentActions": {
       "owner": "P21",
@@ -19,7 +19,8 @@
     },
     "listCommentActions": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The bounded branch composes the proven optional issue validation headers, current actor settings and independently owned raw action/validation selectors; its original off body remains literal. SW153 compares the actual alias route across five principal classes and four credentials plus status/version/filter/raw-generation cases, preserving accepted-action bypass, duplicates, other target users, initialized empty output and the earlier issue handoff versus fresh raw validation source. SW152/SW154 separately prove warm/reloaded/unknown source fidelity, cancellation, quotas, ownership, persistent SQLite twice and race. No action executes here; generation and resolve retain separate guards.",
       "accessors": [
         "WorkspaceMetadata",
         "workspaceData"
@@ -46,7 +47,8 @@
     },
     "startCommentActions": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The bounded branch reuses owned issue authorization/current settings, preserving bounded-handoff priority and caller-owned legacy data handoffs, then retains the original asynchronous launch block. The original off body remains literal. SW153 compares the synchronous production gate tuple against the literal old gate for positive actors and preference/credential/app/bot/via/archive refusals, and executes denied starts without invoking a model. The callback captures only the original workspace/actor/IDs; generation, its slot wait and writer remain independently guarded. SW152/SW154 prove the newly composed shared primitives once.",
       "accessors": [
         "workspaceData"
       ],
