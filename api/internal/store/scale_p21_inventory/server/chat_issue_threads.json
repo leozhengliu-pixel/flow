@@ -1,12 +1,14 @@
 {
   "source": "server/chat_issue_threads.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "chatSyncIssueComments": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "SW65 replaces this function's users accessor with the proven owned ChatDisplay directory under an operation output scope; off mode retains the literal accessor. One actual off/on table passes ten cases for new comments and bot replies, edits and deletion notices, noecho/blank/old skips, platform failure and edit fallback, Chinese rendering, the limit of 20 messages, missing-thread creation and recalled-root restart. The issue-card fallback retains the proven inherited workflow selector and all four live durable actions. Exact platform calls, mirrored items, thread state, actions and errors match; work is live during actual POST/PATCH and durable item writes, then zero after return with no full metadata decode. processChatThreadReply remains independently unmigrated.",
       "accessors": [
-        "WorkspaceMetadataFields"
+        "WorkspaceMetadataFields",
+        "chatCardMetadata"
       ],
       "temperature": "hot",
       "temperatureReason": "Reachable from audited HOT server/chat_notifications.go:processChatNotification",

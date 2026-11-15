@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded presence checks retain exact document policy headers through permission and roster filtering, preserving current-slug selection and cancellation behavior.
+- Bounded chat thread synchronization retains directory and workflow inputs through message edits, sends and durable thread updates.
+- Scoped issue-record comment transactions retain selected native inputs and callback results through responses, with atomic issue, notification and metadata effects. Direct-message comments preserve successful cards and retry behavior. Bounded metadata stays off by default.
 - Bounded chat cards preserve workflow inheritance, global defaults, status options and language through owned rendering. Group and personal card actions and direct-message inbox output retain their original behavior; bounded metadata stays off by default.
 - Bounded issue-child authorization retains selected policy, issue and comment headers through request use, preserving the original child-route permission and handoff behavior. Chat group bindings reuse owned policy readers. Child callback writers remain guarded; bounded metadata stays off by default.
 - Bounded internal chat point reads retain encoding, response buffers and decoded results through the containing request or job. Delivery cursor and chat audit helpers preserve nested aggregate precedence; bounded metadata stays off by default.

@@ -60,6 +60,7 @@
     "createComment": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Pending direct legacy /api/issues route: it does not supply the issue-record alias's discussion scope and still reaches the unported full writer. SW59 proves the scoped /api/issue-records alias callback, creation-key deduplication, parent/former-mention checks, captured response, canonical issue/content/thread rows, primary/notification events and webhook/realtime effects warm/reloaded; SW40 proves DM POST/card retries. SW63 proves the shared scoped writer's rollback, retry/no-op and output lifetime. Whole-consumer review additionally requires the legacy full writer's actor Users/Viewer, resource-count and previous/postimage publication semantics. Asynchronous comment-action generation remains independently pending. Flag-off behavior is unchanged.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -370,6 +371,7 @@
     "deleteComment": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Pending direct legacy /api/issues full-writer path, which does not receive the issue-record alias's discussion scope. The scoped alias is proven by SW59 for author/admin permission, root/direct-reply deletion, matching subscription removal, activity, canonical/native publication, 204 response and release warm/reloaded; SW63 proves cancellation/error rollback and retry/no-op lifetime. Whole-consumer review still needs legacy full-image actor, count and publication equivalence. Flag-off remains literal.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -658,6 +660,7 @@
     "toggleCommentReaction": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Pending direct legacy /api/issues full-writer path without the alias's discussion scope. SW59 proves the scoped alias's complete comment/live actor, duplicate removal, nil/empty reactions, Added payload, returned comment, SQL and webhook/realtime precedence across member/guest/private/key paths warm/reloaded; SW63 proves shared transaction rollback and output lifetime. Whole-consumer review also requires legacy full-image actor, counts and previous/postimage effects. Issue reactions remain independently pending; flag-off is literal.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -751,6 +754,7 @@
     "updateComment": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Pending direct legacy /api/issues full-writer path without the issue-record alias's discussion scope. SW59 proves the scoped update/resolve/unresolve callback, actor, expected-version conflict, former mentions, thread summaries/siblings, recipient mute/preferences, canonical rows and complete publication warm/reloaded. Captured current/updated comments remain owned through encoding, and SW63 proves rollback/retry lifetime. Whole-consumer review additionally needs the legacy full writer's actor, resource-count and previous/postimage semantics. Flag-off dispatch remains unchanged.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_discussion_inputs.go",
+  "unmigrated": 0,
+  "consumers": {
+    "loadIssueDiscussionInputs": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned installed native inputs for the six supported comment callbacks, loaded during the caller's writeMu interval. Preserves ordered mention/existence user headers and full selected user references, selected team/state/label references, four-field project summaries, exact notification preference keys and shapes, push flags, ordered issue thread subscriptions, raw team timezone and summary flags, and the literal narrow/full SLA distinction. SQL containers, actor/Via, role, request markers and lazy hooks remain caller-owned. SW61 compares literal callback inputs and refreshed references warm/reloaded with narrow/full inputs, duplicate first-existence/last-reference precedence, current-generation selection despite unrelated request pins, cancellation/admission/close, and 2000-user 10x unused bodies. Ordinary, persistent SQLite twice and race passed; full decodes and retained work after close are zero. Does not certify arbitrary callbacks or the enclosing writer.",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Shared native input selection for HOT comment writes.",
+      "callers": [
+        "store/SQLiteStore.mutateBoundedIssueDiscussion"
+      ]
+    }
+  }
+}

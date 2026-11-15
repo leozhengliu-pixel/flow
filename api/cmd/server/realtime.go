@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -14,6 +15,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 const presenceTTL = 45 * time.Second
@@ -705,6 +707,28 @@ func (s *server) documentPresenceAllowed(r *http.Request, documentID string) boo
 	return documentRole(s, data, document) != "none"
 }
 
+func (s *server) presenceDocumentPermission(r *http.Request, documentID string) (bool, error) {
+	if !s.store.BoundedMetadataEnabled() {
+		return s.documentPresenceAllowed(r, documentID), nil
+	}
+	data, _, err := s.pagedRealtimeMetadata(r)
+	if err != nil {
+		if contextErr := r.Context().Err(); contextErr != nil {
+			return false, contextErr
+		}
+		if !errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, store.ErrIssueQuery) {
+			return false, err
+		}
+		return false, nil
+	}
+	read, found, err := s.store.BeginPresenceDocumentRead(r.Context(), workspaceKey(r), documentID)
+	if err != nil || !found {
+		return false, err
+	}
+	defer read.Close()
+	return read.Found && documentRole(s, data, read.Document) != "none", nil
+}
+
 func filterPresenceForViewer(data domain.Bootstrap, values []domain.Presence) []domain.Presence {
 	return slices.DeleteFunc(slices.Clone(values), func(item domain.Presence) bool {
 		if item.IssueID != "" && !slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == item.IssueID }) {
@@ -905,7 +929,7 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.IssueID != "" {
 		visible := false
-		if pagedRealtimeRequest(r) {
+		if s.store.BoundedMetadataEnabled() || pagedRealtimeRequest(r) {
 			visible = s.pagedIssueVisible(r, input.IssueID)
 		} else {
 			data := s.workspaceData(r)
@@ -917,7 +941,12 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if input.DocumentID != "" {
-		if !s.documentPresenceAllowed(r, input.DocumentID) {
+		allowed, err := s.presenceDocumentPermission(r, input.DocumentID)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
+			return
+		}
+		if !allowed {
 			writeError(w, http.StatusForbidden, "Document is outside your permissions")
 			return
 		}
@@ -953,7 +982,7 @@ func (s *server) listPresence(w http.ResponseWriter, r *http.Request) {
 	route := strings.TrimSpace(r.URL.Query().Get("route"))
 	if issueID != "" {
 		visible := false
-		if pagedRealtimeRequest(r) {
+		if s.store.BoundedMetadataEnabled() || pagedRealtimeRequest(r) {
 			visible = s.pagedIssueVisible(r, issueID)
 		} else {
 			data := s.workspaceData(r)
@@ -965,7 +994,12 @@ func (s *server) listPresence(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if documentID != "" {
-		if !s.documentPresenceAllowed(r, documentID) {
+		allowed, err := s.presenceDocumentPermission(r, documentID)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
+			return
+		}
+		if !allowed {
 			writeError(w, http.StatusForbidden, "Document is outside your permissions")
 			return
 		}

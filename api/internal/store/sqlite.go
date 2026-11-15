@@ -1572,6 +1572,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 
 func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	if s.metadataResidency != nil {
+		if IsIssueDiscussionMutation(ctx) && boundedIssueDiscussionEvent(eventType) {
+			return s.mutateBoundedIssueDiscussion(ctx, workspaceKey, eventType, payload, mutate)
+		}
 		return s.mutateResidentRecords(ctx, workspaceKey, eventType, payload, mutate)
 	}
 	if projectRecordSelectionEnabled(ctx) {

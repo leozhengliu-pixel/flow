@@ -98,6 +98,9 @@ func TestScaleP21SW40DMPointOutputDifferential(t *testing.T) {
 			{name: "empty-comment", operation: "comment", ref: issue.ID, held: true},
 			{name: "missing-comment", operation: "comment", ref: "missing", text: "Reply", held: true},
 			{name: "chinese-comment", operation: "comment", ref: issue.ID, zh: true, held: true},
+			{name: "successful-comment", operation: "comment", ref: issue.ID, text: "SW40 successful reply", held: true},
+			{name: "chinese-post-comment", operation: "comment", ref: issue.ID, text: "SW40 Chinese reply", zh: true, held: true},
+			{name: "platform-refused-comment", operation: "comment", ref: issue.ID, text: "SW40 platform failure reply", held: true, platformFailure: true},
 		}
 		for _, fixture := range cases {
 			var outcomes []outcome
@@ -146,10 +149,7 @@ func TestScaleP21SW40DMPointOutputDifferential(t *testing.T) {
 			command: chatInboundCommand{OpenID: identity.OpenID, MessageID: prefix + "post-boundary"},
 			job:     domain.ChatJob{DedupKey: prefix + "post-boundary"},
 		}
-		// The full comment consumer is pending: authorization now succeeds,
-		// but its writer boundary remains separate from the GET proof.
-		pendingWriterError := `bounded metadata coverage is incomplete: mutation "comment.created" has no migrated point writer`
-		var postErrors []string
+		var postComments []domain.Comment
 		for _, variant := range []struct {
 			source *store.SQLiteStore
 			point  bool
@@ -165,48 +165,50 @@ func TestScaleP21SW40DMPointOutputDifferential(t *testing.T) {
 				err = service.chatAuthorizedMutation(ctx, workspace, identity.UserID, http.MethodGet, path, nil, &preflight)
 			}
 			if err != nil || preflight.ID != issue.ID {
-				t.Fatal("pending POST boundary lost its successful GET preflight", err)
+				t.Fatal("POST boundary lost its successful GET preflight", err)
 			}
 			var comment domain.Comment
 			postCtx := store.WithCommentCreationKey(ctx, "comment_chat_"+chatKey(record.ConnectionID, dm.command.MessageID))
 			err = service.chatAuthorizedMutation(postCtx, workspace, identity.UserID, http.MethodPost, path+"/comments", domain.CommentCreateInput{Body: "SW40 unchanged POST reply"}, &comment)
-			postError := ""
 			if err != nil {
-				postError = err.Error()
+				t.Fatal("comment POST failed", variant.point, variant.source.BoundedMetadataEnabled(), err)
 			}
-			postErrors = append(postErrors, postError)
+			postComments = append(postComments, comment)
 			if variant.source.BoundedMetadataEnabled() {
-				var failure *chatMutationError
-				if !errors.As(err, &failure) || failure.Status != http.StatusInternalServerError || failure.Message != pendingWriterError {
-					t.Fatal("pending POST did not reach its exact unmigrated writer refusal", err)
+				if variant.source.MetadataWorkUsedForTesting() == 0 {
+					t.Fatal("comment POST result was released before containing output closed")
 				}
-				t.Logf("pending POST authorization passed; writer status=%d blocker=%q point_GET=%v", failure.Status, failure.Message, variant.point)
-			} else if err != nil {
-				t.Fatal("literal full-hydration POST failed", err)
 			}
 			closeOutputs()
+			if variant.source.BoundedMetadataEnabled() && variant.source.MetadataWorkUsedForTesting() != 0 {
+				t.Fatal("comment POST retained output admission after close")
+			}
 		}
-		if postErrors[0] != "" || postErrors[1] == "" || postErrors[1] != postErrors[2] {
-			t.Fatal("GET migration changed the existing bounded POST boundary", postErrors)
+		if postComments[0].ID == "" || postComments[0].Body != "SW40 unchanged POST reply" ||
+			!reflect.DeepEqual(postComments[0], postComments[1]) || !reflect.DeepEqual(postComments[0], postComments[2]) {
+			t.Fatalf("old/new GET plus POST changed exact comment/idempotency:\n%+v", postComments)
 		}
 		var postOutputs []outcome
-		for _, source := range []*store.SQLiteStore{repo, f.probe} {
-			selected, requireHeld, failPlatform, sent = source, true, false, nil
-			err := (&server{store: source, allowedOrigin: "https://flow.example.test"}).chatDMComment(t.Context(), dm, chatDMThread{IssueID: issue.ID}, "SW40 unchanged POST reply")
-			result := outcome{Sent: append([]map[string]any(nil), sent...)}
-			if err != nil {
-				result.Error = err.Error()
-			}
-			postOutputs = append(postOutputs, result)
-			if source.BoundedMetadataEnabled() && source.MetadataWorkUsedForTesting() != 0 {
-				t.Fatal("pending POST notice retained point output")
+		for range 2 {
+			for _, source := range []*store.SQLiteStore{repo, f.probe} {
+				selected, requireHeld, failPlatform, sent = source, true, false, nil
+				err := (&server{store: source, allowedOrigin: "https://flow.example.test"}).chatDMComment(t.Context(), dm, chatDMThread{IssueID: issue.ID}, "SW40 unchanged POST reply")
+				result := outcome{Sent: append([]map[string]any(nil), sent...)}
+				if err != nil {
+					result.Error = err.Error()
+				}
+				postOutputs = append(postOutputs, result)
+				if source.BoundedMetadataEnabled() && source.MetadataWorkUsedForTesting() != 0 {
+					t.Fatal("successful comment card retained output admission")
+				}
 			}
 		}
-		oldPost, _ := json.Marshal(postOutputs[0])
-		newPost, _ := json.Marshal(postOutputs[1])
-		if !bytes.Contains(oldPost, []byte("Comment added")) || postOutputs[0].Error != "" ||
-			len(postOutputs[1].Sent) != 0 || postOutputs[1].Error != pendingWriterError {
-			t.Fatalf("pending POST card boundary changed:\n%s\n%s", oldPost, newPost)
+		firstPost, _ := json.Marshal(postOutputs[0])
+		for _, output := range postOutputs {
+			if !bytes.Contains(firstPost, []byte("Comment added")) || output.Error != "" ||
+				!reflect.DeepEqual(postOutputs[0], output) {
+				t.Fatalf("successful POST card/retry changed:\n%s", scaleP21M2Diff(postOutputs[0], output))
+			}
 		}
 		comments, _, err := repo.ResourceCommentsPage(t.Context(), workspace, issue.ID, "", 100)
 		if err != nil {
@@ -221,6 +223,9 @@ func TestScaleP21SW40DMPointOutputDifferential(t *testing.T) {
 		if created != 1 {
 			t.Fatal("unchanged POST retry/idempotency behavior changed", created)
 		}
-		t.Logf("exact DM GET/card/error comparisons=%d; literal POST success card retained; bounded writer500 propagates without card; literal retry created once", len(cases))
+		if f.probe.WorkspaceMetadataDecodes() != 0 {
+			t.Fatal("DM point/comment path decoded complete workspace metadata")
+		}
+		t.Logf("exact DM GET/POST/card/error comparisons=%d; three old/new GET+POST comments match; four success-card retries created once", len(cases))
 	}
 }

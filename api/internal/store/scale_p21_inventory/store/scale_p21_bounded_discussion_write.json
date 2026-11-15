@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_bounded_discussion_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedIssueDiscussion": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Single-issue transaction for the six explicitly admitted comment events. Owns selected complete issue/content SQL preimages, native callback inputs, lazy former-member/collaboration lookups, callback attempts and captured outputs through the request owner. Preserves actor/membership checks, literal callback, retry/no-op behavior, thread deletion metadata, issue/content hooks, atomic metadata publication, nested aggregate precedence, nil previous values, audit and post-commit webhook/realtime delivery. Rejects undeclared metadata changes, issue-scope changes, missing output owners and unsupported event shapes before commit. SW57/58/60/61 prove the shared input/persistence pieces; SW63 compares literal mutateIssueScope warm/reloaded changed/delete/no-op/retry SQL and publication, cancellation/error rollback and failed/retried-attempt ownership. The flag-off dispatcher remains literal. Does not certify issue reactions, issue updates, comment actions or standalone thread-subscription writers.",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Shared transaction for HOT comment create, update, resolve, delete and reaction routes.",
+      "callers": [
+        "store/SQLiteStore.dispatchMutation"
+      ]
+    }
+  }
+}

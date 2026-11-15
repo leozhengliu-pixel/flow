@@ -1,11 +1,11 @@
 {
   "source": "server/chat_dm_commands.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "chatDMComment": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "GET issue preflight now uses chatAuthorizedPointRead with a containing metadata output lifetime through notices, the unchanged POST and the actual final platform send. SW40 Tier B table passes 13 exact legacy/bounded GET/card/error cases and verifies point work remains held during actual platform use and releases after return. A separate boundary witness preserves full-hydration POST success versus bounded 403 This resource is outside your teams, unchanged between the preexisting bounded old-GET adapter and the new point-GET adapter. The POST chatAuthorizedMutation remains independently pending, so this whole consumer is not partially reviewed.",
+      "status": "reviewed",
+      "reason": "GET issue preflight uses chatAuthorizedPointRead and the existing chatAuthorizedMutation POST now reaches the owned bounded discussion writer. The containing output lifetime remains live through notices, returned comments, final card construction and actual platform send/errors. TestScaleP21SW40DMPointOutputDifferential retains all 13 prior GET/card/error cases and adds exact successful, Chinese and platform-refused comment comparisons (16 total). Three literal old-GET, bounded old-GET and bounded point-GET variants return identical complete POST comments; four actual success-card retries match exactly and create one comment under the unchanged creation key. Held admission is observed during platform sends and after POST until output close, all paths release work afterward, and bounded complete metadata decodes remain zero. The source adapter is unchanged; pending create and linked foreign-preview siblings retain independent status.",
       "accessors": [
         "chatAuthorizedPointRead",
         "chatAuthorizedMutation"

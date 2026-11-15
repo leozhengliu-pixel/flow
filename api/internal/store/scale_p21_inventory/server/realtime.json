@@ -1,10 +1,11 @@
 {
   "source": "server/realtime.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "listPresence": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "SW62 keeps workspaceData in the flag-off branch and uses the existing issue-record visibility path plus an owned literal document-header permission read when bounded metadata is enabled. The 520-case warm/reloaded HTTP differential compares status, headers, response order and values, and stored roster across the principal/API-key matrix for roster/route/document/issue filters, malformed document-filter queries, current and previous slugs, full/minimal updates and removals, and invalid clients. Only generated lastSeenAt values are normalized; distinct fixture timestamps preserve the literal hub order. Canceled bounded document reads return 503 instead of a permission denial. Source ownership is zero after every operation, with no full metadata decode; shared bool-only event/agent consumers remain outside this review.",
       "accessors": [
         "workspaceData"
       ],
@@ -15,9 +16,24 @@
         "POST /api/realtime/presence -> updatePresence"
       ]
     },
+    "presenceDocumentPermission": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "SW62 retains the original bool helper in flag-off mode. Bounded mode reads the existing policy first, then independently owns the current installed first ID-or-current-slug document header through literal documentRole and closes it before returning. Normal forbidden access and malformed query policy results remain false; cancellation and bounded read failures propagate to the presence handler's 503 response. The warm/reloaded HTTP differential covers explicit user/workspace grants, inherited/private/missing teams, missing documents and previous slugs across all existing principal/API-key combinations, with exact responses and zero leaked work. Tier A SW64 separately proves native header parity, first-match collisions, generation/default-key behavior, admission and release normally, persistently and under race.",
+      "accessors": [
+        "BeginPresenceDocumentRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Document permission checks on normal realtime presence read/write endpoints.",
+      "callers": [
+        "server/server.listPresence",
+        "server/server.updatePresence"
+      ]
+    },
     "updatePresence": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "SW62 keeps workspaceData in the flag-off branch and uses the existing issue-record visibility path plus an owned literal document-header permission read when bounded metadata is enabled. The 520-case warm/reloaded HTTP differential compares exact response/status/headers and stored roster across all existing principal/API-key combinations, including denied document updates, current slugs, full/minimal successful updates, full/minimal removals and invalid clients. Only generated lastSeenAt values are normalized. Each header is released after literal documentRole, cancellation yields 503, operation ownership returns to zero and no complete metadata is decoded. Existing asynchronous hub publishing and unrelated bool-only document permission consumers are unchanged.",
       "accessors": [
         "workspaceData"
       ],

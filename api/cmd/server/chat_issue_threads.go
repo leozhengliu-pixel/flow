@@ -182,6 +182,11 @@ func chatInteractive(card map[string]any) map[string]any {
 // posted back. A new comment on an issue without a thread starts one with the
 // issue's card.
 func (s *server) chatSyncIssueComments(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, issue domain.Issue, job domain.ChatJob, payload chatNotificationJob) error {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = beginMetadataOutputReads(ctx)
+		defer close()
+	}
 	thread, err := s.store.ChatThread(ctx, record.WorkspaceKey, record.ConnectionID, binding.ChatID, domain.ChatThreadResourceIssue, issue.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		if payload.Event != "" && payload.Event != "comment.created" {
@@ -215,7 +220,13 @@ func (s *server) chatSyncIssueComments(ctx context.Context, record domain.ChatIn
 	}
 	slices.SortStableFunc(comments, func(a, b domain.Comment) int { return a.CreatedAt.Compare(b.CreatedAt) })
 	language := chatGroupLanguage(record, binding)
-	users, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "users")
+	users, handled, err := s.chatCardMetadata(ctx, record.WorkspaceKey, store.ChatDisplayRequest{Directory: true}, false)
+	if err != nil {
+		return err
+	}
+	if !handled {
+		users, _ = s.store.WorkspaceMetadataFields(record.WorkspaceKey, "users")
+	}
 	sent, present := 0, map[string]bool{}
 	for _, comment := range comments {
 		present[comment.ID] = true

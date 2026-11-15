@@ -1,0 +1,20 @@
+{
+  "source": "server/paged_realtime.go",
+  "unmigrated": 0,
+  "consumers": {
+    "pagedPresenceFor": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "SW62 replaces each bounded DocumentByID predicate with an independently owned current installed first ID-or-current-slug header containing only literal documentRole inputs. Supplied policy retains its original generation and each document lookup retains its separate current-registry selection. Headers close within each predicate; read failures propagate and the response writer returns 503 for cancellation/admission/coverage failures. The shared roster is cloned before deletion and original presence payloads and order survive filtering. The 520-case warm/reloaded HTTP differential covers the complete existing principal/API-key matrix, document/issue/route filters, explicit/inherited grants, missing records/teams, current/previous slugs and update/removal response paths; direct checks prove shared-roster immutability, cancellation propagation, zero ownership leaks and zero full decodes. Tier A SW64 separately proves header source and admission semantics normally, persistently and under race.",
+      "accessors": [
+        "BeginPresenceDocumentRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Filters realtime presence responses and shared stream rosters for each viewer.",
+      "callers": [
+        "server/server.pagedPresence",
+        "server/server.streamRealtime"
+      ]
+    }
+  }
+}

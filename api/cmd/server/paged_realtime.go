@@ -55,13 +55,35 @@ func (s *server) pagedPresenceFor(r *http.Request, data domain.Bootstrap, query 
 			data.Issues = append(data.Issues, domain.Issue{ID: id})
 		}
 	}
-	values = slices.DeleteFunc(slices.Clone(values), func(item domain.Presence) bool {
-		if item.DocumentID == "" {
-			return false
+	if s.store.BoundedMetadataEnabled() {
+		var readErr error
+		values = slices.DeleteFunc(slices.Clone(values), func(item domain.Presence) bool {
+			if item.DocumentID == "" || readErr != nil {
+				return false
+			}
+			read, found, err := s.store.BeginPresenceDocumentRead(r.Context(), workspaceKey(r), item.DocumentID)
+			if err != nil {
+				readErr = err
+				return true
+			}
+			if !found {
+				return true
+			}
+			defer read.Close()
+			return !read.Found || documentRole(s, data, read.Document) == "none"
+		})
+		if readErr != nil {
+			return nil, readErr
 		}
-		document, ok := s.store.DocumentByID(workspaceKey(r), item.DocumentID)
-		return !ok || documentRole(s, data, document) == "none"
-	})
+	} else {
+		values = slices.DeleteFunc(slices.Clone(values), func(item domain.Presence) bool {
+			if item.DocumentID == "" {
+				return false
+			}
+			document, ok := s.store.DocumentByID(workspaceKey(r), item.DocumentID)
+			return !ok || documentRole(s, data, document) == "none"
+		})
+	}
 	return filterPresenceForViewer(data, values), nil
 }
 
@@ -294,6 +316,11 @@ func (s *server) writePresenceResponse(w http.ResponseWriter, r *http.Request, p
 		var err error
 		presence, err = s.pagedPresence(r, presence)
 		if err != nil {
+			if s.store.BoundedMetadataEnabled() && (r.Context().Err() != nil || errors.Is(err, store.ErrMetadataWorkBudget) ||
+				errors.Is(err, store.ErrMetadataPageBudget) || errors.Is(err, store.ErrBoundedMetadataCoverage)) {
+				writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
+				return
+			}
 			issueRecordsError(w, err)
 			return
 		}

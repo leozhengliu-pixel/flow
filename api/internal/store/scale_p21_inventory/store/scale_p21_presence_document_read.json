@@ -1,0 +1,20 @@
+{
+  "source": "store/scale_p21_presence_document_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginPresenceDocumentRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "SW64 proves this trusted installed reader preserves the literal DocumentByID first ID-or-current-slug occurrence, including collisions, duplicate/empty/NUL references, and ignoring previous or suffix slugs. The owned projection retains only ID/SlugID, Creator.ID, TeamIDs, InheritedTeamIDs and ordered permission subject/role fields, preserving nil/empty collections. It intentionally removes incoming source pins and borrowed work leases because the original accessor independently observes the current installed registry and current default key. Independent admission remains held until idempotent Close; cancellation/quota/partial failures release all selections and source descriptors. Native literal parity, live/closed old pins, default-key changes, concurrent readers and warm/reloaded 10x unrelated bodies pass ordinary, persistent SQLite count2 and race runs. Admitted work is stable with zero SQL/full decodes/leaks. Authorization remains at the caller's literal documentRole boundary.",
+      "accessors": [
+        "BeginInstalledMetadataRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Body-free document-role inputs for normal realtime presence permission and roster filtering.",
+      "callers": [
+        "server/server.presenceDocumentPermission",
+        "server/server.pagedPresenceFor"
+      ]
+    }
+  }
+}
