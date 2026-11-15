@@ -18,14 +18,15 @@ import (
 // Data preserves JSON, not native timestamp identity, and must not become a
 // mutation input or escape this lifetime, including while encoding a response.
 type ResourceRead struct {
-	Data    domain.Bootstrap
-	Allowed bool
-	mu      sync.Mutex
-	closed  bool
-	store   *SQLiteStore
-	source  *metadataLogicalSource
-	release []func()
-	buffer  [4096]byte
+	Data        domain.Bootstrap
+	Allowed     bool
+	mu          sync.Mutex
+	closed      bool
+	store       *SQLiteStore
+	source      *metadataLogicalSource
+	release     []func()
+	jsonStrings *metadataJSONStringScope
+	buffer      [4096]byte
 }
 
 type resourceOwnedReadKey struct{}
@@ -41,6 +42,10 @@ func (r *ResourceRead) Close() {
 	}
 	r.closed = true
 	r.Data, r.Allowed = domain.Bootstrap{}, false
+	if r.jsonStrings != nil {
+		r.jsonStrings.Close()
+		r.jsonStrings = nil
+	}
 	if r.source != nil {
 		r.source.Release()
 		r.source = nil

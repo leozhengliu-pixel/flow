@@ -72,13 +72,15 @@ func (r *InstalledMetadataRead) StreamFieldJSON(ctx context.Context, field strin
 }
 
 type logicalJSONStream struct {
-	ctx    context.Context
-	owner  *ResourceRead
-	view   *WebhookAggregateRead
-	out    *bufio.Writer
-	stage  *sw26MigrationStage
-	mapID  int64
-	buffer [32 << 10]byte
+	ctx     context.Context
+	owner   *ResourceRead
+	view    *WebhookAggregateRead
+	out     *bufio.Writer
+	stage   *sw26MigrationStage
+	mapID   int64
+	buffer  [32 << 10]byte
+	replace func(metadataLogicalNode) (metadataLogicalNode, error)
+	rewrite MetadataJSONRewriter
 }
 
 func (s *logicalJSONStream) text(value string) error {
@@ -100,6 +102,12 @@ func (s *logicalJSONStream) write(value webhookJSONValue, depth int) error {
 		return ErrMetadataWorkBudget
 	}
 	var err error
+	if s.replace != nil {
+		value.node, err = s.replace(value.node)
+		if err != nil {
+			return err
+		}
+	}
 	value, err = s.view.unwrap(s.ctx, value)
 	if err != nil {
 		return err
@@ -127,6 +135,11 @@ func (s *logicalJSONStream) write(value webhookJSONValue, depth int) error {
 	}
 	if value.quoted {
 		return s.quoted(value, depth)
+	}
+	if s.rewrite != nil {
+		if handled, err := s.rewriteNode(node); handled || err != nil {
+			return err
+		}
 	}
 	switch typ {
 	case reflect.TypeFor[json.RawMessage]():
@@ -648,6 +661,14 @@ func (s *logicalJSONStream) string(input io.Reader) error {
 }
 
 func (s *logicalJSONStream) stringString(value string) error {
+	if s.rewrite != nil && strings.Contains(value, "/uploads/") {
+		source, err := newMetadataJSONStringSource(s.ctx, s.owner, strings.NewReader(value), int64(len(value)), metadataJSONStringQuoted)
+		if err != nil {
+			return err
+		}
+		defer source.Close()
+		return s.rewrite(s.ctx, source, s.out)
+	}
 	return s.string(strings.NewReader(value))
 }
 

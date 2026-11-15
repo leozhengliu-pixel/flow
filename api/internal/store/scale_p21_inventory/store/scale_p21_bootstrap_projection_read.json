@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_bootstrap_projection_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginIssueBootstrapRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns the literal installed generation for ordinary/development HTTP bootstrap, or matching authenticated caller metadata and its borrowed SQL authority snapshot. SQL ownership remains independent of metadata source matching. Clears five heavy ordinary collections and seven handler-dead fields before typed projection; live directory and principal rows are admitted before ResolveAccess/PagedWorkspaceMetadata. Opaque document/project/initiative/loop bodies and raw trash retain occurrence provenance through the shared body adapter, while the literal viewer projector retains permissions, references, ordering and nil/empty shapes. Policy memo and access values stay owned through final encoding and clear on Close. Shared SW138/SW144 prove body binding and seekable string/raw/base64 signing sources; SW143 covers exact projected-header JSON, forty principal/credential pairs, warm/reloaded/full handoffs, MaxOpenConnections=1 borrowed/default/cross-workspace sources, legal large directories, 10x bodies, cancellation, quotas, output transfer and release. SW145 separately proves the complete registered HTTP response, including signing and spool lifetimes. This does not certify the typed in-process bootstrap helper or general outline bootstrap.",
+      "accessors": ["BeginInstalledMetadataRead", "PagedWorkspaceMetadata"],
+      "temperature": "hot",
+      "temperatureReason": "Owned projected source and streaming output for the paged issue bootstrap HTTP route.",
+      "callers": ["server/server.issueRecordsBootstrapBounded"]
+    }
+  }
+}

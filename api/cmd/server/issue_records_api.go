@@ -183,6 +183,10 @@ func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.issueRecordsBootstrapBounded(w, r)
+		return
+	}
 	started := time.Now()
 	data, ok := s.issueRecordsBootstrapData(w, r)
 	if !ok {

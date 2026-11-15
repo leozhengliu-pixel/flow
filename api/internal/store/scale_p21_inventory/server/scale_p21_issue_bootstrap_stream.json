@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_issue_bootstrap_stream.go",
+  "unmigrated": 0,
+  "consumers": {
+    "issueRecordsBootstrapBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The bounded-only HTTP branch owns BeginIssueBootstrapRead through all literal credential filtering, preference/team visibility, three projection modes, release/cycle/calendar/loop decoration and final output. Shared streamed loop presentation avoids interpreting opaque instructions. Logical encoding binds every body before writing and uses the existing hydrated URL signer per encoded leaf; existing outer spools retain the producer through direct overflow and release it before detached replay. Missing development workspaces keep the literal 404, authenticated denial stays 403, and caller SQL snapshots keep their original authority lifetime. SW145 compares fifty-five actual registered legacy/bounded responses byte-for-byte with exact statuses and headers except numeric timing durations, across principals/keys, warm/reloaded and public SQL handoffs, all projection modes, cross-workspace denial, development defaults, and signed zero/small/full spool budgets. Producer work, request scopes, files and spool allowance release exactly. The original flag-off handler and separately guarded typed chat bootstrap helper remain literal.",
+      "accessors": ["BeginIssueBootstrapRead"],
+      "temperature": "hot",
+      "temperatureReason": "Paged issue list, board and issue detail bootstrap HTTP response.",
+      "callers": ["GET /api/issue-records/bootstrap -> issueRecordsBootstrap"]
+    }
+  }
+}
