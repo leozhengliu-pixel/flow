@@ -101,7 +101,7 @@ func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request)
 	}
 	var attachment domain.Attachment
 	embed := input.Embed == nil || *input.Embed
-	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), issueID), workspaceKey(r), "attachment.created", issueID, map[string]string{"name": filename, "sourceUrl": raw}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(s.issueAttachmentContext(r.Context()), issueID), workspaceKey(r), "attachment.created", issueID, map[string]string{"name": filename, "sourceUrl": raw}, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, issueID)
 		if err != nil {
 			return err

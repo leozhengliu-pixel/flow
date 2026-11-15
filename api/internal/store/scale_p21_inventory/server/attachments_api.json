@@ -1,10 +1,11 @@
 {
   "source": "server/attachments_api.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "saveLinkAttachment": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Uses the proven declared scoped attachment upsert profile without changing its earlier snapshot-derived event, transactional URL recheck, append order, attribution or payload. SW150 compares real authorized handler/helper outputs, saved attachments, canonical SQL, events and complete webhook/realtime envelopes, including stale create/update directions; SW149 independently proves the shared writer's full effects, warm/reloaded ownership and refusal paths. Existing public query/editor checks and native middleware refusal remain exact. Other caller authorization helpers retain their own guards; off context is literal.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -19,7 +20,8 @@
     },
     "updateLinkAttachment": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Uses the proven strict metadata-only scoped attachment profile, preserving first matching attachment, missing/no-op responses, attribution and unchanged event/payload. SW150 compares real authorized native/alias output and full SQL/event/webhook/realtime effects with the legacy path, including permission refusals. SW149 covers the executor's warm/reloaded state, cancellation, release and strict content/activity rejection. Existing middleware behavior is preserved and flag-off context is literal.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

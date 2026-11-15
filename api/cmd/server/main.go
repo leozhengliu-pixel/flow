@@ -5530,7 +5530,7 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var attachment domain.Attachment
-	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), id), workspaceKey(r), "attachment.created", id, map[string]string{"name": header.Filename}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(s.issueAttachmentContext(r.Context()), id), workspaceKey(r), "attachment.created", id, map[string]string{"name": header.Filename}, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
@@ -5565,7 +5565,7 @@ func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
 		title = parsed.Host
 	}
 	var attachment domain.Attachment
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.link_created", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(s.issueAttachmentContext(r.Context()), workspaceKey(r), "issue.link_created", id, input, func(data *domain.Bootstrap) error {
 		issue, issueErr := issueByID(data, id)
 		if issueErr != nil {
 			return issueErr

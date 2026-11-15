@@ -39,12 +39,21 @@ var bootstrapBodyPaths = [][]string{
 	{"Loops", "*", "Description"},
 	{"Loops", "*", "InstructionsData"},
 	{"Trash", "*", "Payload"},
+	{"ProjectUpdates", "{}", "*", "Body"},
+	{"ProjectUpdates", "{}", "*", "BodyData"},
+	{"ProjectUpdates", "{}", "*", "Comments", "*", "Body"},
+	{"ProjectUpdates", "{}", "*", "Comments", "*", "BodyData"},
+	{"InitiativeUpdates", "{}", "*", "Body"},
+	{"InitiativeUpdates", "{}", "*", "BodyData"},
+	{"InitiativeUpdates", "{}", "*", "Comments", "*", "Body"},
+	{"InitiativeUpdates", "{}", "*", "Comments", "*", "BodyData"},
 }
 
 type bootstrapBodyPathPart struct {
 	field string
 	index int
 	row   bool
+	entry bool
 }
 
 type bootstrapBodyPath struct {
@@ -73,6 +82,16 @@ func (p bootstrapBodyPath) row(index int) bootstrapBodyPath {
 	return p
 }
 
+func (p bootstrapBodyPath) entry(index int) bootstrapBodyPath {
+	if p.count == len(p.parts) {
+		p.dead = true
+		return p
+	}
+	p.parts[p.count] = bootstrapBodyPathPart{entry: true, index: index}
+	p.count++
+	return p
+}
+
 func (p bootstrapBodyPath) matches(pattern []string, complete bool) bool {
 	if p.dead || p.count > len(pattern) || complete && p.count != len(pattern) {
 		return false
@@ -83,7 +102,11 @@ func (p bootstrapBodyPath) matches(pattern []string, complete bool) bool {
 			if !part.row {
 				return false
 			}
-		} else if part.row || part.field != pattern[index] {
+		} else if pattern[index] == "{}" {
+			if !part.entry {
+				return false
+			}
+		} else if part.row || part.entry || part.field != pattern[index] {
 			return false
 		}
 	}
@@ -120,6 +143,10 @@ func (p bootstrapBodyPath) text() string {
 			text.WriteByte('[')
 			text.WriteString(strconv.Itoa(part.index))
 			text.WriteByte(']')
+		} else if part.entry {
+			text.WriteByte('{')
+			text.WriteString(strconv.Itoa(part.index))
+			text.WriteByte('}')
 		} else {
 			if index != 0 {
 				text.WriteByte('.')
@@ -232,6 +259,23 @@ func (p *bootstrapBodyProjection) projectedWork(ctx context.Context, node metada
 	if err := bootstrapBodyAddWork(total, uint64(node.typ.Size())*8+512); err != nil {
 		return err
 	}
+	if node.typ.Kind() == reflect.Map {
+		if node.typ.Key().Kind() != reflect.String {
+			return ErrBoundedMetadataCoverage
+		}
+		ordinal := 0
+		return node.MapEntries(ctx, func(key, child metadataLogicalNode) error {
+			if key.cost > (metadataWorkBytes-512)/8 {
+				return ErrMetadataWorkBudget
+			}
+			if err := bootstrapBodyAddWork(total, key.cost*8+512); err != nil {
+				return err
+			}
+			next := path.entry(ordinal)
+			ordinal++
+			return p.projectedWork(ctx, child, next, total)
+		})
+	}
 	return node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
 		next := path
 		if node.typ.Kind() == reflect.Struct {
@@ -341,6 +385,30 @@ func (p *bootstrapBodyProjection) project(ctx context.Context, node metadataLogi
 				result.Index(index).Set(value)
 			}
 			return err
+		})
+		return result, err
+	case reflect.Map:
+		if node.typ.Key().Kind() != reflect.String {
+			return reflect.Value{}, ErrBoundedMetadataCoverage
+		}
+		count, present, err := bootstrapBodyCollectionSize(ctx, node)
+		if err != nil || !present {
+			return result, err
+		}
+		result.Set(reflect.MakeMapWithSize(node.typ, count))
+		ordinal := 0
+		err = node.MapEntries(ctx, func(key, child metadataLogicalNode) error {
+			native, err := key.Value(ctx, int(key.cost))
+			if err != nil {
+				return err
+			}
+			value, err := p.project(ctx, child, path.entry(ordinal))
+			ordinal++
+			if err != nil {
+				return err
+			}
+			result.SetMapIndex(native, value)
+			return nil
 		})
 		return result, err
 	default:
@@ -675,6 +743,7 @@ func (p *bootstrapBodyProjection) bindNode(ctx context.Context, value reflect.Va
 				return err
 			}
 		}
+		ordinal := 0
 		return node.MapEntries(ctx, func(key, child metadataLogicalNode) error {
 			native, err := key.Value(ctx, int(key.cost))
 			if err != nil {
@@ -685,7 +754,12 @@ func (p *bootstrapBodyProjection) bindNode(ctx context.Context, value reflect.Va
 				return ErrBoundedMetadataCoverage
 			}
 			next := path
-			next.dead = true
+			if path.containsOpaque() {
+				next = path.entry(ordinal)
+			} else {
+				next.dead = true
+			}
+			ordinal++
 			return p.bindNode(ctx, item, child, next, depth+1)
 		})
 	}

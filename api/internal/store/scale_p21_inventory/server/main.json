@@ -1,6 +1,6 @@
 {
   "source": "server/main.go",
-  "unmigrated": 71,
+  "unmigrated": 69,
   "consumers": {
     "accountBootstrap": {
       "owner": "P21",
@@ -54,7 +54,8 @@
     },
     "createAttachment": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Only marks the original scoped upload callback for the proven attachment executor; file creation, markdown embedding, cycle automation, activity and response behavior remain unchanged. SW150 compares real multipart uploads through the alias gate, disabled/default embed and affected-team current-cycle selection, exact canonical/event/webhook/realtime effects, and native middleware refusals. SW149 proves the shared writer's warm/reloaded inputs, admission, cancellation and release. Flag-off context is literal.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -190,7 +191,8 @@
     },
     "createIssueLink": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Keeps the original unscoped ordinary issue.link_created topology, aggregate and payload while selecting the declared attachment profile of the proven full legacy writer. It retains native counts/progress, PreviousValues, account and postcommit effects. SW150 compares actual authorized query/editor handler output and complete effects for native/alias links, while retaining the unchanged native outer middleware refusal witness. SW149 proves ordinary callback and physical effect equivalence, warm/reloaded values, retries and ownership. Flag-off context is literal.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

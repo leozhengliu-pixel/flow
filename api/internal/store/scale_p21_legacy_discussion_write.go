@@ -309,7 +309,8 @@ func boundedLegacyIssueEvent(event string) bool {
 
 func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspace, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	issueID := mutationAggregateID(ctx)
-	if !s.BoundedMetadataEnabled() || !boundedLegacyIssueEvent(eventType) || issueID == "" ||
+	attachment := boundedIssueAttachmentEvent(ctx, eventType) && !UsesIssueRecordMutations(ctx)
+	if !s.BoundedMetadataEnabled() || !(boundedLegacyIssueEvent(eventType) || attachment) || issueID == "" ||
 		mutate == nil || !metadataOutputOwnerPresent(ctx) || UsesIssueRecordMutations(ctx) {
 		return ErrBoundedMetadataCoverage
 	}
@@ -366,6 +367,7 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 			return err
 		}
 		attempt.inputs.issueReaction = eventType == "issue.reaction_toggled"
+		attempt.inputs.issueAttachment = attachment
 		transferred := false
 		defer func() {
 			if !transferred {
@@ -420,7 +422,7 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 			}
 		}
 		var progress *legacyProgressImage
-		if eventType == "issue.reaction_toggled" {
+		if eventType == "issue.reaction_toggled" || attachment {
 			progress, err = s.prepareLegacyProgressImage(ctx, callback, time.Now().UTC())
 			if err != nil {
 				return err

@@ -1575,6 +1575,12 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 		if desktopNotificationAcknowledgement(ctx) && eventType == "notification.desktop_acknowledged" {
 			return s.mutateBoundedDesktopAck(ctx, workspaceKey, eventType, payload, mutate)
 		}
+		if boundedIssueAttachmentEvent(ctx, eventType) {
+			if UsesIssueRecordMutations(ctx) {
+				return s.mutateBoundedIssueAttachment(ctx, workspaceKey, eventType, payload, mutate)
+			}
+			return s.mutateBoundedLegacyDiscussion(ctx, workspaceKey, eventType, payload, mutate)
+		}
 		if IsIssueDiscussionMutation(ctx) && boundedIssueDiscussionEvent(eventType) {
 			return s.mutateBoundedIssueDiscussion(ctx, workspaceKey, eventType, payload, mutate)
 		}

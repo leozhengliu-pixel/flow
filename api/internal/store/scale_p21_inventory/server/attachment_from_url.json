@@ -1,10 +1,11 @@
 {
   "source": "server/attachment_from_url.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "createAttachmentFromURL": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Only marks the original single-issue scoped callback for the proven attachment writer. URL fetching, upload validation, default/disabled markdown embed, file lifecycle, event payload and synchronous output stay unchanged. SW150 uses a local HTTP fetch and full alias gate to compare responses, canonical rows and event/webhook/realtime envelopes, with selected-empty refusals and the native middleware refusal witness. SW149 proves shared callback closure, affected-team update selections, warm/reloaded state and cancellation/release. Flag-off context is literal.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

@@ -19,6 +19,7 @@ type legacyDiscussionInputs struct {
 	IssueOrdinals, NotificationOrdinals, DeliveryOrdinals, ThreadSubscriptionOrdinals []int
 	input                                                                             *issueHotInputs
 	issueReaction                                                                     bool
+	issueAttachment                                                                   bool
 	once                                                                              sync.Once
 }
 
@@ -406,6 +407,11 @@ func (r *legacyDiscussionInputs) MergeCallback(ctx context.Context) (_ *metadata
 		return nil, err
 	}
 	defer original.Close()
+	if r.issueAttachment {
+		if err := validateScopedIssueAttachment(*original.Data, *r.Data, "issue.link_created", false); err != nil {
+			return nil, err
+		}
+	}
 	if !reflect.DeepEqual(r.IssueOrdinals, original.IssueOrdinals) || !reflect.DeepEqual(r.NotificationOrdinals, original.NotificationOrdinals) ||
 		!reflect.DeepEqual(r.DeliveryOrdinals, original.DeliveryOrdinals) || !reflect.DeepEqual(r.ThreadSubscriptionOrdinals, original.ThreadSubscriptionOrdinals) ||
 		r.TargetIssueOrdinal != original.TargetIssueOrdinal || r.CommentsPresent != original.CommentsPresent || r.ActivitiesPresent != original.ActivitiesPresent {
@@ -418,7 +424,7 @@ func (r *legacyDiscussionInputs) MergeCallback(ctx context.Context) (_ *metadata
 		case "comments", "activities", "notifications", "notificationDeliveries", "threadSubscriptions":
 			continue
 		case "issues":
-			if r.issueReaction {
+			if r.issueReaction || r.issueAttachment {
 				continue
 			}
 		}
@@ -502,7 +508,7 @@ func (r *legacyDiscussionInputs) MergeCallback(ctx context.Context) (_ *metadata
 		}
 		changes[name] = patch
 	}
-	if r.issueReaction {
+	if r.issueReaction || r.issueAttachment {
 		index, _, _ := metadataLogicalField("issues")
 		old, updated := before.Field(index), next.Field(index)
 		if old.Len() != updated.Len() {
@@ -689,8 +695,11 @@ func (r *legacyDiscussionInputs) mergeGroup(ctx context.Context, frames *metadat
 		}
 	}
 	for index := before.Len(); index < next.Len(); index++ {
-		if name == "activities" && !boundedIssueDiscussionEvent(next.Index(index).Interface().(domain.ActivityEvent).Type) {
-			return patch, false, ErrBoundedMetadataCoverage
+		if name == "activities" {
+			event := next.Index(index).Interface().(domain.ActivityEvent).Type
+			if !boundedIssueDiscussionEvent(event) && !(r.issueAttachment && event == "issue.link_created") {
+				return patch, false, ErrBoundedMetadataCoverage
+			}
 		}
 		node, err := r.nativeFrame(ctx, frames, next.Index(index))
 		if err != nil {
@@ -752,6 +761,9 @@ func (r *legacyDiscussionInputs) mergeFlat(ctx context.Context, frames *metadata
 	} else if name == "issues" && r.issueReaction {
 		ordinals = r.IssueOrdinals
 		allowed = []string{"Reactions", "Version", "UpdatedAt"}
+	} else if name == "issues" && r.issueAttachment {
+		ordinals = r.IssueOrdinals
+		allowed = []string{"Attachments"}
 	}
 	deltas := map[int]legacyDiscussionRecordDelta{}
 	for index := range before.Len() {

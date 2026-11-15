@@ -145,7 +145,7 @@ func (s *server) saveLinkAttachment(ctx context.Context, r *http.Request, worksp
 	}
 	var saved domain.Attachment
 	created := false
-	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, issue.ID), workspace, eventType, issue.ID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(s.issueAttachmentUpsertContext(ctx), issue.ID), workspace, eventType, issue.ID, input, func(data *domain.Bootstrap) error {
 		target, err := issueByID(data, issue.ID)
 		if err != nil {
 			return err
@@ -193,7 +193,7 @@ func (s *server) updateLinkAttachment(w http.ResponseWriter, r *http.Request) {
 	}
 	attachmentID := r.PathValue("attachmentId")
 	var saved domain.Attachment
-	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), issue.ID), workspaceKey(r), "attachment.updated", issue.ID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(s.issueAttachmentContext(r.Context()), issue.ID), workspaceKey(r), "attachment.updated", issue.ID, input, func(data *domain.Bootstrap) error {
 		target, err := issueByID(data, issue.ID)
 		if err != nil {
 			return err

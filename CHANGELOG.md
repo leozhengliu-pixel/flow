@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- File and link attachments preserve scoped and ordinary transaction effects, stale upsert events and markdown cycle automation through owned issue inputs. Bootstrap update-map bodies retain streamed provenance. Bounded metadata stays off by default.
 - Paged issue bootstrap streams owned document, project, initiative and loop bodies, preserving permissions, signed file URLs and response spool fallback. Bounded metadata stays off by default.
 - Document drafts and history retain owned selections and exact trash references; upload cleanup preserves retained and foreign attachments. Desktop acknowledgements retain legacy transaction effects, and resource policy reads reuse certified installed generations with live authority checks. Bounded metadata stays off by default.
 - Account responses and resource windows retain admitted native values through encoding, while reaction writers preserve ordinary and scoped progress, counts, conflicts and publication effects. Bounded metadata stays off by default.

@@ -16,8 +16,9 @@ import (
 
 type boundedIssueReactionAttempt struct {
 	*boundedDiscussionAttempt
-	content *issueChildContentRows
-	once    sync.Once
+	content          *issueChildContentRows
+	attachmentInputs *issueHotInputs
+	once             sync.Once
 }
 
 func (r *boundedIssueReactionAttempt) Close() {
@@ -30,19 +31,24 @@ func (r *boundedIssueReactionAttempt) Close() {
 			r.content.Close()
 			r.content = nil
 		}
+		if r.attachmentInputs != nil {
+			r.attachmentInputs.close()
+			r.attachmentInputs = nil
+		}
 	})
 }
 
 // This adapter retains mutateIssueScope's canonical issue/content preimage.
 // It intentionally has neither a discussion marker nor the full writer's
 // resource-count, PreviousValues, account-metadata or last-workspace effects.
-func (s *SQLiteStore) mutateBoundedIssueReaction(ctx context.Context, workspace, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspace, eventType string, payload any, profile scopedIssuePointProfile, mutate func(*domain.Bootstrap) (string, error)) error {
 	ids, _ := ctx.Value(issueRecordMutationContext{}).([]string)
 	if s == nil || !s.BoundedMetadataEnabled() || !UsesIssueRecordMutations(ctx) || IsIssueDiscussionMutation(ctx) ||
-		eventType != "issue.reaction_toggled" || len(ids) != 1 || ids[0] == "" || mutate == nil || issueRenumbering(ctx) ||
+		!scopedIssuePointEvent(ctx, eventType, profile) || len(ids) != 1 || ids[0] == "" || mutate == nil || issueRenumbering(ctx) ||
 		!metadataOutputOwnerPresent(ctx) {
 		return fmt.Errorf("%w: unsupported bounded scoped issue reaction", ErrBoundedMetadataCoverage)
 	}
+	attachment := profile == scopedIssueAttachmentProfile
 	if workspace == "" {
 		s.mu.RLock()
 		workspace = s.lastWorkspaceKey
@@ -214,6 +220,12 @@ func (s *SQLiteStore) mutateBoundedIssueReaction(ctx context.Context, workspace,
 		if len(data.Issues) > 0 {
 			target = data.Issues[0]
 		}
+		if attachment && eventType == "attachment.created" && !issueAttachmentUpsertMutation(ctx) {
+			attempt.attachmentInputs, err = s.loadIssueAttachmentInputs(ctx, workspace, &data, target)
+			if err != nil {
+				return err
+			}
+		}
 		attempt.lookups, err = newIssueEditorLookups(ctx, attempt.inputs, tx, workspace, data.Workspace.ID, target)
 		if err != nil {
 			return err
@@ -251,7 +263,12 @@ func (s *SQLiteStore) mutateBoundedIssueReaction(ctx context.Context, workspace,
 		if callbackErr != nil {
 			return callbackErr
 		}
-		if err := validateScopedIssueReaction(beforeCallback, data); err != nil {
+		if attachment {
+			err = validateScopedIssueAttachment(beforeCallback, data, eventType, issueAttachmentUpsertMutation(ctx))
+		} else {
+			err = validateScopedIssueReaction(beforeCallback, data)
+		}
+		if err != nil {
 			return err
 		}
 		if err := attempt.reserveContent(ctx, data, payload); err != nil {
@@ -299,12 +316,20 @@ func (s *SQLiteStore) mutateBoundedIssueReaction(ctx context.Context, workspace,
 			}
 			reflect.ValueOf(&data).Elem().Field(index).Set(value)
 		}
-		progress, err := s.prepareScopedIssueReactionProgress(ctx, restored, loaded, data.Issues)
-		if err != nil {
-			return err
+		var progress *scopedIssueReactionProgress
+		if progressEvent(eventType) {
+			progress, err = s.prepareScopedIssueReactionProgress(ctx, restored, loaded, data.Issues)
+			if err != nil {
+				return err
+			}
+			defer progress.Close()
 		}
-		defer progress.Close()
-		merged, err := s.persistLegacyMetadataImageWithProgress(ctx, tx, workspace, stored, restored, progress)
+		var merged *metadataLogicalSource
+		if progress != nil {
+			merged, err = s.persistLegacyMetadataImageWithProgress(ctx, tx, workspace, stored, restored, progress)
+		} else {
+			merged, err = s.persistLegacyMetadataImage(ctx, tx, workspace, stored, restored)
+		}
 		if err != nil {
 			return err
 		}
