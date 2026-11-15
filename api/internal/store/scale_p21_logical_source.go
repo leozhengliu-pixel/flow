@@ -638,6 +638,15 @@ func (b *metadataLogicalBuilder) writeTime(node metadataLogicalNode, value time.
 	location := value.Location()
 	receipt := slices.Index(b.storage.locations, location)
 	if location != time.UTC && location != metadataLogicalProcessLocal && receipt < 0 {
+		inherited, err := b.inheritTimestampInputLocation(location)
+		if err != nil {
+			return node, err
+		}
+		if inherited {
+			receipt = slices.Index(b.storage.locations, location)
+		}
+	}
+	if location != time.UTC && location != metadataLogicalProcessLocal && receipt < 0 {
 		node.unavailable, node.blocked = true, true
 		return b.writeWireTime(node, value)
 	}

@@ -59,10 +59,13 @@ func (s *metadataLogicalSource) Transform(ctx context.Context, transform func(st
 			return err
 		}
 		defer part.Close()
-		part.storage.types = slices.Clone(original.source.types)
-		part.storage.times = slices.Clone(original.source.times)
-		if err := part.inheritLocations(original.source); err != nil {
-			return err
+		native, nativeReplacement := node.(metadataAggregateNativeNode)
+		if !nativeReplacement || !native.value.IsZero() {
+			part.storage.types = slices.Clone(original.source.types)
+			part.storage.times = slices.Clone(original.source.times)
+			if err := part.inheritLocations(original.source); err != nil {
+				return err
+			}
 		}
 		written, err := part.writeAggregateNode(node, 0)
 		if err != nil {

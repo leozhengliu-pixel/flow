@@ -131,6 +131,9 @@ func (r *IssueWriteAuthorizationRead) loadIssueHeaders(ctx context.Context) erro
 		if page == 0 {
 			firstCount = len(r.Data.Issues) - firstStart
 		}
+		if r.recurrenceTiming {
+			break
+		}
 		// Reverse's initial cursor is empty in the original helper, so its
 		// first QueryIssueRecords result reports HasMore=false.
 		if !more || limit == 0 || query.Reverse {
@@ -144,6 +147,9 @@ func (r *IssueWriteAuthorizationRead) loadIssueHeaders(ctx context.Context) erro
 		headersLast := headers[limit-1]
 		headersLast.id = last.ID
 		ctx = context.WithValue(ctx, issueAuthorizationCursorKey{}, headersLast)
+	}
+	if r.recurrenceTiming {
+		return nil
 	}
 	if err := r.owner.reserve(ctx, uint64(firstCount)*128+4096); err != nil {
 		return err

@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Recurring schedule normalization retains bounded candidate reads and exact scoped timing writes, preserving clocks, timezones, previous values and publication. Bounded metadata stays off by default.
 - Comment-action lists and start gates retain owned issue inputs and fresh actor preferences, preserving raw proposal validation and handoff order. Bounded metadata stays off by default.
 - File and link attachments preserve scoped and ordinary transaction effects, stale upsert events and markdown cycle automation through owned issue inputs. Bootstrap update-map bodies retain streamed provenance. Bounded metadata stays off by default.
 - Paged issue bootstrap streams owned document, project, initiative and loop bodies, preserving permissions, signed file URLs and response spool fallback. Bounded metadata stays off by default.

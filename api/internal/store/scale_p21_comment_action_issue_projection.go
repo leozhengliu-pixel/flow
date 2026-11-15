@@ -19,7 +19,17 @@ func commentActionAuthorizationFields(base map[reflect.Type][]string) map[reflec
 var issueAuthorizationCommentActionFields = commentActionAuthorizationFields(issueAuthorizationFields)
 var issueAuthorizationFullCommentActionFields = commentActionAuthorizationFields(issueAuthorizationFullPermissionFields)
 
+var issueAuthorizationRecurrenceTimingFields = func() map[reflect.Type][]string {
+	fields := maps.Clone(issueAuthorizationFields)
+	issue := reflect.TypeFor[domain.Issue]()
+	fields[issue] = append(slices.Clone(fields[issue]), "Recurrence", "DueDate", "NextOccurrenceAt")
+	return fields
+}()
+
 func (r *IssueWriteAuthorizationRead) projectionFields() map[reflect.Type][]string {
+	if r.recurrenceTiming {
+		return issueAuthorizationRecurrenceTimingFields
+	}
 	if r.commentActionValidation {
 		if r.fullPermissions {
 			return issueAuthorizationFullCommentActionFields

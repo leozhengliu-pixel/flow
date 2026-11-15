@@ -27,6 +27,7 @@ type IssueWriteAuthorizationRead struct {
 	query                   IssueRecordQuery
 	fullPermissions         bool
 	commentActionValidation bool
+	recurrenceTiming        bool
 	once                    sync.Once
 }
 

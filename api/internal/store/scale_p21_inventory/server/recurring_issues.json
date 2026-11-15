@@ -1,6 +1,6 @@
 {
   "source": "server/recurring_issues.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "createRecurringOccurrence": {
       "owner": "P21",
@@ -17,7 +17,8 @@
     },
     "normalizeLegacyRecurringIssues": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Its bounded branch retains admitted sparse-index IDs, the literal first summary page and current per-team timezone cache, then uses an exact timing-only MutationScope writer. It preserves the original captured clock, payload, partial per-issue semantics, upgrade logs and no-op behavior; the entire off body stays literal. SW156 compares 11 actual ticker pairs including DST, timezone changes, multiple teams, missing/no-op/cancellation and full row/event/publication effects. SW157 proves input source/snapshot/order/bounds/ownership; SW155 proves the original scoped writer's native actor, PreviousValues, account/progress/publication effects with warm/reloaded differential, persistent SQLite twice and race. Instance creation remains independently guarded.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

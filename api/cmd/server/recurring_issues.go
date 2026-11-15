@@ -193,6 +193,9 @@ func normalizeRecurrenceTiming(issue *domain.Issue, loc *time.Location) bool {
 // need the upgrade are written, one scoped issue mutation each, so the pass is
 // idempotent and a no-op once every schedule uses the current model.
 func (s *server) normalizeLegacyRecurringIssues(ctx context.Context, key string, now time.Time) error {
+	if s.store.BoundedMetadataEnabled() {
+		return s.normalizeLegacyRecurringIssuesBounded(ctx, key, now)
+	}
 	ids, err := s.store.RecurringIssueIDs(ctx, key, time.Time{}, 0)
 	if err != nil {
 		return err

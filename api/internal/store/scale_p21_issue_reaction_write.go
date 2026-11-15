@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"sort"
 	"sync"
 	"time"
 
@@ -43,8 +44,13 @@ func (r *boundedIssueReactionAttempt) Close() {
 // resource-count, PreviousValues, account-metadata or last-workspace effects.
 func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspace, eventType string, payload any, profile scopedIssuePointProfile, mutate func(*domain.Bootstrap) (string, error)) error {
 	ids, _ := ctx.Value(issueRecordMutationContext{}).([]string)
-	if s == nil || !s.BoundedMetadataEnabled() || !UsesIssueRecordMutations(ctx) || IsIssueDiscussionMutation(ctx) ||
-		!scopedIssuePointEvent(ctx, eventType, profile) || len(ids) != 1 || ids[0] == "" || mutate == nil || issueRenumbering(ctx) ||
+	timing := profile == scopedIssueRecurrenceTimingProfile
+	validScope := UsesIssueRecordMutations(ctx) && len(ids) == 1 && ids[0] != ""
+	if timing {
+		ids, validScope = recurrenceTimingScope(ctx)
+	}
+	if s == nil || !s.BoundedMetadataEnabled() || !validScope || IsIssueDiscussionMutation(ctx) ||
+		!scopedIssuePointEvent(ctx, eventType, profile) || mutate == nil || issueRenumbering(ctx) ||
 		!metadataOutputOwnerPresent(ctx) {
 		return fmt.Errorf("%w: unsupported bounded scoped issue reaction", ErrBoundedMetadataCoverage)
 	}
@@ -60,7 +66,7 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		}
 		// The literal scoped writer resolves live membership before its
 		// first context-returning SQL operation.
-		if _, actor := actorFromContext(ctx); actor {
+		if _, actor := actorFromContext(ctx); actor && !timing {
 			return ErrAuthForbidden
 		}
 		return ctx.Err()
@@ -68,6 +74,22 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 	ctx = metadataLogicalUnpinnedContext(ctx)
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
 	var err error
+	webhookEnabled := false
+	if timing && s.webhookConfigured() {
+		webhookEnabled, err = s.boundedLegacyWebhookNeeded(ctx, workspace)
+		if err != nil {
+			return err
+		}
+	}
+	if timing {
+		ctx, _ = s.WithMetadataTimestampInputs(ctx)
+		var release func()
+		ctx, release, err = s.tryAdmitAdditionalMetadataWork(ctx, metadataTimestampInputBytes)
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	ctx, finishTimestampInputs, err := s.startMetadataTimestampInputs(ctx)
 	if err != nil {
 		return err
@@ -76,12 +98,20 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 	var event domain.DomainEvent
 	var realtime json.RawMessage
 	metadataWritten := false
+	committed := false
+	var changedIssues []string
 	traceStart(ctx, "issue")
-	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+	apply := func(ctx context.Context) error {
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
+		if timing && s.coordinator != nil {
+			reload := context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
+			if err := s.reloadResidentWorkspace(reload, workspace); err != nil {
+				return fmt.Errorf("reload workspace before mutation: %w", err)
+			}
+		}
 		if _, found := s.storedWorkspace(workspace); !found {
 			return fmt.Errorf("workspace not found")
 		}
@@ -140,11 +170,22 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 				`FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, data.Workspace.ID, actor.ID); err != nil {
 				return err
 			}
-			role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, actor.ID)
-			if err != nil || status != "active" {
-				return ErrAuthForbidden
+			if timing {
+				role, teams, applyRole, err := s.boundedLegacyActorDirectory(ctx, data.Workspace.ID, actor.ID, attempt.owner)
+				if err != nil {
+					return err
+				}
+				if applyRole {
+					data.ViewerRole = role
+				}
+				data.ViewerTeamIDs = teams
+			} else {
+				role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, actor.ID)
+				if err != nil || status != "active" {
+					return ErrAuthForbidden
+				}
+				data.ViewerRole = role
 			}
-			data.ViewerRole = role
 		}
 		tx, err := s.db.BeginTx(ctx, s.recordTxOptions())
 		if err != nil {
@@ -175,7 +216,16 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		rawBefore := make(map[string][]byte, len(records))
 		loaded := make([]domain.Issue, 0, len(records))
 		keys := make([]string, 0, len(records))
-		for id, record := range records {
+		order := make([]string, 0, len(records))
+		for id := range records {
+			order = append(order, id)
+		}
+		if timing {
+			slices.Sort(order)
+			sort.SliceStable(order, func(i, j int) bool { return records[order[i]].order < records[order[j]].order })
+		}
+		for _, id := range order {
+			record := records[id]
 			data.Issues = append(data.Issues, record.issue)
 			loaded = append(loaded, record.issue)
 			rawBefore[id] = record.raw
@@ -187,14 +237,26 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		data.NotificationDeliveries = []domain.NotificationDelivery{}
 		attempt.content = s.newIssueChildContentRows(tx, workspace)
 		if len(keys) != 0 {
-			content, err := attempt.content.load(ctx, keys[0])
+			var content domain.Bootstrap
+			if timing {
+				content, err = attempt.content.loadMutationScope(ctx, keys)
+			} else {
+				content, err = attempt.content.load(ctx, keys[0])
+			}
 			if err != nil {
 				return err
 			}
 			data.Comments, data.Activities = content.Comments, content.Activities
 			data.Notifications, data.NotificationDeliveries = content.Notifications, content.NotificationDeliveries
 		}
-		selected, err := boundedDiscussionEventSource(ctx, cloned, data)
+		beforeFrameData := data
+		if timing {
+			beforeFrameData, err = recurrenceTimingFrameData(ctx, data)
+			if err != nil {
+				return err
+			}
+		}
+		selected, err := boundedDiscussionEventSource(ctx, cloned, beforeFrameData)
 		if err != nil {
 			return err
 		}
@@ -204,6 +266,18 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 			return err
 		}
 		defer display.Release()
+		if timing {
+			var actor *domain.User
+			if value, present := actorFromContext(ctx); present {
+				actor = &value
+			}
+			prepared, err := s.prepareLegacyActorImage(ctx, display, actor)
+			if err != nil {
+				return err
+			}
+			defer prepared.Close()
+			display = prepared.Source()
+		}
 		for _, name := range []string{"issues", "comments", "activities", "notifications", "notificationDeliveries"} {
 			index, _, _ := metadataLogicalField(name)
 			value, err := attempt.owner.node(ctx, display.fields[index], false)
@@ -215,6 +289,21 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		attempt.inputs, err = s.loadIssueDiscussionInputs(ctx, workspace, &data)
 		if err != nil {
 			return err
+		}
+		if timing {
+			teams, err := attempt.inputs.keys(ctx)
+			if err != nil {
+				return err
+			}
+			for _, issue := range data.Issues {
+				if err := attempt.inputs.addKey(ctx, teams, issue.Team.ID); err != nil {
+					return err
+				}
+			}
+			if err := attempt.inputs.selectMap(ctx, "teamSettings", teams, "TeamID", "Timezone", "ResolvedSummaries"); err != nil {
+				return err
+			}
+			data.TeamSettings = attempt.inputs.data.TeamSettings
 		}
 		var target domain.Issue
 		if len(data.Issues) > 0 {
@@ -263,7 +352,9 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		if callbackErr != nil {
 			return callbackErr
 		}
-		if attachment {
+		if timing {
+			err = validateScopedIssueRecurrenceTiming(beforeCallback, data)
+		} else if attachment {
 			err = validateScopedIssueAttachment(beforeCallback, data, eventType, issueAttachmentUpsertMutation(ctx))
 		} else {
 			err = validateScopedIssueReaction(beforeCallback, data)
@@ -271,11 +362,22 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		if err != nil {
 			return err
 		}
+		frameData := data
+		if timing {
+			frameData, err = recurrenceTimingFrameData(ctx, data)
+			if err != nil {
+				return err
+			}
+		}
 		if err := attempt.reserveContent(ctx, data, payload); err != nil {
 			return err
 		}
-		if _, err := s.writeIssueRecordBatch(ctx, tx, workspace, data.Issues, data, rawBefore); err != nil {
+		written, err := s.writeIssueRecordBatch(ctx, tx, workspace, data.Issues, data, rawBefore)
+		if err != nil {
 			return err
+		}
+		if timing {
+			changedIssues = written
 		}
 		writeCtx := context.WithValue(ctx, legacyContentWriteBudgetKey{}, s)
 		if err := syncContentRecords(writeCtx, tx, workspace, "comment", data.Comments, data, keys); err != nil {
@@ -292,13 +394,13 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 				return err
 			}
 		}
-		requested, err := boundedDiscussionEventSource(ctx, display, data)
+		requested, err := boundedDiscussionEventSource(ctx, display, frameData)
 		if err != nil {
 			return err
 		}
 		defer requested.Release()
 		restored, err := requested.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
-			if name == "viewer" || name == "viewerRole" {
+			if name == "viewer" && !timing || name == "viewerRole" {
 				index, _, _ := metadataLogicalField(name)
 				return metadataAggregateStoredNode{stored.fields[index]}, true, nil
 			}
@@ -309,12 +411,29 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		}
 		defer restored.Release()
 		for _, name := range []string{"viewer", "viewerRole"} {
+			if timing && name == "viewer" {
+				continue
+			}
 			index, _, _ := metadataLogicalField(name)
 			value, err := attempt.owner.node(ctx, stored.fields[index], false)
 			if err != nil {
 				return err
 			}
 			reflect.ValueOf(&data).Elem().Field(index).Set(value)
+		}
+		var previous json.RawMessage
+		if webhookEnabled {
+			plan, err := planMetadataAggregatePayload(ctx, metadataAggregateImage{Source: selected}, metadataAggregateImage{Source: restored}, aggregate, true, nil)
+			if err != nil {
+				return err
+			}
+			if err := attempt.owner.reserve(ctx, uint64(plan.RequiredBytes)); err != nil {
+				return err
+			}
+			previous, _, err = plan.Values(ctx)
+			if err != nil {
+				return err
+			}
 		}
 		var progress *scopedIssueReactionProgress
 		if progressEvent(eventType) {
@@ -338,8 +457,8 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		if err != nil {
 			return err
 		}
-		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
-		eventSource, err := boundedDiscussionEventSource(ctx, merged, data)
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregate, Payload: payloadRaw, PreviousValues: previous, CreatedAt: time.Now().UTC()}
+		eventSource, err := boundedDiscussionEventSource(ctx, merged, frameData)
 		if err != nil {
 			return err
 		}
@@ -361,14 +480,38 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		if err != nil {
 			return err
 		}
-		publication, err := s.prepareLegacyResidentPublication(ctx, tx, workspace, candidate, baseStamp, stored.Stamp() == baseStamp, false)
+		publication, err := s.prepareLegacyResidentPublication(ctx, tx, workspace, candidate, baseStamp, stored.Stamp() == baseStamp, timing)
 		if err != nil {
 			candidate.Release()
 			return err
 		}
 		defer publication.Close()
+		if timing {
+			if err := attempt.reserveValue(ctx, s.viewer); err != nil {
+				return err
+			}
+			viewerRaw, _ := json.Marshal(s.viewer)
+			if len(viewerRaw) == 0 || string(viewerRaw) == "{}" {
+				index, _, _ := metadataLogicalField("viewer")
+				viewer, err := attempt.owner.node(ctx, merged.fields[index], false)
+				if err != nil {
+					return err
+				}
+				if err := attempt.reserveValue(ctx, viewer.Interface()); err != nil {
+					return err
+				}
+				viewerRaw, _ = json.Marshal(viewer.Interface())
+			}
+			if err := writeAccountMetadata(ctx, tx, workspace, viewerRaw); err != nil {
+				return err
+			}
+			previous, err = storedEventPreviousValues(ctx, tx, workspace, event.Type, aggregate, previous)
+			if err != nil {
+				return err
+			}
+		}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{
-			ID: event.ID, Type: event.Type, AggregateID: aggregate, Payload: payloadRaw,
+			ID: event.ID, Type: event.Type, AggregateID: aggregate, Payload: payloadRaw, PreviousValues: previous,
 			CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: data.Workspace.ID, WorkspaceKey: workspace,
 		}); err != nil {
 			return err
@@ -381,9 +524,16 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		}
 		traceMark(ctx, "persist")
 		metadataWritten = tx.metadataWritten
+		committed = true
 		return nil
+	}
+	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+		if timing && s.coordinator != nil {
+			return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx) })
+		}
+		return apply(ctx)
 	}, s.refreshConflictedLogicalMetadata(ctx, workspace))
-	if metadataWritten {
+	if metadataWritten || timing && committed {
 		s.dropMetadataCache(ctx, workspace)
 	}
 	if err != nil {
@@ -391,6 +541,9 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 			return nil
 		}
 		return err
+	}
+	if timing && len(changedIssues) != 0 {
+		s.invalidateIssueRecords(ctx, workspace, changedIssues)
 	}
 	s.publishMutation(ctx, workspace, event, realtime)
 	return nil

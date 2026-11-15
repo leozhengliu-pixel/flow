@@ -67,6 +67,14 @@ func (r *issueChildContentRows) Close() {
 }
 
 func (r *issueChildContentRows) load(ctx context.Context, issueID string) (domain.Bootstrap, error) {
+	return r.loadSelected(ctx, []string{issueID}, false)
+}
+
+func (r *issueChildContentRows) loadMutationScope(ctx context.Context, keys []string) (domain.Bootstrap, error) {
+	return r.loadSelected(ctx, keys, true)
+}
+
+func (r *issueChildContentRows) loadSelected(ctx context.Context, keys []string, mutationScope bool) (domain.Bootstrap, error) {
 	if r == nil || r.rows == nil {
 		return domain.Bootstrap{}, errMetadataLogicalClosed
 	}
@@ -86,6 +94,10 @@ func (r *issueChildContentRows) load(ctx context.Context, issueID string) (domai
 	if r.rows.owner.store == nil || r.rows.tx == nil || r.rows.tx.database != r.rows.owner.store.db {
 		return domain.Bootstrap{}, ErrMetadataRecordQuery
 	}
+	issueID := ""
+	if len(keys) != 0 {
+		issueID = keys[0]
+	}
 	if err := r.rows.beginDiscussion(ctx, r.rows.workspace, issueID); err != nil {
 		return domain.Bootstrap{}, err
 	}
@@ -95,21 +107,21 @@ func (r *issueChildContentRows) load(ctx context.Context, issueID string) (domai
 	result := &domain.Bootstrap{Notifications: []domain.Notification{}}
 	r.results = append(r.results, result)
 	var err error
-	result.Comments, err = issueChildSelectedContent[domain.Comment](ctx, r.rows, "comment", issueID)
+	result.Comments, err = issueChildSelectedContentScope[domain.Comment](ctx, r.rows, "comment", keys, mutationScope)
 	for _, comments := range result.Comments {
 		r.commentSlices = append(r.commentSlices, comments)
 	}
 	if err != nil {
 		return *result, err
 	}
-	result.Activities, err = issueChildSelectedContent[domain.ActivityEvent](ctx, r.rows, "activity", issueID)
+	result.Activities, err = issueChildSelectedContentScope[domain.ActivityEvent](ctx, r.rows, "activity", keys, mutationScope)
 	for _, activities := range result.Activities {
 		r.activitySlices = append(r.activitySlices, activities)
 	}
 	if err != nil {
 		return *result, err
 	}
-	notifications, err := issueChildSelectedContent[domain.Notification](ctx, r.rows, "notification", issueID)
+	notifications, err := issueChildSelectedContentScope[domain.Notification](ctx, r.rows, "notification", keys, mutationScope)
 	r.notificationMaps = append(r.notificationMaps, notifications)
 	for _, items := range notifications {
 		r.notificationSlices = append(r.notificationSlices, items)
@@ -119,11 +131,25 @@ func (r *issueChildContentRows) load(ctx context.Context, issueID string) (domai
 	}
 	// Preserve scopedContent's physical map keys and the original flattening
 	// operation; never regroup on a decoded JSON issue/resource identifier.
-	for _, items := range notifications {
+	appendNotifications := func(items []domain.Notification) error {
 		if err := r.rows.owner.reserve(ctx, uint64(len(items))*uint64(reflect.TypeFor[domain.Notification]().Size())*2+4096); err != nil {
-			return *result, err
+			return err
 		}
 		result.Notifications = append(result.Notifications, items...)
+		return nil
+	}
+	if mutationScope {
+		for _, key := range sortedKeys(notifications) {
+			if err := appendNotifications(notifications[key]); err != nil {
+				return *result, err
+			}
+		}
+	} else {
+		for _, items := range notifications {
+			if err := appendNotifications(items); err != nil {
+				return *result, err
+			}
+		}
 	}
 	selected := result.Notifications
 	r.rows.mu.Unlock()
@@ -143,10 +169,26 @@ func (r *issueChildContentRows) load(ctx context.Context, issueID string) (domai
 // discussionSelectedRows visitor deliberately exposes only decoded values.
 // The caller holds rows.mu and has initialized its discussion owner.
 func issueChildSelectedContent[T any](ctx context.Context, rows *issueMutationRows, kind, issueID string) (map[string][]T, error) {
+	return issueChildSelectedContentScope[T](ctx, rows, kind, []string{issueID}, false)
+}
+
+func issueChildSelectedContentScope[T any](ctx context.Context, rows *issueMutationRows, kind string, keys []string, mutationScope bool) (map[string][]T, error) {
 	result := map[string][]T{}
-	headers, err := rows.discussionHeaders(ctx,
-		"workspace_key=? AND kind=? AND resource_id=?", []any{rows.workspace, kind, issueID},
-		" ORDER BY created_at,id", 0)
+	where, values := "", []any{rows.workspace, kind}
+	order := " ORDER BY created_at,id"
+	if mutationScope {
+		if len(keys) == 0 {
+			return result, ctx.Err()
+		}
+		var selected []any
+		where, selected = bindList("resource_id", keys)
+		values = append(values, selected...)
+		order = " ORDER BY resource_id,created_at,id"
+	} else {
+		where = "resource_id=?"
+		values = append(values, keys[0])
+	}
+	headers, err := rows.discussionHeaders(ctx, "workspace_key=? AND kind=? AND "+where, values, order, 0)
 	if err != nil {
 		return result, err
 	}

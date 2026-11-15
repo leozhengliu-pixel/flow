@@ -174,3 +174,23 @@ func (b *metadataLogicalBuilder) inheritTimestampInputs(ctx context.Context) err
 	}
 	return nil
 }
+
+func (b *metadataLogicalBuilder) inheritTimestampInputLocation(location *time.Location) (bool, error) {
+	op, _ := b.ctx.Value(metadataTimestampOperationKey{}).(*metadataTimestampInputOperation)
+	if op == nil {
+		return false, nil
+	}
+	inputs := op.scope
+	inputs.mu.Lock()
+	defer inputs.mu.Unlock()
+	if inputs.operation != op || !op.bound || op.parsing || !metadataTimestampLeaseLive(inputs, op.lease) {
+		return false, ErrMetadataRecordQuery
+	}
+	if !slices.Contains(op.locations, location) {
+		return false, nil
+	}
+	if err := b.retainAuditedLocation(location); err != nil {
+		return false, err
+	}
+	return true, nil
+}
