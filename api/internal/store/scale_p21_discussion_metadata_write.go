@@ -36,6 +36,15 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 			return nil, fmt.Errorf("%w: discussion metadata cannot publish %s policy", ErrBoundedMetadataCoverage, field.name)
 		}
 	}
+	if issueID, _ := ctx.Value(discussionThreadTargetKey{}).(string); issueID != "" {
+		for _, field := range changedMetadataFields(before, next) {
+			if field.name != "threadSubscriptions" {
+				return nil, ErrBoundedMetadataCoverage
+			}
+		}
+		return s.prepareDiscussionThreadPublication(ctx, tx, workspace, source,
+			before.ThreadSubscriptions, next.ThreadSubscriptions, issueID, baseStamp, exact)
+	}
 	work := &ResourceRead{store: s}
 	defer work.Close()
 	if err := work.reserve(ctx, 64<<10); err != nil {

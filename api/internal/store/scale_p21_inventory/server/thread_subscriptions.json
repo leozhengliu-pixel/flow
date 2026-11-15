@@ -1,10 +1,11 @@
 {
   "source": "server/thread_subscriptions.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "clearThreadSubscription": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The unchanged callback uses exact selected comment ancestry and all matching issue subscriptions. Bounded ordinary and scoped discussion writers admit comment.thread_subscription and preserve matching deletion subsequences, native duplicate occurrences, unmatched-clear event behavior, actor/count and canonical/native publication. SW110 compares complete writer effects warm/reloaded and proves cancellation/release, persistent SQLite twice and race. SW108 compares actual ordinary/alias handler responses and effects plus production principal/key middleware behavior in 98 route cases. Flag-off dispatch is unchanged.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -18,7 +19,8 @@
     },
     "setThreadSubscription": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The unchanged callback retains first matching viewer/issue/root tuple precedence, complete captured response, State/UpdatedAt-only updates, append order and no-op behavior. Scoped native publication patches exact occurrences and reuses the proven legacy metadata-image writer for split/inline canonical merging, including duplicate existing IDs and append beside them. SW110 proves ordinary/scoped warm/reloaded output, SQL/events/webhook/realtime, identity/state refusals, cancellation/release, persistent SQLite twice and race; SW108 proves actual routes and the principal/key middleware matrix. Output stays admitted through encoding and flag-off remains literal.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

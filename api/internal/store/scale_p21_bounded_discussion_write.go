@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sync"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 func boundedIssueDiscussionEvent(event string) bool {
 	switch event {
 	case "comment.created", "comment.updated", "comment.resolved", "comment.unresolved",
-		"comment.deleted", "comment.reaction_toggled":
+		"comment.deleted", "comment.reaction_toggled", "comment.thread_subscription":
 		return true
 	}
 	return false
@@ -119,6 +120,25 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 	}
 	ctx = metadataLogicalUnpinnedContext(ctx)
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
+	if eventType == "comment.thread_subscription" {
+		ctx = context.WithValue(ctx, discussionThreadTargetKey{}, ids[0])
+	}
+	if eventType == "comment.thread_subscription" && ctx.Err() != nil {
+		selected := workspace
+		if selected == "" {
+			s.mu.RLock()
+			selected = s.lastWorkspaceKey
+			s.mu.RUnlock()
+		}
+		if _, found := s.storedWorkspace(selected); !found {
+			return fmt.Errorf("workspace not found")
+		}
+		// The original scoped writer resolves the actor's live membership
+		// before its first context-returning database operation.
+		if _, actor := actorFromContext(ctx); actor {
+			return ErrAuthForbidden
+		}
+	}
 	var err error
 	ctx, finishTimestampInputs, err := s.startMetadataTimestampInputs(ctx)
 	if err != nil {
@@ -312,6 +332,9 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 		if callbackErr != nil {
 			return callbackErr
 		}
+		if err := validateDiscussionThreadEdits(metadataInput.ThreadSubscriptions, data.ThreadSubscriptions, ids[0]); err != nil {
+			return err
+		}
 		for _, field := range changedMetadataFields(metadataInput, collectionMetadata(data)) {
 			if field.name != "threadSubscriptions" {
 				return fmt.Errorf("%w: discussion callback changed metadata %s", ErrBoundedMetadataCoverage, field.name)
@@ -417,15 +440,68 @@ func boundedDiscussionMetadataScope(before, next domain.Bootstrap) (MetadataReco
 	}
 	scope := MetadataRecordScope{}
 	for _, change := range changes {
-		if change.field != "threadSubscriptions" || !change.drop {
+		if change.field != "threadSubscriptions" {
 			return scope, fmt.Errorf("%w: unsupported discussion metadata edit", ErrBoundedMetadataCoverage)
 		}
 		scope.Write = append(scope.Write, RecordKey{Kind: change.field, ID: change.key})
+	}
+	add := func(id string) {
+		key := RecordKey{Kind: "threadSubscriptions", ID: id}
+		if !slices.Contains(scope.Write, key) {
+			scope.Write = append(scope.Write, key)
+		}
+	}
+	if len(next.ThreadSubscriptions) < len(before.ThreadSubscriptions) {
+		kept := 0
+		for _, subscription := range before.ThreadSubscriptions {
+			if kept < len(next.ThreadSubscriptions) && reflect.DeepEqual(subscription, next.ThreadSubscriptions[kept]) {
+				kept++
+			} else {
+				add(subscription.ID)
+			}
+		}
+	} else {
+		for index, subscription := range next.ThreadSubscriptions {
+			if index >= len(before.ThreadSubscriptions) || !reflect.DeepEqual(subscription, before.ThreadSubscriptions[index]) {
+				add(subscription.ID)
+			}
+		}
 	}
 	if err := validateMetadataRecordScope(scope); err != nil {
 		return scope, err
 	}
 	return scope, nil
+}
+
+func validateDiscussionThreadEdits(before, next []domain.ThreadSubscription, issueID string) error {
+	if len(next) < len(before) {
+		kept := 0
+		for _, subscription := range before {
+			if kept < len(next) && reflect.DeepEqual(subscription, next[kept]) {
+				kept++
+			}
+		}
+		if kept == len(next) {
+			return nil
+		}
+		return fmt.Errorf("%w: thread deletion changed a surviving subscription", ErrBoundedMetadataCoverage)
+	}
+	for index, subscription := range next {
+		if index < len(before) && reflect.DeepEqual(subscription, before[index]) {
+			continue
+		}
+		if subscription.IssueID != issueID || subscription.State != "subscribed" && subscription.State != "muted" {
+			return fmt.Errorf("%w: unsupported thread subscription", ErrBoundedMetadataCoverage)
+		}
+		if index < len(before) {
+			original := before[index]
+			original.State, original.UpdatedAt = subscription.State, subscription.UpdatedAt
+			if !reflect.DeepEqual(original, subscription) {
+				return fmt.Errorf("%w: thread edit changed subscription identity", ErrBoundedMetadataCoverage)
+			}
+		}
+	}
+	return nil
 }
 
 func boundedDiscussionEventSource(ctx context.Context, source *metadataLogicalSource, data domain.Bootstrap) (*metadataLogicalSource, error) {

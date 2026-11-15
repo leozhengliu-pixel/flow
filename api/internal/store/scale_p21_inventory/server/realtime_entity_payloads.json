@@ -2,6 +2,24 @@
   "source": "server/realtime_entity_payloads.go",
   "unmigrated": 0,
   "consumers": {
+    "boundedLegacyDocumentPresenceAllowed": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Uses the existing paged viewer policy plus the owned installed document-role header, preserving ordinary SQL/auth false results while propagating cancellation and explicit bounded ownership/coverage failures. SW104 compares direct, sync-v2-off fallback and document-task visibility across the existing principal/key M frame matrix; SW62 and SW105 own header selection, native fidelity and lifetime proofs. No full workspace decode or new SQL source is introduced.",
+      "accessors": ["BeginPresenceDocumentRead"],
+      "temperature": "hot",
+      "temperatureReason": "Document realtime fallback and agent-task fan-out visibility.",
+      "callers": ["server/server.legacyPagedRealtimeEvent", "server/server.boundedAgentTaskRealtimeVisible"]
+    },
+    "boundedPagedDocumentEvent": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Retains the exact selected installed document and existing visibility checks; loads its complete native value only inside the shared result-cache miss builder, preserving old full payload, draft/comment extras and anonymous revocation signals. SW104 compares fallback event JSON/visibility and proves three cache hits skip a full load under pressure, a refused nil build is evicted and release allows retry. SW105 owns complete value admission/cancellation/release; off pagedDocumentEvent remains literal.",
+      "accessors": ["BeginPresenceDocumentRead"],
+      "temperature": "hot",
+      "temperatureReason": "Visible legacy paged document realtime payload.",
+      "callers": ["server/server.legacyPagedRealtimeEvent"]
+    },
     "pagedPulseSourceEvent": {
       "owner": "P21",
       "status": "reviewed",

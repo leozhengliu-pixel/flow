@@ -250,12 +250,23 @@ func (s *server) legacyPagedRealtimeEvent(r *http.Request, event domain.Realtime
 		// Document and other permission changes carry subject lists the viewer may
 		// not see: send the bare signal, clients reload the affected metadata. A
 		// viewer who cannot open the document (any more) is not told which one.
-		if strings.HasPrefix(event.Type, "document.") && !s.documentPresenceAllowed(r, event.AggregateID) {
+		if s.store.BoundedMetadataEnabled() && strings.HasPrefix(event.Type, "document.") {
+			allowed, err := s.boundedLegacyDocumentPresenceAllowed(r, event.AggregateID)
+			if err != nil {
+				return event, false, err
+			}
+			if !allowed {
+				return anonymousRealtimeEvent(event), true, nil
+			}
+		} else if strings.HasPrefix(event.Type, "document.") && !s.documentPresenceAllowed(r, event.AggregateID) {
 			return anonymousRealtimeEvent(event), true, nil
 		}
 		return bareRealtimeEvent(event, nil), true, nil
 	}
 	if strings.HasPrefix(event.Type, "document.") && event.AggregateID != "" {
+		if s.store.BoundedMetadataEnabled() {
+			return s.boundedPagedDocumentEvent(r, data, event)
+		}
 		projected, visible := s.pagedDocumentEvent(r, data, event)
 		return projected, visible, nil
 	}

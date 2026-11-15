@@ -189,7 +189,22 @@ func (s *server) BuildEventSource(ctx context.Context, workspace string, event d
 			id = input.DocumentID
 		}
 		if !strings.HasPrefix(event.Type, "document.draft_") || event.Type == "document.draft_published" && id != "" {
-			installed, installedOK := s.store.DocumentByID(workspace, id)
+			var installed domain.Document
+			var installedOK bool
+			var installedRead *store.PresenceDocumentRead
+			if s.store.BoundedMetadataEnabled() {
+				read, found, err := s.store.BeginPresenceDocumentRead(ctx, workspace, id)
+				if err != nil {
+					return nil, err
+				}
+				if found {
+					installedRead = read
+					defer installedRead.Close()
+					installed, installedOK = read.Document, read.Found
+				}
+			} else {
+				installed, installedOK = s.store.DocumentByID(workspace, id)
+			}
 			if installedOK {
 				id = installed.ID
 			}
@@ -212,7 +227,15 @@ func (s *server) BuildEventSource(ctx context.Context, workspace string, event d
 				}
 				// The installed read model adds canonical owner grants and link
 				// scopes. Keep the same read policy as DocumentByID.
-				if len(document.Permissions) == 0 && slices.ContainsFunc(installed.Permissions, func(permission domain.DocumentPermission) bool {
+				if installedRead != nil && len(document.Permissions) == 0 {
+					permission, found, err := installedRead.FirstUserPermission(ctx, document.Creator.ID)
+					if err != nil {
+						return nil, err
+					}
+					if found {
+						document.Permissions = append(document.Permissions, permission)
+					}
+				} else if len(document.Permissions) == 0 && slices.ContainsFunc(installed.Permissions, func(permission domain.DocumentPermission) bool {
 					return permission.SubjectType == "user" && permission.SubjectID == document.Creator.ID
 				}) {
 					for _, permission := range installed.Permissions {

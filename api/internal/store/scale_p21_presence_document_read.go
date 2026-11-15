@@ -12,17 +12,19 @@ import (
 // PresenceDocumentRead owns only literal documentRole inputs. It is a trusted
 // installed lookup, not authorization or a complete document.
 type PresenceDocumentRead struct {
-	Found    bool
-	Document domain.Document
-	source   *InstalledMetadataRead
-	owner    *ResourceRead
-	once     sync.Once
+	Found        bool
+	Document     domain.Document
+	documentNode metadataLogicalNode
+	source       *InstalledMetadataRead
+	owner        *ResourceRead
+	once         sync.Once
 }
 
 func (r *PresenceDocumentRead) Close() {
 	if r != nil {
 		r.once.Do(func() {
 			r.Found, r.Document = false, domain.Document{}
+			r.documentNode = metadataLogicalNode{}
 			if r.source != nil {
 				r.source.Close()
 				r.source = nil
@@ -107,6 +109,7 @@ func (s *SQLiteStore) BeginPresenceDocumentRead(ctx context.Context, workspace, 
 			}); err != nil {
 				return err
 			}
+			read.documentNode = document
 			read.Found = true
 			return ErrMetadataIterationDone
 		})

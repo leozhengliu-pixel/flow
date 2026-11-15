@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Thread subscriptions retain first-match edits, native duplicate occurrence order and atomic legacy effects through bounded discussion writers.
+- Document realtime preserves complete installed grants and selected values under bounded ownership, loading full payloads only on shared cache misses; bounded metadata stays off by default.
 - Owned legacy comment transactions preserve native hydration, actor, count, event and canonical merge behavior with bounded record staging; unported handlers remain guarded and bounded metadata stays off by default.
 - Installed logical fields stream exact JSON and retain native clone semantics under bounded work admission; bounded metadata stays off by default.
 - Project lists retain owned list-only values through output, preserving filters, permissions, cache precedence and canonical fallback while guarding cache bytes before transfer and decoding.

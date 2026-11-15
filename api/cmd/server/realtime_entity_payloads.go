@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -294,6 +296,100 @@ func (s *server) pagedDocumentEvent(r *http.Request, data domain.Bootstrap, even
 		return realtimeEntityPayload(event, document, extra)
 	})
 	return event, true
+}
+
+func (s *server) boundedLegacyDocumentPresenceAllowed(r *http.Request, documentID string) (bool, error) {
+	data, _, err := s.pagedRealtimeMetadata(r)
+	if err != nil {
+		return false, boundedLegacyDocumentMetadataFailure(r.Context(), err)
+	}
+	read, found, err := s.store.BeginPresenceDocumentRead(r.Context(), workspaceKey(r), documentID)
+	if err != nil || !found {
+		return false, err
+	}
+	defer read.Close()
+	return read.Found && documentRole(s, data, read.Document) != "none", nil
+}
+
+func boundedLegacyDocumentMetadataFailure(ctx context.Context, err error) error {
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	if errors.Is(err, store.ErrMetadataWorkBudget) ||
+		errors.Is(err, store.ErrBoundedMetadataCoverage) ||
+		errors.Is(err, store.ErrMetadataPageBudget) ||
+		errors.Is(err, store.ErrResourceAccessChanged) {
+		return err
+	}
+	return nil
+}
+
+func (s *server) boundedPagedDocumentEvent(r *http.Request, data domain.Bootstrap, event domain.RealtimeEvent) (domain.RealtimeEvent, bool, error) {
+	documentID := event.AggregateID
+	if strings.HasPrefix(event.Type, "document.draft_") {
+		author := s.authDisabled || event.ActorID != "" && event.ActorID == data.Viewer.ID
+		if event.Type != "document.draft_published" {
+			return event, author, nil
+		}
+		var input struct {
+			DocumentID string `json:"documentId"`
+		}
+		_ = json.Unmarshal(event.Payload, &input)
+		if input.DocumentID == "" {
+			return event, author, nil
+		}
+		documentID = input.DocumentID
+	}
+	read, found, err := s.store.BeginPresenceDocumentRead(r.Context(), workspaceKey(r), documentID)
+	if err != nil {
+		return event, false, err
+	}
+	if !found {
+		return anonymousRealtimeEvent(event), true, nil
+	}
+	defer read.Close()
+	if !read.Found {
+		return anonymousRealtimeEvent(event), true, nil
+	}
+	scopeChanged := s.realtime.scopeChanged(event)
+	if documentRole(s, data, read.Document) == "none" {
+		if scopeChanged {
+			return anonymousRealtimeEvent(event), true, nil
+		}
+		return event, false, nil
+	}
+	build := func() (json.RawMessage, error) {
+		document, err := read.LoadDocument(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		extra := map[string]any{"documentId": document.ID}
+		if event.Type == "document.draft_published" {
+			extra["draftId"] = event.AggregateID
+		}
+		if strings.HasPrefix(event.Type, "document.comment_") {
+			comments, _, err := s.store.IssueContent(r.Context(), data.Workspace.URLKey, document.ID)
+			if err == nil {
+				if comments == nil {
+					comments = []domain.Comment{}
+				}
+				extra["comments"] = comments
+			}
+		}
+		document.Favorite = false
+		return realtimeEntityPayload(event, document, extra), nil
+	}
+	var payload json.RawMessage
+	if s.realtime == nil {
+		payload, err = build()
+	} else {
+		payload, err = s.realtime.payloads.loadResult(event.ID+"|document", build)
+	}
+	if err != nil {
+		return event, false, err
+	}
+	event.Payload = payload
+	return event, true, nil
 }
 
 // realtimePayloadCache shares a projected payload between the streams of

@@ -695,7 +695,7 @@ func (r *legacyDiscussionInputs) mergeFlat(ctx context.Context, frames *metadata
 	if err := r.input.reserve(ctx, uint64(before.Len()+next.Len())*256+4096); err != nil {
 		return patch, err
 	}
-	if name == "threadSubscriptions" {
+	if name == "threadSubscriptions" && next.Len() < before.Len() {
 		kept := 0
 		for index := range before.Len() {
 			if kept < next.Len() && reflect.DeepEqual(before.Index(index).Interface(), next.Index(kept).Interface()) {
@@ -717,6 +717,19 @@ func (r *legacyDiscussionInputs) mergeFlat(ctx context.Context, frames *metadata
 	if name == "notificationDeliveries" {
 		ordinals = r.DeliveryOrdinals
 		allowed = []string{"Status", "UpdatedAt", "NextAttemptAt"}
+	} else if name == "threadSubscriptions" {
+		ordinals = r.ThreadSubscriptionOrdinals
+		allowed = []string{"State", "UpdatedAt"}
+		for index := range next.Len() {
+			subscription := next.Index(index).Interface().(domain.ThreadSubscription)
+			if index < before.Len() && reflect.DeepEqual(before.Index(index).Interface(), subscription) {
+				continue
+			}
+			if subscription.IssueID != r.ResourceKey ||
+				subscription.State != "subscribed" && subscription.State != "muted" {
+				return patch, ErrBoundedMetadataCoverage
+			}
+		}
 	}
 	deltas := map[int]legacyDiscussionRecordDelta{}
 	for index := range before.Len() {

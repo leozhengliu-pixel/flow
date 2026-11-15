@@ -126,7 +126,7 @@ func (s *server) boundedAgentTaskRealtimeVisible(r *http.Request, taskID string)
 		if viewer := authUser(r); viewer.App && task.AppUserID != viewer.ID {
 			return false, nil
 		}
-		return s.documentPresenceAllowed(r, task.ResourceID), nil
+		return s.boundedLegacyDocumentPresenceAllowed(r, task.ResourceID)
 	case "project":
 		if viewer := authUser(r); viewer.App && task.AppUserID != viewer.ID {
 			return false, nil

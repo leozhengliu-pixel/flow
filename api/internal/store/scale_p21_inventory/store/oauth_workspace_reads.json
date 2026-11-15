@@ -1,6 +1,6 @@
 {
   "source": "store/oauth_workspace_reads.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "AccountCollections": {
       "owner": "P21",
@@ -24,7 +24,8 @@
     },
     "DocumentByID": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "All four production callers are off-only: BuildEventSource and pagedPresenceFor use explicit store-mode branches; legacy document payload and documentPresenceAllowed callers return through bounded document/task helpers first. SW104 locks the complete direct and transitive callsets, including method references, and compares source/grant and sync-v2-off fallback output across the existing M frame matrix. SW62 covers presence; SW105 proves exact first native ID/current-slug occurrence, full grant/value ownership, warm/reload, cancellation and memory bounds. The literal accessor remains unchanged for flag-off use.",
       "accessors": [
         "resident-state"
       ],

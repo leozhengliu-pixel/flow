@@ -1,10 +1,11 @@
 {
   "source": "store/scale_p15_snapshot_reservation.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "WorkspaceReadSnapshotReservation": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded residency returns HydratedSnapshotReservationMaxBytes before any graph traversal, allocation or hydration. SW109 locks that branch and compares the literal off scalar calculation with the on fixed allowance for default, explicit, missing and native-large workspaces under live/canceled containing contexts. Work, decode, disk and descriptor counters and native values remain unchanged; this scalar reservation does not certify downstream snapshot readers.",
       "accessors": [
         "resident-state"
       ],
