@@ -1,6 +1,6 @@
 {
   "source": "server/public_api_resources.go",
-  "unmigrated": 10,
+  "unmigrated": 8,
   "consumers": {
     "getOrganization": {
       "owner": "P21",
@@ -16,7 +16,8 @@
     },
     "listCommentsConnection": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded project/initiative parents use the proven installed or projected installed point reader with original handoff precedence; its existing credential-team closure is retained without rerunning the full bootstrap filter on a partial view. Application gates and preference filtering remain. Documents select an admitted directory header with literal current-reference-before-historical-alias precedence, then use the unchanged content connection; issues retain their existing SQL path. Owners survive filtering and encoding. SW167 compares 2963 exact legacy/bounded HTTP pairs across four source states, principals/credentials, all parent kinds, aliases, filters/pages, hidden issue-linked documents, handoffs, errors and output lifetime. SW168 separately proves the admitted PreviousSlugIDs header extension across warm/reloaded permission matrices, large aliases, cancellation and release with persistent/race checks. Flag-off bodies remain literal.",
       "accessors": [
         "publicMetadata"
       ],
@@ -186,14 +187,15 @@
     },
     "publicMetadata": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "After SW167 removes the last unhanded HOT comment calls, HOT detail/list/notification/pulse callers have independently reviewed bounded early returns. The remaining HOT teamForMemberRequest edge reaches this helper only with a matching authenticated unused one-shot projection; the helper immediately consumes that request-owned handoff, preserving the existing key/preference filters without a full accessor. The already-merged HotTeamMemberRequestVisibilityAndCallers differential explicitly proves first-use handoff precedence and refusal on reuse. A per-caller reachability audit confirms other unguarded fallback callers are independently classified COLD; their routing remains independently pending. No cold reclassification or flag-off change is made, and SW167 supplies the new comment route differential.",
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata",
         "WorkspaceMetadata"
       ],
       "temperature": "hot",
-      "temperatureReason": "Shared HOT detail/list read fallback: getProjectRecord/getInitiativeRecord and selected-key listProjectRecords invoke it; it cannot be assigned to the cold semaphore.",
+      "temperatureReason": "Shared HOT read helper; bounded HOT callers now use owned early branches or the matching one-shot team-member handoff. Remaining full fallbacks belong to independently classified COLD callers.",
       "callers": [
         "server/link_previews.go:getLinkPreview:35",
         "server/main.go:listNotifications:2601",

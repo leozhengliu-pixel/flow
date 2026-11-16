@@ -337,7 +337,7 @@ var resourceDirectoryHeaders = map[string][]string{
 	"projects":    {"ID", "Name", "SlugID", "Health", "Priority", "Status", "Lead", "TeamIDs", "LabelIDs", "MemberIDs", "Initiatives", "StartDate", "TargetDate", "CreatedAt", "UpdatedAt", "ArchivedAt"},
 	"initiatives": {"ID", "Name", "SlugID", "Status", "Health", "Owner", "Creator", "TargetDate", "ProjectIDs", "ParentInitiativeIDs", "CreatedAt", "UpdatedAt"},
 	"labels":      {"ID", "Name", "Color", "Scope", "GroupID", "ResourceType", "CreatedAt", "ArchivedAt"},
-	"documents":   {"ID", "Title", "SlugID", "SearchSnippet", "MatchedTerms", "Creator", "TeamIDs", "ProjectIDs", "IssueID", "IssueTeamID", "InheritedTeamIDs", "Permissions", "CreatedAt", "UpdatedAt", "ArchivedAt"},
+	"documents":   {"ID", "Title", "SlugID", "PreviousSlugIDs", "SearchSnippet", "MatchedTerms", "Creator", "TeamIDs", "ProjectIDs", "IssueID", "IssueTeamID", "InheritedTeamIDs", "Permissions", "CreatedAt", "UpdatedAt", "ArchivedAt"},
 	"milestones":  {"ID", "ProjectID", "Name", "TargetDate", "CreatedAt", "UpdatedAt"},
 }
 

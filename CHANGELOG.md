@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Public comment connections retain owned parent reads and historical document aliases while preserving credential restrictions, pagination and output lifetimes. Bounded metadata stays off by default.
 - General bootstrap retains its metadata and SQL snapshot through bounded issue and discussion streaming, preserving viewer projections, pulse updates, native chat bodies and signed file URLs. Bounded metadata stays off by default.
 - Worker chat reply readers retain selected native values through status checks, draft use and resume decisions. Bounded metadata stays off by default.
 - Recurring schedule normalization retains bounded candidate reads and exact scoped timing writes, preserving clocks, timezones, previous values and publication. Bounded metadata stays off by default.

@@ -1276,7 +1276,81 @@ func (s *server) listCommentsConnection(w http.ResponseWriter, r *http.Request) 
 	key := func(c domain.Comment, orderBy string) pageKey {
 		return orderedKey(orderBy, c.ID, c.CreatedAt, commentUpdatedAt(c))
 	}
+	// The selected installed record owns nested comment values through encoding.
+	pointMetadata := func(kind, ref string) (domain.Bootstrap, func(), bool) {
+		if s.authDisabled {
+			read, found, err := s.store.BeginInstalledResourcePointRead(context.WithoutCancel(r.Context()), workspaceKey(r), kind, ref)
+			if err != nil {
+				writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+				return domain.Bootstrap{}, nil, false
+			}
+			if !found {
+				writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "workspace not found")
+				return domain.Bootstrap{}, nil, false
+			}
+			return read.Data, read.Close, true
+		}
+		if workspaceKey(r) == "" {
+			writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header (API keys and OAuth tokens select it automatically)")
+			return domain.Bootstrap{}, nil, false
+		}
+		if data, handed := takePagedMetadata(r, workspaceKey(r), authUser(r).ID); handed {
+			filterBootstrapForAPIKey(&data, r)
+			if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
+				issueRecordsError(w, err)
+				return domain.Bootstrap{}, nil, false
+			}
+			return data, func() {}, true
+		}
+		if !acquireProjection(r) {
+			if retryAfter, refused := projectionRefused(r); refused {
+				writeProjectionBusy(w, retryAfter)
+			}
+			return domain.Bootstrap{}, nil, false
+		}
+		var credential *domain.APIKey
+		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			credential = &key
+		}
+		access, err := s.store.ResolveAccess(r.Context(), workspaceKey(r), authUser(r).ID, credential)
+		var read *store.ResourceRead
+		if err == nil {
+			read, err = s.store.BeginProjectedInstalledResourcePointRead(r.Context(), access, kind, ref)
+		}
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) || isNoRows(err) {
+				writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+			} else {
+				writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+			}
+			return domain.Bootstrap{}, nil, false
+		}
+		// The point reader owns credential team closure for this partial view.
+		if credential != nil {
+			filterApplicationScopeProjection(&read.Data, *credential)
+		}
+		if err := s.filterPreferenceIssueTeams(r, &read.Data); err != nil {
+			read.Close()
+			issueRecordsError(w, err)
+			return domain.Bootstrap{}, nil, false
+		}
+		return read.Data, read.Close, true
+	}
 	if id, ok := parents["projectId"]; ok {
+		if s.store.BoundedMetadataEnabled() {
+			data, closeRead, ok := pointMetadata("projects", id)
+			if !ok {
+				return
+			}
+			defer closeRead()
+			index := domain.ProjectIndexBySlugRef(data.Projects, id)
+			if index < 0 {
+				writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "project not found")
+				return
+			}
+			writeConnection(w, r, data.Projects[index].Comments, fields, key)
+			return
+		}
 		data, ok := s.publicMetadata(w, r)
 		if !ok {
 			return
@@ -1290,6 +1364,20 @@ func (s *server) listCommentsConnection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if id, ok := parents["initiativeId"]; ok {
+		if s.store.BoundedMetadataEnabled() {
+			data, closeRead, ok := pointMetadata("initiatives", id)
+			if !ok {
+				return
+			}
+			defer closeRead()
+			index := domain.InitiativeIndexBySlugRef(data.Initiatives, id)
+			if index < 0 {
+				writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "initiative not found")
+				return
+			}
+			writeConnection(w, r, data.Initiatives[index].Comments, fields, key)
+			return
+		}
 		data, ok := s.publicMetadata(w, r)
 		if !ok {
 			return
@@ -1319,6 +1407,93 @@ func (s *server) listCommentsConnection(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		resource, workspace = issue.ID, query.Workspace
+	} else if s.store.BoundedMetadataEnabled() {
+		ctx := r.Context()
+		if s.authDisabled {
+			ctx = context.WithoutCancel(ctx)
+		} else if workspaceKey(r) == "" {
+			writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header (API keys and OAuth tokens select it automatically)")
+			return
+		}
+		userID := ""
+		var credential *domain.APIKey
+		var handed *domain.Bootstrap
+		if !s.authDisabled {
+			userID = authUser(r).ID
+			if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+				credential = &key
+			}
+			if data, ok := takePagedMetadata(r, workspaceKey(r), userID); ok {
+				handed = &data
+			} else if !acquireProjection(r) {
+				if retryAfter, refused := projectionRefused(r); refused {
+					writeProjectionBusy(w, retryAfter)
+				}
+				return
+			}
+		}
+		read, err := s.store.BeginResourceDirectoryRead(ctx, workspaceKey(r), userID, credential, "documents", handed)
+		if err != nil {
+			if s.authDisabled && errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, store.ErrResourceAccessChanged) {
+				writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "workspace not found")
+			} else if errors.Is(err, store.ErrAuthForbidden) || isNoRows(err) {
+				writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+			} else {
+				writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+			}
+			return
+		}
+		defer read.Close()
+		if !s.authDisabled {
+			filterBootstrapForAPIKey(&read.Data, r)
+			if err := s.filterPreferenceIssueTeams(r, &read.Data); err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+		}
+		// Current references take precedence over earlier historical aliases.
+		var selected store.ResourceDirectoryToken
+		found, exact := false, false
+		if err := read.Reserve(ctx, 256); err != nil {
+			writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+			return
+		}
+		err = read.Visit(ctx, func(value *store.ResourceDirectoryValue) error {
+			document := value.Document
+			match := document.ID == parents["documentId"] || document.SlugID == parents["documentId"]
+			if match && !exact {
+				selected, found, exact = value.Token, true, true
+			} else if !found && parents["documentId"] != "" && slices.Contains(document.PreviousSlugIDs, parents["documentId"]) {
+				selected, found = value.Token, true
+			}
+			return nil
+		})
+		if err == nil {
+			err = read.Validate(ctx)
+		}
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) || isNoRows(err) {
+				writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+			} else {
+				writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+			}
+			return
+		}
+		if !found {
+			writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "document not found")
+			return
+		}
+		document, err := read.LoadHeader(ctx, selected)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+			return
+		}
+		defer document.Close()
+		if !documentVisibleToViewer(s, read.Data, document.Document) {
+			writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "document not found")
+			return
+		}
+		resource, workspace = document.Document.ID, read.Data.Workspace.URLKey
 	} else {
 		data, ok := s.publicMetadata(w, r)
 		if !ok {
