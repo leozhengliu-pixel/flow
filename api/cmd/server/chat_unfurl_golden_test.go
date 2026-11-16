@@ -59,7 +59,8 @@ func chatPreviewCases(t *testing.T, f *chatWorkflowFixture) []chatPreviewCase {
 			domain.Document{ID: "doc_restricted", SlugID: "secret-0123456789ab", Title: "Restricted plan", Content: "private", Creator: viewer, TeamIDs: []string{team.ID}, ProjectIDs: []string{}, SubscriberIDs: []string{}, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: "perm_1", DocumentID: "doc_restricted", SubjectType: "user", SubjectID: viewer.ID, Role: "editor", CreatedAt: at, UpdatedAt: at}}, CreatedAt: at, UpdatedAt: at},
 		)
 		data.Initiatives = append(data.Initiatives, domain.Initiative{ID: "initiative_preview", SlugID: "growth-0123456789ab", Name: "增长计划", Summary: "Grow the base", Status: "active", Health: "onTrack", Owner: &viewer, LeadTeamID: team.ID})
-		data.Cycles = append(data.Cycles, domain.Cycle{ID: "cycle_preview", Number: 42, Name: "", TeamID: team.ID, StartsAt: at, EndsAt: at.Add(14 * 24 * time.Hour)})
+		// The preview reports the cycle against the real clock, so the fixture cycle stays active for good.
+		data.Cycles = append(data.Cycles, domain.Cycle{ID: "cycle_preview", Number: 42, Name: "", TeamID: team.ID, StartsAt: at, EndsAt: time.Date(2099, 11, 16, 9, 15, 0, 0, time.UTC)})
 		data.SavedViews = append(data.SavedViews, domain.SavedView{ID: "view_preview", SlugID: "payments-bugs-0123456789ab", Name: "支付缺陷", Description: "Open payment bugs", TeamID: team.ID, SharedAt: &at})
 		return nil
 	}); err != nil {
