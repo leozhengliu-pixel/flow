@@ -1087,6 +1087,10 @@ func (s *server) previewIssueSuggestions(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *server) listIssueSuggestions(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.listIssueSuggestionsBounded(w, r)
+		return
+	}
 	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: authUser(r)}
 	if actor.User.ID == "" {
 		if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
