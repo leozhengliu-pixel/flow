@@ -262,7 +262,8 @@
     white-space: nowrap;
   }
   .document-history-scroll > .phone-native-select-wrap { max-width: 100%; }
-  .document-history-doc { margin: 24px 16px 0; }
+  /* The reference insets the preview text 24px on the left and 16px on the right (8px scroller padding + 8px). */
+  .document-history-doc { margin: 24px 8px 0 16px; }
   .document-history-doc p { color: var(--phone-project-panel-text); letter-spacing: -.1px; }
   .document-history-pill { position: static; flex: none; flex-wrap: wrap; width: fit-content; max-width: calc(100% - 24px); margin: 10px auto 20px; box-sizing: border-box; border-radius: 9999px; }
   .document-history-pill { background: var(--document-history-pill-bg); border-color: var(--document-history-pill-border); box-shadow: var(--document-history-pill-shadow); color: var(--document-history-pill-fg); }
@@ -331,6 +332,8 @@
 @media (max-width: 720px) {
   /* Like the reference, the pill stays one row on a phone: the version column grows to the pill's width and the
      panel (overflow hidden) clips the overflow, Restore version included. The page itself never scrolls sideways. */
+  /* The global light dialog rule would add a hairline around the full-screen sheet; the reference has none. */
+  html:root[data-theme="light"] body .dialog-content.document-history-dialog:not(.search-date-dialog) { border: 0; }
   :root[data-theme="light"] .document-history-pill { max-width: none; }
   :root[data-theme="light"] .document-history-main { min-width: min-content; }
   :root[data-theme="light"] .document-history-navigator > button { width: 32px; height: 32px; }
