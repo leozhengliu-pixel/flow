@@ -275,6 +275,10 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 // issues, scoring each against its candidate issues.
 func generateTriageMutation(issueIDs []string, candidateSets map[string][]domain.Issue, updated *domain.Issue, results *[]domain.Issue, generated *bool) func(*domain.Bootstrap) error {
 	return func(data *domain.Bootstrap) error {
+		// Candidates are appended after the scoped issues for scoring only.
+		// They are search summaries, so even a candidate copy of another
+		// scoped issue must never be written back over its full row.
+		scoped := len(data.Issues)
 		for _, issueID := range issueIDs {
 			issue, err := issueByID(data, issueID)
 			if err != nil {
@@ -297,7 +301,7 @@ func generateTriageMutation(issueIDs []string, candidateSets map[string][]domain
 		for _, id := range issueIDs {
 			allowed[id] = true
 		}
-		data.Issues = slices.DeleteFunc(data.Issues, func(item domain.Issue) bool { return !allowed[item.ID] })
+		data.Issues = slices.DeleteFunc(data.Issues[:scoped], func(item domain.Issue) bool { return !allowed[item.ID] })
 		if !*generated {
 			return store.ErrNoMutation
 		}

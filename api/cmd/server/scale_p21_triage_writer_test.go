@@ -595,6 +595,8 @@ func TestScaleP21TriageGenerateWriterDifferential(t *testing.T) {
 		{"single-auto-apply", triage(auto, f.triage.ID), []string{f.triage.ID}, 2, http.StatusOK},
 		{"batch-without-candidates", triage(suggest, f.triage.ID), []string{f.hidden.ID, f.triage.ID, f.gone.ID}, 2, http.StatusOK},
 		{"not-triage", triage(suggest), []string{f.triage.ID}, 0, http.StatusNoContent},
+		{"scoped-candidate", triage(suggest, f.triage.ID), []string{f.visible.ID, f.triage.ID}, 2, http.StatusOK},
+		{"mutual-candidates", triage(suggest, f.triage.ID, f.visible.ID), []string{f.triage.ID, f.visible.ID}, 2, http.StatusOK},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			f.prepare = test.prepare
@@ -608,33 +610,18 @@ func TestScaleP21TriageGenerateWriterDifferential(t *testing.T) {
 			}
 		})
 	}
-	// Mutual candidates in one batch and auto team moves are refused before
-	// any write; legacy would write candidate summaries over the scoped
-	// issues, or move and renumber the issue.
+	// Auto team moves are refused before any write: legacy would move and
+	// renumber the issue.
 	for _, test := range []struct {
 		name    string
 		prepare func(*testing.T)
 		ids     []string
 	}{
-		{"scoped-candidate", triage(suggest, f.triage.ID), []string{f.visible.ID, f.triage.ID}},
-		{"mutual-candidates", triage(suggest, f.triage.ID, f.visible.ID), []string{f.triage.ID, f.visible.ID}},
 		{"team-auto-move", triage(func(settings *domain.TriageIntelligenceSettings) { auto(settings); settings.TeamAction = "auto" }, f.triage.ID), []string{f.triage.ID}},
 	} {
 		t.Run(test.name+"-refused", func(t *testing.T) {
 			f.prepare = test.prepare
 			defer func() { f.prepare = nil }()
-			if test.name == "scoped-candidate" {
-				// Evidence for the refusal: the legacy batch writes the
-				// candidate summary over the full scoped issue row.
-				service := f.reset(t, "legacy")
-				before := f.rows(t, `SELECT data FROM issue_records WHERE workspace_key=? AND id='`+f.visible.ID+`'`, workspace)
-				r := f.literalRequest(f.data.Viewer, nil, nil)
-				if _, err := service.generateTriageIntelligenceForIssues(r.Context(), workspace, test.ids); err != nil {
-					t.Fatal(err)
-				}
-				after := f.rows(t, `SELECT data FROM issue_records WHERE workspace_key=? AND id='`+f.visible.ID+`'`, workspace)
-				t.Logf("legacy scoped candidate row changed=%t bytes %d -> %d", !reflect.DeepEqual(before, after), len(before[0][0].(string)), len(after[0][0].(string)))
-			}
 			for _, source := range []string{"warm", "reloaded"} {
 				service := f.reset(t, source)
 				before := f.state(t)
