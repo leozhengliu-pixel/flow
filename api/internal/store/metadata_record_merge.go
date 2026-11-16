@@ -689,6 +689,18 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 		if err != nil {
 			return nil, false, err
 		}
+		if len(stored) < len(keys) {
+			backed, err := metadataFieldRecordBacked(ctx, tx, workspace, name, beforeValue.Type())
+			if err != nil {
+				return nil, false, err
+			}
+			if !backed {
+				// The field is kept inline in the root document (an entry
+				// lacks a unique row key), so it has no rows: a missing row
+				// is not a deletion by another write.
+				continue
+			}
+		}
 		if refs == nil {
 			current := newIssueReferences(domain.Bootstrap{Users: after.Users})
 			refs = &current
@@ -773,6 +785,28 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 	return replaced, touched, nil
 }
 
+// metadataFieldRecordBacked reports whether the stored root lists field as
+// kept in one row per record of its kind: "updates" for update collections,
+// "array" for entity lists and "map" for other maps. splitWorkspaceMetadata
+// keeps a list inline when an entry lacks a unique short ID (and a map with
+// an over-long key); such a field has no record rows at all.
+func metadataFieldRecordBacked(ctx context.Context, tx *sqlTx, workspace, field string, kind reflect.Type) (bool, error) {
+	want := "map"
+	switch {
+	case updateMetadataField(field):
+		want = "updates"
+	case kind.Kind() == reflect.Slice:
+		want = "array"
+	}
+	var shape sql.NullString
+	path := (&SQLiteStore{dialect: tx.dialect}).jsonText("data", metadataCollectionsKey+"."+field)
+	err := tx.QueryRowContext(ctx, `SELECT `+path+` FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&shape)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return shape.String == want, err
+}
+
 // updateMetadataField reports a per-parent update collection (parent id ->
 // updates), stored one update per row (splitUpdateMetadata).
 func updateMetadataField(name string) bool {
@@ -848,6 +882,16 @@ func rebaseUpdateRecords(ctx context.Context, tx *sqlTx, workspace string, refs 
 	stored, err := lockMetadataRecords(ctx, tx, workspace, field.name, keys)
 	if err != nil {
 		return result, err
+	}
+	if len(stored) < len(keys) {
+		backed, err := metadataFieldRecordBacked(ctx, tx, workspace, field.name, beforeValue.Type())
+		if err != nil {
+			return result, err
+		}
+		if !backed {
+			// Inline or stored per parent: no update has a row of its own.
+			return result, nil
+		}
 	}
 	if tx.rebasedMetadata == nil {
 		tx.rebasedMetadata = map[metadataRecordKey]bool{}

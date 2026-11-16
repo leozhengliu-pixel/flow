@@ -294,11 +294,9 @@ func TestScaleP21WebhookFailureWriteInlineDuplicates(t *testing.T) {
 				rows := scaleP21WebhookFailureRows(t, source, workspace, "webhookFailureEvents")
 				if !bounded {
 					wantNative, wantRows, wantPayload, wantSnapshot = native, rows, payload, snapshot
-					expected := 49
-					if retained {
-						expected = 50
-					}
-					if len(native) != expected {
+					// The inline duplicates stay: there are no rows a rebase could
+					// read as deletions.
+					if expected := 50; len(native) != expected {
 						t.Fatal("literal duplicate fixture changed", retained, reload, len(native))
 					}
 				} else if !reflect.DeepEqual(native, wantNative) || !reflect.DeepEqual(rows, wantRows) || !bytes.Equal(payload, wantPayload) || !bytes.Equal(snapshot, wantSnapshot) {

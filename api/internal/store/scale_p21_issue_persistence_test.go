@@ -290,14 +290,14 @@ func TestScaleP21IssuePersistenceInlineProjectShapes(t *testing.T) {
 			if !reflect.DeepEqual(physical[0], physical[1]) || !reflect.DeepEqual(native[0], native[1]) {
 				t.Fatal("inline physical/native state differs", physical, native)
 			}
-			want := "array"
-			wantCount := 1
+			// An inline field has no rows to rebase onto: the duplicate entries
+			// stay (no first-occurrence removal) and the field stays inline.
+			wantCount := 2
 			if keepInline {
-				want = ""
-				wantCount = 3
+				wantCount = 4
 			}
-			if physical[1].Shape != want || len(native[1].([]domain.Project)) != wantCount {
-				t.Fatal("inline removal or shape transition differs from literal", physical[1].Shape, native[1])
+			if physical[1].Shape != "" || len(native[1].([]domain.Project)) != wantCount {
+				t.Fatal("inline duplicates were removed or the shape changed", physical[1].Shape, native[1])
 			}
 		})
 	}
@@ -553,8 +553,12 @@ func TestScaleP21IssuePersistenceInlineNativeNoop(t *testing.T) {
 		}
 		state := scaleP21IssuePhysical(t, repo, workspace, "projects")
 		values := scaleP21IssueNative(t, repo, workspace, "projects").([]domain.Project)
-		if !reflect.DeepEqual(prior, state) || state.Shape != "" || len(values) != 1 || values[0].CreatedAt != nativeAt || len(values[0].ProgressHistory) != 1 {
-			t.Fatal("literal inline no-write/native-time contract changed", bounded, state.Shape, len(values))
+		// The inline duplicates have no rows to rebase onto, so neither copy
+		// is dropped: the first takes the progress refresh like any project
+		// and the second keeps its native values.
+		if reflect.DeepEqual(prior, state) || state.Shape != "" || len(values) != 2 || values[0].CreatedAt != nativeAt ||
+			len(values[0].IssueCountHistory) == 0 || len(values[1].ProgressHistory) != 1 {
+			t.Fatal("literal inline duplicate/native-time contract changed", bounded, state.Shape, len(values))
 		}
 		physical = append(physical, state)
 		native = append(native, values)
@@ -600,11 +604,15 @@ func TestScaleP21IssuePersistenceUnknownStamp(t *testing.T) {
 	}
 	physical := scaleP21IssuePhysical(t, f.SQLiteStore, workspace, "projects")
 	native := scaleP21IssueNative(t, view, workspace, "projects").([]domain.Project)
-	// The literal field delta marks the now-unique field split, but its
-	// already-rebased base makes the absent row a tombstone. The warm native
-	// postimage still retains the surviving duplicate and its progress.
-	if physical.Shape != "array" || len(physical.Rows) != 0 || len(native) != 1 || len(native[0].ProgressHistory) == 0 {
-		t.Fatal("unknown-stamp transaction lost literal physical/native divergence", physical, native)
+	// The inline duplicates have no rows to rebase onto: both stay, in SQL
+	// and in the warm native postimage, and the field stays inline.
+	var stored []domain.Project
+	if err := json.Unmarshal(physical.Root, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if physical.Shape != "" || len(physical.Rows) != 0 || len(stored) != 2 || len(native) != 2 ||
+		stored[0].Name != native[0].Name || stored[1].Name != native[1].Name || len(native[0].IssueCountHistory) == 0 {
+		t.Fatal("unknown-stamp transaction lost inline duplicates or diverged from SQL", physical, native)
 	}
 }
 
