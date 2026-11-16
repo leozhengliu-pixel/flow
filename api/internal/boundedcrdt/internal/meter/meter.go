@@ -115,6 +115,20 @@ func (m *Meter) Reserve(cost uint64) {
 	m.credit = Add(m.credit, chunk-256) - cost
 }
 
+// Temporary owns scalar decoder scratch independently of the retained graph.
+// Its caller releases it in the allocating stack frame.
+func (m *Meter) Temporary(cost uint64) func() {
+	if m == nil {
+		return func() {}
+	}
+	m.Check()
+	release, err := m.admit(Add(AllocationSize(cost), 256))
+	if err != nil {
+		m.fail(err)
+	}
+	return release
+}
+
 // Step charges an eight-byte work token. The tokens remain owned for the
 // document lifetime, so repeated pending/conflict scans cannot run unbounded.
 func (m *Meter) Step() {
@@ -275,52 +289,4 @@ func Bytes[S ~string](m *Meter, value S) []byte {
 
 func Unmarshal(m *Meter, raw []byte, value any) error {
 	return unmarshalJSON(m, raw, value)
-}
-
-// JSON admits stdlib's string/interface containers and recursive decoder stack
-// using a lexical upper bound. Syntax acceptance remains json.Unmarshal's.
-// Quotes and escapes are scanned without allocating strings or token objects.
-func JSON(m *Meter, raw []byte) {
-	m.Check()
-	var depth, high uint64
-	for i := 0; i < len(raw); i++ {
-		m.Step()
-		switch raw[i] {
-		case '"':
-			start := i
-			for i++; i < len(raw); i++ {
-				m.Step()
-				if raw[i] == '\\' {
-					i++
-				} else if raw[i] == '"' {
-					break
-				}
-			}
-			end := min(i+1, len(raw))
-			m.Reserve(jsonStringCost(raw[start:end]))
-		case '{', '[':
-			depth++
-			if depth > high {
-				// The stdlib grows both a scanner stack and decoder call
-				// stack. Charge the latter's geometric growth, too.
-				m.Reserve(8 << 10)
-				high = depth
-			}
-			m.Reserve(128)
-		case '}', ']':
-			if depth > 0 {
-				depth--
-			}
-		case ':', ',':
-			// Every comma can grow an interface slice, or insert a map
-			// key; this covers both until syntax validation decides.
-			m.Reserve(MapEntryCost[string, any]())
-		default:
-			// A JSON number may need its original spelling for the
-			// strconv conversion, and every scalar may box a float64.
-			if raw[i] > ' ' {
-				m.Reserve(32)
-			}
-		}
-	}
 }

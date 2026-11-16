@@ -74,6 +74,11 @@ func TestScaleP21SW31PayloadWorkProducerDifferential(t *testing.T) {
 		map[string]any{"escaped": strings.Repeat("\x00", 128000)},
 		json.RawMessage(scaleP21SW31DensePayload(10000)),
 	} {
+		inputWork, err := metadataAggregatePayloadEncodingWork(t.Context(), reflect.ValueOf(payload), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputWork = max(inputWork, 128<<10)
 		f := scaleP09Database(t)
 		workspace := f.data.Workspace.URLKey
 		type outcome struct {
@@ -98,16 +103,19 @@ func TestScaleP21SW31PayloadWorkProducerDifferential(t *testing.T) {
 			repo.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 				got.previous, got.snapshot = event.PreviousValues, event.Snapshot
 				if bounded {
-					work, err := metadataAggregatePayloadJSONWork(t.Context(), event.Payload)
-					if err != nil || held() < int(work) {
-						t.Errorf("webhook lacks payload ownership: held=%d work=%d err=%v", held(), work, err)
+					required := inputWork + len(event.PreviousValues) + len(event.Snapshot)
+					if held() < required {
+						t.Errorf("webhook lacks input and output ownership: held=%d required=%d", held(), required)
 					}
 				}
 			})
 			repo.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 				got.realtime = event.Payload
-				if bounded && held() == 0 {
-					t.Error("realtime publication released event ownership")
+				if bounded {
+					required := inputWork + len(got.previous) + len(event.Payload)
+					if held() < required {
+						t.Errorf("realtime lacks input and output ownership: held=%d required=%d", held(), required)
+					}
 				}
 			})
 			if err := repo.MutateWorkspaceScoped(context.Background(), workspace, "application_policy.updated", "sw31-payload", payload,

@@ -511,7 +511,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				streamedScoped = true
 			}
 		}
-		payloadWork, releasePayload, err := s.reserveMetadataAggregatePayload(ctx, payload)
+		_, releasePayload, err := s.reserveMetadataAggregatePayload(ctx, payload)
 		if err != nil {
 			return err
 		}
@@ -527,29 +527,18 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		committed = domain.DomainEvent{ID: idgen.New("evt_"), Type: event, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
 		beforeImage := metadataAggregateImage{Source: eventSource, Selected: &before, Scope: scope}
 		afterImage := metadataAggregateImage{Source: callbackSource, Selected: &next, Scope: writeScope}
-		plan, err := planMetadataAggregatePayload(ctx, beforeImage, afterImage, aggregate, hooks && s.webhookConfigured(), payloadRaw)
+		eventPublication, err := s.prepareMetadataAggregatePublication(ctx, beforeImage, afterImage, aggregate, hooks && s.webhookConfigured(), payloadRaw, event)
 		if err != nil {
 			return err
-		}
-		releaseExtra := func() {}
-		if extra := plan.RequiredBytes - payloadWork; extra > 0 {
-			_, releaseExtra, err = s.tryAdmitAdditionalMetadataWork(ctx, extra)
-			if err != nil {
-				return err
-			}
 		}
 		ownedPayload := releasePayload
 		releaseEvent = func() {
-			releaseExtra()
+			eventPublication.Close()
 			ownedPayload()
 		}
 		releasePayload = nil
-		previous, entity, err := plan.Values(ctx)
-		if err != nil {
-			return err
-		}
-		committed.PreviousValues = previous
-		realtime = enrichRealtimePayload(payloadRaw, entity, event)
+		committed.PreviousValues = eventPublication.PreviousValues
+		realtime = eventPublication.RealtimePayload
 		// Complete fields use the proven delta writer. Point records are
 		// written separately so a deletion never scans the whole collection.
 		complete := cloneBootstrap(next)

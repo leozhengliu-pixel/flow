@@ -126,6 +126,9 @@ type sqlTx struct {
 	journalCounts        map[string]bool
 	journalOrder         recordJournalOrder
 	metadataCommitStamps map[string]*metadataCommitStamp
+	// Staged input must be consumed and deleted before its write commits.
+	metadataSQLStages      int
+	metadataSQLStageOwners map[string]*metadataSQLWriteStage
 }
 
 // notificationSignal names a notification that is news to its recipient.
@@ -229,6 +232,13 @@ func (tx *sqlTx) Commit() error {
 			write.fail()
 		}
 		return err
+	}
+	if tx.metadataSQLStages != 0 || len(tx.metadataSQLStageOwners) != 0 {
+		_ = tx.Rollback()
+		if write != nil {
+			write.fail()
+		}
+		return ErrMetadataSQLStageOpen
 	}
 	if err := tx.Tx.Commit(); err != nil {
 		if write != nil {
@@ -653,6 +663,15 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 	if tx.writeErr != nil {
 		return nil, tx.writeErr
 	}
+	stageStatement, err := metadataSQLStageStatementInContext(ctx, tx, query, args)
+	if err != nil {
+		return nil, err
+	}
+	if stageStatement != nil {
+		// Nested journal writes retain ordinary accounting. Only this exact
+		// checked staging statement consumes its previously admitted bill.
+		ctx = context.WithValue(ctx, metadataSQLStageStatementKey{}, nil)
+	}
 	tx.journalOrder.valid = false
 	if tx.database != nil && tx.database.journalReady.Load() && !tx.numbering && tx.journalToken == "" && journalWriteStatement(query) {
 		if err := tx.beginRecordJournal(ctx); err != nil {
@@ -673,12 +692,15 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 			bytes += 16
 		}
 	}
-	if tx.maxTransactionBytes > 0 && bytes > tx.maxTransactionBytes-tx.writtenBytes {
-		tx.writeErr = fmt.Errorf("%w: maximum %d bytes; split the import into smaller batches", ErrTransactionWriteBudget, tx.maxTransactionBytes)
-		return nil, tx.writeErr
-	}
 	first := tx.writtenBytes == 0
-	tx.writtenBytes += bytes
+	if stageStatement != nil {
+		stageStatement.recordSQLInput(tx, query, args)
+		bytes = 0
+		first = stageStatement.operation == metadataSQLStageInsert && stageStatement.stage.firstWrite
+	}
+	if err := tx.admitStatementWriteBytes(bytes); err != nil {
+		return nil, err
+	}
 	if tx.journalToken == "" {
 		if workspace, ok := metadataWriteWorkspace(query, args); ok {
 			tx.queueCacheRevision(workspace, cacheKindMetadata)
@@ -686,7 +708,6 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 	}
 	observeSQLStatement(ctx, query)
 	var result sql.Result
-	var err error
 	if tx.journalToken != "" && tx.database.journalWrites[query] != nil {
 		statement := tx.Tx.StmtContext(ctx, tx.database.journalWrites[query])
 		result, err = statement.ExecContext(ctx, textArgs(tx.dialect, args)...)

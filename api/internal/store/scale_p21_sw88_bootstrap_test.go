@@ -297,12 +297,14 @@ func TestScaleP21SW88LogicalJSONLifetimeAndFailure(t *testing.T) {
 	if err := read.StreamFieldJSON(canceled, "settings", io.Discard); !errors.Is(err, context.Canceled) || view.MetadataWorkUsedForTesting() != base {
 		t.Fatal("pre-canceled stream changed or leaked", err)
 	}
-	largeKey := domain.Bootstrap{Settings: map[string]any{strings.Repeat("key", logicalJSONMapKeyBytes/3+1): "body"}}
+	// Exercise actual admission rather than the removed fixed per-key limit.
+	largeKey := domain.Bootstrap{Settings: map[string]any{strings.Repeat("key", (2<<20)/3+1): "body"}}
 	keyView := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": largeKey})
 	keyRead, _, err := keyView.BeginInstalledMetadataRead(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
 	}
+	keyView.metadataResidency.work.limit = 16 << 20
 	keyBase, keyDisk := keyView.MetadataWorkUsedForTesting(), metadataLogicalDiskUsed.Load()
 	if err := keyRead.StreamFieldJSON(t.Context(), "settings", io.Discard); !errors.Is(err, ErrMetadataWorkBudget) ||
 		keyView.MetadataWorkUsedForTesting() != keyBase || metadataLogicalDiskUsed.Load() != keyDisk {

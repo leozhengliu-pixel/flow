@@ -389,17 +389,12 @@ func (s *SQLiteStore) mutateBoundedDesktopAck(ctx context.Context, workspace, ev
 		attempt.data.ViewerRole, attempt.data.ViewerTeamIDs = attempt.nativeRole, nil
 		var previous json.RawMessage
 		if webhook {
-			plan, err := planMetadataAggregatePayload(ctx, metadataAggregateImage{Source: attempt.before}, metadataAggregateImage{Source: callback}, aggregate, true, nil)
+			eventPublication, err := s.prepareMetadataAggregatePrevious(ctx, metadataAggregateImage{Source: attempt.before}, metadataAggregateImage{Source: callback}, aggregate)
 			if err != nil {
 				return err
 			}
-			if err := attempt.owner.reserve(ctx, uint64(plan.RequiredBytes)); err != nil {
-				return err
-			}
-			previous, _, err = plan.Values(ctx)
-			if err != nil {
-				return err
-			}
+			attempt.owner.release = append(attempt.owner.release, eventPublication.Close)
+			previous = eventPublication.PreviousValues
 		}
 		counted, err := s.refreshLegacyResourceCountsFromImage(ctx, callback)
 		if err != nil {
@@ -411,18 +406,12 @@ func (s *SQLiteStore) mutateBoundedDesktopAck(ctx context.Context, workspace, ev
 			return err
 		}
 		nextEvent := domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregate, Payload: payloadRaw, PreviousValues: previous, CreatedAt: time.Now().UTC()}
-		plan, err := planMetadataAggregatePayload(ctx, metadataAggregateImage{Source: attempt.before}, metadataAggregateImage{Source: counted}, aggregate, false, payloadRaw)
+		eventPublication, err := s.prepareMetadataAggregatePublication(ctx, metadataAggregateImage{Source: attempt.before}, metadataAggregateImage{Source: counted}, aggregate, false, payloadRaw, eventType)
 		if err != nil {
 			return err
 		}
-		if err := attempt.owner.reserve(ctx, uint64(plan.RequiredBytes)); err != nil {
-			return err
-		}
-		_, entity, err := plan.Values(ctx)
-		if err != nil {
-			return err
-		}
-		nextRealtime := enrichRealtimePayload(payloadRaw, entity, eventType)
+		attempt.owner.release = append(attempt.owner.release, eventPublication.Close)
+		nextRealtime := eventPublication.RealtimePayload
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err

@@ -21,7 +21,9 @@ import (
 )
 
 const logicalJSONStreamWork = 2 << 20
-const logicalJSONMapKeyBytes = 1 << 20
+
+// Keys are admitted separately before decoding, binding and cursor retention.
+const logicalJSONMapKeyBytes = metadataWorkBytes
 
 // StreamFieldJSON writes one installed field as json.Marshal would, without
 // materializing its record bodies. The caller owns publication/error handling:
@@ -72,15 +74,16 @@ func (r *InstalledMetadataRead) StreamFieldJSON(ctx context.Context, field strin
 }
 
 type logicalJSONStream struct {
-	ctx     context.Context
-	owner   *ResourceRead
-	view    *WebhookAggregateRead
-	out     *bufio.Writer
-	stage   *sw26MigrationStage
-	mapID   int64
-	buffer  [32 << 10]byte
-	replace func(metadataLogicalNode) (metadataLogicalNode, error)
-	rewrite MetadataJSONRewriter
+	ctx                 context.Context
+	owner               *ResourceRead
+	view                *WebhookAggregateRead
+	out                 *bufio.Writer
+	stage               *sw26MigrationStage
+	mapID               int64
+	buffer              [32 << 10]byte
+	replace             func(metadataLogicalNode) (metadataLogicalNode, error)
+	rewrite             MetadataJSONRewriter
+	classifyCodecErrors bool
 }
 
 func (s *logicalJSONStream) text(value string) error {
@@ -249,6 +252,21 @@ func (s *logicalJSONStream) number(node metadataLogicalNode) error {
 		return s.text("0")
 	}
 	err = node.StreamBytes(s.ctx, func(input io.Reader) error {
+		if s.classifyCodecErrors {
+			return metadataAggregateCodecValidation(input, func(input io.Reader) error {
+				scanner := metadataCollectionScanner{ctx: s.ctx, input: bufio.NewReaderSize(input, metadataRecordChunkBytes)}
+				if err := scanner.number(); err != nil {
+					return err
+				}
+				if _, err := scanner.peek(); !errors.Is(err, io.EOF) {
+					if err != nil {
+						return err
+					}
+					return errMetadataCollectionJSON
+				}
+				return nil
+			})
+		}
 		scanner := metadataCollectionScanner{ctx: s.ctx, input: bufio.NewReaderSize(input, metadataRecordChunkBytes)}
 		if err := scanner.number(); err != nil {
 			return err
@@ -599,7 +617,23 @@ func (s *logicalJSONStream) activityIDs(node metadataLogicalNode) error {
 }
 
 func (s *logicalJSONStream) raw(node metadataLogicalNode) error {
+	if s.classifyCodecErrors {
+		work, err := metadataAggregateRawValidationWork(s.ctx, node)
+		if err != nil {
+			return err
+		}
+		_, release, err := s.owner.store.tryAdmitAdditionalMetadataWork(s.ctx, int(work))
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	if err := node.StreamBytes(s.ctx, func(input io.Reader) error {
+		if s.classifyCodecErrors {
+			return metadataAggregateCodecValidation(input, func(input io.Reader) error {
+				return validateMetadataCollectionJSON(s.ctx, input)
+			})
+		}
 		return validateMetadataCollectionJSON(s.ctx, input)
 	}); err != nil {
 		return err

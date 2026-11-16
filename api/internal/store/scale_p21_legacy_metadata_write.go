@@ -588,35 +588,25 @@ func (p *legacyMetadataWritePlan) headers(ctx context.Context, f *legacyMetadata
 			if err != nil {
 				return err
 			}
-			if idNode.cost > (metadataWorkBytes-8192)/64 {
-				return ErrMetadataWorkBudget
-			}
-			if err := p.work.reserve(ctx, idNode.cost*64+uint64(len(parent))*8+8192); err != nil {
-				return err
-			}
-			value, err := idNode.Value(ctx, metadataWorkBytes)
+			idWork := &ResourceRead{store: p.store}
+			defer idWork.Close()
+			id, key, full, err := p.headerID(ctx, idWork, idNode, parent, updateMetadataField(f.field.name))
 			if err != nil {
 				return err
 			}
-			id := value.String()
-			encoded, err := json.Marshal(id)
-			if err != nil {
-				return err
-			}
-			var normalized string
-			if err := json.Unmarshal(encoded, &normalized); err != nil {
-				return err
-			}
-			if id == "" || len(id) > 191 || normalized != id {
+			if full {
 				f.full = true
 			}
-			key := id
-			if updateMetadataField(f.field.name) {
-				key = updateRecordKey(parent, id)
+			if err := p.retainHeaderOrder(ctx); err != nil {
+				return err
 			}
 			if !next {
-				if _, ok := positions[key]; ok {
+				_, exists := positions[key]
+				if exists {
 					f.full = true
+				}
+				if err := p.retainHeaderRow(ctx, id, key, !exists); err != nil {
+					return err
 				}
 				positions[key] = len(f.rows)
 				f.rows = append(f.rows, legacyMetadataWriteRow{id: id, parent: parent, before: item, oldOrdinal: ordinal, ordinal: -1})
@@ -624,6 +614,9 @@ func (p *legacyMetadataWritePlan) headers(ctx context.Context, f *legacyMetadata
 			} else {
 				at, exists := positions[key]
 				if !exists {
+					if err := p.retainHeaderRow(ctx, id, key, true); err != nil {
+						return err
+					}
 					at = len(f.rows)
 					positions[key] = at
 					f.rows = append(f.rows, legacyMetadataWriteRow{id: id, parent: parent, oldOrdinal: -1})
@@ -640,17 +633,10 @@ func (p *legacyMetadataWritePlan) headers(ctx context.Context, f *legacyMetadata
 			return node.Children(ctx, func(key reflect.Value, item metadataLogicalNode) error { return appendRow("", int(key.Int()), item) })
 		}
 		return node.MapEntries(ctx, func(parent, list metadataLogicalNode) error {
-			if parent.cost > (metadataWorkBytes-8192)/16 {
-				return ErrMetadataWorkBudget
-			}
-			if err := p.work.reserve(ctx, parent.cost*16+8192); err != nil {
-				return err
-			}
-			key, err := parent.Value(ctx, metadataWorkBytes)
+			name, err := p.headerParent(ctx, parent, next)
 			if err != nil {
 				return err
 			}
-			name := key.String()
 			nilList, err := list.isNil(ctx)
 			if err != nil {
 				return err
@@ -762,6 +748,9 @@ func (p *legacyMetadataWritePlan) rebase(ctx context.Context, f *legacyMetadataW
 }
 
 func (p *legacyMetadataWritePlan) rebaseRow(ctx context.Context, f *legacyMetadataWriteField, index int) error {
+	if handled, err := p.rebaseProjectProgressRow(ctx, f, index); handled || err != nil {
+		return err
+	}
 	row := &f.rows[index]
 	work := &ResourceRead{store: p.store}
 	defer work.Close()
@@ -1347,6 +1336,9 @@ func (p *legacyMetadataWritePlan) writeArray(ctx context.Context, f *legacyMetad
 	}
 	write := func(index, order int) error {
 		row := &f.rows[f.order[index]]
+		if handled, err := p.writeProjectProgressRow(ctx, f, row, order); handled || err != nil {
+			return err
+		}
 		work := &ResourceRead{store: p.store}
 		defer work.Close()
 		if err := legacyActorWriteNodeWork(ctx, work, row.next, 64); err != nil {
@@ -1443,6 +1435,12 @@ func (p *legacyMetadataWritePlan) writeUpdates(ctx context.Context, f *legacyMet
 		for _, selected := range f.order {
 			row := &f.rows[selected]
 			if row.parent != parent || row.deleted || !row.changed {
+				continue
+			}
+			if handled, err := p.writeProjectUpdateScheduleRow(ctx, f, row); handled || err != nil {
+				if err != nil {
+					return err
+				}
 				continue
 			}
 			work := &ResourceRead{store: p.store}

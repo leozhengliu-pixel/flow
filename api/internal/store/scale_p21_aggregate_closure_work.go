@@ -202,6 +202,18 @@ func metadataAggregateNativeCost(ctx context.Context, value reflect.Value, depth
 			}
 		}
 	case reflect.Slice, reflect.Array:
+		if value.Type().Elem().Kind() == reflect.Uint8 {
+			// Bytes retain their backing capacity without separate element objects.
+			length := value.Len()
+			if value.Kind() == reflect.Slice {
+				length = value.Cap()
+			}
+			if cost > metadataWorkBytes || uint64(length) > (metadataWorkBytes-cost)/2 {
+				return 0, ErrMetadataWorkBudget
+			}
+			cost += uint64(length) * 2
+			break
+		}
 		cost += uint64(value.Len()) * (uint64(value.Type().Elem().Size())*2 + 64)
 		if value.Type().Elem().Kind() != reflect.Uint8 {
 			for i := 0; i < value.Len(); i++ {

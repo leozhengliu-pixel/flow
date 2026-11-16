@@ -397,19 +397,13 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 			return err
 		}
 		defer eventSource.Release()
-		plan, err := planMetadataAggregatePayload(ctx, metadataAggregateImage{Source: attempt.inputs.source},
-			metadataAggregateImage{Source: eventSource}, aggregate, false, payloadRaw)
+		eventPublication, err := s.prepareMetadataAggregatePublication(ctx, metadataAggregateImage{Source: attempt.inputs.source},
+			metadataAggregateImage{Source: eventSource}, aggregate, false, payloadRaw, eventType)
 		if err != nil {
 			return err
 		}
-		if err := attempt.owner.reserve(ctx, uint64(plan.RequiredBytes)); err != nil {
-			return err
-		}
-		_, entity, err := plan.Values(ctx)
-		if err != nil {
-			return err
-		}
-		realtime = enrichRealtimePayload(payloadRaw, entity, eventType)
+		attempt.owner.release = append(attempt.owner.release, eventPublication.Close)
+		realtime = eventPublication.RealtimePayload
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: aggregate,
 			Payload: payloadRaw, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: data.Workspace.ID, WorkspaceKey: workspace}); err != nil {
 			return err

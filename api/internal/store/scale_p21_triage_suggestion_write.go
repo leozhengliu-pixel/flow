@@ -789,19 +789,13 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			return err
 		}
 		defer eventSource.Release()
-		plan, err := planMetadataAggregatePayload(ctx, metadataAggregateImage{Source: metadataBefore},
-			metadataAggregateImage{Source: eventSource}, aggregate, false, payloadRaw)
+		eventPublication, err := s.prepareMetadataAggregatePublication(ctx, metadataAggregateImage{Source: metadataBefore},
+			metadataAggregateImage{Source: eventSource}, aggregate, false, payloadRaw, eventType)
 		if err != nil {
 			return err
 		}
-		if err := attempt.owner.reserve(ctx, uint64(plan.RequiredBytes)); err != nil {
-			return err
-		}
-		_, entity, err := plan.Values(ctx)
-		if err != nil {
-			return err
-		}
-		realtime = enrichRealtimePayload(payloadRaw, entity, eventType)
+		attempt.owner.release = append(attempt.owner.release, eventPublication.Close)
+		realtime = eventPublication.RealtimePayload
 		candidate, err := metadataLogicalInstalledCandidate(ctx, merged)
 		if err != nil {
 			return err

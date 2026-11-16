@@ -703,20 +703,13 @@ func (s *SQLiteStore) MutateFailingWebhookDisable(ctx context.Context, workspace
 			return err
 		}
 		payload := json.RawMessage(`{"reason":"deliveryFailures"}`)
-		plan, err := planMetadataAggregatePayload(ctx, metadataAggregateImage{Source: eventSource}, metadataAggregateImage{Source: candidate}, webhookID, hooks && s.webhookConfigured(), payload)
+		eventPublication, err := s.prepareMetadataAggregatePublication(ctx, metadataAggregateImage{Source: eventSource}, metadataAggregateImage{Source: candidate}, webhookID, hooks && s.webhookConfigured(), payload, "webhook.auto_disabled")
 		if err != nil {
 			return err
 		}
-		_, releaseEvent, err = s.tryAdmitAdditionalMetadataWork(ctx, plan.RequiredBytes)
-		if err != nil {
-			return err
-		}
-		previous, entity, err := plan.Values(ctx)
-		if err != nil {
-			return err
-		}
-		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "webhook.auto_disabled", AggregateID: webhookID, Payload: payload, PreviousValues: previous, CreatedAt: time.Now().UTC()}
-		realtime = enrichRealtimePayload(payload, entity, event.Type)
+		releaseEvent = eventPublication.Close
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "webhook.auto_disabled", AggregateID: webhookID, Payload: payload, PreviousValues: eventPublication.PreviousValues, CreatedAt: time.Now().UTC()}
+		realtime = eventPublication.RealtimePayload
 		keys := []string{}
 		if webhookID != "" {
 			keys = append(keys, webhookID)

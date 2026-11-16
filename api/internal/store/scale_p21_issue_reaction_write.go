@@ -423,17 +423,12 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		}
 		var previous json.RawMessage
 		if webhookEnabled {
-			plan, err := planMetadataAggregatePayload(ctx, metadataAggregateImage{Source: selected}, metadataAggregateImage{Source: restored}, aggregate, true, nil)
+			eventPublication, err := s.prepareMetadataAggregatePrevious(ctx, metadataAggregateImage{Source: selected}, metadataAggregateImage{Source: restored}, aggregate)
 			if err != nil {
 				return err
 			}
-			if err := attempt.owner.reserve(ctx, uint64(plan.RequiredBytes)); err != nil {
-				return err
-			}
-			previous, _, err = plan.Values(ctx)
-			if err != nil {
-				return err
-			}
+			attempt.owner.release = append(attempt.owner.release, eventPublication.Close)
+			previous = eventPublication.PreviousValues
 		}
 		var progress *scopedIssueReactionProgress
 		if progressEvent(eventType) {
@@ -463,19 +458,13 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 			return err
 		}
 		defer eventSource.Release()
-		plan, err := planMetadataAggregatePayload(ctx, metadataAggregateImage{Source: metadataBefore},
-			metadataAggregateImage{Source: eventSource}, aggregate, false, payloadRaw)
+		eventPublication, err := s.prepareMetadataAggregatePublication(ctx, metadataAggregateImage{Source: metadataBefore},
+			metadataAggregateImage{Source: eventSource}, aggregate, false, payloadRaw, eventType)
 		if err != nil {
 			return err
 		}
-		if err := attempt.owner.reserve(ctx, uint64(plan.RequiredBytes)); err != nil {
-			return err
-		}
-		_, entity, err := plan.Values(ctx)
-		if err != nil {
-			return err
-		}
-		realtime = enrichRealtimePayload(payloadRaw, entity, eventType)
+		attempt.owner.release = append(attempt.owner.release, eventPublication.Close)
+		realtime = eventPublication.RealtimePayload
 		candidate, err := metadataLogicalInstalledCandidate(ctx, merged)
 		if err != nil {
 			return err

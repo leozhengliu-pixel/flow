@@ -409,17 +409,12 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 		defer callback.Release()
 		var previous json.RawMessage
 		if webhookEnabled {
-			plan, err := planMetadataAggregatePayload(ctx, metadataAggregateImage{Source: attempt.Before}, metadataAggregateImage{Source: callback}, aggregate, true, nil)
+			eventPublication, err := s.prepareMetadataAggregatePrevious(ctx, metadataAggregateImage{Source: attempt.Before}, metadataAggregateImage{Source: callback}, aggregate)
 			if err != nil {
 				return err
 			}
-			if err := attempt.Owner.reserve(ctx, uint64(plan.RequiredBytes)); err != nil {
-				return err
-			}
-			previous, _, err = plan.Values(ctx)
-			if err != nil {
-				return err
-			}
+			attempt.Owner.release = append(attempt.Owner.release, eventPublication.Close)
+			previous = eventPublication.PreviousValues
 		}
 		var progress *legacyProgressImage
 		if eventType == "issue.reaction_toggled" || attachment {
@@ -443,18 +438,12 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 		}
 		event := domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregate,
 			Payload: payloadRaw, PreviousValues: previous, CreatedAt: time.Now().UTC()}
-		plan, err := planMetadataAggregatePayload(ctx, metadataAggregateImage{Source: attempt.Before}, metadataAggregateImage{Source: counted}, aggregate, false, payloadRaw)
+		eventPublication, err := s.prepareMetadataAggregatePublication(ctx, metadataAggregateImage{Source: attempt.Before}, metadataAggregateImage{Source: counted}, aggregate, false, payloadRaw, eventType)
 		if err != nil {
 			return err
 		}
-		if err := attempt.Owner.reserve(ctx, uint64(plan.RequiredBytes)); err != nil {
-			return err
-		}
-		_, entity, err := plan.Values(ctx)
-		if err != nil {
-			return err
-		}
-		nextRealtime := enrichRealtimePayload(payloadRaw, entity, eventType)
+		attempt.Owner.release = append(attempt.Owner.release, eventPublication.Close)
+		nextRealtime := eventPublication.RealtimePayload
 		// The literal full writer opens its default transaction only after
 		// callback, progress classification, count and realtime planning.
 		tx, err := s.db.BeginTx(ctx, nil)

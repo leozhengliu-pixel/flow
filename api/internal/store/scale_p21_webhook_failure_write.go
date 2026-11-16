@@ -414,20 +414,13 @@ func (s *SQLiteStore) RecordWebhookDeliveryFailure(ctx context.Context, workspac
 		if err != nil {
 			return err
 		}
-		plan, err := planMetadataAggregatePayload(ctx, metadataAggregateImage{Source: source}, metadataAggregateImage{Source: candidate}, failure.WebhookID, hooks && s.webhookConfigured(), payloadRaw)
+		eventPublication, err := s.prepareMetadataAggregatePublication(ctx, metadataAggregateImage{Source: source}, metadataAggregateImage{Source: candidate}, failure.WebhookID, hooks && s.webhookConfigured(), payloadRaw, "webhook.delivery_failed")
 		if err != nil {
 			return err
 		}
-		_, releaseEvent, err = s.tryAdmitAdditionalMetadataWork(ctx, plan.RequiredBytes)
-		if err != nil {
-			return err
-		}
-		previous, entity, err := plan.Values(ctx)
-		if err != nil {
-			return err
-		}
-		committed = domain.DomainEvent{ID: idgen.New("evt_"), Type: "webhook.delivery_failed", AggregateID: failure.WebhookID, Payload: payloadRaw, PreviousValues: previous, CreatedAt: time.Now().UTC()}
-		realtime = enrichRealtimePayload(payloadRaw, entity, committed.Type)
+		releaseEvent = eventPublication.Close
+		committed = domain.DomainEvent{ID: idgen.New("evt_"), Type: "webhook.delivery_failed", AggregateID: failure.WebhookID, Payload: payloadRaw, PreviousValues: eventPublication.PreviousValues, CreatedAt: time.Now().UTC()}
+		realtime = eventPublication.RealtimePayload
 		complete := storageBefore
 		if err := s.persistWorkspaceTx(identityCtx, tx, workspace, &storageBefore, &complete, nil, &committed, nil); err != nil {
 			return err
