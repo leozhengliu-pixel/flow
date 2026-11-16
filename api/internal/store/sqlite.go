@@ -1572,6 +1572,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 
 func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	if s.metadataResidency != nil {
+		if _, batch := issueBatchUpdateFromContext(ctx); batch && UsesIssueRecordMutations(ctx) && eventType == "issue.batch_updated" {
+			return s.mutateBoundedIssueBatch(ctx, workspaceKey, eventType, payload, mutate)
+		}
 		if _, suggestions := issueSuggestionWriteFromContext(ctx); suggestions && UsesIssueRecordMutations(ctx) {
 			return s.mutateBoundedIssueSuggestions(ctx, workspaceKey, eventType, payload, mutate)
 		}

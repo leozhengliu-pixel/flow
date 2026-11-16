@@ -22,12 +22,16 @@ type issueEditorLookups struct {
 	source                 *metadataLogicalSource
 	workspace, workspaceID string
 	documentID             string
-	former                 map[string]bool
-	updates                [][]byte
-	legacyUpdates          [][][]byte
-	updateBytes            uint64
-	formerLoaded           bool
-	updatesLoaded          bool
+	// documents are further documents whose queued updates the callback
+	// may read (a batch update's other issues), each loaded and admitted on
+	// first use like documentID's.
+	documents     map[string]*issueEditorDocument
+	former        map[string]bool
+	updates       [][]byte
+	legacyUpdates [][][]byte
+	updateBytes   uint64
+	formerLoaded  bool
+	updatesLoaded bool
 	// liveMembers mirrors a legacy write whose member snapshot is the
 	// live membership list (loadMemberAccess): without memberships that
 	// list is empty, so no snapshot member counts as former.
@@ -35,6 +39,32 @@ type issueEditorLookups struct {
 	err         error
 	releases    []func()
 	closed      bool
+}
+
+type issueEditorDocument struct {
+	updates [][]byte
+	bytes   uint64
+	loaded  bool
+}
+
+// allowDocuments lets collaborationUpdates read the queued updates of the
+// document generation of each issue besides the first target's.
+func (r *issueEditorLookups) allowDocuments(issues []domain.Issue) {
+	for _, issue := range issues {
+		id := "document_content_" + issue.ID
+		if issue.DocumentContent != nil && issue.DocumentContent.ID != "" {
+			id = issue.DocumentContent.ID
+		}
+		if id == r.documentID {
+			continue
+		}
+		if r.documents == nil {
+			r.documents = map[string]*issueEditorDocument{}
+		}
+		if r.documents[id] == nil {
+			r.documents[id] = &issueEditorDocument{}
+		}
+	}
 }
 
 func newIssueEditorLookups(ctx context.Context, inputs *issueHotInputs, tx *sqlTx, workspace, workspaceID string, target domain.Issue) (_ *issueEditorLookups, err error) {
@@ -64,7 +94,7 @@ func (r *issueEditorLookups) close() {
 		return
 	}
 	r.closed = true
-	r.former, r.updates, r.legacyUpdates = nil, nil, nil
+	r.former, r.updates, r.legacyUpdates, r.documents = nil, nil, nil, nil
 	if r.source != nil {
 		r.source.Release()
 		r.source = nil
@@ -237,65 +267,77 @@ func (r *issueEditorLookups) loadNativeFormer() error {
 	})
 }
 
-func (r *issueEditorLookups) collaborationUpdates(documentID string) ([][]byte, error) {
+func (r *issueEditorLookups) collaborationUpdates(documentID string) (_ [][]byte, err error) {
 	if r.legacy {
 		return r.legacyCollaborationUpdates(documentID)
 	}
 	if err := r.check(); err != nil {
 		return nil, err
 	}
-	if documentID != r.documentID {
+	var updates [][]byte
+	var size uint64
+	if documentID == r.documentID {
+		if !r.updatesLoaded {
+			if r.updates, r.updateBytes, err = r.loadUpdates(documentID); err != nil {
+				return nil, r.failure(err)
+			}
+			r.updatesLoaded = true
+		}
+		updates, size = r.updates, r.updateBytes
+	} else if document := r.documents[documentID]; document != nil {
+		if !document.loaded {
+			if document.updates, document.bytes, err = r.loadUpdates(documentID); err != nil {
+				return nil, r.failure(err)
+			}
+			document.loaded = true
+		}
+		updates, size = document.updates, document.bytes
+	} else {
 		return nil, r.failure(ErrMetadataRecordQuery)
 	}
-	if !r.updatesLoaded {
-		if err := r.loadUpdates(); err != nil {
-			return nil, r.failure(err)
-		}
-		r.updatesLoaded = true
-	}
-	if err := r.reserve(uint64(len(r.updates))*128 + r.updateBytes*2 + 4096); err != nil {
+	if err := r.reserve(uint64(len(updates))*128 + size*2 + 4096); err != nil {
 		return nil, r.failure(err)
 	}
 	// P04 executes independent callbacks. Give each its own mutable blobs,
 	// while keeping the retained transaction result private.
-	result := slices.Clone(r.updates)
+	result := slices.Clone(updates)
 	for index := range result {
 		result[index] = slices.Clone(result[index])
 	}
 	return result, nil
 }
 
-func (r *issueEditorLookups) loadUpdates() error {
+func (r *issueEditorLookups) loadUpdates(documentID string) (updates [][]byte, total uint64, err error) {
 	const from = " FROM document_collaboration_updates WHERE workspace_key=? AND document_id=?"
 	var count, size int64
-	err := r.tx.QueryRowContext(r.ctx, "SELECT COUNT(*),COALESCE(SUM("+r.bytes("update_data")+"),0)"+from, r.workspace, r.documentID).Scan(&count, &size)
+	err = r.tx.QueryRowContext(r.ctx, "SELECT COUNT(*),COALESCE(SUM("+r.bytes("update_data")+"),0)"+from, r.workspace, documentID).Scan(&count, &size)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
 	if count < 0 || size < 0 || uint64(count) > (metadataWorkBytes-(64<<10))/256 ||
 		uint64(size) > (metadataWorkBytes-(64<<10)-uint64(count)*256)/4 {
-		return ErrMetadataWorkBudget
+		return nil, 0, ErrMetadataWorkBudget
 	}
 	if err := r.reserve(uint64(count)*256 + uint64(size)*4 + 64<<10); err != nil {
-		return err
+		return nil, 0, err
 	}
-	rows, err := r.tx.QueryContext(r.ctx, "SELECT update_data"+from+" ORDER BY created_at,update_id", r.workspace, r.documentID)
+	rows, err := r.tx.QueryContext(r.ctx, "SELECT update_data"+from+" ORDER BY created_at,update_id", r.workspace, documentID)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	var actual uint64
 	for rows.Next() {
 		var update []byte
 		if err := rows.Scan(&update); err != nil {
-			return err
+			return nil, 0, err
 		}
 		actual++
-		r.updateBytes += uint64(len(update))
-		if actual > uint64(count) || r.updateBytes > uint64(size) {
-			return ErrMetadataRecordQuery
+		total += uint64(len(update))
+		if actual > uint64(count) || total > uint64(size) {
+			return nil, 0, ErrMetadataRecordQuery
 		}
-		r.updates = append(r.updates, update)
+		updates = append(updates, update)
 	}
-	return rows.Err()
+	return updates, total, rows.Err()
 }

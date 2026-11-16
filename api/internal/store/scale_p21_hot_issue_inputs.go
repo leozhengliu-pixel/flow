@@ -267,44 +267,55 @@ func (s *SQLiteStore) loadIssueSelectedInputs(ctx context.Context, workspace str
 	if err != nil {
 		return nil, err
 	}
+	if err := read.selectIssueInputs(ctx, data, []domain.Issue{target}, input); err != nil {
+		return nil, err
+	}
+	return read, nil
+}
+
+// selectIssueInputs selects from r.source the references the update
+// callback can read for each of targets, the issues it applies input to
+// (one issue update, or every issue of a batch), with data.Issues their
+// loaded family.
+func (read *issueHotInputs) selectIssueInputs(ctx context.Context, data *domain.Bootstrap, targets []domain.Issue, input domain.IssueUpdateInput) (err error) {
 	users, err := read.keys(ctx, data.Viewer.ID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	teams, err := read.keys(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	labels, err := read.keys(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for _, issue := range data.Issues {
 		if err := read.addKey(ctx, teams, issue.Team.ID); err != nil {
-			return nil, err
+			return err
 		}
 		for _, user := range []*domain.User{&issue.Creator, issue.Assignee, issue.Delegate} {
 			if user != nil {
 				if err := read.addKey(ctx, users, user.ID); err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
 		for _, id := range issue.SubscriberIDs {
 			if err := read.addKey(ctx, users, id); err != nil {
-				return nil, err
+				return err
 			}
 		}
 		for _, label := range issue.Labels {
 			if err := read.addKey(ctx, labels, label.ID); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
 	for _, id := range []*string{input.AssigneeID, input.DelegateID} {
 		if id != nil {
 			if err := read.addKey(ctx, users, *id); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
@@ -314,7 +325,7 @@ func (s *SQLiteStore) loadIssueSelectedInputs(ctx context.Context, workspace str
 	}{{teams, input.TeamID}} {
 		if pair.id != nil {
 			if err := read.addKey(ctx, pair.keys, *pair.id); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
@@ -325,38 +336,53 @@ func (s *SQLiteStore) loadIssueSelectedInputs(ctx context.Context, workspace str
 		if pair.ids != nil {
 			for _, id := range *pair.ids {
 				if err := read.addKey(ctx, pair.keys, id); err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
 	}
 	if err := issueHotMentionIDs(input.DescriptionData, func(id string) error { return read.addKey(ctx, users, id) }); err != nil {
-		return nil, err
+		return err
 	}
-	if input.TeamID != nil && *input.TeamID != target.Team.ID {
-		// moveIssueToTeam replaces each label the destination cannot use by
-		// the first same-named label it can: select every label named like
-		// one the target carries (issueTeamMove), in collection order.
-		read.moveTeam = *input.TeamID
-		if read.move, err = read.prepareIssueTeamMove(ctx, []domain.Issue{target}, nil, []string{*input.TeamID}, nil, false); err != nil {
-			return nil, err
+	if input.TeamID != nil {
+		var moved []domain.Issue
+		for _, target := range targets {
+			if *input.TeamID != target.Team.ID {
+				moved = append(moved, target)
+			}
+		}
+		if len(moved) > 0 {
+			// moveIssueToTeam replaces each label the destination cannot use
+			// by the first same-named label it can: select every label named
+			// like one a moved target carries (issueTeamMove), in order.
+			read.moveTeam = *input.TeamID
+			if read.move, err = read.prepareIssueTeamMove(ctx, moved, nil, []string{*input.TeamID}, nil, false); err != nil {
+				return err
+			}
 		}
 	}
 	changedDescription := input.Description != nil || input.DescriptionData != nil || input.DescriptionState != nil || input.ContentState != nil
-	text := ""
+	var lowered []string
 	if changedDescription {
-		text = target.Description
-		if input.Description != nil {
-			text = *input.Description
+		for _, target := range targets {
+			text := target.Description
+			if input.Description != nil {
+				text = *input.Description
+			}
+			if uint64(len(text)) > (metadataWorkBytes-4096)/8 {
+				return ErrMetadataWorkBudget
+			}
+			if err := read.reserve(ctx, uint64(len(text))*8+4096); err != nil {
+				return err
+			}
+			if lower := strings.ToLower(text); !slices.Contains(lowered, lower) {
+				lowered = append(lowered, lower)
+			}
 		}
 	}
-	if uint64(len(text)) > (metadataWorkBytes-4096)/8 {
-		return nil, ErrMetadataWorkBudget
+	mentioned := func(handle string) bool {
+		return slices.ContainsFunc(lowered, func(lower string) bool { return strings.Contains(lower, handle) })
 	}
-	if err := read.reserve(ctx, uint64(len(text))*8+4096); err != nil {
-		return nil, err
-	}
-	lower := strings.ToLower(text)
 	err = read.selectSlice(ctx, "users", func(record metadataLogicalNode) (bool, error) {
 		matched, err := issueHotMatches(ctx, record, "ID", users)
 		if err != nil || matched || !changedDescription {
@@ -364,45 +390,45 @@ func (s *SQLiteStore) loadIssueSelectedInputs(ctx context.Context, workspace str
 		}
 		return read.withHeader(ctx, record, []string{"Name", "Email", "DisplayName"}, func(value reflect.Value) (bool, error) {
 			user := value.Interface().(domain.User)
-			return strings.Contains(lower, "@"+strings.ToLower(user.Email)) ||
-				strings.Contains(lower, "@"+strings.ToLower(user.Name)) ||
-				strings.Contains(lower, "@"+strings.ToLower(strings.ReplaceAll(user.DisplayName, " ", ""))), nil
+			return mentioned("@"+strings.ToLower(user.Email)) ||
+				mentioned("@"+strings.ToLower(user.Name)) ||
+				mentioned("@"+strings.ToLower(strings.ReplaceAll(user.DisplayName, " ", ""))), nil
 		})
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// Newly found text mentions also need preferences and push state.
 	for _, user := range read.data.Users {
 		if err := read.addKey(ctx, users, user.ID); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if err := read.selectMap(ctx, "notificationPreferences", users); err != nil {
-		return nil, err
+		return err
 	}
 	if err := read.selectSlice(ctx, "pushSubscriptions", func(record metadataLogicalNode) (bool, error) {
 		return issueHotMatches(ctx, record, "UserID", users)
 	}, "UserID", "Enabled"); err != nil {
-		return nil, err
+		return err
 	}
 	viewer, err := read.keys(ctx, data.Viewer.ID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if err := read.selectMap(ctx, "userSettings", viewer, "AssignStarted"); err != nil {
-		return nil, err
+		return err
 	}
 	if err := read.selectMap(ctx, "cycleSettings", teams); err != nil {
-		return nil, err
+		return err
 	}
 	cycles, err := read.keys(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if input.CycleID != nil {
 		if err := read.addKey(ctx, cycles, *input.CycleID); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if err := read.selectSlice(ctx, "cycles", func(record metadataLogicalNode) (bool, error) {
@@ -420,14 +446,11 @@ func (s *SQLiteStore) loadIssueSelectedInputs(ctx context.Context, workspace str
 		}
 		return state.StringEqual(ctx, "current")
 	}, "ID", "TeamID", "Status", "StartsAt", "EndsAt"); err != nil {
-		return nil, err
+		return err
 	}
 	// Further reference families are selected before this owner is installed
 	// into the callback, so an unavailable input cannot become an empty one.
-	if err := read.loadReferences(ctx, data, target, users, labels); err != nil {
-		return nil, err
-	}
-	return read, ctx.Err()
+	return read.loadReferences(ctx, data, targets, users, labels)
 }
 
 func issueHotInputsSupported(issues []domain.Issue, target domain.Issue, input domain.IssueUpdateInput) bool {
@@ -443,7 +466,7 @@ func issueHotInputsSupported(issues []domain.Issue, target domain.Issue, input d
 	return true
 }
 
-func (r *issueHotInputs) loadReferences(ctx context.Context, data *domain.Bootstrap, target domain.Issue, users, labels map[string]bool) error {
+func (r *issueHotInputs) loadReferences(ctx context.Context, data *domain.Bootstrap, targets []domain.Issue, users, labels map[string]bool) error {
 	// Its only suggestion operation, here or in a team move, removes every
 	// target suggestion before clearing the target's derived arrays.
 	// Suggestion and SLA-event metadata changes are discarded by this writer.
@@ -495,8 +518,17 @@ func (r *issueHotInputs) loadReferences(ctx context.Context, data *domain.Bootst
 	if err != nil {
 		return err
 	}
+	scoped, err := r.keys(ctx)
+	if err != nil {
+		return err
+	}
+	for _, target := range targets {
+		if err := r.addKey(ctx, scoped, target.Team.ID); err != nil {
+			return err
+		}
+	}
 	for _, sla := range r.data.IssueSLAs {
-		if sla.IssueID == target.ID {
+		if slices.ContainsFunc(targets, func(target domain.Issue) bool { return sla.IssueID == target.ID }) {
 			if err := r.addKey(ctx, rules, sla.RuleID); err != nil {
 				return err
 			}
@@ -510,7 +542,7 @@ func (r *issueHotInputs) loadReferences(ctx context.Context, data *domain.Bootst
 		return r.withHeader(ctx, record, []string{"Enabled", "TeamIDs"}, func(value reflect.Value) (bool, error) {
 			rule := value.Interface().(domain.SLARule)
 			// A moved issue is matched in its destination team.
-			return rule.Enabled && (len(rule.TeamIDs) == 0 || slices.Contains(rule.TeamIDs, target.Team.ID) ||
+			return rule.Enabled && (len(rule.TeamIDs) == 0 || slices.ContainsFunc(rule.TeamIDs, func(id string) bool { return scoped[id] }) ||
 				r.moveTeam != "" && slices.Contains(rule.TeamIDs, r.moveTeam)), nil
 		})
 	}); err != nil {

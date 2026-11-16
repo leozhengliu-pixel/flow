@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Batch issue updates (multi-select edits and team retirement) run through a dedicated bounded writer in bounded mode, with the same single transaction and event as before; batches of about 500 issues or more, and batches carrying a collaborative editor snapshot, are refused before any change. Bounded metadata stays off by default.
 - Issue updates through the issue records API read only the viewer's projected teams, memberships and directory and the destination project and cycle in bounded mode, and the bounded issue writer now moves issues between teams (locked numbering, same-named labels, destination workflow and SLA rules, attached documents, notifications only to subscribers who can open the moved issue), saves legacy editor snapshots with their former-member mention checks and runs the stale-close and archive automation with its notification inputs. Collaborative editor snapshots remain refused in bounded mode. Bounded metadata stays off by default.
 - Changing the status, estimate or project of an issue in a project works again once any issue in that project had a label change: rebuilding the project's progress failed on the label change's recorded additions and removals, so every such write returned an error.
 - Project status updates are saved again when a project has two updates with the same ID: every later workspace write failed with a decoding error.

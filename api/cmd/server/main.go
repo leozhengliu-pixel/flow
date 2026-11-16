@@ -5116,8 +5116,22 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 	})
 	var updated []domain.Issue
 	ctx := r.Context()
+	bounded := s.store.BoundedMetadataEnabled()
 	if input.Update.TeamID != nil {
-		if !s.authDisabled {
+		if !s.authDisabled && bounded {
+			// The same projection over one installed generation; the batch
+			// has no destination checks of its own.
+			metadata, release, ok := s.boundedIssueUpdateTargets(w, r, workspaceKey(r), domain.IssueUpdateInput{})
+			if !ok {
+				return
+			}
+			message := issueTeamMoveForbidden(s, metadata, *input.Update.TeamID)
+			release()
+			if message != "" {
+				writeError(w, http.StatusForbidden, message)
+				return
+			}
+		} else if !s.authDisabled {
 			metadata, err := s.store.PagedWorkspaceMetadata(ctx, workspaceKey(r), authUser(r).ID)
 			if err != nil {
 				issueRecordsError(w, err)
@@ -5130,6 +5144,13 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		ctx = store.WithIssueRenumbering(ctx)
+	}
+	if bounded {
+		// The dedicated bounded writer owns the batch's selected inputs
+		// until the write is published.
+		owned, closeOwned := beginIndependentMetadataOutputReads(ctx)
+		defer closeOwned()
+		ctx = store.ContextWithIssueBatchUpdate(owned, input.Update)
 	}
 	var affected []domain.IssueVersion
 	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.batch_updated", idgen.New("issue_batch_"), input, func(data *domain.Bootstrap) error {
