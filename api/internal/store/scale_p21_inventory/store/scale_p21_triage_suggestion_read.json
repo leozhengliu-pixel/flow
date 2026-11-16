@@ -14,6 +14,19 @@
       "callers": [
         "server/scale_p21_triage_suggestions.go:listIssueSuggestionsBounded"
       ]
+    },
+    "ProjectedWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal PagedWorkspaceMetadata over a borrowed SQL snapshot whose metadata is this installed generation's core and policy fields plus only the requested complete collections (projects, labels, labelGroups, initiatives), after admitting the same live directory rows as BeginIssueBootstrapRead. Every projection rule and resource count reading those collections sees the stored records; absent collections only affect outputs callers do not use. Proven against mcpWorkspaceData for 27 principal/credential pairs on warm and reloaded views with zero full decodes.",
+      "accessors": [
+        "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Triage preview and AI context projection.",
+      "callers": [
+        "server/scale_p21_triage_suggestions.go:mcpWorkspaceDataProjected"
+      ]
     }
   }
 }

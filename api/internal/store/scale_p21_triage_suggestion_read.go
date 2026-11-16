@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 
@@ -283,4 +284,138 @@ func (r *InstalledMetadataRead) LabelVisibleInProjection(ctx context.Context, sc
 		return false, err
 	}
 	return visible, nil
+}
+
+// ProjectedWorkspaceRead owns one literal paged projection through response
+// encoding. Data must not escape Close.
+type ProjectedWorkspaceRead struct {
+	Data  domain.Bootstrap
+	owner *ResourceRead
+	once  sync.Once
+}
+
+func (r *ProjectedWorkspaceRead) Close() {
+	if r != nil {
+		r.once.Do(func() {
+			r.Data = domain.Bootstrap{}
+			if r.owner != nil {
+				r.owner.Close()
+				r.owner = nil
+			}
+		})
+	}
+}
+
+// projectedWorkspaceCollections are the complete collections a projected
+// workspace may request: each is selected whole, so every projection rule
+// and resource count reading it sees exactly the stored records.
+var projectedWorkspaceCollections = []string{"projects", "labels", "labelGroups", "initiatives"}
+
+// ProjectedWorkspace runs the literal PagedWorkspaceMetadata for userID over
+// this generation's core and resident policy fields plus the named complete
+// collections, with live membership, role, user, member, team-membership,
+// invitation and team-default-favorite rows read exactly as the full accessor
+// reads them. Collections that are not requested are absent from the input,
+// so the result is exact only for the requested collections, the policy
+// fields and the live directory (Users, Members, TeamMembers).
+func (r *InstalledMetadataRead) ProjectedWorkspace(ctx context.Context, userID string, collections ...string) (_ *ProjectedWorkspaceRead, err error) {
+	for _, name := range collections {
+		if !slices.Contains(projectedWorkspaceCollections, name) {
+			return nil, ErrMetadataRecordQuery
+		}
+	}
+	owner, bound, err := r.commentActionOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	read := &ProjectedWorkspaceRead{owner: owner}
+	defer func() {
+		if err != nil {
+			read.Close()
+		}
+	}()
+	var data domain.Bootstrap
+	root := reflect.ValueOf(&data).Elem()
+	for _, name := range append([]string{"workspace", "viewer", "viewerRole", "teams", "teamSettings", "workspaceSettings", "teamParents"}, collections...) {
+		index, _, _ := metadataLogicalField(name)
+		value, err := owner.node(bound, owner.source.fields[index], false)
+		if err != nil {
+			return nil, err
+		}
+		root.Field(index).Set(value)
+	}
+	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
+	tx, err := r.store.db.BeginTx(ctx, metadataReadOptions(r.store.dialect))
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	snapshot := owner.metadataOutputContext(ctx)
+	snapshot = context.WithValue(snapshot, workspaceReadKey{}, workspaceRead{
+		database: r.store.db, workspace: r.workspace, reader: tx, metadata: data,
+	})
+	document := &DocumentRead{Data: data, owner: owner}
+	if err := document.documentProjectionWork(snapshot, data.Workspace.ID, userID); err != nil {
+		return nil, err
+	}
+	projected, err := r.store.PagedWorkspaceMetadata(snapshot, r.workspace, userID)
+	if outputErr := metadataOutputError(snapshot); outputErr != nil {
+		return nil, outputErr
+	}
+	if err != nil {
+		return nil, err
+	}
+	read.Data = projected
+	return read, ctx.Err()
+}
+
+// TriageScoringInputs selects, unprojected and from this generation, what
+// the heuristic suggestion scorer and run checks read: core and policy
+// fields, every label, every project's triage fields and the ordered user
+// directory as ID/Active headers.
+func (r *InstalledMetadataRead) TriageScoringInputs(ctx context.Context) (_ *ProjectedWorkspaceRead, err error) {
+	owner, ctx, err := r.commentActionOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	read := &ProjectedWorkspaceRead{owner: owner}
+	defer func() {
+		if err != nil {
+			read.Close()
+		}
+	}()
+	root := reflect.ValueOf(&read.Data).Elem()
+	for _, name := range []string{"workspace", "viewer", "viewerRole", "teams", "teamSettings", "workspaceSettings", "teamParents", "labels"} {
+		index, _, _ := metadataLogicalField(name)
+		value, err := owner.node(ctx, owner.source.fields[index], false)
+		if err != nil {
+			return nil, err
+		}
+		root.Field(index).Set(value)
+	}
+	for _, selection := range []struct {
+		name   string
+		fields []string
+	}{{"projects", triageProjectFields}, {"users", []string{"ID", "Active"}}} {
+		index, _, _ := metadataLogicalField(selection.name)
+		node := owner.source.fields[index]
+		absent, err := node.isNil(ctx)
+		if err != nil {
+			return nil, err
+		}
+		target := root.Field(index)
+		if !absent {
+			target.Set(reflect.MakeSlice(target.Type(), 0, 0))
+		}
+		if err := owner.nativeArray(ctx, node, func(_ int, record metadataLogicalNode) error {
+			value, err := owner.projectNode(ctx, record, selection.fields...)
+			if err == nil {
+				target.Set(reflect.Append(target, value))
+			}
+			return err
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return read, ctx.Err()
 }

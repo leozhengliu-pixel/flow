@@ -1,10 +1,10 @@
 {
   "source": "server/triage_intelligence_ai.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "requestTriageAIPlan": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "mcpWorkspaceData"
       ],
@@ -12,7 +12,8 @@
       "temperatureReason": "Reachable from POST /api/issue-records/{id}/suggestions/refresh",
       "callers": [
         "server/server.runTriageIntelligence"
-      ]
+      ],
+      "reason": "Off mode keeps mcpWorkspaceData. Bounded mode replaces only that read with triageAIWorkspaceBounded (literal mcpWorkspaceData filters over ProjectedWorkspace with complete projects, labels, labelGroups and initiatives and the live directory); recent-issue query, linked-issue lookups, prompt, model call and reply validation are unchanged. TestScaleP21TriageProjectedWorkspaceDifferential proves the projected collections and the built triage AI prompt byte-identical with mcpWorkspaceData for 27 principal/credential pairs on warm and reloaded views; TestScaleP21TriageRunWriterDifferential proves the model receives byte-identical prompts from legacy, warm and reloaded sources and stores identical suggestions."
     },
     "runTriageIntelligence": {
       "owner": "P21",
@@ -27,6 +28,21 @@
       "callers": [
         "server/server.refreshIssueSuggestions",
         "server/server.startTriageIntelligenceRun"
+      ],
+      "reason": "Partially owned, still pending: bounded mode (runTriageIntelligenceBounded) reads unprojected scoring inputs (TriageScoringInputs: policy fields, every label, every project's triage fields, the ordered user directory) and writes through mutateBoundedIssueSuggestions with the generated targets declared; heuristic and model-backed runs, with and without auto-applied project/label/relation suggestions, equal legacy (TestScaleP21TriageRunWriterDifferential). Workspaces whose team suggestions may auto-move issues are refused before the write because the bounded writer does not yet move and renumber issues; that input keeps this consumer blocked."
+    },
+    "runTriageIntelligenceWith": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal runTriageIntelligence body after the issue read, extracted unchanged; its metadata and write context come from the caller (legacy WorkspaceMetadata with WithIssueRenumbering/WithIssueRecordMutations, or the bounded path). Its write is covered with each caller; the team-move gap is accounted to runTriageIntelligence.",
+      "accessors": [
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Run body for Run again and background triage runs.",
+      "callers": [
+        "server/triage_intelligence_ai.go:runTriageIntelligence",
+        "server/scale_p21_triage_suggestions.go:runTriageIntelligenceBounded"
       ]
     }
   }

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
@@ -52,7 +53,7 @@ func scaleP21TriageWriterSetup(t *testing.T) scaleP21TriageWriterFixture {
 	}
 	stamp := time.Date(2026, 2, 3, 4, 5, 6, 7, time.UTC)
 	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.triage_writer_seed", "", nil, func(data *domain.Bootstrap) error {
-		data.Labels = append(data.Labels, domain.IssueLabel{ID: "triage-l-public", Name: "Bug", Scope: "workspace"},
+		data.Labels = append(data.Labels, domain.IssueLabel{ID: "triage-l-public", Name: "Preview crash", Description: "Marketplace image preview crash", Scope: "workspace"},
 			domain.IssueLabel{ID: "triage-l-private", Name: "Private", Scope: f.private})
 		for _, extra := range []domain.IssueSuggestion{
 			{ID: "triage-s-label-real", Type: "label", SuggestedLabelID: "triage-l-public"},
@@ -635,4 +636,112 @@ func TestScaleP21TriageGenerateWriterDifferential(t *testing.T) {
 			}
 		})
 	}
+}
+
+// runTriageIntelligence through the "Run again" route: heuristic and
+// model-backed runs (a fixed model reply over the bounded projected context)
+// write the same rows, order, events and publications. The model receives a
+// byte-identical prompt from every source.
+func TestScaleP21TriageRunWriterDifferential(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := scaleP21TriageWriterSetup(t)
+	workspace := f.data.Workspace.URLKey
+	setup := func(settings func(*domain.TriageIntelligenceSettings), triaged bool) func(*testing.T) {
+		return func(t *testing.T) {
+			if err := f.repository.MutateWorkspace(t.Context(), workspace, "scale_p21.triage_run_settings", "", nil, func(data *domain.Bootstrap) error {
+				settings(&data.WorkspaceSettings.FeatureSettings.TriageIntelligence)
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.repository.MutateWorkspace(store.WithIssueRecordMutations(t.Context(), f.triage.ID), workspace, "scale_p21.triage_run_issue", f.triage.ID, nil, func(data *domain.Bootstrap) error {
+				issue, err := issueByID(data, f.triage.ID)
+				if err != nil {
+					return err
+				}
+				issue.Title, issue.Description = "Public preview bug in marketplace", "The public marketplace image preview crashes."
+				issue.State = domain.WorkflowState{ID: "triage-started", Name: "Started", Type: "started", TeamID: f.public}
+				if triaged {
+					issue.State = domain.WorkflowState{ID: "triage-backlog", Name: "Triage", Type: "backlog", TeamID: f.public}
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	suggest := func(settings *domain.TriageIntelligenceSettings) {
+		settings.AssigneeAction, settings.ProjectAction, settings.LabelAction = "suggest", "suggest", "suggest"
+		settings.DuplicateAction, settings.RelatedAction, settings.TeamAction = "suggest", "suggest", "hide"
+	}
+	auto := func(settings *domain.TriageIntelligenceSettings) {
+		suggest(settings)
+		settings.ProjectAction, settings.LabelAction, settings.RelatedAction = "auto", "auto", "auto"
+	}
+	provider := &triageAIProvider{reply: func() string {
+		return `{"duplicate":null,"related":[{"identifier":"` + f.visible.Identifier + `","reasons":["Same preview area"]}],"assignee":{"name":"` + f.data.Viewer.Name + `","reasons":["Leads it"]},"project":{"name":"Public","reasons":["Named"]},"labels":[{"name":"Bug","reasons":["A crash"]}],"team":null,"thinking":"Preview crash in the public project."}`
+	}}
+	upstream := httptest.NewServer(provider)
+	t.Cleanup(upstream.Close)
+	refresh := func(model bool) func(*server) *httptest.ResponseRecorder {
+		return func(service *server) *httptest.ResponseRecorder {
+			if model {
+				service.agent = appconfig.AgentConfig{Enabled: true, BaseURL: upstream.URL, Model: "model", MaxOutputTokens: 800, Timeout: 5 * time.Second}
+				service.agentClient = upstream.Client()
+			}
+			r := f.literalRequest(f.data.Viewer, nil, nil)
+			r.SetPathValue("id", f.triage.ID)
+			r, closeOutput := beginRequestResourceReads(r)
+			defer closeOutput()
+			w := httptest.NewRecorder()
+			service.refreshIssueSuggestions(w, r)
+			return w
+		}
+	}
+	for _, test := range []struct {
+		name    string
+		prepare func(*testing.T)
+		model   bool
+		code    int
+	}{
+		{"heuristic-suggest", setup(suggest, true), false, http.StatusOK},
+		{"heuristic-auto", setup(auto, true), false, http.StatusOK},
+		{"model-suggest", setup(suggest, true), true, http.StatusOK},
+		{"model-auto", setup(auto, true), true, http.StatusOK},
+		{"not-triage", setup(suggest, false), false, http.StatusBadRequest},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f.prepare = test.prepare
+			defer func() { f.prepare = nil }()
+			provider.mu.Lock()
+			provider.prompts = nil
+			provider.mu.Unlock()
+			outcomes := f.differential(t, test.name, refresh(test.model))
+			if outcomes[0].Code != test.code {
+				t.Fatalf("legacy status %d: %s", outcomes[0].Code, outcomes[0].Body)
+			}
+			if test.model {
+				provider.mu.Lock()
+				prompts := slices.Clone(provider.prompts)
+				provider.mu.Unlock()
+				if len(prompts) != 3 || prompts[1] != prompts[0] || prompts[2] != prompts[0] {
+					t.Fatalf("model prompts differ across sources (%d calls)", len(prompts))
+				}
+			}
+		})
+	}
+	t.Run("team-auto-move-refused", func(t *testing.T) {
+		f.prepare = setup(func(settings *domain.TriageIntelligenceSettings) { suggest(settings); settings.TeamAction = "auto" }, true)
+		defer func() { f.prepare = nil }()
+		for _, source := range []string{"warm", "reloaded"} {
+			service := f.reset(t, source)
+			before := f.state(t)
+			w := refresh(false)(service)
+			if w.Code == http.StatusOK || !reflect.DeepEqual(before, f.state(t)) {
+				t.Fatalf("%s: team auto-move run was not refused cleanly: %d %s", source, w.Code, w.Body.String())
+			}
+		}
+	})
 }

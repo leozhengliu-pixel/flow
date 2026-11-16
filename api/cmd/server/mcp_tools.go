@@ -610,18 +610,23 @@ func accessRole(data domain.Bootstrap, userID string) string {
 }
 
 func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.Bootstrap, error) {
+	return s.mcpWorkspaceDataFrom(ctx, actor, s.store.PagedWorkspaceMetadata)
+}
+
+// mcpWorkspaceDataFrom is mcpWorkspaceData over a paged projection source.
+func (s *server) mcpWorkspaceDataFrom(ctx context.Context, actor mcpActor, paged func(context.Context, string, string) (domain.Bootstrap, error)) (domain.Bootstrap, error) {
 	ctx = context.WithValue(ctx, credentialReadPrincipalKey{}, firstNonEmpty(actor.AuthorizationUserID, actor.User.ID))
 	userID := actor.User.ID
 	if actor.AuthorizationUserID != "" {
 		userID = actor.AuthorizationUserID
 	}
-	data, err := s.store.PagedWorkspaceMetadata(ctx, actor.WorkspaceKey, userID)
+	data, err := paged(ctx, actor.WorkspaceKey, userID)
 	if err != nil {
 		return data, fmt.Errorf("workspace access denied")
 	}
 	filterApplicationScopeProjection(&data, actor.APIKey)
 	if actor.AuthorizationUserID != "" {
-		appData, err := s.store.PagedWorkspaceMetadata(ctx, actor.WorkspaceKey, actor.User.ID)
+		appData, err := paged(ctx, actor.WorkspaceKey, actor.User.ID)
 		if err != nil {
 			return data, err
 		}
