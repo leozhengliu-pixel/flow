@@ -1,5 +1,6 @@
 import { sameActivityActor } from '@/lib/actor-attribution'
 import { activityIds, activityPhrase, changeSeparator, joinActivityParts, type ActivityRef, type IssueActivityEntry } from './issue-activity-model'
+import { asIs } from '@/lib/as-is'
 
 const families = new Set(['state-change', 'priority', 'labels', 'label-added', 'label-removed', 'title-change', 'cycle', 'related-issue', 'duplicate-issue', 'attachment'])
 const aggressive = new Set(['title-change', 'cycle', 'related-issue', 'duplicate-issue', 'attachment'])
@@ -34,7 +35,7 @@ export function groupIssueActivityEntries(entries: IssueActivityEntry[], options
     if (!previous || !families.has(entry.entryType) || family(previous) !== type || sameActorOnly.has(type) && !sameActivityActor(previous, entry)) { result.push(entry); continue }
     const members = [...(previous.members ?? [previous]), entry]
     if (entry.entryType === 'title-change' && sameActivityActor(previous, entry) && Date.parse(entry.createdAt) - Date.parse(previous.createdAt) <= 60_000 && !previous.members) {
-      result[result.indexOf(previous)] = { ...entry, id: previous.id, recordId: previous.recordId, createdAt: previous.createdAt, metadata: { ...entry.metadata, titleBefore: previous.metadata.titleBefore }, description: entry.description.map(part => typeof part !== 'string' && part.type === 'value' && previous.metadata.titleBefore ? { ...part, title: t('Previously: {title}').replace('{title}', previous.metadata.titleBefore) } : part) }
+      result[result.indexOf(previous)] = { ...entry, id: previous.id, recordId: previous.recordId, createdAt: previous.createdAt, metadata: { ...entry.metadata, titleBefore: previous.metadata.titleBefore }, description: entry.description.map(part => typeof part !== 'string' && part.type === 'value' && previous.metadata.titleBefore ? { ...part, title: t('Previously: {title}').replace('{title}', asIs(previous.metadata.titleBefore)) } : part) }
       continue
     }
     const grouped = { ...entry, id: previous.id, recordId: previous.recordId, members, description: summarizeIssueActivity(members, t) }
@@ -49,7 +50,7 @@ export function summarizeIssueActivity(rows: IssueActivityEntry[], t: (text: str
   const phrase = (template: string, values: Parameters<typeof activityPhrase>[1] = {}) => activityPhrase(template, values, t)
   const bold = (label: string) => ({ type: 'value' as const, label: t(label) })
   const number = (n: number) => t(['zero', 'one', 'two', 'three', 'four', 'five'][n] ?? String(n))
-  if (last.entryType === 'attachment') return phrase('added {links}', { links: bold(t('{count} links').replace('{count}', String(rows.length))) })
+  if (last.entryType === 'attachment') return phrase('added {links}', { links: bold(t('{count} links').replace('{count}', asIs(String(rows.length)))) })
   if (last.entryType === 'title-change') return phrase(rows.length === 2 ? 'changed title twice' : 'changed title {count} times', { count: number(rows.length) })
   if (last.entryType.startsWith('label')) {
     if (rows.some(row => !row.description.some(part => typeof part !== 'string' && part.type === 'label'))) return joinActivityParts(rows.map(row => row.description), t)

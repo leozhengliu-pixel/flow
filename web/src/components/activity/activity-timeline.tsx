@@ -37,6 +37,7 @@ import { activityBlockExpanded, expandActivityBlock, activityCollapseReasons, gr
 import './activity-timeline.css'
 import { CommentActions } from './comment-actions'
 import { useCommentActions } from '@/hooks/use-comment-actions'
+import { asIs } from '@/lib/as-is'
 
 export function ActivityTimeline({
   events,
@@ -375,7 +376,7 @@ function resolvedSummary(root: Comment, replies: Comment[], t: (text: string) =>
   const thread = [root, ...replies]
   const names = [...new Set(thread.map(comment => attributedActorName(comment.user, comment.botActor)))]
   const list = names.length > 1 ? `${names.slice(0, -1).join(t('{changes}, {next}').replace('{changes}', '').replace('{next}', ''))}${t('{changes} and {last}').replace('{changes}', '').replace('{last}', '')}${names.at(-1)}` : names[0]
-  return t(thread.length === 1 ? '{count} resolved comment from {name}' : '{count} resolved comments from {name}').replace('{count}', String(thread.length)).replace('{name}', list)
+  return t(thread.length === 1 ? '{count} resolved comment from {name}' : '{count} resolved comments from {name}').replace('{count}', asIs(String(thread.length))).replace('{name}', asIs(list))
 }
 
 /** Rows whose sentence names no actor ("Session with Flow archived"). */
@@ -394,7 +395,7 @@ function ActivityRow({ event, description, context, now, longTime = false }: { e
   const actorName = actor.name !== 'Flow' && !event.botActor && context?.workspace && event.actor?.id ? <PersonCardHover user={event.actor}><a href={memberProfilePath(context.workspace.urlKey, memberProfileHandle(event.actor))}>{actor.name}</a></PersonCardHover> : undefined
   const actors = event.members?.filter((member, index, members) => members.findIndex(other => sameActivityActor(other, member)) === index)
   const names = actors?.slice(0, actors.length > 3 ? 2 : 3).map(member => activityActor(member.actor, member.botActor, context?.users).name || 'Flow') ?? []
-  if (actors && actors.length > 3) names.push(t('{count} others').replace('{count}', String(actors.length - 2)))
+  if (actors && actors.length > 3) names.push(t('{count} others').replace('{count}', asIs(String(actors.length - 2))))
   const groupActors = names.map((name, index) => <Fragment key={index}>{index > 0 && (index === names.length - 1 ? t('{changes} and {last}').replace('{changes}', '').replace('{last}', '') : t('{changes}, {next}').replace('{changes}', '').replace('{next}', ''))}<strong>{name}</strong></Fragment>)
   const sentence = description.map((part, index) => typeof part === 'string' ? part : part.type === 'value' ? <ActivityValueContent key={index} part={part} previousTitle={event.entryType === 'title-change' ? event.metadata.titleBefore : undefined} source={event.metadata.linkSource}/> : part.type === 'label' ? <ActivityLabel key={index} part={part} context={context}/> : inlineRelation && part.type === 'issue' && context?.workspace
     ? (() => {
@@ -427,7 +428,7 @@ function ActivityRow({ event, description, context, now, longTime = false }: { e
 
 function ActivityValueContent({ part, previousTitle, source }: { part: ActivityValue; previousTitle?: string; source?: string }) {
   const { t } = useI18n()
-  if (part.href) return <FlowTooltip side="top" label={source && source !== 'url' ? t('Open in {source}').replace('{source}', source) : t('Open link')}><a href={part.href} target="_blank" rel="noreferrer"><span className="activity-link-source">{source === 'github' || source === 'gitlab' ? <IntegrationBrandIcon provider={source} size={12}/> : <Link2 size={12}/>}</span><b>{part.label}</b></a></FlowTooltip>
+  if (part.href) return <FlowTooltip side="top" label={source && source !== 'url' ? t('Open in {source}').replace('{source}', asIs(source)) : t('Open link')}><a href={part.href} target="_blank" rel="noreferrer"><span className="activity-link-source">{source === 'github' || source === 'gitlab' ? <IntegrationBrandIcon provider={source} size={12}/> : <Link2 size={12}/>}</span><b>{part.label}</b></a></FlowTooltip>
   if (!part.title) return <b>{part.label}</b>
   return previousTitle ? <ActivityTitleValue part={part} previousTitle={previousTitle}/> : <FlowTooltip side="top" label={part.title}><b tabIndex={0}>{part.label}</b></FlowTooltip>
 }
@@ -471,7 +472,7 @@ function ActivityHistoryBlock({ entries, context, now, position, nextCommentDate
   const render = (row: IssueActivityEntry) => <ActivityHistoryEntry key={row.id} row={row} context={context} now={now} targetId={targetId}/>
   return <div className="activity-history-block" data-connected={rows.length >= 2 || undefined}>
     {(open ? rows : partition.before).map(render)}
-    {!open && partition.hidden.length > 0 && <button type="button" className="timeline-item event activity-event-group" aria-label={t('Expand all activity')} aria-expanded={false} onClick={() => { expandActivityBlock(blockKey, now); setExpanded(true) }}><span className="activity-event-icon"><ChevronRight size={14}/></span><span className="activity-row">{t('Show {count} events').replace('{count}', String(partition.hidden.length))}{activityCollapseReasons(partition.hidden, t)}</span></button>}
+    {!open && partition.hidden.length > 0 && <button type="button" className="timeline-item event activity-event-group" aria-label={t('Expand all activity')} aria-expanded={false} onClick={() => { expandActivityBlock(blockKey, now); setExpanded(true) }}><span className="activity-event-icon"><ChevronRight size={14}/></span><span className="activity-row">{t('Show {count} events').replace('{count}', asIs(String(partition.hidden.length)))}{activityCollapseReasons(partition.hidden, t)}</span></button>}
     {!open && partition.after.map(render)}
   </div>
 }

@@ -2,6 +2,7 @@ import { format, formatDistance } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import type { ActivityEvent, BootstrapData } from '@/types/flow'
 import { isAgentBot } from '@/lib/actor-attribution'
+import { asIs } from '@/lib/as-is'
 
 export type ActivityContext = Pick<BootstrapData, 'users' | 'projects' | 'labels' | 'cycles' | 'issues' | 'states' | 'workspace'> & Partial<Pick<BootstrapData, 'releases' | 'reviews' | 'teams'>>
 type Translate = (text: string) => string
@@ -75,7 +76,7 @@ export function issueActivityEntries(event: ActivityEvent, context?: ActivityCon
       add('priority', after === 0 || !m.priority ? [t('removed priority')] : phrase(before > 0 ? after < before ? 'raised priority from {from} to {to}' : 'lowered priority from {from} to {to}' : 'set priority to {to}', { from: value(t(priorities[before] ?? m.priorityBefore)), to: value(t(priorities[after] ?? m.priority)) }))
     }
     if (has('estimate')) {
-      const points = (input: string) => value(/^\d+(\.\d+)?$/.test(input) ? t(Number(input) === 1 ? '{count} point' : '{count} points').replace('{count}', input) : input)
+      const points = (input: string) => value(/^\d+(\.\d+)?$/.test(input) ? t(Number(input) === 1 ? '{count} point' : '{count} points').replace('{count}', asIs(input)) : input)
       add('estimate', !m.estimate || Number(m.estimate) <= 0 ?[t('removed estimate')] : phrase(Number(m.estimateBefore) > 0 ? Number(m.estimate) > Number(m.estimateBefore) ? 'increased estimate from {from} to {to}' : 'lowered estimate from {from} to {to}' : 'estimated complexity as {to}', { from: points(m.estimateBefore ?? ''), to: points(m.estimate) }))
     }
     const added = activityIds(m.addedLabelIds), removed = activityIds(m.removedLabelIds)
@@ -96,7 +97,7 @@ export function issueActivityEntries(event: ActivityEvent, context?: ActivityCon
       }
     }
     if (has('delegate')) emitSmall()
-    if (has('team')) emit('team', phrase(m.teamBeforeName && m.teamName ? 'changed team from {from} to {to}' : 'changed team to {to}', { from: value(m.teamBeforeName || context?.teams?.find(team => team.id === m.teamBefore)?.name || t('another team')), to: value(m.teamName || context?.teams?.find(team => team.id === m.team)?.name || t('another team')) }), { tooltip: m.identifierBefore && m.identifier ? t('Changed identifier from {from} to {to}').replace('{from}', m.identifierBefore).replace('{to}', m.identifier) : undefined })
+    if (has('team')) emit('team', phrase(m.teamBeforeName && m.teamName ? 'changed team from {from} to {to}' : 'changed team to {to}', { from: value(m.teamBeforeName || context?.teams?.find(team => team.id === m.teamBefore)?.name || t('another team')), to: value(m.teamName || context?.teams?.find(team => team.id === m.team)?.name || t('another team')) }), { tooltip: m.identifierBefore && m.identifier ? t('Changed identifier from {from} to {to}').replace('{from}', asIs(m.identifierBefore)).replace('{to}', asIs(m.identifier)) : undefined })
     if (has('state') && m.stateType !== 'duplicate' && m.viaDuplicate !== 'true') emit('state-change', [...phrase(m.stateBefore ? 'moved from {from} to {to}' : 'moved to {to}', { from: value(t(m.stateBefore)), to: value(t(m.state)) }), ...(['autoClose', 'autoCloseStale'].includes(m.automation) ? [' ', t('due to inactivity')] : [])], { metadata: { ...m, stateBeforeType: m.stateBeforeType || context?.states.find(state => state.name === m.stateBefore)?.type || '' } })
     if (has('cycle')) {
       const from = ref('cycle', m.cycleBefore), to = ref('cycle', m.cycle)
@@ -108,7 +109,7 @@ export function issueActivityEntries(event: ActivityEvent, context?: ActivityCon
       const from = ref('milestone', m.projectMilestoneBefore), to = ref('milestone', m.projectMilestone)
       emit('milestone', phrase(!m.projectMilestone ? 'removed from milestone {name} in project {project}' : m.projectMilestoneBefore ? 'changed milestone from {from} to {to}' : 'added to milestone {name} in project {project}', { from, to, name: m.projectMilestone ? to : from, project: ref('project', m.project || m.projectBefore || context?.projects.find(project => project.milestones?.some(item => item.id === (m.projectMilestone || m.projectMilestoneBefore)))?.id || '') }))
     }
-    if (has('title')) emit('title-change', phrase('changed title to {title}', { title: value(truncate(m.title, 70), m.titleBefore ? t('Previously: {title}').replace('{title}', m.titleBefore) : undefined) }))
+    if (has('title')) emit('title-change', phrase('changed title to {title}', { title: value(truncate(m.title, 70), m.titleBefore ? t('Previously: {title}').replace('{title}', asIs(m.titleBefore)) : undefined) }))
     if (has('sla')) emit('sla', !m.sla ? [t('removed the SLA')] : phrase(m.slaReset === 'true' ? 'reset SLA to {to}' : m.slaBefore ? 'changed the SLA from {from} to {to}' : 'set the SLA to {to}', { from: value(m.slaBefore), to: value(m.sla) }))
     if (has('parent')) emit('parent', phrase(!m.parent ? m.parentBefore ? 'removed parent {issue}' : 'removed the parent issue' : m.parentBefore ? 'changed parent issue from {from} to {issue}' : 'set parent to {issue}', { from: issue(m.parentBefore), issue: issue(m.parent || m.parentBefore) }))
     if (has('dueDate')) emit('due-date', !m.dueDate ? [t('removed due date')] : phrase(m.dueDateBefore ? 'changed the due date from {from} to {to}' : 'set the due date to {to}', { from: date(m.dueDateBefore ?? ''), to: date(m.dueDate) }))
