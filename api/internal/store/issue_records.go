@@ -670,15 +670,37 @@ func (s *SQLiteStore) importIssueRecordBatch(ctx context.Context, tx *sqlTx, wor
 		size := 0
 		var args []any
 		var tuples []string
+		var releases []func()
+		releaseBatch := func() {
+			for _, release := range releases {
+				release()
+			}
+			releases = nil
+		}
+		defer releaseBatch()
 		for end < len(issues) && end-start < 100 {
+			release, err := reserveIssueRecordEncoding(ctx, issueRecordWriteAdmission(ctx), issues[end], nil)
+			if err != nil {
+				if end > start && errors.Is(err, ErrMetadataWorkBudget) {
+					// Flush the admitted arguments before retrying this row.
+					// A legal large row need not fit beside 99 other encodings.
+					break
+				}
+				releaseBatch()
+				return err
+			}
 			values, err := s.issueRecordColumns(workspace, issues[end])
 			if err != nil {
+				release()
+				releaseBatch()
 				return err
 			}
 			raw := values[len(values)-1].([]byte)
 			if end > start && size+len(raw) > 4<<20 {
+				release()
 				break
 			}
+			releases = append(releases, release)
 			size += len(raw)
 			if len(orders) > 0 {
 				values = append(values, orders[0][issues[end].ID])
@@ -688,8 +710,10 @@ func (s *SQLiteStore) importIssueRecordBatch(ctx context.Context, tx *sqlTx, wor
 			end++
 		}
 		if _, err := tx.ExecContext(ctx, insert+strings.Join(tuples, ",")+update, args...); err != nil {
+			releaseBatch()
 			return err
 		}
+		releaseBatch()
 		start = end
 	}
 	return syncIssueIndexes(ctx, tx, workspace, issues)

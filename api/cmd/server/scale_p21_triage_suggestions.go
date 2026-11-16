@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -392,22 +393,39 @@ func (s *server) generateTriageIntelligenceForIssuesBounded(ctx context.Context,
 		}
 		return nil, store.ErrNoMutation
 	}
-	candidateSets := map[string][]domain.Issue{}
+	candidates, err := s.store.BeginIssueSuggestionCandidates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer candidates.Close()
 	for _, issueID := range issueIDs {
-		issue, readErr := s.store.AuthorizedIssueRecord(ctx, query, issueID)
-		if readErr != nil {
-			continue
-		}
-		if ok, err := isTriage(&issue); err != nil {
+		// The authorization/detail row is needed only while scoring this
+		// issue's candidate query. Candidate summaries have their own values.
+		if err := func() error {
+			readCtx, closeRead := beginIndependentMetadataOutputReads(ctx)
+			defer closeRead()
+			readCtx = candidates.Context(readCtx)
+			issue, readErr := s.store.AuthorizedIssueRecord(readCtx, query, issueID)
+			if readErr != nil {
+				return nil
+			}
+			if ok, err := isTriage(&issue); err != nil {
+				return err
+			} else if !ok {
+				return nil
+			}
+			if err := candidates.Start(readCtx, issueID); err != nil {
+				return err
+			}
+			if err := s.triageCandidateIssuesVisit(readCtx, &issue, query, func(candidate domain.Issue) error {
+				return candidates.Append(readCtx, candidate)
+			}); err != nil {
+				return err
+			}
+			return candidates.Finish()
+		}(); err != nil {
 			return nil, err
-		} else if !ok {
-			continue
 		}
-		candidates, candidateErr := s.triageCandidateIssues(ctx, &issue, query)
-		if candidateErr != nil {
-			return nil, candidateErr
-		}
-		candidateSets[issueID] = candidates
 	}
 	owned, closeOwned := beginMetadataOutputReads(ctx)
 	defer closeOwned()
@@ -416,21 +434,176 @@ func (s *server) generateTriageIntelligenceForIssuesBounded(ctx context.Context,
 		// inferTeam proposes the teams of scoring candidates besides the
 		// store-derived ones (scoped issues and their projects).
 		owned = store.WithIssueRenumbering(owned)
-		input.Teams = []string{}
-		for _, issueID := range issueIDs {
-			for _, candidate := range candidateSets[issueID] {
-				if candidate.Team.ID != "" && !slices.Contains(input.Teams, candidate.Team.ID) {
-					input.Teams = append(input.Teams, candidate.Team.ID)
-				}
-			}
-		}
+		input.Teams = candidates.Teams(issueIDs)
 	}
 	write := store.ContextWithIssueSuggestionWrite(store.WithIssueRecordMutations(owned, issueIDs...), input)
-	err = s.store.MutateWorkspace(write, workspace, "issue.suggestions_generated", "issue_suggestions_batch", nil, generateTriageMutation(issueIDs, candidateSets, &updated, &results, &generated))
+	err = s.store.MutateWorkspace(write, workspace, "issue.suggestions_generated", "issue_suggestions_batch", nil, generateBoundedTriageMutation(write, issueIDs, candidates, &updated, &results, &generated))
 	if err == nil && !generated {
 		return nil, store.ErrNoMutation
 	}
 	return results, err
+}
+
+func generateBoundedTriageMutation(ctx context.Context, issueIDs []string, source *store.IssueSuggestionCandidates, updated *domain.Issue, results *[]domain.Issue, generated *bool) func(*domain.Bootstrap) error {
+	return func(data *domain.Bootstrap) error {
+		scoped := len(data.Issues)
+		var encountered []string
+		maxNumber := 0
+		for _, issueID := range issueIDs {
+			issue, err := issueByID(data, issueID)
+			var fallback *domain.Issue
+			if err != nil {
+				if mutation, found := source.Mutation(issueID); found {
+					fallback = &mutation
+				}
+				for _, id := range encountered {
+					if fallback != nil {
+						break
+					}
+					if err := source.Walk(ctx, id, func(candidate domain.Issue) (bool, error) {
+						if candidate.ID != issueID {
+							return true, nil
+						}
+						if err := source.KeepResult(ctx, candidate); err != nil {
+							return false, err
+						}
+						fallback = &candidate
+						return false, nil
+					}); err != nil {
+						return err
+					}
+					if fallback != nil {
+						break
+					}
+				}
+				issue = fallback
+			}
+			if issue == nil || !triageIntelligenceEnabled(data.WorkspaceSettings) || !isTriageIssue(data, issue) {
+				continue
+			}
+			encountered = append(encountered, issueID)
+			maxNumber = max(maxNumber, source.Number(issueID))
+			if err := func() error {
+				scores, err := source.BeginScores(ctx)
+				if err != nil {
+					return err
+				}
+				defer scores.Close()
+				score := triageIssueScorer(issue)
+				ranked := make([]triageSuggestionCandidate, 0, min(scoped, maxTriageSuggestionCandidates))
+				mutated := map[string]bool{}
+				visit := func(candidate domain.Issue) (bool, error) {
+					if len(ranked) >= maxTriageSuggestionCandidates {
+						return false, nil
+					}
+					if mutation, found := source.Mutation(candidate.ID); found && !mutated[candidate.ID] {
+						candidate = mutation
+						mutated[candidate.ID] = true
+					}
+					if candidate, ok := score(candidate); ok {
+						candidate.issue, err = scores.Project(ctx, candidate.issue)
+						if err != nil {
+							return false, err
+						}
+						ranked = append(ranked, candidate)
+					}
+					return len(ranked) < maxTriageSuggestionCandidates, nil
+				}
+				for _, candidate := range data.Issues[:scoped] {
+					if more, err := visit(candidate); err != nil {
+						return err
+					} else if !more {
+						break
+					}
+				}
+				for _, id := range encountered {
+					if len(ranked) >= maxTriageSuggestionCandidates {
+						break
+					}
+					if err := source.Walk(ctx, id, visit); err != nil {
+						return err
+					}
+				}
+				sortTriageSuggestionCandidates(ranked)
+				now := time.Now().UTC()
+				items := generateIssueSuggestionsWithCandidates(data, issue, now, ranked)
+				if fallback != nil {
+					data.Issues = append(data.Issues, *fallback)
+				}
+				// These IDs can outlive the current scoring snapshots.
+				for index := range items {
+					item := &items[index]
+					item.SuggestedIssueID = strings.Clone(item.SuggestedIssueID)
+					item.SuggestedProjectID = strings.Clone(item.SuggestedProjectID)
+					item.SuggestedUserID = strings.Clone(item.SuggestedUserID)
+					item.SuggestedLabelID = strings.Clone(item.SuggestedLabelID)
+					item.SuggestedTeamID = strings.Clone(item.SuggestedTeamID)
+					if item.SuggestedIssueID != "" && issueByIDValue(data, item.SuggestedIssueID) == nil {
+						var target *domain.Issue
+						if mutation, found := source.Mutation(item.SuggestedIssueID); found {
+							target = &mutation
+						} else {
+							for _, id := range encountered {
+								if err := source.Walk(ctx, id, func(candidate domain.Issue) (bool, error) {
+									if candidate.ID != item.SuggestedIssueID {
+										return true, nil
+									}
+									if err := scores.Keep(ctx, candidate); err != nil {
+										return false, err
+									}
+									target = &candidate
+									return false, nil
+								}); err != nil {
+									return err
+								}
+								if target != nil {
+									break
+								}
+							}
+						}
+						if target != nil {
+							data.Issues = append(data.Issues, *target)
+						}
+					}
+				}
+				// Team moves read the maximum number of every encountered
+				// summary, even summaries outside the scoring cutoff.
+				data.Issues = append(data.Issues, domain.Issue{Number: maxNumber})
+				issue, err = issueByID(data, issueID)
+				if err != nil {
+					return err
+				}
+				storeTriageSuggestions(data, issue, items, now, triageSourceHeuristic, "")
+				*updated = *issue
+				if fallback != nil {
+					if err := source.KeepResult(ctx, *updated); err != nil {
+						return err
+					}
+				}
+				*results = append(*results, *updated)
+				*generated = true
+				for _, candidate := range data.Issues[scoped : len(data.Issues)-1] {
+					if err := source.SetMutation(ctx, candidate); err != nil {
+						return err
+					}
+					maxNumber = max(maxNumber, candidate.Number)
+				}
+				data.Issues = data.Issues[:scoped]
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		allowed := map[string]bool{}
+		for _, id := range issueIDs {
+			allowed[id] = true
+		}
+		data.Issues = slices.DeleteFunc(data.Issues[:scoped], func(item domain.Issue) bool { return !allowed[item.ID] })
+		if !*generated {
+			return store.ErrNoMutation
+		}
+		return nil
+	}
 }
 
 // mcpWorkspaceDataProjected is mcpWorkspaceData whose paged projection runs

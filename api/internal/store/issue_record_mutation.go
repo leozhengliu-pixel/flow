@@ -359,8 +359,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return err
 		}
 		if editor != nil {
-			metadata.FormerMembers = editor.formerMembers
-			metadata.CollaborationUpdates = editor.collaborationUpdates
+			editor.install(&metadata)
 		} else {
 			metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
 			metadata.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
@@ -392,6 +391,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		metadata.CollaborationUpdates = nil
 		metadata.FormerMembers = nil
+		metadata.CollaborationWork = nil
 		if editor != nil && editor.err != nil {
 			// A budget, coverage or cancellation failure of a bounded lookup
 			// the callback used; SQL errors keep the legacy warning.

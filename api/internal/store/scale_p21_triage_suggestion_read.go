@@ -289,21 +289,35 @@ func (r *InstalledMetadataRead) LabelVisibleInProjection(ctx context.Context, sc
 // ProjectedWorkspaceRead owns one literal paged projection through response
 // encoding. Data must not escape Close.
 type ProjectedWorkspaceRead struct {
-	Data  domain.Bootstrap
-	owner *ResourceRead
-	once  sync.Once
+	Data       domain.Bootstrap
+	owner      *ResourceRead
+	projection *collaborationProjectionCapture
+	once       sync.Once
 }
 
 func (r *ProjectedWorkspaceRead) Close() {
 	if r != nil {
 		r.once.Do(func() {
 			r.Data = domain.Bootstrap{}
+			r.projection = nil
 			if r.owner != nil {
 				r.owner.Close()
 				r.owner = nil
 			}
 		})
 	}
+}
+
+// ProjectionScope borrows the content scope of this exact projection. Its maps
+// remain read-only and valid only until Close.
+func (r *ProjectedWorkspaceRead) ProjectionScope(ctx context.Context) (ViewerProjectionScope, error) {
+	if err := ctx.Err(); err != nil {
+		return ViewerProjectionScope{}, err
+	}
+	if r == nil || r.owner == nil || r.projection == nil || !r.projection.captured {
+		return ViewerProjectionScope{}, ErrBoundedMetadataCoverage
+	}
+	return ViewerProjectionScope{Teams: r.projection.scope.Teams, Content: r.projection.scope.Content}, nil
 }
 
 // projectedWorkspaceCollections are the complete collections a projected
@@ -319,6 +333,16 @@ var projectedWorkspaceCollections = []string{"projects", "labels", "labelGroups"
 // so the result is exact only for the requested collections, the policy
 // fields and the live directory (Users, Members, TeamMembers).
 func (r *InstalledMetadataRead) ProjectedWorkspace(ctx context.Context, userID string, collections ...string) (_ *ProjectedWorkspaceRead, err error) {
+	return r.projectedWorkspace(ctx, userID, false, collections...)
+}
+
+// ProjectedWorkspaceWithScope also retains the literal pre-filter viewer scope,
+// avoiding a second directory projection for related record validation.
+func (r *InstalledMetadataRead) ProjectedWorkspaceWithScope(ctx context.Context, userID string, collections ...string) (*ProjectedWorkspaceRead, error) {
+	return r.projectedWorkspace(ctx, userID, true, collections...)
+}
+
+func (r *InstalledMetadataRead) projectedWorkspace(ctx context.Context, userID string, captureScope bool, collections ...string) (_ *ProjectedWorkspaceRead, err error) {
 	for _, name := range collections {
 		if !slices.Contains(projectedWorkspaceCollections, name) {
 			return nil, ErrMetadataRecordQuery
@@ -357,6 +381,10 @@ func (r *InstalledMetadataRead) ProjectedWorkspace(ctx context.Context, userID s
 	document := &DocumentRead{Data: data, owner: owner}
 	if err := document.documentProjectionWork(snapshot, data.Workspace.ID, userID); err != nil {
 		return nil, err
+	}
+	if captureScope {
+		read.projection = &collaborationProjectionCapture{owner: owner}
+		snapshot = context.WithValue(snapshot, collaborationProjectionCaptureKey{}, read.projection)
 	}
 	projected, err := r.store.PagedWorkspaceMetadata(snapshot, r.workspace, userID)
 	if outputErr := metadataOutputError(snapshot); outputErr != nil {

@@ -29,14 +29,26 @@ func (s *SQLiteStore) persistMetadataLogicalRefresh(ctx context.Context, tx *sql
 	}
 	fields := map[string]metadataLogicalNode{}
 	var shapes map[string]string
-	checkShape := func(name string) error {
+	loadShapes := func() error {
 		if shapes == nil {
 			var raw []byte
-			if err := tx.QueryRowContext(ctx, "SELECT CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?", MetadataRecordPageMaxBytes, workspace).Scan(&raw); err != nil {
+			var size int64
+			length := (&ResourceRead{store: s}).byteLength("data")
+			if err := tx.QueryRowContext(ctx, "SELECT "+length+",CASE WHEN "+length+"<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?", MetadataRecordPageMaxBytes, workspace).Scan(&size, &raw); err != nil {
 				return err
 			}
 			if raw == nil {
-				return ErrMetadataPageBudget
+				_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, 2<<20)
+				if err != nil {
+					return err
+				}
+				defer release()
+				root, err := s.scanMetadataInlineRoot(ctx, tx, workspace, size)
+				if err != nil {
+					return err
+				}
+				shapes, err = root.shapes()
+				return err
 			}
 			var root struct {
 				Shapes map[string]string `json:"_flowCollections"`
@@ -48,6 +60,12 @@ func (s *SQLiteStore) persistMetadataLogicalRefresh(ctx context.Context, tx *sql
 			if shapes == nil {
 				shapes = map[string]string{}
 			}
+		}
+		return nil
+	}
+	checkShape := func(name string) error {
+		if err := loadShapes(); err != nil {
+			return err
 		}
 		expected := "array"
 		if updateMetadataField(name) {
@@ -84,12 +102,22 @@ func (s *SQLiteStore) persistMetadataLogicalRefresh(ctx context.Context, tx *sql
 			}
 			switch name {
 			case "members":
-				if err := s.persistMetadataLogicalInlineField(ctx, tx, workspace, name, before, after); err != nil {
+				if err := s.writeMetadataLogicalInlineField(ctx, tx, workspace, name, before, after, metadataWorkBytes, nil); err != nil {
 					return err
 				}
 				return errMetadataAggregateStop
 			case "comments", "activities", "notifications":
 				return fmt.Errorf("%w: refreshed %s needs its content writer", ErrBoundedMetadataCoverage, name)
+			}
+			if err := loadShapes(); err != nil {
+				return err
+			}
+			if shapes[name] == "" {
+				index, _, _ := metadataLogicalField(name)
+				if err := s.writeMetadataLogicalInlineField(ctx, tx, workspace, name, before, directory.fields[index], metadataWorkBytes, nil); err != nil {
+					return err
+				}
+				return errMetadataAggregateStop
 			}
 			if err := checkShape(name); err != nil {
 				return err

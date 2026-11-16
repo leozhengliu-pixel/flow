@@ -122,6 +122,7 @@ func TestScaleP21JSONOutputLargePlainAndDenseContainers(t *testing.T) {
 	if err := read.ReserveEncoding(t.Context(), plain); err != nil {
 		t.Fatal("legal large text could not reserve encoding", err)
 	}
+	encodingHeld := view.MetadataWorkUsedForTesting()
 	raw, err := json.Marshal(plain)
 	if err != nil {
 		t.Fatal(err)
@@ -135,6 +136,7 @@ func TestScaleP21JSONOutputLargePlainAndDenseContainers(t *testing.T) {
 		buffer.Write(raw[offset:end])
 		offset = end
 	}
+	bufferHeld := view.MetadataWorkUsedForTesting()
 	var decoded string
 	if err := read.ReserveDecode(t.Context(), buffer.Bytes(), &decoded); err != nil {
 		t.Fatal(err)
@@ -142,8 +144,9 @@ func TestScaleP21JSONOutputLargePlainAndDenseContainers(t *testing.T) {
 	if err := json.Unmarshal(buffer.Bytes(), &decoded); err != nil || decoded != plain || read.Err() != nil {
 		t.Fatal("large output encode/buffer/decode round trip changed", err, read.Err())
 	}
-	if view.MetadataWorkUsedForTesting() <= 32<<20 {
-		t.Fatal("large encoding, buffer and decode work did not coexist", view.MetadataWorkUsedForTesting())
+	decodedHeld := view.MetadataWorkUsedForTesting()
+	if encodingHeld < 4*len(raw) || bufferHeld-encodingHeld < 4*len(raw) || decodedHeld-bufferHeld < 16*len(raw) {
+		t.Fatal("large encoding, buffer and decode work did not coexist", encodingHeld, bufferHeld, decodedHeld)
 	}
 	read.Close()
 	if view.MetadataWorkUsedForTesting() != 0 {

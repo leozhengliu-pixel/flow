@@ -1,6 +1,6 @@
 {
   "source": "server/main.go",
-  "unmigrated": 66,
+  "unmigrated": 65,
   "consumers": {
     "accountBootstrap": {
       "owner": "P21",
@@ -43,7 +43,7 @@
         "POST /api/issue-records/batch (server/main.go:913)",
         "POST /api/issues/batch (server/main.go:1073)"
       ],
-      "reason": "Bounded mode replaces the team-move PagedWorkspaceMetadata read with boundedIssueUpdateTargets (literal projection of policy fields and live directory, API-key filter) and the literal issueTeamMoveForbidden, and routes the unchanged callback through mutateBoundedIssueBatch with the update declared (ContextWithIssueBatchUpdate) and an independent output owner; the off branch is literal. One transaction and one issue.batch_updated event as before. TestScaleP21IssueBatchDifferential (30 cases: fields, duplicate IDs, no-op, state with family and sort neighbours, auto-close, triage exit with SLA rules and SLA event numbering, labels, people, former-member rollback, descriptions and legacy editor snapshots with queued updates on another issue, parent, cycle, project, archive, mixed-team label rollback and edit, team moves of pairs and mixed teams incl. sub-team, triage target, private team, guest/outsider/selected-key 403s, SLA on move, missing issue, cancellation), BatchLarge (500 issues: commit and one-failure rollback), BatchConcurrent (overlapping batches equal a sequential legacy order), BatchInlineCollections (inline labels/documents): legacy/warm/SQL-reloaded byte-exact responses, issue rows, sequence, aliases, documents, labels, collaboration updates, content, suggestions, SLAs and SLA events, events, webhooks and realtime, installed image equal to the SQL reload, zero full decodes, no retained work; persistent SQLite x2 and -race. Independent blockers: the route's authorization middleware (buildIssueRecordAuthorizationData) and, at about 300 issues and above, the bounded triage generation that runs after the batch (generateTriageIntelligenceForIssuesBounded returns a budget error, logged, where legacy writes suggestions)."
+      "reason": "Bounded mode replaces the team-move PagedWorkspaceMetadata read with boundedIssueUpdateTargets (literal projection of policy fields and live directory, API-key filter) and the literal issueTeamMoveForbidden, and routes the unchanged callback through mutateBoundedIssueBatch with the update declared (ContextWithIssueBatchUpdate) and an independent output owner; the off branch is literal. One transaction and one issue.batch_updated event as before. TestScaleP21IssueBatchDifferential (30 cases: fields, duplicate IDs, no-op, state with family and sort neighbours, auto-close, triage exit with SLA rules and SLA event numbering, labels, people, former-member rollback, descriptions and legacy editor snapshots with queued updates on another issue, parent, cycle, project, archive, mixed-team label rollback and edit, team moves of pairs and mixed teams incl. sub-team, triage target, private team, guest/outsider/selected-key 403s, SLA on move, missing issue, cancellation), BatchLarge (500 issues: commit and one-failure rollback), BatchConcurrent (overlapping batches equal a sequential legacy order), BatchInlineCollections (inline labels/documents): legacy/warm/SQL-reloaded byte-exact responses, issue rows, sequence, aliases, documents, labels, collaboration updates, content, suggestions, SLAs and SLA events, events, webhooks and realtime, installed image equal to the SQL reload, zero full decodes, no retained work; persistent SQLite x2 and -race. SW189 closes ContentState with the separately imported admitted CRDT engine, preserves malformed-new/invalid-old error behavior and retained/queued/deleted mention semantics, and compares actual update/batch routes plus the permission matrix with no leaked work. The flag-off dependency/path is unchanged. SW184 proves exact 1000-issue batches and SW185 proves exact postcommit triage generation at 350/1000 issues (persisted inline suggestions included), preserving accumulated candidate encounter order and stable scoring with a typed spool and released query/clone scratch. Shared authorization is proved by SW187."
     },
     "bootstrap": {
       "owner": "P21",
@@ -181,7 +181,7 @@
     },
     "createIssue": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "BootstrapForUser",
@@ -193,7 +193,8 @@
       "callers": [
         "POST /api/issues (server/main.go:952)",
         "server/server.createIssueRecord"
-      ]
+      ],
+      "reason": "Bounded mode uses the owned default-team policy read, then the unchanged createIssueInWorkspace callback through the bounded record creation dispatcher. SW186 proves literal legacy/warm/reloaded creation responses, all canonical metadata/issue/content rows, sequence, notifications, audits, events, webhook/realtime and installed postimages across principals/credentials, templates, workflow/triage/SLA actions, cancellation, concurrent creators, stale sequences/custom-ID collisions, ContentState and legal 4MiB ASCII/escaped large descriptions. Selected native inputs retain original ordinals/defaults. Owned old-row preimages and independent callback/row/content/event encoding phases preserve atomic publication with zero full decodes and released work. Flag-off forwards to the literal original writer."
     },
     "createIssueLink": {
       "owner": "P21",

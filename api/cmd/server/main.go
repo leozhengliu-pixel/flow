@@ -3258,7 +3258,15 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		var ok bool
 		var err error
 		if store.UsesIssueRecordMutations(r.Context()) {
-			projected, err = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
+			if s.store.BoundedMetadataEnabled() {
+				var release func()
+				projected, release, err = s.boundedIssueCreateDefaultTeam(r)
+				if release != nil {
+					defer release()
+				}
+			} else {
+				projected, err = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
+			}
 			ok = err == nil
 		} else {
 			projected, ok, err = s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)

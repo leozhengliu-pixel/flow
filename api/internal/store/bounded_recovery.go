@@ -489,12 +489,23 @@ func (s *SQLiteStore) readResidentWorkspacePolicy(ctx context.Context, tx *sqlTx
 	if err := tx.QueryRowContext(ctx, `SELECT `+metadataStampColumns+`,`+bodyLength+`,CASE WHEN `+bodyLength+`<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?`, workspace, cacheKindMetadata, MetadataRecordPageMaxBytes, workspace).Scan(&stamp.workspaceID, &stamp.revision, &size, &raw); err != nil {
 		return data, stamp, 0, err
 	}
-	if size > MetadataRecordPageMaxBytes || raw == nil {
+	var root []byte
+	var shapes map[string]string
+	var err error
+	if size > MetadataRecordPageMaxBytes {
+		root, shapes, err = s.readInlineResidentRoot(ctx, tx, workspace, size, legacyInlineTeams)
+		// Only the projection is decoded; unrelated inline record bodies are
+		// structurally validated using fixed-size SQL reads.
+		raw = root
+	} else if raw == nil {
 		return data, stamp, 0, ErrMetadataPageBudget
 	}
+	if err != nil {
+		return data, stamp, 0, err
+	}
 	if reserve != nil {
-		// Account for the physical root before filtering out non-policy
-		// fields. They still participate in the original root decoder.
+		// A page-sized root uses the original map decoder. A larger root
+		// has already streamed unrelated fields out of this projection.
 		budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes}
 		if err := budget.consume(raw); err != nil {
 			return data, stamp, 0, err
@@ -503,9 +514,11 @@ func (s *SQLiteStore) readResidentWorkspacePolicy(ctx context.Context, tx *sqlTx
 			return data, stamp, 0, err
 		}
 	}
-	root, shapes, err := residentMetadataRootForPolicy(raw, legacyInlineTeams)
-	if err != nil {
-		return data, stamp, 0, err
+	if root == nil {
+		root, shapes, err = residentMetadataRootForPolicy(raw, legacyInlineTeams)
+		if err != nil {
+			return data, stamp, 0, err
+		}
 	}
 	knownFields := make([]string, 0, len(shapes))
 	for field := range shapes {

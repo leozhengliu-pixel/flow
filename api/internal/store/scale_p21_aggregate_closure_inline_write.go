@@ -13,8 +13,9 @@ const metadataLogicalInlineWorkLimit = 2 << 20
 
 // persistMetadataLogicalInlineField uses the existing field-delta writer,
 // preserving its root merge, null/empty shapes, timestamps and journal hooks.
-// The current scoped producer already requires a root of at most 256 KiB.
-// This adapter also preflights its decoded field and encoding work separately.
+// Page-sized roots retain the original delta path; larger roots use the shared
+// streamed patch with the same rebase and canonical hooks. Decoded field and
+// encoding work are admitted separately.
 func (s *SQLiteStore) persistMetadataLogicalInlineField(ctx context.Context, tx *sqlTx, workspace, name string, before, after metadataLogicalNode) error {
 	return s.writeMetadataLogicalInlineField(ctx, tx, workspace, name, before, after, metadataLogicalInlineWorkLimit, nil)
 }
@@ -51,11 +52,15 @@ func (s *SQLiteStore) writeMetadataLogicalInlineField(ctx context.Context, tx *s
 	if err := tx.QueryRowContext(ctx, "SELECT "+rootLength+" FROM workspace_states WHERE workspace_key=?"+lock, workspace).Scan(&rootBytes); err != nil {
 		return err
 	}
-	if rootBytes < 0 || rootBytes > MetadataRecordPageMaxBytes ||
+	if rootBytes < 0 || rootBytes > int64(s.maxStateBytes) ||
 		before.cost > workLimit || after.cost > workLimit {
 		return ErrMetadataWorkBudget
 	}
-	required := (before.cost+after.cost)*8 + uint64(rootBytes)*12 + 64<<10
+	rootWork := uint64(rootBytes) * 12
+	if rootBytes > MetadataRecordPageMaxBytes {
+		rootWork = 2 << 20
+	}
+	required := (before.cost+after.cost)*8 + rootWork + 64<<10
 	if required > workLimit {
 		return ErrMetadataWorkBudget
 	}
@@ -66,6 +71,30 @@ func (s *SQLiteStore) writeMetadataLogicalInlineField(ctx context.Context, tx *s
 	defer release()
 	var workspaceID string
 	var raw []byte
+	if rootBytes > MetadataRecordPageMaxBytes {
+		if err := tx.QueryRowContext(ctx, "SELECT workspace_id FROM workspace_states WHERE workspace_key=?"+lock, workspace).Scan(&workspaceID); err != nil {
+			return err
+		}
+		oldValue, err := before.Value(ctx, int(required))
+		if err != nil {
+			return err
+		}
+		nextValue, err := after.Value(ctx, int(required))
+		if err != nil {
+			return err
+		}
+		oldData := domain.Bootstrap{Workspace: domain.Workspace{ID: workspaceID}}
+		nextData := oldData
+		reflect.ValueOf(&oldData).Elem().Field(field.index).Set(oldValue)
+		reflect.ValueOf(&nextData).Elem().Field(field.index).Set(nextValue)
+		if err := s.writeStreamedInlineMetadataField(ctx, tx, workspace, name, rootBytes, oldData, &nextData); err != nil {
+			return err
+		}
+		if prepared != nil {
+			return prepared(nextData)
+		}
+		return nil
+	}
 	if err := tx.QueryRowContext(ctx, "SELECT workspace_id,CASE WHEN "+rootLength+"<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?"+lock,
 		MetadataRecordPageMaxBytes, workspace).Scan(&workspaceID, &raw); err != nil {
 		return err

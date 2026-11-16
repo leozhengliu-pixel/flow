@@ -313,6 +313,18 @@ func (s *server) triageCandidateIssues(ctx context.Context, issue *domain.Issue,
 	if issue == nil || strings.TrimSpace(issue.Title) == "" {
 		return nil, nil
 	}
+	items := []domain.Issue{}
+	err := s.triageCandidateIssuesVisit(ctx, issue, q, func(candidate domain.Issue) error {
+		items = append(items, candidate)
+		return nil
+	})
+	return items, err
+}
+
+func (s *server) triageCandidateIssuesVisit(ctx context.Context, issue *domain.Issue, q store.IssueRecordQuery, visit func(domain.Issue) error) error {
+	if issue == nil || strings.TrimSpace(issue.Title) == "" {
+		return nil
+	}
 	q.Limit, q.Summary, q.Archived = maxTriageSuggestionCandidates, true, "false"
 	terms := []string{issue.Title}
 	for _, token := range strings.Fields(issue.Title) {
@@ -323,14 +335,12 @@ func (s *server) triageCandidateIssues(ctx context.Context, issue *domain.Issue,
 			break
 		}
 	}
-	items := []domain.Issue{}
-	err := s.store.SearchIssueCandidateTerms(ctx, q, terms, nil, maxTriageSuggestionCandidates, func(candidate domain.Issue) error {
+	return s.store.SearchIssueCandidateTerms(ctx, q, terms, nil, maxTriageSuggestionCandidates, func(candidate domain.Issue) error {
 		if candidate.ID != issue.ID {
-			items = append(items, candidate)
+			return visit(candidate)
 		}
 		return nil
 	})
-	return items, err
 }
 
 func slicesDeleteIssueSuggestions(items []domain.IssueSuggestion, issueID, keepID string) []domain.IssueSuggestion {
@@ -345,8 +355,11 @@ func slicesDeleteIssueSuggestions(items []domain.IssueSuggestion, issueID, keepI
 }
 
 func generateIssueSuggestions(data *domain.Bootstrap, issue *domain.Issue, now time.Time) []domain.IssueSuggestion {
+	return generateIssueSuggestionsWithCandidates(data, issue, now, similarTriageIssues(data, issue))
+}
+
+func generateIssueSuggestionsWithCandidates(data *domain.Bootstrap, issue *domain.Issue, now time.Time, candidates []triageSuggestionCandidate) []domain.IssueSuggestion {
 	settings := data.WorkspaceSettings.FeatureSettings.TriageIntelligence
-	candidates := similarTriageIssues(data, issue)
 	result := make([]domain.IssueSuggestion, 0, 7)
 	rank := 0
 	add := func(kind, target string, score float64, reasons []string) {
@@ -541,20 +554,30 @@ func similarTriageIssues(data *domain.Bootstrap, issue *domain.Issue) []triageSu
 	if issue == nil {
 		return nil
 	}
+	score := triageIssueScorer(issue)
+	candidates := make([]triageSuggestionCandidate, 0, min(len(data.Issues), maxTriageSuggestionCandidates))
+	for index := range data.Issues {
+		if len(candidates) >= maxTriageSuggestionCandidates {
+			break
+		}
+		if candidate, ok := score(data.Issues[index]); ok {
+			candidates = append(candidates, candidate)
+		}
+	}
+	sortTriageSuggestionCandidates(candidates)
+	return candidates
+}
+
+func triageIssueScorer(issue *domain.Issue) func(domain.Issue) (triageSuggestionCandidate, bool) {
 	issueTitleTokens := triageTokens(issue.Title)
 	issueDescriptionTokens := triageTokens(truncateTriageText(issue.Description))
 	issueLabelIDs := make(map[string]bool, len(issue.Labels))
 	for _, label := range issue.Labels {
 		issueLabelIDs[label.ID] = true
 	}
-	candidates := make([]triageSuggestionCandidate, 0, min(len(data.Issues), maxTriageSuggestionCandidates))
-	for index := range data.Issues {
-		candidate := &data.Issues[index]
+	return func(candidate domain.Issue) (triageSuggestionCandidate, bool) {
 		if candidate.ID == issue.ID || candidate.ArchivedAt != nil || candidate.State.Type == "completed" || candidate.State.Type == "canceled" {
-			continue
-		}
-		if len(candidates) >= maxTriageSuggestionCandidates {
-			break
+			return triageSuggestionCandidate{}, false
 		}
 		titleScore := triageSimilarity(issueTitleTokens, triageTokens(candidate.Title))
 		descriptionScore := triageSimilarity(issueDescriptionTokens, triageTokens(truncateTriageText(candidate.Description)))
@@ -573,19 +596,21 @@ func similarTriageIssues(data *domain.Bootstrap, issue *domain.Issue) []triageSu
 		}
 		score = minFloat(1, score)
 		if score < 0.14 {
-			continue
+			return triageSuggestionCandidate{}, false
 		}
-		candidates = append(candidates, triageSuggestionCandidate{
-			issue: *candidate, score: score, titleScore: titleScore, descriptionScore: descriptionScore,
-		})
+		return triageSuggestionCandidate{
+			issue: candidate, score: score, titleScore: titleScore, descriptionScore: descriptionScore,
+		}, true
 	}
+}
+
+func sortTriageSuggestionCandidates(candidates []triageSuggestionCandidate) {
 	sort.SliceStable(candidates, func(i, j int) bool {
 		if candidates[i].score == candidates[j].score {
 			return candidates[i].issue.UpdatedAt.After(candidates[j].issue.UpdatedAt)
 		}
 		return candidates[i].score > candidates[j].score
 	})
-	return candidates
 }
 
 func previewIssueSuggestions(data *domain.Bootstrap, text, teamID string) []triageSuggestionPreview {

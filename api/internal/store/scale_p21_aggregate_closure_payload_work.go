@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"unicode/utf8"
 )
 
 var metadataAggregateRawPayloadType = reflect.TypeOf(json.RawMessage(nil))
@@ -35,9 +36,11 @@ func metadataAggregatePayloadEncodingWork(ctx context.Context, value reflect.Val
 	}
 	switch value.Kind() {
 	case reflect.String:
-		// JSON permits six encoded bytes per input byte. Account for the
-		// encoder's growing buffer, its returned copy, and scalar overhead.
-		if err := add(uint64(value.Len()) * 24); err != nil {
+		work, err := metadataAggregateStringEncodingWork(ctx, value.String())
+		if err != nil {
+			return 0, err
+		}
+		if err := add(work); err != nil {
 			return 0, err
 		}
 	case reflect.Interface, reflect.Pointer:
@@ -91,6 +94,42 @@ func metadataAggregatePayloadEncodingWork(ctx context.Context, value reflect.Val
 		}
 	}
 	return int(cost), nil
+}
+
+// Count the bytes encoding/json actually emits, before allocating any output.
+// Four encoded widths cover appendString's temporary growth, the encoder's
+// old and replacement buffers and Marshal's returned copy. This retains the
+// previous buffer bound without charging every ordinary byte as a \u escape.
+func metadataAggregateStringEncodingWork(ctx context.Context, value string) (uint64, error) {
+	encoded := uint64(2)
+	nextCheck := 0
+	for index := 0; index < len(value); {
+		if index >= nextCheck {
+			if err := ctx.Err(); err != nil {
+				return 0, err
+			}
+			nextCheck = index + 4096
+		}
+		char, size := utf8.DecodeRuneInString(value[index:])
+		width := uint64(size)
+		switch {
+		case char < utf8.RuneSelf:
+			if escaped := logicalJSONASCIIQuotes[char]; escaped != "" {
+				width = uint64(len(escaped))
+			}
+		case char == utf8.RuneError && size == 1, char == '\u2028', char == '\u2029':
+			width = 6
+		}
+		if width > metadataWorkBytes/4-encoded {
+			return 0, ErrMetadataWorkBudget
+		}
+		encoded += width
+		index += size
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	return encoded * 4, nil
 }
 
 // The raw payload is retained through publication. enrichRealtimePayload also

@@ -1117,7 +1117,12 @@ func (p *legacyMetadataWritePlan) materializeField(ctx context.Context, f *legac
 		}
 	}
 	for _, node := range []metadataLogicalNode{left, right} {
-		if err := legacyActorWriteNodeWork(ctx, work, node, 64); err != nil {
+		// Native decoding and the rebaser's shallow container copies stay
+		// live. JSON encoding work is measured from the decoded values below.
+		if node.cost > (metadataWorkBytes-(64<<10))/2 {
+			return reflect.Value{}, reflect.Value{}, ErrMetadataWorkBudget
+		}
+		if err := work.reserve(ctx, node.cost*2+64<<10); err != nil {
 			return reflect.Value{}, reflect.Value{}, err
 		}
 	}
@@ -1126,7 +1131,24 @@ func (p *legacyMetadataWritePlan) materializeField(ctx context.Context, f *legac
 		return reflect.Value{}, reflect.Value{}, err
 	}
 	b, err := right.Value(ctx, metadataWorkBytes)
-	return a, b, err
+	if err != nil {
+		return reflect.Value{}, reflect.Value{}, err
+	}
+	for _, value := range []reflect.Value{a, b} {
+		encoding, err := metadataAggregatePayloadEncodingWork(ctx, value, 0)
+		if err != nil {
+			return reflect.Value{}, reflect.Value{}, err
+		}
+		// The slow writer keeps both marshal results and split raw JSON,
+		// while rebasing may encode a before/after record pair.
+		if encoding > (metadataWorkBytes-(64<<10))/2 {
+			return reflect.Value{}, reflect.Value{}, ErrMetadataWorkBudget
+		}
+		if err := work.reserve(ctx, uint64(encoding)*2+64<<10); err != nil {
+			return reflect.Value{}, reflect.Value{}, err
+		}
+	}
+	return a, b, nil
 }
 
 func (p *legacyMetadataWritePlan) rootShapes(ctx context.Context) (map[string]string, error) {
@@ -1134,6 +1156,26 @@ func (p *legacyMetadataWritePlan) rootShapes(ctx context.Context) (map[string]st
 	var size int64
 	if err := p.tx.QueryRowContext(ctx, "SELECT "+length+" FROM workspace_states WHERE workspace_key=?", p.workspace).Scan(&size); err != nil {
 		return nil, err
+	}
+	if size > MetadataRecordPageMaxBytes && size <= int64(p.store.maxStateBytes) {
+		if p.store.dialect != "sqlite" {
+			// Streaming uses several reads; pin the root after the union's
+			// metadata row locks and recapture its current byte length.
+			if err := p.tx.QueryRowContext(ctx, "SELECT "+length+" FROM workspace_states WHERE workspace_key=? FOR UPDATE", p.workspace).Scan(&size); err != nil {
+				return nil, err
+			}
+		}
+		if size < 0 || size > int64(p.store.maxStateBytes) {
+			return nil, ErrMetadataWorkBudget
+		}
+		if err := p.work.reserve(ctx, 2<<20); err != nil {
+			return nil, err
+		}
+		root, err := p.store.scanMetadataInlineRoot(ctx, p.tx, p.workspace, size)
+		if err != nil {
+			return nil, err
+		}
+		return root.shapes()
 	}
 	if size < 0 || size > MetadataRecordPageMaxBytes || uint64(size) > (metadataWorkBytes-(64<<10))/128 {
 		return nil, ErrMetadataWorkBudget

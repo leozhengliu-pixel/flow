@@ -41,9 +41,10 @@ type PulseSummaryDispatch struct {
 }
 
 type pulseSummaryWork struct {
-	store    *SQLiteStore
-	ctx      context.Context
-	releases []func()
+	store          *SQLiteStore
+	ctx            context.Context
+	releases       []func()
+	inlineSettings bool
 }
 
 func (w *pulseSummaryWork) close() {
@@ -185,14 +186,21 @@ func (s *SQLiteStore) CommitPulseSummaries(ctx context.Context, workspace string
 			lock = " FOR UPDATE"
 		}
 		var root []byte
-		if err := tx.QueryRowContext(ctx, `SELECT CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?`+lock, MetadataRecordPageMaxBytes, workspace).Scan(&root); err != nil {
+		var rootBytes int64
+		if err := tx.QueryRowContext(ctx, `SELECT CASE WHEN `+owned.store.scaleP21SW22VisibilityLength("data")+`<=? THEN data ELSE NULL END,`+
+			owned.store.scaleP21SW22VisibilityLength("data")+` FROM workspace_states WHERE workspace_key=?`+lock, MetadataRecordPageMaxBytes, workspace).Scan(&root, &rootBytes); err != nil {
 			return err
 		}
 		if root == nil {
-			return ErrMetadataPageBudget
-		}
-		if _, _, err := residentMetadataRoot(root); err != nil {
-			return err
+			var err error
+			root, _, err = s.readInlineResidentRoot(ctx, tx, workspace, int(rootBytes), false)
+			if err != nil {
+				return err
+			}
+		} else {
+			if _, _, err := residentMetadataRoot(root); err != nil {
+				return err
+			}
 		}
 		if s.metadataResidency.requireCoverage {
 			if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
@@ -296,10 +304,33 @@ func (s *SQLiteStore) CommitPulseSummaries(ctx context.Context, workspace string
 		if err != nil {
 			return err
 		}
-		if !nativeFound {
-			if err := ensureOAuthMetadataShape(ctx, tx, workspace, "settings", "map", lock); err != nil {
+		inlineSettings := owned.inlineSettings
+		if !nativeFound && !inlineSettings {
+			if err := s.ensureScopedMetadataShape(ctx, tx, workspace, "settings", "map", lock, rootBytes > MetadataRecordPageMaxBytes); err != nil {
 				return err
 			}
+		}
+		var candidate *metadataLogicalSource
+		defer func() {
+			if candidate != nil {
+				candidate.Release()
+			}
+		}()
+		persistCtx := ctx
+		if inlineSettings {
+			candidate, err = pulseSummaryForkCursor(ctx, source, current, true)
+			if err != nil {
+				return err
+			}
+			index, _, _ := metadataLogicalField("settings")
+			actual, err := s.persistMetadataLogicalInlinePostimage(ctx, tx, workspace, "settings",
+				candidate, source.fields[index], candidate.fields[index])
+			if err != nil {
+				return err
+			}
+			candidate.Release()
+			candidate = actual
+			persistCtx = context.WithValue(ctx, scopedMetadataPersistedKey{}, true)
 		}
 		_, releaseEvent, err = s.reserveMetadataAggregatePayload(ctx, nil)
 		if err != nil {
@@ -309,32 +340,29 @@ func (s *SQLiteStore) CommitPulseSummaries(ctx context.Context, workspace string
 		realtime = enrichRealtimePayload(event.Payload, nil, event.Type)
 		complete := storageBefore
 		complete.Notifications, complete.NotificationDeliveries = next.Notifications, next.NotificationDeliveries
-		if err := s.persistWorkspaceTx(ctx, tx, workspace, &storageBefore, &complete, nil, &event, nil); err != nil {
+		if err := s.persistWorkspaceTx(persistCtx, tx, workspace, &storageBefore, &complete, nil, &event, nil); err != nil {
 			return err
 		}
-		if err := scaleP16WriteChanges(ctx, tx, workspace, newIssueReferences(domain.Bootstrap{}), changes); err != nil {
-			return err
-		}
-		value, present := next.Settings["pulseDeliveryCursors"]
-		for _, change := range changes {
-			if change.merged || change.skipped {
-				present = !change.skipped && !change.drop
-				if present {
-					if err := json.Unmarshal(change.raw, &value); err != nil {
-						return err
+		if !inlineSettings {
+			if err := scaleP16WriteChanges(ctx, tx, workspace, newIssueReferences(domain.Bootstrap{}), changes); err != nil {
+				return err
+			}
+			value, present := next.Settings["pulseDeliveryCursors"]
+			for _, change := range changes {
+				if change.merged || change.skipped {
+					present = !change.skipped && !change.drop
+					if present {
+						if err := json.Unmarshal(change.raw, &value); err != nil {
+							return err
+						}
 					}
 				}
 			}
-		}
-		candidate, err := pulseSummaryForkCursor(ctx, source, value, present)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			if candidate != nil {
-				candidate.Release()
+			candidate, err = pulseSummaryForkCursor(ctx, source, value, present)
+			if err != nil {
+				return err
 			}
-		}()
+		}
 		// This is the only fallible ownership check. The candidate stays
 		// private until installation, so stamping it after commit cannot fail.
 		if err := candidate.setStamp(baseStamp); err != nil {
@@ -454,7 +482,12 @@ func (w *pulseSummaryWork) canonicalCursor(tx *sqlTx, workspace, lock string) ([
 	var size uint64
 	err := tx.QueryRowContext(w.ctx, `SELECT `+length+` FROM workspace_metadata_records WHERE workspace_key=? AND field='settings' AND record_key='pulseDeliveryCursors'`+lock, workspace).Scan(&size)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, false, nil
+		inline, inlineErr := metadataFieldStoredInline(w.ctx, tx, w.store.dialect, workspace, "settings")
+		if inlineErr != nil || !inline {
+			return nil, false, inlineErr
+		}
+		w.inlineSettings = true
+		return w.inlineCursor(tx, workspace, lock)
 	}
 	if err != nil {
 		return nil, false, err

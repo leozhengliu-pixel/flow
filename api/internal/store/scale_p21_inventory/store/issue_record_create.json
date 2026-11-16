@@ -1,10 +1,10 @@
 {
   "source": "store/issue_record_create.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "createIssueRecords": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata",
@@ -14,7 +14,8 @@
       "temperatureReason": "Observed in the single classification profile (cpu; setup-only); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
         "store/SQLiteStore.dispatchMutation"
-      ]
+      ],
+      "reason": "The representation guard routes bounded stores to createBoundedIssueRecords while preserving the original full-hydration branch verbatim. SW186 proves literal legacy/warm/reloaded creation responses, all canonical metadata/issue/content rows, sequence, notifications, audits, events, webhook/realtime and installed postimages across principals/credentials, templates, workflow/triage/SLA actions, cancellation, concurrent creators, stale sequences/custom-ID collisions, ContentState and legal 4MiB ASCII/escaped large descriptions. Selected native inputs retain original ordinals/defaults. Owned old-row preimages and independent callback/row/content/event encoding phases preserve atomic publication with zero full decodes and released work. Flag-off forwards to the literal original writer."
     }
   }
 }

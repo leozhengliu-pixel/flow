@@ -328,14 +328,23 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			lock = " FOR UPDATE"
 		}
 		var raw []byte
-		if err := tx.QueryRowContext(ctx, `SELECT CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?`+lock, MetadataRecordPageMaxBytes, workspace).Scan(&raw); err != nil {
+		var rootBytes int
+		length := (&ResourceRead{store: s}).byteLength("data")
+		if err := tx.QueryRowContext(ctx, `SELECT `+length+`,CASE WHEN `+length+`<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?`+lock, MetadataRecordPageMaxBytes, workspace).Scan(&rootBytes, &raw); err != nil {
 			return err
 		}
-		if raw == nil {
-			return ErrMetadataPageBudget
-		}
-		if _, _, err := residentMetadataRoot(raw); err != nil {
-			return err
+		streamedScoped := rootBytes > MetadataRecordPageMaxBytes
+		if streamedScoped {
+			if _, _, err := s.readInlineResidentRoot(ctx, tx, workspace, rootBytes, false); err != nil {
+				return err
+			}
+		} else {
+			if raw == nil {
+				return ErrMetadataPageBudget
+			}
+			if _, _, err := residentMetadataRoot(raw); err != nil {
+				return err
+			}
 		}
 		if s.metadataResidency.requireCoverage {
 			if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
@@ -350,13 +359,22 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if s.coordinator != nil && !exactSource {
 			return ErrConcurrentWrite
 		}
-		storageBefore, err := s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+		loadScope, inlineFields, inputLimit, releaseInline, err := s.prepareScopedInlineSelection(ctx, tx, workspace, logicalSource, scope)
 		if err != nil {
 			return err
 		}
-		before, err := logicalSource.Select(ctx, scope, 2<<20)
+		defer releaseInline()
+		streamedScoped = streamedScoped || len(inlineFields) != 0
+		before, err := logicalSource.Select(ctx, loadScope, inputLimit)
 		if err != nil {
 			return err
+		}
+		storageBefore := before
+		if !streamedScoped {
+			storageBefore, err = s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+			if err != nil {
+				return err
+			}
 		}
 		if before.Workspace.ID != workspaceID {
 			return ErrResourceAccessChanged
@@ -403,11 +421,15 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				return err
 			}
 			ctx = WithMetadataRecords(ctx, scope)
-			storageBefore, err = s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
-			if err != nil {
-				return err
+			if !streamedScoped {
+				storageBefore, err = s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+				if err != nil {
+					return err
+				}
 			}
-			before, err = logicalSource.Select(ctx, scope, 2<<20)
+			loadScope = scope
+			loadScope.Fields = append(slices.Clone(scope.Fields), inlineFields...)
+			before, err = logicalSource.Select(ctx, loadScope, inputLimit)
 			if err != nil {
 				return err
 			}
@@ -415,7 +437,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				return ErrResourceAccessChanged
 			}
 		}
-		next, err := callbackSource.Select(ctx, scope, 2<<20)
+		next, err := callbackSource.Select(ctx, loadScope, inputLimit)
 		if err != nil {
 			return err
 		}
@@ -456,13 +478,25 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if err := validateScopedMetadataChanges(validationBefore, next, writeScope); err != nil {
 			return err
 		}
+		if err := validateScopedInlineMetadataChanges(ctx, validationBefore, next, writeScope, inlineFields, appendOrders); err != nil {
+			return err
+		}
+		if streamedScoped {
+			_, releaseOutput, err := s.reserveMetadataAggregatePayload(ctx, next)
+			if err != nil {
+				return err
+			}
+			defer releaseOutput()
+		}
 		encoded, err := json.Marshal(next)
 		if err != nil {
 			return err
 		}
-		budget := newMetadataHydrationBudget()
-		if err := budget.consume(encoded); err != nil {
-			return err
+		if !streamedScoped {
+			budget := newMetadataHydrationBudget()
+			if err := budget.consume(encoded); err != nil {
+				return err
+			}
 		}
 		root, shapes, _, err := splitWorkspaceMetadata(encoded)
 		if err != nil {
@@ -471,7 +505,10 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		for _, field := range metadataRecordFields(writeScope) {
 			value := root[field]
 			if shapes[field] == "" && len(value) > 2 && (value[0] == '[' || value[0] == '{') && metadataResidencyFields()[field] != "core" {
-				return fmt.Errorf("%w: unsplittable callback output %s", ErrMetadataRecordQuery, field)
+				if !slices.Contains(scope.Fields, field) && !slices.Contains(inlineFields, field) {
+					return fmt.Errorf("%w: unsplittable callback output %s", ErrMetadataRecordQuery, field)
+				}
+				streamedScoped = true
 			}
 		}
 		payloadWork, releasePayload, err := s.reserveMetadataAggregatePayload(ctx, payload)
@@ -526,6 +563,12 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			}
 		}
 		inputCtx := context.WithValue(ctx, scopedMetadataImportInputsKey{}, scopedMetadataImportInputs{data: &next, scope: writeScope})
+		if streamedScoped {
+			if err := s.persistScopedCompleteFields(ctx, tx, workspace, &persistBefore, &complete, scope, inlineFields); err != nil {
+				return err
+			}
+			inputCtx = context.WithValue(inputCtx, scopedMetadataPersistedKey{}, true)
+		}
 		if err := s.persistWorkspaceTx(inputCtx, tx, workspace, &persistBefore, &complete, nil, &committed, nil); err != nil {
 			return err
 		}
@@ -535,6 +578,9 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		}
 		changes = slices.DeleteFunc(changes, func(change metadataRecordChange) bool {
 			if slices.Contains(scope.Fields, change.field) {
+				return true
+			}
+			if slices.Contains(inlineFields, change.field) {
 				return true
 			}
 			// The resolved callback was checked against its refreshed input.
@@ -551,12 +597,12 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				return fmt.Errorf("%w: point creation requires a complete field or a dedicated creation writer", ErrMetadataRecordQuery)
 			}
 			if change.insert && (actorInsert || appended) {
-				if err := ensureOAuthMetadataShape(ctx, tx, workspace, change.field, "array", lock); err != nil {
+				if err := s.ensureScopedMetadataShape(ctx, tx, workspace, change.field, "array", lock, streamedScoped); err != nil {
 					return err
 				}
 			}
 			if change.insert && isMap {
-				if err := ensureOAuthMetadataShape(ctx, tx, workspace, change.field, "map", lock); err != nil {
+				if err := s.ensureScopedMetadataShape(ctx, tx, workspace, change.field, "map", lock, streamedScoped); err != nil {
 					return err
 				}
 			}
@@ -568,7 +614,9 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if err := scaleP16WriteChanges(writeCtx, tx, workspace, newIssueReferences(next), changes); err != nil {
 			return err
 		}
-		candidate, err := callbackSource.Fork(ctx, before, next, writeScope, logicalSource.Stamp(), appendOrders)
+		forkScope := writeScope
+		forkScope.Fields = append(slices.Clone(writeScope.Fields), inlineFields...)
+		candidate, err := callbackSource.Fork(ctx, before, next, forkScope, logicalSource.Stamp(), appendOrders)
 		if err != nil {
 			return err
 		}
@@ -578,6 +626,17 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			return err
 		}
 		candidate = merged
+		for _, name := range inlineFields {
+			index, _, _ := metadataLogicalField(name)
+			adjusted, err := s.persistMetadataLogicalInlinePostimage(ctx, tx, workspace, name,
+				candidate, logicalSource.fields[index], candidate.fields[index])
+			if err != nil {
+				candidate.Release()
+				return err
+			}
+			candidate.Release()
+			candidate = adjusted
+		}
 		merged, err = metadataLogicalCompletePostimage(ctx, candidate, next, complete, scope)
 		candidate.Release()
 		if err != nil {
@@ -685,6 +744,13 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 }
 
 type scopedMetadataWriteKey struct{}
+
+type scopedMetadataPersistedKey struct{}
+
+func scopedMetadataAlreadyPersisted(ctx context.Context) bool {
+	persisted, _ := ctx.Value(scopedMetadataPersistedKey{}).(bool)
+	return persisted
+}
 
 func validateScopedMetadataChanges(before, after domain.Bootstrap, scope MetadataRecordScope) error {
 	if after.Issues != nil || after.Comments != nil || after.Activities != nil || after.Notifications != nil || after.NotificationDeliveries != nil {

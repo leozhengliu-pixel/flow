@@ -1,10 +1,11 @@
 {
   "source": "server/issue_record_aliases.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "buildIssueRecordAuthorizationData": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The flag-off builder is literal. Bounded child/permission/comment-action routes retain their proven reader; the remaining routes use boundedIssueRecordAuthorizationMetadata: the same issue-header reader (requested IDs, two SQL pages, first-page ancestors and comment author), owned until output, plus only the destination existence/directory inputs resourceAllowed reads. The alias never advertises these authorization headers as a complete Bootstrap. TestScaleP21SW187IssueRecordAuthorizationDifferential compares legacy/warm/reloaded authorization decisions and exact consumed headers for 24 route/input cases x 20 M principals/credentials (960 pairs), including update/batch destinations, private/inherited grants, old identifiers, release pipeline scope, cross-workspace refusal, large unrelated bodies, development mode, cancellation, missing output ownership and unconsumed cache release; zero complete metadata decodes.",
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata"

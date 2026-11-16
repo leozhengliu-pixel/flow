@@ -40,6 +40,9 @@ func WithoutIssueRecordMutations(ctx context.Context) context.Context {
 }
 
 func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	if s.BoundedMetadataEnabled() {
+		return s.createBoundedIssueRecords(ctx, workspace, payload, mutate)
+	}
 	metadata, ok := s.WorkspaceMetadata(workspace)
 	if !ok {
 		return fmt.Errorf("workspace not found")

@@ -57,6 +57,9 @@ func applyMentionUpdate(doc *ygo.Doc, update []byte) (err error) {
 }
 
 func refuseFormerMemberStateMentions(data *domain.Bootstrap, beforeData any, beforeState, afterState string, documentID string) error {
+	if data.CollaborationWork != nil {
+		return refuseBoundedFormerMemberStateMentions(data, beforeData, beforeState, afterState, documentID)
+	}
 	if afterState == "" || data.FormerMembers == nil || len(data.FormerMembers()) == 0 {
 		return nil
 	}
@@ -68,6 +71,9 @@ func refuseFormerMemberStateMentions(data *domain.Bootstrap, beforeData any, bef
 }
 
 func refuseFormerMemberRichMentions(data *domain.Bootstrap, beforeData any, beforeState string, after any, documentID string) error {
+	if data.CollaborationWork != nil {
+		return refuseBoundedFormerMemberRichMentions(data, beforeData, beforeState, after, documentID)
+	}
 	mentioned := []string{}
 	collectMentionIDs(after, &mentioned)
 	if len(mentioned) == 0 {

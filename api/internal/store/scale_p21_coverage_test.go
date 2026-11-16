@@ -45,10 +45,13 @@ func scaleP21SnapshotConsumer(node ast.Node) bool {
 		if !ok {
 			return true
 		}
-		if selector.Sel.Name == "workspaces" || selector.Sel.Name == "BeginProjectVisibilityRead" || selector.Sel.Name == "BeginRealtimeRecordRead" || selector.Sel.Name == "BeginProjectDirectoryQuery" || selector.Sel.Name == "BeginProjectDirectoryQueryWithAccess" {
+		if selector.Sel.Name == "workspaces" || selector.Sel.Name == "BeginProjectVisibilityRead" || selector.Sel.Name == "BeginRealtimeRecordRead" || selector.Sel.Name == "BeginProjectDirectoryQuery" || selector.Sel.Name == "BeginProjectDirectoryQueryWithAccess" || selector.Sel.Name == "ReadIssueCreateTemplate" {
 			found = true
 		}
-		if slices.Contains([]string{"sweepWorkerChatWorkspace", "BeginAskStatusRead", "BeginResourceRelationRead", "BeginSlackNotificationRead", "BeginMetadataJSONRead", "chatAuthorizedPointRead", "chatAuthorizedBootstrapHeaders", "chatAuthorizedWorkflowHeaders", "beginIssueRecordsBootstrapRead", "BeginIssueWriteAuthorizationRead", "BeginCollaborationDocumentRead", "socketWorkspaceMetadata", "BeginPresenceDocumentRead", "BeginIssueBootstrapRead", "BeginGeneralBootstrapRead", "BeginRecurringNormalizationRead", "mutateBoundedScopedIssuePoint", "ReadCommentActions", "CommentActionExists", "LoadValidationHeaders", "LoadWorkflow", "ReadIssueSuggestions", "ViewerProjectionScope", "ProjectVisibleInProjection", "ReadIssueSuggestion", "VisitIssueSuggestions", "LabelVisibleInProjection", "mutateBoundedIssueSuggestions", "ProjectedWorkspace", "mcpWorkspaceDataFrom", "TriageScoringInputs"}, selector.Sel.Name) || slices.Contains(scaleP21SnapshotMethods, selector.Sel.Name) ||
+		if slices.Contains([]string{"projectedWorkspace", "ProjectedWorkspaceWithScope", "ProjectionScope", "WithColdMetadataRead", "WithColdMetadataMutation", "withColdMetadataRequest"}, selector.Sel.Name) {
+			found = true
+		}
+		if slices.Contains([]string{"sweepWorkerChatWorkspace", "BeginAskStatusRead", "BeginResourceRelationRead", "BeginSlackNotificationRead", "BeginMetadataJSONRead", "chatAuthorizedPointRead", "chatAuthorizedBootstrapHeaders", "chatAuthorizedWorkflowHeaders", "beginIssueRecordsBootstrapRead", "BeginIssueWriteAuthorizationRead", "BeginCollaborationDocumentRead", "socketWorkspaceMetadata", "BeginPresenceDocumentRead", "BeginIssueBootstrapRead", "BeginGeneralBootstrapRead", "BeginRecurringNormalizationRead", "mutateBoundedScopedIssuePoint", "ReadCommentActions", "CommentActionExists", "LoadValidationHeaders", "LoadWorkflow", "ReadIssueSuggestions", "ViewerProjectionScope", "AuthorizationProjectionScope", "IssueAuthorizationReleaseVisible", "CycleVisibleInProjection", "ProjectVisibleInProjection", "ReadIssueSuggestion", "VisitIssueSuggestions", "LabelVisibleInProjection", "mutateBoundedIssueSuggestions", "ProjectedWorkspace", "mcpWorkspaceDataFrom", "TriageScoringInputs"}, selector.Sel.Name) || slices.Contains(scaleP21SnapshotMethods, selector.Sel.Name) ||
 			slices.Contains([]string{"VisitOAuthApplicationLogos", "boundedOAuthAppIconAccess", "ownedImageAccess", "InstalledReviewReferenceVisible", "BeginResourceRead", "BeginInstalledResourcePointRead", "BeginProjectedInstalledResourcePointRead", "BeginTeamMaintenanceRead", "BeginPulseRead", "BeginPulseScheduleRead", "BeginNotificationVisibilityRead", "BeginMemberDirectoryRead", "BeginNotificationDeliveryContextRead", "DueIntegrationDeliveryIDs", "BeginDocumentRead", "BeginDocumentDirectoryRead", "BeginTeamMemberRequestRead", "BeginWebhookDeliveryRead", "BeginWebhookAggregateRead", "BeginLoopScheduleRead", "BeginChatDisplayRead", "BeginChatEventPolicyRead", "BeginApplicationAccessRead", "BeginApplicationListRead", "BeginAgentSessionRead", "BeginApplicationWebhookSweepRead", "BeginApplicationSLAEventRead", "BeginApplicationTaskContextRead", "BeginResourceDirectoryRead", "CommitPulseSummaries", "RecordWebhookDeliveryFailure", "MutateFailingWebhookDisable"}, selector.Sel.Name) {
 			if qualifier, ok := selector.X.(*ast.Ident); !ok || qualifier.Name != "domain" {
 				found = true
@@ -313,6 +316,15 @@ func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 		`package probe; func request() { _ = s.LoadValidationHeaders(ctx) }`,
 		`package probe; func request() { _ = s.ReadIssueSuggestions(ctx, id) }`,
 		`package probe; func request() { _ = s.ViewerProjectionScope(ctx, user) }`,
+		`package probe; var callback = s.AuthorizationProjectionScope`,
+		`package probe; var callback = s.IssueAuthorizationReleaseVisible`,
+		`package probe; var callback = s.ReadIssueCreateTemplate`,
+		`package probe; var callback = s.ProjectedWorkspaceWithScope`,
+		`package probe; var callback = s.ProjectionScope`,
+		`package probe; var callback = s.WithColdMetadataRead`,
+		`package probe; var callback = s.WithColdMetadataMutation`,
+		`package probe; var callback = s.withColdMetadataRequest`,
+		`package probe; func request() { _ = s.CycleVisibleInProjection(ctx, scope, id, credential) }`,
 		`package probe; func request() { _ = s.ProjectVisibleInProjection(ctx, scope, id, credential) }`,
 		`package probe; func request() { _ = s.ReadIssueSuggestion(ctx, id) }`,
 		`package probe; func request() { _ = s.VisitIssueSuggestions(ctx, visit) }`,

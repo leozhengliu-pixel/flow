@@ -7,13 +7,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func (s *server) draftRecordValidator(r *http.Request) (func(*domain.Bootstrap, domain.Draft) error, error) {
-	metadata, query, err := s.issueRecordsQuery(r)
+func (s *server) draftRecordValidator(r *http.Request, repo *store.SQLiteStore) (func(*domain.Bootstrap, domain.Draft) error, error) {
+	metadata, query, err := s.issueRecordsQueryWithStore(r, repo)
 	if err != nil {
 		return nil, err
 	}
 	if !s.authDisabled {
-		metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+		metadata, err = repo.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
 		if err != nil {
 			return nil, err
 		}
@@ -27,7 +27,7 @@ func (s *server) draftRecordValidator(r *http.Request) (func(*domain.Bootstrap, 
 			}
 			q := query
 			q.Filter, q.Archived, q.Limit = store.IssueFilter{Field: "id", Values: []string{id}}, "all", 1
-			page, err := s.store.QueryIssueRecords(r.Context(), q)
+			page, err := repo.QueryIssueRecords(r.Context(), q)
 			queryError = err
 			return err == nil && len(page.Items) == 1
 		})

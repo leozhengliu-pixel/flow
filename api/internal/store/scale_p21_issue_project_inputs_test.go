@@ -94,18 +94,14 @@ func TestScaleP21IssueProjectInputsManyAndBudget(t *testing.T) {
 	if _, err := view.loadIssueProjectInputs(ctx, "workspace", &data, issues[0], domain.IssueUpdateInput{}); !errors.Is(err, context.Canceled) {
 		t.Fatal("project cancellation changed", err)
 	}
-	// Team moves and legacy editor snapshots have their closures (the
-	// UpdateIssueRecord differentials); a CRDT snapshot keeps its boundary.
+	// These selectors share the admitted editor and team-move closures;
+	// the route differentials prove validation rather than opaque refusal.
 	for _, input := range []domain.IssueUpdateInput{
 		{ContentState: new("opaque")}, {TeamID: new("destination"), ContentState: new("")},
+		{TeamID: new("destination")}, {DescriptionState: new("opaque")},
 	} {
-		if issueProjectInputsSupported(issues[0], input) {
-			t.Fatal("CRDT snapshot boundary silently enabled")
-		}
-	}
-	for _, input := range []domain.IssueUpdateInput{{TeamID: new("destination")}, {DescriptionState: new("opaque")}} {
 		if !issueProjectInputsSupported(issues[0], input) {
-			t.Fatal("team move or legacy editor closure not admitted")
+			t.Fatal("team move or admitted editor closure not available")
 		}
 	}
 }

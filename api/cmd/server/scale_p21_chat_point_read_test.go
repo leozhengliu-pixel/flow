@@ -486,7 +486,7 @@ func TestScaleP21ChatPointReadLifetimeAndRecorder(t *testing.T) {
 					_, err = response.Write([]byte("next"))
 				case "encoding":
 					work := make([]string, 200)
-					text := strings.Repeat("x", 1<<16)
+					text := strings.Repeat("<", 1<<16)
 					for index := range work {
 						work[index] = text
 					}

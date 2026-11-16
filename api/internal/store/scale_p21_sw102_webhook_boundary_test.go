@@ -99,7 +99,15 @@ func scaleP21SW102EarlyResidencyReturn(function *ast.FuncDecl) (*ast.IfStmt, err
 	if function == nil || function.Body == nil || len(function.Body.List) == 0 {
 		return nil, fmt.Errorf("missing early bounded dispatch")
 	}
-	guard, ok := function.Body.List[0].(*ast.IfStmt)
+	body := function.Body.List
+	if prefix, ok := body[0].(*ast.IfStmt); ok && scaleP21SW102Text(prefix.Cond) == "s.coldParent != nil" {
+		const coldGuard = "if s.coldParent != nil {\n\tif s.coldWrite == nil {\n\t\treturn ErrBoundedMetadataCoverage\n\t}\n\tif err := validateColdMetadataMutation(ctx, eventType, payload); err != nil {\n\t\treturn err\n\t}\n}"
+		if scaleP21SW102Text(prefix) != coldGuard || len(body) < 2 {
+			return nil, fmt.Errorf("cold facade prefix must only reject unsupported legacy writers")
+		}
+		body = body[1:]
+	}
+	guard, ok := body[0].(*ast.IfStmt)
 	if !ok || guard.Init != nil || guard.Else != nil ||
 		scaleP21SW102Text(guard.Cond) != "s.metadataResidency != nil" || len(guard.Body.List) == 0 {
 		return nil, fmt.Errorf("bounded residency dispatch must precede every legacy operation")

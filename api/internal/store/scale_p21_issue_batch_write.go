@@ -319,7 +319,7 @@ func (r *boundedIssueBatchAttempt) Close() {
 // and the decoded entry is admitted by its measured size for as long as the
 // attempt holds it, so a batch of many issues does not admit the decoding
 // work of every issue at once.
-func (r *boundedIssueBatchAttempt) collectionValue(ctx context.Context, node metadataLogicalNode) (reflect.Value, error) {
+func (r *boundedDiscussionAttempt) collectionValue(ctx context.Context, node metadataLogicalNode) (reflect.Value, error) {
 	absent, err := node.isNil(ctx)
 	if err != nil {
 		return reflect.Value{}, err
@@ -336,7 +336,7 @@ func (r *boundedIssueBatchAttempt) collectionValue(ctx context.Context, node met
 			return reflect.Value{}, err
 		}
 		value, err := child.Value(ctx, int(child.cost))
-		release()
+		defer release()
 		if err != nil {
 			return reflect.Value{}, err
 		}
@@ -401,11 +401,6 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 	if len(ids) == 0 || len(ids) > 1000 {
 		return fmt.Errorf("invalid issue mutation scope")
 	}
-	if update.ContentState != nil {
-		// refuseFormerMemberStateMentions decodes the snapshot without an
-		// admitted work bound.
-		return fmt.Errorf("%w: collaborative editor snapshot", ErrIssueBatchWriteRefused)
-	}
 	if _, actor := actorFromContext(ctx); renumber && !actor {
 		return fmt.Errorf("%w: renumbering batch without an actor", ErrIssueBatchWriteRefused)
 	}
@@ -428,6 +423,7 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 	needsFamily := update.StateID != nil || update.ParentID != nil
 	ctx = metadataLogicalUnpinnedContext(ctx)
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
+	ctx = withIssueRecordWriteAdmission(ctx, s)
 	ctx, finishTimestampInputs, err := s.startMetadataTimestampInputs(ctx)
 	if err != nil {
 		return err
@@ -608,9 +604,14 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 		}
 		attempt.lookups.allowDocuments(targets)
 		attempt.lookups.liveMembers = renumber && hasActor
-		if err := attempt.reserveContent(ctx, data, payload); err != nil {
+		if err := attempt.reserveValue(ctx, payload); err != nil {
 			return err
 		}
+		releaseCallbackEncoding, err := reserveIssueBatchCallbackEncoding(ctx, s, data, payload)
+		if err != nil {
+			return err
+		}
+		defer releaseCallbackEncoding()
 		callbackCost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(data), 0)
 		if err != nil {
 			return err
@@ -625,15 +626,15 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 		if data.Viewer.Via != nil {
 			beforeCallback.Viewer.Via = cloneSnapshotValue(reflect.ValueOf(data.Viewer.Via)).Interface().(*domain.ActorBot)
 		}
-		data.FormerMembers = attempt.lookups.formerMembers
-		data.CollaborationUpdates = attempt.lookups.collaborationUpdates
+		attempt.lookups.install(&data)
 		if !registerMetadataOutputClose(ctx, attempt.Close) {
 			return ErrBoundedMetadataCoverage
 		}
 		transferred = true
 		traceMark(ctx, "load")
 		aggregate, callbackErr := mutate(&data)
-		data.FormerMembers, data.CollaborationUpdates = nil, nil
+		releaseCallbackEncoding()
+		data.FormerMembers, data.CollaborationUpdates, data.CollaborationWork = nil, nil, nil
 		if err := attempt.lookups.check(); err != nil {
 			return err
 		}
@@ -668,9 +669,6 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 		if err != nil {
 			return err
 		}
-		if err := attempt.reserveContent(ctx, data, payload); err != nil {
-			return err
-		}
 		if _, err := s.writeIssueRecordBatch(ctx, tx, workspace, data.Issues, data, rawBefore); err != nil {
 			return err
 		}
@@ -680,6 +678,11 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 			}
 		}
 		writeCtx := context.WithValue(ctx, legacyContentWriteBudgetKey{}, s)
+		releaseContentEncoding, err := reserveIssueBatchContentEncoding(ctx, s, data)
+		if err != nil {
+			return err
+		}
+		defer releaseContentEncoding()
 		if err := syncContentRecords(writeCtx, tx, workspace, "comment", data.Comments, data, keys); err != nil {
 			return err
 		}
@@ -700,6 +703,7 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 				return err
 			}
 		}
+		releaseContentEncoding()
 		patches := map[string]metadataAggregateNode{}
 		suggestionPatch, releaseSuggestions, err := s.issueSuggestionPatchNode(ctx, display, dropped, edits, appended)
 		if err != nil {

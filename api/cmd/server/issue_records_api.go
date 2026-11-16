@@ -56,8 +56,7 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		return data, query, err
 	}
 	query.Workspace = data.Workspace.URLKey
-	if s.authDisabled && r.Method != http.MethodGet && r.Method != http.MethodHead && r.URL.Path != "/api/issue-records/visibility" &&
-		!(s.store.BoundedMetadataEnabled() && boundedIssueChildWriteRequest(r)) {
+	if s.authDisabled && !s.store.BoundedMetadataEnabled() && r.Method != http.MethodGet && r.Method != http.MethodHead && r.URL.Path != "/api/issue-records/visibility" {
 		data, _ = s.store.WorkspaceMetadata(query.Workspace)
 		data.ViewerRole = "admin"
 	}
@@ -271,7 +270,15 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
-	if !s.authDisabled {
+	if s.store.BoundedMetadataEnabled() {
+		var release func()
+		var ok bool
+		metadata, release, ok = s.boundedIssueCreateTargets(w, r, query.Workspace, input)
+		if !ok {
+			return
+		}
+		defer release()
+	} else if !s.authDisabled {
 		// The authorization built this projection a moment ago, before any
 		// write (request_metadata.go); otherwise build it.
 		var handedOff bool
@@ -283,7 +290,9 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	filterBootstrapForAPIKey(&metadata, r)
+	if !s.store.BoundedMetadataEnabled() {
+		filterBootstrapForAPIKey(&metadata, r)
+	}
 	// A workspace admin sees private teams they have not joined, but adds
 	// issues to them only as a member.
 	teamAllowed := func(id string) bool {

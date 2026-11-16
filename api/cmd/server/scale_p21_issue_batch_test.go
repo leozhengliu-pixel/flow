@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -208,33 +207,15 @@ func TestScaleP21IssueBatchDifferential(t *testing.T) {
 	})
 }
 
-// A batch with a CRDT snapshot stays outside the bounded writer: a typed
-// refusal before any write.
-func TestScaleP21IssueBatchContentStateRefused(t *testing.T) {
+func TestScaleP21IssueBatchContentStateDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP21IssueUpdateSetup(t)
 	state := mentioningCollaborationState(f.principals[2].user.ID)
-	for _, source := range []string{"warm", "reloaded"} {
-		service := f.reset(t, source)
-		before := f.state(t)
-		owned, closeOwned := beginIndependentMetadataOutputReads(t.Context())
-		ctx := store.WithIssueRecordMutations(store.ContextWithActor(owned, f.data.Viewer), f.triage.ID)
-		update := domain.IssueUpdateInput{ContentState: &state}
-		ctx = store.ContextWithIssueBatchUpdate(ctx, update)
-		err := service.store.MutateWorkspace(ctx, f.data.Workspace.URLKey, "issue.batch_updated", "issue_batch_refused", domain.BatchIssueUpdateInput{IssueIDs: []string{f.triage.ID}, Update: update}, func(*domain.Bootstrap) error {
-			t.Fatal("callback ran")
-			return nil
-		})
-		closeOwned()
-		if !errors.Is(err, store.ErrIssueBatchWriteRefused) || !errors.Is(err, store.ErrBoundedMetadataCoverage) {
-			t.Fatalf("%s: content state batch not refused: %v", source, err)
-		}
-		if after := f.state(t); !reflect.DeepEqual(before, after) || service.store.MetadataWorkUsedForTesting() != 0 {
-			t.Fatalf("%s: refused batch changed state or retained work", source)
-		}
-	}
+	f.runBatchCases(t, []scaleP21IssueBatchCase{
+		{name: "content-state", user: f.data.Viewer, ids: []string{f.triage.ID, f.visible.ID}, update: map[string]any{"contentState": state}, code: http.StatusOK},
+	})
 }
 
 // Concurrent batches over overlapping issues serialize: each bounded
@@ -406,51 +387,21 @@ func TestScaleP21IssueBatchLarge(t *testing.T) {
 	})
 }
 
-// At 1000 issues the legacy writer commits or rolls back atomically; the
-// bounded writer's admitted work exceeds the process budget and it refuses
-// with ErrMetadataWorkBudget before any write: both leave nothing partial.
+// A full 1000-issue request preserves legacy commit and rollback behavior.
 func TestScaleP21IssueBatchThousandAtomic(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP21IssueUpdateSetup(t)
 	ids := scaleP21IssueBatchBulk(t, f, 1000)
-	for _, test := range []struct {
-		name  string
-		setup func(*testing.T)
-		code  int
-	}{
-		{"commit", nil, http.StatusOK},
-		{"one-archived", scaleP21IssueBatchArchive(f, ids[len(ids)-1]), http.StatusBadRequest},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			f.scaleP21TriageWriterFixture.prepare = test.setup
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
-			for _, source := range []string{"legacy", "warm", "reloaded"} {
-				var before scaleP21IssueUpdateState
-				got, _ := f.run(t, source, func(service *server) *httptest.ResponseRecorder {
-					before = f.state(t)
-					return f.batch(service, f.data.Viewer, nil, ids, map[string]any{"priority": 2}, false)
-				})
-				changed := 0
-				for index, row := range got.State.Records {
-					if !reflect.DeepEqual(row, before.Records[index]) {
-						changed++
-					}
-				}
-				switch {
-				case source == "legacy" && got.Code != test.code:
-					t.Fatalf("legacy status %d, want %d: %s", got.Code, test.code, got.Body)
-				case source == "legacy" && test.code == http.StatusOK && (changed != len(ids) || len(got.State.Events) != 1):
-					t.Fatalf("legacy batch changed %d of %d issues, %d events", changed, len(ids), len(got.State.Events))
-				case source != "legacy" && (got.Code != http.StatusInternalServerError || !strings.Contains(string(got.Body), "work budget")):
-					t.Fatalf("%s: status %d, want the typed budget refusal: %s", source, got.Code, got.Body)
-				case (source != "legacy" || test.code != http.StatusOK) && (changed != 0 || len(got.State.Events) != 0 || !reflect.DeepEqual(before.Content, got.State.Content)):
-					t.Fatalf("%s: refused or failed batch wrote %d issues, %d events", source, changed, len(got.State.Events))
-				}
+	f.runBatchCases(t, []scaleP21IssueBatchCase{
+		{name: "commit", user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusOK, check: func(t *testing.T, got scaleP21IssueUpdateOutcome) {
+			if len(got.State.Events) != 1 {
+				t.Fatalf("committed batch published %d events", len(got.State.Events))
 			}
-		})
-	}
+		}},
+		{name: "one-archived", setup: scaleP21IssueBatchArchive(f, ids[len(ids)-1]), user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusBadRequest},
+	})
 }
 
 // boundedLegacyIssueWrites rewrites every write under /api/issues to the

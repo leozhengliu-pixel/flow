@@ -1,0 +1,26 @@
+{
+  "source": "server/scale_p21_cold_dispatch_drafts.go",
+  "unmigrated": 0,
+  "consumers": {
+    "createDraftWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal remainder of createDraft after its original decoder, with only the validator/repository arguments explicit. The registered COLD root owns the legacy facade through constructor-time validation, draft.created publication and response encoding. SW191 compares exact validation errors across M and actual warm/reloaded route responses and persisted rows, including decode-before-capture ordering.",
+      "coldDispatch": "server/advanced_features.go:createDraft",
+      "accessors": ["MutateWorkspaceWithAggregate"],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD draft creation route.",
+      "callers": ["server/advanced_features.go:createDraft"]
+    },
+    "updateDraftWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal remainder of updateDraft after its original decoder, with only the validator/repository arguments explicit. The registered COLD root owns the legacy facade through constructor-time validation, draft.updated publication and response encoding. SW191 compares actual warm/reloaded route responses and persisted rows and preserves constructor-time metadata when the installed data later changes.",
+      "coldDispatch": "server/advanced_features.go:updateDraft",
+      "accessors": ["MutateWorkspace"],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD draft update route.",
+      "callers": ["server/advanced_features.go:updateDraft"]
+    }
+  }
+}

@@ -441,7 +441,7 @@ func TestScaleP21IssuePersistenceRollbackAndAdmission(t *testing.T) {
 				if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 					t.Fatal(err)
 				}
-				t.Log("writer-local root-cap check; bounded recovery independently rejects this oversized root")
+				t.Log("oversized inline root remains admitted until a writer-local quota failure")
 			}
 			prior := scaleP21IssuePhysical(t, f.SQLiteStore, workspace, "projects")
 			ctx, cancel := context.WithCancel(t.Context())
@@ -463,7 +463,7 @@ func TestScaleP21IssuePersistenceRollbackAndAdmission(t *testing.T) {
 				case "cancel":
 					cancel()
 					return ctx.Err()
-				case "quota":
+				case "quota", "root":
 					view.metadataResidency.work.limit = view.metadataResidency.work.used
 				}
 				return nil

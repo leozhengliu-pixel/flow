@@ -152,7 +152,9 @@ func (r *IssueWriteAuthorizationRead) loadPolicy(ctx context.Context, userID str
 			allowed[team.ID] = true
 		}
 	}
-	filterBootstrapTeams(&data, viewerTeamScope(data, allowed, userID, role), role == "guest")
+	scope := viewerTeamScope(data, allowed, userID, role)
+	r.projectionScope = ViewerProjectionScope{Teams: scope.Teams, Content: scope.Content}
+	filterBootstrapTeams(&data, scope, role == "guest")
 	for id := range data.TeamSettings {
 		if !allowed[id] {
 			delete(data.TeamSettings, id)

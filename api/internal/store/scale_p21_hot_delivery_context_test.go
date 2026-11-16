@@ -200,7 +200,7 @@ func TestScaleP21HotDeliveryMutationAdmissionAndRollback(t *testing.T) {
 		t.Fatal("delivery callback error did not roll back", err)
 	}
 	if err := view.MutateNotificationDelivery(t.Context(), workspace, "delivery-native-write", func(item *domain.NotificationDelivery) error {
-		item.Error = strings.Repeat("large ", 3<<20)
+		item.Error = strings.Repeat("<", 12<<20)
 		return nil
 	}); !errors.Is(err, ErrMetadataWorkBudget) || stored() != before {
 		t.Fatal("growing callback escaped encoding admission", err)

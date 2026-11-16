@@ -129,6 +129,9 @@ func formerMemberMentionsAsText(data *domain.Bootstrap, document map[string]any)
 // issue write that replaces the description. Only request writes check it:
 // templates, recurring issues and automations copy stored content as it is.
 func refuseNewFormerMemberDescriptionMentions(data *domain.Bootstrap, issue *domain.Issue, input domain.IssueUpdateInput) error {
+	if data.CollaborationWork != nil {
+		return refuseBoundedFormerMemberDescriptionMentions(data, issue, input)
+	}
 	if input.DescriptionData == nil && input.DescriptionState == nil && input.ContentState == nil {
 		return nil
 	}

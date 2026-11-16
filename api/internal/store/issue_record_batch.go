@@ -80,6 +80,11 @@ func (s *SQLiteStore) writeIssueRecordBatch(ctx context.Context, tx *sqlTx, work
 		}
 	}
 	if len(missing) > 0 {
+		if issueRecordWriteAdmission(ctx) != nil {
+			// Bounded writers supply every preimage through the owned row
+			// reader; the compatibility fallback has no transfer allowance.
+			return nil, ErrBoundedMetadataCoverage
+		}
 		payloads := make(map[string][]byte, len(previous)+len(missing))
 		for id, raw := range previous {
 			payloads[id] = raw
@@ -112,24 +117,35 @@ func (s *SQLiteStore) writeIssueRecordBatch(ctx context.Context, tx *sqlTx, work
 	changed := []domain.Issue{}
 	written := []string{}
 	for _, issue := range issues {
-		values, err := s.issueRecordColumns(workspace, issue)
+		err := func() error {
+			release, err := reserveIssueRecordEncoding(ctx, issueRecordWriteAdmission(ctx), issue, previous[issue.ID])
+			if err != nil {
+				return err
+			}
+			defer release()
+			values, err := s.issueRecordColumns(workspace, issue)
+			if err != nil {
+				return err
+			}
+			old := previous[issue.ID]
+			if equalIssueRecordData(old, values[len(values)-1].([]byte)) || len(old) > 0 && refs.equalOwned(old, issue) {
+				return nil
+			}
+			if len(old) > 0 {
+				var before domain.Issue
+				if err := json.Unmarshal(old, &before); err != nil {
+					return err
+				}
+				addIssueStats(deltas, issueStatsOf(before), -1)
+			}
+			addIssueStats(deltas, issueStatsOf(issue), 1)
+			changed = append(changed, issue)
+			written = append(written, issue.ID)
+			return nil
+		}()
 		if err != nil {
 			return nil, err
 		}
-		old := previous[issue.ID]
-		if equalIssueRecordData(old, values[len(values)-1].([]byte)) || len(old) > 0 && refs.equalOwned(old, issue) {
-			continue
-		}
-		if len(old) > 0 {
-			var before domain.Issue
-			if err := json.Unmarshal(old, &before); err != nil {
-				return nil, err
-			}
-			addIssueStats(deltas, issueStatsOf(before), -1)
-		}
-		addIssueStats(deltas, issueStatsOf(issue), 1)
-		changed = append(changed, issue)
-		written = append(written, issue.ID)
 	}
 	if len(changed) == 0 {
 		return nil, nil
@@ -141,7 +157,15 @@ func (s *SQLiteStore) writeIssueRecordBatch(ctx context.Context, tx *sqlTx, work
 		return nil, err
 	}
 	for _, issue := range changed {
-		if err := syncApplicationTask(ctx, tx, workspace, issue, previous[issue.ID]); err != nil {
+		err := func() error {
+			release, err := reserveIssueRecordEncoding(ctx, issueRecordWriteAdmission(ctx), issue, previous[issue.ID])
+			if err != nil {
+				return err
+			}
+			defer release()
+			return syncApplicationTask(ctx, tx, workspace, issue, previous[issue.ID])
+		}()
+		if err != nil {
 			return nil, err
 		}
 	}

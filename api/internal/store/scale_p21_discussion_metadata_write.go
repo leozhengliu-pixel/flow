@@ -45,6 +45,25 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 		return s.prepareDiscussionThreadPublication(ctx, tx, workspace, source,
 			before.ThreadSubscriptions, next.ThreadSubscriptions, issueID, baseStamp, exact)
 	}
+	inlineFields, err := s.inlineMetadataFields(ctx, tx, workspace, metadataRecordFields(scope)...)
+	if err != nil {
+		return nil, err
+	}
+	if slices.Contains(inlineFields, "threadSubscriptions") && !slices.Contains(scope.Fields, "threadSubscriptions") {
+		ids, _ := ctx.Value(issueRecordMutationContext{}).([]string)
+		if len(ids) == 1 && ids[0] != "" {
+			// The discussion reader selected every native occurrence for
+			// this issue and retained their ordinals. Reuse that exact
+			// closure instead of turning duplicate IDs into point rows.
+			for _, field := range changedMetadataFields(before, next) {
+				if field.name != "threadSubscriptions" {
+					return nil, ErrBoundedMetadataCoverage
+				}
+			}
+			return s.prepareDiscussionThreadPublication(ctx, tx, workspace, source,
+				before.ThreadSubscriptions, next.ThreadSubscriptions, ids[0], baseStamp, exact)
+		}
+	}
 	work := &ResourceRead{store: s}
 	defer work.Close()
 	if err := work.reserve(ctx, 64<<10); err != nil {
@@ -61,7 +80,7 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 		if err := work.reserve(ctx, uint64(cost)*4+64<<10); err != nil {
 			return nil, err
 		}
-		if err := validateMetadataLogicalSelection(data, scope); err != nil {
+		if err := validateDiscussionInlineSelection(data, scope, inlineFields); err != nil {
 			return nil, err
 		}
 	}
@@ -84,6 +103,9 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 		return nil, err
 	}
 	for _, name := range metadataRecordFields(writeScope) {
+		if slices.Contains(inlineFields, name) || slices.Contains(scope.Fields, name) {
+			continue
+		}
 		value := root[name]
 		if shapes[name] == "" && len(value) > 2 && (value[0] == '[' || value[0] == '{') && metadataResidencyFields()[name] != "core" {
 			return nil, fmt.Errorf("%w: unsplittable discussion metadata %s", ErrMetadataRecordQuery, name)
@@ -95,12 +117,12 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 	}
 	var completeFields []string
 	for _, field := range changedMetadataFields(nativeBefore, nativeNext) {
-		if slices.Contains(scope.Fields, field.name) {
+		if slices.Contains(scope.Fields, field.name) && !slices.Contains(inlineFields, field.name) {
 			completeFields = append(completeFields, field.name)
 		}
 	}
 	changes = slices.DeleteFunc(changes, func(change metadataRecordChange) bool {
-		return slices.Contains(scope.Fields, change.field)
+		return slices.Contains(scope.Fields, change.field) || slices.Contains(inlineFields, change.field)
 	})
 	for _, change := range changes {
 		if !metadataRecordSelected(writeScope, change.field, change.key, true) {
@@ -127,7 +149,7 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 		}
 		// Only complete fields reach the legacy metadata delta writer. Point
 		// rows are merged once, separately, and no content collections load.
-		if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspace, canonicalBefore, &complete); err != nil {
+		if err := s.persistScopedCompleteFields(ctx, tx, workspace, &canonicalBefore, &complete, scope, inlineFields); err != nil {
 			return nil, err
 		}
 	}
@@ -166,19 +188,44 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 			publication.Close()
 		}
 	}()
-	if len(completeFields) == 0 {
+	if len(completeFields) == 0 && len(inlineFields) == 0 {
 		return publication, nil
 	}
-	candidate, err := metadataLogicalCompletePostimage(ctx, publication.candidate, nativeNext, complete, scope)
-	if err != nil {
-		return nil, err
+	candidate := publication.candidate
+	publication.candidate = nil
+	defer func() {
+		if candidate != nil {
+			candidate.Release()
+		}
+	}()
+	for _, name := range inlineFields {
+		index, _, _ := metadataLogicalField(name)
+		actual, err := s.persistMetadataLogicalInlinePostimage(ctx, tx, workspace, name,
+			candidate, source.fields[index], candidate.fields[index])
+		if err != nil {
+			return nil, err
+		}
+		candidate.Release()
+		candidate = actual
+	}
+	if len(completeFields) != 0 {
+		completeScope := scope
+		completeScope.Fields = slices.DeleteFunc(slices.Clone(scope.Fields), func(name string) bool {
+			return slices.Contains(inlineFields, name)
+		})
+		actual, err := metadataLogicalCompletePostimage(ctx, candidate, nativeNext, complete, completeScope)
+		if err != nil {
+			return nil, err
+		}
+		candidate.Release()
+		candidate = actual
 	}
 	publication.Close()
 	publication, err = s.prepareMetadataLogicalPublication(ctx, tx, workspace, candidate, baseStamp, exact, false)
 	if err != nil {
-		candidate.Release()
 		return nil, err
 	}
+	candidate = nil
 	return publication, nil
 }
 
@@ -232,7 +279,10 @@ func (s *SQLiteStore) discussionMetadataWriteWork(ctx context.Context, tx *sqlTx
 	if err := tx.QueryRowContext(ctx, "SELECT "+work.byteLength("data")+" FROM workspace_states WHERE workspace_key=?", workspace).Scan(&rootBytes); err != nil {
 		return err
 	}
-	if rootBytes < 0 || rootBytes > MetadataRecordPageMaxBytes || uint64(rootBytes) > (metadataWorkBytes-(64<<10))/128 {
+	if rootBytes > MetadataRecordPageMaxBytes {
+		return s.discussionStreamedRootWork(ctx, tx, workspace, work, rootBytes, changes)
+	}
+	if rootBytes < 0 || uint64(rootBytes) > (metadataWorkBytes-(64<<10))/128 {
 		return ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(rootBytes)*128+64<<10); err != nil {

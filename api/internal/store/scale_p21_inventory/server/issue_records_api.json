@@ -1,10 +1,10 @@
 {
   "source": "server/issue_records_api.go",
-  "unmigrated": 3,
+  "unmigrated": 1,
   "consumers": {
     "createIssueRecord": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "PagedWorkspaceMetadata"
       ],
@@ -12,7 +12,8 @@
       "temperatureReason": "Direct issue-create route in the owner hot workload.",
       "callers": [
         "POST /api/issue-records"
-      ]
+      ],
+      "reason": "Bounded target validation uses the captured literal viewer projection/scope and selected project/cycle/user/template headers, keeping credential/private-team/template-child checks and original validation order. SW186 proves literal legacy/warm/reloaded creation responses, all canonical metadata/issue/content rows, sequence, notifications, audits, events, webhook/realtime and installed postimages across principals/credentials, templates, workflow/triage/SLA actions, cancellation, concurrent creators, stale sequences/custom-ID collisions, ContentState and legal 4MiB ASCII/escaped large descriptions. Selected native inputs retain original ordinals/defaults. Owned old-row preimages and independent callback/row/content/event encoding phases preserve atomic publication with zero full decodes and released work. Flag-off forwards to the literal original writer."
     },
     "issueRecordsBootstrapData": {
       "owner": "P21",
@@ -30,7 +31,7 @@
     },
     "issueRecordsQuery": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata"
@@ -45,7 +46,8 @@
         "createIssueRecord",
         "updateIssueRecord",
         "buildIssueRecordAuthorizationData"
-      ]
+      ],
+      "reason": "The bounded representation uses the proven IssueQueryAccess policy and SQL visibility query only. The borrowed-store query helper retains the literal full development fallback for legacy stores, including COLD draft facades. SW186 compares creation/fields/permission/query-scope behavior and unchanged projection SQL (19/admin,14/other); SW187 covers 960 general authorization route/principal/reload comparisons; SW191 proves COLD draft capture timing and literal old behavior through mutation/response. Bootstrap filters, grouping, old identifiers, selected keys and issue/reference reads retain their existing proven native paths. No partial Bootstrap is passed as full mutation input."
     },
     "updateIssueRecord": {
       "owner": "P21",
@@ -59,7 +61,7 @@
       "callers": [
         "PATCH /api/issue-records/{id}"
       ],
-      "reason": "Bounded mode replaces the PagedWorkspaceMetadata/handoff read with boundedIssueUpdateTargets (owned literal projection of policy fields and live directory, projected project/cycle lookups) or, without authentication, boundedIssueUpdatePresence (installed ID lookups); the off branch is literal. The callback is unchanged: issueRole reads the projected viewer, role, teams, settings and memberships with the writer's issues, and applyUpdate/moveIssueToTeam/notifications read the bounded UpdateIssueRecord closure (selected users, labels with same-named move labels, states, cycles, SLA rules of both teams, attached documents, issueMoveAudience members, owned editor lookups). TestScaleP21IssueUpdate{Fields,TeamMove,Scheduler,Concurrent,Inline,StoreBoundaries,WithoutAuth}: legacy/warm/SQL-reloaded byte-exact responses, rows, sequence, aliases, documents, collaboration updates, activity (including merged update entries), notifications and their audience, events with previous values, webhooks and realtime. Independent blockers remain: issueRecordsQuery and the request authorization middleware (buildIssueRecordAuthorizationData) for this route, and UpdateIssueRecord's ContentState (CRDT snapshot) boundary."
+      "reason": "Bounded mode replaces the PagedWorkspaceMetadata/handoff read with boundedIssueUpdateTargets (owned literal projection of policy fields and live directory, projected project/cycle lookups) or, without authentication, boundedIssueUpdatePresence (installed ID lookups); the off branch is literal. The callback is unchanged: issueRole reads the projected viewer, role, teams, settings and memberships with the writer's issues, and applyUpdate/moveIssueToTeam/notifications read the bounded UpdateIssueRecord closure (selected users, labels with same-named move labels, states, cycles, SLA rules of both teams, attached documents, issueMoveAudience members, owned editor lookups). TestScaleP21IssueUpdate{Fields,TeamMove,Scheduler,Concurrent,Inline,StoreBoundaries,WithoutAuth}: legacy/warm/SQL-reloaded byte-exact responses, rows, sequence, aliases, documents, collaboration updates, activity (including merged update entries), notifications and their audience, events with previous values, webhooks and realtime. SW189 closes ContentState with the separately imported admitted CRDT engine, preserves malformed-new/invalid-old error behavior and retained/queued/deleted mention semantics, and compares actual update/batch routes plus the permission matrix with no leaked work. The flag-off dependency/path is unchanged."
     }
   }
 }

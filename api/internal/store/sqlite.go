@@ -1571,7 +1571,18 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 }
 
 func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	if s.coldParent != nil {
+		if s.coldWrite == nil {
+			return ErrBoundedMetadataCoverage
+		}
+		if err := validateColdMetadataMutation(ctx, eventType, payload); err != nil {
+			return err
+		}
+	}
 	if s.metadataResidency != nil {
+		if eventType == "issue.created" && UsesIssueRecordMutations(ctx) {
+			return s.createIssueRecords(ctx, workspaceKey, payload, mutate)
+		}
 		if _, batch := issueBatchUpdateFromContext(ctx); batch && UsesIssueRecordMutations(ctx) && eventType == "issue.batch_updated" {
 			return s.mutateBoundedIssueBatch(ctx, workspaceKey, eventType, payload, mutate)
 		}
@@ -2135,7 +2146,7 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 			return err
 		}
 	}
-	if before != nil {
+	if before != nil && !scopedMetadataAlreadyPersisted(ctx) {
 		stored := *before
 		if base != nil && len(base.progressProjects) > 0 {
 			var err error
@@ -2152,8 +2163,10 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 		for _, field := range persistedMetadataFields() {
 			setRebasedField(field, destination.Field(field.index), source.Field(field.index))
 		}
-	} else if err := writeWorkspaceMetadata(ctx, tx, workspaceKey, data.Workspace.ID, raw); err != nil {
-		return err
+	} else if before == nil {
+		if err := writeWorkspaceMetadata(ctx, tx, workspaceKey, data.Workspace.ID, raw); err != nil {
+			return err
+		}
 	}
 	viewerRaw, _ := json.Marshal(s.viewer)
 	if len(viewerRaw) == 0 || string(viewerRaw) == "{}" {

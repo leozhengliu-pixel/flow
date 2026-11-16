@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -525,24 +524,9 @@ func TestScaleP21IssueUpdateStoreBoundaries(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP21IssueUpdateSetup(t)
 	state := mentioningCollaborationState(f.principals[2].user.ID)
-	for _, source := range []string{"warm", "reloaded"} {
-		service := f.reset(t, source)
-		before := f.state(t)
-		_, err := service.store.UpdateIssueRecord(store.ContextWithActor(t.Context(), f.data.Viewer), f.data.Workspace.URLKey, f.triage.ID, nil,
-			store.IssueMutationScope{Payload: domain.IssueUpdateInput{ContentState: &state}}, func(*domain.Bootstrap, *domain.Issue) error {
-				t.Fatal("callback ran")
-				return nil
-			})
-		if !errors.Is(err, store.ErrBoundedMetadataCoverage) {
-			t.Fatalf("%s: content state not refused: %v", source, err)
-		}
-		if after := f.state(t); !reflect.DeepEqual(before, after) {
-			t.Fatalf("%s: refused write changed state", source)
-		}
-		if service.store.MetadataWorkUsedForTesting() != 0 {
-			t.Fatalf("%s: refused write retained work", source)
-		}
-	}
+	f.runCases(t, []scaleP21IssueUpdateCase{
+		{name: "content-state", user: f.data.Viewer, issue: f.triage.ID, body: map[string]any{"contentState": state}, code: http.StatusOK},
+	})
 	// A cancelled bounded move fails like the legacy one, writing nothing.
 	team := "tm-parent"
 	var errs []string

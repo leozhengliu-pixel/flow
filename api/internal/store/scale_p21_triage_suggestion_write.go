@@ -437,6 +437,7 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 	}
 	ctx = metadataLogicalUnpinnedContext(ctx)
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
+	ctx = withIssueRecordWriteAdmission(ctx, s)
 	ctx, finishTimestampInputs, err := s.startMetadataTimestampInputs(ctx)
 	if err != nil {
 		return err
@@ -590,7 +591,7 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		defer display.Release()
 		for _, name := range []string{"issues", "comments", "activities", "notifications", "notificationDeliveries"} {
 			index, _, _ := metadataLogicalField(name)
-			value, err := attempt.owner.node(ctx, display.fields[index], false)
+			value, err := attempt.collectionValue(ctx, display.fields[index])
 			if err != nil {
 				return err
 			}
@@ -609,7 +610,7 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		if err != nil {
 			return err
 		}
-		if err := attempt.reserveContent(ctx, data, payload); err != nil {
+		if err := attempt.reserveValue(ctx, payload); err != nil {
 			return err
 		}
 		callbackCost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(data), 0)
@@ -619,9 +620,14 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		if callbackCost > (metadataWorkBytes-(64<<10))/3 {
 			return ErrMetadataWorkBudget
 		}
-		if err := attempt.owner.reserve(ctx, callbackCost*3+64<<10); err != nil {
+		if err := attempt.owner.reserve(ctx, callbackCost*2); err != nil {
 			return err
 		}
+		_, releaseBeforeCallback, err := s.tryAdmitAdditionalMetadataWork(ctx, int(callbackCost+64<<10))
+		if err != nil {
+			return err
+		}
+		defer releaseBeforeCallback()
 		beforeCallback := cloneBootstrap(data)
 		if data.Viewer.Via != nil {
 			beforeCallback.Viewer.Via = cloneSnapshotValue(reflect.ValueOf(data.Viewer.Via)).Interface().(*domain.ActorBot)
@@ -657,9 +663,10 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		if err != nil {
 			return err
 		}
-		if err := attempt.reserveContent(ctx, data, payload); err != nil {
-			return err
-		}
+		// The private differential preimage has no users after validation and
+		// patch construction; callback results remain owned by attempt.
+		beforeCallback = domain.Bootstrap{}
+		releaseBeforeCallback()
 		if _, err := s.writeIssueRecordBatch(ctx, tx, workspace, data.Issues, data, rawBefore); err != nil {
 			return err
 		}
@@ -669,6 +676,11 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			}
 		}
 		writeCtx := context.WithValue(ctx, legacyContentWriteBudgetKey{}, s)
+		releaseContent, err := reserveIssueBatchContentEncoding(ctx, s, data)
+		if err != nil {
+			return err
+		}
+		defer releaseContent()
 		if err := syncContentRecords(writeCtx, tx, workspace, "comment", data.Comments, data, keys); err != nil {
 			return err
 		}
@@ -689,6 +701,12 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 				return err
 			}
 		}
+		// The callback uses separately decoded display values. The original
+		// child rows and their SQL decoding scratch end after content sync.
+		oldDeliveries = nil
+		releaseContent()
+		attempt.content.Close()
+		attempt.content = nil
 		patch, releasePatch, err := s.issueSuggestionPatchNode(ctx, display, dropped, edits, appended)
 		if err != nil {
 			return err
@@ -706,7 +724,7 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		defer requested.Release()
 		restored, err := requested.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
 			switch name {
-			case "viewer", "viewerRole":
+			case "viewer", "viewerRole", "members", "teamMembers":
 				index, _, _ := metadataLogicalField(name)
 				return metadataAggregateStoredNode{stored.fields[index]}, true, nil
 			case "issueSuggestions":
@@ -740,6 +758,12 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			}
 			defer progress.Close()
 		}
+		// Progress was the final user of the original issue preimages.
+		// Keep the callback/result owner live, but release raw SQL preimages
+		// before materializing an inline metadata field for persistence.
+		rawBefore, records, loaded = nil, nil, nil
+		attempt.rows.Close()
+		attempt.rows = nil
 		extraFields := []string{"issueSuggestions"}
 		if documents != nil {
 			extraFields = append(extraFields, "documents")
@@ -907,10 +931,8 @@ func (s *SQLiteStore) issueSuggestionPatchNode(ctx context.Context, source *meta
 	if err != nil {
 		return nil, release, err
 	}
-	work := &ResourceRead{store: s}
 	release = func() {
 		frames.Close()
-		work.Close()
 	}
 	defer func() {
 		if err != nil {
@@ -935,6 +957,10 @@ func (s *SQLiteStore) issueSuggestionPatchNode(ctx context.Context, source *meta
 		return nil, release, err
 	}
 	frame := func(value domain.IssueSuggestion) (metadataLogicalNode, error) {
+		// The callback owns value; the builder retains only its spooled
+		// frame, so decoding/encoding scratch ends after this one record.
+		work := &ResourceRead{store: s}
+		defer work.Close()
 		native := reflect.ValueOf(value)
 		cost, err := metadataAggregateNativeCost(ctx, native, 0)
 		if err != nil {

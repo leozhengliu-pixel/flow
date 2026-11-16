@@ -371,6 +371,10 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 		data.Viewer, data.ViewerRole = nativeViewer, nativeRole
 		metadataNext := domain.Bootstrap{Workspace: data.Workspace, Viewer: nativeViewer, ViewerRole: nativeRole, ThreadSubscriptions: data.ThreadSubscriptions}
 		scope, err := boundedDiscussionMetadataScope(metadataBefore, metadataNext)
+		if err != nil && discussionNeedsOrdinalScope(metadataBefore, metadataNext, ids[0], scope, err) {
+			ctx = context.WithValue(ctx, discussionThreadTargetKey{}, ids[0])
+			scope, err = MetadataRecordScope{}, nil
+		}
 		if err != nil {
 			return err
 		}

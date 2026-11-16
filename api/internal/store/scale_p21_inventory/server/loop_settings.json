@@ -1,13 +1,14 @@
 {
   "source": "server/loop_settings.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "getLoopConfig": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "Blocked on bounded installed-source Members and IntegrationConnections with exact labels, role/status/provider predicates and ordering, plus resident workspace settings. TestScaleP21SW18LoopSettingsSourceHold uses an accepted trusted mutation, actual UpdateWorkspace rewrite and actual handler to prove canonical NUL stripping changes app/integration labels and connected-status selection.",
+      "status": "reviewed",
+      "coldDispatch": "server/loop_settings.go:getLoopConfig",
+      "reason": "COLD production route: the explicit repository callback runs getLoopConfigWithStore's literal body on the legacy facade, with full installed Members/IntegrationConnections (including accepted native NUL labels and exact status predicates), under the existing replica-wide cancellable semaphore through response encoding. The original server receiver and runtime state are retained. SW191 compares both actual GET route bodies over the M principal/key matrix; the global all-pending activation gate is retained.",
       "accessors": [
-        "WorkspaceMetadata"
+        "withColdMetadataRequest"
       ],
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
@@ -18,17 +19,37 @@
     },
     "updateLoopSettings": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "The settings writer also returns loopConfig(updated), which consumes complete installed Members and IntegrationConnections; selecting only workspaceSettings drops trusted source options and rereading canonical rows changes accepted warm labels/status. TestScaleP21SW18LoopSettingsSourceHold verifies the actual mutation response preserves these inputs. Needs logical-source-aware policy writer and retained bounded response projection, with existing audit/event side effects.",
+      "status": "reviewed",
+      "coldDispatch": "server/loop_settings.go:updateLoopSettings",
+      "reason": "COLD production route: the explicit repository callback runs updateLoopSettingsWithStore's literal input validation, legacy workspace_preferences.updated writer and loopConfig response on the cold facade. The existing cold full-metadata publication path shares the parent's write mutex and installs its logical postimage before output; the replica slot owns updated's complete graph through encoding. SW191 compares exact warm/reloaded responses and parent installed settings, valid/clear/invalid inputs, next-read visibility and cancellation; existing cold writer tests cover transaction, audit and event boundaries. The global all-pending activation gate remains.",
       "accessors": [
-        "Bootstrap",
-        "MutateWorkspace"
+        "withColdMetadataRequest"
       ],
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
         "PATCH /api/workspace/loop-settings (server/main.go:595)"
       ]
+    },
+    "getLoopConfigWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "coldDispatch": "server/loop_settings.go:getLoopConfig",
+      "reason": "Literal getLoopConfig body with only s.store replaced by the explicitly borrowed repository. Its only production caller is the registered cold wrapper, which holds the legacy full graph through encoding; the server receiver is unchanged. SW191 compares exact GET outputs with legacy across the M principal/key matrix and native labels/status values.",
+      "accessors": ["WorkspaceMetadata"],
+      "temperature": "cold",
+      "temperatureReason": "Literal body of the registered COLD loop settings GET routes.",
+      "callers": ["server/loop_settings.go:getLoopConfig"]
+    },
+    "updateLoopSettingsWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "coldDispatch": "server/loop_settings.go:updateLoopSettings",
+      "reason": "Literal updateLoopSettings body with only s.store replaced by the explicitly borrowed repository. Its registered cold wrapper owns the whole operation, the supported legacy metadata writer and response graph, and the original server receiver remains unchanged. SW191 compares exact warm/reloaded responses and parent installed postimages for valid/clear/invalid input.",
+      "accessors": ["MutateWorkspace"],
+      "temperature": "cold",
+      "temperatureReason": "Literal body of the registered COLD loop settings PATCH route.",
+      "callers": ["server/loop_settings.go:updateLoopSettings"]
     }
   }
 }

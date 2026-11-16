@@ -1,6 +1,6 @@
 {
   "source": "server/advanced_features.go",
-  "unmigrated": 50,
+  "unmigrated": 48,
   "consumers": {
     "addFavorite": {
       "owner": "P21",
@@ -137,10 +137,11 @@
     },
     "createDraft": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "COLD production root. The original 2 MiB decoder remains before validator construction. The explicit repository callback then owns the literal query, constructor-time metadata capture, draft.created writer/publication and response until encoding completes, using the legacy cold facade under one cancellable replica slot. createDraftWithStore preserves the remaining body literally. SW191 covers exact legacy/cold validation across the M matrix, warm/reloaded route responses and persisted draft rows, and a body-reader mutation proving capture stays after decoding.",
+      "coldDispatch": "server/advanced_features.go:createDraft",
       "accessors": [
-        "Bootstrap",
-        "MutateWorkspaceWithAggregate"
+        "withColdMetadataRequest"
       ],
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
@@ -582,10 +583,11 @@
     },
     "updateDraft": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "COLD production root. The original 2 MiB decoder remains before validator construction. The explicit repository callback owns the literal query, constructor-time metadata capture, draft.updated writer/publication and response through encoding, using the legacy cold facade under the replica slot. updateDraftWithStore preserves the remaining body literally. SW191 compares warm/reloaded legacy/cold route responses and persisted drafts, with constructor-time capture and the M validator matrix; the original all-pending activation gate remains.",
+      "coldDispatch": "server/advanced_features.go:updateDraft",
       "accessors": [
-        "Bootstrap",
-        "MutateWorkspace"
+        "withColdMetadataRequest"
       ],
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",

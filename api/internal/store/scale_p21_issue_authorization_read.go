@@ -25,6 +25,7 @@ type IssueWriteAuthorizationRead struct {
 	owner                   *ResourceRead
 	installed               *InstalledMetadataRead
 	query                   IssueRecordQuery
+	projectionScope         ViewerProjectionScope
 	fullPermissions         bool
 	commentActionValidation bool
 	recurrenceTiming        bool
@@ -36,6 +37,7 @@ func (r *IssueWriteAuthorizationRead) Close() {
 		r.once.Do(func() {
 			r.Data = domain.Bootstrap{}
 			r.query = IssueRecordQuery{}
+			r.projectionScope = ViewerProjectionScope{}
 			r.owner.Close()
 			r.installed.Close()
 		})

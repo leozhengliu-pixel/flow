@@ -69,6 +69,9 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 	if data, handled, err := s.boundedIssueWriteAuthorizationMetadata(r); handled {
 		return data, err
 	}
+	if s.store.BoundedMetadataEnabled() {
+		return s.boundedIssueRecordAuthorizationMetadata(r)
+	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
 		return metadata, err

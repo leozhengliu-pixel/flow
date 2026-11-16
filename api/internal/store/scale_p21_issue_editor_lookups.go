@@ -12,7 +12,7 @@ import (
 
 // issueEditorLookups owns the lazy, read-only callback services. It shares the
 // mutation transaction and retains its installed native source through commit.
-// This does not admit the CRDT decoder; opaque editor inputs remain guarded.
+// The editor validator borrows independent, live allocation leases from it.
 type issueEditorLookups struct {
 	ctx                    context.Context
 	store                  *SQLiteStore
@@ -114,6 +114,30 @@ func (r *issueEditorLookups) reserve(cost uint64) error {
 		r.releases = append(r.releases, release)
 	}
 	return err
+}
+
+func (r *issueEditorLookups) install(data *domain.Bootstrap) {
+	data.FormerMembers = r.formerMembers
+	data.CollaborationUpdates = r.collaborationUpdates
+	data.CollaborationWork = r.collaborationWork
+}
+
+func (r *issueEditorLookups) collaborationWork() domain.CollaborationWork {
+	return domain.CollaborationWork{Context: r.ctx, Admit: r.admitCollaboration}
+}
+
+func (r *issueEditorLookups) admitCollaboration(cost uint64) (func(), error) {
+	if err := r.check(); err != nil {
+		return nil, err
+	}
+	if cost > metadataWorkBytes {
+		return nil, ErrMetadataWorkBudget
+	}
+	_, release, err := r.store.tryAdmitAdditionalMetadataWork(r.ctx, int(cost))
+	if err != nil {
+		return nil, err
+	}
+	return release, nil
 }
 
 func (r *issueEditorLookups) failure(err error) error {

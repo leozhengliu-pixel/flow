@@ -284,6 +284,15 @@ func (s *SQLiteStore) issueTextVisibleSelection(q IssueRecordQuery, term string)
 // Retrieve a bounded union once: semantic synonyms must not independently
 // decode the same issue, nor discard the caller's indexed facet predicates.
 func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueRecordQuery, terms []string, labelIDs []string, limit int, visit func(domain.Issue) error) error {
+	var boundedScratch *ResourceRead
+	if issueSuggestionCandidateOwner(ctx, s) != nil {
+		var err error
+		boundedScratch, err = s.beginIssueCandidateQueryWork(ctx, q, terms, labelIDs)
+		if err != nil {
+			return err
+		}
+		defer boundedScratch.Close()
+	}
 	q.Text = ""
 	terms = normalizeSearchTerms(terms)
 	if len(terms) > 32 {
@@ -393,6 +402,9 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	params = append(params, textArgs...)
 	params = append(params, orderArgs...)
 	params = append(params, limit, q.Workspace)
+	if boundedScratch != nil {
+		return s.searchIssueCandidateRows(ctx, q.Workspace, prefix, inner, len(prefixArgs), params, visit)
+	}
 	rows, err := s.db.QueryContext(ctx, prefix+`SELECT output.list_data,output.data FROM (`+inner+`) candidates JOIN issue_records output ON output.id=candidates.id AND output.workspace_key=?`, params...)
 	if err != nil {
 		return err

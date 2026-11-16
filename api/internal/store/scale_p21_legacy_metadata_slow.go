@@ -19,7 +19,21 @@ func (s *SQLiteStore) writeLegacyMetadataSlowFields(ctx context.Context, tx *sql
 	}
 	work := &ResourceRead{store: s}
 	defer work.Close()
-	if err := work.reserve(ctx, MetadataRecordPageMaxBytes*128+256<<10); err != nil {
+	lock := ""
+	if tx.dialect != "sqlite" {
+		lock = " FOR UPDATE"
+	}
+	var rootBytes int64
+	if err := tx.QueryRowContext(ctx, "SELECT "+work.byteLength("data")+" FROM workspace_states WHERE workspace_key=?"+lock, workspace).Scan(&rootBytes); err != nil {
+		return false, err
+	}
+	if rootBytes < 0 {
+		return false, ErrMetadataWorkBudget
+	}
+	if rootBytes > MetadataRecordPageMaxBytes {
+		return s.writeStreamedMetadataSlowFields(ctx, tx, workspace, before, target, names, refs, rootBytes)
+	}
+	if err := work.reserve(ctx, uint64(rootBytes)*128+256<<10); err != nil {
 		return false, err
 	}
 	readRoot := func(lock bool) (string, []byte, error) {
@@ -27,11 +41,29 @@ func (s *SQLiteStore) writeLegacyMetadataSlowFields(ctx context.Context, tx *sql
 		if lock && tx.dialect != "sqlite" {
 			suffix = " FOR UPDATE"
 		}
+		if lock {
+			// Shape writes earlier in this transaction can grow the root.
+			// Admit that growth before transferring its replacement bytes.
+			var current int64
+			if err := tx.QueryRowContext(ctx, "SELECT "+work.byteLength("data")+
+				" FROM workspace_states WHERE workspace_key=?"+suffix, workspace).Scan(&current); err != nil {
+				return "", nil, err
+			}
+			if current < 0 || current > MetadataRecordPageMaxBytes {
+				return "", nil, ErrMetadataWorkBudget
+			}
+			if current > rootBytes {
+				if err := work.reserve(ctx, uint64(current-rootBytes)*128); err != nil {
+					return "", nil, err
+				}
+				rootBytes = current
+			}
+		}
 		var id string
 		var raw []byte
 		if err := tx.QueryRowContext(ctx, "SELECT workspace_id,CASE WHEN "+work.byteLength("data")+
 			"<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?"+suffix,
-			MetadataRecordPageMaxBytes, workspace).Scan(&id, &raw); err != nil {
+			rootBytes, workspace).Scan(&id, &raw); err != nil {
 			return "", nil, err
 		}
 		if raw == nil {

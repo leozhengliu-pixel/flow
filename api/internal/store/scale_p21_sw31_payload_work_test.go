@@ -148,7 +148,7 @@ func TestScaleP21SW31PayloadWorkPreflight(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := 0
-	payload := scaleP21SW31PayloadMarshalProbe{Body: strings.Repeat("x", 12<<20), calls: &calls}
+	payload := scaleP21SW31PayloadMarshalProbe{Body: strings.Repeat("<", 12<<20), calls: &calls}
 	emitted := false
 	repo.SetWebhookSink(func(string, domain.DomainEvent) { emitted = true })
 	err = repo.MutateWorkspaceScoped(context.Background(), f.data.Workspace.URLKey, "application_policy.updated", "sw31-preflight", payload,

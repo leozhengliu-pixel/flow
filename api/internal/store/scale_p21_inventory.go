@@ -23,6 +23,7 @@ type metadataConsumerReview struct {
 	Temperature       string   `json:"temperature,omitempty"`
 	TemperatureReason string   `json:"temperatureReason,omitempty"`
 	Callers           []string `json:"callers,omitempty"`
+	ColdDispatch      string   `json:"coldDispatch,omitempty"`
 }
 
 type metadataConsumerFile struct {
@@ -93,6 +94,9 @@ func readMetadataConsumerInventory(files fs.FS) (metadataConsumerInventory, erro
 				}
 			default:
 				return result, fmt.Errorf("%s: invalid consumer temperature for %s", path, name)
+			}
+			if review.ColdDispatch != "" && (review.Temperature != "cold" || strings.TrimSpace(review.ColdDispatch) != review.ColdDispatch) {
+				return result, fmt.Errorf("%s: invalid cold dispatch for %s", path, name)
 			}
 			file.Consumers[name] = review
 			result.Consumers[file.Source+":"+name] = review

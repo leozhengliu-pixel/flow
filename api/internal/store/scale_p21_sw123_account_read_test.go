@@ -385,11 +385,11 @@ func TestScaleP21SW123AccountCancellationAdmissionAndStageFailure(t *testing.T) 
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", strconv.FormatInt(defaultRecordSpoolMaxBytes, 10))
 	repo.mu.Lock()
 	data := repo.workspaces["physical-other"]
-	data.Workspace.LogoURL = strings.Repeat("large retained header ", 220000)
+	data.Workspace.LogoURL = strings.Repeat("<", 6<<20)
 	repo.workspaces["physical-other"] = data
 	repo.mu.Unlock()
 	if read, err := repo.BeginAccountRead(t.Context()); read != nil || !errors.Is(err, ErrMetadataWorkBudget) {
-		t.Fatal("account bypassed result/encoding admission", read, err)
+		t.Fatal("account bypassed result/encoding admission", read != nil, err)
 	}
 	if repo.MetadataWorkUsedForTesting() != 0 || recordSpoolBytes.Load() != disk {
 		t.Fatal("account failure leaked admission or disk")

@@ -11,10 +11,9 @@ import (
 // progress, legacy editor snapshots (DescriptionState: its mention checks
 // read the owned issueEditorLookups) and actual team moves (the label and
 // SLA closure of loadIssueSelectedInputs plus the attached documents).
-// A CRDT snapshot (ContentState) keeps its coverage boundary: decoding it
-// has no admitted work bound yet.
-func issueProjectInputsSupported(_ domain.Issue, input domain.IssueUpdateInput) bool {
-	return input.ContentState == nil
+// CRDT snapshots use the write-owned metered editor validator.
+func issueProjectInputsSupported(_ domain.Issue, _ domain.IssueUpdateInput) bool {
+	return true
 }
 
 func (s *SQLiteStore) loadIssueProjectInputs(ctx context.Context, workspace string, data *domain.Bootstrap, target domain.Issue, input domain.IssueUpdateInput) (_ *issueHotInputs, err error) {
