@@ -14,8 +14,8 @@ import { Markdown } from '@tiptap/markdown'
 import { MarkdownPaste } from './markdown-paste'
 import { useComposerSelectionActions } from './selection-issue'
 import { Button } from '@/components/ui/button'
-import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
-import { clearComposerDraft, readComposerDraft, writeComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
+import { readComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
+import { composerDraftAutosave, draftFingerprint, serverDraftId, wasDiscardedDraft, type DetachedDraft, type DraftSaveInput } from '@/lib/draft-autosave'
 import type { Draft, User } from '@/types/flow'
 import type { Editor } from '@tiptap/react'
 import { usePeopleDirectory } from '@/components/property/people-context'
@@ -31,7 +31,7 @@ import { MentionMenu } from '@/components/issue/editor/mention-menu'
 import { DescriptionImage, insertImageFiles } from '@/components/issue/editor/image-extension'
 import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from '@/components/issue/editor/file-extension'
 import '@/components/issue/issue-description-editor.css'
-import { useEffect, useInsertionEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useInsertionEffect, useRef, useState } from 'react'
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { bindImageUpload } from './image-upload-binding'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
@@ -39,7 +39,14 @@ import { handleEmoticonInput } from './emoticon-input'
 import { useI18n } from '@/i18n/i18n'
 import { mentionTriggerBeforeCaret } from '@/lib/mention-trigger'
 
-export function Composer({ placeholder = 'Leave a comment…', initialValue = '', initialData, compact = false, mobileIssue = false, onCancel, onSubmit, onAttach, onUpload, draftType, draftResourceId, drafts = [], draftTitle = '', draftMetadata, users }: { users?:User[]; placeholder?: string; initialValue?: string; initialData?: Record<string,unknown>; compact?: boolean; mobileIssue?: boolean; onCancel?: () => void; onSubmit?: (body: string, bodyData?: Record<string, unknown>) => Promise<void>; onAttach?:()=>void; onUpload?: (file: File) => Promise<string>; draftType?: ComposerDraftType; draftResourceId?: string; drafts?: Draft[]; draftTitle?: string; draftMetadata?: Record<string, unknown> }) {
+type ComposerProps = { users?:User[]; placeholder?: string; initialValue?: string; initialData?: Record<string,unknown>; compact?: boolean; mobileIssue?: boolean; onCancel?: () => void; onSubmit?: (body: string, bodyData?: Record<string, unknown>) => Promise<void>; onAttach?:()=>void; onUpload?: (file: File) => Promise<string>; draftType?: ComposerDraftType; draftResourceId?: string; drafts?: Draft[]; draftTitle?: string; draftMetadata?: Record<string, unknown> }
+
+export function Composer(props: ComposerProps) {
+  // A composer edits one draft context: another issue gets its own editor and draft, so no text or draft crosses over.
+  return <ComposerEditor key={props.draftType && props.draftResourceId ? `${props.draftType}:${props.draftResourceId}` : 'composer'} {...props}/>
+}
+
+function ComposerEditor({ placeholder = 'Leave a comment…', initialValue = '', initialData, compact = false, mobileIssue = false, onCancel, onSubmit, onAttach, onUpload, draftType, draftResourceId, drafts = [], draftTitle = '', draftMetadata, users }: ComposerProps) {
   const { t } = useI18n()
   const directory=usePeopleDirectory()
   const mentionUsers=(users??[...directory.users.values()]).filter(user=>user.active&&(!user.app||user.appScopes?.includes('app:mentionable')))
@@ -52,13 +59,12 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   const optionsRef=useLatestRef(mentionOptionList)
   const updateMention=(editor:Editor)=>{const {$from,empty}=editor.state.selection;const match=empty&&!$from.parent.type.spec.code?$from.parent.textBetween(0,$from.parentOffset,' ',' ').match(mentionTriggerBeforeCaret()):null;const next=match?{query:match[1],from:$from.pos-match[1].length-1,to:$from.pos,index:0}:undefined;mentionRef.current=next;setMention(next)}
   const insertMention=(editor:Editor,option:MentionOption)=>{const range=mentionRef.current;if(!range)return;insertMentionOption(editor.view,range,option);editor.commands.focus();mentionRef.current=undefined;setMention(undefined)}
-  const persistedDraft = useMemo(() => draftType && draftResourceId ? drafts.find(item => item.type === draftType && item.resourceId === draftResourceId) ?? readComposerDraft(draftType, draftResourceId) : undefined, [draftResourceId, draftType, drafts])
-  const initialBody = persistedDraft?.body ?? initialValue
-  const initialDocument = persistedDraft?.metadata?.bodyData as Record<string, unknown> | undefined ?? initialData
-  const draftDocument = useRef(initialDocument)
+  const [restored] = useState(() => restoreComposerDraft(draftType, draftResourceId, draftMetadata, drafts))
+  const autosave = restored?.autosave
+  const initialBody = restored?.body ?? initialValue
+  const initialDocument = restored?.document ?? initialData
   const onUploadRef = useLatestRef(onUpload)
-  const [saving, setSaving] = useState(false), [error, setError] = useState(''), [empty, setEmpty] = useState(!commentSendable(initialBody, initialDocument)), [draftBody, setDraftBody] = useState(initialBody)
-  const draftId = useRef(persistedDraft?.id ?? '')
+  const [saving, setSaving] = useState(false), [error, setError] = useState(''), [empty, setEmpty] = useState(!commentSendable(initialBody, initialDocument)), [draftBody, setDraftBody] = useState(initialBody), [draftDocument, setDraftDocument] = useState(initialDocument)
   // Like the reference app, selecting text in a comment offers "Create issue from selection" and "Ask agent" on the formatting toolbar.
   const selectionActions = useComposerSelectionActions()
   const selectionActionsRef = useLatestRef(selectionActions)
@@ -75,21 +81,21 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
     content: initialDocument?.type === 'doc' ? initialDocument : initialBody,
     contentType: initialDocument?.type === 'doc' ? 'json' : 'markdown',
     editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', role: 'textbox', 'aria-label': t(placeholder), 'aria-multiline': 'true' }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=optionsRef.current;if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && !isMathInput(_view.state) && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (handleSelectionShortcut(event, _view.state.selection, _view.state.doc, selectionActionsRef.current, editorRef.current)) return true; if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
-    onUpdate: ({editor}) => { const json = editor.getJSON() as Record<string, unknown>; draftDocument.current = json; const text = commentText(editor); setEmpty(!commentSendable(text, json)); setDraftBody(text);updateMention(editor) },
+    onUpdate: ({editor}) => { const json = editor.getJSON() as Record<string, unknown>; setDraftDocument(json); const text = commentText(editor); setEmpty(!commentSendable(text, json)); setDraftBody(text);updateMention(editor) },
     onSelectionUpdate:({editor})=>updateMention(editor),
   })
+  // The draft is saved by what it contains, not by render: a parent re-render (a new metadata object) with the same content
+  // saves nothing, and an emptied composer has no draft. The context's autosave debounces, serializes and retries.
+  const draftInput: DraftSaveInput | null | undefined = !autosave || !draftType || !draftResourceId || saving ? undefined
+    : commentSendable(draftBody, draftDocument) ? { type: draftType, resourceId: draftResourceId, title: draftTitle, body: commentBody(draftBody, draftDocument), metadata: { ...draftMetadata, bodyData: draftDocument } } : null
+  const draftInputRef = useLatestRef(draftInput)
+  const draftKey = draftInput === undefined ? '' : draftInput === null ? 'empty' : draftFingerprint(draftInput)
   useEffect(() => {
-    if (!draftType || !draftResourceId || !commentSendable(draftBody, draftDocument.current) || saving) return
-    const timer = window.setTimeout(() => {
-      const input = { type: draftType, resourceId: draftResourceId, title: draftTitle, body: commentBody(draftBody, draftDocument.current), metadata: { ...draftMetadata, bodyData: draftDocument.current } }
-      const save = async () => {
-        if (!draftId.current) return createDraft(input)
-        try { return await updateDraft(draftId.current, input) } catch { draftId.current = ''; return createDraft(input) }
-      }
-      void save().then(saved => { draftId.current = saved.id; writeComposerDraft({ id: saved.id, type: draftType, resourceId: draftResourceId, title: draftTitle, body: input.body, metadata: input.metadata, updatedAt: saved.updatedAt }) }).catch(() => undefined)
-    }, 350)
-    return () => window.clearTimeout(timer)
-  }, [draftBody, draftMetadata, draftResourceId, draftTitle, draftType, saving])
+    const input = draftInputRef.current
+    if (autosave && input !== undefined) autosave.schedule(input)
+  }, [autosave, draftInputRef, draftKey])
+  // Leaving the composer saves what is still waiting for the autosave delay, to this composer's own draft.
+  useEffect(() => () => autosave?.flush(), [autosave])
   useInsertionEffect(() => { editorRef.current = editor })
   useEffect(() => {
     if (!editor) return
@@ -115,7 +121,9 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   // draft back, mentions and attachments included. An edit keeps its text until the save finishes.
   // An edit starts from the comment's own text; a restored draft is still a new comment.
   const editing = Boolean(initialValue || initialData)
-  const failedSend = useRef<{ body: string; json?: Record<string, unknown> }>(undefined)
+  // The draft being sent leaves the context with it: it is deleted once the comment is in (after any save it still has in
+  // flight, so it cannot come back), or handed back when the send fails.
+  const failedSend = useRef<{ body: string; json?: Record<string, unknown>; draft?: DetachedDraft }>(undefined)
   const sending = useRef(false)
   const submit = async (retry = false) => {
     if (!editor) return
@@ -126,19 +134,21 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
     if (!body || (!immediate && (saving || sending.current))) return
     failedSend.current = undefined
     setError('')
-    const sentDraft = draftId.current
-    if (immediate) { if (!pending) editor.commands.clearContent(); draftId.current = '' } else { sending.current = true; setSaving(true) }
+    const sentDraft = pending ? pending.draft : autosave?.detach()
+    if (immediate) { if (!pending) editor.commands.clearContent() } else { sending.current = true; setSaving(true) }
     try {
       await onSubmit?.(body, json)
-      if (draftType && draftResourceId) { if (sentDraft && !sentDraft.startsWith('local:')) await deleteDraft(sentDraft).catch(() => undefined); clearComposerDraft(draftType, draftResourceId); if (!immediate) draftId.current = '' }
+      await sentDraft?.discard()
       if (!immediate) editor.commands.clearContent()
     } catch (reason) {
       if (immediate) {
-        if (!draftId.current) draftId.current = sentDraft
-        if (editor.isEmpty && json?.type === 'doc') editor.commands.setContent(json, { emitUpdate: true })
-        else failedSend.current = { body, json }
+        if (editor.isEmpty && json?.type === 'doc') {
+          // The restored text is the draft again; if the composer already started another one, that one takes it over.
+          if (sentDraft && !sentDraft.restore()) void sentDraft.discard()
+          editor.commands.setContent(json, { emitUpdate: true })
+        } else failedSend.current = { body, json, draft: sentDraft }
         editor.commands.focus('end')
-      }
+      } else sentDraft?.restore()
       setError(reason instanceof Error ? reason.message : 'Comment could not be submitted')
     } finally { if (!immediate) { sending.current = false; setSaving(false) } }
   }
@@ -151,6 +161,21 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
     </div><div className="composer-submit">{onCancel && <Button className="composer-cancel" type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>}<Button className="composer-send" type="button" size="icon" aria-label="Submit comment" disabled={saving || empty} onClick={() => void submit()}>{mobileIssue ? <CommentSendIcon size={14}/> : <ArrowUp size={14}/>}</Button></div></div>
     {mention&&editor&&<MentionMenu options={mentionOptionList} selectedIndex={mention.index} anchor={caretAnchor(editor,mention.to)} query={mention.query} onSelect={option=>insertMention(editor,option)}/>}
   </div>
+}
+
+/**
+ * The draft a composer opens with: what its context's autosave holds or is still saving (a composer mounting again while
+ * its first save is on the way), else the saved draft from the drafts list or the local copy. A draft this page already
+ * sent or discarded is never restored.
+ */
+function restoreComposerDraft(type: ComposerDraftType | undefined, resourceId: string | undefined, metadata: Record<string, unknown> | undefined, drafts: Draft[]) {
+  if (!type || !resourceId) return undefined
+  const listed = drafts.find(item => item.type === type && item.resourceId === resourceId && !wasDiscardedDraft(serverDraftId(item)))
+  const local = listed ? undefined : readComposerDraft(type, resourceId)
+  const persisted = listed ?? (local && !wasDiscardedDraft(local.id) ? local : undefined)
+  const autosave = composerDraftAutosave(type, typeof metadata?.resourceType === 'string' ? metadata.resourceType : '', resourceId, persisted)
+  const restored = autosave.latest ?? persisted
+  return { autosave, body: restored?.body, document: restored?.metadata?.bodyData as Record<string, unknown> | undefined }
 }
 
 function commentSendable(text?: string, document?: Record<string, unknown>) {

@@ -2196,6 +2196,8 @@ export function createDraft(input: {
   body?: string;
   contentData?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  /** Makes the create idempotent: the server returns (and updates) the viewer's draft of the same type and resource with this key. */
+  clientKey?: string;
 }): Promise<Draft> {
   return request("/api/drafts", jsonRequest("POST", input));
 }

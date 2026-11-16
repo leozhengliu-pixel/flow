@@ -17,8 +17,8 @@ import { RichComment } from '@/components/activity/rich-comment'
 import { ActivitySidebarSection, type ActivitySidebarItem } from '@/components/panel/activity-sidebar-section'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { toast } from '@/lib/toast'
-import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
-import { clearComposerDraft, readComposerDraft, writeComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
+import { composerDraftAutosave, serverDraftId, wasDiscardedDraft } from '@/lib/draft-autosave'
+import { clearComposerDraft, readComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
 import { Avatar } from '@/components/issue/issue-row'
 import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
@@ -365,8 +365,8 @@ export function InitiativeActivity(props: Props & { display: { updates: boolean;
   // Selecting text in the composer offers "Create issue from selection" and "Ask agent".
   const composerSelectionActions = useComposerSelectionActions()
   const parentDrafts = useMemo(() => ({
-    comment: drafts.find(item => item.type === 'comment' && item.resourceId === initiative.id && item.metadata?.resourceType === 'initiative') ?? readComposerDraft('comment', initiative.id),
-    initiative_update: drafts.find(item => item.type === 'initiative_update' && item.resourceId === initiative.id) ?? readComposerDraft('initiative_update', initiative.id),
+    comment: drafts.find(item => item.type === 'comment' && item.resourceId === initiative.id && item.metadata?.resourceType === 'initiative' && !wasDiscardedDraft(serverDraftId(item))) ?? readComposerDraft('comment', initiative.id),
+    initiative_update: drafts.find(item => item.type === 'initiative_update' && item.resourceId === initiative.id && !wasDiscardedDraft(serverDraftId(item))) ?? readComposerDraft('initiative_update', initiative.id),
   }), [drafts, initiative.id])
   const initialDraft = parentDrafts.initiative_update ?? parentDrafts.comment
   const [mode, setMode] = useState<'comment' | 'update'>(() => initialDraft?.type === 'comment' ? 'comment' : 'update')
@@ -374,26 +374,25 @@ export function InitiativeActivity(props: Props & { display: { updates: boolean;
   const [body, setBody] = useState(initialDraft?.body ?? '')
   const [health, setHealth] = useState<Project['health']>(typeof initialDraft?.metadata?.health === 'string' ? initialDraft.metadata.health as Project['health'] : initiative.health === 'noUpdate' ? 'onTrack' : initiative.health)
   const [saving, setSaving] = useState(false)
-  const draftIds = useRef<Partial<Record<ComposerDraftType, string>>>({ comment: parentDrafts.comment?.id ?? '', initiative_update: parentDrafts.initiative_update?.id ?? '' })
+  // One autosave per draft (the comment and the update), shared with any other mount of this initiative's composer.
+  const draftAutosaves = useMemo(() => ({
+    comment: composerDraftAutosave('comment', 'initiative', initiative.id, parentDrafts.comment),
+    initiative_update: composerDraftAutosave('initiative_update', 'initiative', initiative.id, parentDrafts.initiative_update),
+  }), [initiative.id, parentDrafts])
   const [editing, setEditing] = useState<InitiativeUpdate>()
   const [editingComment, setEditingComment] = useState<Initiative['comments'][number]>()
   // Inline threads on the description stay beside it (the reference app leaves them out of Activity).
   const feed = useMemo(() => [...initiativeUpdates.map(update => ({ type: 'update' as const, date: update.createdAt, update })), ...partitionAnchoredComments(initiative.comments ?? []).pageLevel.map(comment => ({ type: 'comment' as const, date: comment.createdAt, comment }))].sort((a, b) => +new Date(b.date) - +new Date(a.date)), [initiative.comments, initiativeUpdates])
   useEffect(() => {
-    if (!body.trim() || saving) return
-    const timer = window.setTimeout(() => {
-      const input = { type: draftType, resourceId: initiative.id, title: initiative.name, body: body.trim(), metadata: { resourceType: 'initiative', health } }
-      const save = async () => {
-        if (!draftIds.current[draftType]) return createDraft(input)
-        try { return await updateDraft(draftIds.current[draftType]!, input) } catch { draftIds.current[draftType] = ''; return createDraft(input) }
-      }
-      void save().then(saved => {
-        draftIds.current[draftType] = saved.id
-        writeComposerDraft({ id: saved.id, type: draftType, resourceId: initiative.id, title: initiative.name, body: body.trim(), metadata: input.metadata, updatedAt: saved.updatedAt })
-      }).catch(() => undefined)
-    }, 350)
-    return () => window.clearTimeout(timer)
-  }, [body, draftType, health, initiative.id, initiative.name, saving])
+    if (saving) return
+    const autosave = draftAutosaves[draftType]
+    if (!body.trim()) { autosave.cancelPending(); return }
+    // The autosave debounces, sends one request at a time and skips content the server already has.
+    autosave.schedule({ type: draftType, resourceId: initiative.id, title: initiative.name, body: body.trim(), metadata: { resourceType: 'initiative', health } })
+  }, [body, draftAutosaves, draftType, health, initiative.id, initiative.name, saving])
+  // Leaving the initiative saves what is still waiting for the autosave delay.
+  const draftAutosavesRef = useLatestRef(draftAutosaves)
+  useEffect(() => () => { draftAutosavesRef.current.comment.flush(); draftAutosavesRef.current.initiative_update.flush() }, [draftAutosavesRef, initiative.id])
   const switchMode = (next: 'comment' | 'update') => {
     if (next === mode) return
     const nextType: ComposerDraftType = next === 'comment' ? 'comment' : 'initiative_update'
@@ -402,7 +401,8 @@ export function InitiativeActivity(props: Props & { display: { updates: boolean;
     setBody(nextDraft?.body ?? '')
     if (typeof nextDraft?.metadata?.health === 'string') setHealth(nextDraft.metadata.health as Project['health'])
   }
-  const submit = async () => { if (!body.trim() || saving) return; setSaving(true); try { if (mode === 'comment') await onComment(initiative.id, body.trim()); else await onCreateUpdate(initiative.id, { body: body.trim(), health }); const savedId = draftIds.current[draftType]; if (savedId && !savedId.startsWith('local:')) await deleteDraft(savedId).catch(() => undefined); clearComposerDraft(draftType, initiative.id); draftIds.current[draftType] = ''; setBody('') } finally { setSaving(false) } }
+  // The draft leaves with the post: deleted after any save it has in flight, or handed back if the post fails.
+  const submit = async () => { if (!body.trim() || saving) return; setSaving(true); const savedType = draftType; const sentDraft = draftAutosaves[savedType].detach(); try { if (mode === 'comment') await onComment(initiative.id, body.trim()); else await onCreateUpdate(initiative.id, { body: body.trim(), health }); await sentDraft.discard(); clearComposerDraft(savedType, initiative.id); setBody('') } catch (error) { sentDraft.restore(); throw error } finally { setSaving(false) } }
   return <ActivityPage entityId={initiative.id} entityType="initiative" title="Activity"><div className="li-activity"><div className="li-activity-composer"><header><div role="tablist"><button aria-selected={mode === 'comment'} onClick={() => switchMode('comment')} role="tab" type="button">Comment</button><button aria-selected={mode === 'update'} onClick={() => switchMode('update')} role="tab" type="button">Update</button>{mode === 'update' && <InitiativeHealthMenu health={health} onHealth={setHealth}/>}</div></header><MentionTextField ariaLabel={mode === 'update' ? 'Initiative update' : 'Initiative comment'} selectionActions={composerSelectionActions} placeholder={mode === 'update' ? 'Write an initiative update…' : 'Leave a comment…'} value={body} onChange={setBody} onSubmit={() => void submit()}/><footer><button aria-disabled="true" className="li-agent-write" disabled title="Flow AI is not configured for this workspace" type="button"><AgentWriteGlyph size={14}/>Write with Agent</button><span/><button aria-disabled="true" aria-label="Attach images, files, or videos" disabled title="Initiative update attachments are not available" type="button"><Paperclip size={14}/></button><button disabled={!body.trim() || saving} onClick={() => void submit()} type="button">{mode === 'update' ? 'Post update' : 'Comment'}</button></footer></div>
     <div className="li-feed">{feed.map(item => item.type === 'update' ? props.display.updates && <article className="li-update-card" key={item.update.id}><header><Avatar id={item.update.user.id} name={item.update.user.displayName || item.update.user.name}/><strong data-i18n-ignore>{item.update.user.displayName || item.update.user.name}</strong><span>{formatDistanceToNowStrict(new Date(item.update.createdAt), { addSuffix: true })}{item.update.editedAt ? ' · edited' : ''}</span><span className={`li-update-health is-${item.update.health}`}/><small>{healthLabel(item.update.health)}</small><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Update actions" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="li-menu"><DropdownMenu.Item onSelect={() => { setEditing(item.update); setBody('') }}>Edit update</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={() => onDeleteUpdate(initiative.id, item.update.id)}><Trash2 size={14}/>Delete update</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></header>{editing?.id === item.update.id ? <InlineUpdateEditor update={editing} onCancel={() => setEditing(undefined)} onSave={async input => { await onUpdateInitiativeUpdate(initiative.id, editing.id, input); setEditing(undefined) }}/> : <div className="li-rich-text" data-i18n-ignore><RichComment body={item.update.body} data={item.update.bodyData}/></div>}</article> : props.display.comments && <article className="li-comment-card" key={item.comment.id}><Avatar id={item.comment.user.id} name={attributedActorName(item.comment.user, item.comment.botActor)} avatarUrl={attributedActorAvatar(item.comment.user, item.comment.botActor)}/><div><header><strong data-i18n-ignore>{attributedActorName(item.comment.user, item.comment.botActor)}</strong><ViaApp user={item.comment.user} botActor={item.comment.botActor}/><span>{formatDistanceToNowStrict(new Date(item.comment.createdAt), { addSuffix: true })}{item.comment.editedAt ? ' · edited' : ''}</span><EmojiPicker align="end" onSelect={async emoji => { await props.onReactComment(initiative.id, item.comment.id, emoji) }}><button aria-label="Add reaction" type="button">☺</button></EmojiPicker><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Comment actions" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="li-menu"><DropdownMenu.Item onSelect={() => setEditingComment(item.comment)}>Edit comment</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={() => props.onDeleteComment(initiative.id, item.comment.id)}><Trash2 size={14}/>Delete comment</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></header>{editingComment?.id === item.comment.id ? <InlineCommentEditor comment={editingComment} onCancel={() => setEditingComment(undefined)} onSave={async value => { await props.onUpdateComment(initiative.id, item.comment.id, value); setEditingComment(undefined) }}/> : <div className="li-rich-text" data-i18n-ignore><RichComment body={item.comment.body} data={item.comment.bodyData}/></div>}<ReactionPills reactions={item.comment.reactions} viewerId={viewer.id} onToggle={async emoji => { await props.onReactComment(initiative.id, item.comment.id, emoji) }}/></div></article>)}{props.display.activity && <InitiativeHistoryRows initiative={initiative} users={props.users}/>}</div>
   </div>
