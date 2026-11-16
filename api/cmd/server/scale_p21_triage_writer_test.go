@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -290,6 +289,9 @@ func TestScaleP21TriageSuggestionStateWriterDifferential(t *testing.T) {
 		{"accept-missing-issue-target", owner, nil, f.triage.ID, "triage-s-similar-" + f.gone.ID, true, false, http.StatusForbidden},
 		{"accept-self-relation", owner, nil, f.triage.ID, "triage-s-similar-" + f.triage.ID, true, false, http.StatusOK},
 		{"dismiss-team", owner, nil, f.triage.ID, "triage-s-team-" + f.public, false, false, http.StatusOK},
+		{"accept-same-team", owner, nil, f.triage.ID, "triage-s-team-" + f.public, true, false, http.StatusOK},
+		{"accept-private-team-outsider", owner, nil, f.triage.ID, "triage-s-team-" + f.private, true, false, http.StatusForbidden},
+		{"accept-team-guest", f.principals[3].user, nil, f.triage.ID, "triage-s-team-" + f.public, true, false, http.StatusForbidden},
 		{"dismiss-accepted", owner, nil, f.triage.ID, "triage-s-related-" + f.visible.ID, false, false, http.StatusNotFound},
 		{"dismiss-other-issue-row", owner, nil, f.triage.ID, "triage-s-other", false, false, http.StatusNotFound},
 		{"dismiss-missing", owner, nil, f.triage.ID, "triage-s-missing", false, false, http.StatusNotFound},
@@ -312,34 +314,8 @@ func TestScaleP21TriageSuggestionStateWriterDifferential(t *testing.T) {
 			}
 		})
 	}
-	// Team acceptance moves and renumbers the issue. The bounded writer
-	// refuses it before any read-write work; nothing is written or published.
-	t.Run("accept-team-refused", func(t *testing.T) {
-		legacy, _ := f.run(t, "legacy", func(service *server) *httptest.ResponseRecorder {
-			return f.stateRequest(service, owner, nil, f.triage.ID, "triage-s-team-"+f.public, true, false)
-		})
-		if legacy.Code != http.StatusOK {
-			t.Fatalf("legacy team acceptance: %d %s", legacy.Code, legacy.Body)
-		}
-		for _, source := range []string{"warm", "reloaded"} {
-			service := f.reset(t, source)
-			before := f.state(t)
-			w := f.stateRequest(service, owner, nil, f.triage.ID, "triage-s-team-"+f.public, true, false)
-			if w.Code == http.StatusOK || !reflect.DeepEqual(before, f.state(t)) {
-				t.Fatalf("%s team acceptance was not refused cleanly: %d %s", source, w.Code, w.Body.String())
-			}
-		}
-		owned, closeOwned := beginIndependentMetadataOutputReads(t.Context())
-		defer closeOwned()
-		ctx := store.ContextWithIssueSuggestionWrite(store.WithIssueRenumbering(store.WithIssueRecordMutations(owned, f.triage.ID)), store.IssueSuggestionWrite{})
-		err := f.probe.MutateWorkspace(ctx, f.data.Workspace.URLKey, "issue.suggestion_accepted", "x", nil, func(*domain.Bootstrap) error {
-			t.Fatal("refused callback ran")
-			return nil
-		})
-		if !errors.Is(err, store.ErrIssueSuggestionWriteRefused) || !errors.Is(err, store.ErrBoundedMetadataCoverage) {
-			t.Fatal("renumbering was not a typed refusal", err)
-		}
-	})
+	// Team acceptances that move the issue are covered by
+	// TestScaleP21TeamMoveAcceptDifferential.
 }
 
 func TestScaleP21TriagePruneWriterDifferential(t *testing.T) {
@@ -611,31 +587,8 @@ func TestScaleP21TriageGenerateWriterDifferential(t *testing.T) {
 			}
 		})
 	}
-	// Auto team moves are refused before any write: legacy would move and
-	// renumber the issue.
-	for _, test := range []struct {
-		name    string
-		prepare func(*testing.T)
-		ids     []string
-	}{
-		{"team-auto-move", triage(func(settings *domain.TriageIntelligenceSettings) { auto(settings); settings.TeamAction = "auto" }, f.triage.ID), []string{f.triage.ID}},
-	} {
-		t.Run(test.name+"-refused", func(t *testing.T) {
-			f.prepare = test.prepare
-			defer func() { f.prepare = nil }()
-			for _, source := range []string{"warm", "reloaded"} {
-				service := f.reset(t, source)
-				before := f.state(t)
-				r := f.literalRequest(f.data.Viewer, nil, nil)
-				r, closeOutput := beginRequestResourceReads(r)
-				_, err := service.generateTriageIntelligenceForIssues(r.Context(), workspace, test.ids)
-				closeOutput()
-				if !errors.Is(err, store.ErrIssueSuggestionWriteRefused) || !reflect.DeepEqual(before, f.state(t)) {
-					t.Fatalf("%s: not a clean refusal: %v", source, err)
-				}
-			}
-		})
-	}
+	// Auto-applied team moves are covered by
+	// TestScaleP21TeamMoveAutoApplyDifferential.
 }
 
 // runTriageIntelligence through the "Run again" route: heuristic and
@@ -732,16 +685,6 @@ func TestScaleP21TriageRunWriterDifferential(t *testing.T) {
 			}
 		})
 	}
-	t.Run("team-auto-move-refused", func(t *testing.T) {
-		f.prepare = setup(func(settings *domain.TriageIntelligenceSettings) { suggest(settings); settings.TeamAction = "auto" }, true)
-		defer func() { f.prepare = nil }()
-		for _, source := range []string{"warm", "reloaded"} {
-			service := f.reset(t, source)
-			before := f.state(t)
-			w := refresh(false)(service)
-			if w.Code == http.StatusOK || !reflect.DeepEqual(before, f.state(t)) {
-				t.Fatalf("%s: team auto-move run was not refused cleanly: %d %s", source, w.Code, w.Body.String())
-			}
-		}
-	})
+	// Runs whose team suggestions auto-move the issue are covered by
+	// TestScaleP21TeamMoveAutoApplyDifferential.
 }

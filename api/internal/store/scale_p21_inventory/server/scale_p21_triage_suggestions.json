@@ -35,13 +35,14 @@
     "updateIssueSuggestionStateBounded": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Owned reads replace WorkspaceMetadata (first suggestion by ID via ReadIssueSuggestion, contextless), the Viewer fallback (BeginInstalledViewerRead) and mcpWorkspaceData's project/team/label filters (ViewerProjectionScope, ProjectVisibleInProjection, LabelVisibleInProjection, both selected-key label filters); the literal state callback is shared through issueSuggestionStateMutation and written by mutateBoundedIssueSuggestions. TestScaleP21TriageSuggestionStateWriterDifferential: 18 legacy/warm/reloaded cases (project/assignee/label/duplicate/related/self relation acceptance, dismissals, private and selected-key refusals, missing and inactive rows, cancellation) with exact rows, list order, events and publications; team acceptance is explicitly refused and proven write-free, which keeps updateIssueSuggestionState pending.",
+      "reason": "Owned reads replace WorkspaceMetadata (first suggestion by ID via ReadIssueSuggestion, contextless), the Viewer fallback (BeginInstalledViewerRead) and mcpWorkspaceData's project/team/label filters (ViewerProjectionScope, ProjectVisibleInProjection, LabelVisibleInProjection, both selected-key label filters); the literal state callback is shared through issueSuggestionStateMutation and written by mutateBoundedIssueSuggestions. TestScaleP21TriageSuggestionStateWriterDifferential: 18 legacy/warm/reloaded cases (project/assignee/label/duplicate/related/self relation acceptance, dismissals, private and selected-key refusals, missing and inactive rows, cancellation) with exact rows, list order, events and publications. Team acceptance adds the literal issueTeamMoveForbidden over mcpWorkspaceDataProjected and writes under WithIssueRenumbering with the target declared (TestScaleP21TeamMoveAcceptDifferential, TestScaleP21TeamMoveConcurrentSameTeam).",
       "accessors": [
         "BeginInstalledMetadataRead",
         "ReadIssueSuggestion",
         "ViewerProjectionScope",
         "ProjectVisibleInProjection",
         "LabelVisibleInProjection",
+        "mcpWorkspaceDataProjected",
         "MutateWorkspace"
       ],
       "temperature": "hot",
@@ -53,7 +54,7 @@
     "generateTriageIntelligenceForIssuesBounded": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Owned contextless reads replace WorkspaceMetadata (Viewer fallback via BeginInstalledViewerRead, workspaceSettings field, one teamSettings point per issue team for isTriageIssue); issue query, candidate search, run starts and the shared literal generateTriageMutation are unchanged. The write uses mutateBoundedIssueSuggestions with Complete scoring inputs under the request's output owner. TestScaleP21TriageGenerateWriterDifferential compares legacy, warm and SQL-reloaded single, auto-apply, batch and non-triage generations (rows, list order, activities, events, publications) scoped-candidate and mutual-candidate batches, and proves the team auto-move refusal writes nothing; that refusal keeps generateTriageIntelligenceForIssues pending.",
+      "reason": "Owned contextless reads replace WorkspaceMetadata (Viewer fallback via BeginInstalledViewerRead, workspaceSettings field, one teamSettings point per issue team for isTriageIssue); issue query, candidate search, run starts and the shared literal generateTriageMutation are unchanged. The write uses mutateBoundedIssueSuggestions with Complete scoring inputs under the request's output owner. TestScaleP21TriageGenerateWriterDifferential compares legacy, warm and SQL-reloaded single, auto-apply, batch and non-triage generations (rows, list order, activities, events, publications) scoped-candidate and mutual-candidate batches. Team auto-moves write with WithIssueRenumbering and the candidates' teams declared (TestScaleP21TeamMoveAutoApplyDifferential).",
       "accessors": [
         "BeginInstalledMetadataRead",
         "MutateWorkspace"
@@ -96,7 +97,7 @@
     "runTriageIntelligenceBounded": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Contextless TriageScoringInputs replace WorkspaceMetadata for the run checks and heuristic scorer; the shared run body writes through mutateBoundedIssueSuggestions with the issue scope and generated targets declared, under the request's output owner. TestScaleP21TriageRunWriterDifferential: heuristic and model runs, auto-apply, non-triage, legacy/warm/reloaded exact; team auto-move refused write-free, which keeps runTriageIntelligence pending.",
+      "reason": "Contextless TriageScoringInputs replace WorkspaceMetadata for the run checks and heuristic scorer; the shared run body writes through mutateBoundedIssueSuggestions with the issue scope and generated targets declared, under the request's output owner. TestScaleP21TriageRunWriterDifferential: heuristic and model runs, auto-apply, non-triage, legacy/warm/reloaded exact; team auto-moves write with WithIssueRenumbering and the generated teams declared (TestScaleP21TeamMoveAutoApplyDifferential).",
       "accessors": [
         "BeginInstalledMetadataRead",
         "TriageScoringInputs"

@@ -171,7 +171,8 @@ func (s *server) staleIssueSuggestionIssues(ctx context.Context, workspace strin
 // updateIssueSuggestionStateBounded is updateIssueSuggestionState over owned
 // installed reads and the bounded issue suggestion writer. The literal state
 // callback is shared. Accepting a team suggestion moves the issue with
-// renumbering, which the bounded writer refuses.
+// renumbering through the writer's bounded team-move closure, after the
+// literal move permission check.
 func (s *server) updateIssueSuggestionStateBounded(w http.ResponseWriter, r *http.Request, accept bool) {
 	issueID := r.PathValue("id")
 	suggestionID := r.PathValue("suggestionId")
@@ -236,6 +237,7 @@ func (s *server) updateIssueSuggestionStateBounded(w http.ResponseWriter, r *htt
 		respondMutation(w, errors.New("workspace access denied"), http.StatusOK, updated)
 		return
 	}
+	var moveTeams []string
 	if item != nil {
 		var teamCredential func(string) bool
 		labelCredential := func(string) bool { return true }
@@ -271,9 +273,20 @@ func (s *server) updateIssueSuggestionStateBounded(w http.ResponseWriter, r *htt
 			return
 		}
 		if accept && item.Type == "team" && item.SuggestedTeamID != "" {
-			// A team move renumbers the issue; the bounded writer refuses it.
-			respondMutation(w, store.ErrIssueSuggestionWriteRefused, http.StatusOK, updated)
-			return
+			// Accepting a team suggestion moves the issue like the team
+			// picker: the literal check over the viewer's projected
+			// workspace (teams, members and role need no collection).
+			visible, release, visibleErr := s.mcpWorkspaceDataProjected(ctx, actor, installed)
+			defer release()
+			if visibleErr != nil {
+				respondMutation(w, visibleErr, http.StatusOK, updated)
+				return
+			}
+			if message := issueTeamMoveForbidden(s, visible, item.SuggestedTeamID); message != "" {
+				writeError(w, http.StatusForbidden, message)
+				return
+			}
+			moveTeams = []string{item.SuggestedTeamID}
 		}
 	}
 	scopeIDs := []string{issueID}
@@ -282,7 +295,10 @@ func (s *server) updateIssueSuggestionStateBounded(w http.ResponseWriter, r *htt
 	}
 	owned, closeOwned := beginIndependentMetadataOutputReads(ctx)
 	defer closeOwned()
-	write := store.ContextWithIssueSuggestionWrite(store.WithIssueRecordMutations(owned, scopeIDs...), store.IssueSuggestionWrite{})
+	if moveTeams != nil {
+		owned = store.WithIssueRenumbering(owned)
+	}
+	write := store.ContextWithIssueSuggestionWrite(store.WithIssueRecordMutations(owned, scopeIDs...), store.IssueSuggestionWrite{Teams: moveTeams})
 	err = s.store.MutateWorkspace(write, workspaceKey(r), eventType, suggestionID, nil, issueSuggestionStateMutation(issueID, suggestionID, accept, &updated))
 	respondMutation(w, err, http.StatusOK, updated)
 }
@@ -291,8 +307,8 @@ func (s *server) updateIssueSuggestionStateBounded(w http.ResponseWriter, r *htt
 // over owned installed reads (Viewer fallback, workspace and team settings
 // points, contextless like WorkspaceMetadata) and the bounded issue suggestion
 // writer with complete scoring inputs. The literal callback is shared. A
-// workspace whose team suggestions may auto-move issues is refused before any
-// write: the bounded writer does not renumber.
+// workspace whose team suggestions may auto-move issues writes with
+// renumbering, declaring the candidates' teams as possible targets.
 func (s *server) generateTriageIntelligenceForIssuesBounded(ctx context.Context, workspace string, issueIDs []string) ([]domain.Issue, error) {
 	var updated domain.Issue
 	results := make([]domain.Issue, 0, len(issueIDs))
@@ -393,12 +409,23 @@ func (s *server) generateTriageIntelligenceForIssuesBounded(ctx context.Context,
 		}
 		candidateSets[issueID] = candidates
 	}
-	if triageTeamAutoMove(core.Data.WorkspaceSettings.FeatureSettings.TriageIntelligence) {
-		return nil, store.ErrIssueSuggestionWriteRefused
-	}
 	owned, closeOwned := beginMetadataOutputReads(ctx)
 	defer closeOwned()
-	write := store.ContextWithIssueSuggestionWrite(store.WithIssueRecordMutations(owned, issueIDs...), store.IssueSuggestionWrite{Complete: true})
+	input := store.IssueSuggestionWrite{Complete: true}
+	if triageTeamAutoMove(core.Data.WorkspaceSettings.FeatureSettings.TriageIntelligence) {
+		// inferTeam proposes the teams of scoring candidates besides the
+		// store-derived ones (scoped issues and their projects).
+		owned = store.WithIssueRenumbering(owned)
+		input.Teams = []string{}
+		for _, issueID := range issueIDs {
+			for _, candidate := range candidateSets[issueID] {
+				if candidate.Team.ID != "" && !slices.Contains(input.Teams, candidate.Team.ID) {
+					input.Teams = append(input.Teams, candidate.Team.ID)
+				}
+			}
+		}
+	}
+	write := store.ContextWithIssueSuggestionWrite(store.WithIssueRecordMutations(owned, issueIDs...), input)
 	err = s.store.MutateWorkspace(write, workspace, "issue.suggestions_generated", "issue_suggestions_batch", nil, generateTriageMutation(issueIDs, candidateSets, &updated, &results, &generated))
 	if err == nil && !generated {
 		return nil, store.ErrNoMutation
@@ -488,7 +515,7 @@ func (s *server) triageAIWorkspaceBounded(ctx context.Context, actor mcpActor) (
 // over owned unprojected scoring inputs (contextless like WorkspaceMetadata)
 // and the bounded suggestion writer, which receives the issue scope and the
 // targets the run generated. A run that may auto-move the issue to another
-// team is refused before the write: the bounded writer does not renumber.
+// team writes with renumbering, its generated team targets declared.
 func (s *server) runTriageIntelligenceBounded(ctx context.Context, actor mcpActor, query store.IssueRecordQuery, issue domain.Issue, issueID string, options triageRunOptions) (domain.Issue, []domain.IssueSuggestion, error) {
 	reads := context.WithoutCancel(ctx)
 	installed, found, err := s.store.BeginInstalledMetadataRead(reads, actor.WorkspaceKey)
@@ -507,16 +534,17 @@ func (s *server) runTriageIntelligenceBounded(ctx context.Context, actor mcpActo
 	}
 	return s.runTriageIntelligenceWith(ctx, actor, query, issue, issueID, options, metadata, found,
 		func(ctx context.Context, scope []string, generated []domain.IssueSuggestion, teamMove bool) (context.Context, func(), error) {
-			if teamMove {
-				return nil, nil, store.ErrIssueSuggestionWriteRefused
-			}
 			var input store.IssueSuggestionWrite
 			for _, item := range generated {
 				input.Users = append(input.Users, item.SuggestedUserID)
 				input.Projects = append(input.Projects, item.SuggestedProjectID)
 				input.Labels = append(input.Labels, item.SuggestedLabelID)
+				input.Teams = append(input.Teams, item.SuggestedTeamID)
 			}
 			owned, release := beginMetadataOutputReads(ctx)
+			if teamMove {
+				owned = store.WithIssueRenumbering(owned)
+			}
 			return store.ContextWithIssueSuggestionWrite(store.WithIssueRecordMutations(owned, scope...), input), release, nil
 		})
 }
