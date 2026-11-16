@@ -126,6 +126,8 @@
 .document-history-highlight { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .document-history-navigator { display: inline-flex; align-items: center; gap: 0; }
 .document-history-navigator > span { margin-right: 4px; font-variant-numeric: tabular-nums; }
+/* Dark keeps the counter colour (currentColor); light mutes the total. */
+.document-history-counter-total { color: var(--document-history-counter-total-fg); }
 .document-history-navigator > button {
   display: grid;
   place-items: center;
@@ -293,7 +295,6 @@
 :root[data-theme="light"] .document-history-highlight { margin-right: 8px; }
 :root[data-theme="light"] .document-history-highlight input:checked:hover:not(:disabled) { background: var(--toggle-compact-on); }
 :root[data-theme="light"] .document-history-navigator > span { margin: 0 12px; }
-:root[data-theme="light"] .document-history-counter-total { color: var(--document-history-pill-muted); }
 :root[data-theme="light"] .document-history-navigator > button {
   box-sizing: border-box;
   padding: 0 2px;
@@ -328,16 +329,9 @@
 :root[data-theme="light"] .document-history-restore:hover:not(:disabled) { background: var(--document-history-restore-hover-bg); }
 :root[data-theme="light"] .document-history-restore:disabled { opacity: .6; }
 @media (max-width: 720px) {
-  /* The reference keeps one row on a phone and clips Restore off the panel. Flow uses two rows so every control stays
-     reachable: the toggle on the first, the navigator, divider and Restore on the second. */
-  :root[data-theme="light"] .document-history-pill:not(.is-restore-only) { height: auto; flex-wrap: wrap; justify-content: center; row-gap: 4px; }
-  :root[data-theme="light"] .document-history-highlight:has(+ .document-history-navigator) { flex: 0 0 100%; justify-content: center; margin-right: 0; }
-  :root[data-theme="light"] .document-history-navigator > span { margin-left: 0; }
+  /* Like the reference, the pill stays one row on a phone: the version column grows to the pill's width and the
+     panel (overflow hidden) clips the overflow, Restore version included. The page itself never scrolls sideways. */
+  :root[data-theme="light"] .document-history-pill { max-width: none; }
+  :root[data-theme="light"] .document-history-main { min-width: min-content; }
   :root[data-theme="light"] .document-history-navigator > button { width: 32px; height: 32px; }
-  :root[data-theme="light"] .document-history-navigator + .document-history-actions { margin: 0 1px 0 8px; }
-  /* Highlighting off: one row when it fits (16px between toggle and Restore), otherwise Restore centred below. */
-  :root[data-theme="light"] .document-history-pill:has(> .document-history-highlight + .document-history-actions) { column-gap: 16px; }
-  :root[data-theme="light"] .document-history-highlight:has(+ .document-history-actions) { margin-right: 0; }
-  /* 27px row like the reference's 40px pill (28px Restore overhangs by half a pixel on each side). */
-  :root[data-theme="light"] .document-history-highlight + .document-history-actions { height: 27px; margin: 0 1px 0 0; }
 }

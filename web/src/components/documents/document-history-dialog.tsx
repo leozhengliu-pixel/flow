@@ -12,7 +12,6 @@ import { Toggle } from '@/components/ui/toggle'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { ViaApp } from '@/components/ui/via-app'
-import { useResolvedTheme } from '@/hooks/use-resolved-theme'
 import { useI18n } from '@/i18n/i18n'
 import type { FlowDocument } from '@/types/flow'
 
@@ -38,7 +37,6 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
   const { t, formatDate } = useI18n()
   const [selectedId, setSelectedId] = useState('current')
   const [highlight, setHighlight] = useState(true)
-  const theme = useResolvedTheme()
   const loaded = useLoadedRevisions(document, open, { selectedId, highlight })
   const entries = useMemo(() => buildHistoryEntries(loaded), [loaded])
   const days = useMemo(() => groupEntriesByDay(entries), [entries])
@@ -86,7 +84,13 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
     // Only the outermost element of a change is marked (a removed block also has struck text inside it).
     const targets = [...root.querySelectorAll(`[data-change-id="${activeChange}"]`)].filter(element => !element.parentElement?.closest(`[data-change-id="${activeChange}"]`))
     targets.forEach(element => element.setAttribute('data-active', ''))
-    targets[0]?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    // Centre it in the preview's own scroller only: scrollIntoView would also scroll the clipped panel sideways when the
+    // one-row phone pill widens the column past it.
+    const target = targets[0]
+    if (!target) return
+    const box = target.getBoundingClientRect()
+    const view = root.getBoundingClientRect()
+    root.scrollTo?.({ top: root.scrollTop + box.top + box.height / 2 - (view.top + root.clientTop + root.clientHeight / 2), behavior: 'smooth' })
   }, [activeChange, changes, preview, previewEl])
 
   const step = (delta: number) => {
@@ -125,12 +129,11 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
     if (kind === 'yesterday') return t('Yesterday')
     return formatDate(date, { month: 'short', day: 'numeric', ...(date.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) })
   }
-  const counterText = t('{current} of {total}').replace('{current}', () => String(changes ? activeChange : 0)).replace('{total}', () => String(changes))
-  // Light theme mutes the total ("of 3") in its own span; dark keeps the single text run it was measured with.
+  // The total ("of 3") is its own span so its colour can follow --document-history-counter-total-fg. Everything before
+  // it is one text node ending with the space, so the glyphs land on the same pixels as the former single text run.
   const [counterLead = '', counterRest = ''] = t('{current} of {total}').split('{current}')
-  const counter = theme === 'light'
-    ? <>{counterLead}{String(changes ? activeChange : 0)}<span className="document-history-counter-total">{counterRest.replace('{total}', () => String(changes))}</span></>
-    : counterText
+  const [, counterGap = '', counterTotal = ''] = /^(\s*)([\s\S]*)$/.exec(counterRest) ?? []
+  const counter = <>{`${counterLead}${changes ? activeChange : 0}${counterGap}`}<span className="document-history-counter-total">{counterTotal.replace('{total}', () => String(changes))}</span></>
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
