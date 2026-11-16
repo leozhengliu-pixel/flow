@@ -101,6 +101,24 @@ for (const theme of ['light', 'dark'] as const) {
           await dialog.getByRole('option').nth(1).click()
         }
         await expect(restore).toBeEnabled()
+        if (theme === 'light' && viewport.width < 721) {
+          // Like the reference, the light phone pill stays one 40px row: the panel clips it (Restore version included),
+          // is not scrolled sideways, and the page never scrolls horizontally.
+          await expect(toolbar).toHaveCSS('height', '40px')
+          await expect(toolbar).toHaveCSS('flex-wrap', 'nowrap')
+          expect(await toolbar.evaluate(element => {
+            const panel = element.closest('.document-history-panel')!
+            const page = document.scrollingElement!
+            return {
+              overflow: getComputedStyle(panel).overflowX,
+              clipped: element.getBoundingClientRect().right > panel.getBoundingClientRect().right,
+              scrollLeft: panel.scrollLeft,
+              pageScrolls: page.scrollWidth > page.clientWidth,
+            }
+          })).toEqual({ overflow: 'hidden', clipped: true, scrollLeft: 0, pageScrolls: false })
+          // The preview text uses the reference's light body colour.
+          await expect(dialog.locator('.document-history-doc p').first()).toHaveCSS('color', 'lch(20 1 282)')
+        }
         await restore.hover()
         await capture('hover')
         await restore.focus()

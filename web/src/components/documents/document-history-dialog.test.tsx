@@ -120,7 +120,7 @@ describe('DocumentHistoryDialog', () => {
   it('moves between changes with wrapping, scrolling the active one into view', async () => {
     const user = userEvent.setup()
     const scroll = vi.fn()
-    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scroll })
+    Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: scroll })
     renderDialog(makeDocument())
     const counter = screen.getByTestId('history-change-counter')
     expect(counter).toHaveTextContent('1 of 2')
@@ -136,7 +136,7 @@ describe('DocumentHistoryDialog', () => {
     expect(counter).toHaveTextContent('1 of 2')
     await user.click(screen.getByRole('button', { name: 'Previous change' }))
     expect(counter).toHaveTextContent('2 of 2')
-    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: () => undefined })
+    Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: () => undefined })
   })
 
   it('removes all marks and the navigator when Highlight changes is off', async () => {

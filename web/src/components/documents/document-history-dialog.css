@@ -126,6 +126,8 @@
 .document-history-highlight { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .document-history-navigator { display: inline-flex; align-items: center; gap: 0; }
 .document-history-navigator > span { margin-right: 4px; font-variant-numeric: tabular-nums; }
+/* Dark keeps the counter colour (currentColor); light mutes the total. */
+.document-history-counter-total { color: var(--document-history-counter-total-fg); }
 .document-history-navigator > button {
   display: grid;
   place-items: center;
@@ -260,8 +262,9 @@
     white-space: nowrap;
   }
   .document-history-scroll > .phone-native-select-wrap { max-width: 100%; }
-  .document-history-doc { margin: 24px 16px 0; }
-  .document-history-doc p { color: var(--phone-project-panel-text); letter-spacing: -.1px; }
+  /* The reference insets the preview text 24px on the left and 16px on the right (8px scroller padding + 8px). */
+  .document-history-doc { margin: 24px 8px 0 16px; }
+  .document-history-doc p { color: var(--document-history-doc-text, var(--phone-project-panel-text)); letter-spacing: -.1px; }
   .document-history-pill { position: static; flex: none; flex-wrap: wrap; width: fit-content; max-width: calc(100% - 24px); margin: 10px auto 20px; box-sizing: border-box; border-radius: 9999px; }
   .document-history-pill { background: var(--document-history-pill-bg); border-color: var(--document-history-pill-border); box-shadow: var(--document-history-pill-shadow); color: var(--document-history-pill-fg); }
   .document-history-highlight,
@@ -273,4 +276,65 @@
   .document-history-restore:hover:not(:disabled) { background: var(--document-history-restore-hover-bg); }
   .document-history-day h3 { padding-top: 0; }
   .document-history-actions { margin-right: 1px; padding-left: 0; border-left: 0; }
+}
+
+/* Light theme footer pill and the panel frame around it, from the reference's light measurements. Dark keeps the rules above unchanged. */
+:root[data-theme="light"] .document-history-panel { border-color: var(--document-history-panel-border); }
+@media (resolution < 2dppx) { :root[data-theme="light"] .document-history-panel { border-width: 1px; } }
+:root[data-theme="light"] .document-history-pill {
+  height: 40px;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  gap: normal;
+  border: .5px solid var(--document-history-pill-border);
+  background: var(--document-history-pill-bg);
+  box-shadow: var(--document-history-pill-shadow);
+  color: var(--document-history-pill-fg);
+  line-height: normal;
+}
+@media (resolution < 2dppx) { :root[data-theme="light"] .document-history-pill { border-width: 1px; } }
+:root[data-theme="light"] .document-history-highlight { margin-right: 8px; }
+:root[data-theme="light"] .document-history-highlight input:checked:hover:not(:disabled) { background: var(--toggle-compact-on); }
+:root[data-theme="light"] .document-history-navigator > span { margin: 0 12px; }
+:root[data-theme="light"] .document-history-navigator > button {
+  box-sizing: border-box;
+  padding: 0 2px;
+  border: .5px solid transparent;
+  color: var(--document-history-pill-fg);
+  font-size: 12px;
+  font-weight: 500;
+}
+:root[data-theme="light"] .document-history-navigator > button:hover:not(:disabled) { background: var(--document-history-pill-hover-bg); color: var(--document-history-pill-hover-fg); }
+:root[data-theme="light"] .document-history-actions {
+  align-self: stretch;
+  gap: 6px;
+  margin: -6px 1px -6px 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--document-history-pill-divider);
+}
+:root[data-theme="light"] .document-history-actions:only-child { margin: 0 1px 0 0; padding-left: 0; border-left: 0; }
+/* Highlighting off: no navigator, so Restore sits 12px after the toggle without the divider. */
+:root[data-theme="light"] .document-history-highlight:has(+ .document-history-actions) { margin-right: 4px; }
+:root[data-theme="light"] .document-history-highlight + .document-history-actions { align-self: auto; margin: 0 1px 0 12px; padding-left: 0; border-left: 0; }
+:root[data-theme="light"] .document-history-restore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: var(--document-history-restore-bg);
+  color: var(--document-history-restore-fg);
+  box-shadow: var(--document-history-restore-shadow);
+  line-height: normal;
+  white-space: nowrap;
+}
+:root[data-theme="light"] .document-history-restore:hover:not(:disabled) { background: var(--document-history-restore-hover-bg); }
+:root[data-theme="light"] .document-history-restore:disabled { opacity: .6; }
+@media (max-width: 720px) {
+  /* Like the reference, the pill stays one row on a phone: the version column grows to the pill's width and the
+     panel (overflow hidden) clips the overflow, Restore version included. The page itself never scrolls sideways. */
+  /* The global light dialog rule would add a hairline around the full-screen sheet; the reference has none. */
+  html:root[data-theme="light"] body .dialog-content.document-history-dialog:not(.search-date-dialog) { border: 0; }
+  :root[data-theme="light"] .document-history-pill { max-width: none; }
+  :root[data-theme="light"] .document-history-main { min-width: min-content; }
+  :root[data-theme="light"] .document-history-navigator > button { width: 32px; height: 32px; }
 }
