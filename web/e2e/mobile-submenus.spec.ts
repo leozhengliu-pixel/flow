@@ -69,7 +69,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       const labels = page.getByRole('menu', { name: 'Labels', exact: true })
       await fitsPhone(labels, viewport)
       await shot(page, 'issue-labels', viewport.width)
-      const choice = labels.getByRole('menuitemcheckbox').first()
+      // The row menu's Labels level is the labels picker: its rows are options with a checkbox.
+      const choice = labels.getByRole('option', { name: 'Bug', exact: true })
       const labelMutation = page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().includes(`/api/issues/${issue.id}`))
       await choice.tap()
       expect((await labelMutation).ok()).toBe(true)

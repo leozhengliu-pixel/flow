@@ -65,7 +65,7 @@ describe('InitiativeLabelsPicker', () => {
       await user.type(search, 'Roadmap')
       const createOption = await within(dialog).findByRole('option', { name: /Create new workspace label.*Roadmap/ })
       await user.click(createOption)
-      await waitFor(() => expect(onCreateLabel).toHaveBeenCalledWith('Roadmap'))
+      await waitFor(() => expect(onCreateLabel).toHaveBeenCalledWith('Roadmap', undefined))
       await waitFor(() => expect(onUpdate).toHaveBeenCalledWith({ labelIds: ['label-new'] }))
     } finally {
       if (previousLocale) localStorage.setItem('flow:locale', previousLocale)

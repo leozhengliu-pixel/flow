@@ -57,3 +57,15 @@
 /* The reference app's date operator menu (on / before / after): 6px above and below, full-width square rows, icon then label. */
 .operatorMenu:has(button[data-icon]){padding:6px 0}
 .operatorMenu button[data-icon]{justify-content:flex-start;gap:8px;border-radius:0}
+
+/* Label values, measured on the reference's chip editor: the 14px box at 15px, the 9px dot at 39.5px, the name at 60px; a label of a
+   group reads "Group › Label" (the group in the muted ink, a 5x9 marker 8px either side, the label in the strong ink). */
+.options[data-label-values]>button>.checkbox{justify-self:center}
+.options[data-label-values]>button>i{width:9px;height:9px;justify-self:center}
+.options[data-label-values]>button>span[data-i18n-ignore],.options[data-label-values]>button>.valuePath{margin-left:2px}
+.valuePath{min-width:0;display:flex;align-items:center;gap:8px;overflow:hidden}
+.valueGroup{flex:0 1 auto;min-width:0;overflow:hidden;color:var(--pk-muted);text-overflow:ellipsis;white-space:nowrap}
+.valuePath>svg{flex:none;width:5px;height:9px;color:var(--pk-faint)}
+.valueName{flex:none;color:var(--pk-text-strong);white-space:nowrap}
+/* A label value list hugs its widest "Group › Label" row like the reference (up to the label picker's 399px). */
+.valueMenu:has(.options[data-label-values]){width:max-content;min-width:var(--filter-menu-width);max-width:min(399px,calc(100vw - 16px))}

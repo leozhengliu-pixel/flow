@@ -9,7 +9,7 @@ import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { defaultDateOperator, filterValues, isComparableDateValue, type AdvancedFilterGroup } from '@/components/my-issues/my-issues-filter-types'
 import { compareDateFilter, DATE_FILTER_FIELDS, dateFilterMenu, parseDateFilterValue, releasedDateFilterCategory, withDateFilterCounts, type DateFilterOperator } from './issue-date-filter'
 import { advancedFilterTree, conditionAsFilter, isAdvancedGroup } from './advanced-filter'
-import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from '@/lib/labels'
+import { labelsForResource, labelTeamScopeIds, setGroupedLabelSelected, toggleGroupedLabelIds, REMOVE_ALL_LABELS } from '@/lib/labels'
 import { teamStateChanges, teamWorkflowStates, workflowStatusOptions } from '@/lib/team-workflow'
 import { resolvedTeamSettings, teamHierarchy } from '@/lib/team-hierarchy'
 import { estimateOnTeamScale } from '@/lib/estimates'
@@ -307,6 +307,7 @@ export function issueHierarchyFields(issue: Issue, issues: Issue[], byId = issue
 export function explorerPropertyOptions(data: BootstrapData, issues = data.issues) {
   const issueLabels = labelsForResource(data.labels, 'issue', data.labelGroups)
   const labelGroupNames = new Map(data.labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.name]))
+  const labelGroupColors = new Map(data.labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.color]))
   const issueTeamIds = [...new Set(issues.map(issue => issue.team.id))]
   // One team's issues offer its effective workflow; issues of several teams can be in any of their statuses.
   const teamStates = issueTeamIds.length === 1 ? teamWorkflowStates(data, issueTeamIds[0]) : []
@@ -357,7 +358,7 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     triageIntelligence: triageIntelligenceFilterOptions(data, issueLabels, triageCounts),
     dueDate: explorerDueDateOptions().map(option => ({ ...option, kind: 'dueDate' as const })),
     dates: withDateFilterCounts(dateFilterMenu({ releasedDate: (data.releasePipelines?.length ?? 0) > 0 }), issues),
-    labels: issueLabels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, count: labelCounts.get(label.id) ?? 0, kind: 'labels' as const })),
+    labels: issueLabels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, groupColor: label.groupId ? labelGroupColors.get(label.groupId) : undefined, count: labelCounts.get(label.id) ?? 0, kind: 'labels' as const })),
     project: [{ id: '', label: 'No project', count: noProject, kind: 'project' as const }, ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, count: projectCounts.get(project.id) ?? 0, kind: 'project' as const }))],
     projectMilestone: projectMilestoneFilterOptions(data, issues),
     projectProperties:projectPropertyFilterOptions(data,issues),
@@ -426,7 +427,12 @@ export function explorerBulkOptions(action: MyIssuesBulkAction, options: Explore
   if (action === 'estimate') return selection ? explorerEstimateBulkOptions(selection.data, selection.teamIds) : undefined
   if (action === 'assign') return options.assignee
   if (action === 'project') return options.project
-  if (action === 'labels') return options.labels
+  if (action === 'labels') {
+    // Team labels of other teams are not offered (the selection's teams and their parents' labels are).
+    if (!selection) return options.labels
+    const scopes = new Set(selection.teamIds.flatMap(teamId => teamId ? labelTeamScopeIds(teamId, selection.data.teams, selection.data.teamSettings) : []))
+    return options.labels.filter(label => !label.scope || label.scope === 'Workspace' || scopes.has(label.scope))
+  }
   if (action === 'dueDate') return explorerDueDateOptions()
   if (action === 'subscribers') return options.assignee.filter(option => option.id && !('agent' in option && option.agent))
 }
@@ -468,6 +474,7 @@ export async function executeExplorerBulkAction({ action, ids, value, data, issu
     return
   }
   if (action.startsWith('copy')) { await copyIssues(action, ids, issuesById, data.workspace.urlKey); return }
+  if (action === 'labels' && value === REMOVE_ALL_LABELS) return onUpdateIssues(ids, { labelIds: [] })
   if (action === 'labels' && value != null) {
     const selected = !ids.every(id => issuesById.get(id)?.labels.some(label => label.id === value))
     return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { labelIds: setGroupedLabelSelected(issue.labels.map(label => label.id), value, data.labels, selected) }) }))

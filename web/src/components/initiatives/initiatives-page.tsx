@@ -14,7 +14,7 @@ import { Avatar } from '@/components/issue/issue-row'
 import { PriorityIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
-import type { Initiative, InitiativeMutationInput, InitiativeStatus, InitiativeUpdate, IssueLabel, Project, ProjectUpdate, Team, User } from '@/types/flow'
+import type { Initiative, InitiativeMutationInput, InitiativeStatus, InitiativeUpdate, IssueLabel, LabelGroup, Project, ProjectUpdate, Team, User } from '@/types/flow'
 import { initiativePath, initiativesPath, type InitiativeRouteTab, type InitiativesRouteView } from '@/lib/app-routes'
 import { InitiativeLabelsPicker, InitiativeLabelsPill, InitiativeProperties, InitiativeStatusIcon } from './initiative-shared'
 import { InitiativeRowMenu } from './initiative-row-menu'
@@ -58,12 +58,14 @@ type Props = {
   users: User[]
   teams: Team[]
   labels: IssueLabel[]
+  /** Initiative label groups: the labels picker shows a row per group. */
+  labelGroups?: LabelGroup[]
   viewer: User
   view: InitiativesRouteView
   onViewChange: (view: InitiativesRouteView) => void
   onOpen: (initiative: Initiative, tab?: InitiativeRouteTab) => void
   onCreate: (input: InitiativeMutationInput & { name: string }) => Promise<Initiative>
-  onCreateLabel: (name: string) => Promise<IssueLabel>
+  onCreateLabel: (name: string, groupId?: string) => Promise<IssueLabel>
   onCreateUpdate: (id: string, input: { body: string; health?: Project['health'] }) => Promise<InitiativeUpdate>
   onUpdate: (id: string, input: InitiativeMutationInput) => Promise<Initiative>
   onDelete: (id: string) => Promise<void>
@@ -92,7 +94,7 @@ const INITIATIVE_VIRTUALIZATION_THRESHOLD = 80
 
 export function InitiativesPage(props: Props) {
   const { t } = useI18n()
-  const { initiatives, initiativeUpdates, projects, projectUpdates, users, teams, labels, viewer, view, displayDefault, onViewChange, onOpen, onCreate, onCreateLabel, onCreateUpdate, onUpdate, onDelete, onCreateReminder, onSetDefault, onOpenSidebar, createOnMount = false } = props
+  const { initiatives, initiativeUpdates, projects, projectUpdates, users, teams, labels, labelGroups, viewer, view, displayDefault, onViewChange, onOpen, onCreate, onCreateLabel, onCreateUpdate, onUpdate, onDelete, onCreateReminder, onSetDefault, onOpenSidebar, createOnMount = false } = props
   const defaultProperties = displayDefault?.properties?.filter((item): item is Property => PROPERTY_ORDER.includes(item as Property)) ?? DEFAULT_PROPERTIES
   const defaultSort = displayDefault?.ordering && ['manual', 'name', 'status', 'priority', 'target', 'health', 'created', 'updated'].includes(displayDefault.ordering) ? displayDefault.ordering as Sort : 'manual'
   const defaultGrouping = displayDefault?.grouping && ['none','contributingTeam','leadTeam','owner','health','status','priority','label'].includes(displayDefault.grouping) ? displayDefault.grouping as Grouping : 'none'
@@ -203,7 +205,7 @@ export function InitiativesPage(props: Props) {
     localStorage.setItem('flow:initiatives:details-open', String(!open))
     return !open
   })
-  const renderInitiative = (initiative: Initiative, depth = 0, childCount = 0) => <InitiativeRow phoneCompact contextOnly={!visibleIds.has(initiative.id)} depth={depth} childCount={childCount} collapsed={collapsed.has(initiative.id)} onToggleChildren={() => setCollapsed(current => { const next = new Set(current); if (next.has(initiative.id)) next.delete(initiative.id); else next.add(initiative.id); return next; })} projectIds={graph.projectIds(initiative.id)} columns={columns} grid={columnGrid} href={initiativePath(workspaceSlug, initiative)} initiative={initiative} initiatives={initiatives} canParent={graph.canParent} initiativeUpdates={initiativeUpdates[initiative.id] ?? []} labels={labels} projects={projects} projectUpdates={projectUpdates} properties={properties} selected={selected.has(initiative.id)} teams={teams} users={users} onCreateLabel={onCreateLabel} onCreateReminder={remindAt => onCreateReminder(initiative.id, remindAt)} onCreateSubInitiative={() => { setCreatingParentId(initiative.id); setCreating(true) }} onDelete={onDelete} onNewUpdate={() => { setComposeUpdate(true); setUpdatesInitiative(initiative) }} onOpen={onOpen} onOpenUpdates={() => { setComposeUpdate(false); setUpdatesInitiative(initiative) }} onSelect={() => toggleSelected(initiative.id)} onUpdate={input => onUpdate(initiative.id, input)} onUpdateInitiative={onUpdate}/>
+  const renderInitiative = (initiative: Initiative, depth = 0, childCount = 0) => <InitiativeRow phoneCompact contextOnly={!visibleIds.has(initiative.id)} depth={depth} childCount={childCount} collapsed={collapsed.has(initiative.id)} onToggleChildren={() => setCollapsed(current => { const next = new Set(current); if (next.has(initiative.id)) next.delete(initiative.id); else next.add(initiative.id); return next; })} projectIds={graph.projectIds(initiative.id)} columns={columns} grid={columnGrid} href={initiativePath(workspaceSlug, initiative)} initiative={initiative} initiatives={initiatives} canParent={graph.canParent} initiativeUpdates={initiativeUpdates[initiative.id] ?? []} labelGroups={labelGroups} labels={labels} projects={projects} projectUpdates={projectUpdates} properties={properties} selected={selected.has(initiative.id)} teams={teams} users={users} onCreateLabel={onCreateLabel} onCreateReminder={remindAt => onCreateReminder(initiative.id, remindAt)} onCreateSubInitiative={() => { setCreatingParentId(initiative.id); setCreating(true) }} onDelete={onDelete} onNewUpdate={() => { setComposeUpdate(true); setUpdatesInitiative(initiative) }} onOpen={onOpen} onOpenUpdates={() => { setComposeUpdate(false); setUpdatesInitiative(initiative) }} onSelect={() => toggleSelected(initiative.id)} onUpdate={input => onUpdate(initiative.id, input)} onUpdateInitiative={onUpdate}/>
 
   const rowCount = remote.enabled ? remote.page?.total ?? 0 : visible.length
   const tableHeader = rowCount > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><span aria-hidden="true"/><span aria-hidden="true"/><button aria-label="Order by Name" onClick={() => setSort('name')} style={{ gridColumn: 3 }} type="button">Name<InitiativeSortIcon/></button>{columns.map((property, index) => <ColumnHeader gridColumn={index + 4} key={property} property={property} onSort={setSort}/>)}</div>
@@ -278,12 +280,12 @@ function InitiativeRowContent({ phone, children }: { phone: boolean; children: R
 }
 
 /** One the reference app initiative list row; also used for the Sub-initiatives list on an initiative's overview. */
-export function InitiativeRow({ phoneCompact = false, contextOnly, depth, childCount, collapsed, onToggleChildren, projectIds, initiative, initiatives, canParent, initiativeUpdates, projects, projectUpdates, properties, columns, grid, href, selected, users, teams, labels, onCreateLabel, onCreateReminder, onCreateSubInitiative, onDelete, onNewUpdate, onOpen, onOpenUpdates, onSelect, onUpdate, onUpdateInitiative }: {
+export function InitiativeRow({ phoneCompact = false, contextOnly, depth, childCount, collapsed, onToggleChildren, projectIds, initiative, initiatives, canParent, initiativeUpdates, projects, projectUpdates, properties, columns, grid, href, selected, users, teams, labels, labelGroups, onCreateLabel, onCreateReminder, onCreateSubInitiative, onDelete, onNewUpdate, onOpen, onOpenUpdates, onSelect, onUpdate, onUpdateInitiative }: {
   contextOnly: boolean; depth: number; childCount: number; collapsed: boolean; onToggleChildren: () => void; projectIds: Set<string>
   phoneCompact?: boolean
   initiatives: Initiative[]; canParent: (child: string, parent: string) => boolean; onCreateSubInitiative: () => void; onNewUpdate: () => void; onUpdateInitiative: (id: string, input: InitiativeMutationInput) => Promise<unknown>
-  initiative: Initiative; initiativeUpdates: InitiativeUpdate[]; projects: Project[]; projectUpdates: Record<string, ProjectUpdate[]>; properties: Set<Property>; columns: Property[]; grid: string; href: string; selected: boolean; users: User[]; teams: Team[]; labels: IssueLabel[]
-  onCreateLabel: (name: string) => Promise<IssueLabel>; onCreateReminder: (remindAt: string) => Promise<unknown>; onDelete: (id: string) => Promise<void>; onOpen: (initiative: Initiative, tab?: InitiativeRouteTab) => void; onOpenUpdates: () => void; onSelect?: () => void; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
+  initiative: Initiative; initiativeUpdates: InitiativeUpdate[]; projects: Project[]; projectUpdates: Record<string, ProjectUpdate[]>; properties: Set<Property>; columns: Property[]; grid: string; href: string; selected: boolean; users: User[]; teams: Team[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]
+  onCreateLabel: (name: string, groupId?: string) => Promise<IssueLabel>; onCreateReminder: (remindAt: string) => Promise<unknown>; onDelete: (id: string) => Promise<void>; onOpen: (initiative: Initiative, tab?: InitiativeRouteTab) => void; onOpenUpdates: () => void; onSelect?: () => void; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
 }) {
   const remote = useContext(ScaleP19InitiativeContext)
   const aggregate = remote?.aggregates?.[initiative.id]
@@ -313,7 +315,7 @@ export function InitiativeRow({ phoneCompact = false, contextOnly, depth, childC
     if (property === 'projects') return <button aria-label={t('{completed} of {total} projects completed. Click to view projects.').replace('{completed}', () => String(completed)).replace('{total}', () => String(totalProjects))} className="li-project-count" onClick={() => onOpen(initiative, 'projects')} type="button"><span className="li-project-count__ring" aria-hidden="true"><ProjectStatusGlyph name="" progress={totalProjects ? completed / totalProjects : 0} type="started"/></span><span className="li-project-count__value"><span>{completed} /</span> {totalProjects}</span></button>
     if (property === 'health') { const hasUpdates = aggregate?.hasUpdates ?? (initiativeUpdates.length > 0 || initiative.health !== 'noUpdate'); return <button aria-label={hasUpdates ? healthLabel(initiative.health) : 'There are no updates for this initiative'} className={`li-health is-${initiative.health}`} onClick={onOpenUpdates} type="button"><i/><HealthGlyph health={initiative.health} className="li-phone-health"/><span>{hasUpdates ? healthLabel(initiative.health) : 'No updates'}</span></button> }
     if (property === 'activeProjects') return <button aria-label={`${needingUpdate} project${needingUpdate === 1 ? '' : 's'} need an update. Click to open updates.`} className="li-active-projects" onClick={onOpenUpdates} type="button"><i/>{needingUpdate}</button>
-    if (property === 'labels') return <InitiativeLabelsPicker compact initiative={initiative} labels={labels} onCreateLabel={onCreateLabel} onUpdate={onUpdate}/>
+    if (property === 'labels') return <InitiativeLabelsPicker compact initiative={initiative} labels={labels} labelGroups={labelGroups} onCreateLabel={onCreateLabel} onUpdate={onUpdate}/>
     if (property === 'created' || property === 'updated') return <time>{new Date(property === 'created' ? initiative.createdAt : initiative.updatedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</time>
     if (property === 'completed') return <span>{initiative.status === 'completed' ? new Date(initiative.updatedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' }) : '–'}</span>
     if (property === 'teams') { const names = teams.filter(team => initiative.contributingTeamIds.includes(team.id)).map(team => team.name); return <span className="li-muted" data-i18n-ignore>{names.join(', ') || '—'}</span> }

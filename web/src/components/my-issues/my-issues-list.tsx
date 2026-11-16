@@ -14,7 +14,7 @@ import type { MyIssuesProperty } from './my-issues-surface'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
 import { isMilestoneDateOverdue } from '@/components/issue/milestone-progress'
-import { PropertyMenu, type PropertyMenuKind } from '@/components/property/property-menu'
+import { PropertyMenu, type PropertyMenuKind, type PropertyOption } from '@/components/property/property-menu'
 import { LabelHoverPreview } from '@/components/property/label-hover-preview'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import styles from './my-issues-list.module.css'
@@ -61,7 +61,7 @@ import { IssueGroupContextMenu, type IssueGroupMenuActions } from './issue-group
 export type MyIssuesStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 export type MyIssuesContextAction = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle' | 'moreProperties' | 'createRelated' | 'markAs' | 'copy' | 'copyUrl' | 'copyId' | 'copyTitle' | 'convertTo' | 'move' | 'openIn' | 'runLoop' | 'favorite' | 'remind' | 'delete'
 export type MyIssuesEditableProperty = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle'
-export interface MyIssuesContextOption { id: string; teamId?: string; /** An agent member: choosing it delegates instead of assigning (hover card shows the "Agent" pill). */ agent?: boolean; /** The agent's handle (lowercase username), shown in its hover card. */ handle?: string; label: string; color?: string; description?: string; issueCount?: number; scope?: string; groupId?: string; groupLabel?: string; avatarUrl?: string; kind?: MyIssuesEditableProperty; priority?: 0 | 1 | 2 | 3 | 4; shortcut?: string; stateType?: MyIssuesStateType; /** Replaces the default icon (the delegated agent hung under the assignee). */ icon?: ReactNode; /** Replaces the label text. */ labelContent?: ReactNode }
+export interface MyIssuesContextOption { id: string; teamId?: string; /** An agent member: choosing it delegates instead of assigning (hover card shows the "Agent" pill). */ agent?: boolean; /** The agent's handle (lowercase username), shown in its hover card. */ handle?: string; label: string; color?: string; description?: string; issueCount?: number; scope?: string; groupId?: string; groupLabel?: string; groupColor?: string; avatarUrl?: string; kind?: MyIssuesEditableProperty; priority?: 0 | 1 | 2 | 3 | 4; shortcut?: string; stateType?: MyIssuesStateType; /** Replaces the default icon (the delegated agent hung under the assignee). */ icon?: ReactNode; /** Replaces the label text. */ labelContent?: ReactNode }
 export interface MyIssuesRowPropertyOptions {
   status: MyIssuesContextOption[]
   priority: MyIssuesContextOption[]
@@ -545,7 +545,7 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
     <ContextPropertySub label="Priority" shortcut="P" options={options.priority} selectedIds={[String(issue.priority)]} onSelect={id => onPropertyChange('priority', id)}/>
     <ContextPropertySub label="Assignee" shortcut="A" options={options.assignee} selectedIds={[issue.assignee?.id ?? '']} onSelect={id => onPropertyChange('assignee', id)}/>
     <ContextPropertySub label="Due date" shortcut="⇧ D" options={options.dueDate} selectedIds={[issue.dueDate ?? '']} onSelect={id => onPropertyChange('dueDate', id)}/>
-    <ContextPropertySub multi label="Labels" shortcut="L" options={options.labels} selectedIds={issue.labels?.map(label => label.id) ?? []} onSelect={id => onPropertyChange('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], id, options.labels))}/>
+    <ContextLabelsSub options={options.labels} selectedIds={issue.labels?.map(label => label.id) ?? []} onSelect={id => onPropertyChange('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], id, options.labels))}/>
     <ContextPropertySub label="Project" shortcut="⇧ P" options={options.project} selectedIds={[issue.project?.id ?? '']} onSelect={id => onPropertyChange('project', id)}/>
     {editable && <IssueRowEstimateItem row={issue}/>}
     {(options.cycle ?? []).some(option => option.id) && <ContextPropertySub label="Cycle" shortcut="⇧ C" options={options.cycle??[]} selectedIds={[issue.cycleId ?? '']} onSelect={id => onPropertyChange('cycle', id)}/>}
@@ -554,6 +554,15 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
     {onAction&&!(editable&&rowActions)&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<MenuSubmenu label="Copy" triggerProps={{ className: styles.menuItem }} trigger={<><ContextMenuIcon label="Copy"/><span>Copy</span><span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></>} contentProps={{ 'data-flow-motion': 'floating', className: styles.contextSubmenu, sideOffset: 3, alignOffset: -5 }}><MyIssuesMenuItem action="copyUrl" label="Copy issue URL" shortcut="⌘ ⇧ ," onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyId" label="Copy issue ID" onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyTitle" label="Copy issue title" onAction={onAction} submenu={false}/></MenuSubmenu><ContextMenu.Separator className={styles.menuSeparator}/><MyIssuesMenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
     </div>
   </ContextMenu.Content>
+}
+
+/** The row menu's Labels: the labels picker itself (search, team and workspace sections, a row per label group that opens its labels), as in the reference. */
+function ContextLabelsSub({ options, selectedIds, onSelect }: { options: MyIssuesContextOption[]; selectedIds: string[]; onSelect: (id: string) => void | Promise<void> }) {
+  const [open, setOpen] = useState(false)
+  const labelOptions = useMemo<PropertyOption[]>(() => options.map(option => ({ id: option.id, label: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope, groupId: option.groupId, groupLabel: option.groupLabel, groupColor: option.groupColor, i18nIgnore: true })), [options])
+  return <MenuSubmenu label="Labels" open={open} onOpenChange={setOpen} triggerProps={{ className: styles.menuItem }} trigger={<><ContextMenuIcon label="Labels"/><span>Labels</span><kbd>L</kbd><span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></>} contentProps={{ 'data-flow-motion': 'floating', className: `${styles.contextSubmenu} ${styles.contextLabelsSubmenu} property-command-surface property-command-labels`, sideOffset: 3, alignOffset: -5 }}>
+    <PropertyMenu embedded multiple kind="labels" label="Labels" options={labelOptions} selectedIds={selectedIds} onChange={onSelect} onOpenChange={next => { if (!next) setOpen(false) }}/>
+  </MenuSubmenu>
 }
 
 function ContextPropertySub({ label, icon, multi = false, onSelect, options, selectedIds, shortcut }: { label: string; icon?: ReactNode; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; selectedIds: string[]; shortcut?: string }) {
@@ -565,7 +574,7 @@ function ContextPropertySub({ label, icon, multi = false, onSelect, options, sel
   const choose = (id: string) => id === ASSIGNEE_INVITE_ID ? openMemberInvite() : onSelect(id)
   const { inputRef: commandInputRef, ...command } = usePropertyCommand({ open: open && people, options: items, personOptions: people, selectedIds, onSelect: option => choose(option.id), onOpenChange: setOpen })
   const selected = new Set(selectedIds)
-  const sections = multi && label === 'Labels' ? groupContextOptions(items) : [{ id: 'all', label: undefined as string | undefined, options: people ? command.filteredOptions : items }, ...(assignee && !command.query && viewerCanInvite() ? [{ id: 'invite', label: 'New user', options: [ASSIGNEE_INVITE_OPTION] }] : [])]
+  const sections = [{ id: 'all', label: undefined as string | undefined, options: people ? command.filteredOptions : items }, ...(assignee && !command.query && viewerCanInvite() ? [{ id: 'invite', label: 'New user', options: [ASSIGNEE_INVITE_OPTION] }] : [])]
   const row = (option: MyIssuesContextOption) => {
     const content = multi
       ? <ContextMenu.CheckboxItem className={styles.submenuItem} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void choose(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <CheckboxMark/>}</span><MyIssuesOptionIcon option={option}/><span>{option.label}</span></ContextMenu.CheckboxItem>
@@ -626,19 +635,4 @@ function formatTimeInStatus(minutes: number) {
   if (hours < 24) return `${Math.round(hours * 10) / 10}h`
   const days = hours / 24
   return `${Math.round(days * 10) / 10}d`
-}
-function groupContextOptions(options: MyIssuesContextOption[]) {
-  const sections: { id: string; label?: string; options: MyIssuesContextOption[] }[] = []
-  const indexes = new Map<string, number>()
-  for (const option of options) {
-    const id = option.groupId || option.groupLabel || 'ungrouped'
-    let index = indexes.get(id)
-    if (index === undefined) {
-      index = sections.length
-      indexes.set(id, index)
-      sections.push({ id, label: id === 'ungrouped' ? undefined : option.groupLabel, options: [] })
-    }
-    sections[index].options.push(option)
-  }
-  return sections
 }

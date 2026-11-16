@@ -7,6 +7,7 @@ import { assigneeShortcut } from '@/lib/agent-members'
 import { openMemberInvite, viewerCanInvite } from '@/lib/invite-navigation'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Command } from 'cmdk'
+import { LabelCommandItems, REMOVE_ALL_LABELS } from '@/components/command/label-command-items'
 import { ChevronLeft, ChevronRight, Command as CommandIcon, X } from 'lucide-react'
 import type { MyIssuesRowData } from './my-issues-list'
 import { AgentChatPanel } from '@/components/agent/agent-chat-panel'
@@ -20,7 +21,7 @@ import { matchesSearch, translatedKeywords } from '@/lib/search-match'
 import { useRegisterCommandContext } from '@/components/command/command-context'
 
 export type MyIssuesBulkAction = 'assign' | 'unassignMe' | 'status' | 'priority' | 'estimate' | 'project' | 'labels' | 'dueDate' | 'copyId' | 'copyUrl' | 'copyTitle' | 'copyTitleLink' | 'copyDescriptionMarkdown' | 'copyContentMarkdown' | 'copyBranch' | 'copyPrompt' | 'subscribers' | 'removeSubscribers' | 'markAs' | 'archive' | 'delete'
-export interface MyIssuesBulkActionOption { id: string; label: string; color?: string; avatarUrl?: string; /** Agent member: assigning delegates (the "Agent" pill lives in the hover card only). */ agent?: boolean; /** Leading glyph, e.g. the estimate icon of a "Set estimate…" row. */ icon?: ReactNode }
+export interface MyIssuesBulkActionOption { id: string; label: string; color?: string; /** Labels: the label's scope and group, so the labels step lists groups as rows. */ scope?: string; groupId?: string; groupLabel?: string; groupColor?: string; avatarUrl?: string; /** Agent member: assigning delegates (the "Agent" pill lives in the hover card only). */ agent?: boolean; /** Leading glyph, e.g. the estimate icon of a "Set estimate…" row. */ icon?: ReactNode }
 
 export interface MyIssuesBulkActionBarProps {
   selectedIssues: MyIssuesRowData[]
@@ -55,6 +56,9 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [pendingAction, setPendingAction] = useState<MyIssuesBulkAction>()
+  // The labels step: its search (it lists "Group › Label" rows) and the label group whose own step is open.
+  const [labelQuery, setLabelQuery] = useState('')
+  const [labelGroup, setLabelGroup] = useState<{ id: string; name: string }>()
   const [agentIssues, setAgentIssues] = useState<MyIssuesRowData[]>([])
   const [agentOpen, setAgentOpen] = useState(false)
   const [seenSelectionCount, setSeenSelectionCount] = useState(selectedIssues.length)
@@ -67,7 +71,7 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
   const [seenOpen, setSeenOpen] = useState(open)
   if (seenOpen !== open) {
     setSeenOpen(open)
-    if (!open) setPendingAction(undefined)
+    if (!open) { setPendingAction(undefined); setLabelGroup(undefined); setLabelQuery('') }
   }
   if (!selectedIssues.length) return null
   const count = selectedIssues.length
@@ -81,12 +85,14 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
       {error && <span className={styles.error} role="alert">{error}</span>}
     </div>
     <Dialog.Root open={open} onOpenChange={setOpen}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className={styles.overlay}/><Dialog.Content data-flow-motion="dialog" className={styles.commandDialog} aria-describedby={undefined}>
-      <Dialog.Title className={styles.commandTitle}>{pendingAction ? actions.find(action => action.id === pendingAction)?.label : count === 1 ? `${selectedIssues[0].identifier} · ${selectedIssues[0].title}` : `${count} selected issues`}</Dialog.Title>
-      {pendingAction && <button type="button" className={styles.commandBack} aria-label="Back to actions" onClick={() => setPendingAction(undefined)}><ChevronLeft size={13}/>Back</button>}
+      <Dialog.Title className={styles.commandTitle}>{pendingAction === 'labels' && labelGroup ? labelGroup.name : pendingAction ? actions.find(action => action.id === pendingAction)?.label : count === 1 ? `${selectedIssues[0].identifier} · ${selectedIssues[0].title}` : `${count} selected issues`}</Dialog.Title>
+      {pendingAction && <button type="button" className={styles.commandBack} aria-label="Back to actions" onClick={() => { if (labelGroup) { setLabelGroup(undefined); setLabelQuery('') } else setPendingAction(undefined) }}><ChevronLeft size={13}/>Back</button>}
       <Dialog.Close className={styles.commandClose} aria-label="Close command menu"><span>Backspace</span><kbd>⌫</kbd></Dialog.Close>
       <Command onKeyDown={event => { if (pendingAction !== 'assign' || event.metaKey || event.ctrlKey || event.altKey || !/^\d$/.test(event.key)) return; const index = options.findIndex((_option, position) => assigneeShortcut(position) === event.key); if (index >= 0) { event.preventDefault(); onAction('assign', selectedIssues, options[index].id); setOpen(false) } }} label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} className={styles.command} loop filter={pendingAction && ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? (value, query) => { const person = directoryPerson(directory.users, value); return person ? Number(personMatchesQuery(person, query)) : Number(matchesSearch(query, [actionOptions?.(pendingAction)?.find(option => (option.id || 'none') === value)?.label ?? value], t)) } : undefined}>
-        <div className={styles.commandInput}><Command.Input key={pendingAction ?? 'actions'} aria-label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} placeholder={pendingAction === 'assign' ? 'Assign to…' : pendingAction === 'estimate' ? 'Set estimate to…' : pendingAction ? 'Search...' : 'Type a command...'} autoFocus/>{!pendingAction && <><span>Ask Flow</span><kbd>Tab</kbd></>}</div>
-        <Command.List className={styles.commandList}><Command.Empty className={styles.commandEmpty}>No commands found</Command.Empty>{pendingAction
+        <div className={styles.commandInput}><Command.Input key={`${pendingAction ?? 'actions'}:${labelGroup?.id ?? ''}`} {...(pendingAction === 'labels' ? { value: labelQuery, onValueChange: setLabelQuery } : {})} aria-label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} placeholder={pendingAction === 'assign' ? 'Assign to…' : pendingAction === 'estimate' ? 'Set estimate to…' : pendingAction ? 'Search...' : 'Type a command...'} autoFocus/>{!pendingAction && <><span>Ask Flow</span><kbd>Tab</kbd></>}</div>
+        <Command.List className={styles.commandList}><Command.Empty className={styles.commandEmpty}>No commands found</Command.Empty>{pendingAction === 'labels'
+          ? <LabelCommandItems labels={options.map(option => ({ id: option.id, name: option.label, color: option.color, scope: option.scope, groupId: option.groupId, groupLabel: option.groupLabel, groupColor: option.groupColor }))} state={labelId => { const count = selectedIssues.filter(issue => issue.labels?.some(label => label.id === labelId)).length; return count > 0 && count === selectedIssues.length ? true : count > 0 ? 'mixed' : false }} query={labelQuery} groupId={labelGroup?.id} itemClassName={styles.commandItem} onOpenGroup={group => { setLabelGroup(group); setLabelQuery('') }} onToggle={labelId => { onAction('labels', selectedIssues, labelId); setOpen(false) }} onRemoveAll={() => { onAction('labels', selectedIssues, REMOVE_ALL_LABELS); setOpen(false) }}/>
+          : pendingAction
           ? <>{options.map((option, position) => { const person = ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? directoryPerson(directory.users, option.id) : undefined; return <PersonHover key={option.id || 'none'} person={person}><Command.Item value={option.id || 'none'} keywords={[option.label, ...translatedKeywords([option.label], t), ...(person ? [personSearchText(person)] : [])]} className={styles.commandItem} onSelect={() => { onAction(pendingAction, selectedIssues, option.id); setOpen(false) }}><span className={styles.optionLabel}>{['assign','subscribers','removeSubscribers'].includes(pendingAction) && (option.id ? <UserAvatar avatarUrl={option.avatarUrl ?? person?.avatarUrl} className={`avatar core-person-picker-avatar ${styles.optionAvatar}`} color={avatarColor(option.id)} name={option.label}/> : <NoAssigneeIcon size={16}/>)}{option.icon}{option.color && <i style={{ backgroundColor: option.color }}/>}<span>{option.label}</span></span>{pendingAction === 'assign' && assigneeShortcut(position) && <kbd>{assigneeShortcut(position)}</kbd>}</Command.Item></PersonHover> })}
             {pendingAction === 'assign' && viewerCanInvite() && <Command.Group heading="New user"><Command.Item value="Invite and assign…" keywords={['invite']} className={styles.commandItem} onSelect={() => { setOpen(false); openMemberInvite() }}><span className={styles.optionLabel}><FlowGlyph name="invitePlane" size={16} className={styles.inviteIcon}/><span>Invite and assign…</span></span></Command.Item></Command.Group>}</>
           : availableActions.map(action => <Command.Item key={action.id} value={action.label} keywords={translatedKeywords([action.label], t)} className={styles.commandItem} onSelect={() => { const options = actionOptions?.(action.id); if (options?.length) setPendingAction(action.id); else { onAction(action.id, selectedIssues); setOpen(false) } }}><span>{action.label}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</Command.Item>)}</Command.List>

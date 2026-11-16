@@ -179,6 +179,16 @@
   .phone-menu-surface.property-command-labels .property-command-options [role="option"] { grid-template-columns: 20px 16px minmax(0,1fr); gap: 8px; }
   .phone-menu-surface.property-command-labels .property-command-checkbox { justify-self: start; margin-left: 1px; }
   .phone-menu-surface.property-command-labels .option-dot { width: 9px; height: 9px; flex-basis: 9px; }
+  /* Phones show no submenu marker on a label group row; its name runs to the row's end. */
+  html:root body .property-command-labels .property-command-label-group-option > .property-command-group-chevron,
+  html:root body .project-label-option.is-group > .project-label-chevron { display: none; }
+  html:root body .property-command-labels .property-command-label-group-option > .property-command-group-copy { padding-right: 0; }
+  /* Label sheet headings sit 12px in, and section separators run the full width of the sheet (through the list's 6px inset). */
+  html:root body .phone-menu-surface.property-command-labels:not(#_) .property-command-options > .property-command-group { padding-inline: 12px; }
+  html:root body .phone-menu-surface.property-command-labels:not(#_) .property-command-options > .property-command-separator { margin-inline: -6px; }
+  /* The row menu's Labels level (the labels picker inside a phone submenu) shows no key hint, like the labels sheet. */
+  html:root body [data-phone-submenu].property-command-labels .property-command-search-shortcut,
+  html:root body [data-phone-submenu].property-command-labels .property-command-search kbd { display: none; }
   html:root body .phone-menu-surface:not(#_) .property-command-group { font-size: var(--phone-property-group-font-size, 13px); font-weight: 500; }
   html:root body .phone-menu-surface:not(#_):has(.phone-menu-heading) .property-command-options:not(.virtual-property-options) { max-height: min(369px, calc(100dvh - var(--phone-menu-top) - 97px)); }
 }

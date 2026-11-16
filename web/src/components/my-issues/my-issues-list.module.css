@@ -248,3 +248,5 @@
   .group[data-collapsed=true]{padding-bottom:4px}
 }
 .creatorAvatar{display:inline-flex;flex:none;align-items:center}
+/* Row menu Labels: the labels picker hugs its widest row like the property picker (207px to 399px). */
+.contextSubmenu.contextLabelsSubmenu{width:max-content;min-width:207px;max-width:min(399px,calc(100vw - 20px));max-height:min(490px,calc(100vh - 20px));padding:0;overflow:hidden}

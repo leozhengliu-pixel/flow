@@ -3652,6 +3652,7 @@ export const zhCN: Record<string, string> = {
   "Join workspace": "加入工作区",
   Labels: "标签",
   "Workspace labels": "工作区标签",
+  "Team labels": "团队标签",
   "No issue details": "暂无事项详情",
   "No labels used": "未使用标签",
   "No priorities used": "未设置优先级",

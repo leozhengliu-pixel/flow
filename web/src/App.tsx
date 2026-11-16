@@ -2878,9 +2878,9 @@ function App() {
     );
     return initiative;
   };
-  const addInitiativeLabel = async (name: string): Promise<IssueLabel> => {
+  const addInitiativeLabel = async (name: string, groupId?: string): Promise<IssueLabel> => {
     const label = await run(
-      () => createWorkspaceLabel({ name, resourceType: "initiative" }),
+      () => createWorkspaceLabel({ name, resourceType: "initiative", groupId }),
       "Could not create initiative label",
     );
     setData((current) =>
@@ -6201,6 +6201,7 @@ function App() {
               projectUpdates={data.projectUpdates}
               teams={data.teams}
               users={data.users}
+              labelGroups={data.labelGroups.filter(group => group.resourceType === "initiative")}
               labels={labelsForResource(
                 data.labels,
                 "initiative",
