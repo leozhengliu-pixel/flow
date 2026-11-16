@@ -1086,6 +1086,14 @@ func metadataRecordType(name string) (metadataField, reflect.Type, bool) {
 func rebaseMetadataRecordWrite(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, name, key string, base, ours []byte) (result []byte, write bool, err error) {
 	field, kind, ok := metadataRecordType(name)
 	if !ok {
+		if updateMetadataField(name) {
+			// Updates without unique IDs are stored per parent or inline.
+			if inline, err := metadataFieldStoredInline(ctx, tx, tx.dialect, workspace, name); err != nil {
+				return nil, false, err
+			} else if inline {
+				return nil, false, ErrMetadataFieldInline
+			}
+		}
 		return ours, true, nil
 	}
 	stored, err := lockMetadataRecords(ctx, tx, workspace, name, []string{key})
@@ -1093,6 +1101,15 @@ func rebaseMetadataRecordWrite(ctx context.Context, tx *sqlTx, workspace string,
 		return nil, false, err
 	}
 	row, exists := stored[key]
+	if !exists {
+		// An inline field has no rows: neither a deletion nor a creation
+		// may be decided (or written) row by row.
+		if inline, err := metadataFieldStoredInline(ctx, tx, tx.dialect, workspace, name); err != nil {
+			return nil, false, err
+		} else if inline {
+			return nil, false, ErrMetadataFieldInline
+		}
+	}
 	conflict := &metadataConflictError{keys: []metadataRecordKey{{name, key}}}
 	switch {
 	case !exists && base != nil:

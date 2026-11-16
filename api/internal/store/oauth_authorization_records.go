@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"database/sql"
@@ -103,6 +104,11 @@ func ensureOAuthMetadataShape(ctx context.Context, tx *sqlTx, workspace, field, 
 	}
 	if shapes[field] == shape {
 		return nil
+	}
+	if value := bytes.TrimSpace(root[field]); shapes[field] == "" && len(value) > 0 && !bytes.Equal(value, []byte("null")) &&
+		!bytes.Equal(value, []byte("[]")) && !bytes.Equal(value, []byte("{}")) {
+		// Entries kept inline would be replaced by an empty collection.
+		return ErrMetadataFieldInline
 	}
 	shapes[field] = shape
 	var err error

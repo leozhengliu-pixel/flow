@@ -90,6 +90,16 @@ func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspac
 			return err
 		}
 		defer tx.Rollback()
+		// Record rows cannot carry a field the root keeps inline (entries
+		// without unique IDs): the full legacy writer persists it instead.
+		// Cascades page projects, documents and initiatives.
+		inline, err := s.inlineMetadataFields(ctx, tx, workspace, append(metadataRecordFields(scope), "projects", "documents", "initiatives")...)
+		if err != nil {
+			return err
+		}
+		if len(inline) > 0 {
+			return errProjectRecordFallback
+		}
 		var resourceKeys []string
 		var loadedDeliveries map[string]bool
 		if scopedContent && eventType != "project.deleted" {
