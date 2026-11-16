@@ -470,30 +470,48 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, projected[0])
 		return
 	}
-	if !s.authDisabled {
-		// The authorization built this projection a moment ago, before any
-		// write (request_metadata.go); otherwise build it.
-		var handedOff bool
-		if metadata, handedOff = takeIssueWriteMetadata(r, query.Workspace, authUser(r).ID); !handedOff {
-			metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+	if s.store.BoundedMetadataEnabled() {
+		// The same projection and destination checks over one installed
+		// generation, without the complete workspace.
+		if s.authDisabled {
+			filterBootstrapForAPIKey(&metadata, r)
+			if !s.boundedIssueUpdatePresence(w, r, query.Workspace, input) {
+				return
+			}
+		} else {
+			var release func()
+			var ok bool
+			if metadata, release, ok = s.boundedIssueUpdateTargets(w, r, query.Workspace, input); !ok {
+				return
+			}
+			defer release()
 		}
-		if err != nil {
-			issueRecordsError(w, err)
+	} else {
+		if !s.authDisabled {
+			// The authorization built this projection a moment ago, before any
+			// write (request_metadata.go); otherwise build it.
+			var handedOff bool
+			if metadata, handedOff = takeIssueWriteMetadata(r, query.Workspace, authUser(r).ID); !handedOff {
+				metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+			}
+			if err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+		}
+		filterBootstrapForAPIKey(&metadata, r)
+		if input.ProjectID != nil && *input.ProjectID != "" && !slices.ContainsFunc(metadata.Projects, func(project domain.Project) bool { return project.ID == *input.ProjectID }) {
+			writeError(w, 403, "Project is outside your teams")
 			return
 		}
-	}
-	filterBootstrapForAPIKey(&metadata, r)
-	if input.ProjectID != nil && *input.ProjectID != "" && !slices.ContainsFunc(metadata.Projects, func(project domain.Project) bool { return project.ID == *input.ProjectID }) {
-		writeError(w, 403, "Project is outside your teams")
-		return
-	}
-	if input.CycleID != nil && *input.CycleID != "" && !slices.ContainsFunc(metadata.Cycles, func(cycle domain.Cycle) bool { return cycle.ID == *input.CycleID }) {
-		writeError(w, 403, "Cycle is outside your teams")
-		return
-	}
-	if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(r.Context(), query.Workspace, *input.AssigneeID) {
-		writeError(w, 403, "Assignee is outside this workspace")
-		return
+		if input.CycleID != nil && *input.CycleID != "" && !slices.ContainsFunc(metadata.Cycles, func(cycle domain.Cycle) bool { return cycle.ID == *input.CycleID }) {
+			writeError(w, 403, "Cycle is outside your teams")
+			return
+		}
+		if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(r.Context(), query.Workspace, *input.AssigneeID) {
+			writeError(w, 403, "Assignee is outside this workspace")
+			return
+		}
 	}
 	ctx := r.Context()
 	if input.TeamID != nil && *input.TeamID != page.Items[0].Team.ID {

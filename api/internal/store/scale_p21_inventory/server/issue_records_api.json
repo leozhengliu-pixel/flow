@@ -1,6 +1,6 @@
 {
   "source": "server/issue_records_api.go",
-  "unmigrated": 4,
+  "unmigrated": 3,
   "consumers": {
     "createIssueRecord": {
       "owner": "P21",
@@ -49,7 +49,7 @@
     },
     "updateIssueRecord": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata"
@@ -58,7 +58,8 @@
       "temperatureReason": "Direct issue-update route in the owner hot workload.",
       "callers": [
         "PATCH /api/issue-records/{id}"
-      ]
+      ],
+      "reason": "Bounded mode replaces the PagedWorkspaceMetadata/handoff read with boundedIssueUpdateTargets (owned literal projection of policy fields and live directory, projected project/cycle lookups) or, without authentication, boundedIssueUpdatePresence (installed ID lookups); the off branch is literal. The callback is unchanged: issueRole reads the projected viewer, role, teams, settings and memberships with the writer's issues, and applyUpdate/moveIssueToTeam/notifications read the bounded UpdateIssueRecord closure (selected users, labels with same-named move labels, states, cycles, SLA rules of both teams, attached documents, issueMoveAudience members, owned editor lookups). TestScaleP21IssueUpdate{Fields,TeamMove,Scheduler,Concurrent,Inline,StoreBoundaries,WithoutAuth}: legacy/warm/SQL-reloaded byte-exact responses, rows, sequence, aliases, documents, collaboration updates, activity (including merged update entries), notifications and their audience, events with previous values, webhooks and realtime. Independent blockers remain: issueRecordsQuery and the request authorization middleware (buildIssueRecordAuthorizationData) for this route, and UpdateIssueRecord's ContentState (CRDT snapshot) boundary."
     }
   }
 }

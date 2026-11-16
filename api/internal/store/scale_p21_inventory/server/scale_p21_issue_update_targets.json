@@ -1,0 +1,37 @@
+{
+  "source": "server/scale_p21_issue_update_targets.go",
+  "unmigrated": 0,
+  "consumers": {
+    "boundedIssueUpdatePresence": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "updateIssueRecord's destination checks without authentication, whose legacy metadata is the complete unprojected WorkspaceMetadata: one InstalledMetadataRead (contextless like the legacy accessor) and RecordIDPresent ID-header scans of the installed projects, cycles and users, in the literal order with the literal 403 messages and the formerMemberOutsideWrite pass-through; no full metadata decode. TestScaleP21IssueUpdateWithoutAuthDifferential: 9 legacy/warm/SQL-reloaded cases (private and missing project, private and missing cycle, assignee present/missing/former, moves into private and parent teams with a cycle) with exact responses, rows, events and publications.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "RecordIDPresent"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "PATCH /api/issue-records/{id} without authentication (development mode).",
+      "callers": [
+        "server/issue_records_api.go:updateIssueRecord"
+      ]
+    },
+    "boundedIssueUpdateTargets": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Replaces updateIssueRecord's PagedWorkspaceMetadata/handoff with one InstalledMetadataRead: ProjectedWorkspace runs the literal paged projection over core and resident policy fields with the live directory (viewer, role, teams, team settings, team memberships, users: everything issueRole, issueTeamMoveForbidden and the assignee check read), filtered by the literal filterBootstrapForAPIKey; the destination project and cycle use ViewerProjectionScope with ProjectVisibleInProjection and CycleVisibleInProjection under the selected-team credential. Check order, 403 messages, formerMemberOutsideWrite and projection errors are literal; the projection is owned until the response is written. TestScaleP21IssueUpdateFieldsDifferential (38 cases), TeamMoveDifferential (21), Scheduler, Concurrent, Inline and StoreBoundaries: legacy/warm/SQL-reloaded exact responses, issue rows, sequence, aliases, documents, labels, collaboration updates, activity, notifications and audience, events with previous values, webhooks and realtime; zero full metadata decodes.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "ProjectedWorkspace",
+        "ViewerProjectionScope",
+        "ProjectVisibleInProjection",
+        "CycleVisibleInProjection"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Direct issue-update route in the owner hot workload.",
+      "callers": [
+        "server/issue_records_api.go:updateIssueRecord"
+      ]
+    }
+  }
+}

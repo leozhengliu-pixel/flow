@@ -28,9 +28,13 @@ type issueEditorLookups struct {
 	updateBytes            uint64
 	formerLoaded           bool
 	updatesLoaded          bool
-	err                    error
-	releases               []func()
-	closed                 bool
+	// liveMembers mirrors a legacy write whose member snapshot is the
+	// live membership list (loadMemberAccess): without memberships that
+	// list is empty, so no snapshot member counts as former.
+	liveMembers bool
+	err         error
+	releases    []func()
+	closed      bool
 }
 
 func newIssueEditorLookups(ctx context.Context, inputs *issueHotInputs, tx *sqlTx, workspace, workspaceID string, target domain.Issue) (_ *issueEditorLookups, err error) {
@@ -147,6 +151,9 @@ func (r *issueEditorLookups) loadFormer() error {
 		return err
 	}
 	if !hasMemberships {
+		if r.liveMembers {
+			return nil
+		}
 		if err := r.loadNativeFormer(); err != nil {
 			return r.failure(err)
 		}

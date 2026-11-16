@@ -18,6 +18,11 @@ type issueHotInputs struct {
 	store   *SQLiteStore
 	source  *metadataLogicalSource
 	release []func()
+	// move is the label closure of an update that moves the target into
+	// moveTeam (issueTeamMove: labels named like the target's), selected
+	// with the referenced labels in one pass.
+	move     *issueTeamMove
+	moveTeam string
 }
 
 func (r *issueHotInputs) close() {
@@ -328,6 +333,15 @@ func (s *SQLiteStore) loadIssueSelectedInputs(ctx context.Context, workspace str
 	if err := issueHotMentionIDs(input.DescriptionData, func(id string) error { return read.addKey(ctx, users, id) }); err != nil {
 		return nil, err
 	}
+	if input.TeamID != nil && *input.TeamID != target.Team.ID {
+		// moveIssueToTeam replaces each label the destination cannot use by
+		// the first same-named label it can: select every label named like
+		// one the target carries (issueTeamMove), in collection order.
+		read.moveTeam = *input.TeamID
+		if read.move, err = read.prepareIssueTeamMove(ctx, []domain.Issue{target}, nil, []string{*input.TeamID}, nil, false); err != nil {
+			return nil, err
+		}
+	}
 	changedDescription := input.Description != nil || input.DescriptionData != nil || input.DescriptionState != nil || input.ContentState != nil
 	text := ""
 	if changedDescription {
@@ -430,11 +444,15 @@ func issueHotInputsSupported(issues []domain.Issue, target domain.Issue, input d
 }
 
 func (r *issueHotInputs) loadReferences(ctx context.Context, data *domain.Bootstrap, target domain.Issue, users, labels map[string]bool) error {
-	// This subset never moves teams. Its only suggestion operation removes
-	// every target suggestion before clearing the target's derived arrays.
+	// Its only suggestion operation, here or in a team move, removes every
+	// target suggestion before clearing the target's derived arrays.
 	// Suggestion and SLA-event metadata changes are discarded by this writer.
 	if err := r.selectSlice(ctx, "labels", func(record metadataLogicalNode) (bool, error) {
-		return issueHotMatches(ctx, record, "ID", labels)
+		matched, err := issueHotMatches(ctx, record, "ID", labels)
+		if err != nil || matched || r.move == nil {
+			return matched, err
+		}
+		return r.move.label(ctx, r, record)
 	}); err != nil {
 		return err
 	}
@@ -491,13 +509,16 @@ func (r *issueHotInputs) loadReferences(ctx context.Context, data *domain.Bootst
 		}
 		return r.withHeader(ctx, record, []string{"Enabled", "TeamIDs"}, func(value reflect.Value) (bool, error) {
 			rule := value.Interface().(domain.SLARule)
-			return rule.Enabled && (len(rule.TeamIDs) == 0 || slices.Contains(rule.TeamIDs, target.Team.ID)), nil
+			// A moved issue is matched in its destination team.
+			return rule.Enabled && (len(rule.TeamIDs) == 0 || slices.Contains(rule.TeamIDs, target.Team.ID) ||
+				r.moveTeam != "" && slices.Contains(rule.TeamIDs, r.moveTeam)), nil
 		})
 	}); err != nil {
 		return err
 	}
 	// Only relevant suspended members matter to the no-SQL-memberships
-	// development fallback. Team moves, which also inspect roles, are excluded.
+	// development fallback. A team move replaces them with the live member
+	// and team-member rows of these users (issueMoveAudience).
 	return r.selectSlice(ctx, "members", func(record metadataLogicalNode) (bool, error) {
 		user, err := issueHotField(ctx, record, "User")
 		if err != nil {

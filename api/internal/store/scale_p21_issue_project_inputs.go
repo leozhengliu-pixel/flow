@@ -7,11 +7,14 @@ import (
 	"flow/api/internal/domain"
 )
 
-// Project inputs extend the frozen non-project selector. Actual team moves and
-// opaque editor state keep their independent coverage boundary.
-func issueProjectInputsSupported(target domain.Issue, input domain.IssueUpdateInput) bool {
-	return (input.TeamID == nil || *input.TeamID == target.Team.ID) &&
-		input.ContentState == nil && input.DescriptionState == nil
+// Project inputs extend the frozen non-project selector with project
+// progress, legacy editor snapshots (DescriptionState: its mention checks
+// read the owned issueEditorLookups) and actual team moves (the label and
+// SLA closure of loadIssueSelectedInputs plus the attached documents).
+// A CRDT snapshot (ContentState) keeps its coverage boundary: decoding it
+// has no admitted work bound yet.
+func issueProjectInputsSupported(_ domain.Issue, input domain.IssueUpdateInput) bool {
+	return input.ContentState == nil
 }
 
 func (s *SQLiteStore) loadIssueProjectInputs(ctx context.Context, workspace string, data *domain.Bootstrap, target domain.Issue, input domain.IssueUpdateInput) (_ *issueHotInputs, err error) {
@@ -47,6 +50,13 @@ func (s *SQLiteStore) loadIssueProjectInputs(ctx context.Context, workspace stri
 		return issueHotMatches(ctx, record, "ID", projects)
 	}); err != nil {
 		return nil, err
+	}
+	if read.move != nil {
+		// moveIssueDocuments re-derives the scope of the documents attached
+		// to the moved issue (with the projects they name).
+		if err := read.loadIssueDocuments(ctx, map[string]bool{target.ID: true}); err != nil {
+			return nil, err
+		}
 	}
 	return read, ctx.Err()
 }

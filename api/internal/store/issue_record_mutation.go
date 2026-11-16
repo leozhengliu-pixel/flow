@@ -81,8 +81,12 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			}
 			metadata.ViewerRole = role
 		}
-		if err := s.loadMemberAccess(ctx, &metadata); err != nil {
-			return domain.Bootstrap{}, err
+		if !s.BoundedMetadataEnabled() {
+			// Bounded writes read the rows of the people they can name
+			// in the transaction instead (issueMoveAudience).
+			if err := s.loadMemberAccess(ctx, &metadata); err != nil {
+				return domain.Bootstrap{}, err
+			}
 		}
 		return metadata, nil
 	}
@@ -121,7 +125,12 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return err
 		}
 		defer tx.Rollback()
-		if issueRenumbering(ctx) {
+		if issueRenumbering(ctx) && s.BoundedMetadataEnabled() {
+			// The installed image holds NextIssueNumber (issueTeamMove).
+			if metadata.NextIssueNumber, err = s.issueUpdateSequence(ctx, tx, workspace); err != nil {
+				return err
+			}
+		} else if issueRenumbering(ctx) {
 			// Lock the sequence before any issue row, in the order issue
 			// creation takes them.
 			next, err := s.lockedNextIssueNumber(ctx, tx, workspace)
@@ -258,6 +267,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return sql.ErrNoRows
 		}
 		var projectInputs *issueHotInputs
+		var editor *issueEditorLookups
 		if s.BoundedMetadataEnabled() {
 			states, err := s.loadIssueWorkflowStates(ctx, workspace, &metadata, scope.Payload)
 			if err != nil {
@@ -266,23 +276,52 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			defer states.close()
 			metadata.States = states.states
 			storedMetadata.States = slices.Clone(states.states)
-			if input, ok := scope.Payload.(domain.IssueUpdateInput); ok && issueHotInputsSupported(metadata.Issues, *target, input) {
-				inputs, err := s.loadIssueHotInputs(ctx, workspace, &metadata, *target, input)
-				if err != nil {
+			// An untyped payload (the stale-close and archive automation) runs
+			// applyUpdate's state path at most: it reads the closure of an
+			// update without input fields. Its event payload is unchanged.
+			input, _ := scope.Payload.(domain.IssueUpdateInput)
+			var inputs *issueHotInputs
+			if issueHotInputsSupported(metadata.Issues, *target, input) {
+				if inputs, err = s.loadIssueHotInputs(ctx, workspace, &metadata, *target, input); err != nil {
 					return err
 				}
 				defer inputs.close()
 				inputs.install(&metadata, &storedMetadata)
-			} else if input, ok := scope.Payload.(domain.IssueUpdateInput); ok && issueProjectInputsSupported(*target, input) {
-				projectInputs, err = s.loadIssueProjectInputs(ctx, workspace, &metadata, *target, input)
-				if err != nil {
+			} else if issueProjectInputsSupported(*target, input) {
+				if projectInputs, err = s.loadIssueProjectInputs(ctx, workspace, &metadata, *target, input); err != nil {
 					return err
 				}
 				defer projectInputs.close()
 				projectInputs.installProjects(&metadata, &storedMetadata)
-			} else if _, ok := scope.Payload.(domain.IssueUpdateInput); ok {
+				inputs = projectInputs
+			} else {
 				return ErrBoundedMetadataCoverage
 			}
+			_, actor := actorFromContext(ctx)
+			if issueRenumbering(ctx) {
+				if !actor {
+					// The legacy write then keeps the snapshot's members.
+					return fmt.Errorf("%w: renumbering issue update without an actor", ErrBoundedMetadataCoverage)
+				}
+				users := []string{metadata.Viewer.ID}
+				for _, user := range metadata.Users {
+					users = append(users, user.ID)
+				}
+				metadata.Members, metadata.TeamMembers, err = inputs.issueMoveAudience(ctx, tx, metadata.Workspace.ID, users)
+				if err != nil {
+					return err
+				}
+				storedMetadata.Members, storedMetadata.TeamMembers = slices.Clone(metadata.Members), slices.Clone(metadata.TeamMembers)
+			} else if input.TeamID != nil && *input.TeamID != target.Team.ID {
+				// Moved by another write since the caller read the issue: the
+				// legacy write numbers it from the snapshot, unlocked.
+				return fmt.Errorf("%w: team move without renumbering", ErrBoundedMetadataCoverage)
+			}
+			if editor, err = newIssueEditorLookups(ctx, inputs, tx, workspace, metadata.Workspace.ID, *target); err != nil {
+				return err
+			}
+			defer editor.close()
+			editor.liveMembers = issueRenumbering(ctx) && actor
 		}
 		metadata.Activities = map[string][]domain.ActivityEvent{}
 		metadata.Comments = map[string][]domain.Comment{}
@@ -319,8 +358,13 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if err != nil {
 			return err
 		}
-		metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
-		metadata.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
+		if editor != nil {
+			metadata.FormerMembers = editor.formerMembers
+			metadata.CollaborationUpdates = editor.collaborationUpdates
+		} else {
+			metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
+			metadata.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
+		}
 		if len(fields) > 0 && !slices.Contains(fields, "projects") {
 			if projectInputs != nil {
 				metadata.Projects = nil
@@ -348,6 +392,11 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		metadata.CollaborationUpdates = nil
 		metadata.FormerMembers = nil
+		if editor != nil && editor.err != nil {
+			// A budget, coverage or cancellation failure of a bounded lookup
+			// the callback used; SQL errors keep the legacy warning.
+			return editor.err
+		}
 		if metadata.ActivityHistoryError != nil {
 			return metadata.ActivityHistoryError
 		}
