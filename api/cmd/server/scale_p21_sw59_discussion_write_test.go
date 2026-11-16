@@ -196,6 +196,11 @@ func scaleP21SW59Normalized(t *testing.T, result scaleP21SW59Outcome, before sca
 				if clock, err := time.Parse(time.RFC3339Nano, item); err == nil && !clock.Before(started) && !clock.After(finished) {
 					return "<generated-clock>"
 				}
+				// A digest email is due an hour after its notification during the team's working hours (and at a fixed
+				// 09:00 otherwise), so on weekday working hours its due time is a generated clock plus one hour.
+				if clock, err := time.Parse(time.RFC3339Nano, item); err == nil && strings.EqualFold(field, "nextattemptat") && !clock.Add(-time.Hour).Before(started) && !clock.Add(-time.Hour).After(finished) {
+					return "<generated-clock+1h>"
+				}
 			}
 		case map[string]any:
 			for key, child := range item {
