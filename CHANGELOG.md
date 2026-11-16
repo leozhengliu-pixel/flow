@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Project status updates are saved again when a project has two updates with the same ID: every later workspace write failed with a decoding error.
 - Team catalog, project and personal settings writes save edits to a workspace list or map stored inline (an entry shares or lacks its ID, or a key is very long) instead of skipping them or writing rows the next load ignores; other record writers refuse such a write rather than lose it.
 - Triage Intelligence suggests the same project, assignee, label or team on every run when several score equally, preferring the one scored first, instead of picking one at random.
 - Edits to a workspace list or map that is stored inline (because an entry shares or lacks its ID, or a map key is very long), such as accepting or dismissing Triage Intelligence suggestions, are saved again: the entry was dropped from the running server's copy and the edit lost on restart, and duplicate entries were removed.

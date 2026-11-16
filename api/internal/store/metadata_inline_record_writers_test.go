@@ -174,3 +174,82 @@ func TestInlineMetadataRecordWritersPersist(t *testing.T) {
 		}
 	})
 }
+
+// Project updates whose IDs repeat within a project are stored per project
+// (one row holding the project's update list). Writes used to fail decoding
+// that row as a single update; they now persist and reload unchanged.
+func TestProjectUpdatesWithDuplicateIDsPersist(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	repo, config, data := inlineRebaseStore(t)
+	workspace := data.Workspace.URLKey
+	at := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
+	if err := repo.MutateWorkspace(t.Context(), workspace, "project_updates.seed", "", nil, func(data *domain.Bootstrap) error {
+		data.Projects = append(data.Projects, domain.Project{ID: "updates-dup", Name: "Duplicates", TeamIDs: []string{}},
+			domain.Project{ID: "updates-unique", Name: "Unique", TeamIDs: []string{}})
+		if data.ProjectUpdates == nil {
+			data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
+		}
+		data.ProjectUpdates["updates-dup"] = []domain.ProjectUpdate{
+			{ID: "update-a", ProjectID: "updates-dup", Body: "first", Health: "onTrack", CreatedAt: at},
+			{ID: "update-twice", ProjectID: "updates-dup", Body: "twice", Health: "onTrack", CreatedAt: at},
+			{ID: "update-twice", ProjectID: "updates-dup", Body: "twice again", Health: "onTrack", CreatedAt: at},
+		}
+		data.ProjectUpdates["updates-unique"] = []domain.ProjectUpdate{{ID: "update-u", ProjectID: "updates-unique", Body: "only", Health: "atRisk", CreatedAt: at}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if inline, err := metadataFieldStoredInline(t.Context(), repo.db, repo.dialect, workspace, "projectUpdates"); err != nil || !inline {
+		t.Fatalf("fixture projectUpdates is stored per update: %v", err)
+	}
+	bodies := func(data domain.Bootstrap) string {
+		var parts []string
+		for _, id := range []string{"updates-dup", "updates-unique"} {
+			for _, update := range data.ProjectUpdates[id] {
+				parts = append(parts, update.ID+":"+update.Body)
+			}
+		}
+		return strings.Join(parts, ",")
+	}
+	t.Run("full-write", func(t *testing.T) {
+		if err := repo.MutateWorkspace(t.Context(), workspace, "project_updates.edit", "", nil, func(data *domain.Bootstrap) error {
+			updates := append([]domain.ProjectUpdate(nil), data.ProjectUpdates["updates-dup"]...)
+			updates[0].Body = "edited"
+			updates = append(updates, domain.ProjectUpdate{ID: "update-new", ProjectID: "updates-dup", Body: "new", Health: "onTrack", CreatedAt: at})
+			data.ProjectUpdates["updates-dup"] = updates
+			unique := append([]domain.ProjectUpdate(nil), data.ProjectUpdates["updates-unique"]...)
+			unique[0].Body = "only edited"
+			data.ProjectUpdates["updates-unique"] = unique
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		fresh := inlineMetadataReloadEqual(t, repo, config, workspace, "projectUpdates")
+		if got := bodies(fresh); got != "update-a:edited,update-twice:twice,update-twice:twice again,update-new:new,update-u:only edited" {
+			t.Fatalf("project updates after the full write: %s", got)
+		}
+	})
+	t.Run("project-record", func(t *testing.T) {
+		ctx := WithProjectRecordSelection(ContextWithActor(t.Context(), data.Viewer), func(domain.Bootstrap) (MetadataRecordScope, bool) {
+			return MetadataRecordScope{Fields: []string{"projectUpdates"}, Write: []RecordKey{{Kind: "projects", ID: "updates-dup"}}}, true
+		})
+		if err := repo.MutateWorkspace(ctx, workspace, "project.updated", "updates-dup", map[string]any{"name": "Renamed"}, func(data *domain.Bootstrap) error {
+			for index := range data.Projects {
+				if data.Projects[index].ID == "updates-dup" {
+					data.Projects[index].Name = "Renamed"
+				}
+			}
+			updates := append([]domain.ProjectUpdate(nil), data.ProjectUpdates["updates-dup"]...)
+			updates[1].Body = "twice edited"
+			data.ProjectUpdates["updates-dup"] = updates
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		fresh := inlineMetadataReloadEqual(t, repo, config, workspace, "projects", "projectUpdates")
+		if got := bodies(fresh); got != "update-a:edited,update-twice:twice edited,update-twice:twice again,update-new:new,update-u:only edited" {
+			t.Fatalf("project updates after the record write: %s", got)
+		}
+	})
+}
