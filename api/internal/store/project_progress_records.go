@@ -106,10 +106,11 @@ func progressActivities(ctx context.Context, reader progressReader, workspace st
 				rows.Close()
 				return nil, err
 			}
+			// Label deltas are stored as arrays (domain.ActivityMetadata).
 			var activity struct {
-				Type      string            `json:"type"`
-				CreatedAt time.Time         `json:"createdAt"`
-				Metadata  map[string]string `json:"metadata"`
+				Type      string                  `json:"type"`
+				CreatedAt time.Time               `json:"createdAt"`
+				Metadata  domain.ActivityMetadata `json:"metadata"`
 			}
 			if err := json.Unmarshal(raw, &activity); err != nil {
 				rows.Close()
