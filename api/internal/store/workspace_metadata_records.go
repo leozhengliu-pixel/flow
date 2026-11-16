@@ -430,19 +430,8 @@ func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, ke
 	// the project, like a project comment (the reference app answers in the update's
 	// thread).
 	if key.field == "projectUpdates" {
-		var next, prior metadataUpdate
-		if err := json.Unmarshal(value.data, &next); err != nil {
+		if err := syncProjectUpdateMentions(ctx, tx, workspace, key.key, value.data, previous); err != nil {
 			return err
-		}
-		if len(previous) > 0 {
-			if err := json.Unmarshal(previous, &prior); err != nil {
-				return err
-			}
-		}
-		if next.Parent != "" && len(next.Item) > 0 {
-			if err := syncNewCommentMentions(ctx, tx, workspace, next.Parent, next.Item, prior.Item); err != nil {
-				return err
-			}
 		}
 	}
 	if err := writeCustomerFilterRecord(ctx, tx, workspace, key.field, key.key, value.data); err != nil {
@@ -452,6 +441,66 @@ func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, ke
 		return err
 	}
 	return syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, value.data)
+}
+
+// syncProjectUpdateMentions starts the mention sessions of the comments a
+// project update row gained. A row normally holds one update
+// (metadataUpdate). When a project's updates repeat an ID the field is stored
+// per project instead: the row, keyed by the project, holds its update list,
+// and each update is compared with the same occurrence of its ID before.
+func syncProjectUpdateMentions(ctx context.Context, tx *sqlTx, workspace, key string, data, previous []byte) error {
+	if trimmed := bytes.TrimSpace(data); len(trimmed) == 0 || trimmed[0] != '{' {
+		var items, before []json.RawMessage
+		if err := json.Unmarshal(data, &items); err != nil {
+			return err
+		}
+		if trimmed := bytes.TrimSpace(previous); len(trimmed) > 0 && trimmed[0] == '[' {
+			if err := json.Unmarshal(previous, &before); err != nil {
+				return err
+			}
+		}
+		identity := func(raw json.RawMessage) string {
+			var item struct {
+				ID string `json:"id"`
+			}
+			_ = json.Unmarshal(raw, &item)
+			return item.ID
+		}
+		seen := map[string]int{}
+		for _, item := range items {
+			id := identity(item)
+			occurrence := seen[id]
+			seen[id]++
+			var prior json.RawMessage
+			for _, candidate := range before {
+				if identity(candidate) != id {
+					continue
+				}
+				if occurrence == 0 {
+					prior = candidate
+					break
+				}
+				occurrence--
+			}
+			if err := syncNewCommentMentions(ctx, tx, workspace, key, item, prior); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	var next, prior metadataUpdate
+	if err := json.Unmarshal(data, &next); err != nil {
+		return err
+	}
+	if len(previous) > 0 {
+		if err := json.Unmarshal(previous, &prior); err != nil {
+			return err
+		}
+	}
+	if next.Parent != "" && len(next.Item) > 0 {
+		return syncNewCommentMentions(ctx, tx, workspace, next.Parent, next.Item, prior.Item)
+	}
+	return nil
 }
 
 // syncNewCommentMentions starts application mention sessions for the
