@@ -1,0 +1,709 @@
+package encoding
+
+import "flow/api/internal/boundedcrdt/internal/meter"
+
+import (
+	"flow/api/internal/boundedcrdt/internal/block"
+	"flow/api/internal/boundedcrdt/internal/doc"
+	"flow/api/internal/boundedcrdt/internal/store"
+)
+
+// itemFullyKnown reports whether every clock an item covers is already
+// in the store for its client (its clock range lies entirely below the
+// client's next-free clock). Such an item carries no new information.
+func itemFullyKnown(mc *meter.Meter, bs *store.BlockStore, it *block.Item) bool {
+	mc.Enter()
+	defer mc.Leave()
+
+	return it.ID.Clock+it.Len <= bs.GetClock(mc, it.ID.Client)
+}
+
+// sliceWireItemRight trims a decoded wire Item to keep only the clocks
+// at or after offset, discarding the [0, offset) prefix the receiver
+// already has. After commit-time squash a peer may emit one item
+// spanning clocks the receiver partly knows; this keeps the unknown
+// right half so it integrates, instead of the whole item being dropped
+// on a first-clock-known check (which loses the new tail and breaks
+// convergence).
+//
+// The content is split (left half discarded), clock and length advance
+// by offset, and Origin is repointed at the last clock of the dropped
+// prefix so Repair re-resolves Left. Caller re-runs Repair before
+// integrating. Mirrors the slice yrs performs in Update::integrate.
+func sliceWireItemRight(mc *meter.Meter, it *block.Item, offset uint64) error {
+	mc.Enter()
+	defer mc.Leave()
+
+	if offset == 0 || offset >= it.Len {
+		return meter.Errorf(mc, "encoding: slice offset %d out of range for item len %d", offset, it.Len)
+	}
+	right, err := it.Content.Split(mc, offset)
+	if err != nil {
+		return err
+	}
+	it.Content = right
+	newClock := it.ID.Clock + offset
+	originID := block.ID{Client: it.ID.Client, Clock: newClock - 1}
+	it.Origin = meter.Pointer(mc, originID)
+	it.ID.Clock = newClock
+	it.Len -= offset
+	it.Left = nil // re-resolved by Repair from the new Origin
+	return nil
+}
+
+// Pending buffers items and delete-set entries that arrived before
+// their causal dependencies (Origin / RightOrigin / Parent-by-ID
+// referring to clocks the local BlockStore has not yet seen).
+//
+// yrs's equivalent state lives in `Store::pending` (`store.rs` field
+// `pending: Option<PendingUpdate>`) plus `pending_ds`
+// (`Option<DeleteSet>`). We collapse both into a single Pending
+// struct attached to the Doc via the opaque `pendingState any` slot.
+//
+// Lifecycle: Update.Apply integrates the incoming update's blocks and
+// delete set, then the queued delete set, then, when something was
+// queued, the queued blocks with the update's leftovers (the order of
+// yjs readUpdateV2). Items that integrate leave the queue; the leftover
+// stays for the next ApplyUpdate call.
+//
+// Concurrency: Pending is mutated only under the doc's write lock
+// (acquired by the surrounding TransactionMut). No internal mutex.
+type Pending struct {
+	// Blocks groups queued wire-level Block records by clientID.
+	// Per-client entries are kept in clock-ascending order to
+	// preserve causal-prefix ordering — yrs relies on this when
+	// dropping a contiguous prefix that has become satisfied.
+	Blocks map[uint64][]Block
+
+	// DeleteSet stores ranges whose target IDs are not yet present
+	// in the local store. yrs calls this `pending_ds`. Each Apply
+	// re-scans these ranges; those whose target now exists get
+	// applied.
+	DeleteSet *IdSet
+}
+
+// NewPending returns an empty buffer.
+func NewPending(mc *meter.Meter) *Pending {
+	mc.Enter()
+	defer mc.Leave()
+
+	return meter.Pointer(mc, Pending{
+		Blocks: meter.Literal[map[uint64][]Block](mc, 128, func() map[uint64][]Block {
+			return map[uint64][]Block{}
+		}),
+		DeleteSet: NewIdSet(mc),
+	})
+}
+
+// IsEmpty reports whether the buffer holds zero queued items.
+func (p *Pending) IsEmpty(mc *meter.Meter) bool {
+	mc.Enter()
+	defer mc.Leave()
+
+	if p == nil {
+		return true
+	}
+	if len(p.Blocks) > 0 {
+		return false
+	}
+	if p.DeleteSet == nil {
+		return true
+	}
+	empty := true
+	p.DeleteSet.Iterate(mc, func(_ uint64, ranges []Range) {
+		if len(ranges) > 0 {
+			empty = false
+		}
+	})
+	return empty
+}
+
+// BlockCount returns the total number of queued blocks across all
+// clients. Useful for tests and observability ("how many items are
+// stuck waiting?").
+func (p *Pending) BlockCount(mc *meter.Meter) int {
+	mc.Enter()
+	defer mc.Leave()
+
+	if p == nil {
+		return 0
+	}
+	n := 0
+	for _, list := range p.Blocks {
+		mc.Step()
+
+		n += len(list)
+	}
+	return n
+}
+
+// MissingSV returns the state vector describing what the local
+// store is missing to satisfy every queued item's dependencies.
+// Sync-protocol callers use this to request the gap from the peer
+// ("send me everything since (client, clock) for each entry").
+//
+// For each pending item we walk Origin and RightOrigin; for each
+// reference that points outside the current BlockStore, we record
+// (clientID, clock+1) — the receiver wants every clock starting at
+// that target, and the SV convention is "the smallest clock NOT
+// yet seen". Parent-by-ID references contribute the same way.
+//
+// A block queued because of a hole in its OWN client sequence
+// contributes that client's currently-known clock, which is the
+// smallest one not yet seen for it. Without this, a document stuck
+// purely on such a hole reported an empty vector and could not name
+// what it needed — the first item in a root type has no Origin,
+// RightOrigin or Parent-by-ID to walk.
+//
+// Entries merge by taking the larger clock, so when one client has
+// several unmet needs the vector names the highest of them: it is a
+// request that may have to be repeated, not a complete manifest.
+//
+// Returns an empty map when nothing is missing.
+func (p *Pending) MissingSV(mc *meter.Meter, bs *store.BlockStore) store.StateVector {
+	mc.Enter()
+	defer mc.Leave()
+
+	out := meter.MakeMap[store.StateVector, uint64, uint64](mc, 0)
+
+	if p == nil {
+		return out
+	}
+	track := func(ref block.ID) {
+		if bs.Contains(mc, ref) {
+			return
+		}
+		want := ref.Clock + 1
+		if cur, ok := out[ref.Client]; !ok || want > cur {
+			meter.Set(mc, out, ref.Client, want)
+		}
+	}
+	for client, list := range p.Blocks {
+		mc.Step()
+
+		for _, b := range list {
+			mc.Step()
+
+			// A hole in the block's own client sequence is a dependency as
+			// real as an Origin reference, and for a first-in-a-root item it
+			// is the ONLY one - all three references below are nil or
+			// non-ID there. Leaving it out made MissingSV report an empty
+			// vector on a document that was demonstrably stuck, so the
+			// documented recovery path (ask a peer for what is missing)
+			// could not name the thing it needed.
+			// Block.ID is only populated for GC and Skip blocks; an item
+			// carries its own. Reading the wrong one here made this whole
+			// branch silently dead - it compared 0 against the known clock
+			// and never fired.
+			start := b.ID
+			if b.Kind == WireBlockItem && b.Item != nil {
+				start = b.Item.ID
+			}
+			if known := bs.GetClock(mc, client); start.Clock > known {
+				// The smallest clock not yet seen for this client, which is
+				// exactly what the store already has: everything from there
+				// up to the queued block is what we are waiting for.
+				if cur, ok := out[client]; !ok || known > cur {
+					meter.Set(mc, out, client, known)
+				}
+			}
+			if b.Kind != WireBlockItem || b.Item == nil {
+				continue
+			}
+			it := b.Item
+			if it.Origin != nil {
+				track(*it.Origin)
+			}
+			if it.RightOrigin != nil {
+				track(*it.RightOrigin)
+			}
+			if it.Parent.Kind == block.ParentID {
+				track(it.Parent.ID)
+			}
+		}
+	}
+	return out
+}
+
+// addBlock appends b to the per-client queue, keeping the queue
+// sorted by clock ascending so causal-prefix integration sees the
+// earliest unsatisfied item first.
+// blockLen is how many clocks a queued block covers, whichever kind it is.
+func blockLen(mc *meter.Meter, b Block) uint64 {
+	mc.Enter()
+	defer mc.Leave()
+
+	if b.Kind == WireBlockItem {
+		if b.Item == nil {
+			return 0
+		}
+		return b.Item.Len
+	}
+	return b.Len
+}
+
+func (p *Pending) addBlock(mc *meter.Meter, client uint64, b Block) {
+	mc.Enter()
+	defer mc.Leave()
+
+	list := p.Blocks[client]
+	clock := blockStartClock(mc, b)
+	idx := meter.Search(mc, len(list), func(i int) bool {
+		return blockStartClock(mc, list[i]) >= clock
+	})
+	// Two blocks can start at the same clock and cover different amounts of
+	// it: peers split a client's run at different points, so one may hand us
+	// (10, len 5) where another hands us (10, len 2). Keeping whichever
+	// arrived first and discarding the other loses the difference outright -
+	// re-applying the same update must not double-queue, but a LONGER block
+	// at a known start clock is new content, not a duplicate.
+	if idx < len(list) && blockStartClock(mc, list[idx]) == clock {
+		if blockLen(mc, b) > blockLen(mc, list[idx]) {
+			list[idx] = b
+		}
+		return
+	}
+	list = meter.Append(mc, list, Block{})
+	copy(list[idx+1:], list[idx:])
+	list[idx] = b
+	meter.Set(mc, p.Blocks, client, list)
+}
+
+func blockStartClock(mc *meter.Meter, b Block) uint64 {
+	mc.Enter()
+	defer mc.Leave()
+
+	switch b.Kind {
+	case WireBlockItem:
+		if b.Item != nil {
+			return b.Item.ID.Clock
+		}
+	case WireBlockGC, WireBlockSkip:
+		return b.ID.Clock
+	}
+	return 0
+}
+
+// itemMissingDep reports whether any of an Item's wire-level
+// dependency references point to a clock the local store has not
+// seen yet. Used by every integration pass to decide if an item is
+// still stuck.
+func itemMissingDep(mc *meter.Meter, bs *store.BlockStore, it *block.Item) bool {
+	mc.Enter()
+	defer mc.Leave()
+
+	if it == nil {
+		return false
+	}
+	if it.Origin != nil && !bs.Contains(mc, *it.Origin) {
+		return true
+	}
+	if it.RightOrigin != nil && !bs.Contains(mc, *it.RightOrigin) {
+		return true
+	}
+	if it.Parent.Kind == block.ParentID && !bs.Contains(mc, it.Parent.ID) {
+		return true
+	}
+	// A hole in the item's OWN client sequence is a missing dependency
+	// too, even when every explicit reference resolves. An item that
+	// starts above the clock we have for its client (a delta published
+	// against a state vector we never received, or simply an update
+	// delivered out of order) has an implicit dependency on the blocks
+	// filling that hole: yrs `Update::integrate` and yjs
+	// `integrateStructs` both hold such a struct back and record the
+	// gap in `missing`.
+	//
+	// Integrating it anyway pushes the store clock past the hole, and
+	// PushBlock's precondition (store.go: "item.ID.Clock ==
+	// s.GetClock(...)") is broken. The damage is silent and permanent:
+	// the blocks that would have filled the hole arrive later, read as
+	// clock-below-known, and are dropped as already-known. Measured
+	// against yjs 13.6.32 before the fix, one client editing two roots
+	// and publishing only the second delta lost the first root's text
+	// outright when the deltas arrived newest-first.
+	if it.ID.Clock > bs.GetClock(mc, it.ID.Client) {
+		return true
+	}
+	return false
+}
+
+// collectedDep reports whether an item whose references are all in the
+// store hangs off something garbage collection removed: its origin or
+// right origin lies in a GC run, or its parent by ID is a GC run or an
+// item that no longer holds a type (a collected type keeps only a
+// ContentDeleted marker). Mirrors the cases yjs Item.getMissing turns
+// into a null parent.
+func collectedDep(mc *meter.Meter, txn *doc.TransactionMut, it *block.Item) bool {
+	mc.Enter()
+	defer mc.Leave()
+
+	if it.Origin != nil && txn.GetItem(mc, *it.Origin) == nil {
+		return true
+	}
+	if it.RightOrigin != nil && txn.GetItem(mc, *it.RightOrigin) == nil {
+		return true
+	}
+	if it.Parent.Kind == block.ParentID {
+		p := txn.GetItem(mc, it.Parent.ID)
+		if p == nil || p.Content.Kind != block.KindType || p.Content.Branch == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// foldUpdate merges every block and delete-set entry from u into p.
+// Items that the local store already has are silently dropped (no
+// need to retry them).
+func (p *Pending) foldUpdate(mc *meter.Meter, u *Update, bs *store.BlockStore) {
+	mc.Enter()
+	defer mc.Leave()
+
+	for client, list := range u.Blocks {
+		mc.Step()
+
+		for _, b := range list {
+			mc.Step()
+
+			switch b.Kind {
+			case WireBlockItem:
+				// Keep unless the item is fully known. A partially
+				// known item (squashed peer block overlapping the
+				// state-vector boundary) is queued and sliced at
+				// integration time, not dropped on a first-clock check.
+				if b.Item != nil && itemFullyKnown(mc, bs, b.Item) {
+					continue
+				}
+				p.addBlock(mc, client, b)
+			case WireBlockGC, WireBlockSkip:
+				// Keep unless fully known; a run whose start the store
+				// has is trimmed at integration time, like an item.
+				if b.ID.Clock+b.Len <= bs.GetClock(mc, client) {
+					continue
+				}
+				p.addBlock(mc, client, b)
+			}
+		}
+	}
+	if u.DeleteSet != nil {
+		// In the order the update wrote its clients, which applyDeletes
+		// keeps for an update's own delete set.
+		for _, client := range u.DeleteSet.ClientsInOrder(mc) {
+			mc.Step()
+
+			for _, r := range u.DeleteSet.ClientRanges(mc, client) {
+				mc.Step()
+
+				p.DeleteSet.Insert(mc, client, r.Start, r.Length)
+			}
+		}
+	}
+}
+
+// integrateAll runs block passes until one integrates nothing and returns
+// the number of blocks integrated. Passes take clients from the highest ID
+// down and a client's blocks in clock order, as yjs integrateStructs does,
+// because the order of a transaction's deletions decides the order an
+// UndoManager restores them in, and the order map keys are first set is
+// the order deleting their map walks them (Branch.MapOrder). yjs follows a
+// block's missing dependency into the client of the same update that has
+// it at once; a pass here skips the block and the next pass takes it, so
+// the order differs when an update holds a block that depends on another
+// of its clients' blocks (docs/tech-debt.md). A block with a still-missing
+// dep does not stop its client: a later clock may depend on another chain.
+func (p *Pending) integrateAll(mc *meter.Meter, txn *doc.TransactionMut) int {
+	mc.Enter()
+	defer mc.Leave()
+
+	total := 0
+	for {
+		mc.Step()
+
+		n := p.integrateBlocks(mc, txn)
+		total += n
+		if n == 0 {
+			return total
+		}
+	}
+}
+
+// absorb moves q's blocks and delete-set ranges into p.
+func (p *Pending) absorb(mc *meter.Meter, q *Pending) {
+	mc.Enter()
+	defer mc.Leave()
+
+	for client, list := range q.Blocks {
+		mc.Step()
+
+		for _, b := range list {
+			mc.Step()
+
+			p.addBlock(mc, client, b)
+		}
+	}
+	q.DeleteSet.Iterate(mc, func(client uint64, ranges []Range) {
+		for _, r := range ranges {
+			mc.Step()
+
+			p.DeleteSet.Insert(mc, client, r.Start, r.Length)
+		}
+	})
+}
+
+// integrateBlocks is one pass over the queued blocks, clients from the
+// highest ID down. Returns the number of blocks integrated.
+func (p *Pending) integrateBlocks(mc *meter.Meter, txn *doc.TransactionMut) int {
+	mc.Enter()
+	defer mc.Leave()
+
+	bs := txn.Store(mc)
+	progress := 0
+
+	clients := meter.MakeSlice[[]uint64, uint64](mc, uint64(0), uint64(len(p.Blocks)))
+	for c := range p.Blocks {
+		mc.Step()
+
+		clients = meter.Append(mc, clients, c)
+	}
+	meter.Slice(mc, clients, func(i, j int) bool { return clients[i] > clients[j] })
+
+	for _, c := range clients {
+		mc.Step()
+
+		list := p.Blocks[c]
+		remaining := list[:0]
+		for _, b := range list {
+			mc.Step()
+
+			switch b.Kind {
+			case WireBlockGC:
+				known := bs.GetClock(mc, c)
+				if b.ID.Clock+b.Len <= known {
+					continue // fully known
+				}
+				if b.ID.Clock < known {
+					// The store has the start of the run: keep the
+					// unknown tail, as yjs GC.integrate does with an
+					// offset. Dropping the whole run left this
+					// client's clock behind for good.
+					b.Len -= known - b.ID.Clock
+					b.ID.Clock = known
+				}
+				if b.ID.Clock > known {
+					// Gap ahead of what we have for this client;
+					// PushGC has PushBlock's monotonicity
+					// precondition, so queue rather than punch a
+					// hole. Same reasoning as itemMissingDep.
+					remaining = meter.Append(mc, remaining, b)
+					continue
+				}
+				bs.PushGC(mc, c, b.ID.Clock, b.ID.Clock+b.Len-1)
+				progress++
+			case WireBlockSkip:
+				// Skip blocks reserve clock space without semantics;
+				// we drop them once they reach the front of the queue
+				// (matches Apply's current handling).
+				progress++
+			case WireBlockItem:
+				it := b.Item
+				if it == nil {
+					continue
+				}
+				known := bs.GetClock(mc, c)
+				if it.ID.Clock+it.Len <= known {
+					continue // fully known now
+				}
+				if it.ID.Clock < known {
+					// Partial overlap: drop the known prefix and keep
+					// the unknown right half. Origin now points just
+					// below `known`, a clock the store has, so the
+					// left dependency is satisfied.
+					if err := sliceWireItemRight(mc, it, known-it.ID.Clock); err != nil {
+						// Non-splittable content at a partial boundary
+						// should not occur (single-element kinds have
+						// Len 1); drop rather than spin.
+						continue
+					}
+				}
+				if itemMissingDep(mc, bs, it) {
+					remaining = meter.Append(mc, remaining, b)
+					continue
+				}
+				if collectedDep(mc, txn, it) {
+					// What the item hangs off was garbage-collected:
+					// it integrates as a GC run of its length, so the
+					// client's clock moves on (yjs Item.getMissing sets
+					// the parent to null, Item.integrate writes a GC).
+					// Left queued, it blocked every later block of its
+					// client forever.
+					bs.PushGC(mc, c, it.ID.Clock, it.ID.Clock+it.Len-1)
+					progress++
+					continue
+				}
+				if err := block.Repair(mc, it, txn); err != nil {
+					// Repair failed (typically ParentIDUnresolved
+					// when nested types not yet supported) — leave
+					// queued; future code may resolve it.
+					remaining = meter.Append(mc, remaining, b)
+					continue
+				}
+				bs.PushBlock(mc, it)
+				if dropped := it.Integrate(mc, txn, 0); dropped {
+					txn.Delete(mc, it)
+				}
+				progress++
+			}
+		}
+		if len(remaining) == 0 {
+			delete(p.Blocks, c)
+		} else {
+			meter.Set(mc, p.Blocks, c, remaining)
+		}
+	}
+	return progress
+}
+
+// applyDeletes applies the delete set and keeps the ranges that still
+// point at unseen IDs. An update's own delete set (wireOrder) goes client
+// by client in the order the update wrote them, as yjs
+// readAndApplyDeleteSet reads it; the queued one from the highest client
+// ID down, the order yjs re-encodes its pending delete set in
+// (writeDeleteSet). The order of the deletions is the order an
+// UndoManager restores them in. Each range goes through applyDeleteRange,
+// which splits items at the range boundaries before tombstoning, so a
+// wire delete-set that covers a SUBSET of an existing item's clocks
+// tombstones only the matching middle slice instead of the whole item.
+// Returns the number of items deleted.
+func (p *Pending) applyDeletes(mc *meter.Meter, txn *doc.TransactionMut, wireOrder bool) int {
+	mc.Enter()
+	defer mc.Leave()
+
+	if p.DeleteSet == nil {
+		return 0
+	}
+	deleted := 0
+	remaining := NewIdSet(mc)
+	var clients []uint64
+	if wireOrder {
+		clients = p.DeleteSet.ClientsInOrder(mc)
+	} else {
+		p.DeleteSet.Iterate(mc, func(client uint64, _ []Range) {
+			clients = meter.Append(mc, clients, client)
+		})
+		for i, j := 0, len(clients)-1; i < j; i, j = i+1, j-1 {
+			mc.Step()
+
+			clients[i], clients[j] = clients[j], clients[i]
+		}
+	}
+	for _, client := range clients {
+		mc.Step()
+
+		for _, r := range p.DeleteSet.ClientRanges(mc, client) {
+			mc.Step()
+
+			n, leftover := applyDeleteRange(mc, txn, client, r.Start, r.End(mc))
+			deleted += n
+			if leftover.Length > 0 {
+				remaining.Insert(mc, client, leftover.Start, leftover.Length)
+			}
+		}
+	}
+	p.DeleteSet = remaining
+	return deleted
+}
+
+// applyDeleteRange tombstones every live Item covering any clock
+// in [start, end) for the given client. Splits items at start /
+// end boundaries via txn.MaterializeCleanStart / MaterializeCleanEnd
+// so the deletion lands precisely on the range. Returns the count
+// of items actually tombstoned plus the leftover range that could
+// not be applied (because a clock was missing from the store —
+// caller should re-queue).
+//
+// Mirrors yrs Store::integrate_delete_set inner loop. Per
+// docs/tech-debt.md "DeleteSet apply does not split items at
+// range boundaries" — resolves the gap that broke cross-client
+// convergence when a peer's delete partially covers an item the
+// receiver has as a single contiguous block.
+func applyDeleteRange(mc *meter.Meter, txn *doc.TransactionMut, client, start, end uint64) (int, Range) {
+	mc.Enter()
+	defer mc.Leave()
+
+	bs := txn.Store(mc)
+	deleted := 0
+	clock := start
+	for clock < end {
+		mc.Step()
+
+		cell, ok := bs.GetBlock(mc, block.ID{Client: client, Clock: clock})
+		if !ok {
+			// Unseen — re-queue from here.
+			return deleted, Range{Start: clock, Length: end - clock}
+		}
+		if it := cell.AsItem(mc); it == nil || it.IsDeleted(mc) {
+			// GC cell or an item already deleted: step past it whole.
+			// Cutting a deleted item would leave its pieces apart for
+			// good (nothing in this transaction re-merges them), so the
+			// store and every later encoding would differ from yjs,
+			// whose readAndApplyDeleteSet only splits live items.
+			if !advanceClock(mc, &clock, cell.ClockEnd(mc)) {
+				break
+			}
+			continue
+		}
+
+		// Materialize an Item starting at exactly clock. If the
+		// existing cell begins before clock, this splits the cell
+		// and returns the right half. Then check if the item
+		// extends past end-1; if so, materialize a clean end to
+		// split off the unaffected tail. Re-fetch after split.
+		item := txn.MaterializeCleanStart(mc, block.ID{Client: client, Clock: clock})
+		if item == nil {
+			// Shouldn't happen after GetBlock succeeded; defensive.
+			if !advanceClock(mc, &clock, cell.ClockEnd(mc)) {
+				break
+			}
+			continue
+		}
+		if item.ID.Clock+item.Len-1 >= end {
+			// Split at end-1 to keep our target item bounded.
+			_ = txn.MaterializeCleanEnd(mc, block.ID{Client: client, Clock: end - 1})
+			// Re-fetch the item starting at clock — the split
+			// produced a new left half ending exactly at end-1.
+			item = txn.GetItem(mc, block.ID{Client: client, Clock: clock})
+			if item == nil {
+				return deleted, Range{}
+			}
+		}
+
+		if !item.IsDeleted(mc) {
+			txn.Delete(mc, item)
+			deleted++
+		}
+		if !advanceClock(mc, &clock, item.ID.Clock+item.Len-1) {
+			break
+		}
+	}
+	return deleted, Range{}
+}
+
+// advanceClock moves *clock past lastInclusive (the inclusive upper
+// clock of the cell just processed) and reports whether it advanced. It
+// returns false WITHOUT moving when stepping forward would not make
+// progress: either lastInclusive is below the current clock (a
+// zero-length item, whose ID.Clock+Len-1 underflows below clock) or it
+// is the very top of the uint64 space (a malformed Skip reaching
+// MaxUint64, where +1 wraps to 0 and would restart the scan). Callers
+// break instead of spinning or wrapping back to clock 0. Well-formed
+// updates always advance, so this never fires for valid input.
+func advanceClock(mc *meter.Meter, clock *uint64, lastInclusive uint64) bool {
+	mc.Enter()
+	defer mc.Leave()
+
+	if lastInclusive < *clock || lastInclusive == ^uint64(0) {
+		return false
+	}
+	*clock = lastInclusive + 1
+	return true
+}

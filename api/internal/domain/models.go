@@ -3096,6 +3096,7 @@ type Bootstrap struct {
 	// CollaborationUpdates reads accepted, uncompacted updates through the
 	// write's reader, so mention checks preserve the live document too.
 	CollaborationUpdates func(documentID string) ([][]byte, error) `json:"-"`
+	CollaborationWork    func() CollaborationWork                  `json:"-"`
 
 	// TrashRetentionDays is set on bootstrap responses only: how long deleted
 	// items stay restorable (FLOW_TRASH_RETENTION_DAYS).

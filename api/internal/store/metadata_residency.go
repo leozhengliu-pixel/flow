@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"flow/api/internal/boundedcrdt"
 )
 
 var (
@@ -64,6 +66,9 @@ func validateBoundedMetadataCoverage() error {
 		}
 		slices.Sort(owners)
 		return fmt.Errorf("%w: %d registered full-workspace consumers (%s); keep FLOW_BOUNDED_METADATA off", ErrBoundedMetadataCoverage, len(consumers), strings.Join(owners, ", "))
+	}
+	if err := boundedcrdt.CheckRuntime(); err != nil {
+		return fmt.Errorf("%w: %w", ErrBoundedMetadataCoverage, err)
 	}
 	if !RecordHydrationEnabled() || recordJournalMode() != "on" {
 		return fmt.Errorf("%w: record hydration and the record journal must both be on", ErrBoundedMetadataCoverage)

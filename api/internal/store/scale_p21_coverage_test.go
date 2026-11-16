@@ -270,7 +270,7 @@ func TestScaleP21MCPToolInventory(t *testing.T) {
 
 // ActivityHistory* are transaction-scoped issue-edit inputs (a per-issue head
 // loader and the heads it read); like FormerMembers they are never resident.
-const scaleP21RuntimeMetadataFields = `NextIssueNumber ViewerTeamIDs TeamByID TeamByKey TeamChildren LabelIndex FormerMembers CollaborationUpdates ActivityHistoryLoader ActivityHistoryHeads ActivityHistoryError`
+const scaleP21RuntimeMetadataFields = `NextIssueNumber ViewerTeamIDs TeamByID TeamByKey TeamChildren LabelIndex FormerMembers CollaborationUpdates ActivityHistoryLoader ActivityHistoryHeads ActivityHistoryError CollaborationWork`
 
 func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 	for _, source := range []string{
