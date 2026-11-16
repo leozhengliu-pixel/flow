@@ -7,6 +7,8 @@ const columnIds: TeamColumn[] = ['id', 'membership', 'owners', 'projects', 'crea
 /** The reference app's default team columns: ID, Membership, Members, Active projects (Cycle stays opt-in). */
 export const defaultTeamColumns: TeamColumn[] = ['id', 'membership', 'members', 'projects']
 const PREFERENCES_VERSION = 2
+/** `collapsed` lists the parent teams whose sub-teams are hidden. */
+export interface TeamDirectoryPreferences { ordering: TeamOrdering; descending: boolean; columns: TeamColumn[]; collapsed: string[] }
 
 export function useTeamDirectoryControls(workspaceId: string, userId: string) {
   const [params, setParams] = useSearchParams()
@@ -20,14 +22,16 @@ export function useTeamDirectoryControls(workspaceId: string, userId: string) {
     return next
   }, { replace: true })
   const storageKey = `flow:team-directory:${workspaceId}:${userId}`
-  const [preferences, setPreferences] = useState(() => {
-    const fallback = { ordering: 'name' as TeamOrdering, descending: false, columns: defaultTeamColumns }
+  const [preferences, setPreferences] = useState<TeamDirectoryPreferences>(() => {
+    const fallback: TeamDirectoryPreferences = { ordering: 'name', descending: false, columns: defaultTeamColumns, collapsed: [] }
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) ?? 'null')
       if (!saved) return fallback
       return { ordering: (['name', 'created', 'updated'].includes(saved.ordering) ? saved.ordering : 'name') as TeamOrdering,
         descending: saved.descending === true,
-        columns: Array.isArray(saved.columns) ? migrateColumns(saved.columns.filter((id: TeamColumn) => columnIds.includes(id)) as TeamColumn[], saved.version) : fallback.columns }
+        columns: Array.isArray(saved.columns) ? migrateColumns(saved.columns.filter((id: TeamColumn) => columnIds.includes(id)) as TeamColumn[], saved.version) : fallback.columns,
+        // Collapsed parent teams stay collapsed on the next visit, like the reference app.
+        collapsed: Array.isArray(saved.collapsed) ? (saved.collapsed as unknown[]).filter((id): id is string => typeof id === 'string') : [] }
     } catch { return fallback }
   })
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify({ ...preferences, version: PREFERENCES_VERSION })) } catch { /* Storage can be unavailable in private sessions. */ } }, [preferences, storageKey])

@@ -2,7 +2,8 @@
  * LS-0142 ContentViewHeaderInlineSearch + LS-0143 ContentViewHeaderSearch.
  * Shared header find primitive: conditional inline vs always-visible directory search.
  */
-import { Search, X } from "lucide-react";
+import { X } from "lucide-react";
+import { FlowGlyph } from "@/components/ui/menu-glyphs";
 import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
 
 import "./content-view-header-search.css";
@@ -78,7 +79,8 @@ export function ContentViewHeaderSearch({
       data-has-value={value ? "" : undefined}
       style={style}
     >
-      {icon ?? <Search aria-hidden="true" />}
+      {/* Flow's filled search glyph, the same ink as the reference field (release pipelines already used it). */}
+      {icon ?? <FlowGlyph name="search" aria-hidden="true" />}
       <input
         ref={inputRef}
         id={reactId}

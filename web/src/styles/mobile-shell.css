@@ -439,3 +439,24 @@
   }
   html:root .sidebar .sidebar-help > svg { width: 14px; height: 14px; color: var(--text); opacity: .64; }
 }
+
+/* Phone sidebar button, as measured on the reference phone pages: a 32px round ghost button with a 14px panel glyph
+   (12.25x10.5 outline, divider at x4 of 16) drawn as one SVG in the muted icon ink on every page, nudged 0.1px right like the reference's glyph. */
+@media (max-width: 767px) {
+  html:root[data-sidebar-mode] body .app [data-sidebar-trigger] {
+    box-sizing: border-box;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+  }
+  html:root body .app [data-sidebar-trigger]::before {
+    width: 14px;
+    height: 14px;
+    transform: translateX(.1px);
+    background: var(--issue-muted);
+    mask: url('/icons/sidebar-navigation-left.svg') center / 14px 14px no-repeat;
+  }
+  html:root body .app [data-sidebar-trigger]::after { display: none; }
+  /* Pages that show their own 14px glyph instead get the same nudge. */
+  html:root body .app [data-sidebar-trigger] > svg { transform: translateX(.1px); }
+}

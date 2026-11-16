@@ -1,5 +1,6 @@
 import { subDays, subMonths, subYears } from 'date-fns'
 import type { Team, TeamMember } from '@/types/flow'
+import { treeGuideLevels, type teamHierarchy } from '@/lib/team-hierarchy'
 
 export type TeamOrdering = 'name' | 'created' | 'updated'
 export type TeamFilterField = 'members' | 'owners' | 'private' | 'created'
@@ -99,4 +100,44 @@ export function parseTeamFilters(raw: string | null): TeamDirectoryFilters {
 
 export function teamDateLabel(value: string) {
   return teamDateChoices.find(choice => choice.id === value)?.label ?? value.replace('date:', '').replace('/', ' - ')
+}
+
+/** One row of the teams page tree, in display order. */
+export interface TeamDirectoryRow {
+  team: Team
+  depth: number
+  /** Sub-teams are listed under this team (shown, or hidden by collapsing it). */
+  hasChildren: boolean
+  /** Shown only as the parent of a matching sub-team while searching or filtering: drawn dimmed. */
+  context: boolean
+  /** Guide levels (1…depth) that run past this row's bottom edge (see `treeGuideLevels`). */
+  through: number[]
+  /** The next row is this team's first sub-team, so a guide drops from under its icon. */
+  branchBelow: boolean
+}
+
+/**
+ * The teams page as a tree: every matching team plus the ancestors that place it, each level ordered by `compare`
+ * (the chosen ordering, so a descending order also reverses the sub-teams under their parent). An ancestor that does
+ * not match itself is kept as dimmed context; sub-teams of a collapsed team are left out.
+ */
+export function teamDirectoryRows(
+  teams: readonly Team[],
+  hierarchy: Pick<ReturnType<typeof teamHierarchy>, 'ancestors' | 'rows'>,
+  matches: (team: Team) => boolean,
+  compare: (left: Team, right: Team) => number,
+  collapsed: ReadonlySet<string> = new Set(),
+): TeamDirectoryRow[] {
+  const matching = new Set(teams.filter(matches).map(team => team.id))
+  const shown = new Set(matching)
+  for (const id of matching) for (const ancestor of hierarchy.ancestors.get(id) ?? []) shown.add(ancestor.id)
+  const listed = teams.filter(team => shown.has(team.id)).sort(compare)
+  const rows = hierarchy.rows(listed, new Set(collapsed), 'given')
+  const guides = treeGuideLevels(rows.map(row => row.depth))
+  return rows.map((row, index) => ({
+    ...row,
+    context: !matching.has(row.team.id),
+    through: guides[index],
+    branchBelow: (rows[index + 1]?.depth ?? -1) > row.depth,
+  }))
 }

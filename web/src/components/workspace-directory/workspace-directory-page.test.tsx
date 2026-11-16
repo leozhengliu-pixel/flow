@@ -194,7 +194,9 @@ describe('workspace teams directory', () => {
 
   it('uses the reference app\'s header, search and default columns', () => {
     renderTeams()
-    expect(screen.getByRole('button', { name: 'New team' })).toHaveClass('is-ghost')
+    // Like the reference app, the visible "New team" button is announced as "Create new team".
+    expect(screen.getByRole('button', { name: 'Create new team' })).toHaveClass('is-ghost')
+    expect(screen.getByRole('button', { name: 'Create new team' })).toHaveTextContent('New team')
     expect(screen.getByRole('searchbox', { name: 'Find teams' })).toHaveAttribute('placeholder', 'Find teams…')
     expect(screen.queryByText(/^\d+ teams?$/)).not.toBeInTheDocument()
     const header = document.querySelector('.workspace-team-columns') as HTMLElement
@@ -202,16 +204,29 @@ describe('workspace teams directory', () => {
     expect([...header.querySelectorAll('span')].map(span => span.textContent).filter(Boolean)).toEqual(['Description', 'Membership', 'Members', 'Active projects'])
     expect(screen.getByText('Builds the product')).toHaveClass('workspace-team-description')
     expect(screen.getByText('ENG')).toBeInTheDocument()
+    // The membership chip: a filled check glyph, then the label in its own block (it sets the label's baseline).
+    const joined = document.querySelector('span.workspace-team-joined') as HTMLElement
+    expect(joined.firstElementChild?.tagName.toLowerCase()).toBe('svg')
+    expect(joined.firstElementChild?.getAttribute('fill')).toBe('currentColor')
+    expect(joined.lastElementChild).toHaveTextContent('Joined')
+    // The search field draws the filled search glyph, not a stroked one.
+    expect(screen.getByRole('searchbox', { name: 'Find teams' }).previousElementSibling?.getAttribute('stroke')).toBeNull()
   })
 
-  it('hides the default Name sort arrow until hover and keeps it once an order is chosen', async () => {
+  it('hides the default Name sort arrow until hover; the first click chooses A–Z, the next flips it', async () => {
     const user = userEvent.setup()
     renderTeams()
     const header = document.querySelector('.workspace-team-columns') as HTMLElement
     const name = within(header).getByRole('button', { name: 'Order by Name' })
     expect(name).not.toHaveClass('is-sorted')
+    const order = () => [...document.querySelectorAll('.workspace-team-row strong')].map(node => node.textContent)
+    expect(order()).toEqual(['Design', 'Engineering'])
     await user.click(name)
+    expect(within(header).getByRole('button', { name: 'Order by Name, sorted ascending' })).toHaveClass('is-sorted')
+    expect(order()).toEqual(['Design', 'Engineering'])
+    await user.click(within(header).getByRole('button', { name: 'Order by Name, sorted ascending' }))
     expect(within(header).getByRole('button', { name: 'Order by Name, sorted descending' })).toHaveClass('is-sorted')
+    expect(order()).toEqual(['Engineering', 'Design'])
     await user.click(within(header).getByRole('button', { name: 'Order by Name, sorted descending' }))
     expect(within(header).getByRole('button', { name: 'Order by Name, sorted ascending' })).toHaveClass('is-sorted')
   })
@@ -226,6 +241,59 @@ describe('workspace teams directory', () => {
     await user.type(screen.getByRole('searchbox', { name: 'Find teams' }), 'eng')
     expect(screen.getByText('Engineering', { selector: 'strong' })).toBeInTheDocument()
     expect(screen.queryByText('Design', { selector: 'strong' })).not.toBeInTheDocument()
+  })
+
+  const treeData = () => {
+    const data = teamsData()
+    const base = data.teams[0]
+    return { ...data,
+      teams: [...data.teams, { ...base, id: 'team-3', key: 'WEB', name: 'Web' }, { ...base, id: 'team-4', key: 'API', name: 'Api' }],
+      teamSettings: { ...data.teamSettings, 'team-3': { teamId: 'team-3', parentTeamId: 'team-1' }, 'team-4': { teamId: 'team-4', parentTeamId: 'team-1' } },
+    } as unknown as BootstrapData
+  }
+  const rowOf = (name: string) => screen.getByText(name, { selector: 'strong' }).closest('.workspace-team-row') as HTMLElement
+  const names = () => [...document.querySelectorAll('.workspace-team-row strong')].map(node => node.textContent)
+
+  it('draws sub-teams as a tree under their parent, collapsing it after the key and remembering it', async () => {
+    const user = userEvent.setup()
+    const view = renderTeams(treeData())
+    expect(names()).toEqual(['Design', 'Engineering', 'Api', 'Web'])
+    const parent = rowOf('Engineering')
+    // The parent's guide drops from under its icon; the first child's level runs on, the last child's ends in the curve.
+    expect(parent.querySelector('.workspace-team-tree-line[data-branch]')).not.toBeNull()
+    expect(rowOf('Api').querySelector('.workspace-team-tree-line[data-continues]')).not.toBeNull()
+    expect(rowOf('Web').querySelector('.workspace-team-tree-line:not([data-continues])')).not.toBeNull()
+    expect(rowOf('Web').querySelector('.workspace-team-tree-elbow')).not.toBeNull()
+    expect(rowOf('Design').querySelector('.workspace-team-tree-line, .workspace-team-expand')).toBeNull()
+    const toggle = within(parent).getByRole('button', { name: 'Collapse team' })
+    expect(toggle.previousElementSibling).toHaveTextContent('ENG')
+    await user.click(toggle)
+    expect(names()).toEqual(['Design', 'Engineering'])
+    expect(rowOf('Engineering').querySelector('.workspace-team-tree-line')).toBeNull()
+    view.unmount()
+    renderTeams(treeData())
+    expect(names()).toEqual(['Design', 'Engineering'])
+    await user.click(within(rowOf('Engineering')).getByRole('button', { name: 'Expand team' }))
+    expect(names()).toEqual(['Design', 'Engineering', 'Api', 'Web'])
+  })
+
+  it('reverses sub-teams with a descending order and keeps a matching sub-team under its dimmed parent', async () => {
+    const user = userEvent.setup()
+    renderTeams(treeData())
+    const header = document.querySelector('.workspace-team-columns') as HTMLElement
+    await user.click(within(header).getByRole('button', { name: 'Order by Name' }))
+    await user.click(within(header).getByRole('button', { name: 'Order by Name, sorted ascending' }))
+    expect(names()).toEqual(['Engineering', 'Web', 'Api', 'Design'])
+    await user.type(screen.getByRole('searchbox', { name: 'Find teams' }), 'web')
+    expect(names()).toEqual(['Engineering', 'Web'])
+    expect(rowOf('Engineering')).toHaveAttribute('data-context')
+    expect(rowOf('Web')).not.toHaveAttribute('data-context')
+    expect(screen.queryByRole('button', { name: /^(Collapse|Expand) team$/ })).toBeNull()
+    // A matching parent keeps all of its sub-teams.
+    await user.clear(screen.getByRole('searchbox', { name: 'Find teams' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Find teams' }), 'eng')
+    expect(names()).toEqual(['Engineering', 'Web', 'Api'])
+    expect(rowOf('Engineering')).not.toHaveAttribute('data-context')
   })
 
   it('migrates saved v1 column preferences to show the ID and drop the Cycle default', () => {
