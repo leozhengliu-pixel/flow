@@ -2232,6 +2232,8 @@ export interface Draft {
   body: string;
   contentData?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  /** The key the composer that made this draft sends with every save, so a retried create returns this draft. */
+  clientKey?: string;
   createdAt: string;
   updatedAt: string;
 }
