@@ -635,19 +635,65 @@ func previewIssueSuggestions(data *domain.Bootstrap, text, teamID string) []tria
 	return result
 }
 
+// triageScores is a score per suggestion target that remembers the order the
+// targets were first scored in. best breaks a tie toward the earliest of
+// them, a choice the former map iteration could also make, so equal scores
+// pick the same target on every run.
+type triageScores struct {
+	values map[string]float64
+	order  []string
+}
+
+func newTriageScores() *triageScores {
+	return &triageScores{values: map[string]float64{}}
+}
+
+func (s *triageScores) note(id string) {
+	if _, seen := s.values[id]; !seen {
+		s.order = append(s.order, id)
+	}
+}
+
+func (s *triageScores) add(id string, delta float64) {
+	s.note(id)
+	s.values[id] += delta
+}
+
+// raise sets id's score to score when that is higher.
+func (s *triageScores) raise(id string, score float64) {
+	if score > s.values[id] {
+		s.note(id)
+		s.values[id] = score
+	}
+}
+
+func (s *triageScores) best(keep func(string) bool) (string, float64) {
+	var bestID string
+	var bestScore float64
+	for _, id := range s.order {
+		if keep != nil && !keep(id) {
+			continue
+		}
+		if score := s.values[id]; score > bestScore {
+			bestID, bestScore = id, score
+		}
+	}
+	return bestID, bestScore
+}
+
 func inferProject(data *domain.Bootstrap, issue *domain.Issue, candidates []triageSuggestionCandidate) (string, float64, []string) {
 	if issue.Project != nil || len(data.Projects) == 0 {
 		return "", 0, nil
 	}
 	issueTokens := triageTokens(issue.Title, truncateTriageText(issue.Description), data.WorkspaceSettings.FeatureSettings.TriageIntelligence.WorkspaceGuidance)
-	scores := map[string]float64{}
+	scores := newTriageScores()
 	reasons := map[string][]string{}
 	for _, candidate := range candidates[:min(len(candidates), 12)] {
 		if candidate.issue.Project == nil {
 			continue
 		}
 		id := candidate.issue.Project.ID
-		scores[id] += candidate.score
+		scores.add(id, candidate.score)
 		reasons[id] = append(reasons[id], fmt.Sprintf("%s is linked to a closely related issue.", identifierOrTitle(&candidate.issue)))
 	}
 	for index := range data.Projects {
@@ -656,23 +702,15 @@ func inferProject(data *domain.Bootstrap, issue *domain.Issue, candidates []tria
 			continue
 		}
 		score := triageSimilarity(issueTokens, triageTokens(project.Name, project.Summary, project.Description))
-		if score > scores[project.ID] {
-			scores[project.ID] = score
-		}
+		scores.raise(project.ID, score)
 		if score >= 0.3 {
 			reasons[project.ID] = append(reasons[project.ID], "The project name and context overlap with this request.")
 		}
 		if project.Lead != nil && project.Lead.ID == issue.Creator.ID {
-			scores[project.ID] += 0.04
+			scores.add(project.ID, 0.04)
 		}
 	}
-	var bestID string
-	var bestScore float64
-	for id, score := range scores {
-		if score > bestScore {
-			bestID, bestScore = id, score
-		}
-	}
+	bestID, bestScore := scores.best(nil)
 	if bestScore < 0.22 {
 		return "", 0, nil
 	}
@@ -686,34 +724,25 @@ func inferAssignee(data *domain.Bootstrap, issue *domain.Issue, candidates []tri
 	if issue.Assignee != nil {
 		return "", 0, nil
 	}
-	scores := map[string]float64{}
+	scores := newTriageScores()
 	reasons := map[string][]string{}
 	for _, candidate := range candidates[:min(len(candidates), 12)] {
 		if candidate.issue.Assignee != nil {
 			id := candidate.issue.Assignee.ID
-			scores[id] += candidate.score
+			scores.add(id, candidate.score)
 			reasons[id] = append(reasons[id], fmt.Sprintf("Assigned to related issue %s.", identifierOrTitle(&candidate.issue)))
 		}
 	}
 	for index := range data.Projects {
 		project := &data.Projects[index]
 		if project.Lead != nil && project.Lead.ID != "" && project.ID == issueProjectID(issue) {
-			scores[project.Lead.ID] += 0.28
+			scores.add(project.Lead.ID, 0.28)
 			reasons[project.Lead.ID] = append(reasons[project.Lead.ID], "Leads the issue's project.")
 		}
 	}
 	// Conservative: creating the issue (or a related one) is not
 	// evidence of ownership, so creators get no assignee bonus.
-	var bestID string
-	var bestScore float64
-	for id, score := range scores {
-		if userByID(data, id) == nil {
-			continue
-		}
-		if score > bestScore {
-			bestID, bestScore = id, score
-		}
-	}
+	bestID, bestScore := scores.best(func(id string) bool { return userByID(data, id) != nil })
 	if bestID == "" || bestScore < 0.35 {
 		return "", 0, nil
 	}
@@ -725,11 +754,11 @@ func inferLabel(data *domain.Bootstrap, issue *domain.Issue, candidates []triage
 		return "", 0, nil
 	}
 	issueTokens := triageTokens(issue.Title, truncateTriageText(issue.Description), data.WorkspaceSettings.FeatureSettings.TriageIntelligence.WorkspaceGuidance)
-	scores := map[string]float64{}
+	scores := newTriageScores()
 	reasons := map[string][]string{}
 	for _, candidate := range candidates[:min(len(candidates), 12)] {
 		for _, label := range candidate.issue.Labels {
-			scores[label.ID] += candidate.score
+			scores.add(label.ID, candidate.score)
 			reasons[label.ID] = append(reasons[label.ID], fmt.Sprintf("Applied to related issue %s.", identifierOrTitle(&candidate.issue)))
 		}
 	}
@@ -739,20 +768,12 @@ func inferLabel(data *domain.Bootstrap, issue *domain.Issue, candidates []triage
 			continue
 		}
 		score := triageSimilarity(issueTokens, triageTokens(label.Name, label.Description))
-		if score > scores[label.ID] {
-			scores[label.ID] = score
-		}
+		scores.raise(label.ID, score)
 		if score >= 0.35 {
 			reasons[label.ID] = append(reasons[label.ID], "The label name and description match the request.")
 		}
 	}
-	var bestID string
-	var bestScore float64
-	for id, score := range scores {
-		if score > bestScore {
-			bestID, bestScore = id, score
-		}
-	}
+	bestID, bestScore := scores.best(nil)
 	if bestID == "" || bestScore < 0.2 {
 		return "", 0, nil
 	}
@@ -760,14 +781,14 @@ func inferLabel(data *domain.Bootstrap, issue *domain.Issue, candidates []triage
 }
 
 func inferTeam(data *domain.Bootstrap, issue *domain.Issue, candidates []triageSuggestionCandidate) (string, float64, []string) {
-	scores := map[string]float64{}
+	scores := newTriageScores()
 	reasons := map[string][]string{}
 	for _, candidate := range candidates[:min(len(candidates), 12)] {
 		id := candidate.issue.Team.ID
 		if id == "" || id == issue.Team.ID {
 			continue
 		}
-		scores[id] += candidate.score
+		scores.add(id, candidate.score)
 		reasons[id] = append(reasons[id], fmt.Sprintf("%s belongs to this team.", identifierOrTitle(&candidate.issue)))
 	}
 	for index := range data.Projects {
@@ -777,21 +798,12 @@ func inferTeam(data *domain.Bootstrap, issue *domain.Issue, candidates []triageS
 		}
 		for _, teamID := range project.TeamIDs {
 			if teamID != issue.Team.ID {
-				scores[teamID] += 0.3
+				scores.add(teamID, 0.3)
 				reasons[teamID] = append(reasons[teamID], "The issue's project is owned by this team.")
 			}
 		}
 	}
-	var bestID string
-	var bestScore float64
-	for id, score := range scores {
-		if teamByID(data, id) == nil {
-			continue
-		}
-		if score > bestScore {
-			bestID, bestScore = id, score
-		}
-	}
+	bestID, bestScore := scores.best(func(id string) bool { return teamByID(data, id) != nil })
 	if bestID == "" || bestScore < 0.25 {
 		return "", 0, nil
 	}

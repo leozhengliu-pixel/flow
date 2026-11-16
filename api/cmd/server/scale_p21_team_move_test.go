@@ -139,10 +139,15 @@ func (f scaleP21TeamMoveFixture) prepare(opts scaleP21TeamMoveOptions) func(*tes
 				domain.IssueLabel{ID: "tm-l-parent-bug", Name: " crash ", Scope: "tm-parent", CreatedAt: at},
 				domain.IssueLabel{ID: "tm-l-parent-area", Name: "AREA", Scope: "tm-parent", GroupID: "tm-g-area", CreatedAt: at},
 				domain.IssueLabel{ID: "tm-l-grouped-bug", Name: "crash", Scope: "tm-triage", GroupID: "tm-g-archived", CreatedAt: at},
-				domain.IssueLabel{ID: "tm-l-triage-bug", Name: "CRASH", Scope: "tm-triage", CreatedAt: at})
+				domain.IssueLabel{ID: "tm-l-triage-bug", Name: "CRASH", Scope: "tm-triage", CreatedAt: at},
+				domain.IssueLabel{ID: "tm-l-tie-b", Name: "Cross team preview crash", Description: "Image preview crashes on load", CreatedAt: at},
+				domain.IssueLabel{ID: "tm-l-tie-a", Name: "Cross team preview crash", Description: "Image preview crashes on load", CreatedAt: at})
 			data.Projects = append(data.Projects,
-				domain.Project{ID: "tm-p-cross", Name: "Cross", TeamIDs: []string{f.public, "tm-parent"}},
-				domain.Project{ID: "tm-p-sub", Name: "Sub", TeamIDs: []string{f.public, "tm-sub"}},
+				// inferTeam scores tm-parent and tm-sub equally: the tie goes to tm-parent.
+				domain.Project{ID: "tm-p-cross", Name: "Cross", TeamIDs: []string{f.public, "tm-parent", "tm-sub"}},
+				// Equally named projects and labels tie in inferProject and inferLabel.
+				domain.Project{ID: "tm-p-tie-b", Name: "Cross team preview", TeamIDs: []string{f.public}},
+				domain.Project{ID: "tm-p-tie-a", Name: "Cross team preview", TeamIDs: []string{f.public}},
 				domain.Project{ID: "tm-p-docs", Name: "Docs", TeamIDs: []string{f.private, "tm-ghost-team", "tm-triage"}})
 			data.Documents = append(data.Documents,
 				domain.Document{ID: "tm-doc-a", SlugID: "tm-doc-a", Title: "Attached A", Content: "Alpha", IssueID: f.triage.ID, IssueTeamID: f.public,
@@ -200,6 +205,8 @@ func (f scaleP21TeamMoveFixture) prepare(opts scaleP21TeamMoveOptions) func(*tes
 					issue.Title, issue.Description = "Cross team preview crash", "The cross team image preview crashes on load."
 					issue.State = domain.WorkflowState{ID: "triage-backlog", Name: "Triage", Type: "backlog", TeamID: f.public}
 					issue.TriagedAt, issue.SuggestionsGeneratedAt = nil, nil
+					// Unlabelled, so inferLabel scores the tied labels.
+					issue.Labels = nil
 				}
 				if !opts.mergeAt.IsZero() {
 					data.Activities[id] = append(data.Activities[id], domain.ActivityEvent{ID: "tm-activity-prior", Type: "issue.updated", CreatedAt: opts.mergeAt,
@@ -409,7 +416,7 @@ func TestScaleP21TeamMoveAcceptDifferential(t *testing.T) {
 	}{
 		{"parent-team-incompatible-project", scaleP21TeamMoveOptions{project: "triage-p-public"}, owner, nil, "tm-s-parent", false, http.StatusOK,
 			&expectation{"tm-parent", "tmp-todo", []string{"tm-l-parent-bug", "tm-l-shared"}, false}},
-		{"sub-team-inherited-workflow-compatible-project", scaleP21TeamMoveOptions{project: "tm-p-sub"}, owner, nil, "tm-s-sub", false, http.StatusOK,
+		{"sub-team-inherited-workflow-compatible-project", scaleP21TeamMoveOptions{project: "tm-p-cross"}, owner, nil, "tm-s-sub", false, http.StatusOK,
 			&expectation{"tm-sub", "tmp-backlog", []string{"tm-l-parent-bug", "tm-l-shared"}, true}},
 		{"team-without-settings-or-matching-labels", scaleP21TeamMoveOptions{}, owner, nil, "tm-s-bare", false, http.StatusOK,
 			&expectation{"tm-bare", "tmb-a", []string{"tm-l-shared"}, false}},
@@ -607,6 +614,14 @@ func TestScaleP21TeamMoveAutoApplyDifferential(t *testing.T) {
 			}
 			if issue := scaleP21TeamMoveIssue(t, legacy, f.triage.ID); (issue.Team.ID == "tm-parent") != test.moved {
 				t.Fatalf("legacy team %s, moved want %t", issue.Team.ID, test.moved)
+			}
+			// Ties go to the target scored first.
+			installed := string(legacy.Installed)
+			if strings.Contains(installed, `"suggestedTeamId":"tm-sub"`) || strings.Contains(installed, `"tm-p-tie-a"`) || strings.Contains(installed, `"tm-l-tie-a"`) {
+				t.Fatal("a tie went to the later target")
+			}
+			if !strings.Contains(installed, `"tm-l-tie-b"`) {
+				t.Fatal("the tied labels were not suggested")
 			}
 		})
 	}
