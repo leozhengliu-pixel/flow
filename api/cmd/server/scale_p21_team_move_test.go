@@ -317,7 +317,10 @@ func (f scaleP21TeamMoveFixture) run(t *testing.T, source string, call func(*ser
 	if err := reloaded.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if installed, reloaded := scaleP21TeamMoveDocuments(t, got.Installed), scaleP21TeamMoveDocuments(t, got.Reloaded); installed != reloaded {
+	// Persisted bodies lose NUL (PostgreSQL refuses it); the snapshot keeps
+	// it until the next load.
+	nul := strings.NewReplacer(`\u0000`, "")
+	if installed, reloaded := nul.Replace(string(got.Installed)), nul.Replace(string(got.Reloaded)); installed != reloaded {
 		if dir := os.Getenv("FLOW_TEAM_MOVE_DUMP"); dir != "" {
 			_ = os.WriteFile(dir+"/installed.json", []byte(installed), 0o600)
 			_ = os.WriteFile(dir+"/reloaded.json", []byte(reloaded), 0o600)
@@ -340,18 +343,6 @@ func (f scaleP21TeamMoveFixture) differential(t *testing.T, name string, call fu
 		}
 	}
 	return outcomes
-}
-
-// scaleP21TeamMoveDocuments is the documents list of an installed read. A
-// SQL load also lists a workspace's edited suggestion rows again (legacy
-// writes included), so suggestions are compared across sources only.
-func scaleP21TeamMoveDocuments(t *testing.T, raw json.RawMessage) string {
-	t.Helper()
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		t.Fatal(err)
-	}
-	return string(fields["documents"])
 }
 
 // scaleP21TeamMoveSorted orders concurrent publications by their normalized

@@ -791,6 +791,16 @@ func (p *legacyMetadataWritePlan) rebaseRow(ctx context.Context, f *legacyMetada
 		return err
 	}
 	raw, exists := stored[key]
+	if !exists {
+		backed, err := metadataFieldRecordBacked(guard, p.tx, p.workspace, name, reflect.TypeFor[domain.Bootstrap]().Field(f.field.index).Type)
+		if err != nil {
+			return err
+		}
+		if !backed {
+			// An inline field has no rows; rebaseMetadata leaves it as is.
+			return nil
+		}
+	}
 	refs, err := p.references(ctx, p.requested, work, left.Interface(), right.Interface(), raw)
 	if err != nil {
 		return err
