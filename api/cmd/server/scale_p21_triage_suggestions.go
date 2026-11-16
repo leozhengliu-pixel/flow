@@ -405,3 +405,118 @@ func (s *server) generateTriageIntelligenceForIssuesBounded(ctx context.Context,
 	}
 	return results, err
 }
+
+// mcpWorkspaceDataProjected is mcpWorkspaceData whose paged projection runs
+// over installed's core and policy fields and the named complete
+// collections (see ProjectedWorkspace). Every later credential, application
+// and preference filter is the literal mcpWorkspaceData code. The result is
+// exact for those collections, policy fields and the live directory; the
+// returned release must outlive every use of the data.
+func (s *server) mcpWorkspaceDataProjected(ctx context.Context, actor mcpActor, installed *store.InstalledMetadataRead, collections ...string) (domain.Bootstrap, func(), error) {
+	var reads []*store.ProjectedWorkspaceRead
+	release := func() {
+		for _, read := range reads {
+			read.Close()
+		}
+	}
+	data, err := s.mcpWorkspaceDataFrom(ctx, actor, func(ctx context.Context, _ string, userID string) (domain.Bootstrap, error) {
+		read, err := installed.ProjectedWorkspace(ctx, userID, collections...)
+		if err != nil {
+			return domain.Bootstrap{}, err
+		}
+		reads = append(reads, read)
+		return read.Data, nil
+	})
+	return data, release, err
+}
+
+// triageWorkspaceCollections are the complete collections the triage
+// scorers read from the viewer's projected workspace (labelGroups and
+// initiatives keep label groups and label resource counts exact).
+var triageWorkspaceCollections = []string{"projects", "labels", "labelGroups", "initiatives"}
+
+// previewIssueSuggestionsBounded is previewIssueSuggestions over the
+// installed Viewer fallback and an owned exact projection of the collections
+// the preview scores; the scoring code is shared.
+func (s *server) previewIssueSuggestionsBounded(w http.ResponseWriter, r *http.Request, text, teamID string) {
+	ctx := r.Context()
+	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: authUser(r)}
+	if actor.User.ID == "" {
+		// Legacy WorkspaceMetadata ignores cancellation.
+		viewer, ok, err := s.store.BeginInstalledViewerRead(context.WithoutCancel(ctx), actor.WorkspaceKey)
+		if err != nil {
+			issueRecordsError(w, errors.Join(errors.New("installed viewer"), err))
+			return
+		}
+		if ok {
+			defer viewer.Close()
+			actor.User = viewer.Viewer()
+		}
+	}
+	if key, ok := ctx.Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		actor.APIKey = key
+	}
+	data, release, err := s.triageAIWorkspaceBounded(ctx, actor)
+	if release != nil {
+		defer release()
+	}
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	s.writeIssueSuggestionPreview(w, r, actor, data, text, teamID)
+}
+
+// triageAIWorkspaceBounded replaces mcpWorkspaceData for the triage scorers.
+// A missing installed workspace fails as the paged accessor does.
+func (s *server) triageAIWorkspaceBounded(ctx context.Context, actor mcpActor) (domain.Bootstrap, func(), error) {
+	installed, found, err := s.store.BeginInstalledMetadataRead(context.WithoutCancel(ctx), actor.WorkspaceKey)
+	if err != nil {
+		return domain.Bootstrap{}, nil, err
+	}
+	if !found {
+		return domain.Bootstrap{}, nil, errors.New("workspace access denied")
+	}
+	data, release, err := s.mcpWorkspaceDataProjected(ctx, actor, installed, triageWorkspaceCollections...)
+	return data, func() {
+		release()
+		installed.Close()
+	}, err
+}
+
+// runTriageIntelligenceBounded is runTriageIntelligence after the issue read,
+// over owned unprojected scoring inputs (contextless like WorkspaceMetadata)
+// and the bounded suggestion writer, which receives the issue scope and the
+// targets the run generated. A run that may auto-move the issue to another
+// team is refused before the write: the bounded writer does not renumber.
+func (s *server) runTriageIntelligenceBounded(ctx context.Context, actor mcpActor, query store.IssueRecordQuery, issue domain.Issue, issueID string, options triageRunOptions) (domain.Issue, []domain.IssueSuggestion, error) {
+	reads := context.WithoutCancel(ctx)
+	installed, found, err := s.store.BeginInstalledMetadataRead(reads, actor.WorkspaceKey)
+	if err != nil {
+		return domain.Issue{}, nil, err
+	}
+	var metadata domain.Bootstrap
+	if found {
+		defer installed.Close()
+		scoring, err := installed.TriageScoringInputs(reads)
+		if err != nil {
+			return domain.Issue{}, nil, err
+		}
+		defer scoring.Close()
+		metadata = scoring.Data
+	}
+	return s.runTriageIntelligenceWith(ctx, actor, query, issue, issueID, options, metadata, found,
+		func(ctx context.Context, scope []string, generated []domain.IssueSuggestion, teamMove bool) (context.Context, func(), error) {
+			if teamMove {
+				return nil, nil, store.ErrIssueSuggestionWriteRefused
+			}
+			var input store.IssueSuggestionWrite
+			for _, item := range generated {
+				input.Users = append(input.Users, item.SuggestedUserID)
+				input.Projects = append(input.Projects, item.SuggestedProjectID)
+				input.Labels = append(input.Labels, item.SuggestedLabelID)
+			}
+			owned, release := beginMetadataOutputReads(ctx)
+			return store.ContextWithIssueSuggestionWrite(store.WithIssueRecordMutations(owned, scope...), input), release, nil
+		})
+}

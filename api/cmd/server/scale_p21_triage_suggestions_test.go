@@ -368,3 +368,123 @@ func scaleP21TriageJSON(t *testing.T, value any) string {
 	}
 	return string(raw)
 }
+
+// The bounded projector equals mcpWorkspaceData for every collection the
+// triage scorers read, for every principal and credential, including an
+// application key without initiative scope; the AI prompt and the preview
+// response built from it are byte-identical.
+func TestScaleP21TriageProjectedWorkspaceDifferential(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	for _, repo := range scaleP03ServerTestStores(t) {
+		f := scaleP21TriageSetup(t, repo)
+		workspace := f.data.Workspace.URLKey
+		at := time.Date(2026, 5, 6, 7, 8, 9, 0, time.UTC)
+		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.triage_projection_seed", "", nil, func(data *domain.Bootstrap) error {
+			data.WorkspaceSettings.FeatureSettings.TriageIntelligence.WorkspaceGuidance = "Route preview work to the marketplace project."
+			data.LabelGroups = append(data.LabelGroups, domain.LabelGroup{ID: "triage-g-private", Name: "Private group", Scope: f.private})
+			data.Labels = append(data.Labels,
+				domain.IssueLabel{ID: "triage-l-preview", Name: "Image preview", Description: "Marketplace image preview", Scope: "workspace"},
+				domain.IssueLabel{ID: "triage-l-private-grouped", Name: "Private preview", Scope: f.private, GroupID: "triage-g-private"},
+				domain.IssueLabel{ID: "triage-l-public-team", Name: "Public preview", Scope: f.public, GroupID: "triage-g-private"},
+				domain.IssueLabel{ID: "triage-l-archived", Name: "Old preview", ArchivedAt: &at},
+			)
+			for index := range data.Projects {
+				if data.Projects[index].ID == "triage-p-public" {
+					data.Projects[index].Description = "Marketplace image preview component work."
+					data.Projects[index].LabelIDs = []string{"triage-l-preview", "triage-l-public-team"}
+					data.Projects[index].Lead = &data.Viewer
+					data.Projects[index].MemberIDs = []string{data.Viewer.ID}
+					data.Projects[index].DependencyIDs = []string{"triage-p-private", "triage-p-mixed"}
+				}
+			}
+			data.Initiatives = append(data.Initiatives,
+				domain.Initiative{ID: "triage-i-public", Name: "Public initiative", ContributingTeamIDs: []string{f.public}, ProjectIDs: []string{"triage-p-public"}, LabelIDs: []string{"triage-l-preview"}},
+				domain.Initiative{ID: "triage-i-private", Name: "Private initiative", LeadTeamID: f.private, LabelIDs: []string{"triage-l-private-grouped", "triage-l-preview"}},
+			)
+			settings := data.TeamSettings[f.public]
+			settings.Description = "Marketplace and preview work."
+			data.TeamSettings[f.public] = settings
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		views := []*store.SQLiteStore{f.probe}
+		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+			t.Fatal(err)
+		}
+		reloaded, err := repo.BoundedMetadataViewForTesting(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		views = append(views, reloaded)
+		pick := func(data domain.Bootstrap) string {
+			return scaleP21TriageJSON(t, map[string]any{
+				"viewer": data.Viewer, "role": data.ViewerRole, "teams": data.Teams, "teamSettings": data.TeamSettings,
+				"workspaceSettings": data.WorkspaceSettings, "users": data.Users, "members": data.Members, "teamMembers": data.TeamMembers,
+				"projects": data.Projects, "labels": data.Labels, "labelGroups": data.LabelGroups, "initiatives": data.Initiatives,
+			})
+		}
+		app := &domain.APIKey{ID: "m2-app", Actor: "app", Scopes: []string{"read", "write"}, TeamRestriction: "all"}
+		pairs := 0
+		check := func(t *testing.T, user domain.User, key *domain.APIKey) {
+			actor := mcpActor{WorkspaceKey: workspace, User: user}
+			if key != nil {
+				actor.APIKey = *key
+			}
+			legacy, legacyErr := (&server{store: repo}).mcpWorkspaceData(t.Context(), actor)
+			issue := f.triage
+			pool := []domain.Issue{f.visible, f.hidden}
+			for _, view := range views {
+				installed, found, err := view.BeginInstalledMetadataRead(t.Context(), workspace)
+				if err != nil || !found {
+					t.Fatal("installed read", found, err)
+				}
+				bounded, release, err := (&server{store: view}).mcpWorkspaceDataProjected(t.Context(), actor, installed, triageWorkspaceCollections...)
+				if (legacyErr == nil) != (err == nil) || legacyErr != nil && legacyErr.Error() != err.Error() {
+					t.Fatalf("projection error changed: %v / %v", legacyErr, err)
+				}
+				if err == nil {
+					if a, b := pick(legacy), pick(bounded); a != b {
+						t.Fatalf("projected workspace changed: %s", scaleP21M2Diff(a, b))
+					}
+					left, right := buildTriageAIContext(&legacy, issue, pool), buildTriageAIContext(&bounded, issue, pool)
+					if a, b := triageAIPrompt(&left), triageAIPrompt(&right); a != b {
+						t.Fatalf("triage AI prompt changed: %s", scaleP21M2Diff(a, b))
+					}
+				}
+				release()
+				installed.Close()
+				if view.WorkspaceMetadataDecodes() != 0 {
+					t.Fatal("projected workspace decoded complete metadata")
+				}
+			}
+			pairs++
+		}
+		f.matrix(t, check)
+		for _, principal := range f.principals {
+			t.Run(principal.name+"/app", func(t *testing.T) { check(t, principal.user, app) })
+		}
+		for _, user := range []domain.User{{}, {ID: "triage-not-a-member"}} {
+			t.Run("non-member", func(t *testing.T) { check(t, user, nil) })
+		}
+		// The preview route itself, through every source.
+		for _, query := range []string{"text=Marketplace+image+preview", "text=Marketplace+image+preview&teamId=" + f.private, "text=", "text=" + strings.Repeat("x", 501)} {
+			for _, principal := range f.principals {
+				var outcomes []string
+				for _, service := range []*server{{store: repo}, {store: f.probe}, {store: reloaded}} {
+					r := f.request(principal.user, nil, nil)
+					r.URL.RawQuery = query
+					w := httptest.NewRecorder()
+					service.previewIssueSuggestions(w, r)
+					outcomes = append(outcomes, w.Result().Status+"\n"+w.Body.String())
+				}
+				if outcomes[1] != outcomes[0] || outcomes[2] != outcomes[0] {
+					t.Fatalf("preview %q for %s changed: %v", query, principal.name, outcomes)
+				}
+			}
+		}
+		t.Logf("projected workspace pairs=%d", pairs)
+	}
+}

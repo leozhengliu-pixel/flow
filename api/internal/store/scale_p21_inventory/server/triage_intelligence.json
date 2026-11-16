@@ -1,6 +1,6 @@
 {
   "source": "server/triage_intelligence.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "generateTriageIntelligenceForIssues": {
       "owner": "P21",
@@ -37,7 +37,7 @@
     },
     "previewIssueSuggestions": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata",
@@ -48,7 +48,8 @@
       "callers": [
         "GET /api/issue-suggestions -> previewIssueSuggestions",
         "web/src/lib/api.ts issue-suggestion preview"
-      ]
+      ],
+      "reason": "Off mode keeps the literal handler (scoring moved unchanged into writeIssueSuggestionPreview). Bounded mode (previewIssueSuggestionsBounded) uses the proven installed Viewer fallback and triageAIWorkspaceBounded: the literal mcpWorkspaceData credential/application/preference filters over ProjectedWorkspace, i.e. the literal PagedWorkspaceMetadata over core and policy fields plus complete projects, labels, labelGroups and initiatives with the live SQL directory. TestScaleP21TriageProjectedWorkspaceDifferential compares the projected viewer, role, teams, team settings, workspace settings, users, members, team members, projects, labels, label groups and initiatives with mcpWorkspaceData for 27 principal/credential pairs (5 principals x session/unrestricted/selected-empty/selected-set/app keys, empty and non-member users, error text included) on warm and SQL-reloaded views, plus byte-identical preview route responses for in-team, private-team, empty and oversized text; zero full decodes."
     },
     "pruneIssueSuggestionTargets": {
       "owner": "P21",

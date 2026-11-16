@@ -1078,6 +1078,10 @@ func (s *server) previewIssueSuggestions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	teamID := strings.TrimSpace(r.URL.Query().Get("teamId"))
+	if s.store.BoundedMetadataEnabled() {
+		s.previewIssueSuggestionsBounded(w, r, text, teamID)
+		return
+	}
 	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: authUser(r)}
 	if actor.User.ID == "" {
 		if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
@@ -1092,6 +1096,12 @@ func (s *server) previewIssueSuggestions(w http.ResponseWriter, r *http.Request)
 		issueRecordsError(w, err)
 		return
 	}
+	s.writeIssueSuggestionPreview(w, r, actor, data, text, teamID)
+}
+
+// writeIssueSuggestionPreview scores text against candidate issues and the
+// viewer's projected workspace.
+func (s *server) writeIssueSuggestionPreview(w http.ResponseWriter, r *http.Request, actor mcpActor, data domain.Bootstrap, text, teamID string) {
 	if teamID == "" && len(data.Teams) > 0 {
 		teamID = data.Teams[0].ID
 	}

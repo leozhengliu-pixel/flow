@@ -63,6 +63,49 @@
       "callers": [
         "server/triage_intelligence.go:generateTriageIntelligenceForIssues"
       ]
+    },
+    "mcpWorkspaceDataProjected": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Calls the literal mcpWorkspaceData body (mcpWorkspaceDataFrom) with ProjectedWorkspace as the paged source for both the principal and any authorization user, owning every projection until the caller's release. Exact for the requested collections, policy fields and live directory; proven by TestScaleP21TriageProjectedWorkspaceDifferential (27 pairs, warm and reloaded).",
+      "accessors": [
+        "ProjectedWorkspace",
+        "mcpWorkspaceDataFrom"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Triage preview and AI context projection.",
+      "callers": [
+        "server/scale_p21_triage_suggestions.go:triageAIWorkspaceBounded"
+      ]
+    },
+    "triageAIWorkspaceBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Contextless installed read (like the legacy accessor's source) held until release, then mcpWorkspaceDataProjected over projects, labels, labelGroups and initiatives; a missing workspace returns the flattened access-denied error. Covered by the projected-workspace, preview and run differentials.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "mcpWorkspaceDataProjected"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Triage preview and AI context projection.",
+      "callers": [
+        "server/scale_p21_triage_suggestions.go:previewIssueSuggestionsBounded",
+        "server/triage_intelligence_ai.go:requestTriageAIPlan"
+      ]
+    },
+    "runTriageIntelligenceBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Contextless TriageScoringInputs replace WorkspaceMetadata for the run checks and heuristic scorer; the shared run body writes through mutateBoundedIssueSuggestions with the issue scope and generated targets declared, under the request's output owner. TestScaleP21TriageRunWriterDifferential: heuristic and model runs, auto-apply, non-triage, legacy/warm/reloaded exact; team auto-move refused write-free, which keeps runTriageIntelligence pending.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "TriageScoringInputs"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Run again and background triage runs.",
+      "callers": [
+        "server/triage_intelligence_ai.go:runTriageIntelligence"
+      ]
     }
   }
 }
