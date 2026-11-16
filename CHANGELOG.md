@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- The document history footer follows the light theme on phones and desktops: a light pill and panel frame, the divider before Restore version, a muted change total, light hover colours and a 60% disabled Restore button. On phones the toggle keeps its own row so the navigator and Restore stay reachable. Dark is unchanged.
 - Triage Intelligence previews, model context and suggestion runs read the viewer's projected projects, labels, members and teams and the scoring inputs from owned installed metadata, preserving every credential filter and the model prompt. Bounded metadata stays off by default.
 - Triage Intelligence batch generation no longer overwrites an issue with its search summary when that issue is a candidate for another issue in the same batch.
 - Triage Intelligence suggestion acceptance, dismissal, heuristic generation and target pruning write their issues, activities and suggestion list through a dedicated bounded writer that preserves list order, relations, events and publications; team moves are refused in bounded mode. Bounded metadata stays off by default.

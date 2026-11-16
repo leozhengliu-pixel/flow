@@ -12,6 +12,7 @@ import { Toggle } from '@/components/ui/toggle'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { ViaApp } from '@/components/ui/via-app'
+import { useResolvedTheme } from '@/hooks/use-resolved-theme'
 import { useI18n } from '@/i18n/i18n'
 import type { FlowDocument } from '@/types/flow'
 
@@ -37,6 +38,7 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
   const { t, formatDate } = useI18n()
   const [selectedId, setSelectedId] = useState('current')
   const [highlight, setHighlight] = useState(true)
+  const theme = useResolvedTheme()
   const loaded = useLoadedRevisions(document, open, { selectedId, highlight })
   const entries = useMemo(() => buildHistoryEntries(loaded), [loaded])
   const days = useMemo(() => groupEntriesByDay(entries), [entries])
@@ -123,7 +125,12 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
     if (kind === 'yesterday') return t('Yesterday')
     return formatDate(date, { month: 'short', day: 'numeric', ...(date.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) })
   }
-  const counter = t('{current} of {total}').replace('{current}', () => String(changes ? activeChange : 0)).replace('{total}', () => String(changes))
+  const counterText = t('{current} of {total}').replace('{current}', () => String(changes ? activeChange : 0)).replace('{total}', () => String(changes))
+  // Light theme mutes the total ("of 3") in its own span; dark keeps the single text run it was measured with.
+  const [counterLead = '', counterRest = ''] = t('{current} of {total}').split('{current}')
+  const counter = theme === 'light'
+    ? <>{counterLead}{String(changes ? activeChange : 0)}<span className="document-history-counter-total">{counterRest.replace('{total}', () => String(changes))}</span></>
+    : counterText
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
