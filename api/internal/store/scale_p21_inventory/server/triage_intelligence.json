@@ -1,6 +1,6 @@
 {
   "source": "server/triage_intelligence.go",
-  "unmigrated": 5,
+  "unmigrated": 4,
   "consumers": {
     "generateTriageIntelligenceForIssues": {
       "owner": "P21",
@@ -21,7 +21,7 @@
     },
     "listIssueSuggestions": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "WorkspaceMetadata",
         "mcpWorkspaceData"
@@ -31,7 +31,8 @@
       "callers": [
         "TriageIntelligenceSuggestions -> fetchIssueSuggestions -> GET /api/issue-records/{id}/suggestions",
         "GET /api/issues/{id}/suggestions"
-      ]
+      ],
+      "reason": "Off mode keeps the literal handler. Bounded mode delegates to listIssueSuggestionsBounded: the absent-actor fallback uses the proven BeginInstalledViewerRead (contextless, like legacy WorkspaceMetadata); the paged projection's only used outputs (its error, team rows and project filter, then mcpWorkspaceData's selected-team credential filter) come from ViewerProjectionScope/ProjectVisibleInProjection; the issue's suggestions come from ReadIssueSuggestions; core workspace, workspaceSettings and one teamSettings point come from one installed generation. Issue query, AuthorizedIssueRecord, refreshTriageIntelligence and run tracking calls are unchanged. TestScaleP21TriageListSuggestionsDifferential compares exact status and body bytes of legacy, warm and SQL-reloaded bounded views over 236 cases (admin, private outsider, member, guest with grant, sub-team inheritance x session/unrestricted/selected-empty/selected-set keys, agent on/off, ID/identifier/private/missing issues, default/missing/foreign bindings, absent actor, cancelled requests) with visible, private, child, mixed, unscoped, archived and missing project/team/issue targets and inactive/other-issue/duplicate rows, and zero full metadata decodes. Background runs started by refreshTriageIntelligence remain covered by runTriageIntelligence, which is still pending."
     },
     "previewIssueSuggestions": {
       "owner": "P21",

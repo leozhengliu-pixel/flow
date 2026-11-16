@@ -48,7 +48,7 @@ func scaleP21SnapshotConsumer(node ast.Node) bool {
 		if selector.Sel.Name == "workspaces" || selector.Sel.Name == "BeginProjectVisibilityRead" || selector.Sel.Name == "BeginRealtimeRecordRead" || selector.Sel.Name == "BeginProjectDirectoryQuery" || selector.Sel.Name == "BeginProjectDirectoryQueryWithAccess" {
 			found = true
 		}
-		if slices.Contains([]string{"sweepWorkerChatWorkspace", "BeginAskStatusRead", "BeginResourceRelationRead", "BeginSlackNotificationRead", "BeginMetadataJSONRead", "chatAuthorizedPointRead", "BeginIssueWriteAuthorizationRead", "BeginPresenceDocumentRead", "BeginIssueBootstrapRead", "BeginGeneralBootstrapRead", "BeginRecurringNormalizationRead", "mutateBoundedScopedIssuePoint", "ReadCommentActions", "CommentActionExists", "LoadValidationHeaders", "LoadWorkflow"}, selector.Sel.Name) || slices.Contains(scaleP21SnapshotMethods, selector.Sel.Name) ||
+		if slices.Contains([]string{"sweepWorkerChatWorkspace", "BeginAskStatusRead", "BeginResourceRelationRead", "BeginSlackNotificationRead", "BeginMetadataJSONRead", "chatAuthorizedPointRead", "BeginIssueWriteAuthorizationRead", "BeginPresenceDocumentRead", "BeginIssueBootstrapRead", "BeginGeneralBootstrapRead", "BeginRecurringNormalizationRead", "mutateBoundedScopedIssuePoint", "ReadCommentActions", "CommentActionExists", "LoadValidationHeaders", "LoadWorkflow", "ReadIssueSuggestions", "ViewerProjectionScope", "ProjectVisibleInProjection"}, selector.Sel.Name) || slices.Contains(scaleP21SnapshotMethods, selector.Sel.Name) ||
 			slices.Contains([]string{"VisitOAuthApplicationLogos", "boundedOAuthAppIconAccess", "ownedImageAccess", "InstalledReviewReferenceVisible", "BeginResourceRead", "BeginInstalledResourcePointRead", "BeginProjectedInstalledResourcePointRead", "BeginTeamMaintenanceRead", "BeginPulseRead", "BeginPulseScheduleRead", "BeginNotificationVisibilityRead", "BeginMemberDirectoryRead", "BeginNotificationDeliveryContextRead", "DueIntegrationDeliveryIDs", "BeginDocumentRead", "BeginDocumentDirectoryRead", "BeginTeamMemberRequestRead", "BeginWebhookDeliveryRead", "BeginWebhookAggregateRead", "BeginLoopScheduleRead", "BeginChatDisplayRead", "BeginChatEventPolicyRead", "BeginApplicationAccessRead", "BeginApplicationListRead", "BeginAgentSessionRead", "BeginApplicationWebhookSweepRead", "BeginApplicationSLAEventRead", "BeginApplicationTaskContextRead", "BeginResourceDirectoryRead", "CommitPulseSummaries", "RecordWebhookDeliveryFailure", "MutateFailingWebhookDisable"}, selector.Sel.Name) {
 			if qualifier, ok := selector.X.(*ast.Ident); !ok || qualifier.Name != "domain" {
 				found = true
@@ -309,6 +309,9 @@ func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 		`package probe; func request() { _ = s.ReadCommentActions(ctx, id) }`,
 		`package probe; func request() { _ = s.CommentActionExists(ctx, id) }`,
 		`package probe; func request() { _ = s.LoadValidationHeaders(ctx) }`,
+		`package probe; func request() { _ = s.ReadIssueSuggestions(ctx, id) }`,
+		`package probe; func request() { _ = s.ViewerProjectionScope(ctx, user) }`,
+		`package probe; func request() { _ = s.ProjectVisibleInProjection(ctx, scope, id, credential) }`,
 		`package probe; func request() { _ = s.BeginRecurringNormalizationRead(ctx, key) }`,
 		`package probe; func request() { _ = s.BeginInstalledResourcePointRead(ctx, key, kind, ref) }`,
 		`package probe; func request() { _ = s.BeginProjectedInstalledResourcePointRead(ctx, access, kind, ref) }`,

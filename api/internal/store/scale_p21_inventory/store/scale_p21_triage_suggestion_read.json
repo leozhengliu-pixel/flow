@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_triage_suggestion_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "ViewerProjectionScope": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Runs the literal PagedWorkspaceMetadata over a borrowed SQL snapshot whose metadata is only this installed generation's core and resident policy fields (workspace, viewer, viewerRole, teams, teamSettings, workspaceSettings, teamParents), after admitting the same live directory/principal rows as BeginIssueBootstrapRead. Role, user, member, team-membership and team-default-favorite rows are read exactly as the full accessor reads them. One synthetic project per team row (the only projects in the input, so no collision) reports the content scope its project filter applies; returned team rows are the projected Teams. Only database failures in the trailing favorite/review/release issue-visibility pass, which needs collections this input omits, could differ. TestScaleP21TriageSuggestionPrimitivesDifferential compares team rows and every fixture project's visibility with mcpWorkspaceData for 20 principal/credential pairs on warm and SQL-reloaded views, plus non-member, empty-user and cancelled failures, with zero full decodes.",
+      "accessors": [
+        "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Viewer projection scope for the polled triage suggestion list.",
+      "callers": [
+        "server/scale_p21_triage_suggestions.go:listIssueSuggestionsBounded"
+      ]
+    }
+  }
+}

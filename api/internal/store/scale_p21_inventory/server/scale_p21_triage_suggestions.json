@@ -1,0 +1,22 @@
+{
+  "source": "server/scale_p21_triage_suggestions.go",
+  "unmigrated": 0,
+  "consumers": {
+    "listIssueSuggestionsBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns one InstalledMetadataRead through response encoding. Reads core workspace, workspaceSettings plus the issue team's teamSettings point (only when the agent is enabled, as the literal short-circuit does), the issue's suggestions by IssueID header scan, and the viewer projection scope; no full metadata decode. Projection failures, including cancellation and missing workspaces, keep mcpWorkspaceData's flattened 500. Only active suggestions are target-checked, which preserves output because the literal target checks are side-effect-free reads. SW triage differential: 236 cases x3 services (legacy, warm, SQL-reloaded), exact bytes.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "ViewerProjectionScope",
+        "ReadIssueSuggestions",
+        "ProjectVisibleInProjection"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue-detail triage suggestion component fetches/polls this endpoint.",
+      "callers": [
+        "server/triage_intelligence.go:listIssueSuggestions"
+      ]
+    }
+  }
+}
