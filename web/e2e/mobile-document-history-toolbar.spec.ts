@@ -116,6 +116,8 @@ for (const theme of ['light', 'dark'] as const) {
               pageScrolls: page.scrollWidth > page.clientWidth,
             }
           })).toEqual({ overflow: 'hidden', clipped: true, scrollLeft: 0, pageScrolls: false })
+          // The preview text uses the reference's light body colour.
+          await expect(dialog.locator('.document-history-doc p').first()).toHaveCSS('color', 'lch(20 1 282)')
         }
         await restore.hover()
         await capture('hover')

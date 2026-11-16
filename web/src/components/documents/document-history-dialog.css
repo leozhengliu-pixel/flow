@@ -264,7 +264,7 @@
   .document-history-scroll > .phone-native-select-wrap { max-width: 100%; }
   /* The reference insets the preview text 24px on the left and 16px on the right (8px scroller padding + 8px). */
   .document-history-doc { margin: 24px 8px 0 16px; }
-  .document-history-doc p { color: var(--phone-project-panel-text); letter-spacing: -.1px; }
+  .document-history-doc p { color: var(--document-history-doc-text, var(--phone-project-panel-text)); letter-spacing: -.1px; }
   .document-history-pill { position: static; flex: none; flex-wrap: wrap; width: fit-content; max-width: calc(100% - 24px); margin: 10px auto 20px; box-sizing: border-box; border-radius: 9999px; }
   .document-history-pill { background: var(--document-history-pill-bg); border-color: var(--document-history-pill-border); box-shadow: var(--document-history-pill-shadow); color: var(--document-history-pill-fg); }
   .document-history-highlight,
