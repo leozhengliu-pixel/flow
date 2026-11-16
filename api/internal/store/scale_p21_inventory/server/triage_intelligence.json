@@ -18,7 +18,7 @@
         "updateIssueRecord -> generateTriageIntelligenceForIssue",
         "batchUpdate -> generateTriageIntelligenceForIssues"
       ],
-      "reason": "Partially owned, still pending: bounded mode (generateTriageIntelligenceForIssuesBounded) reproduces the background-run starts and heuristic generation, including auto-applied project/label/relation suggestions and batches, exactly through mutateBoundedIssueSuggestions with complete scoring inputs (TestScaleP21TriageGenerateWriterDifferential). Two inputs are refused before any write: workspaces whose team suggestions may auto-move issues (the bounded writer does not renumber), and batches in which one scoped issue is another's candidate, where the legacy callback writes the candidate summary over the full scoped issue row (the test observes the stored row shrinking to the summary). Both keep this consumer blocked."
+      "reason": "Partially owned, still pending: bounded mode (generateTriageIntelligenceForIssuesBounded) reproduces background-run starts and heuristic generation exactly, including auto-applied project/label/relation suggestions, batches and batches whose scoped issues are each other's candidates (after the legacy summary-overwrite fix), through mutateBoundedIssueSuggestions with complete scoring inputs (TestScaleP21TriageGenerateWriterDifferential). Workspaces whose team suggestions may auto-move issues are refused before any write because the bounded writer does not yet move and renumber issues; that input keeps this consumer blocked."
     },
     "listIssueSuggestions": {
       "owner": "P21",

@@ -53,7 +53,7 @@
     "generateTriageIntelligenceForIssuesBounded": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Owned contextless reads replace WorkspaceMetadata (Viewer fallback via BeginInstalledViewerRead, workspaceSettings field, one teamSettings point per issue team for isTriageIssue); issue query, candidate search, run starts and the shared literal generateTriageMutation are unchanged. The write uses mutateBoundedIssueSuggestions with Complete scoring inputs under the request's output owner. TestScaleP21TriageGenerateWriterDifferential compares legacy, warm and SQL-reloaded single, auto-apply, batch and non-triage generations (rows, list order, activities, events, publications) and proves the team auto-move and scoped-candidate refusals write nothing; those refusals keep generateTriageIntelligenceForIssues pending.",
+      "reason": "Owned contextless reads replace WorkspaceMetadata (Viewer fallback via BeginInstalledViewerRead, workspaceSettings field, one teamSettings point per issue team for isTriageIssue); issue query, candidate search, run starts and the shared literal generateTriageMutation are unchanged. The write uses mutateBoundedIssueSuggestions with Complete scoring inputs under the request's output owner. TestScaleP21TriageGenerateWriterDifferential compares legacy, warm and SQL-reloaded single, auto-apply, batch and non-triage generations (rows, list order, activities, events, publications) scoped-candidate and mutual-candidate batches, and proves the team auto-move refusal writes nothing; that refusal keeps generateTriageIntelligenceForIssues pending.",
       "accessors": [
         "BeginInstalledMetadataRead",
         "MutateWorkspace"
