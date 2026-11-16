@@ -119,6 +119,11 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 	if boundary, ok := progress.(legacyMetadataImportBoundary); ok && boundary.legacyImportCompaction() {
 		allowed["importJobs"], allowed["migrationJobs"] = true, true
 	}
+	// Writers that own additional selected collections declare them; the
+	// existing callers declare none.
+	for _, name := range legacyMetadataExtraFields(ctx) {
+		allowed[name] = true
+	}
 	for _, field := range persistedMetadataFields() {
 		a, b := before.fields[field.index], target.fields[field.index]
 		if a == b && (progress == nil || field.name != "projects") {

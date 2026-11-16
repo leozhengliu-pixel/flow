@@ -152,14 +152,25 @@ func syncIssueSuggestionTargets(data *domain.Bootstrap, issue *domain.Issue) boo
 // archived or deactivated, and rewrites only the affected issues (found from
 // the in-memory suggestion records) through the scoped issue-record path.
 func (s *server) pruneIssueSuggestionTargets(ctx context.Context, workspace string, stale func(domain.IssueSuggestion) bool) {
-	metadata, ok := s.store.WorkspaceMetadata(workspace)
-	if !ok {
-		return
-	}
-	ids := []string{}
-	for _, item := range metadata.IssueSuggestions {
-		if stale(item) && !slices.Contains(ids, item.IssueID) {
-			ids = append(ids, item.IssueID)
+	var ids []string
+	if s.store.BoundedMetadataEnabled() {
+		var ok bool
+		if ids, ok = s.staleIssueSuggestionIssues(ctx, workspace, stale); !ok {
+			return
+		}
+		owned, closeOwned := beginIndependentMetadataOutputReads(ctx)
+		defer closeOwned()
+		ctx = store.ContextWithIssueSuggestionWrite(owned, store.IssueSuggestionWrite{})
+	} else {
+		metadata, ok := s.store.WorkspaceMetadata(workspace)
+		if !ok {
+			return
+		}
+		ids = []string{}
+		for _, item := range metadata.IssueSuggestions {
+			if stale(item) && !slices.Contains(ids, item.IssueID) {
+				ids = append(ids, item.IssueID)
+			}
 		}
 	}
 	for start := 0; start < len(ids); start += 500 {
@@ -194,6 +205,9 @@ func (s *server) generateTriageIntelligenceForIssue(ctx context.Context, workspa
 }
 
 func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, workspace string, issueIDs []string) ([]domain.Issue, error) {
+	if s.store.BoundedMetadataEnabled() {
+		return s.generateTriageIntelligenceForIssuesBounded(ctx, workspace, issueIDs)
+	}
 	var updated domain.Issue
 	results := make([]domain.Issue, 0, len(issueIDs))
 	generated := false
@@ -250,7 +264,17 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 	if triageTeamAutoMove(metadata.WorkspaceSettings.FeatureSettings.TriageIntelligence) {
 		ctx = store.WithIssueRenumbering(ctx)
 	}
-	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, issueIDs...), workspace, "issue.suggestions_generated", "issue_suggestions_batch", nil, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, issueIDs...), workspace, "issue.suggestions_generated", "issue_suggestions_batch", nil, generateTriageMutation(issueIDs, candidateSets, &updated, &results, &generated))
+	if err == nil && !generated {
+		return nil, store.ErrNoMutation
+	}
+	return results, err
+}
+
+// generateTriageMutation stores heuristic suggestions for the scoped triage
+// issues, scoring each against its candidate issues.
+func generateTriageMutation(issueIDs []string, candidateSets map[string][]domain.Issue, updated *domain.Issue, results *[]domain.Issue, generated *bool) func(*domain.Bootstrap) error {
+	return func(data *domain.Bootstrap) error {
 		for _, issueID := range issueIDs {
 			issue, err := issueByID(data, issueID)
 			if err != nil {
@@ -265,24 +289,20 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 				continue
 			}
 			generateAndAppendIssueSuggestions(data, issue, time.Now().UTC())
-			updated = *issue
-			results = append(results, updated)
-			generated = true
+			*updated = *issue
+			*results = append(*results, *updated)
+			*generated = true
 		}
 		allowed := map[string]bool{}
 		for _, id := range issueIDs {
 			allowed[id] = true
 		}
 		data.Issues = slices.DeleteFunc(data.Issues, func(item domain.Issue) bool { return !allowed[item.ID] })
-		if !generated {
+		if !*generated {
 			return store.ErrNoMutation
 		}
 		return nil
-	})
-	if err == nil && !generated {
-		return nil, store.ErrNoMutation
 	}
-	return results, err
 }
 
 func (s *server) triageCandidateIssues(ctx context.Context, issue *domain.Issue, q store.IssueRecordQuery) ([]domain.Issue, error) {
@@ -1204,6 +1224,10 @@ func (s *server) dismissIssueSuggestion(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) updateIssueSuggestionState(w http.ResponseWriter, r *http.Request, accept bool) {
+	if s.store.BoundedMetadataEnabled() {
+		s.updateIssueSuggestionStateBounded(w, r, accept)
+		return
+	}
 	issueID := r.PathValue("id")
 	suggestionID := r.PathValue("suggestionId")
 	eventType := "issue.suggestion_dismissed"
@@ -1269,7 +1293,14 @@ func (s *server) updateIssueSuggestionState(w http.ResponseWriter, r *http.Reque
 	if targetID != "" {
 		scope = append(scope, targetID)
 	}
-	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, scope...), workspaceKey(r), eventType, suggestionID, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, scope...), workspaceKey(r), eventType, suggestionID, nil, issueSuggestionStateMutation(issueID, suggestionID, accept, &updated))
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// issueSuggestionStateMutation accepts or dismisses one active suggestion of
+// issueID, capturing the stored result in updated.
+func issueSuggestionStateMutation(issueID, suggestionID string, accept bool, updated *domain.IssueSuggestion) func(*domain.Bootstrap) error {
+	return func(data *domain.Bootstrap) error {
 		index := -1
 		for itemIndex := range data.IssueSuggestions {
 			item := &data.IssueSuggestions[itemIndex]
@@ -1310,12 +1341,11 @@ func (s *server) updateIssueSuggestionState(w http.ResponseWriter, r *http.Reque
 		}
 		suggestion.StateChangedAt = now
 		suggestion.UpdatedAt = now
-		updated = *suggestion
+		*updated = *suggestion
 		if syncIssueSuggestionTargets(data, issue) && !accept {
 			issue.UpdatedAt = now
 			issue.Version++
 		}
 		return nil
-	})
-	respondMutation(w, err, http.StatusOK, updated)
+	}
 }

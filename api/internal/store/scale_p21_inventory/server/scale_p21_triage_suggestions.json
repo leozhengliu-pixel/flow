@@ -17,6 +17,52 @@
       "callers": [
         "server/triage_intelligence.go:listIssueSuggestions"
       ]
+    },
+    "staleIssueSuggestionIssues": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal prune scan of one installed generation: VisitIssueSuggestions decodes and admits one row at a time and keeps first-seen issue order; contextless like WorkspaceMetadata; missing workspaces skip the prune. Covered by TestScaleP21TriagePruneWriterDifferential.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "VisitIssueSuggestions"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Issue/project deletion and target deactivation cleanup.",
+      "callers": [
+        "server/triage_intelligence.go:pruneIssueSuggestionTargets"
+      ]
+    },
+    "updateIssueSuggestionStateBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned reads replace WorkspaceMetadata (first suggestion by ID via ReadIssueSuggestion, contextless), the Viewer fallback (BeginInstalledViewerRead) and mcpWorkspaceData's project/team/label filters (ViewerProjectionScope, ProjectVisibleInProjection, LabelVisibleInProjection, both selected-key label filters); the literal state callback is shared through issueSuggestionStateMutation and written by mutateBoundedIssueSuggestions. TestScaleP21TriageSuggestionStateWriterDifferential: 18 legacy/warm/reloaded cases (project/assignee/label/duplicate/related/self relation acceptance, dismissals, private and selected-key refusals, missing and inactive rows, cancellation) with exact rows, list order, events and publications; team acceptance is explicitly refused and proven write-free, which keeps updateIssueSuggestionState pending.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "ReadIssueSuggestion",
+        "ViewerProjectionScope",
+        "ProjectVisibleInProjection",
+        "LabelVisibleInProjection",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Acceptance/dismissal route from the issue detail suggestion UI.",
+      "callers": [
+        "server/triage_intelligence.go:updateIssueSuggestionState"
+      ]
+    },
+    "generateTriageIntelligenceForIssuesBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned contextless reads replace WorkspaceMetadata (Viewer fallback via BeginInstalledViewerRead, workspaceSettings field, one teamSettings point per issue team for isTriageIssue); issue query, candidate search, run starts and the shared literal generateTriageMutation are unchanged. The write uses mutateBoundedIssueSuggestions with Complete scoring inputs under the request's output owner. TestScaleP21TriageGenerateWriterDifferential compares legacy, warm and SQL-reloaded single, auto-apply, batch and non-triage generations (rows, list order, activities, events, publications) and proves the team auto-move and scoped-candidate refusals write nothing; those refusals keep generateTriageIntelligenceForIssues pending.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Conditional dependency of issue creation/update in triage.",
+      "callers": [
+        "server/triage_intelligence.go:generateTriageIntelligenceForIssues"
+      ]
     }
   }
 }

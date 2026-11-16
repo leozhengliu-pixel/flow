@@ -30,7 +30,13 @@ type scaleP21TriageFixture struct {
 // missing issues; inactive states, other issues' rows and duplicate IDs.
 func scaleP21TriageSetup(t *testing.T, repo *store.SQLiteStore) scaleP21TriageFixture {
 	t.Helper()
-	f := scaleP21TriageFixture{scaleP21M2Fixture: scaleP21M2Setup(t, repo)}
+	return scaleP21TriageSeed(t, scaleP21M2Setup(t, repo))
+}
+
+func scaleP21TriageSeed(t *testing.T, m2 scaleP21M2Fixture) scaleP21TriageFixture {
+	t.Helper()
+	f := scaleP21TriageFixture{scaleP21M2Fixture: m2}
+	repo := m2.repository
 	workspace := f.data.Workspace.URLKey
 	triage := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
 		map[string]any{"title": "Triage list bounded differential", "teamId": f.public}, workspace, http.StatusCreated)
