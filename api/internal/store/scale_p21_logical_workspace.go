@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"reflect"
 	"slices"
 
 	"flow/api/internal/domain"
@@ -12,6 +13,10 @@ func metadataLogicalPolicyFields() []string {
 }
 
 func (s *SQLiteStore) metadataLogicalPolicy(ctx context.Context, source *metadataLogicalSource) (domain.Bootstrap, int, error) {
+	return s.metadataLogicalPolicyAdmitted(ctx, source, nil)
+}
+
+func (s *SQLiteStore) metadataLogicalPolicyAdmitted(ctx context.Context, source *metadataLogicalSource, reserve func(uint64) error) (domain.Bootstrap, int, error) {
 	cost := uint64(4096)
 	fields := metadataLogicalPolicyFields()
 	if err := source.VisitFields(ctx, func(name string, node metadataLogicalNode) error {
@@ -25,9 +30,19 @@ func (s *SQLiteStore) metadataLogicalPolicy(ctx context.Context, source *metadat
 	}); err != nil {
 		return domain.Bootstrap{}, 0, err
 	}
+	if reserve != nil {
+		if err := reserve(cost + uint64(reflect.TypeFor[domain.Bootstrap]().Size())*2 + 128); err != nil {
+			return domain.Bootstrap{}, 0, err
+		}
+	}
 	data, err := source.Select(ctx, MetadataRecordScope{Fields: fields}, int(cost))
 	if err != nil {
 		return domain.Bootstrap{}, 0, err
+	}
+	if reserve != nil {
+		if err := reserveMetadataPolicyDirectory(ctx, data, reserve); err != nil {
+			return domain.Bootstrap{}, 0, err
+		}
 	}
 	domain.RebuildTeamDirectory(&data)
 	return data, int(cost), nil

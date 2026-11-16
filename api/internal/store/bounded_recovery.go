@@ -398,6 +398,10 @@ func (s *SQLiteStore) scanResidentMetadataField(ctx context.Context, reader meta
 }
 
 func residentMetadataRoot(raw []byte) ([]byte, map[string]string, error) {
+	return residentMetadataRootForPolicy(raw, false)
+}
+
+func residentMetadataRootForPolicy(raw []byte, legacyInlineTeams bool) ([]byte, map[string]string, error) {
 	if len(raw) > MetadataRecordPageMaxBytes || !metadataRootFieldsBounded(raw) {
 		return nil, nil, ErrMetadataPageBudget
 	}
@@ -432,7 +436,27 @@ func residentMetadataRoot(raw []byte) ([]byte, map[string]string, error) {
 		}
 		trimmed := strings.TrimSpace(string(value))
 		if shapes[name] == "" && len(trimmed) > 2 && (trimmed[0] == '[' || trimmed[0] == '{') && mode != "core" && mode != "records" {
-			return nil, nil, fmt.Errorf("%w: unsplit field %q", ErrBoundedMetadataCoverage, name)
+			inline := false
+			if legacyInlineTeams && name == "teams" {
+				var items []json.RawMessage
+				if err := json.Unmarshal(value, &items); err != nil {
+					return nil, nil, err
+				}
+				seen := map[string]bool{}
+				for _, item := range items {
+					var entity struct {
+						ID string `json:"id"`
+					}
+					if json.Unmarshal(item, &entity) != nil || entity.ID == "" || len(entity.ID) > 191 || seen[entity.ID] {
+						inline = true
+						break
+					}
+					seen[entity.ID] = true
+				}
+			}
+			if !inline {
+				return nil, nil, fmt.Errorf("%w: unsplit field %q", ErrBoundedMetadataCoverage, name)
+			}
 		}
 		if mode != "core" && mode != "policy" {
 			delete(root, name)
@@ -443,6 +467,14 @@ func residentMetadataRoot(raw []byte) ([]byte, map[string]string, error) {
 }
 
 func (s *SQLiteStore) readResidentWorkspace(ctx context.Context, tx *sqlTx, workspace string) (domain.Bootstrap, copyStamp, int, error) {
+	return s.readResidentWorkspaceAdmitted(ctx, tx, workspace, nil)
+}
+
+func (s *SQLiteStore) readResidentWorkspaceAdmitted(ctx context.Context, tx *sqlTx, workspace string, reserve func(uint64) error) (domain.Bootstrap, copyStamp, int, error) {
+	return s.readResidentWorkspacePolicy(ctx, tx, workspace, reserve, false)
+}
+
+func (s *SQLiteStore) readResidentWorkspacePolicy(ctx context.Context, tx *sqlTx, workspace string, reserve func(uint64) error, legacyInlineTeams bool) (domain.Bootstrap, copyStamp, int, error) {
 	var data domain.Bootstrap
 	var stamp copyStamp
 	if err := ctx.Err(); err != nil {
@@ -460,7 +492,18 @@ func (s *SQLiteStore) readResidentWorkspace(ctx context.Context, tx *sqlTx, work
 	if size > MetadataRecordPageMaxBytes || raw == nil {
 		return data, stamp, 0, ErrMetadataPageBudget
 	}
-	root, shapes, err := residentMetadataRoot(raw)
+	if reserve != nil {
+		// Account for the physical root before filtering out non-policy
+		// fields. They still participate in the original root decoder.
+		budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes}
+		if err := budget.consume(raw); err != nil {
+			return data, stamp, 0, err
+		}
+		if err := reserve(uint64(metadataWorkBytes - budget.work)); err != nil {
+			return data, stamp, 0, err
+		}
+	}
+	root, shapes, err := residentMetadataRootForPolicy(raw, legacyInlineTeams)
 	if err != nil {
 		return data, stamp, 0, err
 	}
@@ -486,6 +529,11 @@ func (s *SQLiteStore) readResidentWorkspace(ctx context.Context, tx *sqlTx, work
 	cost, err := metadataResidentCost(root)
 	if err != nil {
 		return data, stamp, 0, err
+	}
+	if reserve != nil {
+		if err := reserve(uint64(cost) + uint64(reflect.TypeFor[domain.Bootstrap]().Size())*2 + 128); err != nil {
+			return data, stamp, 0, err
+		}
 	}
 	if err := json.Unmarshal(root, &data); err != nil {
 		return data, stamp, 0, err
@@ -517,6 +565,11 @@ func (s *SQLiteStore) readResidentWorkspace(ctx context.Context, tx *sqlTx, work
 					return ErrMetadataWorkBudget
 				}
 				cost += rowCost
+				if reserve != nil {
+					if err := reserve(metadataPolicyRowWork(row, rowCost)); err != nil {
+						return err
+					}
+				}
 				if err := appendResidentMetadataRow(&data, row, shapes[field]); err != nil {
 					return err
 				}
@@ -555,6 +608,11 @@ func (s *SQLiteStore) readResidentWorkspace(ctx context.Context, tx *sqlTx, work
 			}
 			data.Teams[inlineTeams+current] = data.Teams[inlineTeams+from]
 			current = from
+		}
+	}
+	if reserve != nil {
+		if err := reserveMetadataPolicyDirectory(ctx, data, reserve); err != nil {
+			return data, stamp, 0, err
 		}
 	}
 	domain.RebuildTeamDirectory(&data)

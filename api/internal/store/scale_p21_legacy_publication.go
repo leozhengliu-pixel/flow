@@ -26,9 +26,6 @@ func (s *SQLiteStore) prepareLegacyResidentPublication(ctx context.Context, tx *
 			owner.Close()
 		}
 	}()
-	if err := owner.reserve(ctx, metadataPolicyBytes+2<<20); err != nil {
-		return nil, err
-	}
 	if candidate.Stamp().workspaceID == "" || candidate.Stamp().workspaceID != baseStamp.workspaceID {
 		return nil, ErrMetadataRecordQuery
 	}
@@ -39,14 +36,29 @@ func (s *SQLiteStore) prepareLegacyResidentPublication(ctx context.Context, tx *
 	// from the actual native policy installed after the legacy merge.
 	probe := &SQLiteStore{db: s.db, dialect: s.dialect, metadataResidency: newMetadataResidency()}
 	probe.metadataResidency.requireCoverage = false
-	_, canonical, _, err := probe.readResidentWorkspace(ctx, tx, workspace)
+	// The probe is temporary. Its independent cache must not retain another
+	// copy of every visited policy page outside the caller's work budget.
+	probe.metadataResidency.cacheLimit = 0
+	canonical, err := func() (copyStamp, error) {
+		scratch := &ResourceRead{store: s}
+		defer scratch.Close()
+		if err := scratch.reserve(ctx, 2<<20); err != nil {
+			return copyStamp{}, err
+		}
+		_, stamp, _, err := probe.readResidentWorkspacePolicy(ctx, tx, workspace, func(cost uint64) error {
+			return scratch.reserve(ctx, cost)
+		}, true)
+		return stamp, err
+	}()
 	if err != nil {
 		return nil, err
 	}
 	if canonical.workspaceID != baseStamp.workspaceID {
 		return nil, ErrMetadataRecordQuery
 	}
-	policy, cost, err := s.metadataLogicalPolicy(ctx, candidate)
+	policy, cost, err := s.metadataLogicalPolicyAdmitted(ctx, candidate, func(cost uint64) error {
+		return owner.reserve(ctx, cost)
+	})
 	if err != nil {
 		return nil, err
 	}
