@@ -2505,8 +2505,12 @@ type Draft struct {
 	Body        string         `json:"body"`
 	ContentData map[string]any `json:"contentData,omitempty"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	UpdatedAt   time.Time      `json:"updatedAt"`
+	// ClientKey is the key a composer generated for this draft; a create that
+	// repeats it (same user, type and resource) returns this draft instead of
+	// adding another. Empty for drafts created without one.
+	ClientKey string    `json:"clientKey,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // Favorite is one sidebar favorite. Tab names a specific page tab of the
