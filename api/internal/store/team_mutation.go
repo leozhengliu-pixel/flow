@@ -880,8 +880,34 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 			}
 		}
 	}
-	if err := writeMetadataRecordChanges(ctx, tx, workspaceKey, newIssueReferences(domain.Bootstrap{Users: next.Users}), upserts); err != nil {
+	// Fields stored inline (entries without unique IDs) have no rows: write
+	// them whole as the legacy delta writer does, the rest row by row.
+	var fields []string
+	for _, change := range upserts {
+		fields = append(fields, change.field)
+	}
+	inline, err := s.inlineMetadataFields(ctx, tx, workspaceKey, fields...)
+	if err != nil {
 		return 0, err
+	}
+	rows, positions := upserts, []int(nil)
+	if len(inline) > 0 {
+		if err := s.writeInlineMetadataFields(ctx, tx, workspaceKey, next, inline); err != nil {
+			return 0, err
+		}
+		rows = nil
+		for index, change := range upserts {
+			if !slices.Contains(inline, change.field) {
+				rows = append(rows, change)
+				positions = append(positions, index)
+			}
+		}
+	}
+	if err := writeMetadataRecordChanges(ctx, tx, workspaceKey, newIssueReferences(domain.Bootstrap{Users: next.Users}), rows); err != nil {
+		return 0, err
+	}
+	for index, position := range positions {
+		upserts[position] = rows[index]
 	}
 	var removedIssues int64
 	if event != nil && event.Type == "team.deleted" {

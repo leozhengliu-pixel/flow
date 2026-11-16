@@ -115,7 +115,22 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 			return err
 		}
 		refs := newIssueReferences(domain.Bootstrap{Users: current.Users})
-		for _, key := range sortedKeys(next.UserSettings) {
+		// A map stored inline (an over-long key) has no rows: write the whole
+		// map as the legacy delta writer does instead of row by row.
+		inline, err := s.inlineMetadataFields(ctx, tx, workspace, "userSettings")
+		if err != nil {
+			return err
+		}
+		rowKeys, removed := sortedKeys(next.UserSettings), before
+		if len(inline) > 0 {
+			written := current
+			written.UserSettings = next.UserSettings
+			if err := s.writeInlineMetadataFields(ctx, tx, workspace, written, inline); err != nil {
+				return err
+			}
+			rowKeys, removed = nil, nil
+		}
+		for _, key := range rowKeys {
 			value := next.UserSettings[key]
 			previous, existed := before[key]
 			if existed && reflect.DeepEqual(previous, value) {
@@ -163,7 +178,7 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 				return err
 			}
 		}
-		for key := range before {
+		for key := range removed {
 			if _, ok := next.UserSettings[key]; !ok {
 				if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='userSettings' AND record_key=?`, workspace, key); err != nil {
 					return err
