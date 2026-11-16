@@ -1,10 +1,10 @@
 {
   "source": "server/triage_intelligence.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "generateTriageIntelligenceForIssues": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -18,7 +18,7 @@
         "updateIssueRecord -> generateTriageIntelligenceForIssue",
         "batchUpdate -> generateTriageIntelligenceForIssues"
       ],
-      "reason": "Partially owned, still pending: bounded mode (generateTriageIntelligenceForIssuesBounded) reproduces background-run starts and heuristic generation exactly, including auto-applied project/label/relation suggestions, batches and batches whose scoped issues are each other's candidates (after the legacy summary-overwrite fix), through mutateBoundedIssueSuggestions with complete scoring inputs (TestScaleP21TriageGenerateWriterDifferential). Workspaces whose team suggestions may auto-move issues are refused before any write because the bounded writer does not yet move and renumber issues; that input keeps this consumer blocked."
+      "reason": "Off mode keeps the literal WorkspaceMetadata and MutateWorkspace path. Bounded mode (generateTriageIntelligenceForIssuesBounded) reproduces background-run starts and heuristic generation, including auto-applied project/label/relation suggestions, batches and mutual-candidate batches, through mutateBoundedIssueSuggestions with complete scoring inputs (TestScaleP21TriageGenerateWriterDifferential). Workspaces whose team suggestions auto-apply write with WithIssueRenumbering and declare the scoring candidates' teams; the writer's team-move closure (issueTeamMove: locked sequence, target workflow-state chains, same-named labels and their groups, attached documents and their projects) reproduces the literal moveIssueToTeam. TestScaleP21TeamMoveAutoApplyDifferential compares legacy, warm and SQL-reloaded single and batch auto-moves, auto without a team suggestion and suggest-only generation: issue rows and columns, sequence, aliases, label rows, document rows, suggestion order, activities, events with previous values, webhooks, realtime and the SQL-reloaded image, with zero full decodes."
     },
     "listIssueSuggestions": {
       "owner": "P21",
@@ -81,7 +81,7 @@
     },
     "updateIssueSuggestionState": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -94,7 +94,7 @@
         "acceptIssueSuggestion/dismissIssueSuggestion -> updateIssueSuggestionState",
         "POST /api/issue-records/{id}/suggestions/{suggestionId}/accept|dismiss"
       ],
-      "reason": "Partially owned, still pending: bounded mode (updateIssueSuggestionStateBounded) reproduces dismissals and non-team acceptances exactly through mutateBoundedIssueSuggestions (TestScaleP21TriageSuggestionStateWriterDifferential, 18 cases x3 sources). Accepting a team suggestion moves and renumbers the issue; the bounded writer refuses it with ErrIssueSuggestionWriteRefused (no write, no publication), so team acceptance keeps this consumer blocked until a bounded team-move writer exists."
+      "reason": "Off mode keeps the literal handler. Bounded mode (updateIssueSuggestionStateBounded) reproduces dismissals and non-team acceptances (TestScaleP21TriageSuggestionStateWriterDifferential, 21 cases x3 sources) and team acceptances: the literal issueTeamMoveForbidden over mcpWorkspaceDataProjected (guest and outside-team 403s), then mutateBoundedIssueSuggestions under WithIssueRenumbering with the target declared, whose issueTeamMove closure (locked sequence, target and inherited workflow states, same-named labels and groups, attached documents and their projects) runs the literal moveIssueToTeam. TestScaleP21TeamMoveAcceptDifferential: 15 cases (parent team with an incompatible project, sub-team with inherited workflow and compatible project, a team without settings or matching labels, triage target on/off, merged update activity, member mover, same team, private outsider/member admin, sub-team of a private team, guest, ghost team, selected-key 403, cancellation) legacy vs warm vs SQL-reloaded with exact responses, issue rows and columns, sequence, aliases, label rows, document rows, suggestions, activities, events, webhooks and realtime, and the image reloaded from SQL; TestScaleP21TeamMoveConcurrentSameTeam proves concurrent moves into one team equal a sequential legacy order with distinct numbers."
     }
   }
 }

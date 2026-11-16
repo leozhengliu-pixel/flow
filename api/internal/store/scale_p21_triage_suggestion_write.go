@@ -14,18 +14,22 @@ import (
 )
 
 // ErrIssueSuggestionWriteRefused reports an input the bounded issue suggestion
-// writer does not reproduce, such as a team move with renumbering. It wraps
-// ErrBoundedMetadataCoverage; nothing is written.
+// writer does not reproduce, such as a callback that changes unrelated
+// metadata. It wraps ErrBoundedMetadataCoverage; nothing is written.
 var ErrIssueSuggestionWriteRefused = fmt.Errorf("%w: issue suggestion writer refused the input", ErrBoundedMetadataCoverage)
 
 // IssueSuggestionWrite declares the installed records an issue suggestion
 // callback may apply beyond the scoped issues' own references and the targets
 // of their stored suggestions: user, project and label IDs the caller already
 // chose. Complete exposes every user and label and every project's triage
-// fields, for callbacks that score the whole workspace.
+// fields, for callbacks that score the whole workspace. Under
+// WithIssueRenumbering, Teams are the teams the callback may move a scoped
+// issue into besides those the store derives (the issues' own teams, their
+// suggestions' targets and their projects' teams), such as the teams of
+// scoring candidates.
 type IssueSuggestionWrite struct {
-	Users, Projects, Labels []string
-	Complete                bool
+	Users, Projects, Labels, Teams []string
+	Complete                       bool
 }
 
 type issueSuggestionWriteKey struct{}
@@ -56,6 +60,8 @@ var triageProjectFields = []string{"ID", "Name", "Icon", "Color", "ArchivedAt", 
 type issueSuggestionInputs struct {
 	*issueHotInputs
 	ordinals []int
+	// move is the team-move closure, selected under WithIssueRenumbering.
+	move *issueTeamMove
 }
 
 func (r *issueHotInputs) completeField(ctx context.Context, name string) error {
@@ -83,7 +89,8 @@ func (r *issueHotInputs) completeField(ctx context.Context, name string) error {
 // users, labels, projects and states those issues and suggestions reference.
 // Users keep the complete ordered directory as ID/Active headers with complete
 // values in place for referenced users, so first-match lookups are unchanged.
-func (s *SQLiteStore) loadIssueSuggestionInputs(ctx context.Context, source *metadataLogicalSource, data *domain.Bootstrap, ids []string, input IssueSuggestionWrite) (_ *issueSuggestionInputs, err error) {
+// A renumbering write also selects the team-move closure (issueTeamMove).
+func (s *SQLiteStore) loadIssueSuggestionInputs(ctx context.Context, source *metadataLogicalSource, data *domain.Bootstrap, ids []string, input IssueSuggestionWrite, renumber bool) (_ *issueSuggestionInputs, err error) {
 	if err := source.Retain(); err != nil {
 		return nil, err
 	}
@@ -184,6 +191,12 @@ func (s *SQLiteStore) loadIssueSuggestionInputs(ctx context.Context, source *met
 			}
 		}
 	}
+	if renumber {
+		read.move, err = read.prepareIssueTeamMove(ctx, data.Issues, read.data.IssueSuggestions, input.Teams, labels, input.Complete)
+		if err != nil {
+			return nil, err
+		}
+	}
 	all := func(metadataLogicalNode) (bool, error) { return true, nil }
 	match := func(keys map[string]bool) func(metadataLogicalNode) (bool, error) {
 		if input.Complete {
@@ -227,23 +240,47 @@ func (s *SQLiteStore) loadIssueSuggestionInputs(ctx context.Context, source *met
 		}
 		read.data.Users = headers
 	}
-	if err := read.selectSlice(ctx, "labels", match(labels)); err != nil {
+	labelMatch := match(labels)
+	if read.move != nil && !input.Complete {
+		labelMatch = func(record metadataLogicalNode) (bool, error) {
+			matched, err := issueHotMatches(ctx, record, "ID", labels)
+			if err != nil || matched {
+				return matched, err
+			}
+			return read.move.label(ctx, read.issueHotInputs, record)
+		}
+	}
+	if err := read.selectSlice(ctx, "labels", labelMatch); err != nil {
 		return nil, err
 	}
 	if err := read.selectSlice(ctx, "projects", match(projects), triageProjectFields...); err != nil {
 		return nil, err
 	}
 	if err := read.selectSlice(ctx, "states", func(record metadataLogicalNode) (bool, error) {
-		return issueHotMatches(ctx, record, "ID", states)
+		matched, err := issueHotMatches(ctx, record, "ID", states)
+		if err != nil || matched || read.move == nil {
+			return matched, err
+		}
+		return read.move.state(ctx, record)
 	}); err != nil {
 		return nil, err
+	}
+	fields := []string{"teams", "teamSettings", "workspaceSettings", "teamParents", "issueSuggestions", "users", "labels", "projects", "states"}
+	if read.move != nil {
+		if err := read.selectIssueTeamMoveGroups(ctx, read.move); err != nil {
+			return nil, err
+		}
+		if err := read.selectIssueTeamMoveDocuments(ctx, read.move, scope, triageProjectFields); err != nil {
+			return nil, err
+		}
+		fields = append(fields, "labelGroups", "documents")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	input2 := reflect.ValueOf(read.data)
 	target := reflect.ValueOf(data).Elem()
-	for _, name := range []string{"teams", "teamSettings", "workspaceSettings", "teamParents", "issueSuggestions", "users", "labels", "projects", "states"} {
+	for _, name := range fields {
 		index, _, _ := metadataLogicalField(name)
 		target.Field(index).Set(input2.Field(index))
 	}
@@ -366,13 +403,14 @@ func (r *boundedIssueSuggestionAttempt) Close() {
 // rows. It persists issue and content rows as the scoped writer does and the
 // metadata image through the legacy image writer, so the suggestion list,
 // project progress, event, realtime payload and publication follow the
-// legacy contract. Team moves (renumbering) are refused.
+// legacy contract. Under WithIssueRenumbering it also owns the team-move
+// closure (issueTeamMove): the locked sequence, the target workflow states,
+// same-named labels, and the attached documents, whose derived team scope is
+// persisted with the image.
 func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspace, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	input, _ := issueSuggestionWriteFromContext(ctx)
 	ids, _ := ctx.Value(issueRecordMutationContext{}).([]string)
-	if issueRenumbering(ctx) {
-		return fmt.Errorf("%w: team moves renumber issues", ErrIssueSuggestionWriteRefused)
-	}
+	renumber := issueRenumbering(ctx)
 	if s == nil || !s.BoundedMetadataEnabled() || !UsesIssueRecordMutations(ctx) || IsIssueDiscussionMutation(ctx) ||
 		len(ids) == 0 || len(ids) > 1000 || mutate == nil || !metadataOutputOwnerPresent(ctx) {
 		return fmt.Errorf("%w: unsupported bounded issue suggestion mutation", ErrBoundedMetadataCoverage)
@@ -482,6 +520,13 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			return err
 		}
 		defer tx.Rollback()
+		if renumber {
+			// Like the legacy writers, lock the sequence before any other
+			// row, in the order issue creation takes them.
+			if data.NextIssueNumber, err = s.issueTeamMoveSequence(ctx, tx, workspace, attempt.owner, cloned); err != nil {
+				return err
+			}
+		}
 		if s.metadataResidency.requireCoverage {
 			if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
 				return err
@@ -551,7 +596,7 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			}
 			reflect.ValueOf(&data).Elem().Field(index).Set(value)
 		}
-		attempt.suggestions, err = s.loadIssueSuggestionInputs(ctx, display, &data, keys, input)
+		attempt.suggestions, err = s.loadIssueSuggestionInputs(ctx, display, &data, keys, input, renumber)
 		if err != nil {
 			return err
 		}
@@ -597,8 +642,15 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		if callbackErr != nil {
 			return callbackErr
 		}
-		if err := validateIssueSuggestionCallback(beforeCallback, data, scope); err != nil {
+		move := attempt.suggestions.move
+		if err := validateIssueSuggestionCallback(beforeCallback, data, scope, move != nil); err != nil {
 			return err
+		}
+		var documentEdits map[int]domain.Document
+		if move != nil {
+			if documentEdits, err = move.check(beforeCallback, data); err != nil {
+				return err
+			}
 		}
 		dropped, edits, appended, err := issueSuggestionPatch(beforeCallback.IssueSuggestions, data.IssueSuggestions,
 			attempt.suggestions.ordinals, beforeCallback.Issues, data.Issues, scope)
@@ -610,6 +662,11 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		}
 		if _, err := s.writeIssueRecordBatch(ctx, tx, workspace, data.Issues, data, rawBefore); err != nil {
 			return err
+		}
+		if renumber {
+			if err := advanceIssueNumberSequence(ctx, tx, workspace, data.Issues); err != nil {
+				return err
+			}
 		}
 		writeCtx := context.WithValue(ctx, legacyContentWriteBudgetKey{}, s)
 		if err := syncContentRecords(writeCtx, tx, workspace, "comment", data.Comments, data, keys); err != nil {
@@ -637,6 +694,11 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			return err
 		}
 		defer releasePatch()
+		documents, releaseDocuments, err := s.issueTeamMoveDocumentPatch(ctx, display, documentEdits)
+		if err != nil {
+			return err
+		}
+		defer releaseDocuments()
 		requested, err := boundedDiscussionEventSource(ctx, display, data)
 		if err != nil {
 			return err
@@ -650,6 +712,10 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			case "issueSuggestions":
 				if patch != nil {
 					return patch, true, nil
+				}
+			case "documents":
+				if documents != nil {
+					return documents, true, nil
 				}
 			}
 			return metadataAggregateStoredNode{node}, false, nil
@@ -674,7 +740,11 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			}
 			defer progress.Close()
 		}
-		persistCtx := context.WithValue(ctx, legacyMetadataExtraFieldsKey{}, []string{"issueSuggestions"})
+		extraFields := []string{"issueSuggestions"}
+		if documents != nil {
+			extraFields = append(extraFields, "documents")
+		}
+		persistCtx := context.WithValue(ctx, legacyMetadataExtraFieldsKey{}, extraFields)
 		var merged *metadataLogicalSource
 		if progress != nil {
 			merged, err = s.persistLegacyMetadataImageWithProgress(persistCtx, tx, workspace, stored, restored, progress)
@@ -751,7 +821,10 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 // validateIssueSuggestionCallback admits only the scoped writer's issue and
 // timeline effects plus issueSuggestions edits: the same scoped issues, appended
 // activities, unchanged comments and notifications, and no other metadata.
-func validateIssueSuggestionCallback(before, after domain.Bootstrap, scope map[string]bool) error {
+// A team move (move) may also renumber issues and edit attached documents,
+// which issueTeamMove.check admits, and RecordIssueActivity may merge its
+// issue.updated entry into the latest one or drop that entry.
+func validateIssueSuggestionCallback(before, after domain.Bootstrap, scope map[string]bool, move bool) error {
 	refuse := func(reason string) error {
 		return fmt.Errorf("%w: suggestion callback %s", ErrIssueSuggestionWriteRefused, reason)
 	}
@@ -765,12 +838,12 @@ func validateIssueSuggestionCallback(before, after domain.Bootstrap, scope map[s
 		}
 		seen[issue.ID] = true
 		old := before.Issues[index]
-		if issue.Team.ID != old.Team.ID || issue.Number != old.Number || issue.Identifier != old.Identifier {
+		if !move && (issue.Team.ID != old.Team.ID || issue.Number != old.Number || issue.Identifier != old.Identifier) {
 			return refuse("moved an issue")
 		}
 	}
 	for _, field := range changedMetadataFields(collectionMetadata(before), collectionMetadata(after)) {
-		if field.name != "issueSuggestions" {
+		if field.name != "issueSuggestions" && (!move || field.name != "documents") {
 			return refuse("changed metadata " + field.name)
 		}
 	}
@@ -780,7 +853,7 @@ func validateIssueSuggestionCallback(before, after domain.Bootstrap, scope map[s
 	}
 	for key, items := range after.Activities {
 		previous := before.Activities[key]
-		if !scope[key] || len(items) < len(previous) || len(previous) != 0 && !reflect.DeepEqual(previous, items[:len(previous)]) {
+		if !scope[key] || !appendedActivityHistory(previous, items, move) {
 			return refuse("rewrote activity history")
 		}
 	}
@@ -790,6 +863,35 @@ func validateIssueSuggestionCallback(before, after domain.Bootstrap, scope map[s
 		}
 	}
 	return nil
+}
+
+// appendedActivityHistory reports whether items is previous with entries
+// appended. With merge, one earlier issue.updated entry may also be edited in
+// place (same ID) or removed, as RecordIssueActivity merges an edit into the
+// latest one; syncContentRecords persists either like the legacy writer.
+func appendedActivityHistory(previous, items []domain.ActivityEvent, merge bool) bool {
+	equal := func(a, b []domain.ActivityEvent) bool { return len(a) == 0 && len(b) == 0 || reflect.DeepEqual(a, b) }
+	if len(items) >= len(previous) && equal(previous, items[:len(previous)]) {
+		return true
+	}
+	if !merge {
+		return false
+	}
+	for index := range previous {
+		if index < len(items) && reflect.DeepEqual(previous[index], items[index]) {
+			continue
+		}
+		if previous[index].Type != "issue.updated" {
+			return false
+		}
+		rest := previous[index+1:]
+		if index < len(items) && items[index].ID == previous[index].ID && items[index].Type == "issue.updated" &&
+			len(items) >= len(previous) && equal(rest, items[index+1:len(previous)]) {
+			return true
+		}
+		return len(items) >= len(previous)-1 && equal(rest, items[index:len(previous)-1])
+	}
+	return false
 }
 
 // issueSuggestionPatchNode returns the patched collection and a release for

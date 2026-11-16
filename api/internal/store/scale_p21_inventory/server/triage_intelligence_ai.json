@@ -1,6 +1,6 @@
 {
   "source": "server/triage_intelligence_ai.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "requestTriageAIPlan": {
       "owner": "P21",
@@ -17,7 +17,7 @@
     },
     "runTriageIntelligence": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -29,7 +29,7 @@
         "server/server.refreshIssueSuggestions",
         "server/server.startTriageIntelligenceRun"
       ],
-      "reason": "Partially owned, still pending: bounded mode (runTriageIntelligenceBounded) reads unprojected scoring inputs (TriageScoringInputs: policy fields, every label, every project's triage fields, the ordered user directory) and writes through mutateBoundedIssueSuggestions with the generated targets declared; heuristic and model-backed runs, with and without auto-applied project/label/relation suggestions, equal legacy (TestScaleP21TriageRunWriterDifferential). Workspaces whose team suggestions may auto-move issues are refused before the write because the bounded writer does not yet move and renumber issues; that input keeps this consumer blocked."
+      "reason": "Off mode keeps WorkspaceMetadata and the legacy write context. Bounded mode (runTriageIntelligenceBounded) reads unprojected scoring inputs (TriageScoringInputs: policy fields, every label, every project's triage fields, the ordered user directory) and writes through mutateBoundedIssueSuggestions with the generated targets declared; heuristic and model-backed runs, with and without auto-applied project/label/relation suggestions, equal legacy (TestScaleP21TriageRunWriterDifferential). Runs whose team suggestions auto-apply write with WithIssueRenumbering and the generated teams declared, through the writer's issueTeamMove closure; TestScaleP21TeamMoveAutoApplyDifferential compares legacy, warm and SQL-reloaded auto-move runs (also merging into a prior update activity) and runs without a team suggestion, exact rows, sequence, aliases, documents, events and publications."
     },
     "runTriageIntelligenceWith": {
       "owner": "P21",

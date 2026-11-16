@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Accepted and auto-applied Triage Intelligence team suggestions move issues through the bounded suggestion writer, which locks the issue number sequence and loads only the target team's workflow states, same-named labels and the issue's attached documents, preserving numbers, old identifiers, label and status mapping, document scope, history merging, permission checks, events and publications. Bounded metadata stays off by default.
 - Triage Intelligence previews, model context and suggestion runs read the viewer's projected projects, labels, members and teams and the scoring inputs from owned installed metadata, preserving every credential filter and the model prompt. Bounded metadata stays off by default.
 - Triage Intelligence batch generation no longer overwrites an issue with its search summary when that issue is a candidate for another issue in the same batch.
 - Triage Intelligence suggestion acceptance, dismissal, heuristic generation and target pruning write their issues, activities and suggestion list through a dedicated bounded writer that preserves list order, relations, events and publications; team moves are refused in bounded mode. Bounded metadata stays off by default.
