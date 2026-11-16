@@ -485,6 +485,7 @@ func (h *realtimeHub) revokeDocument(client *realtimeSocketClient, documentID, i
 	delete(client.documents, documentID)
 	delete(client.issueDocuments, documentID)
 	delete(client.issueAccess, documentID)
+	client.releaseDocumentHeader(documentID)
 	delete(client.documentAccess, documentID)
 	h.mu.Unlock()
 	if !joined {

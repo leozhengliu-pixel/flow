@@ -1,10 +1,38 @@
 {
   "source": "server/realtime_collaboration.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
+    "handleCollaborationCommand": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The bounded standalone join uses BeginCollaborationDocumentRead for the first surviving generation/ID/current-slug header and literal documentRole/key-write checks; the off branch keeps socketWorkspaceMetadata. Its independent read/output owner survives all canonical recovery-page flush acknowledgements. Keys and record IDs that enter the socket cache are separately cloned and charged before escaping, released on replacement/revocation/teardown. SW178 proves 18 complete legacy/bounded join, role, conflict, queued recheck, paged recovery, credential and failed-writer outcomes; SW179/SW181 prove the shared reader and transient handoff semantics, and SW180 proves cache ownership, cancellation, quotas and concurrent teardown under race. No metadata body enters the header; recovery supplies the original complete sync state.",
+      "accessors": [
+        "BeginCollaborationDocumentRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Standalone document collaboration joins.",
+      "callers": [
+        "realtimeSocket -> handleCollaborationCommand"
+      ]
+    },
+    "socketDocumentRole": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The bounded live role refresh uses the fully proven single-header collaboration reader, then the original collaborationDocument, documentRole and credential write predicate. It detaches the finite role enum before closing the independent read; flag-off retains the original metadata accessor and checks. SW178 compares exact role/conflict/revocation and access notices through actual join/recheck consumers; SW179 covers the permission/key/source matrix, growth, live authority and ownership in normal/persistent/race runs; SW181 proves a borrowed transient team list cannot invent membership.",
+      "accessors": [
+        "BeginCollaborationDocumentRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Live standalone document access refresh.",
+      "callers": [
+        "documentSocketCanEdit -> socketDocumentRole",
+        "recheckStandaloneDocument -> socketDocumentRole"
+      ]
+    },
     "socketWorkspaceMetadata": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The only production callers, handleCollaborationCommand and socketDocumentRole, now bypass this literal legacy accessor when their selected store is bounded, using the proven independent single-header reader instead. The original unprojected development and PagedWorkspaceMetadata plus credential-projection calls remain unchanged off mode. SW178's 18 actual consumer differentials and SW179/SW181 shared proofs cover both callers; SW180 covers detached socket-cache ownership. The inventory recognizes this helper's method calls and method values so a new caller cannot silently escape registration. This is an off-only compatibility helper, not an approved bounded full scan.",
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata",

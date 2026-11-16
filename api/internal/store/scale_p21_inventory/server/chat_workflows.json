@@ -1,6 +1,6 @@
 {
   "source": "server/chat_workflows.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "chatExecuteAction": {
       "owner": "P18",
@@ -17,7 +17,8 @@
     },
     "processChatInbound": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The existing typed bootstrap site now calls proven chatAuthorizedWorkflowHeaders under the containing claimed-job owner. Language, team/state/assignee/template/project defaults and issue-role inputs retain their exact declared closure; original command dispatch, linkage, action validation, binding checks, form persistence and platform errors remain. SW175 is one nine-case actual legacy/bounded inbound table for create/state/assignee/comment forms, expired action/consent, disabled create/update and changed binding scope, comparing complete platform requests and stored actions with held output and zero work/full decodes afterward. The literal off typed-bootstrap path remains; downstream action/create/request writers retain their independent guards.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"

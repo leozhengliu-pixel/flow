@@ -18,61 +18,11 @@ import (
 // continue to use their independent typed input contract.
 func (s *server) issueRecordsBootstrapBounded(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
-	workspace := workspaceKey(r)
-	s.setChangeCursor(w, r, workspace)
-	principal := ""
-	if !s.authDisabled {
-		principal = authUser(r).ID
-		if principal == "" {
-			issueRecordsError(w, store.ErrAuthForbidden)
-			return
-		}
-	}
-	var credential *domain.APIKey
-	if key, found := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); found {
-		credential = &key
-	}
-	read, err := s.store.BeginIssueBootstrapRead(r.Context(), workspace, principal, credential)
-	if err != nil {
-		if principal == "" && errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "workspace not found")
-			return
-		}
-		issueRecordsError(w, err)
+	read, ok := s.beginIssueRecordsBootstrapRead(w, r)
+	if !ok {
 		return
 	}
 	defer read.Close()
-	data := read.Data
-	if !s.authDisabled {
-		filterBootstrapForAPIKey(&data, r)
-	}
-	data.IssueCollectionPaged = true
-	data.CommentActions = nil
-	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
-		issueRecordsError(w, err)
-		return
-	}
-	if projectListBootstrapRequested(r) {
-		store.ProjectListBootstrapProjection(&data)
-	} else if r.Header.Get("X-Flow-Projection") == "issue-detail" {
-		store.IssueDetailBootstrapProjection(&data)
-	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
-		issueRecordsError(w, err)
-		return
-	}
-	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
-		issueRecordsError(w, err)
-		return
-	}
-	if err := scaleP21SanitizeBootstrap(r.Context(), &data, read.StreamString); err != nil {
-		issueRecordsError(w, err)
-		return
-	}
-	s.applyCalendarAway(r.Context(), &data)
-	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
-	data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
-	data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
-	read.Data = data
 	w.Header().Add("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
 	ctx := hydratedSigningContext(r.Context(), w)
 	signing, _ := ctx.Value(hydratedURLSigningKey{}).(*hydratedURLSigning)
@@ -88,4 +38,69 @@ func (s *server) issueRecordsBootstrapBounded(w http.ResponseWriter, r *http.Req
 		log.Printf("encode bounded bootstrap: %v", err)
 		panic(http.ErrAbortHandler)
 	}
+}
+
+// The caller owns the read through streaming or through its declared typed
+// projection. All route filters and decoration errors share this boundary.
+func (s *server) beginIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.Request) (_ *store.IssueBootstrapRead, ok bool) {
+	workspace := workspaceKey(r)
+	s.setChangeCursor(w, r, workspace)
+	principal := ""
+	if !s.authDisabled {
+		principal = authUser(r).ID
+		if principal == "" {
+			issueRecordsError(w, store.ErrAuthForbidden)
+			return nil, false
+		}
+	}
+	var credential *domain.APIKey
+	if key, found := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); found {
+		credential = &key
+	}
+	read, err := s.store.BeginIssueBootstrapRead(r.Context(), workspace, principal, credential)
+	if err != nil {
+		if principal == "" && errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "workspace not found")
+			return nil, false
+		}
+		issueRecordsError(w, err)
+		return nil, false
+	}
+	defer func() {
+		if !ok {
+			read.Close()
+		}
+	}()
+	data := read.Data
+	if !s.authDisabled {
+		filterBootstrapForAPIKey(&data, r)
+	}
+	data.IssueCollectionPaged = true
+	data.CommentActions = nil
+	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
+		issueRecordsError(w, err)
+		return nil, false
+	}
+	if projectListBootstrapRequested(r) {
+		store.ProjectListBootstrapProjection(&data)
+	} else if r.Header.Get("X-Flow-Projection") == "issue-detail" {
+		store.IssueDetailBootstrapProjection(&data)
+	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
+		issueRecordsError(w, err)
+		return nil, false
+	}
+	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
+		issueRecordsError(w, err)
+		return nil, false
+	}
+	if err := scaleP21SanitizeBootstrap(r.Context(), &data, read.StreamString); err != nil {
+		issueRecordsError(w, err)
+		return nil, false
+	}
+	s.applyCalendarAway(r.Context(), &data)
+	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
+	data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
+	data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
+	read.Data = data
+	return read, true
 }

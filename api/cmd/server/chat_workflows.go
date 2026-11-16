@@ -576,7 +576,7 @@ func (s *server) processChatInbound(ctx context.Context, record domain.ChatInteg
 	}
 	ctx = withChatIdentityAuthentication(ctx, identity)
 	var metadata domain.Bootstrap
-	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata); err != nil {
+	if err := s.chatAuthorizedWorkflowHeaders(ctx, record.WorkspaceKey, identity.UserID, &metadata); err != nil {
 		return s.chatMutationFailure(ctx, record, job, command.OpenID, err, "Your Flow workspace access has changed. Sign in to Flow and check your access.")
 	}
 	if command.Kind == chatMessageActionKind {

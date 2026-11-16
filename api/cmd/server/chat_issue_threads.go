@@ -507,11 +507,11 @@ func (s *server) processChatThreadReply(ctx context.Context, record domain.ChatI
 	}
 	ctx = withChatIdentityAuthentication(ctx, identity)
 	var metadata domain.Bootstrap
-	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata); err != nil {
+	if err := s.chatAuthorizedWorkflowHeaders(ctx, record.WorkspaceKey, identity.UserID, &metadata); err != nil {
 		return s.chatMutationFailure(ctx, record, job, command.OpenID, err, "Your Flow workspace access has changed. Sign in to Flow and check your access.")
 	}
 	var issue domain.Issue
-	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(thread.ResourceID), nil, &issue); err != nil {
+	if err := s.chatAuthorizedPointRead(ctx, record.WorkspaceKey, identity.UserID, "/api/issue-records/"+url.PathEscape(thread.ResourceID), &issue); err != nil {
 		return s.chatMutationFailure(ctx, record, job, command.OpenID, err, "You no longer have access to this issue.")
 	}
 	if !chatIssueMatchesBinding(issue, binding) {

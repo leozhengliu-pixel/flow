@@ -906,6 +906,13 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 			allowed[team.ID] = true
 		}
 	}
+	if s.BoundedMetadataEnabled() {
+		if capture, _ := ctx.Value(collaborationProjectionCaptureKey{}).(*collaborationProjectionCapture); capture != nil {
+			if err := capture.capture(ctx, data, allowed); err != nil {
+				return domain.Bootstrap{}, false, err
+			}
+		}
+	}
 	filterBootstrapTeams(&data, viewerTeamScope(data, allowed, userID, role), role == "guest")
 	hasSpecificStates := map[string]bool{}
 	for _, state := range data.States {

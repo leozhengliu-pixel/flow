@@ -462,14 +462,16 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 					ctx, cancel := context.WithCancel(r.Context())
 					r = r.WithContext(ctx)
 					upstream.mode = ""
-					upstream.before = func(*http.Request) {
+					held := make(chan struct{})
+					upstream.before = func(outboundRequest *http.Request) {
 						switch spec.name {
 						case "actor-revoked":
 							if err := repo.SuspendMember(t.Context(), f.data.Workspace.ID, actor.ID); err != nil {
 								t.Fatal(err)
 							}
 						case "cancelled-outbound":
-							cancel()
+							close(held)
+							<-outboundRequest.Context().Done()
 						default:
 							// Both phases mutate the handler's own installed source.
 							// A write on the separate fixture owner would instead
@@ -509,7 +511,22 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 							realtime = event
 						}
 					})
-					scaleP21M3Call(&server{store: source}, w, r, (*server).verifyIdentityProvider)
+					if spec.name == "cancelled-outbound" {
+						finished := make(chan struct{})
+						go func() {
+							defer close(finished)
+							scaleP21M3Call(&server{store: source}, w, r, (*server).verifyIdentityProvider)
+						}()
+						select {
+						case <-held:
+							cancel()
+							<-finished
+						case <-finished:
+							t.Fatalf("verification returned before held outbound stage: %d %s", w.Code, w.Body.String())
+						}
+					} else {
+						scaleP21M3Call(&server{store: source}, w, r, (*server).verifyIdentityProvider)
+					}
 					cancel()
 					if w.Code != spec.status {
 						t.Fatalf("held verification status=%d want=%d body=%s", w.Code, spec.status, w.Body.String())

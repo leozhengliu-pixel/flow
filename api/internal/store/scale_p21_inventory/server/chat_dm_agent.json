@@ -1,11 +1,11 @@
 {
   "source": "server/chat_dm_agent.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "chatDMAuthorize": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "SW79 Tier B inspection found no proven bounded primitive for this complete authority output. The in-process bootstrap call fills dm.metadata for downstream team visibility/archive/retirement checks, assignee directory choices, full project preview selection and group team/project context. chatAuthorizedPointRead explicitly rejects the in-process bootstrap path; an authorization-only check or partial header would change those consumers. Keep the original callback and localized refusal/HIPAA platform notices until an owned authority projection covers the complete downstream lifetime.",
+      "status": "reviewed",
+      "reason": "Uses the proven declared chatAuthorizedBootstrapHeaders contract for all downstream DM team visibility/archive/retirement checks, active assignee choices, real project Summary/status/lead/date/aliases and group team/project prompts. Original authentication/workspace policy, the literal HIPAA settings read, localized refusals and platform notices remain. Synchronous claimed jobs retain their existing owner; asynchronous replies now have an independent owner lasting through completion and heartbeat join. SW170 proves actual legacy/bounded form/card/prompt and authority outputs under the applicable full matrix, both record flags, warm/reloaded and handed sources, persistent repeats and race; SW171 proves four async lifetime/error/cancellation modes. Separate session-marker and mutation writers remain guarded.",
       "accessors": [
         "chatAuthorizedMutation"
       ],

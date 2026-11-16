@@ -1,6 +1,6 @@
 {
   "source": "server/chat_dm_commands.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "chatDMComment": {
       "owner": "P18",
@@ -43,8 +43,8 @@
     },
     "chatDMLinkPreview": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "Local issue GET now uses chatAuthorizedPointRead and an outer metadata output lifetime through card construction, command failure notices and platform send/errors; caller-project preview selection is unchanged. SW40 Tier B table passes 13 exact legacy/bounded GET/card/error cases, including selected-empty denial, reconnect, Chinese, platform failure and caller-project/unlinked-workspace paths, with output held during actual use and released after return. A linked foreign-workspace branch still calls pending chatDMAuthorize and its bootstrap projection, so the complete consumer remains pending.",
+      "status": "reviewed",
+      "reason": "Existing local issue point reads and operation lifetime retain their SW40 proof; linked foreign-workspace authorization now uses the proven owned declared DM headers, closing the remaining broad bootstrap dependency. Original workspace/link lookup, first ordered ID/current/old-slug matching including duplicate IDs, real project card text, point issue reads, localized notices and platform send/error behavior remain. SW173 is one18-row exact actual off/on table covering foreign project and issue previews, aliases/duplicate precedence, selected credentials, HIPAA, expired/revoked access, disconnected linkage, Chinese and platform failure. Successful witnesses assert actual foreign payloads; work remains held through sends and releases afterward with zero full decodes. No new reader/loading/cache/locking is added in this consumer.",
       "accessors": [
         "chatAuthorizedPointRead"
       ],

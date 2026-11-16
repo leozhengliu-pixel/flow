@@ -334,7 +334,7 @@ func (s *server) chatDMMessage(ctx context.Context, record domain.ChatIntegratio
 // as every chat action does, and that the workspace lets its content reach
 // chat applications; it answers the member when not (handled).
 func (s *server) chatDMAuthorize(ctx context.Context, dm *chatDMRequest) (bool, error) {
-	if err := s.chatAuthorizedMutation(dm.authContext(ctx), dm.target.Workspace, dm.identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &dm.metadata); err != nil {
+	if err := s.chatAuthorizedBootstrapHeaders(dm.authContext(ctx), dm.target.Workspace, dm.identity.UserID, &dm.metadata); err != nil {
 		chatLogDirectMessage(ctx, dm.record, dm.job, "dm_workspace_access_refused")
 		return true, s.chatDMFailure(ctx, *dm, err)
 	}

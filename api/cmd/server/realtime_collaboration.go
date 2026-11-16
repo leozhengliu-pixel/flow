@@ -139,6 +139,7 @@ type documentSocketAccess struct {
 	documentID string
 	canEdit    bool
 	checkedAt  time.Time
+	ownedBytes int64
 }
 
 // documentAccessTTL bounds how long a socket keeps editing a document after
@@ -168,6 +169,13 @@ func (h *realtimeHub) removeSocket(client *realtimeSocketClient) {
 	delete(h.sockets[client.workspace], client.id)
 	if len(h.sockets[client.workspace]) == 0 {
 		delete(h.sockets, client.workspace)
+	}
+	for id, access := range client.documentAccess {
+		if access.ownedBytes != 0 {
+			client.releaseDocumentHeader(id)
+			delete(client.documentAccess, id)
+			delete(client.documents, id)
+		}
 	}
 	client.queueMu.Lock()
 	client.queueClosed = true
@@ -383,6 +391,7 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 	}
 	var contentState string
 	readOnly := false
+	headerJoined := false
 	if command.IssueID != "" {
 		issue, visible, canEdit, err := s.socketIssue(r, command.IssueID)
 		if err != nil && !errors.Is(err, store.ErrAuthForbidden) {
@@ -411,9 +420,38 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 		client.issueAccess[command.DocumentID] = &issueSocketAccess{teamID: issue.Team.ID, canEdit: canEdit, checkedAt: time.Now()}
 		s.realtime.mu.Unlock()
 	} else {
-		data, err := s.socketWorkspaceMetadata(r, client.workspace)
-		if err != nil {
-			return err
+		var data domain.Bootstrap
+		if s.store.BoundedMetadataEnabled() {
+			ctx, closeOutputs := beginMetadataOutputReads(r.Context())
+			defer closeOutputs()
+			userID := ""
+			var key *domain.APIKey
+			if !s.authDisabled {
+				userID = authUser(r).ID
+				if credential, found := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); found {
+					key = &credential
+				}
+			}
+			read, err := s.store.BeginCollaborationDocumentRead(ctx, client.workspace, userID, command.DocumentID, key)
+			if err != nil {
+				return err
+			}
+			defer read.Close()
+			ctx, err = read.Context(ctx)
+			if err != nil {
+				return err
+			}
+			if err := read.TransferOutput(ctx); err != nil {
+				return err
+			}
+			r = r.WithContext(ctx)
+			data = read.Data
+		} else {
+			var err error
+			data, err = s.socketWorkspaceMetadata(r, client.workspace)
+			if err != nil {
+				return err
+			}
 		}
 		// Standalone workspace documents use the same collaboration protocol as
 		// issue descriptions, but are authorized by the document's role:
@@ -428,11 +466,21 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 		}
 		contentState = document.ContentState
 		readOnly = !canEditDocument(documentRole(s, data, document)) || !socketCredentialMayWrite(r, "/api/documents/"+document.ID)
-		s.realtime.mu.Lock()
-		client.documentAccess[command.DocumentID] = &documentSocketAccess{documentID: document.ID, canEdit: !readOnly, checkedAt: time.Now()}
-		s.realtime.mu.Unlock()
+		if s.store.BoundedMetadataEnabled() {
+			command.DocumentID, err = s.realtime.joinDocumentHeader(r.Context(), client, command.DocumentID, document.ID, !readOnly)
+			if err != nil {
+				return err
+			}
+			headerJoined = true
+		} else {
+			s.realtime.mu.Lock()
+			client.documentAccess[command.DocumentID] = &documentSocketAccess{documentID: document.ID, canEdit: !readOnly, checkedAt: time.Now()}
+			s.realtime.mu.Unlock()
+		}
 	}
-	s.realtime.joinDocument(client, command.DocumentID)
+	if !headerJoined {
+		s.realtime.joinDocument(client, command.DocumentID)
+	}
 	message := collaborationSyncMessage{Type: "document.sync", DocumentID: command.DocumentID, ContentState: contentState, Updates: []collaborationSyncUpdate{}, ReadOnly: readOnly}
 	bytes := len(contentState)
 	flush := func(more bool) error {
@@ -644,9 +692,28 @@ func (s *server) documentSocketCanEdit(r *http.Request, client *realtimeSocketCl
 // collaboration id names (errNotFound when it is gone). A credential that may
 // not change documents through the API (a read-only API key) only reads it.
 func (s *server) socketDocumentRole(r *http.Request, workspace, collaborationID string) (string, bool, error) {
-	data, err := s.socketWorkspaceMetadata(r, workspace)
-	if err != nil {
-		return "", false, err
+	var data domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		userID := ""
+		var key *domain.APIKey
+		if !s.authDisabled {
+			userID = authUser(r).ID
+			if credential, found := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); found {
+				key = &credential
+			}
+		}
+		read, err := s.store.BeginCollaborationDocumentRead(r.Context(), workspace, userID, collaborationID, key)
+		if err != nil {
+			return "", false, err
+		}
+		defer read.Close()
+		data = read.Data
+	} else {
+		var err error
+		data, err = s.socketWorkspaceMetadata(r, workspace)
+		if err != nil {
+			return "", false, err
+		}
 	}
 	document, conflict, err := collaborationDocument(data, collaborationID)
 	if err != nil {
@@ -655,6 +722,9 @@ func (s *server) socketDocumentRole(r *http.Request, workspace, collaborationID 
 	role := documentRole(s, data, document)
 	if canEditDocument(role) && !socketCredentialMayWrite(r, "/api/documents/"+document.ID) {
 		role = "viewer"
+	}
+	if s.store.BoundedMetadataEnabled() {
+		role = strings.Clone(role)
 	}
 	return role, conflict, nil
 }

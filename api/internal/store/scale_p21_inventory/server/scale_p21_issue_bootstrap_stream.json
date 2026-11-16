@@ -6,10 +6,19 @@
       "owner": "P21",
       "status": "reviewed",
       "reason": "The bounded-only HTTP branch owns BeginIssueBootstrapRead through all literal credential filtering, preference/team visibility, three projection modes, release/cycle/calendar/loop decoration and final output. Shared streamed loop presentation avoids interpreting opaque instructions. Logical encoding binds every body before writing and uses the existing hydrated URL signer per encoded leaf; existing outer spools retain the producer through direct overflow and release it before detached replay. Missing development workspaces keep the literal 404, authenticated denial stays 403, and caller SQL snapshots keep their original authority lifetime. SW145 compares fifty-five actual registered legacy/bounded responses byte-for-byte with exact statuses and headers except numeric timing durations, across principals/keys, warm/reloaded and public SQL handoffs, all projection modes, cross-workspace denial, development defaults, and signed zero/small/full spool budgets. Producer work, request scopes, files and spool allowance release exactly. The original flag-off handler and separately guarded typed chat bootstrap helper remain literal.",
-      "accessors": ["BeginIssueBootstrapRead"],
+      "accessors": ["beginIssueRecordsBootstrapRead"],
       "temperature": "hot",
       "temperatureReason": "Paged issue list, board and issue detail bootstrap HTTP response.",
       "callers": ["GET /api/issue-records/bootstrap -> issueRecordsBootstrap"]
+    },
+    "beginIssueRecordsBootstrapRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Exact extraction of the existing bounded HTTP reader preparation preserves cursor/source selection, all credential/preference filters, projection modes, release/cycle decoration, streamed loop sanitization, calendar and loop counts, nil/empty shapes and error order. The caller owns successful reads; every failed preparation closes its owner. Existing SW145 passes all55 actual registered legacy/bounded HTTP pairs after extraction. SW170 and SW174 add exact declared typed-header consumers across permission/source matrices, ownership/cancellation, persistent repeats and race without changing the underlying store loader or limits. The literal flag-off HTTP handler remains unchanged.",
+      "accessors": ["BeginIssueBootstrapRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared issue bootstrap HTTP and declared chat header preparation.",
+      "callers": ["server/server.issueRecordsBootstrapBounded", "server/server.chatBootstrapHeaders"]
     }
   }
 }

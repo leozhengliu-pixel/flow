@@ -144,6 +144,7 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 	var handler http.HandlerFunc
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	inProcess := false
+	var bootstrapErr error
 	switch {
 	case path == "/api/issue-records/bootstrap" && method == http.MethodGet:
 		// The workspace metadata, read in process: the same data and
@@ -163,6 +164,10 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 				// Workspace/session/resource policy was checked by the same
 				// middleware; a consent check does not need a metadata copy.
 				w.WriteHeader(http.StatusOK)
+				return
+			}
+			if kind, selected := ctx.Value(chatBootstrapHeadersKey{}).(chatBootstrapHeadersKind); selected && s.store.BoundedMetadataEnabled() {
+				bootstrapErr = s.chatBootstrapHeaders(w, r, metadata, kind)
 				return
 			}
 			if data, ok := s.issueRecordsBootstrapData(w, r); ok {
@@ -215,6 +220,9 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 			}
 		}
 		handler(w, r)
+	}
+	if bootstrapErr != nil {
+		return bootstrapErr
 	}
 	if w.owned != nil {
 		if err := w.owned.work.Err(); err != nil {

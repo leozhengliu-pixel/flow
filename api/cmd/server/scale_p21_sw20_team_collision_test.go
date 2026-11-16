@@ -164,7 +164,15 @@ func TestScaleP21SW20RestoreTeamTypedPrefixes(t *testing.T) {
 						source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { realtime = append(realtime, event) })
 						r, w := f.request(actor, key, nil), httptest.NewRecorder()
 						r.SetPathValue("teamId", id)
-						started := time.Now().UTC()
+						auditQuery := store.AuditQuery{ResourceTypes: []string{"team"}, ResourceID: id}
+						previousAudits, err := repo.ListAuditEntries(t.Context(), f.data.Workspace.ID, auditQuery)
+						if err != nil {
+							t.Fatal("typed team audit preimage", err)
+						}
+						previousAuditIDs := map[string]bool{}
+						for _, entry := range previousAudits {
+							previousAuditIDs[entry.ID] = true
+						}
 						scaleP21M3Call(&server{store: source}, w, r, (*server).restoreDeletedTeam)
 						if w.Code != http.StatusOK || len(events) != 1 || len(realtime) != 1 {
 							t.Fatal("typed team restore", w.Code, len(events), len(realtime), w.Body.String())
@@ -177,7 +185,10 @@ func TestScaleP21SW20RestoreTeamTypedPrefixes(t *testing.T) {
 							t.Fatal(err)
 						}
 						generated := map[string]string{response["updatedAt"].(string): "<clock>"}
-						audits, err := repo.ListAuditEntries(t.Context(), f.data.Workspace.ID, store.AuditQuery{Since: started, ResourceTypes: []string{"team"}, ResourceID: id})
+						audits, err := repo.ListAuditEntries(t.Context(), f.data.Workspace.ID, auditQuery)
+						audits = slices.DeleteFunc(audits, func(entry domain.AuditLogEntry) bool {
+							return previousAuditIDs[entry.ID]
+						})
 						if err != nil || len(audits) != 1 {
 							t.Fatal("typed team audit", err, len(audits))
 						}

@@ -1,6 +1,6 @@
 {
   "source": "server/chat_cards.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "chatIssueCard": {
       "owner": "P18",
@@ -19,8 +19,8 @@
     },
     "chatSendUpdateForm": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "The issue point GET now uses chatAuthorizedPointRead with an operation owner retained through role/binding checks, durable form action persistence, personal card send and error delivery. TestScaleP21SW43ChatUpdateFormPointDifferential passed five actual off/on cases for state, assignee, comment, missing-issue error delivery and platform-send failure, comparing exact sent payloads and durable action payloads, with work live during sending and zero work/full decodes after return. Bootstrap input remains supplied by processChatInbound's broad metadata read and feeds language, role, workflow and assignee helpers; that dependency is not certified by this point adapter change. chatIssueCard and quick-control dependencies remain independently pending.",
+      "status": "reviewed",
+      "reason": "The proven point GET and operation lifetime retain their existing SW43 five-case proof through role/binding checks, durable form actions and personal sends/errors. Its only supplied bootstrap now comes from processChatInbound's proven declared workflow-header gateway, closing the remaining language/role/workflow/assignee dependency. SW175's one actual inbound differential table reaches state, assignee and comment forms through that gateway and compares complete platform payloads and persisted action choices, with work held through sending and released after return. SW174 supplies the shared full permission/source/default/template matrix proof once. No new loading, cache or lock is introduced here; later action writers remain independently guarded.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedPointRead"

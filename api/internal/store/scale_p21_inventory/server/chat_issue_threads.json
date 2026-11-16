@@ -1,6 +1,6 @@
 {
   "source": "server/chat_issue_threads.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "chatSyncIssueComments": {
       "owner": "P18",
@@ -18,7 +18,8 @@
     },
     "processChatThreadReply": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Uses proven declared workflow headers for the existing issue-role checks and proven chatAuthorizedPointRead for admitted GET buffer/decoded output. Off mode forwards the literal original typed bootstrap and point GET. Original thread retention/binding/linkage, scope and permission refusal, no-echo reservation, idempotent comment POST and cleanup remain; the POST reaches the already-proven bounded discussion writer. SW176 is one13-row exact actual legacy/bounded table covering public/private comments, replay deduplication, role/private/consent/membership/binding/scope/linkage denials and missing roots. It compares actual comments, SQL/domain events, webhook/realtime effects, thread items and platform calls with meaningful successful/no-echo witnesses, held output, zero full decodes and complete release. No new loading/cache/locking is added.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"

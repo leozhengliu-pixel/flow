@@ -1,0 +1,33 @@
+{
+  "source": "server/scale_p21_chat_bootstrap_headers.go",
+  "unmigrated": 0,
+  "consumers": {
+    "chatAuthorizedBootstrapHeaders": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Declared DM headers use the original chat authentication, workspace middleware and bootstrap source precedence, then the proven owned issue-bootstrap preparation. Only Viewer/role, team visibility inputs, the active-user directory and plain project card fields escape; Summary remains real admitted text and opaque body fields are dropped. TransferOutput succeeds before destination assignment and retains the reader through forms, previews and group prompts. SW170 compares all80 principal/key/record-flag/warm-reload matrix rows plus actual form/cards/group outputs, handed source, invalid/revoked authority, cancellation and absent/closed ownership; normal, persistent SQLite twice and race pass. Off mode forwards the original typed bootstrap call literally. Generic typed-bootstrap callers and separate writers retain independent guards.",
+      "accessors": ["chatAuthorizedMutation"],
+      "temperature": "hot",
+      "temperatureReason": "DM forms, project previews and group reply prompts.",
+      "callers": ["server/server.chatDMAuthorize"]
+    },
+    "chatAuthorizedWorkflowHeaders": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Declared workflow headers reuse the same original chat gateway and owned bootstrap preparation, then retain only workspace/viewer/team policy, states, user/language data, selected template/default/form-presence fields, project association headers and existing handed issue/grant chains. No new source, cache, lock or full hydration is introduced; caller-owned output retains the reader through derived forms and comment checks. SW174 legacy/bounded comparisons cover80 permission/key/flag/source matrix rows, real state/assignee/default/template/triage/role/language witnesses, cancellation, missing/closed owners and handed parent grants; normal, persistent SQLite twice and race pass. Off mode remains the original typed call. Downstream issue/action writers remain separate guards.",
+      "accessors": ["chatAuthorizedMutation"],
+      "temperature": "hot",
+      "temperatureReason": "Inbound chat forms and queued issue thread comments.",
+      "callers": ["server/server.processChatInbound", "server/server.processChatThreadReply"]
+    },
+    "chatBootstrapHeaders": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "A closed DM/workflow discriminator selects only declared plain-field projections after the unchanged shared bootstrap filters/decorators/sanitizer. Already admitted arrays are narrowed in place; no opaque body path enters the returned roots. The reader transfers once to the containing output owner before assigning the destination, closes on transfer failure and preserves the original generic typed gateway. SW170/SW174 pass exact legacy differentials, warm/reloaded and handed sources, ownership/cancellation, persistent repeats and race. SW171 separately proves independent asynchronous reply ownership through health, FinishChatJob, ReleaseChatReplyLeases, cancellation and heartbeat join in four normal/persistent/race scenarios. All existing quotas remain.",
+      "accessors": ["beginIssueRecordsBootstrapRead"],
+      "temperature": "hot",
+      "temperatureReason": "Declared in-process DM and workflow bootstrap readers.",
+      "callers": ["server/server.chatAuthorizedMutation"]
+    }
+  }
+}

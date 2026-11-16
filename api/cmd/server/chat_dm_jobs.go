@@ -108,6 +108,11 @@ func (s *server) startChatDMReplyJobs(ctx context.Context, workspace string) err
 			defer chatDMReplies.Done()
 			progress := &chatDeliveryProgress{}
 			parent := context.WithValue(context.WithoutCancel(ctx), chatDeliveryProgressKey{}, progress)
+			if s.store.BoundedMetadataEnabled() {
+				var close func()
+				parent, close = beginIndependentMetadataOutputReads(parent)
+				defer close()
+			}
 			runCtx, cancel := context.WithTimeout(parent, chatDMRunLimit)
 			defer cancel()
 			stopWorker := context.AfterFunc(s.store.WorkerContext(), cancel)
