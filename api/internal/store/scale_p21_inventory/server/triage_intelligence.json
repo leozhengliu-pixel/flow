@@ -1,6 +1,6 @@
 {
   "source": "server/triage_intelligence.go",
-  "unmigrated": 4,
+  "unmigrated": 3,
   "consumers": {
     "generateTriageIntelligenceForIssues": {
       "owner": "P21",
@@ -17,7 +17,8 @@
         "updateIssue -> generateTriageIntelligenceForIssue",
         "updateIssueRecord -> generateTriageIntelligenceForIssue",
         "batchUpdate -> generateTriageIntelligenceForIssues"
-      ]
+      ],
+      "reason": "Partially owned, still pending: bounded mode (generateTriageIntelligenceForIssuesBounded) reproduces the background-run starts and heuristic generation, including auto-applied project/label/relation suggestions and batches, exactly through mutateBoundedIssueSuggestions with complete scoring inputs (TestScaleP21TriageGenerateWriterDifferential). Two inputs are refused before any write: workspaces whose team suggestions may auto-move issues (the bounded writer does not renumber), and batches in which one scoped issue is another's candidate, where the legacy callback writes the candidate summary over the full scoped issue row (the test observes the stored row shrinking to the summary). Both keep this consumer blocked."
     },
     "listIssueSuggestions": {
       "owner": "P21",
@@ -51,7 +52,7 @@
     },
     "pruneIssueSuggestionTargets": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -66,7 +67,8 @@
         "delete label/merge labels",
         "personal-data cleanup",
         "pruneRecordIssueSuggestionTargets"
-      ]
+      ],
+      "reason": "Off mode keeps the literal WorkspaceMetadata scan. Bounded mode finds stale issues with VisitIssueSuggestions over one installed generation (one decoded row at a time, contextless like WorkspaceMetadata) and runs the unchanged batched callback through mutateBoundedIssueSuggestions under an independent output owner. TestScaleP21TriagePruneWriterDifferential compares legacy, warm and SQL-reloaded bounded runs for multi-issue project, assignee, label/team, dismissed-only, empty and missing-workspace predicates: issue rows (version, order, data), activity/content rows, the complete issueSuggestions list in canonical order, project rows, domain events, webhook and realtime envelopes, normalizing only generated stamps and call clocks, with zero full decodes. A concurrent stale row added for an issue outside the scanned batch is left for the next prune, where the legacy full callback would also delete it."
     },
     "refreshIssueSuggestions": {
       "owner": "P21",
@@ -90,7 +92,8 @@
       "callers": [
         "acceptIssueSuggestion/dismissIssueSuggestion -> updateIssueSuggestionState",
         "POST /api/issue-records/{id}/suggestions/{suggestionId}/accept|dismiss"
-      ]
+      ],
+      "reason": "Partially owned, still pending: bounded mode (updateIssueSuggestionStateBounded) reproduces dismissals and non-team acceptances exactly through mutateBoundedIssueSuggestions (TestScaleP21TriageSuggestionStateWriterDifferential, 18 cases x3 sources). Accepting a team suggestion moves and renumbers the issue; the bounded writer refuses it with ErrIssueSuggestionWriteRefused (no write, no publication), so team acceptance keeps this consumer blocked until a bounded team-move writer exists."
     }
   }
 }

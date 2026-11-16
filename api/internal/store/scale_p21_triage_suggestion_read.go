@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"reflect"
+	"strings"
 	"sync"
 
 	"flow/api/internal/domain"
@@ -174,6 +175,102 @@ func (r *InstalledMetadataRead) ProjectVisibleInProjection(ctx context.Context, 
 				}
 			}
 			if visible {
+				return ErrMetadataIterationDone
+			}
+			return nil
+		})
+	})
+	if canceled := ctx.Err(); canceled != nil {
+		err = canceled
+	}
+	if err != nil {
+		return false, err
+	}
+	return visible, nil
+}
+
+// ReadIssueSuggestion selects the first suggestion with exactly this ID in
+// source order, of any issue and state. No match returns an empty selection.
+func (r *InstalledMetadataRead) ReadIssueSuggestion(ctx context.Context, id string) (_ *IssueSuggestionRead, err error) {
+	owner, ctx, err := r.commentActionOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	read := &IssueSuggestionRead{Suggestions: []domain.IssueSuggestion{}, owner: owner}
+	defer func() {
+		if err != nil {
+			read.Close()
+		}
+	}()
+	err = owner.visitNative(ctx, "issueSuggestions", func(_ int, node metadataLogicalNode) error {
+		return owner.withHeader(ctx, node, []string{"ID"}, func(header reflect.Value) error {
+			if header.Interface().(domain.IssueSuggestion).ID != id {
+				return nil
+			}
+			value, err := owner.node(ctx, node, true)
+			if err != nil {
+				return err
+			}
+			read.Suggestions = append(read.Suggestions, value.Interface().(domain.IssueSuggestion))
+			return ErrMetadataIterationDone
+		})
+	})
+	if canceled := ctx.Err(); canceled != nil {
+		err = canceled
+	}
+	if err != nil {
+		return nil, err
+	}
+	return read, nil
+}
+
+// VisitIssueSuggestions decodes every suggestion in source order, one at a
+// time. Each value is admitted only while visit runs.
+func (r *InstalledMetadataRead) VisitIssueSuggestions(ctx context.Context, visit func(domain.IssueSuggestion) error) error {
+	owner, ctx, err := r.commentActionOwner(ctx)
+	if err != nil {
+		return err
+	}
+	defer owner.Close()
+	err = owner.visitNative(ctx, "issueSuggestions", func(_ int, node metadataLogicalNode) error {
+		scratch := &ResourceRead{store: owner.store}
+		defer scratch.Close()
+		value, err := scratch.node(ctx, node, false)
+		if err != nil {
+			return err
+		}
+		return visit(value.Interface().(domain.IssueSuggestion))
+	})
+	if canceled := ctx.Err(); canceled != nil {
+		err = canceled
+	}
+	return err
+}
+
+// LabelVisibleInProjection reports whether any occurrence of id survives the
+// projection's label filter (a workspace label or a projected team row's
+// label). A non-nil credential receives the label's raw scope and further
+// decides, as a selected-team credential filter applied afterwards does.
+func (r *InstalledMetadataRead) LabelVisibleInProjection(ctx context.Context, scope ViewerProjectionScope, id string, credential func(labelScope string) bool) (bool, error) {
+	owner, ctx, err := r.commentActionOwner(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer owner.Close()
+	visible := false
+	err = owner.visitNative(ctx, "labels", func(_ int, node metadataLogicalNode) error {
+		return owner.withHeader(ctx, node, []string{"ID"}, func(header reflect.Value) error {
+			if header.Interface().(domain.IssueLabel).ID != id {
+				return nil
+			}
+			value, err := owner.projectNode(ctx, node, "ID", "Scope")
+			if err != nil {
+				return err
+			}
+			labelScope := value.Interface().(domain.IssueLabel).Scope
+			normalized := strings.ToLower(strings.TrimSpace(labelScope))
+			if (normalized == "" || normalized == "workspace" || scope.Teams[labelScope]) && (credential == nil || credential(labelScope)) {
+				visible = true
 				return ErrMetadataIterationDone
 			}
 			return nil

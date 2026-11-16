@@ -1572,6 +1572,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 
 func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	if s.metadataResidency != nil {
+		if _, suggestions := issueSuggestionWriteFromContext(ctx); suggestions && UsesIssueRecordMutations(ctx) {
+			return s.mutateBoundedIssueSuggestions(ctx, workspaceKey, eventType, payload, mutate)
+		}
 		if issueRecurrenceTimingMutation(ctx) {
 			return s.mutateBoundedIssueRecurrenceTiming(ctx, workspaceKey, eventType, payload, mutate)
 		}

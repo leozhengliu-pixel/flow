@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Triage Intelligence suggestion acceptance, dismissal, heuristic generation and target pruning write their issues, activities and suggestion list through a dedicated bounded writer that preserves list order, relations, events and publications; team moves are refused in bounded mode. Bounded metadata stays off by default.
 - Triage Intelligence suggestion lists read one issue's suggestions and the viewer's team and project visibility from owned installed metadata, preserving credential filters, refresh runs and error responses. Bounded metadata stays off by default.
 - Public comment connections retain owned parent reads and historical document aliases while preserving credential restrictions, pagination and output lifetimes. Bounded metadata stays off by default.
 - General bootstrap retains its metadata and SQL snapshot through bounded issue and discussion streaming, preserving viewer projections, pulse updates, native chat bodies and signed file URLs. Bounded metadata stays off by default.
