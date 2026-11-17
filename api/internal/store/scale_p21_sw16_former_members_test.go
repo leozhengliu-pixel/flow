@@ -26,8 +26,7 @@ func scaleP21SW16FormerResult(repo *SQLiteStore, ctx context.Context, workspace 
 	return maps.Clone(read.Members()), err
 }
 
-// Exercise the canonical decoder independently. This helper is deliberately
-// separate from BeginFormerMembersRead's production logical-source hold.
+// Exercise the canonical decoder independently of the installed logical source.
 func scaleP21SW16CanonicalFormerResult(repo *SQLiteStore, ctx context.Context, workspace string) (map[string]bool, error) {
 	ctx, release, err := repo.tryAdmitAdditionalMetadataWork(ctx, 2<<20)
 	if err != nil {
@@ -207,8 +206,12 @@ func TestScaleP21SW16FormerMembersDifferential(t *testing.T) {
 	seed(members[:4])
 	reloadFromRows(t, f.SQLiteStore, workspace)
 	compare("actual-reload-fallback")
-	if _, err := scaleP21SW16FormerResult(probe, t.Context(), workspace); !errors.Is(err, ErrBoundedMetadataCoverage) {
-		t.Fatal("unproven logical fallback was exposed by production API", err)
+	if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
+		t.Fatal(err)
+	}
+	wantLogical, wantLogicalErr := f.FormerMembers(t.Context(), workspace)
+	if got, err := scaleP21SW16FormerResult(probe, t.Context(), workspace); err != nil || wantLogicalErr != nil || !reflect.DeepEqual(got, wantLogical) {
+		t.Fatal("production fallback lost the installed logical source", got, wantLogical, err, wantLogicalErr)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -244,8 +247,8 @@ func TestScaleP21SW16FormerMembersDifferential(t *testing.T) {
 	}
 	defer tx.Rollback()
 	ctx = context.WithValue(ctx, workspaceReadKey{}, workspaceRead{database: f.db, workspace: workspace, reader: tx})
-	if _, err := scaleP21SW16FormerResult(probe, ctx, workspace); !errors.Is(err, ErrBoundedMetadataCoverage) {
-		t.Fatal("caller snapshot was not reused for the logical source check", err)
+	if got, err := scaleP21SW16FormerResult(probe, ctx, workspace); err != nil || !reflect.DeepEqual(got, wantLogical) {
+		t.Fatal("caller snapshot was not reused for the logical source check", got, wantLogical, err)
 	}
 	if _, err := tx.ExecContext(ctx, `SELECT 1`); err != nil {
 		t.Fatal("lookup closed caller transaction", err)
