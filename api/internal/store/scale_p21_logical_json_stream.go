@@ -92,6 +92,10 @@ func (s *logicalJSONStream) text(value string) error {
 }
 
 func (s *logicalJSONStream) present(node metadataLogicalNode) (bool, error) {
+	if node.generic {
+		absent, err := node.isNil(s.ctx)
+		return !absent, err
+	}
 	cursor := metadataLogicalCursor{node, node.offset + 16, s.ctx}
 	flag, err := cursor.byte()
 	return flag != 0, err
@@ -143,6 +147,9 @@ func (s *logicalJSONStream) write(value webhookJSONValue, depth int) error {
 		if handled, err := s.rewriteNode(node); handled || err != nil {
 			return err
 		}
+	}
+	if node.generic {
+		return s.genericWrite(node)
 	}
 	switch typ {
 	case reflect.TypeFor[json.RawMessage]():
@@ -389,7 +396,7 @@ func logicalJSONMapKeyType(typ reflect.Type) bool {
 }
 
 func (s *logicalJSONStream) mapKey(node metadataLogicalNode, visit func(string) error) error {
-	if node.typ.Kind() == reflect.String {
+	if node.typ.Kind() == reflect.String && !node.generic {
 		cursor := metadataLogicalCursor{node, node.offset + 16, s.ctx}
 		length, err := cursor.uint()
 		if err != nil {
@@ -471,9 +478,13 @@ func (s *logicalJSONStream) mapping(node metadataLogicalNode, depth int, activit
 					return err
 				}
 			}
+			cost := value.cost
+			if value.generic {
+				cost |= metadataLogicalGenericJSON
+			}
 			_, err := s.stage.exec(s.ctx, int64(len(name)+256),
 				`INSERT INTO json_keys VALUES(?,?,?,?,?,?,?,?)`, id, []byte(name), ordinal,
-				value.offset, value.size, value.cost, value.unavailable, value.blocked)
+				value.offset, value.size, cost, value.unavailable, value.blocked)
 			return err
 		})
 		ordinal++
@@ -532,6 +543,8 @@ func (s *logicalJSONStream) mapping(node metadataLogicalNode, depth int, activit
 			release()
 			return err
 		}
+		value.generic = value.cost&metadataLogicalGenericJSON != 0
+		value.cost &= metadataLogicalCostMask
 		if previousRelease != nil {
 			previousRelease()
 		}

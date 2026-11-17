@@ -162,7 +162,18 @@ func metadataLogicalFirstRecord(ctx context.Context, collection metadataAggregat
 	return result, err
 }
 
-func metadataLogicalRetryRecord(ctx context.Context, builder *metadataLogicalBuilder, field string, kind reflect.Type, raw []byte, old metadataAggregateNode) (metadataAggregateNode, error) {
+func metadataLogicalRetryRecord(ctx context.Context, builder *metadataLogicalBuilder, field string, kind reflect.Type, raw []byte, old metadataAggregateNode, owned ...*metadataLogicalLargeRetry) (metadataAggregateNode, error) {
+	if len(owned) > 1 {
+		return nil, ErrMetadataRecordQuery
+	}
+	if len(owned) == 1 && owned[0] != nil && metadataLogicalLargeRetryField(field) &&
+		raw != nil {
+		fresh, err := owned[0].capturePart(ctx, field, legacySessionJSONPart{bytes.NewReader(raw), 0, int64(len(raw))})
+		if err != nil {
+			return nil, err
+		}
+		return metadataLogicalRetryFramedRecord(ctx, fresh, kind, old)
+	}
 	// The existing marker resolver only expands current-document references.
 	// Reuse its audited realtime preflight before that bounded expansion.
 	if (field == "documents" || field == "trash") && bytes.Contains(raw, documentMarkerBytes) {
@@ -225,16 +236,31 @@ func metadataLogicalRetryRecord(ctx context.Context, builder *metadataLogicalBui
 
 // Replacements use the old collection's first-occurrence/set/remove/append
 // rules. Untouched frames and private/input subtrees are never JSON encoded.
-func metadataLogicalPatchRecords(ctx context.Context, source *metadataLogicalSource, patches []metadataLogicalRecordPatch) (*metadataLogicalSource, error) {
+func metadataLogicalPatchRecords(ctx context.Context, source *metadataLogicalSource, patches []metadataLogicalRecordPatch, owned ...*metadataLogicalLargeRetry) (*metadataLogicalSource, error) {
 	if len(patches) == 0 {
 		return source, source.Retain()
 	}
 	if len(patches) > MetadataRecordBatchMaxKeys {
 		return nil, ErrMetadataPageBudget
 	}
+	if len(owned) > 1 {
+		return nil, ErrMetadataRecordQuery
+	}
+	var large *metadataLogicalLargeRetry
+	if len(owned) == 1 {
+		large = owned[0]
+	}
+	if large != nil {
+		if err := large.check(ctx); err != nil {
+			return nil, err
+		}
+	}
 	bytes := 0
 	for _, patch := range patches {
-		bytes += len(patch.raw) + len(patch.key.key)
+		bytes += len(patch.key.key)
+		if large == nil || !metadataLogicalLargeRetryField(patch.key.field) {
+			bytes += len(patch.raw)
+		}
 	}
 	if bytes > MetadataRecordPageMaxBytes {
 		return nil, ErrMetadataPageBudget
@@ -268,12 +294,21 @@ func metadataLogicalPatchRecords(ctx context.Context, source *metadataLogicalSou
 		}
 		for _, patch := range changes {
 			var replacement metadataAggregateNode
-			if patch.raw != nil {
+			var framed metadataLogicalNode
+			framedPresent := false
+			if large != nil {
+				framed, framedPresent = large.rows[patch.key]
+			}
+			if !framedPresent && patch.raw != nil || framedPresent && framed.typ != nil {
 				old, err := metadataLogicalFirstRecord(ctx, current, patch.key.key)
 				if err != nil {
 					return nil, false, err
 				}
-				replacement, err = metadataLogicalRetryRecord(ctx, fresh, name, kind, patch.raw, old)
+				if framedPresent {
+					replacement, err = metadataLogicalRetryFramedRecord(ctx, framed, kind, old)
+				} else {
+					replacement, err = metadataLogicalRetryRecord(ctx, fresh, name, kind, patch.raw, old, large)
+				}
 				if err != nil {
 					return nil, false, err
 				}
@@ -318,9 +353,34 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 			return ErrMetadataPageBudget
 		}
 		loaded := map[metadataRecordKey][]byte{}
+		var large *metadataLogicalLargeRetry
+		defer func() {
+			if large != nil {
+				large.Close()
+			}
+		}()
+		ensureLarge := func() error {
+			if large != nil {
+				return nil
+			}
+			var err error
+			large, err = newMetadataLogicalLargeRetry(ctx, s, source)
+			return err
+		}
 		for field, ids := range byField {
+			fallback := false
+			var fieldRaw map[string][]byte
+			if metadataLogicalLargeRetryField(field) {
+				fieldRaw = map[string][]byte{}
+			}
 			clause, args := bindList("record_key", ids)
-			rows, err := s.db.QueryContext(ctx, `SELECT record_key,LENGTH(data),CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause,
+			length := "LENGTH(data)"
+			if metadataLogicalLargeRetryField(field) {
+				// A supported SQLite TEXT row may contain multi-byte UTF-8.
+				// Cap actual bytes before SQL Scan can allocate its payload.
+				length = (&ResourceRead{store: s}).byteLength("data")
+			}
+			rows, err := s.db.QueryContext(ctx, `SELECT record_key,`+length+`,CASE WHEN `+length+`<=? THEN data ELSE NULL END FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause,
 				append([]any{MetadataRecordPageMaxBytes, workspace, field}, args...)...)
 			if err != nil {
 				return err
@@ -336,17 +396,50 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 				if !slices.Contains(ids, key) {
 					continue
 				}
-				weight += len(raw)
-				if raw == nil || size > MetadataRecordPageMaxBytes || weight > MetadataRecordPageMaxBytes {
+				if metadataLogicalLargeRetryField(field) &&
+					(raw == nil || size > MetadataRecordPageMaxBytes) {
+					fallback = true
+					continue
+				}
+				if raw == nil || size > MetadataRecordPageMaxBytes ||
+					!metadataLogicalLargeRetryField(field) && weight+len(raw) > MetadataRecordPageMaxBytes {
 					rows.Close()
 					return ErrMetadataPageBudget
 				}
+				if metadataLogicalLargeRetryField(field) {
+					// Keep the original SELECT's last native-key receipt.
+					// Decode only after we know this entire field will use
+					// that generation rather than a fallback snapshot.
+					fieldRaw[key] = raw
+					continue
+				}
+				weight += len(raw)
 				loaded[metadataRecordKey{field, key}] = raw
 			}
 			err = rows.Err()
 			rows.Close()
 			if err != nil {
 				return err
+			}
+			if fallback {
+				fieldRaw = nil
+				if err := ensureLarge(); err != nil {
+					return err
+				}
+				if err := large.captureField(ctx, workspace, field, ids); err != nil {
+					return err
+				}
+			} else if len(fieldRaw) != 0 {
+				if err := ensureLarge(); err != nil {
+					return err
+				}
+				for _, id := range ids {
+					if raw, found := fieldRaw[id]; found {
+						if err := large.captureRaw(ctx, metadataRecordKey{field, id}, raw); err != nil {
+							return err
+						}
+					}
+				}
 			}
 		}
 		var patches []metadataLogicalRecordPatch
@@ -361,7 +454,7 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 				return metadataAggregateStoredNode{node}, false, nil
 			})
 		} else {
-			candidate, err = metadataLogicalPatchRecords(ctx, source, patches)
+			candidate, err = metadataLogicalPatchRecords(ctx, source, patches, large)
 		}
 		if err != nil {
 			return err

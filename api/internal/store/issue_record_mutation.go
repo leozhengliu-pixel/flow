@@ -104,6 +104,10 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	// A metadata record the write changes (a project's progress, a document's
 	// scope) was changed on another server in the same field: refresh it and
 	// rerun the write; after the last attempt the conflict is the error.
+	refresh := s.refreshConflictedMetadata(ctx, workspace)
+	if s.BoundedMetadataEnabled() {
+		refresh = s.refreshConflictedLogicalMetadata(ctx, workspace)
+	}
 	err := mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
 		var err error
 		// The callback edits a metadata clone (sharing only what it never
@@ -560,7 +564,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			s.dropMetadataCache(ctx, workspace)
 		}
 		return nil
-	}, s.refreshConflictedMetadata(ctx, workspace))
+	}, refresh)
 	if errors.Is(err, ErrNoMutation) {
 		return result, nil
 	}

@@ -257,6 +257,9 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 // scalar/string bodies directly. A legal large User name never needs decoding
 // merely because its timestamp came from a different field storage owner.
 func (b *metadataLogicalBuilder) importNode(original metadataLogicalNode, depth int) (node metadataLogicalNode, err error) {
+	if original.generic {
+		return b.copyNode(original)
+	}
 	if depth >= metadataLogicalDepth {
 		return node, ErrMetadataWorkBudget
 	}

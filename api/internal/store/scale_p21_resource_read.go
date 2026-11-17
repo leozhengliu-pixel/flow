@@ -261,12 +261,17 @@ func (r *ResourceRead) nativeChild(cursor *metadataLogicalCursor, typ reflect.Ty
 		return metadataLogicalNode{}, ErrMetadataRecordQuery
 	}
 	cursor.offset = start + int64(size)
-	return metadataLogicalNode{source: cursor.node.source, offset: start, size: int64(size), cost: cost & ((uint64(1) << 62) - 1), typ: typ, unavailable: cost&(uint64(1)<<63) != 0, blocked: cost&(uint64(1)<<62) != 0}, nil
+	return metadataLogicalNode{source: cursor.node.source, offset: start, size: int64(size), cost: cost & metadataLogicalCostMask, typ: typ, unavailable: cost&(uint64(1)<<63) != 0, blocked: cost&(uint64(1)<<62) != 0, generic: cost&metadataLogicalGenericJSON != 0}, nil
 }
 
 func (r *ResourceRead) nativeArray(ctx context.Context, node metadataLogicalNode, visit func(int, metadataLogicalNode) error) error {
 	if node.blocked || node.typ.Kind() != reflect.Slice {
 		return ErrBoundedMetadataCoverage
+	}
+	if node.generic {
+		return node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
+			return visit(int(key.Int()), child)
+		})
 	}
 	cursor := metadataLogicalCursor{node, node.offset + 16, ctx}
 	err := cursor.read(r.buffer[:1])
@@ -292,6 +297,9 @@ func (r *ResourceRead) nativeArray(ctx context.Context, node metadataLogicalNode
 func (r *ResourceRead) nativeEqual(ctx context.Context, node metadataLogicalNode, want string) (bool, error) {
 	if node.blocked || node.typ.Kind() != reflect.String {
 		return false, ErrBoundedMetadataCoverage
+	}
+	if node.generic {
+		return node.StringEqual(ctx, want)
 	}
 	cursor := metadataLogicalCursor{node, node.offset + 16, ctx}
 	length, err := r.nativeUint(&cursor)

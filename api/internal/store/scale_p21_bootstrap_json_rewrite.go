@@ -18,6 +18,18 @@ type MetadataJSONSource interface {
 type MetadataJSONRewriter func(context.Context, MetadataJSONSource, io.Writer) error
 
 func (s *logicalJSONStream) rewriteNode(node metadataLogicalNode) (bool, error) {
+	if node.generic && node.typ.Kind() == reflect.String {
+		builder, err := newMetadataLogicalBuilder(s.ctx)
+		if err != nil {
+			return false, err
+		}
+		defer builder.Close()
+		decoded, err := legacyProjectFrameString(s.ctx, builder, node.genericPart().reader(), metadataLogicalNode{})
+		if err != nil {
+			return false, err
+		}
+		return s.rewriteNode(decoded)
+	}
 	mode := metadataJSONStringQuoted
 	switch {
 	case node.typ == reflect.TypeFor[json.RawMessage]():

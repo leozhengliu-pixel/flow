@@ -36,6 +36,7 @@ func (s *SQLiteStore) withColdMetadataRead(ctx context.Context, run func(context
 }
 
 func (s *SQLiteStore) decodeColdMetadataRead(ctx context.Context, sources map[string]*metadataLogicalSource) error {
+	ctx = coldMetadataGenericDecodeContext(ctx, sources)
 	for workspace, source := range sources {
 		var data domain.Bootstrap
 		value := reflect.ValueOf(&data).Elem()

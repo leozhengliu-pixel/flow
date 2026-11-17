@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded metadata preserves large document and project edits during issue-write conflict retries, including deeply nested JSON, without hydrating the whole workspace. Bounded metadata stays off by default.
+- Cold metadata reads keep their original JSON decoding under the replica's single cancellable cold slot, independently of active hot-request reservations.
 - Bounded GET and HEAD requests for issue filter suggestions reuse the existing membership authorization without loading a complete workspace. Bounded metadata stays off by default.
 - Bounded metadata projections measure PostgreSQL numeric member and favorite fields as text, preserving issue-edit and document-read responses.
 - Bounded metadata serves public shared-issue links and issue filter suggestions without loading the whole workspace: shared links read only the token's issue, its comments and label counts, and filter suggestions count every visible issue one at a time, with the same responses as before. Bounded metadata stays off by default.

@@ -424,6 +424,9 @@ func legacyMetadataWriteEqualMode(ctx context.Context, a, b metadataLogicalNode,
 	if a.blocked || b.blocked || a.unavailable || b.unavailable {
 		return false, ErrBoundedMetadataCoverage
 	}
+	if a.generic || b.generic {
+		return metadataGenericJSONEqual(ctx, a, b)
+	}
 	kind := a.typ.Kind()
 	if a.typ == reflect.TypeFor[time.Time]() {
 		left, err := a.Value(ctx, 4096)
