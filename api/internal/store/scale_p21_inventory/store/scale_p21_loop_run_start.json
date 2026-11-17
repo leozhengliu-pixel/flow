@@ -1,0 +1,33 @@
+{
+  "source": "store/scale_p21_loop_run_start.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginLoopRunStartRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned installed read for one loop run start on the same physical/default registry choice as WorkspaceMetadataFields: workspace URLKey, the loops feature flag map and the complete native first loop with the requested ID; LoadEntity adds only the first ID match's label fields (project/initiative/release/team name, cycle name and number) from the same pinned generation at the original post-guard point. The pin is released at Close; the decoded loop's allowance stays charged through every ExecutionLease (local run goroutine) and MutationContext binds the stamp inputs to that lifetime. TestScaleP21SW262LoopRunStartReadLifetimes covers physical/default/missing keys, duplicate loop/project occurrences, body omission, concurrent leases, late lease/context/entity refusal after Close, idempotent release, cancellation and partial-quota cleanup with zero full decodes; TestScaleP21SW260LoopRunStartDifferential exercises it through actual starts.",
+      "accessors": [
+        "BeginInstalledMetadataRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Installed loop run inputs for actual HOT schedule and event loop starts.",
+      "callers": [
+        "server/scale_p21_loop_run_start.go:startBoundedLoopRun"
+      ]
+    },
+    "MutateLoopRunStart": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Off mode is the literal MutateWorkspace with the loops/loopVersions field snapshot. Bounded mode is one closed loop.run_started transaction under writeMu/coordinator lock: it selects, from the current installed generation (not the start read's pin), the workspace ID, the first loop with the ID and that loop's versions as ID/LoopID/Version headers in native order (bodies never decoded); only a loop without versions is read whole for its v1. The unchanged server callback (ensureLoopVersion, LastRunAt) may change only the loop's Version/VersionID/LastRunAt and append that loop's v1; the stored occurrence is patched by ordinal and the v1 appended after every version, then written through the existing legacy metadata image persistence/publication with the original event, previous values, realtime enrichment and account write, retried on conflicts. TestScaleP21SW261LoopRunStampDifferential compares canonical loops/loopVersions rows, root, stored events and published webhook/realtime bytes warm and reloaded for create-v1, latest-version ties among 43 retained bodies (stamp work stays under 4 MiB), draft, missing loop, duplicate loop occurrences, v1-ID collision with another loop's version, a 280 KiB loop v1, an empty collection, and refuses callback edits outside the closure; TestScaleP21SW261LoopRunStampReadsCurrentVersions proves a version published after the start read is the one recorded and no v1 is appended next to it. Known limit: the shared legacy row rebase reserves 64x the loop row, so loops above roughly 400 KiB of instructions are refused with ErrMetadataWorkBudget (the reviewed setLoopNextRun scoped writer already refuses from 256 KiB).",
+      "accessors": [
+        "MutateWorkspace",
+        "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "loop.run_started metadata transaction of actual HOT loop starts.",
+      "callers": [
+        "server/scale_p21_loop_run_start.go:startBoundedLoopRun"
+      ]
+    }
+  }
+}

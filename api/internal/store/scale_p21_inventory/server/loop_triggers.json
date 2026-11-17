@@ -1,11 +1,11 @@
 {
   "source": "server/loop_triggers.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "dispatchLoopTriggers": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "Direct HOT event-loop probe and trigger metadata now use owned installed scalar projections; the literal off probe and full accessor/body remain unchanged. TestScaleP21HotLoopTickTriggerSelection passes twice on persistent SQLite comparing native warm/reloaded pre-dispatch loop IDs, trigger reasons/labels/sources, issue/comment/customer-request/project/initiative/release/team/cycle cases, private team scope, source trust and recursive loop-source suppression with zero bounded full decodes. Actual matching dispatch still invokes pending HOT startLoopRun; this consumer remains an activation blocker until an actual run differential verifies that dependency.",
+      "status": "reviewed",
+      "reason": "Direct HOT event-loop probe and trigger metadata use the reviewed owned BeginLoopScheduleRead projections (TestScaleP21HotLoopTickTriggerSelection, unchanged); the literal off probe and full accessor/body remain unchanged. Its remaining HOT descendant, startLoopRun, is now bounded: TestScaleP21SW260LoopRunStartDifferential dispatches actual project.updated (one and several matching loops, a 1 MiB project, a paused loop), issue.created (several loops, one non-matching) and private-team project events through dispatchLoopTriggers and compares the resulting runs, queued agent runs, stamps, versions, events and hooks byte for byte with the literal dispatch, warm and SQL-reloaded.",
       "accessors": [
         "WorkspaceMetadata",
         "WorkspaceMetadataFields"
