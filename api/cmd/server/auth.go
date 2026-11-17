@@ -1072,6 +1072,10 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
 		return err == nil && status == "active"
 	}
+	if s.store.BoundedMetadataEnabled() && (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/api/search/filter-suggestions" {
+		_, _, err := s.requestIssueQueryAccess(r)
+		return err == nil
+	}
 	if boundedIssueAuthorizationRequest(r) {
 		_, _, err := s.requestIssueQueryAccess(r)
 		return err == nil
