@@ -174,9 +174,16 @@ func metadataLogicalRetryRecord(ctx context.Context, builder *metadataLogicalBui
 		}
 		return metadataLogicalRetryFramedRecord(ctx, fresh, kind, old)
 	}
+	return metadataLogicalRetryRecordLimit(ctx, builder, field, kind, raw, old, 2<<20, false)
+}
+
+// metadataLogicalRetryRecordLimit is the typed byte-row refresh with the
+// resolved-record cap of its caller's admission; admitted callers have
+// already admitted the complete marker expansion.
+func metadataLogicalRetryRecordLimit(ctx context.Context, builder *metadataLogicalBuilder, field string, kind reflect.Type, raw []byte, old metadataAggregateNode, limit int, admitted bool) (metadataAggregateNode, error) {
 	// The existing marker resolver only expands current-document references.
 	// Reuse its audited realtime preflight before that bounded expansion.
-	if (field == "documents" || field == "trash") && bytes.Contains(raw, documentMarkerBytes) {
+	if !admitted && (field == "documents" || field == "trash") && bytes.Contains(raw, documentMarkerBytes) {
 		document := raw
 		if field == "trash" {
 			var entry struct {
@@ -195,13 +202,34 @@ func metadataLogicalRetryRecord(ctx context.Context, builder *metadataLogicalBui
 	if err != nil {
 		return nil, err
 	}
-	if len(resolved) > 2<<20 {
+	if len(resolved) > limit {
 		return nil, ErrMetadataPageBudget
 	}
 	record, err := decodeMetadataRecord(kind, resolved, reflect.Value{})
 	if err != nil {
 		return nil, err
 	}
+	keep, err := metadataLogicalRetryKeep(ctx, field, kind, record, old)
+	if err != nil {
+		return nil, err
+	}
+	if err := builder.auditJSONLocations(record); err != nil {
+		return nil, err
+	}
+	fresh, err := builder.writeValue(record, 0, false)
+	if err != nil {
+		return nil, err
+	}
+	if len(keep) == 0 {
+		return metadataAggregateStoredNode{fresh}, nil
+	}
+	return metadataLogicalRetainedRecord{fresh, keep}, nil
+}
+
+// metadataLogicalRetryKeep retains the old record's private inputs (json:"-"
+// fields, and an import's rows or a migration's bundle the stored row omits)
+// and clears them in the decoded record.
+func metadataLogicalRetryKeep(ctx context.Context, field string, kind reflect.Type, record reflect.Value, old metadataAggregateNode) (map[string]metadataAggregateNode, error) {
 	keep := map[string]metadataAggregateNode{}
 	if old != nil && kind.Kind() == reflect.Struct {
 		if err := old.nodeChildren(ctx, func(key reflect.Value, value metadataAggregateNode) error {
@@ -221,22 +249,19 @@ func metadataLogicalRetryRecord(ctx context.Context, builder *metadataLogicalBui
 			return nil, err
 		}
 	}
-	if err := builder.auditJSONLocations(record); err != nil {
-		return nil, err
-	}
-	fresh, err := builder.writeValue(record, 0, false)
-	if err != nil {
-		return nil, err
-	}
-	if len(keep) == 0 {
-		return metadataAggregateStoredNode{fresh}, nil
-	}
-	return metadataLogicalRetainedRecord{fresh, keep}, nil
+	return keep, nil
 }
 
 // Replacements use the old collection's first-occurrence/set/remove/append
 // rules. Untouched frames and private/input subtrees are never JSON encoded.
 func metadataLogicalPatchRecords(ctx context.Context, source *metadataLogicalSource, patches []metadataLogicalRecordPatch, owned ...*metadataLogicalLargeRetry) (*metadataLogicalSource, error) {
+	return metadataLogicalPatchRecordsWith(ctx, source, patches, nil, owned...)
+}
+
+// metadataLogicalPatchRecordsWith also replaces the records of generic, the
+// streamed canonical rows of other fields above the page-sized batch (their
+// patch raw is nil); see largeRowRefresh.
+func metadataLogicalPatchRecordsWith(ctx context.Context, source *metadataLogicalSource, patches []metadataLogicalRecordPatch, generic map[metadataRecordKey]*largeRowRefresh, owned ...*metadataLogicalLargeRetry) (*metadataLogicalSource, error) {
 	if len(patches) == 0 {
 		return source, source.Retain()
 	}
@@ -299,12 +324,15 @@ func metadataLogicalPatchRecords(ctx context.Context, source *metadataLogicalSou
 			if large != nil {
 				framed, framedPresent = large.rows[patch.key]
 			}
-			if !framedPresent && patch.raw != nil || framedPresent && framed.typ != nil {
+			row := generic[patch.key]
+			if row != nil || !framedPresent && patch.raw != nil || framedPresent && framed.typ != nil {
 				old, err := metadataLogicalFirstRecord(ctx, current, patch.key.key)
 				if err != nil {
 					return nil, false, err
 				}
-				if framedPresent {
+				if row != nil {
+					replacement, err = metadataLogicalRetryLargeRecord(ctx, fresh, name, kind, row, old)
+				} else if framedPresent {
 					replacement, err = metadataLogicalRetryFramedRecord(ctx, framed, kind, old)
 				} else {
 					replacement, err = metadataLogicalRetryRecord(ctx, fresh, name, kind, patch.raw, old, large)
@@ -359,6 +387,13 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 				large.Close()
 			}
 		}()
+		var genericKeys []metadataRecordKey
+		generic := map[metadataRecordKey]*largeRowRefresh{}
+		defer func() {
+			for _, row := range generic {
+				row.spool.Close()
+			}
+		}()
 		ensureLarge := func() error {
 			if large != nil {
 				return nil
@@ -403,8 +438,10 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 				}
 				if raw == nil || size > MetadataRecordPageMaxBytes ||
 					!metadataLogicalLargeRetryField(field) && weight+len(raw) > MetadataRecordPageMaxBytes {
-					rows.Close()
-					return ErrMetadataPageBudget
+					// Other fields' rows above the page-sized batch (or its
+					// remaining allowance) are streamed and framed apart.
+					genericKeys = append(genericKeys, metadataRecordKey{field, key})
+					continue
 				}
 				if metadataLogicalLargeRetryField(field) {
 					// Keep the original SELECT's last native-key receipt.
@@ -442,6 +479,16 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 				}
 			}
 		}
+		for _, key := range genericKeys {
+			row, found, err := s.readLargeRowRefresh(ctx, workspace, key)
+			if err != nil {
+				return err
+			}
+			if found {
+				row.store = s
+				generic[key] = row
+			}
+		}
 		var patches []metadataLogicalRecordPatch
 		for _, key := range keys {
 			if _, _, ok := metadataRecordType(key.field); ok {
@@ -454,7 +501,7 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 				return metadataAggregateStoredNode{node}, false, nil
 			})
 		} else {
-			candidate, err = metadataLogicalPatchRecords(ctx, source, patches, large)
+			candidate, err = metadataLogicalPatchRecordsWith(ctx, source, patches, generic, large)
 		}
 		if err != nil {
 			return err
