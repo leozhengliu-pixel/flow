@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -38,8 +39,8 @@ func (s *SQLiteStore) scaleP21SW23ReadTeamPolicyRows(ctx context.Context, tx *sq
 		return nil, ErrMetadataRecordQuery
 	}
 	// The 12 MiB independent allowance covers retained <=256 KiB rows,
-	// bounded headers, marshal's 6x escaping/growth and temporary typed
-	// copies. Each row also owns the projector's 4 MiB until encoded.
+	// bounded headers and <=256 KiB raw pages, marshal's 6x escaping/growth
+	// and temporary typed copies. Each row owns the projector's 4 MiB until encoded.
 	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, 12<<20)
 	if err != nil {
 		return nil, err
@@ -79,7 +80,8 @@ func (s *SQLiteStore) scaleP21SW23ReadTeamPolicyRows(ctx context.Context, tx *sq
 		}
 		// Preserve the old column collation and SQLite TEXT/BLOB ordering.
 		// The cursor and point read retain the physical SQLite storage class.
-		rows, err := tx.QueryContext(ctx, `SELECT record_key,`+keyType+`,collection_order,`+bodyLength+` FROM workspace_metadata_records WHERE `+where+` ORDER BY collection_order,record_key LIMIT 32`, args...)
+		pageArgs := append([]any{MetadataRecordPageMaxBytes / metadataRecoveryPageRows}, args...)
+		rows, err := tx.QueryContext(ctx, `SELECT record_key,`+keyType+`,collection_order,`+bodyLength+`,CASE WHEN `+bodyLength+`<=? THEN data ELSE NULL END FROM workspace_metadata_records WHERE `+where+` ORDER BY collection_order,record_key LIMIT 32`, pageArgs...)
 		if err != nil {
 			return nil, err
 		}
@@ -87,11 +89,12 @@ func (s *SQLiteStore) scaleP21SW23ReadTeamPolicyRows(ctx context.Context, tx *sq
 			key, storage string
 			order        int
 			size         int64
+			raw          []byte
 		}
 		page := make([]header, 0, 32)
 		for rows.Next() {
 			var item header
-			if err := rows.Scan(&item.key, &item.storage, &item.order, &item.size); err != nil {
+			if err := rows.Scan(&item.key, &item.storage, &item.order, &item.size, &item.raw); err != nil {
 				rows.Close()
 				return nil, err
 			}
@@ -111,9 +114,15 @@ func (s *SQLiteStore) scaleP21SW23ReadTeamPolicyRows(ctx context.Context, tx *sq
 			return result, nil
 		}
 		for _, item := range page {
-			input := &scaleP21SW23TeamPolicyReaderAt{
+			var input io.ReaderAt = &scaleP21SW23TeamPolicyReaderAt{
 				ctx: ctx, tx: tx, workspace: workspace, key: item.key,
 				blob: s.dialect == "mysql" || item.storage == "blob", size: item.size,
+			}
+			if item.raw != nil {
+				if int64(len(item.raw)) != item.size {
+					return nil, io.ErrUnexpectedEOF
+				}
+				input = bytes.NewReader(item.raw)
 			}
 			projected, err := s.scaleP21SW23BeginTeamProjection(ctx, MetadataArrayRecord{
 				Reader: io.NewSectionReader(input, 0, item.size), EncodedBytes: item.size,

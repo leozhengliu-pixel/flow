@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Selected collection, project, initiative and team-resource requests use owned authorization reads in bounded mode. Small team-policy rows share their existing SQL page, preserving permission decisions and response values.
 - Bounded metadata preserves large document and project edits during issue-write conflict retries, including deeply nested JSON, without hydrating the whole workspace. Bounded metadata stays off by default.
 - Cold metadata reads keep their original JSON decoding under the replica's single cancellable cold slot, independently of active hot-request reservations.
 - Bounded GET and HEAD requests for issue filter suggestions reuse the existing membership authorization without loading a complete workspace. Bounded metadata stays off by default.

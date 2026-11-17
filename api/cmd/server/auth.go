@@ -1076,9 +1076,21 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		_, _, err := s.requestIssueQueryAccess(r)
 		return err == nil
 	}
+	if allowed, handled := s.boundedHotCollectionAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
 	if boundedIssueAuthorizationRequest(r) {
 		_, _, err := s.requestIssueQueryAccess(r)
 		return err == nil
+	}
+	if allowed, handled := s.boundedIssueLabelPointAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
+	if allowed, handled := s.boundedPointResourceAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
+	if allowed, handled := s.boundedTeamResourceAuthorization(r, workspace, userID); handled {
+		return allowed
 	}
 	if boundedSettingsDeletionRequest(r) {
 		data, access, err := s.requestIssueQueryAccess(r)
@@ -1110,6 +1122,9 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 			return err == nil
 		}
 		return true
+	}
+	if allowed, handled := s.boundedMembershipAuthorization(r, workspace, userID); handled {
+		return allowed
 	}
 	var data domain.Bootstrap
 	var ok bool
