@@ -63,6 +63,26 @@ export function startStartup(deps: StartupDeps, input: StartupInput) {
   return { speculative, ready }
 }
 
+let early: { input: StartupInput; startup: ReturnType<typeof startStartup> } | undefined
+
+/** Starts the session, account and remembered-workspace requests before the first render (main.tsx). */
+export function beginStartup(deps: StartupDeps, input: StartupInput) {
+  early = { input, startup: startStartup(deps, input) }
+}
+
+/** The startup begun before the first render when it was begun for the same page; otherwise a new one. */
+export function takeStartup(deps: StartupDeps, input: StartupInput) {
+  const begun = early
+  early = undefined
+  if (begun && begun.input.requestedWorkspaceKey === input.requestedWorkspaceKey && begun.input.isRoot === input.isRoot && begun.input.projection === input.projection) return begun.startup
+  if (begun) {
+    begun.startup.speculative?.controller.abort()
+    begun.startup.speculative?.release()
+    begun.startup.ready.catch(() => undefined)
+  }
+  return startStartup(deps, input)
+}
+
 /** Reuse a speculative request's answer, repeating it as a normal request if it was refused. */
 export function settleBootstrapRequest(request: BootstrapRequest, retry: (signal: AbortSignal) => Promise<BootstrapData>): Promise<BootstrapData> {
   if (!request.speculative) return request.promise
