@@ -12,9 +12,12 @@ import (
 
 // Reuse the existing middleware's permission predicates with owned, selected
 // metadata. Slug resolution happens against the canonical collection first.
+// With bounded metadata the arbitrary selector always refuses, so these
+// writes take the same literal authorization as with the record flags off
+// (including its cold-route facade); the flags then change nothing.
 func (s *server) projectRecordAuthorizationMetadata(r *http.Request, workspace, userID string) (domain.Bootstrap, error, bool) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) < 2 || parts[0] != "api" || parts[1] != "projects" && parts[1] != "initiatives" || r.Method == http.MethodGet || r.Method == http.MethodHead || !projectRecordMutationsEnabled(strings.TrimSuffix(parts[1], "s")) {
+	if s.store.BoundedMetadataEnabled() || len(parts) < 2 || parts[0] != "api" || parts[1] != "projects" && parts[1] != "initiatives" || r.Method == http.MethodGet || r.Method == http.MethodHead || !projectRecordMutationsEnabled(strings.TrimSuffix(parts[1], "s")) {
 		return domain.Bootstrap{}, nil, false
 	}
 	var data domain.Bootstrap

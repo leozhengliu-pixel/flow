@@ -154,7 +154,9 @@ func (s *server) documentAuthorizationMetadata(r *http.Request, workspace, userI
 		}
 	}
 	mode := documentRecordMode("FLOW_DOCUMENT_RECORDS")
-	if mode == "off" || !documentRecordRequest(r) {
+	// A bounded document record request returned above; the arbitrary
+	// selector below serves only the flag-off record mode.
+	if mode == "off" || !documentRecordRequest(r) || s.store.BoundedMetadataEnabled() {
 		return domain.Bootstrap{}, nil, false
 	}
 	var data domain.Bootstrap

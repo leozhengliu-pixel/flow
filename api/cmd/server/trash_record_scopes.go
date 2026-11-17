@@ -38,8 +38,11 @@ func documentTrashRequirements(data domain.Bootstrap, ref string, entryID bool) 
 	return store.MetadataRecordScope{}, false
 }
 
+// The header comes from the resident copy. A bounded store keeps trash out of
+// residency, so the header is never found there: the restore authorization is
+// the literal one, exactly as with FLOW_TRASH_RECORDS off.
 func (s *server) documentTrashAuthorizationHeaders(r *http.Request, workspace string) ([]domain.TrashEntry, bool) {
-	if documentRecordMode("FLOW_TRASH_RECORDS") != "on" {
+	if s.store.BoundedMetadataEnabled() || documentRecordMode("FLOW_TRASH_RECORDS") != "on" {
 		return nil, false
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")

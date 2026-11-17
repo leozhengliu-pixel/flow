@@ -1,10 +1,11 @@
 {
   "source": "store/scale_p17_trash_headers.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "TrashRecordHeader": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Literal resident header retained for the flag-off trash record mode. Its only module reference, documentTrashAuthorizationHeaders (workspace authorization of POST /trash/ and resource authorization of the /api/trash/{id}/restore shape), now returns unselected first with the flag on. Before the change a bounded lookup could never select: the bounded resident copy is policy only and holds no trash, so the bounded answer was already the FLOW_TRASH_RECORDS=off answer. SW282 pins the module reference set with first-return dominance; SW285 asserts the bounded resident copy holds no trash (header and snapshot empty while the literal header strips payload and links) and drives document, private document, project and release-pipeline restores, missing/empty ids, the unbound GET restore shape and purge through the real middleware for every principal/credential and development mode: bounded and literal answers are each identical with FLOW_TRASH_RECORDS on and off, with no wrapper statement or workspace decode flag-on. Restore/purge handlers and the literal TrashSnapshot fallback keep their independent COLD routing obligations.",
       "accessors": [
         "resident-state"
       ],

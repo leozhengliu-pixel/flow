@@ -1,16 +1,16 @@
 {
   "source": "store/scale_p17_record_selection.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "SelectedDocumentMetadata": {
       "owner": "P17",
-      "status": "unmigrated",
-      "reason": "Arbitrary selectors explicitly reject bounded stores. Owned document and P20 paths have typed reader branches, but P16 project/initiative mutation authorization still calls this selector and has not migrated its complete project/customer/relation closure. Keep pending independently of document reader verification.",
+      "status": "reviewed",
+      "reason": "Literal arbitrary selector retained for the flag-off record modes; its first statement still refuses a bounded store before any resident or hydrated read. Every module reference is now flag-off-only: BeginDocumentRead and scaleP20DocumentMetadata already dispatched to the owned typed reader first, documentAuthorizationMetadata's record tail now also returns on the flag (its bounded branch already returned for every document record request), and P16 project/initiative write authorization returns unhandled with the flag on, so those writes take the same cold-aware literal authorization as with FLOW_PROJECT/INITIATIVE_RECORD_MUTATIONS off. SW282 pins the complete module reference set (direct calls only; values, method expressions, interface methods and package-level captures fail) with branch/first-return dominance and the wrapper's own first bounded refusal; SW283 shows the guard rejects partial, fall-through, loop-continue and captured reach. SW284 drives the P16 writes (create/edit by id, slug, old slug, archived, teamless, trashed, missing; comments; project and initiative relations; initiative create/edit/delete) and HOT GET/HEAD reads in record-access on/shadow/off through the real middleware for admin, private-team admin, member, guest and sub-team principals with session, unrestricted, selected-empty, selected-set and app credentials plus development mode: bounded answers are identical with the P16 flags on and off, literal answers are identical too, no statement runs inside the selector with the flag on (flag-off positive control observed) and the workspace is never decoded. The P16 writes themselves remain COLD handler obligations.",
       "accessors": [
         "Bootstrap"
       ],
       "temperature": "hot",
-      "temperatureReason": "P16 project and initiative write authorization still reaches the arbitrary selector; document and P20 bounded paths now use their owned typed reader.",
+      "temperatureReason": "P16 project and initiative write authorization reached the arbitrary selector from resource authorization; document and P20 bounded paths use their owned typed reader.",
       "callers": [
         "server/server.documentAuthorizationMetadata",
         "server/server.projectRecordAuthorizationMetadata",
