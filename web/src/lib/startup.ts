@@ -28,6 +28,11 @@ export interface StartupInput {
 
 export const bootstrapRequestKey = (viewerId: string, workspaceKey: string, projection?: string) => `${viewerId}:${workspaceKey}:${projection ?? 'full'}`
 
+/** Wait before retry `attempt` (from 0) while the server is unreachable: 1 s, doubling, at most 15 s. */
+export function startupRetryDelay(attempt: number): number {
+  return Math.min(15_000, 1000 * 2 ** Math.max(0, attempt))
+}
+
 export function createBootstrapRequest(key: string, start: (signal: AbortSignal) => Promise<BootstrapData>, speculative = false): BootstrapRequest {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 30000)

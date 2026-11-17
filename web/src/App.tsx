@@ -13,8 +13,8 @@ import {
   type ReactNode,
 } from "react";
 import { AgentCursorGlyph, AgentHistoryGlyph } from "@/components/ui/agent-glyph";
-import { AppStartup } from '@/components/layout/app-startup';
-import { createBootstrapRequest, settleBootstrapRequest, takeStartup, type BootstrapRequest } from '@/lib/startup';
+import { AppConnectionError, AppStartup } from '@/components/layout/app-startup';
+import { createBootstrapRequest, settleBootstrapRequest, startupRetryDelay, takeStartup, type BootstrapRequest } from '@/lib/startup';
 import { setRuntimePreferences, setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences';
 import { AuthenticationPolicyPage } from '@/components/auth/authentication-policy-page';
 import {
@@ -373,7 +373,7 @@ import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import { migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMatches, syncV2Enabled, SyncResetRequired } from '@/lib/sync-client'
 import { locallyCreatedAgentSession } from '@/lib/scale-activate-a-agent-echo'
-import { realtimeClientId } from '@/lib/api-client'
+import { isConnectivityError, realtimeClientId } from '@/lib/api-client'
 import { documentBodyLoaded, fetchResourceSurfaceBootstrap, refreshResourceDocument, resourceSyncSurface, resourceTrashedDocument, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
 import { fetchResourceDocument } from '@/lib/scale-p20-transport'
 import { scaleP19Surface } from '@/lib/scale-p19-surfaces'
@@ -640,6 +640,9 @@ function App() {
   const [bootstrapRetry, setBootstrapRetry] = useState(0);
   const initialIssueRef = useRef<{key:string;viewerId:string;issue:Issue} | null>(null);
   const [authReady, setAuthReady] = useState(Boolean(startupView));
+  // The session and account requests could not reach the server; startup keeps retrying (startupRetryRef retries now).
+  const [startupUnreachable, setStartupUnreachable] = useState(false);
+  const startupRetryRef = useRef<(() => void) | undefined>(undefined);
   const [authenticationPolicy,setAuthenticationPolicy] = useState<string>();
   useEffect(()=>{const listener=(event:Event)=>{const detail=(event as CustomEvent<{code:string;workspaceKey:string}>).detail;if(detail.workspaceKey===decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0]??''))setAuthenticationPolicy(detail.code)};window.addEventListener('flow:authentication-policy',listener);return()=>window.removeEventListener('flow:authentication-policy',listener)},[]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -778,8 +781,12 @@ function App() {
       bootstrapRequest.current = startup.speculative;
     }
     const cached = startupView?.snapshot;
-    startup.ready
+    let stopped = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    const settle = (ready: Promise<{ session: AuthSession; account: AccountBootstrap }>): void => void ready
       .then(({ session: authenticated, account: nextAccount }) => {
+        setStartupUnreachable(false);
         if (cached && authenticated.user.id !== cached.viewerId) {
           // Someone else is signed in now: nothing of the snapshot's viewer may stay on screen or on this device.
           clearNavigationCache(cached.viewerId);
@@ -805,19 +812,35 @@ function App() {
         }
         setSession(authenticated);
         setAccount(nextAccount);
+        finish();
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        if (isConnectivityError(error)) {
+          // The server is unreachable: that says nothing about the session. A painted snapshot stays on screen
+          // (its writes stay held), otherwise the can't-connect state shows; either way startup is tried again.
+          if (stopped) return;
+          setStartupUnreachable(true);
+          const retry = () => { clearTimeout(retryTimer); retryTimer = undefined; settle(Promise.all([fetchAuthSession(), fetchAccountBootstrap()]).then(([session, account]) => ({ session, account }))); };
+          startupRetryRef.current = retry;
+          retryTimer = setTimeout(retry, startupRetryDelay(attempts++));
+          return;
+        }
+        setStartupUnreachable(false);
         setSession(null);
         setAccount(null);
         // A snapshot painted ahead of the session goes with it.
         if (cached) setData(null);
         clearNavigationCache();
-      })
-      .finally(() => {
-        setAuthReady(true);
-        setProvisionalSession(false);
-        discardStartupSnapshot();
+        finish();
       });
+    const finish = () => {
+      startupRetryRef.current = undefined;
+      setAuthReady(true);
+      setProvisionalSession(false);
+      discardStartupSnapshot();
+    };
+    settle(startup.ready);
+    return () => { stopped = true; clearTimeout(retryTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- startup runs once on mount; later navigation goes through the bootstrap effect
   }, []);
   const themeSyncRef = useRef<string>("");
@@ -1079,7 +1102,7 @@ function App() {
         };
         // A definite refusal is not transient; only retry a cancelled/partial
         // stream. Exhausting the retries surfaces the usual error state.
-        if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500 && !(error.status === 429 && showsUnconfirmed(account.viewer.id, requestedWorkspaceKey))) {
           if ([403, 404].includes(error.status)) void clearLocalSnapshots(account.viewer.id, requestedWorkspaceKey);
           // A cached view the server refused is dropped with every cache of the workspace, never kept on screen.
           if (showsUnconfirmed(account.viewer.id, requestedWorkspaceKey)) {
@@ -1097,14 +1120,19 @@ function App() {
           setError(true); return;
         }
         const count = bootstrapFailures.current.key === requestKey ? bootstrapFailures.current.count : 0;
+        if (showsUnconfirmed(account.viewer.id, requestedWorkspaceKey)) {
+          // Unreachable, busy or failing server: only a refusal drops a cached view. It stays on screen with its
+          // writes held, and the load is tried again with backoff until the server answers.
+          bootstrapFailures.current = { key: requestKey, count: count + 1 };
+          retryTimer = setTimeout(() => setBootstrapRetry(value => value + 1), count < 2 ? 400 : startupRetryDelay(count - 2));
+          return;
+        }
         if (count < 2) {
           bootstrapFailures.current = { key: requestKey, count: count + 1 };
           retryTimer = setTimeout(() => setBootstrapRetry(value => value + 1), 400);
           return;
         }
         bootstrapFailures.current = { key: '', count: 0 };
-        // A cached view is only shown while its confirmation is on the way.
-        dropUnconfirmed();
         setError(true);
       });
     return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
@@ -5058,7 +5086,7 @@ function App() {
     </WorkspaceStoreProvider>
   );
   if (authenticationPolicy && !authPath) return withStore(<AuthenticationPolicyPage code={authenticationPolicy}/>);
-  if (!authReady) return withStore(<AppStartup />);
+  if (!authReady) return withStore(startupUnreachable ? <AppConnectionError retry={() => startupRetryRef.current?.()} /> : <AppStartup />);
   const handleAuthenticated = async (authenticated: AuthSession, returnTo?: string) => {
     // Signing in as someone else without a logout in between: the previous viewer's cached rows go.
     const previousViewerId = sessionViewerRef.current;
