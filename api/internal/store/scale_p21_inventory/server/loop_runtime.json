@@ -1,6 +1,6 @@
 {
   "source": "server/loop_runtime.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "check": {
       "owner": "P18",
@@ -72,15 +72,15 @@
     },
     "startLoopRun": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"
       ],
       "temperature": "hot",
-      "temperatureReason": "Actual HOT ticker and ordinary committed domain events invoke this start boundary when a due schedule or matching event loop is selected. Existing full loops/version/entity hydration and run_started mutation remain unmigrated and block activation.",
-      "reason": "Promoted conservatively after TestScaleP21HotLoopTickScheduleStamps proved the actual due-loop call reaches this boundary: the literal store reports agent-disabled while the bounded skeletal store reports loop-not-found. Direct scalar selection/stamps are reviewed separately; startLoopRun must gain an exact owned target/entity read plus transactional latest-version/create-v1 stamp before actual run dispatch can be certified. No cold fallback is installed.",
+      "temperatureReason": "Actual HOT ticker and ordinary committed domain events invoke this start boundary when a due schedule or matching event loop is selected.",
+      "reason": "The literal off body (loops/loopVersions/settings/entity WorkspaceMetadataFields read and loop.run_started MutateWorkspace) is unchanged; bounded mode delegates to startBoundedLoopRun, which captures the first native loop, loops flag and entity label from the installed generation, keeps the guard/budget reservation order, version capture, worker handoff, local registration and failure unwinding, and writes the stamp with MutateLoopRunStart (current version or a created v1 in the same transaction). TestScaleP21SW260LoopRunStartDifferential compares actual manual, due-schedule (one and several loops) and event dispatch starts byte for byte against the literal start on warm and SQL-reloaded installed metadata: create-v1, latest-version ties, a 280 KiB loop, project/team/missing-cycle entity labels, paused/draft/loops-disabled/agent-disabled/missing loop, held guard, worker and local budget exhaustion, local handoff with its execution lease, local run-record failure and worker queue failure unwinding (SQLite), concurrent starts of one loop, duplicate loop occurrences, a v1-ID collision and an earlier nested aggregate. Loops above roughly 400 KiB of instructions are refused by the shared legacy row rebase admission (the reviewed setLoopNextRun already refuses from 256 KiB).",
       "callers": [
         "server/server.runLoopNow",
         "processDueDeliveries -> server/server.runDueLoops -> server/server.startLoopRun",
