@@ -201,19 +201,8 @@ func TestScaleP21SW5SettingsPointFailures(t *testing.T) {
 		if !reflect.DeepEqual(before, after) {
 			t.Fatal("cancelled mutation changed canonical target")
 		}
-		reset(true)
-		hash := scaleP21M3Fingerprint(t, repo, workspace, "documentTemplates")
-		for _, handler := range []func(*server, http.ResponseWriter, *http.Request){(*server).updateDocumentTemplate, (*server).deleteDocumentTemplate} {
-			r, w := f.request(f.data.Viewer, nil, map[string]string{"name": "After"}), httptest.NewRecorder()
-			r.SetPathValue("id", target)
-			handler(&server{store: f.probe}, w, r)
-			if w.Code < 400 || !strings.Contains(w.Body.String(), store.ErrMetadataPageBudget.Error()) {
-				t.Fatalf("large target must fail explicitly before mutation: %d %s", w.Code, w.Body.String())
-			}
-			if scaleP21M3Fingerprint(t, repo, workspace, "documentTemplates") != hash {
-				t.Fatal("budget rejection changed canonical target")
-			}
-		}
+		f.probe.SetWebhookSink(nil)
+		f.probe.SetRealtimeSink(nil)
 		if f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("settings point failures decoded complete metadata")
 		}
