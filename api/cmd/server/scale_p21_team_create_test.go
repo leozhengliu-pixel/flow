@@ -290,12 +290,6 @@ func scaleP21TeamCreateInstalledDelta(t *testing.T, before, after json.RawMessag
 		}
 		for _, entry := range current[name] {
 			key, value, _ := strings.Cut(entry, "\t")
-			// EnsureBuiltinApplication's legacy OAuth transaction installs
-			// the app user only into the full legacy snapshot (a separate,
-			// still unmigrated store writer); SQL is compared by the rows.
-			if name == "users" && strings.HasPrefix(key, "app_") {
-				continue
-			}
 			if existing, found := old[key]; !found || existing != value {
 				result[name] = append(result[name], entry)
 			}

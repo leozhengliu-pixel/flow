@@ -73,6 +73,9 @@ func (s *SQLiteStore) syncInstallationIdentity(ctx context.Context, ref Installa
 		if err := json.Unmarshal(raw, &installation); err != nil {
 			return current, err
 		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "users", []string{"ID"}, installation.UserID); err != nil {
+			return current, err
+		}
 		index := slices.IndexFunc(current.Users, func(user domain.User) bool { return user.ID == installation.UserID })
 		userCurrent := index < 0 || current.Users[index].Name == name && current.Users[index].DisplayName == name && current.Users[index].AvatarURL == avatarURL
 		if installation.Name == name && installation.AvatarURL == avatarURL && userCurrent {

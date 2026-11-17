@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_oauth_metadata_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "boundedOAuthMetadataTransaction": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded oauthMetadataTransaction. storedWorkspace reads the resident policy copy only (callback base: workspace, viewer, teams/settings); records come from the installed logical image through oauthMetadataSelect under independent work admission and are published as described for oauthMetadataTransaction. Only a stale image found before the callback runs is retried (the callback runs once at most). TestScaleP21SW294OAuthMetadataDifferential/Concurrent/Budget and TestScaleP21TeamCreateDifferential, persistent SQLite x2 and race.",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reached from team creation through EnsureBuiltinApplication.",
+      "callers": [
+        "store/SQLiteStore.oauthMetadataTransaction"
+      ]
+    }
+  }
+}

@@ -231,15 +231,27 @@ func TestScaleP21SW24ApplicationIdentityIDsProducer(t *testing.T) {
 		}
 		// Decompose only enumeration against the SAME actual installed
 		// source. The separate resident loader does not retain applications.
-		previous := f.metadataResidency
+		// The downstream OAuth transaction then runs on the store's own
+		// (legacy) copy: a bounded one needs an installed logical image,
+		// which this enumeration-only residency does not hold.
+		var err error
 		if bounded {
+			previous := f.metadataResidency
 			f.metadataResidency = newMetadataResidency()
+			fake := f.metadataResidency
+			var read *applicationIdentityIDsRead
+			read, err = f.beginApplicationIdentityIDsRead(t.Context())
+			f.metadataResidency = previous
+			if err == nil {
+				err = syncApplicationIdentityIDs(t.Context(), read.ids, f.SyncApplicationIdentity)
+				read.close()
+			}
+			if fake.work.used != 0 {
+				t.Fatal("real sync batch leaked enumeration allowance")
+			}
+		} else {
+			err = f.SyncAllApplicationIdentities(t.Context())
 		}
-		err := f.SyncAllApplicationIdentities(t.Context())
-		if bounded && f.metadataResidency.work.used != 0 {
-			t.Fatal("real sync batch leaked enumeration allowance")
-		}
-		f.metadataResidency = previous
 		if err != nil {
 			t.Fatal("real identity batch", err)
 		}

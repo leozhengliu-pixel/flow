@@ -1,15 +1,15 @@
 {
   "source": "store/oauth_authorization_records.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "oauthMetadataTransaction": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap"
       ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "temperature": "hot",
+      "temperatureReason": "HOT by reach: team creation (POST /api/workspaces/{key}/teams) and workspace creation call ensureBuiltinApplication -> EnsureBuiltinApplication -> oauthMetadataTransaction. Other callers are COLD: InstallApplication/UninstallApplication (admin routes, application deletion), IssueApplicationCredential (client-credentials and developer tokens), CreateOAuthAuthorizationGrant and RequestOAuthApplicationApproval (consent), RevokeOAuthAuthorizationRecords/RevokeOAuthAccessToken/revokeOAuthAccessFamily (settings and /oauth/revoke), syncInstallationIdentity (application edit and startup).",
       "callers": [
         "store/SQLiteStore.InstallApplication",
         "store/SQLiteStore.EnsureBuiltinApplication",
@@ -21,7 +21,8 @@
         "store/SQLiteStore.RevokeOAuthAuthorizationRecords",
         "store/SQLiteStore.RevokeOAuthAccessToken",
         "store/SQLiteStore.revokeOAuthAccessFamily"
-      ]
+      ],
+      "reason": "Off mode is unchanged (the bounded branch is taken only with bounded metadata; oauthMetadataSelect is a no-op off). Bounded, boundedOAuthMetadataTransaction runs the literal callbacks under writeMu (and the workspace lock with a peer reload) on the resident policy copy without records; each callback declares the records it reads with oauthMetadataSelect (app user by ID, a subject's keys and grants, a client's keys/grants, a refresh family's keys, a grant or key by ID), handed from the installed image in collection order (supersets the callbacks filter themselves). The records the mirror changed are read back from SQL in the same transaction, decoded and normalized as a load does (apiKey/webhook team restriction), replaced in place or inserted at their load position (collection_order, record_key) with a new user's derived userSettings/notificationPreferences, and installed through prepareLegacyResidentPublication with commit-stamp capture before the event is published. Before this, bounded callbacks saw no apiKeys/grants/users: deactivation, uninstall, refresh-family and token-limit logic skipped revocations and the installed image missed new app users until a reload. TestScaleP21SW294OAuthMetadataDifferential (install new/renamed/refused, deactivate, uninstall/missing/builtin, client-credentials and user token issue, token/refresh-family/authorization revocation, grants created/reused/app-installing/refused, approval requests, built-in ensure/suspend/resume/no-op, cancellation) and TestScaleP21SW294OAuthMetadataConcurrent/Budget compare legacy, warm and SQL-reloaded results, every metadata row, root, memberships, installations, lookup/departure/app-user rows, events and publications, with the bounded image equal to a reload; TestScaleP21TeamCreateDifferential now includes the built-in app user immediately. Tier A persistent SQLite x2 and race."
     }
   }
 }
