@@ -298,24 +298,32 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 				return ErrBoundedMetadataCoverage
 			}
 			_, actor := actorFromContext(ctx)
-			if issueRenumbering(ctx) {
-				if !actor {
-					// The legacy write then keeps the snapshot's members.
-					return fmt.Errorf("%w: renumbering issue update without an actor", ErrBoundedMetadataCoverage)
-				}
+			moving := input.TeamID != nil && *input.TeamID != target.Team.ID
+			if issueRenumbering(ctx) || moving {
 				users := []string{metadata.Viewer.ID}
 				for _, user := range metadata.Users {
 					users = append(users, user.ID)
 				}
-				metadata.Members, metadata.TeamMembers, err = inputs.issueMoveAudience(ctx, tx, metadata.Workspace.ID, users)
+				if issueRenumbering(ctx) && actor {
+					metadata.Members, metadata.TeamMembers, err = inputs.issueMoveAudience(ctx, tx, metadata.Workspace.ID, users)
+				} else {
+					// Without the marker, or without an actor, the literal
+					// writer keeps the installed member snapshots.
+					metadata.Members, metadata.TeamMembers, err = inputs.issueMoveSnapshotAudience(ctx, users)
+				}
 				if err != nil {
 					return err
 				}
 				storedMetadata.Members, storedMetadata.TeamMembers = slices.Clone(metadata.Members), slices.Clone(metadata.TeamMembers)
-			} else if input.TeamID != nil && *input.TeamID != target.Team.ID {
+			}
+			if moving && !issueRenumbering(ctx) {
 				// Moved by another write since the caller read the issue: the
 				// legacy write numbers it from the snapshot, unlocked.
-				return fmt.Errorf("%w: team move without renumbering", ErrBoundedMetadataCoverage)
+				metadata.NextIssueNumber, err = inputs.issueMoveSnapshotNumber(ctx)
+				if err != nil {
+					return err
+				}
+				storedMetadata.NextIssueNumber = metadata.NextIssueNumber
 			}
 			if editor, err = newIssueEditorLookups(ctx, inputs, tx, workspace, metadata.Workspace.ID, *target); err != nil {
 				return err
