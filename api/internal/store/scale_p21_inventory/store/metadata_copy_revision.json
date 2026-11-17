@@ -1,6 +1,6 @@
 {
   "source": "store/metadata_copy_revision.go",
-  "unmigrated": 4,
+  "unmigrated": 2,
   "consumers": {
     "copyRevisionLocked": {
       "owner": "P21",
@@ -25,11 +25,12 @@
         "store/SQLiteStore.mutateProjectRecordSelection",
         "store/SQLiteStore.mutateTeamMetadata",
         "store/SQLiteStore.mutateUserSettingsRecord"
-      ]
+      ],
+      "reason": "Pending: TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the five legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it); its allow-list still names UpdateIssueRecord, whose non-project hot-input path installs progressMetadata from persistIssueMetadata (owned by review/scale-p21-setup-fixtures, which makes it return nil on every bounded path; then replace the entry by a proof boundary). mutateTeamMetadata is closed; the favorite, feature-flag, user-settings and project-selection writers are not reached with the flag on."
     },
     "refreshWorkspaceCopy": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "loadWorkspaceStamped"
       ],
@@ -38,11 +39,12 @@
       "callers": [
         "store/SQLiteStore.mutateScoped",
         "store/SQLiteStore.mutateFull"
-      ]
+      ],
+      "reason": "No HOT route or ticker reaches this literal pre-write refresh with FLOW_BOUNDED_METADATA on: TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the five legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it). mutateFull refreshes only without residency (pinned dispatch; a cold facade has no residency), and mutateScoped's callers are flag-off or COLD. Its allow-list is empty. Flag-off revision checks, decode-on-change and stamp installation are unchanged."
     },
     "refreshWorkspaceCopyLocked": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "loadWorkspaceStamped"
       ],
@@ -51,7 +53,8 @@
       "callers": [
         "store/SQLiteStore.mutateProjectRecordSelection",
         "store/SQLiteStore.mutateTeamMetadata"
-      ]
+      ],
+      "reason": "No HOT route or ticker reaches this literal locked refresh with FLOW_BOUNDED_METADATA on: TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the five legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it). Its HOT inventory caller mutateTeamMetadata is closed (no flag-on reference; dispatchMutation's always-returning bounded block is pinned, TestScaleP21TeamMetadataCallset) and mutateProjectRecordSelection's callers are flag-off or COLD. Its allow-list is empty; flag-off behaviour is unchanged."
     },
     "setWorkspaceLocked": {
       "owner": "P21",
@@ -78,7 +81,8 @@
         "store/SQLiteStore.mutateTeamMetadata",
         "store/SQLiteStore.DeleteWorkflowStateRecords",
         "store/SQLiteStore.migrateWorkspaceMetadataRecords"
-      ]
+      ],
+      "reason": "Pending: TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the five legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it); its allow-list still names createTeam, whose ensureBuiltinApplication -> EnsureBuiltinApplication -> oauthMetadataTransaction installs its copy with setWorkspaceLocked (owned by review/scale-p21-app-metadata). writeAPIKeyUse (authenticate, MCP and public API key requests) now installs into the logical generation first (publishBoundedAPIKeyUse, TestScaleP21SW293APIKeyUseDifferential), and the conflict refresh no longer reaches installWorkspace."
     }
   }
 }

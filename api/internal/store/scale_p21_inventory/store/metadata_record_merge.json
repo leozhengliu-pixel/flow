@@ -1,10 +1,10 @@
 {
   "source": "store/metadata_record_merge.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "refreshMetadataRecords": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "storedWorkspace"
       ],
@@ -15,7 +15,8 @@
         "store/SQLiteStore.mutateIssueScope",
         "store/SQLiteStore.RefreshMetadataRecord",
         "store/SQLiteStore.refreshConflictedMetadata"
-      ]
+      ],
+      "reason": "No HOT route or ticker reaches this literal copy refresh with FLOW_BOUNDED_METADATA on: TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the five legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it). On a bounded store refreshConflictedMetadata (the retry refresh of UpdateIssueRecord, team, scoped, full, user-settings and project-selection writers and of background writes) and RefreshMetadataRecord return the logical refresh first (refreshConflictedLogicalRecords: the generic retry adapter and the agent-session framer, the legacy field filter, unknown stamp, policy reinstalled from the generation), so records are never patched into the policy-only copy. TestScaleP21SW293ConflictRefreshDifferential compares legacy and bounded refreshes of changed, deleted and missing projects, a policy team, an agent session, the skipped projectUpdates field, an unknown field and an uninstalled workspace with each other and with the stored state; TestScaleP21SW293IssueUpdateConflictRetry reruns a HOT issue update on the peer's project with identical output and no policy-copy change. Its allow-list is empty; flag-off behaviour is unchanged."
     }
   }
 }
