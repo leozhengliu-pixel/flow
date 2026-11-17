@@ -951,6 +951,12 @@ func (s *server) createProjectStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, message)
 		return
 	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:createProjectStatus", "project_status.created", func(repo *store.SQLiteStore, request *http.Request) {
+			s.createProjectStatusWithStore(w, request, repo, input)
+		})
+		return
+	}
 	var created domain.ProjectStatus
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "project_status.created", input, func(data *domain.Bootstrap) (string, error) {
 		statusType := "planned"
@@ -984,6 +990,12 @@ func (s *server) updateProjectStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if message := validateProjectStatusInput(input); message != "" {
 		writeError(w, http.StatusBadRequest, message)
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:updateProjectStatus", "project_status.updated", func(repo *store.SQLiteStore, request *http.Request) {
+			s.updateProjectStatusWithStore(w, request, repo, input)
+		})
 		return
 	}
 	id := r.PathValue("id")
@@ -1026,6 +1038,12 @@ func (s *server) updateProjectStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteProjectStatus(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:deleteProjectStatus", "project_status.deleted", func(repo *store.SQLiteStore, request *http.Request) {
+			s.deleteProjectStatusWithStore(w, request, repo)
+		})
+		return
+	}
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_status.deleted", id, nil, func(data *domain.Bootstrap) error {
 		statusIndex := slices.IndexFunc(data.ProjectStatuses, func(status domain.ProjectStatus) bool { return status.ID == id })
@@ -1063,6 +1081,12 @@ func (s *server) reorderProjectStatuses(w http.ResponseWriter, r *http.Request) 
 		IDs []string `json:"ids"`
 	}
 	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:reorderProjectStatuses", "project_status.reordered", func(repo *store.SQLiteStore, request *http.Request) {
+			s.reorderProjectStatusesWithStore(w, request, repo, input)
+		})
 		return
 	}
 	var updated []domain.ProjectStatus
@@ -1137,6 +1161,12 @@ func (s *server) createWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 		return
 	}
 	actor := requestActor(s, r)
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:createWorkspaceIssueTemplate", "issue_template.created", func(repo *store.SQLiteStore, request *http.Request) {
+			s.createWorkspaceIssueTemplateWithStore(w, request, repo, input, actor)
+		})
+		return
+	}
 	var created domain.IssueTemplate
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "issue_template.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
@@ -1153,6 +1183,12 @@ func (s *server) createWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 func (s *server) updateWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Request) {
 	var input domain.IssueTemplateMutationInput
 	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:updateWorkspaceIssueTemplate", "issue_template.updated", func(repo *store.SQLiteStore, request *http.Request) {
+			s.updateWorkspaceIssueTemplateWithStore(w, request, repo, input)
+		})
 		return
 	}
 	id := r.PathValue("id")
@@ -1180,6 +1216,12 @@ func (s *server) updateWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 }
 
 func (s *server) deleteWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:deleteWorkspaceIssueTemplate", "issue_template.deleted", func(repo *store.SQLiteStore, request *http.Request) {
+			s.deleteWorkspaceIssueTemplateWithStore(w, request, repo)
+		})
+		return
+	}
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "issue_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "issueTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.IssueTemplates)
@@ -2588,6 +2630,12 @@ func (s *server) createDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	actor := requestActor(s, r)
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:createDocumentTemplate", "document_template.created", func(repo *store.SQLiteStore, request *http.Request) {
+			s.createDocumentTemplateWithStore(w, request, repo, input, actor)
+		})
+		return
+	}
 	var created domain.DocumentTemplate
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "document_template.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
@@ -2604,6 +2652,12 @@ func (s *server) createDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 func (s *server) updateDocumentTemplate(w http.ResponseWriter, r *http.Request) {
 	var input documentTemplateInput
 	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:updateDocumentTemplate", "document_template.updated", func(repo *store.SQLiteStore, request *http.Request) {
+			s.updateDocumentTemplateWithStore(w, request, repo, input)
+		})
 		return
 	}
 	id := r.PathValue("id")
@@ -2632,6 +2686,12 @@ func (s *server) updateDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) deleteDocumentTemplate(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:deleteDocumentTemplate", "document_template.deleted", func(repo *store.SQLiteStore, request *http.Request) {
+			s.deleteDocumentTemplateWithStore(w, request, repo)
+		})
+		return
+	}
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "document_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "documentTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.DocumentTemplates)
