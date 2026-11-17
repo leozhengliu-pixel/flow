@@ -59,9 +59,10 @@
     "setLoopNextRun": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Bounded point writer declares only loops/loopID; original off MutateWorkspace context/callback remain literal. The shared logical aggregate planner now preserves reflective precedence across the complete installed before/after images. TestScaleP21HotLoopTickScheduleStamps runs twice on persistent SQLite in warm/reloaded generations and proves actual canonical next-run changes, identical webhook payload/previous values and realtime enrichment when an earlier nested document object collides with the loop ID, byte-identical unrelated large loop/document rows and zero bounded full decodes. Read-only WireValue timestamps never enter this mutation preimage; the scoped writer retains its native validation and explicit budget/coverage guards.",
+      "reason": "Bounded mode calls the closed MutateLoopNextRun stamp (the first loop's NextRunAt only, a large loop row through the large-row kernels) with the unchanged callback; the original off MutateWorkspace context/callback remain literal. TestScaleP21SW421LoopNextRunDifferential compares actual setLoopNextRun stamps with the literal stamp byte for byte warm and reloaded for small, named time zone, unchanged, 300 KiB, 4 MiB and 15 MiB loops and duplicate occurrences (the scoped writer this replaces refused from 256 KiB); TestScaleP21HotLoopTickScheduleStamps still proves due/uninitialized/future/draft stamps, webhook previous values and realtime enrichment with a colliding nested document object and zero bounded full decodes.",
       "accessors": [
         "Bootstrap",
+        "MutateLoopNextRun",
         "MutateWorkspace"
       ],
       "temperature": "hot",

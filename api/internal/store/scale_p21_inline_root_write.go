@@ -420,7 +420,8 @@ func (s *SQLiteStore) writeStreamedMetadataSlowFieldsRoot(ctx context.Context, t
 			delete(shapes, name)
 		}
 	}
-	if err := syncMetadataRecords(withLegacyMetadataDeltaReadBudget(ctx, owner), tx, workspace, refs, selectedShapes, wanted, names, knownRecords); err != nil {
+	syncWanted, syncNames := largeRowSyncFields(ctx, wanted, names)
+	if err := syncMetadataRecords(withLegacyMetadataDeltaReadBudget(ctx, owner), tx, workspace, refs, selectedShapes, syncWanted, syncNames, knownRecords); err != nil {
 		return err
 	}
 	manifest, err := json.Marshal(shapes)

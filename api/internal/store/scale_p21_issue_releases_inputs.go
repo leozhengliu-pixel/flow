@@ -80,16 +80,38 @@ func (s *SQLiteStore) loadIssueReleaseInputs(ctx context.Context, source *metada
 		if !selected {
 			return nil
 		}
-		cost, err := issueHotProjectionCost(ctx, record, nil)
-		if err != nil {
-			return err
-		}
-		if err := read.reserve(ctx, cost); err != nil {
-			return err
-		}
-		value, err := issueHotProjection(ctx, record, nil, cost)
-		if err != nil {
-			return err
+		var value reflect.Value
+		if record.cost > largeRowNodeCost {
+			// A large release (a long description, many linked issues)
+			// is decoded member by member at its native cost. The
+			// validation snapshot and the callback's IssueIDs edit copy
+			// its containers, never its strings' bytes (largeRowCloneBytes).
+			owner := &ResourceRead{store: s}
+			read.release = append(read.release, owner.Close)
+			if value, err = largeRowRecordValue(ctx, owner, record); err != nil {
+				return err
+			}
+			copies, err := largeRowCloneBytes(ctx, value, 0)
+			if err != nil {
+				return err
+			}
+			if copies > (metadataWorkBytes-(64<<10))/2 {
+				return ErrMetadataWorkBudget
+			}
+			if err := owner.reserve(ctx, copies*2+64<<10); err != nil {
+				return err
+			}
+		} else {
+			cost, err := issueHotProjectionCost(ctx, record, nil)
+			if err != nil {
+				return err
+			}
+			if err := read.reserve(ctx, cost); err != nil {
+				return err
+			}
+			if value, err = issueHotProjection(ctx, record, nil, cost); err != nil {
+				return err
+			}
 		}
 		releases = append(releases, value.Interface().(domain.Release))
 		r.ordinals = append(r.ordinals, int(ordinal.Int()))
@@ -223,16 +245,34 @@ func issueReleasePatch(ctx context.Context, source *metadataLogicalSource, input
 			"IssueIDs":  reflect.ValueOf(edit.IssueIDs),
 			"UpdatedAt": reflect.ValueOf(edit.UpdatedAt),
 		}
-		for _, native := range changed {
-			cost, err := metadataAggregateNativeCost(ctx, native, 0)
-			if err != nil {
-				return err
+		if record.cost > largeRowNodeCost {
+			// A large release's edited members are already admitted with
+			// the decoded inputs; the builder streams them to its spool, so
+			// only their containers' size is admitted as frame scratch.
+			for _, native := range changed {
+				size, err := largeRowCloneBytes(ctx, native, 0)
+				if err != nil {
+					return err
+				}
+				if size > (metadataWorkBytes-(64<<10))/2 {
+					return ErrMetadataWorkBudget
+				}
+				if err := inputs.read.reserve(ctx, size+64<<10); err != nil {
+					return err
+				}
 			}
-			if cost > (metadataWorkBytes-4096)/8 {
-				return ErrMetadataWorkBudget
-			}
-			if err := inputs.read.reserve(ctx, cost*8+4096); err != nil {
-				return err
+		} else {
+			for _, native := range changed {
+				cost, err := metadataAggregateNativeCost(ctx, native, 0)
+				if err != nil {
+					return err
+				}
+				if cost > (metadataWorkBytes-4096)/8 {
+					return ErrMetadataWorkBudget
+				}
+				if err := inputs.read.reserve(ctx, cost*8+4096); err != nil {
+					return err
+				}
 			}
 		}
 		value, err := frames.writeAggregateNode(legacyDiscussionNativeDelta{base: record, changed: changed}, 0)
