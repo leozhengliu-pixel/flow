@@ -23,10 +23,14 @@ const (
 	scopedImageAdvancedSchedule
 	scopedImageAgentReply
 	scopedImageCommentActionResolve
+	scopedImageRecurringOccurrence
 )
 
-// Only closed document-update, cycle and advanced schedule declarations enter this
-// executor. Each owns its literal resolver and native occurrence overlay.
+// Only the closed declarations above enter this executor. Each owns its
+// literal resolver and native occurrence overlay. Profiles that create issues
+// (comment-action resolution, recurring occurrences) do it through the one
+// scopedImageIssueFamily path: their family and the issue sequence resolve
+// inside the transaction, and new rows are persisted with CreateIssues.
 type scopedImageWriteProfile interface {
 	kind() scopedImageWriteKind
 	resolve(context.Context, *ResourceRead, *metadataLogicalSource) (MutationScope, error)
@@ -43,6 +47,29 @@ type scopedImageWriteProfile interface {
 // loads, and returns every issue ID to load.
 type scopedImageIssueFamily interface {
 	issueFamily(ctx context.Context, tx *sqlTx, workspace string, owner *ResourceRead, rows *issueMutationRows, source *metadataLogicalSource, scope MutationScope, ids []string) ([]string, error)
+}
+
+// scopedImageDerivedAggregate is a profile whose callback derives its own
+// aggregate (MutateWorkspaceWithAggregate callers, such as a created issue);
+// every other profile must return the declared mutation aggregate.
+type scopedImageDerivedAggregate interface {
+	validateAggregate(before, after domain.Bootstrap, aggregate string) error
+}
+
+// scopedImageFullInputs is a profile told that the over-limit full image
+// writer, not the scoped transaction, prepares its inputs.
+type scopedImageFullInputs interface {
+	beginFull()
+}
+
+func scopedImageCheckAggregate(ctx context.Context, profile scopedImageWriteProfile, before, after domain.Bootstrap, aggregate string) error {
+	if derived, ok := profile.(scopedImageDerivedAggregate); ok {
+		return derived.validateAggregate(before, after, aggregate)
+	}
+	if aggregate != mutationAggregateID(ctx) {
+		return ErrBoundedMetadataCoverage
+	}
+	return nil
 }
 
 type scopedImageAttempt struct {
@@ -267,7 +294,7 @@ func (r *scopedImageAttempt) issueRecords(ctx context.Context, ids []string) (ma
 func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, eventType string, payload any, profile scopedImageWriteProfile, mutate func(*domain.Bootstrap) (string, error)) error {
 	if s == nil || !s.BoundedMetadataEnabled() || profile == nil || mutate == nil || !metadataOutputOwnerPresent(ctx) ||
 		(profile.kind() != scopedImageDocumentUpdate && profile.kind() != scopedImageCycleSchedule && profile.kind() != scopedImageAdvancedSchedule &&
-			profile.kind() != scopedImageAgentReply && profile.kind() != scopedImageCommentActionResolve) ||
+			profile.kind() != scopedImageAgentReply && profile.kind() != scopedImageCommentActionResolve && profile.kind() != scopedImageRecurringOccurrence) ||
 		UsesIssueRecordMutations(ctx) || issueRenumbering(ctx) {
 		return ErrBoundedMetadataCoverage
 	}
@@ -510,8 +537,8 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		if callbackErr != nil {
 			return callbackErr
 		}
-		if aggregate != mutationAggregateID(ctx) {
-			return ErrBoundedMetadataCoverage
+		if err := scopedImageCheckAggregate(ctx, profile, attempt.before, attempt.data, aggregate); err != nil {
+			return err
 		}
 		if err := profile.validate(attempt.before, attempt.data); err != nil {
 			return err
@@ -571,12 +598,13 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 					created = append(created, issue.ID)
 				}
 			}
-			if len(created) != 0 {
-				existing, err := attempt.rows.load(ctx, created, true)
+			for start := 0; start < len(created); start += 1000 {
+				batch := created[start:min(start+1000, len(created))]
+				existing, err := attempt.rows.load(ctx, batch, true)
 				if err != nil {
 					return err
 				}
-				for _, id := range created {
+				for _, id := range batch {
 					rawBefore[id] = existing[id].raw
 				}
 			}
@@ -816,6 +844,9 @@ func (s *SQLiteStore) mutateBoundedScopedImageFull(ctx context.Context, workspac
 		}
 		defer actorImage.Close()
 		prepared := actorImage.Source()
+		if full, ok := profile.(scopedImageFullInputs); ok {
+			full.beginFull()
+		}
 		attempt.data, err = profile.inputs(ctx, attempt.owner, prepared)
 		if err != nil {
 			return fmt.Errorf("full image inputs: %w", err)
@@ -867,8 +898,8 @@ func (s *SQLiteStore) mutateBoundedScopedImageFull(ctx context.Context, workspac
 		if callbackErr != nil {
 			return callbackErr
 		}
-		if aggregate != mutationAggregateID(ctx) {
-			return ErrBoundedMetadataCoverage
+		if err := scopedImageCheckAggregate(ctx, profile, attempt.before, attempt.data, aggregate); err != nil {
+			return err
 		}
 		if err := profile.validate(attempt.before, attempt.data); err != nil {
 			return err

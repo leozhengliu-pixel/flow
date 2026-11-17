@@ -9,7 +9,7 @@
       "accessors": ["storedWorkspace", "mutateBoundedScopedImageFull"],
       "temperature": "hot",
       "temperatureReason": "Declared transaction for hot cycle maintenance.",
-      "callers": ["store/scale_p21_cycle_schedule_inputs.go:mutateBoundedCycleSchedule"]
+      "callers": ["store/scale_p21_cycle_schedule_inputs.go:mutateBoundedCycleSchedule", "store/scale_p21_recurring_occurrence_write.go:mutateBoundedRecurringOccurrence"]
     },
     "mutateBoundedScopedImageFull": {
       "owner": "P21",

@@ -9,7 +9,7 @@
       "accessors": ["storedWorkspace"],
       "temperature": "hot",
       "temperatureReason": "Shared scoped transaction for issue reactions, declared attachment callbacks and recurrence timing.",
-      "callers": ["store/scale_p21_issue_attachment_write.go:mutateBoundedIssueReaction", "store/scale_p21_issue_attachment_write.go:mutateBoundedIssueAttachment", "store/scale_p21_issue_recurrence_timing.go:mutateBoundedIssueRecurrenceTiming"]
+      "callers": ["store/scale_p21_issue_attachment_write.go:mutateBoundedIssueReaction", "store/scale_p21_issue_attachment_write.go:mutateBoundedIssueAttachment", "store/scale_p21_issue_recurrence_timing.go:mutateBoundedIssueRecurrenceTiming", "store/scale_p21_issue_releases_write.go:mutateBoundedIssueReleases"]
     }
   }
 }

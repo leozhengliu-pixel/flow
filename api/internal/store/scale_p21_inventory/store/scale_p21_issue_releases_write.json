@@ -1,0 +1,20 @@
+{
+  "source": "store/scale_p21_issue_releases_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedIssueReleases": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Closed issue.releases_updated profile: the scoped point writer (issue-record route, marker issue must equal the record scope) or the ordinary legacy full writer, each with owned release inputs (requested/linked occurrences with ordinals, named pipelines), detach validation (IssueIDs/UpdatedAt only, one appended releases activity, everything else unchanged), ordinal release patches and releases declared as the only extra persisted metadata field. SW200 differential (legacy/warm/reloaded, both route families, principal matrix, concurrency, inline duplicates) passes; large edited release rows (~0.5 MiB+) hit the shared rebase/persist work budget.",
+      "accessors": [
+        "mutateBoundedScopedIssuePoint",
+        "mutateBoundedLegacyDiscussion"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Closed release profile of the scoped issue-record writer for PUT /api/issue-records/{id}/releases and of the ordinary full issue writer for the direct /api/issues route.",
+      "callers": [
+        "store/sqlite.go:dispatchMutation"
+      ]
+    }
+  }
+}

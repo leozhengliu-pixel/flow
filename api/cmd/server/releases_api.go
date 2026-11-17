@@ -33,7 +33,11 @@ func (s *server) setIssueReleases(w http.ResponseWriter, r *http.Request) {
 	}
 	issueID := r.PathValue("id")
 	var updated []domain.Release
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.releases_updated", issueID, input, func(data *domain.Bootstrap) error {
+	ctx := r.Context()
+	if s.store.BoundedMetadataEnabled() {
+		ctx = store.ContextWithIssueReleasesMutation(ctx, issueID, input.ReleaseIDs)
+	}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.releases_updated", issueID, input, func(data *domain.Bootstrap) error {
 		if _, err := issueByID(data, issueID); err != nil {
 			return err
 		}

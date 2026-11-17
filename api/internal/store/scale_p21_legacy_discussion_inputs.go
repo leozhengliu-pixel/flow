@@ -20,6 +20,7 @@ type legacyDiscussionInputs struct {
 	input                                                                             *issueHotInputs
 	issueReaction                                                                     bool
 	issueAttachment                                                                   bool
+	issueReleases                                                                     bool
 	once                                                                              sync.Once
 }
 
@@ -697,7 +698,7 @@ func (r *legacyDiscussionInputs) mergeGroup(ctx context.Context, frames *metadat
 	for index := before.Len(); index < next.Len(); index++ {
 		if name == "activities" {
 			event := next.Index(index).Interface().(domain.ActivityEvent).Type
-			if !boundedIssueDiscussionEvent(event) && !(r.issueAttachment && event == "issue.link_created") {
+			if !boundedIssueDiscussionEvent(event) && !(r.issueAttachment && event == "issue.link_created") && !(r.issueReleases && event == "issue.releases_updated") {
 				return patch, false, ErrBoundedMetadataCoverage
 			}
 		}

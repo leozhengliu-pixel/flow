@@ -1,6 +1,6 @@
 {
   "source": "server/releases_api.go",
-  "unmigrated": 8,
+  "unmigrated": 7,
   "consumers": {
     "deleteReleasePipeline": {
       "owner": "P21",
@@ -91,7 +91,8 @@
     },
     "setIssueReleases": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded branch only adds ContextWithIssueReleasesMutation; the literal callback, event, payload and flag-off path are unchanged. The store routes the declared issue.releases_updated callback to a closed releases profile of the proven scoped issue-record point writer (PUT /api/issue-records/{id}/releases and the rewritten /api/issues route) or of the ordinary full legacy issue writer (direct /api/issues handler). loadIssueReleaseInputs selects every release occurrence whose trimmed ID is requested or whose IssueIDs contain the issue, in native order with ordinals, plus every named pipeline occurrence (ID, FrozenStages), so first-match validation, frozen-stage refusal, response order and activity names equal the full collection; detach admits only IssueIDs/UpdatedAt edits and one appended issue.releases_updated activity, and ordinal patches rewrite only edited occurrences. SW200 compares legacy/warm/reloaded responses, issue/content/release/pipeline/root rows, events, webhooks and realtime for add/remove/reorder/clear/null, frozen stage and frozen release refusal, archived/missing/duplicate/empty/trimmed ids, hidden private-pipeline release (route authorization), aggregate-ID collision, 60/80-release issue, duplicate/empty/overlong inline occurrences, first-pipeline precedence, retained history, old identifier, cancellation, both route families, the five-principal/four-credential matrix and concurrent writers. Legal large issue descriptions (1.1 MB) and edited ~110 KB release rows pass. Root gate kept: editing a release row of roughly 0.5 MiB or more exceeds the shared 256 MiB work budget in the shared metadata rebase/persist (lockRecords work*8 plus legacyActorWriteNodeWork 64x) and returns 500 where legacy succeeds.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

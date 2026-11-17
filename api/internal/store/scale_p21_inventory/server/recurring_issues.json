@@ -1,10 +1,11 @@
 {
   "source": "server/recurring_issues.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "createRecurringOccurrence": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded branch only adds an output owner (kept by the ticker's workspace pass through source/sub-issue publication) and ContextWithRecurringOccurrenceWrite; the literal generateRecurringOccurrence callback, recurringIssueScope, payload and flag-off path are unchanged. The closed recurring-occurrence profile of the scoped image writer runs the literal scope expansion (source, parent_id children, recurrenceInstance candidates, 20,000 limits) under the transaction, locks the issue sequence like mutateScoped, selects teams/team settings/parents/workspace settings completely and the reviewed issue input closure (users, labels, groups, states, cycle settings/current cycles, SLA settings/rules/issue SLAs, preferences, members) for the source, live templates and predicted new issue IDs, plus the source project; validates that only declared source fields change and metadata other than issue SLAs/SLA events is untouched; patches issue SLAs by ordinal and appends SLA events renumbered after the stored ones; reads new-ID preimages through the owned row reader; and over the 20,000 limit uses the shared full image writer. One transaction, no per-child commit. SW206 compares legacy/warm/legacy-reloaded/reloaded returned issues, every issue/content/metadata row, the sequence, events, webhooks and ordered realtime (incl. notification signals) for weekly/daily/monthly-31/RRULE schedules, catch-up, sub-issue order/teams/archived templates, labels/archived groups/assignee/description/document content copies, sequence ahead/missing, private team, default settings, project/cycle/SLA collisions and breach notifications, merged history, existing instance, invalid rule, retired/missing team, missing/moved due date, not due, archived/deleted source, rollback, multi-series tick, concurrent ticks, stale-image conflict retry and cancellation. Root gate kept: over the 20,000-record scope the shared full image path hydrates every issue/content record and exceeds the 256 MiB work budget for such a family; the bounded tick then refuses atomically (no rows, sequence, events or publications; work released; retried next tick) where the literal full writer creates the instance (SW206 full-fallback test pins this).",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"

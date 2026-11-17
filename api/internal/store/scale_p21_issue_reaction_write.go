@@ -19,6 +19,7 @@ type boundedIssueReactionAttempt struct {
 	*boundedDiscussionAttempt
 	content          *issueChildContentRows
 	attachmentInputs *issueHotInputs
+	releases         *issueReleaseInputs
 	once             sync.Once
 }
 
@@ -36,6 +37,8 @@ func (r *boundedIssueReactionAttempt) Close() {
 			r.attachmentInputs.close()
 			r.attachmentInputs = nil
 		}
+		r.releases.close()
+		r.releases = nil
 	})
 }
 
@@ -56,6 +59,11 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 	}
 	attachment := profile == scopedIssueAttachmentProfile
 	relation := profile == scopedIssueRelationProfile
+	releases := profile == scopedIssueReleasesProfile
+	releaseInput, _ := issueReleasesFromContext(ctx)
+	if releases && releaseInput.issueID != ids[0] {
+		return fmt.Errorf("%w: unsupported bounded scoped issue releases", ErrBoundedMetadataCoverage)
+	}
 	if workspace == "" {
 		s.mu.RLock()
 		workspace = s.lastWorkspaceKey
@@ -332,10 +340,21 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		if err != nil {
 			return err
 		}
+		if releases {
+			attempt.releases, err = s.loadIssueReleaseInputs(ctx, display, &data, ids[0], releaseInput.requested)
+			if err != nil {
+				return err
+			}
+		}
 		if err := attempt.reserveContent(ctx, data, payload); err != nil {
 			return err
 		}
-		callbackCost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(data), 0)
+		callbackInput := data
+		if releases {
+			// The release inputs own their selected records and snapshot.
+			callbackInput.Releases, callbackInput.ReleasePipelines = nil, nil
+		}
+		callbackCost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(callbackInput), 0)
 		if err != nil {
 			return err
 		}
@@ -345,7 +364,7 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		if err := attempt.owner.reserve(ctx, callbackCost*3+64<<10); err != nil {
 			return err
 		}
-		beforeCallback := cloneBootstrap(data)
+		beforeCallback := cloneBootstrap(callbackInput)
 		if data.Viewer.Via != nil {
 			beforeCallback.Viewer.Via = cloneSnapshotValue(reflect.ValueOf(data.Viewer.Via)).Interface().(*domain.ActorBot)
 		}
@@ -365,8 +384,17 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		if callbackErr != nil {
 			return callbackErr
 		}
+		var releaseEdits map[int]domain.Release
+		if releases {
+			releaseEdits, err = attempt.releases.detach(ctx, ids[0])
+			if err != nil {
+				return err
+			}
+		}
 		if timing {
 			err = validateScopedIssueRecurrenceTiming(beforeCallback, data)
+		} else if releases {
+			err = validateScopedIssueReleases(beforeCallback, data)
 		} else if relation {
 			err = validateScopedIssueRelation(beforeCallback, data)
 		} else if attachment {
@@ -422,6 +450,14 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 			return err
 		}
 		defer requested.Release()
+		if releases {
+			patched, err := issueReleasePatch(ctx, requested, attempt.releases, releaseEdits)
+			if err != nil {
+				return err
+			}
+			defer patched.Release()
+			requested = patched
+		}
 		restored, err := requested.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
 			if name == "viewer" && !timing || name == "viewerRole" {
 				index, _, _ := metadataLogicalField(name)
@@ -462,10 +498,14 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 			defer progress.Close()
 		}
 		var merged *metadataLogicalSource
+		persistCtx := ctx
+		if releases {
+			persistCtx = context.WithValue(ctx, legacyMetadataExtraFieldsKey{}, []string{"releases"})
+		}
 		if progress != nil {
-			merged, err = s.persistLegacyMetadataImageWithProgress(ctx, tx, workspace, stored, restored, progress)
+			merged, err = s.persistLegacyMetadataImageWithProgress(persistCtx, tx, workspace, stored, restored, progress)
 		} else {
-			merged, err = s.persistLegacyMetadataImage(ctx, tx, workspace, stored, restored)
+			merged, err = s.persistLegacyMetadataImage(persistCtx, tx, workspace, stored, restored)
 		}
 		if err != nil {
 			return err

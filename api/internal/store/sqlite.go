@@ -1594,8 +1594,14 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 		if _, selected := cycleScheduleMaintenance(ctx); selected && eventType == "cycles.automatically_maintained" {
 			return s.mutateBoundedCycleSchedule(ctx, workspaceKey, eventType, payload, mutate)
 		}
+		if boundedRecurringOccurrenceEvent(ctx, eventType) {
+			return s.mutateBoundedRecurringOccurrence(ctx, workspaceKey, eventType, payload, mutate)
+		}
 		if boundedIssueRelationEvent(ctx, eventType) {
 			return s.mutateBoundedIssueRelation(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if boundedIssueReleasesEvent(ctx, eventType) {
+			return s.mutateBoundedIssueReleases(ctx, workspaceKey, eventType, payload, mutate)
 		}
 		if eventType == "issue.created" && UsesIssueRecordMutations(ctx) {
 			return s.createIssueRecords(ctx, workspaceKey, payload, mutate)

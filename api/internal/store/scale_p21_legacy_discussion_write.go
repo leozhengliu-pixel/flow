@@ -21,6 +21,7 @@ type legacyDiscussionAttempt struct {
 	NativeRole string
 	inputs     *legacyDiscussionInputs
 	lookups    *issueEditorLookups
+	releases   *issueReleaseInputs
 	base       *legacyRecordBase
 	ctx        context.Context
 	workspace  string
@@ -40,6 +41,8 @@ func (r *legacyDiscussionAttempt) Close() {
 			r.lookups.close()
 			r.lookups = nil
 		}
+		r.releases.close()
+		r.releases = nil
 		if r.inputs != nil {
 			r.inputs.Close()
 			r.inputs = nil
@@ -310,7 +313,9 @@ func boundedLegacyIssueEvent(event string) bool {
 func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspace, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	issueID := mutationAggregateID(ctx)
 	attachment := boundedIssueAttachmentEvent(ctx, eventType) && !UsesIssueRecordMutations(ctx)
-	if !s.BoundedMetadataEnabled() || !(boundedLegacyIssueEvent(eventType) || attachment) || issueID == "" ||
+	releases := boundedIssueReleasesEvent(ctx, eventType)
+	releaseInput, _ := issueReleasesFromContext(ctx)
+	if !s.BoundedMetadataEnabled() || !(boundedLegacyIssueEvent(eventType) || attachment || releases) || issueID == "" ||
 		mutate == nil || !metadataOutputOwnerPresent(ctx) || UsesIssueRecordMutations(ctx) {
 		return ErrBoundedMetadataCoverage
 	}
@@ -368,12 +373,19 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 		}
 		attempt.inputs.issueReaction = eventType == "issue.reaction_toggled"
 		attempt.inputs.issueAttachment = attachment
+		attempt.inputs.issueReleases = releases
 		transferred := false
 		defer func() {
 			if !transferred {
 				attempt.Close()
 			}
 		}()
+		if releases {
+			attempt.releases, err = s.loadIssueReleaseInputs(ctx, attempt.inputs.input.source, attempt.Data, issueID, releaseInput.requested)
+			if err != nil {
+				return err
+			}
+		}
 		// The fingerprint stage need not survive SQL commit/rollback, while
 		// callback-captured native results survive until response release.
 		defer attempt.base.Close()
@@ -399,6 +411,13 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 		if err := attempt.CheckCallback(); err != nil {
 			return err
 		}
+		var releaseEdits map[int]domain.Release
+		if releases {
+			releaseEdits, err = attempt.releases.detach(ctx, issueID)
+			if err != nil {
+				return err
+			}
+		}
 		if err := budget.reserveContent(ctx, *attempt.Data, payload); err != nil {
 			return err
 		}
@@ -407,6 +426,14 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 			return err
 		}
 		defer callback.Release()
+		if releases {
+			patched, err := issueReleasePatch(ctx, callback, attempt.releases, releaseEdits)
+			if err != nil {
+				return err
+			}
+			defer patched.Release()
+			callback = patched
+		}
 		var previous json.RawMessage
 		if webhookEnabled {
 			eventPublication, err := s.prepareMetadataAggregatePrevious(ctx, metadataAggregateImage{Source: attempt.Before}, metadataAggregateImage{Source: callback}, aggregate)
@@ -477,7 +504,11 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 		if progress != nil {
 			progressPlan = progress
 		}
-		merged, err := s.persistLegacyMetadataImageWithProgress(ctx, tx, workspace, attempt.Stored, counted, progressPlan)
+		persistCtx := ctx
+		if releases {
+			persistCtx = context.WithValue(ctx, legacyMetadataExtraFieldsKey{}, []string{"releases"})
+		}
+		merged, err := s.persistLegacyMetadataImageWithProgress(persistCtx, tx, workspace, attempt.Stored, counted, progressPlan)
 		if err != nil {
 			return err
 		}

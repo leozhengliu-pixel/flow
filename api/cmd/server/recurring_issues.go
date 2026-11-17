@@ -63,7 +63,7 @@ func (s *server) generateRecurringIssues(ctx context.Context, now time.Time) err
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if _, err := s.generateWorkspaceRecurringIssues(ctx, key, now); err != nil && !errors.Is(err, context.Canceled) {
+		if err := s.generateRecurringWorkspaceTick(ctx, key, now); err != nil && !errors.Is(err, context.Canceled) {
 			log.Printf("Recurring issues workspace=%s: %v", key, err)
 		}
 	}
@@ -105,7 +105,16 @@ func (s *server) createRecurringOccurrence(ctx context.Context, key, sourceID st
 	var source domain.Issue
 	var children []domain.Issue
 	payload := map[string]string{"automation": "recurring", "sourceIssueId": sourceID}
-	err := s.store.MutateWorkspaceWithAggregate(recurringIssueScope(ctx, sourceID, now), key, "issue.created", payload, func(data *domain.Bootstrap) (string, error) {
+	scope := recurringIssueScope(ctx, sourceID, now)
+	if s.store.BoundedMetadataEnabled() {
+		// The created family stays owned until its publications below finish
+		// (and, in the ticker, until the workspace pass ends).
+		var closeOutputs func()
+		scope, closeOutputs = beginMetadataOutputReads(scope)
+		defer closeOutputs()
+		scope = store.ContextWithRecurringOccurrenceWrite(scope, sourceID)
+	}
+	err := s.store.MutateWorkspaceWithAggregate(scope, key, "issue.created", payload, func(data *domain.Bootstrap) (string, error) {
 		issue, subIssues, updated, err := generateRecurringOccurrence(data, sourceID, now)
 		if err != nil {
 			return "", err
