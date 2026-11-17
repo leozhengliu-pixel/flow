@@ -1,10 +1,11 @@
 {
   "source": "server/chat_workflows.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "chatExecuteAction": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Tier B: existing create/state/assignee/comment route adapters now reach the proven bounded issue-record and discussion writers under the containing job output owner. Workflow-header inputs, binding/action validation, offered-option checks, stable creation/comment/mutation keys, receipts, error mapping and durable result enqueue remain literal. SW197's actual group-create/state/assignee/comment table passes normal, invalid-input and expired-consent cases with exact canonical rows, events, webhook/realtime and result/platform effects; work releases and full decodes remain zero. No new loading, cache or locking is introduced; flag-off routes and the primitives' existing permission proof are retained.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"

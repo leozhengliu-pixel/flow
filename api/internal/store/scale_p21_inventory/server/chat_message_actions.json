@@ -1,10 +1,11 @@
 {
   "source": "server/chat_message_actions.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "chatCreateFromMessage": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Tier B: the existing stable issue-creation-key POST uses the proven bounded issue-record writer and the caller's proven workflow headers. Validation, SQL intake reservation/recovery, authorization-error mapping and durable result delivery remain literal; this consumer adds no loading, cache or locking. SW197's actual message-create adapter passes normal, invalid-input and expired-consent comparisons of canonical issue/content rows, events, webhook/realtime, intake state, queued results and platform calls, with zero retained work/full decodes. Flag-off behavior and the upstream permission boundary are unchanged.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"

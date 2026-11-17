@@ -1,6 +1,6 @@
 {
   "source": "server/agent_worker_chat.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "runAgentSessionOnWorker": {
       "owner": "P18",
@@ -18,7 +18,8 @@
     },
     "save": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Uses the proven native lifecycle writer while retaining first owned ID-or-slug/nondeleted session and first message precedence, exact timestamp/Parts-length/WorkerCursor CAS, detached context, terminal activities and clocks. Only the selected message is owned; unchanged transcripts remain framed. SW198 proves exact legacy/bounded output, rows and events across warm and actual SQL-loaded sources, the principal/key matrix, cancellation, CAS, revocation and legal large split/duplicate-ID inline transcripts. Normal, persistent SQLite repeats and server/store race proofs pass; the off body remains literal.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -59,7 +60,7 @@
     "workerChatStoredReply": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "The literal legacy and internal-conversation bodies remain unchanged. Bounded raw reads delegate to the proven installed FirstMessage selector with an independent output owner spanning final use. Boolean guards close after observing streaming; bounded draft attempts keep ownership through draft/use; resume keeps it through approval decisions and actual run enqueue. Contextless legacy lookup remains Background even when the processing context is canceled. SW159 passes 44 table rows (88 source executions) for all native message fields, duplicate/deleted/empty/NUL/slug identity, warm/reload/current source versus request pins, replacement and cancellation after return, internal-record flags, actual resume effects and lifetime, missing/unowned/closed/budget cases and release. The separately pending save writer still refuses coverage; its refusal is explicitly tested without adding test-only scopes and is not certified as a complete successful update. Zero whole metadata decodes and retained work are observed.",
+      "reason": "The literal legacy and internal-conversation bodies remain unchanged. Bounded raw reads delegate to the proven installed FirstMessage selector with an independent output owner spanning final use. Boolean guards close after observing streaming; bounded draft attempts keep ownership through draft/use; resume keeps it through approval decisions and actual run enqueue. Contextless legacy lookup remains Background even when the processing context is canceled. SW159 passes 44 table rows (88 source executions) for all native message fields, duplicate/deleted/empty/NUL/slug identity, warm/reload/current source versus request pins, replacement and cancellation after return, internal-record flags, actual resume effects and lifetime, missing/unowned/closed/budget cases and release. Its final update-writer case requires full legacy/bounded outcome equality and a persisted save effect; the shared save writer is certified by SW198. Zero whole metadata decodes and retained work are observed.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -75,7 +76,7 @@
     "workerChatStoredReplyBounded": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Uses existing AgentSessionRead.FirstMessage to select the first exact matching message across all ID/owner session occurrences from a fresh contextless installed source. It preserves deleted/duplicate/empty/NUL values, complete native message fields and offloaded references. The selected point transfers its independent lifetime to the caller's existing metadata output scope; parent source closes immediately, while final bool/draft/resume uses stay admitted. SW159 passes 44 exact/guard table rows with warm and reloaded native values, post-return source replacement and cancellation, actual resume decisions/enqueue, lifetime witnesses, zero full metadata decodes and final zero work. No new SQL, loading algorithm, cache, locking or policy is introduced. Successful save remains separately guarded.",
+      "reason": "Uses existing AgentSessionRead.FirstMessage to select the first exact matching message across all ID/owner session occurrences from a fresh contextless installed source. It preserves deleted/duplicate/empty/NUL values, complete native message fields and offloaded references. The selected point transfers its independent lifetime to the caller's existing metadata output scope; parent source closes immediately, while final bool/draft/resume uses stay admitted. SW159 passes 44 exact/guard table rows with warm and reloaded native values, post-return source replacement and cancellation, actual resume decisions/enqueue, lifetime witnesses, zero full metadata decodes and final zero work. Its final update-writer case proves complete outcome equality and a persisted save effect through the SW198-certified writer. No new SQL, loading algorithm, cache, locking or policy is introduced.",
       "accessors": ["BeginAgentSessionRead"],
       "temperature": "hot",
       "temperatureReason": "Selected saved reply used by worker guards, draft updates and resume decisions.",

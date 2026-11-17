@@ -30,7 +30,7 @@ func (s *SQLiteStore) writeLegacyMetadataSlowFields(ctx context.Context, tx *sql
 	if rootBytes < 0 {
 		return false, ErrMetadataWorkBudget
 	}
-	if rootBytes > MetadataRecordPageMaxBytes {
+	if rootBytes > MetadataRecordPageMaxBytes || legacySessionRootPatchFrom(ctx) != nil || legacyInlineFieldsPatchFrom(ctx) != nil {
 		return s.writeStreamedMetadataSlowFields(ctx, tx, workspace, before, target, names, refs, rootBytes)
 	}
 	if err := work.reserve(ctx, uint64(rootBytes)*128+256<<10); err != nil {

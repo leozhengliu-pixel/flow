@@ -1122,7 +1122,14 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		if !acquireProjection(r) {
 			return false
 		}
-		data, err = s.store.PagedWorkspaceMetadata(r.Context(), workspace, userID)
+		repo := s.store
+		if repo.BoundedMetadataEnabled() {
+			repo, err = s.legacyColdAuthorizationRepository(r)
+			if err != nil {
+				return false
+			}
+		}
+		data, err = repo.PagedWorkspaceMetadata(r.Context(), workspace, userID)
 		ok = err == nil
 	}
 	if err != nil || !ok {

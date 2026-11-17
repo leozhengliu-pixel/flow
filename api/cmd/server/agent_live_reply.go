@@ -363,40 +363,7 @@ func (s *server) sweepAgentLiveReplies(ctx context.Context, now time.Time) int {
 		if ctx.Err() != nil {
 			return swept
 		}
-		data, ok := s.store.WorkspaceMetadataFields(key, "agentSessions")
-		if !ok {
-			continue
-		}
-		for _, session := range data.AgentSessions {
-			abandoned := false
-			for _, message := range session.Messages {
-				if s.agentLiveReplyAbandoned(message, now) {
-					abandoned = true
-					break
-				}
-			}
-			if !abandoned {
-				continue
-			}
-			sessionID, owner := session.ID, session.UserID
-			mutationCtx := withAgentReplyFields(store.ContextWithActor(ctx, domain.User{ID: owner}))
-			err := s.store.MutateWorkspace(mutationCtx, key, "agent.message_completed", sessionID, nil, func(next *domain.Bootstrap) error {
-				for index := range next.AgentSessions {
-					current := &next.AgentSessions[index]
-					if current.ID != sessionID {
-						continue
-					}
-					if interruptAgentLiveMessages(next, current, agentReasonReplyAbandoned, func(message domain.AgentMessage) bool { return s.agentLiveReplyAbandoned(message, now) }) {
-						swept++
-						return nil
-					}
-				}
-				return errAgentLiveSkip
-			})
-			if err != nil && !errors.Is(err, errAgentLiveSkip) && ctx.Err() == nil {
-				log.Printf("interrupt agent reply in session %s: %v", sessionID, err)
-			}
-		}
+		swept += s.sweepAgentLiveWorkspace(ctx, key, now)
 	}
 	return swept
 }

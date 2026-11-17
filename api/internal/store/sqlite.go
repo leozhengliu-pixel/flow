@@ -289,11 +289,6 @@ func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) 
 // workspace again (metadata_copy_revision.go).
 func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) error {
 	if s.metadataResidency != nil {
-		ctx, release, err := s.metadataResidency.work.acquire(ctx, metadataPolicyBytes+2<<20)
-		if err != nil {
-			return err
-		}
-		defer release()
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
 		return s.reloadResidentWorkspace(ctx, workspaceKey)
@@ -1581,6 +1576,12 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 		}
 	}
 	if s.metadataResidency != nil {
+		if _, selected := cycleScheduleMaintenance(ctx); selected && eventType == "cycles.automatically_maintained" {
+			return s.mutateBoundedCycleSchedule(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if boundedIssueRelationEvent(ctx, eventType) {
+			return s.mutateBoundedIssueRelation(ctx, workspaceKey, eventType, payload, mutate)
+		}
 		if eventType == "issue.created" && UsesIssueRecordMutations(ctx) {
 			return s.createIssueRecords(ctx, workspaceKey, payload, mutate)
 		}

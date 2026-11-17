@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_chat_request_ask_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "CreateChatRequestAsk": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Closed bounded Ask writer; storedWorkspace checks existence only. It streams the complete installed Ask collection, preserves native ID-or-IssueID uniqueness and prepend order, applies the exact actor/display image, and commits audit, metadata and publication atomically. Independent event-byte ownership survives synchronous sinks; literal off callers retain the old writer. SW197 normal, persistent SQLite twice and race pass warm/reloaded, nil/empty, 1001 split/inline malformed-ID shapes, strict existing 5.5MiB body, actor/Via, aggregate precedence, no-op, cancellation, exhausted admission, rollback and concurrent retries, with released work/zero full decodes. Shared SW217 preserves complete inline values; its disclosed SQL chunk/pass overhead is bounded, with no speed gain claimed.",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Atomic Ask creation after a real chat request issue write.",
+      "callers": [
+        "server/chat_requests.go:chatRecordRequestAsk"
+      ]
+    }
+  }
+}

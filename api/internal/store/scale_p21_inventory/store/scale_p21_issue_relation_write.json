@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_issue_relation_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedIssueRelation": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "SW210 normal, persistent SQLite twice and race proofs pass for the closed relation adapter over the shared scoped point writer. Exact legacy/warm/reloaded outputs cover all six relation types, the principal/key matrix with public/private targets, retained comments/history, legal large records and the literal 64/65 ancestor boundary; store tests prove callback validation, admission denial, cancellation, rollback and release. Selection loads at most two endpoints plus two 64-level parent chains (130 distinct issues; at most 6+4D reader queries, D<=64). Shared canonical resident-policy validation remains capped separately at 192 MiB and is retained to verify root/manifest/policy identity before commit. The flag-off writer and callback remain literal.",
+      "accessors": ["mutateBoundedScopedIssuePoint"],
+      "temperature": "hot",
+      "temperatureReason": "Closed transaction adapter for POST /api/issue-records/{id}/relations and the ordinary issue relation route.",
+      "callers": ["store/sqlite.go:dispatchMutation"]
+    }
+  }
+}

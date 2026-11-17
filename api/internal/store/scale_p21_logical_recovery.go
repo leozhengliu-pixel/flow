@@ -215,10 +215,16 @@ func (r *metadataLogicalRecovery) readCanonical() error {
 		bodyLength = "OCTET_LENGTH(data)"
 		keyLength, fieldLength = "OCTET_LENGTH(record_key)", "OCTET_LENGTH(field)"
 	}
-	if _, _, err := r.recordWork(metadataLogicalRecoveryRecordBytes); err != nil {
+	headerSize := "(" + keyLength + "+" + fieldLength + ")"
+	var maxHeader int64
+	if err := r.tx.QueryRowContext(r.ctx, `SELECT COALESCE(MAX(`+headerSize+`),0) FROM workspace_metadata_records WHERE workspace_key=?`, r.workspace).Scan(&maxHeader); err != nil {
 		return err
 	}
-	headerSize := "(" + keyLength + "+" + fieldLength + ")"
+	// Both queries share the existing repeatable-read snapshot. Charge the
+	// largest actual header before the driver can allocate its strings.
+	if _, _, err := r.recordWork(maxHeader); err != nil {
+		return err
+	}
 	rows, err := r.tx.QueryContext(r.ctx, `SELECT CASE WHEN `+headerSize+`<=? THEN field ELSE NULL END,CASE WHEN `+headerSize+`<=? THEN record_key ELSE NULL END,collection_order,`+bodyLength+`,`+physical+` FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`,
 		metadataLogicalRecoveryRecordBytes, metadataLogicalRecoveryRecordBytes, r.workspace)
 	if err != nil {

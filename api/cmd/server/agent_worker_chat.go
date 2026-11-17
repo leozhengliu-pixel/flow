@@ -687,7 +687,7 @@ func (c *workerChatReply) save(ctx context.Context, stored domain.AgentMessage, 
 		// Scoped to agentSessions alone, the mutation would drop the activity.
 		mutationCtx = withAgentReplyFields(mutationCtx)
 	}
-	err := c.s.store.MutateWorkspace(mutationCtx, c.run.WorkspaceKey, event, c.run.SessionID, nil, func(data *domain.Bootstrap) error {
+	mutate := func(data *domain.Bootstrap) error {
 		session, err := ownedAgentSession(data, c.run.SessionID)
 		if err != nil {
 			return errAgentLiveSkip
@@ -708,7 +708,24 @@ func (c *workerChatReply) save(ctx context.Context, stored domain.AgentMessage, 
 			}
 		}
 		return nil
-	})
+	}
+	var err error
+	if c.s.store.BoundedMetadataEnabled() {
+		ownedCtx, closeOutput := beginIndependentMetadataOutputReads(mutationCtx)
+		defer closeOutput()
+		owner := c.owner.ID
+		err = c.s.store.MutateAgentSessionLifecycle(ownedCtx, c.run.WorkspaceKey, event, c.run.SessionID, store.AgentSessionLifecycleScope{
+			ID: c.run.SessionID, OwnerID: &owner, MatchSlug: true, ExcludeDeleted: true,
+			FirstSession: true, MessageID: &message.ID,
+			AppendActivities: draft.activity != nil,
+			CallbackInput: struct {
+				Message  domain.AgentMessage
+				Activity *domain.AgentActivity
+			}{message, draft.activity},
+		}, mutate)
+	} else {
+		err = c.s.store.MutateWorkspace(mutationCtx, c.run.WorkspaceKey, event, c.run.SessionID, nil, mutate)
+	}
 	if err != nil && !errors.Is(err, errAgentLiveSkip) && !errors.Is(err, errWorkerChatStale) {
 		log.Printf("save worker chat reply %s: %v", c.info.MessageID, err)
 	}

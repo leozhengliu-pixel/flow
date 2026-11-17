@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_cold_read_owner.go",
+  "unmigrated": 0,
+  "consumers": {
+    "Close": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The owning handle clears the native facade graph, viewer and parent reference, then releases current and retired logical generations before returning the sole replica-wide COLD slot. sync.Once makes concurrent/repeated Close idempotent; nested borrowed handles cannot release the outer output lifetime. TestScaleP21SW215ColdReadOwner proves nested output ownership, refresh-retired source retention and final release, concurrent close, cancelled waiters, capture-failure cleanup and unchanged flag-off receiver/context. Core normal, persistent SQLite repeats and race runs pass; HTTP ownership and the real-authentication matrix prove the same lifetime through output.",
+      "accessors": ["workspaces"],
+      "temperature": "cold",
+      "temperatureReason": "Owned cleanup is restricted to an explicitly admitted legacy COLD facade.",
+      "callers": ["store/scale_p21_cold_read_owner.go:BeginColdMetadataRead"]
+    },
+    "BeginColdMetadataRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned form of the existing literal COLD materializer validates an explicitly registered COLD consumer, waits cancellably for one replica-wide slot, pins installed logical native values and borrows nested ownership without taking another slot. Flag-off returns the literal receiver/context without admission or validation; failed capture/decode/cancellation releases its graph and pins. TestScaleP21SW215ColdReadOwner and ColdRead cover warm/reloaded native values, nested handlers, fresh-accessor generations, inherited read snapshots, cancellation, error/panic cleanup and output lifetime; core normal, persistent SQLite repeats and race runs pass. The real-authentication 48-cell differential additionally proves the request facade handoff. This primitive grants no general HOT or startup activation exemption.",
+      "accessors": ["BeginColdMetadataRead", "beginColdMetadataRead"],
+      "temperature": "cold",
+      "temperatureReason": "Only registered COLD boundaries may construct the full native facade.",
+      "callers": ["server/scale_p21_cold_authorization.go:legacyColdAuthorizationRepository"]
+    }
+  }
+}

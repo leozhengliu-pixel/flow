@@ -57,6 +57,9 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 	}
 	query.Workspace = data.Workspace.URLKey
 	if s.authDisabled && !s.store.BoundedMetadataEnabled() && r.Method != http.MethodGet && r.Method != http.MethodHead && r.URL.Path != "/api/issue-records/visibility" {
+		if err := s.store.RefreshColdMetadataRead(r.Context(), query.Workspace); err != nil {
+			return data, query, err
+		}
 		data, _ = s.store.WorkspaceMetadata(query.Workspace)
 		data.ViewerRole = "admin"
 	}

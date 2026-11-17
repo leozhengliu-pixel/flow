@@ -1,6 +1,6 @@
 {
   "source": "server/main.go",
-  "unmigrated": 65,
+  "unmigrated": 64,
   "consumers": {
     "accountBootstrap": {
       "owner": "P21",
@@ -334,7 +334,8 @@
     },
     "createRelation": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded relation routes select the proven SW210 closed point-writer adapter; flag-off retains the literal callback/path. Seventy legacy/warm/reloaded scenarios compare exact responses, business rows, history, versions, events, webhooks and realtime across six relation types, public/private principal/key cells, retained content, cancellation, legal large records and 64/65 ancestor limits. Authenticated ordinary-route 403 behavior remains exact; positive ordinary writes use the existing development bypass. Normal, twice-persistent SQLite and race proofs pass. Measured owner SQL is 44->75 for related and 46->79 for parent_of: selected reads have the adapter's bounded endpoint/ancestor closure, while shared canonical policy preflight adds 2+2F+2*sum(P_f) queries (F<=4, 32-row/256 KiB pages, 192 MiB resident-policy cap) to preserve commit validation; no performance gain is claimed.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

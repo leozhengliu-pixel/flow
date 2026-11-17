@@ -32,6 +32,7 @@ type legacyMetadataWriteField struct {
 	parentNil                map[string]bool
 	parentBefore, parentNext map[string]metadataLogicalNode
 	full, changed, persist   bool
+	inlineReady              bool
 }
 
 type legacyMetadataWritePlan struct {
@@ -218,6 +219,8 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 	}
 	// Decide and admit every fallback before the first fast-path write.
 	var slowNames []string
+	var sessionComplete []*legacyMetadataWriteField
+	var inlineComplete []*legacyMetadataWriteField
 	var slowBefore, slowTarget domain.Bootstrap
 	slowBefore.Workspace.ID, slowTarget.Workspace.ID = stamp.workspaceID, stamp.workspaceID
 	for _, field := range plan.fields {
@@ -236,6 +239,24 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 			return nil, err
 		}
 		if fast {
+			continue
+		}
+		if handled, err := plan.agentSessionLifecycleInlineReady(ctx, field, shapes); err != nil {
+			return nil, err
+		} else if handled {
+			sessionComplete = append(sessionComplete, field)
+			continue
+		}
+		ready := field.inlineReady
+		if !ready {
+			ready, err = plan.inlineFieldReady(ctx, field, shapes)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if ready {
+			field.full = true
+			inlineComplete = append(inlineComplete, field)
 			continue
 		}
 		left, right, err := plan.materializeField(ctx, field, work)
@@ -260,12 +281,45 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 			return nil, err
 		}
 	}
-	if len(slowNames) > 0 {
+	var sessionPatch *legacySessionRootPatch
+	for _, field := range sessionComplete {
+		if sessionPatch != nil {
+			return nil, ErrBoundedMetadataCoverage
+		}
+		sessionPatch, err = plan.prepareAgentSessionLifecycleRoot(ctx, field)
+		if err != nil {
+			return nil, err
+		}
+		defer sessionPatch.Close()
+	}
+	var inlinePatch *legacyInlineFieldsPatch
+	if len(inlineComplete) != 0 {
+		inlinePatch, err = plan.prepareInlineFields(ctx, inlineComplete)
+		if err != nil {
+			return nil, err
+		}
+		defer inlinePatch.Close()
+	}
+	if len(slowNames) > 0 || sessionPatch != nil || inlinePatch != nil {
 		refs, err := plan.references(ctx, actual, work, slowBefore, slowTarget, nil)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := s.writeLegacyMetadataSlowFields(withLegacyMetadataDeltaReadBudget(ctx, work), tx, workspace, slowBefore, slowTarget, slowNames, refs); err != nil {
+		writeCtx := withLegacyMetadataDeltaReadBudget(ctx, work)
+		if sessionPatch != nil {
+			writeCtx = context.WithValue(writeCtx, legacySessionRootPatchKey{}, sessionPatch)
+		}
+		if inlinePatch != nil {
+			writeCtx = context.WithValue(writeCtx, legacyInlineFieldsPatchKey{}, inlinePatch)
+		}
+		names := slowNames
+		if names == nil {
+			names = []string{}
+		}
+		for _, field := range inlineComplete {
+			names = append(names, field.field.name)
+		}
+		if _, err := s.writeLegacyMetadataSlowFields(writeCtx, tx, workspace, slowBefore, slowTarget, names, refs); err != nil {
 			return nil, err
 		}
 	}
@@ -751,6 +805,9 @@ func (p *legacyMetadataWritePlan) rebaseRow(ctx context.Context, f *legacyMetada
 	if handled, err := p.rebaseProjectProgressRow(ctx, f, index); handled || err != nil {
 		return err
 	}
+	if handled, err := p.rebaseAgentSessionLifecycleRow(ctx, f, index); handled || err != nil {
+		return err
+	}
 	row := &f.rows[index]
 	work := &ResourceRead{store: p.store}
 	defer work.Close()
@@ -862,6 +919,19 @@ func legacyMetadataRefsUsers(refs issueReferences) []domain.User {
 }
 
 func (p *legacyMetadataWritePlan) rebaseFull(ctx context.Context, f *legacyMetadataWriteField) error {
+	if handled, err := p.rebaseAgentSessionLifecycleCollection(ctx, f); handled || err != nil {
+		return err
+	}
+	ready, err := p.inlineFieldReady(ctx, f, nil)
+	if err != nil {
+		return err
+	}
+	if ready {
+		// The original rebaser retains inline values when there are no
+		// canonical rows. Keep their frames rather than decoding the field.
+		f.inlineReady = true
+		return nil
+	}
 	work := &ResourceRead{store: p.store}
 	defer work.Close()
 	left, right, err := p.materializeField(ctx, f, work)
@@ -1337,6 +1407,9 @@ func (p *legacyMetadataWritePlan) writeArray(ctx context.Context, f *legacyMetad
 	write := func(index, order int) error {
 		row := &f.rows[f.order[index]]
 		if handled, err := p.writeProjectProgressRow(ctx, f, row, order); handled || err != nil {
+			return err
+		}
+		if handled, err := p.writeAgentSessionLifecycleRow(ctx, f, row, order); handled || err != nil {
 			return err
 		}
 		work := &ResourceRead{store: p.store}

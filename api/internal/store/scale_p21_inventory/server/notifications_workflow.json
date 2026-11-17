@@ -1,6 +1,6 @@
 {
   "source": "server/notifications_workflow.go",
-  "unmigrated": 17,
+  "unmigrated": 16,
   "consumers": {
     "acknowledgeDesktopNotifications": {
       "owner": "P21",
@@ -156,8 +156,10 @@
     },
     "maintainCycleSchedule": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded preflight uses the owned cycle header reader and the closed scoped-image maintenance profile; the off accessor, clock capture, original scope resolver and callback remain literal. SW182 compares exact native values, canonical issue/content/metadata rows, aggregate precedence, events/webhooks/realtime, inherited actor/client, history merge/delete/comment boundaries and unchanged ordinals across 52 warm/reloaded and explicit/default-workspace cases. Actual 1001-issue scoped control, raw pre-dedup >20000 fallback warm/reloaded, duplicate headers, 5.25 MiB unrelated bodies, cancellation, admission refusal, rollback and recovery pass. SW194 proves clone ownership, body-independent headers/clone cost and refusal. Final normal SW182 passes; persistent SQLite count2 and race cover the group, with all three formerly skipped large cells explicitly rerun to PASS under both persistent count2 and race after a test-only stable old-created history fixture. Small cases retain the creator-grace assertion; UTC midnight now fails instead of skipping. Added SQL streams canonical/root/search bytes in bounded 16 KiB chunks; no latency gain is claimed.",
       "accessors": [
+        "BeginCycleScheduleRead",
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"

@@ -217,6 +217,12 @@ func (w *metadataInlineRootSpoolWriter) Write(raw []byte) (int, error) {
 // last-exact-key and RawMessage semantics. Only the final encoded SQL argument
 // is materialized, under its own allowance; unrelated values are never decoded.
 func (s *SQLiteStore) writeStreamedMetadataRootPatch(ctx context.Context, tx *sqlTx, workspace, workspaceID string, root *metadataInlineRoot, patch map[string]json.RawMessage, owner *ResourceRead, touch bool) error {
+	if inline := legacyInlineFieldsPatchFrom(ctx); inline != nil {
+		return s.writeLegacyInlineFieldsRootPatch(ctx, tx, workspace, workspaceID, root, patch, owner, touch, inline)
+	}
+	if session := legacySessionRootPatchFrom(ctx); session != nil {
+		return s.writeAgentSessionLifecycleRootPatch(ctx, tx, workspace, workspaceID, root, patch, owner, touch, session)
+	}
 	spool, err := newMetadataLogicalRecordSpool(ctx)
 	if err != nil {
 		return err

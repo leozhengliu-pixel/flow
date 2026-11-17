@@ -1094,7 +1094,7 @@ func newHandler(s *server) http.Handler {
 	s.registerPublicAPIRoutes(mux)
 	s.registerCodingRoutes(mux)
 
-	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.limitFailedAuthentication(s.projectionGate.holdProjections(s.authenticate(s.limitAuthenticatedAPI(mux))))))
+	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.limitFailedAuthentication(s.projectionGate.holdProjections(s.withColdMetadataRouteMux(mux, s.authenticate(s.limitAuthenticatedAPI(mux)))))))
 	securityConfig := appconfig.DefaultSecurityHeaders()
 	if s.securityHeaders != nil {
 		securityConfig = *s.securityHeaders
@@ -5456,7 +5456,11 @@ func (s *server) createRelation(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var relation domain.IssueRelation
-	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), id), workspaceKey(r), "issue.relation_added", id, input, func(data *domain.Bootstrap) error {
+	ctx := store.WithIssueRecordMutations(r.Context(), id)
+	if s.store.BoundedMetadataEnabled() {
+		ctx = store.ContextWithIssueRelationMutation(ctx)
+	}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.relation_added", id, input, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err

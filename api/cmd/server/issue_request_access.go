@@ -29,7 +29,12 @@ func (s *server) requestIssueQueryAccess(r *http.Request) (domain.Bootstrap, sto
 		return cached.metadata, cached.access, cached.err
 	}
 	cached := issueRequestAccess{workspace: workspace, userID: userID}
-	if s.authDisabled {
+	if !s.store.BoundedMetadataEnabled() {
+		// A cold facade refreshes only at the original cache-miss read.
+		// An ordinary legacy store's refresh is a literal no-op.
+		cached.err = s.store.RefreshColdMetadataRead(r.Context(), workspace)
+	}
+	if cached.err == nil && s.authDisabled {
 		var ok bool
 		cached.metadata, ok = s.store.IssueAccessMetadata(r.Context(), workspace)
 		cached.metadata.Viewer = authUser(r)
@@ -37,7 +42,7 @@ func (s *server) requestIssueQueryAccess(r *http.Request) (domain.Bootstrap, sto
 		if !ok {
 			cached.err = store.ErrAuthForbidden
 		}
-	} else {
+	} else if cached.err == nil {
 		cached.metadata, cached.access, cached.err = s.store.IssueQueryAccess(r.Context(), workspace, userID)
 	}
 	if cacheable {

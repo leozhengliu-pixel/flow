@@ -339,6 +339,7 @@ func TestScaleP21ColdReadRefreshLatestInstalledGeneration(t *testing.T) {
 	physical := workspace + "\x00latest"
 	var facade *SQLiteStore
 	var stale context.Context
+	var previousPath string
 	err := parent.withColdMetadataRead(t.Context(), func(ctx context.Context, source *SQLiteStore) error {
 		facade, stale = source, ctx
 		before, found := source.WorkspaceMetadata("")
@@ -351,6 +352,7 @@ func TestScaleP21ColdReadRefreshLatestInstalledGeneration(t *testing.T) {
 			return err
 		}
 		path := old.stores[0].file.Name()
+		previousPath = path
 		old.Release()
 		latest := cloneBootstrap(before)
 		latest.Settings["cold-refresh"] = map[string]any{"native": int64(9007199254740993), "nul": "latest\x00value"}
@@ -400,8 +402,8 @@ func TestScaleP21ColdReadRefreshLatestInstalledGeneration(t *testing.T) {
 			if parent.viewer.AppScopes[0] != "latest" {
 				t.Fatal("refresh borrowed parent viewer's mutable slice")
 			}
-			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-				t.Fatal("refresh retained previous generation's pins", err)
+			if _, err := os.Stat(path); err != nil {
+				t.Fatal("refresh released a generation still owned by earlier output", err)
 			}
 			// A missing exact key stays missing after a successful refresh.
 			return same.refreshColdMetadataRead(nested, workspace)
@@ -409,6 +411,9 @@ func TestScaleP21ColdReadRefreshLatestInstalledGeneration(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(previousPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("outer output close retained previous generation's pins", err)
 	}
 	if err := facade.refreshColdMetadataRead(stale, physical); err == nil {
 		t.Fatal("closed callback context allowed refresh")

@@ -656,8 +656,10 @@ func (s *SQLiteStore) migrateIssueSequences(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) importIssueRecordBatch(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue, orders ...map[string]int) error {
-	if err := s.recordIssueFieldHistory(ctx, tx, workspace, issues, nil); err != nil {
-		return err
+	if prepared, _ := ctx.Value(legacyIssueHistoryPreparedKey{}).(bool); !prepared {
+		if err := s.recordIssueFieldHistory(ctx, tx, workspace, issues, nil); err != nil {
+			return err
+		}
 	}
 	insert, tuple, update := issueRecordInsert, issueRecordValuesSQL, issueRecordUpdate
 	if len(orders) > 0 {

@@ -85,6 +85,12 @@ func (s *server) getLoopConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getLoopConfigWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore) {
+	if s.store.BoundedMetadataEnabled() {
+		if err := repo.RefreshColdMetadataRead(r.Context(), workspaceKey(r)); err != nil {
+			respondMutation(w, err, http.StatusOK, nil)
+			return
+		}
+	}
 	data, ok := repo.WorkspaceMetadata(workspaceKey(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")

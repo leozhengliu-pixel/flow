@@ -1,6 +1,6 @@
 {
   "source": "server/chat_dm_commands.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "chatDMComment": {
       "owner": "P18",
@@ -18,7 +18,8 @@
     },
     "chatDMCreateIssue": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Tier B: the existing stable creation-key POST adapter reaches the proven bounded issue-record creation writer under the containing output lifetime. Offered-team/assignee validation, action consumption, language, success card and platform errors remain literal; no loading, cache or locking is added here. SW197's actual adapter table passes normal, invalid-input and expired-consent cases, comparing canonical issue/content rows, events, webhook/realtime output and actual platform calls, with zero retained work/full decodes. The flag-off route remains unchanged; the creation primitive's permission proof is reused.",
       "accessors": [
         "chatAuthorizedMutation"
       ],

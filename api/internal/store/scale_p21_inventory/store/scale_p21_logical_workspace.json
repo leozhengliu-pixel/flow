@@ -2,6 +2,15 @@
   "source": "store/scale_p21_logical_workspace.go",
   "unmigrated": 0,
   "consumers": {
+    "readMetadataLogicalWorkspaceAdmitted": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The existing validated logical loader accepts an optional actual-policy admission callback before native allocation; the normalizer independently admits its retained base only for that callback path. Nil-callback behavior remains unchanged. SW216 proves warm/stale reload, a normalization base larger than the parser lease, cancellation/release and policy denial before decode; SW21/SW27/SW30/SW33 regressions pass. Final normal, persistent SQLite twice and race checks cover the public and private reload paths.",
+      "accessors": ["readRawMetadataLogicalSourceValidated"],
+      "temperature": "hot",
+      "temperatureReason": "Shared installed source reload supports HOT request and ticker freshness.",
+      "callers": ["store/bounded_recovery.go:reloadResidentWorkspace"]
+    },
     "readMetadataLogicalWorkspace": {
       "owner": "P21",
       "status": "reviewed",

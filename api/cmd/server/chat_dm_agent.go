@@ -1262,7 +1262,7 @@ func (s *server) chatDMMarkSessionRead(ctx context.Context, workspace, userID, s
 	if err != nil {
 		return
 	}
-	err = s.store.MutateWorkspace(store.ContextWithActor(ctx, user), workspace, "agent.session_read", sessionID, nil, func(data *domain.Bootstrap) error {
+	mutate := func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.AgentSessions, func(session domain.AgentSession) bool {
 			return session.ID == sessionID && session.UserID == userID && session.DeletedAt == nil
 		})
@@ -1279,7 +1279,17 @@ func (s *server) chatDMMarkSessionRead(ctx context.Context, workspace, userID, s
 		}
 		session.LastReadAt = agentReadStamp(readAt)
 		return nil
-	})
+	}
+	if s.store.BoundedMetadataEnabled() {
+		ownedCtx, closeOutput := beginIndependentMetadataOutputReads(store.ContextWithActor(ctx, user))
+		defer closeOutput()
+		err = s.store.MutateAgentSessionLifecycle(ownedCtx, workspace, "agent.session_read", sessionID, store.AgentSessionLifecycleScope{
+			ID: sessionID, OwnerID: &userID, ExcludeDeleted: true, PersistActor: true,
+			FirstSession: true, HeaderOnly: true,
+		}, mutate)
+	} else {
+		err = s.store.MutateWorkspace(store.ContextWithActor(ctx, user), workspace, "agent.session_read", sessionID, nil, mutate)
+	}
 	if err != nil && !errors.Is(err, store.ErrNoMutation) && !errors.Is(err, errNotFound) {
 		log.Printf("Chat direct message workspace=%s: mark read: %v", workspace, err)
 	}

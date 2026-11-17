@@ -1,6 +1,6 @@
 {
   "source": "server/agent_live_reply.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "release": {
       "owner": "P18",
@@ -17,7 +17,8 @@
     },
     "sweepAgentLiveReplies": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Retains global WorkspaceKeys order, cancellation checks and accumulated changed count, delegating to the proven per-workspace header stream and native lifecycle writer. The first-changing duplicate callback and exact cleanup effects remain unchanged. SW198 passes legacy/bounded output, rows and events, the principal/key matrix, warm and actual SQL-loaded sources, cancellation, CAS and revocation. Large user transcripts succeed for split and duplicate-ID inline sessions; normal, persistent SQLite repeats and server/store race proofs pass. Literal flag-off behavior remains.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

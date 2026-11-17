@@ -20,6 +20,7 @@ const (
 	scopedIssueReactionProfile scopedIssuePointProfile = iota
 	scopedIssueAttachmentProfile
 	scopedIssueRecurrenceTimingProfile
+	scopedIssueRelationProfile
 )
 
 // ContextWithIssueAttachmentMutation declares the existing attachment callback.
@@ -70,6 +71,8 @@ func scopedIssuePointEvent(ctx context.Context, event string, profile scopedIssu
 		return boundedIssueAttachmentEvent(ctx, event)
 	case scopedIssueRecurrenceTimingProfile:
 		return issueRecurrenceTimingMutation(ctx) && event == "issue.updated"
+	case scopedIssueRelationProfile:
+		return boundedIssueRelationEvent(ctx, event)
 	}
 	return false
 }

@@ -2065,9 +2065,25 @@ func applyCycleAutomation(data *domain.Bootstrap, issue *domain.Issue) {
 }
 
 func (s *server) maintainCycleSchedule(ctx context.Context, key string) {
-	data, ok := s.store.WorkspaceMetadataFields(key, "teams", "cycleSettings", "cycles")
-	if !ok {
-		return
+	var data domain.Bootstrap
+	var releasePreflight func()
+	if s.store.BoundedMetadataEnabled() {
+		var closeOutputs func()
+		ctx, closeOutputs = beginIndependentMetadataOutputReads(ctx)
+		defer closeOutputs()
+		read, found, err := s.store.BeginCycleScheduleRead(ctx, key)
+		if err != nil || !found {
+			return
+		}
+		defer read.Close()
+		releasePreflight = read.Close
+		data = read.Data
+	} else {
+		var found bool
+		data, found = s.store.WorkspaceMetadataFields(key, "teams", "cycleSettings", "cycles")
+		if !found {
+			return
+		}
 	}
 	now := time.Now().UTC()
 	needed := false
@@ -2077,8 +2093,15 @@ func (s *server) maintainCycleSchedule(ctx context.Context, key string) {
 			break
 		}
 	}
+	if releasePreflight != nil {
+		releasePreflight()
+		data = domain.Bootstrap{}
+	}
 	if !needed {
 		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		ctx = store.ContextWithCycleScheduleMaintenance(ctx, now)
 	}
 	// Only transitions out of an ended current cycle migrate issues.
 	ctx = cycleIssueScope(ctx, false, func(data domain.Bootstrap) []string {

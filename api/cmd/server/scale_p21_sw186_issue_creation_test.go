@@ -76,6 +76,8 @@ func TestScaleP21SW186BorrowedQueryServerFields(t *testing.T) {
 	allowedStore := map[string]bool{
 		"BoundedMetadataEnabled": true, "WorkspaceMetadata": true,
 		"IssueAccessMetadata": true, "IssueQueryAccess": true,
+		// SW215 pins fresh cold reads in the existing legacy-only branches.
+		"RefreshColdMetadataRead": true,
 	}
 	for _, path := range []string{"issue_records_api.go", "issue_request_access.go"} {
 		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)

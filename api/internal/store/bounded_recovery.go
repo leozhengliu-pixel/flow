@@ -844,17 +844,27 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 
 func (s *SQLiteStore) reloadResidentWorkspace(ctx context.Context, workspace string) error {
 	ctx = metadataLogicalUnpinnedContext(ctx)
-	ctx, release, err := s.metadataResidency.work.acquire(ctx, metadataPolicyBytes+2<<20)
-	if err != nil {
-		return err
-	}
-	defer release()
 	s.metadataResidency.mu.Lock()
 	hasLogical := s.metadataResidency.logical[workspace] != nil
 	s.metadataResidency.mu.Unlock()
 	if !s.metadataResidency.requireCoverage && !hasLogical {
+		ctx, release, err := s.metadataResidency.work.acquire(ctx, metadataPolicyBytes+2<<20)
+		if err != nil {
+			return err
+		}
+		defer release()
 		return s.reloadResidentPolicyWorkspace(ctx, workspace)
 	}
+	// The installed loader meters normalization separately. Own the actual
+	// retained policy and directory before allocating their native values.
+	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
+	ctx, releaseParser, err := s.metadataResidency.work.acquire(ctx, 2<<20)
+	if err != nil {
+		return err
+	}
+	defer releaseParser()
+	owner := &ResourceRead{store: s}
+	defer owner.Close()
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return err
@@ -871,7 +881,9 @@ func (s *SQLiteStore) reloadResidentWorkspace(ctx context.Context, workspace str
 			return tx.Commit()
 		}
 	}
-	data, stamp, cost, source, err := s.readMetadataLogicalWorkspace(ctx, tx, workspace)
+	data, stamp, cost, source, err := s.readMetadataLogicalWorkspaceAdmitted(ctx, tx, workspace, func(cost uint64) error {
+		return owner.reserve(ctx, cost)
+	})
 	if err != nil {
 		return err
 	}

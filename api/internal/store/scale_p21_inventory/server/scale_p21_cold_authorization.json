@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_cold_authorization.go",
+  "unmigrated": 0,
+  "consumers": {
+    "legacyColdAuthorizationRepository": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Lazy full-native authorization capture is limited to an exact registered COLD pattern selected by the actual complete mux; earlier refusals and HOT winners do not hydrate. The request read scope owns BeginColdMetadataRead through output encoding, reuses its facade for nested handlers and preserves the original Paged handoff before fresh accessors refresh. TestScaleP21SW215 covers actual mux precedence, warm/reloaded HTTP handoffs, early refusal, freshness, error/cancellation and release. ColdAuthenticationPermissionMatrix compares literal and bounded real cookie/Bearer authentication across 48 warm/reloaded cells, including a distinct SQL admin outside private teams, explicit grants, inheritance, selected-empty/set keys, foreign workspaces, old slugs, hidden references/counts/actors and capture-to-use revocation; persistent SQLite repeats and race runs pass. This certifies only this COLD ownership primitive, not resourceAllowedLegacy as a whole or production activation coverage.",
+      "accessors": ["BeginColdMetadataRead"],
+      "temperature": "cold",
+      "temperatureReason": "The actual mux winner must match an explicit registered COLD route before full hydration.",
+      "callers": ["server/auth.go:resourceAllowedLegacy"]
+    }
+  }
+}

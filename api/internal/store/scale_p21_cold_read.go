@@ -16,6 +16,8 @@ type coldMetadataRead struct {
 	owner   *metadataResidency
 	facade  *SQLiteStore
 	sources map[string]*metadataLogicalSource
+	// Earlier accessor outputs may still borrow their native generation.
+	retired []map[string]*metadataLogicalSource
 }
 
 // withColdMetadataRead lends a legacy read facade only for run's lifetime,
@@ -25,64 +27,12 @@ type coldMetadataRead struct {
 // Refresh is explicit until cold routing covers each old accessor. Existing
 // caller snapshot contexts remain intact.
 func (s *SQLiteStore) withColdMetadataRead(ctx context.Context, run func(context.Context, *SQLiteStore) error) error {
-	if s.metadataResidency == nil {
-		return run(ctx, s)
-	}
-	r := s.metadataResidency
-	if nested, ok := ctx.Value(coldMetadataReadKey{}).(*coldMetadataRead); ok && nested.owner == r {
-		nested.mu.Lock()
-		facade := nested.facade
-		nested.mu.Unlock()
-		if facade != nil {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			return run(ctx, facade)
-		}
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	r.coldOnce.Do(func() { r.coldSlot = make(chan struct{}, 1) })
-	select {
-	case r.coldSlot <- struct{}{}:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	defer func() { <-r.coldSlot }()
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	facade, sources, err := s.pinColdMetadataRead(ctx)
-	read := &coldMetadataRead{owner: r, facade: facade, sources: sources}
-	defer func() {
-		read.mu.Lock()
-		read.facade = nil
-		sources := read.sources
-		read.sources = nil
-		read.mu.Unlock()
-		for _, source := range sources {
-			source.Release()
-		}
-	}()
+	read, err := s.beginColdMetadataRead(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		facade.mu.Lock()
-		facade.workspaces, facade.viewer = nil, domain.User{}
-		facade.lastWorkspaceKey = ""
-		facade.coldParent = nil
-		facade.mu.Unlock()
-	}()
-	if err := facade.decodeColdMetadataRead(ctx, sources); err != nil {
-		return err
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return run(context.WithValue(ctx, coldMetadataReadKey{}, read), facade)
+	defer read.Close()
+	return run(read.Context(), read.Store())
 }
 
 func (s *SQLiteStore) decodeColdMetadataRead(ctx context.Context, sources map[string]*metadataLogicalSource) error {
@@ -159,10 +109,8 @@ func (s *SQLiteStore) refreshColdMetadataRead(ctx context.Context, workspace str
 	s.mu.Unlock()
 	previous := read.sources
 	read.sources = sources
+	read.retired = append(read.retired, previous)
 	installed = true
-	for _, source := range previous {
-		source.Release()
-	}
 	return nil
 }
 

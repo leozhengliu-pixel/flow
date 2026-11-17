@@ -68,6 +68,8 @@ func (s *SQLiteStore) newLegacyRecordBase(ctx context.Context, installed *metada
 		`CREATE TABLE legacy_issue_order(seq INTEGER PRIMARY KEY,id BLOB NOT NULL,number INTEGER NOT NULL,position INTEGER,frame_offset INTEGER NOT NULL,frame_size INTEGER NOT NULL,frame_cost INTEGER NOT NULL)`,
 		`CREATE INDEX legacy_issue_order_id ON legacy_issue_order(id)`,
 		`CREATE TABLE legacy_issue_payload(id BLOB PRIMARY KEY,data BLOB NOT NULL) WITHOUT ROWID`,
+		`CREATE TABLE legacy_issue_history(seq INTEGER PRIMARY KEY,selected BLOB NOT NULL,resource BLOB NOT NULL,data BLOB NOT NULL)`,
+		`CREATE INDEX legacy_issue_history_selected ON legacy_issue_history(selected,seq)`,
 		`CREATE TABLE legacy_issue_positions(id BLOB PRIMARY KEY,position INTEGER NOT NULL) WITHOUT ROWID`,
 		`CREATE TABLE legacy_issue_stats(scope TEXT NOT NULL,id BLOB NOT NULL,state BLOB NOT NULL,type BLOB NOT NULL,priority INTEGER NOT NULL,archived INTEGER NOT NULL,total INTEGER NOT NULL,PRIMARY KEY(scope,id,state,type,priority,archived)) WITHOUT ROWID`,
 	} {
@@ -657,6 +659,31 @@ func (b *legacyRecordBase) recordReferences(ctx context.Context, target *metadat
 	return plan.references(ctx, target, work, nil, nil, raws...)
 }
 
+// Issue comparisons have their own encoding/decode owner after this call.
+// Only one reference map is live here; returned IDs/users stay owned by work.
+func (b *legacyRecordBase) recordIssueRowReferences(ctx context.Context, target *metadataLogicalSource, work *ResourceRead, raws ...[]byte) (issueReferences, error) {
+	var maximum uint64
+	for _, raw := range raws {
+		if len(raw) == 0 {
+			continue
+		}
+		cost, err := metadataAggregatePayloadJSONWork(ctx, raw)
+		if err != nil {
+			return issueReferences{}, err
+		}
+		maximum = max(maximum, cost)
+	}
+	scratch := &ResourceRead{store: b.store}
+	defer scratch.Close()
+	if maximum != 0 {
+		if err := scratch.reserve(ctx, maximum); err != nil {
+			return issueReferences{}, err
+		}
+	}
+	plan := &legacyMetadataWritePlan{store: b.store}
+	return plan.references(ctx, target, work, nil, nil, raws...)
+}
+
 func (b *legacyRecordBase) writeContent(ctx context.Context, tx *sqlTx, workspace, kind, resource string, value reflect.Value) error {
 	// Supplied nonnil collections do not take loaded-family row locks. The
 	// opt-in original-writer hook independently guards its second previous read.
@@ -937,8 +964,17 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 	}
 	batch := &legacyRecordIssueBatch{orders: map[string]int{}}
 	defer batch.close()
+	var history *legacyRecordIssueHistory
+	defer func() { history.Close() }()
 	flush := func() error {
-		if err := b.store.importIssueRecordBatch(ctx, tx, workspace, batch.issues, batch.orders); err != nil {
+		writeCtx := withIssueRecordWriteAdmission(ctx, b.store)
+		if history != nil {
+			if err := history.flush(ctx, tx); err != nil {
+				return err
+			}
+			writeCtx = context.WithValue(writeCtx, legacyIssueHistoryPreparedKey{}, true)
+		}
+		if err := b.store.importIssueRecordBatch(writeCtx, tx, workspace, batch.issues, batch.orders); err != nil {
 			return err
 		}
 		batch.close()
@@ -946,23 +982,33 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 		return nil
 	}
 	maxNumber, total := 0, 0
+	retryAdmission := errors.New("retry legacy issue row admission")
+	admissionError := func(err error) error {
+		if errors.Is(err, ErrMetadataWorkBudget) {
+			return retryAdmission
+		}
+		return err
+	}
 	process := func(value reflect.Value, work *ResourceRead) error {
 		issue := value.Interface().(domain.Issue)
-		total++
-		maxNumber = max(maxNumber, issue.Number)
 		var position int
 		if err := b.stage.db.QueryRowContext(ctx, `SELECT position FROM legacy_issue_positions WHERE id=?`, []byte(issue.ID)).Scan(&position); err != nil {
 			return err
 		}
+		previous, stored, err := b.issuePayload(ctx, issue.ID, work)
+		if err != nil {
+			return admissionError(err)
+		}
+		columnsRelease, err := reserveIssueRecordEncoding(ctx, b.store, issue, nil)
+		if err != nil {
+			return admissionError(err)
+		}
+		defer columnsRelease()
 		values, err := b.store.issueRecordColumns(workspace, issue)
 		if err != nil {
 			return err
 		}
 		raw := values[len(values)-1].([]byte)
-		previous, stored, err := b.issuePayload(ctx, issue.ID, work)
-		if err != nil {
-			return err
-		}
 		skip := false
 		if b.loaded["issue"] {
 			fingerprint, loaded, err := b.fingerprint(ctx, "issue", "", issue.ID)
@@ -978,28 +1024,51 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 			}
 		}
 		if !skip {
-			if len(previous) > 0 {
-				decodeWork, err := metadataAggregatePayloadJSONWork(ctx, previous)
-				if err != nil {
-					return err
-				}
-				if decodeWork > (metadataWorkBytes-(64<<10))/4 {
-					return ErrMetadataWorkBudget
-				}
-				if err := work.reserve(ctx, decodeWork*4+64<<10); err != nil {
-					return err
-				}
-			}
-			refs, err := b.recordReferences(ctx, target, work, previous, raw)
+			refs, err := b.recordIssueRowReferences(ctx, target, work, previous, raw)
 			if err != nil {
-				return err
+				return admissionError(err)
+			}
+			if len(previous) > 0 {
+				release, err := reserveIssueRecordEncoding(ctx, b.store, issue, previous)
+				if err != nil {
+					return admissionError(err)
+				}
+				defer release()
+				// The equality owner includes the already-encoded columns.
+				columnsRelease()
 			}
 			// equalOwned also resolves indexed team/state/label dimensions.
+			// This decodes the old issue under the equality owner's lease.
 			refs, err = b.issueReferences(ctx, target, work, refs, issue, previous)
 			if err != nil {
-				return err
+				return admissionError(err)
 			}
 			if !equalIssueRecordData(previous, raw) && !refs.equalOwned(previous, issue) {
+				cost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(issue), 0)
+				if err != nil {
+					return admissionError(err)
+				}
+				_, release, err := b.store.tryAdmitAdditionalMetadataWork(ctx, int(min(uint64(metadataWorkBytes)+1, cost*4+64<<10)))
+				if err != nil {
+					return admissionError(err)
+				}
+				// No stats/seen counters change until row ownership fits.
+				// A caller may flush prior rows and retry this one on denial.
+				queued := false
+				defer func() {
+					if !queued {
+						release()
+					}
+				}()
+				if history == nil {
+					history, err = b.newIssueHistory(ctx)
+					if err != nil {
+						return admissionError(err)
+					}
+				}
+				if err := history.append(ctx, workspace, issue, previous); err != nil {
+					return admissionError(err)
+				}
 				if len(previous) > 0 {
 					var old domain.Issue
 					if err := json.Unmarshal(previous, &old); err != nil {
@@ -1012,17 +1081,10 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 				if err := b.addStats(ctx, issueStatsOf(issue), 1); err != nil {
 					return err
 				}
-				cost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(issue), 0)
-				if err != nil {
-					return err
-				}
-				_, release, err := b.store.tryAdmitAdditionalMetadataWork(ctx, int(min(uint64(metadataWorkBytes)+1, cost*4+64<<10)))
-				if err != nil {
-					return err
-				}
 				batch.releases = append(batch.releases, release)
 				batch.issues = append(batch.issues, issue)
 				batch.orders[issue.ID] = position
+				queued = true
 			} else {
 				_, old, known, err := b.previous(ctx, "issue", "", issue.ID)
 				if err != nil {
@@ -1039,6 +1101,8 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 			return err
 		}
 		batch.targets++
+		total++
+		maxNumber = max(maxNumber, issue.Number)
 		return nil
 	}
 	for start := 0; ; start += 64 {
@@ -1056,32 +1120,51 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 			headerWork.Close()
 			return err
 		}
+		if err := b.issueHistoryPayloadBatch(ctx, tx, workspace, headers); err != nil {
+			headerWork.Close()
+			return err
+		}
 		for _, header := range headers {
-			work := &ResourceRead{store: b.store}
-			err := func() error {
-				defer work.Close()
-				if header.node.cost > (metadataWorkBytes-(64<<10))/4 {
-					return ErrMetadataWorkBudget
+			for {
+				work := &ResourceRead{store: b.store}
+				err := func() error {
+					defer work.Close()
+					if header.node.cost > (metadataWorkBytes-(64<<10))/4 {
+						return retryAdmission
+					}
+					if err := work.reserve(ctx, header.node.cost*4+64<<10); err != nil {
+						return admissionError(err)
+					}
+					value, err := header.node.Value(ctx, metadataWorkBytes)
+					if err != nil {
+						return err
+					}
+					defer value.SetZero()
+					return process(value, work)
+				}()
+				if err == retryAdmission && len(batch.issues) > 0 {
+					if err := flush(); err != nil {
+						headerWork.Close()
+						return err
+					}
+					continue
 				}
-				if err := work.reserve(ctx, header.node.cost*4+64<<10); err != nil {
-					return err
-				}
-				value, err := header.node.Value(ctx, metadataWorkBytes)
 				if err != nil {
+					headerWork.Close()
+					if err == retryAdmission {
+						return ErrMetadataWorkBudget
+					}
 					return err
 				}
-				defer value.SetZero()
-				return process(value, work)
-			}()
-			if err != nil {
-				headerWork.Close()
-				return err
+				break
 			}
 		}
 		if err := flush(); err != nil {
 			headerWork.Close()
 			return err
 		}
+		history.Close()
+		history = nil
 		headerWork.Close()
 	}
 	if err := b.unseen(ctx, "issue", func(_, id string, _ [32]byte) error {

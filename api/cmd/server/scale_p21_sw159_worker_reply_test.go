@@ -85,7 +85,7 @@ func TestScaleP21SW159WorkerReplyDifferential(t *testing.T) {
 			{"of-invalid-principal", "of", "off"}, {"pinned-old-source", "read", "off"},
 			{"streaming-only", "streaming", "off"}, {"streaming-only-finished", "streaming", "off"},
 			{"reply-for", "reply-for", "off"}, {"reply-for-finished", "reply-for", "off"},
-			{"update-draft", "update", "off"}, {"update-writer-pending", "update", "off"}, {"update-skip", "update", "off"}, {"update-canceled", "update", "off"},
+			{"update-draft", "update", "off"}, {"update-writer", "update", "off"}, {"update-skip", "update", "off"}, {"update-canceled", "update", "off"},
 			{"resume-approved", "resume", "off"}, {"resume-pending", "resume", "off"},
 			{"unowned", "read", "off"}, {"closed-owner", "read", "off"}, {"budget-refused", "read", "off"},
 		} {
@@ -136,8 +136,8 @@ func TestScaleP21SW159WorkerReplyDifferential(t *testing.T) {
 					if spec.operation == "update" {
 						message.WorkerCursor = nil
 					}
-					if spec.name == "update-writer-pending" {
-						message.Parts = []domain.AgentMessagePart{{ID: "text", Type: "text", Text: "pending writer boundary", Status: "running"}}
+					if spec.name == "update-writer" {
+						message.Parts = []domain.AgentMessagePart{{ID: "text", Type: "text", Text: "writer boundary", Status: "running"}}
 						message.Offloaded = nil
 					}
 					if spec.operation == "resume" {
@@ -330,10 +330,9 @@ func TestScaleP21SW159WorkerReplyDifferential(t *testing.T) {
 							if result.Finished || err != nil || !result.DraftChecked {
 								t.Fatal("read-only draft use changed its result", result.Finished, err)
 							}
-						case "update-writer-pending":
-							if source == repo && (!result.Finished || err != nil) ||
-								source == probe && (result.Finished || !errors.Is(err, store.ErrBoundedMetadataCoverage)) {
-								t.Fatal("actual pending writer boundary changed", result.Finished, err)
+						case "update-writer":
+							if !result.Finished || err != nil {
+								t.Fatal("verified writer did not save the reply", result.Finished, err)
 							}
 						case "update-skip":
 							if !result.Finished || !errors.Is(err, errAgentLiveSkip) {
@@ -450,15 +449,24 @@ func TestScaleP21SW159WorkerReplyDifferential(t *testing.T) {
 					for _, hold := range holds {
 						hold.Close()
 					}
+					if spec.name == "update-writer" {
+						// The bounded view shares SQL, not the oracle's native copy.
+						if err := repo.ForgetInstalledMetadataRevisionForTesting(workspace); err != nil {
+							t.Fatal(err)
+						}
+						if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
+							t.Fatal(err)
+						}
+					}
 					saved, _ := repo.WorkspaceMetadataFields(workspace, "agentSessions")
 					result.Saved = saved.AgentSessions
 					if spec.operation != "update" && spec.name != "retained-after-replace" && !reflect.DeepEqual(result.Saved, original.AgentSessions) {
 						t.Fatal("reply read/resume modified stored session data")
 					}
-					if spec.name == "update-writer-pending" {
-						if source == repo && (result.Saved[0].Messages[0].Content != "saved effect" || result.Saved[0].Messages[0].Status != "") ||
-							source == probe && !reflect.DeepEqual(result.Saved, original.AgentSessions) {
-							t.Fatal("pending writer boundary changed persisted effects")
+					if spec.name == "update-writer" {
+						if len(result.Saved) != 1 || len(result.Saved[0].Messages) != 1 ||
+							result.Saved[0].Messages[0].Content != "saved effect" || result.Saved[0].Messages[0].Status != "" {
+							t.Fatal("verified writer changed persisted effects")
 						}
 					}
 					if spec.name == "update-draft" && !reflect.DeepEqual(result.Saved, original.AgentSessions) ||
@@ -480,12 +488,10 @@ func TestScaleP21SW159WorkerReplyDifferential(t *testing.T) {
 					}
 					outputs = append(outputs, result)
 				}
-				if spec.name == "update-writer-pending" {
+				if spec.name == "update-writer" {
 					if !outputs[0].DraftChecked || !outputs[1].DraftChecked {
-						t.Fatal("pending writer fixture did not reach owned full draft use")
+						t.Fatal("writer fixture did not reach owned full draft use")
 					}
-					t.Log("pending writer: literal save succeeds; bounded save refuses coverage without changing session data")
-					return
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
 					t.Fatalf("worker reply result/error/effects differ: legacy=%+v bounded=%+v", outputs[0], outputs[1])

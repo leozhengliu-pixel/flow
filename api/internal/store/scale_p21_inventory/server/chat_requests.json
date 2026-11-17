@@ -1,10 +1,11 @@
 {
   "source": "server/chat_requests.go",
-  "unmigrated": 3,
+  "unmigrated": 0,
   "consumers": {
     "chatFileRequest": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Tier B: the stable issue-key POST composes the proven bounded creation route with the closed CreateChatRequestAsk writer. Existing intake reservation/recovery, team/template checks, request content, source-thread claim and durable confirmation enqueue remain literal. SW197's actual file-request table passes normal, invalid-input and expired-consent comparisons of complete issue/content rows, events, webhook/realtime, intake/jobs and platform effects; successful witnesses require durable Ask completion. SW197 store normal, persistent SQLite twice and race prove the Ask primitive, including the supported existing 5.5MiB inline body. Output owners release with zero full decodes; flag-off behavior is unchanged.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"
@@ -18,7 +19,8 @@
     },
     "chatRecordRequestAsk": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The bounded branch supplies the declared Ask input to CreateChatRequestAsk while retaining the original callback and literal MutateWorkspaceWithAggregate off call. SQL actor lookup, ID-or-IssueID uniqueness, first actor-adjusted requester, prepend order, approvals, audit and payload remain unchanged. SW197 store normal/persistent SQLite twice/race prove warm/reloaded equivalence, native actor/Via, malformed inline IDs, strict 5.5MiB existing-body success, aggregate precedence, cancellation, rollback, budget/release and concurrent retries. The passing server file-request/process-request table proves real issue-to-Ask completion and publication. Authorization remains at the existing issue-record route.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
@@ -57,7 +59,8 @@
     },
     "processChatRequest": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Tier B: its generic typed bootstrap call now uses the proven closed chatAuthorizedWorkflowHeaders contract, which forwards to the literal original call off mode. Linkage/tenant/consent checks, request binding, error mapping and dispatch to chatCreateRequest remain unchanged; no new loading, cache or locking is added. SW197's actual process-request normal/invalid-input/expired-consent table passes exact canonical issue/content rows, events, webhook/realtime, intake/jobs and platform comparisons, requiring successful durable Ask completion and zero retained work/full decodes. Header and creation permission semantics reuse their existing primitive proofs.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"

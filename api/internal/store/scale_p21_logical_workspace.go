@@ -49,6 +49,10 @@ func (s *SQLiteStore) metadataLogicalPolicyAdmitted(ctx context.Context, source 
 }
 
 func (s *SQLiteStore) readMetadataLogicalWorkspace(ctx context.Context, tx *sqlTx, workspace string) (domain.Bootstrap, copyStamp, int, *metadataLogicalSource, error) {
+	return s.readMetadataLogicalWorkspaceAdmitted(ctx, tx, workspace, nil)
+}
+
+func (s *SQLiteStore) readMetadataLogicalWorkspaceAdmitted(ctx context.Context, tx *sqlTx, workspace string, reserve func(uint64) error) (domain.Bootstrap, copyStamp, int, *metadataLogicalSource, error) {
 	ctx = s.metadataLogicalScratchContext(ctx, workspace)
 	// Preserve journal, manifest and canonical-root validation while the
 	// logical producer is installed independently of the policy projection.
@@ -60,11 +64,17 @@ func (s *SQLiteStore) readMetadataLogicalWorkspace(ctx context.Context, tx *sqlT
 	if err := validateMetadataLogicalRootIdentity(ctx, raw); err != nil {
 		return domain.Bootstrap{}, copyStamp{}, 0, nil, err
 	}
-	normalized, err := s.normalizeMetadataLogicalSource(ctx, raw)
+	normalizeCtx := ctx
+	if reserve != nil {
+		// The loader's parser lease is not the normalizer's retained base.
+		// Let normalization admit its actual base independently.
+		normalizeCtx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
+	}
+	normalized, err := s.normalizeMetadataLogicalSource(normalizeCtx, raw)
 	if err != nil {
 		return domain.Bootstrap{}, copyStamp{}, 0, nil, err
 	}
-	data, cost, err := s.metadataLogicalPolicy(ctx, normalized)
+	data, cost, err := s.metadataLogicalPolicyAdmitted(ctx, normalized, reserve)
 	if err != nil {
 		normalized.Release()
 		return domain.Bootstrap{}, copyStamp{}, 0, nil, err

@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded metadata preserves chat session saves and read markers, issue relations and cycle scheduling through large inline records, with owned cold authorization and reload admission. Issue persistence retains field-history boundaries across memory-limited batch flushes. Bounded metadata stays off by default with the strict activation guard retained.
 - Bounded metadata admits live JSON and event-snapshot work separately from temporary decoding and traversal, and streams large project bodies through canonical writes while preserving transaction-size limits and journal capture. Bounded metadata stays off by default.
 - Bounded metadata supports issue creation, collaborative editor snapshots, 1,000-issue batch edits and their triage suggestions with admitted live work, preserving permissions, transaction effects and old-client responses. Large inline collections retain their entries through reload and row writers; loop settings and drafts use a cancellable single-replica legacy facade. Bounded metadata stays off by default, with the strict activation guard retained.
 - Batch issue updates (multi-select edits and team retirement) run through a dedicated bounded writer in bounded mode, with the same single transaction and event as before, including 1,000-issue batches and collaborative editor snapshots. Bounded metadata stays off by default.

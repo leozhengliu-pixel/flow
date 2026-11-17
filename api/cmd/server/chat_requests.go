@@ -203,7 +203,7 @@ func (s *server) processChatRequest(ctx context.Context, record domain.ChatInteg
 	}
 	ctx = withChatIdentityAuthentication(ctx, identity)
 	var metadata domain.Bootstrap
-	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata); err != nil {
+	if err := s.chatAuthorizedWorkflowHeaders(ctx, record.WorkspaceKey, identity.UserID, &metadata); err != nil {
 		return s.chatMutationFailure(ctx, record, job, command.OpenID, err, "Your Flow workspace access has changed. Sign in to Flow and check your access.")
 	}
 	return s.chatCreateRequest(ctx, record, binding, identity, metadata, job, draft)
@@ -496,7 +496,7 @@ func (s *server) chatRecordRequestAsk(ctx context.Context, record domain.ChatInt
 		return "", err
 	}
 	askID := "ask_chat_" + chatKey(record.ConnectionID, "ask", issue.ID)[:32]
-	err = s.store.MutateWorkspaceWithAggregate(store.ContextWithActor(ctx, user), record.WorkspaceKey, "ask.created", map[string]string{"source": record.Provider, "issueId": issue.ID}, func(data *domain.Bootstrap) (string, error) {
+	mutate := func(data *domain.Bootstrap) (string, error) {
 		if slices.ContainsFunc(data.Asks, func(ask domain.Ask) bool { return ask.ID == askID || ask.IssueID == issue.ID }) {
 			return askID, store.ErrNoMutation
 		}
@@ -508,7 +508,15 @@ func (s *server) chatRecordRequestAsk(ctx context.Context, record domain.ChatInt
 		data.Asks = append([]domain.Ask{{ID: askID, Title: issue.Title, Body: issue.Description, Source: record.Provider, Requester: requester, TeamID: issue.Team.ID, TemplateID: templateID, Status: "approved", IssueID: issue.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now}}, data.Asks...)
 		appendAudit(data, "created", "ask", askID, map[string]any{"source": record.Provider, "issueId": issue.ID})
 		return askID, nil
-	})
+	}
+	if s.store.BoundedMetadataEnabled() {
+		err = s.store.CreateChatRequestAsk(store.ContextWithActor(ctx, user), record.WorkspaceKey, store.ChatRequestAskInput{
+			ID: askID, IssueID: issue.ID, Title: issue.Title, Body: issue.Description,
+			Source: record.Provider, TeamID: issue.Team.ID, TemplateID: templateID,
+		}, mutate)
+	} else {
+		err = s.store.MutateWorkspaceWithAggregate(store.ContextWithActor(ctx, user), record.WorkspaceKey, "ask.created", map[string]string{"source": record.Provider, "issueId": issue.ID}, mutate)
+	}
 	if errors.Is(err, store.ErrNoMutation) {
 		err = nil
 	}

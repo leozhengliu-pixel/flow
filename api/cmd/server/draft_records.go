@@ -13,6 +13,11 @@ func (s *server) draftRecordValidator(r *http.Request, repo *store.SQLiteStore) 
 		return nil, err
 	}
 	if !s.authDisabled {
+		if !repo.BoundedMetadataEnabled() {
+			if err := repo.RefreshColdMetadataRead(r.Context(), query.Workspace); err != nil {
+				return nil, err
+			}
+		}
 		metadata, err = repo.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
 		if err != nil {
 			return nil, err

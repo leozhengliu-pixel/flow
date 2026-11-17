@@ -55,6 +55,7 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		return fmt.Errorf("%w: unsupported bounded scoped issue reaction", ErrBoundedMetadataCoverage)
 	}
 	attachment := profile == scopedIssueAttachmentProfile
+	relation := profile == scopedIssueRelationProfile
 	if workspace == "" {
 		s.mu.RLock()
 		workspace = s.lastWorkspaceKey
@@ -209,6 +210,11 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		if err != nil {
 			return err
 		}
+		if relation {
+			if err := loadScopedIssueRelationRows(ctx, attempt.rows, records, payload); err != nil {
+				return err
+			}
+		}
 		if err := attempt.owner.reserve(ctx, uint64(len(records))*4096+64<<10); err != nil {
 			return err
 		}
@@ -236,7 +242,7 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		data.Notifications = []domain.Notification{}
 		data.NotificationDeliveries = []domain.NotificationDelivery{}
 		attempt.content = s.newIssueChildContentRows(tx, workspace)
-		if len(keys) != 0 {
+		if len(keys) != 0 && !relation {
 			var content domain.Bootstrap
 			if timing {
 				content, err = attempt.content.loadMutationScope(ctx, keys)
@@ -354,6 +360,8 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		}
 		if timing {
 			err = validateScopedIssueRecurrenceTiming(beforeCallback, data)
+		} else if relation {
+			err = validateScopedIssueRelation(beforeCallback, data)
 		} else if attachment {
 			err = validateScopedIssueAttachment(beforeCallback, data, eventType, issueAttachmentUpsertMutation(ctx))
 		} else {
@@ -380,18 +388,24 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 			changedIssues = written
 		}
 		writeCtx := context.WithValue(ctx, legacyContentWriteBudgetKey{}, s)
-		if err := syncContentRecords(writeCtx, tx, workspace, "comment", data.Comments, data, keys); err != nil {
-			return err
-		}
-		if err := syncContentRecords(writeCtx, tx, workspace, "activity", data.Activities, data, keys); err != nil {
-			return err
-		}
-		if err := syncContentRecords(writeCtx, tx, workspace, "notification", notificationRecords(data.Notifications), data, keys); err != nil {
-			return err
-		}
-		for _, delivery := range data.NotificationDeliveries {
-			if err := writeContentRecord(writeCtx, tx, workspace, "delivery", "", delivery); err != nil {
+		if relation {
+			if err := writeScopedIssueRelationContent(writeCtx, tx, workspace, data); err != nil {
 				return err
+			}
+		} else {
+			if err := syncContentRecords(writeCtx, tx, workspace, "comment", data.Comments, data, keys); err != nil {
+				return err
+			}
+			if err := syncContentRecords(writeCtx, tx, workspace, "activity", data.Activities, data, keys); err != nil {
+				return err
+			}
+			if err := syncContentRecords(writeCtx, tx, workspace, "notification", notificationRecords(data.Notifications), data, keys); err != nil {
+				return err
+			}
+			for _, delivery := range data.NotificationDeliveries {
+				if err := writeContentRecord(writeCtx, tx, workspace, "delivery", "", delivery); err != nil {
+					return err
+				}
 			}
 		}
 		requested, err := boundedDiscussionEventSource(ctx, display, frameData)

@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_cycle_schedule_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedScopedImage": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Declared scoped-image executor pins the installed logical generation, admits callback clones/outputs, selects the original scoped issue rows and content, preserves policy/display and aggregate publication, and retains owners through synchronous sinks. Existing storedWorkspace access remains the workspace-existence check. Cycle SW182/SW194 proof covers native and canonical equality, actual 1001 scoped control, duplicate occurrences, inherited actor/client, cancellation/refusal/rollback/recovery and body-independent ownership; other closed profile consumers retain their separate certification. Final normal, persistent SQLite count2 and race pass; final targeted persistent/race reruns explicitly pass all three large clock-boundary cells without skips.",
+      "accessors": ["storedWorkspace", "mutateBoundedScopedImageFull"],
+      "temperature": "hot",
+      "temperatureReason": "Declared transaction for hot cycle maintenance.",
+      "callers": ["store/scale_p21_cycle_schedule_inputs.go:mutateBoundedCycleSchedule"]
+    },
+    "mutateBoundedScopedImageFull": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The existing raw pre-dedup 20000-candidate boundary retains the literal full-transaction fallback while using admitted logical frames and exact streamed inline-field persistence. SW182 raw-threshold cases use >10500 duplicate cycle headers and 1011 actual issues, verify the full count-repair marker, native/canonical issue/content/metadata equality, inherited actor/client, earlier aggregate precedence and complete publication warm/reloaded. Final normal and persistent SQLite count2 pass; both large fallback cells also pass the final targeted race with no skips after using an old-created history fixture with explicit appended-history assertions. Product writes remain 1043 in both modes; observed SQL is literal12383/bounded13789-13790 with bounded16KiB streaming and peak admitted work120168212 bytes. No latency improvement is claimed.",
+      "accessors": ["storedWorkspace"],
+      "temperature": "hot",
+      "temperatureReason": "Preserves the legacy full transaction when cycle maintenance exceeds the existing 20000-issue scoped limit.",
+      "callers": ["store/scale_p21_cycle_schedule_write.go:mutateBoundedScopedImage"]
+    }
+  }
+}

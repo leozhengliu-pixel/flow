@@ -1,6 +1,6 @@
 {
   "source": "server/chat_dm_agent.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "chatDMAuthorize": {
       "owner": "P18",
@@ -22,8 +22,8 @@
     },
     "chatDMMarkSessionRead": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "The existing scoped writer already supplies this metadata-only event's actor, display and aggregate closure. Its point Select and Fork reject duplicate selected IDs before the unchanged callback can choose the first exact ID/owner nondeleted session; complete-field writes reject nonempty unsplittable arrays, including duplicate or empty IDs accepted by the installed native source constructor. Resolved scopes run after initial selection and add only reads. A thin switch therefore changes supported input behavior. Keep the literal first-occurrence callback, already-read no-op and max(now UTC, native UpdatedAt) timestamp pending an exact session writer.",
+      "status": "reviewed",
+      "reason": "Uses the proven native occurrence writer with HeaderOnly/FirstSession selection, retaining exact ID/owner/nondeleted precedence, already-read no-op and max(now UTC,native UpdatedAt) LastReadAt. Unscoped legacy Viewer/first-Users persistence and global display refresh remain exact. SW198 proves full root, rows, events and output equality across the principal/key matrix, warm and actual SQL-loaded sources, cancellation and revocation. Legal large user transcripts succeed for split and duplicate-ID inline sessions. Normal, persistent SQLite repeats and server/store race proofs pass; the off body remains literal.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
