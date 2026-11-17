@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -226,27 +227,60 @@ type AccountSignInEvent struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// AccountSignInEvents lists the sign-in notifications sent to userID.
+// AccountSignInEvents lists the sign-in notifications sent to userID, newest
+// first, at most accountSignInEventLimit. Rows written before fixed-width
+// times hold RFC3339Nano text, which misorders events within one second
+// (stored_time.go), so they are ordered by decoded time; when the cap cuts a
+// second, the whole second is read so the newest of it are kept.
 func (s *SQLiteStore) AccountSignInEvents(ctx context.Context, userID string) ([]AccountSignInEvent, error) {
 	if err := s.ensureAccountEmailEvents(ctx); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT kind,created_at FROM auth_email_events WHERE user_id=? ORDER BY created_at DESC LIMIT 500`, userID)
+	rows, err := s.accountSignInEventRows(ctx, `SELECT kind,created_at FROM auth_email_events WHERE user_id=? ORDER BY created_at DESC LIMIT ?`, userID, accountSignInEventLimit)
+	if err != nil || len(rows) < accountSignInEventLimit {
+		return accountSignInEventsByTime(rows), err
+	}
+	last := rows[len(rows)-1].raw
+	if rows, err = s.accountSignInEventRows(ctx, `SELECT kind,created_at FROM auth_email_events WHERE user_id=? AND created_at>=? ORDER BY created_at DESC`, userID, last[:min(len(last), storedTimeSecond)]); err != nil {
+		return nil, err
+	}
+	items := accountSignInEventsByTime(rows)
+	return items[:min(len(items), accountSignInEventLimit)], nil
+}
+
+const accountSignInEventLimit = 500
+
+type accountSignInEventRow struct {
+	item     AccountSignInEvent
+	raw, key string
+}
+
+func (s *SQLiteStore) accountSignInEventRows(ctx context.Context, query string, args ...any) ([]accountSignInEventRow, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AccountSignInEvent{}
+	items := []accountSignInEventRow{}
 	for rows.Next() {
-		var item AccountSignInEvent
-		var created string
-		if err := rows.Scan(&item.Kind, &created); err != nil {
+		var row accountSignInEventRow
+		if err := rows.Scan(&row.item.Kind, &row.raw); err != nil {
 			return nil, err
 		}
-		item.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
-		items = append(items, item)
+		row.item.CreatedAt, _ = time.Parse(time.RFC3339Nano, row.raw)
+		row.key = normalizeStoredTime(row.raw)
+		items = append(items, row)
 	}
 	return items, rows.Err()
+}
+
+func accountSignInEventsByTime(rows []accountSignInEventRow) []AccountSignInEvent {
+	slices.SortStableFunc(rows, func(a, b accountSignInEventRow) int { return strings.Compare(b.key, a.key) })
+	items := make([]AccountSignInEvent, len(rows))
+	for index, row := range rows {
+		items[index] = row.item
+	}
+	return items
 }
 
 // AccountWorkspaces lists every workspace userID has a membership row in

@@ -50,7 +50,7 @@ func (s *SQLiteStore) RecordAccountEmailEvent(ctx context.Context, userID, kind,
 	if err := s.ensureAccountEmailEvents(ctx); err != nil {
 		return false, err
 	}
-	result, err := s.db.ExecContext(ctx, `INSERT INTO auth_email_events(user_id,kind,item_key,created_at) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, userID, kind, key, at.UTC().Format(time.RFC3339Nano))
+	result, err := s.db.ExecContext(ctx, `INSERT INTO auth_email_events(user_id,kind,item_key,created_at) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, userID, kind, key, formatStoredTime(at))
 	if err != nil {
 		return false, err
 	}
@@ -86,7 +86,7 @@ func (s *SQLiteStore) AccountsDueFollowUp(ctx context.Context, kind, after, skip
 	rows, err := s.db.QueryContext(ctx, `SELECT u.id,u.email,u.name,u.display_name FROM auth_email_events e JOIN auth_users u ON u.id=e.user_id
 		WHERE e.kind=? AND e.created_at<=? AND u.active=1 AND u.email IS NOT NULL AND u.email<>''
 		AND NOT EXISTS (SELECT 1 FROM auth_email_events d WHERE d.user_id=e.user_id AND (d.kind=? OR d.kind=?))
-		ORDER BY e.created_at LIMIT ?`, after, cutoff.UTC().Format(time.RFC3339Nano), kind, skip, limit)
+		ORDER BY e.created_at LIMIT ?`, after, formatStoredTime(cutoff), kind, skip, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -447,11 +447,29 @@ func (s *SQLiteStore) BeginWorkspacePurge(ctx context.Context, workspaceKey stri
 }
 
 // deletionRequestRef is the ID of the domain event that scheduled the
-// deletion, so the receipt names the request without naming its author.
+// deletion, so the receipt names the request without naming its author. The
+// latest is picked by decoded time: older rows hold RFC3339Nano text, which
+// does not sort by time (stored_time.go). A workspace has a few such events.
 func (s *SQLiteStore) deletionRequestRef(ctx context.Context, workspaceID string) string {
-	var id string
-	_ = s.db.QueryRowContext(ctx, `SELECT id FROM domain_events WHERE workspace_id=? AND event_type='workspace.deletion_scheduled' ORDER BY created_at DESC LIMIT 1`, workspaceID).Scan(&id)
-	return id
+	rows, err := s.db.QueryContext(ctx, `SELECT id,created_at FROM domain_events WHERE workspace_id=? AND event_type='workspace.deletion_scheduled'`, workspaceID)
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	var latest, latestAt string
+	for rows.Next() {
+		var id, at string
+		if rows.Scan(&id, &at) != nil {
+			return ""
+		}
+		if at = normalizeStoredTime(at); latest == "" || at > latestAt || at == latestAt && id > latest {
+			latest, latestAt = id, at
+		}
+	}
+	if rows.Err() != nil {
+		return ""
+	}
+	return latest
 }
 
 // workspacePurgeStarted reports whether the workspace's purge has begun.
