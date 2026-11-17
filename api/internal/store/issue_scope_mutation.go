@@ -208,6 +208,24 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 				loaded[id], stored[id] = record.issue, record.raw
 			}
 		}
+		if discussionOnly && issueAncestorInputs(ctx) {
+			if target, ok := loaded[ids[0]]; ok {
+				chain, err := loadIssueAncestorChain(target, func(id string) (storedIssueRecord, bool, error) {
+					if issue, exists := loaded[id]; exists {
+						return storedIssueRecord{issue: issue, raw: stored[id]}, true, nil
+					}
+					records, err := s.loadIssueRecordsByID(ctx, tx, workspace, []string{id}, false)
+					record, found := records[id]
+					return record, found, err
+				})
+				if err != nil {
+					return err
+				}
+				for _, record := range chain {
+					loaded[record.issue.ID], stored[record.issue.ID] = record.issue, record.raw
+				}
+			}
+		}
 		if len(loaded) > 1000 {
 			return fmt.Errorf("issue mutation scope exceeds 1000 records")
 		}

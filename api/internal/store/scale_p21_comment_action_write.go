@@ -436,6 +436,25 @@ func (s *SQLiteStore) mutateBoundedCommentActionProposal(ctx context.Context, wo
 			data.Issues = append(data.Issues, record.issue)
 			stored[id] = record.raw
 		}
+		// commentActionsAllowed inherits grants from the ancestors, as the
+		// generation read does; they follow the target as read-only inputs.
+		if len(data.Issues) != 0 && issueAncestorInputs(ctx) {
+			chain, err := loadIssueAncestorChain(data.Issues[0], func(id string) (storedIssueRecord, bool, error) {
+				records, err := attempt.rows.load(ctx, []string{id}, false)
+				record, found := records[id]
+				return record, found, err
+			})
+			if err != nil {
+				return err
+			}
+			if err := attempt.owner.reserve(ctx, uint64(len(chain))*4096); err != nil {
+				return err
+			}
+			for _, record := range chain {
+				data.Issues = append(data.Issues, record.issue)
+				stored[record.issue.ID] = record.raw
+			}
+		}
 		data.Comments, err = attempt.rows.loadDiscussionComment(ctx, ids[0], discussion.CommentID)
 		if err != nil {
 			return err

@@ -127,7 +127,9 @@ func (s *server) generateCommentActions(ctx context.Context, workspace, issueID,
 		return
 	}
 	claimed := false
-	claimCtx := store.WithIssueDiscussionMutation(ctx, issueID, commentID)
+	// The claim and append check edit rights as the read above did, with the
+	// grants the issue inherits from its ancestors.
+	claimCtx := store.WithIssueAncestorInputs(store.WithIssueDiscussionMutation(ctx, issueID, commentID))
 	claimCtx = store.ContextWithMutationResults(claimCtx, &claimed)
 	err = s.store.MutateWorkspace(claimCtx, workspace, "comment.actions_started", issueID, nil, func(next *domain.Bootstrap) error {
 		claimed = false

@@ -234,6 +234,18 @@ func scaleP21AgentReplyDifferential(t *testing.T) {
 				case len(legacy.State.Events) != 1 || len(agent) == 0:
 					t.Fatalf("legacy did not notify: events=%d notifications=%v", len(legacy.State.Events), agent)
 				}
+				if test.shape == "restricted" {
+					// The agent is on the document's team; a recipient is not
+					// on it because the agent is. The prompter is on another
+					// team only and has no grant; the member is on the team.
+					recipients := map[string]bool{}
+					for _, item := range agent {
+						recipients[item["recipientId"].(string)] = true
+					}
+					if recipients[private.ID] || !recipients[member.ID] || !recipients[guest.ID] {
+						t.Fatalf("document access judged by the agent's teams: %v", recipients)
+					}
+				}
 				if test.shape == "existing" {
 					found := false
 					for _, item := range agent {

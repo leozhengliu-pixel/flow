@@ -13,6 +13,45 @@ import (
 type discussionMutationKey struct{}
 type discussionMutation struct{ CommentID string }
 
+type issueAncestorInputsKey struct{}
+
+// WithIssueAncestorInputs makes a discussion mutation also load the target
+// issue's ancestor chain as read-only callback inputs, so a callback that
+// checks issue permissions sees the grants sub-issues inherit from their
+// parents (issueRole and issuePermissionAllows walk the same chain).
+func WithIssueAncestorInputs(ctx context.Context) context.Context {
+	return context.WithValue(ctx, issueAncestorInputsKey{}, true)
+}
+
+func issueAncestorInputs(ctx context.Context) bool {
+	enabled, _ := ctx.Value(issueAncestorInputsKey{}).(bool)
+	return enabled
+}
+
+// issueAncestorLimit matches the ancestor walk of the comment action read:
+// the target and at most 63 ancestors.
+const issueAncestorLimit = 63
+
+// loadIssueAncestorChain loads target's ancestors, nearest first, one record
+// at a time; it stops at a missing record, a cycle or issueAncestorLimit.
+func loadIssueAncestorChain(target domain.Issue, load func(id string) (storedIssueRecord, bool, error)) ([]storedIssueRecord, error) {
+	chain := []storedIssueRecord{}
+	seen := map[string]bool{target.ID: true}
+	for parent := target.ParentID; parent != nil && *parent != "" && !seen[*parent] && len(chain) < issueAncestorLimit; {
+		record, found, err := load(*parent)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			break
+		}
+		seen[record.issue.ID] = true
+		chain = append(chain, record)
+		parent = record.issue.ParentID
+	}
+	return chain, nil
+}
+
 func WithIssueDiscussionMutation(ctx context.Context, issueID, commentID string) context.Context {
 	if commentID == "" {
 		commentID = CommentCreationKey(ctx)

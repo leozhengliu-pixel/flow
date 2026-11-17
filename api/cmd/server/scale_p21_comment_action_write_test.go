@@ -20,7 +20,8 @@ import (
 // generateCommentActions and resolveCommentAction on their closed bounded
 // writers, compared with the legacy discussion and scoped writers: the claim,
 // the model request, the proposal filter and append (stale comment, existing
-// actions, settings turned off and a parent-only grant before the append),
+// actions, settings turned off, and a parent-only grant that the claim and
+// append inherit as the read does),
 // the claim callback's own races, and every resolution outcome (accepted
 // update, link and sub-issue, dismissal, idempotence, conflicts, missing
 // actions and comments, a turned-off setting and a creation failure that
@@ -283,7 +284,9 @@ func scaleP21CommentActionGeneration(t *testing.T) {
 			})
 			legacy := outcomes[0]
 			t.Logf("legacy: %d events, %d model requests", len(legacy.State.Events), len(legacy.Extra.([]json.RawMessage)))
-			if test.name == "update" || test.name == "link-subissue" {
+			// parent-only-grant: the guest edits only through the parent's
+			// grant, which the read inherits; the claim and append must too.
+			if test.name == "update" || test.name == "link-subissue" || test.name == "parent-only-grant" {
 				if len(legacy.State.Events) != 2 || !strings.Contains(string(legacy.Installed), "comment_action_") {
 					t.Fatalf("legacy did not claim and append: %v", legacy.State.Events)
 				}

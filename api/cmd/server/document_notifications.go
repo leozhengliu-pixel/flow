@@ -93,6 +93,10 @@ func documentNotificationText(kind, actor, detail string) string {
 type memberDirectory struct {
 	users map[string]domain.User
 	roles map[string]string
+	// teams are each member's team memberships, read from the membership
+	// records: a mutation callback's TeamMembers do not carry them, and its
+	// ViewerTeamIDs are the actor's own.
+	teams map[string][]string
 }
 
 // memberDirectoryTTL bounds how stale the cached member list may be.
@@ -114,7 +118,7 @@ func (s *server) documentMemberDirectory(r *http.Request) memberDirectory {
 // workspaceMemberDirectory is documentMemberDirectory outside a request (for
 // example the agent reply listener).
 func (s *server) workspaceMemberDirectory(ctx context.Context, workspace string) memberDirectory {
-	directory := memberDirectory{users: map[string]domain.User{}, roles: map[string]string{}}
+	directory := memberDirectory{users: map[string]domain.User{}, roles: map[string]string{}, teams: map[string][]string{}}
 	if s.authDisabled {
 		return directory
 	}
@@ -146,6 +150,10 @@ func (s *server) workspaceMemberDirectory(ctx context.Context, workspace string)
 	if err != nil {
 		return directory
 	}
+	teamMembers, err := s.store.ListTeamMembers(ctx, workspaceID)
+	if err != nil {
+		return directory
+	}
 	defer func() {
 		memberDirectories.Store(key, cachedMemberDirectory{directory: directory, loadedAt: time.Now()})
 	}()
@@ -155,6 +163,11 @@ func (s *server) workspaceMemberDirectory(ctx context.Context, workspace string)
 		}
 		directory.users[member.User.ID] = member.User
 		directory.roles[member.User.ID] = member.Role
+	}
+	for _, member := range teamMembers {
+		if _, active := directory.users[member.UserID]; active {
+			directory.teams[member.UserID] = append(directory.teams[member.UserID], member.TeamID)
+		}
 	}
 	return directory
 }
@@ -178,6 +191,12 @@ func documentRoleFor(s *server, data *domain.Bootstrap, directory memberDirector
 	}
 	view := *data
 	view.Viewer = *user
+	// ViewerTeamIDs are the acting viewer's own memberships, read for the
+	// callback; anyone else is judged by their own memberships, never the
+	// actor's.
+	if userID != data.Viewer.ID {
+		view.ViewerTeamIDs = directory.teams[userID]
+	}
 	view.ViewerRole = directory.roles[userID]
 	if view.ViewerRole == "" {
 		for _, member := range data.Members {
