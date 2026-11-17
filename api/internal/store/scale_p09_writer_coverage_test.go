@@ -58,6 +58,7 @@ scale_p01_seed.go:SeedScaleP01Principals
 scale_p21_agent_session_sync.go:syncAgentSessionLifecycleCollection
 scale_p21_legacy_record_base.go:persistIssues
 scale_p21_metadata_sql_stage_accounting.go:statementQuery
+scale_p21_project_update_parent_map.go:writeProjectUpdateScheduleParent
 scale_p21_webhook_failure_write.go:RecordWebhookDeliveryFailure
 scim.go:CreateSCIMUser
 scim.go:DeprovisionSCIMUser

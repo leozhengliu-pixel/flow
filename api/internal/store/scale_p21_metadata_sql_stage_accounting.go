@@ -30,6 +30,8 @@ type metadataSQLStageTarget struct {
 	dataBytes              int
 	// A negative value means this record has no metadata search hook.
 	searchBytes int
+	// Parent-map rows retain the literal parent key, including an empty key.
+	projectUpdateParent bool
 }
 
 func (t metadataSQLStageTarget) valid() bool {
@@ -38,10 +40,15 @@ func (t metadataSQLStageTarget) valid() bool {
 	}
 	if t.workspaceState {
 		return t.workspaceID != "" && t.updatedAt != "" && t.field == "" &&
-			t.key == "" && t.order == 0 && t.searchBytes == -1
+			t.key == "" && t.order == 0 && t.searchBytes == -1 && !t.projectUpdateParent
 	}
-	if t.key == "" || t.workspaceID != "" || t.updatedAt != "" {
+	if t.workspaceID != "" || t.updatedAt != "" ||
+		t.key == "" && !t.projectUpdateParent {
 		return false
+	}
+	if t.projectUpdateParent {
+		return t.field == "projectUpdates" && len(t.key) <= 191 &&
+			t.order == 0 && t.searchBytes == -1
 	}
 	switch t.field {
 	case "projects":

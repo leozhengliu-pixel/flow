@@ -4023,12 +4023,31 @@ func csvText(value string) string {
 }
 
 func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
+	s.maintainAdvancedSchedulesAt(ctx, key, time.Now)
+}
+
+func (s *server) maintainAdvancedSchedulesAt(ctx context.Context, key string, clock func() time.Time) {
 	// Page loads run this check; read only what it inspects.
-	data, ok := s.store.WorkspaceMetadataFields(key, "settings", "issueSlas", "slaRules", "trash", "projects", "projectUpdates")
-	if !ok {
-		return
+	var data domain.Bootstrap
+	var releasePreflight func()
+	if s.store.BoundedMetadataEnabled() {
+		var closeOutputs func()
+		ctx, closeOutputs = beginIndependentMetadataOutputReads(ctx)
+		defer closeOutputs()
+		read, found, err := s.store.BeginAdvancedScheduleRead(ctx, key)
+		if err != nil || !found {
+			return
+		}
+		defer read.Close()
+		releasePreflight, data = read.Close, read.Data
+	} else {
+		var found bool
+		data, found = s.store.WorkspaceMetadataFields(key, "settings", "issueSlas", "slaRules", "trash", "projects", "projectUpdates")
+		if !found {
+			return
+		}
 	}
-	now := time.Now().UTC()
+	now := clock().UTC()
 	needsMutation := slaEnabled(&data) && slices.ContainsFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.Status == "active" && now.After(item.DueAt) })
 	needsMutation = needsMutation || slices.ContainsFunc(data.Trash, func(item domain.TrashEntry) bool { return trashExpired(item, now) })
 	settings, _ := data.Settings["projectUpdates"].(map[string]any)
@@ -4057,8 +4076,15 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 			}
 		}
 	}
+	if releasePreflight != nil {
+		releasePreflight()
+		data = domain.Bootstrap{}
+	}
 	if !needsMutation {
 		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		ctx = store.ContextWithAdvancedScheduleMaintenance(ctx, now, trashRetention)
 	}
 	// The job touches project updates, the projects' reminder notifications,
 	// the trash and — with SLAs on — the issues applySLARules can change.
@@ -4092,6 +4118,9 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 		// write and realtime event when nothing changed, so page loads do not
 		// keep rewriting the workspace and re-triggering each other.
 		fingerprint := func() []byte {
+			if s.store.BoundedMetadataEnabled() {
+				return store.AdvancedScheduleFingerprint(mutationCtx, *next)
+			}
 			raw, _ := json.Marshal([]any{next.Projects, next.ProjectUpdates, next.Notifications, next.NotificationDeliveries, next.Trash, next.IssueSLAs, next.SLAEvents})
 			return raw
 		}

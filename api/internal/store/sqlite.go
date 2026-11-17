@@ -1576,6 +1576,9 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 		}
 	}
 	if s.metadataResidency != nil {
+		if advancedScheduleMaintenance(ctx) != nil && eventType == "schedules.maintained" {
+			return s.mutateBoundedAdvancedSchedule(ctx, workspaceKey, eventType, payload, mutate)
+		}
 		if _, selected := cycleScheduleMaintenance(ctx); selected && eventType == "cycles.automatically_maintained" {
 			return s.mutateBoundedCycleSchedule(ctx, workspaceKey, eventType, payload, mutate)
 		}

@@ -1,6 +1,6 @@
 {
   "source": "server/advanced_features.go",
-  "unmigrated": 48,
+  "unmigrated": 47,
   "consumers": {
     "addFavorite": {
       "owner": "P21",
@@ -412,8 +412,27 @@
     },
     "maintainAdvancedSchedules": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Every ordinary bootstrap delegates to maintainAdvancedSchedulesAt with time.Now. The clock is invoked only after preflight loading, preserving the original production capture point. The reviewed helper owns the complete bounded scheduler path and the literal flag-off behavior; SW209 covers exact warm/reloaded scheduler effects, no-op, admission, cancellation and release.",
       "accessors": [
+        "maintainAdvancedSchedulesAt",
+        "BeginAdvancedScheduleRead",
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Every ordinary workspace bootstrap checks advanced reminders/schedules.",
+      "callers": [
+        "GET /api/bootstrap -> bootstrap -> maintainAdvancedSchedules"
+      ]
+    },
+    "maintainAdvancedSchedulesAt": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded dispatch reads admitted installed scheduler headers through BeginAdvancedScheduleRead and releases preflight ownership before the closed mutation. Only captured cadence/reminder decisions and one UTC clock survive into the callback; the independent output scope spans mutation and post-write cleanup. Literal flag-off loading and callback behavior remain. SW209 compares exact SLA/reminder/trash, canonical/native state, events and publication across principal/key fixtures, warm and actual reload, including duplicate-large map/inline shapes; normal, persistent SQLite count2 and complete race evidence preserve exact RemainingMinutes and the strict due-soon boundary without normalization.",
+      "accessors": [
+        "BeginAdvancedScheduleRead",
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"

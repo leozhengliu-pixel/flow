@@ -49,11 +49,21 @@ var errLegacyInlineFieldsShape = errors.New("inline metadata array shape determi
 // rows, whose target also remains inline under splitWorkspaceMetadata. A shape
 // transition or any canonical row keeps the existing full-field algorithm.
 func (p *legacyMetadataWritePlan) inlineFieldReady(ctx context.Context, field *legacyMetadataWriteField, shapes map[string]string) (bool, error) {
-	if field == nil || field.next.typ == nil || field.next.typ.Kind() != reflect.Slice ||
-		field.next.typ.Elem().Kind() != reflect.Struct || shapes[field.field.name] != "" {
+	if field == nil || field.next.typ == nil || shapes[field.field.name] != "" {
 		return false, nil
 	}
-	id, found := field.next.typ.Elem().FieldByName("ID")
+	element := field.next.typ
+	updates := updateMetadataField(field.field.name)
+	if updates {
+		if element.Kind() != reflect.Map || element.Key().Kind() != reflect.String {
+			return false, nil
+		}
+		element = element.Elem()
+	}
+	if element.Kind() != reflect.Slice || element.Elem().Kind() != reflect.Struct {
+		return false, nil
+	}
+	id, found := element.Elem().FieldByName("ID")
 	if !found || id.Type.Kind() != reflect.String || id.PkgPath != "" || len(id.Index) != 1 {
 		return false, nil
 	}
@@ -74,7 +84,84 @@ func (p *legacyMetadataWritePlan) inlineFieldReady(ctx context.Context, field *l
 	if rows != 0 {
 		return false, nil
 	}
+	if updates {
+		return p.inlineUpdateTargetShape(ctx, field.next)
+	}
 	return p.inlineTargetShape(ctx, field.next)
+}
+
+func (p *legacyMetadataWritePlan) inlineUpdateTargetShape(ctx context.Context, target metadataLogicalNode) (bool, error) {
+	if absent, err := target.isNil(ctx); err != nil || absent {
+		return false, err
+	}
+	spool, err := newMetadataLogicalRecordSpool(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer spool.Close()
+	owner := &ResourceRead{store: p.store}
+	defer owner.Close()
+	if err := owner.reserve(ctx, logicalJSONStreamWork); err != nil {
+		return false, err
+	}
+	output := &metadataInlineRootSpoolWriter{spool: spool, limit: int64(p.store.maxStateBytes)}
+	if err := legacyProjectStreamNode(ctx, owner, target, output); err != nil {
+		return false, err
+	}
+	// Invalid native keys can collide; the literal JSON map keeps the last.
+	parents, err := legacySessionJSONObject(ctx, owner, legacySessionSpoolPart(spool))
+	if err != nil {
+		return false, err
+	}
+	wideParent := false
+	for parent := range parents {
+		wideParent = wideParent || len(parent) > 191
+	}
+	if !wideParent {
+		return false, nil
+	}
+	for _, list := range parents {
+		inline, err := func() (bool, error) {
+			listOwner := &ResourceRead{store: p.store}
+			defer listOwner.Close()
+			items, err := legacySessionJSONArray(ctx, listOwner, list)
+			if err != nil {
+				return false, err
+			}
+			seen := map[string]bool{}
+			for _, item := range items {
+				id, err := func() (string, error) {
+					itemOwner := &ResourceRead{store: p.store}
+					defer itemOwner.Close()
+					fields, err := legacySessionJSONObject(ctx, itemOwner, item)
+					if err != nil {
+						return "", err
+					}
+					value, err := legacySessionSmallString(ctx, itemOwner, fields["id"])
+					if err != nil {
+						return "", err
+					}
+					if err := listOwner.reserve(ctx, uint64(len(value))*8+1024); err != nil {
+						return "", err
+					}
+					return value, nil
+				}()
+				if err != nil {
+					return false, err
+				}
+				// Update IDs become hashed keys, without a width limit.
+				if id == "" || seen[id] {
+					return true, nil
+				}
+				seen[id] = true
+			}
+			return false, nil
+		}()
+		if err != nil || inline {
+			return inline, err
+		}
+	}
+	return false, nil
 }
 
 func (p *legacyMetadataWritePlan) inlineTargetShape(ctx context.Context, target metadataLogicalNode) (bool, error) {
