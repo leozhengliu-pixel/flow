@@ -1519,6 +1519,10 @@ func semanticFacets(data domain.Bootstrap, results []semanticResult) map[string]
 }
 
 func (s *server) filterSuggestions(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.boundedFilterSuggestions(w, r)
+		return
+	}
 	data := s.workspaceData(r)
 	query := normalizeSearch(r.URL.Query().Get("q"))
 	field := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("field")))

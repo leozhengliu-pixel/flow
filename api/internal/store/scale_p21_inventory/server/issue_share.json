@@ -1,10 +1,10 @@
 {
   "source": "server/issue_share.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "getSharedIssue": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "BootstrapFor"
       ],
@@ -12,7 +12,8 @@
       "temperatureReason": "Read-only issue-detail view for old/shared-link clients.",
       "callers": [
         "GET /api/shared/issues/{token}"
-      ]
+      ],
+      "reason": "Bounded mode dispatches to getBoundedSharedIssue before the literal BootstrapFor body, which stays unchanged off mode. BeginSharedIssueRead authorizes only by the first issue whose ShareToken equals the path token, in installed order or the canonical collection_order,id stream; no session, team or credential authority participates. The selected issue keeps BootstrapFor's last-duplicate display references and refreshResourceCounts' global label counts (nonarchived issues, nonarchived projects, initiatives, per-resource dedup, empty IDs uncounted, directory-only targets); comments keep their source order and refreshed users; the literal redactions and empty-list shape are applied by the handler, which owns the read through the final write. Bounded refusals answer 503; every other failure keeps the indistinguishable 404. SW240 store and route differentials cover native/installed and SQL-reloaded sources, private-team, archived, duplicate, revoked, missing, case-changed and foreign-workspace tokens, whitespace/missing workspace, rich comments and redactions."
     },
     "shareIssue": {
       "owner": "P21",

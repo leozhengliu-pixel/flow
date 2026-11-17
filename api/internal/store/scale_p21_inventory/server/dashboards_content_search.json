@@ -1,6 +1,6 @@
 {
   "source": "server/dashboards_content_search.go",
-  "unmigrated": 20,
+  "unmigrated": 19,
   "consumers": {
     "createDashboard": {
       "owner": "P21",
@@ -112,7 +112,7 @@
     },
     "filterSuggestions": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "workspaceData"
       ],
@@ -121,7 +121,8 @@
       "callers": [
         "GET /api/search/filter-suggestions -> filterSuggestions",
         "web/src/lib/api.ts fetchFilterSuggestions"
-      ]
+      ],
+      "reason": "Bounded mode dispatches to boundedFilterSuggestions before the literal workspaceData body, which stays unchanged off mode. BeginIssueFacetRead visits every issue the literal projection keeps, never a page: development reads keep all issues; authenticated reads replay projectBootstrapForUser's team scope from live membership and filterBootstrapTeams' in-place DeleteFunc parent lookup over compact issue authority (SQL id/team/parent columns and issue_permission_records grants, or native headers), then the credential's team filter. Label, project and cycle visibility and names follow the viewer and credential projections exactly (last visible label entry, last project summary, first visible cycle); team, status and assignee names refresh from their last directory entry. Visible issue payloads are decoded one at a time by the canonical bootstrap issue walker; the handler keeps the literal accumulator, Count/Label sort and top-50 cut. SW240 covers the full principal/credential matrix, guests, private/archived/orphan teams, archived issues, >50 tied facets, every field and query filter, empty and foreign workspaces, development mode, warm and reloaded sources and the lost-parent order case."
     },
     "getSharedDashboard": {
       "owner": "P21",
