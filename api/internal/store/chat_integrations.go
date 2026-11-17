@@ -246,6 +246,45 @@ func (s *SQLiteStore) PutChatBinding(ctx context.Context, workspace string, item
 	return tx.Commit()
 }
 
+// RecordChatBindingSkip keeps a binding's latest skipped event on its stored
+// payload (lastSkipped) and changes nothing else. The write only applies to
+// the payload it read, so a concurrent save or revocation is never undone; it
+// rereads and retries a few times, then gives up. A missing binding is not an
+// error.
+func (s *SQLiteStore) RecordChatBindingSkip(ctx context.Context, workspace, connection, id string, skip domain.ChatBindingSkip) error {
+	value, err := json.Marshal(skip)
+	if err != nil {
+		return err
+	}
+	for range 3 {
+		var raw []byte
+		err := s.db.QueryRowContext(ctx, `SELECT payload FROM chat_bindings WHERE workspace_key=? AND connection_id=? AND id=?`, workspace, connection, id).Scan(&raw)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return err
+		}
+		fields["lastSkipped"] = value
+		rewritten, err := json.Marshal(fields)
+		if err != nil {
+			return err
+		}
+		result, err := s.db.ExecContext(ctx, `UPDATE chat_bindings SET payload=? WHERE workspace_key=? AND connection_id=? AND id=? AND payload=?`, rewritten, workspace, connection, id, raw)
+		if err != nil {
+			return err
+		}
+		if changed, err := result.RowsAffected(); err != nil || changed > 0 {
+			return err
+		}
+	}
+	return errors.New("chat binding changed while recording its skipped event")
+}
+
 func (s *SQLiteStore) DeleteChatBinding(ctx context.Context, workspace, connection, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM chat_bindings WHERE workspace_key=? AND connection_id=? AND id=?`, workspace, connection, id)
 	return err

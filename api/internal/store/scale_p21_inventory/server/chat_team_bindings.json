@@ -42,6 +42,14 @@
         "server/server.chatBindingForChat"
       ]
     },
+    "chatBindingViews": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Settings list blocked reasons reuse the delivery policy reads of queueChatDomainEvent: bounded mode binds one installed Context generation for Pulse project headers, exact ChatDisplay HIPAA/team ID/private/archive/retire/ancestry scalars and the bindings' selected ChatEventPolicy template headers, then applies chatEventBindingScopeBlock; the literal off branch keeps WorkspaceMetadataFields with chatBindingScopeBlock. Both share chatBindingTeamBlock and the live private-team authorizer check, so reasons are identical by construction. Owners are released before the settings response is encoded (only reason codes leave). TestChatBindingBlockedReasonModes compares the actual settings encoder in both modes for public/members/owners/private/private-parent/archived/template/HIPAA bindings.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
     "chatManageableTeamIDs": {
       "owner": "P18",
       "status": "unmigrated",

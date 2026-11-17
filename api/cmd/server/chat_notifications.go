@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -17,13 +18,17 @@ import (
 )
 
 func chatEventBindingScopePermitted(data domain.Bootstrap, binding domain.ChatBinding, templates []store.ChatEventTemplateHeader) bool {
-	scope := binding
-	scope.TemplateID = ""
-	if !chatBindingScopePermitted(data, scope) {
-		return false
+	return chatEventBindingScopeBlock(data, binding, templates) == ""
+}
+
+// chatEventBindingScopeBlock is chatBindingScopeBlock over template headers
+// (bounded metadata): the same rules, order and reasons.
+func chatEventBindingScopeBlock(data domain.Bootstrap, binding domain.ChatBinding, templates []store.ChatEventTemplateHeader) string {
+	if reason := chatBindingTeamBlock(data, binding); reason != "" {
+		return reason
 	}
 	if binding.TemplateID == "" {
-		return true
+		return ""
 	}
 	found := false
 	for _, template := range templates {
@@ -31,11 +36,14 @@ func chatEventBindingScopePermitted(data domain.Bootstrap, binding domain.ChatBi
 			continue
 		}
 		if template.TemplateType == "form" || template.FormFields > 0 || template.TeamID != "" && template.TeamID != binding.TeamID || template.VisibilityTeamID != "" && template.VisibilityTeamID != binding.TeamID || template.ProjectID != "" && !chatBindingLimitedToProject(binding, template.ProjectID) {
-			return false
+			return domain.ChatBindingBlockedTemplate
 		}
 		found = true
 	}
-	return found
+	if !found {
+		return domain.ChatBindingBlockedTemplate
+	}
+	return ""
 }
 
 type chatNotificationJob struct {
@@ -236,13 +244,27 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 			if !binding.Enabled || !binding.CreatedAt.IsZero() && event.CreatedAt.Before(binding.CreatedAt) {
 				continue
 			}
-			var permitted bool
+			// A sharing rule that stops a binding is decided now, at event
+			// time: the event is not queued for the group later. When the
+			// event was for the binding's team, the skip is logged and kept
+			// on the binding so its settings show it.
+			var reason string
 			if s.store.BoundedMetadataEnabled() {
-				permitted = chatEventBindingScopePermitted(projectMetadata, binding, templates)
+				reason = chatEventBindingScopeBlock(projectMetadata, binding, templates)
 			} else {
-				permitted = chatBindingScopePermitted(projectMetadata, binding)
+				reason = chatBindingScopeBlock(projectMetadata, binding)
 			}
-			if !permitted || !s.chatBindingAuthorizerValid(ctx, workspace, binding) {
+			if reason == "" && !s.chatBindingAuthorizerValid(ctx, workspace, binding) {
+				reason = domain.ChatBindingBlockedAuthorizer
+			}
+			concerns := chatEventConcernsBinding(projectMetadata, binding, event, kinds, issue)
+			if reason == "" && concerns {
+				reason = chatEventResourceBlock(projectMetadata, binding, event, kinds, issue)
+			}
+			if reason != "" {
+				if concerns {
+					s.recordChatBindingSkip(ctx, workspace, record, binding, event, reason)
+				}
 				continue
 			}
 			if issue != nil && !chatIssueMatchesBinding(*issue, binding) {
@@ -410,6 +432,66 @@ func (s *server) processChatNotification(ctx context.Context, record domain.Chat
 		}
 	}
 	return s.chatSendIssueCard(ctx, record, binding, issue, job.DedupKey, payload.SourceMessageID, payload.Kind)
+}
+
+// chatEventConcernsBinding: the event is one the binding asked for, about its
+// team's work in its projects, so not delivering it is a skip worth recording.
+// It ignores the sharing rules, which decide whether it is delivered.
+func chatEventConcernsBinding(data domain.Bootstrap, binding domain.ChatBinding, event domain.DomainEvent, kinds []string, issue *domain.Issue) bool {
+	if !slices.ContainsFunc(kinds, func(kind string) bool { return slices.Contains(binding.Events, kind) }) {
+		return false
+	}
+	switch {
+	case issue != nil:
+		return issue.Team.ID == binding.TeamID && issue.ArchivedAt == nil && binding.CoversProject(chatIssueProjectID(*issue))
+	case slices.Contains(kinds, "project.update_created"):
+		return slices.ContainsFunc(data.Projects, func(project domain.Project) bool {
+			return project.ID == event.AggregateID && project.ArchivedAt == nil && slices.Contains(project.TeamIDs, binding.TeamID) && binding.CoversProject(project.ID)
+		})
+	case event.Type == "initiative.update_created":
+		return !chatBindingProjectScoped(binding) && slices.ContainsFunc(data.Initiatives, func(initiative domain.Initiative) bool {
+			return initiative.ID == event.AggregateID && initiative.LeadTeamID != "" && initiative.LeadTeamID == binding.TeamID
+		})
+	}
+	return false
+}
+
+// chatEventResourceBlock is why an event for a binding whose scope may be
+// shared is still not delivered: the issue's own access restrictions, or a
+// project or initiative shared with a team the group may not see.
+func chatEventResourceBlock(data domain.Bootstrap, binding domain.ChatBinding, event domain.DomainEvent, kinds []string, issue *domain.Issue) string {
+	switch {
+	case issue != nil:
+		if len(issue.Permissions) > 0 {
+			return domain.ChatBindingBlockedIssueRestricted
+		}
+		if issue.Team.ArchivedAt != nil {
+			return domain.ChatBindingBlockedTeamInactive
+		}
+		if issue.Team.Private && !chatPrivateBinding(binding) {
+			return domain.ChatBindingBlockedTeamPrivate
+		}
+	case event.Type == "initiative.update_created":
+		if !chatInitiativeMatchesBinding(data, binding, event.AggregateID) {
+			return domain.ChatBindingBlockedInitiative
+		}
+	case slices.Contains(kinds, "project.update_created"):
+		if !chatProjectMatchesBinding(data, binding, event.AggregateID) {
+			return domain.ChatBindingBlockedProjects
+		}
+	}
+	return ""
+}
+
+// recordChatBindingSkip logs a binding's skipped event and keeps it on the
+// binding. Neither carries message content or secrets. A failed write is
+// logged and does not hold the event cursor back.
+func (s *server) recordChatBindingSkip(ctx context.Context, workspace string, record domain.ChatIntegrationRecord, binding domain.ChatBinding, event domain.DomainEvent, reason string) {
+	slog.WarnContext(ctx, "chat binding skipped event", "workspace", workspace, "provider", record.Provider, "connection_id", record.ConnectionID, "binding_id", binding.ID, "team_id", binding.TeamID, "event_id", event.ID, "event_type", event.Type, "reason", reason)
+	skip := domain.ChatBindingSkip{Reason: reason, EventID: event.ID, EventType: event.Type, At: time.Now().UTC()}
+	if err := s.store.RecordChatBindingSkip(ctx, workspace, record.ConnectionID, binding.ID, skip); err != nil {
+		slog.WarnContext(ctx, "chat binding skip not recorded", "workspace", workspace, "provider", record.Provider, "binding_id", binding.ID, "event_id", event.ID, "error", err.Error())
+	}
 }
 
 func chatProjectMatchesBinding(data domain.Bootstrap, binding domain.ChatBinding, projectID string) bool {

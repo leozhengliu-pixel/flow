@@ -10,6 +10,7 @@ import type { ChatBinding, ChatBindingInput, ChatBindingLanguage, ChatBindingReq
 import type { BootstrapData, Project } from "@/types/flow";
 
 import { bindingProjectIds, CHAT_BINDING_EVENTS, useBotChats } from "./chat-binding-support";
+import { chatBindingBlockedText, chatBindingSkipText } from "./chat-binding-blocked-text";
 import { useInChatGroupDialog } from "./chat-group-dialog-context";
 import { SettingsSelect, SettingsToggle } from "./settings-primitives";
 import { asIs } from '@/lib/as-is'
@@ -101,6 +102,11 @@ export function ChatBindingRow({ binding, data, busy, canEdit, onEdit, onRevoke,
         {t("Authorized by {name} on {date}").replace("{name}", () => authorizer?.displayName || authorizer?.name || t("a former member")).replace("{date}", asIs(formatDate(binding.authorization.authorizedAt, { dateStyle: "medium" })))}
         {revoked && binding.revokedAt && ` · ${t("Revoked on {date}").replace("{date}", asIs(formatDate(binding.revokedAt, { dateStyle: "medium" })))}`}
       </span>}
+      {!revoked && (binding.blockedReason || binding.lastSkipped) && <span className="chat-binding-blocked" role="status" data-blocked={binding.blockedReason || undefined}>
+        {binding.blockedReason && chatBindingBlockedText(binding.blockedReason, t)}
+        {binding.blockedReason && binding.lastSkipped && " "}
+        {binding.lastSkipped && <span className="chat-binding-skipped">{t("Last update skipped on {date}: {reason}.").replace("{date}", asIs(formatDate(binding.lastSkipped.at, { dateStyle: "medium", timeStyle: "short" }))).replace("{reason}", () => chatBindingSkipText(binding.lastSkipped!.reason, t))}</span>}
+      </span>}
     </div>
     <aside>
       {!revoked && onEdit && <button type="button" className="feature-button chat-icon-button" aria-label={`${t("Edit group binding")}: ${binding.chatName}`} title={t("Edit group binding")} disabled={Boolean(busy) || !canEdit} onClick={onEdit}><Pencil size={14} aria-hidden="true" /></button>}
@@ -110,11 +116,13 @@ export function ChatBindingRow({ binding, data, busy, canEdit, onEdit, onRevoke,
   </div>;
 }
 
-export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeamIds = [], binding, fixedTeamId, fixedProjectId, defaultEvents, notificationsTitle, notificationsDescription, busy, onCancel, onSave }: {
+export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeamIds = [], membersOnlyTeamIds = [], binding, fixedTeamId, fixedProjectId, defaultEvents, notificationsTitle, notificationsDescription, busy, onCancel, onSave }: {
   provider: ChatIntegrationProvider;
   data: BootstrapData;
   bindableTeamIds: string[];
   privateTeamIds?: string[];
+  /** Private teams that are private only because they are limited to their members. */
+  membersOnlyTeamIds?: string[];
   binding?: ChatBinding;
   /** The team page binds its own team only. */
   fixedTeamId?: string;
@@ -154,6 +162,7 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
   const bindable = new Set(bindableTeamIds);
   const teams = data.teams.filter((team) => bindable.has(team.id) && (!fixedTeamId || team.id === fixedTeamId));
   const privateTeam = privateTeamIds.includes(teamId);
+  const privateNote = membersOnlyTeamIds.includes(teamId) ? t("This team is limited to its members") : t("This team is private");
   const projects = data.projects.filter((project) => !project.archivedAt && project.teamIds.includes(teamId) && project.teamIds.every((id) => id === teamId || (bindable.has(id) && !privateTeamIds.includes(id))));
   const templates = data.issueTemplates.filter((template) => template.templateType !== "customForm" && !template.formFields?.length && (!template.teamId || template.teamId === teamId) && (!template.visibilityTeamId || template.visibilityTeamId === teamId) && (!template.projectId || projectIds.includes(template.projectId)));
   const selectedChat = chats.find((chat) => chat.id === chatId);
@@ -221,7 +230,7 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
             <FieldRow label={t("Request priority")}><SettingsSelect label={t("Request priority")} options={[{ value: DEFAULT_PRIORITY, label: t("Team default") }, ...REQUEST_PRIORITIES.map((item) => ({ value: item.value, label: t(item.label) }))]} value={requestPriority || DEFAULT_PRIORITY} onChange={(value) => setRequestPriority(value === DEFAULT_PRIORITY ? "" : value)} /></FieldRow>
           </>}
         </div>
-        {privateTeam && <p className="chat-dialog-note" role="note"><Lock size={13} aria-hidden="true" /><span><strong>{t("This team is private")}</strong> {t("Binding doesn't add anyone to the team or change who can see it in Flow. Everyone in the group sees the selected updates; group actions still use each member's own Flow permissions.")}</span></p>}
+        {privateTeam && <p className="chat-dialog-note" role="note"><Lock size={13} aria-hidden="true" /><span><strong>{privateNote}</strong> {t("Binding doesn't add anyone to the team or change who can see it in Flow. Everyone in the group sees the selected updates; group actions still use each member's own Flow permissions.")}</span></p>}
         <div className="chat-dialog-approval">
           <div><strong>{t("Share with this group")}</strong><span>{t("I approve sharing this team's selected updates with everyone in this group.")}</span></div>
           <SettingsToggle label={t("I approve sharing this team's selected updates with everyone in this group.")} checked={approved} onChange={setApproved} />
@@ -273,7 +282,7 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
         </>}
       </div>
       <div className="feature-card chat-approval">
-        {privateTeam && <div className="feature-row chat-private-notice" role="note"><div><strong><Lock size={13} aria-hidden="true" />{t("This team is private")}</strong><span>{t("Binding doesn't add anyone to the team or change who can see it in Flow. Everyone in the group sees the selected updates; group actions still use each member's own Flow permissions.")}</span></div></div>}
+        {privateTeam && <div className="feature-row chat-private-notice" role="note"><div><strong><Lock size={13} aria-hidden="true" />{privateNote}</strong><span>{t("Binding doesn't add anyone to the team or change who can see it in Flow. Everyone in the group sees the selected updates; group actions still use each member's own Flow permissions.")}</span></div></div>}
         <FieldRow inline label={t("Share with this group")} description={t("I approve sharing this team's selected updates with everyone in this group.")}><SettingsToggle label={t("I approve sharing this team's selected updates with everyone in this group.")} checked={approved} onChange={setApproved} /></FieldRow>
       </div>
       <div className="feature-section-action chat-actions">

@@ -66,7 +66,8 @@ export interface ChatPermissions {
     errorCode?: string;
   };
   workspace: { canManage: boolean };
-  teams: { manageableTeamIds: string[]; privateTeamIds: string[] };
+  /** membersOnlyTeamIds: the private teams that are private only because they (or a parent) are limited to their members or owners. */
+  teams: { manageableTeamIds: string[]; privateTeamIds: string[]; membersOnlyTeamIds?: string[] };
 }
 
 export interface ChatIdentity {
@@ -93,6 +94,31 @@ export interface ChatBindingRequests {
   priority?: number;
 }
 
+/**
+ * Why a binding does not deliver, by the server's sharing rules: its current
+ * blocked reason, or the reason of its last skipped event (issue_restricted
+ * and initiative_out_of_scope only apply to one event).
+ */
+export type ChatBindingBlockedReason =
+  | "hipaa"
+  | "revoked"
+  | "team_inactive"
+  | "team_private_needs_authorization"
+  | "team_members_only_needs_authorization"
+  | "authorizer_lost_access"
+  | "project_out_of_scope"
+  | "template_not_permitted"
+  | "issue_restricted"
+  | "initiative_out_of_scope";
+
+/** The latest event for the binding's team that a sharing rule stopped. */
+export interface ChatBindingSkip {
+  reason: ChatBindingBlockedReason;
+  eventId: string;
+  eventType: string;
+  at: string;
+}
+
 export interface ChatBinding {
   id: string;
   connectionId: string;
@@ -116,6 +142,10 @@ export interface ChatBinding {
   authorization?: ChatBindingAuthorization;
   revokedAt?: string;
   revokedBy?: string;
+  /** Why the binding cannot deliver now (computed by the server when listing); absent when it can. */
+  blockedReason?: ChatBindingBlockedReason;
+  /** The latest event it did not deliver because a sharing rule stopped it; a save clears it. */
+  lastSkipped?: ChatBindingSkip;
 }
 
 export interface ChatIntegrationSettings {
@@ -156,7 +186,7 @@ export interface ChatIntegrationCredentials {
   verificationToken?: string;
 }
 
-export type ChatBindingInput = Omit<ChatBinding, "id" | "connectionId" | "authorization" | "revokedAt" | "revokedBy" | "createdAt"> & {
+export type ChatBindingInput = Omit<ChatBinding, "id" | "connectionId" | "authorization" | "revokedAt" | "revokedBy" | "createdAt" | "blockedReason" | "lastSkipped"> & {
   id?: string;
   /** Explicit consent to share the team's selected updates and actions with everyone in the group. */
   authorize: true;

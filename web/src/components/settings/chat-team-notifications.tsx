@@ -83,6 +83,6 @@ export function ChatTeamNotifications({ provider, data, team }: { provider: Chat
           onRemove={() => void (async () => { if (await confirmRemoveBinding(binding, t)) await mutate(`remove:${binding.id}`, () => removeChatBinding(provider, binding.id), "Group binding removed"); })()} />)}
       </div>
     </SettingsSection>}
-    {editing && canManage && settings && <ChatBindingEditor key={editing === "new" ? "new" : editing.id} provider={provider} data={data} bindableTeamIds={settings.bindableTeamIds ?? []} privateTeamIds={settings.permissions?.teams.privateTeamIds} binding={editing === "new" ? undefined : editing} fixedTeamId={team.id} defaultEvents={TEAM_CHAT_DEFAULT_EVENTS} busy={Boolean(busy)} onCancel={() => setEditing(null)} onSave={(input) => mutate("binding", () => saveChatBinding(provider, input), "Group binding saved", () => setEditing(null))} />}
+    {editing && canManage && settings && <ChatBindingEditor key={editing === "new" ? "new" : editing.id} provider={provider} data={data} bindableTeamIds={settings.bindableTeamIds ?? []} privateTeamIds={settings.permissions?.teams.privateTeamIds} membersOnlyTeamIds={settings.permissions?.teams.membersOnlyTeamIds} binding={editing === "new" ? undefined : editing} fixedTeamId={team.id} defaultEvents={TEAM_CHAT_DEFAULT_EVENTS} busy={Boolean(busy)} onCancel={() => setEditing(null)} onSave={(input) => mutate("binding", () => saveChatBinding(provider, input), "Group binding saved", () => setEditing(null))} />}
   </div>;
 }

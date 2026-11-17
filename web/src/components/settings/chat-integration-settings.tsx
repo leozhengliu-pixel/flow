@@ -279,7 +279,7 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
             {!editing && <div className="feature-section-action"><button type="button" className="feature-button" disabled={!connected || Boolean(busy) || sharingBlocked} onClick={() => setEditing("new")}><Plus size={14} aria-hidden="true" />{t("Add group")}</button></div>}
           </section>}
 
-          {canBind && editing && !sharingBlocked && <ChatBindingEditor key={editing === "new" ? "new" : editing.id} provider={provider} data={data} bindableTeamIds={settings.bindableTeamIds ?? []} privateTeamIds={permissions?.teams.privateTeamIds} binding={editing === "new" ? undefined : editing} busy={Boolean(busy)} onCancel={() => setEditing(null)} onSave={(input) => mutate("binding", () => saveChatBinding(provider, input), "Group binding saved", () => setEditing(null))} />}
+          {canBind && editing && !sharingBlocked && <ChatBindingEditor key={editing === "new" ? "new" : editing.id} provider={provider} data={data} bindableTeamIds={settings.bindableTeamIds ?? []} privateTeamIds={permissions?.teams.privateTeamIds} membersOnlyTeamIds={permissions?.teams.membersOnlyTeamIds} binding={editing === "new" ? undefined : editing} busy={Boolean(busy)} onCancel={() => setEditing(null)} onSave={(input) => mutate("binding", () => saveChatBinding(provider, input), "Group binding saved", () => setEditing(null))} />}
         </>}
       </div>
     </div>

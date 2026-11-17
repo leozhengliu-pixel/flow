@@ -412,7 +412,12 @@ func (s *server) writeChatSettings(w http.ResponseWriter, r *http.Request, data 
 					visible = append(visible, binding)
 				}
 			}
-			result["bindings"] = visible
+			views, err := s.chatBindingViews(r.Context(), record.WorkspaceKey, visible)
+			if err != nil {
+				writeChatError(w, 500, "Could not read group bindings")
+				return
+			}
+			result["bindings"] = views
 			ids, policy, err := s.chatBindableTeamIDsRead(r.Context(), record.WorkspaceKey, manageable)
 			if err != nil {
 				writeChatError(w, 500, "Could not read chat integration")
