@@ -320,6 +320,9 @@ var loopEntityFields = []string{"loops", "loopVersions", "workspaceSettings", "p
 // startLoopRun records a running run and executes it in the background.
 // Runs over the concurrency budget are recorded as failed.
 func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, actorID string) (domain.LoopRun, error) {
+	if s.store.BoundedMetadataEnabled() {
+		return s.startBoundedLoopRun(workspace, loopID, trigger, actorID)
+	}
 	data, ok := s.store.WorkspaceMetadataFields(workspace, loopEntityFields...)
 	if !ok {
 		return domain.LoopRun{}, errNotFound
