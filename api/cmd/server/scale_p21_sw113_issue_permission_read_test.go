@@ -49,15 +49,21 @@ func (w *scaleP21SW113Writer) Write(raw []byte) (int, error) {
 
 func scaleP21SW113Serve(t *testing.T, f scaleP21M2Fixture, source *store.SQLiteStore, user domain.User, key *domain.APIKey, token, prefix, ref string, development bool) scaleP21SW113Response {
 	t.Helper()
+	return scaleP21SW113ServeMethod(t, f, source, user, key, token, prefix, ref, development, http.MethodGet)
+}
+
+// scaleP21SW113ServeMethod also serves HEAD, which the GET patterns accept.
+func scaleP21SW113ServeMethod(t *testing.T, f scaleP21M2Fixture, source *store.SQLiteStore, user domain.User, key *domain.APIKey, token, prefix, ref string, development bool, method string) scaleP21SW113Response {
+	t.Helper()
 	path := prefix + ref + "/permissions"
 	var request *http.Request
 	if key == nil && !development {
-		request = httptest.NewRequest(http.MethodGet, path, nil)
+		request = httptest.NewRequest(method, path, nil)
 		request.Header.Set("X-Workspace-Key", f.data.Workspace.URLKey)
 		request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
 	} else {
 		request = f.literalRequest(user, key, nil)
-		request.Method, request.URL.Path = http.MethodGet, path
+		request.Method, request.URL.Path = method, path
 	}
 	statements := 0
 	request = request.WithContext(store.WithSQLStatementObserver(request.Context(), func(string) { statements++ }))
@@ -276,6 +282,13 @@ func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
 								t.Fatalf("permission fields, dates, order or null shape changed: got=%s want=%s", old.Body, want)
 							}
 						}
+						// SW287: GET patterns serve HEAD; with the flag on it takes
+						// the same retained read instead of the literal bootstrap.
+						oldHead := scaleP21SW113ServeMethod(t, f, repo, user, key, sessions[user.ID], prefix, test.ref, false, http.MethodHead)
+						boundedHead := scaleP21SW113ServeMethod(t, f, f.probe, user, key, sessions[user.ID], prefix, test.ref, false, http.MethodHead)
+						if !reflect.DeepEqual(oldHead, boundedHead) || !reflect.DeepEqual(oldHead, old) {
+							t.Fatalf("permission HEAD differs: literal=%+v bounded=%+v GET=%+v", oldHead, boundedHead, old)
+						}
 						t.Logf("permissions_GET ref=%s credential_selected=%t status=%d bytes=%d", test.name, key != nil && key.TeamRestriction == "selected", old.Code, len(old.Body))
 					})
 				}
@@ -287,6 +300,11 @@ func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
 				bounded := scaleP21SW113Serve(t, f, f.probe, f.data.Viewer, nil, "", "/api/issues/", test.ref, true)
 				if !reflect.DeepEqual(old, bounded) {
 					t.Fatalf("development legacy permission GET differs: literal=%+v bounded=%+v", old, bounded)
+				}
+				oldHead := scaleP21SW113ServeMethod(t, f, repo, f.data.Viewer, nil, "", "/api/issues/", test.ref, true, http.MethodHead)
+				boundedHead := scaleP21SW113ServeMethod(t, f, f.probe, f.data.Viewer, nil, "", "/api/issues/", test.ref, true, http.MethodHead)
+				if !reflect.DeepEqual(oldHead, boundedHead) || !reflect.DeepEqual(oldHead, old) {
+					t.Fatalf("development permission HEAD differs: literal=%+v bounded=%+v GET=%+v", oldHead, boundedHead, old)
 				}
 				wantCode := http.StatusOK
 				if test.missing {
@@ -391,7 +409,10 @@ func TestScaleP21SW113PermissionReadDispatchIsExact(t *testing.T) {
 		{http.MethodGet, "/api/issues/id/permissions/grant", false},
 		{http.MethodPut, "/api/issues/id/permissions", false},
 		{http.MethodDelete, "/api/issues/id/permissions/grant", false},
-		{http.MethodHead, "/api/issue-records/id/permissions", false},
+		{http.MethodHead, "/api/issue-records/id/permissions", true},
+		{http.MethodHead, "/api/issues/id/permissions", true},
+		{http.MethodHead, "/api/issues/id/permissions/grant", false},
+		{http.MethodOptions, "/api/issues/id/permissions", false},
 		{http.MethodPut, "/api/issue-records/id/permissions", false},
 		{http.MethodPost, "/api/issue-records/id/permissions", false},
 		{http.MethodPatch, "/api/issue-records/id/permissions/grant", false},

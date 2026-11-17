@@ -617,7 +617,15 @@ func (s *server) refuseSoleAdmin(w http.ResponseWriter, ctx context.Context, use
 	workspaces := []map[string]string{}
 	for _, key := range keys {
 		item := map[string]string{"urlKey": key}
-		if data, ok := s.store.WorkspaceMetadataFields(key, "workspace"); ok {
+		// Only the workspace identity: bounded mode reads its retained copy.
+		var data domain.Bootstrap
+		var ok bool
+		if s.store.BoundedMetadataEnabled() {
+			data, ok = s.store.WorkspaceSettingsMetadata(key)
+		} else {
+			data, ok = s.store.WorkspaceMetadataFields(key, "workspace")
+		}
+		if ok {
 			item["name"] = data.Workspace.Name
 		}
 		workspaces = append(workspaces, item)

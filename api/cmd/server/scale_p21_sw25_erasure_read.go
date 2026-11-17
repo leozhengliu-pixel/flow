@@ -13,7 +13,8 @@ func (s *server) eraseMemberWorkspaceID(ctx context.Context, workspace string) (
 		return data.Workspace.ID, ok
 	}
 	if workspace == "" {
-		data, ok := s.store.WorkspaceMetadataFields(workspace, "workspace")
+		// The default installed workspace's retained identity.
+		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
 		return data.Workspace.ID, ok
 	}
 	_, _, _, data, ok := s.store.WorkspaceAccessStatus(ctx, workspace, "")

@@ -1,6 +1,6 @@
 {
   "source": "store/sqlite.go",
-  "unmigrated": 13,
+  "unmigrated": 10,
   "consumers": {
     "Account": {
       "owner": "P21",
@@ -20,7 +20,8 @@
     },
     "Bootstrap": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "TestScaleP21SW286StoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. With FLOW_BOUNDED_METADATA on no HOT inventory route, ticker or consumer reaches it: PATCH /api/issues/{id} is rewritten to the record route before dispatch (updateIssue is unrouted), the coding runtime Bootstrap is internal/coding's protocol (pinned name collision), and every other caller (deleteIssue, MCP/agent tools) is COLD. The literal body is unchanged and still clones and hydrates; this review certifies only HOT unreachability, not a bounded body.",
       "accessors": [
         "Bootstrap",
         "BootstrapFor"
@@ -34,7 +35,8 @@
     },
     "BootstrapFor": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "TestScaleP21SW286StoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. With the flag on its only HOT-classified reachers are the compatibility relays workspaceData and findIssueForPermissions: every GET or HEAD permission list reads the retained authorized issue headers (SW113, now including HEAD), the COLD permission writers and other COLD callers keep the literal read, and the workspace administration callers (updateWorkspace, logo, shared dashboard/view, invite preview, cancel/delete/purge) are COLD. The literal hydrating body is unchanged; this review certifies HOT unreachability only.",
       "accessors": [
         "Bootstrap",
         "BootstrapForContext"
@@ -62,7 +64,8 @@
     },
     "BootstrapForContext": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "TestScaleP21SW286StoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. It is reached only through Bootstrap, BootstrapFor and BootstrapForUser, each closed by the same guard. The literal body still clones the resident copy and hydrates issues and content; this review certifies only that no HOT route or ticker executes it with the flag on.",
       "accessors": [
         "Bootstrap"
       ],
