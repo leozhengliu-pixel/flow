@@ -1576,17 +1576,16 @@ func (s *server) runDueLoops(workspace string, now time.Time) {
 
 func (s *server) setLoopNextRun(workspace, loopID string, next time.Time) {
 	if s.store.BoundedMetadataEnabled() {
-		ctx := store.WithMetadataFields(context.Background(), "loops")
-		err := s.store.MutateWorkspaceScoped(ctx, workspace, "loop.scheduled", loopID, nil,
-			store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "loops", ID: loopID}}},
-			func(data *domain.Bootstrap) error {
-				loop := loopByID(data, loopID)
-				if loop == nil {
-					return errNotFound
-				}
-				loop.NextRunAt = &next
-				return nil
-			})
+		// The closed loop.scheduled stamp writes a large loop row through
+		// the large-row kernels.
+		err := s.store.MutateLoopNextRun(context.Background(), workspace, loopID, func(data *domain.Bootstrap) error {
+			loop := loopByID(data, loopID)
+			if loop == nil {
+				return errNotFound
+			}
+			loop.NextRunAt = &next
+			return nil
+		})
 		if err != nil {
 			log.Printf("Loop schedule workspace=%s loop=%s: %v", workspace, loopID, err)
 		}
