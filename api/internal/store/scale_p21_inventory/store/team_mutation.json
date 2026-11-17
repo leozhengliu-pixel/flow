@@ -1,10 +1,11 @@
 {
   "source": "store/team_mutation.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "mutateTeamMetadata": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Legacy full-snapshot team writer, unreachable from a bounded store except through a cold facade. TestScaleP21TeamMetadataCallset proves its only reference is dispatchMutation's call after the bounded dispatch block that always returns (a bounded store dispatches to mutateResidentRecords and refuses unported writers), and pins every production use of the events it serves: the only HOT producer, createTeam, calls it solely on its flag-off branch (bounded createTeam uses CreateTeamRecords, which reuses this file's snapshotTeamMutation, collectDirtyTeamRecords, teamMutationEntity and persistTeamMetadata unchanged), and updateTeam, purgeTeam and updateStructuredTeamSettings are registered COLD consumers that only a cold facade (bounded representation disabled, coldWrite publication, TestScaleP21ColdTeam*) can run; no production code emits the alm.* catalog events. Its retry, peer refresh and revision behaviour on the flag-off path are unchanged; the bounded HOT path's conflicts, peer refresh and stamps are proven by TestScaleP21TeamCreatePeerDifferential and TestScaleP21TeamCreateConcurrentDifferential.",
       "accessors": [
         "Bootstrap"
       ],

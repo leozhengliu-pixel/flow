@@ -1,6 +1,6 @@
 {
   "source": "server/main.go",
-  "unmigrated": 64,
+  "unmigrated": 63,
   "consumers": {
     "accountBootstrap": {
       "owner": "P21",
@@ -362,7 +362,8 @@
     },
     "createTeam": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode replaces only the MutateWorkspace call: the literal callback (key uniqueness, parent/copy validation, hierarchy permission, default/copied settings, cycle settings and cycles, cloned statuses, development members) runs through CreateTeamRecords, and the creator-membership audit through recordCreatedTeamMemberAudit; WorkspaceSettingsMetadata, ListTeamMembers, ChangeTeamMembership and the response are unchanged. Off mode is the original MutateWorkspace call. TestScaleP21TeamCreateDifferential covers top-level, private, sub-teams with inherited statuses and of inheriting teams, copy without inheritance (tied positions, shared statuses, no settings), parent over copy, copied and default-started cycles, duplicate key/name, missing/retired/too-deep parents, guest/member refusals, team owners from the stored list, inline statuses, 300 teams/1200 statuses/300 labels, built-in agent install/extension, development, cancellation; Concurrent and Peer differentials cover same/distinct-key creators and coordinator peer refresh. EnsureBuiltinApplication's OAuth transaction (separate unmigrated cold store writer) still installs its app user only into the legacy snapshot; SQL rows and events are identical.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

@@ -2027,7 +2027,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	var developmentCreatorID string
 	now := time.Now().UTC()
 	team := domain.Team{ID: idgen.New("team_"), Name: input.Name, Key: input.Key, Color: input.Color, Icon: input.Icon, Private: input.Private, CreatedAt: &now, UpdatedAt: &now}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.created", team.ID, input, func(data *domain.Bootstrap) error {
+	create := func(data *domain.Bootstrap) error {
 		if domain.TeamKeyTaken(data, team.Key, team.ID) {
 			return errTeamKeyTaken
 		}
@@ -2117,7 +2117,13 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 			domain.SyncTeamAncestorMembers(data)
 		}
 		return nil
-	})
+	}
+	var err error
+	if s.store.BoundedMetadataEnabled() {
+		err = s.createTeamRecords(r.Context(), workspaceKey, team.ID, input.ParentTeamID, input.CopyFromTeamID, input, create)
+	} else {
+		err = s.store.MutateWorkspace(r.Context(), workspaceKey, "team.created", team.ID, input, create)
+	}
 	if err == nil {
 		// Without auth the development viewer is the creator; the in-memory row added above
 		// is not the persisted team_memberships row that issue visibility reads.
@@ -2129,7 +2135,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		var created store.TeamMembershipChangeResult
 		created, err = s.store.ChangeTeamMembership(r.Context(), store.TeamMembershipChangeRequest{WorkspaceID: data.Workspace.ID, TeamID: team.ID, UserID: creatorID, Member: true, Role: "owner", Origin: defaultTeamMemberOrigin(r)})
 		if err == nil {
-			s.recordTeamMemberAudit(r.Context(), workspaceKey, requestTeamMemberActor(r, ""), teamMemberReasonTeamCreated, created.Changes, nil)
+			s.recordCreatedTeamMemberAudit(r.Context(), workspaceKey, requestTeamMemberActor(r, ""), teamMemberReasonTeamCreated, created.Changes)
 		}
 	}
 	if err == nil {

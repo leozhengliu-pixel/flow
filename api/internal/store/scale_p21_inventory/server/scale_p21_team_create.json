@@ -1,0 +1,32 @@
+{
+  "source": "server/scale_p21_team_create.go",
+  "unmigrated": 0,
+  "consumers": {
+    "createTeamRecords": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded branch of createTeam only: forwards the unchanged callback, payload and parent/copy-from source teams to CreateTeamRecords (development flag from authDisabled). Covered by the createTeam differentials.",
+      "accessors": [
+        "CreateTeamRecords"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Bounded branch of createTeam (POST /api/workspaces/{workspaceKey}/teams).",
+      "callers": [
+        "server/server.createTeam"
+      ]
+    },
+    "recordCreatedTeamMemberAudit": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Off mode forwards to the unchanged recordTeamMemberAudit. Bounded, it runs the same names snapshot (reviewed teamMemberNames), decoration and appendTeamMemberAudit through MutateWorkspaceScoped with the auditLog field scope and no record reads, so the staged entries, team_member.updated event and publication equal the legacy field-scoped full writer. Compared byte for byte by the createTeam differentials (audit rows, events, webhooks, realtime), including concurrent and peer creators.",
+      "accessors": [
+        "MutateWorkspaceScoped"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Creator membership audit of createTeam (POST /api/workspaces/{workspaceKey}/teams).",
+      "callers": [
+        "server/server.createTeam"
+      ]
+    }
+  }
+}

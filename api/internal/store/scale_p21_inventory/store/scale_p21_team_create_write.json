@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_team_create_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "CreateTeamRecords": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Closed bounded team.created writer. storedWorkspace checks existence only. Under writeMu and the workspace lock (peer refresh by reloadResidentWorkspace) it selects from the installed logical image, through the legacy display pass, exactly what mutateTeamMetadata hands createTeam's callback: workspace/viewer/viewerRole, complete teams and team settings (resident policy), the shared statuses plus every status of the source teams' inherited-status chains in collection order (statesForTeam/sharedDefaultStateID filter identically, so the unstable sort sees the same slice), the source teams' cycle settings, the viewer's ordered root team memberships behind a non-matching placeholder (role lookup and the empty-list fill are unchanged), and in development whole users/members/teamMembers. Root-inline written fields are handed whole and re-checked inside the transaction. It then runs the literal snapshotTeamMutation, actor substitution, collectDirtyTeamRecords, teamMutationEntity and persistTeamMetadata (same rows, collection orders, rebase, inline/root member arrays, event and account state) and installs a Fork+merged post-image through prepareLegacyResidentPublication before commit, with commit-stamp capture (ErrConcurrentWrite retry under a coordinator). TestScaleP21TeamCreateDifferential/Concurrent/PeerDifferential (normal, persistent SQLite x2, race) compare legacy, warm and SQL-reloaded responses, every metadata row and order, the root, memberships, audit rows, account state, installations, events, webhooks, realtime and the installed delta, with zero full decodes and released work.",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Bounded team creation writer of POST /api/workspaces/{workspaceKey}/teams.",
+      "callers": [
+        "server/scale_p21_team_create.go:createTeamRecords"
+      ]
+    }
+  }
+}
