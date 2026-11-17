@@ -80,6 +80,22 @@ export function isNavigationHydrated(data: BootstrapData | null | undefined): bo
   return Boolean(data && hydratedSnapshots.has(data))
 }
 
+// Issue rows a hydrated snapshot brought in. A fresh bootstrap replaces them; only rows fetched from the server
+// while the snapshot was on screen may be merged into it.
+const snapshotIssues = new WeakSet<Issue>()
+
+function markSnapshotIssues<T extends BootstrapData>(data: T): T {
+  for (const issue of data.issues ?? []) snapshotIssues.add(issue)
+  return data
+}
+
+/** The data without the issue rows that came from a cached snapshot (and were not refreshed since). */
+export function withoutSnapshotIssues(data: BootstrapData | null): BootstrapData | null {
+  if (!data?.issues) return data
+  const issues = data.issues.filter(issue => !snapshotIssues.has(issue))
+  return issues.length === data.issues.length ? data : { ...data, issues }
+}
+
 /** Keep a merged snapshot classified as cached until a real bootstrap replaces it. */
 export function carryNavigationHydration(from: BootstrapData | null | undefined, to: BootstrapData): BootstrapData {
   return isNavigationHydrated(from) ? markNavigationHydrated(to) : to
@@ -333,7 +349,7 @@ export function hydrateWorkspaceNavigation({
   if (!cached || cached.viewer.id !== viewerId || cached.workspace.urlKey !== requestedWorkspaceKey) return null
   // Older builds stored notifications here. They may already be deleted on the
   // server, so the inbox reconciles them from /api/notifications instead.
-  const hydrated = { ...cached, notifications: [] }
+  const hydrated = markSnapshotIssues({ ...cached, notifications: [] })
   if (preview?.viewerId === viewerId && preview.key.startsWith(`${requestedWorkspaceKey}:`) && !preview.issue.isSummary) {
     return markNavigationHydrated({ ...hydrated, issues: mergeIssueRecords(hydrated.issues ?? [], [preview.issue]) })
   }

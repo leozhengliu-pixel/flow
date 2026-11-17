@@ -1,11 +1,13 @@
 /**
- * Registers /sw.js, which caches content-hashed /assets/ files cache-first (see public/sw.js). Production only; set
+ * Registers /sw.js, which caches content-hashed /assets/ files cache-first and answers page navigations with the
+ * cached app shell while it revalidates it (see public/sw.js). Production only; set
  * localStorage['flow:disable-sw'] = '1' (or build with VITE_DISABLE_SW=1) to opt out, which also removes a worker
  * and caches that an earlier visit installed.
  */
 
 const DISABLE_KEY = 'flow:disable-sw'
-const CACHE_PREFIX = 'flow-assets-'
+// The worker's caches: hashed files and the app shell (any version).
+const CACHE_PATTERN = /^flow-(?:assets|shell)-/
 
 export function serviceWorkerEnabled(
   env: { PROD?: boolean; VITE_DISABLE_SW?: string } = import.meta.env,
@@ -24,7 +26,7 @@ async function removeServiceWorker() {
   await Promise.all(registrations.map(registration => registration.unregister()))
   if (typeof caches === 'undefined') return
   const keys = await caches.keys()
-  await Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX)).map(key => caches.delete(key)))
+  await Promise.all(keys.filter(key => CACHE_PATTERN.test(key)).map(key => caches.delete(key)))
 }
 
 export function registerServiceWorker() {
