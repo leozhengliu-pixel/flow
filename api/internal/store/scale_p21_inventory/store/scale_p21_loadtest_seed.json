@@ -1,0 +1,32 @@
+{
+  "source": "store/scale_p21_loadtest_seed.go",
+  "unmigrated": 0,
+  "consumers": {
+    "seedSyntheticBatchBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded SeedSyntheticMetadata batch writer, built only with -tags loadtest (TestScaleP21SW277LoadFixtureCallset). storedWorkspace reads only the resident workspace and viewer the callback names; the callback's image holds no stored collection and may change only the declared collection. Under writeMu and the workspace lock it writes each new record with writeMetadataRecordRow after the stored last collection order (legacy tail append; an empty collection starts at 0), refuses existing IDs and inline collections (ensureScopedMetadataShape), writes notifications with writeContentRecord, and inserts the legacy event and account viewer row before publishing. TestScaleP21SW276SyntheticSeedDifferential proves byte-identical rows, events and publications against mutateFull with zero full decodes.",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Load-test fixture setup compiled only with -tags loadtest; no server route or ticker.",
+      "callers": [
+        "store/SQLiteStore.SeedSyntheticMetadata"
+      ]
+    },
+    "workspaceStateBytesBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded WorkspaceStateBytes, built only with -tags loadtest. storedWorkspace checks existence only; sizes are summed per decoded record from the installed logical generation under per-record work leases. TestScaleP21SW276SyntheticSeedDifferential compares it with the legacy measurement warm and after a SQL reload.",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Load-test measurement compiled only with -tags loadtest; no server route or ticker.",
+      "callers": [
+        "store/SQLiteStore.WorkspaceStateBytes"
+      ]
+    }
+  }
+}

@@ -36,33 +36,42 @@ func filler(seed string, n int) string {
 	return b.String()[:n]
 }
 
+// syntheticSeedClock and syntheticSeedBatchBytes are the seed's clock and
+// per-transaction write budget; differential tests pin them.
+var (
+	syntheticSeedClock      = time.Now
+	syntheticSeedBatchBytes = 6 << 20
+)
+
 // SeedSyntheticMetadata appends synthetic projects, trash entries, documents
 // and AI conversations through the normal persistence path, in batches that
-// stay under the per-transaction write budget.
+// stay under the per-transaction write budget. A bounded store appends each
+// batch through seedSyntheticBatchBounded instead of the full mutation.
 func (s *SQLiteStore) SeedSyntheticMetadata(ctx context.Context, workspace string, spec SyntheticMetadata) error {
 	var err error
 	spec, err = scaleP01SyntheticSpec(spec)
 	if err != nil {
 		return err
 	}
-	const batchBytes = 6 << 20
+	batchBytes := syntheticSeedBatchBytes
 	kinds := []struct {
+		field       string
 		total, size int
 		add         func(data *domain.Bootstrap, index int, now time.Time)
 	}{
-		{spec.Projects, spec.ProjectBytes, func(data *domain.Bootstrap, i int, now time.Time) {
+		{"projects", spec.Projects, spec.ProjectBytes, func(data *domain.Bootstrap, i int, now time.Time) {
 			data.Projects = append(data.Projects, scaleP01SyntheticProject(data.Viewer, spec, i, now))
 		}},
-		{spec.Trash, spec.TrashBytes, func(data *domain.Bootstrap, i int, now time.Time) {
+		{"trash", spec.Trash, spec.TrashBytes, func(data *domain.Bootstrap, i int, now time.Time) {
 			data.Trash = append(data.Trash, syntheticTrash(data.Viewer, spec, i, now))
 		}},
-		{spec.Documents, spec.DocumentBytes, func(data *domain.Bootstrap, i int, now time.Time) {
+		{"documents", spec.Documents, spec.DocumentBytes, func(data *domain.Bootstrap, i int, now time.Time) {
 			data.Documents = append(data.Documents, scaleP01SyntheticDocument(data.Viewer, spec, i, now))
 		}},
-		{spec.Conversations, spec.ConversationBytes, func(data *domain.Bootstrap, i int, now time.Time) {
+		{"aiConversations", spec.Conversations, spec.ConversationBytes, func(data *domain.Bootstrap, i int, now time.Time) {
 			data.AIConversations = append(data.AIConversations, syntheticConversation(data.Viewer, i, spec.ConversationBytes, now))
 		}},
-		{spec.Notifications, 1000, func(data *domain.Bootstrap, i int, now time.Time) {
+		{"notifications", spec.Notifications, 1000, func(data *domain.Bootstrap, i int, now time.Time) {
 			userID := data.Viewer.ID
 			if len(spec.UserIDs) > 0 {
 				userID = spec.UserIDs[i%len(spec.UserIDs)]
@@ -74,20 +83,34 @@ func (s *SQLiteStore) SeedSyntheticMetadata(ctx context.Context, workspace strin
 			data.Notifications = append(data.Notifications, domain.Notification{ID: fmt.Sprintf("lt-notification-%06d", i), RecipientID: userID, Type: "project.updated", SourceType: "project", SourceID: projectID, ProjectID: projectID, Actor: data.Viewer, Category: "updates", OccurrenceCount: 1, CreatedAt: now, UpdatedAt: now})
 		}},
 	}
+	seeded := false
 	for _, kind := range kinds {
 		perBatch := max(1, batchBytes/max(1, kind.size))
 		for start := 0; start < kind.total; start += perBatch {
 			first, end, add := start, min(kind.total, start+perBatch), kind.add
-			if err := s.mutateFull(ctx, workspace, "loadtest.seeded", nil, func(data *domain.Bootstrap) (string, error) {
-				now := time.Now().UTC()
+			mutate := func(data *domain.Bootstrap) (string, error) {
+				now := syntheticSeedClock().UTC()
 				for i := first; i < end; i++ {
 					add(data, i, now)
 				}
 				return "loadtest.seeded", nil
-			}); err != nil {
+			}
+			var err error
+			if s.BoundedMetadataEnabled() {
+				err = s.seedSyntheticBatchBounded(ctx, workspace, kind.field, mutate)
+				seeded = true
+			} else {
+				err = s.mutateFull(ctx, workspace, "loadtest.seeded", nil, mutate)
+			}
+			if err != nil {
 				return fmt.Errorf("seed batch %d-%d: %w", first, end, err)
 			}
 		}
+	}
+	if seeded {
+		// The batches wrote canonical rows only: install them once, through
+		// the bounded SQL recovery every peer change uses.
+		return s.ReloadWorkspace(ctx, workspace)
 	}
 	return nil
 }
@@ -131,6 +154,9 @@ func syntheticConversation(creator domain.User, i, size int, now time.Time) doma
 // WorkspaceStateBytes reports the stored state row size and the serialized
 // size of the large metadata collections, for load-test reporting.
 func (s *SQLiteStore) WorkspaceStateBytes(ctx context.Context, workspace string) (map[string]int, error) {
+	if s.BoundedMetadataEnabled() {
+		return s.workspaceStateBytesBounded(ctx, workspace)
+	}
 	var raw []byte
 	if err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw); err != nil {
 		return nil, err

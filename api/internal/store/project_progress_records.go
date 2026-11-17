@@ -403,6 +403,13 @@ func updateProjectProgress(ctx context.Context, reader progressReader, workspace
 // rebaseIssueMetadata). The caller holds s.writeMu and installs the returned
 // snapshot after the transaction commits; it is nil when nothing changed.
 func (s *SQLiteStore) persistIssueMetadata(ctx context.Context, tx *sqlTx, workspace string, before, after []domain.Issue, documents []domain.Document) (*domain.Bootstrap, error) {
+	if s.BoundedMetadataEnabled() {
+		// A bounded store reaches this only with the non-project hot inputs
+		// (UpdateIssueRecord sends project inputs and team moves to
+		// persistSelectedIssueMetadata). Its resident copy holds policy only,
+		// so a progress or document-scope change is refused, never skipped.
+		return nil, refuseBoundedHotIssueMetadata(before, after, documents)
+	}
 	stored, ok := s.workspaces[workspace]
 	if !ok {
 		return nil, nil

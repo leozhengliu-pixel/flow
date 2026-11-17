@@ -1,6 +1,6 @@
 {
   "source": "store/project_progress_records.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "backfillWorkspaceProjectProgress": {
       "owner": "P21",
@@ -16,7 +16,8 @@
     },
     "persistIssueMetadata": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded stores never read its resident copy: TestScaleP21SW278PersistIssueMetadataCallset proves the only reference is UpdateIssueRecord's else branch of projectInputs != nil and that projectInputs is assigned only in the bounded issueProjectInputsSupported branch (siblings: issueHotInputsSupported and a coverage refusal), so a bounded store reaches it only with the non-project hot inputs, where the legacy writer returns no metadata. The bounded branch (refuseBoundedHotIssueMetadata) returns nil exactly there and refuses project progress or a team move instead of skipping it against the policy copy. Flag off is unchanged. TestScaleP21SW278BoundedIssueMetadataRefusal compares legacy and bounded outcomes (plain edit, duplicate family rows, empty family, project progress, project join, team move with and without documents) with zero decodes; TestScaleP21HotIssueInputsUpdateDifferential covers the end-to-end hot update.",
       "accessors": [
         "Bootstrap"
       ],

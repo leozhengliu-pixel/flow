@@ -1,10 +1,11 @@
 {
   "source": "store/loadtest_seed.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "SeedSyntheticMetadata": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Load-test setup only: built solely with -tags loadtest, which no Dockerfile, CI or release recipe sets; TestScaleP21SW277LoadFixtureCallset pins every reference (tests in loadtest-tagged files, the bounded branch call) so no route or ticker can reach it. Flag off it runs the unchanged batches through mutateFull (clock and batch budget are package variables defaulting to time.Now and 6 MiB). Bounded, each batch goes through seedSyntheticBatchBounded: no stored collection is read or decoded, records are appended after the stored last record with the canonical row writer, notifications through the content record writer, with the same event, account row and publication; the resident image is reinstalled once through ReloadWorkspace. TestScaleP21SW276SyntheticSeedDifferential (multi-batch, existing trash/conversation records, several recipients) compares metadata records (keys, orders, bytes), content records, seed events, realtime publications, the root, every table's row count and the reported sizes warm and SQL-reloaded, with zero full decodes and released work.",
       "accessors": [
         "Bootstrap",
         "mutateFull"
@@ -17,7 +18,8 @@
     },
     "WorkspaceStateBytes": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Load-test measurement only (loadtest build tag, callset pinned by TestScaleP21SW277LoadFixtureCallset). Flag off unchanged. Bounded it reports the root's byte length and, per measured collection, the exact length of the JSON array legacy marshals, summed one decoded record at a time from the installed logical generation (workspaceStateBytesBounded; null for a nil collection); TestScaleP21SW276SyntheticSeedDifferential compares legacy, warm bounded and SQL-reloaded bounded sizes before and after seeding and the missing-workspace error, with no full decode.",
       "accessors": [
         "WorkspaceMetadata"
       ],

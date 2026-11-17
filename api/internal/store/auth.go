@@ -92,9 +92,9 @@ func (s *SQLiteStore) ensureAuthTestFixture(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback()
-	for _, data := range s.workspaces {
-		for _, user := range data.Users {
-			_, err = tx.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
+	for key, data := range s.workspaces {
+		insert := func(user domain.User) error {
+			_, err := tx.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
 				user.ID, normalizeEmail(user.Email), user.Name, user.DisplayName, user.AvatarURL, string(hash), now.Format(time.RFC3339Nano), boolInt(user.Active), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 			if err != nil {
 				return err
@@ -113,6 +113,20 @@ func (s *SQLiteStore) ensureAuthTestFixture(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
+			}
+			return nil
+		}
+		if s.BoundedMetadataEnabled() {
+			// The resident copy holds policy only (workspace, viewer, teams):
+			// the users stream from their canonical records in order.
+			if err := s.visitAuthTestFixtureUsers(ctx, key, insert); err != nil {
+				return err
+			}
+			continue
+		}
+		for _, user := range data.Users {
+			if err := insert(user); err != nil {
+				return err
 			}
 		}
 	}
