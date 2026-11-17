@@ -1,4 +1,4 @@
-import { snapshotWriteGate } from '@/lib/snapshot-write-gate'
+import { SnapshotUnconfirmedError, snapshotWriteGate } from '@/lib/snapshot-write-gate'
 const pageRealtimeClientId = crypto.randomUUID()
 
 export class ApiError<T = unknown> extends Error {
@@ -16,6 +16,16 @@ export class ApiError<T = unknown> extends Error {
     this.current = current
     this.params = params
   }
+}
+
+/**
+ * The server could not be reached (or a gateway in front of it answered for it): fetch's network TypeError and
+ * 502/503/504. Not a refusal: nothing about the session or access follows from it.
+ */
+export function isConnectivityError(error: unknown): boolean {
+  if (error instanceof SnapshotUnconfirmedError) return false
+  if (error instanceof ApiError) return error.status === 502 || error.status === 503 || error.status === 504
+  return error instanceof TypeError
 }
 
 export function realtimeClientId() {

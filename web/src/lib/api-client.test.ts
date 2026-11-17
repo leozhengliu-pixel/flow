@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ApiError, request, requestRetryingBusy } from './api-client'
+import { ApiError, isConnectivityError, request, requestRetryingBusy } from './api-client'
+import { SnapshotUnconfirmedError } from './snapshot-write-gate'
+import { startupRetryDelay } from './startup'
 
 const busy = (retryAfter?: string) => new Response(JSON.stringify({ error: 'busy' }), { status: 503, headers: retryAfter ? { 'Retry-After': retryAfter } : {} })
 const ok = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } })
@@ -68,5 +70,19 @@ describe('requestRetryingBusy', () => {
     await vi.advanceTimersByTimeAsync(5000)
     await assertion
     expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('isConnectivityError', () => {
+  it('names an unreachable server or gateway, never a refusal or a held write', () => {
+    expect(isConnectivityError(new TypeError('Failed to fetch'))).toBe(true)
+    for (const status of [502, 503, 504]) expect(isConnectivityError(new ApiError('down', status))).toBe(true)
+    for (const status of [400, 401, 403, 404, 409, 429, 500]) expect(isConnectivityError(new ApiError('no', status))).toBe(false)
+    expect(isConnectivityError(new SnapshotUnconfirmedError())).toBe(false)
+    expect(isConnectivityError(new DOMException('Aborted', 'AbortError'))).toBe(false)
+  })
+
+  it('backs off from 1 s, doubling, up to 15 s', () => {
+    expect([0, 1, 2, 3, 4, 5, 20].map(startupRetryDelay)).toEqual([1000, 2000, 4000, 8000, 15000, 15000, 15000])
   })
 })

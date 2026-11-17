@@ -1,5 +1,5 @@
 import { expect, test, type BrowserContext, type Page, type Route } from '@playwright/test'
-import { apiFetch, signIn, signUp, startApi, type Account, type RunningApi } from './harness'
+import { apiFetch, freePort, signIn, signUp, startApi, startProxy, type Account, type RunningApi } from './harness'
 
 /**
  * Repeat visits paint the workspace from the local snapshot (src/lib/local-snapshot.ts) before the session, account
@@ -230,5 +230,58 @@ test.describe('two viewers', () => {
     await page.goto(`${api.origin}/${account.workspaceKey}`)
     await page.waitForTimeout(1000)
     expect(await page.evaluate(() => sessionStorage.getItem('flow-test:seen'))).toBeNull()
+  })
+})
+
+test.describe('server unreachable', () => {
+  // The worker's cached shell is what lets the page load at all while the server is down.
+  test.use({ serviceWorkers: 'allow' })
+  ownApi()
+
+  test('the cached view stays while the server is down and fresh data replaces it when it is back; a cold start shows the app\'s own can\'t-connect state', async ({ page, context }) => {
+    const port = await freePort()
+    let gateway = await startProxy(api.port, { port })
+    const origin = `http://localhost:${port}`
+    try {
+      const account = await signUp(context, origin, 'snapshot-offline')
+      const { team, issue } = await seedIssue(page, account, 'Snapshot offline title')
+      const url = `${origin}/${account.workspaceKey}/team/${team.key}/all`
+      await page.goto(url)
+      await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.state)).toBe('activated')
+      await page.goto(url)
+      await expect(page.getByText('Snapshot offline title')).toBeVisible()
+      await expect.poll(() => page.evaluate(async () => Boolean(await (await caches.open('flow-shell-v2')).match('/__flow-app-shell'))), { timeout: 15_000 }).toBe(true)
+      await waitForSnapshot(page)
+
+      // The server goes away: the page still opens from the shell and the snapshot, and stays (no sign-in, no crash).
+      await gateway.stop()
+      await page.goto(url)
+      await expect(page.getByText('Snapshot offline title')).toBeVisible()
+      await page.waitForTimeout(4000)
+      await expect(page.getByText('Snapshot offline title')).toBeVisible()
+      expect(new URL(page.url()).pathname).toBe(`/${account.workspaceKey}/team/${team.key}/all`)
+      await expect(page.getByText('Unexpected Application Error')).toHaveCount(0)
+
+      // Back: the retries reach it and the fresh data replaces the cached view.
+      const side = await context.newPage()
+      await side.goto(`${api.origin}/sw.js`)
+      expect((await apiFetch(side, 'PATCH', `/api/issues/${issue.id}`, { title: 'Snapshot online title' }, account.workspaceKey)).status).toBe(200)
+      await side.close()
+      gateway = await startProxy(api.port, { port })
+      await expect(page.getByText('Snapshot online title')).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByText('Snapshot offline title')).toHaveCount(0)
+
+      // A cold start (no snapshot) with the server down: the shell boots into the app's own can't-connect state.
+      await page.evaluate(() => localStorage.removeItem('flow:local-snapshot'))
+      await gateway.stop()
+      await page.goto(url)
+      await expect(page.getByText("Can't connect to Flow")).toBeVisible()
+      await expect(page.getByText('Unexpected Application Error')).toHaveCount(0)
+      gateway = await startProxy(api.port, { port })
+      await expect(page.getByText('Snapshot online title')).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByText("Can't connect to Flow")).toHaveCount(0)
+    } finally {
+      await gateway.stop()
+    }
   })
 })
