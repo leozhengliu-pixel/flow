@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded metadata projections measure PostgreSQL numeric member and favorite fields as text, preserving issue-edit and document-read responses.
 - Bounded metadata serves public shared-issue links and issue filter suggestions without loading the whole workspace: shared links read only the token's issue, its comments and label counts, and filter suggestions count every visible issue one at a time, with the same responses as before. Bounded metadata stays off by default.
 - Bounded metadata preserves stored membership snapshots during issue team moves and project-update order and duplicate entries during scheduler writes. Selected settings use the cancellable cold facade, and issue-row ownership transfers avoid duplicate admission. Bounded metadata stays off by default with the strict activation guard retained.
 - Bounded metadata preserves chat session saves and read markers, issue relations and cycle scheduling through large inline records, with owned cold authorization and reload admission. Issue persistence retains field-history boundaries across memory-limited batch flushes. Bounded metadata stays off by default with the strict activation guard retained.
