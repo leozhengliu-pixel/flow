@@ -296,6 +296,13 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		if err != nil {
 			return err
 		}
+		var replyAudience map[string]bool
+		if profile == scopedIssueAgentReplyProfile {
+			replyAudience, err = s.loadAgentReplyIssueInputs(ctx, attempt.owner, attempt.inputs.source, &data)
+			if err != nil {
+				return err
+			}
+		}
 		if timing {
 			teams, err := attempt.inputs.keys(ctx)
 			if err != nil {
@@ -364,6 +371,8 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 			err = validateScopedIssueRelation(beforeCallback, data)
 		} else if attachment {
 			err = validateScopedIssueAttachment(beforeCallback, data, eventType, issueAttachmentUpsertMutation(ctx))
+		} else if profile == scopedIssueAgentReplyProfile {
+			err = validateAgentReplyNotifications(beforeCallback, data, replyAudience)
 		} else {
 			err = validateScopedIssueReaction(beforeCallback, data)
 		}

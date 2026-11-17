@@ -1,10 +1,10 @@
 {
   "source": "server/comment_actions.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "generateCommentActions": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -15,7 +15,8 @@
       "temperatureReason": "Conditional asynchronous child of the hot create-comment path; keeping it HOT avoids a hidden hot-to-cold transition when the existing AI feature is enabled.",
       "callers": [
         "createComment -> startCommentActions -> goroutine -> generateCommentActions"
-      ]
+      ],
+      "reason": "The bounded branch hands the run to generateCommentActionsBounded; the original off body remains literal. The bounded body keeps every literal step and replaces only its two broad reads (installed existence probe plus BeginIssueBootstrapRead's paged projection; raw development viewer/role) and its two writes, which keep their callbacks and discussion scope but are declared to the closed comment action writer: the claim stamps only the selected comment, the append adds only the declared proposals after every native action, with commentActionsAllowed and validateCommentAction's closure selected inside the transaction. TestScaleP21CommentActionGenerationDifferential and TestScaleP21CommentActionClaimRaceDifferential compare legacy, warm and SQL-reloaded runs byte for byte (narrow inputs on and off): prompt requests, claims, appends, stored rows, metadata and installed images, events, webhooks and realtime, for proposal mixes, claim races (stamped, rewritten, missing comment, turned-off setting), changes between claim and append (comment body/version, setting, existing action, archived issue) and a parent-only grant. Persistent SQLite twice and race pass with zero full decodes and released work."
     },
     "listCommentActions": {
       "owner": "P21",
@@ -34,7 +35,7 @@
     },
     "resolveCommentAction": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -43,7 +44,8 @@
       "temperatureReason": "Issue activity action acceptance performs an issue update; it is part of the same issue-comment UI flow.",
       "callers": [
         "useCommentActions.resolve -> POST /api/issue-records/{id}/comment-actions/{actionId}"
-      ]
+      ],
+      "reason": "The bounded branch declares the resolution (issue, action, status) on the original scope (the issue, its status-automation family, issue creation) and callback; the off path is literal. The resource-scope image writer runs it with a closed profile: the status-automation family and the issue sequence are resolved inside the record transaction exactly as loadScopedIssues does, the callback sees the authorization closure, every action with the resolved ID (first issue match, with ordinals), and for an accepted pending action the literal update closure (status/assignee/priority/labels: the batch update inputs) or the sub-issue creation closure (the issue creation inputs); a link only appends. Validation admits the resolved action, SLAs, SLA events, suggestions and creation side records; each is patched at its native ordinal and committed with the issue, content and event rows in one transaction. TestScaleP21CommentActionResolutionDifferential compares legacy, warm and SQL-reloaded runs (narrow inputs on and off) byte for byte, including the response, stored rows, metadata, installed images, event, webhook previous values and realtime: accepted priority/status/assignee/labels/link/sub-issue, dismissals, idempotent and conflicting re-resolution, stale and invalid proposals, missing actions and comments, a duplicate action ID on another issue, a turned-off setting and a sub-issue creation failure that rolls back the whole resolution. Persistent SQLite twice and race pass with zero full decodes and released work."
     },
     "startCommentActions": {
       "owner": "P21",

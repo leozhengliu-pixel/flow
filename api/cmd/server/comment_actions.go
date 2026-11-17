@@ -80,6 +80,10 @@ func (s *server) startCommentActions(r *http.Request, issueID string, comment do
 }
 
 func (s *server) generateCommentActions(ctx context.Context, workspace, issueID, commentID string, actor domain.User) {
+	if s.store.BoundedMetadataEnabled() {
+		s.generateCommentActionsBounded(ctx, workspace, issueID, commentID, actor)
+		return
+	}
 	// Checked again here: the run may wait for a slot after the comment was
 	// posted, and the workspace may have turned AI off meanwhile.
 	if s.workspaceAIPolicy(ctx, workspace, actor.ID) != nil {
@@ -351,6 +355,11 @@ func (s *server) resolveCommentAction(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]any{"commentActionsChanged": true}
 	// Acceptance may create a sub-issue and run normal workflow automation.
 	ctx := store.WithMutationScope(store.WithoutIssueRecordMutations(r.Context()), store.MutationScope{IssueIDs: []string{id}, StatusAutomation: true, CreateIssues: true})
+	if s.store.BoundedMetadataEnabled() {
+		// The closed resolution writer keeps this scope and callback; the
+		// request owns its captured result until the response is written.
+		ctx = store.ContextWithCommentActionResolution(ctx, store.CommentActionResolution{IssueID: id, ActionID: actionID, Status: input.Status})
+	}
 	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.updated", id, payload, func(data *domain.Bootstrap) error {
 		issue, e := issueByID(data, id)
 		if e != nil {

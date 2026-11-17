@@ -1579,6 +1579,18 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 		if advancedScheduleMaintenance(ctx) != nil && eventType == "schedules.maintained" {
 			return s.mutateBoundedAdvancedSchedule(ctx, workspaceKey, eventType, payload, mutate)
 		}
+		if reply, selected := agentReplyNotificationFromContext(ctx); selected && eventType == "agent_task.replied" {
+			if reply.Kind == "issue" {
+				return s.mutateBoundedScopedIssuePoint(ctx, workspaceKey, eventType, payload, scopedIssueAgentReplyProfile, mutate)
+			}
+			return s.mutateBoundedScopedImage(ctx, workspaceKey, eventType, payload, agentReplyImageProfile{reply: reply}, mutate)
+		}
+		if resolution, selected := commentActionResolutionFromContext(ctx); selected && eventType == "issue.updated" && !UsesIssueRecordMutations(ctx) {
+			return s.mutateBoundedScopedImage(ctx, workspaceKey, eventType, payload, &commentActionResolveProfile{resolution: resolution}, mutate)
+		}
+		if commentActionProposalEvent(ctx, eventType) && IsIssueDiscussionMutation(ctx) {
+			return s.mutateBoundedCommentActionProposal(ctx, workspaceKey, eventType, payload, mutate)
+		}
 		if _, selected := cycleScheduleMaintenance(ctx); selected && eventType == "cycles.automatically_maintained" {
 			return s.mutateBoundedCycleSchedule(ctx, workspaceKey, eventType, payload, mutate)
 		}

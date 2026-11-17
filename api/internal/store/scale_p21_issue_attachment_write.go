@@ -21,6 +21,7 @@ const (
 	scopedIssueAttachmentProfile
 	scopedIssueRecurrenceTimingProfile
 	scopedIssueRelationProfile
+	scopedIssueAgentReplyProfile
 )
 
 // ContextWithIssueAttachmentMutation declares the existing attachment callback.
@@ -73,6 +74,10 @@ func scopedIssuePointEvent(ctx context.Context, event string, profile scopedIssu
 		return issueRecurrenceTimingMutation(ctx) && event == "issue.updated"
 	case scopedIssueRelationProfile:
 		return boundedIssueRelationEvent(ctx, event)
+	case scopedIssueAgentReplyProfile:
+		reply, ok := agentReplyNotificationFromContext(ctx)
+		ids, _ := ctx.Value(issueRecordMutationContext{}).([]string)
+		return ok && reply.Kind == "issue" && event == "agent_task.replied" && len(ids) == 1 && ids[0] == reply.Resource
 	}
 	return false
 }

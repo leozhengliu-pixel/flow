@@ -21,6 +21,8 @@ const (
 	scopedImageDocumentUpdate scopedImageWriteKind = iota + 1
 	scopedImageCycleSchedule
 	scopedImageAdvancedSchedule
+	scopedImageAgentReply
+	scopedImageCommentActionResolve
 )
 
 // Only closed document-update, cycle and advanced schedule declarations enter this
@@ -33,6 +35,14 @@ type scopedImageWriteProfile interface {
 	image(context.Context, *ResourceRead, *metadataLogicalSource, domain.Bootstrap, domain.Bootstrap) (*metadataLogicalSource, error)
 	extraFields() []string
 	reserveCallback(context.Context, *ResourceRead, domain.Bootstrap, any) error
+}
+
+// scopedImageIssueFamily is a profile whose declared scope also loads the
+// status-automation family and may create issues. issueFamily runs inside the
+// record transaction, after the direct IDs resolve and before any record
+// loads, and returns every issue ID to load.
+type scopedImageIssueFamily interface {
+	issueFamily(ctx context.Context, tx *sqlTx, workspace string, owner *ResourceRead, rows *issueMutationRows, source *metadataLogicalSource, scope MutationScope, ids []string) ([]string, error)
 }
 
 type scopedImageAttempt struct {
@@ -256,7 +266,8 @@ func (r *scopedImageAttempt) issueRecords(ctx context.Context, ids []string) (ma
 
 func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, eventType string, payload any, profile scopedImageWriteProfile, mutate func(*domain.Bootstrap) (string, error)) error {
 	if s == nil || !s.BoundedMetadataEnabled() || profile == nil || mutate == nil || !metadataOutputOwnerPresent(ctx) ||
-		(profile.kind() != scopedImageDocumentUpdate && profile.kind() != scopedImageCycleSchedule && profile.kind() != scopedImageAdvancedSchedule) ||
+		(profile.kind() != scopedImageDocumentUpdate && profile.kind() != scopedImageCycleSchedule && profile.kind() != scopedImageAdvancedSchedule &&
+			profile.kind() != scopedImageAgentReply && profile.kind() != scopedImageCommentActionResolve) ||
 		UsesIssueRecordMutations(ctx) || issueRenumbering(ctx) {
 		return ErrBoundedMetadataCoverage
 	}
@@ -331,9 +342,11 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		if err != nil {
 			return err
 		}
-		if scope.Resolve != nil || scope.Expand != nil || scope.StatusAutomation || scope.CreateIssues {
+		family, familyScope := profile.(scopedImageIssueFamily)
+		if scope.Resolve != nil || scope.Expand != nil || (scope.StatusAutomation || scope.CreateIssues) && !familyScope {
 			return ErrBoundedMetadataCoverage
 		}
+		createIssues := familyScope && scope.CreateIssues
 		if scope.AllIssues {
 			return errScopeTooLarge
 		}
@@ -371,18 +384,31 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		if baseStamp.workspaceID != attempt.data.Workspace.ID {
 			return ErrResourceAccessChanged
 		}
+		// A family profile resolves its status-automation and created issues itself (below); the direct
+		// selection sees only the declared issues.
+		direct := scope
+		if familyScope {
+			direct.StatusAutomation, direct.CreateIssues = false, false
+		}
 		var ids []string
 		if selector, ok := profile.(interface {
 			selectIssueIDs(context.Context, *sqlTx, string, MutationScope, *ResourceRead) ([]string, error)
 		}); ok {
-			ids, err = selector.selectIssueIDs(ctx, tx, workspace, scope, attempt.owner)
+			ids, err = selector.selectIssueIDs(ctx, tx, workspace, direct, attempt.owner)
 		} else {
-			ids, err = s.scopedImageIssueIDs(ctx, tx, workspace, scope, attempt.owner)
+			ids, err = s.scopedImageIssueIDs(ctx, tx, workspace, direct, attempt.owner)
 		}
 		if err != nil {
 			return err
 		}
 		attempt.rows = s.newIssueMutationRows(tx, workspace)
+		if familyScope {
+			// The profile's own in-transaction family and issue sequence,
+			// resolved exactly where the scoped writer resolves them.
+			if ids, err = family.issueFamily(ctx, tx, workspace, attempt.owner, attempt.rows, cloned, scope, ids); err != nil {
+				return err
+			}
+		}
 		records, err := attempt.issueRecords(ctx, ids)
 		if err != nil {
 			return err
@@ -536,7 +562,26 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 			return err
 		}
 		defer releaseEncoding()
-		changed, err := s.persistScopedRecords(writeContext, tx, workspace, persistData, loaded, rawBefore, false, keys, oldDeliveries)
+		if createIssues {
+			// The scoped writer reads a created issue's stored row (normally
+			// none) inside persistence; the bounded owned reader supplies it.
+			created := []string{}
+			for _, issue := range attempt.data.Issues {
+				if _, found := rawBefore[issue.ID]; !found && !slices.Contains(created, issue.ID) {
+					created = append(created, issue.ID)
+				}
+			}
+			if len(created) != 0 {
+				existing, err := attempt.rows.load(ctx, created, true)
+				if err != nil {
+					return err
+				}
+				for _, id := range created {
+					rawBefore[id] = existing[id].raw
+				}
+			}
+		}
+		changed, err := s.persistScopedRecords(writeContext, tx, workspace, persistData, loaded, rawBefore, createIssues, keys, oldDeliveries)
 		if err != nil {
 			return err
 		}

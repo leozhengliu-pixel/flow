@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_comment_action_generation.go",
+  "unmigrated": 0,
+  "consumers": {
+    "InstalledViewerRole": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Reads only the installed snapshot's viewerRole scalar from one owned installed generation, the raw role a development-mode WorkspaceMetadata read presents (the bootstrap projection substitutes admin). Charged to a scratch owner and released before return. Covered by the generation differential's development-free paths and the bounded bootstrap read it complements.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Development-mode comment action generation inputs.",
+      "callers": ["server/scale_p21_comment_action_writes.go:commentActionGenerationInputs"]
+    }
+  }
+}

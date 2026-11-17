@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_comment_action_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedCommentActionProposal": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Closed bounded writer for the comment action claim (comment.actions_started) and proposal append (comment.actions_updated); storedWorkspace checks existence only. It keeps mutateIssueScope's discussion preimage (locked issue row, the comment's thread, active discussion notifications and their deliveries, live actor role with the inactive-member refusal) and the literal callbacks, selecting the discussion inputs plus the closure of commentActionsAllowed and validateCommentAction: complete teams, team settings and workspace settings, the viewer's complete settings and memberships, the team/ancestor/workspace states and referenced labels in source order, complete proposed assignees, every action of the comment (the global CommentID predicate) and the former-member lookup. Validation admits only the claimed comment's ActionsGeneratedAt stamp, or the declared proposals appended after every native action; the append is a native logical image append persisted with the record transaction. TestScaleP21CommentActionGenerationDifferential and TestScaleP21CommentActionClaimRaceDifferential compare legacy, warm and SQL-reloaded runs (narrow inputs on and off) byte for byte, persistent SQLite twice and race, with zero full decodes and released work.",
+      "accessors": ["storedWorkspace"],
+      "temperature": "hot",
+      "temperatureReason": "Background comment action generation after an issue comment.",
+      "callers": ["store/sqlite.go:dispatchMutation"]
+    }
+  }
+}
