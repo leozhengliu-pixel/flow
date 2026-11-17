@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"testing"
 	"time"
 
 	"flow/api/internal/domain"
@@ -71,6 +72,11 @@ type TeamMembershipChangeRequest struct {
 	// DryRun computes the result without writing; guards that would fail
 	// are reported in Kept instead of as errors.
 	DryRun bool
+	// RetryConcurrentWrites reruns an addition that lost a write race
+	// (ErrConcurrentWrite: its transaction was rolled back, nothing was
+	// written) instead of returning the conflict. Removals and dry runs
+	// ignore it.
+	RetryConcurrentWrites bool
 }
 
 // TeamMembershipChangeResult lists what the request changed (or, in a dry
@@ -80,10 +86,38 @@ type TeamMembershipChangeResult struct {
 	Kept    *domain.TeamMemberKept
 }
 
+type teamMembershipWriteHookKey struct{}
+
+// WithTeamMembershipWriteHookForTesting runs hook in every membership change
+// transaction made with ctx, after its reads and before its first write.
+func WithTeamMembershipWriteHookForTesting(ctx context.Context, hook func()) context.Context {
+	if !testing.Testing() {
+		return ctx
+	}
+	return context.WithValue(ctx, teamMembershipWriteHookKey{}, hook)
+}
+
 // ChangeTeamMembership is SetTeamMembership with origins, removal guards, a
 // dry run and the list of changes (including parent-team memberships added
 // because the user joined a sub-team) for the audit log.
 func (s *SQLiteStore) ChangeTeamMembership(ctx context.Context, request TeamMembershipChangeRequest) (TeamMembershipChangeResult, error) {
+	if !request.RetryConcurrentWrites || !request.Member || request.DryRun {
+		return s.changeTeamMembership(ctx, request)
+	}
+	// An addition fails with ErrConcurrentWrite only before its commit (an
+	// SQLite read transaction that cannot become a writer while another
+	// connection writes): it wrote nothing, so a rerun on fresh reads is the
+	// same request. Its only post-commit step belongs to removals.
+	var result TeamMembershipChangeResult
+	err := mutationAttempts(ctx, backgroundWriteAttempts, func(ctx context.Context) error {
+		var err error
+		result, err = s.changeTeamMembership(ctx, request)
+		return err
+	}, nil)
+	return result, err
+}
+
+func (s *SQLiteStore) changeTeamMembership(ctx context.Context, request TeamMembershipChangeRequest) (TeamMembershipChangeResult, error) {
 	result := TeamMembershipChangeResult{}
 	workspaceID, teamID, userID, role := request.WorkspaceID, request.TeamID, request.UserID, request.Role
 	if role == "" {
@@ -145,6 +179,9 @@ func (s *SQLiteStore) ChangeTeamMembership(ctx context.Context, request TeamMemb
 	var managed int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM scim_team_memberships WHERE workspace_id=? AND team_id=? AND user_id=? AND managed=1`, workspaceID, teamID, userID).Scan(&managed); err != nil {
 		return result, err
+	}
+	if hook, ok := ctx.Value(teamMembershipWriteHookKey{}).(func()); ok && hook != nil {
+		hook()
 	}
 	if exists {
 		currentOrigin = domain.TeamMemberOriginOrDefault(currentOrigin)

@@ -69,9 +69,9 @@ scim.go:writeSCIMUser
 sqlite.go:createWorkspace
 sqlite.go:updateWorkspace
 team_hierarchy.go:syncTeamAncestorMembers
-team_membership_origin.go:ChangeTeamMembership
 team_membership_origin.go:RemoveMemberWithChanges
 team_membership_origin.go:addTeamAncestorMemberships
+team_membership_origin.go:changeTeamMembership
 team_mutation.go:persistTeamMetadata
 team_mutation.go:writeMetadataRecordChanges
 team_mutation.go:writeMetadataRecordUpserts

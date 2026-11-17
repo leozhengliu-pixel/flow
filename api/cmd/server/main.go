@@ -2132,10 +2132,16 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		if s.authDisabled {
 			creatorID = developmentCreatorID
 		}
+		// The team is committed: a lost write race of the creator's
+		// membership is rerun, never answered as a conflict (409 says
+		// nothing was written, and a client retry would find the key taken).
 		var created store.TeamMembershipChangeResult
-		created, err = s.store.ChangeTeamMembership(r.Context(), store.TeamMembershipChangeRequest{WorkspaceID: data.Workspace.ID, TeamID: team.ID, UserID: creatorID, Member: true, Role: "owner", Origin: defaultTeamMemberOrigin(r)})
+		created, err = s.store.ChangeTeamMembership(r.Context(), store.TeamMembershipChangeRequest{WorkspaceID: data.Workspace.ID, TeamID: team.ID, UserID: creatorID, Member: true, Role: "owner", Origin: defaultTeamMemberOrigin(r), RetryConcurrentWrites: true})
 		if err == nil {
 			s.recordCreatedTeamMemberAudit(r.Context(), workspaceKey, requestTeamMemberActor(r, ""), teamMemberReasonTeamCreated, created.Changes)
+		} else if errors.Is(err, store.ErrConcurrentWrite) {
+			log.Printf("team creator membership workspace=%s team=%s: %v", workspaceKey, team.ID, err)
+			err = nil
 		}
 	}
 	if err == nil {

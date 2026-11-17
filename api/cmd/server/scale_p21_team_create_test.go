@@ -49,6 +49,8 @@ type scaleP21TeamCreateFixture struct {
 	installations map[string]bool
 	auditSeq      int64
 	auditHead     []any
+	// wrap, when set, extends each creation request's context.
+	wrap func(context.Context) context.Context
 }
 
 type scaleP21TeamCreateCase struct {
@@ -323,6 +325,9 @@ func (f scaleP21TeamCreateFixture) create(service *server, user domain.User, bod
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithCancel(ctx)
 		cancel()
+	}
+	if f.wrap != nil {
+		ctx = f.wrap(ctx)
 	}
 	r, closeOutput := beginRequestResourceReads(r.WithContext(ctx))
 	defer closeOutput()
@@ -683,11 +688,12 @@ func TestScaleP21TeamCreateConcurrentDifferential(t *testing.T) {
 	f := scaleP21TeamCreateSetup(t)
 	f.scaleP21TriageWriterFixture.prepare = f.prepare(nil)
 	for _, test := range []struct {
-		name string
-		keys []string
+		name  string
+		keys  []string
+		codes []int
 	}{
-		{"distinct-keys", []string{"CA1", "CA2", "CA3", "CA4"}},
-		{"same-key", []string{"CSK", "CSK", "csk"}},
+		{"distinct-keys", []string{"CA1", "CA2", "CA3", "CA4"}, []int{http.StatusCreated, http.StatusCreated, http.StatusCreated, http.StatusCreated}},
+		{"same-key", []string{"CSK", "CSK", "csk"}, []int{http.StatusCreated, http.StatusBadRequest, http.StatusBadRequest}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var expected string
@@ -703,11 +709,10 @@ func TestScaleP21TeamCreateConcurrentDifferential(t *testing.T) {
 							// Copies (not sub-teams): the creator's inherited ancestor
 							// membership would go to whichever creation commits first.
 							body := map[string]any{"name": "Concurrent " + strings.ToUpper(key), "key": key, "copyFromTeamId": "tm-parent"}
+							// No client retry: every first answer is final. A
+							// committed creation answers 201 even when its
+							// creator membership lost a write race (SW280).
 							w := f.create(service, f.data.Viewer, body, false, false)
-							// A lost write race is a conflict the client retries.
-							for attempt := 0; attempt < 5 && w.Code == http.StatusConflict; attempt++ {
-								w = f.create(service, f.data.Viewer, body, false, false)
-							}
 							if w.Code != http.StatusCreated {
 								t.Logf("%s %s: %d %s", source, key, w.Code, w.Body.String())
 							}
@@ -715,20 +720,15 @@ func TestScaleP21TeamCreateConcurrentDifferential(t *testing.T) {
 							codes = append(codes, w.Code)
 							mu.Unlock()
 						}
-						// Concurrent legacy creators are not a deterministic
-						// oracle (the copy refresh races the membership and
-						// audit writes: 400/409 on distinct keys); the bounded
-						// creators must equal their serial legacy result.
-						if service.store.BoundedMetadataEnabled() {
-							go create()
-						} else {
-							create()
-						}
+						go create()
 					}
 					group.Wait()
 					return nil
 				})
 				slices.Sort(codes)
+				if !slices.Equal(codes, test.codes) {
+					t.Fatalf("%s %s codes %v, want %v", source, test.name, codes, test.codes)
+				}
 				// Concurrent creators commit in any order: created rows keep
 				// their content but not their relative position or sequence.
 				for _, row := range got.State.Metadata {
@@ -759,9 +759,6 @@ func TestScaleP21TeamCreateConcurrentDifferential(t *testing.T) {
 					t.Fatalf("%s concurrent creation changed: %s", source, scaleP21M2Diff(expected, normalized))
 				}
 				expected = normalized
-				if test.name == "same-key" && !slices.Equal(codes, []int{http.StatusCreated, http.StatusBadRequest, http.StatusBadRequest}) {
-					t.Fatalf("%s same-key codes %v", source, codes)
-				}
 			}
 		})
 	}
