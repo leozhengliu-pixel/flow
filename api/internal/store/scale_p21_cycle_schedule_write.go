@@ -20,9 +20,10 @@ type scopedImageWriteKind uint8
 const (
 	scopedImageDocumentUpdate scopedImageWriteKind = iota + 1
 	scopedImageCycleSchedule
+	scopedImageAdvancedSchedule
 )
 
-// Only closed document-update and cycle-maintenance declarations enter this
+// Only closed document-update, cycle and advanced schedule declarations enter this
 // executor. Each owns its literal resolver and native occurrence overlay.
 type scopedImageWriteProfile interface {
 	kind() scopedImageWriteKind
@@ -255,7 +256,7 @@ func (r *scopedImageAttempt) issueRecords(ctx context.Context, ids []string) (ma
 
 func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, eventType string, payload any, profile scopedImageWriteProfile, mutate func(*domain.Bootstrap) (string, error)) error {
 	if s == nil || !s.BoundedMetadataEnabled() || profile == nil || mutate == nil || !metadataOutputOwnerPresent(ctx) ||
-		(profile.kind() != scopedImageDocumentUpdate && profile.kind() != scopedImageCycleSchedule) ||
+		(profile.kind() != scopedImageDocumentUpdate && profile.kind() != scopedImageCycleSchedule && profile.kind() != scopedImageAdvancedSchedule) ||
 		UsesIssueRecordMutations(ctx) || issueRenumbering(ctx) {
 		return ErrBoundedMetadataCoverage
 	}
@@ -370,7 +371,14 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		if baseStamp.workspaceID != attempt.data.Workspace.ID {
 			return ErrResourceAccessChanged
 		}
-		ids, err := s.scopedImageIssueIDs(ctx, tx, workspace, scope, attempt.owner)
+		var ids []string
+		if selector, ok := profile.(interface {
+			selectIssueIDs(context.Context, *sqlTx, string, MutationScope, *ResourceRead) ([]string, error)
+		}); ok {
+			ids, err = selector.selectIssueIDs(ctx, tx, workspace, scope, attempt.owner)
+		} else {
+			ids, err = s.scopedImageIssueIDs(ctx, tx, workspace, scope, attempt.owner)
+		}
 		if err != nil {
 			return err
 		}
@@ -378,6 +386,11 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		records, err := attempt.issueRecords(ctx, ids)
 		if err != nil {
 			return err
+		}
+		if filter, ok := profile.(interface {
+			filterIssueRecords(MutationScope, map[string]storedIssueRecord)
+		}); ok {
+			filter.filterIssueRecords(scope, records)
 		}
 		order := sortedKeys(records)
 		sort.SliceStable(order, func(i, j int) bool { return records[order[i]].order < records[order[j]].order })

@@ -54,10 +54,22 @@ func (s *SQLiteStore) BeginFormerMembersRead(ctx context.Context, workspace stri
 	}
 	data, found := s.workspaces[workspace]
 	workspaceID := data.Workspace.ID
+	var source *metadataLogicalSource
+	var sourceErr error
+	if found && workspaceID != "" {
+		// The literal accessor captures its member snapshot together with the
+		// workspace identity, before querying membership authority.
+		source, sourceErr = s.retainMetadataLogicalSource(metadataLogicalUnpinnedContext(ctx), workspace)
+	}
 	s.mu.RUnlock()
 	if !found || workspaceID == "" {
 		return read, nil
 	}
+	if sourceErr != nil {
+		return read, sourceErr
+	}
+	defer source.Release()
+	ctx = context.WithValue(ctx, formerMembersLogicalSourceKey{}, source)
 	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, 2<<20)
 	if err != nil {
 		return read, err
@@ -116,6 +128,9 @@ func (s *SQLiteStore) BeginFormerMembersRead(ctx context.Context, workspace stri
 }
 
 func (s *SQLiteStore) scaleP21SW16FallbackFormerMembers(ctx context.Context, tx *sqlTx, workspace string, read *FormerMembersRead, add func(string) error, canonicalSource bool) (*FormerMembersRead, error) {
+	if !canonicalSource {
+		return read, s.readFormerMembersLogicalFallback(ctx, read, add)
+	}
 	collection, err := s.MetadataCollectionsInSnapshot(ctx, tx, workspace, "members")
 	if err != nil {
 		return read, err
@@ -124,25 +139,6 @@ func (s *SQLiteStore) scaleP21SW16FallbackFormerMembers(ctx context.Context, tx 
 	shape, err := collection.Shape("members")
 	if err != nil {
 		return read, err
-	}
-	if !canonicalSource {
-		if shape.RequiresTypedMerge {
-			return read, fmt.Errorf("%w: former-member fallback needs logical source provenance", ErrBoundedMetadataCoverage)
-		}
-		present := false
-		err := collection.VisitArray("members", func(context.Context, MetadataArrayRecord) error {
-			present = true
-			return ErrMetadataIterationDone
-		})
-		if err != nil {
-			return read, err
-		}
-		if present {
-			// Full workspace writes can sanitize a canonical inline value
-			// while the legacy warm copy retains the callback's value.
-			return read, fmt.Errorf("%w: former-member fallback needs logical source provenance", ErrBoundedMetadataCoverage)
-		}
-		return read, nil
 	}
 	ctx, releaseFallback, err := s.tryAdmitAdditionalMetadataWork(ctx, scaleP21SW16FormerWorkBytes)
 	if err != nil {

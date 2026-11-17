@@ -1,6 +1,6 @@
 {
   "source": "server/settings_features.go",
-  "unmigrated": 39,
+  "unmigrated": 29,
   "consumers": {
     "connectIntegration": {
       "owner": "P21",
@@ -30,7 +30,7 @@
     },
     "createDocumentTemplate": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
@@ -40,7 +40,9 @@
       "callers": [
         "POST /api/document-templates (server/main.go)",
         "POST /api/document-templates (api/cmd/server/main.go:612)"
-      ]
+      ],
+      "coldDispatch": "server/settings_features.go:createDocumentTemplate",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains actor capture, native team checks, default content data and literal content/state input semantics. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
     },
     "createLabelGroup": {
       "owner": "P21",
@@ -70,7 +72,7 @@
     },
     "createProjectStatus": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
@@ -80,11 +82,13 @@
       "callers": [
         "POST /api/project-statuses (server/main.go)",
         "POST /api/project-statuses (api/cmd/server/main.go:624)"
-      ]
+      ],
+      "coldDispatch": "server/settings_features.go:createProjectStatus",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains status-type validation, defaults and native status-position normalization. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
     },
     "createWorkspaceIssueTemplate": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
@@ -93,7 +97,9 @@
       "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
       "callers": [
         "POST /api/issue-templates (api/cmd/server/main.go:609)"
-      ]
+      ],
+      "coldDispatch": "server/settings_features.go:createWorkspaceIssueTemplate",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains actor capture, native applyIssueTemplate reference checks and explicit empty label/form defaults. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
     },
     "createWorkspaceLabel": {
       "owner": "P21",
@@ -110,8 +116,8 @@
     },
     "deleteDocumentTemplate": {
       "owner": "P17",
-      "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. After deleting the selected template, legacy lookup can fall through to a matching Document.ContentData object. Previous review: Writes/deletes only documentTemplates/id; callback uses no other collection and preserves missing-record semantics and the original off-mode context/accessor. TestScaleP21SW5SettingsPointDifferential compares canonical target/other records, response and webhook/realtime effects across the principal/credential matrix and live revocation boundary. TestScaleP21SW5SettingsPointFailures checks cancellation and explicit oversized-target rejection without mutation. requestActor and HTTP authorization remain separate blockers.",
+      "status": "reviewed",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains the original scoped writer and exact ID deletion/missing-template semantics. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -121,7 +127,8 @@
       "callers": [
         "DELETE /api/document-templates/{id} (server/main.go)",
         "DELETE /api/document-templates/{id} (api/cmd/server/main.go:614)"
-      ]
+      ],
+      "coldDispatch": "server/settings_features.go:deleteDocumentTemplate"
     },
     "deleteOAuthApplication": {
       "owner": "P21",
@@ -139,7 +146,7 @@
     },
     "deleteProjectStatus": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -149,12 +156,14 @@
       "callers": [
         "DELETE /api/project-statuses/{id} (server/main.go)",
         "DELETE /api/project-statuses/{id} (api/cmd/server/main.go:626)"
-      ]
+      ],
+      "coldDispatch": "server/settings_features.go:deleteProjectStatus",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains last-of-type and assigned-project refusals before removing the native status. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
     },
     "deleteWorkspaceIssueTemplate": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. After deleting the selected template, legacy lookup can fall through to a matching Document.ContentData object. Previous review: Writes/deletes only issueTemplates/id while retaining the exact workspace-scope OR empty-visibility predicate and missing-record behavior; no issue/content collection is changed. TestScaleP21SW5SettingsPointDifferential covers workspace and team templates with empty visibility, principal/credential classes, canonical unrelated rows and webhook/realtime effects. TestScaleP21SW5SettingsPointFailures preserves private-visibility rejection. requestActor and HTTP authorization remain separate blockers.",
+      "status": "reviewed",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains the original scoped writer, scope/visibility predicate and missing-template refusal on the borrowed legacy facade. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -163,7 +172,8 @@
       "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
       "callers": [
         "DELETE /api/issue-templates/{id} (api/cmd/server/main.go:611)"
-      ]
+      ],
+      "coldDispatch": "server/settings_features.go:deleteWorkspaceIssueTemplate"
     },
     "disconnectIntegration": {
       "owner": "P21",
@@ -310,7 +320,7 @@
     },
     "reorderProjectStatuses": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -320,7 +330,9 @@
       "callers": [
         "POST /api/project-statuses/reorder (server/main.go)",
         "POST /api/project-statuses/reorder (api/cmd/server/main.go:627)"
-      ]
+      ],
+      "coldDispatch": "server/settings_features.go:reorderProjectStatuses",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains exact ID uniqueness/type-rank checks and reordered status snapshots in native projects. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
     },
     "requestActor": {
       "owner": "P21",
@@ -416,8 +428,8 @@
     },
     "updateDocumentTemplate": {
       "owner": "P17",
-      "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. An earlier document template's ContentData can match the later target ID before its own record is visited. Previous review: Writes documentTemplates/id and reads only a supplied nonempty canonical teams/teamId after the existing whitespace normalization; unchanged content and template properties remain on the target. Existing team/name/color validation and no-op behavior are retained. TestScaleP21SW5SettingsPointDifferential compares principal/credential classes, team assignment/clear, invalid/missing/no-op paths, canonical records and event effects; TestScaleP21SW5SettingsPointFailures checks cancellation and explicit oversized-target rollback. HTTP authorization remains independently blocked.",
+      "status": "reviewed",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains the original scoped writer, native team checks, field presence, no-op and timestamp behavior. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -427,7 +439,8 @@
       "callers": [
         "PATCH /api/document-templates/{id} (server/main.go)",
         "PATCH /api/document-templates/{id} (api/cmd/server/main.go:613)"
-      ]
+      ],
+      "coldDispatch": "server/settings_features.go:updateDocumentTemplate"
     },
     "updateIntegration": {
       "owner": "P21",
@@ -471,7 +484,7 @@
     },
     "updateProjectStatus": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -481,7 +494,9 @@
       "callers": [
         "PATCH /api/project-statuses/{id} (server/main.go)",
         "PATCH /api/project-statuses/{id} (api/cmd/server/main.go:625)"
-      ]
+      ],
+      "coldDispatch": "server/settings_features.go:updateProjectStatus",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains type immutability, no-op detection and status snapshots cascaded into native projects. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
     },
     "updateUserSettings": {
       "owner": "P21",
@@ -498,7 +513,7 @@
     },
     "updateWorkspaceIssueTemplate": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -507,7 +522,9 @@
       "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
       "callers": [
         "PATCH /api/issue-templates/{id} (api/cmd/server/main.go:610)"
-      ]
+      ],
+      "coldDispatch": "server/settings_features.go:updateWorkspaceIssueTemplate",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains the literal scope/visibility predicate, native reference checks, no-op and timestamp behavior. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
     },
     "updateWorkspaceLabel": {
       "owner": "P21",

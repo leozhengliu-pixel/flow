@@ -327,6 +327,9 @@ func (p *bootstrapBodyProjection) rawToken(node metadataLogicalNode, path bootst
 }
 
 func bootstrapBodyCollectionSize(ctx context.Context, node metadataLogicalNode) (int, bool, error) {
+	if node.generic {
+		return node.genericCollectionSize(ctx)
+	}
 	cursor := metadataLogicalCursor{node, node.offset + 16, ctx}
 	present, err := cursor.byte()
 	if err != nil || present == 0 {

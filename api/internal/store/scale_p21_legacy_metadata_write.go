@@ -33,6 +33,7 @@ type legacyMetadataWriteField struct {
 	parentBefore, parentNext map[string]metadataLogicalNode
 	full, changed, persist   bool
 	inlineReady              bool
+	scheduleParents          *legacyScheduleParentMap
 }
 
 type legacyMetadataWritePlan struct {
@@ -116,6 +117,13 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 		}
 	}
 	plan := &legacyMetadataWritePlan{store: s, tx: tx, workspace: workspace, workspaceID: stamp.workspaceID, work: work, frames: frames, requested: target, progress: progress}
+	defer func() {
+		for _, field := range plan.fields {
+			if field.scheduleParents != nil {
+				field.scheduleParents.Close()
+			}
+		}
+	}()
 	allowed := map[string]bool{"viewer": true, "users": true, "members": true, "projects": true, "initiatives": true, "labels": true, "projectUpdates": true, "initiativeUpdates": true, "threadSubscriptions": true}
 	if boundary, ok := progress.(legacyMetadataImportBoundary); ok && boundary.legacyImportCompaction() {
 		allowed["importJobs"], allowed["migrationJobs"] = true, true
@@ -221,10 +229,18 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 	var slowNames []string
 	var sessionComplete []*legacyMetadataWriteField
 	var inlineComplete []*legacyMetadataWriteField
+	var parentMaps []*legacyMetadataWriteField
 	var slowBefore, slowTarget domain.Bootstrap
 	slowBefore.Workspace.ID, slowTarget.Workspace.ID = stamp.workspaceID, stamp.workspaceID
 	for _, field := range plan.fields {
 		if !field.persist {
+			continue
+		}
+		if field.scheduleParents != nil {
+			if shapes[field.field.name] != "map" {
+				return nil, ErrConcurrentWrite
+			}
+			parentMaps = append(parentMaps, field)
 			continue
 		}
 		fast := false
@@ -282,6 +298,11 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 		}
 	}
 	var sessionPatch *legacySessionRootPatch
+	for _, field := range parentMaps {
+		if err := plan.writeProjectUpdateScheduleParentMap(ctx, field); err != nil {
+			return nil, err
+		}
+	}
 	for _, field := range sessionComplete {
 		if sessionPatch != nil {
 			return nil, ErrBoundedMetadataCoverage
@@ -402,6 +423,9 @@ func legacyMetadataWriteEqualMode(ctx context.Context, a, b metadataLogicalNode,
 	}
 	if a.blocked || b.blocked || a.unavailable || b.unavailable {
 		return false, ErrBoundedMetadataCoverage
+	}
+	if a.generic || b.generic {
+		return metadataGenericJSONEqual(ctx, a, b)
 	}
 	kind := a.typ.Kind()
 	if a.typ == reflect.TypeFor[time.Time]() {
@@ -770,6 +794,9 @@ func (p *legacyMetadataWritePlan) headers(ctx context.Context, f *legacyMetadata
 }
 
 func (p *legacyMetadataWritePlan) rebase(ctx context.Context, f *legacyMetadataWriteField) error {
+	if handled, err := p.rebaseProjectUpdateScheduleParentMap(ctx, f); handled || err != nil {
+		return err
+	}
 	if f.full {
 		return p.rebaseFull(ctx, f)
 	}

@@ -1,10 +1,11 @@
 {
   "source": "store/oauth_workspace_reads.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "AccountCollections": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Literal wrapper retained. HOT comment-action handlers return through their owned bounded helpers before this accessor; requestAccountSettings reaches it only off mode. SW211 pins the complete server callset, rejects indirect/package-level method references and new callers, and requires the dominating bounded return or off-only branch. Account security, coding/signing and settings callers retain independent COLD facade/publication obligations. The guard passes normal, persistent SQLite twice and race; this HOT closure does not certify cold routing or activation.",
       "accessors": [
         "resident-state"
       ],
@@ -56,7 +57,8 @@
     },
     "TrashSnapshot": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Literal wrapper retained. SW211 pins the complete server callset and requires POST /trash/ dominance in workspace authorization, excluding ordinary HOT middleware; indirect/package-level references and new callers fail the guard. Agent restore and trash restore/purge retain independent COLD facade/publication obligations. Normal, persistent SQLite twice and race guard runs pass. This HOT closure does not certify cold routing or activation.",
       "accessors": [
         "resident-state"
       ],

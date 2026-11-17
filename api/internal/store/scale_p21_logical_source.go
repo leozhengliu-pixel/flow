@@ -51,16 +51,19 @@ type metadataLogicalStorage struct {
 	locations     []*time.Location
 	locationBytes int64
 	bytes         int64
+	genericStore  *SQLiteStore
 }
 
 type metadataLogicalNode struct {
-	source      *metadataLogicalStorage
-	offset      int64
-	size        int64
-	cost        uint64
-	typ         reflect.Type
-	unavailable bool
-	blocked     bool
+	source       *metadataLogicalStorage
+	offset       int64
+	size         int64
+	cost         uint64
+	typ          reflect.Type
+	unavailable  bool
+	blocked      bool
+	generic      bool
+	genericRange bool
 }
 
 type metadataLogicalBuilder struct {
@@ -396,6 +399,9 @@ func (b *metadataLogicalBuilder) patch(n metadataLogicalNode) error {
 	}
 	if n.blocked {
 		cost |= uint64(1) << 62
+	}
+	if n.generic {
+		cost |= metadataLogicalGenericJSON
 	}
 	binary.LittleEndian.PutUint64(data[8:], cost)
 	_, err := b.storage.file.WriteAt(data[:], n.offset)

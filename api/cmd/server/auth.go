@@ -1072,9 +1072,25 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
 		return err == nil && status == "active"
 	}
+	if s.store.BoundedMetadataEnabled() && (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/api/search/filter-suggestions" {
+		_, _, err := s.requestIssueQueryAccess(r)
+		return err == nil
+	}
+	if allowed, handled := s.boundedHotCollectionAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
 	if boundedIssueAuthorizationRequest(r) {
 		_, _, err := s.requestIssueQueryAccess(r)
 		return err == nil
+	}
+	if allowed, handled := s.boundedIssueLabelPointAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
+	if allowed, handled := s.boundedPointResourceAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
+	if allowed, handled := s.boundedTeamResourceAuthorization(r, workspace, userID); handled {
+		return allowed
 	}
 	if boundedSettingsDeletionRequest(r) {
 		data, access, err := s.requestIssueQueryAccess(r)
@@ -1106,6 +1122,9 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 			return err == nil
 		}
 		return true
+	}
+	if allowed, handled := s.boundedMembershipAuthorization(r, workspace, userID); handled {
+		return allowed
 	}
 	var data domain.Bootstrap
 	var ok bool

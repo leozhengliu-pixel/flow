@@ -1,11 +1,11 @@
 {
   "source": "store/scale_p21_sw16_former_members.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "BeginFormerMembersRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Off mode delegates the exact original FormerMembers accessor and preserves nonnil partial/error maps. Bounded mode copies only installed workspace identity, then uses the original membership/departure UNION and active-rejoin precedence in one snapshot; length/count preflight and byte-gated 64-row pages bound driver transfer and the owned map. Owned SQL/parser lifetime ends before return while adaptive output admission stays with FormerMembersRead until idempotent Close. All three production callers retain the handle through full map use; no old bounded map call remains. TestScaleP21SW16FormerMembersHandleLifetime and server CollaborationLease prove real saturation, caller-owned output charge, pool-one SQL detach, failure cleanup and exact off errors. Native M/key request matrix, suspend/rejoin queued/replayed checks, cross-workspace/exact identities and zero full decodes passed twice on one persistent SQLite file. The separately registered development no-membership fallback remains explicitly blocked for proven warm/canonical source divergence.",
+      "reason": "Off mode delegates the exact original FormerMembers accessor and preserves nonnil partial/error maps. Bounded mode uses the original membership/departure UNION and active-rejoin precedence in one snapshot; length/count preflight and byte-gated 64-row pages bound driver transfer and the owned map. SQL/parser lifetime ends before return while adaptive output admission stays with FormerMembersRead until idempotent Close. SW16 covers output charge, pool-one detach, failures, off errors and the permission/revocation matrix. SW211 retains the installed logical source and workspace identity before membership SQL and proves warm/actual-reloaded provenance, native suspended status, cancellation and source ownership.",
       "accessors": [
         "FormerMembers",
         "resident-state"
@@ -13,8 +13,8 @@
     },
     "scaleP21SW16FallbackFormerMembers": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Nonempty no-membership fallback is explicitly held until a logical source adapter can preserve warm inline member IDs/status across full workspace writes. A supported Members delta followed by UpdateWorkspace(Name) retains NUL in the ordinary warm copy while canonical persistence removes it. The bounded raw-only typed fallback cannot reconstruct that source; positive canonical decoding fixtures do not certify activation.",
+      "status": "reviewed",
+      "reason": "The no-membership fallback retains the installed logical source and workspace identity before membership-authority SQL. It streams exact native suspended status and decodes only selected User.ID values under the existing owned map/work limits; unrelated names and bodies remain framed. Membership/departure SQL and active-rejoin precedence stay unchanged. SW211 proves supported Members-delta and UpdateWorkspace warm/actual-reloaded provenance, duplicate/empty/overlong IDs, large names, borrowed snapshots, generation replacement during membership SQL, cancellation and idempotent release. Normal, persistent SQLite twice and race proofs pass; existing SW16 permission/revocation coverage is retained. Off mode uses literal FormerMembers.",
       "accessors": [
         "MetadataCollectionsInSnapshot"
       ],

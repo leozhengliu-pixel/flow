@@ -1,6 +1,6 @@
 {
   "source": "server/issue_records_api.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "createIssueRecord": {
       "owner": "P21",
@@ -17,7 +17,7 @@
     },
     "issueRecordsBootstrapData": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata",
@@ -26,8 +26,10 @@
       "temperature": "hot",
       "temperatureReason": "Metadata bootstrap for paged issue list/detail/board clients.",
       "callers": [
-        "GET /api/issue-records/bootstrap -> issueRecordsBootstrap"
-      ]
+        "GET /api/issue-records/bootstrap -> issueRecordsBootstrap",
+        "server/server.chatAuthorizedMutation (in-process typed bootstrap)"
+      ],
+      "reason": "Literal helper retained. Its only production references are HTTP bootstrap and the in-process chat gateway. Bounded HTTP returns through the owned stream; HOT DM/workflow callers inject a closed owned-header kind and return through that reader before the literal fallback. Generic HOT GETs pass statically declared Issue results, rejected by the checked Bootstrap assertion for a dynamic bootstrap path; the point adapter separately refuses in-process bootstrap. SW225 pins every direct/indirect reference, dispatch return, result type, kind injection, constructor and output lifetime, with alias/shadow/type-versus-method adversaries. Existing SW145 route and SW170/SW174 typed-header differentials prove output semantics. Generic complete-bootstrap COLD callers remain independently pending; no shared store wrapper or activation is certified."
     },
     "issueRecordsQuery": {
       "owner": "P21",

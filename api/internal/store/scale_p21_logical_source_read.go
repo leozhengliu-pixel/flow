@@ -55,7 +55,7 @@ func (c *metadataLogicalCursor) child(t reflect.Type) (metadataLogicalNode, erro
 		return metadataLogicalNode{}, io.ErrUnexpectedEOF
 	}
 	c.offset = start + int64(size)
-	return metadataLogicalNode{source: c.node.source, offset: start, size: int64(size), cost: cost & ((uint64(1) << 62) - 1), typ: t, unavailable: cost&(uint64(1)<<63) != 0, blocked: cost&(uint64(1)<<62) != 0}, nil
+	return metadataLogicalNode{source: c.node.source, offset: start, size: int64(size), cost: cost & metadataLogicalCostMask, typ: t, unavailable: cost&(uint64(1)<<63) != 0, blocked: cost&(uint64(1)<<62) != 0, generic: cost&metadataLogicalGenericJSON != 0}, nil
 }
 
 // Value admits the entire decoded object before allocation. The caller must
@@ -82,6 +82,9 @@ func (n metadataLogicalNode) value(ctx context.Context, depth int) (reflect.Valu
 }
 
 func (n metadataLogicalNode) materialize(ctx context.Context, depth int, wire bool) (reflect.Value, error) {
+	if n.generic {
+		return n.genericValue(ctx)
+	}
 	if wire && n.unavailable && metadataLogicalWireCustomMarshaler(n.typ) {
 		return reflect.Value{}, ErrBoundedMetadataCoverage
 	}
@@ -293,6 +296,9 @@ func (n metadataLogicalNode) Children(ctx context.Context, visit func(reflect.Va
 		return err
 	}
 	defer n.source.Release()
+	if n.generic {
+		return n.genericChildren(ctx, visit)
+	}
 	c := metadataLogicalCursor{n, n.offset + 16, ctx}
 	if n.typ == reflect.TypeFor[time.Time]() {
 		return nil
@@ -370,6 +376,13 @@ func (n metadataLogicalNode) StringEqual(ctx context.Context, want string) (bool
 	if n.typ.Kind() != reflect.String {
 		return false, nil
 	}
+	if n.generic {
+		if err := n.source.Retain(); err != nil {
+			return false, err
+		}
+		defer n.source.Release()
+		return n.genericStringEqual(ctx, want)
+	}
 	if err := n.source.Retain(); err != nil {
 		return false, err
 	}
@@ -408,6 +421,9 @@ func (n metadataLogicalNode) MapEntries(ctx context.Context, visit func(metadata
 		return err
 	}
 	defer n.source.Release()
+	if n.generic {
+		return n.genericMapEntries(ctx, visit)
+	}
 	c := metadataLogicalCursor{n, n.offset + 16, ctx}
 	present, err := c.byte()
 	if err != nil || present == 0 {

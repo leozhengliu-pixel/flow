@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 )
@@ -118,7 +119,7 @@ func scaleP21SW217GenericWrite(t *testing.T, ctx context.Context, repo *SQLiteSt
 }
 
 func TestScaleP21SW217InlineFieldsLiteralDifferential(t *testing.T) {
-	for _, variant := range []string{"ask-5.5MiB", "cycles-20001", "empty-id", "overlong-id", "invalid-UTF8-collision", "ordinary-and-session"} {
+	for _, variant := range []string{"ask-5.5MiB", "cycles-20001", "empty-id", "overlong-id", "invalid-UTF8-collision", "ordinary-and-session", "update-duplicate-5.5MiB", "update-parent-UTF8-collision"} {
 		t.Run(variant, func(t *testing.T) {
 			f, view, before := scaleP21SW77Fixture(t)
 			name := "asks"
@@ -140,10 +141,27 @@ func TestScaleP21SW217InlineFieldsLiteralDifferential(t *testing.T) {
 				before.Asks = []domain.Ask{{ID: string([]byte{0xff}), Title: "first"}, {ID: string([]byte{0xfe}), Title: "later"}}
 			case "ordinary-and-session":
 				before.AgentSessions = []domain.AgentSession{{ID: "same", Title: "first"}, {ID: "same", Title: "later"}}
+			case "update-duplicate-5.5MiB":
+				name = "projectUpdates"
+				before.ProjectUpdates = map[string][]domain.ProjectUpdate{
+					strings.Repeat("p", 192): {{ID: "same", Body: strings.Repeat("x", 11<<19)}, {ID: "same", Body: "later"}},
+				}
+			case "update-parent-UTF8-collision":
+				name = "projectUpdates"
+				before.ProjectUpdates = map[string][]domain.ProjectUpdate{
+					string(bytes.Repeat([]byte{0xfe}, 64)): {{ID: "ignored-unique", Body: "first parent"}},
+					string(bytes.Repeat([]byte{0xff}, 64)): {{ID: "same", Body: strings.Repeat("x", 11<<19)}, {ID: "same", Body: "last parent"}},
+				}
 			}
 			target := cloneBootstrap(before)
 			if name == "cycles" {
 				target.Cycles[0].Name = "changed"
+			} else if name == "projectUpdates" {
+				for parent, updates := range target.ProjectUpdates {
+					due := time.Date(2026, time.November, 16, 12, 0, 0, 0, time.UTC)
+					updates[0].DueAt, updates[0].Missing = &due, true
+					target.ProjectUpdates[parent] = updates
+				}
 			} else {
 				target.Asks[0].Title = "changed <>&"
 			}
@@ -252,6 +270,140 @@ func TestScaleP21SW217InlineEligibilityAndTransitions(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestScaleP21SW217InlineUpdateEligibilityAndTransitions(t *testing.T) {
+	for _, variant := range []string{
+		"nil", "empty-map", "nil-list", "empty-list", "unique", "wide-unique",
+		"ordinary-duplicate", "boundary-parent", "wide-duplicate", "wide-empty-id",
+		"wide-overlong-id", "wide-normalized-id-collision", "normalized-wide-parent",
+		"parent-collision-winner-valid", "parent-collision-winner-invalid", "canonical-row", "split-root",
+	} {
+		t.Run(variant, func(t *testing.T) {
+			f, view, before := scaleP21SW77Fixture(t)
+			parent := strings.Repeat("p", 192)
+			before.ProjectUpdates = map[string][]domain.ProjectUpdate{parent: {{ID: "same"}, {ID: "same"}}}
+			if variant == "split-root" {
+				before.ProjectUpdates = map[string][]domain.ProjectUpdate{parent: {{ID: "first"}, {ID: "second"}}}
+			}
+			target := cloneBootstrap(before)
+			want := false
+			switch variant {
+			case "nil":
+				target.ProjectUpdates = nil
+			case "empty-map":
+				target.ProjectUpdates = map[string][]domain.ProjectUpdate{}
+			case "nil-list":
+				target.ProjectUpdates[parent] = nil
+			case "empty-list":
+				target.ProjectUpdates[parent] = []domain.ProjectUpdate{}
+			case "unique", "wide-unique":
+				target.ProjectUpdates = map[string][]domain.ProjectUpdate{parent: {{ID: "first"}, {ID: "second"}}}
+				if variant == "unique" {
+					target.ProjectUpdates = map[string][]domain.ProjectUpdate{"short": {{ID: "first"}}}
+				}
+			case "ordinary-duplicate":
+				target.ProjectUpdates = map[string][]domain.ProjectUpdate{"short": {{ID: "same"}, {ID: "same"}}}
+			case "boundary-parent":
+				target.ProjectUpdates = map[string][]domain.ProjectUpdate{strings.Repeat("p", 191): {{ID: "same"}, {ID: "same"}}}
+			case "wide-duplicate":
+				want = true
+			case "wide-empty-id":
+				target.ProjectUpdates[parent] = []domain.ProjectUpdate{{ID: ""}}
+				want = true
+			case "wide-overlong-id":
+				target.ProjectUpdates[parent] = []domain.ProjectUpdate{{ID: strings.Repeat("x", 192)}}
+			case "wide-normalized-id-collision":
+				target.ProjectUpdates[parent] = []domain.ProjectUpdate{{ID: string([]byte{0xfe})}, {ID: string([]byte{0xff})}}
+				want = true
+			case "normalized-wide-parent":
+				target.ProjectUpdates = map[string][]domain.ProjectUpdate{
+					string(bytes.Repeat([]byte{0xff}, 64)): {{ID: "same"}, {ID: "same"}},
+				}
+				want = true
+			case "parent-collision-winner-valid", "parent-collision-winner-invalid":
+				first, last := []domain.ProjectUpdate{{ID: "same"}, {ID: "same"}}, []domain.ProjectUpdate{{ID: "unique"}}
+				if variant == "parent-collision-winner-invalid" {
+					first, last, want = last, first, true
+				}
+				target.ProjectUpdates = map[string][]domain.ProjectUpdate{
+					string(bytes.Repeat([]byte{0xfe}, 64)): first,
+					string(bytes.Repeat([]byte{0xff}, 64)): last,
+				}
+			}
+			raw, err := json.Marshal(target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, literalShapes, _, err := splitWorkspaceMetadata(raw)
+			literalWant := want || variant == "canonical-row"
+			if err != nil || (literalShapes["projectUpdates"] == "" && target.ProjectUpdates != nil) != literalWant {
+				t.Fatal("eligibility expectation differs from literal splitter", literalShapes["projectUpdates"], want, err)
+			}
+			tx, ctx := scaleP21SW77Begin(t, f, before)
+			if variant == "canonical-row" {
+				if err := writeMetadataRecordRow(ctx, tx, before.Workspace.URLKey,
+					metadataRecordKey{"projectUpdates", "unexpected"}, metadataRecord{data: []byte(`[]`)}, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, shapes := scaleP21SW217Shapes(t, ctx, tx, before.Workspace.URLKey)
+			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
+			plan, field, release := scaleP21SW217Selected(t, view, tx, before.Workspace.URLKey, before, target, "projectUpdates")
+			ready, err := plan.inlineFieldReady(ctx, field, shapes)
+			release()
+			if err != nil || ready != want || view.MetadataWorkUsedForTesting() != 0 ||
+				metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
+				t.Fatal("inline update eligibility/transition differs or leaked", ready, want, err)
+			}
+			if err := tx.Rollback(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestScaleP21SW217InlineUpdateCancellationAndRelease(t *testing.T) {
+	f, view, before := scaleP21SW77Fixture(t)
+	parent := strings.Repeat("p", 192)
+	before.ProjectUpdates = map[string][]domain.ProjectUpdate{
+		parent: {{ID: "same", Body: strings.Repeat("x", 11<<19)}, {ID: "same"}},
+	}
+	target := cloneBootstrap(before)
+	target.ProjectUpdates[parent][0].Missing = true
+	tx, ctx := scaleP21SW77Begin(t, f, before)
+	defer tx.Rollback()
+	plan, field, release := scaleP21SW217Selected(t, view, tx, before.Workspace.URLKey, before, target, "projectUpdates")
+	defer release()
+	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
+	_, shapes := scaleP21SW217Shapes(t, ctx, tx, before.Workspace.URLKey)
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	ready, err := plan.inlineFieldReady(cancelled, field, shapes)
+	if ready || !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled update eligibility changed error", ready, err)
+	}
+	limit := view.metadataResidency.work.limit
+	view.metadataResidency.work.limit = logicalJSONStreamWork / 2
+	ready, err = plan.inlineFieldReady(ctx, field, shapes)
+	view.metadataResidency.work.limit = limit
+	if ready || !errors.Is(err, ErrMetadataWorkBudget) {
+		t.Fatal("update eligibility bypassed admission", ready, err)
+	}
+	ready, err = plan.inlineFieldReady(ctx, field, shapes)
+	if err != nil || !ready {
+		t.Fatal("update eligibility did not recover", ready, err)
+	}
+	patch, err := plan.prepareInlineFields(ctx, []*legacyMetadataWriteField{field})
+	if err != nil {
+		t.Fatal(err)
+	}
+	patch.Close()
+	patch.Close()
+	if view.MetadataWorkUsedForTesting() != 0 || metadataLogicalDiskUsed.Load() != disk ||
+		metadataLogicalDescriptorsUsed.Load() != descriptors {
+		t.Fatal("inline update eligibility/preparation leaked admission or spool")
 	}
 }
 

@@ -68,6 +68,9 @@ func (n metadataAggregateStoredNode) mapValue(ctx context.Context, want string) 
 }
 
 func (n metadataAggregateStoredNode) mapValues(ctx context.Context, visit func(metadataAggregateNode) error) error {
+	if n.value.generic {
+		return n.value.genericMapValues(ctx, visit)
+	}
 	return n.value.MapEntries(ctx, func(_, value metadataLogicalNode) error {
 		return visit(metadataAggregateStoredNode{value})
 	})

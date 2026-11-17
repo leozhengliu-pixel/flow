@@ -457,6 +457,16 @@ func (r *WebhookAggregateRead) omitted(ctx context.Context, node metadataLogical
 	if !field.empty && !field.zero {
 		return false, nil
 	}
+	if node.generic {
+		empty, err := node.genericEmpty(ctx, false)
+		if err != nil || field.empty && empty {
+			return empty, err
+		}
+		if field.zero {
+			return node.genericEmpty(ctx, true)
+		}
+		return false, nil
+	}
 	if field.empty {
 		cursor := metadataLogicalCursor{node, node.offset + 16, ctx}
 		switch node.typ.Kind() {

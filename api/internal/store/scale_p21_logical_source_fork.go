@@ -11,6 +11,12 @@ import (
 )
 
 func (b *metadataLogicalBuilder) copyNode(node metadataLogicalNode) (metadataLogicalNode, error) {
+	if b.storage.genericStore == nil {
+		b.storage.genericStore = node.source.genericStore
+	}
+	if node.generic && node.genericRange {
+		return b.writeGenericJSONPart(node.typ, node.genericPart(), node.cost)
+	}
 	start := b.offset
 	count, err := io.CopyBuffer(metadataLogicalWriter{b}, io.NewSectionReader(node.source.file, node.offset, node.size), b.buffer[:])
 	if err != nil {
@@ -307,6 +313,10 @@ func (n metadataLogicalNode) isNil(ctx context.Context) (bool, error) {
 	if n.typ.Kind() != reflect.Slice && n.typ.Kind() != reflect.Map && n.typ.Kind() != reflect.Pointer && n.typ.Kind() != reflect.Interface {
 		return false, nil
 	}
+	if n.generic {
+		prefix, err := metadataGenericJSONPrefix(ctx, n.genericPart())
+		return prefix == 'n', err
+	}
 	c := metadataLogicalCursor{n, n.offset + 16, ctx}
 	present, err := c.byte()
 	return present == 0, err
@@ -330,6 +340,9 @@ func (n metadataLogicalNode) StreamBytes(ctx context.Context, visit func(io.Read
 		return err
 	}
 	defer n.source.Release()
+	if n.generic {
+		return n.genericStreamBytes(ctx, visit)
+	}
 	c := metadataLogicalCursor{n, n.offset + 16, ctx}
 	if n.typ.Kind() == reflect.Slice && n.typ.Elem().Kind() == reflect.Uint8 {
 		present, err := c.byte()

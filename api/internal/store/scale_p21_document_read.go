@@ -333,6 +333,11 @@ func (r *DocumentRead) documentProjectionWork(ctx context.Context, accessWorkspa
 func (r *DocumentRead) documentProjectionRows(ctx context.Context, columns []string, from string, args ...any) error {
 	length := "0"
 	for _, column := range columns {
+		// Projection columns include numeric scalars; PostgreSQL's byte
+		// length function accepts text or bytea, without implicit casts.
+		if r.owner.store.dialect == "postgres" {
+			column = "CAST(" + column + " AS TEXT)"
+		}
 		length += "+COALESCE(" + r.owner.byteLength(column) + ",0)"
 	}
 	var count, size int64
