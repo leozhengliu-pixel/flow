@@ -1020,6 +1020,8 @@ type scaleP21SW286Boundary struct {
 var scaleP21SW286Boundaries = map[string]scaleP21SW286Boundary{
 	"server/server.startLoopRun->server/server.executeLoopRun": {mode: "async",
 		reason: "the loop AI run (model and tool calls: executeLoopRun -> runToolCall -> callFlowTool -> runFlowTool, COLD in the inventory) runs on its worker after the HOT start boundary"},
+	"server/server.startBoundedLoopRun->server/server.executeLoopRun": {mode: "async",
+		reason: "the loop AI run (model and tool calls: executeLoopRun -> runToolCall -> callFlowTool -> runFlowTool, COLD in the inventory) runs on its worker after the HOT start boundary"},
 	"server/server.chatDMAgentCall->server/server.createAgentSessionStream": {mode: "handler",
 		reason: "chat DM agent chat is POST /api/agent/sessions/stream, a COLD agent-session route"},
 	"server/server.chatDMAgentCall->server/server.createAgentSessionMessageStream": {mode: "handler",
@@ -1099,18 +1101,10 @@ var scaleP21SW286Allowed = map[string]scaleP21SW286Allowance{
 		owner: "swarm: integration delivery", reason: "every-tick integration delivery reads the workspace metadata for the delivery's integration"},
 	"server/server.startWorkflowScheduler": {wrappers: []string{"WorkspaceMetadataFields"},
 		owner: "swarm: workflow", reason: "15-second workflow ticker reads workflow definitions and runs"},
-	"server/server.startLoopRun": {wrappers: []string{"WorkspaceMetadataFields"},
-		owner: "lead: loop run (review/scale-p21-loop-run)", reason: "HOT trigger dispatch and the due-loop tick start runs from the loop entity fields"},
-	"server/server.attachmentVisible": {wrappers: []string{"WorkspaceMetadata", "WorkspaceMetadataForRead"},
-		owner: "lead: upload visibility (fix/loop-attachment-visibility)", reason: "GET /uploads/{name} and file signing authorize loop/customer/update/document/session/project attachments"},
-	"server/server.generateCommentActions": {wrappers: []string{"WorkspaceMetadata", "WorkspaceMetadataForRead"},
-		owner: "lead: comment actions (review/scale-p21-comment-actions)", reason: "the asynchronous AI child of the HOT create-comment path reads the workspace metadata"},
 	"server/server.refuseFormerMemberCollaborationUpdate": {wrappers: []string{"WorkspaceMetadata", "WorkspaceMetadataForRead"},
 		owner: "swarm: former members", reason: "collaboration frames of a standalone document read socketWorkspaceMetadata, whose development-mode branch is WorkspaceMetadata"},
 	"server/server.oauthApplicationsByClient": {wrappers: []string{"WorkspaceMetadataFields"},
 		owner: "unowned (reported)", reason: "the once-a-minute HOT delivery tick (reconcileAllApplicationWebhooks) and HOT dispatchWebhookEvent (application, OAuth authorization and team lifecycle events, on its own goroutine) index every workspace's OAuth applications"},
-	"server/server.reconcileApplicationWebhooksWith": {wrappers: []string{"WorkspaceMetadataFields"},
-		owner: "unowned (reported)", reason: "the same two HOT paths reconcile each workspace's managed application webhooks from its webhooks, OAuth authorizations, teams and team settings"},
 }
 
 func scaleP21SW286Cut(ref scaleP21SW286Ref) bool {
