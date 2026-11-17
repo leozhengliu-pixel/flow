@@ -5,7 +5,7 @@
     "BeginLoopRunStartRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Owned installed read for one loop run start on the same physical/default registry choice as WorkspaceMetadataFields: workspace URLKey, the loops feature flag map and the complete native first loop with the requested ID; LoadEntity adds only the first ID match's label fields (project/initiative/release/team name, cycle name and number) from the same pinned generation at the original post-guard point. The pin is released at Close; the decoded loop's allowance stays charged through every ExecutionLease (local run goroutine) and MutationContext binds the stamp inputs to that lifetime. TestScaleP21SW262LoopRunStartReadLifetimes covers physical/default/missing keys, duplicate loop/project occurrences, body omission, concurrent leases, late lease/context/entity refusal after Close, idempotent release, cancellation and partial-quota cleanup with zero full decodes; TestScaleP21SW260LoopRunStartDifferential exercises it through actual starts.",
+      "reason": "Owned installed read for one loop run start on the same physical/default registry choice as WorkspaceMetadataFields: workspace URLKey, the loops feature flag map and the complete native first loop with the requested ID; LoadEntity adds only the first ID match's label fields (project/initiative/release/team name, cycle name and number) from the same pinned generation at the original post-guard point. The pin is released at Close; the decoded loop's allowance stays charged through every ExecutionLease (local run goroutine) and MutationContext binds the stamp inputs to that lifetime. TestScaleP21SW262LoopRunStartReadLifetimes covers physical/default/missing keys, duplicate loop/project occurrences, body omission, concurrent leases, late lease/context/entity refusal after Close, idempotent release, cancellation and partial-quota cleanup with zero full decodes; TestScaleP21SW260LoopRunStartDifferential exercises it through actual starts. A first loop above 256 KiB native cost is decoded member by member (largeRowHeader without framed bodies), each member admitted at its own native cost, so its allowance is one native copy of the loop instead of eight; TestScaleP21SW420LargeLoopRunStampDifferential holds the read over 11-15 MiB stamps.",
       "accessors": [
         "BeginInstalledMetadataRead"
       ],
@@ -18,15 +18,41 @@
     "MutateLoopRunStart": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Off mode is the literal MutateWorkspace with the loops/loopVersions field snapshot. Bounded mode is one closed loop.run_started transaction under writeMu/coordinator lock: it selects, from the current installed generation (not the start read's pin), the workspace ID, the first loop with the ID and that loop's versions as ID/LoopID/Version headers in native order (bodies never decoded); only a loop without versions is read whole for its v1. The unchanged server callback (ensureLoopVersion, LastRunAt) may change only the loop's Version/VersionID/LastRunAt and append that loop's v1; the stored occurrence is patched by ordinal and the v1 appended after every version, then written through the existing legacy metadata image persistence/publication with the original event, previous values, realtime enrichment and account write, retried on conflicts. TestScaleP21SW261LoopRunStampDifferential compares canonical loops/loopVersions rows, root, stored events and published webhook/realtime bytes warm and reloaded for create-v1, latest-version ties among 43 retained bodies (stamp work stays under 4 MiB), draft, missing loop, duplicate loop occurrences, v1-ID collision with another loop's version, a 280 KiB loop v1, an empty collection, and refuses callback edits outside the closure; TestScaleP21SW261LoopRunStampReadsCurrentVersions proves a version published after the start read is the one recorded and no v1 is appended next to it. Known limit: the shared legacy row rebase reserves 64x the loop row, so loops above roughly 400 KiB of instructions are refused with ErrMetadataWorkBudget (the reviewed setLoopNextRun scoped writer already refuses from 256 KiB).",
+      "reason": "Off mode is the literal MutateWorkspace with the loops/loopVersions field snapshot. Bounded mode is one closed loop.run_started transaction (mutateLoopStamp) under writeMu/coordinator lock: it selects, from the current installed generation (not the start read's pin), the workspace ID, the first loop with the ID and that loop's versions as ID/LoopID/Version headers in native order (bodies never decoded); only a loop without versions is read whole for its v1. The unchanged server callback (ensureLoopVersion, LastRunAt) may change only the loop's Version/VersionID/LastRunAt and append that loop's v1; the stored occurrence is patched by ordinal and the v1 appended after every version, then written through the existing legacy metadata image persistence/publication with the original event, previous values, realtime enrichment and account write, retried on conflicts. TestScaleP21SW261LoopRunStampDifferential compares canonical loops/loopVersions rows, root, stored events and published webhook/realtime bytes warm and reloaded for create-v1, latest-version ties among 43 retained bodies (stamp work stays under 4 MiB), draft, missing loop, duplicate loop occurrences, v1-ID collision with another loop's version, a 280 KiB loop v1, an empty collection, and refuses callback edits outside the closure; TestScaleP21SW261LoopRunStampReadsCurrentVersions proves a version published after the start read is the one recorded and no v1 is appended next to it. A loop above 256 KiB is read member by member at its native cost, the callback copies are admitted without the loop's large top-level strings (the clone and the v1 share them), the loop row takes the large-row kernels and a v1 that is its collection's first record takes the large first-records kernel (root shape through the slow writer from ID-only stand-ins, rows through writeLargeRow). TestScaleP21SW420LargeLoopRunStampDifferential (start read held as the server holds it) compares rows, search documents, root, events, webhooks and realtime warm and reloaded at the literal maxima: first version 7 MiB and 11 MiB, a v1 appended after another loop's version at 11 MiB, a 15 MiB loop that already has a version, 13 MiB (both refuse with ErrTransactionWriteBudget), and peers that rename the loop, stamp it (conflict retried), replace its 4 MiB instructions or stamp a loop with a version; peak admitted work 72 MB at 7 MiB, 112 MB at 11 MiB, 121 MB at 15 MiB, 133 MB at the 13 MiB refusal (previously refused from ~400 KiB).",
       "accessors": [
-        "MutateWorkspace",
-        "storedWorkspace"
+        "MutateWorkspace"
       ],
       "temperature": "hot",
       "temperatureReason": "loop.run_started metadata transaction of actual HOT loop starts.",
       "callers": [
         "server/scale_p21_loop_run_start.go:startBoundedLoopRun"
+      ]
+    },
+    "MutateLoopNextRun": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Off mode is the literal MutateWorkspace with the loops field snapshot and the loop.scheduled event (setLoopNextRun's original off call). Bounded mode is mutateLoopStamp's closed transaction with the callback's inputs owned by the call: the workspace ID and the first loop with the ID (ID only); the unchanged server callback may change only that loop's NextRunAt, which is patched into the stored occurrence by ordinal and written through the legacy metadata image persistence (a loop row above 256 KiB through the large-row kernels) with the original event, previous values, webhook and realtime publication, retried on conflicts. TestScaleP21SW421LoopNextRunDifferential compares setLoopNextRun and the store call with the literal stamp byte for byte (loop rows, search documents, root, events, webhooks, realtime) warm and reloaded: small, named time zone, unchanged value, 300 KiB, 4 MiB and 15 MiB loops, duplicate occurrences, a missing loop, peers that rename the loop or set its next run (conflict retried) and a 17 MiB row the literal writer refuses with ErrTransactionWriteBudget (the scoped writer it replaces refused from 256 KiB).",
+      "accessors": [
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Due-loop ticker schedule bookkeeping.",
+      "callers": [
+        "server/loop_runtime.go:setLoopNextRun"
+      ]
+    },
+    "mutateLoopStamp": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The bounded transaction shared by MutateLoopRunStart and MutateLoopNextRun (see their reviews): storedWorkspace only confirms the workspace exists before the closed stamp inputs are selected from the current installed generation; nothing is decoded whole.",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "loop.run_started and loop.scheduled metadata transactions.",
+      "callers": [
+        "store/scale_p21_loop_run_start.go:MutateLoopRunStart",
+        "store/scale_p21_loop_run_start.go:MutateLoopNextRun"
       ]
     }
   }

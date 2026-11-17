@@ -129,7 +129,8 @@ func (s *SQLiteStore) writeLegacyMetadataSlowFields(ctx context.Context, tx *sql
 			shapes[name] = shape
 		}
 	}
-	if err := syncMetadataRecords(withLegacyMetadataDeltaReadBudget(ctx, work), tx, workspace, refs, shapes, wanted, names, knownRecords); err != nil {
+	syncWanted, syncNames := largeRowSyncFields(ctx, wanted, names)
+	if err := syncMetadataRecords(withLegacyMetadataDeltaReadBudget(ctx, work), tx, workspace, refs, shapes, syncWanted, syncNames, knownRecords); err != nil {
 		return false, err
 	}
 	patch := func(root map[string]json.RawMessage, storedShapes map[string]string) ([]byte, error) {
