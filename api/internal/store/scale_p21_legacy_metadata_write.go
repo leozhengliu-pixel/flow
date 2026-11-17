@@ -854,6 +854,9 @@ func (p *legacyMetadataWritePlan) rebaseRow(ctx context.Context, f *legacyMetada
 	if handled, err := p.rebaseWorkflowRunStreamRow(ctx, f, index); handled || err != nil {
 		return err
 	}
+	if handled, err := p.rebaseLargeRow(ctx, f, index); handled || err != nil {
+		return err
+	}
 	row := &f.rows[index]
 	work := &ResourceRead{store: p.store}
 	defer work.Close()
@@ -1468,6 +1471,9 @@ func (p *legacyMetadataWritePlan) writeArray(ctx context.Context, f *legacyMetad
 			return err
 		}
 		if handled, err := p.writeWorkflowRunStreamRow(ctx, f, row, order); handled || err != nil {
+			return err
+		}
+		if handled, err := p.writeLargeRow(ctx, f, row, order); handled || err != nil {
 			return err
 		}
 		work := &ResourceRead{store: p.store}
