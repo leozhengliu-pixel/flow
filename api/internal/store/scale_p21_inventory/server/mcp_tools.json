@@ -1,10 +1,11 @@
 {
   "source": "server/mcp_tools.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "mcpWorkspaceData": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Closed by caller reachability, literal body unchanged. SW271 pins the callset: the four HOT triage callers (preview/list/update suggestion routes, requestTriageAIPlan) dispatch to their owned projections before it with the flag on; the eight other callers are COLD MCP/agent tools whose flag-on reverse walks meet no HOT-classified consumer except through the pinned AI-run boundaries. mcpWorkspaceDataFrom is referenced only by this wrapper and by mcpWorkspaceDataProjected, which passes installed projections, never PagedWorkspaceMetadata.",
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata"

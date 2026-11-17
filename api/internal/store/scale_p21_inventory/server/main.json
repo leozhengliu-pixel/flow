@@ -1037,7 +1037,8 @@
     },
     "workspaceData": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Closed by caller reachability, literal body unchanged (flag-off byte-identical). SW270 type-checks this package and pins the complete direct/indirect callset: no function-value, route or package-level capture; 17 HOT callers (18 references) reach it only flag-off (then-branch of !BoundedMetadataEnabled, else-branch of BoundedMetadataEnabled, or after a terminating BoundedMetadataEnabled dispatch, including serveDocumentRecordList's flag-on true return); findIssueForPermissions is reached with the flag on only by COLD permission writes because the HOT GET/HEAD list now answers from its retained bounded read (listIssuePermissionsBounded; SW274 GET/HEAD differential with a no-statement-inside-wrapper probe); the 113 remaining callers are COLD in this inventory and a flag-on reverse walk from each meets no HOT-classified consumer except through the pinned AI-run worker handoff and in-process agent-route dispatch boundaries.",
       "accessors": [
         "Bootstrap",
         "BootstrapFor",

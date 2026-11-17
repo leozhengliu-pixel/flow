@@ -1,10 +1,11 @@
 {
   "source": "server/scale_p15_heap.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "hydratedLegacySnapshotReservation": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Own bounded branch: with the flag on the estimator returns the fixed HydratedSnapshotReservationMaxBytes, exactly what WorkspaceReadSnapshotReservation answers for a bounded store, without its store lock or workspace read; flag off is unchanged. SW272 pins the only reference (signedFileURLs' admission estimator value) and the flag-off-only store accessor; SW274 compares the branch with the store estimator for bounded/literal stores and present/default/missing keys and admits a bounded bootstrap.",
       "accessors": [
         "WorkspaceReadSnapshotReservation"
       ],

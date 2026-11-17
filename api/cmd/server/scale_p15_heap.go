@@ -98,8 +98,15 @@ func boundHydratedLegacyDownloads(next http.Handler, estimates ...func(*http.Req
 	})
 }
 
+// hydratedLegacySnapshotReservation estimates a compatibility download's
+// admission. A bounded store keeps no hydrated workspace graph to measure:
+// its estimate is the fixed maximum, which is what the store's own estimator
+// answers for it, without taking the store lock or reading the workspace.
 func (s *server) hydratedLegacySnapshotReservation(r *http.Request) int64 {
 	if s.store != nil {
+		if s.store.BoundedMetadataEnabled() {
+			return store.HydratedSnapshotReservationMaxBytes
+		}
 		return s.store.WorkspaceReadSnapshotReservation(workspaceKey(r))
 	}
 	if bytes, ok := r.Context().Value(hydratedLegacyEstimateKey{}).(int64); ok {

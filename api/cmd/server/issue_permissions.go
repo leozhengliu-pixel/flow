@@ -102,19 +102,9 @@ func (s *server) findIssueForPermissions(r *http.Request) (*domain.Bootstrap, *d
 }
 
 func (s *server) listIssuePermissions(w http.ResponseWriter, r *http.Request) {
-	if s.store.BoundedMetadataEnabled() && boundedIssuePermissionReadRequest(r) && strings.HasPrefix(r.URL.Path, "/api/issues/") {
-		if read, ok := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); !ok || read == nil {
-			if _, _, err := s.boundedIssueWriteAuthorizationMetadata(r); err != nil {
-				if r.Context().Err() != nil {
-					issueRecordsError(w, r.Context().Err())
-				} else if errors.Is(err, store.ErrMetadataWorkBudget) || errors.Is(err, store.ErrMetadataPageBudget) || errors.Is(err, store.ErrBoundedMetadataCoverage) {
-					writeError(w, http.StatusServiceUnavailable, "Issue permissions are temporarily unavailable")
-				} else {
-					issueRecordsError(w, err)
-				}
-				return
-			}
-		}
+	if s.store.BoundedMetadataEnabled() {
+		s.listIssuePermissionsBounded(w, r)
+		return
 	}
 	data, issue, ok := s.findIssueForPermissions(r)
 	if !ok || issueRole(s, *data, *issue) == "none" {
@@ -122,6 +112,47 @@ func (s *server) listIssuePermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, slices.Clone(issue.Permissions))
+}
+
+// listIssuePermissionsBounded answers the permission list from the retained
+// bounded issue authorization read only and never reaches workspaceData. A GET
+// pattern also serves HEAD; a HEAD reads exactly what its GET reads, so it is
+// classified, and acquires its read, as that GET. The issue-record alias hands
+// a GET its full-permission read; for a HEAD the alias retains only its
+// general authorization read (permission IDs without their fields), so a HEAD
+// always acquires the full-permission read here.
+func (s *server) listIssuePermissionsBounded(w http.ResponseWriter, r *http.Request) {
+	head := r.Method == http.MethodHead
+	if head {
+		r.Method = http.MethodGet
+		defer func() { r.Method = http.MethodHead }()
+	}
+	permissionRead := boundedIssuePermissionReadRequest(r)
+	read, retained := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead)
+	if permissionRead && (head || (!retained || read == nil) && strings.HasPrefix(r.URL.Path, "/api/issues/")) {
+		if _, _, err := s.boundedIssueWriteAuthorizationMetadata(r); err != nil {
+			if r.Context().Err() != nil {
+				issueRecordsError(w, r.Context().Err())
+			} else if errors.Is(err, store.ErrMetadataWorkBudget) || errors.Is(err, store.ErrMetadataPageBudget) || errors.Is(err, store.ErrBoundedMetadataCoverage) {
+				writeError(w, http.StatusServiceUnavailable, "Issue permissions are temporarily unavailable")
+			} else {
+				issueRecordsError(w, err)
+			}
+			return
+		}
+		read, retained = r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead)
+	}
+	var data domain.Bootstrap
+	if permissionRead && retained && read != nil {
+		data = read.Data
+	}
+	id := r.PathValue("id")
+	index := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == id })
+	if index < 0 || issueRole(s, data, data.Issues[index]) == "none" {
+		writeError(w, http.StatusNotFound, "issue not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, slices.Clone(data.Issues[index].Permissions))
 }
 
 func validIssuePermission(data domain.Bootstrap, permission domain.IssuePermission) bool {
