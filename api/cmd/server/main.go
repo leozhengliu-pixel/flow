@@ -5748,7 +5748,11 @@ func (s *server) serveUpload(w http.ResponseWriter, r *http.Request) {
 	if !s.authDisabled {
 		user := authUser(r)
 		account, err := s.store.AccountForUser(r.Context(), user.ID)
-		if err != nil || !s.attachmentVisible(r.Context(), account, user.ID, "/uploads/"+name) {
+		ctx, refused := withUploadVisibilityRefusal(r.Context())
+		if err != nil || !s.attachmentVisible(ctx, account, user.ID, "/uploads/"+name) {
+			if err == nil && readLeafBusy(w, refused()) {
+				return
+			}
 			http.NotFound(w, r)
 			return
 		}
@@ -5797,6 +5801,9 @@ func safeInlineUploadType(value string) bool {
 }
 
 func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBootstrap, userID, url string) bool {
+	if s.store.BoundedMetadataEnabled() {
+		return s.boundedAttachmentVisible(ctx, account, userID, url)
+	}
 	if agentUploadVisible(userID, url) {
 		return true
 	}

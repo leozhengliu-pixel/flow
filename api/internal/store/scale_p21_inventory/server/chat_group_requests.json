@@ -1,12 +1,13 @@
 {
   "source": "server/chat_group_requests.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "executeChatGroupRequest": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads the reviewed typed workflow header contract (chatAuthorizedWorkflowHeaders) instead of the generic typed bootstrap; flag off that wrapper is the same literal generic call, bounded it owns the read through beginIssueRecordsBootstrapRead. Its metadata uses (chatLanguage, chatFileRequest) are exactly the fields the reviewed processChatRequest path already takes from that contract. SW267 compares legacy and bounded tool results, errors, canonical rows, events, webhooks, realtime, chat jobs/requests and platform calls for success, invalid input, expired consent, an existing request and disabled requests, with zero full decodes and no retained work.",
       "accessors": [
-        "Bootstrap",
+        "chatAuthorizedWorkflowHeaders",
         "chatAuthorizedMutation"
       ],
       "temperature": "cold",

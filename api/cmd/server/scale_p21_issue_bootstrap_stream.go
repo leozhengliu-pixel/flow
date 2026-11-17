@@ -63,7 +63,7 @@ func (s *server) beginIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.R
 			writeError(w, http.StatusNotFound, "workspace not found")
 			return nil, false
 		}
-		issueRecordsError(w, err)
+		issueBootstrapError(w, err)
 		return nil, false
 	}
 	defer func() {
@@ -78,7 +78,7 @@ func (s *server) beginIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.R
 	data.IssueCollectionPaged = true
 	data.CommentActions = nil
 	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
-		issueRecordsError(w, err)
+		issueBootstrapError(w, err)
 		return nil, false
 	}
 	if projectListBootstrapRequested(r) {
@@ -86,15 +86,15 @@ func (s *server) beginIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.R
 	} else if r.Header.Get("X-Flow-Projection") == "issue-detail" {
 		store.IssueDetailBootstrapProjection(&data)
 	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
-		issueRecordsError(w, err)
+		issueBootstrapError(w, err)
 		return nil, false
 	}
 	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
-		issueRecordsError(w, err)
+		issueBootstrapError(w, err)
 		return nil, false
 	}
 	if err := scaleP21SanitizeBootstrap(r.Context(), &data, read.StreamString); err != nil {
-		issueRecordsError(w, err)
+		issueBootstrapError(w, err)
 		return nil, false
 	}
 	s.applyCalendarAway(r.Context(), &data)
@@ -103,4 +103,13 @@ func (s *server) beginIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.R
 	data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
 	read.Data = data
 	return read, true
+}
+
+// issueBootstrapError answers a bounded work refusal like the other bounded
+// reads (503 with Retry-After); the original accessors had no budget. Every
+// other failure keeps the original response.
+func issueBootstrapError(w http.ResponseWriter, err error) {
+	if !readLeafBusy(w, err) {
+		issueRecordsError(w, err)
+	}
 }

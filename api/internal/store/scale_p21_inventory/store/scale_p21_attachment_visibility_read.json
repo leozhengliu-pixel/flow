@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_attachment_visibility_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginAttachmentVisibilityRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns one installed generation for the upload visibility check through the shared bootstrap body adapter: every attachment-bearing root (loops, loopAttachments, customerRequests, project/initiative updates without snapshots, documents, agentSessions, projects, initiatives, reviews) is projected as typed headers with opaque bodies; the five external collections, provider jobs, comment actions, loop runs and loop versions are never materialized. Work is admitted before use and released on Close. SW268 compares the actual GET /uploads/{name} route and fileReadable for every family on legacy and bounded warm/SQL-reloaded sources with zero full decodes and no retained work.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Owned source for upload visibility in GET /uploads/{name} and signed file reads.",
+      "callers": ["server/server.boundedWorkspaceAttachmentVisible"]
+    },
+    "Project": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Runs the literal PagedWorkspaceMetadata over a borrowed SQL snapshot whose metadata is this read's own projected generation, after admitting the same live directory/principal rows, policy memo and ResolveAccess as BeginIssueBootstrapRead, followed by the trailing ValidateAccess authority check. The result shares the read's lifetime. SW268 proves the viewer projection's customer request, project/initiative update, document, agent session, project/initiative/review comment visibility for owner/admin/private-team/member/guest/sub-team/app principals and a second membership.",
+      "accessors": ["PagedWorkspaceMetadata"],
+      "temperature": "hot",
+      "temperatureReason": "Viewer projection for upload visibility.",
+      "callers": ["server/server.boundedWorkspaceAttachmentVisible"]
+    }
+  }
+}

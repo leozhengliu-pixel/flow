@@ -108,7 +108,7 @@ func (s *server) executeChatGroupRequest(ctx context.Context, workspace string, 
 	}
 	ctx = withChatIdentityAuthentication(ctx, identity)
 	var metadata domain.Bootstrap
-	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata); err != nil {
+	if err := s.chatAuthorizedWorkflowHeaders(ctx, record.WorkspaceKey, identity.UserID, &metadata); err != nil {
 		if _, transient := chatMutationCode(err, ""); transient != nil {
 			return nil, transient
 		}
