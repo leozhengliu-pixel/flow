@@ -1,6 +1,6 @@
 {
   "source": "server/application_webhooks.go",
-  "unmigrated": 5,
+  "unmigrated": 3,
   "consumers": {
     "applicationWebhookDataScoped": {
       "owner": "P21",
@@ -42,31 +42,36 @@
     },
     "oauthApplicationsByClient": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "temperature": "hot",
+      "temperatureReason": "HOT by reach: the delivery scheduler tick (processDueDeliveries -> reconcileAllApplicationWebhooks, every minute) and dispatchWebhookEvent on application, OAuth and team lifecycle events reach it.",
       "callers": [
-        "server/application_webhooks.go:reconcileAllApplicationWebhooks -> oauthApplicationsByClient",
-        "server/application_webhooks.go:reconcileApplicationWebhooks -> oauthApplicationsByClient"
-      ]
+        "server/application_webhooks.go:applicationWebhookClients -> oauthApplicationsByClient",
+        "processDueDeliveries -> reconcileAllApplicationWebhooks -> applicationWebhookClients",
+        "dispatchWebhookEvent -> reconcileApplicationWebhooks -> applicationWebhookClients"
+      ],
+      "reason": "Off mode retains the literal per-workspace WorkspaceMetadataFields(oauthApplications) index. Bounded, applicationWebhookClients takes BeginApplicationWebhookClientsRead: WorkspaceKeys order, each installed oauthApplications collection in order through the reviewed WebhookDeliveryRead owner, projecting only ID/ClientID/Name/WebhookEnabled/WebhookURL/WebhookResourceTypes (the fields the reconcile reads), so a client ID in several workspaces (or twice in one) maps to the last exactly as before; the owned index is held until the reconcile batch ends and a refused admission skips the reconcile instead of hydrating. TestScaleP21SW295ApplicationWebhookClients compares legacy, warm and SQL-reloaded indexes (missing, duplicate, multi-workspace and secret/description-bearing apps) with zero retained work; TestScaleP21SW295ApplicationWebhookReconcileDifferential runs it under every reconcile."
     },
     "reconcileApplicationWebhooksWith": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
         "WorkspaceMetadataFields"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "temperature": "hot",
+      "temperatureReason": "HOT by reach: every-minute delivery tick (processDueDeliveries -> reconcileAllApplicationWebhooks) and dispatchWebhookEvent on application, OAuth and team lifecycle events.",
       "callers": [
-        "server/application_webhooks.go:reconcileAllApplicationWebhooks -> reconcileApplicationWebhooksWith",
-        "server/application_webhooks.go:reconcileApplicationWebhooks -> reconcileApplicationWebhooksWith"
-      ]
+        "processDueDeliveries -> reconcileAllApplicationWebhooks -> reconcileApplicationWebhooksWith",
+        "dispatchWebhookEvent -> reconcileApplicationWebhooks -> reconcileApplicationWebhooksWith",
+        "server/application_uninstall.go -> reconcileApplicationWebhooks",
+        "server/settings_features.go -> reconcileApplicationWebhooks"
+      ],
+      "reason": "Off mode retains WorkspaceMetadataFields and the literal MutateWorkspace(webhooks) callback (now a named variable, unchanged). Bounded, BeginApplicationWebhookReconcileRead (reviewed WebhookDeliveryRead owner) hands exactly what the reconcile reads: workspace ID, every ManagedBy=application hook whole in order, live grants (RevokedAt nil, non-empty client) as ordered client/user headers (first installer per client unchanged) and the IDs of non-private, non-archived, non-retired teams in order; ListApplications runs under the reviewed applicationOutputContext owner; the unchanged callback writes through MutateWorkspaceScoped with the complete webhooks field and the same WithMetadataFields context, event, aggregate and payload. Revocation/permission deliveries and cancellation are unchanged. A refused read logs and skips. TestScaleP21SW295ApplicationWebhookReconcileDifferential compares legacy, warm and SQL-reloaded results for one workspace, 24 applications, reconcile-all, unchanged, nothing installed, seven lifecycle events through dispatchWebhookEvent and concurrent reconciles with an install: every metadata row (new hooks' map-order positions normalized), queued deliveries, departures, events, webhooks/realtime publications, installed delta and reload, the bounded image equal to a reload, zero full decodes and released work; Tier A persistent SQLite x2 and race."
     },
     "rotateApplicationWebhookSecret": {
       "owner": "P21",

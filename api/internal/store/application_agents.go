@@ -242,6 +242,9 @@ func (s *SQLiteStore) writeApplicationInstallationTx(ctx context.Context, tx *sq
 	if err = ensureOAuthMetadataShape(ctx, tx, a.WorkspaceKey, "users", "array", lock); err != nil {
 		return current, a, err
 	}
+	if err = oauthMetadataSelect(ctx, tx, &current, "users", []string{"ID"}, user.ID); err != nil {
+		return current, a, err
+	}
 	current.Users = slices.Clone(current.Users)
 	idx := slices.IndexFunc(current.Users, func(u domain.User) bool { return u.ID == user.ID })
 	if idx < 0 {
@@ -276,6 +279,13 @@ func (s *SQLiteStore) InstallApplication(ctx context.Context, workspace string, 
 }
 
 func revokeApplicationCredentialsTx(ctx context.Context, tx *sqlTx, workspace, userID string, data domain.Bootstrap) (domain.Bootstrap, error) {
+	// SubjectID is SubjectUserID, else CreatorID: select either match.
+	if err := oauthMetadataSelect(ctx, tx, &data, "apiKeys", []string{"SubjectUserID", "CreatorID"}, userID); err != nil {
+		return data, err
+	}
+	if err := oauthMetadataSelect(ctx, tx, &data, "oauthAuthorizations", []string{"UserID"}, userID); err != nil {
+		return data, err
+	}
 	now := time.Now().UTC()
 	data.APIKeys = slices.Clone(data.APIKeys)
 	for index := range data.APIKeys {

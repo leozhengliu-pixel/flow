@@ -292,15 +292,39 @@ func (s *server) oauthApplicationsByClient() map[string]domain.OAuthApplication 
 	return result
 }
 
+// applicationWebhookClients is oauthApplicationsByClient. Bounded, the index
+// is an owned read of the installed applications' webhook fields, held until
+// release; a refused read (budget) skips the reconcile.
+func (s *server) applicationWebhookClients(ctx context.Context) (map[string]domain.OAuthApplication, func(), bool) {
+	if !s.store.BoundedMetadataEnabled() {
+		return s.oauthApplicationsByClient(), func() {}, true
+	}
+	read, err := s.store.BeginApplicationWebhookClientsRead(ctx)
+	if err != nil {
+		log.Printf("Application webhooks: application index: %v", err)
+		return nil, nil, false
+	}
+	return read.Apps, read.Close, true
+}
+
 func (s *server) reconcileAllApplicationWebhooks(ctx context.Context) {
-	apps := s.oauthApplicationsByClient()
+	apps, release, ok := s.applicationWebhookClients(ctx)
+	if !ok {
+		return
+	}
+	defer release()
 	for _, key := range s.store.WorkspaceKeys() {
 		s.reconcileApplicationWebhooksWith(ctx, key, apps)
 	}
 }
 
 func (s *server) reconcileApplicationWebhooks(ctx context.Context, workspace string) {
-	s.reconcileApplicationWebhooksWith(ctx, workspace, s.oauthApplicationsByClient())
+	apps, release, ok := s.applicationWebhookClients(ctx)
+	if !ok {
+		return
+	}
+	defer release()
+	s.reconcileApplicationWebhooksWith(ctx, workspace, apps)
 }
 
 var applicationWebhookReconcile sync.Mutex
@@ -326,11 +350,33 @@ func managedWebhookID(workspace, clientID string) string {
 func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace string, apps map[string]domain.OAuthApplication) {
 	applicationWebhookReconcile.Lock()
 	defer applicationWebhookReconcile.Unlock()
-	data, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks", "oauthAuthorizations", "teams", "teamSettings")
+	bounded := s.store.BoundedMetadataEnabled()
+	var data domain.Bootstrap
+	var ok bool
+	listCtx := ctx
+	if bounded {
+		// The managed hooks whole, live grant headers and reachable team IDs:
+		// all the reconcile reads of these fields.
+		read, found, err := s.store.BeginApplicationWebhookReconcileRead(ctx, workspace)
+		if err != nil {
+			log.Printf("Application webhooks workspace=%s: %v", workspace, err)
+			return
+		}
+		if !found {
+			return
+		}
+		defer read.Close()
+		data, ok = read.Data, true
+		var close func()
+		listCtx, close = applicationOutputContext(ctx)
+		defer close()
+	} else {
+		data, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks", "oauthAuthorizations", "teams", "teamSettings")
+	}
 	if !ok {
 		return
 	}
-	installations, err := s.store.ListApplications(ctx, workspace)
+	installations, err := s.store.ListApplications(listCtx, workspace)
 	if err != nil {
 		return
 	}
@@ -392,7 +438,7 @@ func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace
 	}
 	var revoked []domain.Webhook
 	var permissions []permissionChange
-	err = s.store.MutateWorkspace(store.WithMetadataFields(ctx, "webhooks"), workspace, "webhook.updated", "application_webhooks", map[string]any{"managed": true}, func(next *domain.Bootstrap) error {
+	change := func(next *domain.Bootstrap) error {
 		revoked, permissions = nil, nil
 		now := time.Now().UTC()
 		mutated := false
@@ -438,7 +484,13 @@ func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace
 		}
 		next.Webhooks = kept
 		return nil
-	})
+	}
+	if bounded {
+		// The callback rewrites the webhooks field (only managed hooks change).
+		err = s.store.MutateWorkspaceScoped(store.WithMetadataFields(ctx, "webhooks"), workspace, "webhook.updated", "application_webhooks", map[string]any{"managed": true}, store.MetadataRecordScope{Fields: []string{"webhooks"}}, change)
+	} else {
+		err = s.store.MutateWorkspace(store.WithMetadataFields(ctx, "webhooks"), workspace, "webhook.updated", "application_webhooks", map[string]any{"managed": true}, change)
+	}
 	if err != nil {
 		log.Printf("Application webhooks workspace=%s: %v", workspace, err)
 		return

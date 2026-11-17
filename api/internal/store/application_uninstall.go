@@ -64,6 +64,12 @@ func (s *SQLiteStore) UninstallApplication(ctx context.Context, workspace, id st
 		if removed.Builtin || removed.ClientID == BuiltinApplicationClientID {
 			return current, ErrBuiltinApplication
 		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "oauthAuthorizations", []string{"ClientID"}, removed.ClientID); err != nil {
+			return current, err
+		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "users", []string{"ID"}, removed.UserID); err != nil {
+			return current, err
+		}
 		next, err := revokeApplicationCredentialsTx(ctx, tx, current.Workspace.URLKey, removed.UserID, current)
 		if err != nil {
 			return current, err

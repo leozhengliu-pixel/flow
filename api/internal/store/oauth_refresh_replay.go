@@ -181,6 +181,9 @@ func (s *SQLiteStore) OAuthClientSecret(clientID, secret string) (confidential, 
 func (s *SQLiteStore) revokeOAuthAccessFamily(ctx context.Context, workspace, family string) error {
 	var event domain.DomainEvent
 	err := s.oauthMetadataTransaction(ctx, workspace, func(tx *sqlTx, lock string, current domain.Bootstrap) (domain.Bootstrap, error) {
+		if err := oauthMetadataSelect(ctx, tx, &current, "apiKeys", []string{"RefreshFamilyID"}, family); err != nil {
+			return current, err
+		}
 		now := time.Now().UTC()
 		keys := slices.Clone(current.APIKeys)
 		changed := false

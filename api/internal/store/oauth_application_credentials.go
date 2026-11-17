@@ -134,6 +134,9 @@ func (s *SQLiteStore) IssueApplicationCredential(ctx context.Context, workspace,
 		}) {
 			return current, ErrAuthForbidden
 		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "apiKeys", []string{"OAuthClientID"}, clientID); err != nil {
+			return current, err
+		}
 		keys := slices.Clone(current.APIKeys)
 		activeTokens := 0
 		now := time.Now().UTC()

@@ -50,6 +50,9 @@ func oauthPolicyMetadata(ctx context.Context, tx metadataReader, workspace, lock
 // The legacy metadata writer replaces absent rows, so these targeted writes must
 // share its lock until both SQL and the immutable cache replacement are visible.
 func (s *SQLiteStore) oauthMetadataTransaction(ctx context.Context, workspace string, mutate func(*sqlTx, string, domain.Bootstrap) (domain.Bootstrap, error)) error {
+	if s.BoundedMetadataEnabled() {
+		return s.boundedOAuthMetadataTransaction(ctx, workspace, mutate)
+	}
 	apply := func() error {
 		s.lockWorkspaceWrites()
 		defer s.unlockWorkspaceWrites()
@@ -283,6 +286,9 @@ func (s *SQLiteStore) CreateOAuthAuthorizationGrant(ctx context.Context, code st
 		if err != nil {
 			return current, err
 		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "oauthAuthorizations", []string{"ID"}, authorization.ID); err != nil {
+			return current, err
+		}
 		if !slices.ContainsFunc(current.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool { return item.ID == authorization.ID }) {
 			current.OAuthAuthorizations = append([]domain.OAuthAuthorization{authorization}, current.OAuthAuthorizations...)
 		}
@@ -416,6 +422,14 @@ func (s *SQLiteStore) RevokeOAuthAuthorizationRecords(ctx context.Context, works
 		if err != nil {
 			return current, err
 		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "oauthAuthorizations", []string{"ID"}, id); err != nil {
+			return current, err
+		}
+		if len(keys) > 0 {
+			if err := oauthMetadataSelect(ctx, tx, &current, "apiKeys", []string{"ID"}, slices.Collect(maps.Keys(keys))...); err != nil {
+				return current, err
+			}
+		}
 		current.OAuthAuthorizations = slices.Clone(current.OAuthAuthorizations)
 		for i := range current.OAuthAuthorizations {
 			if current.OAuthAuthorizations[i].ID == id {
@@ -480,6 +494,9 @@ func (s *SQLiteStore) RevokeOAuthAccessToken(ctx context.Context, secretHash str
 		}
 		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, "oauth_token.revoked", id)
 		if err != nil {
+			return current, err
+		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "apiKeys", []string{"ID"}, id); err != nil {
 			return current, err
 		}
 		current.APIKeys = slices.Clone(current.APIKeys)

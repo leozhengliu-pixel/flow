@@ -1,6 +1,6 @@
 {
   "source": "server/main.go",
-  "unmigrated": 62,
+  "unmigrated": 61,
   "consumers": {
     "accountBootstrap": {
       "owner": "P21",
