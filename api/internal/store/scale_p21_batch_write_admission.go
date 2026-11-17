@@ -22,6 +22,16 @@ func issueRecordWriteAdmission(ctx context.Context) *SQLiteStore {
 }
 
 func reserveIssueRecordEncoding(ctx context.Context, s *SQLiteStore, issue domain.Issue, previous []byte) (func(), error) {
+	return reserveIssueRecordEncodingEnvelope(ctx, s, issue, previous, false)
+}
+
+// The row still owns its initial column envelope. Admit only the additional
+// comparison work; both owners together retain the original complete bound.
+func reserveIssueRecordComparisonEncoding(ctx context.Context, s *SQLiteStore, issue domain.Issue, previous []byte) (func(), error) {
+	return reserveIssueRecordEncodingEnvelope(ctx, s, issue, previous, true)
+}
+
+func reserveIssueRecordEncodingEnvelope(ctx context.Context, s *SQLiteStore, issue domain.Issue, previous []byte, columnsHeld bool) (func(), error) {
 	if s == nil {
 		return func() {}, nil
 	}
@@ -48,6 +58,12 @@ func reserveIssueRecordEncoding(ctx context.Context, s *SQLiteStore, issue domai
 	}
 	if cost > metadataWorkBytes {
 		return nil, ErrMetadataWorkBudget
+	}
+	if columnsHeld {
+		cost -= uint64(work) * 2
+	}
+	if cost == 0 {
+		return func() {}, nil
 	}
 	_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(cost))
 	return release, err

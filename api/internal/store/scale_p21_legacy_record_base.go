@@ -989,7 +989,9 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 		}
 		return err
 	}
-	process := func(value reflect.Value, work *ResourceRead) error {
+	process := func(value reflect.Value, native *ResourceRead) error {
+		work := &ResourceRead{store: b.store}
+		defer work.Close()
 		issue := value.Interface().(domain.Issue)
 		var position int
 		if err := b.stage.db.QueryRowContext(ctx, `SELECT position FROM legacy_issue_positions WHERE id=?`, []byte(issue.ID)).Scan(&position); err != nil {
@@ -1029,13 +1031,13 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 				return admissionError(err)
 			}
 			if len(previous) > 0 {
-				release, err := reserveIssueRecordEncoding(ctx, b.store, issue, previous)
+				release, err := reserveIssueRecordComparisonEncoding(ctx, b.store, issue, previous)
 				if err != nil {
 					return admissionError(err)
 				}
 				defer release()
-				// The equality owner includes the already-encoded columns.
-				columnsRelease()
+				// Initial columns plus this delta own the full equality
+				// envelope without a duplicate reservation during transfer.
 			}
 			// equalOwned also resolves indexed team/state/label dimensions.
 			// This decodes the old issue under the equality owner's lease.
@@ -1044,22 +1046,6 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 				return admissionError(err)
 			}
 			if !equalIssueRecordData(previous, raw) && !refs.equalOwned(previous, issue) {
-				cost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(issue), 0)
-				if err != nil {
-					return admissionError(err)
-				}
-				_, release, err := b.store.tryAdmitAdditionalMetadataWork(ctx, int(min(uint64(metadataWorkBytes)+1, cost*4+64<<10)))
-				if err != nil {
-					return admissionError(err)
-				}
-				// No stats/seen counters change until row ownership fits.
-				// A caller may flush prior rows and retry this one on denial.
-				queued := false
-				defer func() {
-					if !queued {
-						release()
-					}
-				}()
 				if history == nil {
 					history, err = b.newIssueHistory(ctx)
 					if err != nil {
@@ -1081,10 +1067,12 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 				if err := b.addStats(ctx, issueStatsOf(issue), 1); err != nil {
 					return err
 				}
-				batch.releases = append(batch.releases, release)
+				// The batch retains a shallow copy of this native row.
+				// Transfer its existing owner instead of reserving the
+				// same live allocations again during the handoff.
+				batch.releases = append(batch.releases, native.Close)
 				batch.issues = append(batch.issues, issue)
 				batch.orders[issue.ID] = position
-				queued = true
 			} else {
 				_, old, known, err := b.previous(ctx, "issue", "", issue.ID)
 				if err != nil {
@@ -1128,11 +1116,20 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 			for {
 				work := &ResourceRead{store: b.store}
 				err := func() error {
-					defer work.Close()
+					// A changed row transfers this owner into batch. An
+					// unchanged or failed row releases it locally.
+					transferred := false
+					defer func() {
+						if !transferred {
+							work.Close()
+						}
+					}()
+					decode := &ResourceRead{store: b.store}
+					defer decode.Close()
 					if header.node.cost > (metadataWorkBytes-(64<<10))/4 {
 						return retryAdmission
 					}
-					if err := work.reserve(ctx, header.node.cost*4+64<<10); err != nil {
+					if err := decode.reserve(ctx, header.node.cost*4+64<<10); err != nil {
 						return admissionError(err)
 					}
 					value, err := header.node.Value(ctx, metadataWorkBytes)
@@ -1140,7 +1137,24 @@ func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspa
 						return err
 					}
 					defer value.SetZero()
-					return process(value, work)
+					// The frame decoder's temporary buffers are gone.
+					// Transfer ownership to the actual native row before
+					// entering independently admitted encoding phases.
+					cost, err := metadataAggregateNativeCost(ctx, value, 0)
+					if err != nil {
+						return err
+					}
+					if cost > (metadataWorkBytes-(64<<10))/4 {
+						return retryAdmission
+					}
+					if err := work.reserve(ctx, cost*4+64<<10); err != nil {
+						return admissionError(err)
+					}
+					decode.Close()
+					before := len(batch.issues)
+					err = process(value, work)
+					transferred = len(batch.issues) > before
+					return err
 				}()
 				if err == retryAdmission && len(batch.issues) > 0 {
 					if err := flush(); err != nil {
