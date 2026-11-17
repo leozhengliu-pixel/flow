@@ -12,8 +12,10 @@ import (
 
 type boundedIssueWriteAuthorizationContext struct{}
 
+// GET patterns also serve HEAD, so a HEAD permission list takes the same
+// retained read as its GET instead of the literal workspace bootstrap.
 func boundedIssuePermissionReadRequest(r *http.Request) bool {
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
 	path, absolute := strings.CutPrefix(r.URL.Path, "/")
