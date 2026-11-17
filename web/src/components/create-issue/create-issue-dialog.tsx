@@ -8,6 +8,7 @@ import { estimateMenuProps } from '@/components/issue/estimate-menu'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
+import { focusEditorStart } from '@/components/issue/editor/focus-editor-start'
 import { ChevronRight, CircleDashed, Diamond, ExternalLink, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, Trash2, X } from 'lucide-react'
 import type { BootstrapData, Draft, Issue, IssueLabel, IssueSuggestionPreview } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
@@ -511,7 +512,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialExpand
           </header>
 
           <div className={styles.document}>
-            <IssueTitleEditor value={title} onChange={setTitle} onEnter={() => descriptionEditorRef.current?.commands.focus('start')} onSubmit={() => void submit()} autoFocus={open} className={styles.titleField} editorRef={editor => { titleEditorRef.current = editor }}/>
+            <IssueTitleEditor value={title} onChange={setTitle} onEnter={() => focusEditorStart(descriptionEditorRef.current)} onSubmit={() => void submit()} autoFocus={open} className={styles.titleField} editorRef={editor => { titleEditorRef.current = editor }}/>
             {formTemplate
               ? <TemplateFormFill fields={formTemplate.formFields ?? []} values={formValues} onChange={setFormValues} title={title} onTitle={setTitle} priority={priority} onPriority={setPriority} dueDate={dueDate} onDueDate={setDueDate} invalid={invalidFields}/>
               : <IssueDescriptionEditor users={data.users} value={description?.markdown ?? ''} state={description?.documentJSON} onChange={setDescription} onSubmit={() => void submit()} className={styles.descriptionField} editorRef={editor => { descriptionEditorRef.current = editor }}/>}

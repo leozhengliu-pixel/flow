@@ -77,7 +77,8 @@
   }
   html:root body .issue-view .issue-mobile-properties .issue-due-date-trigger:not(#_) > svg { width: 14px; height: 14px; flex: 0 0 14px; }
   html:root body .issue-view .issue-mobile-properties .issue-due-date-trigger:not(#_) > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 450; line-height: normal; }
-  .issue-view .issue-description-root { margin-top: 22px; }
+  /* The issue body only: the sub-issue composer's body sits right under its title row. */
+  .issue-view .issue-description-root:not(.sub-issue-editor > *) { margin-top: 22px; }
   .issue-view .issue-description-root .description-editor { margin-top: 0; border-radius: 0; }
   .issue-view .document-actions { height: 32px; margin-top: 10px; gap: 0; }
   .issue-view .document-actions .issue-document-action { width: 32px; height: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; color: var(--issue-header-fg); font-size: 12px; font-weight: 500; line-height: normal; }

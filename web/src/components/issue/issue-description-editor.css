@@ -363,7 +363,9 @@
 .description-diagram.is-editing .description-diagram-preview { display: none; }
 .description-diagram.is-editing .description-diagram-source { display: block; }
 
-:root[data-theme="light"] .description-editor:focus {
+/* Light twin of the base `.description-editor:focus` tint, at one type selector above it so a surface that clears its focus
+   background (issue body, sub-issue composer, dialogs, composers) stays clear in light mode as it does in dark. */
+html:where([data-theme="light"]) .description-editor:focus {
   background: var(--theme-soft-overlay);
 }
 :root[data-theme="light"] .description-editor code,
