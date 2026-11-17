@@ -14,7 +14,7 @@ import {
 } from "react";
 import { AgentCursorGlyph, AgentHistoryGlyph } from "@/components/ui/agent-glyph";
 import { AppStartup } from '@/components/layout/app-startup';
-import { createBootstrapRequest, settleBootstrapRequest, startStartup, type BootstrapRequest } from '@/lib/startup';
+import { createBootstrapRequest, settleBootstrapRequest, takeStartup, type BootstrapRequest } from '@/lib/startup';
 import { setRuntimePreferences, setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences';
 import { AuthenticationPolicyPage } from '@/components/auth/authentication-policy-page';
 import {
@@ -171,12 +171,19 @@ import {
   carryNavigationHydration,
   clearNavigationCache,
   hydrateWorkspaceNavigation,
+  isNavigationHydrated,
   navigationCacheGeneration,
   readNavigationCache,
   writeRecoveredNavigationCache,
   writeNavigationCacheWhenIdle,
+  readRememberedWorkspace,
   rememberWorkspace,
+  withoutSnapshotIssues,
 } from "@/lib/navigation-cache";
+import { clearLocalSnapshots, createLocalSnapshotSaver, discardStartupSnapshot, localSnapshotGeneration, startupSnapshot } from '@/lib/local-snapshot';
+import { holdSnapshotWrites, rejectSnapshotWrites, releaseSnapshotWrites } from '@/lib/snapshot-write-gate';
+import { rememberChatPlatform } from '@/lib/chat-platform';
+import { rememberTrashRetention } from '@/lib/trash-retention';
 import { fetchWorkspacePreferences, listLoops } from '@/lib/api';
 import { getAgentSession, listAgentSessions, listAgentSkills } from '@/lib/api';
 import type { AgentSession, ReleasePipeline } from "@/types/flow";
@@ -257,6 +264,7 @@ import {
   newProjectTemplatePath,
   newTeamPath,
   parseAppRoute,
+  isProjectListRoute,
   projectPath,
   projectSavedViewPath,
   projectSavedViewEditPath,
@@ -407,15 +415,53 @@ function App() {
       () => parseAppRoute(location.pathname, location.search),
       [location.pathname, location.search],
     );
-  const [account, setAccount] = useState<AccountBootstrap | null>(null),
-    [data, setData] = useState<BootstrapData | null>(null),
+  // A repeat visit paints from the local snapshot main.tsx read before the first render: the last confirmed
+  // session, account and workspace of this device's viewer. The session, account and bootstrap requests still
+  // run; they confirm the snapshot or replace it (see `unconfirmed` below).
+  const [startupView] = useState(() => {
+    const snapshot = startupSnapshot();
+    const cached = snapshot && hydrateWorkspaceNavigation({ current: null, cached: snapshot.data, requestedWorkspaceKey: snapshot.workspaceKey, viewerId: snapshot.viewerId });
+    if (!snapshot || !cached) return undefined;
+    holdSnapshotWrites(snapshot.workspaceKey);
+    rememberChatPlatform(snapshot.account);
+    rememberTrashRetention(snapshot.data);
+    return { snapshot, data: cached };
+  });
+  const [account, setAccount] = useState<AccountBootstrap | null>(startupView?.snapshot.account ?? null),
+    [data, setData] = useState<BootstrapData | null>(startupView?.data ?? null),
     [error, setError] = useState(false);
-  const [session, setSession] = useState<AuthSession | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(startupView?.snapshot.session ?? null);
   const [syncFallback, setSyncFallback] = useState('');
   const sessionViewerRef=useRef(session?.user.id);
   sessionViewerRef.current=session?.user.id;
   const dataRef=useRef(data);
   dataRef.current=data;
+  // The workspace on screen came from a cached snapshot that no bootstrap has confirmed yet. Until one does,
+  // its writes wait (snapshot-write-gate), realtime stays off and nothing is written back to the caches.
+  const [unconfirmed, setUnconfirmedState] = useState<{ viewerId: string; workspaceKey: string } | null>(startupView ? { viewerId: startupView.snapshot.viewerId, workspaceKey: startupView.snapshot.workspaceKey } : null);
+  const unconfirmedRef = useRef(unconfirmed);
+  const setUnconfirmed = useCallback((value: { viewerId: string; workspaceKey: string } | null) => {
+    unconfirmedRef.current = value;
+    setUnconfirmedState(value);
+  }, []);
+  const showsUnconfirmed = (viewerId: string, workspaceKey: string) => unconfirmedRef.current?.viewerId === viewerId && unconfirmedRef.current.workspaceKey === workspaceKey;
+  const snapshotUnconfirmed = Boolean(unconfirmed && data && data.workspace.urlKey === unconfirmed.workspaceKey && data.viewer.id === unconfirmed.viewerId);
+  // The session and account on screen came from the snapshot; /api/auth/session and /api/account/bootstrap have not answered.
+  const [provisionalSession, setProvisionalSession] = useState(Boolean(startupView));
+  const provisionalSessionRef = useRef(provisionalSession);
+  provisionalSessionRef.current = provisionalSession;
+  // The root page was sent to the snapshot account's last workspace before the real account answered.
+  const provisionalRootTarget = useRef('');
+  useEffect(() => {
+    if (snapshotUnconfirmed) { holdSnapshotWrites(unconfirmed!.workspaceKey); return; }
+    if (unconfirmed) {
+      // The cached view left the screen without a confirming bootstrap (dropped, another workspace or viewer).
+      rejectSnapshotWrites(unconfirmed.workspaceKey);
+      setUnconfirmed(null);
+      return;
+    }
+    releaseSnapshotWrites();
+  }, [snapshotUnconfirmed, unconfirmed, setUnconfirmed]);
   const syncClient = syncClientFor(data);
   const inboxWorkspaceKey = data?.workspace.urlKey;
   const inboxViewerId = data?.viewer.id;
@@ -450,12 +496,16 @@ function App() {
   if (data) setViewerCanInvite(canInviteMembers(data));
   const acceptBootstrap = useCallback((next:BootstrapData)=>{
     if(next.viewer.id!==sessionViewerRef.current) return;
+    // Fresh data wins over a cached snapshot: none of the snapshot's issue rows survive the merge.
+    const replacesSnapshot = unconfirmedRef.current?.viewerId === next.viewer.id && unconfirmedRef.current.workspaceKey === next.workspace.urlKey;
     setData(current=>{
-      const merged=current?.sync || next.sync ? next : mergeWorkspaceDirectory(current,next);
+      const base = replacesSnapshot && current?.workspace.urlKey === next.workspace.urlKey ? withoutSnapshotIssues(current) : current;
+      const merged=base?.sync || next.sync ? next : mergeWorkspaceDirectory(base,next);
       if (!merged.sync) writeNavigationCacheWhenIdle(next.viewer.id, next.workspace.urlKey, merged);
       return merged;
     });
-  },[]);
+    if (replacesSnapshot) setUnconfirmed(null);
+  },[setUnconfirmed]);
   // Metadata edits (projects, releases, documents, customers, drafts, ...)
   // never rewrite issue records. Refresh the metadata projection and keep the
   // loaded issues instead of downloading every issue again; only issues a
@@ -582,12 +632,14 @@ function App() {
   const bootstrapRequest = useRef<BootstrapRequest | null>(null);
   useEffect(() => () => bootstrapRequest.current?.controller.abort(), []);
   const loadedBootstrapRequestKey = useRef('');
+  // The bootstrap that last confirmed the workspace, and the cache-clear generation it was applied in.
+  const snapshotConfirmedAt = useRef<{ key: string; generation: number }>({ key: '', generation: -1 });
   // A streamed bootstrap can be cut short (a queued request, a transient
   // disconnect). Retry before replacing the cache-backed page with an error.
   const bootstrapFailures = useRef<{ key: string; count: number }>({ key: '', count: 0 });
   const [bootstrapRetry, setBootstrapRetry] = useState(0);
   const initialIssueRef = useRef<{key:string;viewerId:string;issue:Issue} | null>(null);
-  const [authReady, setAuthReady] = useState(false);
+  const [authReady, setAuthReady] = useState(Boolean(startupView));
   const [authenticationPolicy,setAuthenticationPolicy] = useState<string>();
   useEffect(()=>{const listener=(event:Event)=>{const detail=(event as CustomEvent<{code:string;workspaceKey:string}>).detail;if(detail.workspaceKey===decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0]??''))setAuthenticationPolicy(detail.code)};window.addEventListener('flow:authentication-policy',listener);return()=>window.removeEventListener('flow:authentication-policy',listener)},[]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -717,7 +769,7 @@ function App() {
     }
   };
   useEffect(() => {
-    const startup = startStartup(
+    const startup = takeStartup(
       { fetchSession: fetchAuthSession, fetchAccount: fetchAccountBootstrap, fetchBootstrap: fetchRouteBootstrap },
       { requestedWorkspaceKey: requestedWorkspaceKey ?? "", isRoot: route.kind === "root", projection: bootstrapProjection },
     );
@@ -725,17 +777,47 @@ function App() {
       startup.speculative.key = syncBootstrapRequestKey(startup.speculative.key, syncSurface);
       bootstrapRequest.current = startup.speculative;
     }
+    const cached = startupView?.snapshot;
     startup.ready
       .then(({ session: authenticated, account: nextAccount }) => {
+        if (cached && authenticated.user.id !== cached.viewerId) {
+          // Someone else is signed in now: nothing of the snapshot's viewer may stay on screen or on this device.
+          clearNavigationCache(cached.viewerId);
+          if (bootstrapRequest.current?.key.startsWith(`${cached.viewerId}:`)) { bootstrapRequest.current.controller.abort(); bootstrapRequest.current = null; }
+          loadedBootstrapRequestKey.current = '';
+          setData(current => current?.viewer.id === cached.viewerId ? null : current);
+        } else if (cached) {
+          // As for any cached snapshot: the inbox shows the server's rows even if the bootstrap never finishes.
+          void fetchAllInboxNotifications()
+            .then(notifications => setData(current => current?.workspace.urlKey === cached.workspaceKey && current.viewer.id === cached.viewerId && current.viewer.id === sessionViewerRef.current
+              ? { ...current, notifications }
+              : current))
+            .catch(() => undefined);
+        }
+        const rootTarget = provisionalRootTarget.current;
+        provisionalRootTarget.current = '';
+        if (rootTarget) {
+          // The root page went to the snapshot account's last workspace. If the account now names another one and
+          // the page is still in the first, go where the root page would have gone.
+          const next = nextAccount.workspaces.find(item => item.workspace.urlKey === nextAccount.lastWorkspaceKey)?.workspace ?? nextAccount.workspaces[0]?.workspace;
+          const shown = decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0] ?? '');
+          if (next?.urlKey !== rootTarget && shown === rootTarget) navigateTo(next ? `/${encodeURIComponent(next.urlKey)}` : workspaceOnboardingPath(), { replace: true });
+        }
         setSession(authenticated);
         setAccount(nextAccount);
       })
       .catch(() => {
         setSession(null);
         setAccount(null);
+        // A snapshot painted ahead of the session goes with it.
+        if (cached) setData(null);
         clearNavigationCache();
       })
-      .finally(() => setAuthReady(true));
+      .finally(() => {
+        setAuthReady(true);
+        setProvisionalSession(false);
+        discardStartupSnapshot();
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- startup runs once on mount; later navigation goes through the bootstrap effect
   }, []);
   const themeSyncRef = useRef<string>("");
@@ -768,6 +850,8 @@ function App() {
       darkTheme: settings.darkTheme,
     });
     if (
+      // Settings read from a cached snapshot are never written back; the confirmed ones decide.
+      !snapshotUnconfirmed &&
       themeNeedsAccountSync(settings, applied) &&
       themeSyncRef.current !== `${accountWorkspaceKey}:${accountViewerId}:${applied.interfaceTheme}`
     ) {
@@ -804,6 +888,7 @@ function App() {
     accountUserSettings,
     accountWorkspaceSettings,
     settingsOverridesRevision,
+    snapshotUnconfirmed,
   ]);
   const oauthPath = location.pathname === "/oauth/authorize";
   const connectPath =
@@ -883,6 +968,7 @@ function App() {
         account.workspaces.find(
           (item) => item.workspace.urlKey === account.lastWorkspaceKey,
         )?.workspace ?? account.workspaces[0]?.workspace;
+      if (provisionalSessionRef.current && next) provisionalRootTarget.current = next.urlKey;
       navigateTo(
         next
           ? `/${encodeURIComponent(next.urlKey)}`
@@ -925,6 +1011,11 @@ function App() {
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     if (loadedWorkspaceKey !== requestedWorkspaceKey || loadedBootstrapRequestKey.current && loadedBootstrapRequestKey.current !== requestKey) {
       const cachedNavigation = syncV2Enabled() && syncSurface ? undefined : readNavigationCache(account.viewer.id, requestedWorkspaceKey);
+      if (loadedWorkspaceKey !== requestedWorkspaceKey && cachedNavigation?.viewer.id === account.viewer.id && cachedNavigation.workspace.urlKey === requestedWorkspaceKey) {
+        // The workspace is shown from its cached snapshot until this bootstrap confirms it.
+        holdSnapshotWrites(requestedWorkspaceKey);
+        setUnconfirmed({ viewerId: account.viewer.id, workspaceKey: requestedWorkspaceKey });
+      }
       setData((current) => {
         if (loadedWorkspaceKey === requestedWorkspaceKey) {
           if (!projectListProjection || !current) return current;
@@ -962,20 +1053,41 @@ function App() {
         bootstrapFailures.current = { key: '', count: 0 };
         rememberWorkspace(account.viewer.id, requestedWorkspaceKey);
         loadedBootstrapRequestKey.current=requestKey;
+        snapshotConfirmedAt.current = { key: requestKey, generation: localSnapshotGeneration() };
+        // Fresh data wins over a cached snapshot, wherever the user went meanwhile: none of the snapshot's issue
+        // rows survive the merge (rows fetched from the server since do).
+        const replacesSnapshot = showsUnconfirmed(account.viewer.id, requestedWorkspaceKey);
         setData(current=>{
-          const merged=current?.sync || next.sync ? next : mergeWorkspaceDirectory(current,next), preview=initialIssueRef.current;
+          const base = replacesSnapshot && current?.workspace.urlKey === requestedWorkspaceKey ? withoutSnapshotIssues(current) : current;
+          const merged=base?.sync || next.sync ? next : mergeWorkspaceDirectory(base,next), preview=initialIssueRef.current;
           const withPreview=!next.sync && preview?.viewerId===account.viewer.id && preview?.key.startsWith(`${requestedWorkspaceKey}:`) && !preview.issue.isSummary
             ? {...merged,issues:mergeIssueRecords(merged.issues,[preview.issue])}
             : merged;
           if (!withPreview.sync) writeNavigationCacheWhenIdle(account.viewer.id, requestedWorkspaceKey, withPreview);
           return withPreview;
         });
+        if (replacesSnapshot) setUnconfirmed(null);
       })
       .catch((error) => {
         if (cancelled) return;
+        const dropUnconfirmed = () => {
+          if (!showsUnconfirmed(account.viewer.id, requestedWorkspaceKey)) return false;
+          rejectSnapshotWrites(requestedWorkspaceKey);
+          setUnconfirmed(null);
+          setData(current => current?.workspace.urlKey === requestedWorkspaceKey && current.viewer.id === account.viewer.id ? null : current);
+          return true;
+        };
         // A definite refusal is not transient; only retry a cancelled/partial
         // stream. Exhausting the retries surfaces the usual error state.
         if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+          if ([403, 404].includes(error.status)) void clearLocalSnapshots(account.viewer.id, requestedWorkspaceKey);
+          // A cached view the server refused is dropped with every cache of the workspace, never kept on screen.
+          if (showsUnconfirmed(account.viewer.id, requestedWorkspaceKey)) {
+            clearNavigationCache(account.viewer.id, requestedWorkspaceKey);
+            dropUnconfirmed();
+            // While the session itself is unconfirmed, its answer decides what follows (sign-in for an expired one).
+            if (provisionalSessionRef.current) return;
+          }
           if (syncV2Enabled() && [401, 403].includes(error.status)) {
             clearNavigationCache(account.viewer.id, requestedWorkspaceKey);
             const rejected = syncClientFor(dataRef.current);
@@ -991,10 +1103,12 @@ function App() {
           return;
         }
         bootstrapFailures.current = { key: '', count: 0 };
+        // A cached view is only shown while its confirmation is on the way.
+        dropUnconfirmed();
         setError(true);
       });
     return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
-  }, [account, bootstrapRetry, connectPath, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, fetchRouteBootstrap, syncSurface, syncFallback, requestedWorkspaceKey, route.kind]);
+  }, [account, bootstrapRetry, connectPath, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, fetchRouteBootstrap, syncSurface, syncFallback, requestedWorkspaceKey, route.kind, setUnconfirmed]);
   // Surfaces ("Actions" buttons) register a command context and ask for the palette.
   useEffect(() => {
     const open = () => setCommandOpen(true);
@@ -1559,8 +1673,10 @@ function App() {
     return next === state ? current : { ...current, teamPinnedResources: next.resources, teamResourceSections: next.sections };
   }))), []);
   const realtime = useWorkspaceRealtime({
-    workspaceKey: data?.workspace.urlKey,
-    viewerId: data?.viewer.id,
+    // The stream starts once a bootstrap confirmed the workspace, resuming from the cursor it left off at; a
+    // cached snapshot is never patched by replayed events.
+    workspaceKey: snapshotUnconfirmed ? undefined : data?.workspace.urlKey,
+    viewerId: snapshotUnconfirmed ? undefined : data?.viewer.id,
     snapshot: data,
     syncV2: Boolean(syncClient),
     syncCursor: syncClient?.manifest.head,
@@ -1767,6 +1883,32 @@ function App() {
     },
   });
   useDesktopNotifications(data);
+  // The next visit paints from what this one last showed: the confirmed workspace is saved after its bootstrap
+  // and then at most every 30 seconds while it changes (and when the page is hidden). Only a workspace a full
+  // bootstrap confirmed for the signed-in viewer qualifies, and none after a cache clear until the next one.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const accountRef = useRef(account);
+  accountRef.current = account;
+  const [snapshotSaver] = useState(() => createLocalSnapshotSaver(() => {
+    const current = dataRef.current, viewer = sessionRef.current, owner = accountRef.current;
+    if (!current || !viewer || !owner || provisionalSessionRef.current || current.sync || isNavigationHydrated(current)) return undefined;
+    if (showsUnconfirmed(current.viewer.id, current.workspace.urlKey)) return undefined;
+    const confirmed = snapshotConfirmedAt.current;
+    if (confirmed.key !== loadedBootstrapRequestKey.current || confirmed.key !== bootstrapRequestKey(current.viewer.id, current.workspace.urlKey) || confirmed.generation !== localSnapshotGeneration()) return undefined;
+    return { session: viewer, account: owner, data: current };
+  }));
+  useEffect(() => { if (data && !snapshotUnconfirmed && !provisionalSession) snapshotSaver.schedule(data.viewer.id, data.workspace.urlKey); }, [data, snapshotUnconfirmed, provisionalSession, snapshotSaver]);
+  useEffect(() => {
+    const hidden = () => { if (document.visibilityState === 'hidden') snapshotSaver.flush(); };
+    document.addEventListener('visibilitychange', hidden);
+    window.addEventListener('pagehide', snapshotSaver.flush);
+    return () => {
+      document.removeEventListener('visibilitychange', hidden);
+      window.removeEventListener('pagehide', snapshotSaver.flush);
+      snapshotSaver.cancel();
+    };
+  }, [snapshotSaver]);
   useEffect(() => {
     if (!syncClient || !realtime.connected) return;
     let active = true;
@@ -4921,6 +5063,9 @@ function App() {
     // Signing in as someone else without a logout in between: the previous viewer's cached rows go.
     const previousViewerId = sessionViewerRef.current;
     if (previousViewerId && previousViewerId !== authenticated.user.id) clearNavigationCache(previousViewerId);
+    // So is anything this device kept for its last viewer (a session that ended without a logout here).
+    const rememberedViewerId = readRememberedWorkspace()?.viewerId;
+    if (rememberedViewerId && rememberedViewerId !== authenticated.user.id && rememberedViewerId !== previousViewerId) clearNavigationCache(rememberedViewerId);
     setSession(authenticated);
     const nextAccount = await fetchAccountBootstrap();
     setAccount(nextAccount);
@@ -7760,14 +7905,6 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   return "not-found";
 }
 
-function isProjectListRoute(route: AppRoute) {
-  return route.kind === 'projects'
-    || route.kind === 'team-projects'
-    || route.kind === 'projects-new-view'
-    || route.kind === 'projects-saved-view'
-    || route.kind === 'team-projects-new-view'
-    || route.kind === 'team-projects-saved-view'
-}
 function MainIssuePanel({ children, ...props }: React.HTMLAttributes<HTMLElement>) {
   return <main className="main-panel issue-panel" {...props}>{children}</main>;
 }
