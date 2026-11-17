@@ -131,8 +131,12 @@ func claimLoopAttachments(data *domain.Bootstrap, ids []string, loopID string) (
 	return claimed, nil
 }
 
-// loopAttachmentVisible reports whether an upload belongs to a loop (or a
-// pending loop upload) in the workspace.
+// loopAttachmentVisible reports whether an upload belongs to a loop of the
+// workspace or is the viewer's own pending loop upload. A loop's files follow
+// the loop's read rule: every active member reads every loop (GET /api/loops,
+// GET /api/loops/{id} and the bootstrap filter loops by no team, draft or
+// role), so a file is served while its loop exists. Deleting a loop is
+// permanent, so the uploads it had claimed are no longer served to anyone.
 func loopAttachmentVisible(data domain.Bootstrap, userID, url string) bool {
 	for _, loop := range data.Loops {
 		if slices.ContainsFunc(loop.Attachments, func(item domain.LoopAttachment) bool { return item.URL == url }) {
@@ -140,7 +144,13 @@ func loopAttachmentVisible(data domain.Bootstrap, userID, url string) bool {
 		}
 	}
 	return slices.ContainsFunc(data.LoopAttachments, func(item domain.LoopAttachment) bool {
-		return item.URL == url && (item.LoopID != "" || item.CreatorID == userID)
+		if item.URL != url {
+			return false
+		}
+		if item.LoopID == "" {
+			return item.CreatorID == userID
+		}
+		return slices.ContainsFunc(data.Loops, func(loop domain.Loop) bool { return loop.ID == item.LoopID })
 	})
 }
 
