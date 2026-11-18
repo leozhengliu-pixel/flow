@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded integration delivery retries preserve captured network inputs, HTTP-accepted raw JSON bytes and atomic publication without loading complete workspaces.
 - Bounded batch updates retain response values while releasing completed mutation work before triage.
 - Bounded workflow execution and the due-workflow scheduler preserve action order, large editor values, failure and retry history and atomic publication without loading complete workspaces.
 - Bounded issue writes persist from exact stored frames and recurring issues release their preliminary reads, preserving stored values and history. Bounded metadata stays off by default.

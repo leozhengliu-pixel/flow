@@ -1106,10 +1106,7 @@ type scaleP21SW286Allowance struct {
 // must name exactly the wrappers it still reaches when the other entries are
 // not passed either: the test fails when one no longer reaches a wrapper, so
 // the list shrinks as the migrations land.
-var scaleP21SW286Allowed = map[string]scaleP21SW286Allowance{
-	"server/server.processIntegrationDelivery": {wrappers: []string{"WorkspaceMetadata", "WorkspaceMetadataForRead"},
-		owner: "swarm: integration delivery", reason: "every-tick integration delivery reads the workspace metadata for the delivery's integration"},
-}
+var scaleP21SW286Allowed = map[string]scaleP21SW286Allowance{}
 
 func scaleP21SW286Cut(ref scaleP21SW286Ref) bool {
 	_, cut := scaleP21SW286Boundaries[ref.from+"->"+ref.to]
