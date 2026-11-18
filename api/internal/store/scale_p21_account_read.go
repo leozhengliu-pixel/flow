@@ -113,7 +113,14 @@ func (s *SQLiteStore) BeginAccountRead(ctx context.Context) (_ *AccountRead, err
 }
 
 func (s *SQLiteStore) stageAccountCounts(ctx context.Context, stage *sw26MigrationStage, scratch *ResourceRead) (bool, error) {
-	size := "COALESCE(" + scratch.byteLength("workspace_key") + ",0)+COALESCE(" + scratch.byteLength("total") + ",0)"
+	// The count's decimal text, as SQLite's CAST(total AS BLOB) measures it;
+	// PostgreSQL has no OCTET_LENGTH(bigint), which failed the scan and staged
+	// no counts there.
+	total := "total"
+	if s.dialect == "postgres" {
+		total = "CAST(total AS TEXT)"
+	}
+	size := "COALESCE(" + scratch.byteLength("workspace_key") + ",0)+COALESCE(" + scratch.byteLength(total) + ",0)"
 	rows, err := s.db.QueryContext(ctx, "SELECT "+size+",CASE WHEN "+size+
 		"<=? THEN workspace_key ELSE NULL END,CASE WHEN "+size+
 		"<=? THEN total ELSE NULL END FROM issue_collection_counts", MetadataRecordPageMaxBytes, MetadataRecordPageMaxBytes)
