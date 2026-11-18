@@ -160,6 +160,39 @@ func (d *metadataJSONStringDecoder) appendRune(value rune) error {
 
 func (d *metadataJSONStringDecoder) stringBody() error {
 	for {
+		// Copy a buffered run of plain ASCII at once: the rune path below
+		// appends those bytes unchanged, flushing at the same boundaries,
+		// but checks the context twice per byte, which dominated decoding
+		// of large bodies. Cancellation is observed per run and per chunk.
+		if buffered := d.input.Buffered(); buffered > 0 {
+			run, _ := d.input.Peek(buffered)
+			plain := 0
+			for plain < len(run) && run[plain] >= 0x20 && run[plain] < utf8.RuneSelf && run[plain] != '"' && run[plain] != '\\' {
+				plain++
+			}
+			if plain > 0 {
+				if err := d.ctx.Err(); err != nil {
+					return err
+				}
+				for copied := 0; copied < plain; {
+					if d.used == len(d.output) {
+						if err := d.flush(); err != nil {
+							return err
+						}
+						if err := d.ctx.Err(); err != nil {
+							return err
+						}
+					}
+					count := copy(d.output[d.used:], run[copied:plain])
+					d.used += count
+					copied += count
+				}
+				if _, err := d.input.Discard(plain); err != nil {
+					return err
+				}
+				continue
+			}
+		}
 		b, err := d.peek()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
