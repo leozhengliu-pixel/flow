@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 )
 
@@ -19,6 +20,19 @@ func (s *SQLiteStore) LoopRecordExists(ctx context.Context, workspace, id string
 		s.mu.RUnlock()
 	}
 	var found int
+	if s.dialect != "sqlite" && strings.ContainsRune(workspace, '\x00') {
+		// textArgs strips PostgreSQL NULs and MySQL's utf8mb4_0900_ai_ci
+		// collation ignores them: no stored workspace key has one, so the
+		// workspace is missing, as SQLite answers it.
+		return false, sql.ErrNoRows
+	}
+	if s.dialect == "postgres" && strings.ContainsRune(id, '\x00') {
+		// textArgs would strip the NUL and match the ID without it. PostgreSQL
+		// stores no record key or inline JSON string with NUL, so only the
+		// workspace's existence is left to read.
+		err = s.db.QueryRowContext(ctx, `SELECT 0 FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&found)
+		return false, err
+	}
 	inline := `EXISTS (SELECT 1 FROM json_each(w.data,'$.loops') item WHERE ` + s.metadataRecordKeyEquals("json_extract(item.value,'$.id')", "?") + `)`
 	switch s.dialect {
 	case "mysql":
