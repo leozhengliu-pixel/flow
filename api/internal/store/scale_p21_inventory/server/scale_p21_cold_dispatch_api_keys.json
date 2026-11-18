@@ -1,0 +1,125 @@
+{
+  "source": "server/scale_p21_cold_dispatch_api_keys.go",
+  "unmigrated": 0,
+  "consumers": {
+    "coldWorkspaceData": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "workspaceData on the borrowed store for the registered COLD settings routes that read it: flag off workspaceData itself; bounded, for a metadata read (every /api/api-keys request) the projection authorization built on the same cold facade and handed off, else (after the projection gate) a fresh PagedWorkspaceMetadata of the refreshed facade; for other routes (OAuth applications) BootstrapForUser of the refreshed facade; auth disabled WorkspaceMetadata/BootstrapFor as admin. The views, issue-record authorization and paged realtime branches are refused (no cold route reaches them). TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see listAPIKeys).",
+      "coldDispatch": "server/settings_features.go:listAPIKeys",
+      "accessors": [
+        "workspaceData",
+        "WorkspaceMetadata",
+        "PagedWorkspaceMetadata",
+        "BootstrapForUser",
+        "BootstrapFor"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "callers": [
+        "server/scale_p21_cold_dispatch_api_keys.go:listAPIKeysWithStore",
+        "server/scale_p21_cold_dispatch_api_keys.go:revokeAPIKeyWithStore",
+        "server/scale_p21_cold_dispatch_api_keys.go:listOAuthApplicationsWithStore",
+        "server/scale_p21_cold_dispatch_api_keys.go:getOAuthApplicationWithStore"
+      ]
+    },
+    "createAPIKeyWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal createAPIKey mutation with the repository explicit; the api_key.created writer runs on the cold facade. TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see createAPIKey).",
+      "coldDispatch": "server/settings_features.go:createAPIKey",
+      "accessors": [
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "callers": [
+        "server/settings_features.go:createAPIKey"
+      ]
+    },
+    "createOAuthApplicationWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal createOAuthApplication mutation with the repository explicit; the oauth_application.created writer runs on the cold facade, reconcile and credential audit on the server's store. TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see createOAuthApplication).",
+      "coldDispatch": "server/settings_features.go:createOAuthApplication",
+      "accessors": [
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "callers": [
+        "server/settings_features.go:createOAuthApplication"
+      ]
+    },
+    "deleteOAuthApplicationWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal deleteOAuthApplication body with the repository explicit; the oauth_application.deleted writer runs on the cold facade (a legacy store, where the scoped writer is MutateWorkspace), uninstalls, reconcile and email on the server's store. TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see deleteOAuthApplication).",
+      "coldDispatch": "server/settings_features.go:deleteOAuthApplication",
+      "accessors": [
+        "MutateWorkspaceScoped"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "callers": [
+        "server/settings_features.go:deleteOAuthApplication"
+      ]
+    },
+    "revokeAPIKeyWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal flag-off revokeAPIKey body with the repository explicit: the viewer's role through coldWorkspaceData, the api_key.revoked writer on the cold facade (a legacy store, where the scoped writer is MutateWorkspace). TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see revokeAPIKey).",
+      "coldDispatch": "server/settings_features.go:revokeAPIKey",
+      "accessors": [
+        "MutateWorkspaceScoped"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "callers": [
+        "server/settings_features.go:revokeAPIKey"
+      ]
+    },
+    "revokeMCPAuthorizationsWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal remainder of revokeMCPAuthorizations after its access check: grants and installations read on the refreshed borrowed store, revocations (bounded OAuth metadata transaction) and audit on the server's store. TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see revokeMCPAuthorizations).",
+      "coldDispatch": "server/oauth_authorized_applications.go:revokeMCPAuthorizations",
+      "accessors": [
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "callers": [
+        "server/oauth_authorized_applications.go:revokeMCPAuthorizations"
+      ]
+    },
+    "rotateAPIKeySecretWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal rotateAPIKeySecret mutation with the repository explicit; the api_key.secret_rotated writer runs on the cold facade (a legacy store, where the scoped writer is MutateWorkspace). TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see rotateAPIKeySecret).",
+      "coldDispatch": "server/settings_features.go:rotateAPIKeySecret",
+      "accessors": [
+        "MutateWorkspaceScoped"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "callers": [
+        "server/settings_features.go:rotateAPIKeySecret"
+      ]
+    },
+    "updateAPIKeyWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal updateAPIKey mutation with the repository explicit; the api_key.updated writer runs on the cold facade. TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see updateAPIKey).",
+      "coldDispatch": "server/settings_features.go:updateAPIKey",
+      "accessors": [
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "callers": [
+        "server/settings_features.go:updateAPIKey"
+      ]
+    }
+  }
+}

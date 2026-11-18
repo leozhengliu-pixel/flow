@@ -814,7 +814,7 @@ func scaleP21SW270WorkspaceDataCold() map[string]int {
 		"finishPasskeyRegistration", "listReleases", "getRelease", "listReleasePipelines", "getReleasePipeline",
 		"syncReviewFromCodeHost", "listReviews", "getReview", "updateReview*2", "submitReview",
 		"commentOnReview", "resolveReviewThread", "listWorkspaceLabels", "listWorkspaceIssueTemplates",
-		"listAPIKeys", "revokeAPIKey", "listOAuthApplications", "getOAuthApplication", "listIntegrations",
+		"coldWorkspaceData", "listIntegrations",
 		"disconnectIntegrationConnection", "disconnectIntegration",
 	)
 }

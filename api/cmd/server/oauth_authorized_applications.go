@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"net/http"
 	"os"
 	"slices"
@@ -182,35 +181,7 @@ func (s *server) revokeMCPAuthorizations(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	key := access.Workspace.URLKey
-	metadata, _ := s.store.WorkspaceMetadata(key)
-	installations, err := s.store.ListApplications(r.Context(), key)
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
-		return
-	}
-	installed := installedApplicationClients(installations)
-	admin := workspaceAdminRole(access.ViewerRole)
-	revoked := 0
-	for _, authorization := range metadata.OAuthAuthorizations {
-		if !mcpOAuthAuthorization(authorization, installed) || !admin && authorization.UserID != actor.ID {
-			continue
-		}
-		err := s.store.RevokeOAuthAuthorizationRecords(r.Context(), key, authorization.ID, actor.ID)
-		if store.IsOAuthNotFound(err) {
-			continue
-		}
-		if errors.Is(err, store.ErrAuthForbidden) {
-			// The viewer's role changed since the workspace was read.
-			writeError(w, http.StatusForbidden, "You don't have permission to perform this action")
-			return
-		}
-		if err != nil {
-			respondMutation(w, err, http.StatusOK, nil)
-			return
-		}
-		s.recordAudit(r.Context(), key, newAuditEntry(actor, "revoked", "oauth_authorization", authorization.ID, map[string]any{"clientId": authorization.ClientID, "clientName": authorization.ClientName, "userId": authorization.UserID}))
-		revoked++
-	}
-	writeJSON(w, http.StatusOK, map[string]int{"revoked": revoked})
+	s.withColdMetadataRequest(w, r, "server/oauth_authorized_applications.go:revokeMCPAuthorizations", "", func(repo *store.SQLiteStore, request *http.Request) {
+		s.revokeMCPAuthorizationsWithStore(w, request, repo, actor, access)
+	})
 }
