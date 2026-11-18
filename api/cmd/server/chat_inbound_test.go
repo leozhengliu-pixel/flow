@@ -398,6 +398,63 @@ func TestChatCallbackTimestampReadsEveryUnit(t *testing.T) {
 	}
 }
 
+// The Feishu web client signs card callbacks with a Go time.Time text as the
+// timestamp (seen in production: 59 bytes, one header value, no padding):
+// date, time, numeric offset, zone abbreviation and the monotonic reading.
+// It is read by its numeric offset, with or without the monotonic part, and
+// with any fraction length; near misses stay unparsable.
+func TestChatCallbackTimestampReadsGoTimeText(t *testing.T) {
+	shanghai := time.FixedZone("CST", 8*3600)
+	at := time.Date(2026, 9, 25, 11, 4, 12, 971178746, shanghai)
+	for _, tc := range []struct {
+		value string
+		want  time.Time
+	}{
+		{"2026-09-25 11:04:12.971178746 +0800 CST m=+247318.326578241", at},
+		{"2026-09-25 11:04:12.97117874 +0800 CST m=+247318.326578241", at.Add(-6 * time.Nanosecond)},
+		{"2026-09-25 11:04:12.971178746 +0800 CST", at},
+		{"2026-09-25 11:04:12 +0800 CST", at.Truncate(time.Second)},
+		{"2026-09-25 03:04:12.971178746 +0000 UTC m=+0.000012345", at},
+		{"2026-09-25 11:04:12.971178746 +0800 +08 m=+1.000000000", at},
+		{"2026-09-24 21:34:12.971178746 -0530 -0530", at},
+		{"2026-09-25 11:04:12.971178746 +0800 CST m=-3.500000000", at},
+		{" 2026-09-25 11:04:12.971178746 +0800 CST m=+247318.326578241\t", at},
+		// The value String prints for the clock itself parses back to it.
+		{at.String(), at},
+	} {
+		got, unit, ok := chatCallbackTimestamp(tc.value)
+		if !ok || unit != "go_time" || !got.Equal(tc.want) {
+			t.Fatalf("%q: %v %q %v, want %v", tc.value, got, unit, ok, tc.want)
+		}
+	}
+	if sample := "2026-09-25 11:04:12.971178746 +0800 CST m=+247318.326578241"; len(sample) != 59 {
+		t.Fatalf("production sample length %d", len(sample))
+	}
+	now := time.Now()
+	if got, unit, ok := chatCallbackTimestamp(now.String()); !ok || unit != "go_time" || !got.Equal(now.Round(0)) {
+		t.Fatalf("time.Now().String() %q: %v %q %v", now.String(), got, unit, ok)
+	}
+	for _, value := range []string{
+		"2026-09-25 11:04:12.971178746 +0800",                          // no zone abbreviation
+		"2026-09-25 11:04:12.971178746 CST",                            // no numeric offset
+		"2026-09-25T11:04:12.971178746 +0800 CST",                      // ISO separator
+		"2026-09-25  11:04:12 +0800 CST",                               // doubled space
+		"2026-13-25 11:04:12 +0800 CST",                                // no such month
+		"2026-09-25 25:04:12 +0800 CST",                                // no such hour
+		"2026-09-25 11:04:12.9711787461 +0800 CST",                     // ten fraction digits
+		"2026-09-25 11:04:12 +0800 CST m=+1.5",                         // monotonic without nine digits
+		"2026-09-25 11:04:12 +0800 CST m=247318.326578241",             // monotonic without a sign
+		"2026-09-25 11:04:12 +0800 CST m=+247318.326578241 extra",      // trailing text
+		"2026-09-25 11:04:12 +0800 CST\n2026-09-25 11:04:12 +0800 CST", // two values
+		"2026-09-25 11:04:12 +0800 CST, 2026-09-25 11:04:12 +0800 CST", // folded repeated header
+		"1758769452 2026-09-25 11:04:12 +0800 CST",                     // mixed forms
+	} {
+		if _, _, ok := chatCallbackTimestamp(value); ok {
+			t.Fatalf("%q read as a timestamp", value)
+		}
+	}
+}
+
 // chatInboundJobs claims the queued inbound jobs, so each call counts the
 // jobs queued since the last.
 func (f *chatWorkflowFixture) chatInboundJobs(t *testing.T) int {
@@ -426,6 +483,10 @@ func TestChatInboundSignedCardClicksAcceptEveryTimestampForm(t *testing.T) {
 		strconv.FormatInt(now.Unix(), 10) + ".375",
 		strconv.FormatInt(now.Add(-2*time.Hour).Unix(), 10),
 		strconv.FormatInt(now.Add(2*time.Hour).UnixMilli(), 10),
+		// The Feishu web client's form: a Go time.Time text with its
+		// monotonic reading, and the same in China Standard Time.
+		now.String(),
+		strings.Replace(now.In(time.FixedZone("CST", 8*3600)).String(), " CST", " CST m=+247318.326578241", 1),
 	} {
 		body := chatEncryptedTestBody(t, f.cardTriggerEvent(f.identity.OpenID, f.binding.ChatID, messageID, ids[chatQuickAssign], "", "evt_stamp_"+strconv.Itoa(i), nil), f.credentials.EncryptKey)
 		got := f.post(t, chatRawCallback{body: body, stamp: stamp, signature: chatSignSHA256})
@@ -438,8 +499,8 @@ func TestChatInboundSignedCardClicksAcceptEveryTimestampForm(t *testing.T) {
 	if got := f.post(t, chatRawCallback{body: legacy, stamp: strconv.FormatInt(now.UnixMilli(), 10), signature: chatSignSHA1}); got.Code != http.StatusOK || !strings.Contains(got.Body.String(), "正在更新") {
 		t.Fatalf("legacy card in ms: %d %s", got.Code, got.Body.String())
 	}
-	if queued := f.chatInboundJobs(t); queued != 8 {
-		t.Fatalf("queued %d clicks, want 8", queued)
+	if queued := f.chatInboundJobs(t); queued != 10 {
+		t.Fatalf("queued %d clicks, want 10", queued)
 	}
 	if rejected := logs.records(t, "chat callback rejected"); len(rejected) != 0 {
 		t.Fatalf("rejections: %v", rejected)
@@ -462,6 +523,7 @@ func TestChatInboundCardTimestampRefusalsAreDiagnosed(t *testing.T) {
 	stale := strconv.FormatInt(now.Add(-48*time.Hour).Unix(), 10)
 	future := strconv.FormatInt(now.Add(48*time.Hour).UnixNano(), 10)
 	httpDate := now.UTC().Format(http.TimeFormat)
+	staleGoTime := now.Add(-48*time.Hour).In(time.FixedZone("CST", 8*3600)).String() + " m=+247318.326578241"
 	cases := []struct {
 		name     string
 		callback chatRawCallback
@@ -477,6 +539,8 @@ func TestChatInboundCardTimestampRefusalsAreDiagnosed(t *testing.T) {
 			map[string]any{"timestamp_present": true, "timestamp_length": float64(len(httpDate)), "timestamp_digits_only": false, "timestamp_unit": "", "signature_valid": true}, 0},
 		{"stale seconds", chatRawCallback{body: event, stamp: stale, signature: chatSignSHA256}, chatRejectTimestampStale,
 			map[string]any{"timestamp_present": true, "timestamp_length": float64(len(stale)), "timestamp_digits_only": true, "timestamp_unit": "s", "signature_valid": true}, 1},
+		{"stale Go time text", chatRawCallback{body: event, stamp: staleGoTime, signature: chatSignSHA256}, chatRejectTimestampStale,
+			map[string]any{"timestamp_present": true, "timestamp_length": float64(len(staleGoTime)), "timestamp_digits_only": false, "timestamp_unit": "go_time", "signature_valid": true}, 1},
 		{"future nanoseconds", chatRawCallback{body: event, stamp: future, signature: chatSignSHA256}, chatRejectTimestampFuture,
 			map[string]any{"timestamp_present": true, "timestamp_length": float64(len(future)), "timestamp_digits_only": true, "timestamp_unit": "ns", "signature_valid": true}, -1},
 		{"genuine legacy signature, stale", chatRawCallback{body: legacy, stamp: stale, signature: chatSignSHA1}, chatRejectTimestampStale,
@@ -488,7 +552,7 @@ func TestChatInboundCardTimestampRefusalsAreDiagnosed(t *testing.T) {
 		{"forged signature, no timestamp", chatRawCallback{body: legacy, stamp: "-", signature: chatSignSHA1, override: forged}, chatRejectSignature,
 			map[string]any{"timestamp_present": false, "signature_valid": false}, 0},
 	}
-	secrets := []string{f.credentials.EncryptKey, f.credentials.VerificationToken, f.credentials.AppSecret, forged, httpDate, stale, future, "c-update-token", "Asia/Shanghai"}
+	secrets := []string{f.credentials.EncryptKey, f.credentials.VerificationToken, f.credentials.AppSecret, forged, httpDate, stale, staleGoTime, future, "c-update-token", "Asia/Shanghai"}
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.callback.nonce = "nonce_marker_" + strconv.Itoa(i)
