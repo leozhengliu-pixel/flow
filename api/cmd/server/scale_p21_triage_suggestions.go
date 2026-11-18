@@ -476,7 +476,7 @@ func generateBoundedTriageMutation(ctx context.Context, issueIDs []string, sourc
 		}
 		defer indexWork.Close()
 		reserve := func(bytes uint64) error { return indexWork.Reserve(ctx, bytes) }
-		index := newTriageCandidateIndex(reserve)
+		index, cache := newTriageCandidateIndex(reserve), newTriageGenerationCache(reserve)
 		useIndex := !triageCandidateIndexOff
 		var groupStarts []int32
 		if useIndex {
@@ -603,7 +603,7 @@ func generateBoundedTriageMutation(ctx context.Context, issueIDs []string, sourc
 				}
 				sortTriageSuggestionCandidates(ranked)
 				now := time.Now().UTC()
-				items := generateIssueSuggestionsWithCandidates(data, issue, now, ranked)
+				items := generateIssueSuggestionsCached(data, issue, now, ranked, cache)
 				if fallback != nil {
 					data.Issues = append(data.Issues, *fallback)
 				}

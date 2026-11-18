@@ -282,7 +282,7 @@ func generateTriageMutation(issueIDs []string, candidateSets map[string][]domain
 		// They are search summaries, so even a candidate copy of another
 		// scoped issue must never be written back over its full row.
 		scoped := len(data.Issues)
-		index := newTriageCandidateIndex(nil)
+		index, cache := newTriageCandidateIndex(nil), newTriageGenerationCache(nil)
 		for _, issueID := range issueIDs {
 			issue, err := issueByID(data, issueID)
 			if err != nil {
@@ -297,11 +297,12 @@ func generateTriageMutation(issueIDs []string, candidateSets map[string][]domain
 				continue
 			}
 			// generateAndAppendIssueSuggestions, scanning data.Issues
-			// through the candidate index.
+			// through the candidate index and the cached project and label
+			// tokens of this generation.
 			now := time.Now().UTC()
 			if triageIntelligenceEnabled(data.WorkspaceSettings) && isTriageIssue(data, issue) {
 				candidates := index.similarTriageIssues(data, issue)
-				storeTriageSuggestions(data, issue, generateIssueSuggestionsWithCandidates(data, issue, now, candidates), now, triageSourceHeuristic, "")
+				storeTriageSuggestions(data, issue, generateIssueSuggestionsCached(data, issue, now, candidates, cache), now, triageSourceHeuristic, "")
 			}
 			*updated = *issue
 			*results = append(*results, *updated)
@@ -369,6 +370,12 @@ func generateIssueSuggestions(data *domain.Bootstrap, issue *domain.Issue, now t
 }
 
 func generateIssueSuggestionsWithCandidates(data *domain.Bootstrap, issue *domain.Issue, now time.Time, candidates []triageSuggestionCandidate) []domain.IssueSuggestion {
+	return generateIssueSuggestionsCached(data, issue, now, candidates, nil)
+}
+
+// generateIssueSuggestionsCached is generateIssueSuggestionsWithCandidates
+// with the project and label tokens of a generation computed once (cache).
+func generateIssueSuggestionsCached(data *domain.Bootstrap, issue *domain.Issue, now time.Time, candidates []triageSuggestionCandidate, cache *triageGenerationCache) []domain.IssueSuggestion {
 	settings := data.WorkspaceSettings.FeatureSettings.TriageIntelligence
 	result := make([]domain.IssueSuggestion, 0, 7)
 	rank := 0
@@ -428,7 +435,7 @@ func generateIssueSuggestionsWithCandidates(data *domain.Bootstrap, issue *domai
 	}
 
 	if issue.Project == nil {
-		if projectID, score, reasons := inferProject(data, issue, candidates); projectID != "" {
+		if projectID, score, reasons := inferProjectCached(data, issue, candidates, cache); projectID != "" {
 			add("project", projectID, score, reasons)
 		}
 	}
@@ -437,7 +444,7 @@ func generateIssueSuggestionsWithCandidates(data *domain.Bootstrap, issue *domai
 			add("assignee", userID, score, reasons)
 		}
 	}
-	if labelID, score, reasons := inferLabel(data, issue, candidates); labelID != "" {
+	if labelID, score, reasons := inferLabelCached(data, issue, candidates, cache); labelID != "" {
 		add("label", labelID, score, reasons)
 	}
 	if teamID, score, reasons := inferTeam(data, issue, candidates); teamID != "" {
@@ -742,6 +749,10 @@ func (s *triageScores) best(keep func(string) bool) (string, float64) {
 }
 
 func inferProject(data *domain.Bootstrap, issue *domain.Issue, candidates []triageSuggestionCandidate) (string, float64, []string) {
+	return inferProjectCached(data, issue, candidates, nil)
+}
+
+func inferProjectCached(data *domain.Bootstrap, issue *domain.Issue, candidates []triageSuggestionCandidate, cache *triageGenerationCache) (string, float64, []string) {
 	if issue.Project != nil || len(data.Projects) == 0 {
 		return "", 0, nil
 	}
@@ -761,7 +772,7 @@ func inferProject(data *domain.Bootstrap, issue *domain.Issue, candidates []tria
 		if project.ArchivedAt != nil {
 			continue
 		}
-		score := triageSimilarity(issueTokens, triageTokens(project.Name, project.Summary, project.Description))
+		score := triageSimilarity(issueTokens, cache.tokens(cache.projectTokens(), project.ID, project.Name, project.Summary, project.Description))
 		scores.raise(project.ID, score)
 		if score >= 0.3 {
 			reasons[project.ID] = append(reasons[project.ID], "The project name and context overlap with this request.")
@@ -810,6 +821,10 @@ func inferAssignee(data *domain.Bootstrap, issue *domain.Issue, candidates []tri
 }
 
 func inferLabel(data *domain.Bootstrap, issue *domain.Issue, candidates []triageSuggestionCandidate) (string, float64, []string) {
+	return inferLabelCached(data, issue, candidates, nil)
+}
+
+func inferLabelCached(data *domain.Bootstrap, issue *domain.Issue, candidates []triageSuggestionCandidate, cache *triageGenerationCache) (string, float64, []string) {
 	if len(issue.Labels) > 0 || len(data.Labels) == 0 {
 		return "", 0, nil
 	}
@@ -827,7 +842,7 @@ func inferLabel(data *domain.Bootstrap, issue *domain.Issue, candidates []triage
 		if label.ArchivedAt != nil || (label.ResourceType != "" && label.ResourceType != "issue") {
 			continue
 		}
-		score := triageSimilarity(issueTokens, triageTokens(label.Name, label.Description))
+		score := triageSimilarity(issueTokens, cache.tokens(cache.labelTokens(), label.ID, label.Name, label.Description))
 		scores.raise(label.ID, score)
 		if score >= 0.35 {
 			reasons[label.ID] = append(reasons[label.ID], "The label name and description match the request.")
