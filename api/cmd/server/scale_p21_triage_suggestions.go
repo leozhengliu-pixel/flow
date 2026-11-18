@@ -1,6 +1,7 @@
 package main
 
 import (
+	"container/heap"
 	"context"
 	"errors"
 	"log"
@@ -813,54 +814,149 @@ func triageCandidateView(candidate domain.Issue) domain.Issue {
 
 // scoreIndexed is the bounded scoring visit over the indexed stream: scoped
 // issues (current values), then the encountered groups' candidate views.
-// Only positions sharing a token with issue are read; the first occurrence
-// of an ID with a source mutation is always read and scored as that
-// mutation, as the visit does. It reports false, with ranked emptied, when a
-// mutation's first occurrence was not forced, and the caller scans instead.
+// Only positions sharing a token with issue can be accepted. A group entry's
+// positions share one view, so it is scored once and its accepted positions
+// are merged in stream order up to the cut-off. The first occurrence of an
+// ID with a source mutation is scored as that mutation, as the visit does.
+// It reports false, with ranked emptied, when an ID has a mutation whose
+// first occurrence was not forced, and the caller scans instead.
 func scoreIndexed(ctx context.Context, index *triageCandidateIndex, scoped []domain.Issue, issue *domain.Issue, source *store.IssueSuggestionCandidates,
 	mutatedIDs map[string]bool, scores *store.IssueSuggestionScores, ranked *[]triageSuggestionCandidate) (bool, error) {
 	s := newTriageIssueScore(issue)
 	score := triageIssueScorer(issue)
-	var forced []int32
+	forced := map[int32]bool{}
 	for id := range mutatedIDs {
 		if position, found := index.first(id); found {
-			forced = append(forced, position)
+			forced[position] = true
 		}
 	}
-	positions := index.match(s.title, s.description, forced...)
+	index.count(s.title, s.description)
 	defer index.done()
 	mutated := map[string]bool{}
-	for _, position := range positions {
-		if len(*ranked) >= maxTriageSuggestionCandidates {
-			break
-		}
-		var candidate domain.Issue
-		if int(position) < len(scoped) {
-			candidate = scoped[position]
-		} else {
-			candidate = index.value(position)
-		}
-		var scored triageSuggestionCandidate
-		var ok bool
+	// evaluate scores one position as the visit does.
+	evaluate := func(position int32, candidate domain.Issue, titleScore, descriptionScore float64) (triageSuggestionCandidate, bool, bool) {
 		if mutation, found := source.Mutation(candidate.ID); found && !mutated[candidate.ID] {
-			if first, _ := index.first(candidate.ID); first != position {
-				*ranked = (*ranked)[:0]
-				return false, nil
+			if !forced[position] {
+				return triageSuggestionCandidate{}, false, false
 			}
 			mutated[candidate.ID] = true
-			scored, ok = score(mutation)
-		} else if s.eligible(candidate) {
-			titleScore, descriptionScore := index.similarity(position, s.title, s.description)
-			scored, ok = s.finish(candidate, titleScore, descriptionScore)
+			scored, ok := score(mutation)
+			return scored, ok, true
 		}
-		if !ok {
-			continue
+		if !s.eligible(candidate) {
+			return triageSuggestionCandidate{}, false, true
 		}
+		scored, ok := s.finish(candidate, titleScore, descriptionScore)
+		return scored, ok, true
+	}
+	accept := func(scored triageSuggestionCandidate) error {
 		var err error
 		if scored.issue, err = scores.Project(ctx, scored.issue); err != nil {
-			return false, err
+			return err
 		}
 		*ranked = append(*ranked, scored)
+		return nil
+	}
+	abandon := func() (bool, error) {
+		*ranked = (*ranked)[:0]
+		return false, nil
+	}
+	// Scoped issues: each position has its own current value.
+	for position := range int32(len(scoped)) {
+		if len(*ranked) >= maxTriageSuggestionCandidates {
+			return true, nil
+		}
+		entry := index.entryOf[position]
+		if !index.isTouched(entry) && !forced[position] {
+			continue
+		}
+		titleScore, descriptionScore := index.similarity(position, s.title, s.description)
+		scored, ok, valid := evaluate(position, scoped[position], titleScore, descriptionScore)
+		if !valid {
+			return abandon()
+		}
+		if ok {
+			if err := accept(scored); err != nil {
+				return false, err
+			}
+		}
+	}
+	// Group entries: one score per view; forced positions on their own.
+	var runs triageAcceptedRuns
+	applied := map[int32]bool{}
+	for position := range forced {
+		if int(position) < len(scoped) {
+			continue
+		}
+		mutation, found := source.Mutation(index.value(position).ID)
+		if !found || mutated[mutation.ID] {
+			continue
+		}
+		mutated[mutation.ID] = true
+		applied[position] = true
+		if scored, ok := score(mutation); ok {
+			runs = append(runs, &triageAcceptedRun{positions: []int32{position}, scored: scored})
+		}
+	}
+	for _, entry := range index.touched {
+		values := &index.entries[entry]
+		if len(values.positions) == 0 || int(values.positions[0]) < len(scoped) {
+			continue
+		}
+		view := values.value
+		if _, found := source.Mutation(view.ID); found && !mutatedIDs[view.ID] {
+			return abandon()
+		}
+		if !s.eligible(view) {
+			continue
+		}
+		titleScore, descriptionScore := index.similarity(values.positions[0], s.title, s.description)
+		if scored, ok := s.finish(view, titleScore, descriptionScore); ok {
+			// A forced position of the view was scored as its mutation.
+			positions := values.positions
+			if len(applied) != 0 {
+				positions = slices.DeleteFunc(slices.Clone(positions), func(position int32) bool { return applied[position] })
+			}
+			if len(positions) != 0 {
+				runs = append(runs, &triageAcceptedRun{positions: positions, scored: scored})
+			}
+		}
+	}
+	// The accepted positions in stream order, up to the cut-off.
+	heap.Init(&runs)
+	for len(runs) != 0 && len(*ranked) < maxTriageSuggestionCandidates {
+		next := runs[0]
+		if err := accept(next.scored); err != nil {
+			return false, err
+		}
+		if next.cursor++; next.cursor < len(next.positions) {
+			heap.Fix(&runs, 0)
+		} else {
+			heap.Pop(&runs)
+		}
 	}
 	return true, nil
+}
+
+// triageAcceptedRuns is a heap of accepted scan runs ordered by the stream
+// position of their next occurrence.
+type triageAcceptedRun struct {
+	positions []int32
+	cursor    int
+	scored    triageSuggestionCandidate
+}
+
+type triageAcceptedRuns []*triageAcceptedRun
+
+func (h triageAcceptedRuns) Len() int { return len(h) }
+func (h triageAcceptedRuns) Less(i, j int) bool {
+	return h[i].positions[h[i].cursor] < h[j].positions[h[j].cursor]
+}
+func (h triageAcceptedRuns) Swap(i, j int)  { h[i], h[j] = h[j], h[i] }
+func (h *triageAcceptedRuns) Push(item any) { *h = append(*h, item.(*triageAcceptedRun)) }
+func (h *triageAcceptedRuns) Pop() any {
+	old := *h
+	item := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return item
 }
