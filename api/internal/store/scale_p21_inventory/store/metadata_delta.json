@@ -1,11 +1,11 @@
 {
   "source": "store/metadata_delta.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "WorkspaceMetadataFields": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Pending: TestScaleP21SW286StoreWrapperHotBoundaries still finds HOT flag-on reachers: the unowned application-webhook reconcile reported by the guard: oauthApplicationsByClient and reconcileApplicationWebhooksWith run every minute from the HOT delivery tick (reconcileAllApplicationWebhooks) and on lifecycle events from HOT dispatchWebhookEvent. Pulse scheduling reads only through its retained source (pinned by SW288).",
+      "status": "reviewed",
+      "reason": "Closed by reachability: TestScaleP21SW286StoreWrapperHotBoundaries (with the SW290 probe) finds no HOT consumer reaching WorkspaceMetadataFields with FLOW_BOUNDED_METADATA on. The application-webhook reconcile is bounded: applicationWebhookClients reads BeginApplicationWebhookClientsRead and reconcileApplicationWebhooksWith reads BeginApplicationWebhookReconcileRead with the flag on (TestScaleP21SW295ApplicationWebhookClients and TestScaleP21SW295ApplicationWebhookReconcileDifferential); oauthApplicationsByClient is a guard-closed consumer that nothing references with the flag on. Pulse scheduling reads only through its retained source (pinned by SW288). The literal wrapper is unchanged for flag-off callers.",
       "accessors": [
         "Bootstrap"
       ],
