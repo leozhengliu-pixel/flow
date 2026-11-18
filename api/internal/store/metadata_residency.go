@@ -184,7 +184,9 @@ func (r *metadataResidency) replacePolicyCosts(costs map[string]int) error {
 type metadataWorkBudget struct {
 	mu                   sync.Mutex
 	limit, used, waiting int
-	changed              chan struct{}
+	// peak is the highest used so far (MetadataWorkPeakForTesting).
+	peak    int
+	changed chan struct{}
 }
 
 type metadataWorkLease struct {
@@ -232,6 +234,7 @@ func (b *metadataWorkBudget) acquire(ctx context.Context, bytes int) (context.Co
 		}
 		if bytes <= b.limit-b.used {
 			b.used += bytes
+			b.peak = max(b.peak, b.used)
 			lease := &metadataWorkLease{b, bytes, true}
 			b.mu.Unlock()
 			var once sync.Once

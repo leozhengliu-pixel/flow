@@ -26,6 +26,9 @@ type issueMutationRows struct {
 	workspace  string
 	results    []map[string]storedIssueRecord
 	discussion *discussionRowsOwned
+	// rawOnly keeps only the stored payloads (record.raw, record.order):
+	// callers decode the issues they need under their own allowance.
+	rawOnly bool
 }
 
 type issueMutationRowHeader struct {
@@ -232,6 +235,10 @@ func (r *issueMutationRows) payloads(ctx context.Context, headers []issueMutatio
 		return io.ErrUnexpectedEOF
 	}
 	for index, body := range bodies {
+		if r.rawOnly {
+			result[headers[index].id] = storedIssueRecord{raw: body, order: headers[index].order}
+			continue
+		}
 		work, err := metadataAggregatePayloadJSONWork(ctx, body)
 		if err != nil {
 			return err
