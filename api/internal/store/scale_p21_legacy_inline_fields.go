@@ -353,7 +353,7 @@ func (s *SQLiteStore) writeLegacyInlineFieldsRootPatch(ctx context.Context, tx *
 		return err
 	}
 	defer stage.Close(context.WithoutCancel(ctx))
-	writer, err := stage.writer(ctx, "data")
+	writer, err := stage.growingWriter(ctx, "data", s)
 	if err != nil {
 		return err
 	}

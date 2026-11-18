@@ -830,7 +830,7 @@ func (p *legacyMetadataWritePlan) writeProjectProgressRow(ctx context.Context, f
 	defer func() {
 		_ = stage.Close(context.WithoutCancel(ctx))
 	}()
-	writer, err := stage.writer(ctx, "data")
+	writer, err := stage.growingWriter(ctx, "data", p.store)
 	if err != nil {
 		return true, err
 	}
@@ -852,7 +852,7 @@ func (p *legacyMetadataWritePlan) writeProjectProgressRow(ctx context.Context, f
 	if err := writeReleaseIssueRecords(ctx, p.tx, p.workspace, "projects", row.id, next); err != nil {
 		return true, err
 	}
-	search, err := stage.writer(ctx, "content")
+	search, err := stage.growingWriter(ctx, "content", p.store)
 	if err != nil {
 		return true, err
 	}
