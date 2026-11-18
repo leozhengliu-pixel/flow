@@ -324,6 +324,14 @@ func (r *IssueSuggestionScores) Keep(ctx context.Context, issue domain.Issue) er
 	return r.owner.reserve(ctx, cost*2+1024)
 }
 
+// Reserve admits bytes the caller retains until Close (a scoring index).
+func (r *IssueSuggestionScores) Reserve(ctx context.Context, bytes uint64) error {
+	if r == nil || r.owner == nil {
+		return errMetadataLogicalClosed
+	}
+	return r.owner.reserve(ctx, bytes)
+}
+
 // Project retains the fields read after similarity scoring: identity/display,
 // the stable sort clock, team/project/assignee IDs and ordered label IDs.
 // Other fields have already contributed to the numeric scores. The allowance

@@ -455,6 +455,9 @@ func (s *server) generateTriageIntelligenceForIssuesBounded(ctx context.Context,
 }
 
 func generateBoundedTriageMutation(ctx context.Context, issueIDs []string, source *store.IssueSuggestionCandidates, updated *domain.Issue, results *[]domain.Issue, generated *bool) func(*domain.Bootstrap) error {
+	// The IDs whose first candidate occurrence the source replaces with a
+	// mutation; like the source's mutations they outlive an attempt.
+	mutatedIDs := map[string]bool{}
 	return func(data *domain.Bootstrap) error {
 		// A write that lost a race to another server runs the callback
 		// again: the results are those of the attempt that commits.
@@ -462,32 +465,74 @@ func generateBoundedTriageMutation(ctx context.Context, issueIDs []string, sourc
 		scoped := len(data.Issues)
 		var encountered []string
 		maxNumber := 0
+		// The scan stream (scoped issues, then every encountered issue's
+		// candidates) is indexed once per attempt: each scored issue reads
+		// only the positions sharing one of its tokens, and a lookup walks
+		// only the group holding the first occurrence. The literal scan runs
+		// instead when the index is off or its memory is not admitted.
+		indexWork, err := source.BeginScores(ctx)
+		if err != nil {
+			return err
+		}
+		defer indexWork.Close()
+		reserve := func(bytes uint64) error { return indexWork.Reserve(ctx, bytes) }
+		index := newTriageCandidateIndex(reserve)
+		useIndex := !triageCandidateIndexOff
+		var groupStarts []int32
+		if useIndex {
+			for _, issue := range data.Issues[:scoped] {
+				if err := index.add(issue, domain.Issue{}, false); err != nil {
+					if !errors.Is(err, store.ErrMetadataWorkBudget) {
+						return err
+					}
+					useIndex = false
+					break
+				}
+			}
+		}
+		// lookup returns the first occurrence of id in the encountered
+		// groups, in encountered order, after keep admits it.
+		lookup := func(id string, keep func(domain.Issue) error) (*domain.Issue, error) {
+			var found *domain.Issue
+			walk := func(group string) error {
+				return source.Walk(ctx, group, func(candidate domain.Issue) (bool, error) {
+					if candidate.ID != id {
+						return true, nil
+					}
+					if err := keep(candidate); err != nil {
+						return false, err
+					}
+					found = &candidate
+					return false, nil
+				})
+			}
+			if useIndex {
+				position, ok := index.first(id)
+				if !ok {
+					return nil, nil
+				}
+				if int(position) >= scoped {
+					group, _ := slices.BinarySearch(groupStarts, position+1)
+					return found, walk(encountered[group-1])
+				}
+			}
+			for _, group := range encountered {
+				if err := walk(group); err != nil || found != nil {
+					return found, err
+				}
+			}
+			return found, nil
+		}
 		for _, issueID := range issueIDs {
 			issue, err := issueByID(data, issueID)
 			var fallback *domain.Issue
 			if err != nil {
 				if mutation, found := source.Mutation(issueID); found {
 					fallback = &mutation
-				}
-				for _, id := range encountered {
-					if fallback != nil {
-						break
-					}
-					if err := source.Walk(ctx, id, func(candidate domain.Issue) (bool, error) {
-						if candidate.ID != issueID {
-							return true, nil
-						}
-						if err := source.KeepResult(ctx, candidate); err != nil {
-							return false, err
-						}
-						fallback = &candidate
-						return false, nil
-					}); err != nil {
-						return err
-					}
-					if fallback != nil {
-						break
-					}
+				} else if fallback, err = lookup(issueID, func(candidate domain.Issue) error {
+					return source.KeepResult(ctx, candidate)
+				}); err != nil {
+					return err
 				}
 				issue = fallback
 			}
@@ -496,6 +541,17 @@ func generateBoundedTriageMutation(ctx context.Context, issueIDs []string, sourc
 			}
 			encountered = append(encountered, issueID)
 			maxNumber = max(maxNumber, source.Number(issueID))
+			if useIndex {
+				groupStarts = append(groupStarts, int32(index.length()))
+				if err := source.Walk(ctx, issueID, func(candidate domain.Issue) (bool, error) {
+					return true, index.add(candidate, triageCandidateView(candidate), true)
+				}); err != nil {
+					if !errors.Is(err, store.ErrMetadataWorkBudget) {
+						return err
+					}
+					useIndex = false
+				}
+			}
 			if err := func() error {
 				scores, err := source.BeginScores(ctx)
 				if err != nil {
@@ -522,19 +578,27 @@ func generateBoundedTriageMutation(ctx context.Context, issueIDs []string, sourc
 					}
 					return len(ranked) < maxTriageSuggestionCandidates, nil
 				}
-				for _, candidate := range data.Issues[:scoped] {
-					if more, err := visit(candidate); err != nil {
+				indexed := false
+				if useIndex {
+					if indexed, err = scoreIndexed(ctx, index, data.Issues[:scoped], issue, source, mutatedIDs, scores, &ranked); err != nil {
 						return err
-					} else if !more {
-						break
 					}
 				}
-				for _, id := range encountered {
-					if len(ranked) >= maxTriageSuggestionCandidates {
-						break
+				if !indexed {
+					for _, candidate := range data.Issues[:scoped] {
+						if more, err := visit(candidate); err != nil {
+							return err
+						} else if !more {
+							break
+						}
 					}
-					if err := source.Walk(ctx, id, visit); err != nil {
-						return err
+					for _, id := range encountered {
+						if len(ranked) >= maxTriageSuggestionCandidates {
+							break
+						}
+						if err := source.Walk(ctx, id, visit); err != nil {
+							return err
+						}
 					}
 				}
 				sortTriageSuggestionCandidates(ranked)
@@ -555,24 +619,10 @@ func generateBoundedTriageMutation(ctx context.Context, issueIDs []string, sourc
 						var target *domain.Issue
 						if mutation, found := source.Mutation(item.SuggestedIssueID); found {
 							target = &mutation
-						} else {
-							for _, id := range encountered {
-								if err := source.Walk(ctx, id, func(candidate domain.Issue) (bool, error) {
-									if candidate.ID != item.SuggestedIssueID {
-										return true, nil
-									}
-									if err := scores.Keep(ctx, candidate); err != nil {
-										return false, err
-									}
-									target = &candidate
-									return false, nil
-								}); err != nil {
-									return err
-								}
-								if target != nil {
-									break
-								}
-							}
+						} else if target, err = lookup(item.SuggestedIssueID, func(candidate domain.Issue) error {
+							return scores.Keep(ctx, candidate)
+						}); err != nil {
+							return err
 						}
 						if target != nil {
 							data.Issues = append(data.Issues, *target)
@@ -599,6 +649,7 @@ func generateBoundedTriageMutation(ctx context.Context, issueIDs []string, sourc
 					if err := source.SetMutation(ctx, candidate); err != nil {
 						return err
 					}
+					mutatedIDs[candidate.ID] = true
 					maxNumber = max(maxNumber, candidate.Number)
 				}
 				data.Issues = data.Issues[:scoped]
@@ -733,4 +784,83 @@ func (s *server) runTriageIntelligenceBounded(ctx context.Context, actor mcpActo
 			}
 			return store.ContextWithIssueSuggestionWrite(store.WithIssueRecordMutations(owned, scope...), input), release, nil
 		})
+}
+
+// triageCandidateView is what the bounded scan keeps of a candidate summary:
+// the fields IssueSuggestionScores.Project retains (projecting the view gives
+// the summary's projection) plus the archive and state checks of scoring.
+func triageCandidateView(candidate domain.Issue) domain.Issue {
+	title := candidate.Title
+	if candidate.Identifier != "" {
+		title = ""
+	}
+	view := domain.Issue{ID: candidate.ID, Identifier: candidate.Identifier, Title: title, UpdatedAt: candidate.UpdatedAt,
+		Team: domain.Team{ID: candidate.Team.ID}, State: domain.WorkflowState{Type: candidate.State.Type}, ArchivedAt: candidate.ArchivedAt}
+	if candidate.Project != nil {
+		view.Project = &domain.ProjectSummary{ID: candidate.Project.ID}
+	}
+	if candidate.Assignee != nil {
+		view.Assignee = &domain.User{ID: candidate.Assignee.ID}
+	}
+	if len(candidate.Labels) != 0 {
+		view.Labels = make([]domain.IssueLabel, len(candidate.Labels))
+		for index, label := range candidate.Labels {
+			view.Labels[index].ID = label.ID
+		}
+	}
+	return view
+}
+
+// scoreIndexed is the bounded scoring visit over the indexed stream: scoped
+// issues (current values), then the encountered groups' candidate views.
+// Only positions sharing a token with issue are read; the first occurrence
+// of an ID with a source mutation is always read and scored as that
+// mutation, as the visit does. It reports false, with ranked emptied, when a
+// mutation's first occurrence was not forced, and the caller scans instead.
+func scoreIndexed(ctx context.Context, index *triageCandidateIndex, scoped []domain.Issue, issue *domain.Issue, source *store.IssueSuggestionCandidates,
+	mutatedIDs map[string]bool, scores *store.IssueSuggestionScores, ranked *[]triageSuggestionCandidate) (bool, error) {
+	s := newTriageIssueScore(issue)
+	score := triageIssueScorer(issue)
+	var forced []int32
+	for id := range mutatedIDs {
+		if position, found := index.first(id); found {
+			forced = append(forced, position)
+		}
+	}
+	positions := index.match(s.title, s.description, forced...)
+	defer index.done()
+	mutated := map[string]bool{}
+	for _, position := range positions {
+		if len(*ranked) >= maxTriageSuggestionCandidates {
+			break
+		}
+		var candidate domain.Issue
+		if int(position) < len(scoped) {
+			candidate = scoped[position]
+		} else {
+			candidate = index.value(position)
+		}
+		var scored triageSuggestionCandidate
+		var ok bool
+		if mutation, found := source.Mutation(candidate.ID); found && !mutated[candidate.ID] {
+			if first, _ := index.first(candidate.ID); first != position {
+				*ranked = (*ranked)[:0]
+				return false, nil
+			}
+			mutated[candidate.ID] = true
+			scored, ok = score(mutation)
+		} else if s.eligible(candidate) {
+			titleScore, descriptionScore := index.similarity(position, s.title, s.description)
+			scored, ok = s.finish(candidate, titleScore, descriptionScore)
+		}
+		if !ok {
+			continue
+		}
+		var err error
+		if scored.issue, err = scores.Project(ctx, scored.issue); err != nil {
+			return false, err
+		}
+		*ranked = append(*ranked, scored)
+	}
+	return true, nil
 }
