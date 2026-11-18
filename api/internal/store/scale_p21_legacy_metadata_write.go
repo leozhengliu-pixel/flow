@@ -36,6 +36,8 @@ type legacyMetadataWriteField struct {
 	scheduleParents          *legacyScheduleParentMap
 	// reorder takes writeArrayReorder (legacyMetadataStreamedOrder).
 	reorder bool
+	// transition takes writeArrayTransition (legacyMetadataStreamedOrder).
+	transition bool
 }
 
 type legacyMetadataWritePlan struct {
@@ -238,6 +240,7 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 	}
 	// Decide and admit every fallback before the first fast-path write.
 	var slowNames []string
+	var transitions []*legacyMetadataWriteField
 	var sessionComplete []*legacyMetadataWriteField
 	var inlineComplete []*legacyMetadataWriteField
 	var parentMaps []*legacyMetadataWriteField
@@ -272,6 +275,17 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 			field.reorder = true
 			continue
 		}
+		if legacyMetadataStreamedOrder(ctx, field.field.name) {
+			ready, err := plan.arrayTransitionReady(ctx, field, shapes)
+			if err != nil {
+				return nil, err
+			}
+			if ready {
+				field.transition = true
+				transitions = append(transitions, field)
+				continue
+			}
+		}
 		if handled, err := plan.agentSessionLifecycleInlineReady(ctx, field, shapes); err != nil {
 			return nil, err
 		} else if handled {
@@ -298,6 +312,21 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 		reflect.ValueOf(&slowBefore).Elem().Field(field.field.index).Set(left)
 		reflect.ValueOf(&slowTarget).Elem().Field(field.field.index).Set(right)
 		slowNames = append(slowNames, field.field.name)
+	}
+	if len(transitions) != 0 && (len(slowNames) != 0 || len(sessionComplete) != 0 || len(inlineComplete) != 0) {
+		// Another field also rewrites the root: the literal writer writes
+		// them in one root update, so the transitions are materialized too.
+		for _, field := range transitions {
+			left, right, err := plan.materializeField(ctx, field, work)
+			if err != nil {
+				return nil, err
+			}
+			field.transition = false
+			reflect.ValueOf(&slowBefore).Elem().Field(field.field.index).Set(left)
+			reflect.ValueOf(&slowTarget).Elem().Field(field.field.index).Set(right)
+			slowNames = append(slowNames, field.field.name)
+		}
+		transitions = nil
 	}
 	for _, field := range plan.fields {
 		if field.full || !field.persist {
@@ -362,6 +391,11 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 			names = append(names, field.field.name)
 		}
 		if _, err := s.writeLegacyMetadataSlowFields(writeCtx, tx, workspace, slowBefore, slowTarget, names, refs); err != nil {
+			return nil, err
+		}
+	}
+	for _, field := range transitions {
+		if err := plan.writeArrayTransition(ctx, field); err != nil {
 			return nil, err
 		}
 	}
@@ -985,6 +1019,13 @@ func (p *legacyMetadataWritePlan) rebaseFull(ctx context.Context, f *legacyMetad
 		// canonical rows. Keep their frames rather than decoding the field.
 		f.inlineReady = true
 		return nil
+	}
+	if legacyMetadataStreamedOrder(ctx, f.field.name) {
+		// The same holds for an inline field without canonical rows whose
+		// target splits into rows (writeArrayTransition persists it).
+		if ready, err := p.arrayTransitionReady(ctx, f, map[string]string{}); err != nil || ready {
+			return err
+		}
 	}
 	work := &ResourceRead{store: p.store}
 	defer work.Close()
