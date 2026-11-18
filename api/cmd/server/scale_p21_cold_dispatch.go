@@ -31,6 +31,16 @@ var scaleP21ColdRoutes = []scaleP21ColdRoute{
 	{http.MethodPatch, "/api/drafts/{id}", "server/advanced_features.go:updateDraft", "draft.updated"},
 	{http.MethodGet, "/api/oauth/authorized-applications", "server/oauth_authorized_applications.go:listAuthorizedApplications", ""},
 	{http.MethodPatch, "/api/oauth-applications/{id}", "server/settings_features.go:updateOAuthApplication", "oauth_application.updated"},
+	{http.MethodDelete, "/api/oauth/authorized-applications/mcp", "server/oauth_authorized_applications.go:revokeMCPAuthorizations", ""},
+	{http.MethodGet, "/api/api-keys", "server/settings_features.go:listAPIKeys", ""},
+	{http.MethodPost, "/api/api-keys", "server/settings_features.go:createAPIKey", "api_key.created"},
+	{http.MethodPatch, "/api/api-keys/{id}", "server/settings_features.go:updateAPIKey", "api_key.updated"},
+	{http.MethodDelete, "/api/api-keys/{id}", "server/settings_features.go:revokeAPIKey", "api_key.revoked"},
+	{http.MethodPost, "/api/api-keys/{id}/rotate-secret", "server/settings_features.go:rotateAPIKeySecret", "api_key.secret_rotated"},
+	{http.MethodGet, "/api/oauth-applications", "server/settings_features.go:listOAuthApplications", ""},
+	{http.MethodGet, "/api/oauth-applications/{id}", "server/settings_features.go:getOAuthApplication", ""},
+	{http.MethodPost, "/api/oauth-applications", "server/settings_features.go:createOAuthApplication", "oauth_application.created"},
+	{http.MethodDelete, "/api/oauth-applications/{id}", "server/settings_features.go:deleteOAuthApplication", "oauth_application.deleted"},
 }
 
 func (s *server) withColdMetadataRequest(w http.ResponseWriter, r *http.Request, consumer, writer string, run func(*store.SQLiteStore, *http.Request)) {
