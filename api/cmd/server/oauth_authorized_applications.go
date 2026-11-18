@@ -167,62 +167,9 @@ func (s *server) listAuthorizedApplications(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	key := access.Workspace.URLKey
-	metadata, _ := s.store.WorkspaceMetadata(key)
-	installations, err := s.store.ListApplications(r.Context(), key)
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
-		return
-	}
-	installed := installedApplicationClients(installations)
-	byClient := map[string]*authorizedApplication{}
-	order := []string{}
-	mcp := []domain.OAuthAuthorization{}
-	entry := func(clientID, name string) *authorizedApplication {
-		if item, ok := byClient[clientID]; ok {
-			return item
-		}
-		item := &authorizedApplication{ClientID: clientID, Name: name, Authorizations: []domain.OAuthAuthorization{}}
-		byClient[clientID] = item
-		order = append(order, clientID)
-		return item
-	}
-	for _, authorization := range metadata.OAuthAuthorizations {
-		if authorization.RevokedAt != nil || authorization.Actor == "app" {
-			continue
-		}
-		if mcpOAuthAuthorization(authorization, installed) {
-			mcp = append(mcp, authorization)
-			continue
-		}
-		item := entry(authorization.ClientID, authorization.ClientName)
-		item.Authorizations = append(item.Authorizations, authorization)
-	}
-	for _, installation := range installations {
-		if installation.Builtin || !installation.Active || installation.ClientID == "" {
-			continue
-		}
-		entry(installation.ClientID, installation.Name)
-	}
-	result := make([]authorizedApplication, 0, len(order)+1)
-	if len(mcp) > 0 {
-		result = append(result, mcpAuthorizedApplication(mcp, s.mcpDeveloperURL(r), time.Now().UTC()))
-	}
-	for _, clientID := range order {
-		item := byClient[clientID]
-		if app, ok := s.store.OAuthApplicationByClientID(clientID); ok {
-			item.Name, item.Description, item.LogoURL, item.DeveloperName, item.DeveloperURL = app.Name, app.Description, app.LogoURL, app.DeveloperName, app.DeveloperURL
-			item.Realtime = app.WebhookEnabled && app.WebhookURL != ""
-			item.RedirectURIs = slices.Clone(app.RedirectURIs)
-		} else if client, err := s.store.OAuthClient(r.Context(), clientID); err == nil {
-			item.Name, item.LogoURL, item.DeveloperURL = client.ClientName, client.LogoURI, client.ClientURI
-			item.RedirectURIs = slices.Clone(client.RedirectURIs)
-		}
-		result = append(result, *item)
-	}
-	slices.SortStableFunc(result, func(a, b authorizedApplication) int {
-		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	s.withColdMetadataRequest(w, r, "server/oauth_authorized_applications.go:listAuthorizedApplications", "", func(repo *store.SQLiteStore, request *http.Request) {
+		s.listAuthorizedApplicationsWithStore(w, request, repo, key)
 	})
-	writeJSON(w, http.StatusOK, result)
 }
 
 // DELETE /api/oauth/authorized-applications/mcp revokes MCP access: every
