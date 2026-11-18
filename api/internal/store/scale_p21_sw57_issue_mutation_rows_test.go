@@ -272,7 +272,9 @@ func TestScaleP21SW57IssueMutationRows(t *testing.T) {
 				if drift == "grow" || drift == "grow-empty" {
 					query, args = `UPDATE issue_records SET data=? WHERE workspace_key=? AND id=?`, []any{hugeRaw, workspace, ids[0]}
 				}
-				if _, err := tx.Tx.ExecContext(t.Context(), query, args...); err != nil {
+				// The driver transaction bypasses the wrapper (and this observer),
+				// so it needs the dialect's placeholders itself.
+				if _, err := tx.Tx.ExecContext(t.Context(), rewriteSQL(query, tx.dialect), args...); err != nil {
 					t.Fatal(err)
 				}
 			})
