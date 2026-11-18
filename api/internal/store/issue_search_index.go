@@ -132,7 +132,9 @@ func (s *SQLiteStore) scaleP21SW18MigrateIssueSearchIndex(ctx context.Context) e
 	}
 	content := strings.Join(parts, " || '\n' || ")
 	if s.dialect == "mysql" {
-		content = "CONCAT_WS(CHAR(10)," + strings.Join(parts, ",") + ")"
+		// CHAR(10) alone is a binary string, which would make the result and
+		// its LEFT() cap count bytes and split a UTF-8 character.
+		content = "CONCAT_WS(CHAR(10 USING utf8mb4)," + strings.Join(parts, ",") + ")"
 	}
 	content = s.searchCapExpression(content)
 	contentBytes := "OCTET_LENGTH(" + content + ")"
