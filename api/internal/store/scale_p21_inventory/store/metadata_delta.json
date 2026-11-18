@@ -5,7 +5,7 @@
     "WorkspaceMetadataFields": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending: TestScaleP21SW286StoreWrapperHotBoundaries still finds HOT flag-on reachers: startWorkflowScheduler (15-second workflow ticker; swarm), startLoopRun (trigger dispatch and the due-loop tick; lead loop run), and the unowned application-webhook reconcile reported by the guard: oauthApplicationsByClient and reconcileApplicationWebhooksWith run every minute from the HOT delivery tick (reconcileAllApplicationWebhooks) and on lifecycle events from HOT dispatchWebhookEvent. Pulse scheduling reads only through its retained source (pinned by SW288).",
+      "reason": "Pending: TestScaleP21SW286StoreWrapperHotBoundaries still finds HOT flag-on reachers: the unowned application-webhook reconcile reported by the guard: oauthApplicationsByClient and reconcileApplicationWebhooksWith run every minute from the HOT delivery tick (reconcileAllApplicationWebhooks) and on lifecycle events from HOT dispatchWebhookEvent. Pulse scheduling reads only through its retained source (pinned by SW288).",
       "accessors": [
         "Bootstrap"
       ],
