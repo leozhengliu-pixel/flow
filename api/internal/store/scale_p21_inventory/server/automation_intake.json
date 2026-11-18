@@ -1,6 +1,6 @@
 {
   "source": "server/automation_intake.go",
-  "unmigrated": 19,
+  "unmigrated": 18,
   "consumers": {
     "createPushSubscription": {
       "owner": "P21",
@@ -214,7 +214,8 @@
     },
     "startWorkflowScheduler": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode dispatches each 15-second tick to boundedWorkflowScheduleTick before the literal WorkspaceMetadataFields loop, which stays the unchanged off branch (SW503 pins the dispatch order and the literal loop copy used by the differentials). SW501 compares the literal loop with the bounded tick on warm and SQL-reloaded sources at Sunday 10:00 UTC and Monday 10:00 UTC: exact due boundaries, one-nanosecond-late definitions, weekday/Sunday cron and @daily/@hourly/@weekly rules, disabled and manual definitions with due NextRunAt, duplicate definition IDs, due/stale/superseded/disabled/missing retry targets, a failing scheduled run with retry history, run order, rows, events and publication, plus a canceled tick that changes nothing. SW342 remains.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],

@@ -6,10 +6,10 @@
       "owner": "P21",
       "status": "unmigrated",
       "accessors": ["MutateWorkspaceWithAggregate"],
-      "reason": "Extracted shared scoped mutation kernel adds ordinal workflow and delivery profiles. Pending Wave36 differential, persistent and race proof; no downstream consumer or activation is certified by this provisional registration.",
+      "reason": "Extracted shared scoped mutation kernel. The nil-profile path is the reviewed MutateWorkspaceScopedWithAggregate (its SW27-33/SW36/SW188 proofs apply unchanged). Workflow profile: none - the bounded workflow writer is MutateWorkflowRun's own attempt and never reaches this kernel (SW504 AST guard; certified by SW500-SW503). The only ordinal profile is integration delivery (mutateMetadataOrdinalProfile from scale_p21_integration_delivery_profile.go); it stays pending until processIntegrationDelivery/BeginIntegrationDeliveryRead are certified (the Wave36 near-limit SW228 worker run still fails its deadline).",
       "temperature": "hot",
-      "temperatureReason": "Shared writer reached by workflow execution and integration delivery.",
-      "callers": ["MutateWorkspaceScopedWithAggregate", "bounded workflow writer", "bounded integration delivery writer"]
+      "temperatureReason": "Shared writer reached by integration delivery's ordinal profile (workflow execution uses its own writer).",
+      "callers": ["MutateWorkspaceScopedWithAggregate", "bounded integration delivery writer (mutateMetadataOrdinalProfile)"]
     },
     "BoundedMetadataViewForTesting": {
       "owner": "P21",
