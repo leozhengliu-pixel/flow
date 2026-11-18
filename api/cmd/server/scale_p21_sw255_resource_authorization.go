@@ -48,8 +48,16 @@ func (s *server) boundedPointResourceAuthorization(r *http.Request, workspace, u
 		request.URL = &location
 		return s.boundedHotCollectionAuthorization(request, workspace, userID)
 	}
+	return s.boundedPointResourceDecision(r, workspace, userID, kind, ref), true
+}
+
+// boundedPointResourceDecision is the literal projectAllowed/initiativeAllowed
+// point predicate, composed with the literal relation predicate when the
+// decoded path names .../relations/{relationId}. It is method independent.
+func (s *server) boundedPointResourceDecision(r *http.Request, workspace, userID, kind, ref string) (allowed bool) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if strings.TrimSpace(ref) == "" {
-		return false, true // MatchSlugRef rejects the empty decoded ref.
+		return false // MatchSlugRef rejects the empty decoded ref.
 	}
 	var credential *domain.APIKey
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
@@ -67,23 +75,23 @@ func (s *server) boundedPointResourceAuthorization(r *http.Request, workspace, u
 					allowed, err = s.boundedPointRelationAuthorization(r, workspace, userID, kind, ref, parts[4], access)
 				}
 				if err == nil {
-					return allowed, true
+					return allowed
 				}
 			}
 		}
 		if !errors.Is(err, store.ErrResourceAccessChanged) || attempt == 2 {
-			return false, true
+			return false
 		}
 		if credential != nil {
 			user, current, selectedWorkspace := s.authenticateAPIKey(r)
 			if current == nil || user.ID != userID || selectedWorkspace != workspace || !apiKeyAllowsRequest(r, *current) {
-				return false, true
+				return false
 			}
 			credential = current
 			*r = *r.WithContext(context.WithValue(r.Context(), apiKeyContextKey{}, *current))
 		}
 	}
-	return false, true
+	return false
 }
 
 // Literal auth projects the viewer before applying key restrictions in its

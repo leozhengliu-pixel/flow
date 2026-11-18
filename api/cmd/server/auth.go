@@ -1152,6 +1152,11 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		data, err = s.issueRecordAuthorizationData(r)
 		ok = err == nil
 	} else {
+		// With bounded metadata, the reviewed readers decide every shape that
+		// has one; the remaining shapes keep the literal projection below.
+		if allowed, handled := s.boundedFallbackAuthorization(r, workspace, userID); handled {
+			return allowed
+		}
 		// The viewer's whole projection: bounded by the projection gate (projection_gate.go).
 		if !acquireProjection(r) {
 			return false
