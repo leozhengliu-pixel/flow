@@ -1,6 +1,9 @@
 package store
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 // ApplicationWebhookWorkspaceCount counts installed webhook workspaces in the
 // store's current catalog. Only scalar predicates enter the application working
@@ -13,6 +16,11 @@ func (s *SQLiteStore) ApplicationWebhookWorkspaceCount(ctx context.Context, clie
 		return 0, err
 	}
 	defer release()
+	if s.dialect == "postgres" && strings.ContainsRune(clientID, '\x00') {
+		// textArgs would strip the NUL and count the client without it;
+		// PostgreSQL stores no metadata string with NUL, so none matches.
+		return 0, nil
+	}
 	keys := s.WorkspaceKeys()
 	count := 0
 	for start := 0; start < len(keys); start += MetadataRecordBatchMaxKeys {
