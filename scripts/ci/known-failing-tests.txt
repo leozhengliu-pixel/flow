@@ -66,6 +66,8 @@
 ./cmd/server TestScaleP21TeamMoveAutoApplyDifferential postgres # bounded triage generation: unsupported Unicode escape sequence (22P05) (owner: P21 team move)
 ./cmd/server TestScaleP21TriageWriterConcurrentSameIssue postgres # one of two concurrent triage writers answers 500 (owner: P21 triage writer)
 ./cmd/server TestScaleP21SW198LargeSessionLifecycleDifferential postgres # a legal large session changes its commit count (0 to 1) (owner: P21 SW198)
+./cmd/server TestScaleP21SW209AdvancedScheduleTickerLargeInlineWarmDifferential postgres,mysql # combined duplicate gate lost occurrence order (Health/DueAt/Missing of the 192-byte inline project ID); fails on the base commit too (owner: P21 SW209)
+./cmd/server TestScaleP21SW209AdvancedScheduleTickerLargeInlineReloadedDifferential postgres,mysql # combined duplicate gate lost occurrence order (Health/DueAt/Missing of the 192-byte inline project ID); fails on the base commit too (owner: P21 SW209)
 ./cmd/server TestScaleP21TeamMoveConcurrentSameTeam postgres # legacy move answers 500: unsupported Unicode escape sequence (22P05) (owner: P21 team move)
 ./cmd/server TestScaleP21TeamMoveAcceptDifferential postgres # legacy team move accept answers 403 (owner: P21 team move)
 ./cmd/server TestScaleP21SW294OAuthMetadataDifferential postgres # install-new: warm output changed (owner: P21 SW294)
