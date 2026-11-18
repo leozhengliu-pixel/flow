@@ -1,15 +1,15 @@
 {
   "source": "server/scale_p21_sw255_resource_authorization.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "boundedPointRelationAuthorization": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": ["BeginResourceRelationRead"],
       "temperature": "hot",
       "temperatureReason": "Project and initiative relation-ID request authorization.",
       "callers": ["server/scale_p21_sw255_resource_authorization.go:boundedPointResourceDecision"],
-      "reason": "Reuses the reviewed BeginResourceRelationRead owner and the point resource authorization reader for the related endpoint, keeping the literal viewer-then-key order; the escaped relation-route differential (SW327) has not been certified."
+      "reason": "Reuses the reviewed BeginResourceRelationRead owner and the point resource authorization reader for the related endpoint, keeping the literal viewer-then-key order (the relation row must name the decoded source ref exactly, the related endpoint must pass the source predicate, and a miss revalidates access). Its only caller, boundedPointResourceDecision, is reached from the escaped point route (boundedPointResourceAuthorization) and from the fallback point shape (boundedFallbackAuthorization: PATCH/DELETE .../relations/{relationId}). Certified on this branch: TestScaleP21SW327EscapedResourceAuthorization (400 legacy/bounded pairs over the principal and key matrix, witness, private related, reversed and raw-alias relations for projects and initiatives, SQL-reloaded rows) and TestScaleP21SW491FallbackAuthorizationDifferential (3304 warm and reloaded pairs including public/private relation PATCH and DELETE, slug mismatch and missing relation IDs), with TestScaleP21SW255PointResourceAuthorization and TestScaleP21SW490AuthorizationFallbackClosure pinning the route shapes; all with zero full decodes and released work."
     }
   }
 }
