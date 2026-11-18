@@ -13,7 +13,7 @@
     "WorkspaceMetadata": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending: TestScaleP21SW286StoreWrapperHotBoundaries still finds HOT flag-on reachers, each allow-listed with its owner: attachmentVisible (GET /uploads/{name} and file signing; lead upload visibility), generateCommentActions (asynchronous AI child of create-comment; lead comment actions), processIntegrationDelivery (every-tick integration delivery; swarm), refuseFormerMemberCollaborationUpdate (collaboration frames reach socketWorkspaceMetadata's development-mode WorkspaceMetadata branch; swarm former members). Every other flag-on caller is COLD, flag-off-only or a pinned relay.",
+      "reason": "Pending: TestScaleP21SW286StoreWrapperHotBoundaries still finds HOT flag-on reachers, each allow-listed with its owner: attachmentVisible (GET /uploads/{name} and file signing; lead upload visibility), generateCommentActions (asynchronous AI child of create-comment; lead comment actions), refuseFormerMemberCollaborationUpdate (collaboration frames reach socketWorkspaceMetadata's development-mode WorkspaceMetadata branch; swarm former members). Every other flag-on caller is COLD, flag-off-only or a pinned relay.",
       "accessors": [
         "WorkspaceMetadataForRead"
       ],
@@ -113,7 +113,7 @@
     "WorkspaceMetadataForRead": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending: reached with the flag on only through WorkspaceMetadata (issueRecordsBootstrapData's development branch is a relay pinned by SW225), so it keeps WorkspaceMetadata's HOT blockers: attachmentVisible, generateCommentActions, processIntegrationDelivery, refuseFormerMemberCollaborationUpdate (TestScaleP21SW286StoreWrapperHotBoundaries).",
+      "reason": "Pending: reached with the flag on only through WorkspaceMetadata (issueRecordsBootstrapData's development branch is a relay pinned by SW225), so it keeps WorkspaceMetadata's HOT blockers: attachmentVisible, generateCommentActions, refuseFormerMemberCollaborationUpdate (TestScaleP21SW286StoreWrapperHotBoundaries).",
       "accessors": [
         "resident-state"
       ],

@@ -1,6 +1,6 @@
 {
   "source": "server/enterprise_identity_integrations.go",
-  "unmigrated": 13,
+  "unmigrated": 12,
   "consumers": {
     "createIdentityProvider": {
       "owner": "P21",
@@ -115,7 +115,8 @@
     },
     "processIntegrationDelivery": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "With FLOW_BOUNDED_METADATA on, the first statement dispatches to the reviewed processBoundedIntegrationDelivery, so the worker never reads WorkspaceMetadata or calls MutateWorkspace; off mode is the literal worker, whose only change is reading the shared 5s retry persistence deadline from integrationDeliveryPersistTimeout. TestScaleP21SW510DeliveryOutcomesDifferential and TestScaleP21SW510ConcurrentWorkers compare it with the bounded worker on every outcome; TestScaleP21SW286StoreWrapperHotBoundaries no longer finds it reaching a wrapper with the flag on.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

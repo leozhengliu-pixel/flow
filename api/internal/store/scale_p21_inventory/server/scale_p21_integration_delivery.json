@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_integration_delivery.go",
+  "unmigrated": 0,
+  "consumers": {
+    "processBoundedIntegrationDelivery": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginIntegrationDeliveryRead", "MutateIntegrationDelivery", "BeginMetadataJSONRead"],
+      "temperature": "hot",
+      "temperatureReason": "Network delivery claim, response and retry worker runs from the delivery scheduler.",
+      "callers": ["server/enterprise_identity_integrations.go:processIntegrationDelivery"],
+      "reason": "Bounded worker with the literal order: first-occurrence read (BeginIntegrationDeliveryRead), HIPAA/not-found/not-retryable/retry-limit/connection/endpoint refusals, claim through the ordinal MutateIntegrationDelivery profile with the literal claim callback (envelope prepared inside it from the claimed record, the call deadline still 10s including that preparation), the captured endpoint/HMAC/token inputs from the entry read, the network call outside any lock, then the literal retry callback under the shared integrationDeliveryPersistTimeout (5s) with an exact result-encoding preflight. TestScaleP21SW510DeliveryOutcomesDifferential: 31 outcomes x warm/SQL-reloaded, literal vs bounded, comparing HTTP status/body, the outbound request (path, body, content type, delivery/event headers, HMAC validity per secret source, bearer token), native and reloaded deliveries/connections, webhook and realtime events: delivered, failed retry, final failed attempt, permanent retry limit, not retryable, HIPAA, disabled connection status, missing workspace/delivery/connection, invalid endpoints, five secret sources, unsigned, no previous values, and peer writes before the claim (claimed, exhausted, deleted delivery/connection, promoted duplicate, HIPAA, payload) and during the network call (deleted delivery/connection, promoted duplicate, status). TestScaleP21SW510ConcurrentWorkers: sequenced and racing workers deliver exactly once with identical results and state. SW202 worker (delivered, large, failed, canceled network, attempts/status CAS, connection move, HIPAA after claim), SW228 ownership and near-limit (16,711,732-byte envelope, persistence held to stated margins against the literal worker) and SW345 raw UTF-8 cover the rest."
+    }
+  }
+}

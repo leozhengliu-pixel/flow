@@ -1097,8 +1097,6 @@ type scaleP21SW286Allowance struct {
 // not passed either: the test fails when one no longer reaches a wrapper, so
 // the list shrinks as the migrations land.
 var scaleP21SW286Allowed = map[string]scaleP21SW286Allowance{
-	"server/server.processIntegrationDelivery": {wrappers: []string{"WorkspaceMetadata", "WorkspaceMetadataForRead"},
-		owner: "swarm: integration delivery", reason: "every-tick integration delivery reads the workspace metadata for the delivery's integration"},
 	"server/server.refuseFormerMemberCollaborationUpdate": {wrappers: []string{"WorkspaceMetadata", "WorkspaceMetadataForRead"},
 		owner: "swarm: former members", reason: "collaboration frames of a standalone document read socketWorkspaceMetadata, whose development-mode branch is WorkspaceMetadata"},
 	"server/server.oauthApplicationsByClient": {wrappers: []string{"WorkspaceMetadataFields"},
