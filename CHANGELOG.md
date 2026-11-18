@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded batch updates retain response values while releasing completed mutation work before triage.
 - Bounded workflow execution and the due-workflow scheduler preserve action order, large editor values, failure and retry history and atomic publication without loading complete workspaces.
 - Bounded issue writes persist from exact stored frames and recurring issues release their preliminary reads, preserving stored values and history. Bounded metadata stays off by default.
 - Bounded authorization preserves team-membership, escaped-route, file-signing, workflow-run and update-preview decisions. Trash restore authorization retains release-pipeline team ownership and feature checks.
