@@ -8,7 +8,7 @@
       "accessors": ["ResourceReadMetadata"],
       "temperature": "hot",
       "temperatureReason": "SW255 GET/HEAD project and initiative source authorization for detail, relations and updates.",
-      "callers": ["server/scale_p21_sw255_resource_authorization.go:boundedPointResourceAuthorization"],
+      "callers": ["server/scale_p21_sw255_resource_authorization.go:boundedPointResourceDecision", "server/scale_p21_sw493_view_dashboard_authorization.go:boundedProjectAllowed", "server/scale_p21_sw496_body_authorization.go:boundedInitiativeAllowed", "server/scale_p21_sw495_reference_authorization.go:boundedReferencePredicate"],
       "reason": "Owns only the point-resource authorization result over the original installed stamp choice or borrowed/new repeatable canonical snapshot. Native order and projected policy headers preserve the first visible ID/slug winner; capped rows and fixed-chunk spools feed the existing typed validator for canonical identity and dependency/parent ACLs. ResourceRead admission and retained source last through idempotent Close, with final live authority and cancellation checks; flag off delegates literally to ResourceReadMetadata. SW308 covers warm, actual SQL reload, canonical fallback, caller snapshots, duplicate native IDs, old slugs, large ignored bodies, the M principal/key matrix, revocation, cancellation and cleanup. Normal, persistent SQLite count-two and race proofs pass, with configured PostgreSQL repeats. SW255's 720 route pairs remain exact; SQL increases are bounded by team/header/alias traversal and explicitly reported, not claimed as a reduction. The whole auth wrapper and activation remain independent."
     }
   }
