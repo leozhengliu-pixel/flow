@@ -1,0 +1,14 @@
+{
+  "source": "server/scale_p21_workflow_schedule_tick.go",
+  "unmigrated": 1,
+  "consumers": {
+    "boundedWorkflowScheduleTick": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": ["BeginWorkflowScheduleRead"],
+      "temperature": "hot",
+      "temperatureReason": "Production workflow ticker's owned due/retry loop.",
+      "callers": ["server/automation_intake.go:startWorkflowScheduler"]
+    }
+  }
+}

@@ -202,7 +202,8 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap",
-        "MutateWorkspace"
+        "MutateWorkspace",
+        "MutateWorkflowRun"
       ],
       "temperature": "hot",
       "temperatureReason": "15-second workflow ticker reads definitions/runs and executes due or retried work; setup CRUD remains cold.",
