@@ -250,7 +250,7 @@ func (s *SQLiteStore) teamMemberRequestMemberships(ctx context.Context, workspac
 	empty := func(column string) string { return "CASE WHEN " + column + " IS NULL THEN NULL ELSE '' END" }
 	managed := `CASE WHEN EXISTS (SELECT 1 FROM scim_team_memberships sm WHERE sm.workspace_id=m.workspace_id AND sm.team_id=m.team_id AND sm.user_id=m.user_id AND sm.managed=1) THEN 1 ELSE 0 END`
 	rows, err := tx.QueryContext(ctx, `SELECT m.target_match,COALESCE(`+length("m.team_id")+`,0),COALESCE(`+length("m.role")+`,0),`+
-		empty("m.team_id")+","+empty("m.user_id")+","+empty("m.role")+","+empty("m.joined_at")+","+managed+","+empty("m.origin")+source+` ORDER BY m.joined_at`, params...)
+		empty("m.team_id")+","+empty("m.user_id")+","+empty("m.role")+","+empty("m.joined_at")+","+managed+","+empty("m.origin")+source+` ORDER BY `+teamMemberOrder(s.dialect, "m"), params...)
 	if err != nil {
 		return nil, nil
 	}
@@ -286,7 +286,7 @@ func (s *SQLiteStore) teamMemberRequestMemberships(ctx context.Context, workspac
 	if err := read.charge(ctx, s, count*1024+bytes*32); err != nil {
 		return nil, err
 	}
-	rows, err = tx.QueryContext(ctx, `SELECT m.team_id,m.role`+source+` WHERE m.target_match=1 ORDER BY m.joined_at`, params...)
+	rows, err = tx.QueryContext(ctx, `SELECT m.team_id,m.role`+source+` WHERE m.target_match=1 ORDER BY `+teamMemberOrder(s.dialect, "m"), params...)
 	if err != nil {
 		return nil, nil
 	}
@@ -458,4 +458,25 @@ func (s *SQLiteStore) teamMemberRequestPolicy(ctx context.Context, source *metad
 		}
 	}
 	return policy, nil
+}
+
+// teamMemberOrder is ListTeamMembers' order: joined_at, then (for members
+// who joined at the same instant, as a built-in application added to every
+// team does) user and team, the order SQLite returns those ties in through its
+// team_memberships_user index. It compares bytes as SQLite does: PostgreSQL's
+// database collation and MySQL's utf8mb4_0900_ai_ci would not, and without the
+// tie keys both return ties in physical order, which updates change.
+func teamMemberOrder(dialect, alias string) string {
+	columns := []string{"joined_at", "user_id", "team_id"}
+	for i, column := range columns {
+		column = alias + "." + column
+		switch dialect {
+		case "postgres":
+			column += ` COLLATE "C"`
+		case "mysql":
+			column = "CAST(" + column + " AS BINARY)"
+		}
+		columns[i] = column
+	}
+	return strings.Join(columns, ",")
 }
