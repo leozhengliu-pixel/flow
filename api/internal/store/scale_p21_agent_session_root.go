@@ -79,8 +79,12 @@ func (s *SQLiteStore) writeAgentSessionLifecycleRootPatch(ctx context.Context, t
 		return err
 	}
 	defer replacement.Close()
-	written := &metadataInlineRootSpoolWriter{spool: replacement, limit: int64(s.maxStateBytes)}
+	// As the delta writer's root, NUL is dropped (PostgreSQL refuses \u0000).
+	written := &jsonNULStripWriter{dst: &metadataInlineRootSpoolWriter{spool: replacement, limit: int64(s.maxStateBytes)}}
 	if err := legacySessionWriteJSONObject(ctx, owner, fields, written); err != nil {
+		return err
+	}
+	if err := written.Finish(); err != nil {
 		return err
 	}
 	if same, err := legacySessionRawEqual(ctx, legacySessionJSONPart{root.source, 0, root.source.size}, legacySessionSpoolPart(replacement)); err != nil || same {
