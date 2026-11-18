@@ -30,6 +30,8 @@ const (
 	scaleP21SW490TeamContent
 	// preferenceReviewVisible(parts[2]) for an embedded review favorite.
 	scaleP21SW490ReviewPreference
+	// A per-record predicate over one metadata kind (SW492+).
+	scaleP21SW490Record
 )
 
 type scaleP21SW490Shape struct {
@@ -57,7 +59,16 @@ func scaleP21SW490FallbackShape(r *http.Request) scaleP21SW490Shape {
 	}
 	createRoot := len(parts) == 2 && r.Method == http.MethodPost
 	switch parts[1] {
-	case "issues", "views", "dashboards", "asks", "releases", "release-pipelines":
+	case "views", "dashboards":
+		kind := map[string]string{"views": "savedViews", "dashboards": "dashboards"}[parts[1]]
+		if createRoot {
+			return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: kind, output: true}
+		}
+		if len(parts) >= 3 {
+			return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: kind, ref: parts[2]}
+		}
+		return scaleP21SW490Shape{decision: scaleP21SW490Membership}
+	case "issues", "asks", "releases", "release-pipelines":
 		if createRoot || len(parts) >= 3 {
 			return literal
 		}
@@ -111,7 +122,7 @@ func scaleP21SW490FallbackShape(r *http.Request) scaleP21SW490Shape {
 		if len(parts) < 3 {
 			return scaleP21SW490Shape{decision: scaleP21SW490Membership}
 		}
-		return literal
+		return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: "cycles", ref: parts[2]}
 	case "teams":
 		if len(parts) < 3 {
 			return scaleP21SW490Shape{decision: scaleP21SW490Membership}
@@ -162,6 +173,10 @@ func (s *server) boundedFallbackAuthorization(r *http.Request, workspace, userID
 		return s.boundedTeamRowAuthorization(r, workspace, userID, shape.ref), true
 	case scaleP21SW490TeamContent:
 		return s.boundedTeamResourceDecision(r, workspace, userID, shape.ref, shape.output), true
+	case scaleP21SW490Record:
+		if kind, decide := s.scaleP21SW490RecordPredicate(r, userID, shape); decide != nil {
+			return s.boundedRecordDecision(r, workspace, userID, kind, shape.ref, decide), true
+		}
 	}
 	return false, false
 }
