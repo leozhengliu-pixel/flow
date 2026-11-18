@@ -82,7 +82,11 @@ func TestScaleP21SW193PulseInlineSettings(t *testing.T) {
 					t.Fatal(err)
 				}
 				var rootBytes int
-				if err := f.db.QueryRowContext(t.Context(), "SELECT LENGTH(CAST(data AS BLOB)) FROM workspace_states WHERE workspace_key=?", workspace).Scan(&rootBytes); err != nil {
+				rootLength := "LENGTH(CAST(data AS BLOB))"
+				if f.dialect != "sqlite" {
+					rootLength = "OCTET_LENGTH(data)"
+				}
+				if err := f.db.QueryRowContext(t.Context(), "SELECT "+rootLength+" FROM workspace_states WHERE workspace_key=?", workspace).Scan(&rootBytes); err != nil {
 					t.Fatal(err)
 				}
 				if (rootBytes > MetadataRecordPageMaxBytes) != large {
