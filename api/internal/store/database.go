@@ -129,6 +129,9 @@ type sqlTx struct {
 	// Staged input must be consumed and deleted before its write commits.
 	metadataSQLStages      int
 	metadataSQLStageOwners map[string]*metadataSQLWriteStage
+	// metadataReadWindows caches large metadata row reads until the next
+	// write or the end of the transaction (scale_p21_collection_snapshot.go).
+	metadataReadWindows *metadataReadWindows
 }
 
 // notificationSignal names a notification that is news to its recipient.
@@ -145,6 +148,7 @@ var ErrTransactionWriteBudget = errors.New("transaction write budget exceeded")
 // counters, cache revisions) come last, so a writer holds them only while it
 // commits.
 func (tx *sqlTx) Commit() error {
+	tx.dropMetadataReadWindows()
 	if tx.writeErr != nil {
 		_ = tx.Rollback()
 		return tx.writeErr
@@ -660,6 +664,7 @@ func (d *sqlDatabase) BeginTx(ctx context.Context, options *sql.TxOptions) (*sql
 }
 
 func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	tx.dropMetadataReadWindows()
 	if tx.writeErr != nil {
 		return nil, tx.writeErr
 	}
@@ -733,6 +738,7 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 }
 
 func (tx *sqlTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	tx.dropMetadataReadWindowsUnlessSelect(query)
 	if tx.journalOrder.valid {
 		tx.journalOrder.valid = false
 	}
@@ -741,6 +747,7 @@ func (tx *sqlTx) QueryContext(ctx context.Context, query string, args ...any) (*
 }
 
 func (tx *sqlTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	tx.dropMetadataReadWindowsUnlessSelect(query)
 	if tx.journalOrder.valid {
 		tx.journalOrder.valid = false
 	}

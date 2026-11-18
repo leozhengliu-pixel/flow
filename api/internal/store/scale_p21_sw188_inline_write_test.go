@@ -404,8 +404,8 @@ func TestScaleP21SW188InlineRootSQLBound(t *testing.T) {
 			t.Fatal(err)
 		}
 		if index == 0 {
-			// The original fixed-chunk scanner rereads each short key through
-			// SQL after it has skipped that property's complete value.
+			// The plain scanner rereads each short key after it has skipped
+			// that property's complete value (served from the read windows).
 			snapshot := &metadataCollectionSnapshot{store: view, tx: tx, workspace: workspace}
 			snapshot.root = &metadataSnapshotReaderAt{ctx: ctx, snapshot: snapshot, size: int64(len(raw))}
 			read := &MetadataCollectionRead{ctx: ctx, snapshot: snapshot, rootSize: int64(len(raw))}
@@ -432,10 +432,16 @@ func TestScaleP21SW188InlineRootSQLBound(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	pages := (len(raw) + metadataRecordChunkBytes - 1) / metadataRecordChunkBytes
-	if !reflect.DeepEqual(headers[0], headers[1]) || counts[1] >= counts[0] || counts[1] > pages+6 {
-		t.Fatalf("cached root changed headers or query bound: before=%d after=%d pages=%d", counts[0], counts[1], pages)
+	// Both readers now go through the transaction's read windows: the raw
+	// scanner no longer rereads each short key through SQL either, so the
+	// inline page cache cannot issue fewer reads than it. Each must stay one
+	// pass over the root's windows (each SUBSTR loads the whole row, so the
+	// read count is what makes the scan O(root) rather than O(root^2)).
+	width := metadataReadWindowWidth(int64(len(raw)))
+	windows := (len(raw) + width - 1) / width
+	if !reflect.DeepEqual(headers[0], headers[1]) || counts[1] > counts[0] || counts[0] > windows+6 || counts[1] > windows+6 {
+		t.Fatalf("cached root changed headers or query bound: before=%d after=%d windows=%d", counts[0], counts[1], windows)
 	}
-	t.Logf("same %d-byte root, %d fields: root SQL reads before=%d after=%d; cache=2x%d bytes, bound=ceil(root/chunk)+6",
-		len(raw), len(headers[0]), counts[0], counts[1], metadataRecordChunkBytes)
+	t.Logf("same %d-byte root, %d fields: root SQL reads raw=%d inline=%d; window=%d bytes, bound=ceil(root/window)+6",
+		len(raw), len(headers[0]), counts[0], counts[1], width)
 }

@@ -140,6 +140,7 @@ func (tx *sqlTx) flushSQLRecordJournal() (bool, error) {
 	writer.Close()
 	if err != nil && strings.Contains(err.Error(), recordJournalSmallFallback) {
 		if tx.journalBudget != nil {
+			tx.dropMetadataReadWindows()
 			if _, err := tx.Tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT flow_record_journal`); err != nil {
 				return true, err
 			}
