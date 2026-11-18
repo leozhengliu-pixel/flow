@@ -253,6 +253,14 @@ func TestScaleP21SW254IssuePayloadOneSnapshotPer64Targets(t *testing.T) {
 			// Target occurrences include the same ID within and across the
 			// 64-target capture boundary; physical SQL remains deduplicated.
 			data.Issues[31], data.Issues[64] = data.Issues[0], data.Issues[0]
+			if f.dialect == "postgres" {
+				// PostgreSQL rejects a key repeated in one UPSERT statement, so the
+				// literal writer refuses a duplicate within one 64-issue batch
+				// (SW93 duplicate-issues-one-batch proves the bounded writer
+				// refuses it the same way). Keep the duplicate across the boundary.
+				data.Issues[31] = seed
+				data.Issues[31].ID, data.Issues[31].Identifier, data.Issues[31].Number, data.Issues[31].Version = fmt.Sprintf("%sissue-%02d", prefix, 31), "SW254-31", 32, 10
+			}
 			var expectedRows map[string][][]any
 			var expectedHistory map[string]issueFieldHistory
 			var expectedCounts map[string]map[issueStatsKey]int64
