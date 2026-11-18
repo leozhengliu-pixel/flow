@@ -10,13 +10,32 @@ import (
 	"unicode/utf8"
 )
 
-// The search indexes are rebuilt once without stopwords. Versions in the
-// data-migration range keep them apart from the schema list; they are applied
-// by the index ensure stages, not runDataMigrations.
+// The search indexes are rebuilt once without stopwords, and once more to
+// restore the rows that multi-row upserts dropped from them (see
+// mysqlFullTextIndexTables). Versions in the data-migration range keep them
+// apart from the schema list; they are applied by the index ensure stages,
+// not runDataMigrations.
 const (
 	issueSearchStopwordsMigrationVersion    = 1004
 	metadataSearchStopwordsMigrationVersion = 1005
+	issueSearchRestoreMigrationVersion      = 1011
+	metadataSearchRestoreMigrationVersion   = 1012
 )
+
+// fullTextIndexRebuild is a one-time rebuild of a full-text index, recorded in
+// schema_migrations under version.
+type fullTextIndexRebuild struct {
+	version int
+	name    string
+}
+
+// fullTextIndexRebuilds are the rebuilds every search index receives once.
+func fullTextIndexRebuilds(table string, stopwords, restore int) []fullTextIndexRebuild {
+	return []fullTextIndexRebuild{
+		{stopwords, table + " full-text index without stopwords"},
+		{restore, table + " full-text index rebuilt to restore rows dropped by multi-row upserts"},
+	}
+}
 
 // mysqlFullTextIndexTables are the tables that hold an InnoDB FULLTEXT index.
 // MySQL 8.4 drops the rows a multi-row INSERT ... ON DUPLICATE KEY UPDATE
@@ -40,19 +59,30 @@ var mysqlFullTextIndexTables = map[string]bool{"issue_search_documents": true, "
 // the table's first FULLTEXT index and keeps it for later reads, so it is
 // turned off only on that session.
 //
-// An index created by an earlier release still uses the stopwords; it is
-// dropped and rebuilt once, recorded under version. The drop and the create
-// must be separate statements: a combined ALTER keeps the old setting. Any
+// An index created by an earlier release still uses the stopwords, and on
+// MySQL 8.4 may have lost rows to multi-row upserts; it is dropped and rebuilt
+// once while any of rebuilds is unrecorded (one build covers them all; a new
+// database builds once too), and every one is then recorded. The rebuild
+// reads and tokenizes every row of the table, and InnoDB blocks writes to it
+// while a FULLTEXT index is created; documents are not touched. The drop and
+// the create must be separate statements: a combined ALTER keeps the old setting. Any
 // later statement that rebuilds the table (ALTER ... FORCE, ADD COLUMN,
 // OPTIMIZE TABLE) must run through this path too, or the stopwords return.
 //
 // optional tolerates a user without the INDEX privilege, for indexes whose
 // search has a fallback.
-func (s *SQLiteStore) ensureMySQLNgramIndex(ctx context.Context, table, index string, version int, optional bool) error {
-	applied, err := s.migrationApplied(ctx, version)
-	if err != nil {
-		return err
+func (s *SQLiteStore) ensureMySQLNgramIndex(ctx context.Context, table, index string, optional bool, rebuilds ...fullTextIndexRebuild) error {
+	var pending []fullTextIndexRebuild
+	for _, rebuild := range rebuilds {
+		applied, err := s.migrationApplied(ctx, rebuild.version)
+		if err != nil {
+			return err
+		}
+		if !applied {
+			pending = append(pending, rebuild)
+		}
 	}
+	applied := len(pending) == 0
 	conn, err := s.db.DB.Conn(ctx)
 	if err != nil {
 		return err
@@ -67,7 +97,7 @@ func (s *SQLiteStore) ensureMySQLNgramIndex(ctx context.Context, table, index st
 	if !applied {
 		if _, err := conn.ExecContext(ctx, `DROP INDEX `+index+` ON `+table); err != nil && !isMissingIndex(err) {
 			if isMySQLSearchPermissionError(err) {
-				slog.Warn("full-text index keeps InnoDB stopwords; grant INDEX on the table to rebuild it", "table", table, "error", err)
+				slog.Warn("full-text index not rebuilt: it may keep InnoDB stopwords or miss rows; grant INDEX on the table to rebuild it", "table", table, "error", err)
 				return nil
 			}
 			return err
@@ -83,14 +113,16 @@ func (s *SQLiteStore) ensureMySQLNgramIndex(ctx context.Context, table, index st
 		return nil
 	}
 	if elapsed := time.Since(began); elapsed >= time.Second {
-		slog.Info("rebuilt full-text index without stopwords", "table", table, "ms", elapsed.Milliseconds())
+		slog.Info("rebuilt full-text index", "table", table, "ms", elapsed.Milliseconds())
 	}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)`, version, table+" full-text index without stopwords", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
-		// Another instance starting at the same time may have recorded it.
-		if applied, checkErr := s.migrationApplied(ctx, version); checkErr == nil && applied {
-			return nil
+	for _, rebuild := range pending {
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)`, rebuild.version, rebuild.name, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			// Another instance starting at the same time may have recorded it.
+			if applied, checkErr := s.migrationApplied(ctx, rebuild.version); checkErr == nil && applied {
+				continue
+			}
+			return err
 		}
-		return err
 	}
 	return nil
 }

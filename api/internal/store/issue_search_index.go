@@ -34,7 +34,7 @@ func (s *SQLiteStore) ensureIssueSearchIndex(ctx context.Context) error {
 		}
 	}
 	if s.dialect == "mysql" {
-		return s.ensureMySQLNgramIndex(ctx, "issue_search_documents", "issue_search_fulltext", issueSearchStopwordsMigrationVersion, false)
+		return s.ensureMySQLNgramIndex(ctx, "issue_search_documents", "issue_search_fulltext", false, fullTextIndexRebuilds("issue_search_documents", issueSearchStopwordsMigrationVersion, issueSearchRestoreMigrationVersion)...)
 	}
 	return nil
 }
