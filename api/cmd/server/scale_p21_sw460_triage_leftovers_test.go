@@ -185,52 +185,66 @@ func scaleP21SW461Existing(t *testing.T) int {
 func scaleP21SW461Seed(t *testing.T, f *scaleP21IssueUpdateFixture, ids []string, existing int) {
 	t.Helper()
 	at := time.Date(2026, 1, 5, 6, 7, 8, 0, time.UTC)
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw461_suggestions", "", nil, func(data *domain.Bootstrap) error {
-		var head []domain.IssueSuggestion
-		for index, id := range ids {
-			if index%10 == 0 {
-				head = append(head, domain.IssueSuggestion{ID: fmt.Sprintf("sw461-dismissed-%04d", index), IssueID: id, Type: "label", State: "dismissed",
-					SuggestedLabelID: "sw461-label", StateChangedAt: at, CreatedAt: at, UpdatedAt: at,
-					Metadata: map[string]any{"rank": 1, "reasons": []string{"Dismissed earlier"}, "score": 0.5}})
+	dismissed := 0
+	// Batches stay inside the legacy transaction write budget.
+	for batch := 0; batch == 0 || batch < existing; batch += 10000 {
+		if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw461_suggestions", "", nil, func(data *domain.Bootstrap) error {
+			var head []domain.IssueSuggestion
+			if batch == 0 {
+				for index, id := range ids {
+					if index%10 == 0 {
+						head = append(head, domain.IssueSuggestion{ID: fmt.Sprintf("sw461-dismissed-%04d", index), IssueID: id, Type: "label", State: "dismissed",
+							SuggestedLabelID: "sw461-label", StateChangedAt: at, CreatedAt: at, UpdatedAt: at,
+							Metadata: map[string]any{"rank": 1, "reasons": []string{"Dismissed earlier"}, "score": 0.5}})
+					}
+				}
+				dismissed = len(head)
+			} else {
+				head = append(head, data.IssueSuggestions[:dismissed+batch]...)
 			}
-		}
-		// Other issues: outside every generation scope.
-		scoped := map[string]bool{}
-		for _, id := range ids {
-			scoped[id] = true
-		}
-		var others []string
-		for _, issue := range data.Issues {
-			if !scoped[issue.ID] && len(others) < 2 {
-				others = append(others, issue.ID)
+			// Other issues: outside every generation scope.
+			scoped := map[string]bool{}
+			for _, id := range ids {
+				scoped[id] = true
 			}
-		}
-		if len(others) != 2 {
-			return fmt.Errorf("sw461 needs two issues outside the scope, found %v", others)
-		}
-		for index := range existing {
-			state := "active"
-			if index%4 == 3 {
-				state = "dismissed"
+			var others []string
+			for _, issue := range data.Issues {
+				if !scoped[issue.ID] && len(others) < 2 {
+					others = append(others, issue.ID)
+				}
 			}
-			head = append(head, domain.IssueSuggestion{ID: fmt.Sprintf("sw461-existing-%06d", index), IssueID: others[index%2], Type: "relatedIssue", State: state,
-				SuggestedIssueID: fmt.Sprintf("sw400-bulk-%04d", index%len(ids)), StateChangedAt: at, CreatedAt: at, UpdatedAt: at,
-				Metadata: map[string]any{"rank": index%5 + 1, "reasons": []string{"Similar title", fmt.Sprintf("Shares %d words", index%7+2)}, "score": 0.25 + float64(index%50)/100}})
-		}
-		// The list is stored one row per suggestion, as generations keep
-		// it: the fixture's repeated suggestion IDs (which keep the field
-		// inline in the root document) keep only their first occurrence.
-		seen := map[string]bool{}
-		for _, item := range data.IssueSuggestions {
-			if !seen[item.ID] {
-				seen[item.ID] = true
-				head = append(head, item)
+			if len(others) != 2 {
+				return fmt.Errorf("sw461 needs two issues outside the scope, found %v", others)
 			}
+			for index := batch; index < min(batch+10000, existing); index++ {
+				state := "active"
+				if index%4 == 3 {
+					state = "dismissed"
+				}
+				head = append(head, domain.IssueSuggestion{ID: fmt.Sprintf("sw461-existing-%06d", index), IssueID: others[index%2], Type: "relatedIssue", State: state,
+					SuggestedIssueID: fmt.Sprintf("sw400-bulk-%04d", index%len(ids)), StateChangedAt: at, CreatedAt: at, UpdatedAt: at,
+					Metadata: map[string]any{"rank": index%5 + 1, "reasons": []string{"Similar title", fmt.Sprintf("Shares %d words", index%7+2)}, "score": 0.25 + float64(index%50)/100}})
+			}
+			if batch != 0 {
+				data.IssueSuggestions = append(head, data.IssueSuggestions[dismissed+batch:]...)
+				return nil
+			}
+			// The list is stored one row per suggestion, as generations
+			// keep it: the fixture's repeated suggestion IDs (which keep the
+			// field inline in the root document) keep only their first
+			// occurrence.
+			seen := map[string]bool{}
+			for _, item := range data.IssueSuggestions {
+				if !seen[item.ID] {
+					seen[item.ID] = true
+					head = append(head, item)
+				}
+			}
+			data.IssueSuggestions = head
+			return nil
+		}); err != nil {
+			t.Fatal(err)
 		}
-		data.IssueSuggestions = head
-		return nil
-	}); err != nil {
-		t.Fatal(err)
 	}
 	full, ok := f.repository.BootstrapFor(f.data.Workspace.URLKey)
 	if !ok {
