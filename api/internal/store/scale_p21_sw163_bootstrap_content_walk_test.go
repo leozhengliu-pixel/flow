@@ -40,6 +40,11 @@ func scaleP21SW163Fixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string) 
 
 func scaleP21SW163Insert(t *testing.T, fixture scaleP09Fixture, workspace, kind string, resource, created, id, raw any) {
 	t.Helper()
+	if text, ok := raw.(string); ok && fixture.dialect == "postgres" {
+		// PostgreSQL reads a text parameter for BYTEA as escaped bytea input
+		// (a JSON "\u..." escape is invalid there); store the same bytes.
+		raw = []byte(text)
+	}
 	if _, err := fixture.db.ExecContext(t.Context(), `INSERT INTO workspace_content_records(workspace_key,kind,resource_id,id,created_at,data) VALUES(?,?,?,?,?,?)`,
 		workspace, kind, resource, id, created, raw); err != nil {
 		t.Fatal(err)
