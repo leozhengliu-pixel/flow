@@ -456,6 +456,9 @@ func (s *server) generateTriageIntelligenceForIssuesBounded(ctx context.Context,
 
 func generateBoundedTriageMutation(ctx context.Context, issueIDs []string, source *store.IssueSuggestionCandidates, updated *domain.Issue, results *[]domain.Issue, generated *bool) func(*domain.Bootstrap) error {
 	return func(data *domain.Bootstrap) error {
+		// A write that lost a race to another server runs the callback
+		// again: the results are those of the attempt that commits.
+		*results, *generated = (*results)[:0], false
 		scoped := len(data.Issues)
 		var encountered []string
 		maxNumber := 0

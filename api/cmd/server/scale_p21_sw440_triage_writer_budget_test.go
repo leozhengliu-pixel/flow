@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -245,67 +243,74 @@ func TestScaleP21SW440ThousandIssueTriageGenerationDifferential(t *testing.T) {
 	}
 }
 
-// A write committed by another server between this server's installed image
-// and its generation (it reassigns the document of a scoped issue): the
-// outcome must equal the legacy order (that write, then generation).
-//
-// Open: the warm bounded run commits rows equal to legacy, but its installed
-// image keeps the document as it was before the other server's write while
-// the SQL reload shows that write (seen 2026-11-17; the triage writer's
-// publication path is unchanged by the budget work, whether other bounded
-// writers do the same is unverified). Runs only with FLOW_P21_OPEN_BLOCKERS=1.
-func TestScaleP21SW441ThousandIssueTriageConflictingWrite(t *testing.T) {
-	if os.Getenv("FLOW_P21_OPEN_BLOCKERS") == "" {
-		t.Skip("open P21 blocker (a warm installed image misses another server's document write); set FLOW_P21_OPEN_BLOCKERS=1")
+// scaleP21SW441Moved is a bulk issue the team auto-move moves into the private
+// triage team: its group's majority is there (scaleP21SW440Setup).
+const scaleP21SW441Moved = "sw400-bulk-0040"
+
+// scaleP21SW441Attach attaches the SW440 document to the moved issue before
+// the installed image is captured.
+func scaleP21SW441Attach(f scaleP21IssueUpdateFixture, base func(*testing.T)) func(*testing.T) {
+	return func(t *testing.T) {
+		base(t)
+		if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw441_attach", "", nil, func(data *domain.Bootstrap) error {
+			for index := range data.Documents {
+				if document := &data.Documents[index]; document.ID == "sw440-doc" {
+					document.IssueID, document.IssueTeamID = scaleP21SW441Moved, scaleP21SW400Team
+					return nil
+				}
+			}
+			return errors.New("sw441 document missing")
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
+}
+
+// A write committed by another server between this server's installed image
+// and its generation reassigns the team of a document attached to an issue
+// that the generation moves: both change the document's issueTeamId. The
+// outcome equals the legacy order (that write, then generation) byte for
+// byte, and the installed image equals the SQL reload. The bounded writer's
+// first attempt loses the race on the document record, refreshes it into the
+// installed image and runs the generation again.
+//
+// (Until 2026-11-18 this test reassigned the document of an issue the
+// generation does not move: no writer touches that record, so the warm image
+// kept it as before the other server's write until its peer event. Legacy
+// does the same on a second server; SW460 proves that equality.)
+func TestScaleP21SW441ThousandIssueTriageConflictingWrite(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f, ids := scaleP21SW440Setup(t, scaleP21SW440Size(t))
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID, setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
+	f.scaleP21TriageWriterFixture.prepare = scaleP21SW441Attach(f, f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID, setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
 		settings.TeamAction, settings.LabelAction = "auto", "auto"
-	})})
+	})}))
 	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
-	at := time.Date(2026, 1, 4, 5, 6, 7, 0, time.UTC)
 	started := time.Now().UTC()
-	outcomes := f.differential(t, "conflict", func(service *server) *httptest.ResponseRecorder {
-		// The other server (the canonical store) reassigns the document of
-		// a scoped issue that the generation moves to another team, after
-		// this server installed its image: both change its issueTeamId.
-		if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw441_conflict", "", nil, func(data *domain.Bootstrap) error {
-			for index := range data.Documents {
-				if document := &data.Documents[index]; document.ID == "sw440-doc" {
-					document.IssueTeamID, document.UpdatedAt = "sw440-plain", at
-					return nil
-				}
-			}
-			return errors.New("conflict document missing")
-		}); err != nil {
-			t.Fatal(err)
-		}
-		var logged bytes.Buffer
-		previous := slog.Default()
-		slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	// The other server is the canonical store: the legacy source is that
+	// store, which sees the write before its generation (the legacy order).
+	peer := func(t *testing.T) { f.sw460Reassign(t, f.repository, "sw440-plain") }
+	outcomes := f.sw460Differential(t, []string{"legacy", "warm", "reloaded"}, peer, func(service *server) *httptest.ResponseRecorder {
+		attempts := store.IssueSuggestionWriteAttemptsForTesting()
 		w := f.sw440Generate(t, ids)(service)
-		slog.SetDefault(previous)
 		if service.store.BoundedMetadataEnabled() {
-			for _, text := range strings.Split(logged.String(), "\n") {
-				if strings.Contains(text, "event=issue.suggestions_generated") {
-					t.Logf("bounded suggestion write reran: %t", strings.Contains(text, "retry="))
-				}
+			if rerun := store.IssueSuggestionWriteAttemptsForTesting() - attempts; rerun != 2 {
+				t.Fatalf("bounded suggestion write ran %d attempts, want 2 (a lost race on the document, then the rerun)", rerun)
 			}
 		}
 		return w
-	})
+	}, true)
 	scaleP21SW440Check(t, outcomes[0], started, f.private, true, true)
 	moved := false
 	for _, row := range outcomes[0].State.Documents {
 		if row[0] == "sw440-doc" {
-			moved = strings.Contains(row[2].(string), `"issueTeamId":"`) && !strings.Contains(row[2].(string), `"issueTeamId":"sw440-plain"`)
+			moved = strings.Contains(row[2].(string), `"issueId":"`+scaleP21SW441Moved+`","issueTeamId":"`+f.private+`"`) &&
+				strings.Contains(row[2].(string), `"updatedAt":"2026-01-04T05:06:07Z"`)
 		}
 	}
 	if !moved {
-		t.Fatal("legacy did not move the document the other server reassigned")
+		t.Fatal("legacy did not move the document the other server reassigned into the private team")
 	}
 }
 
