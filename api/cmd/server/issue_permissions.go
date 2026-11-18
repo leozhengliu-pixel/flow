@@ -116,20 +116,14 @@ func (s *server) listIssuePermissions(w http.ResponseWriter, r *http.Request) {
 
 // listIssuePermissionsBounded answers the permission list from the retained
 // bounded issue authorization read only and never reaches workspaceData. A GET
-// pattern also serves HEAD; a HEAD reads exactly what its GET reads, so it is
-// classified, and acquires its read, as that GET. The issue-record alias hands
-// a GET its full-permission read; for a HEAD the alias retains only its
-// general authorization read (permission IDs without their fields), so a HEAD
-// always acquires the full-permission read here.
+// pattern also serves HEAD; boundedIssuePermissionReadRequest classifies a
+// HEAD as its GET, so the issue-record alias hands a HEAD the same retained
+// full-permission read it hands the GET, and a HEAD reuses it here exactly as
+// the GET does instead of reading it a second time.
 func (s *server) listIssuePermissionsBounded(w http.ResponseWriter, r *http.Request) {
-	head := r.Method == http.MethodHead
-	if head {
-		r.Method = http.MethodGet
-		defer func() { r.Method = http.MethodHead }()
-	}
 	permissionRead := boundedIssuePermissionReadRequest(r)
 	read, retained := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead)
-	if permissionRead && (head || (!retained || read == nil) && strings.HasPrefix(r.URL.Path, "/api/issues/")) {
+	if permissionRead && (!retained || read == nil) && strings.HasPrefix(r.URL.Path, "/api/issues/") {
 		if _, _, err := s.boundedIssueWriteAuthorizationMetadata(r); err != nil {
 			if r.Context().Err() != nil {
 				issueRecordsError(w, r.Context().Err())
