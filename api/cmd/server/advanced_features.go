@@ -585,6 +585,19 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		// Re-deriving the inherited scope reads the attached issue's team.
 		scope = documentLinkMutationScope(r.Context(), id)
 	}
+	if s.store.BoundedMetadataEnabled() {
+		// The closed writer selects the document, its old and new linked
+		// projects (Resources only) and the issues the scope names; the
+		// callback below is unchanged.
+		var closeOutputs func()
+		scope, closeOutputs = beginMetadataOutputReads(scope)
+		defer closeOutputs()
+		request := store.DocumentUpdateWriteRequest{Ref: id, ReadExistingIssue: input.ProjectIDs != nil && input.IssueID == nil}
+		if input.ProjectIDs != nil {
+			request.ProjectIDs = normalizedStrings(*input.ProjectIDs)
+		}
+		scope = store.WithDocumentUpdateWrite(scope, request)
+	}
 	err := s.store.MutateWorkspace(scope, workspaceKey(r), favoriteMutationEvent("document.updated", input), id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
