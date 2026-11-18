@@ -18,6 +18,12 @@ const (
 	metadataSearchStopwordsMigrationVersion = 1005
 )
 
+// mysqlFullTextIndexTables are the tables syncIssueIndexRows writes that hold
+// an InnoDB FULLTEXT index. MySQL 8.4 drops the rows a multi-row INSERT ...
+// ON DUPLICATE KEY UPDATE changes from such an index (MATCH no longer finds
+// them, while LIKE does); a single-row upsert and an UPDATE keep them.
+var mysqlFullTextIndexTables = map[string]bool{"issue_search_documents": true}
+
 // ensureMySQLNgramIndex creates a FULLTEXT ngram index without InnoDB's
 // stopword list. The default list holds "a" and "i", and the ngram parser drops
 // every bigram that contains a stopword, so with it most English words
