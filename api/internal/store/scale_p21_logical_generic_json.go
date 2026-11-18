@@ -94,14 +94,70 @@ func metadataGenericJSONWork(ctx context.Context, store *SQLiteStore, visit func
 // Match writeValue's native-storage charge without expanding generic JSON
 // into typed frames. Syntax and normalization already belong to the existing
 // decoder; this traversal only measures immutable normalized ranges.
+//
+// The range is read once: every nested value is measured by the scanner that
+// reaches it, rather than by rescanning its subtree once per enclosing
+// container (which made a chain of depth d cost O(d²) bytes per call, and a
+// child-by-child traversal O(d³)).
 func metadataGenericJSONCost(ctx context.Context, typ reflect.Type, part legacySessionJSONPart, work *metadataAggregateTraversal) (uint64, error) {
+	// The scanner and each string's decoder read small pieces of the same
+	// range; one window (within the caller's fixed stream allowance) keeps
+	// those re-reads out of the backing file.
+	part.input = &metadataGenericJSONWindow{input: part.input}
+	measure := metadataGenericJSONMeasure{ctx: ctx, part: part, work: work}
+	return measure.value(typ, true)
+}
+
+// metadataGenericJSONWindow is an io.ReaderAt that serves reads smaller
+// than its buffer from one cached window of the underlying input.
+type metadataGenericJSONWindow struct {
+	input  io.ReaderAt
+	buffer []byte
+	start  int64
+	size   int
+	err    error
+}
+
+func (w *metadataGenericJSONWindow) ReadAt(p []byte, offset int64) (int, error) {
+	if w.buffer == nil {
+		w.buffer = make([]byte, 16<<10)
+	}
+	if len(p) > len(w.buffer) {
+		return w.input.ReadAt(p, offset)
+	}
+	if offset < w.start || offset+int64(len(p)) > w.start+int64(w.size) {
+		w.size, w.err = w.input.ReadAt(w.buffer, offset)
+		w.start = offset
+		if w.size < len(p) && w.err == nil {
+			w.err = io.ErrUnexpectedEOF
+		}
+	}
+	count := copy(p, w.buffer[min(int(offset-w.start), w.size):w.size])
+	if count < len(p) {
+		return count, w.err
+	}
+	return count, nil
+}
+
+type metadataGenericJSONMeasure struct {
+	ctx     context.Context
+	part    legacySessionJSONPart
+	work    *metadataAggregateTraversal
+	scanner *metadataCollectionScanner
+}
+
+// value measures the value at the scanner's position and consumes it. The
+// root (top) reads its prefix directly from the range, exactly as a fresh
+// range measurement does, and is never consumed past what its kind needs.
+func (m *metadataGenericJSONMeasure) value(typ reflect.Type, top bool) (uint64, error) {
+	ctx := m.ctx
 	if !metadataGenericJSONType(typ) {
 		return 0, ErrBoundedMetadataCoverage
 	}
-	if err := work.enter(); err != nil {
+	if err := m.work.enter(); err != nil {
 		return 0, err
 	}
-	defer work.leave()
+	defer m.work.leave()
 	cost := uint64(typ.Size())*2 + 128
 	add := func(size uint64) error {
 		if size > metadataWorkBytes || cost > metadataWorkBytes-size {
@@ -110,12 +166,24 @@ func metadataGenericJSONCost(ctx context.Context, typ reflect.Type, part legacyS
 		cost += size
 		return nil
 	}
-	prefix, err := metadataGenericJSONPrefix(ctx, part)
-	if err != nil || prefix == 'n' {
+	var prefix byte
+	var err error
+	if top {
+		prefix, err = metadataGenericJSONPrefix(ctx, m.part)
+	} else {
+		prefix, err = m.peek()
+	}
+	if err != nil {
+		return cost, err
+	}
+	if prefix == 'n' {
+		if !top {
+			_, err = m.scanner.value(0)
+		}
 		return cost, err
 	}
 	if typ.Kind() == reflect.Interface {
-		child, err := metadataGenericJSONCost(ctx, metadataGenericJSONDynamic(prefix), part, work)
+		child, err := m.value(metadataGenericJSONDynamic(prefix), top)
 		if err != nil {
 			return 0, err
 		}
@@ -127,47 +195,116 @@ func metadataGenericJSONCost(ctx context.Context, typ reflect.Type, part legacyS
 	if metadataGenericJSONDynamic(prefix) != typ {
 		return 0, ErrMetadataRecordQuery
 	}
-	scanner := metadataGenericJSONScanner(ctx, part)
+	if m.scanner == nil {
+		m.scanner = metadataGenericJSONScanner(ctx, m.part)
+	}
+	scanner := m.scanner
 	switch typ.Kind() {
 	case reflect.String:
 		if err := add(64); err != nil {
 			return 0, err
 		}
-		_, err = VisitMetadataJSONStringChunks(ctx, part.reader(), func(value []byte) error {
+		input := m.part
+		if !top {
+			var value metadataCollectionRange
+			if value, err = scanner.value(0); err != nil {
+				return cost, err
+			}
+			input = legacySessionJSONPart{m.part.input, value.offset, value.size}
+		}
+		_, err = VisitMetadataJSONStringChunks(ctx, input.reader(), func(value []byte) error {
 			return add(uint64(len(value)) * 2)
 		})
 	case reflect.Map:
-		err = scanner.object(func(key, value metadataCollectionRange) error {
+		err = m.members('{', '}', func() error {
 			if err := add(uint64(typ.Elem().Size())*2 + 64); err != nil {
 				return err
 			}
-			for _, child := range []struct {
-				typ  reflect.Type
-				part metadataCollectionRange
-			}{{typ.Key(), key}, {typ.Elem(), value}} {
-				size, err := metadataGenericJSONCost(ctx, child.typ, legacySessionJSONPart{part.input, child.part.offset, child.part.size}, work)
-				if err != nil {
-					return err
-				}
-				if err := add(size); err != nil {
-					return err
-				}
+			size, err := m.value(typ.Key(), false)
+			if err != nil {
+				return err
 			}
-			return nil
-		}, 0)
+			if err := add(size); err != nil {
+				return err
+			}
+			if err := scanner.spaces(); err != nil {
+				return err
+			}
+			if err := scanner.expect(':'); err != nil {
+				return err
+			}
+			if size, err = m.value(typ.Elem(), false); err != nil {
+				return err
+			}
+			return add(size)
+		})
 	case reflect.Slice:
-		err = scanner.array(func(value metadataCollectionRange) error {
+		err = m.members('[', ']', func() error {
 			if err := add(uint64(typ.Elem().Size())*2 + 64); err != nil {
 				return err
 			}
-			size, err := metadataGenericJSONCost(ctx, typ.Elem(), legacySessionJSONPart{part.input, value.offset, value.size}, work)
+			size, err := m.value(typ.Elem(), false)
 			if err != nil {
 				return err
 			}
 			return add(size)
-		}, 0)
+		})
+	default:
+		if !top {
+			_, err = scanner.value(0)
+		}
 	}
 	return cost, err
+}
+
+func (m *metadataGenericJSONMeasure) peek() (byte, error) {
+	if err := m.ctx.Err(); err != nil {
+		return 0, err
+	}
+	if err := m.scanner.spaces(); err != nil {
+		return 0, err
+	}
+	prefix, err := m.scanner.peek()
+	if errors.Is(err, io.EOF) {
+		err = io.ErrUnexpectedEOF
+	}
+	return prefix, err
+}
+
+// members consumes one object or array, calling member at the start of each
+// member; member consumes that member's value (and an object's key/colon).
+func (m *metadataGenericJSONMeasure) members(open, close byte, member func() error) error {
+	scanner := m.scanner
+	if err := scanner.expect(open); err != nil {
+		return err
+	}
+	if err := scanner.spaces(); err != nil {
+		return err
+	}
+	if b, _ := scanner.peek(); b == close {
+		return scanner.expect(close)
+	}
+	for {
+		if err := scanner.spaces(); err != nil {
+			return err
+		}
+		if err := member(); err != nil {
+			return err
+		}
+		if err := scanner.spaces(); err != nil {
+			return err
+		}
+		b, err := scanner.byte()
+		if err != nil {
+			return err
+		}
+		if b == close {
+			return nil
+		}
+		if b != ',' {
+			return errMetadataCollectionJSON
+		}
+	}
 }
 
 // The metered decoder intentionally exposes one invalid-JSON boundary.
