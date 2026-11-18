@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -49,6 +50,11 @@ func scaleP21SW93Rows(t *testing.T, tx *sqlTx, workspace string) map[string][][]
 		rows.Close()
 		if err != nil {
 			t.Fatal(err)
+		}
+		if tx.dialect != "sqlite" {
+			// ORDER BY 1,2 is not a total order; PostgreSQL and MySQL return
+			// ties in physical order, which updates change. Compare as sets.
+			slices.SortFunc(result[table], func(a, b []any) int { return strings.Compare(fmt.Sprint(a...), fmt.Sprint(b...)) })
 		}
 	}
 	return result
@@ -362,7 +368,9 @@ func TestScaleP21SW93LegacyRecordBaseDifferential(t *testing.T) {
 					base.Close()
 					t.Fatal(err)
 				}
-				duplicateBatch := variant == "duplicate-issues-one-batch"
+				// PostgreSQL aborts the transaction on any failed statement (and
+				// rejects repeated UPSERT keys in one statement).
+				duplicateBatch := variant == "duplicate-issues-one-batch" || f.dialect == "postgres"
 				if duplicateBatch {
 					if _, err := tx.ExecContext(ctx, `SAVEPOINT sw93_duplicate_batch`); err != nil {
 						t.Fatal(err)
