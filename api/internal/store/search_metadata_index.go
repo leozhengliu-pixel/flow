@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"strconv"
 	"strings"
 )
 
@@ -47,29 +49,37 @@ func metadataSearchText(raw []byte) string {
 	if json.Unmarshal(raw, &value) != nil {
 		return string(raw)
 	}
-	parts := make([]string, 0, 13)
-	for _, field := range []string{"name", "title", "displayName", "email", "summary", "description", "content", "domains", "version", "status", "tier", "scope", "resource"} {
+	parts := make([]string, 0, len(metadataSearchTextFields))
+	for _, field := range metadataSearchTextFields {
 		item, ok := value[field]
 		if !ok || item == nil {
 			parts = append(parts, "")
 			continue
 		}
-		encoded, _ := json.Marshal(item)
-		var textValue string
-		if json.Unmarshal(encoded, &textValue) == nil {
-			parts = append(parts, textValue)
-		} else {
-			// Match json_extract()/CONCAT_WS output used by trigger backfills,
-			// including compact JSON arrays and scalar numbers/booleans.
-			parts = append(parts, string(encoded))
-		}
+		parts = append(parts, metadataSearchPart(item))
 	}
 	return strings.Join(parts, " ")
 }
 
+// metadataSearchTextFields are the record fields whose text a metadata
+// search document holds, in order, separated by single spaces.
+var metadataSearchTextFields = []string{"name", "title", "displayName", "email", "summary", "description", "content", "domains", "version", "status", "tier", "scope", "resource"}
+
+// metadataSearchPart is the text of one non-null field value.
+func metadataSearchPart(item any) string {
+	encoded, _ := json.Marshal(item)
+	var textValue string
+	if json.Unmarshal(encoded, &textValue) == nil {
+		return textValue
+	}
+	// Match json_extract()/CONCAT_WS output used by trigger backfills,
+	// including compact JSON arrays and scalar numbers/booleans.
+	return string(encoded)
+}
+
 func (s *SQLiteStore) metadataSearchContent(column string) string {
 	parts := []string{}
-	for _, field := range []string{"name", "title", "displayName", "email", "summary", "description", "content", "domains", "version", "status", "tier", "scope", "resource"} {
+	for _, field := range metadataSearchTextFields {
 		parts = append(parts, "COALESCE("+s.jsonText(column, field)+",'')")
 	}
 	if s.dialect == "mysql" {
@@ -145,18 +155,26 @@ func (s *SQLiteStore) ensureMetadataSearchIndex(ctx context.Context) error {
 // LIKE does; see mysqlFullTextIndexTables), so the documents that
 // exist are updated in place and only missing ones are inserted. The
 // comparison is the upsert's: the column's collation decides what differs.
+// The documents hold the text the application writes (metadataSearchText;
+// see mysqlMetadataSearchPageContent), so an unchanged document is not
+// rewritten on every start.
 func (s *SQLiteStore) writeMetadataSearchPage(ctx context.Context, workspace, field string, keys []string) error {
 	where, args := bindList("record_key", keys)
 	args = append([]any{workspace, field}, args...)
 	if s.dialect == "mysql" {
-		content := s.metadataSearchContent("m.data")
+		content, contentArgs, release, err := s.mysqlMetadataSearchPageContent(ctx, args, where)
+		if err != nil {
+			return err
+		}
+		defer release()
 		mine, _ := bindList("m.record_key", keys)
-		if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_documents idx JOIN workspace_metadata_records m ON m.workspace_key=idx.workspace_key AND m.field=idx.field AND m.record_key=idx.record_key SET idx.content=`+content+` WHERE m.workspace_key=? AND m.field=? AND `+mine+` AND idx.content<>`+content, args...); err != nil {
+		updateArgs := append(append(append([]any{}, contentArgs...), args...), contentArgs...)
+		if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_documents idx JOIN workspace_metadata_records m ON m.workspace_key=idx.workspace_key AND m.field=idx.field AND m.record_key=idx.record_key SET idx.content=`+content+` WHERE m.workspace_key=? AND m.field=? AND `+mine+` AND idx.content<>`+content, updateArgs...); err != nil {
 			return err
 		}
 		// The upsert stays for a document written meanwhile; without a
 		// concurrent writer it only inserts.
-		_, err := s.db.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) SELECT workspace_key,field,record_key,`+s.metadataSearchContent("data")+` FROM workspace_metadata_records m WHERE workspace_key=? AND field=? AND `+where+` AND NOT EXISTS (SELECT 1 FROM metadata_search_documents idx WHERE idx.workspace_key=m.workspace_key AND idx.field=m.field AND idx.record_key=m.record_key) ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`, args...)
+		_, err = s.db.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) SELECT workspace_key,field,record_key,`+content+` FROM workspace_metadata_records m WHERE workspace_key=? AND field=? AND `+where+` AND NOT EXISTS (SELECT 1 FROM metadata_search_documents idx WHERE idx.workspace_key=m.workspace_key AND idx.field=m.field AND idx.record_key=m.record_key) ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`, append(append([]any{}, contentArgs...), args...)...)
 		return err
 	}
 	upsert := ` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=excluded.content WHERE metadata_search_documents.content<>excluded.content`
@@ -165,6 +183,98 @@ func (s *SQLiteStore) writeMetadataSearchPage(ctx context.Context, workspace, fi
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) SELECT workspace_key,field,record_key,`+s.metadataSearchContent("data")+` FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+where+upsert, args...)
 	return err
+}
+
+// mysqlMetadataSearchPageContent is the MySQL text expression, over the
+// records aliased m, of the document the application writes for each record
+// of a page (pageArgs: workspace, field and the keys of where), with its
+// arguments. MySQL renders a field value that is not a string (a project's
+// status object, an array of domains, a number, a boolean) as its own JSON
+// text, with spaces and its own key order, where the application writes Go's
+// compact JSON; such values are read once per distinct value, formatted by
+// metadataSearchPart and passed back, while strings stay in SQL. A string
+// "null", which SQL reads as missing, is formatted the same way. A value
+// that changed after it was read keeps MySQL's text, as do all values of a
+// page whose reading the metadata work budget refuses; the document is then
+// still complete, only written again on the next repair.
+func (s *SQLiteStore) mysqlMetadataSearchPageContent(ctx context.Context, pageArgs []any, where string) (string, []any, func(), error) {
+	texts := make([]string, len(metadataSearchTextFields))
+	selections := make([]string, len(metadataSearchTextFields))
+	var args []any
+	for index, name := range metadataSearchTextFields {
+		value := "JSON_EXTRACT(CONVERT(m.data USING utf8mb4),'$." + name + "')"
+		texts[index] = "CAST(" + value + " AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin"
+		selections[index] = "SELECT " + strconv.Itoa(index) + " part," + texts[index] + " value FROM workspace_metadata_records m WHERE workspace_key=? AND field=? AND " + where +
+			" AND (JSON_TYPE(" + value + ") NOT IN ('STRING','NULL') OR JSON_TYPE(" + value + ")='STRING' AND JSON_UNQUOTE(" + value + ")=CAST('null' AS BINARY))"
+		args = append(args, pageArgs...)
+	}
+	values := strings.Join(selections, " UNION ")
+	plain := s.metadataSearchContent("m.data")
+	var count, size int64
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(OCTET_LENGTH(value)),0) FROM (`+values+`) metadata_search_values`, args...).Scan(&count, &size); err != nil {
+		return "", nil, nil, err
+	}
+	if count == 0 {
+		return plain, nil, func() {}, nil
+	}
+	cost := int64(64<<10) + count*512 + size*4
+	if size > metadataWorkBytes || cost > metadataWorkBytes {
+		return plain, nil, func() {}, nil
+	}
+	readCtx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(cost))
+	if errors.Is(err, ErrMetadataWorkBudget) {
+		return plain, nil, func() {}, nil
+	}
+	if err != nil {
+		return "", nil, nil, err
+	}
+	rows, err := s.db.QueryContext(readCtx, `SELECT part,value FROM (`+values+`) metadata_search_values`, args...)
+	if err != nil {
+		release()
+		return "", nil, nil, err
+	}
+	defer rows.Close()
+	cases := make([][]string, len(metadataSearchTextFields))
+	caseArgs := make([][]any, len(metadataSearchTextFields))
+	var read int64
+	for rows.Next() {
+		var part int
+		var raw string
+		if err := rows.Scan(&part, &raw); err != nil {
+			release()
+			return "", nil, nil, err
+		}
+		// A value written after the size was read waits for the next repair.
+		if read += int64(len(raw)); read > size || part < 0 || part >= len(cases) {
+			continue
+		}
+		var item any
+		if json.Unmarshal([]byte(raw), &item) != nil {
+			continue
+		}
+		text := ""
+		if item != nil {
+			text = metadataSearchPart(item)
+		}
+		cases[part] = append(cases[part], "WHEN "+texts[part]+"=CAST(? AS BINARY) THEN ?")
+		caseArgs[part] = append(caseArgs[part], raw, text)
+	}
+	if err := rows.Err(); err != nil {
+		release()
+		return "", nil, nil, err
+	}
+	parts := make([]string, len(metadataSearchTextFields))
+	var contentArgs []any
+	for index, name := range metadataSearchTextFields {
+		fallback := "COALESCE(" + s.jsonText("m.data", name) + ",'')"
+		if len(cases[index]) == 0 {
+			parts[index] = fallback
+			continue
+		}
+		parts[index] = "CASE " + strings.Join(cases[index], " ") + " ELSE " + fallback + " END"
+		contentArgs = append(contentArgs, caseArgs[index]...)
+	}
+	return s.searchCapExpression("CONCAT_WS(' '," + strings.Join(parts, ",") + ")"), contentArgs, release, nil
 }
 
 func (s *SQLiteStore) migrateMetadataSearchIndex(ctx context.Context) error {
