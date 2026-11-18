@@ -331,8 +331,8 @@ func TestScaleP21SW139BootstrapLoopFailures(t *testing.T) {
 }
 
 func TestScaleP21SW139BootstrapLoopTextScratchBound(t *testing.T) {
-	block := []byte(strings.Repeat("Alpha ", 128))
-	measure := func(repeats int) uint64 {
+	spaced, unspaced := []byte(strings.Repeat("Alpha ", 128)), []byte(strings.Repeat("Alpha_", 128))
+	measure := func(block []byte, repeats int) uint64 {
 		data := domain.Bootstrap{Loops: []domain.Loop{{ID: "bounded", Name: "Bounded text", Instructions: "marker"}}}
 		reader := func(ctx context.Context, marker string, visit func([]byte) error) error {
 			if marker != "marker" {
@@ -355,9 +355,26 @@ func TestScaleP21SW139BootstrapLoopTextScratchBound(t *testing.T) {
 		}
 		return after.TotalAlloc - before.TotalAlloc
 	}
-	small, large := measure(4), measure(16384)
-	if large > 64<<10 || large > small+16<<10 {
-		t.Fatal("loop instruction size changed sanitizer scratch", small, large)
+	// See TestScaleP21SW136LoopTextScratchBound: under -race the standard
+	// library's SHA-256 checkpoint (Digest.AppendBinary) allocates a short-lived
+	// pad per whitespace run because the compiler disables its append-of-make
+	// optimisation when instrumenting. The spaced bound is asserted only in
+	// normal builds (CI's scale differential jobs run without -race); the
+	// whitespace-free input never checkpoints and keeps the bound under -race.
+	for _, input := range []struct {
+		name  string
+		block []byte
+		race  bool
+	}{{"spaced", spaced, false}, {"unspaced", unspaced, true}} {
+		small, large := measure(input.block, 4), measure(input.block, 16384)
+		if raceDetector && !input.race {
+			t.Logf("%s: race build, allocation bound not asserted (instrumented stdlib checkpoint pad): 3KiB=%d 12MiB=%d",
+				input.name, small, large)
+			continue
+		}
+		if large > 64<<10 || large > small+16<<10 {
+			t.Fatal("loop instruction size changed sanitizer scratch", input.name, small, large)
+		}
+		t.Logf("%s: 3KiB text allocations=%d; 12MiB text allocations=%d; required loop output count=1", input.name, small, large)
 	}
-	t.Logf("3KiB text allocations=%d; 12MiB text allocations=%d; required loop output count=1", small, large)
 }
