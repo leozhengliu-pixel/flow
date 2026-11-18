@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"flow/api/internal/domain"
 )
@@ -33,6 +34,8 @@ type oauthMetadataBoundedTx struct {
 	handed map[string][]int
 	// before holds each handed record's JSON, to tell the mirror's changes.
 	before map[metadataRecordKey][]byte
+	// dropped lists the handed records the callback removed from its copy.
+	dropped map[metadataRecordKey]bool
 }
 
 // The callbacks reach oauthMetadataSelect through their transaction only.
@@ -47,11 +50,36 @@ func oauthMetadataSelect(ctx context.Context, tx *sqlTx, current *domain.Bootstr
 	if !found {
 		return nil
 	}
-	return state.(*oauthMetadataBoundedTx).load(ctx, current, field, names, values)
+	t := state.(*oauthMetadataBoundedTx)
+	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
+	keys, err := t.inputs.keys(ctx, values...)
+	if err != nil {
+		return err
+	}
+	return t.load(ctx, current, field, func(ctx context.Context, record metadataLogicalNode) (bool, error) {
+		for _, name := range names {
+			match, err := issueHotMatches(ctx, record, name, keys)
+			if err != nil || match {
+				return match, err
+			}
+		}
+		return false, nil
+	})
 }
 
-func (t *oauthMetadataBoundedTx) load(ctx context.Context, current *domain.Bootstrap, field string, names, values []string) error {
-	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
+// oauthMetadataSelectWhere is oauthMetadataSelect for a callback whose
+// records are not named by one field's values: match reads the installed
+// record's fields (never decoding the record) and must select a superset of
+// the records the callback reads or changes. Off mode it does nothing.
+func oauthMetadataSelectWhere(ctx context.Context, tx *sqlTx, current *domain.Bootstrap, field string, match func(context.Context, metadataLogicalNode) (bool, error)) error {
+	state, found := oauthMetadataBoundedTxs.Load(tx)
+	if !found {
+		return nil
+	}
+	return state.(*oauthMetadataBoundedTx).load(context.WithValue(ctx, metadataWorkLeaseKey{}, nil), current, field, match)
+}
+
+func (t *oauthMetadataBoundedTx) load(ctx context.Context, current *domain.Bootstrap, field string, match func(context.Context, metadataLogicalNode) (bool, error)) error {
 	index, _, ok := metadataLogicalField(field)
 	if !ok || !slices.Contains(oauthMetadataBoundedFields, field) {
 		return ErrMetadataRecordQuery
@@ -64,14 +92,10 @@ func (t *oauthMetadataBoundedTx) load(ctx context.Context, current *domain.Boots
 	if target.Len() != len(handed) {
 		return fmt.Errorf("%w: %s changed before its records were selected", ErrBoundedMetadataCoverage, field)
 	}
-	keys, err := t.inputs.keys(ctx, values...)
-	if err != nil {
-		return err
-	}
 	merged := reflect.MakeSlice(target.Type(), 0, target.Len())
 	ordinals := make([]int, 0, len(handed))
 	ordinal, position := -1, 0
-	err = t.inputs.source.fields[index].Children(ctx, func(_ reflect.Value, record metadataLogicalNode) error {
+	err := t.inputs.source.fields[index].Children(ctx, func(_ reflect.Value, record metadataLogicalNode) error {
 		ordinal++
 		if position < len(handed) && handed[position] == ordinal {
 			merged = reflect.Append(merged, target.Index(position))
@@ -79,16 +103,9 @@ func (t *oauthMetadataBoundedTx) load(ctx context.Context, current *domain.Boots
 			position++
 			return nil
 		}
-		matched := false
-		for _, name := range names {
-			match, err := issueHotMatches(ctx, record, name, keys)
-			if err != nil {
-				return err
-			}
-			if match {
-				matched = true
-				break
-			}
+		matched, err := match(ctx, record)
+		if err != nil {
+			return err
 		}
 		if !matched {
 			return nil
@@ -157,14 +174,34 @@ func (t *oauthMetadataBoundedTx) changes(ctx context.Context, next domain.Bootst
 		}
 		switch value.Kind() {
 		case reflect.Slice:
+			kept := map[string]bool{}
 			for i := 0; i < value.Len(); i++ {
 				key, valid := metadataRecordValueKey(value.Index(i))
 				if !valid {
 					return nil, ErrMetadataRecordQuery
 				}
+				kept[key] = true
 				if err := changed(key, value.Index(i)); err != nil {
 					return nil, err
 				}
+			}
+			// A handed record the callback dropped from its copy (a deleted
+			// row) is read back too: candidate removes it when its row is gone.
+			var dropped []string
+			for handed := range t.before {
+				if handed.field == field && !kept[handed.key] && !slices.Contains(result[field], handed.key) {
+					dropped = append(dropped, handed.key)
+				}
+			}
+			if len(dropped) != 0 {
+				if t.dropped == nil {
+					t.dropped = map[metadataRecordKey]bool{}
+				}
+				for _, key := range dropped {
+					t.dropped[metadataRecordKey{field: field, key: key}] = true
+				}
+				slices.Sort(dropped)
+				result[field] = append(result[field], dropped...)
 			}
 		case reflect.Map:
 			keys := make([]string, 0, value.Len())
@@ -259,6 +296,9 @@ type oauthMetadataRecordsCollection struct {
 	shape   metadataLogicalNode
 	replace map[string]metadataAggregateNode
 	inserts []oauthMetadataInsert
+	// remove holds the records whose rows were deleted: every occurrence
+	// is left out and later ordinals close up.
+	remove map[string]bool
 }
 
 func (n oauthMetadataRecordsCollection) nodeType() reflect.Type           { return n.base.typ }
@@ -284,6 +324,18 @@ func (n oauthMetadataRecordsCollection) nodeChildren(ctx context.Context, visit 
 			return err
 		}
 		value := metadataAggregateNode(metadataAggregateStoredNode{item})
+		if len(n.remove) != 0 {
+			id, err := issueHotField(ctx, item, "ID")
+			if err != nil {
+				return err
+			}
+			for key := range n.remove {
+				match, err := id.StringEqual(ctx, key)
+				if err != nil || match {
+					return err
+				}
+			}
+		}
 		if len(replaced) < len(n.replace) {
 			id, err := issueHotField(ctx, item, "ID")
 			if err != nil {
@@ -418,15 +470,29 @@ func (t *oauthMetadataBoundedTx) candidate(ctx context.Context, tx *sqlTx, works
 			}
 			continue
 		}
-		// Each written key's first installed occurrence, and the count.
+		// A dropped record whose row the transaction deleted is not loaded.
+		removed := map[string]bool{}
+		for _, key := range keys {
+			if _, written := rows[key]; !written && t.dropped[metadataRecordKey{field: field, key: key}] {
+				removed[key] = true
+			}
+		}
+		// Each written key's first installed occurrence, and the count of
+		// the records a load reads.
 		present := map[string]bool{}
 		count := 0
 		if err := node.Children(ctx, func(_ reflect.Value, item metadataLogicalNode) error {
-			count++
 			id, err := issueHotField(ctx, item, "ID")
 			if err != nil {
 				return err
 			}
+			for key := range removed {
+				match, err := id.StringEqual(ctx, key)
+				if err != nil || match {
+					return err
+				}
+			}
+			count++
 			for _, key := range keys {
 				if _, written := rows[key]; !written || present[key] {
 					continue
@@ -444,7 +510,7 @@ func (t *oauthMetadataBoundedTx) candidate(ctx context.Context, tx *sqlTx, works
 		}); err != nil {
 			return nil, err
 		}
-		collection := oauthMetadataRecordsCollection{base: node, shape: node, replace: map[string]metadataAggregateNode{}}
+		collection := oauthMetadataRecordsCollection{base: node, shape: node, replace: map[string]metadataAggregateNode{}, remove: removed}
 		type pending struct {
 			after int
 			node  metadataAggregateNode
@@ -490,7 +556,7 @@ func (t *oauthMetadataBoundedTx) candidate(ctx context.Context, tx *sqlTx, works
 				return nil, fmt.Errorf("%w: %s load positions collide", ErrBoundedMetadataCoverage, field)
 			}
 		}
-		if len(collection.replace) == 0 && len(collection.inserts) == 0 {
+		if len(collection.replace) == 0 && len(collection.inserts) == 0 && len(collection.remove) == 0 {
 			continue
 		}
 		if nilValue, err := node.isNil(ctx); err != nil {
@@ -552,7 +618,7 @@ func (t *oauthMetadataBoundedTx) close() {
 	if t.inputs != nil {
 		t.inputs.close()
 	}
-	t.handed, t.before = nil, nil
+	t.handed, t.before, t.dropped = nil, nil, nil
 }
 
 // errOAuthMetadataStale reports a stale image found before the callback ran:
@@ -650,4 +716,117 @@ func (s *SQLiteStore) boundedOAuthMetadataTransaction(ctx context.Context, works
 			return err
 		}
 	}
+}
+
+// oauthExchangeExpiryMargin widens the token exchange's expired-key selection
+// past its own clock: the exchange tests each key against a later time.Now,
+// so a key that expires between selection and test is still handed.
+const oauthExchangeExpiryMargin = 5 * time.Minute
+
+// oauthExchangeKeySelection selects, from the installed API keys, a superset
+// of the keys ExchangeOAuthGrant revokes or deletes: with supersede, the app
+// user's own keys of the client (actor app, SubjectID the grant's user), and
+// every OAuth key whose expiry is before expiring. The exchange filters the
+// handed keys with its literal conditions. Only scalar fields are read.
+func oauthExchangeKeySelection(grant domain.OAuthRefreshGrant, supersede bool, expiring time.Time) func(context.Context, metadataLogicalNode) (bool, error) {
+	return func(ctx context.Context, record metadataLogicalNode) (bool, error) {
+		client, err := issueHotField(ctx, record, "OAuthClientID")
+		if err != nil {
+			return false, err
+		}
+		if empty, err := client.StringEqual(ctx, ""); err != nil || empty {
+			return false, err
+		}
+		if supersede {
+			own, err := client.StringEqual(ctx, grant.ClientID)
+			if err != nil {
+				return false, err
+			}
+			app := false
+			if own {
+				actor, err := issueHotField(ctx, record, "Actor")
+				if err != nil {
+					return false, err
+				}
+				if app, err = actor.StringEqual(ctx, "app"); err != nil {
+					return false, err
+				}
+			}
+			if app {
+				// domain.APIKey.SubjectID: SubjectUserID, else CreatorID.
+				subject, err := issueHotField(ctx, record, "SubjectUserID")
+				if err != nil {
+					return false, err
+				}
+				if match, err := subject.StringEqual(ctx, grant.UserID); err != nil || match {
+					return match, err
+				}
+				blank, err := subject.StringEqual(ctx, "")
+				if err != nil {
+					return false, err
+				}
+				if blank {
+					creator, err := issueHotField(ctx, record, "CreatorID")
+					if err != nil {
+						return false, err
+					}
+					if match, err := creator.StringEqual(ctx, grant.UserID); err != nil || match {
+						return match, err
+					}
+				}
+			}
+		}
+		expires, err := issueHotField(ctx, record, "ExpiresAt")
+		if err != nil {
+			return false, err
+		}
+		if missing, err := expires.isNil(ctx); err != nil || missing {
+			return false, err
+		}
+		value, err := expires.Value(ctx, int(expires.cost))
+		if err != nil {
+			return false, err
+		}
+		at, ok := value.Interface().(*time.Time)
+		return ok && at != nil && at.Before(expiring), nil
+	}
+}
+
+// boundedWriteAPIKeyUse is writeAPIKeyUse for the bounded store. The rows'
+// update runs in the OAuth metadata transaction, so the key and grant it
+// stamps are read back into the installed image as a reload reads them;
+// later installed reads (a cold facade, records handed to an OAuth write)
+// see the use. A workspace this store has not installed only gets its rows,
+// as the legacy writer commits them before looking for its copy.
+func (s *SQLiteStore) boundedWriteAPIKeyUse(ctx context.Context, use apiKeyUse) error {
+	err := s.oauthMetadataTransaction(ctx, use.workspace, func(tx *sqlTx, _ string, current domain.Bootstrap) (domain.Bootstrap, error) {
+		if err := s.writeAPIKeyUseRows(ctx, tx, use); err != nil {
+			return current, err
+		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "apiKeys", []string{"ID"}, use.keyID); err != nil {
+			return current, err
+		}
+		if use.authorizationID != "" {
+			if err := oauthMetadataSelect(ctx, tx, &current, "oauthAuthorizations", []string{"ID"}, use.authorizationID); err != nil {
+				return current, err
+			}
+		}
+		return apiKeyUseMirror(current, use), nil
+	})
+	if !errors.Is(err, ErrAuthForbidden) {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := s.writeAPIKeyUseRows(ctx, tx, use); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.dropMetadataCache(ctx, use.workspace)
+	return nil
 }

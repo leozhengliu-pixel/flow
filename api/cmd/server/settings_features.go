@@ -1793,37 +1793,9 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 		writeError(w, 400, err.Error())
 		return
 	}
-	var updated domain.OAuthApplication
-	changed := false
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.updated", id, input, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
-		if index < 0 {
-			return errNotFound
-		}
-		before := data.OAuthApplications[index]
-		applyOAuthInput(&data.OAuthApplications[index], input)
-		if err := checkGitHubUsernameAvailable(data, id, data.OAuthApplications[index].GitHubUsername); err != nil {
-			return err
-		}
-		if input.Scopes != nil || input.SupportsClientCredentials != nil {
-			data.OAuthApplications[index].CredentialsAuthorizedBy = requestActor(s, r).ID
-		}
-		updated = data.OAuthApplications[index]
-		if unchangedEdit(before, data.OAuthApplications[index]) {
-			updated = before
-			updated.ClientSecret = ""
-			return store.ErrNoMutation
-		}
-		updated.ClientSecret = ""
-		changed = true
-		return nil
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:updateOAuthApplication", "oauth_application.updated", func(repo *store.SQLiteStore, request *http.Request) {
+		s.updateOAuthApplicationWithStore(w, request, repo, input)
 	})
-	if err == nil && changed {
-		s.syncApplicationIdentity(r.Context(), updated.ClientID)
-		// Keep each workspace's managed app webhook in step, as manifest saves do.
-		go s.reconcileAllApplicationWebhooks(context.Background())
-	}
-	respondMutation(w, err, http.StatusOK, updated)
 }
 
 func (s *server) deleteOAuthApplication(w http.ResponseWriter, r *http.Request) {

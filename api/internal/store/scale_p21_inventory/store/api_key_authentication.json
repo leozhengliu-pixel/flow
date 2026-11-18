@@ -5,7 +5,7 @@
     "writeAPIKeyUse": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Existing usage telemetry updates at most one API key and one grant through native SQL JSON expressions, with unchanged minute/revocation predicates and canonical hooks. The bounded resident policy has no credential body collections to copy or hydrate; root installation only retires the complete-copy stamp. TestScaleP21M1APIKeyTelemetryDifferential compares exact canonical key/grant bytes for active and revoked records, selected-empty scope and oversized unrelated settings. Credential lookup consumers remain independently blocked.",
+      "reason": "Flag off unchanged: the same SQL stamp (writeAPIKeyUseRows) and in-memory mirror (apiKeyUseMirror). Bounded, boundedWriteAPIKeyUse runs the stamp inside oauthMetadataTransaction and reads the stamped key and grant back into the installed image (the rows' once-a-minute/revoked predicates decide, as a reload); before this the installed image never saw lastUsedAt, so cold listings and later OAuth writes that re-marshal handed keys lost it. TestScaleP21M1APIKeyTelemetryDifferential compares exact canonical key/grant bytes for active and revoked records, selected-empty scope and oversized unrelated settings; TestScaleP21SW430OAuthColdRoutes compares the installed image with a reload after real Bearer authentication.",
       "accessors": [
         "resident-state"
       ]

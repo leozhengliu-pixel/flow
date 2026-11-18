@@ -325,11 +325,9 @@ func TestScaleP21SW410OAuthApplicationByClientIDRoutes(t *testing.T) {
 			return sw410Response("developer-token", w)
 		}
 	}
-	// The listing's authorizations come from its own WorkspaceMetadata read
-	// (listAuthorizedApplications, a separate unmigrated consumer that sees
-	// none bounded). Its installed entries carry the application lookup's
-	// fields, compared exactly; authorizations and authorization-only
-	// entries are dropped from the comparison.
+	// Its installed entries carry the application lookup's fields, compared
+	// exactly; authorizations and authorization-only entries are dropped
+	// here (SW430 compares the whole listing through the real routes).
 	listing := func(s *server) string {
 		r := sw410Request(s, http.MethodGet, "/api/oauth/authorized-applications", nil, workspace, owner)
 		w := sw410Serve(r, s.listAuthorizedApplications)
@@ -379,7 +377,9 @@ func TestScaleP21SW410OAuthApplicationByClientIDRoutes(t *testing.T) {
 			// The application edit routes sync after their write.
 			r := sw410Request(s, http.MethodPatch, "/api/oauth-applications/x", nil, workspace, owner)
 			var err error
-			sw410Serve(r, func(_ http.ResponseWriter, r *http.Request) { err = s.store.SyncApplicationIdentity(r.Context(), client) })
+			sw410Serve(r, func(_ http.ResponseWriter, r *http.Request) {
+				err = s.store.SyncApplicationIdentity(r.Context(), client)
+			})
 			return "sync " + scaleP21SW294Result(err)
 		}
 	}
@@ -395,10 +395,9 @@ func TestScaleP21SW410OAuthApplicationByClientIDRoutes(t *testing.T) {
 			})
 		}
 	}
-	// The token exchange's API key and grant writes (ExchangeOAuthGrant, a
-	// separate unmigrated consumer) reach SQL but not the bounded installed
-	// image; they are compared as rows, and the stale field is asserted.
-	exchanged := []string{"apiKeys"}
+	// The token exchange (ExchangeOAuthGrant) installs the keys it writes:
+	// no installed field differs from a reload (SW430 covers its sweep).
+	var exchanged []string
 	cases := []struct {
 		name  string
 		setup func(*testing.T)
@@ -439,4 +438,3 @@ func TestScaleP21SW410OAuthApplicationByClientIDRoutes(t *testing.T) {
 		})
 	}
 }
-

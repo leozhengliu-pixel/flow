@@ -18,7 +18,7 @@ import (
 // writers, not a list of event names. Trigger capture also covers statements
 // built dynamically by these writers. A new writer must be reviewed and added.
 const scaleP09ReviewedWriters = `
-api_key_authentication.go:writeAPIKeyUse
+api_key_authentication.go:writeAPIKeyUseRows
 application_agents.go:revokeApplicationCredentialsTx
 application_agents.go:writeApplicationInstallationTx
 application_identity.go:syncInstallationIdentity

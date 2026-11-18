@@ -29,6 +29,8 @@ var scaleP21ColdRoutes = []scaleP21ColdRoute{
 	{http.MethodPatch, "/api/workspace/loop-settings", "server/loop_settings.go:updateLoopSettings", "workspace_preferences.updated"},
 	{http.MethodPost, "/api/drafts", "server/advanced_features.go:createDraft", "draft.created"},
 	{http.MethodPatch, "/api/drafts/{id}", "server/advanced_features.go:updateDraft", "draft.updated"},
+	{http.MethodGet, "/api/oauth/authorized-applications", "server/oauth_authorized_applications.go:listAuthorizedApplications", ""},
+	{http.MethodPatch, "/api/oauth-applications/{id}", "server/settings_features.go:updateOAuthApplication", "oauth_application.updated"},
 }
 
 func (s *server) withColdMetadataRequest(w http.ResponseWriter, r *http.Request, consumer, writer string, run func(*store.SQLiteStore, *http.Request)) {

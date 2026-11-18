@@ -190,11 +190,49 @@ func (s *SQLiteStore) runAPIKeyUses() {
 }
 
 func (s *SQLiteStore) writeAPIKeyUse(ctx context.Context, use apiKeyUse) error {
+	if s.BoundedMetadataEnabled() {
+		return s.boundedWriteAPIKeyUse(ctx, use)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err := s.writeAPIKeyUseRows(ctx, tx, use); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.dropMetadataCache(ctx, use.workspace)
+	s.lockWorkspaceWrites()
+	defer s.unlockWorkspaceWrites()
+	data, ok := s.workspaces[use.workspace]
+	if !ok {
+		return nil
+	}
+	data = apiKeyUseMirror(data, use)
+	s.setWorkspaceLocked(use.workspace, data)
+	return nil
+}
+
+// apiKeyUseMirror stamps the use on the copy's key and grant, as the rows'
+// update does except for its once-a-minute predicate.
+func apiKeyUseMirror(data domain.Bootstrap, use apiKeyUse) domain.Bootstrap {
+	if index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool { return key.ID == use.keyID }); index >= 0 && data.APIKeys[index].RevokedAt == nil {
+		data.APIKeys = slices.Clone(data.APIKeys)
+		at := use.at
+		data.APIKeys[index].LastUsedAt = &at
+	}
+	if index := slices.IndexFunc(data.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool { return item.ID == use.authorizationID }); index >= 0 && data.OAuthAuthorizations[index].RevokedAt == nil {
+		data.OAuthAuthorizations = slices.Clone(data.OAuthAuthorizations)
+		at := use.at
+		data.OAuthAuthorizations[index].LastUsedAt = &at
+	}
+	return data
+}
+
+func (s *SQLiteStore) writeAPIKeyUseRows(ctx context.Context, tx *sqlTx, use apiKeyUse) error {
 	expression := "CAST(json_set(data,'$.lastUsedAt',?) AS BLOB)"
 	if s.dialect == "mysql" {
 		expression = "JSON_SET(CONVERT(data USING utf8mb4),'$.lastUsedAt',?)"
@@ -211,26 +249,5 @@ func (s *SQLiteStore) writeAPIKeyUse(ctx context.Context, use apiKeyUse) error {
 			return err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	s.dropMetadataCache(ctx, use.workspace)
-	s.lockWorkspaceWrites()
-	defer s.unlockWorkspaceWrites()
-	data, ok := s.workspaces[use.workspace]
-	if !ok {
-		return nil
-	}
-	if index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool { return key.ID == use.keyID }); index >= 0 && data.APIKeys[index].RevokedAt == nil {
-		data.APIKeys = slices.Clone(data.APIKeys)
-		at := use.at
-		data.APIKeys[index].LastUsedAt = &at
-	}
-	if index := slices.IndexFunc(data.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool { return item.ID == use.authorizationID }); index >= 0 && data.OAuthAuthorizations[index].RevokedAt == nil {
-		data.OAuthAuthorizations = slices.Clone(data.OAuthAuthorizations)
-		at := use.at
-		data.OAuthAuthorizations[index].LastUsedAt = &at
-	}
-	s.setWorkspaceLocked(use.workspace, data)
 	return nil
 }
