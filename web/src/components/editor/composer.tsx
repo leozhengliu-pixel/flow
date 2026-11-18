@@ -38,6 +38,7 @@ import { commentShortcutMatches } from '@/lib/runtime-preferences'
 import { handleEmoticonInput } from './emoticon-input'
 import { useI18n } from '@/i18n/i18n'
 import { mentionTriggerBeforeCaret } from '@/lib/mention-trigger'
+import { encodeDirectiveUrl } from '@/lib/directive-url'
 
 type ComposerProps = { users?:User[]; placeholder?: string; initialValue?: string; initialData?: Record<string,unknown>; compact?: boolean; mobileIssue?: boolean; onCancel?: () => void; onSubmit?: (body: string, bodyData?: Record<string, unknown>) => Promise<void>; onAttach?:()=>void; onUpload?: (file: File) => Promise<string>; draftType?: ComposerDraftType; draftResourceId?: string; drafts?: Draft[]; draftTitle?: string; draftMetadata?: Record<string, unknown> }
 
@@ -191,7 +192,7 @@ function commentMediaMarkdown(node?: unknown) {
   const walk = (value: unknown) => {
     if (!value || typeof value !== 'object') return
     const current = value as { type?: string; attrs?: { src?: string; alt?: string; title?: string; size?: unknown; contentType?: string }; content?: unknown[] }
-    const src = current.attrs?.src
+    const src = current.attrs?.src && encodeDirectiveUrl(current.attrs.src)
     if (src && !src.startsWith('blob:') && !src.startsWith('data:')) {
       if (current.type === 'image') parts.push(`![${current.attrs?.alt || ''}](${src})`)
       if (current.type === 'video') parts.push(`::video[${current.attrs?.title || ''}](${src})`)

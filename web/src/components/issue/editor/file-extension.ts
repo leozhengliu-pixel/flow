@@ -4,6 +4,7 @@ import { formatFileSize } from '@/lib/format-file-size'
 import { openPdfViewer } from '@/components/editor/pdf/pdf-bridge'
 import { copyPdfLink, downloadPdf, isPdfFile, printPdf } from '@/components/editor/pdf/pdf-file-actions'
 import { createPdfPreview, createPdfToolbar } from '@/components/editor/pdf/pdf-card'
+import { encodeDirectiveUrl } from '@/lib/directive-url'
 
 type DescriptionImageUpload = (file: File) => Promise<string>
 
@@ -121,7 +122,8 @@ export const DescriptionFile = Node.create({
   },
   markdownTokenName: 'descriptionFile',
   parseMarkdown: (token, helpers) => helpers.createNode('file', { src: String(token.href ?? ''), title: String(token.text ?? 'File'), size: token.size ? Number(token.size) : null, contentType: token.contentType ? String(token.contentType) : null }),
-  renderMarkdown: node => `::file[${String(node.attrs?.title || 'File')}](${String(node.attrs?.src || '')}){size="${node.attrs?.size ?? ''}" type="${node.attrs?.contentType ?? ''}"}`,
+  // The URL is written in its directive encoding (idempotent: a parsed src is already encoded and stays byte-stable).
+  renderMarkdown: node => `::file[${String(node.attrs?.title || 'File')}](${encodeDirectiveUrl(String(node.attrs?.src || ''))}){size="${node.attrs?.size ?? ''}" type="${node.attrs?.contentType ?? ''}"}`,
   markdownTokenizer: {
     name: 'descriptionFile',
     level: 'block' as const,
@@ -176,7 +178,7 @@ export const DescriptionVideo = Node.create({
   },
   markdownTokenName: 'descriptionVideo',
   parseMarkdown: (token, helpers) => helpers.createNode('video', { src: String(token.href ?? token.src ?? ''), title: String(token.text ?? '') }),
-  renderMarkdown: node => `::video[${String(node.attrs?.title || '')}](${String(node.attrs?.src || '')})`,
+  renderMarkdown: node => `::video[${String(node.attrs?.title || '')}](${encodeDirectiveUrl(String(node.attrs?.src || ''))})`,
   markdownTokenizer: {
     name: 'descriptionVideo',
     level: 'block' as const,
@@ -236,7 +238,8 @@ function persistSrc(view: EditorView, type: string, placeholder: string, file: F
     URL.revokeObjectURL(placeholder)
   }
   if (!upload) return
-  return upload(file).then(url => apply(url)).catch(() => apply(null))
+  // The node keeps the URL in its directive form, the same src a reload parses back from the Markdown.
+  return upload(file).then(url => apply(encodeDirectiveUrl(url))).catch(() => apply(null))
 }
 
 const FILE_PATH = 'M6.75 1V6.75C6.75 7.5297 7.34489 8.17045 8.10554 8.24313L8.25 8.25H14V13C14 14.1046 13.1046 15 12 15H4C2.89543 15 2 14.1046 2 13V3C2 1.89543 2.89543 1 4 1H6.75ZM8 1L14 7.03022H9C8.44772 7.03022 8 6.5825 8 6.03022V1Z'
