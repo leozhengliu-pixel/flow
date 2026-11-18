@@ -113,9 +113,13 @@ func sw430UseStamped(t *testing.T, s *server, workspace, token string) bool {
 	if err := json.Unmarshal(scaleP21SW294Image(t, s.store, workspace, "apiKeys")["apiKeys"], &keys); err != nil {
 		t.Fatal(err)
 	}
+	// A key that already carries an older use (a seeded lastUsedAt) is
+	// stamped again: wait for this use, which the writer applies when the
+	// stored use is over a minute old.
+	recent := func(at *time.Time) bool { return at != nil && time.Since(*at) < time.Minute }
 	for _, item := range keys {
 		if item.ID == key.ID {
-			return item.LastUsedAt != nil && key.LastUsedAt != nil
+			return recent(item.LastUsedAt) && recent(key.LastUsedAt)
 		}
 	}
 	return false
