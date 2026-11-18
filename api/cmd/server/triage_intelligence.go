@@ -275,6 +275,9 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 // issues, scoring each against its candidate issues.
 func generateTriageMutation(issueIDs []string, candidateSets map[string][]domain.Issue, updated *domain.Issue, results *[]domain.Issue, generated *bool) func(*domain.Bootstrap) error {
 	return func(data *domain.Bootstrap) error {
+		// A write that lost a race to another server runs the callback
+		// again: the results are those of the attempt that commits.
+		*updated, *results, *generated = domain.Issue{}, (*results)[:0], false
 		// Candidates are appended after the scoped issues for scoring only.
 		// They are search summaries, so even a candidate copy of another
 		// scoped issue must never be written back over its full row.

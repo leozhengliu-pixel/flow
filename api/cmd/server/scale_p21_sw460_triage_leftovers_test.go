@@ -388,3 +388,71 @@ func TestScaleP21SW462TriageSuggestionReorderOverPeerRows(t *testing.T) {
 		t.Fatalf("legacy rows: added %t, deleted kept %t, dismissed %t", found["sw462-added"], found["sw461-existing-000007"], found["sw461-dismissed-0000"])
 	}
 }
+
+// A legacy server whose copy is behind (flag off) generates triage after
+// another server reassigned the team of a document attached to an issue the
+// team auto-move moves: its metadata rebase loses the race on that document,
+// refreshes it and runs the callback again. The response lists every scoped
+// issue as often as the scope names it (before 2026-11-18 the rerun appended
+// a second copy of every result), and the bounded warm and SQL-reloaded views equal that legacy
+// server byte for byte, the moved document included.
+func TestScaleP21SW463TriageRerunReturnsOneResultPerIssue(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f, ids := scaleP21SW440Setup(t, 100)
+	f.scaleP21TriageWriterFixture.prepare = scaleP21SW441Attach(f, f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID, setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
+		settings.TeamAction, settings.LabelAction = "auto", "auto"
+	})}))
+	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	peer := func(t *testing.T) {
+		other, err := store.OpenDatabase(f.reader.config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer other.Close()
+		f.sw460Reassign(t, other, "sw440-plain")
+	}
+	outcomes := f.sw460Differential(t, []string{"legacy", "warm", "reloaded"}, peer, func(service *server) *httptest.ResponseRecorder {
+		w := f.sw440Generate(t, ids)(service)
+		var results []struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
+			t.Fatalf("status %d: %.300s", w.Code, w.Body.String())
+		}
+		// The scope repeats one ID (scaleP21SW440Setup), which every
+		// attempt lists as often as the scope names it.
+		allowed := map[string]int{}
+		for _, id := range ids {
+			allowed[id]++
+		}
+		for _, result := range results {
+			if allowed[result.ID]--; allowed[result.ID] < 0 {
+				t.Fatalf("bounded=%t: %s listed more often than the scope names it among %d results", service.store.BoundedMetadataEnabled(), result.ID, len(results))
+			}
+		}
+		return w
+	}, true)
+	legacy := outcomes[0]
+	if legacy.Code != http.StatusOK || len(legacy.State.Events) != 1 {
+		t.Fatalf("legacy status %d with %d events: %.300s", legacy.Code, len(legacy.State.Events), legacy.Body)
+	}
+	for _, row := range legacy.State.Documents {
+		if row[0] != "sw440-doc" {
+			continue
+		}
+		var document domain.Document
+		if err := json.Unmarshal([]byte(row[2].(string)), &document); err != nil {
+			t.Fatal(err)
+		}
+		// The move applied over the other server's write: the legacy server
+		// refreshed the document and ran the generation again.
+		if document.IssueID != scaleP21SW441Moved || document.IssueTeamID == "sw440-plain" || document.IssueTeamID == scaleP21SW400Team ||
+			!document.UpdatedAt.Equal(time.Date(2026, 1, 4, 5, 6, 7, 0, time.UTC)) {
+			t.Fatalf("legacy did not move the reassigned document: %s", row[2])
+		}
+		return
+	}
+	t.Fatal("document row missing")
+}
