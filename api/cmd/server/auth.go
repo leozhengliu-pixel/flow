@@ -558,7 +558,16 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			if headers, selected := s.documentTrashAuthorizationHeaders(r, key); selected {
 				data.Trash = headers
 			} else {
-				data.Trash = s.store.TrashSnapshot(key)
+				repository := s.store
+				if repository.BoundedMetadataEnabled() {
+					var readErr error
+					repository, readErr = s.legacyColdAuthorizationRepository(r)
+					if readErr != nil {
+						respondMutation(w, readErr, http.StatusOK, nil)
+						return false
+					}
+				}
+				data.Trash = repository.TrashSnapshot(key)
 			}
 		}
 	}
@@ -1124,6 +1133,12 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		return true
 	}
 	if allowed, handled := s.boundedMembershipAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
+	if allowed, handled := s.boundedTeamMembershipAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
+	if allowed, handled := s.boundedEmptyLegacyIssueDenial(r, workspace); handled {
 		return allowed
 	}
 	var data domain.Bootstrap
