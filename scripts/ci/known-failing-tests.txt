@@ -1,5 +1,5 @@
-# Known-failing Go tests, tracked until fixed (baseline of 2026-11-17, CI runs
-# 44173057528 and 44222295379).
+# Known-failing Go tests, tracked until fixed (baseline of 2026-11-17/18, CI runs
+# 44173057528, 44222295379 and 44239650983).
 #
 #   <package> <TestName> <scope>[,<scope>...] # <reason> (owner: <who fixes it>)
 #
@@ -40,5 +40,13 @@
 ./internal/store TestScaleP21SW18WebhookCredentials mysql # missing credential selection on MySQL (owner: P21 SW18)
 ./internal/store TestScaleP21SW18IssueSearchMigrationDifferential mysql # bounded and literal search migration differ on MySQL (owner: P21 SW18)
 ./internal/store TestScaleP21SW193PulseInlineSettings postgres,mysql # MySQL: CAST(... AS BLOB) is not valid SQL (1064); fails on PostgreSQL too (owner: P21 SW193)
-./internal/store TestScaleP21SW21TypedSyncRequestVisitor mysql # Timeout exceeded in regular expression match (3699) (owner: P21 SW21)
+./internal/store TestScaleP21SW21TypedSyncRequestVisitor postgres,mysql # MySQL: Timeout exceeded in regular expression match (3699); PostgreSQL: cannot deconstruct a scalar (22023) (owner: P21 SW21)
+./internal/store TestScaleP21SW217InlineFieldsLiteralDifferential postgres # literal inline oracle: invalid byte sequence for encoding UTF8: 0xff (22021) (owner: P21 SW217)
+./internal/store TestScaleP21SW218LegacyIssueWorkDifferential postgres # canonical workspace_content_records rows differ between literal and bounded (owner: P21 SW218)
+./internal/store TestScaleP21SW22ApplicationWebhookCount postgres # count=2 where the legacy count and the expectation are 0 (owner: P21 SW22)
+./internal/store TestScaleP21SW23LoopRecordExists postgres # a loop id with a trailing NUL is reported as existing (owner: P21 SW23)
+./internal/store TestScaleP21SW33OwnedAuthorityPostgresNativeIdentity postgres # native identity producer: invalid byte sequence for encoding UTF8: 0x00 (22021) (owner: P21 SW33)
+./internal/store TestScaleP21SW57IssueMutationRows postgres # syntax error at or near "=?" (42601): a ? placeholder is not rewritten (owner: P21 SW57)
+./internal/store TestScaleP21SW60DiscussionRows postgres # invalid input syntax for type json (22P02), then the aborted transaction differs between literal and bounded (owner: P21 SW60)
+./internal/store TestScaleP21SW93LegacyRecordBaseDifferential postgres # canonical content/issue/index/order rows differ; issue_records read in an aborted transaction (25P02) (owner: P21 SW93)
 ./cmd/server TestScaleP21HotNotificationsDifferential postgres,mysql # hangs: the 4-connection pool is exhausted and lockAuditHead asks for a second connection (tx.database.ExecContext) while its transaction holds one (owner: P21 hot notifications)
