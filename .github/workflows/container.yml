@@ -62,9 +62,16 @@ jobs:
         working-directory: web
         run: npm run build
 
-      - name: Test API
+      # The API suites run in the CI workflow for the same commit (race detector,
+      # sharded, with measured timeouts); the full cmd/server and internal/store
+      # suites take hours of test time and cannot run here under go test's
+      # default 10-minute limit. This step only proves the commit builds: every
+      # package and every test binary compiles (-run '^$' runs no test).
+      - name: Build API and compile its tests
         working-directory: api
-        run: go test ./...
+        run: |
+          go build ./...
+          go test -count=1 -run '^$' ./...
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
