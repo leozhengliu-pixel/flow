@@ -305,10 +305,12 @@ func TestScaleP21SW441ThousandIssueTriageConflictingWrite(t *testing.T) {
 	moved := false
 	for _, row := range outcomes[0].State.Documents {
 		if row[0] == "sw440-doc" {
-			data := row[2].(string)
-			moved = strings.Contains(data, `"issueId":"`+scaleP21SW441Moved+`","issueTeamId":"`) &&
-				!strings.Contains(data, `"issueTeamId":"sw440-plain"`) && !strings.Contains(data, `"issueTeamId":"`+scaleP21SW400Team+`"`) &&
-				strings.Contains(data, `"updatedAt":"2026-01-04T05:06:07Z"`)
+			var document domain.Document
+			if err := json.Unmarshal([]byte(row[2].(string)), &document); err != nil {
+				t.Fatal(err)
+			}
+			moved = document.IssueID == scaleP21SW441Moved && document.IssueTeamID != "sw440-plain" && document.IssueTeamID != scaleP21SW400Team &&
+				document.UpdatedAt.Equal(time.Date(2026, 1, 4, 5, 6, 7, 0, time.UTC))
 		}
 	}
 	if !moved {
