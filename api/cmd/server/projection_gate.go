@@ -80,6 +80,9 @@ func acquireProjectionWaiting(r *http.Request) bool {
 }
 
 func acquireProjectionSlot(r *http.Request, bounded bool) bool {
+	if held, handled := holdColdProjection(r); handled {
+		return held
+	}
 	hold, ok := r.Context().Value(projectionHoldKey{}).(*projectionHold)
 	if !ok || hold.gate == nil {
 		return true

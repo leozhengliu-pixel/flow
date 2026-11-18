@@ -297,11 +297,13 @@ func main() {
 	// Other replicas look here for this release's assets once it serves pages.
 	startSharedAssetPublish(s.staticPath, applicationConfig.Assets, 30*time.Second)
 	go s.runCoding(shutdownSignal)
-	go s.runApplicationAgentWorker(shutdownSignal)
+	// Background work that reaches COLD consumers runs COLD per operation
+	// with bounded metadata on (SW550 background roots).
+	go s.runApplicationAgentWorker(store.WithColdWork(shutdownSignal, "application-agent-worker"))
 	go s.runRecurringIssueScheduler(shutdownSignal)
-	go s.runReviewImportScheduler(shutdownSignal)
+	go s.runReviewImportScheduler(store.WithColdWork(shutdownSignal, "review-import-scheduler"))
 	go s.runPersonalConnectionScheduler(shutdownSignal)
-	go s.runStorageMaintenance(shutdownSignal, applicationConfig.Retention.DomainEvents)
+	go s.runStorageMaintenance(store.WithColdWork(shutdownSignal, "storage-maintenance"), applicationConfig.Retention.DomainEvents)
 	go s.resealStoredSecrets(shutdownSignal)
 	go func() {
 		<-shutdownSignal.Done()
