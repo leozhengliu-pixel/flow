@@ -552,7 +552,7 @@ var errWorkflowNotDue = errors.New("workflow is no longer due")
 // still due, so replicas polling the same workspace run it once.
 func (s *server) runWorkflow(ctx context.Context, key, id, trigger, resourceType, resourceID string, dueOnly bool) (domain.WorkflowRun, error) {
 	var run domain.WorkflowRun
-	err := s.store.MutateWorkspace(ctx, key, "workflow_run.executed", id, map[string]string{"trigger": trigger}, func(data *domain.Bootstrap) error {
+	mutate := func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.WorkflowDefinitions, func(item domain.WorkflowDefinition) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -608,7 +608,13 @@ func (s *server) runWorkflow(ctx context.Context, key, id, trigger, resourceType
 			data.WorkflowRuns = data.WorkflowRuns[len(data.WorkflowRuns)-500:]
 		}
 		return nil
-	})
+	}
+	var err error
+	if s.store.BoundedMetadataEnabled() {
+		err = s.store.MutateWorkflowRun(ctx, key, id, resourceType, resourceID, map[string]string{"trigger": trigger}, mutate)
+	} else {
+		err = s.store.MutateWorkspace(ctx, key, "workflow_run.executed", id, map[string]string{"trigger": trigger}, mutate)
+	}
 	return run, err
 }
 
@@ -841,6 +847,10 @@ func (s *server) startWorkflowScheduler() {
 			case <-ticker.C:
 			}
 			now := time.Now().UTC()
+			if s.store.BoundedMetadataEnabled() {
+				s.boundedWorkflowScheduleTick(ctx, now)
+				continue
+			}
 			for _, key := range s.store.WorkspaceKeys() {
 				data, ok := s.store.WorkspaceMetadataFields(key, "workflowDefinitions", "workflowRuns")
 				if !ok {
