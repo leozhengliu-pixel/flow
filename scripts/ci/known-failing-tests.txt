@@ -22,14 +22,6 @@
 ./internal/store TestScaleP21SW220ProjectUpdateParentMapDifferential race # still running after 8 min under race when its shard timed out; empty-parent alone 2.5 min (owner: P21 SW220)
 ./cmd/server TestScaleP21SW209AdvancedScheduleTickerDifferential race # still running after 7.5 min under race (5 MiB bodies per matrix cell) when its shard timed out (owner: P21 SW209)
 
-# Fail under the race detector on CI
-./cmd/server TestScaleP21SW136LoopTextScratchBound race # streamed loop text allocates about 58 MB (TotalAlloc) for a 12 MiB input under -race, bound is 16 KiB (owner: P21 SW136)
-./cmd/server TestScaleP21SW139BootstrapLoopTextScratchBound race # same TotalAlloc scratch bound as SW136 fails under -race (owner: P21 SW139)
-./cmd/server TestScaleP21SW182CycleScheduleTickerDifferential race,plain # inclusive-UTC-day-with-process-local-offset subtests: literal and bounded cycle JSON differ on the UTC runner (owner: P21 SW182)
-./internal/store TestScaleP21ApplicationAccessSnapshotBudgetAndIgnoredBodies race # "borrowed pool-one list failed context deadline exceeded" under race (owner: P21 application access)
-./internal/store TestScaleP21SW21PersonalScrubDifferential race # journal summary read hits its context deadline under race (owner: P21 SW21)
-./internal/store TestScaleP21SW21PersonalScrubAtomicAdmission race # fails after 104 s under race (owner: P21 SW21)
-
 # PostgreSQL and MySQL (Scale differentials jobs)
 ./internal/store TestScaleP21SW110ThreadWriterDifferential postgres # duplicate-id: NUL in an inline collection reaches workspace_states; root writers and the bounded SQL stage must both drop it (22P05) (owner: P21 SW110)
 ./internal/store TestScaleP21SW163BootstrapContentMalformedVisitor postgres # fails on PostgreSQL (owner: P21 SW163)
