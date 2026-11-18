@@ -8,7 +8,7 @@
       "accessors": ["BeginResourceRelationRead"],
       "temperature": "hot",
       "temperatureReason": "Project and initiative relation-ID request authorization.",
-      "callers": ["server/scale_p21_sw255_resource_authorization.go:boundedPointResourceAuthorization"],
+      "callers": ["server/scale_p21_sw255_resource_authorization.go:boundedPointResourceDecision"],
       "reason": "Reuses the reviewed BeginResourceRelationRead owner and the point resource authorization reader for the related endpoint, keeping the literal viewer-then-key order; the escaped relation-route differential (SW327) has not been certified."
     }
   }
