@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"sync/atomic"
+	"testing"
 	"time"
 
 	"flow/api/internal/domain"
@@ -17,6 +19,20 @@ import (
 // writer does not reproduce, such as a callback that changes unrelated
 // metadata. It wraps ErrBoundedMetadataCoverage; nothing is written.
 var ErrIssueSuggestionWriteRefused = fmt.Errorf("%w: issue suggestion writer refused the input", ErrBoundedMetadataCoverage)
+
+// issueSuggestionWriteAttempts counts the transaction attempts of the bounded
+// issue suggestion writer (IssueSuggestionWriteAttemptsForTesting).
+var issueSuggestionWriteAttempts atomic.Int64
+
+// IssueSuggestionWriteAttemptsForTesting returns how many transaction attempts
+// the bounded issue suggestion writer has started in this process: a write
+// that lost a race to another server and ran again counts twice.
+func IssueSuggestionWriteAttemptsForTesting() int64 {
+	if !testing.Testing() {
+		return 0
+	}
+	return issueSuggestionWriteAttempts.Load()
+}
 
 // IssueSuggestionWrite declares the installed records an issue suggestion
 // callback may apply beyond the scoped issues' own references and the targets
@@ -462,6 +478,7 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		if _, found := s.storedWorkspace(workspace); !found {
 			return fmt.Errorf("workspace not found")
 		}
+		issueSuggestionWriteAttempts.Add(1)
 		unbindTimestampInputs, err := s.bindMetadataTimestampInputs(ctx)
 		if err != nil {
 			return err
