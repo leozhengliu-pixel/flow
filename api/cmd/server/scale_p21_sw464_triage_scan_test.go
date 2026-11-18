@@ -63,7 +63,8 @@ func scaleP21SW464Issue(r *rand.Rand, id string, at time.Time) domain.Issue {
 // same candidates, scores and order (ties included), over randomized streams
 // with repeated IDs and texts, archived and closed candidates, fields edited
 // between queries, appended positions and more qualifying candidates than
-// the 2000 cut-off.
+// the 2000 cut-off. The generation token cache leaves the suggestions of
+// generateIssueSuggestionsWithCandidates unchanged.
 func TestScaleP21SW464TriageCandidateIndexMatchesScan(t *testing.T) {
 	at := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
 	for seed := range 60 {
@@ -94,6 +95,7 @@ func TestScaleP21SW464TriageCandidateIndexMatchesScan(t *testing.T) {
 			data.Issues = append(data.Issues, issue)
 		}
 		index := newTriageCandidateIndex(nil)
+		cache := newTriageGenerationCache(nil)
 		for query := range 25 {
 			if query%5 == 4 {
 				// Positions appended between queries, and fields that
@@ -122,6 +124,24 @@ func TestScaleP21SW464TriageCandidateIndexMatchesScan(t *testing.T) {
 			}
 			if seed%15 == 0 && len(want) != maxTriageSuggestionCandidates {
 				t.Fatalf("seed %d: %d candidates, want the cut-off", seed, len(want))
+			}
+			issue.Project, issue.Assignee, issue.Labels = nil, nil, nil
+			now := at.Add(time.Hour)
+			plain := generateIssueSuggestionsWithCandidates(data, &issue, now, want)
+			cached := generateIssueSuggestionsCached(data, &issue, now, got, cache)
+			strip := func(items []domain.IssueSuggestion) []domain.IssueSuggestion {
+				for index := range items {
+					items[index].ID = ""
+				}
+				return items
+			}
+			if !reflect.DeepEqual(strip(plain), strip(cached)) {
+				t.Fatalf("seed %d query %d: cached suggestions differ:\n%+v\n%+v", seed, query, plain, cached)
+			}
+			if query == 12 {
+				// A project or label text edited mid-generation.
+				data.Projects[1].Description = scaleP21SW464Text(r, 50)
+				data.Labels[2].Name = scaleP21SW464Text(r, 2)
 			}
 		}
 	}

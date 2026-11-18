@@ -284,3 +284,59 @@ func triageCandidateValueCost(value domain.Issue) uint64 {
 	}
 	return cost
 }
+
+// triageGenerationCache keeps the tokens of each project and label a
+// generation compares with every scored issue (inferProject, inferLabel),
+// computed once from exactly the texts triageTokens would read. An entry is
+// reused only while those texts are unchanged. A nil cache tokenizes on every
+// call.
+type triageGenerationCache struct {
+	projects, labels map[string]triageCachedTokens
+	// reserve admits the cached tokens (bounded); nil for legacy.
+	reserve func(uint64) error
+}
+
+type triageCachedTokens struct {
+	texts  []string
+	tokens map[string]bool
+}
+
+func newTriageGenerationCache(reserve func(uint64) error) *triageGenerationCache {
+	return &triageGenerationCache{projects: map[string]triageCachedTokens{}, labels: map[string]triageCachedTokens{}, reserve: reserve}
+}
+
+func (c *triageGenerationCache) projectTokens() map[string]triageCachedTokens {
+	if c == nil {
+		return nil
+	}
+	return c.projects
+}
+
+func (c *triageGenerationCache) labelTokens() map[string]triageCachedTokens {
+	if c == nil {
+		return nil
+	}
+	return c.labels
+}
+
+func (c *triageGenerationCache) tokens(kind map[string]triageCachedTokens, id string, texts ...string) map[string]bool {
+	if c == nil || kind == nil {
+		return triageTokens(texts...)
+	}
+	if cached, found := kind[id]; found && slices.Equal(cached.texts, texts) {
+		return cached.tokens
+	}
+	tokens := triageTokens(texts...)
+	if c.reserve != nil {
+		cost := uint64(len(id))*2 + 256
+		for token := range tokens {
+			cost += uint64(len(token))*2 + 96
+		}
+		if c.reserve(cost) != nil {
+			// Not retained: the next issue tokenizes again.
+			return tokens
+		}
+	}
+	kind[id] = triageCachedTokens{texts: slices.Clone(texts), tokens: tokens}
+	return tokens
+}
