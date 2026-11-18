@@ -275,9 +275,9 @@ jobs:
             fi
           done
 
-  # The API suite is split so no single runner carries it all: cmd/server (about
-  # 4.5 hours of test time under the race detector, measured 2026-11-17) and
-  # internal/store (about 3 hours) are sharded by measured test time (scripts/ci/go-test-timings.json; see
+  # The API suite is split so no single runner carries it all: cmd/server (over
+  # 8.4 hours of test time under the race detector, measured on run 44222295379)
+  # and internal/store (over 5.5 hours) are sharded by measured test time (scripts/ci/go-test-timings.json; see
   # scripts/ci/go-test-shard.sh), and every other package runs in one job. Each job writes
   # its own coverage profile; api-coverage merges them and enforces the floor.
   # "API" below is the required status check that gathers everything.
@@ -310,15 +310,15 @@ jobs:
         env:
           CHECK_PATTERNS: '1'
         run: |
-          ../scripts/ci/go-test-shard.sh check ./cmd/server 14
-          ../scripts/ci/go-test-shard.sh plan ./cmd/server 14
+          ../scripts/ci/go-test-shard.sh check ./cmd/server 20
+          ../scripts/ci/go-test-shard.sh plan ./cmd/server 20
 
       - name: Check test shards cover every test once (internal/store)
         env:
           CHECK_PATTERNS: '1'
         run: |
-          ../scripts/ci/go-test-shard.sh check ./internal/store 10
-          ../scripts/ci/go-test-shard.sh plan ./internal/store 10
+          ../scripts/ci/go-test-shard.sh check ./internal/store 14
+          ../scripts/ci/go-test-shard.sh plan ./internal/store 14
 
   api-test:
     name: API tests (${{ matrix.name }})
@@ -333,30 +333,40 @@ jobs:
       max-parallel: 15
       matrix:
         include:
-          - { name: 'server 1/14', profile: server-1, package: ./cmd/server, shard: 1, shards: 14 }
-          - { name: 'server 2/14', profile: server-2, package: ./cmd/server, shard: 2, shards: 14 }
-          - { name: 'server 3/14', profile: server-3, package: ./cmd/server, shard: 3, shards: 14 }
-          - { name: 'server 4/14', profile: server-4, package: ./cmd/server, shard: 4, shards: 14 }
-          - { name: 'server 5/14', profile: server-5, package: ./cmd/server, shard: 5, shards: 14 }
-          - { name: 'server 6/14', profile: server-6, package: ./cmd/server, shard: 6, shards: 14 }
-          - { name: 'server 7/14', profile: server-7, package: ./cmd/server, shard: 7, shards: 14 }
-          - { name: 'server 8/14', profile: server-8, package: ./cmd/server, shard: 8, shards: 14 }
-          - { name: 'server 9/14', profile: server-9, package: ./cmd/server, shard: 9, shards: 14 }
-          - { name: 'server 10/14', profile: server-10, package: ./cmd/server, shard: 10, shards: 14 }
-          - { name: 'server 11/14', profile: server-11, package: ./cmd/server, shard: 11, shards: 14 }
-          - { name: 'server 12/14', profile: server-12, package: ./cmd/server, shard: 12, shards: 14 }
-          - { name: 'server 13/14', profile: server-13, package: ./cmd/server, shard: 13, shards: 14 }
-          - { name: 'server 14/14', profile: server-14, package: ./cmd/server, shard: 14, shards: 14 }
-          - { name: 'store 1/10', profile: store-1, package: ./internal/store, shard: 1, shards: 10 }
-          - { name: 'store 2/10', profile: store-2, package: ./internal/store, shard: 2, shards: 10 }
-          - { name: 'store 3/10', profile: store-3, package: ./internal/store, shard: 3, shards: 10 }
-          - { name: 'store 4/10', profile: store-4, package: ./internal/store, shard: 4, shards: 10 }
-          - { name: 'store 5/10', profile: store-5, package: ./internal/store, shard: 5, shards: 10 }
-          - { name: 'store 6/10', profile: store-6, package: ./internal/store, shard: 6, shards: 10 }
-          - { name: 'store 7/10', profile: store-7, package: ./internal/store, shard: 7, shards: 10 }
-          - { name: 'store 8/10', profile: store-8, package: ./internal/store, shard: 8, shards: 10 }
-          - { name: 'store 9/10', profile: store-9, package: ./internal/store, shard: 9, shards: 10 }
-          - { name: 'store 10/10', profile: store-10, package: ./internal/store, shard: 10, shards: 10 }
+          - { name: 'server 1/20', profile: server-1, package: ./cmd/server, shard: 1, shards: 20 }
+          - { name: 'server 2/20', profile: server-2, package: ./cmd/server, shard: 2, shards: 20 }
+          - { name: 'server 3/20', profile: server-3, package: ./cmd/server, shard: 3, shards: 20 }
+          - { name: 'server 4/20', profile: server-4, package: ./cmd/server, shard: 4, shards: 20 }
+          - { name: 'server 5/20', profile: server-5, package: ./cmd/server, shard: 5, shards: 20 }
+          - { name: 'server 6/20', profile: server-6, package: ./cmd/server, shard: 6, shards: 20 }
+          - { name: 'server 7/20', profile: server-7, package: ./cmd/server, shard: 7, shards: 20 }
+          - { name: 'server 8/20', profile: server-8, package: ./cmd/server, shard: 8, shards: 20 }
+          - { name: 'server 9/20', profile: server-9, package: ./cmd/server, shard: 9, shards: 20 }
+          - { name: 'server 10/20', profile: server-10, package: ./cmd/server, shard: 10, shards: 20 }
+          - { name: 'server 11/20', profile: server-11, package: ./cmd/server, shard: 11, shards: 20 }
+          - { name: 'server 12/20', profile: server-12, package: ./cmd/server, shard: 12, shards: 20 }
+          - { name: 'server 13/20', profile: server-13, package: ./cmd/server, shard: 13, shards: 20 }
+          - { name: 'server 14/20', profile: server-14, package: ./cmd/server, shard: 14, shards: 20 }
+          - { name: 'server 15/20', profile: server-15, package: ./cmd/server, shard: 15, shards: 20 }
+          - { name: 'server 16/20', profile: server-16, package: ./cmd/server, shard: 16, shards: 20 }
+          - { name: 'server 17/20', profile: server-17, package: ./cmd/server, shard: 17, shards: 20 }
+          - { name: 'server 18/20', profile: server-18, package: ./cmd/server, shard: 18, shards: 20 }
+          - { name: 'server 19/20', profile: server-19, package: ./cmd/server, shard: 19, shards: 20 }
+          - { name: 'server 20/20', profile: server-20, package: ./cmd/server, shard: 20, shards: 20 }
+          - { name: 'store 1/14', profile: store-1, package: ./internal/store, shard: 1, shards: 14 }
+          - { name: 'store 2/14', profile: store-2, package: ./internal/store, shard: 2, shards: 14 }
+          - { name: 'store 3/14', profile: store-3, package: ./internal/store, shard: 3, shards: 14 }
+          - { name: 'store 4/14', profile: store-4, package: ./internal/store, shard: 4, shards: 14 }
+          - { name: 'store 5/14', profile: store-5, package: ./internal/store, shard: 5, shards: 14 }
+          - { name: 'store 6/14', profile: store-6, package: ./internal/store, shard: 6, shards: 14 }
+          - { name: 'store 7/14', profile: store-7, package: ./internal/store, shard: 7, shards: 14 }
+          - { name: 'store 8/14', profile: store-8, package: ./internal/store, shard: 8, shards: 14 }
+          - { name: 'store 9/14', profile: store-9, package: ./internal/store, shard: 9, shards: 14 }
+          - { name: 'store 10/14', profile: store-10, package: ./internal/store, shard: 10, shards: 14 }
+          - { name: 'store 11/14', profile: store-11, package: ./internal/store, shard: 11, shards: 14 }
+          - { name: 'store 12/14', profile: store-12, package: ./internal/store, shard: 12, shards: 14 }
+          - { name: 'store 13/14', profile: store-13, package: ./internal/store, shard: 13, shards: 14 }
+          - { name: 'store 14/14', profile: store-14, package: ./internal/store, shard: 14, shards: 14 }
           - { name: 'other packages', profile: other, package: others, shard: 0, shards: 0 }
     env:
       # Use the test run's instrumentation so listing and execution reuse the
