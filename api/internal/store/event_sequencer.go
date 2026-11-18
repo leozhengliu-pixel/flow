@@ -120,7 +120,9 @@ func (tx *sqlTx) queueEventSequencing() error {
 		for _, pending := range batch {
 			args = append(args, pending.workspaceID, pending.eventID, now)
 		}
-		if _, err := tx.Tx.ExecContext(ctx, rewriteSQL(`INSERT INTO domain_event_sequencing(workspace_id,event_id,created_ms) VALUES`+values, tx.dialect), args...); err != nil {
+		// The driver transaction skips the wrapper: drop PostgreSQL NULs from
+		// the identities as the domain_events insert (through it) did.
+		if _, err := tx.Tx.ExecContext(ctx, rewriteSQL(`INSERT INTO domain_event_sequencing(workspace_id,event_id,created_ms) VALUES`+values, tx.dialect), textArgs(tx.dialect, args)...); err != nil {
 			return err
 		}
 	}
