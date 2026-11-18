@@ -115,6 +115,20 @@ func (s *SQLiteStore) normalizeMetadataLogicalSource(ctx context.Context, source
 			return err
 		}
 		emptyDefault := reflect.ValueOf(n.base).Field(index)
+		if name == "integrationDeliveries" || name == "integrationConnections" {
+			if nilValue {
+				return builder.Field(name, emptyDefault)
+			}
+			var normalized metadataAggregateNode = metadataAggregateStoredNode{value: node}
+			if name == "integrationConnections" {
+				normalized = integrationConnectionDefaultsNode{base: node}
+			}
+			written, err := builder.writeAggregateNode(normalized, 0)
+			if err == nil {
+				builder.source.fields[index] = written
+			}
+			return err
+		}
 		if nilValue && !emptyDefault.IsNil() || name == "projectStatuses" {
 			// Empty project statuses synthesize the standard ordered list.
 			empty := true

@@ -53,6 +53,7 @@ func (w *pulseSummaryWork) inlineCursor(tx *sqlTx, workspace, lock string) ([]by
 	if err != nil {
 		return nil, false, err
 	}
+	defer root.Close()
 	shapes, err := root.shapes()
 	if err != nil {
 		return nil, false, err
@@ -100,6 +101,7 @@ func (s *SQLiteStore) discussionStreamedRootWork(ctx context.Context, tx *sqlTx,
 	if err != nil {
 		return err
 	}
+	defer root.Close()
 	shapes, err := root.shapes()
 	if err != nil {
 		return err

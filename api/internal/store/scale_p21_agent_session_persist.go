@@ -131,7 +131,7 @@ func (p *legacyMetadataWritePlan) writeAgentSessionLifecycleNativeRow(ctx contex
 // every native occurrence and replaces that field in the locked root. Merely
 // finding no selected row must never be interpreted as a concurrent deletion.
 func (p *legacyMetadataWritePlan) agentSessionLifecycleInlineReady(ctx context.Context, field *legacyMetadataWriteField, _ map[string]string) (bool, error) {
-	if !legacySessionLifecycleWrite(ctx) || field.field.name != "agentSessions" {
+	if !legacyMetadataLifecycleStreamSelected(ctx, field.field.name) {
 		return false, nil
 	}
 	if !field.full {
@@ -171,7 +171,7 @@ func (p *legacyMetadataWritePlan) prepareAgentSessionLifecycleRoot(ctx context.C
 	}
 	if nextSplit.valid {
 		return &legacySessionRootPatch{
-			split: true, part: legacySessionJSONPart{bytes.NewReader([]byte("[]")), 0, 2},
+			field: field.field.name, split: true, part: legacySessionJSONPart{bytes.NewReader([]byte("[]")), 0, 2},
 		}, nil
 	}
 	// Inline arrays never pass through offloadRecord. Keep the requested
@@ -180,5 +180,8 @@ func (p *legacyMetadataWritePlan) prepareAgentSessionLifecycleRoot(ctx context.C
 	if err != nil {
 		return nil, err
 	}
-	return &legacySessionRootPatch{part: legacySessionSpoolPart(next), spool: next}, nil
+	return &legacySessionRootPatch{
+		field: field.field.name, part: legacySessionSpoolPart(next), spool: next,
+		canonical: integrationDeliveryStreamEvent(ctx) != "",
+	}, nil
 }

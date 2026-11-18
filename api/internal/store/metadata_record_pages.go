@@ -274,12 +274,26 @@ type canonicalMetadataReader struct {
 	key             RecordKey
 	size, offset    int64
 	buffer          []byte
+	readAhead       []byte
+	pageBytes       int
 	captureLeft     int
 	boundedCapture  bool
 	captureExceeded bool
 }
 
 func (r *canonicalMetadataReader) Read(p []byte) (int, error) {
+	pageBytes := r.pageBytes
+	if pageBytes == 0 {
+		pageBytes = metadataRecordChunkBytes
+	}
+	if pageBytes < 0 || pageBytes > MetadataRecordPageMaxBytes {
+		return 0, ErrMetadataPageBudget
+	}
+	if r.pageBytes != 0 {
+		if err := r.ctx.Err(); err != nil {
+			return 0, err
+		}
+	}
 	if len(r.buffer) == 0 {
 		if r.offset >= r.size {
 			return 0, io.EOF
@@ -292,12 +306,29 @@ func (r *canonicalMetadataReader) Read(p []byte) (int, error) {
 		if r.boundedCapture {
 			n = min(n, int64(r.captureLeft))
 		}
-		data := "data"
-		if r.tx.dialect == "sqlite" {
-			data = "CAST(data AS BLOB)"
+		if r.pageBytes == 0 || len(r.readAhead) == 0 {
+			fetch := n
+			target := &r.buffer
+			if r.pageBytes != 0 {
+				fetch = min(int64(pageBytes), r.size-r.offset)
+				target = &r.readAhead
+			}
+			data := "data"
+			if r.tx.dialect == "sqlite" {
+				data = "CAST(data AS BLOB)"
+			}
+			if err := r.tx.QueryRowContext(r.ctx, `SELECT SUBSTR(`+data+`,?,?) FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, r.offset+1, fetch, r.workspace, r.key.Kind, r.key.ID).Scan(target); err != nil {
+				return 0, err
+			}
+			if r.pageBytes != 0 && int64(len(r.readAhead)) != fetch {
+				return 0, io.ErrUnexpectedEOF
+			}
 		}
-		if err := r.tx.QueryRowContext(r.ctx, `SELECT SUBSTR(`+data+`,?,?) FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, r.offset+1, n, r.workspace, r.key.Kind, r.key.ID).Scan(&r.buffer); err != nil {
-			return 0, err
+		if r.pageBytes != 0 {
+			// Keep the catalog's original logical capture windows even when
+			// SQL reads ahead under a separately owned larger page.
+			n = min(n, int64(len(r.readAhead)))
+			r.buffer, r.readAhead = r.readAhead[:n], r.readAhead[n:]
 		}
 		if len(r.buffer) == 0 {
 			return 0, io.ErrUnexpectedEOF

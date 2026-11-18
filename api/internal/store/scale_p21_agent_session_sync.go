@@ -6,10 +6,14 @@ import (
 	"io"
 )
 
-func (p *legacyMetadataWritePlan) agentSessionCanonicalSpool(ctx context.Context, owner *ResourceRead, key string) (*RecordSpool, error) {
+func (p *legacyMetadataWritePlan) agentSessionCanonicalSpool(ctx context.Context, owner *ResourceRead, key string, fields ...string) (*RecordSpool, error) {
+	kind := "agentSessions"
+	if len(fields) != 0 {
+		kind = fields[0]
+	}
 	var size int64
-	if err := p.tx.QueryRowContext(ctx, "SELECT "+owner.byteLength("data")+" FROM workspace_metadata_records WHERE workspace_key=? AND field='agentSessions' AND record_key=?",
-		p.workspace, key).Scan(&size); err != nil {
+	if err := p.tx.QueryRowContext(ctx, "SELECT "+owner.byteLength("data")+" FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?",
+		p.workspace, kind, key).Scan(&size); err != nil {
 		return nil, err
 	}
 	if size < 0 || size > metadataLogicalDiskBytes {
@@ -19,7 +23,7 @@ func (p *legacyMetadataWritePlan) agentSessionCanonicalSpool(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	reader := &canonicalMetadataReader{ctx: ctx, tx: p.tx, workspace: p.workspace, key: RecordKey{"agentSessions", key}, size: size}
+	reader := &canonicalMetadataReader{ctx: ctx, tx: p.tx, workspace: p.workspace, key: RecordKey{kind, key}, size: size}
 	if count, err := io.CopyBuffer(spool, reader, make([]byte, metadataRecordChunkBytes)); err != nil || count != size {
 		spool.Close()
 		if err == nil {
@@ -30,7 +34,7 @@ func (p *legacyMetadataWritePlan) agentSessionCanonicalSpool(ctx context.Context
 	return spool, nil
 }
 
-func legacySessionStoredMatches(ctx context.Context, owner *ResourceRead, tx *sqlTx, workspace string, previous legacySessionJSONPart, next legacySessionJSONPart) (bool, error) {
+func legacySessionStoredMatches(ctx context.Context, owner *ResourceRead, tx *sqlTx, workspace string, previous legacySessionJSONPart, next legacySessionJSONPart, fields ...string) (bool, error) {
 	oldFields, err := legacySessionJSONObject(ctx, owner, previous)
 	if err != nil {
 		return false, err
@@ -41,6 +45,9 @@ func legacySessionStoredMatches(ctx context.Context, owner *ResourceRead, tx *sq
 	}
 	if same, err := legacySessionObjectsEqual(ctx, owner, oldFields, newFields); err != nil || same {
 		return same, err
+	}
+	if len(fields) != 0 && fields[0] != "agentSessions" {
+		return false, nil
 	}
 	marker, err := legacySessionHasMarker(ctx, previous)
 	if err != nil || !marker || tx.database == nil || tx.database.content == nil {
@@ -66,8 +73,8 @@ func legacySessionStoredMatches(ctx context.Context, owner *ResourceRead, tx *sq
 // JSON/offload ownership. Unrelated canonical body rows are not decoded.
 func (p *legacyMetadataWritePlan) syncAgentSessionLifecycleCollection(ctx context.Context, owner *ResourceRead, field *legacyMetadataWriteField, known, wanted legacySessionSplitImage) error {
 	query := "SELECT " + owner.byteLength("record_key") + ",CASE WHEN " + owner.byteLength("record_key") + "<=? THEN record_key ELSE NULL END,collection_order" +
-		" FROM workspace_metadata_records WHERE workspace_key=? AND field='agentSessions'"
-	rows, err := p.tx.QueryContext(ctx, query, MetadataRecordPageMaxBytes, p.workspace)
+		" FROM workspace_metadata_records WHERE workspace_key=? AND field=?"
+	rows, err := p.tx.QueryContext(ctx, query, MetadataRecordPageMaxBytes, p.workspace, field.field.name)
 	if err != nil {
 		return err
 	}
@@ -107,46 +114,71 @@ func (p *legacyMetadataWritePlan) syncAgentSessionLifecycleCollection(ctx contex
 			continue
 		}
 		node := wanted.nodes[id]
-		if exists {
-			same, err := func() (bool, error) {
-				work := &ResourceRead{store: p.store}
-				defer work.Close()
-				var old *RecordSpool
-				var err error
-				if wasKnown {
-					old, err = legacySessionNodeSpool(ctx, work, oldNode)
-				} else {
-					old, err = p.agentSessionCanonicalSpool(ctx, work, id)
+		if err := func() error {
+			var encoded *integrationDeliveryRowSpool
+			defer func() {
+				if encoded != nil {
+					encoded.spool.Close()
 				}
-				if err != nil {
-					return false, err
-				}
-				defer old.Close()
-				next, err := legacySessionNodeSpool(ctx, work, node)
-				if err != nil {
-					return false, err
-				}
-				defer next.Close()
-				return legacySessionStoredMatches(ctx, work, p.tx, p.workspace, legacySessionSpoolPart(old), legacySessionSpoolPart(next))
 			}()
-			if err != nil {
-				return err
-			}
-			if same {
-				if previousOrder != order {
-					if _, err := p.tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET collection_order=? WHERE workspace_key=? AND field=? AND record_key=?`,
-						order, p.workspace, "agentSessions", id); err != nil {
-						return err
+			if exists {
+				same, err := func() (bool, error) {
+					work := &ResourceRead{store: p.store}
+					defer work.Close()
+					var old *RecordSpool
+					var err error
+					if wasKnown {
+						old, err = legacySessionNodeSpool(ctx, work, oldNode)
+					} else {
+						old, err = p.agentSessionCanonicalSpool(ctx, work, id, field.field.name)
 					}
-					p.tx.metadataWritten = true
+					if err != nil {
+						return false, err
+					}
+					defer old.Close()
+					next, err := legacySessionNodeSpool(ctx, work, node)
+					if err != nil {
+						return false, err
+					}
+					if integrationDeliveryStreamEvent(ctx) != "" &&
+						(field.field.name == "integrationDeliveries" || field.field.name == "integrationConnections") {
+						encoded = newIntegrationDeliveryRowSpool(p, field.field.name, id, node, next)
+					} else {
+						defer next.Close()
+					}
+					return legacySessionStoredMatches(ctx, work, p.tx, p.workspace, legacySessionSpoolPart(old), legacySessionSpoolPart(next), field.field.name)
+				}()
+				if err != nil {
+					return err
 				}
-				continue
+				if same {
+					if previousOrder != order {
+						if _, err := p.tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET collection_order=? WHERE workspace_key=? AND field=? AND record_key=?`,
+							order, p.workspace, field.field.name, id); err != nil {
+							return err
+						}
+						p.tx.metadataWritten = true
+					}
+					return nil
+				}
 			}
-		}
-		// The closed callback did not create sessions. A newly split row is
-		// an existing native occurrence, admitted and encoded one at a time.
-		row := legacyMetadataWriteRow{id: id, before: node, next: node, changed: true}
-		if _, err := p.writeAgentSessionLifecycleNativeRow(ctx, field, &row, order, true); err != nil {
+			// The closed callback did not create sessions. A newly split row is
+			// an existing native occurrence, admitted and encoded one at a time.
+			row := legacyMetadataWriteRow{id: id, before: node, next: node, changed: true}
+			write := p.writeAgentSessionLifecycleNativeRow
+			switch field.field.name {
+			case "workflowRuns":
+				write = p.writeWorkflowRunStreamNativeRow
+			case "integrationDeliveries", "integrationConnections":
+				if encoded != nil {
+					_, err := p.writeIntegrationDeliveryNativeRowWithSpool(ctx, field, &row, order, true, encoded)
+					return err
+				}
+				write = p.writeIntegrationDeliveryNativeRow
+			}
+			_, err := write(ctx, field, &row, order, true)
+			return err
+		}(); err != nil {
 			return err
 		}
 	}
@@ -155,7 +187,7 @@ func (p *legacyMetadataWritePlan) syncAgentSessionLifecycleCollection(ctx contex
 			// The ordinary slow tail preserves rows absent from known.
 			continue
 		}
-		if err := deleteMetadataRecordRow(ctx, p.tx, p.workspace, metadataRecordKey{"agentSessions", id}); err != nil {
+		if err := deleteMetadataRecordRow(ctx, p.tx, p.workspace, metadataRecordKey{field.field.name, id}); err != nil {
 			return err
 		}
 	}

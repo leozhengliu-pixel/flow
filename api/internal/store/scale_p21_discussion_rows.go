@@ -158,7 +158,16 @@ func (r *issueMutationRows) discussionPayloads(ctx context.Context, kind string,
 	if len(headers) == 0 || len(headers) > issueMutationRowsBatchSize || size < 0 || uint64(size) > (metadataWorkBytes-(64<<10)-uint64(len(headers))*512)/3 {
 		return ErrMetadataWorkBudget
 	}
-	if err := r.owner.reserve(ctx, uint64(size)*3+uint64(len(headers))*512+64<<10); err != nil {
+	sqlScratch := &ResourceRead{store: r.owner.store}
+	sqlRetained := false
+	defer func() {
+		if sqlRetained {
+			r.owner.release = append(r.owner.release, sqlScratch.Close)
+		} else {
+			sqlScratch.Close()
+		}
+	}()
+	if err := sqlScratch.reserve(ctx, uint64(size)*3+uint64(len(headers))*512+64<<10); err != nil {
 		return err
 	}
 	locator := func(value string, blob bool) any {
@@ -191,6 +200,7 @@ func (r *issueMutationRows) discussionPayloads(ctx context.Context, kind string,
 		}
 		bodies = append(bodies, body)
 		r.discussion.raw = append(r.discussion.raw, body)
+		sqlRetained = true
 	}
 	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
 		return err
@@ -198,12 +208,64 @@ func (r *issueMutationRows) discussionPayloads(ctx context.Context, kind string,
 	if len(bodies) != len(headers) {
 		return io.ErrUnexpectedEOF
 	}
+	rawCost := uint64(len(bodies))*uint64(reflect.TypeFor[[]byte]().Size())*2 + 4096
+	for _, body := range bodies {
+		rawCost += uint64(cap(body))
+	}
+	rows = nil
+	if err := r.owner.reserve(ctx, rawCost); err == nil {
+		sqlRetained = false
+		sqlScratch.Close()
+	} else if !errors.Is(err, ErrMetadataWorkBudget) {
+		return err
+	}
 	for _, body := range bodies {
 		if err := visit(body); err != nil {
 			return err
 		}
 	}
 	return ctx.Err()
+}
+
+// Decode scratch ends after each row. The retained native value gets its own
+// allowance before that scratch closes; pressure keeps the original envelope.
+func discussionDecodeOwned[T any](ctx context.Context, r *issueMutationRows, raw []byte, visit func(T) error) error {
+	work, err := metadataAggregatePayloadJSONWork(ctx, raw)
+	if err != nil {
+		return err
+	}
+	fixed := uint64(reflect.TypeFor[T]().Size())*4 + 4096
+	if fixed > metadataWorkBytes || work > metadataWorkBytes-fixed {
+		return ErrMetadataWorkBudget
+	}
+	decodeScratch := &ResourceRead{store: r.owner.store}
+	decodeTransferred := false
+	defer func() {
+		if !decodeTransferred {
+			decodeScratch.Close()
+		}
+	}()
+	if err := decodeScratch.reserve(ctx, work+fixed); err != nil {
+		return err
+	}
+	var value T
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return err
+	}
+	native, nativeErr := metadataAggregateNativeCost(ctx, reflect.ValueOf(value), 0)
+	if nativeErr == nil && native <= metadataWorkBytes-fixed {
+		nativeErr = r.owner.reserve(ctx, native+fixed)
+	} else if nativeErr == nil {
+		nativeErr = ErrMetadataWorkBudget
+	}
+	if nativeErr != nil {
+		if !errors.Is(nativeErr, ErrMetadataWorkBudget) {
+			return nativeErr
+		}
+		r.owner.release = append(r.owner.release, decodeScratch.Close)
+		decodeTransferred = true
+	}
+	return visit(value)
 }
 
 func discussionSelectedRows[T any](ctx context.Context, r *issueMutationRows, kind, where string, args []any, order string, limit int, visit func(T) error) error {
@@ -218,22 +280,7 @@ func discussionSelectedRows[T any](ctx context.Context, r *issueMutationRows, ki
 			end++
 		}
 		if err := r.discussionPayloads(ctx, kind, headers[start:end], size, func(raw []byte) error {
-			work, err := metadataAggregatePayloadJSONWork(ctx, raw)
-			if err != nil {
-				return err
-			}
-			fixed := uint64(reflect.TypeFor[T]().Size())*4 + 4096
-			if fixed > metadataWorkBytes || work > metadataWorkBytes-fixed {
-				return ErrMetadataWorkBudget
-			}
-			if err := r.owner.reserve(ctx, work+fixed); err != nil {
-				return err
-			}
-			var value T
-			if err := json.Unmarshal(raw, &value); err != nil {
-				return err
-			}
-			return visit(value)
+			return discussionDecodeOwned(ctx, r, raw, visit)
 		}); err != nil {
 			return err
 		}

@@ -189,14 +189,21 @@ func (s *SQLiteStore) metadataAggregateEncodeOwned(ctx context.Context, node met
 	if err := scratch.reserve(ctx, logicalJSONStreamWork); err != nil {
 		return nil, nil, err
 	}
-	frames, err := newMetadataLogicalBuilder(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer frames.Close()
-	framed, err := frames.writeAggregateNode(node, 0)
-	if err != nil {
-		return nil, nil, err
+	var framed metadataLogicalNode
+	if stored, ok := node.(metadataAggregateStoredNode); ok {
+		// The caller retains this immutable source through encoding. Reuse
+		// its frame and type registry without copying the complete winner.
+		framed = stored.value
+	} else {
+		frames, err := newMetadataLogicalBuilder(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer frames.Close()
+		framed, err = frames.writeAggregateNode(node, 0)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	spool, err := newMetadataLogicalRecordSpool(ctx)
 	if err != nil {

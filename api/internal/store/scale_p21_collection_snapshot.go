@@ -149,15 +149,23 @@ func ReplayMetadataReader(reader io.Reader, encodedBytes int64) (*io.SectionRead
 }
 
 type metadataSnapshotReaderAt struct {
-	ctx      context.Context
-	snapshot *metadataCollectionSnapshot
-	key      RecordKey
-	size     int64
+	ctx       context.Context
+	snapshot  *metadataCollectionSnapshot
+	key       RecordKey
+	size      int64
+	pageBytes int
 }
 
 func (r *metadataSnapshotReaderAt) ReadAt(p []byte, offset int64) (int, error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
+	}
+	pageBytes := r.pageBytes
+	if pageBytes == 0 {
+		pageBytes = metadataRecordChunkBytes
+	}
+	if pageBytes < 0 || pageBytes > MetadataRecordPageMaxBytes {
+		return 0, ErrMetadataPageBudget
 	}
 	if offset < 0 {
 		return 0, ErrMetadataRecordQuery
@@ -182,7 +190,7 @@ func (r *metadataSnapshotReaderAt) ReadAt(p []byte, offset int64) (int, error) {
 	}
 	n := 0
 	for n < len(p) && offset+int64(n) < r.size {
-		size := min(int64(metadataRecordChunkBytes), int64(len(p)-n), r.size-offset-int64(n))
+		size := min(int64(pageBytes), int64(len(p)-n), r.size-offset-int64(n))
 		args := []any{offset + int64(n) + 1, size, snapshot.workspace}
 		if r.key.Kind != "" {
 			args = append(args, r.key.Kind, r.key.ID)

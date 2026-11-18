@@ -281,7 +281,13 @@ func (s *SQLiteStore) writeLegacyInlineFieldsRootPatch(ctx context.Context, tx *
 	if !touch || inline == nil || len(inline.parts) == 0 {
 		return ErrBoundedMetadataCoverage
 	}
-	fields, err := legacySessionJSONObject(ctx, owner, legacySessionJSONPart{root.source, 0, root.source.size})
+	var fields map[string]legacySessionJSONPart
+	var err error
+	if integrationDeliveryStreamEvent(ctx) != "" {
+		fields, err = root.legacySessionFields(ctx, owner)
+	} else {
+		fields, err = legacySessionJSONObject(ctx, owner, legacySessionJSONPart{root.source, 0, root.source.size})
+	}
 	if err != nil {
 		return err
 	}
@@ -313,19 +319,34 @@ func (s *SQLiteStore) writeLegacyInlineFieldsRootPatch(ctx context.Context, tx *
 		fields[name] = part
 		delete(shapes, name)
 	}
+	canonical := map[string]legacySessionJSONPart{}
 	if session := legacySessionRootPatchFrom(ctx); session != nil {
-		if session.part.input == nil {
-			return ErrBoundedMetadataCoverage
+		seen := map[string]bool{}
+		if err := session.visit(func(part *legacySessionRootPatch) error {
+			kind := part.field
+			if kind == "" {
+				kind = "agentSessions"
+			}
+			if part.part.input == nil || seen[kind] || !legacyMetadataLifecycleStreamSelected(ctx, kind) {
+				return ErrBoundedMetadataCoverage
+			}
+			if _, duplicate := inline.parts[kind]; duplicate {
+				return ErrBoundedMetadataCoverage
+			}
+			seen[kind] = true
+			if part.split {
+				shapes[kind] = "array"
+			} else {
+				delete(shapes, kind)
+			}
+			fields[kind] = part.part
+			if part.canonical {
+				canonical[kind] = part.part
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
-		if _, duplicate := inline.parts["agentSessions"]; duplicate {
-			return ErrBoundedMetadataCoverage
-		}
-		if session.split {
-			shapes["agentSessions"] = "array"
-		} else {
-			delete(shapes, "agentSessions")
-		}
-		fields["agentSessions"] = session.part
 	}
 	manifest, err := json.Marshal(shapes)
 	if err != nil {
@@ -338,15 +359,25 @@ func (s *SQLiteStore) writeLegacyInlineFieldsRootPatch(ctx context.Context, tx *
 	}
 	defer replacement.Close()
 	output := &metadataInlineRootSpoolWriter{spool: replacement, limit: int64(s.maxStateBytes)}
-	if err := legacySessionWriteJSONObject(ctx, owner, fields, output); err != nil {
+	if err := legacySessionWriteJSONObjectWithCanonical(ctx, owner, fields, canonical, output); err != nil {
 		return err
 	}
 	if same, err := legacySessionRawEqual(ctx, legacySessionJSONPart{root.source, 0, root.source.size}, legacySessionSpoolPart(replacement)); err != nil || same {
 		return err
 	}
+	updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	if integrationDeliveryStreamEvent(ctx) != "" {
+		if raw, binary, err := integrationDeliveryBinarySpool(ctx, owner, replacement); err != nil {
+			return err
+		} else if binary {
+			tx.metadataWritten = true
+			_, err := tx.ExecContext(ctx, metadataSQLStageLegacyRootSQL, workspaceID, raw, updatedAt, workspace)
+			return err
+		}
+	}
 	stage, err := beginMetadataSQLWriteStage(ctx, tx, metadataSQLStageTarget{
 		workspaceState: true, workspace: workspace, workspaceID: workspaceID,
-		updatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		updatedAt: updatedAt,
 		dataBytes: int(replacement.bytes), searchBytes: -1,
 	})
 	if err != nil {

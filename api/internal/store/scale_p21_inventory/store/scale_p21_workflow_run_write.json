@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_workflow_run_write.go",
+  "unmigrated": 1,
+  "consumers": {
+    "MutateWorkflowRun": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": ["storedWorkspace"],
+      "temperature": "hot",
+      "temperatureReason": "One atomic scheduled/retried workflow action sequence and history update.",
+      "callers": ["server/automation_intake.go:runWorkflow"]
+    }
+  }
+}
