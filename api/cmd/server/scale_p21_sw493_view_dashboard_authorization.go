@@ -53,44 +53,9 @@ func (s *server) boundedViewPredicate(r *http.Request, userID, ref string, creat
 			}
 			return true, nil
 		}
-		// The literal projection of the headers named by ref.
-		projected := domain.Bootstrap{ViewerRole: role}
-		for _, view := range data.SavedViews {
-			if view.Scope == "team" && !access.TeamContentVisible(view.TeamID) || view.Scope == "personal" && view.OwnerID != userID {
-				continue
-			}
-			if view.ProjectID != "" {
-				visible, err := s.boundedProjectVisibleByID(r, access, view.ProjectID)
-				if err != nil {
-					return false, err
-				}
-				if !visible {
-					continue
-				}
-			}
-			projected.SavedViews = append(projected.SavedViews, view)
-		}
-		// viewAllowed
-		allowed := false
-		for _, item := range projected.SavedViews {
-			if item.ID != ref && item.SlugID != ref {
-				continue
-			}
-			if item.Scope == "personal" {
-				allowed = item.OwnerID == userID || workspaceAdminRole(role)
-			} else if item.Scope == "team" && item.TeamID != "" && !access.TeamContentAllowed(item.TeamID) {
-				allowed = false
-			} else if item.ProjectID == "" {
-				allowed = true
-			} else {
-				var err error
-				if allowed, err = s.boundedProjectAllowed(r, access, item.ProjectID); err != nil {
-					return false, err
-				}
-			}
-			if allowed {
-				break
-			}
+		allowed, projected, err := s.boundedViewAllowed(r, access, userID, ref, data)
+		if err != nil {
+			return false, err
 		}
 		if !allowed {
 			return false, nil
@@ -120,6 +85,83 @@ func (s *server) boundedViewPredicate(r *http.Request, userID, ref string, creat
 	}
 }
 
+// boundedViewAllowed is the literal viewAllowed over the literal projection
+// of the headers named by ref, which it also returns in collection order.
+func (s *server) boundedViewAllowed(r *http.Request, access store.AccessContext, userID, ref string, data domain.Bootstrap) (bool, domain.Bootstrap, error) {
+	role := access.ViewerRole()
+	projected := domain.Bootstrap{ViewerRole: role}
+	for _, view := range data.SavedViews {
+		if view.Scope == "team" && !access.TeamContentVisible(view.TeamID) || view.Scope == "personal" && view.OwnerID != userID {
+			continue
+		}
+		if view.ProjectID != "" {
+			visible, err := s.boundedProjectVisibleByID(r, access, view.ProjectID)
+			if err != nil {
+				return false, projected, err
+			}
+			if !visible {
+				continue
+			}
+		}
+		projected.SavedViews = append(projected.SavedViews, view)
+	}
+	for _, item := range projected.SavedViews {
+		if item.ID != ref && item.SlugID != ref {
+			continue
+		}
+		allowed := false
+		if item.Scope == "personal" {
+			allowed = item.OwnerID == userID || workspaceAdminRole(role)
+		} else if item.Scope == "team" && item.TeamID != "" && !access.TeamContentAllowed(item.TeamID) {
+			allowed = false
+		} else if item.ProjectID == "" {
+			allowed = true
+		} else {
+			var err error
+			if allowed, err = s.boundedProjectAllowed(r, access, item.ProjectID); err != nil {
+				return false, projected, err
+			}
+		}
+		if allowed {
+			return true, projected, nil
+		}
+	}
+	return false, projected, nil
+}
+
+// boundedDashboards reads and projects the dashboards setting with the
+// store's own settings filter and decodes it with settingCollection.
+func (s *server) boundedDashboards(r *http.Request, access store.AccessContext) ([]domain.Dashboard, error) {
+	read, err := s.store.BeginSettingAuthorizationRead(r.Context(), access, dashboardsSettingsKey)
+	if err != nil {
+		return nil, err
+	}
+	data := read.Data
+	read.Close()
+	access.FilterSettingsByVisibility(&data)
+	return settingCollection[domain.Dashboard](data, dashboardsSettingsKey), nil
+}
+
+// boundedDashboardVisible is the literal dashboardAllowed: dashboardVisible
+// sees the projected team rows.
+func boundedDashboardVisible(access store.AccessContext, userID, ref string, items []domain.Dashboard) bool {
+	for _, item := range items {
+		if item.ID != ref {
+			continue
+		}
+		rows := domain.Bootstrap{ViewerRole: access.ViewerRole()}
+		for _, id := range item.TeamIDs {
+			if access.TeamRowVisible(id) {
+				rows.Teams = append(rows.Teams, domain.Team{ID: id})
+			}
+		}
+		if dashboardVisible(rows, userID, item) {
+			return true
+		}
+	}
+	return false
+}
+
 // boundedDashboardPredicate mirrors the "dashboards" case. The setting is
 // projected by the store's own settings filter and decoded by the literal
 // settingCollection; dashboardVisible sees the projected team rows.
@@ -136,30 +178,11 @@ func (s *server) boundedDashboardPredicate(r *http.Request, userID, ref string, 
 			}
 			return input.TeamIDs == nil || !slices.ContainsFunc(*input.TeamIDs, func(id string) bool { return !access.TeamContentAllowed(id) }), nil
 		}
-		read, err := s.store.BeginSettingAuthorizationRead(r.Context(), access, dashboardsSettingsKey)
+		items, err := s.boundedDashboards(r, access)
 		if err != nil {
 			return false, err
 		}
-		data := read.Data
-		read.Close()
-		access.FilterSettingsByVisibility(&data)
-		items := settingCollection[domain.Dashboard](data, dashboardsSettingsKey)
-		visible := false
-		for _, item := range items {
-			if item.ID != ref {
-				continue
-			}
-			rows := domain.Bootstrap{ViewerRole: role}
-			for _, id := range item.TeamIDs {
-				if access.TeamRowVisible(id) {
-					rows.Teams = append(rows.Teams, domain.Team{ID: id})
-				}
-			}
-			if dashboardVisible(rows, userID, item) {
-				visible = true
-				break
-			}
-		}
+		visible := boundedDashboardVisible(access, userID, ref, items)
 		if !visible {
 			return false, nil
 		}

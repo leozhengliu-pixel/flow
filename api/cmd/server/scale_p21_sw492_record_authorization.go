@@ -74,7 +74,7 @@ func boundedCycleAllowed(ref string) scaleP21RecordPredicate {
 // scaleP21SW490RecordPredicate names the record kind to read (none for a
 // create root or a setting) and the literal predicate of a record shape. For
 // record shapes, output marks a create root.
-func (s *server) scaleP21SW490RecordPredicate(r *http.Request, userID string, shape scaleP21SW490Shape) (string, scaleP21RecordPredicate) {
+func (s *server) scaleP21SW490RecordPredicate(r *http.Request, workspace, userID string, shape scaleP21SW490Shape) (string, scaleP21RecordPredicate) {
 	switch shape.kind {
 	case "cycles":
 		return "cycles", boundedCycleAllowed(shape.ref)
@@ -85,6 +85,29 @@ func (s *server) scaleP21SW490RecordPredicate(r *http.Request, userID string, sh
 		return "savedViews", s.boundedViewPredicate(r, userID, shape.ref, false)
 	case "dashboards":
 		return "", s.boundedDashboardPredicate(r, userID, shape.ref, shape.output)
+	case "reviews":
+		return "reviews", s.boundedReviewPredicate(r, workspace, userID, shape.ref)
+	case "releases":
+		return "", s.boundedReleasePredicate(r, shape.ref, shape.output)
+	case "releasePipelines":
+		return "", s.boundedPipelinePredicate(r, shape.ref, shape.output)
+	case "customers":
+		return "", s.boundedCustomerPredicate(r, shape.ref)
+	case "customerRequests":
+		return "", s.boundedCustomerRequestPredicate(r, workspace, userID, shape.ref, shape.output)
+	case "projectsBody":
+		return "", s.boundedProjectBodyPredicate(r, workspace, userID, shape.ref, shape.output)
+	case "initiativesBody":
+		return "", s.boundedInitiativeBodyPredicate(r, shape.ref, shape.output)
+	case "documentCreate":
+		return "", s.boundedDocumentCreatePredicate(r)
+	case "references":
+		return "", s.boundedReferencePredicate(r, workspace, userID, shape.target, shape.ref)
+	case "asks":
+		if shape.output {
+			return "", s.boundedAskPredicate(r, "", true)
+		}
+		return "asks", s.boundedAskPredicate(r, shape.ref, false)
 	}
 	return "", nil
 }

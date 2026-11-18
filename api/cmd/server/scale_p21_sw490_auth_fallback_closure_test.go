@@ -19,82 +19,14 @@ import (
 	"time"
 )
 
-// scaleP21SW490LiteralFallbackRoutes are the registered routes whose literal
-// resource predicate still reads projected records (asks,
-// customers, customer requests, releases, pipelines, reviews,
-// favorite/subscription references) or the request body (create roots,
-// relation creation and PATCH under projects/initiatives). With bounded
-// metadata on they keep the literal whole-workspace projection. Every other
-// non-public route must be decided by a reviewed bounded reader or by a
-// registered COLD facade. The walk below fails on any difference, in either
-// direction, so this list can only shrink with a matching closure.
-// "[escaped id]" marks a pattern that keeps the literal projection only when an
-// escaped "/" in an ID shifts the decoded segments into a body predicate.
-var scaleP21SW490LiteralFallbackRoutes = []string{
-	"PATCH /api/initiatives/{id}/relations/{relationId} [escaped id]",
-	"PATCH /api/projects/{id}/relations/{relationId} [escaped id]",
-	"DELETE /api/asks/{id}",
-	"DELETE /api/customer-requests/{id}",
-	"DELETE /api/customer-requests/{id}/archive",
-	"DELETE /api/customer-requests/{id}/attachments/{attachmentId}",
-	"DELETE /api/customers/{id}",
-	"DELETE /api/favorites/{type}/{id}",
-	"DELETE /api/release-pipelines/{id}",
-	"DELETE /api/release-pipelines/{id}/access-key",
-	"DELETE /api/releases/{id}",
-	"DELETE /api/releases/{id}/notes/{noteId}",
-	"DELETE /api/subscriptions/{type}/{id}",
-	"GET /api/customers/{id}",
-	"GET /api/release-pipelines/{id}",
-	"GET /api/releases/{id}",
-	"GET /api/releases/{id}/history",
-	"GET /api/releases/{id}/notes",
-	"GET /api/reviews/{id}",
-	"PATCH /api/asks/{id}",
-	"PATCH /api/customer-requests/{id}",
-	"PATCH /api/customers/{id}",
-	"PATCH /api/favorites/{type}/{id}",
-	"PATCH /api/initiatives/{id}",
-	"PATCH /api/initiatives/{id}/comments/{commentId}",
-	"PATCH /api/initiatives/{id}/resources/{resourceId}",
-	"PATCH /api/initiatives/{id}/updates/{updateId}",
-	"PATCH /api/projects/{id}",
-	"PATCH /api/projects/{id}/comments/{commentId}",
-	"PATCH /api/projects/{id}/milestones/{milestoneId}",
-	"PATCH /api/projects/{id}/resources/{resourceId}",
-	"PATCH /api/projects/{id}/updates/{updateId}",
-	"PATCH /api/release-pipelines/{id}",
-	"PATCH /api/releases/{id}",
-	"PATCH /api/releases/{id}/notes/{noteId}",
-	"PATCH /api/reviews/{id}",
-	"PATCH /api/reviews/{id}/comments/{commentId}",
-	"POST /api/asks",
-	"POST /api/asks/{id}/decision",
-	"POST /api/customer-requests",
-	"POST /api/customer-requests/{id}/archive",
-	"POST /api/customer-requests/{id}/attachments",
-	"POST /api/customers/{id}/merge",
-	"POST /api/documents",
-	"POST /api/initiatives",
-	"POST /api/initiatives/{id}/relations",
-	"POST /api/projects",
-	"POST /api/projects/{id}/relations",
-	"POST /api/release-pipelines",
-	"POST /api/release-pipelines/reorder",
-	"POST /api/release-pipelines/{id}/access-key",
-	"POST /api/releases",
-	"POST /api/releases/reorder",
-	"POST /api/releases/{id}/notes",
-	"POST /api/reviews/{id}/coding-session",
-	"POST /api/reviews/{id}/comment-attachments",
-	"POST /api/reviews/{id}/comments",
-	"POST /api/reviews/{id}/reactions",
-	"POST /api/reviews/{id}/submit",
-	"POST /api/reviews/{id}/sync",
-	"PUT /api/favorites/{type}/{id}",
-	"PUT /api/reviews/{id}/previews",
-	"PUT /api/subscriptions/{type}/{id}",
-}
+// scaleP21SW490LiteralFallbackRoutes lists registered routes that may still
+// reach resourceAllowedLegacy's whole-workspace projection with bounded
+// metadata on. It is empty: every non-public route is decided by a reviewed
+// bounded reader or a registered COLD facade. The walk below fails on any
+// difference in either direction. An entry suffixed "[escaped id]" would
+// mark a pattern reached only when an escaped "/" in an ID shifts the
+// decoded segments into another literal branch.
+var scaleP21SW490LiteralFallbackRoutes = []string{}
 
 func scaleP21SW490Patterns(t *testing.T) []string {
 	t.Helper()
@@ -196,22 +128,24 @@ func TestScaleP21SW490AuthorizationFallbackClosure(t *testing.T) {
 			{http.MethodPost, "/api/labels", scaleP21SW490Membership, "", "", false},
 			{http.MethodGet, "/api", scaleP21SW490Membership, "", "", false},
 			{http.MethodGet, "/uploads/projects", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/uploads/projects", scaleP21SW490Literal, "", "", false},
+			{http.MethodPost, "/uploads/projects", scaleP21SW490Record, "projectsBody", "", true},
 			{http.MethodGet, "/api/issues", scaleP21SW490Membership, "", "", false},
 			{http.MethodPost, "/api/issues", scaleP21SW490Literal, "", "", false},
 			{http.MethodGet, "/api/issues/a/history", scaleP21SW490Literal, "", "", false},
 			{http.MethodGet, "/api/issue-records/a", scaleP21SW490Literal, "", "", false},
-			{http.MethodPost, "/api/projects", scaleP21SW490Literal, "", "", false},
+			{http.MethodPost, "/api/projects", scaleP21SW490Record, "projectsBody", "", true},
+			{http.MethodPost, "/api/initiatives", scaleP21SW490Record, "initiativesBody", "", true},
 			{http.MethodGet, "/api/projects", scaleP21SW490Membership, "", "", false},
 			{http.MethodPut, "/api/initiatives", scaleP21SW490NonGuest, "", "", false},
 			{http.MethodDelete, "/api/projects/p", scaleP21SW490Point, "projects", "p", false},
 			{http.MethodPost, "/api/projects/p/comments", scaleP21SW490Point, "projects", "p", false},
-			{http.MethodPatch, "/api/projects/p", scaleP21SW490Literal, "", "", false},
-			{http.MethodPatch, "/api/projects/p/comments/c", scaleP21SW490Literal, "", "", false},
-			{http.MethodPost, "/api/projects/p/relations", scaleP21SW490Literal, "", "", false},
-			{http.MethodPost, "/api/projects/p/relations/r", scaleP21SW490Literal, "", "", false},
+			{http.MethodPatch, "/api/projects/p", scaleP21SW490Record, "projectsBody", "p", false},
+			{http.MethodPatch, "/api/projects/p/comments/c", scaleP21SW490Record, "projectsBody", "p", false},
+			{http.MethodPost, "/api/projects/p/relations", scaleP21SW490Record, "projectsBody", "p", false},
+			{http.MethodPost, "/api/projects/p/relations/r", scaleP21SW490Record, "projectsBody", "p", false},
 			{http.MethodPatch, "/api/projects/p/relations/r", scaleP21SW490Point, "projects", "p", false},
-			{http.MethodPatch, "/api/projects/p/relations", scaleP21SW490Literal, "", "", false},
+			{http.MethodPatch, "/api/projects/p/relations", scaleP21SW490Record, "projectsBody", "p", false},
+			{http.MethodPatch, "/api/projects/a%2Fb/relations/r", scaleP21SW490Record, "projectsBody", "a", false},
 			{http.MethodDelete, "/api/initiatives/i/relations/r", scaleP21SW490Point, "initiatives", "i", false},
 			{http.MethodDelete, "/api/projects/a%2Fb", scaleP21SW490Point, "projects", "a", false},
 			{http.MethodPost, "/%61pi/%70rojects/p/%63omments", scaleP21SW490Point, "projects", "p", false},
@@ -221,22 +155,24 @@ func TestScaleP21SW490AuthorizationFallbackClosure(t *testing.T) {
 			{http.MethodPost, "/api/dashboards", scaleP21SW490Record, "dashboards", "", true},
 			{http.MethodGet, "/api/dashboards/d/results", scaleP21SW490Record, "dashboards", "d", false},
 			{http.MethodGet, "/api/asks", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/asks/a/decision", scaleP21SW490Literal, "", "", false},
+			{http.MethodPost, "/api/asks", scaleP21SW490Record, "asks", "", true},
+			{http.MethodPost, "/api/asks/a/decision", scaleP21SW490Record, "asks", "a", false},
 			{http.MethodPut, "/api/customers", scaleP21SW490NonGuest, "", "", false},
-			{http.MethodPatch, "/api/customers/c", scaleP21SW490Literal, "", "", false},
+			{http.MethodPatch, "/api/customers/c", scaleP21SW490Record, "customers", "c", false},
 			{http.MethodGet, "/api/customer-requests", scaleP21SW490NonGuest, "", "", false},
-			{http.MethodPost, "/api/customer-requests", scaleP21SW490Literal, "", "", false},
+			{http.MethodPost, "/api/customer-requests", scaleP21SW490Record, "customerRequests", "", true},
+			{http.MethodDelete, "/api/customer-requests/r/archive", scaleP21SW490Record, "customerRequests", "r", false},
 			{http.MethodGet, "/api/favorites", scaleP21SW490Membership, "", "", false},
-			{http.MethodPut, "/api/favorites/project/p", scaleP21SW490Literal, "", "", false},
-			{http.MethodDelete, "/api/subscriptions/issue/i", scaleP21SW490Literal, "", "", false},
+
 			{http.MethodGet, "/api/reviews", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/reviews/r/comments", scaleP21SW490Literal, "", "", false},
+			{http.MethodPost, "/api/reviews/r/comments", scaleP21SW490Record, "reviews", "r", false},
 			{http.MethodGet, "/api/documents", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/documents", scaleP21SW490Literal, "", "", false},
+			{http.MethodPost, "/api/documents", scaleP21SW490Record, "documentCreate", "", true},
 			{http.MethodPatch, "/api/documents/d/comments/c", scaleP21SW490Literal, "", "", false},
 			{http.MethodGet, "/api/releases", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/releases/reorder", scaleP21SW490Literal, "", "", false},
-			{http.MethodGet, "/api/release-pipelines/p", scaleP21SW490Literal, "", "", false},
+			{http.MethodPost, "/api/releases/reorder", scaleP21SW490Record, "releases", "reorder", false},
+			{http.MethodPost, "/api/releases", scaleP21SW490Record, "releases", "", true},
+			{http.MethodGet, "/api/release-pipelines/p", scaleP21SW490Record, "releasePipelines", "p", false},
 			{http.MethodGet, "/api/cycles", scaleP21SW490Membership, "", "", false},
 			{http.MethodGet, "/api/cycles/c", scaleP21SW490Record, "cycles", "c", false},
 			{http.MethodPatch, "/api/cycles/c/x/y", scaleP21SW490Record, "cycles", "c", false},
@@ -261,18 +197,28 @@ func TestScaleP21SW490AuthorizationFallbackClosure(t *testing.T) {
 				t.Fatalf("%s %s: shape %+v, want %+v", row.method, row.path, got, want)
 			}
 		}
+		for _, row := range []struct{ method, path, target, ref string }{
+			{http.MethodPut, "/api/favorites/project/p", "project", "p"},
+			{http.MethodDelete, "/api/subscriptions/%20Issue%20/i", "issue", "i"},
+			{http.MethodPatch, "/api/favorites/view/a%2Fb", "view", "a"},
+		} {
+			got := scaleP21SW490FallbackShape(httptest.NewRequest(row.method, row.path, nil))
+			if got != (scaleP21SW490Shape{decision: scaleP21SW490Record, kind: "references", ref: row.ref, target: row.target}) {
+				t.Fatal("reference shape", row, got)
+			}
+		}
 		for _, body := range []struct {
 			text     string
 			decision scaleP21SW490Decision
 		}{
 			{`{"favorite":true}`, scaleP21SW490ReviewPreference},
 			{`{"favorite":false}`, scaleP21SW490ReviewPreference},
-			{`{"favorite":null}`, scaleP21SW490Literal},
-			{`{"favorite":true,"title":"x"}`, scaleP21SW490Literal},
-			{`{}`, scaleP21SW490Literal},
+			{`{"favorite":null}`, scaleP21SW490Record},
+			{`{"favorite":true,"title":"x"}`, scaleP21SW490Record},
+			{`{}`, scaleP21SW490Record},
 		} {
 			request := httptest.NewRequest(http.MethodPatch, "/api/reviews/r", strings.NewReader(body.text))
-			if got := scaleP21SW490FallbackShape(request); got.decision != body.decision || got.decision == scaleP21SW490ReviewPreference && got.ref != "r" {
+			if got := scaleP21SW490FallbackShape(request); got.decision != body.decision || got.ref != "r" || got.decision == scaleP21SW490Record && got.kind != "reviews" {
 				t.Fatal("embedded review favorite shape", body.text, got)
 			}
 		}

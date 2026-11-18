@@ -16,8 +16,11 @@ import (
 type recordAuthorizationKind struct {
 	typ    reflect.Type
 	fields []string
-	// match lists the JSON members compared with the reference (id first).
+	// match lists the members compared with the reference: "id", "slugId",
+	// or "slugRef" (domain.MatchSlugRef over ID, SlugID, PreviousSlugIDs).
 	match []string
+	// field is the stored collection when it differs from the kind name.
+	field string
 	// assign appends one decoded header to its Bootstrap collection.
 	assign func(*domain.Bootstrap, reflect.Value)
 }
@@ -40,6 +43,71 @@ var recordAuthorizationKinds = map[string]recordAuthorizationKind{
 		typ: reflect.TypeFor[domain.Project](), fields: []string{"ID", "TeamIDs"}, match: []string{"id"},
 		assign: func(data *domain.Bootstrap, value reflect.Value) {
 			data.Projects = append(data.Projects, value.Interface().(domain.Project))
+		},
+	},
+	"reviews": {
+		typ: reflect.TypeFor[domain.CodeReview](), fields: []string{"ID", "IssueIDs"}, match: []string{"id"},
+		assign: func(data *domain.Bootstrap, value reflect.Value) {
+			data.Reviews = append(data.Reviews, value.Interface().(domain.CodeReview))
+		},
+	},
+	"releases": {
+		typ: reflect.TypeFor[domain.Release](), fields: []string{"ID", "PipelineID", "ProjectIDs", "IssueIDs"}, match: []string{"id"},
+		assign: func(data *domain.Bootstrap, value reflect.Value) {
+			data.Releases = append(data.Releases, value.Interface().(domain.Release))
+		},
+	},
+	"releasePipelines": {
+		typ: reflect.TypeFor[domain.ReleasePipeline](), fields: []string{"ID", "TeamIDs"}, match: []string{"id"},
+		assign: func(data *domain.Bootstrap, value reflect.Value) {
+			data.ReleasePipelines = append(data.ReleasePipelines, value.Interface().(domain.ReleasePipeline))
+		},
+	},
+	"customers": {
+		typ: reflect.TypeFor[domain.Customer](), fields: []string{"ID"}, match: []string{"id"},
+		assign: func(data *domain.Bootstrap, value reflect.Value) {
+			data.Customers = append(data.Customers, value.Interface().(domain.Customer))
+		},
+	},
+	"customerRequests": {
+		typ: reflect.TypeFor[domain.CustomerRequest](), fields: []string{"ID", "CustomerID", "IssueID", "ProjectID"}, match: []string{"id"},
+		assign: func(data *domain.Bootstrap, value reflect.Value) {
+			data.CustomerRequests = append(data.CustomerRequests, value.Interface().(domain.CustomerRequest))
+		},
+	},
+	"labels": {
+		typ: reflect.TypeFor[domain.IssueLabel](), fields: []string{"ID", "Scope", "ArchivedAt"}, match: []string{"id"},
+		assign: func(data *domain.Bootstrap, value reflect.Value) {
+			data.Labels = append(data.Labels, value.Interface().(domain.IssueLabel))
+		},
+	},
+	// Exact-ID initiative headers: the literal projected data.Initiatives.
+	"initiatives": {
+		typ: reflect.TypeFor[domain.Initiative](), fields: []string{"ID", "LeadTeamID", "ContributingTeamIDs", "ProjectIDs"}, match: []string{"id"},
+		assign: func(data *domain.Bootstrap, value reflect.Value) {
+			data.Initiatives = append(data.Initiatives, value.Interface().(domain.Initiative))
+		},
+	},
+	// Slug-referenced project and initiative headers: a selected credential's
+	// favorite/subscription projection keeps only key-team resources.
+	"projectRefs": {
+		field: "projects",
+		typ: reflect.TypeFor[domain.Project](), fields: []string{"ID", "SlugID", "PreviousSlugIDs", "TeamIDs"}, match: []string{"slugRef"},
+		assign: func(data *domain.Bootstrap, value reflect.Value) {
+			data.Projects = append(data.Projects, value.Interface().(domain.Project))
+		},
+	},
+	"initiativeRefs": {
+		field: "initiatives",
+		typ: reflect.TypeFor[domain.Initiative](), fields: []string{"ID", "SlugID", "PreviousSlugIDs", "LeadTeamID", "ProjectIDs"}, match: []string{"slugRef"},
+		assign: func(data *domain.Bootstrap, value reflect.Value) {
+			data.Initiatives = append(data.Initiatives, value.Interface().(domain.Initiative))
+		},
+	},
+	"asks": {
+		typ: reflect.TypeFor[domain.Ask](), fields: []string{"ID", "TeamID"}, match: []string{"id"},
+		assign: func(data *domain.Bootstrap, value reflect.Value) {
+			data.Asks = append(data.Asks, value.Interface().(domain.Ask))
 		},
 	},
 }
@@ -102,10 +170,14 @@ func (s *SQLiteStore) BeginRecordAuthorizationRead(ctx context.Context, access A
 		return nil, err
 	}
 	read.owner.source = source
+	field := kind
+	if spec.field != "" {
+		field = spec.field
+	}
 	if current {
-		err = read.installed(ctx, kind, spec, ref)
+		err = read.installed(ctx, field, spec, ref)
 	} else {
-		err = read.canonical(ctx, p.workspace, kind, spec, ref)
+		err = read.canonical(ctx, p.workspace, field, spec, ref)
 	}
 	if err == nil {
 		err = s.validateRecordAuthorization(ctx, access)
@@ -121,7 +193,7 @@ func (s *SQLiteStore) BeginRecordAuthorizationRead(ctx context.Context, access A
 func (r *RecordAuthorizationRead) installed(ctx context.Context, kind string, spec recordAuthorizationKind, ref string) error {
 	return r.owner.visitNative(ctx, kind, func(_ int, node metadataLogicalNode) error {
 		return r.owner.withHeader(ctx, node, spec.fields, func(value reflect.Value) error {
-			if !slices.ContainsFunc(spec.match, func(member string) bool { return recordAuthorizationMember(value, member) == ref }) {
+			if !slices.ContainsFunc(spec.match, func(member string) bool { return recordAuthorizationMatch(value, member, ref) }) {
 				return nil
 			}
 			if err := r.owner.reserve(ctx, uint64(spec.typ.Size())*2+4096); err != nil {
@@ -154,11 +226,22 @@ func (r *RecordAuthorizationRead) canonical(ctx context.Context, workspace, kind
 		if err := json.NewDecoder(record.Reader).Decode(value.Interface()); err != nil {
 			return err
 		}
-		if slices.ContainsFunc(spec.match, func(member string) bool { return recordAuthorizationMember(value.Elem(), member) == ref }) {
+		if slices.ContainsFunc(spec.match, func(member string) bool { return recordAuthorizationMatch(value.Elem(), member, ref) }) {
 			spec.assign(&r.Data, value.Elem())
 		}
 		return nil
 	})
+}
+
+func recordAuthorizationMatch(value reflect.Value, member, ref string) bool {
+	if member == "slugRef" {
+		var previous []string
+		if field := value.FieldByName("PreviousSlugIDs"); field.IsValid() {
+			previous = field.Interface().([]string)
+		}
+		return domain.MatchSlugRef(ref, value.FieldByName("ID").String(), value.FieldByName("SlugID").String(), previous) != domain.SlugNoMatch
+	}
+	return recordAuthorizationMember(value, member) == ref
 }
 
 func recordAuthorizationMember(value reflect.Value, member string) string {
@@ -320,6 +403,13 @@ func (access AccessContext) TeamContentVisible(teamID string) bool {
 // TeamRowVisible is membership of the literal projected data.Teams.
 func (access AccessContext) TeamRowVisible(teamID string) bool {
 	return access.policy != nil && access.policy.teams.Teams[teamID]
+}
+
+// TeamActiveRow is the literal "team" reference check after teamAllowed: a
+// projected team row with this ID that is not retired.
+func (access AccessContext) TeamActiveRow(teamID string) bool {
+	p := access.policy
+	return p != nil && p.teams.Teams[teamID] && slices.ContainsFunc(p.metadata.Teams, func(team domain.Team) bool { return team.ID == teamID && team.RetiredAt == nil })
 }
 
 // ProjectVisible is the literal projection's project filter.
