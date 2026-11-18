@@ -339,9 +339,14 @@ func TestScaleP21SW209AdvancedScheduleTickerDifferential(t *testing.T) {
 							}
 							restore := store.ForceFullMutationsForTesting(true)
 							err := f.repository.MutateWorkspace(t.Context(), workspace, "scale_p21.sw209_seed", "", nil, func(data *domain.Bootstrap) error {
-								if err := json.Unmarshal(saved, data); err != nil {
+								// Replace the state: unmarshalling into it would merge maps
+								// and keep an earlier case's rows (its 5 MiB project updates
+								// stayed in every later case's metadata root).
+								var restored domain.Bootstrap
+								if err := json.Unmarshal(saved, &restored); err != nil {
 									return err
 								}
+								*data = restored
 								for index := range data.Projects {
 									data.Projects[index].UpdateCadence, data.Projects[index].UpdateSchedule = "none", nil
 								}
