@@ -6,16 +6,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"hash/fnv"
 	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -57,29 +53,23 @@ import (
 // FLOW_SW530_ROUTES=<substring> limits the walk; FLOW_SW530_REPORT=<file>
 // writes every divergence as JSON.
 //
-// scaleP21SW530KnownDivergences pins the route classes that still differ;
-// the test fails on any other divergence and on a pinned one that no longer
-// differs, so the list can only shrink.
+// With bounded metadata on, every route not proven bounded runs COLD (SW550:
+// full legacy behaviour behind the per-replica COLD slot), so every route
+// must answer as legacy. A proven-bounded (HOT) route must also never run
+// COLD: its bounded runs take no COLD slot and serve no legacy accessor
+// through a legacy view.
+//
+// scaleP21SW530KnownDivergences pins the route classes that still differ, each
+// with an accepted reason; the test fails on any other divergence and on a
+// pinned one that no longer differs, so the list can only shrink.
 
 var scaleP21SW530KnownDivergences = map[string]string{
-	// Reviewed HOT reader (scale_p21_sw16_project_templates.go) copies
-	// ProjectTemplates from the live bounded image, which holds resident
-	// policy only: bounded answers null while flag-off lists the templates.
-	// TestScaleP21SW16ProjectTemplateListDifferential compares the adapter
-	// with BootstrapFor on the same bounded view, so it never saw this. A
-	// scoped projectTemplates read is refused by the logical source
-	// ("installed logical subtree []domain.ProjectTemplate is unavailable").
-	"GET /api/project-templates": "OPEN: bounded lists no project templates",
 	// Flag-off ResourceWindowMetadata exceeds the page budget on this
 	// fixture (a 450 KB unrelated project and settings row) and answers 501
 	// "use the legacy read endpoint"; the bounded adapter answers 200.
-	"GET /api/resource-windows/trash": "OPEN: flag-off 501 over the page budget, bounded 200",
-	// getUserSettings calls store.AccountCollections (oauth_workspace_reads.go,
-	// inventoried "reviewed": "requestAccountSettings reaches it only off
-	// mode"), which reads the live bounded image: bounded answers zero
-	// settings ({"userId":"","language":"",...}) where flag-off answers the
-	// viewer's settings. Same accessor: passkeys and commit signing key.
-	"GET /api/account/settings": "OPEN: bounded answers empty user settings",
+	// Accepted by the lead (2026-11-18): more permissive, no business
+	// regression.
+	"GET /api/resource-windows/trash": "ACCEPTED: flag-off 501 over the page budget, bounded 200",
 }
 
 type sw530Principal struct {
@@ -134,11 +124,16 @@ type sw530Sweep struct {
 	webhooks   []string
 	realtime   []string
 	skeletal   []string
-	// skeletalBy lists, per pattern, the legacy whole-workspace reads of
-	// the live bounded image its bounded runs made (with their callers).
+	// skeletalBy lists, per pattern, the legacy whole-workspace reads its
+	// bounded runs served through a legacy view (with their callers), and
+	// coldSlots counts the COLD slots they took.
 	skeletalBy map[string]map[string]bool
+	coldSlots  map[string]int64
 	resets     int
 	probeStale bool
+	// totalSlots and totalViews count the COLD slots and legacy views the
+	// bounded runs took.
+	totalSlots, totalViews int64
 }
 
 type sw530Divergence struct {
@@ -150,8 +145,16 @@ var (
 	sw530Order     = regexp.MustCompile(`"collection_order":-?1[0-9]{15,}`)
 	sw530RandomHex = regexp.MustCompile(`\b[0-9a-f]{32,}\b`)
 	// Random tokens and generated addresses of invite links and intake.
-	sw530Token     = regexp.MustCompile(`"(token|localPart|address|verificationToken|secretPrefix)":"[^"]*"`)
+	sw530Token     = regexp.MustCompile(`"(token|localPart|address|verificationToken|secretPrefix|challenge)":"[^"]*"`)
 	sw530RandomB64 = regexp.MustCompile(`flow_[a-z]+_[A-Za-z0-9_-]{16,}`)
+	// Values each run draws again: a stored secret prefix (in an escaped
+	// row), a share token, a new slug's random suffix and the analytics
+	// window, which starts a fixed time before the request.
+	sw530EscapedToken = regexp.MustCompile(`\\"(secretPrefix)\\":\\"[^"\\]*\\"`)
+	sw530ShareToken   = regexp.MustCompile(`dsh_[A-Za-z0-9_-]{16}`)
+	sw530Registration = regexp.MustCompile(`passkey_reg_[A-Za-z0-9_-]{16,}`)
+	sw530SlugSuffix   = regexp.MustCompile(`("slugId\\?":\\?"[^"\\]*-)[0-9a-f]{12}(\\?")`)
+	sw530Since        = regexp.MustCompile(`"since":"[^"]*"`)
 )
 
 func sw530Normalize(text string, started time.Time) string {
@@ -169,6 +172,11 @@ func sw530Normalize(text string, started time.Time) string {
 	text = sw530Stamp.ReplaceAllString(text, "<uuid>")
 	text = sw530Order.ReplaceAllString(text, `"collection_order":<order>`)
 	text = sw530Token.ReplaceAllString(text, `"$1":"<random>"`)
+	text = sw530EscapedToken.ReplaceAllString(text, `\"$1\":\"<random>\"`)
+	text = sw530ShareToken.ReplaceAllString(text, "dsh_<random>")
+	text = sw530Registration.ReplaceAllString(text, "passkey_reg_<random>")
+	text = sw530SlugSuffix.ReplaceAllString(text, "${1}<suffix>${2}")
+	text = sw530Since.ReplaceAllString(text, `"since":"<since>"`)
 	return sw530RandomHex.ReplaceAllString(text, "<hex>")
 }
 
@@ -243,179 +251,52 @@ func TestScaleP21SW530AllRoutesFlagOnDifferential(t *testing.T) {
 		raw, _ := json.MarshalIndent(confirmed, "", "  ")
 		_ = os.WriteFile(path, raw, 0o600)
 	}
-	pending, byName := sw530PendingConsumers(t)
-	// A skeleton read made by an unmigrated consumer anywhere on its stack
-	// is that consumer's pending work.
-	for pattern, reads := range x.skeletalBy {
-		for read := range reads {
-			_, chain, _ := strings.Cut(read, " from ")
-			for _, function := range strings.Split(chain, " < ") {
-				name := function[strings.LastIndex(function, ".")+1:]
-				for _, key := range byName[name] {
-					if !slices.Contains(pending[pattern], key) {
-						pending[pattern] = append(pending[pattern], key)
-					}
-				}
-			}
-		}
-	}
-	open, waiting := 0, 0
+	open := 0
 	for _, name := range names {
 		items := classes[name]
 		first := items[0]
 		message := fmt.Sprintf("%s: %d request(s) differ, e.g. %s (%s, %s):\n legacy=%s\nbounded=%s", name, len(items), first.Request, first.Source, first.Kind, sw530Clip(first.Legacy), sw530Clip(first.Bounded))
-		if consumers := pending[name]; len(consumers) != 0 {
-			// The startup guard refuses bounded mode while these are
-			// unmigrated; marking one reviewed while its route still
-			// differs fails here.
-			waiting++
-			t.Logf("SW530 pending consumer(s) %s: %s", strings.Join(consumers, ", "), message)
-			continue
-		}
 		if reason, known := scaleP21SW530KnownDivergences[name]; known {
 			open++
-			t.Logf("SW530 pinned open divergence (%s) %s", reason, message)
+			t.Logf("SW530 pinned divergence (%s) %s", reason, message)
 			continue
 		}
-		t.Error("SW530 divergence on a route no unmigrated consumer covers: " + message)
+		t.Error("SW530 divergence: " + message)
 	}
-	// A route whose bounded run read the live skeleton answers from it
-	// silently in a test view and is refused on a production store (SW531):
-	// only routes behind pending consumers may do so.
+	// A proven-bounded route never runs COLD (SW550): no COLD slot, no
+	// legacy accessor served through a legacy view.
+	cold := 0
+	for _, request := range requests {
+		if !scaleP21RouteHot(request.pattern) {
+			cold++
+		}
+	}
 	for pattern, reads := range x.skeletalBy {
-		if len(pending[pattern]) == 0 {
-			t.Errorf("SW530 %s read the live bounded skeleton outside a COLD facade: %s", pattern, strings.Join(slices.Sorted(maps.Keys(reads)), "; "))
+		if scaleP21RouteHot(pattern) {
+			t.Errorf("SW530 HOT route %s read legacy accessors through a legacy view: %s", pattern, strings.Join(slices.Sorted(maps.Keys(reads)), "; "))
+		}
+	}
+	for pattern, slots := range x.coldSlots {
+		if scaleP21RouteHot(pattern) && slots != 0 {
+			t.Errorf("SW530 HOT route %s took %d COLD slot(s)", pattern, slots)
 		}
 	}
 	if os.Getenv("FLOW_SW530_ROUTES") == "" {
 		for name := range scaleP21SW530KnownDivergences {
 			if _, still := classes[name]; !still {
 				t.Errorf("pinned divergence %s no longer differs: remove it", name)
-			} else if len(pending[name]) != 0 {
-				t.Errorf("pinned divergence %s is covered by pending consumers %v: unpin it", name, pending[name])
 			}
 		}
 	}
-	t.Logf("SW530 done: %d requests x 3 sources, %d divergent route classes (%d behind pending consumers, %d pinned open), %d resets, %s", len(requests), len(names), waiting, open, x.resets, time.Since(started).Round(time.Second))
-}
-
-// sw530PendingConsumers maps each route pattern to the unmigrated consumers
-// that serve it: those whose inventory lists the pattern as a caller, the
-// route's own handler functions, and consumers whose inventory callers name
-// one of those handlers.
-func sw530PendingConsumers(t *testing.T) (map[string][]string, map[string][]string) {
-	t.Helper()
-	paths, err := filepath.Glob("../../internal/store/scale_p21_inventory/*/*.json")
-	if err != nil || len(paths) == 0 {
-		t.Fatal("SW530 inventory missing", err)
+	t.Logf("SW530 COLD routing: %d of %d requests on COLD routes, %d COLD slot acquisitions, %d legacy accessor views", cold, len(requests), x.totalSlots, x.totalViews)
+	if facades, facadeTime, viewTime := store.ColdHydrationForTesting(); facades > 0 {
+		views := max(store.ColdAccessorReadsForTesting(), 1)
+		t.Logf("SW530 COLD hydration: %d facade decodes, %s each on average (%s total); %d legacy views, %s each on average", facades, (facadeTime / time.Duration(facades)).Round(time.Microsecond), facadeTime.Round(time.Millisecond), views, (viewTime / time.Duration(views)).Round(time.Microsecond))
 	}
-	type consumer struct{ key, name, source string }
-	var pending []consumer
-	callers := map[string][]string{}
-	for _, path := range paths {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var file struct {
-			Source    string `json:"source"`
-			Consumers map[string]struct {
-				Status  string   `json:"status"`
-				Callers []string `json:"callers"`
-			} `json:"consumers"`
-		}
-		if err := json.Unmarshal(raw, &file); err != nil {
-			t.Fatal(path, err)
-		}
-		for name, review := range file.Consumers {
-			if review.Status == "unmigrated" {
-				item := consumer{file.Source + ":" + name, name, file.Source}
-				pending = append(pending, item)
-				callers[item.key] = review.Callers
-			}
-		}
+	if holds, total, longest := store.ColdWriteLockHoldForTesting(); holds > 0 {
+		t.Logf("SW530 COLD legacy writes held the shared write lock %d times, %s on average, %s at most", holds, (total / time.Duration(holds)).Round(time.Microsecond), longest.Round(time.Microsecond))
 	}
-	result, byName := map[string][]string{}, map[string][]string{}
-	for _, item := range pending {
-		byName[item.name] = append(byName[item.name], item.key)
-	}
-	add := func(pattern, key string) {
-		if !slices.Contains(result[pattern], key) {
-			result[pattern] = append(result[pattern], key)
-		}
-	}
-	for _, item := range pending {
-		for _, caller := range callers[item.key] {
-			pattern, _, _ := strings.Cut(caller, " (")
-			add(strings.TrimSpace(pattern), item.key)
-		}
-	}
-	for pattern, handlers := range sw530RouteHandlers(t) {
-		for _, handler := range handlers {
-			word := regexp.MustCompile(`\b` + regexp.QuoteMeta(handler) + `\b`)
-			for _, item := range pending {
-				if item.name == handler && strings.HasPrefix(item.source, "server/") {
-					add(pattern, item.key)
-					continue
-				}
-				for _, caller := range callers[item.key] {
-					if word.MatchString(caller) {
-						add(pattern, item.key)
-						break
-					}
-				}
-			}
-		}
-	}
-	return result, byName
-}
-
-// sw530RouteHandlers lists, per registered pattern, the server methods its
-// handler expression names (s.handler, wrappers and their wrapped handler).
-func sw530RouteHandlers(t *testing.T) map[string][]string {
-	t.Helper()
-	files, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	result := map[string][]string{}
-	for _, name := range files {
-		if strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		parsed, err := parser.ParseFile(token.NewFileSet(), name, nil, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ast.Inspect(parsed, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok || len(call.Args) != 2 {
-				return true
-			}
-			selector, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || selector.Sel.Name != "HandleFunc" && selector.Sel.Name != "Handle" {
-				return true
-			}
-			literal, ok := call.Args[0].(*ast.BasicLit)
-			if !ok || literal.Kind != token.STRING {
-				return true
-			}
-			pattern, err := strconv.Unquote(literal.Value)
-			if err != nil {
-				return true
-			}
-			ast.Inspect(call.Args[1], func(node ast.Node) bool {
-				if method, ok := node.(*ast.SelectorExpr); ok {
-					if receiver, ok := method.X.(*ast.Ident); ok && receiver.Name == "s" && !slices.Contains(result[pattern], method.Sel.Name) {
-						result[pattern] = append(result[pattern], method.Sel.Name)
-					}
-				}
-				return true
-			})
-			return true
-		})
-	}
-	return result
+	t.Logf("SW530 done: %d requests x 3 sources, %d divergent route classes (%d pinned), %d resets, %s", len(requests), len(names), open, x.resets, time.Since(started).Round(time.Second))
 }
 
 func sw530Clip(text string) string {
@@ -428,7 +309,7 @@ func sw530Clip(text string) string {
 func sw530Setup(t *testing.T) *sw530Sweep {
 	t.Helper()
 	fx := scaleP21SW491Setup(t, nil)
-	x := &sw530Sweep{fx: fx, workspace: fx.workspace, ids: map[string]string{}, skeletalBy: map[string]map[string]bool{}}
+	x := &sw530Sweep{fx: fx, workspace: fx.workspace, ids: map[string]string{}, skeletalBy: map[string]map[string]bool{}, coldSlots: map[string]int64{}}
 	f := fx.f
 	uploads := t.TempDir()
 	newService := func(repo *store.SQLiteStore) http.Handler {
@@ -1057,10 +938,27 @@ func (x *sw530Sweep) run(t *testing.T, source string, request sw530Request, star
 	x.mu.Lock()
 	x.webhooks, x.realtime, x.skeletal = nil, nil, nil
 	x.mu.Unlock()
+	slots, views := store.ColdSlotAcquisitionsForTesting(), store.ColdAccessorReadsForTesting()
 	w, timedOut := x.call(handler, request.method, request.path, request.body, request.principal, request.bearer)
-	// Publications may follow the response on another goroutine.
+	if source != "legacy" {
+		slots, views = store.ColdSlotAcquisitionsForTesting()-slots, store.ColdAccessorReadsForTesting()-views
+		x.coldSlots[request.pattern] += slots
+		x.totalSlots += slots
+		x.totalViews += views
+	}
+	// Publications and follow-up writes (an export's completion) may follow
+	// the response on another goroutine; a COLD one first hydrates its
+	// facade. Wait until the stored state stops changing.
 	time.Sleep(time.Millisecond)
 	after := x.snapshot(t)
+	for range 50 {
+		time.Sleep(25 * time.Millisecond)
+		again := x.snapshot(t)
+		if maps.Equal(after, again) {
+			break
+		}
+		after = again
+	}
 	got := sw530Outcome{Status: w.Code, Header: map[string]string{}, TimedOut: timedOut}
 	got.Body = sw530Normalize(w.Body.String(), started)
 	for name, values := range w.Header() {
