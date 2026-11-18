@@ -223,7 +223,7 @@ func TestScaleP21ApplicationAccessSnapshotBudgetAndIgnoredBodies(t *testing.T) {
 		t.Fatal("cancellation leaked admission", err)
 	}
 	f.db.SetMaxOpenConns(1)
-	ctx, cancel = context.WithTimeout(t.Context(), 10*time.Second)
+	ctx, cancel = context.WithTimeout(t.Context(), raceWatchdog(10*time.Second))
 	defer cancel()
 	tx, err := f.db.BeginTx(ctx, metadataReadOptions(f.dialect))
 	if err != nil {
