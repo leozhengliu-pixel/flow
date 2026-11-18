@@ -125,9 +125,9 @@ func (x *triageCandidateIndex) first(id string) (int32, bool) {
 	return position, found
 }
 
-// match returns, ascending, every position whose value shares a title token
-// with title or a description token with description, plus extra positions.
-func (x *triageCandidateIndex) match(title, description map[string]bool, extra ...int32) []int32 {
+// count sets the counters of every entry sharing a title token with title
+// or a description token with description (touched), until done.
+func (x *triageCandidateIndex) count(title, description map[string]bool) {
 	for token := range title {
 		if id, found := x.tokens[token]; found {
 			for _, entry := range x.title[id] {
@@ -148,12 +148,38 @@ func (x *triageCandidateIndex) match(title, description map[string]bool, extra .
 			}
 		}
 	}
-	positions := slices.Clone(extra)
+}
+
+func (x *triageCandidateIndex) isTouched(entry int32) bool {
+	return x.titleHits[entry] != 0 || x.descHits[entry] != 0
+}
+
+// each visits, ascending, every position of a touched entry after count,
+// until visit returns false. Many touched positions are read in one pass
+// over the stream rather than gathered and sorted.
+func (x *triageCandidateIndex) each(visit func(int32) bool) {
+	total := 0
+	for _, entry := range x.touched {
+		total += len(x.entries[entry].positions)
+	}
+	if total*8 >= len(x.entryOf) {
+		for position, entry := range x.entryOf {
+			if x.isTouched(entry) && !visit(int32(position)) {
+				return
+			}
+		}
+		return
+	}
+	positions := make([]int32, 0, total)
 	for _, entry := range x.touched {
 		positions = append(positions, x.entries[entry].positions...)
 	}
 	slices.Sort(positions)
-	return slices.Compact(positions)
+	for _, position := range positions {
+		if !visit(position) {
+			return
+		}
+	}
 }
 
 // similarity returns the title and description similarities of position
@@ -192,21 +218,24 @@ func (x *triageCandidateIndex) similarTriageIssues(data *domain.Bootstrap, issue
 		}
 	}
 	s := newTriageIssueScore(issue)
-	positions := x.match(s.title, s.description)
+	x.count(s.title, s.description)
 	defer x.done()
-	candidates := make([]triageSuggestionCandidate, 0, min(len(positions), maxTriageSuggestionCandidates))
-	for _, position := range positions {
+	var candidates []triageSuggestionCandidate
+	x.each(func(position int32) bool {
 		if len(candidates) >= maxTriageSuggestionCandidates {
-			break
+			return false
 		}
 		candidate := data.Issues[position]
-		if !s.eligible(candidate) {
-			continue
+		if s.eligible(candidate) {
+			titleScore, descriptionScore := x.similarity(position, s.title, s.description)
+			if scored, ok := s.finish(candidate, titleScore, descriptionScore); ok {
+				candidates = append(candidates, scored)
+			}
 		}
-		titleScore, descriptionScore := x.similarity(position, s.title, s.description)
-		if scored, ok := s.finish(candidate, titleScore, descriptionScore); ok {
-			candidates = append(candidates, scored)
-		}
+		return true
+	})
+	if candidates == nil {
+		candidates = make([]triageSuggestionCandidate, 0)
 	}
 	sortTriageSuggestionCandidates(candidates)
 	return candidates
