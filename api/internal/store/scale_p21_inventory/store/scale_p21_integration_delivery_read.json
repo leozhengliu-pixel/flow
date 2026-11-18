@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_integration_delivery_read.go",
+  "unmigrated": 1,
+  "consumers": {
+    "BeginIntegrationDeliveryRead": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Delivery scheduler reads the selected delivery and connection on every worker tick.",
+      "callers": ["server/scale_p21_integration_delivery.go:processBoundedIntegrationDelivery"],
+      "reason": "Mounted first-occurrence installed-source reader with owned selected values; the new delivery group's targeted, persistence and race proof is still pending."
+    }
+  }
+}

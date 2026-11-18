@@ -126,6 +126,26 @@ func legacySessionCopyJSON(ctx context.Context, owner *ResourceRead, part legacy
 }
 
 func legacySessionWriteJSONObject(ctx context.Context, owner *ResourceRead, fields map[string]legacySessionJSONPart, output io.Writer) error {
+	return legacySessionWriteJSONObjectWithCanonical(ctx, owner, fields, nil, output)
+}
+
+// Only complete spools produced by the typed JSON encoder can be borrowed as
+// canonical parts. Other root values retain the original compaction path.
+func legacySessionWriteJSONObjectWithCanonical(ctx context.Context, owner *ResourceRead, fields, canonical map[string]legacySessionJSONPart, output io.Writer) error {
+	if len(canonical) != 0 {
+		if err := legacySessionCanonicalOwnerOpen(ctx, owner); err != nil {
+			return err
+		}
+	}
+	for name, part := range canonical {
+		spool, valid := part.input.(*RecordSpool)
+		actual, found := fields[name]
+		if !valid || spool == nil || !found || actual.input != spool ||
+			part.start != 0 || part.size != spool.bytes ||
+			actual.start != part.start || actual.size != part.size {
+			return ErrBoundedMetadataCoverage
+		}
+	}
 	names := make([]string, 0, len(fields))
 	for name := range fields {
 		names = append(names, name)
@@ -150,12 +170,58 @@ func legacySessionWriteJSONObject(ctx context.Context, owner *ResourceRead, fiel
 		if _, err := io.WriteString(output, ":"); err != nil {
 			return err
 		}
-		if err := legacySessionCopyJSON(ctx, owner, fields[name], output); err != nil {
+		if part, found := canonical[name]; found {
+			err = legacySessionCopyCanonicalJSON(ctx, owner, part, output)
+		} else {
+			err = legacySessionCopyJSON(ctx, owner, fields[name], output)
+		}
+		if err != nil {
 			return err
 		}
 	}
 	_, err := io.WriteString(output, "}")
 	return err
+}
+
+func legacySessionCanonicalOwnerOpen(ctx context.Context, owner *ResourceRead) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if owner == nil || owner.store == nil || !owner.store.BoundedMetadataEnabled() {
+		return ErrBoundedMetadataCoverage
+	}
+	owner.mu.Lock()
+	defer owner.mu.Unlock()
+	if owner.closed {
+		return errMetadataLogicalClosed
+	}
+	return nil
+}
+
+func legacySessionCopyCanonicalJSON(ctx context.Context, owner *ResourceRead, part legacySessionJSONPart, output io.Writer) error {
+	var buffer [metadataRecordChunkBytes]byte
+	for offset := int64(0); offset < part.size; {
+		if err := legacySessionCanonicalOwnerOpen(ctx, owner); err != nil {
+			return err
+		}
+		size := min(int64(len(buffer)), part.size-offset)
+		n, err := part.input.ReadAt(buffer[:size], part.start+offset)
+		if err != nil {
+			return err
+		}
+		if int64(n) != size {
+			return io.ErrUnexpectedEOF
+		}
+		written, err := output.Write(buffer[:n])
+		if err != nil {
+			return err
+		}
+		if written != n {
+			return io.ErrShortWrite
+		}
+		offset += int64(n)
+	}
+	return legacySessionCanonicalOwnerOpen(ctx, owner)
 }
 
 func legacySessionPartEqual(ctx context.Context, owner *ResourceRead, left, right legacySessionJSONPart) (bool, error) {

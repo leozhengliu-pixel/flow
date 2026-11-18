@@ -12,6 +12,9 @@ import (
 // at 29, including the catalog and record-journal migrations.
 const boundedMetadataStagingSchemaVersion = 30
 
+const metadataSQLIntegrationChunkBytes = MetadataRecordPageMaxBytes
+const metadataSQLIntegrationOwnedChunkBytes = 1 << 20
+
 var ErrMetadataSQLStageOpen = errors.New("metadata SQL staging is still open")
 
 func (s *SQLiteStore) createBoundedMetadataStagingSchema(ctx context.Context) error {
@@ -37,6 +40,9 @@ type metadataSQLWriteStage struct {
 	written                        [2]int
 	consumed                       [2]bool
 	statements, inputBytes         int
+	appendChunkBytes               int
+	admittedAppendChunkBytes       int
+	appendOwner                    *integrationDeliveryPageOwner
 }
 
 func beginMetadataSQLWriteStage(ctx context.Context, tx *sqlTx, target metadataSQLStageTarget) (*metadataSQLWriteStage, error) {
@@ -46,13 +52,29 @@ func beginMetadataSQLWriteStage(ctx context.Context, tx *sqlTx, target metadataS
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	ownedChunk, err := integrationDeliverySQLChunkBytes(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
 	var nonce [32]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return nil, err
 	}
 	stage := &metadataSQLWriteStage{
 		tx: tx, id: hex.EncodeToString(nonce[:]), target: target,
-		firstWrite: tx.writtenBytes == 0,
+		firstWrite:       tx.writtenBytes == 0,
+		appendChunkBytes: metadataRecordChunkBytes,
+	}
+	event := integrationDeliveryStreamEvent(ctx)
+	if (event == "integration_delivery.claimed" || event == "integration_delivery.retry") &&
+		(target.workspaceState || target.field == "integrationDeliveries" || target.field == "integrationConnections") {
+		// Event-only callers retain their existing 2 MiB scratch bound.
+		// The private live owner additionally admits a 1 MiB SQL append.
+		stage.appendChunkBytes = metadataSQLIntegrationChunkBytes
+		if ownedChunk != 0 {
+			stage.appendChunkBytes = ownedChunk
+			stage.appendOwner, _ = ctx.Value(integrationDeliveryPagesKey{}).(*integrationDeliveryPageOwner)
+		}
 	}
 	if tx.metadataSQLStageOwners == nil {
 		tx.metadataSQLStageOwners = map[string]*metadataSQLWriteStage{}
@@ -97,9 +119,16 @@ func (s *metadataSQLWriteStage) writer(ctx context.Context, column string) (*met
 	if !s.open() || !s.inserted || !metadataSQLStageColumn(column) || column == "content" && s.target.searchBytes < 0 {
 		return nil, ErrMetadataRecordQuery
 	}
+	if err := s.checkAppendOwner(ctx); err != nil {
+		return nil, err
+	}
+	columnIndex := 0
+	if column == "content" {
+		columnIndex = 1
+	}
 	return &metadataSQLStageWriter{
 		ctx: ctx, stage: s, column: column,
-		buffer: make([]byte, 0, metadataRecordChunkBytes),
+		buffer: make([]byte, 0, min(s.appendChunkBytes, s.expectedBytes(columnIndex))),
 	}, nil
 }
 
@@ -136,6 +165,10 @@ func (w *metadataSQLStageWriter) Write(part []byte) (int, error) {
 	if w == nil || !w.stage.open() || !metadataSQLStageColumn(w.column) {
 		return 0, ErrMetadataRecordQuery
 	}
+	if err := w.stage.checkAppendOwner(w.ctx); err != nil {
+		w.buffer = nil
+		return 0, err
+	}
 	column := 0
 	if w.column == "content" {
 		column = 1
@@ -145,10 +178,10 @@ func (w *metadataSQLStageWriter) Write(part []byte) (int, error) {
 	}
 	original := len(part)
 	for len(part) > 0 {
-		take := min(len(part), metadataRecordChunkBytes-len(w.buffer))
+		take := min(len(part), cap(w.buffer)-len(w.buffer))
 		w.buffer = append(w.buffer, part[:take]...)
 		part = part[take:]
-		if len(w.buffer) == metadataRecordChunkBytes {
+		if len(w.buffer) == cap(w.buffer) {
 			if err := w.flush(false); err != nil {
 				return original - len(part), err
 			}

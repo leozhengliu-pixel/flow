@@ -424,6 +424,7 @@ func TestScaleP21SW188InlineRootSQLBound(t *testing.T) {
 			read, err = view.scanMetadataInlineRoot(ctx, tx, workspace, int64(len(raw)))
 			if err == nil {
 				headers[index] = read.fields
+				read.Close()
 			}
 		}
 		tx.Rollback()

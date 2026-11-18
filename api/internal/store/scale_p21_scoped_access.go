@@ -200,6 +200,10 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	if !s.BoundedMetadataEnabled() {
 		return s.MutateWorkspaceWithAggregate(ctx, workspace, event, payload, mutate)
 	}
+	return s.mutateWorkspaceScopedWithAggregate(ctx, workspace, event, payload, scope, mutate, nil)
+}
+
+func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, workspace, event string, payload any, scope MetadataRecordScope, mutate func(*domain.Bootstrap) (string, error), profileFactory metadataOrdinalProfileFactory) error {
 	if !RecordHydrationEnabled() {
 		return ErrBoundedMetadataCoverage
 	}
@@ -216,7 +220,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	if legacyFieldScoped && !slices.Contains(fields, "users") {
 		refreshActor = false
 	}
-	if refreshActor && !slices.Contains(scope.Fields, "users") {
+	if profileFactory == nil && refreshActor && !slices.Contains(scope.Fields, "users") {
 		scope.Read = slices.DeleteFunc(slices.Clone(scope.Read), func(key RecordKey) bool {
 			return key.Kind == "users" && key.ID == actor.ID
 		})
@@ -247,6 +251,11 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	}
 	if s.coordinator != nil {
 		reservation = max(reservation, metadataPolicyBytes+2<<20)
+	}
+	if profileFactory != nil {
+		// Ordinal callbacks and their policy projection have independent
+		// actual-cost owners; do not pre-reserve a maximum policy image.
+		reservation = 8 << 20
 	}
 	if inputs, _ := ctx.Value(metadataTimestampInputsKey{}).(*MetadataTimestampInputs); inputs != nil {
 		reservation += metadataTimestampInputBytes
@@ -335,6 +344,14 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		}
 		streamedScoped := rootBytes > MetadataRecordPageMaxBytes
 		if streamedScoped {
+			if profileFactory != nil && integrationDeliveryStreamEvent(ctx) != "" {
+				root, err := s.scanMetadataInlineRoot(ctx, tx, workspace, int64(rootBytes))
+				if err != nil {
+					return err
+				}
+				defer root.Close()
+				ctx = withMetadataInlineRootCapture(ctx, root)
+			}
 			if _, _, err := s.readInlineResidentRoot(ctx, tx, workspace, rootBytes, false); err != nil {
 				return err
 			}
@@ -359,296 +376,330 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if s.coordinator != nil && !exactSource {
 			return ErrConcurrentWrite
 		}
-		loadScope, inlineFields, inputLimit, releaseInline, err := s.prepareScopedInlineSelection(ctx, tx, workspace, logicalSource, scope)
-		if err != nil {
-			return err
-		}
-		defer releaseInline()
-		streamedScoped = streamedScoped || len(inlineFields) != 0
-		before, err := logicalSource.Select(ctx, loadScope, inputLimit)
-		if err != nil {
-			return err
-		}
-		storageBefore := before
-		if !streamedScoped {
-			storageBefore, err = s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+		var candidate *metadataLogicalSource
+		if profileFactory != nil {
+			attempt, err := s.applyMetadataOrdinalProfile(ctx, tx, workspace, workspaceID, event,
+				payload, logicalSource, actor, hasActor, activeActor, role, teams, hooks, profileFactory, callback)
 			if err != nil {
 				return err
 			}
-		}
-		if before.Workspace.ID != workspaceID {
-			return ErrResourceAccessChanged
-		}
-		eventSource := logicalSource
-		if !metadataOnly {
-			eventSource, err = s.hydrateMetadataLogicalSource(ctx, tx, logicalSource, workspace)
-			if err != nil {
-				return err
-			}
-			defer eventSource.Release()
-		}
-		callbackSource := eventSource
-		refreshComplete := !legacyFieldScoped || slices.Contains(fields, "users")
-		if refreshComplete {
-			callbackSource, err = eventSource.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
-				base := metadataAggregateNode(metadataAggregateStoredNode{node})
-				if legacyFieldScoped && !slices.Contains(fields, name) {
-					return base, false, nil
+			candidate, committed, realtime, releaseEvent = attempt.candidate, attempt.event, attempt.realtime, attempt.release
+			defer func() {
+				if candidate != nil {
+					candidate.Release()
 				}
-				refreshed := metadataAggregateRefreshField(eventSource, name, base)
-				_, changed := refreshed.(metadataAggregateRefreshCollection)
-				return refreshed, changed, nil
-			})
+			}()
+		} else {
+			loadScope, inlineFields, inputLimit, releaseInline, err := s.prepareScopedInlineSelection(ctx, tx, workspace, logicalSource, scope)
 			if err != nil {
 				return err
 			}
-			defer callbackSource.Release()
-		}
-		if !metadataOnly {
-			callbackSource, err = refreshMetadataLogicalIssueReferences(ctx, callbackSource)
+			defer releaseInline()
+			streamedScoped = streamedScoped || len(inlineFields) != 0
+			before, err := logicalSource.Select(ctx, loadScope, inputLimit)
 			if err != nil {
 				return err
 			}
-			defer callbackSource.Release()
-		}
-		if resolve := metadataScopeResolver(ctx); resolve != nil {
-			keys, err := resolve(cloneBootstrap(before))
-			if err != nil {
-				return err
-			}
-			scope, err = extendMetadataReadScope(scope, keys)
-			if err != nil {
-				return err
-			}
-			ctx = WithMetadataRecords(ctx, scope)
+			storageBefore := before
 			if !streamedScoped {
 				storageBefore, err = s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
 				if err != nil {
 					return err
 				}
 			}
-			loadScope = scope
-			loadScope.Fields = append(slices.Clone(scope.Fields), inlineFields...)
-			before, err = logicalSource.Select(ctx, loadScope, inputLimit)
-			if err != nil {
-				return err
-			}
 			if before.Workspace.ID != workspaceID {
 				return ErrResourceAccessChanged
 			}
-		}
-		next, err := callbackSource.Select(ctx, loadScope, inputLimit)
-		if err != nil {
-			return err
-		}
-		originalRole := next.ViewerRole
-		refreshDisplayReferences(&next)
-		if hasActor {
-			next.Viewer = actor
-			if activeActor {
-				next.ViewerRole, next.ViewerTeamIDs = role, teams
+			eventSource := logicalSource
+			if !metadataOnly {
+				eventSource, err = s.hydrateMetadataLogicalSource(ctx, tx, logicalSource, workspace)
+				if err != nil {
+					return err
+				}
+				defer eventSource.Release()
 			}
-			if refreshActor {
-				if index := slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID == actor.ID }); index >= 0 {
-					next.Users[index] = actor
+			callbackSource := eventSource
+			refreshComplete := !legacyFieldScoped || slices.Contains(fields, "users")
+			if refreshComplete {
+				callbackSource, err = eventSource.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
+					base := metadataAggregateNode(metadataAggregateStoredNode{node})
+					if legacyFieldScoped && !slices.Contains(fields, name) {
+						return base, false, nil
+					}
+					refreshed := metadataAggregateRefreshField(eventSource, name, base)
+					_, changed := refreshed.(metadataAggregateRefreshCollection)
+					return refreshed, changed, nil
+				})
+				if err != nil {
+					return err
+				}
+				defer callbackSource.Release()
+			}
+			if !metadataOnly {
+				callbackSource, err = refreshMetadataLogicalIssueReferences(ctx, callbackSource)
+				if err != nil {
+					return err
+				}
+				defer callbackSource.Release()
+			}
+			if resolve := metadataScopeResolver(ctx); resolve != nil {
+				keys, err := resolve(cloneBootstrap(before))
+				if err != nil {
+					return err
+				}
+				scope, err = extendMetadataReadScope(scope, keys)
+				if err != nil {
+					return err
+				}
+				ctx = WithMetadataRecords(ctx, scope)
+				if !streamedScoped {
+					storageBefore, err = s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+					if err != nil {
+						return err
+					}
+				}
+				loadScope = scope
+				loadScope.Fields = append(slices.Clone(scope.Fields), inlineFields...)
+				before, err = logicalSource.Select(ctx, loadScope, inputLimit)
+				if err != nil {
+					return err
+				}
+				if before.Workspace.ID != workspaceID {
+					return ErrResourceAccessChanged
+				}
+			}
+			next, err := callbackSource.Select(ctx, loadScope, inputLimit)
+			if err != nil {
+				return err
+			}
+			originalRole := next.ViewerRole
+			refreshDisplayReferences(&next)
+			if hasActor {
+				next.Viewer = actor
+				if activeActor {
+					next.ViewerRole, next.ViewerTeamIDs = role, teams
+				}
+				if refreshActor {
+					if index := slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID == actor.ID }); index >= 0 {
+						next.Users[index] = actor
+					} else {
+						next.Users = append(next.Users, actor)
+					}
+				}
+			}
+			validationBefore := before
+			if metadataScopeResolver(ctx) != nil || refreshComplete {
+				validationBefore = cloneBootstrap(next)
+				validationBefore.ViewerRole, validationBefore.ViewerTeamIDs = originalRole, nil
+			}
+			next.FormerMembers = s.formerMemberLookup(ctx, tx, &next)
+			next.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
+			aggregate, err := callback(&next)
+			next.ViewerRole, next.ViewerTeamIDs, next.FormerMembers, next.CollaborationUpdates = originalRole, nil, nil, nil
+			if err != nil {
+				return err
+			}
+			if legacyFieldScoped && !slices.Contains(fields, "viewer") {
+				next.Viewer = before.Viewer
+			}
+			writeScope, appendOrders, err := s.prepareMetadataAppends(ctx, tx, workspace, before, next, scope)
+			if err != nil {
+				return err
+			}
+			if err := validateScopedMetadataChanges(validationBefore, next, writeScope); err != nil {
+				return err
+			}
+			if err := validateScopedInlineMetadataChanges(ctx, validationBefore, next, writeScope, inlineFields, appendOrders); err != nil {
+				return err
+			}
+			if streamedScoped {
+				_, releaseOutput, err := s.reserveMetadataAggregatePayload(ctx, next)
+				if err != nil {
+					return err
+				}
+				defer releaseOutput()
+			}
+			encoded, err := json.Marshal(next)
+			if err != nil {
+				return err
+			}
+			if !streamedScoped {
+				budget := newMetadataHydrationBudget()
+				if err := budget.consume(encoded); err != nil {
+					return err
+				}
+			}
+			root, shapes, _, err := splitWorkspaceMetadata(encoded)
+			if err != nil {
+				return err
+			}
+			for _, field := range metadataRecordFields(writeScope) {
+				value := root[field]
+				if shapes[field] == "" && len(value) > 2 && (value[0] == '[' || value[0] == '{') && metadataResidencyFields()[field] != "core" {
+					if !slices.Contains(scope.Fields, field) && !slices.Contains(inlineFields, field) {
+						return fmt.Errorf("%w: unsplittable callback output %s", ErrMetadataRecordQuery, field)
+					}
+					streamedScoped = true
+				}
+			}
+			_, releasePayload, err := s.reserveMetadataAggregatePayload(ctx, payload)
+			if err != nil {
+				return err
+			}
+			defer func() {
+				if releasePayload != nil {
+					releasePayload()
+				}
+			}()
+			payloadRaw, err := json.Marshal(payload)
+			if err != nil {
+				return err
+			}
+			committed = domain.DomainEvent{ID: idgen.New("evt_"), Type: event, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
+			beforeImage := metadataAggregateImage{Source: eventSource, Selected: &before, Scope: scope}
+			afterImage := metadataAggregateImage{Source: callbackSource, Selected: &next, Scope: writeScope}
+			eventPublication, err := s.prepareMetadataAggregatePublication(ctx, beforeImage, afterImage, aggregate, hooks && s.webhookConfigured(), payloadRaw, event)
+			if err != nil {
+				return err
+			}
+			ownedPayload := releasePayload
+			releaseEvent = func() {
+				eventPublication.Close()
+				ownedPayload()
+			}
+			releasePayload = nil
+			committed.PreviousValues = eventPublication.PreviousValues
+			realtime = eventPublication.RealtimePayload
+			// Complete fields use the proven delta writer. Point records are
+			// written separately so a deletion never scans the whole collection.
+			complete := cloneBootstrap(next)
+			persistBefore := storageBefore
+			left, logicalBefore, right := reflect.ValueOf(&persistBefore).Elem(), reflect.ValueOf(&before).Elem(), reflect.ValueOf(&complete).Elem()
+			for _, field := range persistedMetadataFields() {
+				if field.name == "viewer" || slices.Contains(scope.Fields, field.name) {
+					left.Field(field.index).Set(logicalBefore.Field(field.index))
 				} else {
-					next.Users = append(next.Users, actor)
+					right.Field(field.index).Set(left.Field(field.index))
 				}
 			}
-		}
-		validationBefore := before
-		if metadataScopeResolver(ctx) != nil || refreshComplete {
-			validationBefore = cloneBootstrap(next)
-			validationBefore.ViewerRole, validationBefore.ViewerTeamIDs = originalRole, nil
-		}
-		next.FormerMembers = s.formerMemberLookup(ctx, tx, &next)
-		next.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
-		aggregate, err := callback(&next)
-		next.ViewerRole, next.ViewerTeamIDs, next.FormerMembers, next.CollaborationUpdates = originalRole, nil, nil, nil
-		if err != nil {
-			return err
-		}
-		if legacyFieldScoped && !slices.Contains(fields, "viewer") {
-			next.Viewer = before.Viewer
-		}
-		writeScope, appendOrders, err := s.prepareMetadataAppends(ctx, tx, workspace, before, next, scope)
-		if err != nil {
-			return err
-		}
-		if err := validateScopedMetadataChanges(validationBefore, next, writeScope); err != nil {
-			return err
-		}
-		if err := validateScopedInlineMetadataChanges(ctx, validationBefore, next, writeScope, inlineFields, appendOrders); err != nil {
-			return err
-		}
-		if streamedScoped {
-			_, releaseOutput, err := s.reserveMetadataAggregatePayload(ctx, next)
+			inputCtx := context.WithValue(ctx, scopedMetadataImportInputsKey{}, scopedMetadataImportInputs{data: &next, scope: writeScope})
+			if streamedScoped {
+				if err := s.persistScopedCompleteFields(ctx, tx, workspace, &persistBefore, &complete, scope, inlineFields); err != nil {
+					return err
+				}
+				inputCtx = context.WithValue(inputCtx, scopedMetadataPersistedKey{}, true)
+			}
+			if err := s.persistWorkspaceTx(inputCtx, tx, workspace, &persistBefore, &complete, nil, &committed, nil); err != nil {
+				return err
+			}
+			changes, _, err := scaleP16RecordChanges(before, next)
 			if err != nil {
 				return err
 			}
-			defer releaseOutput()
-		}
-		encoded, err := json.Marshal(next)
-		if err != nil {
-			return err
-		}
-		if !streamedScoped {
-			budget := newMetadataHydrationBudget()
-			if err := budget.consume(encoded); err != nil {
-				return err
-			}
-		}
-		root, shapes, _, err := splitWorkspaceMetadata(encoded)
-		if err != nil {
-			return err
-		}
-		for _, field := range metadataRecordFields(writeScope) {
-			value := root[field]
-			if shapes[field] == "" && len(value) > 2 && (value[0] == '[' || value[0] == '{') && metadataResidencyFields()[field] != "core" {
-				if !slices.Contains(scope.Fields, field) && !slices.Contains(inlineFields, field) {
-					return fmt.Errorf("%w: unsplittable callback output %s", ErrMetadataRecordQuery, field)
+			changes = slices.DeleteFunc(changes, func(change metadataRecordChange) bool {
+				if slices.Contains(scope.Fields, change.field) {
+					return true
 				}
-				streamedScoped = true
+				if slices.Contains(inlineFields, change.field) {
+					return true
+				}
+				// The resolved callback was checked against its refreshed input.
+				// Reference-only changes to read records enrich events but must
+				// not rewrite canonical rows, as on the legacy delta path.
+				return metadataScopeResolver(ctx) != nil && !metadataRecordSelected(scope, change.field, change.key, true)
+			})
+			for _, change := range changes {
+				field, _, typed := metadataRecordType(change.field)
+				isMap := typed && reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type.Kind() == reflect.Map || change.field == "workspaceSettings"
+				actorInsert := refreshActor && change.field == "users" && change.key == actor.ID
+				_, appended := appendOrders[metadataRecordKey{field: change.field, key: change.key}]
+				if change.insert && !isMap && !actorInsert && !appended {
+					return fmt.Errorf("%w: point creation requires a complete field or a dedicated creation writer", ErrMetadataRecordQuery)
+				}
+				if change.insert && (actorInsert || appended) {
+					if err := s.ensureScopedMetadataShape(ctx, tx, workspace, change.field, "array", lock, streamedScoped); err != nil {
+						return err
+					}
+				}
+				if change.insert && isMap {
+					if err := s.ensureScopedMetadataShape(ctx, tx, workspace, change.field, "map", lock, streamedScoped); err != nil {
+						return err
+					}
+				}
 			}
-		}
-		_, releasePayload, err := s.reserveMetadataAggregatePayload(ctx, payload)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			if releasePayload != nil {
-				releasePayload()
+			writeCtx := ctx
+			if len(appendOrders) > 0 {
+				writeCtx = context.WithValue(ctx, metadataAppendOrdersKey{}, appendOrders)
 			}
-		}()
-		payloadRaw, err := json.Marshal(payload)
-		if err != nil {
-			return err
-		}
-		committed = domain.DomainEvent{ID: idgen.New("evt_"), Type: event, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
-		beforeImage := metadataAggregateImage{Source: eventSource, Selected: &before, Scope: scope}
-		afterImage := metadataAggregateImage{Source: callbackSource, Selected: &next, Scope: writeScope}
-		eventPublication, err := s.prepareMetadataAggregatePublication(ctx, beforeImage, afterImage, aggregate, hooks && s.webhookConfigured(), payloadRaw, event)
-		if err != nil {
-			return err
-		}
-		ownedPayload := releasePayload
-		releaseEvent = func() {
-			eventPublication.Close()
-			ownedPayload()
-		}
-		releasePayload = nil
-		committed.PreviousValues = eventPublication.PreviousValues
-		realtime = eventPublication.RealtimePayload
-		// Complete fields use the proven delta writer. Point records are
-		// written separately so a deletion never scans the whole collection.
-		complete := cloneBootstrap(next)
-		persistBefore := storageBefore
-		left, logicalBefore, right := reflect.ValueOf(&persistBefore).Elem(), reflect.ValueOf(&before).Elem(), reflect.ValueOf(&complete).Elem()
-		for _, field := range persistedMetadataFields() {
-			if field.name == "viewer" || slices.Contains(scope.Fields, field.name) {
-				left.Field(field.index).Set(logicalBefore.Field(field.index))
-			} else {
-				right.Field(field.index).Set(left.Field(field.index))
-			}
-		}
-		inputCtx := context.WithValue(ctx, scopedMetadataImportInputsKey{}, scopedMetadataImportInputs{data: &next, scope: writeScope})
-		if streamedScoped {
-			if err := s.persistScopedCompleteFields(ctx, tx, workspace, &persistBefore, &complete, scope, inlineFields); err != nil {
+			if err := scaleP16WriteChanges(writeCtx, tx, workspace, newIssueReferences(next), changes); err != nil {
 				return err
 			}
-			inputCtx = context.WithValue(inputCtx, scopedMetadataPersistedKey{}, true)
-		}
-		if err := s.persistWorkspaceTx(inputCtx, tx, workspace, &persistBefore, &complete, nil, &committed, nil); err != nil {
-			return err
-		}
-		changes, _, err := scaleP16RecordChanges(before, next)
-		if err != nil {
-			return err
-		}
-		changes = slices.DeleteFunc(changes, func(change metadataRecordChange) bool {
-			if slices.Contains(scope.Fields, change.field) {
-				return true
+			forkScope := writeScope
+			forkScope.Fields = append(slices.Clone(writeScope.Fields), inlineFields...)
+			candidate, err = callbackSource.Fork(ctx, before, next, forkScope, logicalSource.Stamp(), appendOrders)
+			if err != nil {
+				return err
 			}
-			if slices.Contains(inlineFields, change.field) {
-				return true
+			merged, err := metadataLogicalMergedPostimage(ctx, candidate, changes)
+			candidate.Release()
+			if err != nil {
+				return err
 			}
-			// The resolved callback was checked against its refreshed input.
-			// Reference-only changes to read records enrich events but must
-			// not rewrite canonical rows, as on the legacy delta path.
-			return metadataScopeResolver(ctx) != nil && !metadataRecordSelected(scope, change.field, change.key, true)
-		})
-		for _, change := range changes {
-			field, _, typed := metadataRecordType(change.field)
-			isMap := typed && reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type.Kind() == reflect.Map || change.field == "workspaceSettings"
-			actorInsert := refreshActor && change.field == "users" && change.key == actor.ID
-			_, appended := appendOrders[metadataRecordKey{field: change.field, key: change.key}]
-			if change.insert && !isMap && !actorInsert && !appended {
-				return fmt.Errorf("%w: point creation requires a complete field or a dedicated creation writer", ErrMetadataRecordQuery)
-			}
-			if change.insert && (actorInsert || appended) {
-				if err := s.ensureScopedMetadataShape(ctx, tx, workspace, change.field, "array", lock, streamedScoped); err != nil {
+			candidate = merged
+			for _, name := range inlineFields {
+				index, _, _ := metadataLogicalField(name)
+				adjusted, err := s.persistMetadataLogicalInlinePostimage(ctx, tx, workspace, name,
+					candidate, logicalSource.fields[index], candidate.fields[index])
+				if err != nil {
+					candidate.Release()
 					return err
 				}
+				candidate.Release()
+				candidate = adjusted
 			}
-			if change.insert && isMap {
-				if err := s.ensureScopedMetadataShape(ctx, tx, workspace, change.field, "map", lock, streamedScoped); err != nil {
+			merged, err = metadataLogicalCompletePostimage(ctx, candidate, next, complete, scope)
+			candidate.Release()
+			if err != nil {
+				return err
+			}
+			candidate = merged
+			if !metadataOnly {
+				installed, stripErr := metadataLogicalInstalledCandidate(ctx, candidate)
+				candidate.Release()
+				if stripErr != nil {
+					return stripErr
+				}
+				candidate = installed
+			}
+			defer func() {
+				if candidate != nil {
+					candidate.Release()
+				}
+			}()
+			if callbackSource != eventSource {
+				if err := s.persistMetadataLogicalRefresh(ctx, tx, workspace, eventSource, callbackSource, scope, candidate); err != nil {
 					return err
 				}
 			}
 		}
-		writeCtx := ctx
-		if len(appendOrders) > 0 {
-			writeCtx = context.WithValue(ctx, metadataAppendOrdersKey{}, appendOrders)
-		}
-		if err := scaleP16WriteChanges(writeCtx, tx, workspace, newIssueReferences(next), changes); err != nil {
-			return err
-		}
-		forkScope := writeScope
-		forkScope.Fields = append(slices.Clone(writeScope.Fields), inlineFields...)
-		candidate, err := callbackSource.Fork(ctx, before, next, forkScope, logicalSource.Stamp(), appendOrders)
-		if err != nil {
-			return err
-		}
-		merged, err := metadataLogicalMergedPostimage(ctx, candidate, changes)
-		candidate.Release()
-		if err != nil {
-			return err
-		}
-		candidate = merged
-		for _, name := range inlineFields {
-			index, _, _ := metadataLogicalField(name)
-			adjusted, err := s.persistMetadataLogicalInlinePostimage(ctx, tx, workspace, name,
-				candidate, logicalSource.fields[index], candidate.fields[index])
+		if profileFactory != nil {
+			// The final root write consumed the preimage capture. Publication
+			// must validate the new SQL root, even when its size is unchanged.
+			ctx = context.WithValue(ctx, metadataInlineRootCaptureKey{}, (*metadataInlineRoot)(nil))
+			publication, err := s.prepareLegacyResidentPublication(ctx, tx, workspace, candidate, baseStamp, exactSource, true)
+			traceMark(ctx, "ordinal-resident-publication")
 			if err != nil {
-				candidate.Release()
 				return err
 			}
-			candidate.Release()
-			candidate = adjusted
-		}
-		merged, err = metadataLogicalCompletePostimage(ctx, candidate, next, complete, scope)
-		candidate.Release()
-		if err != nil {
+			candidate = nil
+			defer publication.Close()
+			if err := tx.Commit(); err != nil {
+				return err
+			}
+			traceMark(ctx, "ordinal-commit")
+			err = publication.Install()
+			traceMark(ctx, "ordinal-install")
 			return err
-		}
-		candidate = merged
-		if !metadataOnly {
-			installed, stripErr := metadataLogicalInstalledCandidate(ctx, candidate)
-			candidate.Release()
-			if stripErr != nil {
-				return stripErr
-			}
-			candidate = installed
-		}
-		defer func() {
-			if candidate != nil {
-				candidate.Release()
-			}
-		}()
-		if callbackSource != eventSource {
-			if err := s.persistMetadataLogicalRefresh(ctx, tx, workspace, eventSource, callbackSource, scope, candidate); err != nil {
-				return err
-			}
 		}
 		capture := tx.captureMetadataCommitStampFrom(workspace, baseStamp)
 		var policy domain.Bootstrap
@@ -709,12 +760,16 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		s.mu.Unlock()
 		return nil
 	}
+	refresh := s.refreshConflictedLogicalMetadata(ctx, workspace)
+	if profileFactory != nil && integrationDeliveryStreamEvent(ctx) != "" {
+		refresh = s.refreshIntegrationDeliveryConflict(ctx, workspace)
+	}
 	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
 		if s.coordinator != nil {
 			return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx) })
 		}
 		return apply(ctx)
-	}, s.refreshConflictedLogicalMetadata(ctx, workspace))
+	}, refresh)
 	if errors.Is(err, ErrNoMutation) {
 		return nil
 	}
