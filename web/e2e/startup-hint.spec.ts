@@ -25,8 +25,10 @@ for (const width of [1440, 390, 375]) {
           await reached
           const hint = page.locator('.flow-startup__text')
           await expect(hint).toHaveCSS('opacity', '0')
-          const clock = await hint.evaluate(element => {
-            const style = getComputedStyle(element)
+          // The session request starts before the first render, so React may replace the pre-JavaScript hint while
+          // this runs: read whichever hint is on the page in one task instead of a handle resolved a round trip earlier.
+          const clock = await page.evaluate(() => {
+            const style = getComputedStyle(document.querySelector('.flow-startup__text')!)
             const ready = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).domContentLoadedEventStart
             return { duration: parseFloat(style.animationDuration) * 1000, easing: style.animationTimingFunction, delay: parseFloat(style.animationDelay) * 1000, ready }
           })
