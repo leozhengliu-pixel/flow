@@ -282,6 +282,7 @@ func generateTriageMutation(issueIDs []string, candidateSets map[string][]domain
 		// They are search summaries, so even a candidate copy of another
 		// scoped issue must never be written back over its full row.
 		scoped := len(data.Issues)
+		index := newTriageCandidateIndex(nil)
 		for _, issueID := range issueIDs {
 			issue, err := issueByID(data, issueID)
 			if err != nil {
@@ -295,7 +296,13 @@ func generateTriageMutation(issueIDs []string, candidateSets map[string][]domain
 			if err != nil {
 				continue
 			}
-			generateAndAppendIssueSuggestions(data, issue, time.Now().UTC())
+			// generateAndAppendIssueSuggestions, scanning data.Issues
+			// through the candidate index.
+			now := time.Now().UTC()
+			if triageIntelligenceEnabled(data.WorkspaceSettings) && isTriageIssue(data, issue) {
+				candidates := index.similarTriageIssues(data, issue)
+				storeTriageSuggestions(data, issue, generateIssueSuggestionsWithCandidates(data, issue, now, candidates), now, triageSourceHeuristic, "")
+			}
 			*updated = *issue
 			*results = append(*results, *updated)
 			*generated = true
@@ -572,39 +579,64 @@ func similarTriageIssues(data *domain.Bootstrap, issue *domain.Issue) []triageSu
 }
 
 func triageIssueScorer(issue *domain.Issue) func(domain.Issue) (triageSuggestionCandidate, bool) {
-	issueTitleTokens := triageTokens(issue.Title)
-	issueDescriptionTokens := triageTokens(truncateTriageText(issue.Description))
-	issueLabelIDs := make(map[string]bool, len(issue.Labels))
-	for _, label := range issue.Labels {
-		issueLabelIDs[label.ID] = true
-	}
+	s := newTriageIssueScore(issue)
 	return func(candidate domain.Issue) (triageSuggestionCandidate, bool) {
-		if candidate.ID == issue.ID || candidate.ArchivedAt != nil || candidate.State.Type == "completed" || candidate.State.Type == "canceled" {
+		if !s.eligible(candidate) {
 			return triageSuggestionCandidate{}, false
 		}
-		titleScore := triageSimilarity(issueTitleTokens, triageTokens(candidate.Title))
-		descriptionScore := triageSimilarity(issueDescriptionTokens, triageTokens(truncateTriageText(candidate.Description)))
-		score := titleScore*0.72 + descriptionScore*0.18
-		if candidate.Team.ID == issue.Team.ID {
-			score += 0.04
-		}
-		if issue.Project != nil && candidate.Project != nil && issue.Project.ID == candidate.Project.ID {
-			score += 0.05
-		}
-		for _, label := range candidate.Labels {
-			if issueLabelIDs[label.ID] {
-				score += 0.03
-				break
-			}
-		}
-		score = minFloat(1, score)
-		if score < 0.14 {
-			return triageSuggestionCandidate{}, false
-		}
-		return triageSuggestionCandidate{
-			issue: candidate, score: score, titleScore: titleScore, descriptionScore: descriptionScore,
-		}, true
+		titleScore := triageSimilarity(s.title, triageTokens(candidate.Title))
+		descriptionScore := triageSimilarity(s.description, triageTokens(truncateTriageText(candidate.Description)))
+		return s.finish(candidate, titleScore, descriptionScore)
 	}
+}
+
+// triageIssueScore scores candidates against one issue (triageIssueScorer);
+// the candidate index supplies the similarities from its token counts.
+type triageIssueScore struct {
+	issue              *domain.Issue
+	title, description map[string]bool
+	labels             map[string]bool
+}
+
+func newTriageIssueScore(issue *domain.Issue) triageIssueScore {
+	s := triageIssueScore{
+		issue:       issue,
+		title:       triageTokens(issue.Title),
+		description: triageTokens(truncateTriageText(issue.Description)),
+		labels:      make(map[string]bool, len(issue.Labels)),
+	}
+	for _, label := range issue.Labels {
+		s.labels[label.ID] = true
+	}
+	return s
+}
+
+func (s triageIssueScore) eligible(candidate domain.Issue) bool {
+	return candidate.ID != s.issue.ID && candidate.ArchivedAt == nil && candidate.State.Type != "completed" && candidate.State.Type != "canceled"
+}
+
+func (s triageIssueScore) finish(candidate domain.Issue, titleScore, descriptionScore float64) (triageSuggestionCandidate, bool) {
+	issue := s.issue
+	score := titleScore*0.72 + descriptionScore*0.18
+	if candidate.Team.ID == issue.Team.ID {
+		score += 0.04
+	}
+	if issue.Project != nil && candidate.Project != nil && issue.Project.ID == candidate.Project.ID {
+		score += 0.05
+	}
+	for _, label := range candidate.Labels {
+		if s.labels[label.ID] {
+			score += 0.03
+			break
+		}
+	}
+	score = minFloat(1, score)
+	if score < 0.14 {
+		return triageSuggestionCandidate{}, false
+	}
+	return triageSuggestionCandidate{
+		issue: candidate, score: score, titleScore: titleScore, descriptionScore: descriptionScore,
+	}, true
 }
 
 func sortTriageSuggestionCandidates(candidates []triageSuggestionCandidate) {
@@ -1095,11 +1127,20 @@ func triageSimilarity(left, right map[string]bool) float64 {
 			intersection++
 		}
 	}
-	union := len(left) + len(right) - intersection
+	return triageSimilarityCount(intersection, len(left), len(right))
+}
+
+// triageSimilarityCount is triageSimilarity from the sizes of both token sets
+// and their intersection.
+func triageSimilarityCount(intersection, left, right int) float64 {
+	if left == 0 || right == 0 {
+		return 0
+	}
+	union := left + right - intersection
 	if union == 0 {
 		return 0
 	}
-	coverage := float64(intersection) / float64(min(len(left), len(right)))
+	coverage := float64(intersection) / float64(min(left, right))
 	jaccard := float64(intersection) / float64(union)
 	return coverage*0.72 + jaccard*0.28
 }
