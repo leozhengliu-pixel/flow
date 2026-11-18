@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strconv"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -27,6 +29,49 @@ func (s *SQLiteStore) createBoundedMetadataStagingSchema(ctx context.Context) er
 	return err
 }
 
+// Staged input is kept as one row per appended chunk (operation, column,
+// sequence) and assembled once by the statement that consumes it. Appending
+// to a single staged value rewrote the whole growing value per chunk (and,
+// on MySQL, its undo log), so a staged row of n bytes cost O(n^2 / chunk).
+const boundedMetadataStagingChunksSchemaVersion = 31
+
+func (s *SQLiteStore) createBoundedMetadataStagingChunksSchema(ctx context.Context) error {
+	text := "TEXT"
+	if s.dialect == "mysql" {
+		text = "LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin"
+	}
+	_, err := s.db.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS bounded_metadata_write_chunks ("+
+		"operation_id VARCHAR(64) NOT NULL,part INTEGER NOT NULL,seq INTEGER NOT NULL,chunk "+text+" NOT NULL,"+
+		"PRIMARY KEY(operation_id,part,seq))")
+	return err
+}
+
+// metadataSQLStageConcatFanIn stays below PostgreSQL's 100-argument function
+// limit and SQLite's default 127.
+const metadataSQLStageConcatFanIn = 64
+
+// metadataSQLStageConcat is one SQL expression joining the parts in order:
+// a single concat() (no aggregate, no session limit) per at most 64 parts,
+// nested for more. An empty list is the empty string.
+func metadataSQLStageConcat(parts []string) string {
+	if len(parts) == 0 {
+		return "''"
+	}
+	for len(parts) > 1 {
+		var next []string
+		for start := 0; start < len(parts); start += metadataSQLStageConcatFanIn {
+			group := parts[start:min(start+metadataSQLStageConcatFanIn, len(parts))]
+			if len(group) == 1 {
+				next = append(next, group[0])
+			} else {
+				next = append(next, "concat("+strings.Join(group, ",")+")")
+			}
+		}
+		parts = next
+	}
+	return parts[0]
+}
+
 // The installed schema needs only ordinary DML during a write. Each row is
 // inserted and removed in the same transaction. An interrupted operation's
 // rollback also removes its insert, so committed staging rows never exist.
@@ -39,10 +84,12 @@ type metadataSQLWriteStage struct {
 	admitted, inserted, firstWrite bool
 	written                        [2]int
 	consumed                       [2]bool
-	statements, inputBytes         int
-	appendChunkBytes               int
-	admittedAppendChunkBytes       int
-	appendOwner                    *integrationDeliveryPageOwner
+	// chunks counts the chunk rows staged per column (data, content).
+	chunks                   [2]int
+	statements, inputBytes   int
+	appendChunkBytes         int
+	admittedAppendChunkBytes int
+	appendOwner              *integrationDeliveryPageOwner
 	// releases return the admitted growth of this stage's writers.
 	releases []func()
 }
@@ -118,6 +165,9 @@ func (s *metadataSQLWriteStage) Close(ctx context.Context) error {
 		release()
 	}
 	s.releases = nil
+	if _, err := s.exec(ctx, metadataSQLStageDeleteChunks, s.id); err != nil {
+		return err
+	}
 	if _, err := s.exec(ctx, metadataSQLStageDelete, s.id); err != nil {
 		return err
 	}
@@ -174,15 +224,27 @@ func (s *metadataSQLWriteStage) valueSQL(column string, asBytes bool) (string, e
 	if !s.open() || !metadataSQLStageColumn(column) {
 		return "", ErrMetadataRecordQuery
 	}
-	value := column
+	// The staged chunks of this operation's column, in order, each a primary
+	// key lookup correlated with the operation's stage row.
+	part := 0
+	if column == "content" {
+		part = 1
+	}
+	pieces := make([]string, s.chunks[part])
+	for seq := range pieces {
+		pieces[seq] = "(SELECT chunk FROM bounded_metadata_write_chunks WHERE operation_id=bounded_metadata_write_stage.operation_id" +
+			" AND part=" + strconv.Itoa(part) + " AND seq=" + strconv.Itoa(seq) + ")"
+	}
+	assembled := metadataSQLStageConcat(pieces)
+	value := assembled
 	if asBytes {
 		switch s.tx.dialect {
 		case "sqlite":
-			value = "CAST(" + column + " AS BLOB)"
+			value = "CAST(" + assembled + " AS BLOB)"
 		case "mysql":
-			value = "CAST(" + column + " AS BINARY)"
+			value = "CAST(" + assembled + " AS BINARY)"
 		case "postgres":
-			value = "convert_to(" + column + ",'UTF8')"
+			value = "convert_to(" + assembled + ",'UTF8')"
 		default:
 			return "", ErrBoundedMetadataCoverage
 		}
@@ -263,10 +325,11 @@ func (w *metadataSQLStageWriter) flush(final bool) error {
 	if w.column == "content" {
 		operation, column = metadataSQLStageAppendSearch, 1
 	}
-	result, err := w.stage.exec(w.ctx, operation, string(w.buffer[:end]), w.stage.id)
+	result, err := w.stage.exec(w.ctx, operation, w.stage.id, w.stage.chunks[column], string(w.buffer[:end]))
 	if err != nil {
 		return err
 	}
+	w.stage.chunks[column]++
 	w.stage.written[column] += end
 	if rows, err := result.RowsAffected(); err != nil || rows != 1 {
 		if err != nil {
