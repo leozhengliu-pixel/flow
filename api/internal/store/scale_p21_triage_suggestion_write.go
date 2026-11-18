@@ -878,6 +878,9 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			extraFields = append(extraFields, "documents")
 		}
 		persistCtx := context.WithValue(ctx, legacyMetadataExtraFieldsKey{}, extraFields)
+		// Dismissed suggestions move behind the regenerated ones: the
+		// list is renumbered a chunk of rows at a time, not materialized.
+		persistCtx = withLegacyMetadataStreamedOrder(persistCtx, "issueSuggestions")
 		var merged *metadataLogicalSource
 		if progress != nil {
 			merged, err = s.persistLegacyMetadataImageWithProgress(persistCtx, tx, workspace, stored, restored, progress)
