@@ -1,4 +1,7 @@
 version: 2
+# Paused 2026-11-17 (owner): every Dependabot pull request runs the full CI and competes with merge trains for the
+# 20 concurrent runner jobs. open-pull-requests-limit 0 stops new version-update PRs and rebase-strategy disabled stops
+# rebasing the open ones. Restore the previous limits (web/api 5, actions/docker 3) and remove the rebase lines to resume.
 updates:
   - package-ecosystem: npm
     directory: /web
@@ -7,7 +10,8 @@ updates:
       day: monday
       time: "03:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
+    rebase-strategy: disabled
     labels:
       - dependencies
       - web
@@ -32,7 +36,8 @@ updates:
       day: monday
       time: "03:15"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
+    rebase-strategy: disabled
     labels:
       - dependencies
       - api
@@ -43,7 +48,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
+    rebase-strategy: disabled
     labels:
       - dependencies
       - ci
@@ -61,7 +67,8 @@ updates:
       day: monday
       time: "03:30"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
+    rebase-strategy: disabled
     labels:
       - dependencies
       - container
