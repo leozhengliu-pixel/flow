@@ -1086,7 +1086,7 @@ func (s *SQLiteStore) ListTeamMembers(ctx context.Context, workspaceID string) (
 	rows, err := s.db.QueryContext(ctx, `SELECT m.team_id,m.user_id,m.role,m.joined_at,
 		CASE WHEN EXISTS (SELECT 1 FROM scim_team_memberships sm WHERE sm.workspace_id=m.workspace_id AND sm.team_id=m.team_id AND sm.user_id=m.user_id AND sm.managed=1) THEN 1 ELSE 0 END,
 		m.origin
-		FROM team_memberships m WHERE m.workspace_id=? ORDER BY m.joined_at`, workspaceID)
+		FROM team_memberships m WHERE m.workspace_id=? ORDER BY `+teamMemberOrder(s.dialect, "m"), workspaceID)
 	if err != nil {
 		return nil, err
 	}
