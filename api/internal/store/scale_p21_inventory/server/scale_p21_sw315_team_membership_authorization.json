@@ -2,14 +2,14 @@
   "source": "server/scale_p21_sw315_team_membership_authorization.go",
   "unmigrated": 1,
   "consumers": {
-    "boundedTeamMembershipAuthorization": {
+    "boundedTeamRowAuthorization": {
       "owner": "P21",
       "status": "unmigrated",
       "accessors": ["BeginTeamMemberRequestRead"],
       "temperature": "hot",
       "temperatureReason": "Team member list and membership request authorization.",
-      "callers": ["server/auth.go:resourceAllowedLegacy"],
-      "reason": "Mechanical reuse of the existing team-member owner with literal installed team-ID resolution; the grouped Tier B route differential has not run."
+      "callers": ["server/scale_p21_sw315_team_membership_authorization.go:boundedTeamMembershipAuthorization", "server/scale_p21_sw306_membership_authorization.go:boundedMembershipAuthorization", "server/scale_p21_sw307_team_resource_authorization.go:boundedTeamResourceAuthorization"],
+      "reason": "Mechanical reuse of the existing team-member owner with literal installed team-ID resolution, shared by the team member route (SW315), the escaped membership route (SW306) and the team row decision (SW307); the grouped Tier B route differentials have not been certified."
     }
   }
 }
