@@ -149,16 +149,7 @@ func (s *SQLiteStore) sw17SearchFieldBounded(ctx context.Context, workspace, fie
 					releaseNext()
 				}
 			}()
-			where, args := bindList("record_key", keys)
-			args = append([]any{workspace, field}, args...)
-			upsert := ` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=excluded.content WHERE metadata_search_documents.content<>excluded.content`
-			if s.dialect == "mysql" {
-				upsert = ` ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`
-			}
-			if s.dialect == "postgres" {
-				upsert = ` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=EXCLUDED.content WHERE metadata_search_documents.content<>EXCLUDED.content`
-			}
-			if _, err := s.db.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) SELECT workspace_key,field,record_key,`+s.metadataSearchContent("data")+` FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+where+upsert, args...); err != nil {
+			if err := s.writeMetadataSearchPage(ctx, workspace, field, keys); err != nil {
 				return err
 			}
 			if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET last_record_key=?,completed=0 WHERE workspace_key=? AND field=?`, next, workspace, field); err != nil {
