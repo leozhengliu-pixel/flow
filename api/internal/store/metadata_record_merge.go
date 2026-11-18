@@ -15,7 +15,9 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"flow/api/internal/domain"
 )
@@ -1195,6 +1197,7 @@ func setMetadataRecordsDecoded(data *domain.Bootstrap, records map[metadataRecor
 // lockMetadataRecords reads (and on MySQL and PostgreSQL locks) the stored
 // rows of one field's records, in key order.
 func lockMetadataRecords(ctx context.Context, tx *sqlTx, workspace, field string, keys []string) (map[string][]byte, error) {
+	keys = storableMetadataRecordKeys(tx.dialect, keys)
 	if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
 		return budget.lockRecords(ctx, tx, workspace, field, keys)
 	}
@@ -1435,4 +1438,27 @@ func (s *SQLiteStore) recordTxOptions() *sql.TxOptions {
 		return recordWriteTxOptions
 	}
 	return nil
+}
+
+// storableMetadataRecordKeys drops the keys no PostgreSQL row can have: its
+// text is valid UTF-8 without NUL, so it refuses invalid UTF-8 parameters
+// (22021) and textArgs would strip NUL, matching another record. A key from
+// an in-memory ID (encoding/json stores such IDs with U+FFFD, kept inline)
+// is then simply not found, as on SQLite and MySQL. Other dialects keep keys.
+func storableMetadataRecordKeys(dialect string, keys []string) []string {
+	if dialect != "postgres" {
+		return keys
+	}
+	for index, key := range keys {
+		if !utf8.ValidString(key) || strings.IndexByte(key, 0) >= 0 {
+			kept := slices.Clone(keys[:index])
+			for _, key := range keys[index+1:] {
+				if utf8.ValidString(key) && strings.IndexByte(key, 0) < 0 {
+					kept = append(kept, key)
+				}
+			}
+			return kept
+		}
+	}
+	return keys
 }
