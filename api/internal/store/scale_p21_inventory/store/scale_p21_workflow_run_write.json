@@ -1,10 +1,11 @@
 {
   "source": "store/scale_p21_workflow_run_write.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "MutateWorkflowRun": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Owned full-record attempt: selected callback inputs (definition first occurrence, last matching run plus the 499-run tail, issue Number fold, resource issue projection, referenced users, labels and their label groups, team states, former-member lookup), the literal callback, and a patched logical image for definitions, runs (cleared predecessor + appended run + 500 tail), prepended issues, the resource issue delta and appended notifications, committed with counts, imports, record locks, journal, account row and the single workflow_run.executed event in one transaction; named conflicts refresh the workflow-run stream and retry. storedWorkspace is only the resident existence check. It never reaches the shared scoped kernel or a full-workspace accessor (SW504). SW500/SW501/SW502 (server differentials incl. peer conflicts, cancellation and 4 MiB rows), SW201, SW219, SW232 and SW322 cover it; the label-group input was added after SW500 showed grouped labels failing only in bounded mode. Root gate (pinned): definitions over about 4 MiB exceed the shared aggregate-plan envelope and are refused atomically.",
       "accessors": ["storedWorkspace"],
       "temperature": "hot",
       "temperatureReason": "One atomic scheduled/retried workflow action sequence and history update.",
