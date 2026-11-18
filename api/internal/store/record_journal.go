@@ -188,6 +188,7 @@ func (tx *sqlTx) beginRecordJournal(ctx context.Context) error {
 }
 
 func (tx *sqlTx) Rollback() error {
+	tx.dropMetadataReadWindows()
 	if tx.journalToken != "" && tx.dialect == "mysql" {
 		// MySQL session variables outlive rollback and pooled transactions.
 		// Clear the token before returning this connection to the pool.
@@ -292,6 +293,7 @@ func (tx *sqlTx) deferRecordJournalBudget() error {
 	// into a rejected import/cascade. Retain trigger-captured keys/versions,
 	// atomically make the catalog unavailable, and require bounded repair.
 	ctx, state := tx.context(), tx.journalBudget
+	tx.dropMetadataReadWindows()
 	if _, err := tx.Tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT flow_record_journal`); err != nil {
 		return err
 	}

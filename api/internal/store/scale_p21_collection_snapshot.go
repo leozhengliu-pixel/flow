@@ -182,6 +182,14 @@ func (r *metadataSnapshotReaderAt) ReadAt(p []byte, offset int64) (int, error) {
 	}
 	n := 0
 	for n < len(p) && offset+int64(n) < r.size {
+		window, err := r.window(table, where, data, offset+int64(n))
+		if err != nil {
+			return n, err
+		}
+		if window != nil {
+			n += copy(p[n:], window.data[offset+int64(n)-window.start:])
+			continue
+		}
 		size := min(int64(metadataRecordChunkBytes), int64(len(p)-n), r.size-offset-int64(n))
 		args := []any{offset + int64(n) + 1, size, snapshot.workspace}
 		if r.key.Kind != "" {
@@ -200,6 +208,115 @@ func (r *metadataSnapshotReaderAt) ReadAt(p []byte, offset int64) (int, error) {
 		return n, io.EOF
 	}
 	return n, nil
+}
+
+// Every SQL SUBSTR of a metadata row loads the whole row in each dialect
+// (SQLite and MySQL read the complete value, PostgreSQL detoasts it), so
+// reading a row of size S in fixed 16 KiB pieces cost O(S^2 / 16 KiB). Rows
+// larger than metadataReadWindowMinRow are instead read in admitted windows
+// of S/32 bytes, at least 64 KiB and at most 256 KiB, kept on the
+// transaction until its next write, savepoint rollback, commit or rollback.
+// Up to 8 MiB that is about 32 whole-row reads per pass (O(S)); beyond it
+// the cost is S^2 / 256 KiB, 16 times below the fixed pieces. The cap keeps
+// the admitted work independent of body size (the streamed writers prove
+// their peak within 2 MiB of a small body's); a linear read of larger rows
+// needs storage that SQL can read in parts. Without admission a read keeps
+// the fixed pieces; the bytes are the same.
+const (
+	metadataReadWindowMinRow = 4 * metadataRecordChunkBytes
+	metadataReadWindowMin    = 64 << 10
+	metadataReadWindowMax    = 256 << 10
+)
+
+type metadataReadWindow struct {
+	table, where, workspace string
+	key                     RecordKey
+	size, start             int64
+	data                    []byte
+}
+
+type metadataReadWindows struct {
+	width   int
+	slots   [1]metadataReadWindow
+	next    int
+	release func()
+}
+
+func (tx *sqlTx) dropMetadataReadWindows() {
+	if windows := tx.metadataReadWindows; windows != nil {
+		tx.metadataReadWindows = nil
+		windows.release()
+	}
+}
+
+func (tx *sqlTx) dropMetadataReadWindowsUnlessSelect(query string) {
+	if tx.metadataReadWindows == nil {
+		return
+	}
+	query = strings.TrimSpace(query)
+	if len(query) < 7 || !strings.EqualFold(query[:7], "SELECT ") {
+		tx.dropMetadataReadWindows()
+	}
+}
+
+func metadataReadWindowWidth(size int64) int {
+	width := (size + 31) / 32
+	width = (width + metadataRecordChunkBytes - 1) / metadataRecordChunkBytes * metadataRecordChunkBytes
+	return int(min(max(width, metadataReadWindowMin), metadataReadWindowMax))
+}
+
+// window returns the cached window holding at, filling one when the row is
+// large and the window is admitted, or nil for the fixed-piece read.
+func (r *metadataSnapshotReaderAt) window(table, where, data string, at int64) (*metadataReadWindow, error) {
+	snapshot := r.snapshot
+	tx := snapshot.tx
+	if r.size <= metadataReadWindowMinRow || snapshot.store == nil {
+		return nil, nil
+	}
+	windows := tx.metadataReadWindows
+	if windows != nil {
+		for index := range windows.slots {
+			slot := &windows.slots[index]
+			if slot.data != nil && slot.table == table && slot.where == where && slot.workspace == snapshot.workspace &&
+				slot.key == r.key && slot.size == r.size && at >= slot.start && at < slot.start+int64(len(slot.data)) {
+				return slot, nil
+			}
+		}
+	} else {
+		width := metadataReadWindowWidth(r.size)
+		// The retained window plus the driver's copy while it is read.
+		_, release, err := snapshot.store.tryAdmitAdditionalMetadataWork(r.ctx, width*2)
+		if err != nil {
+			if errors.Is(err, ErrMetadataWorkBudget) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		windows = &metadataReadWindows{width: width, release: release}
+		tx.metadataReadWindows = windows
+	}
+	width := int64(windows.width)
+	start := at / width * width
+	length := min(width, r.size-start)
+	args := []any{start + 1, length, snapshot.workspace}
+	if r.key.Kind != "" {
+		args = append(args, r.key.Kind, r.key.ID)
+	}
+	var chunk []byte
+	if err := tx.QueryRowContext(r.ctx, "SELECT SUBSTR("+data+",?,?) FROM "+table+" WHERE "+where, args...).Scan(&chunk); err != nil {
+		return nil, err
+	}
+	if int64(len(chunk)) != length {
+		return nil, io.ErrUnexpectedEOF
+	}
+	if tx.metadataReadWindows != windows {
+		// Only a write, commit or rollback drops the windows; none runs here.
+		return nil, ErrMetadataRecordQuery
+	}
+	slot := &windows.slots[windows.next]
+	windows.next = (windows.next + 1) % len(windows.slots)
+	*slot = metadataReadWindow{table: table, where: where, workspace: snapshot.workspace, key: r.key, size: r.size, start: start, data: chunk}
+	return slot, nil
 }
 
 func (r *metadataCollectionSnapshot) scanHeaders(ctx context.Context, kind string, visit func(RecordKey, int64) error) error {
