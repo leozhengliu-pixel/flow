@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -178,6 +180,9 @@ func writeSyncError(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrMetadataCursor):
 		writeError(w, http.StatusConflict, "Sync cursor changed; reload the manifest")
 	default:
+		// The response stays generic; the cause (an unready collection, a
+		// coverage gap or a database error) is logged for diagnosis.
+		slog.Warn("sync records unavailable", "error", err, "error_type", fmt.Sprintf("%T", err))
 		writeError(w, http.StatusServiceUnavailable, "Sync records are not ready; use the legacy read endpoint")
 	}
 }
