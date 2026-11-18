@@ -111,7 +111,7 @@ func (s *SQLiteStore) ensureMetadataSearchIndex(ctx context.Context) error {
 			`CREATE TRIGGER IF NOT EXISTS metadata_records_search_delete AFTER DELETE ON workspace_metadata_records BEGIN `+remove+`; END`)
 	case "mysql":
 		// Full-text creation is optional on restricted MySQL users.
-		if err := s.ensureMySQLNgramIndex(ctx, "metadata_search_documents", "metadata_search_fulltext", metadataSearchStopwordsMigrationVersion, true); err != nil {
+		if err := s.ensureMySQLNgramIndex(ctx, "metadata_search_documents", "metadata_search_fulltext", true, fullTextIndexRebuilds("metadata_search_documents", metadataSearchStopwordsMigrationVersion, metadataSearchRestoreMigrationVersion)...); err != nil {
 			return err
 		}
 		for _, event := range []string{"INSERT", "UPDATE"} {
