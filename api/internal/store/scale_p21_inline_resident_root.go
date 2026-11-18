@@ -23,6 +23,7 @@ func (s *SQLiteStore) readInlineResidentRoot(ctx context.Context, tx *sqlTx, wor
 	if err != nil {
 		return nil, nil, err
 	}
+	defer read.Close()
 	root := map[string]json.RawMessage{}
 	retained := int64(0)
 	for name, part := range read.fields {

@@ -344,11 +344,17 @@ func (r *boundedDiscussionAttempt) collectionValue(ctx context.Context, node met
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		if retained > (metadataWorkBytes-512)/2 {
+		width := uint64(value.Type().Size())
+		if width > (metadataWorkBytes-512)/2 {
 			return reflect.Value{}, ErrMetadataWorkBudget
 		}
-		// Twice the entry: the collection may copy it while it grows.
-		return value, r.owner.reserve(ctx, retained*2+512)
+		// Append/map growth copies entry slots, while nested containers and
+		// immutable bodies keep their already-owned backing allocations.
+		relocation := width*2 + 512
+		if retained > metadataWorkBytes-relocation {
+			return reflect.Value{}, ErrMetadataWorkBudget
+		}
+		return value, r.owner.reserve(ctx, retained+relocation)
 	}
 	switch node.typ.Kind() {
 	case reflect.Slice:
@@ -549,6 +555,7 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 			data.Comments, data.Activities = content.Comments, content.Activities
 			data.Notifications, data.NotificationDeliveries = content.Notifications, content.NotificationDeliveries
 		}
+		traceMark(ctx, "batch-content")
 		oldDeliveries := make(map[string]bool, len(data.NotificationDeliveries))
 		for _, delivery := range data.NotificationDeliveries {
 			oldDeliveries[delivery.ID] = true
@@ -571,6 +578,11 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 			}
 			reflect.ValueOf(&data).Elem().Field(index).Set(value)
 		}
+		// Transform copied the complete SQL preimages into immutable frames;
+		// collectionValue owns independent displayed native values now.
+		attempt.content.Close()
+		attempt.content = nil
+		traceMark(ctx, "batch-display")
 		var targets []domain.Issue
 		for _, id := range ids {
 			if index := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == id }); index >= 0 {
@@ -604,6 +616,7 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 		}
 		attempt.lookups.allowDocuments(targets)
 		attempt.lookups.liveMembers = renumber && hasActor
+		traceMark(ctx, "batch-inputs")
 		if err := attempt.reserveValue(ctx, payload); err != nil {
 			return err
 		}
@@ -612,14 +625,40 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 			return err
 		}
 		defer releaseCallbackEncoding()
+		traceMark(ctx, "batch-encoding")
 		callbackCost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(data), 0)
 		if err != nil {
 			return err
 		}
-		if callbackCost > (metadataWorkBytes-(64<<10))/3 {
+		if callbackCost > metadataWorkBytes {
 			return ErrMetadataWorkBudget
 		}
-		if err := attempt.owner.reserve(ctx, callbackCost*3+64<<10); err != nil {
+		// Collection/input owners already retain data and its growth-copy
+		// capacity. Keep one additional native envelope for callback growth;
+		// the independent comparison clone below owns only copied containers.
+		if err := attempt.owner.reserve(ctx, callbackCost); err != nil {
+			return err
+		}
+		comparison := &ResourceRead{store: s}
+		defer comparison.Close()
+		cloneCost, err := cycleScheduleCloneValueWork(ctx, reflect.ValueOf(data), false, 0)
+		if err != nil {
+			return err
+		}
+		if data.Viewer.Via != nil {
+			extra, err := cycleScheduleCloneValueWork(ctx, reflect.ValueOf(data.Viewer.Via), false, 0)
+			if err != nil {
+				return err
+			}
+			if extra > metadataWorkBytes-cloneCost {
+				return ErrMetadataWorkBudget
+			}
+			cloneCost += extra
+		}
+		if cloneCost > metadataWorkBytes-(64<<10) {
+			return ErrMetadataWorkBudget
+		}
+		if err := comparison.reserve(ctx, cloneCost+64<<10); err != nil {
 			return err
 		}
 		beforeCallback := cloneBootstrap(data)
@@ -665,6 +704,8 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 		if err != nil {
 			return err
 		}
+		beforeCallback = domain.Bootstrap{}
+		comparison.Close()
 		events, err := issueBatchSLAEvents(data.SLAEvents, attempt.batch.slaEvents)
 		if err != nil {
 			return err

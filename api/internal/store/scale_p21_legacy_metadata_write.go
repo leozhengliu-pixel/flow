@@ -46,6 +46,7 @@ type legacyMetadataWritePlan struct {
 	requested, actual *metadataLogicalSource
 	fields            []*legacyMetadataWriteField
 	progress          legacyMetadataProgress
+	inlineRoot        *metadataInlineRoot
 }
 
 type legacyMetadataProgress interface {
@@ -118,6 +119,9 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 	}
 	plan := &legacyMetadataWritePlan{store: s, tx: tx, workspace: workspace, workspaceID: stamp.workspaceID, work: work, frames: frames, requested: target, progress: progress}
 	defer func() {
+		if plan.inlineRoot != nil {
+			plan.inlineRoot.Close()
+		}
 		for _, field := range plan.fields {
 			if field.scheduleParents != nil {
 				field.scheduleParents.Close()
@@ -225,6 +229,11 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
+	if plan.inlineRoot != nil {
+		// The remainder writes canonical rows, then one slow root patch.
+		// Borrow the locked shape snapshot only until that root write.
+		ctx = withMetadataInlineRootCapture(ctx, plan.inlineRoot)
+	}
 	// Decide and admit every fallback before the first fast-path write.
 	var slowNames []string
 	var sessionComplete []*legacyMetadataWriteField
@@ -313,20 +322,24 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 		}
 	}
 	var sessionPatch *legacySessionRootPatch
+	var sessionTail *legacySessionRootPatch
 	for _, field := range parentMaps {
 		if err := plan.writeProjectUpdateScheduleParentMap(ctx, field); err != nil {
 			return nil, err
 		}
 	}
 	for _, field := range sessionComplete {
-		if sessionPatch != nil {
-			return nil, ErrBoundedMetadataCoverage
-		}
-		sessionPatch, err = plan.prepareAgentSessionLifecycleRoot(ctx, field)
+		part, err := plan.prepareAgentSessionLifecycleRoot(ctx, field)
 		if err != nil {
 			return nil, err
 		}
-		defer sessionPatch.Close()
+		if sessionPatch == nil {
+			sessionPatch = part
+			defer sessionPatch.Close()
+		} else {
+			sessionTail.next = part
+		}
+		sessionTail = part
 	}
 	var inlinePatch *legacyInlineFieldsPatch
 	if len(inlineComplete) != 0 {
@@ -859,7 +872,13 @@ func (p *legacyMetadataWritePlan) rebaseRow(ctx context.Context, f *legacyMetada
 	if handled, err := p.rebaseProjectProgressRow(ctx, f, index); handled || err != nil {
 		return err
 	}
+	if handled, err := p.rebaseIntegrationDeliveryRow(ctx, f, index); handled || err != nil {
+		return err
+	}
 	if handled, err := p.rebaseAgentSessionLifecycleRow(ctx, f, index); handled || err != nil {
+		return err
+	}
+	if handled, err := p.rebaseWorkflowRunStreamRow(ctx, f, index); handled || err != nil {
 		return err
 	}
 	if handled, err := p.rebaseLargeRow(ctx, f, index); handled || err != nil {
@@ -1294,6 +1313,12 @@ func (p *legacyMetadataWritePlan) rootShapes(ctx context.Context) (map[string]st
 		if err != nil {
 			return nil, err
 		}
+		captured, _ := ctx.Value(metadataInlineRootCaptureKey{}).(*metadataInlineRoot)
+		if integrationDeliveryStreamEvent(ctx) != "" && p.progress == nil && captured == nil {
+			p.inlineRoot = root
+		} else {
+			defer root.Close()
+		}
 		return root.shapes()
 	}
 	if size < 0 || size > MetadataRecordPageMaxBytes || uint64(size) > (metadataWorkBytes-(64<<10))/128 {
@@ -1469,7 +1494,13 @@ func (p *legacyMetadataWritePlan) writeArray(ctx context.Context, f *legacyMetad
 		if handled, err := p.writeProjectProgressRow(ctx, f, row, order); handled || err != nil {
 			return err
 		}
+		if handled, err := p.writeIntegrationDeliveryRow(ctx, f, row, order); handled || err != nil {
+			return err
+		}
 		if handled, err := p.writeAgentSessionLifecycleRow(ctx, f, row, order); handled || err != nil {
+			return err
+		}
+		if handled, err := p.writeWorkflowRunStreamRow(ctx, f, row, order); handled || err != nil {
 			return err
 		}
 		if handled, err := p.writeLargeRow(ctx, f, row, order); handled || err != nil {

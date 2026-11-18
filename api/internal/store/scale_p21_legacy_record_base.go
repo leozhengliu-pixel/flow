@@ -113,7 +113,21 @@ func (b *legacyRecordBase) RememberStored(ctx context.Context, kind, resource, i
 	if !b.loaded[kind] {
 		return nil
 	}
-	hash := sha256.Sum256(raw)
+	return b.rememberStoredHash(ctx, kind, resource, id, sha256.Sum256(raw))
+}
+
+// RememberStoredHash captures bytes already hashed by the streamed SQL reader.
+func (b *legacyRecordBase) RememberStoredHash(ctx context.Context, kind, resource, id string, hash [32]byte) error {
+	if err := b.check(ctx); err != nil {
+		return err
+	}
+	if !b.loaded[kind] {
+		return nil
+	}
+	return b.rememberStoredHash(ctx, kind, resource, id, hash)
+}
+
+func (b *legacyRecordBase) rememberStoredHash(ctx context.Context, kind, resource, id string, hash [32]byte) error {
 	var empty [32]byte
 	_, err := b.stage.exec(ctx, int64(len(resource)+len(id)+256),
 		`INSERT INTO legacy_base(kind,resource,id,stored,loaded) VALUES(?,?,?,?,?) ON CONFLICT(kind,resource,id) DO UPDATE SET stored=excluded.stored,loaded=excluded.loaded`,
@@ -167,6 +181,12 @@ func (b *legacyRecordBase) FingerprintLoaded(ctx context.Context, source *metada
 	}
 	for _, kind := range []string{"issue", "activity", "comment", "notification", "delivery"} {
 		if b.loaded[kind] {
+			if kind == "issue" {
+				if err := b.fingerprintLoadedIssueFrames(ctx, source); err != nil {
+					return err
+				}
+				continue
+			}
 			if err := b.visit(ctx, source, kind, visit); err != nil {
 				return err
 			}
@@ -378,7 +398,8 @@ func (b *legacyRecordBase) currentBody(ctx context.Context, tx *sqlTx, workspace
 		}
 		return nil, false, err
 	}
-	if size < 0 || size > metadataWorkBytes/16 {
+	if size < 0 || kind != "issue" && size > metadataWorkBytes/16 ||
+		uint64(size) > (metadataWorkBytes-(64<<10))/4 {
 		return nil, false, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(size)*4+64<<10); err != nil {
@@ -905,7 +926,9 @@ func (b *legacyRecordBase) issuePayloadBatch(ctx context.Context, tx *sqlTx, wor
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+length+"),0) FROM issue_records WHERE workspace_key=? AND "+clause, values...).Scan(&maximum); err != nil {
 		return err
 	}
-	if maximum < 0 || maximum > metadataWorkBytes/16 {
+	// Preserve the one-SELECT 64-target preimage snapshot and the existing
+	// three-copy row transfer allowance. Validate before multiplication.
+	if maximum < 0 || uint64(maximum) > (metadataWorkBytes-(64<<10))/3 {
 		return ErrMetadataWorkBudget
 	}
 	if err := wire.reserve(ctx, uint64(maximum)*3+64<<10); err != nil {
@@ -959,227 +982,9 @@ func (b *legacyRecordBase) issuePayload(ctx context.Context, id string, work *Re
 }
 
 func (b *legacyRecordBase) persistIssues(ctx context.Context, tx *sqlTx, workspace string, target *metadataLogicalSource) error {
-	if err := b.prepareIssueOrder(ctx, target); err != nil {
+	maxNumber, total, err := b.persistIssueFrameTargets(ctx, tx, workspace, target)
+	if err != nil {
 		return err
-	}
-	batch := &legacyRecordIssueBatch{orders: map[string]int{}}
-	defer batch.close()
-	var history *legacyRecordIssueHistory
-	defer func() { history.Close() }()
-	flush := func() error {
-		writeCtx := withIssueRecordWriteAdmission(ctx, b.store)
-		if history != nil {
-			if err := history.flush(ctx, tx); err != nil {
-				return err
-			}
-			writeCtx = context.WithValue(writeCtx, legacyIssueHistoryPreparedKey{}, true)
-		}
-		if err := b.store.importIssueRecordBatch(writeCtx, tx, workspace, batch.issues, batch.orders); err != nil {
-			return err
-		}
-		batch.close()
-		batch.orders = map[string]int{}
-		return nil
-	}
-	maxNumber, total := 0, 0
-	retryAdmission := errors.New("retry legacy issue row admission")
-	admissionError := func(err error) error {
-		if errors.Is(err, ErrMetadataWorkBudget) {
-			return retryAdmission
-		}
-		return err
-	}
-	process := func(value reflect.Value, native *ResourceRead) error {
-		work := &ResourceRead{store: b.store}
-		defer work.Close()
-		issue := value.Interface().(domain.Issue)
-		var position int
-		if err := b.stage.db.QueryRowContext(ctx, `SELECT position FROM legacy_issue_positions WHERE id=?`, []byte(issue.ID)).Scan(&position); err != nil {
-			return err
-		}
-		previous, stored, err := b.issuePayload(ctx, issue.ID, work)
-		if err != nil {
-			return admissionError(err)
-		}
-		columnsRelease, err := reserveIssueRecordEncoding(ctx, b.store, issue, nil)
-		if err != nil {
-			return admissionError(err)
-		}
-		defer columnsRelease()
-		values, err := b.store.issueRecordColumns(workspace, issue)
-		if err != nil {
-			return err
-		}
-		raw := values[len(values)-1].([]byte)
-		skip := false
-		if b.loaded["issue"] {
-			fingerprint, loaded, err := b.fingerprint(ctx, "issue", "", issue.ID)
-			if err != nil {
-				return err
-			}
-			if loaded && (!stored || sha256.Sum256(previous) != fingerprint.stored) || !loaded && stored {
-				if loaded && fingerprint.loaded == sha256.Sum256(raw) {
-					skip = true
-				} else {
-					return fmt.Errorf("issue %s: %w", issue.ID, ErrConcurrentWrite)
-				}
-			}
-		}
-		if !skip {
-			refs, err := b.recordIssueRowReferences(ctx, target, work, previous, raw)
-			if err != nil {
-				return admissionError(err)
-			}
-			if len(previous) > 0 {
-				release, err := reserveIssueRecordComparisonEncoding(ctx, b.store, issue, previous)
-				if err != nil {
-					return admissionError(err)
-				}
-				defer release()
-				// Initial columns plus this delta own the full equality
-				// envelope without a duplicate reservation during transfer.
-			}
-			// equalOwned also resolves indexed team/state/label dimensions.
-			// This decodes the old issue under the equality owner's lease.
-			refs, err = b.issueReferences(ctx, target, work, refs, issue, previous)
-			if err != nil {
-				return admissionError(err)
-			}
-			if !equalIssueRecordData(previous, raw) && !refs.equalOwned(previous, issue) {
-				if history == nil {
-					history, err = b.newIssueHistory(ctx)
-					if err != nil {
-						return admissionError(err)
-					}
-				}
-				if err := history.append(ctx, workspace, issue, previous); err != nil {
-					return admissionError(err)
-				}
-				if len(previous) > 0 {
-					var old domain.Issue
-					if err := json.Unmarshal(previous, &old); err != nil {
-						return err
-					}
-					if err := b.addStats(ctx, issueStatsOf(old), -1); err != nil {
-						return err
-					}
-				}
-				if err := b.addStats(ctx, issueStatsOf(issue), 1); err != nil {
-					return err
-				}
-				// The batch retains a shallow copy of this native row.
-				// Transfer its existing owner instead of reserving the
-				// same live allocations again during the handoff.
-				batch.releases = append(batch.releases, native.Close)
-				batch.issues = append(batch.issues, issue)
-				batch.orders[issue.ID] = position
-			} else {
-				_, old, known, err := b.previous(ctx, "issue", "", issue.ID)
-				if err != nil {
-					return err
-				}
-				if !known || old != position {
-					if _, err := tx.ExecContext(ctx, `UPDATE issue_records SET collection_order=? WHERE workspace_key=? AND id=?`, position, workspace, issue.ID); err != nil {
-						return err
-					}
-				}
-			}
-		}
-		if err := b.seen(ctx, "issue", "", issue.ID); err != nil {
-			return err
-		}
-		batch.targets++
-		total++
-		maxNumber = max(maxNumber, issue.Number)
-		return nil
-	}
-	for start := 0; ; start += 64 {
-		headerWork := &ResourceRead{store: b.store}
-		headers, err := b.issueBatch(ctx, target, start, headerWork)
-		if err != nil {
-			headerWork.Close()
-			return err
-		}
-		if len(headers) == 0 {
-			headerWork.Close()
-			break
-		}
-		if err := b.issuePayloadBatch(ctx, tx, workspace, headers); err != nil {
-			headerWork.Close()
-			return err
-		}
-		if err := b.issueHistoryPayloadBatch(ctx, tx, workspace, headers); err != nil {
-			headerWork.Close()
-			return err
-		}
-		for _, header := range headers {
-			for {
-				work := &ResourceRead{store: b.store}
-				err := func() error {
-					// A changed row transfers this owner into batch. An
-					// unchanged or failed row releases it locally.
-					transferred := false
-					defer func() {
-						if !transferred {
-							work.Close()
-						}
-					}()
-					decode := &ResourceRead{store: b.store}
-					defer decode.Close()
-					if header.node.cost > (metadataWorkBytes-(64<<10))/4 {
-						return retryAdmission
-					}
-					if err := decode.reserve(ctx, header.node.cost*4+64<<10); err != nil {
-						return admissionError(err)
-					}
-					value, err := header.node.Value(ctx, metadataWorkBytes)
-					if err != nil {
-						return err
-					}
-					defer value.SetZero()
-					// The frame decoder's temporary buffers are gone.
-					// Transfer ownership to the actual native row before
-					// entering independently admitted encoding phases.
-					cost, err := metadataAggregateNativeCost(ctx, value, 0)
-					if err != nil {
-						return err
-					}
-					if cost > (metadataWorkBytes-(64<<10))/4 {
-						return retryAdmission
-					}
-					if err := work.reserve(ctx, cost*4+64<<10); err != nil {
-						return admissionError(err)
-					}
-					decode.Close()
-					before := len(batch.issues)
-					err = process(value, work)
-					transferred = len(batch.issues) > before
-					return err
-				}()
-				if err == retryAdmission && len(batch.issues) > 0 {
-					if err := flush(); err != nil {
-						headerWork.Close()
-						return err
-					}
-					continue
-				}
-				if err != nil {
-					headerWork.Close()
-					if err == retryAdmission {
-						return ErrMetadataWorkBudget
-					}
-					return err
-				}
-				break
-			}
-		}
-		if err := flush(); err != nil {
-			headerWork.Close()
-			return err
-		}
-		history.Close()
-		history = nil
-		headerWork.Close()
 	}
 	if err := b.unseen(ctx, "issue", func(_, id string, _ [32]byte) error {
 		work := &ResourceRead{store: b.store}

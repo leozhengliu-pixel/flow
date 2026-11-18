@@ -88,6 +88,7 @@ func scaleP21SW217GenericWrite(t *testing.T, ctx context.Context, repo *SQLiteSt
 	if err != nil {
 		return err
 	}
+	defer root.Close()
 	ordinary := map[string]json.RawMessage{}
 	names := []string{name}
 	if before.Workspace.Name != target.Workspace.Name {
@@ -469,6 +470,7 @@ func TestScaleP21SW217InlineCancellationAndRelease(t *testing.T) {
 		patch.Close()
 		t.Fatal(err)
 	}
+	defer root.Close()
 	writeCtx, cancelWrite := context.WithCancel(ctx)
 	inserted := false
 	writeCtx = WithSQLStatementObserver(writeCtx, func(query string) {
@@ -479,6 +481,7 @@ func TestScaleP21SW217InlineCancellationAndRelease(t *testing.T) {
 	})
 	err = view.writeLegacyInlineFieldsRootPatch(writeCtx, tx, before.Workspace.URLKey, target.Workspace.ID, root, nil, owner, true, patch)
 	cancelWrite()
+	root.Close()
 	owner.Close()
 	patch.Close()
 	if !inserted || !errors.Is(err, context.Canceled) || tx.metadataSQLStages != 0 ||

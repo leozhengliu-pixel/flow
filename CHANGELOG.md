@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded issue writes persist from exact stored frames and recurring issues release their preliminary reads, preserving stored values and history. Bounded metadata stays off by default.
 - Bounded authorization preserves team-membership, escaped-route, file-signing, workflow-run and update-preview decisions. Trash restore authorization retains release-pipeline team ownership and feature checks.
 - Selected collection, project, initiative and team-resource requests use owned authorization reads in bounded mode. Small team-policy rows share their existing SQL page, preserving permission decisions and response values.
 - Bounded metadata preserves large document and project edits during issue-write conflict retries, including deeply nested JSON, without hydrating the whole workspace. Bounded metadata stays off by default.
