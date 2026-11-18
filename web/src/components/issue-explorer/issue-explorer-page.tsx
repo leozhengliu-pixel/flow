@@ -3,6 +3,7 @@ import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-action
 import { unavailableDisplayProperties } from '@/components/my-issues/display-property-availability'
 import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import { useActionGroupsForSelection } from '@/hooks/use-action-groups-for-selection'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { clearSelectedModels, setSelectedModels } from '@/lib/selected-models-store'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { teamHierarchy } from '@/lib/team-hierarchy'
@@ -119,6 +120,13 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const [teamDefault, setTeamDefault] = useState<Record<string, unknown> | undefined>(() => scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewDefaults?.[teamViewKey] : undefined)
   const personalViewKey = savedView ? `${data.workspace.urlKey}:issue-explorer:view:${savedView.id}:display` : undefined
   const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => personalViewKey ? readPersonalDisplay(personalViewKey, savedView!, view) : duplicateFrom ? displayFromSavedView(duplicateFrom, view) : creatingView ? draftDisplay(view, boardRoute, teamDefault, defaultDisplayOverrides) : readDisplay(`${preferencesKey}:display`, view, boardRoute, teamDefault, defaultDisplayOverrides))
+  // The team default follows the server's copy: a page painted from a cached workspace snapshot (or open while
+  // another member saves a default) shows the confirmed one. A stored personal display still wins.
+  const serverTeamDefault = scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewDefaults?.[teamViewKey] : undefined
+  useResetOnChange([JSON.stringify(serverTeamDefault ?? null)], () => {
+    setTeamDefault(serverTeamDefault)
+    if (!personalViewKey && !duplicateFrom && !creatingView) setDisplay(readDisplay(`${preferencesKey}:display`, view, boardRoute, serverTeamDefault, defaultDisplayOverrides))
+  })
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false)
   const detailsKey = detailsStorageKey ?? `${data.workspace.urlKey}:issue-explorer:${savedView && desktop ? `view:${savedView.id}:desktop` : storageScope}:details`
   const defaultDetailsOpen = Boolean(savedView && desktop)
