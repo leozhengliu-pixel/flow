@@ -83,7 +83,11 @@ func sw430Quiet(t *testing.T, s *server, workspace, token string) {
 	for {
 		buffer := make([]byte, 1<<20)
 		buffer = buffer[:runtime.Stack(buffer, true)]
-		busy := strings.Contains(string(buffer), "reconcileAllApplicationWebhooks")
+		// The delivery tick's reconcile and the per-workspace reconciles that
+		// application lifecycle events start (dispatchWebhookEvent) both hold
+		// request work while they run.
+		stacks := string(buffer)
+		busy := strings.Contains(stacks, "reconcileAllApplicationWebhooks") || strings.Contains(stacks, "reconcileApplicationWebhooks(")
 		if !busy && token != "" {
 			busy = !sw430UseStamped(t, s, workspace, token)
 		}
