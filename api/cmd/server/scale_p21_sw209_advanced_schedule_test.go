@@ -247,7 +247,36 @@ func scaleP21SW209ReloadSource(t *testing.T, f scaleP21SW10Fixture, source *stor
 	}
 }
 
+// The ticker differential runs one top-level test per scenario group so the
+// shards can spread it: every case is a complete literal/bounded pair, and
+// the single test of all 17 scenarios needed most of an hour under the race
+// detector. The 5 MiB duplicate-update cases run one test per source mode.
 func TestScaleP21SW209AdvancedScheduleTickerDifferential(t *testing.T) {
+	scaleP21SW209Ticker(t, []bool{false, true}, "missing", "cancelled", "missing-workspace")
+}
+
+func TestScaleP21SW209AdvancedScheduleTickerDueDifferential(t *testing.T) {
+	scaleP21SW209Ticker(t, []bool{false, true}, "due-soon", "current-archive", "inbox-off-noop", "expired-document", "member-reminder-fanout")
+}
+
+func TestScaleP21SW209AdvancedScheduleTickerSLADifferential(t *testing.T) {
+	scaleP21SW209Ticker(t, []bool{false, true}, "sla-breach", "sla-paused", "sla-removed", "sla-subscriber-fanout",
+		"sla-many-unique-rules", "sla-duplicate-winning-rules", "duplicate-updates")
+}
+
+func TestScaleP21SW209AdvancedScheduleTickerLargeMapDifferential(t *testing.T) {
+	scaleP21SW209Ticker(t, []bool{false, true}, "duplicate-large-map")
+}
+
+func TestScaleP21SW209AdvancedScheduleTickerLargeInlineWarmDifferential(t *testing.T) {
+	scaleP21SW209Ticker(t, []bool{false}, "duplicate-large-inline")
+}
+
+func TestScaleP21SW209AdvancedScheduleTickerLargeInlineReloadedDifferential(t *testing.T) {
+	scaleP21SW209Ticker(t, []bool{true}, "duplicate-large-inline")
+}
+
+func scaleP21SW209Ticker(t *testing.T, reloads []bool, scenarios ...string) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -285,14 +314,9 @@ func TestScaleP21SW209AdvancedScheduleTickerDifferential(t *testing.T) {
 	type scenario struct {
 		name string
 	}
-	for _, test := range []scenario{
-		{"missing"}, {"due-soon"}, {"current-archive"}, {"inbox-off-noop"},
-		{"expired-document"}, {"sla-breach"}, {"sla-paused"}, {"sla-removed"},
-		{"member-reminder-fanout"}, {"sla-subscriber-fanout"},
-		{"sla-many-unique-rules"}, {"sla-duplicate-winning-rules"},
-		{"duplicate-updates"}, {"duplicate-large-map"}, {"duplicate-large-inline"}, {"cancelled"}, {"missing-workspace"},
-	} {
-		for _, reload := range []bool{false, true} {
+	for _, name := range scenarios {
+		test := scenario{name}
+		for _, reload := range reloads {
 			type actorCase struct {
 				name string
 				user domain.User
