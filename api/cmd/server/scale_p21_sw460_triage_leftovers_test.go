@@ -393,8 +393,8 @@ func TestScaleP21SW462TriageSuggestionReorderOverPeerRows(t *testing.T) {
 // another server reassigned the team of a document attached to an issue the
 // team auto-move moves: its metadata rebase loses the race on that document,
 // refreshes it and runs the callback again. The response lists every scoped
-// issue once (before 2026-11-18 the rerun appended a second copy of every
-// result), and the bounded warm and SQL-reloaded views equal that legacy
+// issue as often as the scope names it (before 2026-11-18 the rerun appended
+// a second copy of every result), and the bounded warm and SQL-reloaded views equal that legacy
 // server byte for byte, the moved document included.
 func TestScaleP21SW463TriageRerunReturnsOneResultPerIssue(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
@@ -421,12 +421,16 @@ func TestScaleP21SW463TriageRerunReturnsOneResultPerIssue(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
 			t.Fatalf("status %d: %.300s", w.Code, w.Body.String())
 		}
-		seen := map[string]bool{}
+		// The scope repeats one ID (scaleP21SW440Setup), which every
+		// attempt lists as often as the scope names it.
+		allowed := map[string]int{}
+		for _, id := range ids {
+			allowed[id]++
+		}
 		for _, result := range results {
-			if seen[result.ID] {
-				t.Fatalf("bounded=%t: %s listed twice among %d results", service.store.BoundedMetadataEnabled(), result.ID, len(results))
+			if allowed[result.ID]--; allowed[result.ID] < 0 {
+				t.Fatalf("bounded=%t: %s listed more often than the scope names it among %d results", service.store.BoundedMetadataEnabled(), result.ID, len(results))
 			}
-			seen[result.ID] = true
 		}
 		return w
 	}, true)
