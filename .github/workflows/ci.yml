@@ -275,21 +275,47 @@ jobs:
             fi
           done
 
-  # The API suite is split so no single runner carries it all: cmd/server (over
-  # 8.4 hours of test time under the race detector, measured on run 44222295379)
-  # and internal/store (over 5.5 hours) are sharded by measured test time (scripts/ci/go-test-timings.json; see
-  # scripts/ci/go-test-shard.sh), and every other package runs in one job. Each job writes
-  # its own coverage profile; api-coverage merges them and enforces the floor.
-  # "API" below is the required status check that gathers everything.
+  # The API suite is split so no single runner carries it all: cmd/server and
+  # internal/store are sharded by measured test time (scripts/ci/go-test-timings.json;
+  # see scripts/ci/go-test-shard.sh), and every other package runs in one job. Pushes
+  # to main (and manual runs) test with the race detector: over 8.4 hours of
+  # cmd/server and 5.5 hours of internal/store test time (run 44222295379), 20 and
+  # 14 shards. Pull requests test without it, in far fewer shards
+  # (scripts/ci/go-test-shards.json). Tests listed in scripts/ci/known-failing-tests.txt
+  # for a mode are left out of its shards and run, never blocking, in "Known failing
+  # (tracked)". Each job writes its own coverage profile; api-coverage merges them
+  # and enforces the floor. "API" below is the required status check that gathers everything.
+  api-plan:
+    name: API test plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      api: ${{ steps.plan.outputs.api }}
+      dialect: ${{ steps.plan.outputs.dialect }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/ci
+
+      - name: Build the test matrices
+        id: plan
+        env:
+          MODE: ${{ github.event_name == 'pull_request' && 'plain' || 'race' }}
+        run: scripts/ci/go-test-matrix.sh "$MODE" | tee -a "$GITHUB_OUTPUT"
+
   api-static:
     name: API vet and shard check
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: api
     env:
-      GO_TEST_LIST_FLAGS: -race -covermode=atomic
+      # The test list does not depend on instrumentation; vet already compiled
+      # the plain packages.
+      GO_TEST_LIST_FLAGS: -covermode=atomic
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -303,25 +329,38 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      # Fails unless the shards of each sharded package partition its tests: every
-      # test lands in exactly one shard, and each shard's -run pattern selects
-      # exactly that shard's tests. The shard counts must match the api-test matrix.
-      - name: Check test shards cover every test once (cmd/server)
+      # Fails unless, in every mode, the shards of each sharded package partition
+      # its tests minus that mode's known failures: every test lands in exactly one
+      # shard, and each shard's -run pattern selects exactly that shard's tests.
+      # Also fails when the known-failing list is malformed or names a test that no
+      # longer exists. The counts come from scripts/ci/go-test-shards.json, like the
+      # api-test and scale-dialects matrices.
+      - name: Check test shards cover every test once
         env:
           CHECK_PATTERNS: '1'
         run: |
-          ../scripts/ci/go-test-shard.sh check ./cmd/server 20
-          ../scripts/ci/go-test-shard.sh plan ./cmd/server 20
-
-      - name: Check test shards cover every test once (internal/store)
-        env:
-          CHECK_PATTERNS: '1'
-        run: |
-          ../scripts/ci/go-test-shard.sh check ./internal/store 14
-          ../scripts/ci/go-test-shard.sh plan ./internal/store 14
+          set -euo pipefail
+          shards=../scripts/ci/go-test-shards.json
+          ../scripts/ci/go-test-shard.sh baseline
+          for package in ./cmd/server ./internal/store; do
+            for mode in race plain; do
+              total=$(jq -r --arg mode "$mode" --arg package "$package" '.[$mode][$package]' "$shards")
+              echo "::group::$package, $mode, $total shards"
+              SHARD_SCOPE=$mode ../scripts/ci/go-test-shard.sh check "$package" "$total"
+              SHARD_SCOPE=$mode ../scripts/ci/go-test-shard.sh plan "$package" "$total"
+              echo "::endgroup::"
+            done
+            for dialect in postgres mysql; do
+              total=$(jq -r --arg package "$package" '.dialect[$package]' "$shards")
+              echo "::group::$package TestScaleP, $dialect, $total shards"
+              GO_TEST_SHARD_FILTER='^TestScaleP' SHARD_SCOPE=$dialect ../scripts/ci/go-test-shard.sh check "$package" "$total"
+              echo "::endgroup::"
+            done
+          done
 
   api-test:
     name: API tests (${{ matrix.name }})
+    needs: [api-plan]
     runs-on: ubuntu-latest
     # go test's own -timeout (below) fires first and prints the running tests.
     timeout-minutes: 65
@@ -331,47 +370,13 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 15
-      matrix:
-        include:
-          - { name: 'server 1/20', profile: server-1, package: ./cmd/server, shard: 1, shards: 20 }
-          - { name: 'server 2/20', profile: server-2, package: ./cmd/server, shard: 2, shards: 20 }
-          - { name: 'server 3/20', profile: server-3, package: ./cmd/server, shard: 3, shards: 20 }
-          - { name: 'server 4/20', profile: server-4, package: ./cmd/server, shard: 4, shards: 20 }
-          - { name: 'server 5/20', profile: server-5, package: ./cmd/server, shard: 5, shards: 20 }
-          - { name: 'server 6/20', profile: server-6, package: ./cmd/server, shard: 6, shards: 20 }
-          - { name: 'server 7/20', profile: server-7, package: ./cmd/server, shard: 7, shards: 20 }
-          - { name: 'server 8/20', profile: server-8, package: ./cmd/server, shard: 8, shards: 20 }
-          - { name: 'server 9/20', profile: server-9, package: ./cmd/server, shard: 9, shards: 20 }
-          - { name: 'server 10/20', profile: server-10, package: ./cmd/server, shard: 10, shards: 20 }
-          - { name: 'server 11/20', profile: server-11, package: ./cmd/server, shard: 11, shards: 20 }
-          - { name: 'server 12/20', profile: server-12, package: ./cmd/server, shard: 12, shards: 20 }
-          - { name: 'server 13/20', profile: server-13, package: ./cmd/server, shard: 13, shards: 20 }
-          - { name: 'server 14/20', profile: server-14, package: ./cmd/server, shard: 14, shards: 20 }
-          - { name: 'server 15/20', profile: server-15, package: ./cmd/server, shard: 15, shards: 20 }
-          - { name: 'server 16/20', profile: server-16, package: ./cmd/server, shard: 16, shards: 20 }
-          - { name: 'server 17/20', profile: server-17, package: ./cmd/server, shard: 17, shards: 20 }
-          - { name: 'server 18/20', profile: server-18, package: ./cmd/server, shard: 18, shards: 20 }
-          - { name: 'server 19/20', profile: server-19, package: ./cmd/server, shard: 19, shards: 20 }
-          - { name: 'server 20/20', profile: server-20, package: ./cmd/server, shard: 20, shards: 20 }
-          - { name: 'store 1/14', profile: store-1, package: ./internal/store, shard: 1, shards: 14 }
-          - { name: 'store 2/14', profile: store-2, package: ./internal/store, shard: 2, shards: 14 }
-          - { name: 'store 3/14', profile: store-3, package: ./internal/store, shard: 3, shards: 14 }
-          - { name: 'store 4/14', profile: store-4, package: ./internal/store, shard: 4, shards: 14 }
-          - { name: 'store 5/14', profile: store-5, package: ./internal/store, shard: 5, shards: 14 }
-          - { name: 'store 6/14', profile: store-6, package: ./internal/store, shard: 6, shards: 14 }
-          - { name: 'store 7/14', profile: store-7, package: ./internal/store, shard: 7, shards: 14 }
-          - { name: 'store 8/14', profile: store-8, package: ./internal/store, shard: 8, shards: 14 }
-          - { name: 'store 9/14', profile: store-9, package: ./internal/store, shard: 9, shards: 14 }
-          - { name: 'store 10/14', profile: store-10, package: ./internal/store, shard: 10, shards: 14 }
-          - { name: 'store 11/14', profile: store-11, package: ./internal/store, shard: 11, shards: 14 }
-          - { name: 'store 12/14', profile: store-12, package: ./internal/store, shard: 12, shards: 14 }
-          - { name: 'store 13/14', profile: store-13, package: ./internal/store, shard: 13, shards: 14 }
-          - { name: 'store 14/14', profile: store-14, package: ./internal/store, shard: 14, shards: 14 }
-          - { name: 'other packages', profile: other, package: others, shard: 0, shards: 0 }
+      matrix: ${{ fromJSON(needs.api-plan.outputs.api) }}
     env:
+      MODE: ${{ needs.api-plan.outputs.mode }}
       # Use the test run's instrumentation so listing and execution reuse the
-      # same race/coverage build objects.
-      GO_TEST_LIST_FLAGS: -race -covermode=atomic
+      # same build objects.
+      GO_TEST_LIST_FLAGS: ${{ needs.api-plan.outputs.mode == 'race' && '-race -covermode=atomic' || '-covermode=atomic' }}
+      SHARD_SCOPE: ${{ needs.api-plan.outputs.mode }}
       PACKAGE: ${{ matrix.package }}
       SHARD: ${{ matrix.shard }}
       SHARDS: ${{ matrix.shards }}
@@ -389,17 +394,17 @@ jobs:
 
       # setup-go's dependency-only key is immutable: a hit never saves newly
       # compiled source or race/coverage variants. Layer a source-keyed build
-      # cache over it, with one writer per package group and prior-source fallback.
-      - name: Restore race and coverage build cache
+      # cache over it, with one writer per mode and package group and prior-source fallback.
+      - name: Restore test and coverage build cache
         id: race-cache
         uses: actions/cache/restore@v5
         with:
           path: ~/.cache/go-build
-          key: go-race-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUILD_CACHE_GROUP }}-${{ hashFiles('api/go.mod', 'api/go.sum') }}-${{ hashFiles('api/**/*.go') }}
+          key: go-test-v2-${{ env.MODE }}-${{ runner.os }}-${{ runner.arch }}-${{ env.BUILD_CACHE_GROUP }}-${{ hashFiles('api/go.mod', 'api/go.sum') }}-${{ hashFiles('api/**/*.go') }}
           restore-keys: |
-            go-race-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUILD_CACHE_GROUP }}-${{ hashFiles('api/go.mod', 'api/go.sum') }}-
+            go-test-v2-${{ env.MODE }}-${{ runner.os }}-${{ runner.arch }}-${{ env.BUILD_CACHE_GROUP }}-${{ hashFiles('api/go.mod', 'api/go.sum') }}-
 
-      - name: Test with race detector and coverage
+      - name: Test with coverage (race detector on main)
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/coverage" "$GITHUB_WORKSPACE/timings"
@@ -417,7 +422,9 @@ jobs:
           # plain `go test` would, and the failing tests' output follows a failure.
           events="$GITHUB_WORKSPACE/timings/$PROFILE.jsonl"
           status=0
-          go test -json -race -count=1 -timeout 50m -covermode=atomic \
+          race=()
+          if [ "$MODE" = race ]; then race=(-race); fi
+          go test -json "${race[@]}" -count=1 -timeout 50m -covermode=atomic \
             -coverprofile="$GITHUB_WORKSPACE/coverage/$PROFILE.out" \
             "${selection[@]}" "${packages[@]}" 2>&1 |
             tee "$events" | ../scripts/ci/go-test-json.sh log || status=$?
@@ -435,7 +442,7 @@ jobs:
             exit "$status"
           fi
 
-      - name: Save race and coverage build cache
+      - name: Save test and coverage build cache
         if: ${{ success() && (matrix.shard == 1 || matrix.shard == 0) && steps.race-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v5
         with:
@@ -513,8 +520,9 @@ jobs:
   # file. The shard assignment reads scripts/ci/go-test-timings.json;
   # scripts/ci/update-go-test-timings.sh downloads this artifact from successful
   # main runs for the scheduled refresh PR, or from the run IDs it is given (a
-  # pull request run, or a red run, measures what it ran). Not part of the "API"
-  # gate: a missing timings file must never fail a build.
+  # red run measures what it ran). The file holds race-detector times: refresh it
+  # from main or manual runs, not from pull requests (those run without the race
+  # detector). Not part of the "API" gate: a missing timings file must never fail a build.
   api-timings:
     name: API test timings
     needs: [api-test]
@@ -545,7 +553,7 @@ jobs:
 
   api:
     name: API
-    needs: [api-static, api-test, api-coverage]
+    needs: [api-plan, api-static, api-test, api-coverage]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -693,21 +701,18 @@ jobs:
         run: go test -tags=integration ./internal/objectstore -run TestExternalS3RoundTrip
 
   # The scalability work keeps an old-path/new-path differential test per package (TestScaleP*); they run on both
-  # external dialects here, since a SQLite-only pass does not prove the SQL paths. One job per dialect and package,
-  # each on its own empty database (store tests leave rows the server tests would open), without the race detector
-  # (api-test runs these tests under it on SQLite). Measured 2026-11-17 on PostgreSQL: about 550 of the 1134 store
-  # differentials ran in 10 minutes, so each job gets 50 minutes.
+  # external dialects here, since a SQLite-only pass does not prove the SQL paths. The TestScaleP tests of each
+  # package are sharded (scripts/ci/go-test-shards.json "dialect", packed by the SQLite timings), each shard on its
+  # own empty database (store tests leave rows the server tests would open), without the race detector. The
+  # dialect's known failures (scripts/ci/known-failing-tests.txt) are left out and run in "Known failing (tracked)".
   scale-dialects:
-    name: Scale differentials (${{ matrix.dialect }}, ${{ matrix.package }})
-    needs: [api-static]
-    if: ${{ always() }}
+    name: Scale differentials (${{ matrix.name }})
+    needs: [api-plan]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
-      matrix:
-        dialect: [postgres, mysql]
-        package: [internal/store, cmd/server]
+      matrix: ${{ fromJSON(needs.api-plan.outputs.dialect) }}
     services:
       postgres:
         image: postgres:17-alpine
@@ -746,9 +751,75 @@ jobs:
       - name: Scale differentials
         working-directory: api
         env:
+          GO_TEST_SHARD_FILTER: '^TestScaleP'
+          SHARD_SCOPE: ${{ matrix.dialect }}
           FLOW_TEST_DATABASE_DRIVER: ${{ matrix.dialect }}
           FLOW_TEST_DATABASE_URL: ${{ matrix.dialect == 'postgres' && 'postgres://flow:flow@127.0.0.1:5432/flow?sslmode=disable' || 'mysql://flow:flow@127.0.0.1:3306/flow' }}
-        run: go test ./${{ matrix.package }} -run '^TestScaleP' -count=1 -timeout 50m -v
+          PACKAGE: ${{ matrix.package }}
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ matrix.shards }}
+        run: |
+          set -euo pipefail
+          pattern=$(../scripts/ci/go-test-shard.sh run "$PACKAGE" "$SHARD" "$SHARDS")
+          echo "Shard $SHARD/$SHARDS of the TestScaleP tests of $PACKAGE: $(( $(printf '%s' "$pattern" | tr -cd '|' | wc -c) + 1 )) tests"
+          go test "$PACKAGE" -run "$pattern" -count=1 -timeout 50m -v
+
+  # The tests of scripts/ci/known-failing-tests.txt, each in every scope it is listed
+  # for: race and plain on SQLite (with and without the race detector), postgres and
+  # mysql on those databases. Each test runs alone with a 10-minute timeout, so a hang
+  # ends. This job never fails: its summary lists which tests still fail and which
+  # pass now, and every passing test gets a warning so its line is removed.
+  known-failing:
+    name: Known failing (tracked, ${{ matrix.scope }})
+    needs: [api-plan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: [race, plain, postgres, mysql]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: flow
+          POSTGRES_PASSWORD: flow
+          POSTGRES_DB: flow
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U flow -d flow"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_USER: flow
+          MYSQL_PASSWORD: flow
+          MYSQL_DATABASE: flow
+          MYSQL_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      - name: Permit triggers in the isolated MySQL service
+        if: matrix.scope == 'mysql'
+        continue-on-error: true
+        run: >-
+          docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
+          "SET GLOBAL log_bin_trust_function_creators=1;"
+
+      - name: Run the known-failing tests
+        working-directory: api
+        continue-on-error: true
+        env:
+          SCOPE: ${{ matrix.scope }}
+        run: ../scripts/ci/run-known-failing.sh "$SCOPE"
 
   # coding sessions (track C): the in-sandbox runner and the sandbox image files.
   sandbox-runner:
