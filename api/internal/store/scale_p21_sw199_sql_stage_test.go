@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -20,11 +21,24 @@ func TestScaleP21SW199SQLStageMigration(t *testing.T) {
 		boundedMetadataStagingSchemaVersion, "transactional bounded metadata write staging").Scan(&recorded); err != nil || recorded != 1 {
 		t.Fatal("staging schema did not run through versioned migration", recorded, err)
 	}
+	for _, created := range []error{fixture.createBoundedMetadataStagingChunksSchema(t.Context()), fixture.createBoundedMetadataStagingChunksSchema(t.Context())} {
+		if created != nil {
+			t.Fatal("staging chunk schema is not idempotent", created)
+		}
+	}
+	if err := fixture.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM schema_migrations WHERE version=? AND name=?`,
+		boundedMetadataStagingChunksSchemaVersion, "bounded metadata write staging chunks").Scan(&recorded); err != nil || recorded != 1 {
+		t.Fatal("staging chunk schema did not run through versioned migration", recorded, err)
+	}
 	var rows int
-	if err := fixture.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM bounded_metadata_write_stage`).Scan(&rows); err != nil || rows != 0 {
+	if err := fixture.db.QueryRowContext(t.Context(), `SELECT (SELECT COUNT(*) FROM bounded_metadata_write_stage)+(SELECT COUNT(*) FROM bounded_metadata_write_chunks)`).Scan(&rows); err != nil || rows != 0 {
 		t.Fatal("staging migration created persistent input", rows, err)
 	}
 	if fixture.dialect == "mysql" {
+		var chunkColumn int
+		if err := fixture.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bounded_metadata_write_chunks' AND column_name='chunk' AND character_set_name='utf8mb4' AND collation_name='utf8mb4_bin'`).Scan(&chunkColumn); err != nil || chunkColumn != 1 {
+			t.Fatal("staging chunks inherited a lossy database character set", chunkColumn, err)
+		}
 		var unicodeColumns int
 		if err := fixture.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bounded_metadata_write_stage' AND column_name IN ('data','content') AND character_set_name='utf8mb4' AND collation_name='utf8mb4_bin'`).Scan(&unicodeColumns); err != nil || unicodeColumns != 2 {
 			t.Fatal("staging payload inherited a lossy database character set", unicodeColumns, err)
@@ -46,27 +60,52 @@ func TestScaleP21SW199SQLStageDialectSQL(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			expression := column + " || ?"
-			if dialect == "mysql" {
-				expression = "CONCAT(" + column + ",CONVERT(CAST(? AS BINARY) USING utf8mb4))"
+			part, chunk := "0", "?"
+			if column == "content" {
+				part = "1"
 			}
-			want := "UPDATE bounded_metadata_write_stage SET " + column + "=" + expression + " WHERE operation_id=?"
+			if dialect == "mysql" {
+				chunk = "CONVERT(CAST(? AS BINARY) USING utf8mb4)"
+			}
+			// One row per chunk: an append never rewrites earlier input.
+			want := "INSERT INTO bounded_metadata_write_chunks(operation_id,part,seq,chunk) VALUES(?," + part + ",?," + chunk + ")"
 			if query != want {
 				t.Fatal("staging append changed byte interpretation or operation scope", dialect, query, want)
 			}
 		}
-		value, err := stage.valueSQL("data", true)
-		if err != nil {
-			t.Fatal(err)
+		chunk := func(seq int) string {
+			return "(SELECT chunk FROM bounded_metadata_write_chunks WHERE operation_id=bounded_metadata_write_stage.operation_id AND part=0 AND seq=" + fmt.Sprint(seq) + ")"
 		}
-		expression := "CAST(data AS BLOB)"
-		if dialect == "mysql" {
-			expression = "CAST(data AS BINARY)"
-		} else if dialect == "postgres" {
-			expression = "convert_to(data,'UTF8')"
-		}
-		if value != "(SELECT "+expression+" FROM bounded_metadata_write_stage WHERE operation_id=?)" {
-			t.Fatal("staging final metadata value changed binary representation", dialect, value)
+		for _, chunks := range []int{0, 1, 2, 64, 65, 130} {
+			stage.chunks[0] = chunks
+			value, err := stage.valueSQL("data", true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var parts []string
+			for seq := range chunks {
+				parts = append(parts, chunk(seq))
+			}
+			assembled := "''"
+			switch {
+			case chunks == 1:
+				assembled = parts[0]
+			case chunks > 1 && chunks <= 64:
+				assembled = "concat(" + strings.Join(parts, ",") + ")"
+			case chunks == 65:
+				assembled = "concat(concat(" + strings.Join(parts[:64], ",") + ")," + parts[64] + ")"
+			case chunks == 130:
+				assembled = "concat(concat(" + strings.Join(parts[:64], ",") + "),concat(" + strings.Join(parts[64:128], ",") + "),concat(" + strings.Join(parts[128:], ",") + "))"
+			}
+			expression := "CAST(" + assembled + " AS BLOB)"
+			if dialect == "mysql" {
+				expression = "CAST(" + assembled + " AS BINARY)"
+			} else if dialect == "postgres" {
+				expression = "convert_to(" + assembled + ",'UTF8')"
+			}
+			if value != "(SELECT "+expression+" FROM bounded_metadata_write_stage WHERE operation_id=?)" {
+				t.Fatal("staging final metadata value changed binary representation or chunk order", dialect, chunks, value)
+			}
 		}
 	}
 }
@@ -164,7 +203,7 @@ func TestScaleP21SW199SQLStageCancellationAndRollback(t *testing.T) {
 	defer cancel()
 	appends := 0
 	ctx = WithSQLStatementObserver(ctx, func(query string) {
-		if strings.HasPrefix(query, "UPDATE bounded_metadata_write_stage SET data=") {
+		if strings.HasPrefix(query, "INSERT INTO bounded_metadata_write_chunks(operation_id,part,seq,chunk) VALUES(?,0,") {
 			appends++
 			if appends == 2 {
 				cancel()
@@ -185,7 +224,7 @@ func TestScaleP21SW199SQLStageCancellationAndRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count int
-	if err := fixture.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM bounded_metadata_write_stage WHERE operation_id=?`, stage.id).Scan(&count); err != nil || count != 0 {
+	if err := fixture.db.QueryRowContext(t.Context(), `SELECT (SELECT COUNT(*) FROM bounded_metadata_write_stage WHERE operation_id=?)+(SELECT COUNT(*) FROM bounded_metadata_write_chunks WHERE operation_id=?)`, stage.id, stage.id).Scan(&count); err != nil || count != 0 {
 		t.Fatal("rollback committed partial staging data", count, err)
 	}
 }

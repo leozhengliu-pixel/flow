@@ -117,6 +117,7 @@ const (
 	metadataSQLStageWriteRow
 	metadataSQLStageWriteSearch
 	metadataSQLStageWriteRoot
+	metadataSQLStageDeleteChunks
 )
 
 type metadataSQLStageStatementKey struct{}
@@ -131,19 +132,21 @@ func (s *metadataSQLWriteStage) statementQuery(operation metadataSQLStageOperati
 	case metadataSQLStageInsert:
 		return "INSERT INTO bounded_metadata_write_stage(operation_id,data,content) VALUES(?,'','')", nil
 	case metadataSQLStageAppendData, metadataSQLStageAppendSearch:
-		column := "data"
+		part := "0"
 		if operation == metadataSQLStageAppendSearch {
-			column = "content"
+			part = "1"
 		}
-		expression := column + " || ?"
+		chunk := "?"
 		if s.tx.dialect == "mysql" {
 			// Interpret the original UTF-8 parameter bytes explicitly;
 			// the connection/database defaults must not transcode them.
-			expression = "CONCAT(" + column + ",CONVERT(CAST(? AS BINARY) USING utf8mb4))"
+			chunk = "CONVERT(CAST(? AS BINARY) USING utf8mb4)"
 		}
-		return "UPDATE bounded_metadata_write_stage SET " + column + "=" + expression + " WHERE operation_id=?", nil
+		return "INSERT INTO bounded_metadata_write_chunks(operation_id,part,seq,chunk) VALUES(?," + part + ",?," + chunk + ")", nil
 	case metadataSQLStageDelete:
 		return "DELETE FROM bounded_metadata_write_stage WHERE operation_id=?", nil
+	case metadataSQLStageDeleteChunks:
+		return "DELETE FROM bounded_metadata_write_chunks WHERE operation_id=?", nil
 	case metadataSQLStageWriteRow:
 		value, err := s.valueSQL("data", true)
 		if err != nil {
@@ -197,19 +200,19 @@ func metadataSQLStageStatementInContext(ctx context.Context, tx *sqlTx, query st
 			return nil, ErrBoundedMetadataCoverage
 		}
 		expected = []any{s.id}
-	case metadataSQLStageDelete:
+	case metadataSQLStageDelete, metadataSQLStageDeleteChunks:
 		expected = []any{s.id}
 	case metadataSQLStageAppendData, metadataSQLStageAppendSearch:
-		if !s.inserted || len(args) != 2 || args[1] != s.id {
-			return nil, ErrBoundedMetadataCoverage
-		}
-		part, ok := args[0].(string)
-		if !ok || len(part) == 0 || len(part) > metadataSQLStageMaxChunkBytes || !utf8.ValidString(part) || strings.IndexByte(part, 0) >= 0 {
-			return nil, ErrBoundedMetadataCoverage
-		}
 		column := 0
 		if statement.operation == metadataSQLStageAppendSearch {
 			column = 1
+		}
+		if !s.inserted || len(args) != 3 || args[0] != s.id || args[1] != s.chunks[column] {
+			return nil, ErrBoundedMetadataCoverage
+		}
+		part, ok := args[2].(string)
+		if !ok || len(part) == 0 || len(part) > metadataSQLStageMaxChunkBytes || !utf8.ValidString(part) || strings.IndexByte(part, 0) >= 0 {
+			return nil, ErrBoundedMetadataCoverage
 		}
 		if s.consumed[column] || len(part) > s.expectedBytes(column)-s.written[column] {
 			return nil, ErrBoundedMetadataCoverage
