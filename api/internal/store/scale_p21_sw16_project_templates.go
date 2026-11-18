@@ -140,6 +140,21 @@ func (s *SQLiteStore) BeginProjectTemplatesRead(ctx context.Context, workspace s
 			}
 			return nil, false, nil
 		}
+		if s.metadataResidency != nil {
+			// The resident image holds no project templates (SW530: bounded
+			// answered null). Read the exact installed value from the
+			// workspace's installed logical source instead.
+			installed, done, found, err := s.installedProjectTemplates(ctx, workspace)
+			if err != nil || !found {
+				release()
+				return nil, found, err
+			}
+			admitted := release
+			templates, release = installed, func() {
+				done()
+				admitted()
+			}
+		}
 		return &ProjectTemplatesRead{templates: templates, release: release}, true, nil
 	}
 }
@@ -420,4 +435,39 @@ func scaleP21SW16CloneTemplateValue(value reflect.Value) reflect.Value {
 	default:
 		return value
 	}
+}
+
+// installedProjectTemplates decodes the projectTemplates field of the
+// workspace's installed logical source, charged to its own resource read;
+// release returns the charge once the response is written.
+func (s *SQLiteStore) installedProjectTemplates(ctx context.Context, workspace string) (_ []domain.ProjectTemplate, release func(), found bool, err error) {
+	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)
+	source, found, err := s.BeginInstalledMetadataRead(ctx, workspace)
+	if err != nil || !found {
+		return nil, nil, found, err
+	}
+	owner := &ResourceRead{store: s}
+	release = func() {
+		source.Close()
+		owner.Close()
+	}
+	var templates []domain.ProjectTemplate
+	err = source.source.VisitFields(ctx, func(name string, field metadataLogicalNode) error {
+		if name != "projectTemplates" {
+			return nil
+		}
+		value, err := owner.node(ctx, field, false)
+		if err == nil {
+			templates = value.Interface().([]domain.ProjectTemplate)
+		}
+		return err
+	})
+	if err == nil {
+		err = ctx.Err()
+	}
+	if err != nil {
+		release()
+		return nil, nil, true, err
+	}
+	return templates, release, true, nil
 }
