@@ -181,7 +181,7 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 			if err != nil {
 				return nil
 			}
-			typed, err := resourceWindowTypedJSONWork(ctx, resolved, kind)
+			typed, err := largeRowTypedJSONWork(ctx, scratch, resolved, kind)
 			if err != nil {
 				return nil
 			}
