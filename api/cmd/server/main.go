@@ -5165,17 +5165,35 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		ctx = store.WithIssueRenumbering(ctx)
 	}
+	releaseBatch := func() {}
+	releaseResults := func() {}
+	defer func() { releaseResults() }()
 	if bounded {
 		// The dedicated bounded writer owns the batch's selected inputs
 		// until the write is published.
 		owned, closeOwned := beginIndependentMetadataOutputReads(ctx)
 		defer closeOwned()
+		releaseBatch = closeOwned
 		ctx = store.ContextWithIssueBatchUpdate(owned, input.Update)
 	}
 	var affected []domain.IssueVersion
+	keepResults := func() error {
+		kept, closeKept := beginIndependentMetadataOutputReads(r.Context())
+		if err := s.store.KeepIssueResults(kept, updated, affected); err != nil {
+			closeKept()
+			return err
+		}
+		releaseResults = closeKept
+		return nil
+	}
 	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.batch_updated", idgen.New("issue_batch_"), input, func(data *domain.Bootstrap) error {
 		changed := false
 		updated, affected = nil, nil
+		if bounded {
+			// Only the latest callback's result reaches this HTTP response.
+			// Earlier attempts remain owned by the batch scope itself.
+			releaseResults()
+		}
 		versionsBefore := make(map[string]int64, len(data.Issues))
 		for _, issue := range data.Issues {
 			versionsBefore[issue.ID] = issue.Version
@@ -5207,6 +5225,11 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 			appendIssueNotifications(data, *issue, activity, nil)
 		}
 		if !changed {
+			if bounded {
+				if err := keepResults(); err != nil {
+					return err
+				}
+			}
 			return store.ErrNoMutation
 		}
 		// A later edit of the batch can change an earlier one (an auto-closed
@@ -5221,9 +5244,17 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 				affected = append(affected, domain.IssueVersion{ID: issue.ID, Version: issue.Version})
 			}
 		}
+		if bounded {
+			return keepResults()
+		}
 		return nil
 	})
 	if err == nil {
+		if bounded {
+			// Response admission already succeeded before commit. Release
+			// attempt-only inputs before triage reads or writes these rows.
+			releaseBatch()
+		}
 		if triageIntelligenceWorkspaceEnabled(s, workspaceKey(r)) {
 			issueIDs := make([]string, len(updated))
 			for index := range updated {
