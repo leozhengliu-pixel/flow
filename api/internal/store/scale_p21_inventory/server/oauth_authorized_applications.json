@@ -1,18 +1,20 @@
 {
   "source": "server/oauth_authorized_applications.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "listAuthorizedApplications": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
-        "WorkspaceMetadata"
+        "withColdMetadataRequest"
       ],
       "temperature": "cold",
       "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
       "callers": [
         "GET /api/oauth/authorized-applications (api/cmd/server/oauth_platform.go:36)"
-      ]
+      ],
+      "coldDispatch": "server/oauth_authorized_applications.go:listAuthorizedApplications",
+      "reason": "COLD production route. The workspace access and admin checks run first on the server's store (refusals take no cold slot); flag off withColdMetadataRequest runs listAuthorizedApplicationsWithStore on the server's store literally. Bounded, GET /api/oauth/authorized-applications is registered in scaleP21ColdRoutes, so authorization's whole-workspace projection and the handler share one replica cold slot; the handler refreshes the borrowed facade to the latest installed generation and runs the literal legacy listing on it (every member's grants from WorkspaceMetadata, the folded MCP entry with its members/permissions/last use, installed entries from ListApplications, the application and dynamic-client lookups) through response encoding. Bounded before this, its own WorkspaceMetadata read returned the resident policy copy without oauthAuthorizations and the settings page listed no authorized applications (SW410 control run). TestScaleP21SW430OAuthColdRoutes compares the whole response through real cookie/Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded: owner/admin/member-forbidden/unknown-workspace/empty, revoked, app-actor, unknown-client, duplicate-client, large, installed, inactive and orphan entries, MCP folding, after revocations, after token exchanges and token use (lastUsedAt), plus rows, events and installed image == reload."
     },
     "revokeMCPAuthorizations": {
       "owner": "P21",
