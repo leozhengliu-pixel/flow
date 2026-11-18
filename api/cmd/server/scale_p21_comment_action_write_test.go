@@ -113,6 +113,12 @@ func (c scaleP21CommentActionSetup) seed(t *testing.T, change func(*domain.Boots
 			if data.Issues[index].ID == c.issue {
 				data.Issues[index].ParentID = &parent
 				data.Issues[index].Priority = 3
+				// Created long before every run: an edit by its creator within
+				// three minutes of creation adds no history, so a wall-clock
+				// creation time made owner-accepts-status depend on how long
+				// the earlier cases took (legacy inside the window, bounded
+				// after it under -race).
+				data.Issues[index].CreatedAt = c.at
 				// The member edits through a direct grant.
 				data.Issues[index].Permissions = append(data.Issues[index].Permissions, domain.IssuePermission{
 					ID: "ca-member-editor", IssueID: c.issue, SubjectType: "user", SubjectID: c.member.ID, Role: "editor", CreatedAt: c.at, UpdatedAt: c.at})
