@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -148,7 +149,7 @@ const (
 	chatRejectNonce               = "nonce"                // missing nonce
 	chatRejectSignature           = "signature"            // no signature scheme matches the raw body
 	chatRejectTimestampMissing    = "timestamp_missing"    // signed, but without a timestamp header
-	chatRejectTimestampUnparsable = "timestamp_unparsable" // signed, but the timestamp is not a Unix time
+	chatRejectTimestampUnparsable = "timestamp_unparsable" // signed, but the timestamp is neither a Unix time nor a Go time text
 	chatRejectTimestampStale      = "timestamp_stale"      // signed, older than chatCallbackWindow
 	chatRejectTimestampFuture     = "timestamp_future"     // signed, further ahead than chatCallbackWindow
 	chatRejectToken               = "token"                // schema 2.0 header.token is not the verification token
@@ -203,7 +204,8 @@ type chatTimestampCheck struct {
 	Length  int
 	// DigitsOnly: the raw header value is ASCII digits and nothing else.
 	DigitsOnly bool
-	// Unit is s, ms, us or ns, or empty when the value is not a Unix time.
+	// Unit is s, ms, us or ns for a Unix time, go_time for a Go time.Time
+	// text, or empty when the value is neither.
 	Unit string
 	// SkewSeconds is now minus the timestamp, rounded to seconds: positive
 	// when the timestamp is in the past. Meaningful only with a Unit.
@@ -223,13 +225,30 @@ func (c chatTimestampCheck) attrs() []any {
 	return append(attrs, "signature_valid", c.SignatureValid)
 }
 
+// chatGoTimeStamp is the text of Go's time.Time.String(): date, time with an
+// optional fraction, numeric offset, zone abbreviation (letters, or the offset
+// itself such as "+08" when the zone has no name) and, for a time read from the
+// clock, the monotonic reading String appends ("m=+247318.326578241", always
+// nine fraction digits). Card callbacks from the Feishu web client carry their
+// X-Lark-Request-Timestamp in this form, signed as such:
+// "2026-09-25 11:04:12.971178746 +0800 CST m=+247318.326578241".
+var chatGoTimeStamp = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) ([+-]\d{4}) (?:[A-Za-z]{2,6}|[+-]\d{2}|[+-]\d{4})(?: m=[+-]\d+\.\d{9})?$`)
+
 // chatCallbackTimestamp parses the request timestamp: a Unix time in seconds,
 // milliseconds, microseconds or nanoseconds, told apart by magnitude (each is
 // a thousand times the last, so for any date from 1973 to 5138 only one
-// reading is plausible), optionally with a decimal fraction, surrounding
-// whitespace ignored. It also returns the unit it read.
+// reading is plausible), optionally with a decimal fraction, or a Go
+// time.Time text (chatGoTimeStamp, read by its numeric offset; the monotonic
+// reading is process-relative and ignored); surrounding whitespace ignored.
+// It also returns the unit it read.
 func chatCallbackTimestamp(value string) (time.Time, string, bool) {
 	value = strings.TrimSpace(value)
+	if len(value) <= 96 {
+		if match := chatGoTimeStamp.FindStringSubmatch(value); match != nil {
+			at, err := time.Parse("2006-01-02 15:04:05 -0700", match[1]+" "+match[2])
+			return at, "go_time", err == nil
+		}
+	}
 	whole, fraction, hasFraction := strings.Cut(value, ".")
 	if len(value) > 32 || !chatASCIIDigits(whole) || hasFraction && !chatASCIIDigits(fraction) {
 		return time.Time{}, "", false
