@@ -220,13 +220,9 @@ func scaleP21TriageNormalize(t *testing.T, value any, started time.Time) string 
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := scaleP21TriageStamp.ReplaceAllString(string(raw), "<stamp>")
-	return scaleP21TriageClock.ReplaceAllStringFunc(text, func(clock string) string {
-		if at, err := time.Parse(time.RFC3339Nano, clock); err == nil && !at.Before(started) {
-			return "<now>"
-		}
-		return clock
-	})
+	// Exactly scaleP21TriageStamp then scaleP21TriageClock (see
+	// TestScaleP21NormalizeScanMatchesRegexp), without regexp's cost.
+	return scaleP21NormalizeStampsAndClocks(string(raw), started)
 }
 
 func (f *scaleP21TriageWriterFixture) differential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []scaleP21TriageOutcome {
