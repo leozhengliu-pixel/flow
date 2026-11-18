@@ -101,6 +101,16 @@ describe('DocumentPage header', () => {
     expect(props.onReload).not.toHaveBeenCalled()
   })
 
+  it('mounts the editor only once a document from a cached snapshot has its server body', () => {
+    const cached = { ...flowDocument, content: '' }
+    const { rerender, props } = renderPage({ document: cached, bodyPending: true })
+    expect(screen.getByRole('status')).toHaveTextContent('Loading document')
+    expect(screen.queryByLabelText('Document content')).not.toBeInTheDocument()
+    const fresh = { ...flowDocument, content: 'Server body' }
+    rerender(<I18nProvider><DocumentPage {...props} document={fresh} bodyPending={false}/></I18nProvider>)
+    expect(screen.getByLabelText('Document content')).toHaveTextContent('Server body')
+  })
+
   it('has no Activity panel and, no docked agent rail or header chat button', () => {
     const { container } = renderPage()
     expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument()
