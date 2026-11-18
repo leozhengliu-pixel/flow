@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_integration_delivery.go",
+  "unmigrated": 1,
+  "consumers": {
+    "processBoundedIntegrationDelivery": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": ["BeginIntegrationDeliveryRead", "MutateIntegrationDelivery", "BeginMetadataJSONRead"],
+      "temperature": "hot",
+      "temperatureReason": "Network delivery claim, response and retry worker runs from the delivery scheduler.",
+      "callers": ["server/enterprise_identity_integrations.go:processIntegrationDelivery"],
+      "reason": "Mounted bounded worker and independently owned network/result encoding; actual worker, retry, publication and permission differential proof remains pending."
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_integration_envelope_owned.go",
+  "unmigrated": 1,
+  "consumers": {
+    "prepareBoundedIntegrationEnvelope": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": ["BeginMetadataJSONRead"],
+      "temperature": "hot",
+      "temperatureReason": "Every outbound integration delivery decodes and re-encodes its supported JSON envelope.",
+      "callers": ["server/scale_p21_integration_delivery.go:processBoundedIntegrationDelivery"],
+      "reason": "Separate generic decode and encode owners are mounted over the proven JSON primitive; delivery envelope and output-lifetime proof is pending."
+    }
+  }
+}

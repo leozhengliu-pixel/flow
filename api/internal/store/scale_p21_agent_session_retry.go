@@ -11,6 +11,10 @@ import (
 // retries keep its first-occurrence replacement/deletion and unknown-stamp
 // installation semantics while framing the selected canonical row from disk.
 func (s *SQLiteStore) refreshAgentSessionLifecycleConflict(ctx context.Context, workspace string) func(error) error {
+	return s.refreshMetadataLifecycleConflict(ctx, workspace, "agentSessions", legacySessionCanonicalRecord)
+}
+
+func (s *SQLiteStore) refreshMetadataLifecycleConflict(ctx context.Context, workspace, kind string, decode func(context.Context, *SQLiteStore, *metadataLogicalBuilder, legacySessionJSONPart) (metadataLogicalNode, error)) func(error) error {
 	ordinary := s.refreshConflictedLogicalMetadata(ctx, workspace)
 	return func(conflict error) error {
 		keys, found := conflictedMetadataKeys(conflict)
@@ -19,7 +23,7 @@ func (s *SQLiteStore) refreshAgentSessionLifecycleConflict(ctx context.Context, 
 		}
 		var sessions, other []metadataRecordKey
 		for _, key := range keys {
-			if key.field == "agentSessions" {
+			if key.field == kind {
 				sessions = append(sessions, key)
 			} else {
 				other = append(other, key)
@@ -70,8 +74,8 @@ func (s *SQLiteStore) refreshAgentSessionLifecycleConflict(ctx context.Context, 
 				return err
 			}
 			var size int64
-			err := tx.QueryRowContext(ctx, "SELECT "+owner.byteLength("data")+" FROM workspace_metadata_records WHERE workspace_key=? AND field='agentSessions' AND record_key=?",
-				workspace, key.key).Scan(&size)
+			err := tx.QueryRowContext(ctx, "SELECT "+owner.byteLength("data")+" FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?",
+				workspace, kind, key.key).Scan(&size)
 			if errors.Is(err, sql.ErrNoRows) {
 				replacements[key.key] = metadataLogicalNode{}
 				continue
@@ -88,14 +92,14 @@ func (s *SQLiteStore) refreshAgentSessionLifecycleConflict(ctx context.Context, 
 					return err
 				}
 				defer spool.Close()
-				reader := &canonicalMetadataReader{ctx: ctx, tx: tx, workspace: workspace, key: RecordKey{"agentSessions", key.key}, size: size}
+				reader := &canonicalMetadataReader{ctx: ctx, tx: tx, workspace: workspace, key: RecordKey{kind, key.key}, size: size}
 				if count, err := io.CopyBuffer(spool, reader, make([]byte, metadataRecordChunkBytes)); err != nil || count != size {
 					if err == nil {
 						err = io.ErrUnexpectedEOF
 					}
 					return err
 				}
-				node, err := legacySessionCanonicalRecord(ctx, s, frames, legacySessionSpoolPart(spool))
+				node, err := decode(ctx, s, frames, legacySessionSpoolPart(spool))
 				if err != nil {
 					return err
 				}
@@ -111,7 +115,7 @@ func (s *SQLiteStore) refreshAgentSessionLifecycleConflict(ctx context.Context, 
 		}
 		candidate, err := source.Transform(ctx, func(name string, original metadataLogicalNode) (metadataAggregateNode, bool, error) {
 			var current metadataAggregateNode = metadataAggregateStoredNode{value: original}
-			if name != "agentSessions" {
+			if name != kind {
 				return current, false, nil
 			}
 			for _, key := range sessions {

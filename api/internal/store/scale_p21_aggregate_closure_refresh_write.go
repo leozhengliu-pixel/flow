@@ -47,6 +47,7 @@ func (s *SQLiteStore) persistMetadataLogicalRefresh(ctx context.Context, tx *sql
 				if err != nil {
 					return err
 				}
+				defer root.Close()
 				shapes, err = root.shapes()
 				return err
 			}

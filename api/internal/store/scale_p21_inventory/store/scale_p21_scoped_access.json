@@ -1,7 +1,16 @@
 {
   "source": "store/scale_p21_scoped_access.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
+    "mutateWorkspaceScopedWithAggregate": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": ["MutateWorkspaceWithAggregate"],
+      "reason": "Extracted shared scoped mutation kernel adds ordinal workflow and delivery profiles. Pending Wave36 differential, persistent and race proof; no downstream consumer or activation is certified by this provisional registration.",
+      "temperature": "hot",
+      "temperatureReason": "Shared writer reached by workflow execution and integration delivery.",
+      "callers": ["MutateWorkspaceScopedWithAggregate", "bounded workflow writer", "bounded integration delivery writer"]
+    },
     "BoundedMetadataViewForTesting": {
       "owner": "P21",
       "status": "reviewed",

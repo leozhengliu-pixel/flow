@@ -154,6 +154,7 @@ func (s *SQLiteStore) persistScopedCompleteFields(ctx context.Context, tx *sqlTx
 	if err != nil {
 		return err
 	}
+	defer root.Close()
 	shapes, err := root.shapes()
 	if err != nil {
 		return err
@@ -198,6 +199,7 @@ func (s *SQLiteStore) ensureScopedMetadataShape(ctx context.Context, tx *sqlTx, 
 	if err != nil {
 		return err
 	}
+	defer root.Close()
 	shapes, err := root.shapes()
 	if err != nil {
 		return err

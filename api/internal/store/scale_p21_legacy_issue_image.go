@@ -68,45 +68,13 @@ func (n legacyIssueImageNode) nodeValue(ctx context.Context, limit int) (reflect
 }
 func (n legacyIssueImageNode) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
 	ordinal := 0
-	return n.store.scanLegacyIssueRows(ctx, n.tx, n.workspace, func(row *legacyIssueRow) error {
+	return n.store.scanLegacyIssueFrames(ctx, n.tx, n.workspace, func(row legacyIssueFrame) error {
 		if base := legacyRecordBaseCapture(ctx); base != nil {
-			if err := base.RememberStored(ctx, "issue", "", row.PhysicalID, row.Record.raw); err != nil {
+			if err := base.RememberStoredHash(ctx, "issue", "", row.PhysicalID, row.StoredHash); err != nil {
 				return err
 			}
 		}
-		value := reflect.ValueOf(row.Record.issue)
-		cost, err := metadataAggregateNativeCost(ctx, value, 0)
-		if err != nil {
-			return err
-		}
-		if cost > (metadataWorkBytes-(64<<10))/2 {
-			return ErrMetadataWorkBudget
-		}
-		// Scanner admission covers the decoded row. The temporary typed frame
-		// and its import codec have their own allowance until visit returns.
-		work := &ResourceRead{store: n.store}
-		defer work.Close()
-		if err := work.reserve(ctx, cost*2+64<<10); err != nil {
-			return err
-		}
-		frame, err := newMetadataLogicalBuilder(ctx)
-		if err != nil {
-			return err
-		}
-		defer frame.Close()
-		// Only this fresh standard JSON decode supplies location receipts.
-		// Native caller/source values never pass through this audit.
-		if err := frame.auditJSONLocations(value); err != nil {
-			return err
-		}
-		node, err := frame.writeValue(value, 0, false)
-		if err != nil {
-			return err
-		}
-		if node.unavailable || node.blocked {
-			return ErrBoundedMetadataCoverage
-		}
-		if err := visit(reflect.ValueOf(ordinal), metadataAggregateStoredNode{value: node}); err != nil {
+		if err := visit(reflect.ValueOf(ordinal), metadataAggregateStoredNode{value: row.Node}); err != nil {
 			return err
 		}
 		ordinal++

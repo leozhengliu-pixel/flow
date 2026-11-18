@@ -10,6 +10,7 @@ import (
 	"io"
 	"reflect"
 	"slices"
+	"sync"
 	"time"
 
 	"flow/api/internal/domain"
@@ -23,6 +24,7 @@ type metadataInlineRootPage struct {
 // Root scanning rereads short keys after skipping each value. Keep two fixed
 // pages so those lookups do not add one SQL statement per metadata property.
 type metadataInlineRootReader struct {
+	ctx    context.Context
 	source io.ReaderAt
 	size   int64
 	pages  [2]metadataInlineRootPage
@@ -30,11 +32,21 @@ type metadataInlineRootReader struct {
 }
 
 func (r *metadataInlineRootReader) ReadAt(out []byte, offset int64) (int, error) {
+	if r.ctx != nil {
+		if err := r.ctx.Err(); err != nil {
+			return 0, err
+		}
+	}
 	if offset < 0 {
 		return 0, ErrMetadataRecordQuery
 	}
 	read := 0
 	for len(out) > 0 && offset < r.size {
+		if r.ctx != nil {
+			if err := r.ctx.Err(); err != nil {
+				return read, err
+			}
+		}
 		start := offset / metadataRecordChunkBytes * metadataRecordChunkBytes
 		var page []byte
 		for _, cached := range r.pages {
@@ -68,9 +80,58 @@ func (r *metadataInlineRootReader) ReadAt(out []byte, offset int64) (int, error)
 }
 
 type metadataInlineRoot struct {
-	ctx    context.Context
-	source *metadataInlineRootReader
-	fields map[string]metadataCollectionRange
+	ctx       context.Context
+	source    *metadataInlineRootReader
+	fields    map[string]metadataCollectionRange
+	store     *SQLiteStore
+	tx        *sqlTx
+	workspace string
+	spool     *RecordSpool
+	work      *ResourceRead
+	closeOnce sync.Once
+	closed    bool
+}
+
+func (r *metadataInlineRoot) Close() {
+	if r == nil {
+		return
+	}
+	r.closeOnce.Do(func() {
+		r.closed = true
+		r.source, r.fields = nil, nil
+		if r.spool != nil {
+			_ = r.spool.Close()
+			r.spool = nil
+		}
+		if r.work != nil {
+			r.work.Close()
+			r.work = nil
+		}
+		r.ctx, r.store, r.tx, r.workspace = nil, nil, nil, ""
+	})
+}
+
+type metadataInlineRootCaptureKey struct{}
+
+// The owner keeps root alive and guarantees no workspace-state write between
+// capture and the borrowing call. Row-only fast writes may precede that call.
+func withMetadataInlineRootCapture(ctx context.Context, root *metadataInlineRoot) context.Context {
+	return context.WithValue(ctx, metadataInlineRootCaptureKey{}, root)
+}
+
+func (r *metadataInlineRoot) borrow(ctx context.Context) (_ *metadataInlineRoot, err error) {
+	borrowed := &metadataInlineRoot{
+		ctx: ctx, fields: r.fields, store: r.store, tx: r.tx, workspace: r.workspace,
+		work: &ResourceRead{store: r.store},
+	}
+	// The shared map is immutable and remains charged to the original owner.
+	// Each synchronous borrower owns its descriptor and two cached pages.
+	if err := borrowed.work.reserve(ctx, 64<<10); err != nil {
+		borrowed.Close()
+		return nil, err
+	}
+	borrowed.source = &metadataInlineRootReader{ctx: ctx, source: r.spool, size: r.source.size}
+	return borrowed, nil
 }
 
 func (r *metadataInlineRoot) scanner(part metadataCollectionRange) *metadataCollectionScanner {
@@ -93,13 +154,75 @@ func (r *metadataInlineRoot) shortString(part metadataCollectionRange) (string, 
 	return value, err
 }
 
-func (s *SQLiteStore) scanMetadataInlineRoot(ctx context.Context, tx *sqlTx, workspace string, size int64) (*metadataInlineRoot, error) {
+func (s *SQLiteStore) scanMetadataInlineRoot(ctx context.Context, tx *sqlTx, workspace string, size int64) (_ *metadataInlineRoot, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s == nil || tx == nil || tx.database != s.db || tx.dialect != s.dialect || workspace == "" || size < 0 {
+		return nil, ErrMetadataRecordQuery
+	}
+	if s.maxStateBytes > 0 && size > int64(s.maxStateBytes) {
+		return nil, fmt.Errorf("workspace state exceeds %d bytes", s.maxStateBytes)
+	}
+	if captured, _ := ctx.Value(metadataInlineRootCaptureKey{}).(*metadataInlineRoot); captured != nil {
+		if captured.closed || captured.spool == nil || captured.source == nil ||
+			captured.store != s || captured.tx != tx || captured.workspace != workspace || captured.source.size != size {
+			return nil, ErrMetadataRecordQuery
+		}
+		return captured.borrow(ctx)
+	}
+	root := &metadataInlineRoot{
+		ctx: ctx, store: s, tx: tx, workspace: workspace,
+		fields: map[string]metadataCollectionRange{}, work: &ResourceRead{store: s},
+	}
+	defer func() {
+		if err != nil {
+			root.Close()
+		}
+	}()
+	// Fixed copy/parser scratch, two cached pages and the closed root-name
+	// range map stay admitted until the captured snapshot is released.
+	pageBytes := metadataRecordChunkBytes
+	event := integrationDeliveryStreamEvent(ctx)
+	if (event == "integration_delivery.claimed" || event == "integration_delivery.retry") && size > metadataRecordChunkBytes {
+		pageBytes = int(min(int64(MetadataRecordPageMaxBytes), size))
+	}
+	// Larger SQL reads keep their driver/Scan copies and copy buffer owned;
+	// the two file-backed parser pages remain the ordinary fixed size.
+	scratch := uint64(128<<10) + uint64(pageBytes-metadataRecordChunkBytes)*4
+	if err := root.work.reserve(ctx, scratch); err != nil {
+		return nil, err
+	}
+	root.spool, err = newMetadataLogicalRecordSpool(s.metadataLogicalScratchContext(ctx, workspace))
+	if err != nil {
+		return nil, err
+	}
+	if !root.spool.CanAppend(size) {
+		return nil, ErrRecordSpoolBudget
+	}
 	snapshot := &metadataCollectionSnapshot{store: s, tx: tx, workspace: workspace}
-	source := &metadataSnapshotReaderAt{ctx: ctx, snapshot: snapshot, size: size}
-	root := &metadataInlineRoot{ctx: ctx, source: &metadataInlineRootReader{source: source, size: size}, fields: map[string]metadataCollectionRange{}}
+	source := &metadataSnapshotReaderAt{ctx: ctx, snapshot: snapshot, size: size, pageBytes: pageBytes}
+	count, err := io.CopyBuffer(root.spool, io.NewSectionReader(source, 0, size), make([]byte, pageBytes))
+	if err != nil {
+		return nil, err
+	}
+	if count != size {
+		return nil, io.ErrUnexpectedEOF
+	}
+	traceMark(ctx, "inline-root-copy")
+	root.source = &metadataInlineRootReader{ctx: ctx, source: root.spool, size: size}
+	if err := root.scan(); err != nil {
+		return nil, err
+	}
+	traceMark(ctx, "inline-root-scan")
+	return root, nil
+}
+
+func (root *metadataInlineRoot) scan() error {
+	size := root.source.size
 	scanner := root.scanner(metadataCollectionRange{size: size})
 	if err := scanner.spaces(); err != nil {
-		return nil, err
+		return err
 	}
 	if err := scanner.object(func(key, value metadataCollectionRange) error {
 		name, err := root.shortString(key)
@@ -112,12 +235,12 @@ func (s *SQLiteStore) scanMetadataInlineRoot(ctx context.Context, tx *sqlTx, wor
 		root.fields[name] = value
 		return nil
 	}, 0); err != nil {
-		return nil, err
+		return err
 	}
 	if err := scanner.end(); err != nil {
-		return nil, err
+		return err
 	}
-	return root, nil
+	return nil
 }
 
 func (r *metadataInlineRoot) shapes() (map[string]string, error) {
@@ -144,6 +267,23 @@ func (r *metadataInlineRoot) shapes() (map[string]string, error) {
 		shapes = map[string]string{}
 	}
 	return shapes, nil
+}
+
+func (r *metadataInlineRoot) legacySessionFields(ctx context.Context, owner *ResourceRead) (map[string]legacySessionJSONPart, error) {
+	if r == nil || r.closed || r.source == nil || owner == nil || owner.store != r.store {
+		return nil, ErrMetadataRecordQuery
+	}
+	if err := legacySessionCanonicalOwnerOpen(ctx, owner); err != nil {
+		return nil, err
+	}
+	if err := owner.reserve(ctx, uint64(len(r.fields))*512+64<<10); err != nil {
+		return nil, err
+	}
+	fields := make(map[string]legacySessionJSONPart, len(r.fields))
+	for name, part := range r.fields {
+		fields[name] = legacySessionJSONPart{r.source, part.offset, part.size}
+	}
+	return fields, ctx.Err()
 }
 
 // Match json.Marshal's RawMessage compaction without retaining the raw value.
@@ -321,6 +461,7 @@ func (s *SQLiteStore) writeStreamedInlineMetadataField(ctx context.Context, tx *
 	if err != nil {
 		return err
 	}
+	defer root.Close()
 	shapes, err := root.shapes()
 	if err != nil {
 		return err
@@ -364,6 +505,7 @@ func (s *SQLiteStore) writeStreamedMetadataSlowFields(ctx context.Context, tx *s
 	if err != nil {
 		return false, err
 	}
+	defer root.Close()
 	if err := s.writeStreamedMetadataSlowFieldsRoot(ctx, tx, workspace, before, target, names, refs, root, owner); err != nil {
 		return false, err
 	}

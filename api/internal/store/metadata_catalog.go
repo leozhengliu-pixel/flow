@@ -44,7 +44,11 @@ type metadataCatalogRow struct {
 // an oversized title or relationship array becomes an explicit omission.
 func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, workspace string, key RecordKey, size int64) (metadataCatalogRow, error) {
 	row := metadataCatalogRow{key: key, bodyBytes: size}
-	r := &canonicalMetadataReader{ctx: ctx, tx: tx, workspace: workspace, key: key, size: size}
+	pageBytes, err := integrationDeliveryCanonicalPageBytes(ctx, tx)
+	if err != nil {
+		return row, err
+	}
+	r := &canonicalMetadataReader{ctx: ctx, tx: tx, workspace: workspace, key: key, size: size, pageBytes: pageBytes}
 	hash := sha256.New()
 	number := metadataCatalogScalarNumber{}
 	source := io.TeeReader(r, io.MultiWriter(hash, &number))
@@ -118,7 +122,6 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 		id, _ := json.Marshal(key.ID)
 		summary["id"] = id
 	}
-	var err error
 	row.summary, err = json.Marshal(summary)
 	if err != nil {
 		return row, err

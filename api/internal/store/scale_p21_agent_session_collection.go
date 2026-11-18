@@ -41,7 +41,7 @@ func legacySessionFirstOccurrences(ctx context.Context, owner *ResourceRead, fie
 // per ID. This mirrors newMetadataCollection; later duplicate edits survive
 // unchanged unless the literal first-record rebase itself replaces/drops one.
 func (p *legacyMetadataWritePlan) rebaseAgentSessionLifecycleCollection(ctx context.Context, field *legacyMetadataWriteField) (bool, error) {
-	if !legacySessionLifecycleWrite(ctx) || field.field.name != "agentSessions" || !field.full {
+	if !legacyMetadataLifecycleStreamSelected(ctx, field.field.name) || !field.full {
 		return false, nil
 	}
 	owner := &ResourceRead{store: p.store}
@@ -85,7 +85,14 @@ func (p *legacyMetadataWritePlan) rebaseAgentSessionLifecycleCollection(ctx cont
 			field: field.field, before: field.before, next: field.next,
 			rows: []legacyMetadataWriteRow{{id: id, before: a.node, next: b.node, changed: true}},
 		}
-		handled, err := p.rebaseAgentSessionLifecycleRow(ctx, selected, 0)
+		rebase := p.rebaseAgentSessionLifecycleRow
+		switch field.field.name {
+		case "workflowRuns":
+			rebase = p.rebaseWorkflowRunStreamRow
+		case "integrationDeliveries", "integrationConnections":
+			rebase = p.rebaseIntegrationDeliveryRow
+		}
+		handled, err := rebase(ctx, selected, 0)
 		if err != nil {
 			return true, err
 		}

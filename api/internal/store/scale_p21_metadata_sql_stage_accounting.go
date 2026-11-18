@@ -51,9 +51,11 @@ func (t metadataSQLStageTarget) valid() bool {
 			t.order == 0 && t.searchBytes == -1
 	}
 	switch t.field {
+	case "integrationDeliveries", "integrationConnections":
+		return t.searchBytes == -1
 	case "projects":
 		return t.searchBytes >= 0
-	case "agentSessions", "projectUpdates":
+	case "agentSessions", "projectUpdates", "workflowRuns":
 		return t.searchBytes == -1
 	}
 	return false
@@ -73,11 +75,33 @@ func (tx *sqlTx) admitStatementWriteBytes(bytes int) error {
 
 func (s *metadataSQLWriteStage) open() bool {
 	return s != nil && !s.closed && s.tx != nil && s.tx.metadataSQLStageOwners[s.id] == s &&
-		(!s.admitted || s.target == s.admittedTarget)
+		(!s.admitted || s.target == s.admittedTarget && s.appendChunkBytes == s.admittedAppendChunkBytes)
+}
+
+func (s *metadataSQLWriteStage) checkAppendOwner(ctx context.Context) error {
+	if s.appendChunkBytes != metadataSQLIntegrationOwnedChunkBytes {
+		return nil
+	}
+	owner, _ := ctx.Value(integrationDeliveryPagesKey{}).(*integrationDeliveryPageOwner)
+	if owner == nil || owner != s.appendOwner {
+		return ErrBoundedMetadataCoverage
+	}
+	chunk, err := integrationDeliverySQLChunkBytes(ctx, s.tx)
+	if err != nil {
+		return err
+	}
+	if chunk != s.appendChunkBytes {
+		return ErrBoundedMetadataCoverage
+	}
+	return nil
 }
 
 func (s *metadataSQLWriteStage) admitTarget() error {
 	if !s.open() || !s.target.valid() {
+		return ErrBoundedMetadataCoverage
+	}
+	if s.appendChunkBytes != metadataRecordChunkBytes && s.appendChunkBytes != metadataSQLIntegrationChunkBytes &&
+		s.appendChunkBytes != metadataSQLIntegrationOwnedChunkBytes {
 		return ErrBoundedMetadataCoverage
 	}
 	if s.target.workspaceState {
@@ -87,6 +111,7 @@ func (s *metadataSQLWriteStage) admitTarget() error {
 			return err
 		}
 		s.admittedTarget, s.admitted = s.target, true
+		s.admittedAppendChunkBytes = s.appendChunkBytes
 		return nil
 	}
 	// Exactly the original argument costs: strings/payload use byte length,
@@ -104,6 +129,7 @@ func (s *metadataSQLWriteStage) admitTarget() error {
 		}
 	}
 	s.admittedTarget, s.admitted = s.target, true
+	s.admittedAppendChunkBytes = s.appendChunkBytes
 	return nil
 }
 
@@ -186,6 +212,11 @@ func metadataSQLStageStatementInContext(ctx context.Context, tx *sqlTx, query st
 	if !s.open() || s.tx != tx || !s.admitted {
 		return nil, ErrBoundedMetadataCoverage
 	}
+	if statement.operation != metadataSQLStageDelete {
+		if err := s.checkAppendOwner(ctx); err != nil {
+			return nil, err
+		}
+	}
 	want, err := s.statementQuery(statement.operation)
 	if err != nil || want != query {
 		return nil, ErrBoundedMetadataCoverage
@@ -204,7 +235,7 @@ func metadataSQLStageStatementInContext(ctx context.Context, tx *sqlTx, query st
 			return nil, ErrBoundedMetadataCoverage
 		}
 		part, ok := args[0].(string)
-		if !ok || len(part) == 0 || len(part) > metadataRecordChunkBytes || !utf8.ValidString(part) || strings.IndexByte(part, 0) >= 0 {
+		if !ok || len(part) == 0 || len(part) > s.appendChunkBytes || !utf8.ValidString(part) || strings.IndexByte(part, 0) >= 0 {
 			return nil, ErrBoundedMetadataCoverage
 		}
 		column := 0

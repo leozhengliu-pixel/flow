@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"reflect"
 
 	"flow/api/internal/domain"
@@ -200,25 +199,12 @@ func issueChildSelectedContentScope[T any](ctx context.Context, rows *issueMutat
 		}
 		index := start
 		err := rows.discussionPayloads(ctx, kind, headers[start:end], size, func(raw []byte) error {
-			work, err := metadataAggregatePayloadJSONWork(ctx, raw)
-			if err != nil {
-				return err
-			}
-			fixed := uint64(reflect.TypeFor[T]().Size())*4 + 4096
-			if fixed > metadataWorkBytes || work > metadataWorkBytes-fixed {
-				return ErrMetadataWorkBudget
-			}
-			if err := rows.owner.reserve(ctx, work+fixed); err != nil {
-				return err
-			}
-			var value T
-			if err := json.Unmarshal(raw, &value); err != nil {
-				return err
-			}
-			resource := headers[index].resource
-			result[resource] = append(result[resource], value)
-			index++
-			return nil
+			return discussionDecodeOwned(ctx, rows, raw, func(value T) error {
+				resource := headers[index].resource
+				result[resource] = append(result[resource], value)
+				index++
+				return nil
+			})
 		})
 		if err != nil {
 			return result, err

@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded workflow execution and delivery retries preserve action order, large editor values, captured network inputs and atomic publication without loading complete workspaces. Bounded metadata stays off by default.
+- Bounded authorization preserves team-membership, file-signing, workflow-run and update-preview decisions. Trash restore authorization retains release-pipeline team ownership and feature checks.
+- Bounded batch updates retain response values while releasing completed mutation work before triage. Recurring issues release preliminary reads, and integration retries preserve HTTP-accepted raw JSON bytes.
 - Selected collection, project, initiative and team-resource requests use owned authorization reads in bounded mode. Small team-policy rows share their existing SQL page, preserving permission decisions and response values.
 - Bounded metadata preserves large document and project edits during issue-write conflict retries, including deeply nested JSON, without hydrating the whole workspace. Bounded metadata stays off by default.
 - Cold metadata reads keep their original JSON decoding under the replica's single cancellable cold slot, independently of active hot-request reservations.
