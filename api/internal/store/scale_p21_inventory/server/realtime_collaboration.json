@@ -32,7 +32,7 @@
     "socketWorkspaceMetadata": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "The only production callers, handleCollaborationCommand and socketDocumentRole, now bypass this literal legacy accessor when their selected store is bounded, using the proven independent single-header reader instead. The original unprojected development and PagedWorkspaceMetadata plus credential-projection calls remain unchanged off mode. SW178's 18 actual consumer differentials and SW179/SW181 shared proofs cover both callers; SW180 covers detached socket-cache ownership. The inventory recognizes this helper's method calls and method values so a new caller cannot silently escape registration. This is an off-only compatibility helper, not an approved bounded full scan.",
+      "reason": "Its production callers, handleCollaborationCommand, socketDocumentRole and refuseFormerMemberCollaborationUpdate (standalone documents, SW520), bypass this literal legacy accessor when their selected store is bounded, using the proven independent single-header reader instead (the former-member check with the selected document's content). The original unprojected development and PagedWorkspaceMetadata plus credential-projection calls remain unchanged off mode. SW178's 18 actual consumer differentials and SW179/SW181 shared proofs cover both callers; SW180 covers detached socket-cache ownership. The inventory recognizes this helper's method calls and method values so a new caller cannot silently escape registration. This is an off-only compatibility helper, not an approved bounded full scan.",
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata",

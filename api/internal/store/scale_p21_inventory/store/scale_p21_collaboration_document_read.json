@@ -2,10 +2,10 @@
   "source": "store/scale_p21_collaboration_document_read.go",
   "unmigrated": 0,
   "consumers": {
-    "BeginCollaborationDocumentRead": {
+    "beginCollaborationDocumentRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Owns charged installed or authenticated caller policy plus the first surviving collaboration-generation/ID/current-slug document header, preserving occurrence/conflict order, exact ACL/key projection and native nil/empty header fields. Policy/live principal projection loads once; a closed bounded-only hook captures admitted pretrim content/admin scope and post-row-filter team headers without changing the legacy filter. Hidden candidates project and release transient headers with no per-candidate SQL; ignored bodies and the complete document directory are never decoded or retained. SW179's full selector/permission/credential/source differential, 10x body/directory growth, 1-versus-100 hidden matches, live authority, quotas, cancellation and ownership pass normal, persistent SQLite twice and race. Measured legacy/bounded SQL is 8/63 in that fixture, independent of hidden-match count; policy fallback still scales with its existing bounded pages/stream reads and is not claimed universally constant. SW181 normal/persistent/race proves borrowed json-ignored ViewerTeamIDs are cleared exactly as legacy cloning, preventing false editor membership. Context validates lifetime without lending a complete source; idempotent close/failed transfer release all reservations and source references.",
+      "reason": "Owns charged installed or authenticated caller policy plus the first surviving collaboration-generation/ID/current-slug document header, preserving occurrence/conflict order, exact ACL/key projection and native nil/empty header fields. Policy/live principal projection loads once; a closed bounded-only hook captures admitted pretrim content/admin scope and post-row-filter team headers without changing the legacy filter. Hidden candidates project and release transient headers with no per-candidate SQL; ignored bodies and the complete document directory are never decoded or retained. SW179's full selector/permission/credential/source differential, 10x body/directory growth, 1-versus-100 hidden matches, live authority, quotas, cancellation and ownership pass normal, persistent SQLite twice and race. Measured legacy/bounded SQL is 8/63 in that fixture, independent of hidden-match count; policy fallback still scales with its existing bounded pages/stream reads and is not claimed universally constant. SW181 normal/persistent/race proves borrowed json-ignored ViewerTeamIDs are cleared exactly as legacy cloning, preventing false editor membership. Context validates lifetime without lending a complete source; idempotent close/failed transfer release all reservations and source references. The body now sits behind BeginCollaborationDocumentRead (unchanged, header only) and BeginCollaborationDocumentContentRead, which additionally projects only the selected visible document's ContentState and ContentData (from the native node, charged to the selected candidate, or from the caller-owned snapshot) after every visibility and credential predicate passed; SW520 compares it against the literal read through the former-member collaboration frame, warm and SQL-reloaded.",
       "accessors": [
         "BeginInstalledMetadataRead"
       ],
@@ -13,7 +13,8 @@
       "temperatureReason": "Body-free standalone document socket authorization.",
       "callers": [
         "server/server.handleCollaborationCommand",
-        "server/server.socketDocumentRole"
+        "server/server.socketDocumentRole",
+        "server/server.beginFormerMemberDocumentContent"
       ]
     }
   }

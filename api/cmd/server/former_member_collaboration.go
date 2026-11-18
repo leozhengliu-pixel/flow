@@ -129,6 +129,13 @@ func (s *server) refuseFormerMemberCollaborationUpdate(r *http.Request, client *
 		if issue.DocumentContent != nil {
 			state, content = issue.DocumentContent.ContentState, issue.DocumentContent.ContentData
 		}
+	} else if s.store.BoundedMetadataEnabled() {
+		read, err := s.beginFormerMemberDocumentContent(r, client.workspace, documentID)
+		if err != nil {
+			return err
+		}
+		defer read.Close()
+		state, content = read.Document.ContentState, read.Document.ContentData
 	} else {
 		workspace, err := s.socketWorkspaceMetadata(r, client.workspace)
 		if err != nil {

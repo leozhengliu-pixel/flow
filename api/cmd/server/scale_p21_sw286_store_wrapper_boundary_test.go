@@ -1084,7 +1084,6 @@ var scaleP21SW286Relays = map[string]string{
 	"server/server.findIssueForPermissions":   "permission helper shared by the GET list and the COLD permission writers",
 	"server/server.issueRecordsBootstrapData": "literal bootstrap helper: the HTTP route returns through issueRecordsBootstrapBounded first and chat is pinned by SW225",
 	"server/server.publicMetadata":            "public API metadata helper: its other callers are COLD public API routes",
-	"server/server.socketWorkspaceMetadata":   "collaboration socket helper: the bounded socket paths read owned collaboration documents first",
 }
 
 // scaleP21SW286Closed are HOT inventory consumers that call a wrapper
@@ -1094,6 +1093,7 @@ var scaleP21SW286Relays = map[string]string{
 // differential that proves the bounded dispatch. The walk passes them.
 var scaleP21SW286Closed = map[string]string{
 	"server/server.oauthApplicationsByClient": "TestScaleP21SW295ApplicationWebhookClients",
+	"server/server.socketWorkspaceMetadata":   "TestScaleP21SW520FormerMemberDocumentDifferential",
 }
 
 type scaleP21SW286Allowance struct {
@@ -1109,8 +1109,6 @@ type scaleP21SW286Allowance struct {
 var scaleP21SW286Allowed = map[string]scaleP21SW286Allowance{
 	"server/server.processIntegrationDelivery": {wrappers: []string{"WorkspaceMetadata", "WorkspaceMetadataForRead"},
 		owner: "swarm: integration delivery", reason: "every-tick integration delivery reads the workspace metadata for the delivery's integration"},
-	"server/server.refuseFormerMemberCollaborationUpdate": {wrappers: []string{"WorkspaceMetadata", "WorkspaceMetadataForRead"},
-		owner: "swarm: former members", reason: "collaboration frames of a standalone document read socketWorkspaceMetadata, whose development-mode branch is WorkspaceMetadata"},
 }
 
 func scaleP21SW286Cut(ref scaleP21SW286Ref) bool {
