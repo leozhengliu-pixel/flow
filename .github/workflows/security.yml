@@ -73,9 +73,40 @@ jobs:
             exit 1
           fi
 
+      # npm audit has no ignore option either: this step fails on any high or
+      # critical advisory, like `npm audit --audit-level=high`, except for
+      # REVIEWED: advisories with no fixed release that only reach build and test
+      # tooling, each until its review date, the same entries as web/osv-scanner.toml.
+      # GHSA-fc5q-39xc-vjpf (picomatch): only vite, vitest and their file walkers
+      # use it, on this repo's own config globs; it is not in the shipped bundle.
       - name: Web dependency audit
         working-directory: web
-        run: npm audit --audit-level=high
+        env:
+          REVIEWED: GHSA-fc5q-39xc-vjpf:2027-02-05
+        run: |
+          report="$RUNNER_TEMP/npm-audit.json"
+          npm audit --json > "$report" || true
+          # A failed audit (registry error) has no vulnerabilities object: fail then.
+          jq -e '.vulnerabilities | type == "object"' "$report" > /dev/null
+          found=$(jq -r '[.vulnerabilities[].via[] | objects | select(.severity == "high" or .severity == "critical") | .url | sub(".*/"; "")] | unique[]' "$report")
+          today=$(date -u +%F)
+          unreviewed=""
+          for id in $found; do
+            until=""
+            for entry in $REVIEWED; do
+              if [ "${entry%%:*}" = "$id" ]; then until="${entry#*:}"; fi
+            done
+            if [ -n "$until" ] && [[ ! "$today" > "$until" ]]; then
+              echo "::warning::$id is high or critical; reviewed as build and test only until $until (see web/osv-scanner.toml)"
+            else
+              unreviewed="$unreviewed $id"
+            fi
+          done
+          if [ -n "$unreviewed" ]; then
+            echo "::error::High or critical npm advisories without a current review:$unreviewed"
+            npm audit --audit-level=high || true
+            exit 1
+          fi
 
       - name: Secret scan
         uses: gitleaks/gitleaks-action@v3

@@ -5,6 +5,8 @@
 #   go-test-shard.sh list  PACKAGE INDEX TOTAL   print the test names of shard INDEX, one per line
 #   go-test-shard.sh check PACKAGE TOTAL         fail unless the shards partition the package's tests
 #   go-test-shard.sh plan  PACKAGE TOTAL         print each shard's test count and predicted seconds
+#   go-test-shard.sh known PACKAGE SCOPE         print the known-failing tests of PACKAGE in SCOPE
+#   go-test-shard.sh baseline                    fail unless the known-failing list is well formed
 #
 # Run it from the Go module root (api/). PACKAGE is an import path or a relative
 # path such as ./cmd/server. Extra flags for `go test -list` come from
@@ -27,8 +29,18 @@
 # given by a hash of its name, which depends on that name alone. Without timings
 # for the package every test is placed that way. Refresh the file with
 # update-go-test-timings.sh. Needs jq when a timings file exists.
-# CI currently uses 8 cmd/server shards and 3 internal/store shards; keep the
-# workflow matrix and its partition checks in sync when changing those counts.
+# The shard counts per mode live in scripts/ci/go-test-shards.json; the CI
+# workflow builds its matrices and its partition checks from that file.
+#
+# Which tests take part
+#
+# GO_TEST_SHARD_FILTER (an extended regex, optional) keeps only the matching
+# names (the dialect jobs shard the TestScaleP tests alone). SHARD_SCOPE (race,
+# plain, postgres or mysql) leaves out the tests that scripts/ci/known-failing-tests.txt
+# (KNOWN_FAILING points at another file) lists for this package and scope: the
+# "Known failing (tracked)" job runs those instead. The check command fails when
+# a listed test no longer exists, so a fixed and renamed or deleted test cannot
+# linger in the list. Nothing else is left out.
 #
 # Only top-level Test*, Fuzz* and Example* functions are assigned; their subtests
 # run with their parent. Benchmarks are not run by `go test` without -bench and are
@@ -38,6 +50,9 @@ set -euo pipefail
 
 MAX_PATTERN_BYTES=100000
 timings_file=${GO_TEST_TIMINGS:-$(dirname "$0")/go-test-timings.json}
+known_file=${KNOWN_FAILING:-$(dirname "$0")/known-failing-tests.txt}
+known_packages='./cmd/server ./internal/store'
+known_scopes='race plain postgres mysql'
 
 usage() {
   sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//' >&2
@@ -47,13 +62,68 @@ usage() {
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# All runnable top-level test names of a package, sorted and unique.
-all_tests() {
+# Every runnable top-level test name of a package, sorted and unique.
+full_tests() {
   local package=$1
   # shellcheck disable=SC2086
   go test ${GO_TEST_LIST_FLAGS:-} -list '^(Test|Fuzz|Example)' "$package" |
     grep -E '^(Test|Fuzz|Example)[A-Za-z0-9_]*$' |
     LC_ALL=C sort -u
+}
+
+# The entries of the known-failing list as "<package> <test> <scope>" lines, one
+# per scope. Blank lines and lines starting with # are ignored; a # starts the
+# comment (reason and owner) of an entry.
+known_entries() {
+  [ -f "$known_file" ] || return 0
+  sed -e 's/#.*//' "$known_file" | awk 'NF { n = split($3, scopes, ","); for (i = 1; i <= n; i++) print $1, $2, scopes[i] }'
+}
+
+# The known-failing tests of a package in a scope, sorted.
+known_tests() {
+  local package=$1 scope=$2
+  known_entries | awk -v package="$(timings_key "$package")" -v scope="$scope" '$1 == package && $3 == scope { print $2 }' | LC_ALL=C sort -u
+}
+
+# The tests this run shards: the filter applied and the scope's known failures left out.
+all_tests() {
+  local package=$1
+  full_tests "$package" > "$work/full"
+  if [ -n "${GO_TEST_SHARD_FILTER:-}" ]; then
+    grep -E "$GO_TEST_SHARD_FILTER" "$work/full" > "$work/filtered" || true
+  else
+    cp "$work/full" "$work/filtered"
+  fi
+  if [ -n "${SHARD_SCOPE:-}" ]; then
+    known_tests "$package" "$SHARD_SCOPE" > "$work/known"
+    LC_ALL=C comm -23 "$work/filtered" "$work/known"
+  else
+    cat "$work/filtered"
+  fi
+}
+
+# Fail unless every line of the known-failing list is "<package> <Test> <scopes>"
+# with a reason comment, a known package and scopes, and no test listed twice.
+check_baseline() {
+  [ -f "$known_file" ] || return 0
+  awk -v packages="$known_packages" -v scopes="$known_scopes" '
+    BEGIN { split(packages, p, " "); for (i in p) okp[p[i]]; split(scopes, s, " "); for (i in s) oks[s[i]] }
+    /^[[:space:]]*(#|$)/ { next }
+    {
+      line = $0; comment = index(line, "#")
+      if (comment == 0 || substr(line, comment + 1) !~ /[^[:space:]]/) { print FILENAME ":" NR ": an entry needs a # reason and owner" > "/dev/stderr"; bad = 1 }
+      body = comment ? substr(line, 1, comment - 1) : line
+      n = split(body, f, " ")
+      if (n != 3) { print FILENAME ":" NR ": want <package> <TestName> <scope,...>" > "/dev/stderr"; bad = 1; next }
+      if (!(f[1] in okp)) { print FILENAME ":" NR ": package " f[1] " is not sharded" > "/dev/stderr"; bad = 1 }
+      if (f[2] !~ /^Test[A-Za-z0-9_]*$/) { print FILENAME ":" NR ": " f[2] " is not a top-level test name" > "/dev/stderr"; bad = 1 }
+      if ((f[1] " " f[2]) in seen) { print FILENAME ":" NR ": " f[2] " is listed twice" > "/dev/stderr"; bad = 1 }
+      seen[f[1] " " f[2]]
+      m = split(f[3], sc, ",")
+      for (i = 1; i <= m; i++) if (!(sc[i] in oks)) { print FILENAME ":" NR ": unknown scope " sc[i] > "/dev/stderr"; bad = 1 }
+    }
+    END { exit bad }
+  ' "$known_file"
 }
 
 # Timings are keyed by the package path relative to the module ("./cmd/server").
@@ -185,19 +255,38 @@ case $command in
       }
     ' "$work/assigned"
     ;;
+  known)
+    [ "$#" -eq 3 ] || usage
+    known_tests "$2" "$3"
+    ;;
+  baseline)
+    [ "$#" -eq 1 ] || usage
+    check_baseline
+    echo "OK: $(known_entries | awk '{ print $1, $2 }' | sort -u | wc -l | tr -d ' ') known-failing tests are well formed"
+    ;;
   check)
     [ "$#" -eq 3 ] || usage
     package=$2 total=$3
     validate_shard 1 "$total"
+    check_baseline
     load_weights "$package"
     all_tests "$package" > "$work/all"
     if [ ! -s "$work/all" ]; then
       echo "$package has no tests" >&2
       exit 1
     fi
+    # A listed test that no longer exists must leave the known-failing list.
+    known_entries | awk -v package="$(timings_key "$package")" '$1 == package { print $2 }' | LC_ALL=C sort -u > "$work/listed"
+    missing=$(LC_ALL=C comm -23 "$work/listed" "$work/full")
+    if [ -n "$missing" ]; then
+      echo "known-failing tests of $package that no longer exist (remove them from $known_file):" >&2
+      printf '%s\n' "$missing" >&2
+      exit 1
+    fi
+    echo "known failing: $(wc -l < "$work/listed" | tr -d ' ') tests of $package listed; scope ${SHARD_SCOPE:-none} leaves out $( [ -n "${SHARD_SCOPE:-}" ] && known_tests "$package" "$SHARD_SCOPE" | wc -l | tr -d ' ' || echo 0)"
     if [ -s "$work/weights" ]; then
       listed=$(wc -l < "$work/weights" | tr -d ' ')
-      stale=$(awk 'NR == FNR { have[$1]; next } !($1 in have)' "$work/all" "$work/weights" | wc -l | tr -d ' ')
+      stale=$(awk 'NR == FNR { have[$1]; next } !($1 in have)' "$work/full" "$work/weights" | wc -l | tr -d ' ')
       echo "timings: $listed tests listed for $package, $stale of them no longer exist"
     else
       echo "timings: none for $package, assigning by name hash"
@@ -229,7 +318,7 @@ case $command in
     done
     LC_ALL=C sort "$work/union" > "$work/union.sorted"
     if ! diff -u "$work/all" "$work/union.sorted"; then
-      echo "the union of the $total shards differs from the full test list of $package" >&2
+      echo "the union of the $total shards differs from the test list of $package (filter ${GO_TEST_SHARD_FILTER:-none}, scope ${SHARD_SCOPE:-none})" >&2
       exit 1
     fi
     if [ -n "$(LC_ALL=C sort "$work/union" | uniq -d)" ]; then

@@ -1,0 +1,5 @@
+{
+  "race": { "./cmd/server": 20, "./internal/store": 14 },
+  "plain": { "./cmd/server": 5, "./internal/store": 3 },
+  "dialect": { "./cmd/server": 8, "./internal/store": 3 }
+}
