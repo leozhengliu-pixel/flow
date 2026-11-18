@@ -6058,6 +6058,7 @@ function App() {
             key={pageDocument.id}
             data={data}
             deletedEntry={trashedDocument?.entry}
+            bodyPending={snapshotUnconfirmed}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onNavigate={(path) => navigateTo(path)}
             origin={navigationLabel(navigationReturnPath(location.state, data.workspace.urlKey, ''), data)}
