@@ -32,7 +32,7 @@ func requestActor(s *server, r *http.Request) domain.User {
 }
 
 func (s *server) getUserSettings(w http.ResponseWriter, r *http.Request) {
-	_, settings, ok := s.store.AccountCollections(workspaceKey(r), requestActor(s, r).ID)
+	_, settings, ok := s.accountCollections(r.Context(), workspaceKey(r), requestActor(s, r).ID, false)
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return

@@ -74,7 +74,7 @@ func (s *server) signingKeyNeedsReupload(ctx context.Context, userID string) boo
 }
 
 func (s *server) getCommitSigningKey(w http.ResponseWriter, r *http.Request) {
-	_, settings, ok := s.store.AccountCollections(workspaceKey(r), requestActor(s, r).ID)
+	_, settings, ok := s.accountCollections(r.Context(), workspaceKey(r), requestActor(s, r).ID, false)
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -142,7 +142,7 @@ func (s *server) removeCommitSigningKey(w http.ResponseWriter, r *http.Request) 
 	actor := requestActor(s, r)
 	// Coding sessions (track E): the stored private key goes first, so a
 	// failure leaves the key listed and the removal can be retried.
-	if _, settings, ok := s.store.AccountCollections(workspaceKey(r), actor.ID); ok && settings.CommitSigningKey != nil {
+	if _, settings, ok := s.accountCollections(r.Context(), workspaceKey(r), actor.ID, false); ok && settings.CommitSigningKey != nil {
 		if err := s.store.DeleteSigningKeyMaterial(r.Context(), actor.ID); err != nil {
 			slog.ErrorContext(r.Context(), "commit signing key material not deleted", "user_id", actor.ID, "error", err.Error())
 			writeError(w, http.StatusInternalServerError, "the signing key could not be removed; try again")

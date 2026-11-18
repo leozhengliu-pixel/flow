@@ -354,7 +354,7 @@ func (s *server) codingRuntimeSign(w http.ResponseWriter, r *http.Request) {
 // it is a key uploaded before Flow kept private keys, and the user is asked to
 // upload it again rather than to add one.
 func (s *server) userHasLegacySigningKey(workspace, userID string) bool {
-	_, settings, ok := s.store.AccountCollections(workspace, userID)
+	_, settings, ok := s.accountCollections(context.Background(), workspace, userID, false)
 	return ok && settings.CommitSigningKey != nil
 }
 
