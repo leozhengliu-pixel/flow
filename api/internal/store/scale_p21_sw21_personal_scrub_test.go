@@ -255,7 +255,7 @@ func TestScaleP21SW21PersonalScrubDifferential(t *testing.T) {
 	} {
 		for _, source := range []*SQLiteStore{f.SQLiteStore, probe} {
 			f.restore(t)
-			ctx, cancel := context.WithTimeout(ContextWithActor(t.Context(), actor), 30*time.Second)
+			ctx, cancel := context.WithTimeout(ContextWithActor(t.Context(), actor), raceWatchdog(30*time.Second))
 			count, err := source.ScrubPersonCopies(ctx, workspace, f.person)
 			cancel()
 			if err != nil {
@@ -339,7 +339,7 @@ func TestScaleP21SW21PersonalScrubAtomicAdmission(t *testing.T) {
 	}
 	t.Logf("bounded scrub values=%d bytes/op=%d allocs/op=%d elapsed=%s", count, after.TotalAlloc-before.TotalAlloc, after.Mallocs-before.Mallocs, elapsed)
 	f.restore(t)
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), raceWatchdog(30*time.Second))
 	defer cancel()
 	count, err = probe.ScrubPersonCopies(ctx, workspace, f.person)
 	if err != nil || count != f.verify(t, true) || probe.metadataResidency.work.used != 0 {
