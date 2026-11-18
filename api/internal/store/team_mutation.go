@@ -1086,6 +1086,9 @@ func writeMetadataRecordUpserts(ctx context.Context, tx *sqlTx, workspace string
 			order = base
 		}
 		upserts[i].order = order
+		// Metadata JSON is parsed in SQL (journal triggers, search), where
+		// PostgreSQL refuses \u0000: as in writeMetadataRecordRow, NUL is dropped.
+		change.raw = StripJSONNUL(change.raw)
 		// The hot cache mirrors the row as stored.
 		stored, err := offloadRecord(ctx, tx, workspace, change.field, change.raw)
 		if err != nil {
