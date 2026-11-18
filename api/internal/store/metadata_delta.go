@@ -445,6 +445,9 @@ func (s *SQLiteStore) persistMetadataTx(ctx context.Context, tx *sqlTx, workspac
 // collection (webhooks, loops, integration deliveries) use it instead of
 // copying every record in the workspace under the read lock.
 func (s *SQLiteStore) WorkspaceMetadataFields(workspace string, fields ...string) (domain.Bootstrap, bool) {
+	if s.skeletalFields(fields) {
+		return domain.Bootstrap{}, false
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if workspace == "" {

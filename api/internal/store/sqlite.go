@@ -1442,6 +1442,9 @@ func (s *SQLiteStore) BootstrapFor(workspaceKey string) (domain.Bootstrap, bool)
 // Propagate request cancellation through compatibility collection reads so a
 // disconnected browser does not keep decoding the workspace in the background.
 func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey string) (domain.Bootstrap, bool) {
+	if s.skeletalRead("BootstrapFor") {
+		return domain.Bootstrap{}, false
+	}
 	s.mu.RLock()
 	if workspaceKey == "" {
 		workspaceKey = s.lastWorkspaceKey
