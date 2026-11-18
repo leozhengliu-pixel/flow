@@ -418,3 +418,47 @@ func TestExternalDatabaseAuditEvents(t *testing.T) {
 	_, _ = repo.db.ExecContext(ctx, `DELETE FROM audit_events WHERE workspace_id=?`, workspaceID)
 	_, _ = repo.db.ExecContext(ctx, `DELETE FROM audit_chain_heads WHERE workspace_id=?`, workspaceID)
 }
+
+// TestExternalDatabaseAuditFirstWritersSmallPool appends concurrently to a
+// workspace without a chain head through a two-connection pool on PostgreSQL
+// or MySQL. Each append holds a connection for its transaction, so creating
+// the head through a second pooled connection would wait forever, and the
+// head creation must not deadlock concurrent first writers on row locks.
+func TestExternalDatabaseAuditFirstWritersSmallPool(t *testing.T) {
+	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
+	if driver == "" || databaseURL == "" {
+		t.Skip("external database configuration is not set")
+	}
+	repo, err := OpenDatabase(DatabaseConfig{Driver: driver, URL: databaseURL, MaxOpenConns: 2, MaxIdleConns: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	for round := range 3 {
+		workspaceID := "audit_pool_" + idgen.New("")
+		const writers = 8
+		errs := make(chan error, writers)
+		for writer := range writers {
+			go func() {
+				errs <- repo.AppendAuditEntries(ctx, workspaceID, domain.AuditLogEntry{Action: "first", ResourceType: "test", ResourceID: idgen.New(""), CreatedAt: time.Now().UTC(), Actor: domain.User{ID: "usr_pool"}, Metadata: map[string]any{"writer": writer}})
+			}()
+		}
+		for range writers {
+			select {
+			case err := <-errs:
+				if err != nil {
+					t.Fatalf("round %d append: %v", round, err)
+				}
+			case <-ctx.Done():
+				t.Fatalf("round %d: concurrent first writers did not finish: %v", round, ctx.Err())
+			}
+		}
+		if report, err := repo.VerifyAuditChain(ctx, workspaceID); err != nil || !report.Valid || report.Entries != writers {
+			t.Fatalf("round %d verify = %+v, %v", round, report, err)
+		}
+		_, _ = repo.db.ExecContext(ctx, `DELETE FROM audit_events WHERE workspace_id=?`, workspaceID)
+		_, _ = repo.db.ExecContext(ctx, `DELETE FROM audit_chain_heads WHERE workspace_id=?`, workspaceID)
+	}
+}
