@@ -789,6 +789,9 @@ func (s *server) retryIntegrationDelivery(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id string) (domain.IntegrationDelivery, error) {
+	if s.store.BoundedMetadataEnabled() {
+		return s.processBoundedIntegrationDelivery(ctx, workspace, id)
+	}
 	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok {
 		return domain.IntegrationDelivery{}, errNotFound
