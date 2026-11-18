@@ -248,7 +248,10 @@ func (s *SQLiteStore) installWrittenWorkspace(workspace string, data domain.Boot
 func (s *SQLiteStore) installWrittenWorkspaceLocked(workspace string, data domain.Bootstrap, write *metadataWrite) {
 	current, ok := s.copyRevisionLocked(workspace)
 	s.workspaces[workspace] = data
-	if s.coldWrite != nil {
+	// A default COLD legacy writer without a prepared publication (any
+	// writer but the full metadata writer) publishes through the parent's
+	// reload when it returns the shared write lock (coldLegacyMutation).
+	if s.coldWrite != nil && (s.coldWrite.prepared != nil || !s.coldWrite.legacy) {
 		s.installColdFullWriteLocked(workspace, write, current, ok)
 	}
 	if write == nil || write.workspace != workspace || !ok || current.epoch != write.base.epoch {

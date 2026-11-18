@@ -1,0 +1,15 @@
+{
+  "source": "store/issue_query.go",
+  "unmigrated": 0,
+  "consumers": {
+    "PagedWorkspaceMetadata": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Flag off and bounded outside a COLD context it is unchanged (bounded: the workspace read source refuses, ErrAuthForbidden). In a COLD context (a default COLD request's scope or COLD work) the literal projection runs on the legacy view of the installed workspace (coldAccessorView), so a COLD route's projection is the legacy one. SW530 covers every COLD route that builds it (public API connections, workspaceData metadata reads).",
+      "accessors": ["PagedWorkspaceMetadata"],
+      "temperature": "cold",
+      "temperatureReason": "Default COLD routing (owner decision 2026-11-14): with bounded metadata on, a route not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD scope.",
+      "callers": ["server/main.go:workspaceData", "server/public_api_resources.go:publicMetadata", "server/auth.go:resourceAllowedLegacy"]
+    }
+  }
+}

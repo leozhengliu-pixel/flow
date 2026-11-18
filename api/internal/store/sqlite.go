@@ -165,10 +165,15 @@ func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 func (s *SQLiteStore) WorkerContext() context.Context {
+	ctx := context.Background()
 	if s.lifecycle != nil {
-		return s.lifecycle
+		ctx = s.lifecycle
 	}
-	return context.Background()
+	if s.metadataResidency != nil {
+		// Background work runs COLD per operation (WithColdWork).
+		ctx = WithColdWork(ctx, "worker")
+	}
+	return ctx
 }
 
 // publishNotificationSignals sends notification.created for notifications a
@@ -1441,6 +1446,13 @@ func (s *SQLiteStore) BootstrapFor(workspaceKey string) (domain.Bootstrap, bool)
 // Propagate request cancellation through compatibility collection reads so a
 // disconnected browser does not keep decoding the workspace in the background.
 func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey string) (domain.Bootstrap, bool) {
+	if view, release, handled := s.coldAccessorView(ctx, "BootstrapFor", workspaceKey, nil); handled {
+		defer release()
+		if view == nil {
+			return domain.Bootstrap{}, false
+		}
+		return view.BootstrapForContext(ctx, view.lastWorkspaceKey)
+	}
 	if s.skeletalRead("BootstrapFor") {
 		return domain.Bootstrap{}, false
 	}
@@ -1638,6 +1650,11 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 		}
 		if !UsesIssueRecordMutations(ctx) && boundedLegacyIssueEvent(eventType) && mutationAggregateID(ctx) != "" {
 			return s.mutateBoundedLegacyDiscussion(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if coldCapable(ctx) && !residentRecordWriterReady(ctx, eventType) {
+			// No migrated writer serves this COLD write: run the literal
+			// legacy dispatch on the COLD facade (scale_p21_default_cold.go).
+			return s.coldLegacyMutation(ctx, workspaceKey, eventType, payload, mutate)
 		}
 		return s.mutateResidentRecords(ctx, workspaceKey, eventType, payload, mutate)
 	}
@@ -2313,6 +2330,18 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 }
 
 func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, workspace domain.Workspace) (domain.Bootstrap, error) {
+	if s.metadataResidency != nil && coldCapable(ctx) && (workspace.URLKey == "" || workspace.URLKey == workspaceKey) {
+		// COLD: the literal legacy update on the COLD facade, which answers
+		// the complete workspace (scale_p21_default_cold.go). A rename keeps
+		// the bounded path: the parent's image moves keys.
+		var updated domain.Bootstrap
+		err := s.coldLegacyWrite(ctx, workspaceKey, func(ctx context.Context, facade *SQLiteStore) error {
+			var err error
+			updated, err = facade.UpdateWorkspace(ctx, workspaceKey, workspace)
+			return err
+		})
+		return updated, err
+	}
 	if s.coordinator == nil {
 		updated, err := s.updateWorkspace(ctx, workspaceKey, workspace)
 		if errors.Is(err, ErrNoMutation) {
