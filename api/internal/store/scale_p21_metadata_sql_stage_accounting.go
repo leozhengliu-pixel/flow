@@ -235,7 +235,7 @@ func metadataSQLStageStatementInContext(ctx context.Context, tx *sqlTx, query st
 			return nil, ErrBoundedMetadataCoverage
 		}
 		part, ok := args[0].(string)
-		if !ok || len(part) == 0 || len(part) > s.appendChunkBytes || !utf8.ValidString(part) || strings.IndexByte(part, 0) >= 0 {
+		if !ok || len(part) == 0 || len(part) > max(s.appendChunkBytes, metadataSQLStageMaxChunkBytes) || !utf8.ValidString(part) || strings.IndexByte(part, 0) >= 0 {
 			return nil, ErrBoundedMetadataCoverage
 		}
 		column := 0

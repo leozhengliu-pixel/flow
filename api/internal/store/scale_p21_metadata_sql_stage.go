@@ -43,7 +43,18 @@ type metadataSQLWriteStage struct {
 	appendChunkBytes               int
 	admittedAppendChunkBytes       int
 	appendOwner                    *integrationDeliveryPageOwner
+	// releases return the admitted growth of this stage's writers.
+	releases []func()
 }
+
+// metadataSQLStageMaxChunkBytes bounds one staged append. Every append
+// rewrites the staged value (data || ?), so fixed metadataRecordChunkBytes
+// appends made a staged row of n bytes cost O(n²/16 KiB) SQL I/O (a 5 MiB
+// row rewrote about 800 MiB). A growing writer doubles its chunk after each
+// append while the store admits the larger buffer (at most 3 x 240 KiB, below
+// the 1 MiB body-independence margin the streamed writers prove), which cuts
+// that rewrite 16-fold.
+const metadataSQLStageMaxChunkBytes = 256 << 10
 
 func beginMetadataSQLWriteStage(ctx context.Context, tx *sqlTx, target metadataSQLStageTarget) (*metadataSQLWriteStage, error) {
 	if tx == nil || !target.valid() {
@@ -102,6 +113,11 @@ func (s *metadataSQLWriteStage) Close(ctx context.Context) error {
 	if s == nil || s.closed {
 		return nil
 	}
+	// A writer's buffer is unreachable once its stage closes or fails.
+	for _, release := range s.releases {
+		release()
+	}
+	s.releases = nil
 	if _, err := s.exec(ctx, metadataSQLStageDelete, s.id); err != nil {
 		return err
 	}
@@ -126,10 +142,30 @@ func (s *metadataSQLWriteStage) writer(ctx context.Context, column string) (*met
 	if column == "content" {
 		columnIndex = 1
 	}
+	chunk := min(s.appendChunkBytes, s.expectedBytes(columnIndex))
 	return &metadataSQLStageWriter{
-		ctx: ctx, stage: s, column: column,
-		buffer: make([]byte, 0, min(s.appendChunkBytes, s.expectedBytes(columnIndex))),
+		ctx: ctx, stage: s, column: column, chunk: chunk,
+		buffer: make([]byte, 0, chunk),
 	}, nil
+}
+
+// growingWriter is writer whose appends grow geometrically up to
+// metadataSQLStageMaxChunkBytes while store admits each larger buffer (the
+// buffer, its SQL argument copy and the driver's bound copy). Without
+// admission it keeps its current chunk; the staged bytes are the same.
+func (s *metadataSQLWriteStage) growingWriter(ctx context.Context, column string, store *SQLiteStore) (*metadataSQLStageWriter, error) {
+	writer, err := s.writer(ctx, column)
+	// Integration delivery stages keep their own fixed append size.
+	if err == nil && store != nil && s.appendChunkBytes == metadataRecordChunkBytes {
+		writer.admit = func(size int) error {
+			_, release, err := store.tryAdmitAdditionalMetadataWork(ctx, size)
+			if err == nil {
+				s.releases = append(s.releases, release)
+			}
+			return err
+		}
+	}
+	return writer, err
 }
 
 // valueSQL has exactly one operation-ID placeholder. The caller binds s.id
@@ -159,6 +195,22 @@ type metadataSQLStageWriter struct {
 	stage  *metadataSQLWriteStage
 	column string
 	buffer []byte
+	chunk  int
+	admit  func(int) error
+}
+
+func (w *metadataSQLStageWriter) grow() {
+	if w.admit == nil || w.chunk >= metadataSQLStageMaxChunkBytes {
+		return
+	}
+	next := min(w.chunk*2, metadataSQLStageMaxChunkBytes)
+	if w.admit((next-w.chunk)*3) != nil {
+		w.admit = nil
+		return
+	}
+	buffer := make([]byte, len(w.buffer), next)
+	copy(buffer, w.buffer)
+	w.buffer, w.chunk = buffer, next
 }
 
 func (w *metadataSQLStageWriter) Write(part []byte) (int, error) {
@@ -178,13 +230,14 @@ func (w *metadataSQLStageWriter) Write(part []byte) (int, error) {
 	}
 	original := len(part)
 	for len(part) > 0 {
-		take := min(len(part), cap(w.buffer)-len(w.buffer))
+		take := min(len(part), w.chunk-len(w.buffer))
 		w.buffer = append(w.buffer, part[:take]...)
 		part = part[take:]
-		if len(w.buffer) == cap(w.buffer) {
+		if len(w.buffer) == w.chunk {
 			if err := w.flush(false); err != nil {
 				return original - len(part), err
 			}
+			w.grow()
 		}
 	}
 	return original, nil

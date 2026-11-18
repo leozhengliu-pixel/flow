@@ -535,7 +535,7 @@ func (p *legacyMetadataWritePlan) writeProjectUpdateScheduleParent(ctx context.C
 		return err
 	}
 	defer stage.Close(context.WithoutCancel(ctx))
-	writer, err := stage.writer(ctx, "data")
+	writer, err := stage.growingWriter(ctx, "data", p.store)
 	if err != nil {
 		return err
 	}
