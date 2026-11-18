@@ -55,6 +55,14 @@ func (s *SQLiteStore) refreshLogicalMetadataRecords(workspace string, keys []met
 // (which may differ from the row when the row's predicate skipped the
 // update). Nothing else is copied, decoded or re-encoded; the policy copy is
 // unchanged. Without a change the generation and its stamp stay.
+//
+// Like the legacy patch it takes no request work: it runs on the store's one
+// API-key-use worker after the request has answered, so a lease here would be
+// held against whichever requests are being served then and could refuse
+// them (ErrMetadataWorkBudget), or be refused itself and leave the generation
+// without the use the row has. Its memory is bounded without the budget: one
+// worker publishes one use at a time, decoding at most two records of at most
+// 2 MiB each and writing their frames to disk.
 func (s *SQLiteStore) publishBoundedAPIKeyUse(ctx context.Context, use apiKeyUse) error {
 	s.mu.RLock()
 	_, installed := s.workspaces[use.workspace]
@@ -62,12 +70,7 @@ func (s *SQLiteStore) publishBoundedAPIKeyUse(ctx context.Context, use apiKeyUse
 	if !installed {
 		return nil
 	}
-	ctx = metadataLogicalUnpinnedContext(ctx)
-	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, 32<<20)
-	if err != nil {
-		return err
-	}
-	defer release()
+	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	source, err := s.retainMetadataLogicalSource(ctx, use.workspace)
