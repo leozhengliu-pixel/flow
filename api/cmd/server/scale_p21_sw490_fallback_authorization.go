@@ -38,6 +38,8 @@ type scaleP21SW490Shape struct {
 	decision  scaleP21SW490Decision
 	kind, ref string
 	output    bool
+	// target is a favorite/subscription reference's resource kind.
+	target string
 }
 
 // scaleP21SW490FallbackShape mirrors, from the decoded path and method only,
@@ -59,8 +61,8 @@ func scaleP21SW490FallbackShape(r *http.Request) scaleP21SW490Shape {
 	}
 	createRoot := len(parts) == 2 && r.Method == http.MethodPost
 	switch parts[1] {
-	case "views", "dashboards":
-		kind := map[string]string{"views": "savedViews", "dashboards": "dashboards"}[parts[1]]
+	case "views", "dashboards", "releases", "release-pipelines", "asks":
+		kind := map[string]string{"views": "savedViews", "dashboards": "dashboards", "releases": "releases", "release-pipelines": "releasePipelines", "asks": "asks"}[parts[1]]
 		if createRoot {
 			return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: kind, output: true}
 		}
@@ -68,14 +70,15 @@ func scaleP21SW490FallbackShape(r *http.Request) scaleP21SW490Shape {
 			return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: kind, ref: parts[2]}
 		}
 		return scaleP21SW490Shape{decision: scaleP21SW490Membership}
-	case "issues", "asks", "releases", "release-pipelines":
+	case "issues":
 		if createRoot || len(parts) >= 3 {
 			return literal
 		}
 		return scaleP21SW490Shape{decision: scaleP21SW490Membership}
 	case "projects", "initiatives":
+		body := parts[1] + "Body"
 		if createRoot {
-			return literal
+			return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: body, output: true}
 		}
 		if len(parts) < 3 {
 			if parts[1] == "initiatives" {
@@ -84,27 +87,30 @@ func scaleP21SW490FallbackShape(r *http.Request) scaleP21SW490Shape {
 			return scaleP21SW490Shape{decision: scaleP21SW490Membership}
 		}
 		if len(parts) >= 4 && parts[3] == "relations" && r.Method == http.MethodPost {
-			return literal
+			return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: body, ref: parts[2]}
 		}
 		if !(len(parts) >= 5 && parts[3] == "relations") && r.Method == http.MethodPatch {
-			return literal
+			return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: body, ref: parts[2]}
 		}
 		return scaleP21SW490Shape{decision: scaleP21SW490Point, kind: parts[1], ref: parts[2]}
 	case "customers":
 		if len(parts) < 3 {
 			return scaleP21SW490Shape{decision: scaleP21SW490NonGuest}
 		}
-		return literal
+		return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: "customers", ref: parts[2]}
 	case "customer-requests":
-		if createRoot || len(parts) >= 3 {
-			return literal
+		if createRoot {
+			return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: "customerRequests", output: true}
+		}
+		if len(parts) >= 3 {
+			return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: "customerRequests", ref: parts[2]}
 		}
 		return scaleP21SW490Shape{decision: scaleP21SW490NonGuest}
 	case "favorites", "subscriptions":
 		if len(parts) < 4 {
 			return scaleP21SW490Shape{decision: scaleP21SW490Membership}
 		}
-		return literal
+		return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: "references", ref: parts[3], target: strings.ToLower(strings.TrimSpace(parts[2]))}
 	case "reviews":
 		if embeddedFavoriteRequest(r) {
 			return scaleP21SW490Shape{decision: scaleP21SW490ReviewPreference, ref: parts[2]}
@@ -112,10 +118,13 @@ func scaleP21SW490FallbackShape(r *http.Request) scaleP21SW490Shape {
 		if len(parts) < 3 {
 			return scaleP21SW490Shape{decision: scaleP21SW490Membership}
 		}
-		return literal
+		return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: "reviews", ref: parts[2]}
 	case "documents":
 		if len(parts) == 2 && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
 			return scaleP21SW490Shape{decision: scaleP21SW490Membership}
+		}
+		if createRoot {
+			return scaleP21SW490Shape{decision: scaleP21SW490Record, kind: "documentCreate", output: true}
 		}
 		return literal
 	case "cycles":
@@ -174,7 +183,7 @@ func (s *server) boundedFallbackAuthorization(r *http.Request, workspace, userID
 	case scaleP21SW490TeamContent:
 		return s.boundedTeamResourceDecision(r, workspace, userID, shape.ref, shape.output), true
 	case scaleP21SW490Record:
-		if kind, decide := s.scaleP21SW490RecordPredicate(r, userID, shape); decide != nil {
+		if kind, decide := s.scaleP21SW490RecordPredicate(r, workspace, userID, shape); decide != nil {
 			return s.boundedRecordDecision(r, workspace, userID, kind, shape.ref, decide), true
 		}
 	}
