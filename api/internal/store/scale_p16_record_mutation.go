@@ -460,6 +460,8 @@ func scaleP16WriteRoot(ctx context.Context, tx *sqlTx, workspace string, changes
 	if err != nil {
 		return err
 	}
+	// The root JSON is parsed in SQL, where PostgreSQL refuses \u0000.
+	raw = StripJSONNUL(raw)
 	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET data=? WHERE workspace_key=?`, raw, workspace)
 	return err
 }

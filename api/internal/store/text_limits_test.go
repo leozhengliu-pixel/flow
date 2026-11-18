@@ -263,3 +263,35 @@ func TestStripJSONNUL(t *testing.T) {
 		t.Errorf("textArgs on MySQL = %q", args)
 	}
 }
+
+// jsonNULStripWriter returns StripJSONNUL's bytes for every split of the
+// document into two writes, including splits inside an escape.
+func TestJSONNULStripWriterMatchesStripJSONNUL(t *testing.T) {
+	for _, in := range []string{
+		`{"a":"x\u0000y"}`,
+		`{"a":"\\u0000"}`,
+		`{"a":"\\\u0000","b":"\"\u0000"}`,
+		`{"a":"\u00001","b":"\u0001\u000","c":"\u0000\u0000"}`,
+		`{"\u0000k":["\u0000",{"x":"a\u0000"}],"plain":"u0000"}`,
+		`{"a":"plain"}`,
+		`{"a":"trailing\`,
+		`{"a":"trailing\u00`,
+	} {
+		want := string(StripJSONNUL([]byte(in)))
+		for split := 0; split <= len(in); split++ {
+			var out bytes.Buffer
+			writer := &jsonNULStripWriter{dst: &out}
+			for _, part := range []string{in[:split], in[split:]} {
+				if n, err := writer.Write([]byte(part)); err != nil || n != len(part) {
+					t.Fatalf("write = %d, %v", n, err)
+				}
+			}
+			if err := writer.Finish(); err != nil {
+				t.Fatal(err)
+			}
+			if out.String() != want {
+				t.Fatalf("split %d of %s = %s, want %s", split, in, out.String(), want)
+			}
+		}
+	}
+}
