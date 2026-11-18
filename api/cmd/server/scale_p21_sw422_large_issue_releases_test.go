@@ -47,7 +47,11 @@ func TestScaleP21SW422LargeIssueReleasesDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			_ = f.rows(t, `SELECT 1 FROM workspace_states WHERE workspace_key=?`, workspace)
-			if _, err := f.reader.reader.ExecContext(context.Background(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='releases' AND record_key=?`, raw, workspace, large); err != nil {
+			statement := `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='releases' AND record_key=?`
+			if f.reader.config.Driver == "postgres" || f.reader.config.Driver == "postgresql" {
+				statement = scaleDB{driver: "postgres"}.rebind(statement)
+			}
+			if _, err := f.reader.reader.ExecContext(context.Background(), statement, raw, workspace, large); err != nil {
 				t.Fatal(err)
 			}
 		}
