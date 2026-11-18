@@ -353,7 +353,8 @@ jobs:
             for dialect in postgres mysql; do
               total=$(jq -r --arg package "$package" '.dialect[$package]' "$shards")
               echo "::group::$package TestScaleP, $dialect, $total shards"
-              GO_TEST_SHARD_FILTER='^TestScaleP' SHARD_SCOPE=$dialect ../scripts/ci/go-test-shard.sh check "$package" "$total"
+              GO_TEST_SHARD_FILTER='^TestScaleP' GO_TEST_TIMINGS=../scripts/ci/go-test-timings-dialect.json SHARD_SCOPE=$dialect ../scripts/ci/go-test-shard.sh check "$package" "$total"
+              GO_TEST_SHARD_FILTER='^TestScaleP' GO_TEST_TIMINGS=../scripts/ci/go-test-timings-dialect.json SHARD_SCOPE=$dialect ../scripts/ci/go-test-shard.sh plan "$package" "$total"
               echo "::endgroup::"
             done
           done
@@ -702,7 +703,9 @@ jobs:
 
   # The scalability work keeps an old-path/new-path differential test per package (TestScaleP*); they run on both
   # external dialects here, since a SQLite-only pass does not prove the SQL paths. The TestScaleP tests of each
-  # package are sharded (scripts/ci/go-test-shards.json "dialect", packed by the SQLite timings), each shard on its
+  # package are sharded (scripts/ci/go-test-shards.json "dialect", packed by the per-test seconds measured on
+  # these jobs, scripts/ci/go-test-timings-dialect.json: the SQLite timings leave most of the long differentials
+  # untimed and under-weight the SQL ones, so shards ran past the 25-minute round), each shard on its
   # own empty database (store tests leave rows the server tests would open), without the race detector. The
   # dialect's known failures (scripts/ci/known-failing-tests.txt) are left out and run in "Known failing (tracked)".
   scale-dialects:
@@ -752,6 +755,7 @@ jobs:
         working-directory: api
         env:
           GO_TEST_SHARD_FILTER: '^TestScaleP'
+          GO_TEST_TIMINGS: ../scripts/ci/go-test-timings-dialect.json
           SHARD_SCOPE: ${{ matrix.dialect }}
           FLOW_TEST_DATABASE_DRIVER: ${{ matrix.dialect }}
           FLOW_TEST_DATABASE_URL: ${{ matrix.dialect == 'postgres' && 'postgres://flow:flow@127.0.0.1:5432/flow?sslmode=disable' || 'mysql://flow:flow@127.0.0.1:3306/flow' }}
