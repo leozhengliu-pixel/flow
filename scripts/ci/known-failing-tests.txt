@@ -1,5 +1,6 @@
 # Known-failing Go tests, tracked until fixed (baseline of 2026-11-17/18, CI runs
-# 44173057528, 44222295379 and 44239650983).
+# 44173057528, 44222295379 and 44239650983; the cmd/server PostgreSQL
+# entries are from the first sharded run, MySQL cmd/server shard 2/2 timed out).
 #
 #   <package> <TestName> <scope>[,<scope>...] # <reason> (owner: <who fixes it>)
 #
@@ -25,7 +26,7 @@
 # Fail under the race detector on CI
 ./cmd/server TestScaleP21SW136LoopTextScratchBound race # streamed loop text allocates about 58 MB (TotalAlloc) for a 12 MiB input under -race, bound is 16 KiB (owner: P21 SW136)
 ./cmd/server TestScaleP21SW139BootstrapLoopTextScratchBound race # same TotalAlloc scratch bound as SW136 fails under -race (owner: P21 SW139)
-./cmd/server TestScaleP21SW182CycleScheduleTickerDifferential race,plain # inclusive-UTC-day-with-process-local-offset subtests: literal and bounded cycle JSON differ on the UTC runner (owner: P21 SW182)
+./cmd/server TestScaleP21SW182CycleScheduleTickerDifferential race,plain,postgres,mysql # inclusive-UTC-day-with-process-local-offset subtests: literal and bounded cycle JSON differ on the UTC runner (owner: P21 SW182)
 ./internal/store TestScaleP21ApplicationAccessSnapshotBudgetAndIgnoredBodies race # "borrowed pool-one list failed context deadline exceeded" under race (owner: P21 application access)
 ./internal/store TestScaleP21SW21PersonalScrubDifferential race # journal summary read hits its context deadline under race (owner: P21 SW21)
 ./internal/store TestScaleP21SW21PersonalScrubAtomicAdmission race # fails after 104 s under race (owner: P21 SW21)
@@ -49,4 +50,27 @@
 ./internal/store TestScaleP21SW57IssueMutationRows postgres # syntax error at or near "=?" (42601): a ? placeholder is not rewritten (owner: P21 SW57)
 ./internal/store TestScaleP21SW60DiscussionRows postgres # invalid input syntax for type json (22P02), then the aborted transaction differs between literal and bounded (owner: P21 SW60)
 ./internal/store TestScaleP21SW93LegacyRecordBaseDifferential postgres # canonical content/issue/index/order rows differ; issue_records read in an aborted transaction (25P02) (owner: P21 SW93)
+./internal/store TestScaleP21SW93LegacyRecordTenfoldPopulationWork postgres # "tenfold population changed literal canonical rows/counts" and leaked work in run 44239650983 (passed in 44222295379: depends on what else the shared database holds) (owner: P21 SW93)
+./cmd/server TestScaleP21HotOAuthLogoAccessDifferential postgres # unsupported Unicode escape sequence (22P05): NUL reaches a JSON parse (owner: P21 hot OAuth logo)
+./cmd/server TestScaleP21IssueBatchContentStateDifferential postgres # content-state: literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 issue batch)
+./cmd/server TestScaleP21IssueBatchDifferential postgres # priority-pair: literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 issue batch)
+./cmd/server TestScaleP21IssueUpdateFieldsDifferential postgres # plain-fields: literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 issue update)
+./cmd/server TestScaleP21IssueUpdateStoreBoundaries postgres # content-state: literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 issue update)
+./cmd/server TestScaleP21IssueUpdateWithoutAuthDifferential postgres # private-project: literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 issue update)
+./cmd/server TestScaleP21IssueUpdateTeamMoveDifferential postgres # the legacy path answers 200 where the differential expects otherwise (owner: P21 issue update)
+./cmd/server TestScaleP21SW125AccountNativeIconProducerWitness postgres # native icon account route output differs (owner: P21 SW125)
+./cmd/server TestScaleP21SW125AccountRoutesDifferential postgres # development account route output differs (owner: P21 SW125)
+./cmd/server TestScaleP21SW159WorkerReplyDifferential postgres # worker reply result/error/effects differ between legacy and bounded (owner: P21 SW159)
+./cmd/server TestScaleP21SW186IssueCreationAutomationDifferential postgres # literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 SW186)
+./cmd/server TestScaleP21SW186IssueCreationDifferential postgres,mysql # custom-creation-key-existing (PostgreSQL) and development reloaded (MySQL): literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 SW186)
+./cmd/server TestScaleP21SW189ContentStatePermissions postgres # literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 SW189)
+./cmd/server TestScaleP21SW189ContentStateRouteDifferential postgres # the legacy path answers 400 (owner: P21 SW189)
+./cmd/server TestScaleP21SW18TeamResourcesDifferential postgres # team resource read answers 503 "team resources unavailable" (owner: P21 SW18)
+./cmd/server TestScaleP21SW23LoopRunReadsDifferential postgres # loop run read output differs (owner: P21 SW23)
+./cmd/server TestScaleP21SW294OAuthMetadataConcurrent postgres # concurrent OAuth metadata: warm output changed (owner: P21 SW294)
+./cmd/server TestScaleP21TeamCreateConcurrentDifferential postgres # legacy team create answers 500: unsupported Unicode escape sequence (22P05) (owner: P21 team create)
+./cmd/server TestScaleP21TeamCreateDifferential postgres # legacy team create answers 500 (owner: P21 team create)
+./cmd/server TestScaleP21TeamMoveAutoApplyDifferential postgres # bounded triage generation: unsupported Unicode escape sequence (22P05) (owner: P21 team move)
+./cmd/server TestScaleP21TriageWriterConcurrentSameIssue postgres # one of two concurrent triage writers answers 500 (owner: P21 triage writer)
+./cmd/server TestScaleP21SW198LargeSessionLifecycleDifferential postgres # a legal large session changes its commit count (0 to 1) (owner: P21 SW198)
 ./cmd/server TestScaleP21HotNotificationsDifferential postgres,mysql # hangs: the 4-connection pool is exhausted and lockAuditHead asks for a second connection (tx.database.ExecContext) while its transaction holds one (owner: P21 hot notifications)
