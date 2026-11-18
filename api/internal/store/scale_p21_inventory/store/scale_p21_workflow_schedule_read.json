@@ -1,10 +1,11 @@
 {
   "source": "store/scale_p21_workflow_schedule_read.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "BeginWorkflowScheduleRead": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Retains one installed metadata generation for both scheduler loops and projects only Enabled/Trigger/NextRunAt (then ID) of definitions and Status/NextRetryAt (then WorkflowID/ResourceType/ResourceID) of runs per child under a scratch owner, visiting due items in native order with the caller's clock; Close is idempotent. SW201 due-read store tests plus SW501/SW342 tick differentials (weekday and Sunday clocks, exact and one-nanosecond boundaries, duplicates, cancellation) cover it.",
       "accessors": ["BeginInstalledMetadataRead"],
       "temperature": "hot",
       "temperatureReason": "Retained native definitions/runs generation for the 15-second workflow tick.",
