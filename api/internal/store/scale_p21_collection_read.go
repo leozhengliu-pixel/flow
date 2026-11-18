@@ -766,6 +766,25 @@ func (s *metadataCollectionScanner) string() error {
 		return err
 	}
 	for {
+		// Skip a buffered run of ordinary string bytes at once: the byte
+		// path below accepts them unchanged, but checks the (often deeply
+		// wrapped) context for every byte, which dominated scans of large
+		// bodies. Cancellation is still observed once per run.
+		if buffered := s.input.Buffered(); buffered > 0 {
+			run, _ := s.input.Peek(buffered)
+			plain := 0
+			for plain < len(run) && run[plain] != '"' && run[plain] != '\\' && run[plain] >= 0x20 {
+				plain++
+			}
+			if plain > 0 {
+				if err := s.ctx.Err(); err != nil {
+					return err
+				}
+				discarded, _ := s.input.Discard(plain)
+				s.offset += int64(discarded)
+				continue
+			}
+		}
 		b, err := s.byte()
 		if err != nil {
 			return err
