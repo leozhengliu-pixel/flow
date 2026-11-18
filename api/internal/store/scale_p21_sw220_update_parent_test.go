@@ -145,14 +145,21 @@ func scaleP21SW220Run(t *testing.T, fixture scaleP09Fixture, view *SQLiteStore, 
 	return result
 }
 
+// The parent-map differential runs its variants in two top-level tests so
+// the shards can spread them: each variant writes 5 MiB duplicate bodies
+// through both writers.
 func TestScaleP21SW220ProjectUpdateParentMapDifferential(t *testing.T) {
+	scaleP21SW220ParentMap(t, "duplicate", "empty-parent", "empty-id", "normalized-id", "normalized-parent", "deleted-parent", "foreign-parent")
+}
+
+func TestScaleP21SW220ProjectUpdateParentMapCanonicalDifferential(t *testing.T) {
+	scaleP21SW220ParentMap(t, "canonical-unknown", "canonical-folded-id", "canonical-comments", "canonical-occurrences", "order-only", "hash-parent-null")
+}
+
+func scaleP21SW220ParentMap(t *testing.T, variants ...string) {
 	f, view, seed := scaleP21SW77Fixture(t)
 	clock := time.Date(2026, 11, 16, 1, 2, 3, 0, time.UTC)
-	for _, variant := range []string{
-		"duplicate", "empty-parent", "empty-id", "normalized-id", "normalized-parent",
-		"canonical-unknown", "canonical-folded-id", "canonical-comments", "canonical-occurrences",
-		"deleted-parent", "foreign-parent", "order-only", "hash-parent-null",
-	} {
+	for _, variant := range variants {
 		t.Run(variant, func(t *testing.T) {
 			smallPeak := 0
 			for _, size := range []int{32, 5 << 20} {
