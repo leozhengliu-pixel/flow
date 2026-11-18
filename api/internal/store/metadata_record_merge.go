@@ -1197,7 +1197,29 @@ func setMetadataRecordsDecoded(data *domain.Bootstrap, records map[metadataRecor
 // lockMetadataRecords reads (and on MySQL and PostgreSQL locks) the stored
 // rows of one field's records, in key order.
 func lockMetadataRecords(ctx context.Context, tx *sqlTx, workspace, field string, keys []string) (map[string][]byte, error) {
-	keys = storableMetadataRecordKeys(tx.dialect, keys)
+	stored, aliases := storedMetadataRecordKeys(tx.dialect, keys)
+	if aliases == nil {
+		return lockStoredMetadataRecords(ctx, tx, workspace, field, keys)
+	}
+	rows, err := lockStoredMetadataRecords(ctx, tx, workspace, field, stored)
+	if err != nil {
+		return nil, err
+	}
+	// Answer under the caller's keys, as SQLite stores them.
+	result := make(map[string][]byte, len(keys))
+	for _, key := range keys {
+		storedKey, kept := aliases[key]
+		if !kept {
+			storedKey = key
+		}
+		if raw, found := rows[storedKey]; found && (kept || utf8.ValidString(key)) {
+			result[key] = raw
+		}
+	}
+	return result, nil
+}
+
+func lockStoredMetadataRecords(ctx context.Context, tx *sqlTx, workspace, field string, keys []string) (map[string][]byte, error) {
 	if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
 		return budget.lockRecords(ctx, tx, workspace, field, keys)
 	}
@@ -1440,25 +1462,49 @@ func (s *SQLiteStore) recordTxOptions() *sql.TxOptions {
 	return nil
 }
 
-// storableMetadataRecordKeys drops the keys no PostgreSQL row can have: its
-// text is valid UTF-8 without NUL, so it refuses invalid UTF-8 parameters
-// (22021) and textArgs would strip NUL, matching another record. A key from
-// an in-memory ID (encoding/json stores such IDs with U+FFFD, kept inline)
-// is then simply not found, as on SQLite and MySQL. Other dialects keep keys.
-func storableMetadataRecordKeys(dialect string, keys []string) []string {
+// storedMetadataRecordKeys maps record keys to the keys PostgreSQL stores
+// them under. Its text holds no NUL: the row of an ID with NUL is written
+// (textArgs) and found under the ID without it, so lookups and deletions must
+// use that key. It refuses invalid UTF-8 (22021), so such a key (encoding/json
+// stores the ID with U+FFFD, kept inline) has no row and is left out. aliases
+// is nil when no key changes (and on other dialects, which store keys as
+// given); otherwise it maps each changed key to its stored key, or omits it
+// when it has none.
+func storedMetadataRecordKeys(dialect string, keys []string) ([]string, map[string]string) {
 	if dialect != "postgres" {
-		return keys
+		return keys, nil
 	}
+	var aliases map[string]string
+	var stored []string
+	seen := map[string]bool{}
 	for index, key := range keys {
-		if !utf8.ValidString(key) || strings.IndexByte(key, 0) >= 0 {
-			kept := slices.Clone(keys[:index])
-			for _, key := range keys[index+1:] {
-				if utf8.ValidString(key) && strings.IndexByte(key, 0) < 0 {
-					kept = append(kept, key)
-				}
+		valid, nul := utf8.ValidString(key), strings.IndexByte(key, 0) >= 0
+		if aliases == nil && valid && !nul {
+			continue
+		}
+		if aliases == nil {
+			aliases = map[string]string{}
+			stored = make([]string, 0, len(keys))
+			for _, earlier := range keys[:index] {
+				stored = append(stored, earlier)
+				seen[earlier] = true
 			}
-			return kept
+		}
+		storedKey := key
+		if valid && nul {
+			storedKey = StripNUL(key)
+			aliases[key] = storedKey
+		} else if !valid {
+			continue
+		}
+		if !seen[storedKey] {
+			seen[storedKey] = true
+			stored = append(stored, storedKey)
 		}
 	}
-	return keys
+	if aliases == nil {
+		return keys, nil
+	}
+	sort.Strings(stored)
+	return stored, aliases
 }

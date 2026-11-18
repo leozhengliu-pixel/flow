@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync/atomic"
 
 	"flow/api/internal/domain"
@@ -214,6 +215,8 @@ func syncMetadataRecordSet(ctx context.Context, tx *sqlTx, workspace string, ref
 // the database: stored payloads are taken from known, and fetched only for
 // rows known does not have.
 func syncMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, shapes map[string]string, wanted map[metadataRecordKey]metadataRecord, fields []string, known map[metadataRecordKey]metadataRecord) error {
+	// Stored rows come back under their stored keys: compare ours under those.
+	wanted, known = storedMetadataRecordMap(tx.dialect, wanted), storedMetadataRecordMap(tx.dialect, known)
 	if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
 		return budget.syncRecords(ctx, tx, workspace, refs, shapes, wanted, fields, known)
 	}
@@ -653,4 +656,31 @@ func (s *SQLiteStore) expandWorkspaceMetadata(ctx context.Context, workspace str
 	}
 	delete(root, metadataCollectionsKey)
 	return json.Marshal(root)
+}
+
+// storedMetadataRecordMap keys records as PostgreSQL stores them: without
+// NUL (see storedMetadataRecordKeys), so a record known or wanted under an ID
+// with NUL is matched with, replaced over or deleted as its stored row rather
+// than mistaken for another write's row. A key that only differs by NUL from
+// another one shares its stored row; the later record wins, as its write
+// would. The map is returned as it is when no key changes.
+func storedMetadataRecordMap(dialect string, records map[metadataRecordKey]metadataRecord) map[metadataRecordKey]metadataRecord {
+	if dialect != "postgres" || records == nil {
+		return records
+	}
+	changed := false
+	for key := range records {
+		if strings.IndexByte(key.key, 0) >= 0 {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		return records
+	}
+	stored := make(map[metadataRecordKey]metadataRecord, len(records))
+	for key, value := range records {
+		stored[metadataRecordKey{key.field, StripNUL(key.key)}] = value
+	}
+	return stored
 }
