@@ -1,6 +1,7 @@
 # Known-failing Go tests, tracked until fixed (baseline of 2026-11-17/18, CI runs
-# 44173057528, 44222295379 and 44239650983; the cmd/server PostgreSQL
-# entries are from the first sharded run, MySQL cmd/server shard 2/2 timed out).
+# 44173057528, 44222295379, 44239650983 and 44253320777). Not listed, flaky:
+# TestScaleP19EnablePermissionDifferential/postgres/key-selected-set (503) and
+# TestScaleP21SW186IssueCreationDifferential/development on MySQL.
 #
 #   <package> <TestName> <scope>[,<scope>...] # <reason> (owner: <who fixes it>)
 #
@@ -20,8 +21,8 @@
 ./internal/store TestScaleP21SW248GenericJSONStdlibTypesAndChildren race # deep-map/deep-array subtests take 7-8 min each under race: child walks rescan the subtree per level (owner: P21 SW248)
 ./internal/store TestScaleP21SW248GenericJSONEquality race # still running after 37 min under race (deep cases) (owner: P21 SW248)
 ./internal/store TestScaleP21SW248GenericJSONNestedLookupAndOverlay race # still running after 17 min under race; first-array-descendant alone 6.5 min (owner: P21 SW248)
-./internal/store TestScaleP21SW220ProjectUpdateParentMapDifferential race # still running after 8 min under race when its shard timed out; empty-parent alone 2.5 min (owner: P21 SW220)
-./cmd/server TestScaleP21SW209AdvancedScheduleTickerDifferential race # still running after 7.5 min under race (5 MiB bodies per matrix cell) when its shard timed out (owner: P21 SW209)
+./internal/store TestScaleP21SW220ProjectUpdateParentMapDifferential race,mysql # still running after 8 min under race when its shard timed out (empty-parent alone 2.5 min); on MySQL still running after 15.5 min without race (owner: P21 SW220)
+./cmd/server TestScaleP21SW209AdvancedScheduleTickerDifferential race,postgres,mysql # still running after 7.5 min under race (5 MiB bodies per matrix cell) when its shard timed out (owner: P21 SW209)
 
 # Fail under the race detector on CI
 ./cmd/server TestScaleP21SW136LoopTextScratchBound race # streamed loop text allocates about 58 MB (TotalAlloc) for a 12 MiB input under -race, bound is 16 KiB (owner: P21 SW136)
@@ -62,7 +63,7 @@
 ./cmd/server TestScaleP21SW125AccountRoutesDifferential postgres # development account route output differs (owner: P21 SW125)
 ./cmd/server TestScaleP21SW159WorkerReplyDifferential postgres # worker reply result/error/effects differ between legacy and bounded (owner: P21 SW159)
 ./cmd/server TestScaleP21SW186IssueCreationAutomationDifferential postgres # literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 SW186)
-./cmd/server TestScaleP21SW186IssueCreationDifferential postgres,mysql # custom-creation-key-existing (PostgreSQL) and development reloaded (MySQL): literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 SW186)
+./cmd/server TestScaleP21SW186IssueCreationDifferential postgres # custom-creation-key-existing: literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 SW186)
 ./cmd/server TestScaleP21SW189ContentStatePermissions postgres # literal and bounded issue JSON differ in the triage suggestion fields (suggestionsGeneratedAt/suggestionsInputSketch) (owner: P21 SW189)
 ./cmd/server TestScaleP21SW189ContentStateRouteDifferential postgres # the legacy path answers 400 (owner: P21 SW189)
 ./cmd/server TestScaleP21SW18TeamResourcesDifferential postgres # team resource read answers 503 "team resources unavailable" (owner: P21 SW18)
@@ -73,4 +74,10 @@
 ./cmd/server TestScaleP21TeamMoveAutoApplyDifferential postgres # bounded triage generation: unsupported Unicode escape sequence (22P05) (owner: P21 team move)
 ./cmd/server TestScaleP21TriageWriterConcurrentSameIssue postgres # one of two concurrent triage writers answers 500 (owner: P21 triage writer)
 ./cmd/server TestScaleP21SW198LargeSessionLifecycleDifferential postgres # a legal large session changes its commit count (0 to 1) (owner: P21 SW198)
+./cmd/server TestScaleP21TeamMoveConcurrentSameTeam postgres # legacy move answers 500: unsupported Unicode escape sequence (22P05) (owner: P21 team move)
+./cmd/server TestScaleP21TeamMoveAcceptDifferential postgres # legacy team move accept answers 403 (owner: P21 team move)
+./cmd/server TestScaleP21SW294OAuthMetadataDifferential postgres # install-new: warm output changed (owner: P21 SW294)
+./cmd/server TestScaleP21SW295ApplicationWebhookReconcileDifferential postgres # reconcile-workspace: warm output changed (owner: P21 SW295)
+./cmd/server TestScaleP21SW43ChatUpdateFormPointDifferential postgres,mysql # point form leaked output work or decoded complete metadata (owner: P21 SW43)
+./cmd/server TestScaleP21WorkerChatSweepDifferential postgres,mysql # worker header selection changed queue/state effects (owner: P21 worker chat sweep)
 ./cmd/server TestScaleP21HotNotificationsDifferential postgres,mysql # hangs: the 4-connection pool is exhausted and lockAuditHead asks for a second connection (tx.database.ExecContext) while its transaction holds one (owner: P21 hot notifications)
