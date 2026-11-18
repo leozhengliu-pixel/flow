@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"reflect"
-	"strings"
 	"sync"
 
 	"flow/api/internal/domain"
@@ -464,12 +463,15 @@ func (p *legacyMetadataWritePlan) writeProjectUpdateScheduleParentMap(ctx contex
 }
 
 func (p *legacyMetadataWritePlan) writeProjectUpdateScheduleParent(ctx context.Context, f *legacyMetadataWriteField, parent string, next legacySessionJSONPart) error {
-	if p.tx.dialect == "postgres" && strings.IndexByte(parent, 0) >= 0 {
-		// Legacy delta matching uses the native known key before textArgs
-		// strips NULs. It leaves the canonical normalized key untouched.
-		return nil
-	}
+	// A parent with NUL is stored without it on PostgreSQL, and the literal
+	// delta matches known and wanted rows under that stored key
+	// (storedMetadataRecordMap): the row is replaced like any other parent's,
+	// under the key the literal writer sends.
 	previous, found := f.scheduleParents.before[parent]
+	key := parent
+	if p.tx.dialect == "postgres" {
+		key = StripNUL(parent)
+	}
 	if !found {
 		return ErrBoundedMetadataCoverage
 	}
@@ -484,7 +486,7 @@ func (p *legacyMetadataWritePlan) writeProjectUpdateScheduleParent(ctx context.C
 	}
 	var order int
 	err := p.tx.QueryRowContext(ctx, "SELECT collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?"+lock,
-		p.workspace, f.field.name, parent).Scan(&order)
+		p.workspace, f.field.name, key).Scan(&order)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Every target parent is known in before: the literal known-row delta
 		// never recreates a parent another writer deleted.
@@ -512,7 +514,7 @@ func (p *legacyMetadataWritePlan) writeProjectUpdateScheduleParent(ctx context.C
 			return nil
 		}
 		_, err := p.tx.ExecContext(ctx, "UPDATE workspace_metadata_records SET collection_order=? WHERE workspace_key=? AND field=? AND record_key=?",
-			0, p.workspace, f.field.name, parent)
+			0, p.workspace, f.field.name, key)
 		p.tx.metadataWritten = err == nil || p.tx.metadataWritten
 		return err
 	}
@@ -528,7 +530,7 @@ func (p *legacyMetadataWritePlan) writeProjectUpdateScheduleParent(ctx context.C
 		return ErrConcurrentWrite
 	}
 	stage, err := beginMetadataSQLWriteStage(ctx, p.tx, metadataSQLStageTarget{
-		workspace: p.workspace, field: f.field.name, key: parent, order: 0,
+		workspace: p.workspace, field: f.field.name, key: key, order: 0,
 		dataBytes: int(stored.bytes), searchBytes: -1, projectUpdateParent: true,
 	})
 	if err != nil {

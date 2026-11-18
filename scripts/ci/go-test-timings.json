@@ -3190,7 +3190,6 @@
     "TestScaleP21SW220ParentMapCancellationAndRelease": 7.59,
     "TestScaleP21SW220ParentMapClosedEligibility": 5.68,
     "TestScaleP21SW220ParentNativeNULDifferential": 513.96,
-    "TestScaleP21SW220ParentPostgresNativeNULDoesNotQuery": 0,
     "TestScaleP21SW220ParentSQLStageDeclaration": 0,
     "TestScaleP21SW224IssueEncodingOwnershipTransition": 8.24,
     "TestScaleP21SW228GenericJSONOwnedDifferential": 0.06,
