@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -23,12 +22,6 @@ import (
 // events, webhooks, realtime and the installed image; the legacy run must
 // generate suggestions for every triage issue (a bounded generation failure
 // would be logged and dropped, so it surfaces as a difference).
-//
-// Open: the bounded issue-suggestion writer exceeds the metadata work budget
-// on this 1000-issue scope (even from an empty budget), so batchUpdate logs
-// the error and writes no suggestions, unlike legacy. SW402 shows the bounded
-// batch writer itself fails a 1000-issue batch over issues with a short
-// update history. Both run only with FLOW_P21_OPEN_BLOCKERS=1.
 
 const scaleP21SW400Team = "sw400-team"
 
@@ -179,9 +172,6 @@ func scaleP21SW400Actions(f scaleP21IssueUpdateFixture, edit func(*domain.Triage
 }
 
 func TestScaleP21SW400ThousandIssueBatchTriageDifferential(t *testing.T) {
-	if os.Getenv("FLOW_P21_OPEN_BLOCKERS") == "" {
-		t.Skip("open P21 activation blocker (bounded writers exceed the metadata work budget on 1000-issue scopes); set FLOW_P21_OPEN_BLOCKERS=1")
-	}
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -285,9 +275,6 @@ func TestScaleP21SW400ThousandIssueBatchTriageDifferential(t *testing.T) {
 // an update history (activities and notifications to their subscribers):
 // the batch writer alone, legacy against bounded.
 func TestScaleP21SW402ThousandIssueBatchWithHistoryDifferential(t *testing.T) {
-	if os.Getenv("FLOW_P21_OPEN_BLOCKERS") == "" {
-		t.Skip("open P21 activation blocker (bounded writers exceed the metadata work budget on 1000-issue scopes); set FLOW_P21_OPEN_BLOCKERS=1")
-	}
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")

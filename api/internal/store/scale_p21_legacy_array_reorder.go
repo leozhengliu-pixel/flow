@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"slices"
 )
 
@@ -209,4 +210,109 @@ func (p *legacyMetadataWritePlan) writeArrayReorderRow(ctx context.Context, f *l
 		return moveOnly()
 	}
 	return writeMetadataRecordRow(ctx, p.tx, p.workspace, key, metadataRecord{data: raw, order: order}, previous)
+}
+
+// arrayTransitionReady admits a collection stored inline in the root (its
+// stored list repeats or lacks an ID, so splitWorkspaceMetadata kept it
+// whole) whose target splits into one row per record: the stored root still
+// lists it inline, it has no canonical rows, and the target is a non-nil list
+// of structs with an id that the literal splitter accepts (inlineTargetShape).
+func (p *legacyMetadataWritePlan) arrayTransitionReady(ctx context.Context, f *legacyMetadataWriteField, shapes map[string]string) (bool, error) {
+	if !f.full || f.next.typ == nil || shapes[f.field.name] != "" || updateMetadataField(f.field.name) ||
+		f.field.name == "projects" || f.field.name == "agentSessions" {
+		return false, nil
+	}
+	element := f.next.typ
+	if element.Kind() != reflect.Slice || element.Elem().Kind() != reflect.Struct {
+		return false, nil
+	}
+	id, found := element.Elem().FieldByName("ID")
+	if !found || id.Type.Kind() != reflect.String || id.PkgPath != "" || len(id.Index) != 1 {
+		return false, nil
+	}
+	if tag := id.Tag.Get("json"); tag != "id" && tag != "id,omitempty" {
+		return false, nil
+	}
+	if absent, err := f.next.isNil(ctx); err != nil || absent {
+		return false, err
+	}
+	backed, err := metadataFieldRecordBacked(ctx, p.tx, p.workspace, f.field.name, f.next.typ)
+	if err != nil || backed {
+		return false, err
+	}
+	var rows int
+	if err := p.tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field=?", p.workspace, f.field.name).Scan(&rows); err != nil {
+		return false, err
+	}
+	if rows != 0 {
+		return false, nil
+	}
+	inline, err := p.inlineTargetShape(ctx, f.next)
+	return !inline, err
+}
+
+// writeArrayTransition persists an arrayTransitionReady field as the
+// materializing writer does (splitWorkspaceMetadata, then syncMetadataRecords
+// over no stored or known rows, then the root patch), one record at a time:
+// every target record is written as a new row ordered by its list index, the
+// root keeps the field as [] and its collection manifest names it "array".
+func (p *legacyMetadataWritePlan) writeArrayTransition(ctx context.Context, f *legacyMetadataWriteField) error {
+	err := f.next.Children(ctx, func(key reflect.Value, item metadataLogicalNode) error {
+		work := &ResourceRead{store: p.store}
+		defer work.Close()
+		if err := legacyActorWriteNodeWork(ctx, work, item, 64); err != nil {
+			return err
+		}
+		value, err := item.Value(ctx, metadataWorkBytes)
+		if err != nil {
+			return err
+		}
+		raw, err := json.Marshal(value.Interface())
+		if err != nil {
+			return err
+		}
+		// The splitter keys the row by the encoded record's id.
+		var entity struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(raw, &entity); err != nil {
+			return err
+		}
+		if entity.ID == "" || len(entity.ID) > 191 {
+			return ErrBoundedMetadataCoverage
+		}
+		return writeMetadataRecordRow(ctx, p.tx, p.workspace, metadataRecordKey{f.field.name, entity.ID}, metadataRecord{data: raw, order: int(key.Int())}, nil)
+	})
+	if err != nil {
+		return err
+	}
+	owner := &ResourceRead{store: p.store}
+	defer owner.Close()
+	if err := owner.reserve(ctx, 2<<20); err != nil {
+		return err
+	}
+	lock := ""
+	if p.tx.dialect != "sqlite" {
+		lock = " FOR UPDATE"
+	}
+	var size int64
+	if err := p.tx.QueryRowContext(ctx, "SELECT "+owner.byteLength("data")+" FROM workspace_states WHERE workspace_key=?"+lock, p.workspace).Scan(&size); err != nil {
+		return err
+	}
+	root, err := p.store.scanMetadataInlineRoot(ctx, p.tx, p.workspace, size)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	shapes, err := root.shapes()
+	if err != nil {
+		return err
+	}
+	shapes[f.field.name] = "array"
+	manifest, err := json.Marshal(shapes)
+	if err != nil {
+		return err
+	}
+	patch := map[string]json.RawMessage{f.field.name: json.RawMessage(`[]`), metadataCollectionsKey: manifest}
+	return p.store.writeStreamedMetadataRootPatch(ctx, p.tx, p.workspace, p.workspaceID, root, patch, owner, true)
 }
