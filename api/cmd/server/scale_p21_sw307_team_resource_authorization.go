@@ -14,8 +14,8 @@ func scaleP21SW307TeamResourceAuthorizationRequest(r *http.Request) (string, boo
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return "", false
 	}
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) != 4 || parts[0] != "api" || parts[1] != "teams" || parts[2] == "" || parts[3] != "resources" {
+	parts, selected := scaleP21EscapedRouteParts(r, "/api/teams/{id}/resources")
+	if !selected || len(parts) < 3 {
 		return "", false
 	}
 	return parts[2], true
@@ -29,17 +29,29 @@ func (s *server) boundedTeamResourceAuthorization(r *http.Request, workspace, us
 	if !selected {
 		return false, false
 	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	content := len(parts) >= 4 && (parts[3] == "resources" || parts[3] == "resource-sections")
+	if !content {
+		return s.boundedTeamRowAuthorization(r, workspace, userID, ref), true
+	}
+	output := r.Method == http.MethodGet && len(parts) == 4 && parts[3] == "resources"
+	return s.boundedTeamResourceDecision(r, workspace, userID, ref, output), true
+}
+
+// output follows the literal decoded handoff condition independently of the
+// registered escaped suffix. Membership routes borrow only the predicate.
+func (s *server) boundedTeamResourceDecision(r *http.Request, workspace, userID, ref string, output bool) bool {
 	var credential *domain.APIKey
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		credential = &key
 	}
 	for attempt := 0; attempt < 3; attempt++ {
-		read, err := s.store.BeginTeamResourceAuthorizationRead(r.Context(), workspace, userID, ref, r.Method == http.MethodGet, credential)
+		read, err := s.store.BeginTeamResourceAuthorizationRead(r.Context(), workspace, userID, ref, output, credential)
 		if err == nil {
-			if !read.Allowed || r.Method != http.MethodGet {
+			if !read.Allowed || !output {
 				allowed := read.Allowed
 				read.Close()
-				return allowed, true
+				return allowed
 			}
 			rows := teamResourcesRead{
 				TeamID:   read.Data.Teams[0].ID,
@@ -51,27 +63,25 @@ func (s *server) boundedTeamResourceAuthorization(r *http.Request, workspace, us
 				read.Close()
 			}) {
 				read.Close()
-				return false, true
+				return false
 			}
-			// Preserve the canonical ID. A raw team-key alias still fails the
-			// unchanged handler's TeamID == PathValue check; HEAD has no rows.
 			*r = *r.WithContext(context.WithValue(r.Context(), teamResourcesReadKey{}, rows))
-			return true, true
+			return true
 		}
 		if read != nil {
 			read.Close()
 		}
 		if !errors.Is(err, store.ErrResourceAccessChanged) || attempt == 2 {
-			return false, true
+			return false
 		}
 		if credential != nil {
 			user, current, selectedWorkspace := s.authenticateAPIKey(r)
 			if current == nil || user.ID != userID || selectedWorkspace != workspace || !apiKeyAllowsRequest(r, *current) {
-				return false, true
+				return false
 			}
 			credential = current
 			*r = *r.WithContext(context.WithValue(r.Context(), apiKeyContextKey{}, *current))
 		}
 	}
-	return false, true
+	return false
 }

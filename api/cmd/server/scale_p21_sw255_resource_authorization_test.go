@@ -25,7 +25,7 @@ func TestScaleP21SW255PointResourceAuthorization(t *testing.T) {
 	t.Run("exact-source-resource-boundary", func(t *testing.T) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			for _, kind := range []string{"projects", "initiatives"} {
-				for _, tail := range []string{"", "/relations", "/updates"} {
+				for _, tail := range []string{"", "/relations", "/updates", "/updates/diff-preview", "/history"} {
 					request := httptest.NewRequest(method, "/api/"+kind+"/old-slug"+tail, nil)
 					gotKind, ref, handled := scaleP21SW255ResourceAuthorizationRequest(request)
 					if !handled || gotKind != kind || ref != "old-slug" {
@@ -44,7 +44,7 @@ func TestScaleP21SW255PointResourceAuthorization(t *testing.T) {
 		for _, path := range []string{
 			"/api/projects", "/api/initiatives", "/api/projects/", "/api/projects/x/",
 			"/api/projects/x/relations/hidden", "/api/initiatives/x/relations/hidden",
-			"/api/projects/x/history", "/api/initiatives/x/updates/diff-preview",
+			"/api/initiatives/x/updates/not-diff-preview",
 			"/api/documents/x", "/api/projects//updates", "/api//projects/x",
 		} {
 			if _, _, handled := scaleP21SW255ResourceAuthorizationRequest(httptest.NewRequest(http.MethodGet, path, nil)); handled {
