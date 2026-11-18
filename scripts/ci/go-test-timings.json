@@ -3178,7 +3178,6 @@
     "TestScaleP21SW218LegacyIssueWorkCancellation": 6.04,
     "TestScaleP21SW218LegacyIssueWorkDifferential": 365.2,
     "TestScaleP21SW218LegacyIssueWorkHistoryDenialIsAtomic": 4.74,
-    "TestScaleP21SW21EscapedKeyCandidatePattern": 0,
     "TestScaleP21SW21PersonalErasureUsesResidentIdentity": 8.18,
     "TestScaleP21SW21PersonalLeakCheckUsesResidentIdentity": 10.32,
     "TestScaleP21SW21PersonalScrubBaseline": 30.72,
