@@ -29,8 +29,9 @@ func (s *SQLiteStore) BeginIntegrationWebhookCredentials(ctx context.Context, wo
 		workspace = s.lastWorkspaceKey
 		s.mu.RUnlock()
 	}
-	// textArgs strips PostgreSQL NULs; a missing lookup must not alias a row.
-	if s.dialect == "postgres" && (strings.ContainsRune(workspace, '\x00') || strings.ContainsRune(provider, '\x00')) {
+	// textArgs strips PostgreSQL NULs and MySQL's utf8mb4_0900_ai_ci collation
+	// ignores them; a missing lookup must not alias a row.
+	if s.dialect != "sqlite" && (strings.ContainsRune(workspace, '\x00') || strings.ContainsRune(provider, '\x00')) {
 		return IntegrationWebhookCredentials{}, false, emptyRelease, nil
 	}
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))

@@ -39,8 +39,9 @@ func (s *SQLiteStore) BeginTeamResourceRead(ctx context.Context, workspace, team
 		workspace = s.lastWorkspaceKey
 		s.mu.RUnlock()
 	}
-	// textArgs strips PostgreSQL NULs; preserve exact identity comparisons.
-	if s.dialect == "postgres" && strings.ContainsRune(workspace, '\x00') {
+	// textArgs strips PostgreSQL NULs and MySQL's utf8mb4_0900_ai_ci collation
+	// ignores them; preserve exact identity comparisons.
+	if s.dialect != "sqlite" && strings.ContainsRune(workspace, '\x00') {
 		return nil, false, false, nil
 	}
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
@@ -185,7 +186,9 @@ func (r *TeamResourceRead) visit(kind string, visit func(io.Reader) error) error
 		position = "CASE WHEN JSON_TYPE(" + extract + ") IN ('INTEGER','DOUBLE','DECIMAL') THEN " + extract + " ELSE CAST('0' AS JSON) END"
 		parameter = "CAST(? AS JSON)"
 	case "postgres":
-		position = "CAST(" + position + " AS DOUBLE PRECISION)"
+		// ->> yields text: the absent default is the text '0' (a numeric 0 has
+		// no common type with text).
+		position = "CAST(COALESCE(" + r.store.jsonText("data", "position") + ",'0') AS DOUBLE PRECISION)"
 	}
 	var lastID string
 	var lastPosition float64
