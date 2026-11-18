@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -31,6 +30,13 @@ func TestScaleP21SW21TypedSyncRequestVisitor(t *testing.T) {
 		`{"id":"null","applicationId":null}`,
 		`null`,
 		`{"id":"literal","applicationId":"%_!","createdAt":"2026-01-02T03:04:05Z","reviewedAt":"2026-01-03T04:05:06Z"}`,
+		// Escaped keys and key-like text inside values, on every dialect's
+		// candidate predicate (formerly a unit test of MySQL's raw-text pattern).
+		`{"id":"escaped-value","applicationId":"other","groupName":"escaped \\n and \\"}`,
+		`{"id":"escaped-a","\u0061pplicationId":"target"}`,
+		`{ "id":"escaped-upper", "application\u0049d" : "target"}`,
+		`{"id":"quoted","applicationId":"other","groupName":"quoted {\"applicationId\":\"target\"}"}`,
+		`{"id":"nested-escaped","applicationId":"target","unknown":{"\u0061pplicationId":"other"}}`,
 	}
 	large, _ := json.Marshal(domain.OAuthSyncGroupRequest{ID: "large", ApplicationID: "target", GroupName: strings.Repeat("<large legal body> ", 40000)})
 	raws = append(raws, string(large))
@@ -127,29 +133,6 @@ func TestScaleP21SW21TypedSyncRequestVisitor(t *testing.T) {
 	}
 	if probe.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("typed visitor decoded complete workspace metadata")
-	}
-}
-
-func TestScaleP21SW21EscapedKeyCandidatePattern(t *testing.T) {
-	mysql := &SQLiteStore{dialect: "mysql"}
-	_, args := mysql.scaleP21SW21ApplicationCandidate("target")
-	pattern, err := regexp.Compile(args[1].(string))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, item := range []struct {
-		raw  string
-		want bool
-	}{
-		{`{"id":"x","applicationId":"other","groupName":"escaped \\n and \\"}`, false},
-		{`{"id":"x","\u0061pplicationId":"target"}`, true},
-		{`{ "application\u0049d" : "target"}`, true},
-		{`{"applicationId":"other","groupName":"quoted {\"applicationId\":\"target\"}"}`, false},
-		{`{"applicationId":"target","unknown":{"\u0061pplicationId":"other"}}`, true},
-	} {
-		if got := pattern.MatchString(item.raw); got != item.want {
-			t.Fatalf("escaped object-key candidate=%v want=%v raw=%s", got, item.want, item.raw)
-		}
 	}
 }
 
