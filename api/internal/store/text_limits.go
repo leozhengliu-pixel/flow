@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -184,6 +185,69 @@ func StripJSONNUL(raw []byte) []byte {
 		out = append(out, c)
 	}
 	return out
+}
+
+// jsonNULStripWriter writes a JSON document to dst exactly as StripJSONNUL
+// would return it, for documents streamed in pieces: an escape may cross
+// Write calls. Finish reports an escape left open (invalid JSON) by writing it
+// unchanged, as StripJSONNUL keeps a trailing partial escape.
+type jsonNULStripWriter struct {
+	dst      io.Writer
+	inString bool
+	pending  []byte
+	out      []byte
+}
+
+func (w *jsonNULStripWriter) Write(p []byte) (int, error) {
+	w.out = w.out[:0]
+	for _, c := range p {
+		if len(w.pending) == 1 && c != 'u' {
+			// Any other escape: both bytes stay, the second taken as escaped.
+			w.out = append(w.out, w.pending[0], c)
+			w.pending = w.pending[:0]
+			continue
+		}
+		if len(w.pending) > 0 {
+			if c == jsonNULEscape[len(w.pending)] {
+				w.pending = append(w.pending, c)
+				if len(w.pending) == len(jsonNULEscape) {
+					w.pending = w.pending[:0]
+				}
+				continue
+			}
+			// Not \u0000: what was held stays, and c is read as StripJSONNUL
+			// reads it after the escape it skipped.
+			w.out = append(w.out, w.pending...)
+			w.pending = w.pending[:0]
+		}
+		switch {
+		case !w.inString:
+			w.inString = c == '"'
+			w.out = append(w.out, c)
+		case c == '"':
+			w.inString = false
+			w.out = append(w.out, c)
+		case c == '\\':
+			w.pending = append(w.pending, c)
+		default:
+			w.out = append(w.out, c)
+		}
+	}
+	if len(w.out) > 0 {
+		if _, err := w.dst.Write(w.out); err != nil {
+			return 0, err
+		}
+	}
+	return len(p), nil
+}
+
+func (w *jsonNULStripWriter) Finish() error {
+	if len(w.pending) == 0 {
+		return nil
+	}
+	_, err := w.dst.Write(w.pending)
+	w.pending = w.pending[:0]
+	return err
 }
 
 // StripNUL removes U+0000 from text. PostgreSQL refuses it in text and
