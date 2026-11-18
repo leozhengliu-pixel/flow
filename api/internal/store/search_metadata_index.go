@@ -136,6 +136,37 @@ func (s *SQLiteStore) ensureMetadataSearchIndex(ctx context.Context) error {
 	return nil
 }
 
+// writeMetadataSearchPage copies the search documents of one page of records
+// (keys of one workspace field) into metadata_search_documents, rewriting the
+// documents that differ from their records. Both index repairs use it.
+//
+// On MySQL a multi-row INSERT ... ON DUPLICATE KEY UPDATE that changes rows
+// drops them from the InnoDB FULLTEXT index (8.4: MATCH no longer finds them,
+// LIKE does; see mysqlFullTextIndexTables), so the documents that
+// exist are updated in place and only missing ones are inserted. The
+// comparison is the upsert's: the column's collation decides what differs.
+func (s *SQLiteStore) writeMetadataSearchPage(ctx context.Context, workspace, field string, keys []string) error {
+	where, args := bindList("record_key", keys)
+	args = append([]any{workspace, field}, args...)
+	if s.dialect == "mysql" {
+		content := s.metadataSearchContent("m.data")
+		mine, _ := bindList("m.record_key", keys)
+		if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_documents idx JOIN workspace_metadata_records m ON m.workspace_key=idx.workspace_key AND m.field=idx.field AND m.record_key=idx.record_key SET idx.content=`+content+` WHERE m.workspace_key=? AND m.field=? AND `+mine+` AND idx.content<>`+content, args...); err != nil {
+			return err
+		}
+		// The upsert stays for a document written meanwhile; without a
+		// concurrent writer it only inserts.
+		_, err := s.db.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) SELECT workspace_key,field,record_key,`+s.metadataSearchContent("data")+` FROM workspace_metadata_records m WHERE workspace_key=? AND field=? AND `+where+` AND NOT EXISTS (SELECT 1 FROM metadata_search_documents idx WHERE idx.workspace_key=m.workspace_key AND idx.field=m.field AND idx.record_key=m.record_key) ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`, args...)
+		return err
+	}
+	upsert := ` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=excluded.content WHERE metadata_search_documents.content<>excluded.content`
+	if s.dialect == "postgres" {
+		upsert = ` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=EXCLUDED.content WHERE metadata_search_documents.content<>EXCLUDED.content`
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) SELECT workspace_key,field,record_key,`+s.metadataSearchContent("data")+` FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+where+upsert, args...)
+	return err
+}
+
 func (s *SQLiteStore) migrateMetadataSearchIndex(ctx context.Context) error {
 	if s.BoundedMetadataEnabled() {
 		return s.sw17MigrateMetadataSearchIndexBounded(ctx)
@@ -182,17 +213,7 @@ func (s *SQLiteStore) migrateMetadataSearchIndex(ctx context.Context) error {
 				if len(ids) == 0 {
 					break
 				}
-				where, args := bindList("record_key", ids)
-				args = append([]any{workspace, kind.field}, args...)
-				upsert := ` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=excluded.content WHERE metadata_search_documents.content<>excluded.content`
-				if s.dialect == "mysql" {
-					upsert = ` ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`
-				}
-				if s.dialect == "postgres" {
-					upsert = ` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=EXCLUDED.content WHERE metadata_search_documents.content<>EXCLUDED.content`
-				}
-				_, err = s.db.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) SELECT workspace_key,field,record_key,`+s.metadataSearchContent("data")+` FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+where+upsert, args...)
-				if err != nil {
+				if err := s.writeMetadataSearchPage(ctx, workspace, kind.field, ids); err != nil {
 					return err
 				}
 				last = ids[len(ids)-1]

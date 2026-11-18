@@ -18,11 +18,19 @@ const (
 	metadataSearchStopwordsMigrationVersion = 1005
 )
 
-// mysqlFullTextIndexTables are the tables syncIssueIndexRows writes that hold
-// an InnoDB FULLTEXT index. MySQL 8.4 drops the rows a multi-row INSERT ...
-// ON DUPLICATE KEY UPDATE changes from such an index (MATCH no longer finds
-// them, while LIKE does); a single-row upsert and an UPDATE keep them.
-var mysqlFullTextIndexTables = map[string]bool{"issue_search_documents": true}
+// mysqlFullTextIndexTables are the tables that hold an InnoDB FULLTEXT index.
+// MySQL 8.4 drops the rows a multi-row INSERT ... ON DUPLICATE KEY UPDATE
+// (VALUES or SELECT) changes from such an index, often all of them and the
+// rows it inserts beside them: MATCH no longer finds them, while LIKE does.
+// Rows it leaves unchanged stay. A single-row upsert, several of them in
+// one transaction, and a multi-row UPDATE (CASE or JOIN) keep them. Row
+// triggers are no escape: the metadata search triggers on
+// workspace_metadata_records lose documents the same way when one statement
+// changes the search text of several records (none does today; a workspace
+// rename moves records whose documents already moved, so it changes none).
+// Writers of these tables (syncIssueIndexRows, the issue and metadata index
+// repairs) update existing rows in place there and insert only new ones.
+var mysqlFullTextIndexTables = map[string]bool{"issue_search_documents": true, "metadata_search_documents": true}
 
 // ensureMySQLNgramIndex creates a FULLTEXT ngram index without InnoDB's
 // stopword list. The default list holds "a" and "i", and the ngram parser drops
