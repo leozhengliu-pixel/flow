@@ -68,6 +68,11 @@ func (s *SQLiteStore) WithColdMetadataMutation(ctx context.Context, consumer, wo
 }
 
 func validateColdMetadataMutation(ctx context.Context, event string, payload any) error {
+	if coldLegacyWrite(ctx) {
+		// A default COLD write runs the literal legacy dispatch; its
+		// publication is the facade's shared write lock (coldLegacyMutation).
+		return nil
+	}
 	_, scoped := mutationScopeFromContext(ctx)
 	loopContract := event == "loop.output_contract" && !fullMutationsForced.Load()
 	if scoped || UsesIssueRecordMutations(ctx) || projectRecordSelectionEnabled(ctx) ||

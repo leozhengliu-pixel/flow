@@ -28,6 +28,17 @@ func residentRecordEvent(event string) bool {
 	return false
 }
 
+// residentRecordWriterReady reports whether mutateResidentRecords serves the
+// write (a point edit of resident records) rather than refusing it.
+func residentRecordWriterReady(ctx context.Context, eventType string) bool {
+	scope, scoped := metadataRecordScopeFromContext(ctx)
+	if !scoped || len(scope.Write) == 0 || !residentRecordEvent(eventType) || metadataRecordVerificationEnabled(ctx) {
+		return false
+	}
+	_, content := mutationScopeFromContext(ctx)
+	return !content
+}
+
 func (s *SQLiteStore) mutateResidentRecords(ctx context.Context, workspace, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	scope, scoped := metadataRecordScopeFromContext(ctx)
 	if !scoped || len(scope.Write) == 0 || !residentRecordEvent(eventType) || metadataRecordVerificationEnabled(ctx) {
