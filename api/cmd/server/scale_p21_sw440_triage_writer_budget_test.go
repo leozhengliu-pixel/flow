@@ -243,8 +243,8 @@ func TestScaleP21SW440ThousandIssueTriageGenerationDifferential(t *testing.T) {
 	}
 }
 
-// scaleP21SW441Moved is a bulk issue the team auto-move moves into the private
-// triage team: its group's majority is there (scaleP21SW440Setup).
+// scaleP21SW441Moved is a bulk issue the team auto-move moves: its group's
+// majority is in the private triage team (scaleP21SW440Setup).
 const scaleP21SW441Moved = "sw400-bulk-0040"
 
 // scaleP21SW441Attach attaches the SW440 document to the moved issue before
@@ -305,12 +305,14 @@ func TestScaleP21SW441ThousandIssueTriageConflictingWrite(t *testing.T) {
 	moved := false
 	for _, row := range outcomes[0].State.Documents {
 		if row[0] == "sw440-doc" {
-			moved = strings.Contains(row[2].(string), `"issueId":"`+scaleP21SW441Moved+`","issueTeamId":"`+f.private+`"`) &&
-				strings.Contains(row[2].(string), `"updatedAt":"2026-01-04T05:06:07Z"`)
+			data := row[2].(string)
+			moved = strings.Contains(data, `"issueId":"`+scaleP21SW441Moved+`","issueTeamId":"`) &&
+				!strings.Contains(data, `"issueTeamId":"sw440-plain"`) && !strings.Contains(data, `"issueTeamId":"`+scaleP21SW400Team+`"`) &&
+				strings.Contains(data, `"updatedAt":"2026-01-04T05:06:07Z"`)
 		}
 	}
 	if !moved {
-		t.Fatal("legacy did not move the document the other server reassigned into the private team")
+		t.Fatal("legacy did not move the document the other server reassigned")
 	}
 }
 

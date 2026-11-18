@@ -33,6 +33,8 @@ type legacyMetadataWriteField struct {
 	parentBefore, parentNext map[string]metadataLogicalNode
 	full, changed, persist   bool
 	inlineReady              bool
+	// reorder takes writeArrayReorder (legacyMetadataStreamedOrder).
+	reorder bool
 }
 
 type legacyMetadataWritePlan struct {
@@ -241,6 +243,10 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 		if fast {
 			continue
 		}
+		if !field.full && shapes[field.field.name] == "array" && legacyMetadataStreamedOrder(ctx, field.field.name) && plan.arrayReorderReady(field) {
+			field.reorder = true
+			continue
+		}
 		if handled, err := plan.agentSessionLifecycleInlineReady(ctx, field, shapes); err != nil {
 			return nil, err
 		} else if handled {
@@ -272,7 +278,9 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 		if field.full || !field.persist {
 			continue
 		}
-		if updateMetadataField(field.field.name) {
+		if field.reorder {
+			err = plan.writeArrayReorder(ctx, field)
+		} else if updateMetadataField(field.field.name) {
 			err = plan.writeUpdates(ctx, field)
 		} else {
 			err = plan.writeArray(ctx, field)
