@@ -25,20 +25,34 @@ type coldWriteMutex struct {
 func (m *coldWriteMutex) Lock() {
 	if m.shared != nil {
 		m.shared.Lock()
-		if m.onLock != nil {
-			m.onLock()
-		}
+		m.locked()
 		return
 	}
 	m.local.Lock()
 }
 
+// locked runs onLock; if it panics the shared lock is returned first, so a
+// panicking COLD write never leaves the live store's writers locked out.
+func (m *coldWriteMutex) locked() {
+	if m.onLock == nil {
+		return
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			m.shared.Unlock()
+			panic(recovered)
+		}
+	}()
+	m.onLock()
+}
+
 func (m *coldWriteMutex) Unlock() {
 	if m.shared != nil {
+		// The shared lock is returned even when publication panics.
+		defer m.shared.Unlock()
 		if m.onUnlock != nil {
 			m.onUnlock()
 		}
-		m.shared.Unlock()
 		return
 	}
 	m.local.Unlock()
@@ -49,9 +63,7 @@ func (m *coldWriteMutex) TryLock() bool {
 		if !m.shared.TryLock() {
 			return false
 		}
-		if m.onLock != nil {
-			m.onLock()
-		}
+		m.locked()
 		return true
 	}
 	return m.local.TryLock()
