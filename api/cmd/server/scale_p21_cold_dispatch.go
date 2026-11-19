@@ -37,8 +37,6 @@ var scaleP21ColdRoutes = []scaleP21ColdRoute{
 	{http.MethodPatch, "/api/api-keys/{id}", "server/settings_features.go:updateAPIKey", "api_key.updated"},
 	{http.MethodDelete, "/api/api-keys/{id}", "server/settings_features.go:revokeAPIKey", "api_key.revoked"},
 	{http.MethodPost, "/api/api-keys/{id}/rotate-secret", "server/settings_features.go:rotateAPIKeySecret", "api_key.secret_rotated"},
-	{http.MethodGet, "/api/oauth-applications", "server/settings_features.go:listOAuthApplications", ""},
-	{http.MethodGet, "/api/oauth-applications/{id}", "server/settings_features.go:getOAuthApplication", ""},
 	{http.MethodPost, "/api/oauth-applications", "server/settings_features.go:createOAuthApplication", "oauth_application.created"},
 	{http.MethodDelete, "/api/oauth-applications/{id}", "server/settings_features.go:deleteOAuthApplication", "oauth_application.deleted"},
 	{http.MethodPost, "/api/trash/{id}/restore", "server/advanced_features.go:restoreTrashEntry", "trash.restored"},

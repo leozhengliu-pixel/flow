@@ -618,6 +618,10 @@ func (s *server) reorderWorkflowStates(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getTeamSettings(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.getTeamSettingsBounded(w, r)
+		return
+	}
 	data := s.workspaceData(r)
 	settings := teamSettings(&data, r.PathValue("id"))
 	writeJSON(w, http.StatusOK, settings)
@@ -1189,8 +1193,12 @@ func (s *server) deleteIssueTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listTeamLabels(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
 	teamID := r.PathValue("id")
+	if s.store.BoundedMetadataEnabled() {
+		s.listLabelsBounded(w, r, func(label domain.IssueLabel) bool { return label.Scope == teamID })
+		return
+	}
+	data := s.workspaceData(r)
 	result := []domain.IssueLabel{}
 	for _, label := range data.Labels {
 		if label.Scope == teamID {

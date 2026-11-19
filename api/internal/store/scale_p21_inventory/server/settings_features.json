@@ -1,6 +1,6 @@
 {
   "source": "server/settings_features.go",
-  "unmigrated": 19,
+  "unmigrated": 14,
   "consumers": {
     "connectIntegration": {
       "owner": "P21",
@@ -47,13 +47,13 @@
     },
     "createLabelGroup": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Flag off forwards to the literal MutateWorkspaceWithAggregate. Bounded the appending writer appends labelGroups and reads teams/<scope> for the teamExists check; the label_group_ ID is minted inside the callback. TestScaleP21SW600LabelRoutes compares workspace and team groups and refusals legacy vs warm vs SQL-reloaded, zero full decodes.",
       "accessors": [
-        "Bootstrap",
-        "MutateWorkspaceWithAggregate"
+        "MutateWorkspaceAppendingWithAggregate"
       ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "temperature": "hot",
+      "temperatureReason": "Label group creation from label settings.",
       "callers": [
         "POST /api/label-groups (server/main.go:621)"
       ]
@@ -105,13 +105,13 @@
     },
     "createWorkspaceLabel": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Flag off MutateWorkspaceAppendingWithAggregate forwards to the literal MutateWorkspaceWithAggregate with the unchanged callback. Bounded the reviewed appending writer appends labels and reads only the requested group (labelGroups/<trimmed groupId>, the one record validLabelGroup reads); the new label_ ID is minted inside the callback, so no stored object precedes it. TestScaleP21SW600LabelRoutes compares plain, grouped, project, archived and refused creations legacy vs warm vs SQL-reloaded: responses, metadata rows, root, events, webhooks (previous values), realtime, installed image == reload, zero full decodes.",
       "accessors": [
-        "Bootstrap",
-        "MutateWorkspaceWithAggregate"
+        "MutateWorkspaceAppendingWithAggregate"
       ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "temperature": "hot",
+      "temperatureReason": "Creating a label is an ordinary member action (label pickers create labels inline).",
       "callers": [
         "POST /api/labels (server/main.go:616)"
       ]
@@ -223,16 +223,16 @@
     "getOAuthApplication": {
       "owner": "P21",
       "status": "reviewed",
+      "reason": "Flag off the literal withColdMetadataRequest body runs unchanged. Bounded it answers from withOAuthApplicationsBounded (the reviewed installed oauthApplications field, emptied for a non-admin key as filterBootstrapForAPIKey does) with the literal ID lookup, 404 Application not found and client secret stripping; no longer registered in scaleP21ColdRoutes. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares present, missing and refused reads legacy vs warm vs SQL-reloaded.",
       "accessors": [
+        "BeginOAuthApplicationsRead",
         "withColdMetadataRequest"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "temperature": "hot",
+      "temperatureReason": "Admin OAuth application detail, read when an application settings page opens.",
       "callers": [
         "GET /api/oauth-applications/{id} (api/cmd/server/oauth_platform.go:31)"
-      ],
-      "coldDispatch": "server/settings_features.go:getOAuthApplication",
-      "reason": "COLD production route. Bounded before this, every request was refused with 403 by authorization (SW450 control run). GET /api/oauth-applications/{id} is registered in scaleP21ColdRoutes; getOAuthApplicationWithStore reads workspaceData's BootstrapForUser on the refreshed cold facade (coldWorkspaceData), answers 404 for an unknown id and strips the client secret literally. Flag off unchanged. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real routes through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded: responses, rows, audit, events, publications and installed image == reload."
+      ]
     },
     "listAPIKeys": {
       "owner": "P21",
@@ -263,16 +263,16 @@
     "listOAuthApplications": {
       "owner": "P21",
       "status": "reviewed",
+      "reason": "Flag off the literal withColdMetadataRequest body runs on the server store unchanged (listOAuthApplicationsWithStore over workspaceData). Bounded it returns before that through withOAuthApplicationsBounded: the viewer projection leaves oauthApplications as stored and filterBootstrapForAPIKey empties it for a key without the admin scope, so the reviewed BeginOAuthApplicationsRead installed-field decode answers the same applications in source order (nil versus empty kept) with client secrets stripped literally; the route is no longer registered in scaleP21ColdRoutes, so its authorization is the bounded membership decision. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real routes through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded (owner, admin, member and guest refusals, admin-scope key, empty list, created and deleted applications).",
       "accessors": [
+        "BeginOAuthApplicationsRead",
         "withColdMetadataRequest"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "temperature": "hot",
+      "temperatureReason": "Admin OAuth application list, read whenever the API settings page opens.",
       "callers": [
         "GET /api/oauth-applications (api/cmd/server/main.go:639)"
-      ],
-      "coldDispatch": "server/settings_features.go:listOAuthApplications",
-      "reason": "COLD production route. Bounded before this, authorization's whole-workspace projection read the server's bounded store (an unregistered route), whose PagedWorkspaceMetadata answers ErrAuthForbidden, so every request was refused with 403 'This resource is outside your teams' (SW450 control run). GET /api/oauth-applications is registered in scaleP21ColdRoutes; listOAuthApplicationsWithStore reads workspaceData's BootstrapForUser on the refreshed cold facade (coldWorkspaceData) and strips client secrets literally. Flag off withColdMetadataRequest runs the literal body on the server's store. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real routes through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded: responses, rows, audit, events, publications and installed image == reload."
+      ]
     },
     "listWorkspaceIssueTemplates": {
       "owner": "P21",
@@ -288,12 +288,13 @@
     },
     "listWorkspaceLabels": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Flag off the literal body reads workspaceData unchanged. Bounded it returns before workspaceData through listLabelsBounded (workspace-scope and resourceType predicate unchanged), which answers the same labels in source order with the same issue counts from the reviewed resource directory read and the issue indexes. TestScaleP21SW600LabelRoutes compares the real route through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded, for every role, plain and team-restricted keys and resource filters, with zero full decodes.",
       "accessors": [
         "workspaceData"
       ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "temperature": "hot",
+      "temperatureReason": "Label settings list read by every member who opens label settings or label pickers.",
       "callers": [
         "GET /api/labels (server/main.go:615)"
       ]
@@ -466,13 +467,13 @@
     },
     "updateLabelGroup": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Flag off forwards to the literal MutateWorkspace. Bounded it writes labelGroups/<id> (with the labelRecordScope aggregate predecessors of the ID) and, when archivedAt is given, the complete labels field its cascade rewrites; label_group.updated is metadata-only. TestScaleP21SW600LabelRoutes compares renames, archiving and unarchiving a group with its labels, unchanged edits, invalid times and missing groups legacy vs warm vs SQL-reloaded, zero full decodes.",
       "accessors": [
-        "Bootstrap",
-        "MutateWorkspace"
+        "MutateWorkspaceResolved"
       ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "temperature": "hot",
+      "temperatureReason": "Label group edits from label settings.",
       "callers": [
         "PATCH /api/label-groups/{id} (server/main.go:622)"
       ]
@@ -537,13 +538,13 @@
     },
     "updateWorkspaceLabel": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Flag off MutateWorkspaceResolved forwards to the literal MutateWorkspace with the unchanged callback. Bounded it writes labels/<id> with updateTeamLabel reviewed aggregate predecessors (labelRecordScope) and resolves, inside the transaction, the group validLabelGroup reads (the requested groupId, else the label current group) and the selected projects display users. label.updated is metadata-only (issue copies are resolved from the catalog on read), so cascadeLabel changes no stored issue. TestScaleP21SW600LabelRoutes compares renames, regrouping, archiving, unchanged edits, team labels, missing IDs and an ID shared with a team legacy vs warm vs SQL-reloaded, zero full decodes.",
       "accessors": [
-        "Bootstrap",
-        "MutateWorkspace"
+        "MutateWorkspaceResolved"
       ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "temperature": "hot",
+      "temperatureReason": "Renaming, recolouring, regrouping and archiving labels are ordinary member actions.",
       "callers": [
         "PATCH /api/labels/{id} (server/main.go:617)"
       ]
