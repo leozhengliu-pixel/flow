@@ -29,7 +29,7 @@ func (s *metadataLogicalStorage) settleForTesting() error {
 	s.pendingMu.Lock()
 	s.dropFrameMemo(0, metadataLogicalMemoEnd)
 	s.pendingMu.Unlock()
-	s.dropReadCache()
+	s.dropCachedBlocks()
 	return nil
 }
 

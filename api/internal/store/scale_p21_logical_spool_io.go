@@ -36,33 +36,32 @@ import (
 //  3. A patch of flushed bytes runs as a sequence: patches becomes odd, the
 //     file is written, every cached block overlapping the range is dropped,
 //     patches becomes even again. A block read that saw an odd count, or a
-//     different count when it publishes, is never published: the count is
-//     checked under cacheMu, which the invalidation also takes. Every read
-//     that starts after a patch returned sees the patched bytes (a block
-//     published before the patch began is dropped by its invalidation; one
-//     read after it began fails the check).
-//  4. Cached blocks are immutable while published and never cover bytes past
+//     different count after it published the block, is never made servable:
+//     a block is published not ready, the count is checked again, and only
+//     then marked ready. Every read that starts after a patch returned sees
+//     the patched bytes (a block published before the patch began is dropped
+//     by its invalidation; one published after it began fails the check).
+//  4. Cached blocks are immutable once published and never cover bytes past
 //     the flushed end they were read under, so appends and flushes leave them
-//     valid. Readers copy out of a block only under cacheMu, and the pread
-//     filling a block runs before it is published, so a block's buffer is
-//     reused (spare) once it has left its slot without any reader seeing it
-//     change: a header scan of a large collection reads block after block
-//     without allocating one each time.
+//     valid; a reader holding a dropped block may finish with it.
 //  5. Patches of bytes still in pending are copied into pending; the bytes
 //     reach the file with the next flush. A patch past the logical end writes
 //     through, as os.File.WriteAt would.
 //  6. A failed flush leaves every byte in pending, and reads keep serving it.
 //  7. discard (the last Release) marks the storage closed and drops the
-//     buffer, the cache and the frame memo; no file is created afterwards,
-//     and a never-created file has nothing to remove.
+//     buffer, its cached blocks and the frame memo; no file is created
+//     afterwards, and a never-created file has nothing to remove. A block
+//     read that finishes after the discard is withdrawn from the cache.
 //
-// The cache and the buffer (at most 128 KiB per storage) are covered by the
-// storage's descriptor charge (metadataLogicalDescriptorBytes). Twelve slots:
-// an installed storage is traversed by several readers at once (COLD
-// decodes, a reload's normalization, pulse, schedule and resource reads),
-// each walking the child headers of a large collection; with four slots
-// they evicted each other's blocks and nearly every header read was a pread
-// (the load rig at scale 1).
+// The cache is shared by the storages of one spool group (one workspace's
+// installed lineage, scale_p21_logical_spool_group.go); each block names the
+// storage it was read from. The cache and a write buffer of resident spools
+// (128 KiB per group) are covered by the group's descriptor charge
+// (metadataLogicalDescriptorBytes). Twelve slots: an installed source is
+// traversed by several readers at once (COLD decodes, a reload's
+// normalization, pulse, schedule and resource reads), each walking the child
+// headers of a large collection; with four slots they evicted each other's
+// blocks and nearly every header read was a pread (the load rig at scale 1).
 const (
 	metadataLogicalReadBlock  = 8 << 10
 	metadataLogicalReadSlots  = 12
@@ -71,13 +70,14 @@ const (
 
 var errMetadataLogicalNegativeOffset = errors.New("installed logical metadata source: negative offset")
 
-// metadataLogicalBlock is one cached block: the spool bytes from
+// metadataLogicalBlock is one immutable cached block: the spool bytes from
 // index*metadataLogicalReadBlock (shorter than a block at the spool's end).
-// Its buffer has the capacity of a whole block and is reused once the block
-// leaves its slot (invariant 4).
+// Only a ready block is served from its slot.
 type metadataLogicalBlock struct {
+	owner *metadataLogicalStorage
 	index int64
 	data  []byte
+	ready atomic.Bool
 }
 
 // metadataLogicalSpoolReadBytes counts the spool bytes callers read, served
@@ -180,21 +180,44 @@ func (s *metadataLogicalStorage) append(data []byte) error {
 
 // settle ends a builder's appends: a spool with a file writes its buffer out
 // and returns its memory; a spool that never outgrew its buffer stays in
-// memory.
+// memory, trimmed to its bytes, while its group's resident allowance admits
+// it, and is written to its file otherwise (scale_p21_logical_spool_group.go).
+// A settled storage returns the write buffer it joined its group with.
+// Settling again does nothing.
 func (s *metadataLogicalStorage) settle() error {
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
 	if s.closed {
 		return errMetadataLogicalClosed
 	}
-	if s.file == nil {
+	if s.settled {
 		return nil
 	}
-	err := s.flushLocked()
-	if err == nil {
-		s.pending = nil
+	if s.file == nil {
+		if cap(s.pending) > len(s.pending) {
+			s.pending = append(make([]byte, 0, len(s.pending)), s.pending...)
+		}
+		size := int64(len(s.pending))
+		if s.group == nil || s.group.admitResident(size) {
+			if s.group != nil {
+				s.resident = size
+			}
+			s.settledLocked()
+			return nil
+		}
 	}
-	return err
+	if err := s.flushLocked(); err != nil {
+		return err
+	}
+	s.pending = nil
+	s.settledLocked()
+	return nil
+}
+
+func (s *metadataLogicalStorage) settledLocked() {
+	s.settled = true
+	metadataLogicalDescriptorsUsed.Add(-s.writeCharge)
+	s.writeCharge = 0
 }
 
 func (s *metadataLogicalStorage) flushLocked() error {
@@ -320,137 +343,93 @@ func (s *metadataLogicalStorage) readFlushedAt(p []byte, offset int64) (int, err
 		index := at / metadataLogicalReadBlock
 		start := at - index*metadataLogicalReadBlock
 		need := min(int64(metadataLogicalReadBlock), start+int64(len(p)-count))
-		if copied, ok := s.cachedRead(p[count:], index, start, need); ok {
-			count += copied
-			continue
+		block, err := s.block(index, need)
+		if block != nil && start < int64(len(block.data)) {
+			count += copy(p[count:], block.data[start:])
 		}
-		copied, complete, err := s.blockRead(p[count:], index, start, need)
-		count += copied
 		if err != nil {
 			return count, err
 		}
-		if !complete {
+		if block == nil || int64(len(block.data)) < need {
 			return count, io.EOF
 		}
 	}
 	return count, nil
 }
 
-// cachedRead copies p from the cached block index when it holds at least
-// need bytes. The slots are searched in full: a comparison of two frames far
-// apart in one spool keeps both cached.
-func (s *metadataLogicalStorage) cachedRead(p []byte, index, start, need int64) (int, bool) {
-	s.cacheMu.RLock()
-	defer s.cacheMu.RUnlock()
-	for _, cached := range s.blocks {
-		if cached != nil && cached.index == index && int64(len(cached.data)) >= need {
-			return copy(p, cached.data[start:]), true
-		}
-	}
-	return 0, false
-}
-
-// blockRead reads block index into an evicted or spare buffer, copies p from
-// it and publishes it when the read overlapped no patch (invariant 3). A miss
+// block returns a ready cached block index holding at least need bytes, or
+// reads one. The slots of the group's cache are searched in full (a
+// comparison of two frames far apart in one spool keeps both cached); a miss
 // replaces an empty or outdated slot of the same block, else the next slot in
-// turn. complete reports that the block held need bytes.
-func (s *metadataLogicalStorage) blockRead(p []byte, index, start, need int64) (int, bool, error) {
-	s.cacheMu.Lock()
+// turn.
+func (s *metadataLogicalStorage) block(index, need int64) (*metadataLogicalBlock, error) {
+	cache := s.blockCache()
 	victim := -1
-	for i, cached := range s.blocks {
+	for i := range cache.blocks {
+		cached := cache.blocks[i].Load()
 		if cached == nil {
 			victim = i
 			continue
 		}
-		if cached.index == index {
-			if int64(len(cached.data)) >= need {
-				// Another reader published it meanwhile.
-				copied := copy(p, cached.data[start:])
-				s.cacheMu.Unlock()
-				return copied, true, nil
+		if cached.owner == s && cached.index == index {
+			if int64(len(cached.data)) >= need && cached.ready.Load() {
+				return cached, nil
 			}
 			victim = i
 		}
 	}
-	if victim < 0 {
-		s.victim++
-		victim = int(s.victim % metadataLogicalReadSlots)
-	}
-	block := s.blocks[victim]
-	s.blocks[victim] = nil
-	if block == nil && len(s.spare) > 0 {
-		block = s.spare[len(s.spare)-1]
-		s.spare[len(s.spare)-1] = nil
-		s.spare = s.spare[:len(s.spare)-1]
-	}
-	s.cacheMu.Unlock()
-	if block == nil {
-		block = &metadataLogicalBlock{data: make([]byte, metadataLogicalReadBlock)}
-	}
 	base := index * metadataLogicalReadBlock
 	size := max(min(int64(metadataLogicalReadBlock), s.flushed.Load()-base), need)
+	data := make([]byte, size)
 	patches := s.patches.Load()
-	count, err := s.file.ReadAt(block.data[:size], base)
+	count, err := s.file.ReadAt(data, base)
 	metadataLogicalSpoolTestPoint(s, metadataLogicalSpoolBlockRead)
-	block.index, block.data = index, block.data[:count]
-	copied := 0
-	if start < int64(count) {
-		copied = copy(p, block.data[start:])
-	}
-	complete := int64(count) >= need
-	s.cacheMu.Lock()
-	// A failed or short read is never cached (it still serves the bytes it
-	// holds, as the file read would), nor one a patch was in flight for or
-	// began during: these bytes may predate it.
-	if err == nil && patches&1 == 0 && s.patches.Load() == patches && s.blocks[victim] == nil {
-		s.blocks[victim] = block
-	} else {
-		s.recycleLocked(block)
-	}
-	s.cacheMu.Unlock()
-	if err != nil && complete {
-		err = nil
-	}
-	return copied, complete, err
-}
-
-// recycleLocked keeps the buffer of a block that left (or never reached) its
-// slot for the next block read, while the cache holds fewer buffers than it
-// has slots. The caller holds cacheMu.
-func (s *metadataLogicalStorage) recycleLocked(block *metadataLogicalBlock) {
-	held := len(s.spare)
-	for _, cached := range s.blocks {
-		if cached != nil {
-			held++
+	block := &metadataLogicalBlock{owner: s, index: index, data: data[:count]}
+	if err != nil {
+		// A failed or short read is never cached; it still serves the bytes
+		// it holds, as the file read would.
+		if int64(count) >= need {
+			return block, nil
 		}
+		return block, err
 	}
-	if held < metadataLogicalReadSlots && cap(block.data) == metadataLogicalReadBlock {
-		s.spare = append(s.spare, block)
+	if patches&1 != 0 {
+		// A patch is in flight: these bytes may predate it.
+		return block, nil
 	}
+	if victim < 0 {
+		victim = int(cache.victim.Add(1) % metadataLogicalReadSlots)
+	}
+	slot := &cache.blocks[victim]
+	slot.Store(block)
+	if s.dropped.Load() {
+		// The storage was discarded during the read: its blocks are gone from
+		// the shared cache and this one must not stay.
+		slot.CompareAndSwap(block, nil)
+	} else if s.patches.Load() == patches {
+		block.ready.Store(true)
+	} else {
+		// A patch began after the read started; its invalidation may already
+		// have run, so the block is withdrawn here and never served.
+		slot.CompareAndSwap(block, nil)
+	}
+	return block, nil
 }
 
-// invalidate drops cached blocks overlapping [start, end).
+// invalidate drops the storage's cached blocks overlapping [start, end).
 func (s *metadataLogicalStorage) invalidate(start, end int64) {
-	s.cacheMu.Lock()
-	defer s.cacheMu.Unlock()
-	for index, cached := range s.blocks {
-		if cached == nil {
+	cache := s.blockCache()
+	for index := range cache.blocks {
+		slot := &cache.blocks[index]
+		cached := slot.Load()
+		if cached == nil || cached.owner != s {
 			continue
 		}
 		base := cached.index * metadataLogicalReadBlock
 		if base < end && start < base+metadataLogicalReadBlock {
-			s.blocks[index] = nil
-			s.recycleLocked(cached)
+			slot.CompareAndSwap(cached, nil)
 		}
 	}
-}
-
-// dropReadCache releases the cached blocks and their spare buffers.
-func (s *metadataLogicalStorage) dropReadCache() {
-	s.cacheMu.Lock()
-	defer s.cacheMu.Unlock()
-	s.blocks = [metadataLogicalReadSlots]*metadataLogicalBlock{}
-	s.spare = nil
 }
 
 // discard closes a released storage: it drops the buffer, the cache and the
@@ -461,8 +440,9 @@ func (s *metadataLogicalStorage) discard() error {
 	file := s.file
 	s.pending = nil
 	s.dropFrameMemo(0, metadataLogicalMemoEnd)
+	s.dropped.Store(true)
 	s.pendingMu.Unlock()
-	s.dropReadCache()
+	s.dropCachedBlocks()
 	if file == nil {
 		return nil
 	}

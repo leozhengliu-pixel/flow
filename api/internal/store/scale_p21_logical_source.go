@@ -57,20 +57,26 @@ type metadataLogicalStorage struct {
 	locationBytes int64
 	bytes         int64
 	genericStore  *SQLiteStore
+	// group is the lineage this storage was written in
+	// (scale_p21_logical_spool_group.go): it holds the descriptor charge and
+	// the read cache. writeCharge is the write buffer a storage that joined
+	// a group holds until it settles; resident is what its settled in-memory
+	// spool takes of the group's allowance.
+	group       *metadataLogicalSpoolGroup
+	writeCharge int64
+	resident    int64
+	settled     bool
+	ownCache    atomic.Pointer[metadataLogicalBlockCache]
 	// Spool I/O (scale_p21_logical_spool_io.go, invariants there): file is
 	// created lazily in directory and holds [0, flushed); pending holds later
-	// appends; blocks cache small reads of flushed bytes under cacheMu and
-	// spare keeps evicted block buffers for the next block read.
+	// appends; the group's blocks cache small reads of flushed bytes.
 	directory string
 	pendingMu sync.Mutex
 	file      *os.File
 	closed    bool
+	dropped   atomic.Bool
 	pending   []byte
 	flushed   atomic.Int64
-	cacheMu   sync.RWMutex
-	blocks    [metadataLogicalReadSlots]*metadataLogicalBlock
-	spare     []*metadataLogicalBlock
-	victim    uint32
 	// patches is odd while a patch of flushed bytes is in flight and changes
 	// with each one; a block read that overlapped one is never served.
 	patches atomic.Int64
@@ -124,15 +130,19 @@ type metadataLogicalAncestor struct {
 }
 
 func newMetadataLogicalBuilder(ctx context.Context) (*metadataLogicalBuilder, error) {
-	if err := ctx.Err(); err != nil {
+	return newMetadataLogicalBuilderIn(ctx, nil)
+}
+
+// newMetadataLogicalBuilderIn starts a builder whose storages join group: a
+// generation derived from an installed source writes in that source's group
+// and takes no descriptor charge of its own (scale_p21_logical_spool_group.go).
+// A nil group starts a new one.
+func newMetadataLogicalBuilderIn(ctx context.Context, group *metadataLogicalSpoolGroup) (*metadataLogicalBuilder, error) {
+	storage, err := newMetadataLogicalStorage(ctx, group)
+	if err != nil {
 		return nil, err
 	}
-	if limit := metadataLogicalDescriptorCap(); !reserveMetadataLogicalBytes(&metadataLogicalDescriptorsUsed, metadataLogicalDescriptorBytes, limit) {
-		return nil, fmt.Errorf("%w: installed workspace sources use all of FLOW_METADATA_SOURCE_BYTES (%d bytes, %d KiB per workspace)", ErrMetadataWorkBudget, limit, metadataLogicalDescriptorBytes>>10)
-	}
-	config, _ := ctx.Value(metadataLogicalScratchKey{}).(metadataLogicalScratch)
 	t := reflect.TypeFor[domain.Bootstrap]()
-	storage := &metadataLogicalStorage{directory: metadataSpoolDirectory(config.directory), refs: 1}
 	source := &metadataLogicalSource{refs: 1, fields: make([]metadataLogicalNode, t.NumField()), stores: []*metadataLogicalStorage{storage}}
 	return &metadataLogicalBuilder{ctx: ctx, source: source, storage: storage, active: -1}, nil
 }
@@ -309,8 +319,13 @@ func (b *metadataLogicalBuilder) Finish(stamp copyStamp) (*metadataLogicalSource
 	if err := b.ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := b.storage.settle(); err != nil {
-		return nil, err
+	// Every storage the generation wrote settles: a publication writes each
+	// rewritten field to a storage of its own. Shared storages settled with
+	// the generation that wrote them.
+	for _, storage := range b.source.stores {
+		if err := storage.settle(); err != nil {
+			return nil, err
+		}
 	}
 	b.source.stamp = stamp
 	b.finished = true
@@ -364,7 +379,14 @@ func (s *metadataLogicalStorage) Release() {
 		if err := s.discard(); err == nil || errors.Is(err, os.ErrNotExist) {
 			metadataLogicalDiskUsed.Add(-s.bytes)
 		}
-		metadataLogicalDescriptorsUsed.Add(-metadataLogicalDescriptorBytes - s.locationBytes)
+		s.pendingMu.Lock()
+		writeCharge, resident := s.writeCharge, s.resident
+		s.writeCharge, s.resident = 0, 0
+		s.pendingMu.Unlock()
+		metadataLogicalDescriptorsUsed.Add(-s.locationBytes - writeCharge)
+		if s.group != nil {
+			s.group.leave(resident)
+		}
 		s.times, s.types, s.locations = nil, nil, nil
 	}
 }

@@ -30,8 +30,10 @@ const (
 	metadataBodyCacheBytes = 64 << 20
 	metadataWorkBytes      = 256 << 20
 	// metadataSourceReloadHeadroom is the share of the installed source
-	// budget a bounded start keeps free for reloads and publications, which
-	// build a workspace's next source before releasing its current one.
+	// budget a bounded start keeps free for the work that runs beside the
+	// installed sources: requests' and publications' scratch spools (a
+	// group each) and the write buffers of storages being written, and
+	// workspaces created at runtime.
 	metadataSourceReloadHeadroom = 16 << 20
 )
 
@@ -54,8 +56,9 @@ func metadataBudgetBytes(name string, fallback int64) int64 {
 }
 
 // metadataLogicalDescriptorCap is the process-wide budget of installed
-// logical sources: every resident workspace holds one storage charged
-// metadataLogicalDescriptorBytes (its read cache and write buffer).
+// logical sources: every resident workspace holds one spool group charged
+// metadataLogicalDescriptorBytes (its read cache and write buffer), shared by
+// every generation of its source (scale_p21_logical_spool_group.go).
 func metadataLogicalDescriptorCap() int64 {
 	return metadataBudgetBytes("FLOW_METADATA_SOURCE_BYTES", metadataLogicalDescriptorLimit)
 }

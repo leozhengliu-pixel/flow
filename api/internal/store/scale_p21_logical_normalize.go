@@ -25,13 +25,20 @@ type metadataLogicalNormalizer struct {
 // dependencies. Cross-record lookup/count/uniqueness state lives in a bounded
 // disk index, rather than another complete Bootstrap.
 func (s *SQLiteStore) normalizeMetadataLogicalSource(ctx context.Context, source *metadataLogicalSource) (_ *metadataLogicalSource, err error) {
+	return s.normalizeMetadataLogicalSourceIn(ctx, source, nil)
+}
+
+// normalizeMetadataLogicalSourceIn writes the normalized source in lineage,
+// the spool group of the workspace's installed generation when it replaces
+// one (scale_p21_logical_spool_group.go), else in a new group.
+func (s *SQLiteStore) normalizeMetadataLogicalSourceIn(ctx context.Context, source *metadataLogicalSource, lineage *metadataLogicalSpoolGroup) (_ *metadataLogicalSource, err error) {
 	ctx = metadataLogicalSourceScratchContext(ctx, source)
 	n, ctx, done, err := s.newMetadataLogicalNormalizer(ctx, source)
 	if err != nil {
 		return nil, err
 	}
 	defer done()
-	builder, err := newMetadataLogicalBuilder(ctx)
+	builder, err := newMetadataLogicalBuilderIn(ctx, lineage)
 	if err != nil {
 		return nil, err
 	}

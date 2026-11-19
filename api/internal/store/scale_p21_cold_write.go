@@ -360,7 +360,9 @@ func (s *SQLiteStore) prepareColdFullWrite(ctx context.Context, tx *sqlTx, works
 		data.Notifications != nil || data.NotificationDeliveries != nil) {
 		return fmt.Errorf("%w: cold metadata callback changed external collections", ErrBoundedMetadataCoverage)
 	}
-	builder, err := newMetadataLogicalBuilder(metadataLogicalSourceScratchContext(ctx, state.source))
+	// The postimage replaces the installed generation: it joins its lineage
+	// (scale_p21_logical_spool_group.go).
+	builder, err := newMetadataLogicalBuilderIn(metadataLogicalSourceScratchContext(ctx, state.source), state.source.spoolGroup())
 	if err != nil {
 		return err
 	}
