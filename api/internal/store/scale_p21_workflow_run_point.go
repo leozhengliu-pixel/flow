@@ -45,6 +45,9 @@ func WorkflowRunFullImageAttemptsForTesting() int64 {
 //   - a createIssue run whose Number fold overflows, or that runs on a
 //     dialect whose ID collation can differ from the byte order the legacy
 //     order-stability check uses;
+//   - a resource issue whose stored row is larger than one point read admits
+//     (errIssueMutationRowTooLarge): the full image streams it as framed
+//     records, as the writer did before the point attempt;
 //
 // and, after the callback, a created issue whose ID is already stored.
 //
@@ -123,6 +126,9 @@ func (s *SQLiteStore) workflowRunPointAttempt(ctx context.Context, w *workflowRu
 	}
 	if w.resourceType == "issue" && w.resourceID != "" {
 		records, err := rows.load(ctx, []string{w.resourceID}, true)
+		if errors.Is(err, errIssueMutationRowTooLarge) {
+			err = errWorkflowRunFullImage
+		}
 		if err != nil {
 			return err
 		}
@@ -220,6 +226,9 @@ func (s *SQLiteStore) workflowRunPointAttempt(ctx context.Context, w *workflowRu
 			ids = append(ids, issue.ID)
 		}
 		existing, err := rows.load(ctx, ids, true)
+		if errors.Is(err, errIssueMutationRowTooLarge) {
+			err = errWorkflowRunFullImage
+		}
 		if err != nil {
 			return err
 		}
