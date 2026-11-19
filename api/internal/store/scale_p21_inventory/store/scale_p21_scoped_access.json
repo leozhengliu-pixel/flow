@@ -1,12 +1,12 @@
 {
   "source": "store/scale_p21_scoped_access.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "mutateWorkspaceScopedWithAggregate": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": ["MutateWorkspaceWithAggregate"],
-      "reason": "Extracted shared scoped mutation kernel. The nil-profile path is the reviewed MutateWorkspaceScopedWithAggregate (its SW27-33/SW36/SW188 proofs apply unchanged). Workflow profile: none - the bounded workflow writer is MutateWorkflowRun's own attempt and never reaches this kernel (SW504 AST guard; certified by SW500-SW503). The only ordinal profile is integration delivery (mutateMetadataOrdinalProfile from scale_p21_integration_delivery_profile.go); it stays pending until processIntegrationDelivery/BeginIntegrationDeliveryRead are certified (the Wave36 near-limit SW228 worker run still fails its deadline).",
+      "reason": "Extracted shared scoped mutation kernel. The nil-profile path is the reviewed MutateWorkspaceScopedWithAggregate (its SW27-33/SW36/SW188 proofs apply unchanged). Workflow profile: none - the bounded workflow writer is MutateWorkflowRun's own attempt and never reaches this kernel (SW504 AST guard; certified by SW500-SW503). The only ordinal profile is integration delivery (MutateIntegrationDelivery -> mutateMetadataOrdinalProfile with the closed first-occurrence integrationDeliveryProfile, claim and retry events only): store SW202 profile/kernel tests (ordinal postimages, undeclared-edit refusal, large raw payload, entry precedence, current-connection claim, kernel validation/error capture/display-before-actor and the conflict retry with captured large output), SW228 ownership/near-limit source modes, SW324 raw-frame comparison and SW226/SW333/SW339/SW340/SW343/SW344/SW348/SW349 row and root writers; server TestScaleP21SW510DeliveryOutcomesDifferential compares the claim and retry writes against MutateWorkspace (warm and SQL-reloaded, with a coordinator, peer writes before the claim and during the call), TestScaleP21SW510ConcurrentWorkers the racing claims, SW202 worker the attempts/status CAS and connection move, and SW228 near-limit the 16,711,732-byte envelope write.",
       "temperature": "hot",
       "temperatureReason": "Shared writer reached by integration delivery's ordinal profile (workflow execution uses its own writer).",
       "callers": ["MutateWorkspaceScopedWithAggregate", "bounded integration delivery writer (mutateMetadataOrdinalProfile)"]
