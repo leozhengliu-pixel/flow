@@ -80,18 +80,7 @@ func (n metadataAggregateRefreshRecord) logicalBase() metadataLogicalNode {
 }
 func (n metadataAggregateRefreshRecord) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
 	return n.base.nodeChildren(ctx, func(key reflect.Value, child metadataAggregateNode) error {
-		replace := false
-		switch n.field {
-		case "members", "projectUpdates", "initiativeUpdates", "comments":
-			replace = key.String() == "User"
-		case "projects":
-			replace = key.String() == "Lead" || key.String() == "Creator"
-		case "initiatives":
-			replace = key.String() == "Creator" || key.String() == "Owner"
-		case "activities", "notifications":
-			replace = key.String() == "Actor"
-		}
-		if replace {
+		if metadataAggregateRefreshReplaces(n.field, key.String()) {
 			refreshed, err := metadataAggregateRefreshUser(ctx, n.source, child)
 			if err != nil {
 				return err
@@ -271,4 +260,114 @@ func metadataAggregateMaterializeChildren(ctx context.Context, node metadataAggr
 		return nil
 	})
 	return result, err
+}
+
+// metadataAggregateRefreshReplaces reports whether the display refresh of a
+// field's record substitutes its member name with the directory's user.
+func metadataAggregateRefreshReplaces(field, name string) bool {
+	switch field {
+	case "members", "projectUpdates", "initiativeUpdates", "comments":
+		return name == "User"
+	case "projects":
+		return name == "Lead" || name == "Creator"
+	case "initiatives":
+		return name == "Creator" || name == "Owner"
+	case "activities", "notifications":
+		return name == "Actor"
+	}
+	return false
+}
+
+// unchanged reports whether refreshing the record changes nothing: every
+// user it substitutes is (strictly, frame by frame) the user the record
+// already holds, so the refreshed record decodes exactly as the stored one.
+// stored is that record. A false answer only means the record is written
+// as before.
+func (n metadataAggregateRefreshRecord) unchanged(ctx context.Context) (metadataAggregateStoredNode, bool, error) {
+	stored, ok := n.base.(metadataAggregateStoredNode)
+	if !ok || stored.value.typ.Kind() != reflect.Struct || stored.value.blocked || stored.value.unavailable || stored.value.generic {
+		return stored, false, nil
+	}
+	same := true
+	err := stored.value.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
+		if !same || !metadataAggregateRefreshReplaces(n.field, key.String()) {
+			return nil
+		}
+		original := metadataAggregateStoredNode{child}
+		refreshed, err := metadataAggregateRefreshUser(ctx, n.source, original)
+		if err != nil {
+			return err
+		}
+		if kept, ok := refreshed.(metadataAggregateStoredNode); ok && kept.value == child {
+			// Nothing substituted (no user, or none found).
+			return nil
+		}
+		held, found := original.value, metadataAggregateNode(nil)
+		switch value := refreshed.(type) {
+		case metadataAggregatePointerNode:
+			// The record's pointer holds the user the directory replaces.
+			pointee, err := metadataAggregateUnwrap(ctx, original, true)
+			if err != nil {
+				return err
+			}
+			stored, ok := pointee.(metadataAggregateStoredNode)
+			if !ok {
+				same = false
+				return nil
+			}
+			held, found = stored.value, value.child
+		default:
+			found = value
+		}
+		user, ok := found.(metadataAggregateStoredNode)
+		if !ok {
+			same = false
+			return nil
+		}
+		equal, err := legacyMetadataWriteEqualMode(ctx, held, user.value, 0, true)
+		if err != nil && ctx.Err() == nil {
+			// Frames the comparison does not read (opaque, unavailable):
+			// the record is written as before.
+			equal, err = false, nil
+		}
+		same = equal
+		return err
+	})
+	if err != nil {
+		return stored, false, err
+	}
+	return stored, same, nil
+}
+
+// unchanged reports whether no record of the collection changes when
+// refreshed (unchanged records): the display pass then keeps the stored
+// collection instead of rewriting it.
+func (n metadataAggregateRefreshCollection) unchanged(ctx context.Context) (bool, error) {
+	stored, ok := n.base.(metadataAggregateStoredNode)
+	if !ok || stored.value.blocked || stored.value.unavailable || stored.value.generic {
+		return false, nil
+	}
+	same := true
+	err := n.nodeChildren(ctx, func(_ reflect.Value, child metadataAggregateNode) error {
+		if !same {
+			return errMetadataAggregateStop
+		}
+		var err error
+		switch value := child.(type) {
+		case metadataAggregateRefreshRecord:
+			_, same, err = value.unchanged(ctx)
+		case metadataAggregateRefreshCollection:
+			same, err = value.unchanged(ctx)
+		default:
+			same = false
+		}
+		return err
+	})
+	if errors.Is(err, errMetadataAggregateStop) {
+		err = nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return same, nil
 }

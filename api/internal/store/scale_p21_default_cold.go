@@ -183,7 +183,10 @@ type coldSlotQueue struct {
 var coldSlotQueues sync.Map // *metadataResidency -> *coldSlotQueue
 
 func (r *metadataResidency) coldQueue() *coldSlotQueue {
-	r.coldOnce.Do(func() { r.coldSlot = make(chan struct{}, 1) })
+	// FLOW_COLD_SLOTS (default 1): concurrent COLD facades per replica.
+	// Each holds its own copy of the decoded workspace; COLD writes stay
+	// serialized by the shared write lock.
+	r.coldOnce.Do(func() { r.coldSlot = make(chan struct{}, envPositiveInt("FLOW_COLD_SLOTS", 1)) })
 	if queue, ok := coldSlotQueues.Load(r); ok {
 		return queue.(*coldSlotQueue)
 	}
@@ -467,6 +470,16 @@ var coldAccessorFailures atomic.Int64
 // decodeColdWorkspace is decodeColdMetadataRead for one workspace, limited to
 // fields (and the workspace record) when fields is set.
 func (s *SQLiteStore) decodeColdWorkspace(ctx context.Context, workspace string, source *metadataLogicalSource, fields []string) error {
+	if s.coldParent != nil && s.coldParent.metadataResidency != nil {
+		data, err := s.coldParent.metadataResidency.decodeColdImage(ctx, workspace, source, fields)
+		if err != nil {
+			return err
+		}
+		s.mu.Lock()
+		s.workspaces[workspace] = data
+		s.mu.Unlock()
+		return ctx.Err()
+	}
 	ctx = coldMetadataGenericDecodeContext(ctx, map[string]*metadataLogicalSource{workspace: source})
 	var data domain.Bootstrap
 	value := reflect.ValueOf(&data).Elem()
@@ -547,6 +560,18 @@ func (s *SQLiteStore) coldLegacyWrite(ctx context.Context, workspace string, run
 		var base *coldPublishBase
 		facade.writeMu.onLock = func() {
 			locked = time.Now()
+			if s.coordinator != nil && logical {
+				// Under the coordinator another replica may have committed
+				// since this replica's installed generation: bring it up to
+				// SQL incrementally, as the HOT writers do before their
+				// write, so the facade syncs to an exact generation and the
+				// legacy writer finds its copy current instead of reloading
+				// the complete workspace from SQL under the lock. A failure
+				// leaves that legacy reload to the writer.
+				if err := s.reloadResidentWorkspace(context.WithValue(ctx, metadataWorkLeaseKey{}, nil), requested()); err != nil && ctx.Err() == nil {
+					slog.Warn("bounded metadata: COLD legacy write could not reload its workspace incrementally", "workspace", requested(), "error", err)
+				}
+			}
 			if err := facade.syncColdLegacyWriteLocked(ctx, requested()); err != nil {
 				cancelled.Store(&err)
 			}
@@ -724,6 +749,7 @@ func SetColdInstallHookForTesting(hook func()) {
 func (s *SQLiteStore) dropResidentWorkspace(workspace string) {
 	r := s.metadataResidency
 	forgetColdPublications(r, workspace)
+	r.forgetColdImage(workspace)
 	s.mu.Lock()
 	delete(s.workspaces, workspace)
 	s.forgetCopyRevisionLocked(workspace)

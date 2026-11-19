@@ -471,10 +471,15 @@ func (b *metadataLogicalBuilder) writeValue(v reflect.Value, depth int, key bool
 	if err = b.write(make([]byte, 16)); err != nil {
 		return node, err
 	}
+	// The child headers of a slice this writes (written index).
+	var headers *writtenChildIndex
 	defer func() {
 		if err == nil {
 			node.size = b.offset - node.offset
 			err = b.patch(node)
+			if err == nil {
+				headers.keep(b.storage, node)
+			}
 		}
 	}()
 	if v.Type() == reflect.TypeFor[time.Time]() {
@@ -484,6 +489,9 @@ func (b *metadataLogicalBuilder) writeValue(v reflect.Value, depth int, key bool
 		n, e := b.writeValue(value, depth+1, isKey)
 		node.cost += n.cost
 		node.unavailable = node.unavailable || n.unavailable
+		if e == nil {
+			headers.add(n)
+		}
 		return e
 	}
 	switch v.Kind() {
@@ -586,6 +594,7 @@ func (b *metadataLogicalBuilder) writeValue(v reflect.Value, depth int, key bool
 			}
 		} else if v.Kind() == reflect.Slice {
 			node.cost += uint64(v.Len()) * (uint64(v.Type().Elem().Size())*2 + 64)
+			headers = newWrittenChildIndex(v.Type(), b.offset)
 			for i := 0; i < v.Len() && err == nil; i++ {
 				err = child(v.Index(i), key)
 			}

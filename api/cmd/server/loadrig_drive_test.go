@@ -460,14 +460,25 @@ func loadRigClient(identity loadRigIdentity, bases []string, transport http.Roun
 	return &http.Client{Jar: jar, Transport: transport, Timeout: timeout}
 }
 
-// loadRigMix applies FLOW_LOADRIG_MIX ("issue.list=20,search=0,...").
+// loadRigMix applies FLOW_LOADRIG_MIX. A mix lists the operations that run
+// ("issue.update=1" runs only issue updates; every unlisted operation gets
+// weight 0). A leading "default" entry keeps the default weights and only
+// overrides the listed ones ("default,search=0").
 func loadRigMix(t *testing.T, ops []loadRigOp) []loadRigOp {
 	t.Helper()
 	raw := strings.TrimSpace(os.Getenv("FLOW_LOADRIG_MIX"))
 	if raw == "" {
 		return ops
 	}
-	for _, part := range strings.Split(raw, ",") {
+	parts := strings.Split(raw, ",")
+	if strings.TrimSpace(parts[0]) == "default" {
+		parts = parts[1:]
+	} else {
+		for index := range ops {
+			ops[index].weight = 0
+		}
+	}
+	for _, part := range parts {
 		name, value, ok := strings.Cut(strings.TrimSpace(part), "=")
 		weight, err := strconv.ParseFloat(value, 64)
 		index := slices.IndexFunc(ops, func(op loadRigOp) bool { return op.name == name })
@@ -556,6 +567,9 @@ func TestLoadRigDrive(t *testing.T) {
 	totalWeight := 0.0
 	for _, op := range ops {
 		totalWeight += op.weight
+	}
+	if totalWeight <= 0 {
+		t.Fatal("FLOW_LOADRIG_MIX leaves no operation with a positive weight")
 	}
 	members, readers := []loadRigIdentity{}, []loadRigIdentity{}
 	for _, identity := range fixture.Identities {
@@ -1064,6 +1078,9 @@ func loadRigBoundedDerived(c map[string]int64) map[string]float64 {
 		"coldPublishIncrementals": float64(c["coldPublishIncrementals"]), "coldPublishIncrementalAvgMs": avg(c["coldPublishIncrementalNanos"], c["coldPublishIncrementals"]),
 		"coldPublishFulls": float64(c["coldPublishFulls"]), "coldPublishFullAvgMs": avg(c["coldPublishFullNanos"], c["coldPublishFulls"]),
 		"coldPublishUnchanged": float64(c["coldPublishUnchanged"]), "coldPublishFallbacks": float64(c["coldPublishFallbacks"]),
+		"coldDecodeImageHits": float64(c["coldDecodeImageHits"]), "coldDecodeImageBuilds": float64(c["coldDecodeImageBuilds"]),
+		"coldDecodeRecordsReused": float64(c["coldDecodeElementReuses"]), "coldDecodeRecordsDecoded": float64(c["coldDecodeElementDecodes"]),
+		"coldDecodeCopyAvgMs": avg(c["coldDecodeCopyNanos"], c["coldDecodeImageHits"]+c["coldDecodeImageBuilds"]), "coldDecodeCachedMiB": float64(c["coldDecodeCachedBytes"]) / (1 << 20),
 		"reloadIncrementals": float64(c["reloadIncrementals"]), "reloadIncrementalAvgMs": avg(c["reloadIncrementalNanos"], c["reloadIncrementals"]),
 		"reloadFulls": float64(c["reloadFulls"]), "reloadFullAvgMs": avg(c["reloadFullNanos"], c["reloadFulls"]),
 		"coldFullWriteDecodes": float64(c["coldFullWriteDecodes"]), "coldFullWriteDecodeSkips": float64(c["coldFullWriteDecodeSkips"]),
