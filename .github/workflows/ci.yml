@@ -762,14 +762,16 @@ jobs:
           PACKAGE: ${{ matrix.package }}
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ matrix.shards }}
-        # A test that hangs fails after 25 minutes and the tests that had not
-        # started run in a further go test (go-test-resume.sh), so one hang
-        # cannot hide the rest of the shard.
+        # go test's -timeout bounds a whole round of the shard, not one test,
+        # and dialect shards take 20-25 minutes: at 60 minutes a hang fails
+        # the round and the tests that had not started run in a further go
+        # test (go-test-resume.sh), so one hang cannot hide the rest of the
+        # shard, while a slow runner no longer reads as a hang.
         run: |
           set -euo pipefail
           ../scripts/ci/go-test-shard.sh list "$PACKAGE" "$SHARD" "$SHARDS" > "$RUNNER_TEMP/names"
           echo "Shard $SHARD/$SHARDS of the TestScaleP tests of $PACKAGE: $(wc -l < "$RUNNER_TEMP/names") tests"
-          ../scripts/ci/go-test-resume.sh "$PACKAGE" "$RUNNER_TEMP/names" 25m
+          ../scripts/ci/go-test-resume.sh "$PACKAGE" "$RUNNER_TEMP/names" 60m
 
   # The tests of scripts/ci/known-failing-tests.txt, each in every scope it is listed
   # for: race and plain on SQLite (with and without the race detector), postgres and
