@@ -151,6 +151,13 @@ func TestScaleP21WorkerChatSweepDifferential(t *testing.T) {
 					}
 					result.StateGone = []bool{errors.Is(err, store.ErrAgentRunNotFound)}
 					wantCancel := name == "queued-expired" || name == "deleted" || name == "duplicate-sessions" || name == "duplicate-messages" || name == "empty-owner" || name == "nul-owner"
+					if driver := scaleP03DatabaseConfig(t).Driver; name == "nul-session" && driver != "" && driver != "sqlite" {
+						// Only SQLite tells the session ID with NUL from the run's.
+						// PostgreSQL text cannot hold NUL (every SQL argument drops
+						// it) and MySQL's utf8mb4_0900_ai_ci ignores it, so the
+						// literal run lookup finds the run and cancels it.
+						wantCancel = true
+					}
 					if len(runIDs) != 0 && !reflect.DeepEqual(result.Canceled, []bool{wantCancel}) || result.StateGone[0] != wantCancel || result.Swept != 0 {
 						t.Fatal("worker header selection changed queue/state effects", result)
 					}
