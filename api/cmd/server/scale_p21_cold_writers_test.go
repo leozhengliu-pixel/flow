@@ -258,7 +258,7 @@ func scaleP21ColdWritersLoopContractStore(t *testing.T, f scaleP21TeamCreateFixt
 	t.Helper()
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	const loopID, otherID = "cold-writers-loop", "cold-writers-other"
-	base :=domain.Loop{ID: loopID, Name: "Contract loop", Instructions: "Summarize the open bugs", Status: "active", TriggerType: "manual", ConnectorIDs: []string{}}
+	base := domain.Loop{ID: loopID, Name: "Contract loop", Instructions: "Summarize the open bugs", Status: "active", TriggerType: "manual", ConnectorIDs: []string{}}
 	hash := loopContractHashOf(base)
 	model := &domain.LoopOutputContract{Source: loopContractModel, InstructionsHash: hash, ReadOnly: true, Outputs: []domain.LoopContractOutput{}, ExtractedAt: &extracted}
 	person := &domain.LoopOutputContract{Source: loopContractPerson, InstructionsHash: "older", Outputs: []domain.LoopContractOutput{}, ExtractedAt: &extracted}

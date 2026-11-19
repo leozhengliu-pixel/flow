@@ -92,14 +92,14 @@ var recordAuthorizationKinds = map[string]recordAuthorizationKind{
 	// favorite/subscription projection keeps only key-team resources.
 	"projectRefs": {
 		field: "projects",
-		typ: reflect.TypeFor[domain.Project](), fields: []string{"ID", "SlugID", "PreviousSlugIDs", "TeamIDs"}, match: []string{"slugRef"},
+		typ:   reflect.TypeFor[domain.Project](), fields: []string{"ID", "SlugID", "PreviousSlugIDs", "TeamIDs"}, match: []string{"slugRef"},
 		assign: func(data *domain.Bootstrap, value reflect.Value) {
 			data.Projects = append(data.Projects, value.Interface().(domain.Project))
 		},
 	},
 	"initiativeRefs": {
 		field: "initiatives",
-		typ: reflect.TypeFor[domain.Initiative](), fields: []string{"ID", "SlugID", "PreviousSlugIDs", "LeadTeamID", "ProjectIDs"}, match: []string{"slugRef"},
+		typ:   reflect.TypeFor[domain.Initiative](), fields: []string{"ID", "SlugID", "PreviousSlugIDs", "LeadTeamID", "ProjectIDs"}, match: []string{"slugRef"},
 		assign: func(data *domain.Bootstrap, value reflect.Value) {
 			data.Initiatives = append(data.Initiatives, value.Interface().(domain.Initiative))
 		},
