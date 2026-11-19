@@ -31,36 +31,57 @@ func ColdMetricsSnapshot() map[string]int64 {
 	})
 	facades, facadeTime, viewTime := ColdHydrationForTesting()
 	holds, holdTotal, holdMax := ColdWriteLockHoldForTesting()
-	return map[string]int64{
-		"coldSlotAcquisitions":     coldSlotAcquisitions.Load(),
-		"coldSlotRefusals":         coldSlotRefusals.Load(),
-		"coldSlotsHeld":            coldSlotHolders.Load(),
-		"coldSlotWaiting":          waiting,
-		"coldSlotQueues":           queues,
-		"coldSlotWaits":            coldSlotWaits.Load(),
-		"coldSlotWaitNanos":        coldSlotWaitNanos.Load(),
-		"coldSlotWaitMaxNanos":     coldSlotWaitMax.Load(),
-		"legacyViewRefusals":       legacyViewRefusals.Load(),
-		"legacyViewWaits":          legacyViewWaits.Load(),
-		"legacyViewWaitNanos":      legacyViewWaitNanos.Load(),
-		"legacyViewWaitMax":        legacyViewWaitMax.Load(),
-		"coldFacadeDecodes":        facades,
-		"coldFacadeDecodeNanos":    int64(facadeTime),
-		"coldFacadeDecodeMaxNanos": coldFacadeDecodeMax.Load(),
-		"coldViewReads":            coldAccessorReads.Load(),
-		"coldViewDecodeNanos":      int64(viewTime),
-		"coldViewDecodeMaxNanos":   coldAccessorDecodeMax.Load(),
-		"coldViewFailures":         coldAccessorFailures.Load(),
-		"coldWriteLockHolds":       holds,
-		"coldWriteLockNanos":       int64(holdTotal),
-		"coldWriteLockMaxNanos":    int64(holdMax),
-		"writerLockWaits":          writerLockWaits.waits.Load(),
-		"writerLockWaitNanos":      writerLockWaits.nanos.Load(),
-		"writerLockWaitMax":        writerLockWaits.longest.Load(),
-		"coldWriterLockWaits":      coldWriterLockWaits.waits.Load(),
-		"coldWriterWaitNanos":      coldWriterLockWaits.nanos.Load(),
-		"coldWriterWaitMax":        coldWriterLockWaits.longest.Load(),
+	fallbacks := int64(0)
+	reasons := ColdPublishFallbacksForTesting()
+	for _, count := range reasons {
+		fallbacks += count
 	}
+	snapshot := map[string]int64{
+		"coldWriteSyncNanos":          coldWriteSyncNanos.Load(),
+		"coldWriteRefreshes":          coldWriteRefreshes.Load(),
+		"coldWriteRefreshNanos":       coldWriteRefreshNanos.Load(),
+		"coldWritePublishNanos":       coldWritePublishNanos.Load(),
+		"coldPublishBaseNanos":        coldPublishBaseNanos.Load(),
+		"coldPublishIncrementals":     coldPublishIncrementals.Load(),
+		"coldPublishIncrementalNanos": coldPublishIncrementalNanos.Load(),
+		"coldPublishFulls":            coldPublishFulls.Load(),
+		"coldPublishFullNanos":        coldPublishFullNanos.Load(),
+		"coldPublishUnchanged":        coldPublishUnchanged.Load(),
+		"coldPublishBaseKnown":        coldPublishBaseKnown.Load(),
+		"coldPublishFallbacks":        fallbacks,
+		"coldSlotAcquisitions":        coldSlotAcquisitions.Load(),
+		"coldSlotRefusals":            coldSlotRefusals.Load(),
+		"coldSlotsHeld":               coldSlotHolders.Load(),
+		"coldSlotWaiting":             waiting,
+		"coldSlotQueues":              queues,
+		"coldSlotWaits":               coldSlotWaits.Load(),
+		"coldSlotWaitNanos":           coldSlotWaitNanos.Load(),
+		"coldSlotWaitMaxNanos":        coldSlotWaitMax.Load(),
+		"legacyViewRefusals":          legacyViewRefusals.Load(),
+		"legacyViewWaits":             legacyViewWaits.Load(),
+		"legacyViewWaitNanos":         legacyViewWaitNanos.Load(),
+		"legacyViewWaitMax":           legacyViewWaitMax.Load(),
+		"coldFacadeDecodes":           facades,
+		"coldFacadeDecodeNanos":       int64(facadeTime),
+		"coldFacadeDecodeMaxNanos":    coldFacadeDecodeMax.Load(),
+		"coldViewReads":               coldAccessorReads.Load(),
+		"coldViewDecodeNanos":         int64(viewTime),
+		"coldViewDecodeMaxNanos":      coldAccessorDecodeMax.Load(),
+		"coldViewFailures":            coldAccessorFailures.Load(),
+		"coldWriteLockHolds":          holds,
+		"coldWriteLockNanos":          int64(holdTotal),
+		"coldWriteLockMaxNanos":       int64(holdMax),
+		"writerLockWaits":             writerLockWaits.waits.Load(),
+		"writerLockWaitNanos":         writerLockWaits.nanos.Load(),
+		"writerLockWaitMax":           writerLockWaits.longest.Load(),
+		"coldWriterLockWaits":         coldWriterLockWaits.waits.Load(),
+		"coldWriterWaitNanos":         coldWriterLockWaits.nanos.Load(),
+		"coldWriterWaitMax":           coldWriterLockWaits.longest.Load(),
+	}
+	for reason, count := range reasons {
+		snapshot["coldPublishFallback "+reason] = count
+	}
+	return snapshot
 }
 
 // DefaultBoundedMetadataStatsInterval is the period of the COLD summary line.
@@ -124,6 +145,11 @@ func coldMetricsDelta(prev, cur map[string]int64, interval time.Duration) []any 
 		"coldLockWaitAvg", avg(d("coldWriterWaitNanos"), d("coldWriterLockWaits")),
 		"coldLockWaitMax", time.Duration(cur["coldWriterWaitMax"]),
 		"coldWriteLockHolds", d("coldWriteLockHolds"),
+		"coldPublishIncremental", d("coldPublishIncrementals"),
+		"coldPublishIncrementalAvg", avg(d("coldPublishIncrementalNanos"), d("coldPublishIncrementals")),
+		"coldPublishFull", d("coldPublishFulls"),
+		"coldPublishFullAvg", avg(d("coldPublishFullNanos"), d("coldPublishFulls")),
+		"coldPublishFallbacks", d("coldPublishFallbacks"),
 	}
 }
 

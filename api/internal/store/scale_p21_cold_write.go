@@ -22,14 +22,33 @@ type coldWriteMutex struct {
 	// the lock, so no other writer runs between its base, its commit and
 	// the parent's image.
 	onLock, onUnlock func()
+	// stale reports a facade base older than the parent's installed
+	// generation, and refresh brings it up to date. Lock refreshes it
+	// outside the shared lock and takes the lock again (a bounded number of
+	// times) rather than having onLock decode the workspace under the lock
+	// while every other writer waits.
+	stale   func() bool
+	refresh func()
 }
+
+// coldWriteRefreshAttempts bounds Lock's refreshes outside the shared lock;
+// after them onLock refreshes under it.
+const coldWriteRefreshAttempts = 2
 
 func (m *coldWriteMutex) Lock() {
 	if m.shared != nil {
-		if !m.shared.TryLock() {
-			started := time.Now()
-			m.shared.Lock()
-			observeWriteLockWait(&coldWriterLockWaits, started)
+		for attempt := 0; ; attempt++ {
+			if !m.shared.TryLock() {
+				started := time.Now()
+				m.shared.Lock()
+				observeWriteLockWait(&coldWriterLockWaits, started)
+			}
+			if attempt < coldWriteRefreshAttempts && m.stale != nil && m.refresh != nil && m.stale() {
+				m.shared.Unlock()
+				m.refresh()
+				continue
+			}
+			break
 		}
 		m.locked()
 		return
@@ -264,10 +283,12 @@ func (s *SQLiteStore) setColdMetadataRecords(ctx context.Context, data *domain.B
 
 func (s *SQLiteStore) prepareColdFullWrite(ctx context.Context, tx *sqlTx, workspace string, data domain.Bootstrap) (err error) {
 	state := s.coldWrite
-	if state.legacy && state.source == nil {
-		// A default COLD legacy writer that never selected an installed
-		// base (anything but the integrated writers) publishes through the
-		// parent's reload (coldLegacyMutation).
+	if state.legacy {
+		// A default COLD legacy write publishes through the parent when it
+		// returns the write lock (coldLegacyWrite): from the records it
+		// changed, or reloaded from SQL, so the installed image is the one a
+		// reload produces. An image prepared here from the writer's own
+		// result would be its unnormalized values (SW561).
 		return nil
 	}
 	if state.prepared != nil || state.source == nil {
@@ -357,6 +378,11 @@ func (s *SQLiteStore) prepareColdFullWrite(ctx context.Context, tx *sqlTx, works
 func (s *SQLiteStore) installColdFullWriteLocked(workspace string, write *metadataWrite, current copyRevision, currentOK bool) {
 	state := s.coldWrite
 	prepared := state.prepared
+	if state.legacy && prepared == nil {
+		// A default COLD legacy write publishes through the parent when it
+		// returns the write lock (prepareColdFullWrite prepares nothing).
+		return
+	}
 	if prepared == nil || prepared.workspace != workspace {
 		panic("cold full mutation has no prepared publication")
 	}

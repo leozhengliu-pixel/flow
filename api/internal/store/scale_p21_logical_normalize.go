@@ -26,11 +26,49 @@ type metadataLogicalNormalizer struct {
 // disk index, rather than another complete Bootstrap.
 func (s *SQLiteStore) normalizeMetadataLogicalSource(ctx context.Context, source *metadataLogicalSource) (_ *metadataLogicalSource, err error) {
 	ctx = metadataLogicalSourceScratchContext(ctx, source)
-	stage, err := sw26NewMigrationStage(ctx)
+	n, ctx, done, err := s.newMetadataLogicalNormalizer(ctx, source)
 	if err != nil {
 		return nil, err
 	}
-	defer stage.Close()
+	defer done()
+	builder, err := newMetadataLogicalBuilder(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			builder.Close()
+		}
+	}()
+	err = source.VisitFields(ctx, func(name string, node metadataLogicalNode) error {
+		return n.field(ctx, builder, name, node)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return builder.Finish(source.Stamp())
+}
+
+// newMetadataLogicalNormalizer prepares the normalizer of source: its stage,
+// its admitted base work, the normalized base (workspaceSettings and the core
+// fields) and the cross-record index of source's index fields. It returns the
+// context the normalization runs in and the function that releases it all.
+func (s *SQLiteStore) newMetadataLogicalNormalizer(ctx context.Context, source *metadataLogicalSource) (_ *metadataLogicalNormalizer, _ context.Context, done func(), err error) {
+	stage, err := sw26NewMigrationStage(ctx)
+	if err != nil {
+		return nil, ctx, nil, err
+	}
+	cleanup := []func(){func() { stage.Close() }}
+	done = func() {
+		for i := len(cleanup) - 1; i >= 0; i-- {
+			cleanup[i]()
+		}
+	}
+	defer func() {
+		if err != nil {
+			done()
+		}
+	}()
 	for _, query := range []string{
 		`CREATE TABLE logical_values(kind TEXT NOT NULL,key TEXT NOT NULL,ordinal INTEGER NOT NULL,value BLOB,frame_offset INTEGER,frame_size INTEGER,frame_cost INTEGER,frame_unavailable INTEGER,frame_blocked INTEGER,PRIMARY KEY(kind,key))`,
 		`CREATE INDEX logical_values_order ON logical_values(kind,ordinal)`,
@@ -41,7 +79,7 @@ func (s *SQLiteStore) normalizeMetadataLogicalSource(ctx context.Context, source
 		`CREATE INDEX logical_issue_parents ON logical_issues(parent,ordinal)`,
 	} {
 		if _, err := stage.exec(ctx, 4096, query); err != nil {
-			return nil, err
+			return nil, ctx, nil, err
 		}
 	}
 	n := &metadataLogicalNormalizer{store: s, source: source, stage: stage}
@@ -55,135 +93,138 @@ func (s *SQLiteStore) normalizeMetadataLogicalSource(ctx context.Context, source
 		}
 		return nil
 	}); err != nil {
-		return nil, err
+		return nil, ctx, nil, err
 	}
 	n.baseWork = int(baseCost)
 	ctx, releaseBase, err := s.admitMetadataWork(ctx, n.baseWork)
 	if err != nil {
-		return nil, err
+		return nil, ctx, nil, err
 	}
-	defer releaseBase()
+	cleanup = append(cleanup, releaseBase)
 	n.values, err = newMetadataLogicalBuilder(ctx)
 	if err != nil {
-		return nil, err
+		return nil, ctx, nil, err
 	}
-	defer n.values.Close()
+	values := n.values
+	cleanup = append(cleanup, values.Close)
 	n.base, err = source.Select(ctx, MetadataRecordScope{Fields: []string{"workspaceSettings"}}, metadataPolicyBytes)
 	if err != nil {
-		return nil, err
+		return nil, ctx, nil, err
 	}
 	normalizeStoredMetadata(&n.base)
 	if err := n.index(ctx); err != nil {
-		return nil, err
+		return nil, ctx, nil, err
 	}
-	builder, err := newMetadataLogicalBuilder(ctx)
-	if err != nil {
-		return nil, err
+	return n, ctx, done, nil
+}
+
+// field writes the normalized value of one raw field (node) into builder.
+func (n *metadataLogicalNormalizer) field(ctx context.Context, builder *metadataLogicalBuilder, name string, node metadataLogicalNode) error {
+	index, _, ok := metadataLogicalField(name)
+	if !ok || name == "-" {
+		return nil
 	}
-	defer func() {
-		if err != nil {
-			builder.Close()
-		}
-	}()
-	err = source.VisitFields(ctx, func(name string, node metadataLogicalNode) error {
-		index, _, ok := metadataLogicalField(name)
-		if !ok || name == "-" {
-			return nil
-		}
-		if err := builder.inheritLocations(node.source); err != nil {
-			return err
-		}
-		if node.typ.Kind() != reflect.Map && (node.typ.Kind() != reflect.Slice || node.typ.Elem().Kind() == reflect.Uint8) {
-			value := reflect.ValueOf(n.base).Field(index)
-			// The normalizer only modifies workspaceSettings among scalar
-			// metadata fields. Keep all other actual stored scalar values.
-			if name != "workspaceSettings" {
-				owned, release, err := n.value(ctx, node)
-				if err != nil {
-					return err
-				}
-				defer release()
-				value = owned
-			}
-			if err := builder.auditJSONLocations(value); err != nil {
-				return err
-			}
-			return builder.Field(name, value)
-		}
-		nilValue, err := node.isNil(ctx)
-		if err != nil {
-			return err
-		}
-		emptyDefault := reflect.ValueOf(n.base).Field(index)
-		if name == "integrationDeliveries" || name == "integrationConnections" {
-			if nilValue {
-				return builder.Field(name, emptyDefault)
-			}
-			var normalized metadataAggregateNode = metadataAggregateStoredNode{value: node}
-			if name == "integrationConnections" {
-				normalized = integrationConnectionDefaultsNode{base: node}
-			}
-			written, err := builder.writeAggregateNode(normalized, 0)
-			if err == nil {
-				builder.source.fields[index] = written
-			}
-			return err
-		}
-		if nilValue && !emptyDefault.IsNil() || name == "projectStatuses" {
-			// Empty project statuses synthesize the standard ordered list.
-			empty := true
-			err := node.Children(ctx, func(reflect.Value, metadataLogicalNode) error {
-				empty = false
-				return errMetadataAggregateStop
-			})
-			if err != nil && !errors.Is(err, errMetadataAggregateStop) {
-				return err
-			}
-			if empty && emptyDefault.Len() > 0 && name != "userSettings" && name != "notificationPreferences" && name != "teamSettings" {
-				return builder.Field(name, emptyDefault)
-			}
-			nilValue = false
-		}
-		if err := builder.BeginCollection(name, nilValue); err != nil {
-			return err
-		}
-		ordinal := 0
-		if err := node.Children(ctx, func(key reflect.Value, item metadataLogicalNode) error {
-			owned, release, err := n.value(ctx, item)
+	if err := builder.inheritLocations(node.source); err != nil {
+		return err
+	}
+	if node.typ.Kind() != reflect.Map && (node.typ.Kind() != reflect.Slice || node.typ.Elem().Kind() == reflect.Uint8) {
+		value := reflect.ValueOf(n.base).Field(index)
+		// The normalizer only modifies workspaceSettings among scalar
+		// metadata fields. Keep all other actual stored scalar values.
+		if name != "workspaceSettings" {
+			owned, release, err := n.value(ctx, node)
 			if err != nil {
 				return err
 			}
 			defer release()
-			normalized, err := n.record(ctx, name, key, owned, ordinal)
-			ordinal++
-			if err != nil {
-				return err
-			}
-			if node.typ.Kind() == reflect.Slice {
-				key = reflect.Value{}
-			}
-			if err := builder.auditJSONLocations(normalized); err != nil {
-				return err
-			}
-			if err := builder.Append(key, normalized); err != nil {
-				return err
-			}
-			if name == "userSettings" || name == "notificationPreferences" || name == "teamSettings" {
-				return n.put(ctx, "seen:"+name, key.String(), ordinal, []byte("true"))
-			}
-			return nil
-		}); err != nil {
+			value = owned
+		}
+		if err := builder.auditJSONLocations(value); err != nil {
 			return err
 		}
-		if err := n.missing(ctx, builder, name); err != nil {
-			return err
-		}
-		return builder.EndCollection()
-	})
-	if err != nil {
-		return nil, err
+		return builder.Field(name, value)
 	}
-	return builder.Finish(source.Stamp())
+	nilValue, err := node.isNil(ctx)
+	if err != nil {
+		return err
+	}
+	emptyDefault := reflect.ValueOf(n.base).Field(index)
+	if name == "integrationDeliveries" || name == "integrationConnections" {
+		if nilValue {
+			return builder.Field(name, emptyDefault)
+		}
+		var normalized metadataAggregateNode = metadataAggregateStoredNode{value: node}
+		if name == "integrationConnections" {
+			normalized = integrationConnectionDefaultsNode{base: node}
+		}
+		written, err := builder.writeAggregateNode(normalized, 0)
+		if err == nil {
+			builder.source.fields[index] = written
+		}
+		return err
+	}
+	if nilValue && !emptyDefault.IsNil() || name == "projectStatuses" {
+		// Empty project statuses synthesize the standard ordered list.
+		empty := true
+		err := node.Children(ctx, func(reflect.Value, metadataLogicalNode) error {
+			empty = false
+			return errMetadataAggregateStop
+		})
+		if err != nil && !errors.Is(err, errMetadataAggregateStop) {
+			return err
+		}
+		if empty && emptyDefault.Len() > 0 && name != "userSettings" && name != "notificationPreferences" && name != "teamSettings" {
+			return builder.Field(name, emptyDefault)
+		}
+		nilValue = false
+	}
+	if err := builder.BeginCollection(name, nilValue); err != nil {
+		return err
+	}
+	ordinal := 0
+	if err := node.Children(ctx, func(key reflect.Value, item metadataLogicalNode) error {
+		normalized, release, err := n.item(ctx, name, key, item, ordinal)
+		ordinal++
+		if err != nil {
+			return err
+		}
+		defer release()
+		if node.typ.Kind() == reflect.Slice {
+			key = reflect.Value{}
+		}
+		if err := builder.auditJSONLocations(normalized); err != nil {
+			return err
+		}
+		if err := builder.Append(key, normalized); err != nil {
+			return err
+		}
+		if name == "userSettings" || name == "notificationPreferences" || name == "teamSettings" {
+			return n.put(ctx, "seen:"+name, key.String(), ordinal, []byte("true"))
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := n.missing(ctx, builder, name); err != nil {
+		return err
+	}
+	return builder.EndCollection()
+}
+
+// item normalizes one raw collection item (item, under key) of field name at
+// ordinal. release ends the record's work allowance; the caller holds it
+// until the normalized value is written.
+func (n *metadataLogicalNormalizer) item(ctx context.Context, name string, key reflect.Value, item metadataLogicalNode, ordinal int) (reflect.Value, func(), error) {
+	owned, release, err := n.value(ctx, item)
+	if err != nil {
+		return reflect.Value{}, nil, err
+	}
+	normalized, err := n.record(ctx, name, key, owned, ordinal)
+	if err != nil {
+		release()
+		return reflect.Value{}, nil, err
+	}
+	return normalized, release, nil
 }
 
 func (n *metadataLogicalNormalizer) value(ctx context.Context, node metadataLogicalNode) (reflect.Value, func(), error) {

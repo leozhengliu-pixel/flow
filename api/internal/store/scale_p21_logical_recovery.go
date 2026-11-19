@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 	"strings"
 
 	"flow/api/internal/domain"
@@ -37,6 +38,8 @@ type metadataLogicalRecovery struct {
 	rootIndexed      bool
 	rootIndexUsable  bool
 	rootIndexRelease func()
+	// part limits the canonical rows staged to these fields (nil: all).
+	part map[string]bool
 }
 
 type metadataLogicalRootKey struct {
@@ -56,6 +59,16 @@ func (s *SQLiteStore) readRawMetadataLogicalSourceValidated(ctx context.Context,
 }
 
 func (s *SQLiteStore) readRawMetadataLogicalSourceRoot(ctx context.Context, tx *sqlTx, workspace string, validateRoot bool) (_ *metadataLogicalSource, err error) {
+	return s.readRawMetadataLogicalSourcePart(ctx, tx, workspace, validateRoot, nil, nil)
+}
+
+// readRawMetadataLogicalSourcePart is readRawMetadataLogicalSourceRoot
+// recovering only the fields named in part (nil: every field): the others
+// hold their zero value, except a field of supplied, which holds that value
+// instead of its recovery. A recovered field is exactly the one a complete
+// recovery produces: each field reads only its own root occurrences and
+// canonical rows (an incremental COLD publication, scale_p21_cold_incremental.go).
+func (s *SQLiteStore) readRawMetadataLogicalSourcePart(ctx context.Context, tx *sqlTx, workspace string, validateRoot bool, part map[string]bool, supplied map[string]reflect.Value) (_ *metadataLogicalSource, err error) {
 	ctx = s.metadataLogicalScratchContext(ctx, workspace)
 	read, err := s.metadataRootCursorInSnapshot(ctx, tx, workspace)
 	if err != nil {
@@ -123,7 +136,7 @@ func (s *SQLiteStore) readRawMetadataLogicalSourceRoot(ctx context.Context, tx *
 			builder.Close()
 		}
 	}()
-	recovery := &metadataLogicalRecovery{store: s, ctx: ctx, tx: tx, workspace: workspace, read: read, stage: stage, builder: builder, typed: typed, manifest: map[string]string{}}
+	recovery := &metadataLogicalRecovery{store: s, ctx: ctx, tx: tx, workspace: workspace, read: read, stage: stage, builder: builder, typed: typed, manifest: map[string]string{}, part: part}
 	defer recovery.releaseWork()
 	defer recovery.releaseRootIndex()
 	if err := recovery.readManifest(); err != nil {
@@ -140,6 +153,18 @@ func (s *SQLiteStore) readRawMetadataLogicalSourceRoot(ctx context.Context, tx *
 		field := bootstrap.Field(index)
 		name := jsonFieldName(field)
 		if name == "-" {
+			continue
+		}
+		if value, ok := supplied[name]; ok {
+			if err := recovery.field(name, value); err != nil {
+				return nil, fmt.Errorf("recover logical %s: %w", name, err)
+			}
+			continue
+		}
+		if part != nil && !part[name] {
+			if err := builder.Field(name, reflect.Zero(field.Type)); err != nil {
+				return nil, fmt.Errorf("recover logical %s: %w", name, err)
+			}
 			continue
 		}
 		if _, err := stage.exec(ctx, 0, `DELETE FROM values_stage`); err != nil {
@@ -297,8 +322,24 @@ func (r *metadataLogicalRecovery) readCanonical() error {
 		keyLength, fieldLength = "OCTET_LENGTH(record_key)", "OCTET_LENGTH(field)"
 	}
 	headerSize := "(" + keyLength + "+" + fieldLength + ")"
+	restrict, restrictArgs := "", []any{}
+	if r.part != nil {
+		names := make([]string, 0, len(r.part))
+		for name, included := range r.part {
+			if included {
+				names = append(names, name)
+			}
+		}
+		if len(names) == 0 {
+			return nil
+		}
+		slices.Sort(names)
+		var clause string
+		clause, restrictArgs = bindList("field", names)
+		restrict = ` AND ` + clause
+	}
 	var maxHeader int64
-	if err := r.tx.QueryRowContext(r.ctx, `SELECT COALESCE(MAX(`+headerSize+`),0) FROM workspace_metadata_records WHERE workspace_key=?`, r.workspace).Scan(&maxHeader); err != nil {
+	if err := r.tx.QueryRowContext(r.ctx, `SELECT COALESCE(MAX(`+headerSize+`),0) FROM workspace_metadata_records WHERE workspace_key=?`+restrict, append([]any{r.workspace}, restrictArgs...)...).Scan(&maxHeader); err != nil {
 		return err
 	}
 	// Both queries share the existing repeatable-read snapshot. Charge the
@@ -306,8 +347,8 @@ func (r *metadataLogicalRecovery) readCanonical() error {
 	if _, _, err := r.recordWork(maxHeader); err != nil {
 		return err
 	}
-	rows, err := r.tx.QueryContext(r.ctx, `SELECT CASE WHEN `+headerSize+`<=? THEN field ELSE NULL END,CASE WHEN `+headerSize+`<=? THEN record_key ELSE NULL END,collection_order,`+bodyLength+`,`+physical+` FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`,
-		metadataLogicalRecoveryRecordBytes, metadataLogicalRecoveryRecordBytes, r.workspace)
+	rows, err := r.tx.QueryContext(r.ctx, `SELECT CASE WHEN `+headerSize+`<=? THEN field ELSE NULL END,CASE WHEN `+headerSize+`<=? THEN record_key ELSE NULL END,collection_order,`+bodyLength+`,`+physical+` FROM workspace_metadata_records WHERE workspace_key=?`+restrict+` ORDER BY field,record_key`,
+		append([]any{metadataLogicalRecoveryRecordBytes, metadataLogicalRecoveryRecordBytes, r.workspace}, restrictArgs...)...)
 	if err != nil {
 		return err
 	}

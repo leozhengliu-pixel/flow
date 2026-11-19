@@ -1,0 +1,12 @@
+{
+  "source": "store/scale_p21_cold_incremental.go",
+  "unmigrated": 0,
+  "consumers": {
+    "buildColdPublication": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Incremental COLD publication under the shared write lock: recovers only the fields a COLD legacy write changed (and the normalizer's base and dependency fields) from the publication's repeatable snapshot, normalizes them with the original normalizer and shares every other installed field node. No complete Bootstrap is materialized; unchanged collections are copied frame for frame. TestColdIncrementalPublication* compare every publication with a fresh SQL reload.",
+      "accessors": ["readRawMetadataLogicalSourcePart"]
+    }
+  }
+}
