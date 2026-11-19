@@ -1,4 +1,4 @@
-import { endsSession, registerSessionCacheClearer } from '@/lib/session-cache-registry'
+import { endsSession, registerSessionCacheClearer, registerSessionFlusher } from '@/lib/session-cache-registry'
 import { toast } from '@/lib/toast'
 
 import type { BootstrapData, Favorite } from '@/types/flow'
@@ -245,4 +245,8 @@ registerSessionCacheClearer((_viewerId, workspaceKey) => {
   sessionEpoch++
   pendingIntents.clear()
   pendingRequests.clear()
+})
+
+registerSessionFlusher(async () => {
+  while (pendingRequests.size) await Promise.allSettled([...pendingRequests.values()])
 })

@@ -1,4 +1,5 @@
 import { trackUserSettingsWrite } from './user-settings-overrides';
+import { flushBeforeSessionEnd } from "@/lib/session-cache-registry";
 import type {
   AccountBootstrap,
   ThreadSubscription,
@@ -208,6 +209,8 @@ export function loginAccount(
   return request("/api/auth/login", jsonRequest("POST", { email, password }));
 }
 export async function logoutAccount(): Promise<void> {
+  // Last edits go out as the current viewer, within a short bound; the rest is dropped when the session caches clear.
+  await flushBeforeSessionEnd();
   await request("/api/auth/logout", { method: "POST" });
   const { ClientStorage } = await import("@/lib/client-storage");
   ClientStorage.clearAllNonAuthData();
