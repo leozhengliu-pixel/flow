@@ -9,6 +9,7 @@ import (
 	"io"
 	"reflect"
 	"strings"
+	"unicode/utf8"
 
 	"flow/api/internal/domain"
 )
@@ -411,8 +412,12 @@ func (p *legacyMetadataWritePlan) rebaseIntegrationDeliveryRow(ctx context.Conte
 			p.tx.journalOrder = recordJournalOrder{p.workspace, field.field.name, physical.String, order, true}
 		}
 		// lockMetadataRecords keys by the SQL-returned physical key. A
-		// collation or textArgs alias must not become a native-key match.
-		missing = physical.String != row.id
+		// collation or textArgs alias must not become a native-key match,
+		// except the one lockMetadataRecords answers too: on PostgreSQL a
+		// valid UTF-8 ID with NUL is stored, and found, without the NUL
+		// (storedMetadataRecordKeys).
+		missing = physical.String != row.id && !(p.tx.dialect == "postgres" && utf8.ValidString(row.id) &&
+			strings.IndexByte(row.id, 0) >= 0 && physical.String == StripNUL(row.id))
 	}
 	if missing {
 		backed, err := metadataFieldRecordBacked(ctx, p.tx, p.workspace, field.field.name, field.before.typ)
