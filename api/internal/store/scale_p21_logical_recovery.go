@@ -77,7 +77,10 @@ func (s *SQLiteStore) readRawMetadataLogicalSourceRoot(ctx context.Context, tx *
 		root.Close()
 		return nil, ErrRecordSpoolBudget
 	}
-	if _, err := io.CopyBuffer(root, io.NewSectionReader(read.rootSource(), 0, read.rootSize), make([]byte, metadataRecordChunkBytes)); err != nil {
+	endRead := read.snapshot.readScope()
+	_, err = io.CopyBuffer(root, io.NewSectionReader(read.rootSource(), 0, read.rootSize), make([]byte, metadataRecordChunkBytes))
+	endRead()
+	if err != nil {
 		root.Close()
 		return nil, err
 	}
