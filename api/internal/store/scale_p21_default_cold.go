@@ -505,9 +505,12 @@ func (s *SQLiteStore) coldLegacyWrite(ctx context.Context, workspace string, run
 			return facade.lastWorkspaceKey
 		}
 		var locked time.Time
+		var cancelled atomic.Pointer[error]
 		facade.writeMu.onLock = func() {
 			locked = time.Now()
-			facade.syncColdLegacyWriteLocked(ctx, requested())
+			if err := facade.syncColdLegacyWriteLocked(ctx, requested()); err != nil {
+				cancelled.Store(&err)
+			}
 		}
 		// The store keeps installed logical sources (always in production;
 		// a test view once it captured one): a key the write creates gets one.
@@ -530,7 +533,15 @@ func (s *SQLiteStore) coldLegacyWrite(ctx context.Context, workspace string, run
 			}
 		}
 		defer func() { facade.writeMu.onLock, facade.writeMu.onUnlock = nil, nil }()
-		return run(ctx, facade)
+		err := run(ctx, facade)
+		if err != nil {
+			// A facade withdrawn because the request was cancelled makes the
+			// writer say "workspace not found"; the cancellation is the cause.
+			if ce := cancelled.Load(); ce != nil {
+				return *ce
+			}
+		}
+		return err
 	})
 }
 
@@ -546,11 +557,14 @@ func (s *SQLiteStore) coldReceiver() *SQLiteStore {
 // generation of workspace. The caller holds the parent's write lock. When the
 // refresh fails the workspace is withdrawn from the facade, so the legacy
 // writer fails (workspace not found) instead of writing from a stale base.
-func (s *SQLiteStore) syncColdLegacyWriteLocked(ctx context.Context, workspace string) {
+// It returns the context's error when the refresh failed because the request
+// was cancelled or timed out, so the caller reports that and not a missing
+// workspace.
+func (s *SQLiteStore) syncColdLegacyWriteLocked(ctx context.Context, workspace string) error {
 	read, ok := ctx.Value(coldMetadataReadKey{}).(*coldMetadataRead)
 	parent := s.coldParent
 	if !ok || parent == nil {
-		return
+		return nil
 	}
 	r := parent.metadataResidency
 	r.mu.Lock()
@@ -560,14 +574,18 @@ func (s *SQLiteStore) syncColdLegacyWriteLocked(ctx context.Context, workspace s
 	pinned := read.sources[workspace]
 	read.mu.Unlock()
 	if current != nil && current == pinned {
-		return
+		return nil
 	}
 	if err := s.refreshColdMetadataRead(ctx, workspace); err != nil {
 		slog.Error("bounded metadata: COLD legacy write could not refresh its facade", "workspace", workspace, "error", err)
 		s.mu.Lock()
 		delete(s.workspaces, workspace)
 		s.mu.Unlock()
+		if ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+			return err
+		}
 	}
+	return nil
 }
 
 // publishColdLegacyWriteLocked reloads the parent's installed image of
