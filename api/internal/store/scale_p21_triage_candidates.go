@@ -100,7 +100,7 @@ func (r *IssueSuggestionCandidates) Close() {
 }
 
 func (r *IssueSuggestionCandidates) Write(p []byte) (int, error) {
-	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, int64(len(p)), metadataLogicalDiskBytes) {
+	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, int64(len(p)), metadataLogicalDiskCap()) {
 		return 0, ErrMetadataWorkBudget
 	}
 	n, err := r.file.Write(p)

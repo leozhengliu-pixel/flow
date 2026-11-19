@@ -159,6 +159,12 @@ func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "audit-verify" {
 		os.Exit(runAuditVerifyCommand(os.Args[2:]))
 	}
+	// Operators prepare a database for FLOW_BOUNDED_METADATA=on (journal
+	// repair and metadata catalog, docs/bounded-metadata.md) with
+	// `server metadata-prepare`.
+	if len(os.Args) >= 2 && os.Args[1] == "metadata-prepare" {
+		os.Exit(runMetadataPrepareCommand(os.Args[2:]))
+	}
 	// The YAML configuration file (--config or FLOW_CONFIG_FILE) is read
 	// first: its server settings become environment values the environment
 	// does not set, so logging and every later reader see them.

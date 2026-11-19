@@ -23,7 +23,7 @@ func (s *SQLiteStore) metadataLogicalPolicyAdmitted(ctx context.Context, source 
 		if name == "workspace" || name == "viewer" || name == "viewerRole" || slices.Contains(fields, name) {
 			cost += node.cost
 		}
-		if cost > uint64(s.metadataResidency.policyLimit) {
+		if cost > uint64(s.metadataResidency.metadataWorkspacePolicyLimit()) {
 			return ErrMetadataWorkBudget
 		}
 		return nil

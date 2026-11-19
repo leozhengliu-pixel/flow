@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,10 +22,54 @@ var (
 )
 
 const (
+	// metadataPolicyBytes is the default resident policy budget of all
+	// workspaces together (FLOW_METADATA_POLICY_BYTES) and the most one
+	// workspace's policy image may take; whole-policy operations admit that
+	// much work.
 	metadataPolicyBytes    = 192 << 20
 	metadataBodyCacheBytes = 64 << 20
 	metadataWorkBytes      = 256 << 20
+	// metadataSourceReloadHeadroom is the share of the installed source
+	// budget a bounded start keeps free for reloads and publications, which
+	// build a workspace's next source before releasing its current one.
+	metadataSourceReloadHeadroom = 16 << 20
 )
+
+// metadataBudgetBytes reads a byte budget from the environment: a positive
+// whole number of bytes. Unset, invalid, zero or negative values use the
+// default. The budgets grow with the number of workspaces a replica holds
+// (docs/bounded-metadata.md, Tuning).
+func metadataBudgetBytes(name string, fallback int64) int64 {
+	value, err := strconv.ParseInt(strings.TrimSpace(os.Getenv(name)), 10, 64)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+// metadataLogicalDescriptorCap is the process-wide budget of installed
+// logical sources: every resident workspace holds one storage charged
+// metadataLogicalDescriptorBytes (its read cache and write buffer).
+func metadataLogicalDescriptorCap() int64 {
+	return metadataBudgetBytes("FLOW_METADATA_SOURCE_BYTES", metadataLogicalDescriptorLimit)
+}
+
+// metadataLogicalDiskCap is the process-wide spool disk budget of logical
+// sources, installed ones included.
+func metadataLogicalDiskCap() int64 {
+	return metadataBudgetBytes("FLOW_METADATA_SOURCE_DISK_BYTES", metadataLogicalDiskBytes)
+}
+
+// metadataWorkspacePolicyLimit is the most one workspace's resident policy
+// may take: the total budget, but never more than the whole-policy work an
+// operation admits.
+func (r *metadataResidency) metadataWorkspacePolicyLimit() int {
+	return min(r.policyLimit, metadataPolicyBytes)
+}
+
+const metadataMiB = 1 << 20
+
+func ceilMiB(bytes int64) int64 { return (bytes + metadataMiB - 1) / metadataMiB }
 
 // Fields are classified explicitly. Adding a Bootstrap field requires a
 // residency decision, even if it is derived or stored in a different table.
@@ -114,7 +159,7 @@ type metadataResidentCacheEntry struct {
 }
 
 func newMetadataResidency() *metadataResidency {
-	return &metadataResidency{requireCoverage: true, cache: map[metadataResidentCacheKey]*list.Element{}, cacheLimit: metadataBodyCacheBytes, policy: map[string]int{}, policyLimit: metadataPolicyBytes, stamps: map[string]copyStamp{}, applied: map[string]int64{}, work: newMetadataWorkBudget(metadataWorkBytes)}
+	return &metadataResidency{requireCoverage: true, cache: map[metadataResidentCacheKey]*list.Element{}, cacheLimit: metadataBodyCacheBytes, policy: map[string]int{}, policyLimit: int(min(metadataBudgetBytes("FLOW_METADATA_POLICY_BYTES", metadataPolicyBytes), 1<<46)), stamps: map[string]copyStamp{}, applied: map[string]int64{}, work: newMetadataWorkBudget(metadataWorkBytes)}
 }
 
 func (s *SQLiteStore) residentStamp(workspace string) (copyStamp, int64, bool) {
