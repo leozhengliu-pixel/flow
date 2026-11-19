@@ -257,8 +257,12 @@ func TestScaleP21SW15InstalledViewerWirePersistent(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		// The probe's legacy accessor now answers from a legacy view of its
+		// installed logical source, where the warm viewer's unknown Location
+		// stays opaque to native decoding; the oracle is each store's
+		// resident viewer, which the installed read selects.
 		for _, store := range []*SQLiteStore{f.SQLiteStore, probe} {
-			source, found := store.WorkspaceMetadata(workspace)
+			source, found := scaleP21ResidentOracle(store, workspace)
 			read, ok, err := store.BeginInstalledViewerRead(t.Context(), workspace)
 			if err != nil || !ok || !found {
 				t.Fatal(stage, err)
