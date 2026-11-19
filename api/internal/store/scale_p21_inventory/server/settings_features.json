@@ -1,6 +1,6 @@
 {
   "source": "server/settings_features.go",
-  "unmigrated": 14,
+  "unmigrated": 13,
   "consumers": {
     "connectIntegration": {
       "owner": "P21",
@@ -510,13 +510,14 @@
     },
     "updateUserSettings": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes through MutateUserSettings with the literal callback: flag off the literal MutateWorkspace; bounded a patch without username runs the literal point writer's transaction on the member's settings record (stored row as the base, installed entry as written, no previous values), one with username the scoped writer with the complete users, members and userSettings fields that usernameTaken reads. TestScaleP21SW602AccountSettings compares legacy vs warm vs SQL-reloaded (responses, rows, events, webhooks, realtime, installed entries, zero full decodes) for field edits, unchanged edits, invalid values, members with unnormalized stored rows, without rows and without entries, username changes, conflicts and clears, and development mode.",
       "accessors": [
         "Bootstrap",
-        "MutateWorkspace"
+        "MutateUserSettings"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "temperature": "hot",
+      "temperatureReason": "Personal preferences page (every account settings toggle).",
       "callers": [
         "PATCH /api/account/settings (api/cmd/server/main.go:431)"
       ]

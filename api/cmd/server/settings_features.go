@@ -47,7 +47,7 @@ func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := requestActor(s, r)
 	var updated domain.UserSettings
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "user_settings.updated", actor.ID, patch, func(data *domain.Bootstrap) error {
+	err := s.store.MutateUserSettings(r.Context(), workspaceKey(r), actor.ID, patch, func(data *domain.Bootstrap) error {
 		input, err := mergeSettingsPatch(data.UserSettings[actor.ID], patch, "userId", "updatedAt", "commitSigningKey", "personalSettingsVersion")
 		if err != nil {
 			return err

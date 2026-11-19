@@ -42,7 +42,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/scale_p21_issue_record_authorization_read.go": "6026fba608d49f31c47ac07de86b8ea1f000f94b93a7f0758e0ee964303025d4",
 		"../../cmd/server/scale_p21_issue_update_targets.go":            "58665b35304f51e087403d1abba92894e319e4f5900039ee17de0a86902745c3",
 		"../../cmd/server/scale_p21_triage_suggestions.go":              "ce4dc87da131244726aadae31d61b8a7fe9cd5760d05b895013aa8ac88fc2002",
-		"../../cmd/server/settings_features.go":                         "bc6978233bf9d0a041acc84b04493978b22ba2ed01244a430152ef177ba16a69",
+		"../../cmd/server/settings_features.go":                         "d2a3e6d643c62a6ce76a8ccfcf6b8702bf618d0e1fbba37795bc7b1d68814cc8",
 		"authz_epoch.go":                                                "ce59afa33d8daca93d0901d13d86a0f7bb5f140cc479efc38395ab568173e9c4",
 		"content_records.go":                                            "711cc4e036099177c87ed23e50f56c81703b4aa7af2c3123053cc3873cfaccba",
 		"database.go":                                                   "c9a2a0a74eb26a40e7e17d1396910cff3d7cba65943884550b33a3db082c90aa",
