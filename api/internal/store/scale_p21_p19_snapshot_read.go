@@ -58,7 +58,7 @@ func (r *P19SnapshotRead) reserve(ctx context.Context, cost uint64) error {
 	return nil
 }
 
-// BeginP19SnapshotRead preserves ReadScaleP19Snapshot's three-attempt installed
+// BeginP19SnapshotRead preserves ReadScaleP19Snapshot's bounded-attempt installed
 // copy/stamp check and reload recovery. It does not borrow caller SQL snapshots
 // or installed pins: neither influenced the literal P19 accessor.
 func (s *SQLiteStore) BeginP19SnapshotRead(ctx context.Context, workspace, principal string, unfiltered bool) (*P19SnapshotRead, error) {
@@ -66,7 +66,7 @@ func (s *SQLiteStore) BeginP19SnapshotRead(ctx context.Context, workspace, princ
 		return nil, ErrBoundedMetadataCoverage
 	}
 	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)
-	for range 3 {
+	for attempt := 1; ; attempt++ {
 		tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 		if err != nil {
 			return nil, err
@@ -74,18 +74,18 @@ func (s *SQLiteStore) BeginP19SnapshotRead(ctx context.Context, workspace, princ
 		stamp, err := readMetadataStamp(ctx, tx, workspace)
 		var read *P19SnapshotRead
 		if err == nil {
+			accessChangedReadHook(ctx, attempt)
 			read, err = s.p19SnapshotAt(ctx, workspace, principal, unfiltered, tx, stamp)
 		}
 		_ = tx.Rollback()
 		if errors.Is(err, ErrResourceAccessChanged) {
-			if err := s.ReloadWorkspace(ctx, workspace); err != nil {
+			if err := s.accessChangedReread(ctx, workspace, attempt); err != nil {
 				return nil, err
 			}
 			continue
 		}
 		return read, err
 	}
-	return nil, ErrResourceAccessChanged
 }
 
 func (s *SQLiteStore) p19SnapshotAt(ctx context.Context, workspace, principal string, unfiltered bool, tx *sqlTx, stamp copyStamp) (_ *P19SnapshotRead, err error) {

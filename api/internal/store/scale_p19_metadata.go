@@ -17,7 +17,8 @@ type ScaleP19Snapshot struct {
 
 // ReadScaleP19Snapshot pairs the installed summary inputs and committed record
 // versions at one SQL revision. An uncertified copy takes the existing reload
-// recovery once; it cannot acquire newer versions for older row values.
+// recovery, a bounded number of times (accessChangedReread); it cannot acquire
+// newer versions for older row values.
 func (s *SQLiteStore) ReadScaleP19Snapshot(ctx context.Context, workspace, principal string, unfiltered bool) (ScaleP19Snapshot, error) {
 	if s.BoundedMetadataEnabled() {
 		if !metadataOutputOwnerPresent(ctx) {
@@ -33,7 +34,7 @@ func (s *SQLiteStore) ReadScaleP19Snapshot(ctx context.Context, workspace, princ
 		}
 		return read.Snapshot, nil
 	}
-	for range 3 {
+	for attempt := 1; ; attempt++ {
 		tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 		if err != nil {
 			return ScaleP19Snapshot{}, err
@@ -43,10 +44,11 @@ func (s *SQLiteStore) ReadScaleP19Snapshot(ctx context.Context, workspace, princ
 			_ = tx.Rollback()
 			return ScaleP19Snapshot{}, err
 		}
+		accessChangedReadHook(ctx, attempt)
 		data, err := s.scaleP19MetadataAt(ctx, workspace, principal, unfiltered, tx, stamp)
 		if errors.Is(err, ErrResourceAccessChanged) {
 			_ = tx.Rollback()
-			if err := s.ReloadWorkspace(ctx, workspace); err != nil {
+			if err := s.accessChangedReread(ctx, workspace, attempt); err != nil {
 				return ScaleP19Snapshot{}, err
 			}
 			continue
@@ -86,7 +88,6 @@ func (s *SQLiteStore) ReadScaleP19Snapshot(ctx context.Context, workspace, princ
 		_ = tx.Rollback()
 		return result, nil
 	}
-	return ScaleP19Snapshot{}, ErrResourceAccessChanged
 }
 
 // ScaleP19Metadata preserves the established viewer projection while copying
