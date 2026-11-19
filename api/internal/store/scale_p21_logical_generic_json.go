@@ -61,9 +61,9 @@ func metadataGenericJSONScanner(ctx context.Context, part legacySessionJSONPart)
 // A child range contains canonical JSON, never a typed frame header.
 func (n metadataLogicalNode) genericPart() legacySessionJSONPart {
 	if n.genericRange {
-		return legacySessionJSONPart{n.source.file, n.offset, n.size}
+		return legacySessionJSONPart{n.source, n.offset, n.size}
 	}
-	return legacySessionJSONPart{n.source.file, n.offset + 16, n.size - 16}
+	return legacySessionJSONPart{n.source, n.offset + 16, n.size - 16}
 }
 
 func metadataGenericJSONWork(ctx context.Context, store *SQLiteStore, visit func(*metadataAggregateTraversal) error) error {

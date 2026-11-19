@@ -128,6 +128,13 @@ func (s *server) preparePulseSummaries(ctx context.Context, key string, now time
 		Settings: read.Snapshot.Settings, UserSettings: read.Snapshot.UserSettings, TeamSettings: read.Snapshot.TeamSettings}
 	cursors := pulseCursors(&metadata)
 	workspaceDefault := metadata.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule
+	if s.store.BoundedMetadataEnabled() {
+		// The scheduler tick has no request: the member list's app users are
+		// decorated from owned installation reads, kept until this pass ends.
+		var closeOutputs func()
+		ctx, closeOutputs = beginMetadataOutputReads(ctx)
+		defer closeOutputs()
+	}
 	// Every active member is a candidate, including invited members who never
 	// wrote anything (the metadata user list only grows on writes).
 	members, err := s.store.ListMembers(ctx, metadata.Workspace.ID)

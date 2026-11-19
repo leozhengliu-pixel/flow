@@ -57,7 +57,7 @@ func (s *logicalJSONStream) rewriteNode(node metadataLogicalNode) (bool, error) 
 	if cursor.offset > node.offset+node.size || length > uint64(node.offset+node.size-cursor.offset) {
 		return false, ErrMetadataRecordQuery
 	}
-	input := io.NewSectionReader(node.source.file, cursor.offset, int64(length))
+	input := io.NewSectionReader(node.source, cursor.offset, int64(length))
 	source, err := newMetadataJSONStringSource(s.ctx, s.owner, input, int64(length), mode)
 	if err != nil {
 		return false, err
