@@ -134,7 +134,18 @@ func scaleP21SW116Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at t
 			}
 		}
 	}
+	// The installed copy below stands for this server's own write of the
+	// rows just stored, so it is exact at their revision, as the server's
+	// write would leave it. Left at the earlier revision, the stored
+	// revision would have moved past the copy as a peer's commit does, and a
+	// bounded writer (installedGenerationBehind) would replace its image with
+	// the SQL reload while the literal writer keeps this copy.
+	stamp, err := readMetadataStamp(t.Context(), f.db, workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.mu.Lock()
+	f.setCopyRevisionLocked(workspace, stamp)
 	installed := f.workspaces[workspace]
 	installed.Labels, installed.Projects = native.Labels, native.Projects
 	if mode == "warm-import-inputs" {
