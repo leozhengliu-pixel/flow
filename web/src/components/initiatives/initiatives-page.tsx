@@ -121,7 +121,7 @@ export function InitiativesPage(props: Props) {
   // default keeps the viewer's choice.
   const [seenDisplayDefault, setSeenDisplayDefault] = useState(displayDefault)
   if (displayDefault && JSON.stringify(seenDisplayDefault ?? null) !== JSON.stringify(displayDefault)) {
-    const was = initiativeDisplayDefaults(seenDisplayDefault), now = initiativeDisplayDefaults(displayDefault)
+    const was = initiativeDisplayDefaults(seenDisplayDefault), now = initiativeDisplayDefaults(displayDefault)!
     setSeenDisplayDefault(displayDefault)
     if (!was || showNested === was.nested) setShowNested(now.nested)
     if (!was || showParents === was.parents) setShowParents(now.parents)
