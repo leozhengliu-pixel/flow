@@ -1,3 +1,4 @@
+import { registerSessionCacheClearer } from '@/lib/session-cache-registry'
 import { useSyncExternalStore } from 'react'
 import type { AgentSession } from '@/types/flow'
 
@@ -10,6 +11,7 @@ import type { AgentSession } from '@/types/flow'
  * older copy without it.
  */
 const live = new Map<string, AgentSession>()
+registerSessionCacheClearer(() => { if (live.size) { live.clear(); emit() } })
 const listeners = new Set<() => void>()
 let version = 0
 

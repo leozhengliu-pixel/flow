@@ -1,3 +1,4 @@
+import { registerSessionCacheClearer } from '@/lib/session-cache-registry'
 import { FlowTooltip, TooltipShortcut } from '@/components/ui/tooltip'
 import { memo, useContext, useEffect, useInsertionEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { useI18n } from '@/i18n/i18n'
@@ -500,6 +501,7 @@ export function SubIssueProgress({progress,subIssues,onOpenSubIssue,className}:{
 }
 
 const statusHistoryCache = new Map<string, { stateId: string; activities: ActivityEvent[] }>()
+registerSessionCacheClearer(() => statusHistoryCache.clear())
 
 /** Status hover for list rows: the issue's history is loaded when the card first opens. */
 function RowStatusHover({ issue }: { issue: MyIssuesRowData }) {

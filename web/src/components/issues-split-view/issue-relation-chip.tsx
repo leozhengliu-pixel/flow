@@ -3,6 +3,8 @@ import { useContext, useEffect, useRef, useState } from 'react'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { fetchIssueRecord } from '@/lib/api'
+import { currentWorkspaceKey } from '@/lib/api-client'
+import { fetched } from './related-issue-cache'
 import { ApplicationStoreContext } from '@/store/application-store-contexts'
 import type { Issue } from '@/types/flow'
 import styles from './issues-split-view.module.css'
@@ -11,8 +13,6 @@ export type IssueRelationKind = 'blocked_by' | 'blocks'
 
 const HOVER_LIMIT = 5
 /** Related issues fetched for a hover card (the paged list only carries the ids). */
-const fetched = new Map<string, Promise<Issue | undefined>>()
-
 function useRelatedIssue(id: string, enabled: boolean) {
   const app = useContext(ApplicationStoreContext)
   const known = app?.data?.issues.find(issue => issue.id === id)
@@ -20,10 +20,12 @@ function useRelatedIssue(id: string, enabled: boolean) {
   useEffect(() => {
     if (!enabled || known) return
     let live = true
-    let pending = fetched.get(id)
+    const workspaceKey = currentWorkspaceKey()
+    const cacheKey = `${workspaceKey}\n${id}`
+    let pending = fetched.get(cacheKey)?.pending
     if (!pending) {
       pending = fetchIssueRecord(id).catch(() => undefined)
-      fetched.set(id, pending)
+      fetched.set(cacheKey, { workspaceKey, pending })
     }
     void pending.then(issue => { if (live) setLoaded(issue) })
     return () => { live = false }
