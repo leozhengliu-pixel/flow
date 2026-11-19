@@ -331,7 +331,9 @@ type loopWork struct {
 // caller runs it with runLoopWork or, when it is never stored, abandons it.
 func (s *server) registerLoopWork(workspace, runID string, limits loopRunLimits) *loopWork {
 	registry := s.loopRunRegistry()
-	ctx, cancel := context.WithCancelCause(context.Background())
+	// A loop run's tool calls reach COLD consumers (runFlowTool): with
+	// bounded metadata on, each runs COLD per operation (SW552).
+	ctx, cancel := context.WithCancelCause(store.WithColdWork(context.Background(), "loop-run"))
 	ctx, stop := context.WithTimeoutCause(ctx, limits.Timeout, errLoopRunTimedOut)
 	return &loopWork{registry: registry, runID: runID, entry: registry.register(runID, workspace, cancel), ctx: ctx, cancel: cancel, stop: stop}
 }
