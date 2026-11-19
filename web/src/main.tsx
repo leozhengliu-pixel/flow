@@ -28,7 +28,24 @@ import './styles/picker-parity.css'
 import './styles/dialog-placement.css'
 import './styles/mobile-shell.css'
 import './components/ui/menu-highlight.css'
+import { prepareStartupSnapshot } from './lib/local-snapshot'
+import { syncV2Enabled } from './lib/sync-client'
+import { beginStartup } from './lib/startup'
+import { fetchAccountBootstrap, fetchAuthSession, fetchBootstrap } from './lib/api'
+import { isProjectListRoute, parseAppRoute } from './lib/app-routes'
+import { RouteError } from './components/layout/route-error'
 
+// The session, account and remembered-workspace requests start now instead of after the first render (App takes
+// them over), and a repeat visit paints from the local workspace snapshot read alongside them.
+if (!syncV2Enabled()) {
+  const route = parseAppRoute(window.location.pathname, window.location.search)
+  beginStartup({ fetchSession: fetchAuthSession, fetchAccount: fetchAccountBootstrap, fetchBootstrap }, {
+    requestedWorkspaceKey: ('workspaceSlug' in route ? route.workspaceSlug : '') ?? '',
+    isRoot: route.kind === 'root',
+    projection: isProjectListRoute(route) ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined,
+  })
+}
+const startupSnapshotRead = prepareStartupSnapshot(window.location.pathname, { enabled: !syncV2Enabled() }).catch(() => undefined)
 installStaleChunkReload()
 // Fetch the current route's page chunks now, in parallel with the session/bootstrap requests, instead of after the data lands.
 preloadInitialRoute()
@@ -37,7 +54,7 @@ initializeTheme()
 window.__flowMermaidPreview = renderMermaidPreview
 
 // Await the (lazily loaded) Chinese dictionary when the saved locale needs it so the first paint is never English.
-void prepareInitialLocale().then(() => {
+void Promise.all([prepareInitialLocale(), startupSnapshotRead]).then(() => {
   const router = createBrowserRouter([{ path: '*', element: (
     <LightboxEditorProvider>
       <TooltipProvider>
@@ -48,7 +65,7 @@ void prepareInitialLocale().then(() => {
       <ActionDialogHost />
       <DueDateDialogHost />
     </LightboxEditorProvider>
-  ) }])
+  ), errorElement: <RouteError /> }])
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <FlowMotionProvider><I18nProvider>

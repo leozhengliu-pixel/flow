@@ -1,5 +1,6 @@
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useServerDraft } from "@/hooks/use-server-draft";
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { NotificationChevron, NotificationSlackGlyph } from './notification-glyphs';
@@ -1054,11 +1055,11 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
   const desktop = useDesktopSettings();
   const current = data.userSettings[data.viewer.id];
   const viewerUsername = data.viewer.username || current?.username || data.viewer.name;
-  const [displayName, setDisplayName] = useState(data.viewer.displayName);
-  const [username, setUsername] = useState(
-    viewerUsername,
-  );
-  const [jobTitle, setJobTitle] = useState(current?.jobTitle || "");
+  // The profile follows the server's copy (a page painted from a cached workspace snapshot shows the confirmed one)
+  // until the viewer edits a field.
+  const [displayName, setDisplayName] = useServerDraft(data.viewer.displayName);
+  const [username, setUsername] = useServerDraft(viewerUsername);
+  const [jobTitle, setJobTitle] = useServerDraft(current?.jobTitle || "");
   const [busy, setBusy] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const dirty =

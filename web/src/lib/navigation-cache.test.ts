@@ -9,6 +9,7 @@ import {
   markNavigationHydrated,
   readNavigationCache,
   toNavigationSnapshot,
+  withoutSnapshotIssues,
   workspaceBootstrapPhase,
   writeNavigationCache,
 } from './navigation-cache'
@@ -89,6 +90,29 @@ describe('navigation cache', () => {
       viewerId: viewer.id,
       preview: { viewerId: viewer.id, key: 'workspace:TST-1', issue: makeIssue({ isSummary: true }) },
     })?.issues[0]?.isSummary).toBe(true)
+  })
+
+  it('lets a fresh bootstrap replace every cached issue row, keeping only rows fetched from the server meanwhile', () => {
+    const cached = toNavigationSnapshot(makeBootstrap({
+      issueCollectionPaged: true,
+      issues: [
+        makeIssue({ id: 'deleted', identifier: 'TST-9', title: 'Deleted on the server' }),
+        makeIssue({ id: 'renamed', identifier: 'TST-2', title: 'Old title' }),
+      ],
+    }))
+    const hydrated = hydrateWorkspaceNavigation({ current: null, cached, requestedWorkspaceKey: 'workspace', viewerId: viewer.id })!
+    // An issue page opened while the snapshot was on screen loaded its record from the server.
+    const opened = makeIssue({ id: 'opened', identifier: 'TST-3', title: 'Opened meanwhile', isSummary: false })
+    const shown = { ...hydrated, issues: [...hydrated.issues, opened] }
+    const fresh = makeBootstrap({ issueCollectionPaged: true, issues: [makeIssue({ id: 'renamed', identifier: 'TST-2', title: 'New title', isSummary: true })] })
+    // Without dropping the snapshot rows, a paged merge would keep the deleted issue.
+    expect(mergeWorkspaceDirectory(shown, fresh).issues.map(issue => issue.id)).toContain('deleted')
+    const merged = mergeWorkspaceDirectory(withoutSnapshotIssues(shown), fresh)
+    expect(merged.issues.map(issue => [issue.id, issue.title]).sort()).toEqual([['opened', 'Opened meanwhile'], ['renamed', 'New title']])
+    // Data that never came from a snapshot is untouched.
+    const server = makeBootstrap()
+    expect(withoutSnapshotIssues(server)).toBe(server)
+    expect(withoutSnapshotIssues(null)).toBeNull()
   })
 
   it('keeps an in-flight bootstrap after cache hydration looks loaded', () => {

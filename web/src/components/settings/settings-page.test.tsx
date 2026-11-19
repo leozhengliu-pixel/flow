@@ -533,3 +533,23 @@ it('disables the team danger zone for members with the reference app\'s reasons'
   await userEvent.setup().hover(screen.getByRole('button', { name: 'Delete…' }).parentElement as HTMLElement);
   expect(await screen.findByRole('tooltip')).toHaveTextContent('Only workspace owners, admins, and team owners can delete teams');
 });
+
+it('shows the workspace name the server confirms after mounting from cached data', () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  const view = render(<MemoryRouter><I18nProvider><SettingsPage {...input}/></I18nProvider></MemoryRouter>);
+  expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue(input.data.workspace.name);
+  view.rerender(<MemoryRouter><I18nProvider><SettingsPage {...input} data={{ ...input.data, workspace: { ...input.data.workspace, name: 'Renamed elsewhere' } }}/></I18nProvider></MemoryRouter>);
+  expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Renamed elsewhere');
+});
+
+it('mounts an editor again from the record the server confirms', () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  const hook = (name: string) => ({ id: 'hook-1', name, url: 'https://example.test/hook', enabled: true, resourceTypes: ['issues'], teamIds: [], secretPrefix: 'whsec', createdAt: '', updatedAt: '' });
+  const page = (name: string, snapshotPending: boolean) => <MemoryRouter><I18nProvider><SettingsPage {...input} page="api" webhookId="hook-1" snapshotPending={snapshotPending} data={{ ...input.data, webhooks: [hook(name)] } as never}/></I18nProvider></MemoryRouter>;
+  const view = render(page('Cached hook', true));
+  expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Cached hook');
+  view.rerender(page('Server hook', false));
+  expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Server hook');
+});

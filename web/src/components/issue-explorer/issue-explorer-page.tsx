@@ -3,6 +3,7 @@ import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-action
 import { unavailableDisplayProperties } from '@/components/my-issues/display-property-availability'
 import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import { useActionGroupsForSelection } from '@/hooks/use-action-groups-for-selection'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { clearSelectedModels, setSelectedModels } from '@/lib/selected-models-store'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { teamHierarchy } from '@/lib/team-hierarchy'
@@ -119,6 +120,13 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const [teamDefault, setTeamDefault] = useState<Record<string, unknown> | undefined>(() => scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewDefaults?.[teamViewKey] : undefined)
   const personalViewKey = savedView ? `${data.workspace.urlKey}:issue-explorer:view:${savedView.id}:display` : undefined
   const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => personalViewKey ? readPersonalDisplay(personalViewKey, savedView!, view) : duplicateFrom ? displayFromSavedView(duplicateFrom, view) : creatingView ? draftDisplay(view, boardRoute, teamDefault, defaultDisplayOverrides) : readDisplay(`${preferencesKey}:display`, view, boardRoute, teamDefault, defaultDisplayOverrides))
+  // The team default follows the server's copy: a page painted from a cached workspace snapshot (or open while
+  // another member saves a default) shows the confirmed one. A stored personal display still wins.
+  const serverTeamDefault = scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewDefaults?.[teamViewKey] : undefined
+  useResetOnChange([JSON.stringify(serverTeamDefault ?? null)], () => {
+    setTeamDefault(serverTeamDefault)
+    if (!personalViewKey && !duplicateFrom && !creatingView) setDisplay(readDisplay(`${preferencesKey}:display`, view, boardRoute, serverTeamDefault, defaultDisplayOverrides))
+  })
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false)
   const detailsKey = detailsStorageKey ?? `${data.workspace.urlKey}:issue-explorer:${savedView && desktop ? `view:${savedView.id}:desktop` : storageScope}:details`
   const defaultDetailsOpen = Boolean(savedView && desktop)
@@ -133,6 +141,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const [draftInsights, setDraftInsights] = useState<SavedViewInsightsConfig>()
   // "Set default for everyone" on a team issue view: the team's shared Insights default.
   const [teamInsightDefault, setTeamInsightDefault] = useState<Record<string, unknown> | undefined>(() => scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewInsights?.[teamViewKey] : undefined)
+  const serverTeamInsights = scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewInsights?.[teamViewKey] : undefined
+  useResetOnChange([JSON.stringify(serverTeamInsights ?? null)], () => setTeamInsightDefault(serverTeamInsights))
   const [detailsWidth, setDetailsWidth] = useState(350)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [filterOpenSignal, setFilterOpenSignal] = useState(0)
@@ -237,6 +247,13 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const initialSaveTarget = saveTargets.find(target => target.scope === (sourceView?.scope ?? defaultSaveScope ?? scope.kind) && (target.scope !== 'team' || target.teamId === (sourceView?.teamId ?? (scope.kind === 'team' ? scope.team.id : undefined)))) ?? saveTargets[0]
 
   const workspaceKey = data.workspace.urlKey
+  // A saved view painted from a cached snapshot (or edited by a member meanwhile) shows the server's filters and
+  // layout once they change; an open edit card and the personal display layer keep the user's own choices.
+  useResetOnChange([savedView?.id, JSON.stringify(savedView?.filters ?? null), JSON.stringify(savedView?.display ?? null)], () => {
+    if (!savedView || viewEditor || hydratedSavedViewId.current !== savedView.id) return
+    setFilters(filtersFromSavedView(savedView))
+    setDisplay(readPersonalDisplay(`${workspaceKey}:issue-explorer:view:${savedView.id}:display`, savedView, savedView.view))
+  })
   useEffect(() => {
     if (!savedView || hydratedSavedViewId.current === savedView.id) return
     hydratedSavedViewId.current = savedView.id

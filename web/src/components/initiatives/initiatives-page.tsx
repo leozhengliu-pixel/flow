@@ -116,6 +116,20 @@ export function InitiativesPage(props: Props) {
   const [sort, setSort] = useState<Sort>(() => displayDefault ? defaultSort : readInitiativeSetting('sort', ['manual', 'name', 'status', 'priority', 'target', 'health', 'created', 'updated'], 'manual'))
   const [grouping, setGrouping] = useState<Grouping>(() => displayDefault ? defaultGrouping : readInitiativeSetting('grouping', ['none','contributingTeam','leadTeam','owner','health','status','priority','label'], 'none'))
   const [showTeamInitiatives, setShowTeamInitiatives] = useState(() => displayDefault ? defaultShowTeam : localStorage.getItem('flow:initiatives:show-team') !== 'false')
+  // The shared display default follows the server: a page painted from a cached workspace snapshot (or open while
+  // another member saves a default) shows the confirmed one. A setting the viewer already moved off the previous
+  // default keeps the viewer's choice.
+  const [seenDisplayDefault, setSeenDisplayDefault] = useState(displayDefault)
+  if (displayDefault && JSON.stringify(seenDisplayDefault ?? null) !== JSON.stringify(displayDefault)) {
+    const was = initiativeDisplayDefaults(seenDisplayDefault), now = initiativeDisplayDefaults(displayDefault)!
+    setSeenDisplayDefault(displayDefault)
+    if (!was || showNested === was.nested) setShowNested(now.nested)
+    if (!was || showParents === was.parents) setShowParents(now.parents)
+    if (!was || sameStringSet(properties, was.properties)) setProperties(now.properties)
+    if (!was || sort === was.sort) setSort(now.sort)
+    if (!was || grouping === was.grouping) setGrouping(now.grouping)
+    if (!was || showTeamInitiatives === was.showTeam) setShowTeamInitiatives(now.showTeam)
+  }
   const [updatesInitiative, setUpdatesInitiative] = useState<Initiative>()
   const [composeUpdate, setComposeUpdate] = useState(false)
   const [creatingParentId, setCreatingParentId] = useState<string>()
@@ -524,4 +538,16 @@ function matchesInitiativeFilter(initiative: Initiative, key: keyof FilterState,
 function healthLabel(value: Project['health']) { return ({ onTrack: 'On track', atRisk: 'At risk', offTrack: 'Off track', noUpdate: 'No updates' } as const)[value] }
 function readInitiativeProperties() { if (localStorage.getItem('flow:initiatives:properties-version') !== '2') return new Set(DEFAULT_PROPERTIES); try { const stored = JSON.parse(localStorage.getItem('flow:initiatives:properties') ?? 'null'); if (Array.isArray(stored)) return new Set<Property>(stored.filter((item): item is Property => PROPERTY_ORDER.includes(item))) } catch { /* use defaults */ } return new Set(DEFAULT_PROPERTIES) }
 function readInitiativeSetting<T extends string>(key: string, values: readonly T[], fallback: T) { const stored = localStorage.getItem(`flow:initiatives:${key}`) as T | null; return stored && values.includes(stored) ? stored : fallback }
+function initiativeDisplayDefaults(display: Props['displayDefault']) {
+  if (!display) return undefined
+  const sorts = ['manual', 'name', 'status', 'priority', 'target', 'health', 'created', 'updated'], groupings = ['none', 'contributingTeam', 'leadTeam', 'owner', 'health', 'status', 'priority', 'label']
+  return {
+    nested: display.showNestedInitiatives ?? true,
+    parents: display.showParentInitiatives ?? true,
+    properties: new Set<Property>(display.properties?.filter((item): item is Property => PROPERTY_ORDER.includes(item as Property)) ?? DEFAULT_PROPERTIES),
+    sort: (display.ordering && sorts.includes(display.ordering) ? display.ordering : 'manual') as Sort,
+    grouping: (display.grouping && groupings.includes(display.grouping) ? display.grouping : 'none') as Grouping,
+    showTeam: display.showTeamInitiatives ?? true,
+  }
+}
 function sameStringSet<T extends string>(left: Set<T>, right: Set<T>) { return left.size === right.size && [...left].every(value => right.has(value)) }

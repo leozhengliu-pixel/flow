@@ -1,3 +1,4 @@
+import { SnapshotUnconfirmedError, snapshotWriteGate } from '@/lib/snapshot-write-gate'
 const pageRealtimeClientId = crypto.randomUUID()
 
 export class ApiError<T = unknown> extends Error {
@@ -15,6 +16,16 @@ export class ApiError<T = unknown> extends Error {
     this.current = current
     this.params = params
   }
+}
+
+/**
+ * The server could not be reached (or a gateway in front of it answered for it): fetch's network TypeError and
+ * 502/503/504. Not a refusal: nothing about the session or access follows from it.
+ */
+export function isConnectivityError(error: unknown): boolean {
+  if (error instanceof SnapshotUnconfirmedError) return false
+  if (error instanceof ApiError) return error.status === 502 || error.status === 503 || error.status === 504
+  return error instanceof TypeError
 }
 
 export function realtimeClientId() {
@@ -81,6 +92,13 @@ export function apiFetch(url: string, { quiet, ...init }: ApiRequestInit = {}) {
   const headers = new Headers(init.headers)
   if (workspaceKey && !headers.has('X-Workspace-Key')) headers.set('X-Workspace-Key', workspaceKey)
   headers.set('X-Client-ID', realtimeClientId())
+  // A write for a workspace shown from an unconfirmed local snapshot waits for the fresh bootstrap.
+  const gate = snapshotWriteGate(init.method, url, headers.get('X-Workspace-Key'))
+  if (gate) return gate.then(() => send(url, init, headers, quiet, workspaceKey))
+  return send(url, init, headers, quiet, workspaceKey)
+}
+
+function send(url: string, init: RequestInit, headers: Headers, quiet: boolean | undefined, workspaceKey: string) {
 	return fetch(url, { ...init, headers, credentials: 'same-origin' }).then(async response => {
     if(response.status===403 && !quiet) {
       const payload=await response.clone().json().catch(()=>null)

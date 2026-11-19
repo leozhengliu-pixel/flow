@@ -28,6 +28,11 @@ export interface StartupInput {
 
 export const bootstrapRequestKey = (viewerId: string, workspaceKey: string, projection?: string) => `${viewerId}:${workspaceKey}:${projection ?? 'full'}`
 
+/** Wait before retry `attempt` (from 0) while the server is unreachable: 1 s, doubling, at most 15 s. */
+export function startupRetryDelay(attempt: number): number {
+  return Math.min(15_000, 1000 * 2 ** Math.max(0, attempt))
+}
+
 export function createBootstrapRequest(key: string, start: (signal: AbortSignal) => Promise<BootstrapData>, speculative = false): BootstrapRequest {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 30000)
@@ -61,6 +66,26 @@ export function startStartup(deps: StartupDeps, input: StartupInput) {
     return { session, account }
   }, error => { discard(); throw error })
   return { speculative, ready }
+}
+
+let early: { input: StartupInput; startup: ReturnType<typeof startStartup> } | undefined
+
+/** Starts the session, account and remembered-workspace requests before the first render (main.tsx). */
+export function beginStartup(deps: StartupDeps, input: StartupInput) {
+  early = { input, startup: startStartup(deps, input) }
+}
+
+/** The startup begun before the first render when it was begun for the same page; otherwise a new one. */
+export function takeStartup(deps: StartupDeps, input: StartupInput) {
+  const begun = early
+  early = undefined
+  if (begun && begun.input.requestedWorkspaceKey === input.requestedWorkspaceKey && begun.input.isRoot === input.isRoot && begun.input.projection === input.projection) return begun.startup
+  if (begun) {
+    begun.startup.speculative?.controller.abort()
+    begun.startup.speculative?.release()
+    begun.startup.ready.catch(() => undefined)
+  }
+  return startStartup(deps, input)
 }
 
 /** Reuse a speculative request's answer, repeating it as a normal request if it was refused. */

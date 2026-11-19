@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { ProjectStatus } from '@/types/flow'
 import type { ProjectPageItem } from './projects-data-view'
-import { DEFAULT_PROJECTS_DISPLAY } from './projects-display-model'
+import { DEFAULT_PROJECTS_DISPLAY, type ProjectsDisplaySettings } from './projects-display-model'
 import { groupProjectsForView, projectStatusesForLayout, useProjectsViewState, type ProjectsViewState } from './use-projects-view-state'
 
 const statuses: ProjectStatus[] = [
@@ -123,5 +123,22 @@ describe('only show lead team projects', () => {
     act(() => result.current.setDisplay({ ...result.current.state.display, onlyLeadTeamProjects: false }))
     act(() => result.current.resetDisplay())
     expect(result.current.state.display.onlyLeadTeamProjects).toBe(true)
+  })
+
+  it('follows the shared display default the server confirms until the viewer changes the display', () => {
+    const storageKey = `follow-default-${Math.random()}`
+    const cached: ProjectsDisplaySettings = { ...DEFAULT_PROJECTS_DISPLAY, layout: 'list' }
+    const confirmed: ProjectsDisplaySettings = { ...DEFAULT_PROJECTS_DISPLAY, layout: 'board' }
+    const { result, rerender } = renderHook(({ workspaceDefault }) => useProjectsViewState(projects, { projectStatuses: statuses, storageKey, workspaceDefault }), { initialProps: { workspaceDefault: cached } })
+    expect(result.current.state.display.layout).toBe('list')
+    rerender({ workspaceDefault: confirmed })
+    expect(result.current.state.display.layout).toBe('board')
+    // The followed default is not stored as the viewer's own choice.
+    const reopened = renderHook(() => useProjectsViewState(projects, { projectStatuses: statuses, storageKey, workspaceDefault: cached }))
+    expect(reopened.result.current.state.display.layout).toBe('list')
+
+    act(() => result.current.setDisplay({ ...result.current.state.display, layout: 'timeline' }))
+    rerender({ workspaceDefault: cached })
+    expect(result.current.state.display.layout).toBe('timeline')
   })
 })

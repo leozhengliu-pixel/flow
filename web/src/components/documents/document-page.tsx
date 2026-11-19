@@ -71,6 +71,8 @@ export interface DocumentPageProps {
   onNavigate?: (path: string) => void
   /** Set when the document is in the trash: the page is read-only and offers "Restore document". */
   deletedEntry?: TrashEntry
+  /** The document came from a cached workspace snapshot, which keeps no body: the body waits for the server's copy. */
+  bodyPending?: boolean
 }
 
 function latestRevision(document: FlowDocument) {
@@ -81,7 +83,7 @@ function latestRevision(document: FlowDocument) {
   return latest
 }
 
-export function DocumentPage({ data, document, onReload, onBack, origin, openHistoryRequest, onHistoryRequestHandled, onOpenSidebar, onNavigate, deletedEntry }: DocumentPageProps) {
+export function DocumentPage({ data, document, onReload, onBack, origin, openHistoryRequest, onHistoryRequestHandled, onOpenSidebar, onNavigate, deletedEntry, bodyPending = false }: DocumentPageProps) {
   const { t } = useI18n()
   const deleted = Boolean(deletedEntry)
   const [title, setTitle] = useState(document.title)
@@ -116,7 +118,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const peopleScope = JSON.stringify([data.workspace.id, data.viewer.id, data.sync?.authzEpoch])
   const people = useResourcePeople(data.users, ownerOpen || subscribersOpen)
   const pending = useRef<number | undefined>(undefined)
-  const bodyLoaded = !resourceWindowEnabled('documents') || documentBodyLoaded(data, document)
+  const bodyLoaded = !bodyPending && (!resourceWindowEnabled('documents') || documentBodyLoaded(data, document))
   const [titleFocused, setTitleFocused] = useState(false)
 
   const navigate = useCallback((path: string) => { if (onNavigate) onNavigate(path); else window.location.assign(path) }, [onNavigate])
