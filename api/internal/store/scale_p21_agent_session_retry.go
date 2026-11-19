@@ -70,6 +70,9 @@ func (s *SQLiteStore) refreshMetadataLifecycleConflict(ctx context.Context, work
 		}
 		defer tx.Rollback()
 		replacements := map[string]metadataLogicalNode{}
+		// behind: some conflicted row is not the stored form of the record
+		// this generation holds, so another server committed it.
+		behind := false
 		for _, key := range sessions {
 			if err := owner.reserve(ctx, uint64(len(key.key))*8+512); err != nil {
 				return err
@@ -81,6 +84,7 @@ func (s *SQLiteStore) refreshMetadataLifecycleConflict(ctx context.Context, work
 				// row under its key and drops the record, while SQL keeps the
 				// row: the installed image drops it too.
 				replacements[key.key] = metadataLogicalNode{}
+				behind = true
 				continue
 			}
 			var size int64
@@ -88,6 +92,7 @@ func (s *SQLiteStore) refreshMetadataLifecycleConflict(ctx context.Context, work
 				workspace, kind, key.key).Scan(&size)
 			if errors.Is(err, sql.ErrNoRows) {
 				replacements[key.key] = metadataLogicalNode{}
+				behind = true
 				continue
 			}
 			if err != nil {
@@ -114,6 +119,16 @@ func (s *SQLiteStore) refreshMetadataLifecycleConflict(ctx context.Context, work
 					return err
 				}
 				replacements[key.key] = node
+				if !behind {
+					stored, err := legacySessionInstalledRowStored(ctx, owner, tx, workspace, source, kind, key.key, spool)
+					if err != nil {
+						if ctx.Err() != nil {
+							return ctx.Err()
+						}
+						stored = false
+					}
+					behind = !stored
+				}
 				return nil
 			}()
 			if err != nil {
@@ -150,8 +165,13 @@ func (s *SQLiteStore) refreshMetadataLifecycleConflict(ctx context.Context, work
 			return err
 		}
 		// Only the conflicted records are refreshed: the rest of the peer's
-		// commit is still missing (installedGenerationBehind).
-		candidate.behind.Store(true)
+		// commit is still missing (installedGenerationBehind). A conflict
+		// whose rows SQL holds exactly as this generation stores its own
+		// records is no evidence of a peer: the installed session differs
+		// from its row only by what persisting drops (NUL, the references of
+		// bodies that are loaded), as after any write of this server, whose
+		// candidate the next write keeps (as the literal path keeps it).
+		candidate.behind.Store(behind || source.behind.Load())
 		policy, cost, err := s.metadataLogicalPolicy(ctx, candidate)
 		if err != nil {
 			return err
@@ -162,4 +182,54 @@ func (s *SQLiteStore) refreshMetadataLifecycleConflict(ctx context.Context, work
 		candidate = nil
 		return nil
 	}
+}
+
+// legacySessionInstalledRowStored reports whether row, a session row as SQL
+// holds it, is exactly what the record of source (the installed generation)
+// under key stores as: the session persist path's NUL strip and offload
+// stored form (writeAgentSessionLifecycleNativeRow), compared as the rebase
+// compares stored rows. A missing installed record is not.
+func legacySessionInstalledRowStored(ctx context.Context, owner *ResourceRead, tx *sqlTx, workspace string, source *metadataLogicalSource, field, key string, row *RecordSpool) (bool, error) {
+	index, _, ok := metadataLogicalField(field)
+	if !ok || index >= len(source.fields) || source.fields[index].typ == nil {
+		return false, nil
+	}
+	found, err := metadataLogicalFirstRecord(ctx, metadataAggregateStoredNode{value: source.fields[index]}, key)
+	if err != nil {
+		return false, err
+	}
+	record, ok := found.(metadataAggregateStoredNode)
+	if !ok || record.value.typ == nil {
+		return false, nil
+	}
+	native, err := legacySessionNodeSpool(ctx, owner, record.value)
+	if err != nil {
+		return false, err
+	}
+	defer native.Close()
+	stripped, err := newMetadataLogicalRecordSpool(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer stripped.Close()
+	if err := legacyProjectCopyStoredJSON(ctx, stripped, legacySessionSpoolPart(native).reader()); err != nil {
+		return false, err
+	}
+	stored, err := newMetadataLogicalRecordSpool(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer stored.Close()
+	if err := legacySessionStoredForm(ctx, owner, tx, workspace, legacySessionSpoolPart(stripped), stored, false); err != nil {
+		return false, err
+	}
+	storedFields, err := legacySessionJSONObject(ctx, owner, legacySessionSpoolPart(stored))
+	if err != nil {
+		return false, err
+	}
+	rowFields, err := legacySessionJSONObject(ctx, owner, legacySessionSpoolPart(row))
+	if err != nil {
+		return false, err
+	}
+	return legacySessionObjectsEqual(ctx, owner, rowFields, storedFields)
 }
