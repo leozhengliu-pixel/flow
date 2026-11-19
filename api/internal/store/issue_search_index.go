@@ -414,10 +414,14 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	params = append(params, textArgs...)
 	params = append(params, orderArgs...)
 	params = append(params, limit, q.Workspace)
+	// A join need not keep its subquery's order (PostgreSQL's hash join does
+	// not), so the joined rows are ordered again by the same keys: tied
+	// candidates keep the order the caller's scan breaks ties with.
+	outer := ` ORDER BY ` + strings.ReplaceAll(order, "i.", "output.")
 	if boundedScratch != nil {
-		return s.searchIssueCandidateRows(ctx, q.Workspace, prefix, inner, len(prefixArgs), params, visit)
+		return s.searchIssueCandidateRows(ctx, q.Workspace, prefix, inner, len(prefixArgs), params, outer, orderArgs, visit)
 	}
-	rows, err := s.db.QueryContext(ctx, prefix+`SELECT output.list_data,output.data FROM (`+inner+`) candidates JOIN issue_records output ON output.id=candidates.id AND output.workspace_key=?`, params...)
+	rows, err := s.db.QueryContext(ctx, prefix+`SELECT output.list_data,output.data FROM (`+inner+`) candidates JOIN issue_records output ON output.id=candidates.id AND output.workspace_key=?`+outer, append(params, orderArgs...)...)
 	if err != nil {
 		return err
 	}

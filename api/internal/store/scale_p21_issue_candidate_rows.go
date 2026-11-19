@@ -43,7 +43,7 @@ type issueCandidateSQLRow struct {
 	blob                 int
 }
 
-func (s *SQLiteStore) searchIssueCandidateRows(ctx context.Context, workspace, prefix, inner string, prefixCount int, params []any, visit func(domain.Issue) error) error {
+func (s *SQLiteStore) searchIssueCandidateRows(ctx context.Context, workspace, prefix, inner string, prefixCount int, params []any, order string, orderArgs []any, visit func(domain.Issue) error) error {
 	held := &ResourceRead{store: s}
 	defer held.Close()
 	wire := &ResourceRead{store: s}
@@ -81,11 +81,12 @@ func (s *SQLiteStore) searchIssueCandidateRows(ctx context.Context, workspace, p
 		storage = "CASE WHEN typeof(output.id)='blob' THEN 1 ELSE 0 END"
 	}
 	query := prefix + "SELECT CASE WHEN " + length("output.list_data") + "<=? THEN output.list_data ELSE NULL END," +
-		"output.id,COALESCE(" + length("output.list_data") + ",0)," + length("output.data") + "," + storage + from
+		"output.id,COALESCE(" + length("output.list_data") + ",0)," + length("output.data") + "," + storage + from + order
 	// Prefix arguments (e.g. PostgreSQL's search CTE) precede this SELECT's
 	// size guard. Count their placeholders before the inner query parameters.
 	values := append(slices.Clone(params[:prefixCount]), maximumList)
 	values = append(values, params[prefixCount:]...)
+	values = append(values, orderArgs...)
 	rows, err := tx.QueryContext(ctx, query, values...)
 	if err != nil {
 		return err
