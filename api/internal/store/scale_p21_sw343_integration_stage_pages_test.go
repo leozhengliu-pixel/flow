@@ -212,7 +212,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 						t.Fatal("closed private owner accepted new buffered bytes")
 					}
 				case "exec":
-					_, err = stage.exec(ctx, metadataSQLStageAppendData, "x", stage.id)
+					_, err = stage.exec(ctx, metadataSQLStageAppendData, stage.id, stage.chunks[0], "x")
 				}
 				if !errors.Is(err, ErrBoundedMetadataCoverage) || queries != beforeQueries || tx.writtenBytes != billed || stage.written[0] != 0 {
 					t.Fatal("invalidated stage owner reached SQL or changed admission", operation, err, queries, beforeQueries)
@@ -252,7 +252,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 			}
 		}
 		stage.appendChunkBytes = ownedChunk
-		if _, err := stage.exec(ctx, metadataSQLStageAppendData, strings.Repeat("x", ownedChunk+1), stage.id); !errors.Is(err, ErrBoundedMetadataCoverage) ||
+		if _, err := stage.exec(ctx, metadataSQLStageAppendData, stage.id, stage.chunks[0], strings.Repeat("x", ownedChunk+1)); !errors.Is(err, ErrBoundedMetadataCoverage) ||
 			tx.writtenBytes != billed || stage.written[0] != 0 || queries != initialQueries {
 			t.Fatal("oversized private SQL argument changed admission", err, queries, tx.writtenBytes, billed)
 		}
@@ -271,7 +271,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 		raw := []byte(`{"body":"` + strings.Repeat("x", ownedChunk-2-len(`{"body":"`)) + "\U0001f600" + strings.Repeat("y", ownedChunk+17) + `"}`)
 		appends := 0
 		ctx = WithSQLStatementObserver(ctx, func(query string) {
-			if strings.HasPrefix(query, "UPDATE bounded_metadata_write_stage SET data=") {
+			if strings.HasPrefix(query, "INSERT INTO bounded_metadata_write_chunks(operation_id,part,seq,chunk) VALUES(?,0,") {
 				appends++
 			}
 		})
@@ -319,7 +319,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 		defer cancel()
 		appends := 0
 		ctx = WithSQLStatementObserver(ctx, func(query string) {
-			if strings.HasPrefix(query, "UPDATE bounded_metadata_write_stage SET data=") {
+			if strings.HasPrefix(query, "INSERT INTO bounded_metadata_write_chunks(operation_id,part,seq,chunk) VALUES(?,0,") {
 				appends++
 				if appends == 2 {
 					cancel()

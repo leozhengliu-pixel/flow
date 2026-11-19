@@ -519,6 +519,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 23, name: "chat reply thread leases", apply: s.createChatReplyLeaseSchema},
 		{version: 24, name: "personal data exports and account erasure", apply: s.createPersonalDataSchema},
 		{version: boundedMetadataStagingSchemaVersion, name: "transactional bounded metadata write staging", apply: s.createBoundedMetadataStagingSchema},
+		{version: boundedMetadataStagingChunksSchemaVersion, name: "bounded metadata write staging chunks", apply: s.createBoundedMetadataStagingChunksSchema},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}

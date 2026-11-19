@@ -152,7 +152,7 @@ func scaleP21SW219Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 			if strings.Contains(lower, "select substr(") && strings.Contains(lower, "workspace_metadata_records") {
 				reads++
 			}
-			if !cancelled && (cancelRead && reads == 4 || cancelWrite && strings.Contains(lower, "update bounded_metadata_write_stage set data")) {
+			if !cancelled && (cancelRead && reads == 4 || cancelWrite && strings.Contains(lower, "insert into bounded_metadata_write_chunks(operation_id,part,seq,chunk) values(?,0,")) {
 				cancelled = true
 				cancel()
 			}

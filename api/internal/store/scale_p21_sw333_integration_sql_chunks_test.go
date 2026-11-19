@@ -84,7 +84,7 @@ func TestScaleP21SW333IntegrationSQLChunks(t *testing.T) {
 		raw := []byte(`{"body":"` + strings.Repeat("x", large-2-len(`{"body":"`)) + "\U0001f600" + strings.Repeat("y", large+17) + `"}`)
 		appends := 0
 		ctx := WithSQLStatementObserver(withIntegrationDeliveryStream(t.Context(), "integration_delivery.retry"), func(query string) {
-			if strings.HasPrefix(query, "UPDATE bounded_metadata_write_stage SET data=") {
+			if strings.HasPrefix(query, "INSERT INTO bounded_metadata_write_chunks(operation_id,part,seq,chunk) VALUES(?,0,") {
 				appends++
 			}
 		})
@@ -127,7 +127,7 @@ func TestScaleP21SW333IntegrationSQLChunks(t *testing.T) {
 		defer cancel()
 		appends := 0
 		ctx = WithSQLStatementObserver(ctx, func(query string) {
-			if strings.HasPrefix(query, "UPDATE bounded_metadata_write_stage SET data=") {
+			if strings.HasPrefix(query, "INSERT INTO bounded_metadata_write_chunks(operation_id,part,seq,chunk) VALUES(?,0,") {
 				appends++
 				if appends == 2 {
 					cancel()
@@ -176,7 +176,7 @@ func TestScaleP21SW333IntegrationSQLChunks(t *testing.T) {
 					t.Fatal("admitted chunk declaration was mutable", event, err)
 				}
 				stage.appendChunkBytes = chunk
-				if _, err := stage.exec(ctx, metadataSQLStageAppendData, strings.Repeat("x", chunk+1), stage.id); !errors.Is(err, ErrBoundedMetadataCoverage) {
+				if _, err := stage.exec(ctx, metadataSQLStageAppendData, stage.id, stage.chunks[0], strings.Repeat("x", chunk+1)); !errors.Is(err, ErrBoundedMetadataCoverage) {
 					t.Fatal("stage accepted an oversized append", event, err)
 				}
 				if tx.writtenBytes != billed || stage.written[0] != 0 {

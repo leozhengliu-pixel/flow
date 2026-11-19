@@ -69,7 +69,8 @@ func scaleP21SW200Write(t *testing.T, fixture scaleP09Fixture, raw []byte, limit
 			if err == nil {
 				chunks := (len(stored)+metadataRecordChunkBytes-1)/metadataRecordChunkBytes +
 					(len(search)+metadataRecordChunkBytes-1)/metadataRecordChunkBytes
-				if stage.statements != 4+chunks {
+				// insert, chunks, row, search document, chunk and stage deletes
+				if stage.statements != 5+chunks {
 					t.Fatal("SQL stage write count exceeded its per-chunk bound", stage.statements, chunks)
 				}
 				if stage.inputBytes > tx.writtenBytes+stage.statements*1024 {
@@ -301,7 +302,7 @@ func scaleP21SW200RootWrite(t *testing.T, fixture scaleP09Fixture, raw []byte, u
 			}
 			if err == nil {
 				chunks := (len(raw) + metadataRecordChunkBytes - 1) / metadataRecordChunkBytes
-				if stage.statements != 3+chunks || stage.inputBytes > tx.writtenBytes+stage.statements*1024 {
+				if stage.statements != 4+chunks || stage.inputBytes > tx.writtenBytes+stage.statements*1024 {
 					t.Fatal("root staging exceeded SQL input/count overhead bound", stage.statements, chunks, stage.inputBytes, tx.writtenBytes)
 				}
 				t.Logf("root_legacy_billed_bytes=%d root_staged_driver_input_bytes=%d legacy_write_queries=1 staged_write_queries=%d",
