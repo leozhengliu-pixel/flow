@@ -214,6 +214,10 @@ func (r *Redis) Allow(ctx context.Context, key string, limit int, window time.Du
 	return values[0] <= int64(limit), retry, nil
 }
 
+// ErrWorkspaceLockBusy reports that another replica held the distributed
+// workspace lock for the whole wait; the request is retryable.
+var ErrWorkspaceLockBusy = errors.New("the workspace lock is held by another server")
+
 func (r *Redis) WithWorkspaceLock(ctx context.Context, workspace string, action func() error) error {
 	key := r.key("lock", slot(workspace))
 	token := randomID()
@@ -227,7 +231,7 @@ func (r *Redis) WithWorkspaceLock(ctx context.Context, workspace string, action 
 			break
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("workspace %q is busy", workspace)
+			return fmt.Errorf("workspace %q is busy: %w", workspace, ErrWorkspaceLockBusy)
 		}
 		select {
 		case <-ctx.Done():

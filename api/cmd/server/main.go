@@ -7384,6 +7384,10 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 		(&metadataReadGate{}).busy(w, store.ColdMetadataBusyRetryAfter)
 		return
 	}
+	if errors.Is(err, coordination.ErrWorkspaceLockBusy) {
+		(&metadataReadGate{}).busy(w, workspaceLockBusyRetryAfter)
+		return
+	}
 	if errors.Is(err, store.ErrAuthForbidden) {
 		writeError(w, http.StatusForbidden, "You don't have permission to perform this action")
 		return

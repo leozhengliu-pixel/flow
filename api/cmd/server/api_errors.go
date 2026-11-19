@@ -10,7 +10,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
+	"flow/api/internal/coordination"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
@@ -68,6 +70,9 @@ func apiErrorTypeFor(status int, message string) string {
 	return apiErrorType(status)
 }
 
+// workspaceLockBusyRetryAfter is the Retry-After of a busy distributed lock.
+const workspaceLockBusyRetryAfter = time.Second
+
 // internalErrorMessage is the only message a 500 response carries. The error
 // behind it (often database or driver text naming tables, columns and SQL
 // states) is logged with the request id instead.
@@ -85,7 +90,7 @@ func requestIDFrom(ctx context.Context) string {
 // (isInternalError): it becomes a logged 500 with the generic message and the
 // request id.
 func writeErrorFor(w http.ResponseWriter, r *http.Request, status int, err error) {
-	if isInternalError(err) {
+	if isInternalError(err) || errors.Is(err, coordination.ErrWorkspaceLockBusy) {
 		writeInternalError(w, r, err)
 		return
 	}
@@ -108,6 +113,11 @@ func writeInternalError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, store.ErrColdMetadataBusy) {
 		// The COLD slot's queue was full or its wait ran out: retryable.
 		(&metadataReadGate{}).busy(w, store.ColdMetadataBusyRetryAfter)
+		return
+	}
+	if errors.Is(err, coordination.ErrWorkspaceLockBusy) {
+		// Another replica holds the distributed workspace lock: retryable.
+		(&metadataReadGate{}).busy(w, workspaceLockBusyRetryAfter)
 		return
 	}
 	requestID := requestIDFrom(r.Context())

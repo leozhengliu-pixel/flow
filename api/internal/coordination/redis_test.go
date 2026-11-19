@@ -2,6 +2,7 @@ package coordination
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -194,4 +195,32 @@ func openTestRedis(t *testing.T, address string) *Redis {
 		t.Fatal(err)
 	}
 	return client
+}
+
+func TestRedisWorkspaceLockBusyIsTypedError(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	holder := openTestRedis(t, redisServer.Addr())
+	waiter := openTestRedis(t, redisServer.Addr())
+	defer holder.Close()
+	defer waiter.Close()
+	waiter.lockWait = 50 * time.Millisecond
+
+	entered, release := make(chan struct{}), make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- holder.WithWorkspaceLock(t.Context(), "workspace", func() error {
+			close(entered)
+			<-release
+			return nil
+		})
+	}()
+	<-entered
+	err := waiter.WithWorkspaceLock(t.Context(), "workspace", func() error { return nil })
+	close(release)
+	if !errors.Is(err, ErrWorkspaceLockBusy) {
+		t.Fatalf("busy lock error = %v, want ErrWorkspaceLockBusy", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 }
