@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"go/ast"
 	"go/format"
+	"go/parser"
+	"go/token"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -139,12 +143,17 @@ func scaleP21SW550Classify(t *testing.T) map[string]string {
 		reach[start] = result
 		return result
 	}
+	locals := scaleP21SW550LocalHandlers(t)
 	table := map[string]string{}
 	for _, pattern := range scaleP21SW490Patterns(t) {
 		targets := roots[pattern]
 		if len(targets) == 0 {
-			// A handler held in a local (the MCP endpoints) has no package
-			// function in its registration: nothing proves it bounded.
+			// A handler held in a local (the MCP endpoints) is the server
+			// method its assignment calls.
+			targets = locals[pattern]
+		}
+		if len(targets) == 0 {
+			// An imported handler value: nothing proves it bounded.
 			table[pattern] = "cold: unresolved-handler"
 			continue
 		}
@@ -424,4 +433,74 @@ func TestScaleP21SW550BackgroundColdWork(t *testing.T) {
 			t.Errorf("SW550 stale background root %s: it no longer reaches a legacy consumer", root)
 		}
 	}
+}
+
+// scaleP21SW550LocalHandlers resolves a registration whose handler is a local
+// variable (readWriteMCP := s.mcpHTTP(false)) to the server methods its
+// assignment in the same function names.
+func scaleP21SW550LocalHandlers(t *testing.T) map[string][]string {
+	t.Helper()
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := map[string][]string{}
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range parsed.Decls {
+			function, ok := decl.(*ast.FuncDecl)
+			if !ok || function.Body == nil {
+				continue
+			}
+			assigned := map[string][]string{}
+			ast.Inspect(function.Body, func(node ast.Node) bool {
+				assignment, ok := node.(*ast.AssignStmt)
+				if !ok || len(assignment.Lhs) != len(assignment.Rhs) {
+					return true
+				}
+				for index, left := range assignment.Lhs {
+					ident, ok := left.(*ast.Ident)
+					if !ok {
+						continue
+					}
+					ast.Inspect(assignment.Rhs[index], func(node ast.Node) bool {
+						if selector, ok := node.(*ast.SelectorExpr); ok {
+							if receiver, ok := selector.X.(*ast.Ident); ok && receiver.Name == "s" {
+								assigned[ident.Name] = append(assigned[ident.Name], "server/server."+selector.Sel.Name)
+							}
+						}
+						return true
+					})
+				}
+				return true
+			})
+			ast.Inspect(function.Body, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok || len(call.Args) != 2 {
+					return true
+				}
+				selector, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || selector.Sel.Name != "HandleFunc" && selector.Sel.Name != "Handle" {
+					return true
+				}
+				literal, ok := call.Args[0].(*ast.BasicLit)
+				handler, local := call.Args[1].(*ast.Ident)
+				if !ok || !local || len(assigned[handler.Name]) == 0 {
+					return true
+				}
+				pattern, err := strconv.Unquote(literal.Value)
+				if err == nil {
+					result[pattern] = assigned[handler.Name]
+				}
+				return true
+			})
+		}
+	}
+	return result
 }
