@@ -95,7 +95,13 @@ for (const enabled of [false, true]) for (const viewport of [{ width: 1440, heig
       expect((await request.post('/api/initiatives', { headers, data: { name: 'P19 initiative', status: 'active' } })).status()).toBe(201)
       const fixture = await directory(page, request, workspaceKey)
       await page.goto(`/${workspaceKey}/projects/all`)
-      await expect(page.getByRole('row', { name: '项目', exact: true })).toBeVisible()
+      // Each test starts its own Vite dev server, which transforms modules on
+      // first request: a zh-CN page loads the date-fns locale and editor
+      // modules before it asks for the project window, which took the first
+      // row past 5 s on CI. Wait for the window the list renders, then give
+      // the first render the same 30 s the pager test's first load has.
+      await expect.poll(() => fixture.calls.length, { timeout: 30_000 }).toBeGreaterThan(0)
+      await expect(page.getByRole('row', { name: '项目', exact: true })).toBeVisible({ timeout: 30_000 })
       if (enabled) {
         await expect(page.locator('.scale-p19-project-pager')).toContainText('23210')
         expect(fixture.calls.some(url => url.searchParams.has('window'))).toBe(true)
