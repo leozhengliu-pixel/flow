@@ -1000,6 +1000,8 @@ type scaleP21SW292Boundary struct {
 var scaleP21SW292Boundaries = map[string]scaleP21SW292Boundary{
 	"server/server.startLoopRun->server/server.executeLoopRun": {mode: "async",
 		reason: "the loop AI run (model and tool calls: executeLoopRun -> runToolCall -> callFlowTool -> runFlowTool, COLD in the inventory) runs on its worker after the HOT start boundary"},
+	"server/server.startBoundedLoopRun->server/server.executeLoopRun": {mode: "async",
+		reason: "the loop AI run (model and tool calls: executeLoopRun -> runToolCall -> callFlowTool -> runFlowTool, COLD in the inventory) runs on its worker after the HOT start boundary"},
 	"server/server.chatDMAgentCall->server/server.createAgentSessionStream": {mode: "handler",
 		reason: "chat DM agent chat is POST /api/agent/sessions/stream, a COLD agent-session route"},
 	"server/server.chatDMAgentCall->server/server.createAgentSessionMessageStream": {mode: "handler",
@@ -1048,9 +1050,6 @@ var scaleP21SW292Allowed = map[string]scaleP21SW292Allowance{
 		owner: "lead: setup fixtures (review/scale-p21-setup-fixtures, persistIssueMetadata) and issue update (issue_record_mutation.go)",
 		reason: "the non-project hot-input path assigns progressMetadata from persistIssueMetadata, which still reads the policy-only copy on this branch; " +
 			"once persistIssueMetadata returns nil on every flag-on path, replace this entry by a proof boundary pinning that return"},
-	"server/server.createTeam": {targets: []string{"setWorkspaceLocked"},
-		owner:  "lead: application metadata (review/scale-p21-app-metadata, oauthMetadataTransaction / ensureBuiltinApplication)",
-		reason: "bounded team creation calls ensureBuiltinApplication, whose EnsureBuiltinApplication writes through oauthMetadataTransaction and installs its copy with setWorkspaceLocked"},
 }
 
 type scaleP21SW292Reacher struct {

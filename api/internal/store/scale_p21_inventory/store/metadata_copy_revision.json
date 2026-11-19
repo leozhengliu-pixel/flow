@@ -1,6 +1,6 @@
 {
   "source": "store/metadata_copy_revision.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "copyRevisionLocked": {
       "owner": "P21",
@@ -58,7 +58,7 @@
     },
     "setWorkspaceLocked": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap"
       ],
@@ -82,7 +82,7 @@
         "store/SQLiteStore.DeleteWorkflowStateRecords",
         "store/SQLiteStore.migrateWorkspaceMetadataRecords"
       ],
-      "reason": "Pending: TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the five legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it); its allow-list still names createTeam, whose ensureBuiltinApplication -> EnsureBuiltinApplication -> oauthMetadataTransaction installs its copy with setWorkspaceLocked (owned by review/scale-p21-app-metadata). writeAPIKeyUse (authenticate, MCP and public API key requests) now installs into the logical generation first (publishBoundedAPIKeyUse, TestScaleP21SW293APIKeyUseDifferential), and the conflict refresh no longer reaches installWorkspace."
+      "reason": "TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it) and finds no HOT reacher of setWorkspaceLocked with the flag on: bounded team creation's ensureBuiltinApplication now writes through boundedOAuthMetadataTransaction (TestScaleP21SW294OAuthMetadataDifferential, TestScaleP21TeamCreateDifferential), writeAPIKeyUse installs into the logical generation first (publishBoundedAPIKeyUse, TestScaleP21SW293APIKeyUseDifferential), and the loop run start's AI work is an async COLD boundary. The literal off-mode installs are unchanged."
     }
   }
 }

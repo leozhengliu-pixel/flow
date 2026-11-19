@@ -526,6 +526,7 @@ type scaleP21SW270Boundary struct {
 //     classification, exactly like a route registration.
 var scaleP21SW270Boundaries = map[string]scaleP21SW270Boundary{
 	"server.startLoopRun->server.executeLoopRun":                     {"async", "the loop AI run (model and tool calls: executeLoopRun -> runToolCall -> callFlowTool -> runFlowTool, COLD in the inventory) runs on its worker after the HOT start boundary"},
+	"server.startBoundedLoopRun->server.executeLoopRun":              {"async", "the loop AI run (model and tool calls: executeLoopRun -> runToolCall -> callFlowTool -> runFlowTool, COLD in the inventory) runs on its worker after the HOT start boundary"},
 	"server.chatDMAgentCall->server.createAgentSessionStream":        {"handler", "chat DM agent chat is POST /api/agent/sessions/stream, a COLD agent-session route"},
 	"server.chatDMAgentCall->server.createAgentSessionMessageStream": {"handler", "chat DM agent follow-up is POST /api/agent/sessions/{id}/messages/stream, a COLD agent-session route"},
 	"server.chatDMAgentCall->server.resolveAgentApproval":            {"handler", "chat DM approval card is POST /api/agent/sessions/{id}/approvals/{approvalId}, a COLD agent-session route"},
