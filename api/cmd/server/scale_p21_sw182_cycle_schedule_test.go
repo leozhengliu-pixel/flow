@@ -910,8 +910,27 @@ func scaleP21SW182Pair(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 		}
 		t.Fatal("actual cycle ticker native/SQL/publication differential", scaleP21M2Diff(old.Normalized, bounded.Normalized))
 	}
+	// The seed's native values come back from the legacy in-memory copy as
+	// time.Local, while the bounded side decodes the identical stored JSON.
+	// With a non-zero process offset encoding/json maps that offset back to
+	// time.Local, but on a UTC process the stored value is "Z" and decodes to
+	// time.UTC: same instant, offset and zone name, differing only in the
+	// *Location pointer, which no response, stored row or event can carry
+	// (those are compared byte for byte above). Canonicalize only that
+	// zero-offset Local alias before the typed comparisons.
+	canonicalZone := func(source []domain.Cycle) []domain.Cycle {
+		cycles := slices.Clone(source)
+		for index := range cycles {
+			for _, clock := range []*time.Time{&cycles[index].StartsAt, &cycles[index].EndsAt, &cycles[index].CreatedAt, &cycles[index].UpdatedAt} {
+				if name, offset := clock.Zone(); clock.Location() == time.Local && offset == 0 && name == "UTC" {
+					*clock = clock.UTC()
+				}
+			}
+		}
+		return cycles
+	}
 	normalizeNative := func(result scaleP21SW182Run) []domain.Cycle {
-		cycles := slices.Clone(result.Cycles)
+		cycles := canonicalZone(result.Cycles)
 		existing, generated := map[string]bool{}, map[string]string{}
 		for _, prior := range result.PriorCycle {
 			existing[prior.ID] = true
@@ -937,11 +956,13 @@ func scaleP21SW182Pair(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 	if !reflect.DeepEqual(normalizeNative(old), normalizeNative(bounded)) {
 		t.Fatal("typed native cycle AFTER values differ", scaleP21M2Diff(normalizeNative(old), normalizeNative(bounded)))
 	}
-	for index, before := range old.PriorCycle {
+	oldPrior, oldCycles := canonicalZone(old.PriorCycle), canonicalZone(old.Cycles)
+	boundedPrior, boundedCycles := canonicalZone(bounded.PriorCycle), canonicalZone(bounded.Cycles)
+	for index, before := range oldPrior {
 		// The literal scoped writer can rebase duplicate IDs into one native
 		// occurrence. Only demand seed invariance where it preserved an ordinal.
-		if index < len(old.Cycles) && reflect.DeepEqual(before, old.Cycles[index]) &&
-			!reflect.DeepEqual(bounded.PriorCycle[index], bounded.Cycles[index]) {
+		if index < len(oldCycles) && reflect.DeepEqual(before, oldCycles[index]) &&
+			!reflect.DeepEqual(boundedPrior[index], boundedCycles[index]) {
 			t.Fatal("bounded ticker changed a native cycle the literal ticker preserved", index, before.ID)
 		}
 	}
