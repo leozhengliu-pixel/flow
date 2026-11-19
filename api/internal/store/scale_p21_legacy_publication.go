@@ -105,6 +105,10 @@ func (p *legacyResidentPublication) Install() error {
 	if !ready {
 		return ErrBoundedMetadataCoverage
 	}
+	if base.staleCommitReload() {
+		p.policy = domain.Bootstrap{}
+		return nil
+	}
 	sourceStamp := copyStamp{workspaceID: final.workspaceID, revision: -1}
 	if base.exact {
 		sourceStamp = final

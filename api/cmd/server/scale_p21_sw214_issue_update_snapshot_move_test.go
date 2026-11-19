@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -348,6 +349,17 @@ func scaleP21SW214StalePeerRouteDifferential(t *testing.T, reload bool) {
 		reloadedImage := f.installed(t, reloaded)
 		if err := reloaded.Close(); err != nil {
 			t.Fatal(err)
+		}
+		if reload {
+			// The bounded writer's image was exact before the peer moved
+			// the stored revision past it: it reloads its image from SQL
+			// after the commit, while the literal writer keeps its stale
+			// copy at an unknown revision. Compare the bounded image to the
+			// SQL load instead of equating the two writers' images.
+			if service.store.BoundedMetadataEnabled() && !bytes.Equal(installed, reloadedImage) {
+				t.Fatal("bounded image after the peer race differs from the SQL load", scaleP21M2Diff(string(installed), string(reloadedImage)))
+			}
+			installed = nil
 		}
 		state := f.state(t)
 		var events [][]any

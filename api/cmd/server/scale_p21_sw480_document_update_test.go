@@ -133,6 +133,19 @@ func scaleP21SW480Installed(t *testing.T, repo *store.SQLiteStore, workspace str
 	return result
 }
 
+// scaleP21SW480ReloadEqual: the bounded writer's installed fields equal a
+// fresh SQL reload of the same view.
+func scaleP21SW480ReloadEqual(t *testing.T, reader *scaleP04Database, source *store.SQLiteStore, workspace string, installed map[string]json.RawMessage) {
+	t.Helper()
+	scaleP21SW201ReloadSource(t, reader, source)
+	reloaded := scaleP21SW480Installed(t, source, workspace)
+	for name, raw := range installed {
+		if !bytes.Equal(raw, reloaded[name]) {
+			t.Fatalf("installed %s differs from the SQL reload: %s", name, scaleP21M2Diff(string(raw), string(reloaded[name])))
+		}
+	}
+}
+
 func scaleP21SW480Normalize(t *testing.T, value any, fields map[string]json.RawMessage, documentID string, existing map[string]bool, started, finished time.Time) any {
 	t.Helper()
 	ids := map[string]string{}
@@ -373,6 +386,7 @@ func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 		{"duplicate-later-slug", prefix + "duplicate-slug", map[string]any{"title": "Later duplicate edited"}},
 		{"expected-version-match", documentID, map[string]any{"title": "Matching version", "expectedVersion": 7}},
 		{"peer-merge", documentID, map[string]any{"title": "After peer"}},
+		{"peer-unrelated-records", documentID, map[string]any{"title": "After peer"}},
 		{"peer-conflict-retry", documentID, map[string]any{"title": "After peer"}},
 		{"peer-large-merge", documentID, map[string]any{"title": "After peer"}},
 	}
@@ -478,6 +492,16 @@ func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if strings.HasPrefix(testName, "peer-") {
+				// A server's copy is exact at its stored revision once
+				// loaded, and the peer's commit then provably moves the
+				// stored revision past it. A reset on a copy a previous peer
+				// race left at an unknown revision stays unknown: load it
+				// (a current copy is kept).
+				if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if strings.HasSuffix(mode, "reloaded") {
 				// Force a real SQL decode (with its load normalization) in
 				// both reloaded modes, whoever wrote the reset last.
@@ -519,6 +543,12 @@ func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 					for index := range data.Projects {
 						if data.Projects[index].ID == oldProject {
 							data.Projects[index].Name = "Peer renamed"
+						}
+						// A record the document writer never reads or
+						// writes: only a reload brings it into the
+						// writer's installed image.
+						if testName == "peer-unrelated-records" && data.Projects[index].ID == newProject {
+							data.Projects[index].Name, data.Projects[index].Description = "Peer renamed unrelated", "peer unrelated body"
 						}
 					}
 					return nil
@@ -622,8 +652,15 @@ func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 			for _, update := range updates {
 				updateState = append(updateState, []any{update.ID, update.ClientID, update.Data, update.CreatedAt})
 			}
+			// After a peer race the literal writer keeps its stale copy at
+			// an unknown revision; the bounded writer's installed image is
+			// compared with the SQL reload instead (below).
+			installed := fields
+			if strings.HasPrefix(testName, "peer-") {
+				installed = nil
+			}
 			got.Response, err = json.Marshal(map[string]any{
-				"response": json.RawMessage(response.Body.Bytes()), "installed": fields, "audits": newAudits,
+				"response": json.RawMessage(response.Body.Bytes()), "installed": installed, "audits": newAudits,
 				"canonical": canonical, "canonicalRaw": canonicalRaw, "updates": updateState,
 			})
 			if err != nil {
@@ -719,6 +756,12 @@ func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 			}
 			if strings.HasPrefix(testName, "peer-") && (canonical.Icon != "peer-icon" || canonical.Title != "After peer") {
 				t.Fatal("peer edit and retried update did not both persist", canonical.Icon, canonical.Title)
+			}
+			if strings.HasPrefix(testName, "peer-") && source.BoundedMetadataEnabled() {
+				if testName == "peer-unrelated-records" && !bytes.Contains(fields["projects"], []byte("Peer renamed unrelated")) {
+					t.Fatal("installed image lost the peer's unrelated record")
+				}
+				scaleP21SW480ReloadEqual(t, reader, source, workspace, fields)
 			}
 			if strings.HasPrefix(testName, "offloaded-history") || testName == "large-current-and-history" {
 				for _, revisionID := range []string{prefix + "older", prefix + "oldest"} {

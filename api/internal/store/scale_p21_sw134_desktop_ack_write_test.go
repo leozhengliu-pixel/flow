@@ -46,6 +46,21 @@ func scaleP21SW134Metadata(t *testing.T, f scaleP09Fixture, at time.Time) domain
 	return data
 }
 
+// scaleP21SW134ReloadEqual: the bounded installed image equals a fresh SQL
+// reload of the same view.
+func scaleP21SW134ReloadEqual(t *testing.T, repo *SQLiteStore, workspace string, installed domain.Bootstrap) {
+	t.Helper()
+	if _, err := repo.db.ExecContext(t.Context(), `UPDATE workspace_cache_revisions SET revision=revision+1 WHERE workspace_key=? AND kind='metadata'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
+		t.Fatal(err)
+	}
+	if reloaded := scaleP21SW98Installed(t, repo, workspace); !reflect.DeepEqual(installed, reloaded) {
+		t.Fatal("peer-raced installed image differs from the SQL reload", scaleP21SW98FirstDiff(scaleP21SW63JSON(t, installed), scaleP21SW63JSON(t, reloaded), "installed"))
+	}
+}
+
 func scaleP21SW134Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at time.Time, mode, viewer string) {
 	t.Helper()
 	scaleP21SW63Seed(t, f, issue, at)
@@ -248,6 +263,19 @@ func TestScaleP21SW134DesktopAcknowledgementDifferential(t *testing.T) {
 					got.Indexes = scaleP21SW98Indexes(t, repo, workspace)
 					got.Installed = scaleP21SW98Installed(t, repo, workspace)
 					got.InstalledVia = got.Installed.Viewer.Via
+					if mode == "canonical-merge" {
+						// A peer committed between the writer's installed
+						// image and its transaction. The literal writer keeps
+						// its copy (stored counters re-derived, the request
+						// actor's attribution on the viewer) at an unknown
+						// revision; the bounded writer reloads its image from
+						// SQL after the commit, as a peer event's reload
+						// would, so it must equal that reload instead.
+						if bounded {
+							scaleP21SW134ReloadEqual(t, repo, workspace, got.Installed)
+						}
+						got.Installed, got.InstalledVia = domain.Bootstrap{}, nil
+					}
 					got.Events = scaleP21SW63NewEvents(t, repo, workspace, prior)
 					if strings.HasPrefix(mode, "audit") {
 						entries, err := repo.ListAuditEntries(t.Context(), f.data.Workspace.ID, AuditQuery{Limit: 1000})

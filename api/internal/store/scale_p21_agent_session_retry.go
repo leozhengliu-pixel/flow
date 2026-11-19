@@ -149,6 +149,9 @@ func (s *SQLiteStore) refreshMetadataLifecycleConflict(ctx context.Context, work
 		if err := candidate.setStamp(stamp); err != nil {
 			return err
 		}
+		// Only the conflicted records are refreshed: the rest of the peer's
+		// commit is still missing (installedGenerationBehind).
+		candidate.behind.Store(true)
 		policy, cost, err := s.metadataLogicalPolicy(ctx, candidate)
 		if err != nil {
 			return err
