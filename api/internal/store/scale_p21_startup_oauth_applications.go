@@ -38,8 +38,10 @@ func (s *SQLiteStore) installedOAuthApplications(ctx context.Context, accessor s
 		if !exists {
 			continue // removed meanwhile
 		}
-		apps := data.OAuthApplications
-		if view, release, handled := s.coldAccessorView(ctx, accessor, key, []string{"oauthApplications"}); handled {
+		var apps []domain.OAuthApplication
+		if view, release, handled := s.coldAccessorView(ctx, accessor, key, []string{"oauthApplications"}); !handled {
+			apps = data.OAuthApplications
+		} else {
 			if view == nil {
 				release()
 				if err := ctx.Err(); err != nil {

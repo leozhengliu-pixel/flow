@@ -1506,6 +1506,9 @@ func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey stri
 }
 
 func (s *SQLiteStore) CycleForCalendar(id, token string) (domain.Cycle, bool) {
+	if cycle, found, handled := s.installedCycleForCalendar(id, token); handled {
+		return cycle, found
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, data := range s.workspaces {
@@ -1516,6 +1519,33 @@ func (s *SQLiteStore) CycleForCalendar(id, token string) (domain.Cycle, bool) {
 		}
 	}
 	return domain.Cycle{}, false
+}
+
+// installedCycleForCalendar is CycleForCalendar on a bounded store, whose
+// image holds no cycles (the public calendar feed answered 404, SW559): each
+// workspace's cycles are read from its legacy view, in workspace key order.
+// handled is false flag off and on a store without installed sources (a test
+// view), which read the image as before.
+func (s *SQLiteStore) installedCycleForCalendar(id, token string) (domain.Cycle, bool, bool) {
+	if s.metadataResidency == nil || s.coldParent != nil {
+		return domain.Cycle{}, false, false
+	}
+	for _, key := range s.WorkspaceKeys() {
+		view, release, handled := s.coldAccessorView(context.Background(), "CycleForCalendar", key, []string{"cycles"})
+		if !handled {
+			return domain.Cycle{}, false, false
+		}
+		if view == nil {
+			release()
+			continue
+		}
+		cycle, found := view.CycleForCalendar(id, token)
+		release()
+		if found {
+			return cycle, true, true
+		}
+	}
+	return domain.Cycle{}, false, true
 }
 
 func (s *SQLiteStore) Account() domain.AccountBootstrap {

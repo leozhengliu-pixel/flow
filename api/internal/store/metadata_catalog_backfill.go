@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"testing"
 	"time"
 )
 
@@ -354,6 +355,45 @@ func (s *SQLiteStore) RunMetadataCatalogBackfill(ctx context.Context) error {
 			}
 		}
 		workspace, kind = nextWorkspace, nextKind
+	}
+}
+
+// CompleteMetadataCatalogForTesting runs the catalog backfill over every
+// collection of every workspace to completion, as an operator does before a
+// bounded start (a bounded store refuses an incomplete catalog). Test
+// binaries only.
+func (s *SQLiteStore) CompleteMetadataCatalogForTesting(ctx context.Context) error {
+	if !testing.Testing() {
+		return ErrBoundedMetadataCoverage
+	}
+	workspace, kind := "", ""
+	for {
+		next, nextKind, err := s.nextMetadataCatalogCollection(ctx, workspace, kind)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		status, err := s.MetadataCatalogStatus(ctx, next, nextKind)
+		if err != nil {
+			return err
+		}
+		if status.Complete {
+			if err := s.ResetMetadataCatalogBackfill(ctx, next, nextKind); err != nil {
+				return err
+			}
+		}
+		for {
+			progress, err := s.BackfillMetadataCatalog(ctx, next, nextKind)
+			if err != nil && !errors.Is(err, ErrConcurrentWrite) {
+				return err
+			}
+			if err == nil && progress.Complete {
+				break
+			}
+		}
+		workspace, kind = next, nextKind
 	}
 }
 
