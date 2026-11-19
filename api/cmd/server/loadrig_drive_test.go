@@ -1042,7 +1042,13 @@ func loadRigBoundedDerived(c map[string]int64) map[string]float64 {
 	}
 	hotWaits := c["writerLockWaits"] - c["coldWriterLockWaits"]
 	hotNanos := c["writerLockWaitNanos"] - c["coldWriterWaitNanos"]
-	return map[string]float64{
+	derived := map[string]float64{}
+	for key, value := range c {
+		if strings.HasPrefix(key, "coldPublishFallback ") && value != 0 {
+			derived[key] = float64(value)
+		}
+	}
+	for key, value := range map[string]float64{
 		"coldSlotAcquisitions": float64(c["coldSlotAcquisitions"]), "coldSlotRefusals": float64(c["coldSlotRefusals"]),
 		"coldSlotWaits": float64(c["coldSlotWaits"]), "coldSlotWaitAvgMs": avg(c["coldSlotWaitNanos"], c["coldSlotWaits"]), "coldSlotWaitMaxMs": ms(c["coldSlotWaitMaxNanos"]),
 		"coldFacadeDecodes": float64(c["coldFacadeDecodes"]), "coldFacadeDecodeAvgMs": avg(c["coldFacadeDecodeNanos"], c["coldFacadeDecodes"]),
@@ -1051,7 +1057,16 @@ func loadRigBoundedDerived(c map[string]int64) map[string]float64 {
 		"writerLockWaits": float64(c["writerLockWaits"]), "writerLockWaitAvgMs": avg(c["writerLockWaitNanos"], c["writerLockWaits"]), "writerLockWaitMaxMs": ms(c["writerLockWaitMax"]),
 		"hotWriterLockWaits": float64(hotWaits), "hotWriterLockWaitAvgMs": avg(hotNanos, hotWaits),
 		"coldWriterLockWaits": float64(c["coldWriterLockWaits"]), "coldWriterLockWaitAvgMs": avg(c["coldWriterWaitNanos"], c["coldWriterLockWaits"]),
+		"coldWriteSyncAvgMs": avg(c["coldWriteSyncNanos"], c["coldWriteLockHolds"]), "coldWritePublishAvgMs": avg(c["coldWritePublishNanos"], c["coldWriteLockHolds"]),
+		"coldWriteRefreshes": float64(c["coldWriteRefreshes"]), "coldWriteRefreshAvgMs": avg(c["coldWriteRefreshNanos"], c["coldWriteRefreshes"]),
+		"coldPublishBaseAvgMs":    avg(c["coldPublishBaseNanos"], c["coldWriteLockHolds"]),
+		"coldPublishIncrementals": float64(c["coldPublishIncrementals"]), "coldPublishIncrementalAvgMs": avg(c["coldPublishIncrementalNanos"], c["coldPublishIncrementals"]),
+		"coldPublishFulls": float64(c["coldPublishFulls"]), "coldPublishFullAvgMs": avg(c["coldPublishFullNanos"], c["coldPublishFulls"]),
+		"coldPublishUnchanged": float64(c["coldPublishUnchanged"]), "coldPublishFallbacks": float64(c["coldPublishFallbacks"]),
+	} {
+		derived[key] = value
 	}
+	return derived
 }
 
 var loadRigClassOrder = []string{"hot-read", "hot-write", "search", "sync", "page-load", "api-key", "cold-read", "cold-write", "agent"}

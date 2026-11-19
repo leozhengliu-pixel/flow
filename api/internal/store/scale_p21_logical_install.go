@@ -184,6 +184,7 @@ func (s *SQLiteStore) releaseMetadataLogicalSources() {
 	}
 	s.mu.Unlock()
 	for _, residency := range views {
+		forgetColdPublications(residency, "")
 		residency.mu.Lock()
 		sources := residency.logical
 		residency.logical = nil
