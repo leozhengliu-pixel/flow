@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -126,7 +127,16 @@ func TestScaleP21SW580WorkflowPointWriterBounded(t *testing.T) {
 		{name: "schedule-notify", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "* * * * *",
 			actions: scaleP21SW500Actions(scaleP21SW500Action("notify")), want: "succeeded"},
 		{name: "retry-issue-multi-action", trigger: "retry", dueOnly: true, defTrigger: "issueCreated", issue: true,
-			actions: scaleP21SW500AllActions, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
+				actions := scaleP21SW500AllActions(env)
+				// On PostgreSQL and MySQL every createIssue run is handed to
+				// the full-image writer by design (SW500 pins it there); the
+				// point writer's bound is measured on the other actions.
+				if driver := env.database.config.Driver; driver != "" && driver != "sqlite" {
+					actions = slices.DeleteFunc(actions, func(action domain.WorkflowAction) bool { return action.Type == "createIssue" })
+				}
+				return actions
+			}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 1, &env.past)}
 			}, want: "succeeded"},
 	}
