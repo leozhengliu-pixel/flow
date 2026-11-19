@@ -225,6 +225,7 @@ func (q *coldSlotQueue) acquire(ctx context.Context) error {
 		return ErrColdMetadataBusy
 	}
 	defer q.waiting.Add(-1)
+	defer observeColdSlotWait(time.Now())
 	timer := time.NewTimer(time.Duration(q.timeout.Load()))
 	defer timer.Stop()
 	select {
@@ -244,6 +245,26 @@ func (q *coldSlotQueue) acquire(ctx context.Context) error {
 func (q *coldSlotQueue) release() {
 	coldSlotHolders.Add(-1)
 	<-q.slot
+}
+
+// The waits for the COLD slot that found it held: how many, how long in total
+// and at most (load measurement; an uncontended acquisition waits for none).
+var coldSlotWaits, coldSlotWaitNanos, coldSlotWaitMax atomic.Int64
+
+func observeColdSlotWait(started time.Time) {
+	waited := int64(time.Since(started))
+	coldSlotWaits.Add(1)
+	coldSlotWaitNanos.Add(waited)
+	storeMaxInt64(&coldSlotWaitMax, waited)
+}
+
+func storeMaxInt64(target *atomic.Int64, value int64) {
+	for {
+		current := target.Load()
+		if value <= current || target.CompareAndSwap(current, value) {
+			return
+		}
+	}
 }
 
 // coldSlotHolders counts the COLD slots held process-wide (SW551).
