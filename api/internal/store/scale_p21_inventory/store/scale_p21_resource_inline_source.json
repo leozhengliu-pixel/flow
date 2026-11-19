@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_resource_inline_source.go",
+  "unmigrated": 0,
+  "consumers": {
+    "inlineSnapshotSource": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["readRawMetadataLogicalSourceValidated"],
+      "temperature": "hot",
+      "temperatureReason": "Canonical (stale installed source) fallback of the HOT project/initiative point readers.",
+      "callers": ["store/scale_p21_resource_read.go:BeginResourceRead", "store/scale_p21_resource_authorization_read.go:BeginResourceAuthorizationRead"],
+      "reason": "Only when the reader's SQL snapshot keeps a consulted collection inline (duplicate, empty or over-long IDs leave it without per-record rows), the canonical point reads answer from that snapshot's validated, normalized logical source through the existing installed readers instead of row-by-row SQL that cannot see inline entries. The parser holds its own lease and normalization admits its retained base, as reloadResidentWorkspace; the source is request-owned and released by Close. Row-backed workspaces keep the unchanged canonical SQL path. SW540 compares the hydrated literal copy with bounded warm and stale-source (canonical) BeginResourceRead/BeginResourceAuthorizationRead over inline duplicate projects, initiatives and initiative relations, owner/member/guest and unrestricted/selected/app keys, with zero full decodes and released work; it fails without the fallback (the canonical path answered not found)."
+    }
+  }
+}
