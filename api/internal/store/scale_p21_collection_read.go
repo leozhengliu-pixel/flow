@@ -775,13 +775,14 @@ func (s *metadataCollectionScanner) string() error {
 		// Skip a buffered run of ordinary string bytes at once: the byte
 		// path below accepts them unchanged, but checks the (often deeply
 		// wrapped) context for every byte, which dominated scans of large
-		// bodies. Cancellation is still observed once per run.
+		// bodies. Cancellation is still observed once per run. Complete,
+		// valid escapes inside the run are accepted here too (escape-heavy
+		// bodies such as < would otherwise take the byte path); any
+		// other escape, or one split by the buffer end, stops the run and
+		// is judged by the byte path below.
 		if buffered := s.input.Buffered(); buffered > 0 {
 			run, _ := s.input.Peek(buffered)
-			plain := 0
-			for plain < len(run) && run[plain] != '"' && run[plain] != '\\' && run[plain] >= 0x20 {
-				plain++
-			}
+			plain := metadataCollectionStringRun(run)
 			if plain > 0 {
 				if err := s.ctx.Err(); err != nil {
 					return err
@@ -824,6 +825,41 @@ func (s *metadataCollectionScanner) string() error {
 			return errMetadataCollectionJSON
 		}
 	}
+}
+
+// metadataCollectionStringRun returns the length of the longest prefix of run
+// that string accepts without ending the string or reporting an error.
+func metadataCollectionStringRun(run []byte) int {
+	plain := 0
+	for plain < len(run) {
+		switch b := run[plain]; {
+		case b == '"' || b < 0x20:
+			return plain
+		case b != '\\':
+			plain++
+			continue
+		}
+		if plain+1 >= len(run) {
+			return plain
+		}
+		switch run[plain+1] {
+		case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
+			plain += 2
+		case 'u':
+			if plain+6 > len(run) {
+				return plain
+			}
+			for _, b := range run[plain+2 : plain+6] {
+				if !(b >= '0' && b <= '9' || b >= 'A' && b <= 'F' || b >= 'a' && b <= 'f') {
+					return plain
+				}
+			}
+			plain += 6
+		default:
+			return plain
+		}
+	}
+	return plain
 }
 
 func (s *metadataCollectionScanner) number() error {
