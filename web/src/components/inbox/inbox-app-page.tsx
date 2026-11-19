@@ -80,6 +80,8 @@ interface InboxProjection extends InboxNotificationRowData {
 }
 
 export interface InboxAppPageProps {
+  /** The workspace on screen is a cached snapshot: it holds no notifications yet, so the list is loading, not empty. */
+  pending?: boolean
   data: BootstrapData
   presence?: Presence[]
   onReload: () => Promise<void> | void
@@ -114,7 +116,7 @@ export interface InboxAppPageProps {
   onLoadIssueContext?: (issueId: string) => Promise<void> | void
 }
 
-export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenInitiative, onOpenReview, onOpenSettings, onNavigate, onCreateProjectUpdate, onCreateInitiativeUpdate, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar, activeTab = 'all', onTabChange, onLoadIssueContext }: InboxAppPageProps) {
+export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenInitiative, onOpenReview, onOpenSettings, onNavigate, onCreateProjectUpdate, onCreateInitiativeUpdate, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar, activeTab = 'all', onTabChange, onLoadIssueContext, pending = false }: InboxAppPageProps) {
   const { t } = useI18n()
   // Paged workspaces ship no notifications in the bootstrap: read them from the API.
   const paged = Boolean(data.issueCollectionPaged)
@@ -188,7 +190,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
   }, [displayOptions])
 
   // Until the first paged load lands, keep a `?notification=` selection from a desktop/email link.
-  const listPending = paged && pagedInbox.loading && !pagedInbox.notifications.length
+  const listPending = pending || (paged && pagedInbox.loading && !pagedInbox.notifications.length)
   // The local list follows a fresh source (adjusted while rendering; unset so the first render also reconciles the selection).
   const [syncedSource, setSyncedSource] = useState<{ listPending: boolean; source: InboxProjection[] }>()
   if (syncedSource?.listPending !== listPending || syncedSource.source !== source) {
@@ -313,7 +315,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
     onOpenSidebar={onOpenSidebar}
     onOpenSettings={onOpenSettings}
     onRetryLoad={() => void (paged ? reloadPaged() : onReload())}
-    loading={paged && pagedInbox.loading && !pagedInbox.notifications.length}
+    loading={listPending}
     loadError={paged && pagedInbox.error && !pagedInbox.notifications.length}
     hasMore={paged && pagedInbox.hasMore}
     loadingMore={paged && pagedInbox.loadingMore}

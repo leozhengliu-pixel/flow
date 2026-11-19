@@ -175,6 +175,15 @@ function ReleaseNotesTab({ data, pipeline, release, issues, onReload }: { data: 
   const saved = useRef({ notes: initial, title: note?.title || release.name })
   const noteId = useRef(note?.id)
   noteId.current = note?.id ?? noteId.current
+  // The notes follow the server's copy (a page painted from a cached workspace snapshot shows the confirmed one)
+  // unless the viewer has edits that are not saved yet.
+  const serverTitle = note?.title || release.name
+  useResetOnChange([initial, serverTitle], () => {
+    if (notes !== saved.current.notes || title !== saved.current.title) return
+    saved.current = { notes: initial, title: serverTitle }
+    setNotes(initial)
+    setTitle(serverTitle)
+  })
   const save = async (nextNotes: string, nextTitle: string) => {
     if (nextNotes === saved.current.notes && nextTitle === saved.current.title) return
     saved.current = { notes: nextNotes, title: nextTitle }

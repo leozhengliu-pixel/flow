@@ -6520,6 +6520,7 @@ function App() {
         {page === "inbox" && (
           <InboxAppPage
             data={data}
+            pending={snapshotUnconfirmed}
             activeTab={route.kind === "inbox" && route.tab ? route.tab : "all"}
             onTabChange={(tab) => navigateTo(inboxPath(data.workspace.urlKey, tab === "all" ? undefined : tab))}
             presence={realtime.presence}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import type { ProjectStatus } from '@/types/flow'
 import type { ProjectDataGroup, ProjectPageItem, ProjectProperty, ProjectsDataViewProps, ProjectSortColumn } from './projects-data-view'
 import { DEFAULT_PROJECTS_DISPLAY, filterProjectsByLeadTeam, type ProjectsDisplaySettings } from './projects-display-model'
@@ -71,10 +72,17 @@ export function useProjectsViewState(projects: ProjectPageItem[], { initial, pro
   const [state, setState] = useState<ProjectsViewState>(() => createInitialState(initial, personalKey, workspaceDefaultKey, workspaceDefault))
   const [storedDefault, setStoredDefault] = useState(() => readStoredDisplay(workspaceDefaultKey))
   const displayDefault = useMemo(() => workspaceDefault ?? storedDefault ?? defaultDisplay(), [storedDefault, workspaceDefault])
+  // Until the viewer changes the display (or has a saved personal one) the page shows the shared default and keeps
+  // following it: a page painted from a cached workspace snapshot shows the default the server confirms, and the
+  // snapshot's copy is never stored as the viewer's own choice.
+  const [followsDefault, setFollowsDefault] = useState(() => !readStoredDisplay(personalKey) && !initial?.display)
+  useResetOnChange([JSON.stringify(displayDefault)], () => {
+    if (followsDefault) setState(current => ({ ...current, display: cloneDisplay(displayDefault), sort: sortForOrdering(displayDefault.ordering, current.sort) }))
+  })
 
   useEffect(() => {
-    writeStoredDisplay(personalKey, state.display)
-  }, [personalKey, state.display])
+    if (!followsDefault) writeStoredDisplay(personalKey, state.display)
+  }, [followsDefault, personalKey, state.display])
 
   const statuses = useMemo(() => projectStatusesForLayout(projectStatuses, state.display.layout), [projectStatuses, state.display.layout])
   const displayedProjects = useMemo(() => filterProjectsByLeadTeam(projects, state.display, leadTeamId), [leadTeamId, projects, state.display])
@@ -86,12 +94,12 @@ export function useProjectsViewState(projects: ProjectPageItem[], { initial, pro
     grouping: state.display.grouping,
     manualOrdering: state.display.ordering === 'Manual',
     onSelectionChange: selectedIds => setState(current => ({ ...current, selectedIds })),
-    onSort: (column, direction) => setState(current => ({ ...current, display: { ...current.display, ordering: orderingForColumn(column), orderingDirection: direction }, sort: { column, direction } })),
+    onSort: (column, direction) => { setFollowsDefault(false); setState(current => ({ ...current, display: { ...current.display, ordering: orderingForColumn(column), orderingDirection: direction }, sort: { column, direction } })) },
     selectedIds: state.selectedIds,
     sort: state.sort,
     visibleProperties: state.display.properties,
     timelineZoom: normalizeTimelineZoom(state.display.timelineZoom),
-    onTimelineZoomChange: (timelineZoom: TimelineZoom) => setState(current => ({ ...current, display: { ...current.display, timelineZoom } })),
+    onTimelineZoomChange: (timelineZoom: TimelineZoom) => { setFollowsDefault(false); setState(current => ({ ...current, display: { ...current.display, timelineZoom } })) },
   }
 
   return {
@@ -101,7 +109,7 @@ export function useProjectsViewState(projects: ProjectPageItem[], { initial, pro
     displayDefault,
     dataViewProps,
     visibleColumns: new Set(state.display.properties),
-    setDisplay: (display: ProjectsDisplaySettings) => setState(current => ({ ...current, display: cloneDisplay(display), sort: sortForOrdering(display.ordering, current.sort) })),
+    setDisplay: (display: ProjectsDisplaySettings) => { setFollowsDefault(false); setState(current => ({ ...current, display: cloneDisplay(display), sort: sortForOrdering(display.ordering, current.sort) })) },
     setSelectedIds: (selectedIds: string[]) => setState(current => ({ ...current, selectedIds })),
     resetDisplay: () => setState(current => ({ ...current, display: cloneDisplay(displayDefault), sort: { column: 'name', direction: 'asc' } })),
     setDisplayDefault: () => {

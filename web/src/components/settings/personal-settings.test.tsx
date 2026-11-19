@@ -569,4 +569,13 @@ describe('personal settings workflows', () => {
     expect(screen.queryByText('Upload this key again so coding sessions can sign your commits')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Upload again' })).toBeNull()
   })
+
+  it('shows the profile the server confirms after mounting from cached data', () => {
+    const input = props('profile')
+    const view = render(<I18nProvider><PersonalSettings {...input}/></I18nProvider>)
+    expect(screen.getByRole('textbox', { name: 'Full name' })).toHaveValue(input.data.viewer.displayName)
+    view.rerender(<I18nProvider><PersonalSettings {...input} data={{ ...input.data, viewer: { ...input.data.viewer, displayName: 'Renamed Elsewhere' } }}/></I18nProvider>)
+    expect(screen.getByRole('textbox', { name: 'Full name' })).toHaveValue('Renamed Elsewhere')
+    expect(screen.queryByRole('button', { name: 'Update' })).not.toBeInTheDocument()
+  })
 })
