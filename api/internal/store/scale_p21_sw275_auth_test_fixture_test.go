@@ -215,7 +215,11 @@ func TestScaleP21SW275AuthTestFixtureCallset(t *testing.T) {
 		callers := append(scaleP21SW275References(t, ".", names...), scaleP21SW275References(t, "../../cmd/server", names...)...)
 		for _, caller := range callers {
 			switch caller {
-			case "sqlite.go:OpenSQLite", "sqlite.go:OpenSQLiteTestFixture", "audit_log.go:runAuditVerifyCommand":
+			// metadataPrepare is `server metadata-prepare`: its only caller
+			// is runMetadataPrepareCommand, which only main dispatches; it
+			// opens the database flag-off once and exits.
+			case "sqlite.go:OpenSQLite", "sqlite.go:OpenSQLiteTestFixture", "audit_log.go:runAuditVerifyCommand",
+				"metadata_prepare.go:metadataPrepare", "metadata_prepare.go:runMetadataPrepareCommand":
 				function := caller[strings.Index(caller, ":")+1:]
 				if !constructors[function] {
 					constructors[function], changed = true, true
@@ -227,7 +231,7 @@ func TestScaleP21SW275AuthTestFixtureCallset(t *testing.T) {
 			allowed[caller] = true
 		}
 	}
-	if !allowed["main.go:main"] || !constructors["runAuditVerifyCommand"] {
+	if !allowed["main.go:main"] || !constructors["runAuditVerifyCommand"] || !constructors["runMetadataPrepareCommand"] {
 		t.Fatalf("store constructor closure=%v", constructors)
 	}
 }
