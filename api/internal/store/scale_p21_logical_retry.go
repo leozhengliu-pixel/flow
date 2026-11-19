@@ -7,6 +7,7 @@ import (
 	"errors"
 	"reflect"
 	"slices"
+	"strings"
 
 	"flow/api/internal/domain"
 )
@@ -381,6 +382,8 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 			return ErrMetadataPageBudget
 		}
 		loaded := map[metadataRecordKey][]byte{}
+		// seen holds the small rows read (any field) for the evidence below.
+		seen := map[metadataRecordKey][]byte{}
 		var large *metadataLogicalLargeRetry
 		defer func() {
 			if large != nil {
@@ -448,10 +451,12 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 					// Decode only after we know this entire field will use
 					// that generation rather than a fallback snapshot.
 					fieldRaw[key] = raw
+					seen[metadataRecordKey{field, key}] = raw
 					continue
 				}
 				weight += len(raw)
 				loaded[metadataRecordKey{field, key}] = raw
+				seen[metadataRecordKey{field, key}] = raw
 			}
 			err = rows.Err()
 			rows.Close()
@@ -460,6 +465,9 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 			}
 			if fallback {
 				fieldRaw = nil
+				for _, id := range ids {
+					delete(seen, metadataRecordKey{field, id})
+				}
 				if err := ensureLarge(); err != nil {
 					return err
 				}
@@ -515,9 +523,19 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 		if err := candidate.setStamp(stamp); err != nil {
 			return err
 		}
-		// Only the conflicted records are refreshed: the rest of the peer's
-		// commit is still missing (installedGenerationBehind).
-		candidate.behind.Store(true)
+		// Only the conflicted records are refreshed: the rest of a peer's
+		// commit would still be missing (installedGenerationBehind). A
+		// conflict whose rows SQL holds exactly as this generation stores
+		// its own records is no evidence of a peer: the installed record
+		// differs from its row only by what persisting drops (NUL, the
+		// references of bodies that are loaded), as after any write of this
+		// server. Rows that are missing, too large to compare here, or not
+		// that stored form are evidence.
+		behind, err := s.conflictedRowsShowPeer(ctx, workspace, source, patches, seen)
+		if err != nil {
+			return err
+		}
+		candidate.behind.Store(behind)
 		policy, cost, err := s.metadataLogicalPolicy(ctx, candidate)
 		if err != nil {
 			return err
@@ -528,6 +546,56 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 		candidate = nil
 		return nil
 	}
+}
+
+// conflictedRowsShowPeer reports whether the conflicted rows just read are
+// evidence that another server wrote: the image was already behind, a key has
+// a NUL on PostgreSQL (the literal refresh drops it), a row is missing or was
+// not read as a small row, or it is not exactly the stored form of the
+// installed record.
+func (s *SQLiteStore) conflictedRowsShowPeer(ctx context.Context, workspace string, source *metadataLogicalSource, patches []metadataLogicalRecordPatch, seen map[metadataRecordKey][]byte) (bool, error) {
+	if source.behind.Load() {
+		return true, nil
+	}
+	if len(patches) == 0 {
+		return false, nil
+	}
+	owner := &ResourceRead{store: s}
+	defer owner.Close()
+	for _, patch := range patches {
+		key := patch.key
+		if s.dialect == "postgres" && strings.IndexByte(key.key, 0) >= 0 {
+			return true, nil
+		}
+		raw, found := seen[key]
+		if !found {
+			return true, nil
+		}
+		if err := owner.reserve(ctx, uint64(len(raw))*8+4096); err != nil {
+			return false, err
+		}
+		stored, err := func() (bool, error) {
+			spool, err := newMetadataLogicalRecordSpool(ctx)
+			if err != nil {
+				return false, err
+			}
+			defer spool.Close()
+			if _, err := spool.Write(raw); err != nil {
+				return false, err
+			}
+			return legacySessionInstalledRowStored(ctx, owner, nil, workspace, source, key.field, key.key, spool)
+		}()
+		if err != nil {
+			if ctx.Err() != nil {
+				return false, ctx.Err()
+			}
+			stored = false
+		}
+		if !stored {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func metadataLogicalMergedPostimage(ctx context.Context, source *metadataLogicalSource, changes []metadataRecordChange) (*metadataLogicalSource, error) {

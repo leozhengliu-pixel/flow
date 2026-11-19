@@ -184,11 +184,14 @@ func (s *SQLiteStore) refreshMetadataLifecycleConflict(ctx context.Context, work
 	}
 }
 
-// legacySessionInstalledRowStored reports whether row, a session row as SQL
+// legacySessionInstalledRowStored reports whether row, a record row as SQL
 // holds it, is exactly what the record of source (the installed generation)
-// under key stores as: the session persist path's NUL strip and offload
-// stored form (writeAgentSessionLifecycleNativeRow), compared as the rebase
-// compares stored rows. A missing installed record is not.
+// under key stores as: the persist path's NUL strip and, with a transaction,
+// the session offload stored form (writeAgentSessionLifecycleNativeRow),
+// compared as the rebase compares stored rows. A missing installed record is
+// not. The general conflict refresh (refreshConflictedLogicalMetadata) shares
+// it without a transaction: no offload form, so a row whose body references
+// differ is conservatively not stored.
 func legacySessionInstalledRowStored(ctx context.Context, owner *ResourceRead, tx *sqlTx, workspace string, source *metadataLogicalSource, field, key string, row *RecordSpool) (bool, error) {
 	index, _, ok := metadataLogicalField(field)
 	if !ok || index >= len(source.fields) || source.fields[index].typ == nil {
@@ -220,7 +223,11 @@ func legacySessionInstalledRowStored(ctx context.Context, owner *ResourceRead, t
 		return false, err
 	}
 	defer stored.Close()
-	if err := legacySessionStoredForm(ctx, owner, tx, workspace, legacySessionSpoolPart(stripped), stored, false); err != nil {
+	if tx != nil {
+		if err := legacySessionStoredForm(ctx, owner, tx, workspace, legacySessionSpoolPart(stripped), stored, false); err != nil {
+			return false, err
+		}
+	} else if _, err := io.CopyBuffer(stored, legacySessionSpoolPart(stripped).reader(), make([]byte, metadataRecordChunkBytes)); err != nil {
 		return false, err
 	}
 	storedFields, err := legacySessionJSONObject(ctx, owner, legacySessionSpoolPart(stored))
