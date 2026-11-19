@@ -238,9 +238,21 @@ change the table layout: both modes read and write the same canonical record
 tables (`workspace_metadata_records`), record versions and journal. The
 catalog rows and checkpoints the flag-on mode maintains stay in place and are
 ignored by a flag-off replica (flag-off never runs the checkpoint opener).
-The load rig starts flag-off replicas on a copy of the same seed. The code
-does not contain an explicit "rollback" test of a database written flag-on and
-then served flag-off (**to be confirmed**; test it on a restored copy first).
+`TestScaleP21RollbackRoundTrip` writes a broad set of changes flag-on, reopens
+the database flag-off and compares every table and API response with a run
+that stayed flag-off; it also checks the opposite direction.
+
+Turning the flag back **on** after a flag-off period needs the catalog to
+cover what was written meanwhile. Writes into collections the catalog never
+covered (for example the first loop, document or workflow written flag-off)
+make the next flag-on start refuse with "bounded metadata coverage is
+incomplete" until the catalog backfill has run again
+(`FLOW_METADATA_CATALOG=shadow` on the flag-off replicas).
+
+A flag-on start that finds any workspace without complete coverage stops the
+whole process (`recover resident workspace "<key>": ...`); no workspace is
+served. After startup, a workspace whose coverage check fails only fails its
+own requests.
 
 ## Pre-production check: the load rig
 
@@ -278,7 +290,6 @@ pass/fail limits.
 
 - Observation period and exit criteria between the single-replica and fleet-wide steps.
 - Whether the catalog worker stays on after activation.
-- Whether any admission failure aborts startup or only fails requests for that workspace.
-- A tested flag-on to flag-off rollback on a restored production copy.
+- A flag-on to flag-off rollback rehearsed on a restored production copy.
 - Sizing guidance for `FLOW_COLD_QUEUE_LIMIT`, `FLOW_COLD_QUEUE_TIMEOUT` and `FLOW_COLD_PROJECTION_CONCURRENCY`.
 - Load-rig pass/fail thresholds.
