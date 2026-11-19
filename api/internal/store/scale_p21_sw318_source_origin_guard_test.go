@@ -75,7 +75,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_desktop_ack_write.go":                                "caca6a6974572bf3205f7dcf5280b54dd7ad502f75b761967281665259b90682",
 		"scale_p21_document_auxiliary_read.go":                          "509970bec9f7e70a18b5054485374e46e441f5a03c31dfb491497ba16b570a6d",
 		"scale_p21_document_directory_read.go":                          "8f82ff264a997bfdd6dc71f5c3992856f5df4ece322ea248ff29f60f2e2c3247",
-		"scale_p21_document_read.go":                                    "4748e956ffcde0adee04ea8af5b077a60d47769953ebe8a7f9ac17f904ad54d1",
+		"scale_p21_document_read.go":                                    "1fe8d8dd043b03597a9d5e54e4e1b137df115592111e820bf940fc691e63438c",
 		"scale_p21_general_bootstrap_read.go":                           "d7a45918ea4ec4fdfad5bab2614ea5135cd2dbdc50db14db27c47eb873adb32d",
 		"scale_p21_installed_resource_point_read.go":                    "9ea5e51dc1e426ffe0a3fda73a001acfef726c1b07798498f79fee5ab3b16e9e",
 		"scale_p21_issue_authorization_policy.go":                       "3b1db13512c208deb9b7c7c650e50cb15e926835c5151fc2e841d85313416d21",

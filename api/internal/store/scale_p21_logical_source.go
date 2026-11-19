@@ -58,6 +58,9 @@ type metadataLogicalStorage struct {
 	pendingMu sync.Mutex
 	pending   []byte
 	blocks    [metadataLogicalReadSlots]atomic.Pointer[metadataLogicalBlock]
+	// patches counts in-place writes of flushed bytes; a block read that
+	// overlapped one is not cached.
+	patches atomic.Int64
 }
 
 type metadataLogicalNode struct {

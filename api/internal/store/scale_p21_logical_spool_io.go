@@ -102,6 +102,7 @@ func (s *metadataLogicalStorage) writeAt(data []byte, offset int64) error {
 		if err := s.flushLocked(); err != nil {
 			return err
 		}
+		s.patches.Add(1)
 		_, err := s.file.WriteAt(data, offset)
 		s.invalidate(offset, end)
 		if err == nil && end > flushed {
@@ -117,6 +118,10 @@ func (s *metadataLogicalStorage) writeAt(data []byte, offset int64) error {
 			return nil
 		}
 	}
+	// Counted before the file write and invalidated after it: a concurrent
+	// block read either sees the count change and does not cache, or read
+	// before this write and is dropped by the invalidation.
+	s.patches.Add(1)
 	_, err := s.file.WriteAt(data, offset)
 	s.invalidate(offset, offset+int64(len(data)))
 	return err
@@ -197,6 +202,7 @@ func (s *metadataLogicalStorage) block(index, need int64) (*metadataLogicalBlock
 		size = need
 	}
 	data := make([]byte, size)
+	patches := s.patches.Load()
 	count, err := s.file.ReadAt(data, base)
 	block := &metadataLogicalBlock{index: index, data: data[:count]}
 	if err != nil {
@@ -207,7 +213,14 @@ func (s *metadataLogicalStorage) block(index, need int64) (*metadataLogicalBlock
 		}
 		return block, err
 	}
-	slot.Store(block)
+	if s.patches.Load() == patches {
+		slot.Store(block)
+		if s.patches.Load() != patches {
+			// A patch began after the check; its invalidation may already
+			// have run, so the block is withdrawn here.
+			slot.CompareAndSwap(block, nil)
+		}
+	}
 	return block, nil
 }
 
