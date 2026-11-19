@@ -165,7 +165,7 @@ func (s *SQLiteStore) BeginLoopRunStartRead(ctx context.Context, workspace, loop
 	}
 	r.Data.WorkspaceSettings = value.Interface().(domain.WorkspaceSettings)
 	err = loopRunStartFirst(ctx, source, "loops", loopID, func(_ int, record metadataLogicalNode) error {
-		value, err := r.owned.node(ctx, record, false)
+		value, err := largeRowRecordValue(ctx, r.owned, record)
 		if err == nil {
 			r.Data.Loops = []domain.Loop{value.Interface().(domain.Loop)}
 		}
@@ -227,6 +227,9 @@ type loopRunStampInputs struct {
 	before  domain.Bootstrap
 	ordinal int
 	once    sync.Once
+	// nextRun: the loop.scheduled stamp, which reads only the loop's ID
+	// and changes only its NextRunAt.
+	nextRun bool
 }
 
 func (r *loopRunStampInputs) Close() {
@@ -238,8 +241,8 @@ func (r *loopRunStampInputs) Close() {
 	}
 }
 
-func (s *SQLiteStore) loadLoopRunStampInputs(ctx context.Context, source *metadataLogicalSource, loopID string) (_ *loopRunStampInputs, err error) {
-	r := &loopRunStampInputs{owner: &ResourceRead{store: s}, ordinal: -1}
+func (s *SQLiteStore) loadLoopRunStampInputs(ctx context.Context, source *metadataLogicalSource, loopID string, nextRun bool) (_ *loopRunStampInputs, err error) {
+	r := &loopRunStampInputs{owner: &ResourceRead{store: s}, ordinal: -1, nextRun: nextRun}
 	defer func() {
 		if err != nil {
 			r.Close()
@@ -266,7 +269,7 @@ func (s *SQLiteStore) loadLoopRunStampInputs(ctx context.Context, source *metada
 	if err != nil {
 		return nil, err
 	}
-	if r.ordinal >= 0 {
+	if r.ordinal >= 0 && !nextRun {
 		index, _, _ = metadataLogicalField("loopVersions")
 		err = source.fields[index].Children(ctx, func(_ reflect.Value, node metadataLogicalNode) error {
 			parent, found, err := loopRunStartChild(ctx, node, "LoopID")
@@ -288,7 +291,7 @@ func (s *SQLiteStore) loadLoopRunStampInputs(ctx context.Context, source *metada
 		}
 		if len(r.data.LoopVersions) == 0 {
 			// Only a loop without versions is read whole: its v1 snapshots it.
-			value, err := r.owner.node(ctx, record, false)
+			value, err := largeRowRecordValue(ctx, r.owner, record)
 			if err != nil {
 				return nil, err
 			}
@@ -299,10 +302,15 @@ func (s *SQLiteStore) loadLoopRunStampInputs(ctx context.Context, source *metada
 	if err != nil {
 		return nil, err
 	}
+	// The callback's copy, its v1 and the before image. They share the
+	// loop's large strings (ensureLoopVersion assigns them, the clone
+	// copies string headers), which the decode above already admitted.
+	for _, loop := range r.data.Loops {
+		cost -= min(cost, largeRowSharedStrings(reflect.ValueOf(loop)))
+	}
 	if cost > (metadataWorkBytes-(64<<10))/3 {
 		return nil, ErrMetadataWorkBudget
 	}
-	// The callback's copy, its v1 and the before image.
 	if err := r.owner.reserve(ctx, cost*3+64<<10); err != nil {
 		return nil, err
 	}
@@ -319,7 +327,11 @@ func (r *loopRunStampInputs) image(ctx context.Context, source *metadataLogicalS
 	}
 	before, after := r.before.Loops[0], r.data.Loops[0]
 	allowed := before
-	allowed.Version, allowed.VersionID, allowed.LastRunAt = after.Version, after.VersionID, after.LastRunAt
+	if r.nextRun {
+		allowed.NextRunAt = after.NextRunAt
+	} else {
+		allowed.Version, allowed.VersionID, allowed.LastRunAt = after.Version, after.VersionID, after.LastRunAt
+	}
 	if after.ID != loopID || !reflect.DeepEqual(allowed, after) {
 		return nil, ErrBoundedMetadataCoverage
 	}
@@ -337,7 +349,29 @@ func (r *loopRunStampInputs) image(ctx context.Context, source *metadataLogicalS
 	if !reflect.DeepEqual(unlisted, original) {
 		return nil, ErrBoundedMetadataCoverage
 	}
+	if r.nextRun && len(appended) != 0 {
+		return nil, ErrBoundedMetadataCoverage
+	}
 	changed := map[string]reflect.Value{"LastRunAt": reflect.ValueOf(after.LastRunAt)}
+	var nextRunAt *time.Time
+	if r.nextRun {
+		// A schedule's next run is in the loop's named time zone. The row,
+		// event and realtime bytes carry only its RFC 3339 offset, so the
+		// image keeps the instant as a load decodes it (a fixed zone).
+		nextRunAt = after.NextRunAt
+		if nextRunAt != nil {
+			raw, err := json.Marshal(*nextRunAt)
+			if err != nil {
+				return nil, err
+			}
+			var loaded time.Time
+			if err := json.Unmarshal(raw, &loaded); err != nil {
+				return nil, err
+			}
+			nextRunAt = &loaded
+		}
+		changed = map[string]reflect.Value{"NextRunAt": reflect.ValueOf(nextRunAt)}
+	}
 	if before.Version != after.Version {
 		changed["Version"] = reflect.ValueOf(after.Version)
 	}
@@ -355,6 +389,9 @@ func (r *loopRunStampInputs) image(ctx context.Context, source *metadataLogicalS
 		}
 	}
 	if err := frames.inheritTimestampInputs(ctx); err != nil {
+		return nil, err
+	}
+	if err := frames.auditJSONLocations(reflect.ValueOf(nextRunAt)); err != nil {
 		return nil, err
 	}
 	frame := func(node metadataAggregateNode) (metadataLogicalNode, error) {
@@ -417,13 +454,50 @@ func (s *SQLiteStore) MutateLoopRunStart(ctx context.Context, workspace, loopID 
 	if !s.BoundedMetadataEnabled() {
 		return s.MutateWorkspace(WithMetadataFields(ctx, "loops", "loopVersions"), workspace, "loop.run_started", loopID, payload, mutate)
 	}
+	if !metadataOutputOwnerPresent(ctx) {
+		return ErrBoundedMetadataCoverage
+	}
+	return s.mutateLoopStamp(ctx, workspace, "loop.run_started", loopID, payload, mutate, false)
+}
+
+// MutateLoopNextRun is the loop.scheduled stamp of the schedule runner: the
+// original MutateWorkspace with its loops callback when bounded metadata is
+// off; otherwise the callback receives the first loop with the ID (its ID
+// only) and may change only its NextRunAt, written as one logical metadata
+// image (a large loop row through the large-row kernels) with the original
+// event, webhook and realtime publication. The callback's inputs end with
+// the call.
+func (s *SQLiteStore) MutateLoopNextRun(ctx context.Context, workspace, loopID string, mutate func(*domain.Bootstrap) error) error {
+	if !s.BoundedMetadataEnabled() {
+		return s.MutateWorkspace(WithMetadataFields(ctx, "loops"), workspace, "loop.scheduled", loopID, nil, mutate)
+	}
+	var closes []func()
+	var mu sync.Mutex
+	defer func() {
+		mu.Lock()
+		owned := closes
+		closes = nil
+		mu.Unlock()
+		for _, close := range owned {
+			close()
+		}
+	}()
+	ctx = WithMetadataOutputOwner(ctx, func(close func()) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		closes = append(closes, close)
+		return true
+	})
+	return s.mutateLoopStamp(ctx, workspace, "loop.scheduled", loopID, nil, mutate, true)
+}
+
+func (s *SQLiteStore) mutateLoopStamp(ctx context.Context, workspace, eventType, loopID string, payload any, mutate func(*domain.Bootstrap) error, nextRun bool) error {
 	if mutate == nil || !metadataOutputOwnerPresent(ctx) || UsesIssueRecordMutations(ctx) {
 		return ErrBoundedMetadataCoverage
 	}
 	if _, actor := actorFromContext(ctx); actor {
 		return ErrBoundedMetadataCoverage
 	}
-	const eventType = "loop.run_started"
 	if workspace == "" {
 		s.mu.RLock()
 		workspace = s.lastWorkspaceKey
@@ -482,7 +556,7 @@ func (s *SQLiteStore) MutateLoopRunStart(ctx context.Context, workspace, loopID 
 			return err
 		}
 		defer stored.Release()
-		inputs, err := s.loadLoopRunStampInputs(ctx, stored, loopID)
+		inputs, err := s.loadLoopRunStampInputs(ctx, stored, loopID, nextRun)
 		if err != nil {
 			return err
 		}

@@ -231,6 +231,7 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 	var inlineComplete []*legacyMetadataWriteField
 	var parentMaps []*legacyMetadataWriteField
 	var slowBefore, slowTarget domain.Bootstrap
+	var firstRecords []largeRowFirstWrite
 	slowBefore.Workspace.ID, slowTarget.Workspace.ID = stamp.workspaceID, stamp.workspaceID
 	for _, field := range plan.fields {
 		if !field.persist {
@@ -273,6 +274,20 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 		if ready {
 			field.full = true
 			inlineComplete = append(inlineComplete, field)
+			continue
+		}
+		if rows, handled, err := plan.largeRowFirstRecords(ctx, field); err != nil {
+			return nil, err
+		} else if handled {
+			left, right, err := plan.largeRowFirstSkeleton(ctx, field, rows)
+			if err != nil {
+				return nil, err
+			}
+			field.full = true
+			reflect.ValueOf(&slowBefore).Elem().Field(field.field.index).Set(left)
+			reflect.ValueOf(&slowTarget).Elem().Field(field.field.index).Set(right)
+			slowNames = append(slowNames, field.field.name)
+			firstRecords = append(firstRecords, largeRowFirstWrite{field, rows})
 			continue
 		}
 		left, right, err := plan.materializeField(ctx, field, work)
@@ -333,6 +348,13 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 		if inlinePatch != nil {
 			writeCtx = context.WithValue(writeCtx, legacyInlineFieldsPatchKey{}, inlinePatch)
 		}
+		if len(firstRecords) != 0 {
+			rootOnly := map[string]bool{}
+			for _, first := range firstRecords {
+				rootOnly[first.field.field.name] = true
+			}
+			writeCtx = context.WithValue(writeCtx, largeRowRootOnlyFieldsKey{}, rootOnly)
+		}
 		names := slowNames
 		if names == nil {
 			names = []string{}
@@ -341,6 +363,11 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 			names = append(names, field.field.name)
 		}
 		if _, err := s.writeLegacyMetadataSlowFields(writeCtx, tx, workspace, slowBefore, slowTarget, names, refs); err != nil {
+			return nil, err
+		}
+	}
+	for _, first := range firstRecords {
+		if err := plan.writeLargeRowFirstRecords(ctx, first.field, first.rows); err != nil {
 			return nil, err
 		}
 	}
@@ -961,6 +988,9 @@ func (p *legacyMetadataWritePlan) rebaseFull(ctx context.Context, f *legacyMetad
 		// canonical rows. Keep their frames rather than decoding the field.
 		f.inlineReady = true
 		return nil
+	}
+	if handled, err := p.rebaseLargeRowFirstRecords(ctx, f); handled || err != nil {
+		return err
 	}
 	work := &ResourceRead{store: p.store}
 	defer work.Close()
