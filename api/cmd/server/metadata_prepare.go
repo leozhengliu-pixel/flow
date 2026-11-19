@@ -76,6 +76,13 @@ func metadataPrepare(args []string, stdout, stderr io.Writer) int {
 	}
 	if !report.Ready {
 		fmt.Fprintf(stderr, "metadata-prepare: %d workspaces still need the journal repair and %d collections the catalog; see the report\n", report.UncoveredWorkspaces, report.IncompleteCollections)
+		for _, gap := range report.Uncovered {
+			scopes := make([]string, 0, len(gap.Pending))
+			for _, scope := range gap.Pending {
+				scopes = append(scopes, fmt.Sprintf("%s from %s: %d keys", scope.Field, scope.Source, scope.Keys))
+			}
+			fmt.Fprintf(stderr, "metadata-prepare: workspace key %q (workspace exists: %t, activation walk unfinished: %t): %s\n", gap.Workspace, gap.WorkspaceExists, gap.ActivationWalk, strings.Join(scopes, "; "))
+		}
 		return 1
 	}
 	return 0

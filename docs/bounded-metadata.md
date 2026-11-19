@@ -85,15 +85,33 @@ It writes progress to stderr and a JSON report to stdout:
 | --- | --- |
 | `journal.workspaces`, `journal.repaired` | Workspaces that needed the journal repair, and those finished. |
 | `journal.incomplete` | Workspaces not finished, with the error. |
+| `journal.discarded` | Workspace keys with no workspace behind them whose leftover journal keys were removed (see below). |
 | `catalog.collections`, `catalog.completed` | Collections scanned, and those whose catalog is complete. |
 | `catalog.normalized` | Canonical rows stored as SQLite text, rewritten as blobs (see below). |
 | `catalog.skipped` | Collections that could not be cataloged: `workspace`, `field` and the `error`, which names the record. |
 | `journalSeconds`, `catalogSeconds` | Wall time of each step. |
 | `uncoveredWorkspaces`, `incompleteCollections`, `ready` | What a bounded start would still refuse, from the SQL checks below. `ready` is true when both counts are 0. |
+| `uncovered` | The first 20 uncovered workspace keys: `workspace`, `workspaceExists`, `activationWalk` (the walk after the journal was enabled is unfinished) and `pending`, the keys old writers changed by `field` (`@authz` for memberships and permissions, `@core` for the workspace root), `source` table and count. Also printed on stderr. |
 
 Exit status 0 means ready, 1 that something is still incomplete (see
-`journal.incomplete` and `catalog.skipped`), 2 an error (the message is on
-stderr; the progress made so far is kept).
+`journal.incomplete`, `uncovered` and `catalog.skipped`), 2 an error (the
+message is on stderr; the progress made so far is kept).
+
+Writers outside the app (an older binary, a bulk copy of tables with the
+journal triggers installed) can leave journal keys under a workspace key no
+workspace owns: a workspace an older binary deleted, or the empty key, under
+which memberships copied in before their `workspace_states` rows are
+journaled. Nothing can publish those keys, so the repair removes them and
+counts the key in `journal.discarded`; a workspace whose root is copied in
+later journals its own root and is repaired as a whole. Copy
+`workspace_states` before the membership tables to avoid them altogether.
+
+The command needs no particular collation. On MySQL the canonical
+`workspace_metadata_records` key columns use the database's default
+collation (`utf8mb4_0900_ai_ci` on 8.4, which sorts `teams` before
+`teamSettings`) and the catalog and journal tables byte order; the catalog
+pass pages each table in its own order and never compares keys across them.
+Do not change the collation of these columns to make prepare finish.
 
 For scale: on a SQLite database with 2520 small workspaces (25,200
 collections), on a busy development machine, the journal repair took 30
