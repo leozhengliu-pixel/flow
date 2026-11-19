@@ -40,6 +40,11 @@ func TestScaleP21SW19GitLabRotationSnapshotCancellation(t *testing.T) {
 		cancelled, cancel := context.WithCancel(t.Context())
 		cancel()
 		now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+		// The bounded rotation reads its installed projection: no legacy
+		// whole-workspace accessor (resident skeleton or legacy view).
+		var legacyReads []string
+		probe.SetSkeletalReadObserverForTesting(func(accessor string) { legacyReads = append(legacyReads, accessor) })
+		t.Cleanup(func() { probe.SetSkeletalReadObserverForTesting(nil) })
 		for _, source := range []*store.SQLiteStore{repo, probe} {
 			(&server{store: source}).rotateDueGitLabTokens(cancelled, workspace, now)
 		}
@@ -47,9 +52,16 @@ func TestScaleP21SW19GitLabRotationSnapshotCancellation(t *testing.T) {
 		if output.Len() != 0 {
 			t.Fatal("canceled context changed the context-insensitive snapshot phase", output.String())
 		}
+		if len(legacyReads) != 0 || probe.WorkspaceMetadataDecodes() != 0 {
+			t.Fatal("actual policy-only source was substituted or decoded", legacyReads)
+		}
+		// The probe is still policy-only: its connections are not resident,
+		// so the legacy field read is served outside the resident image (a
+		// legacy view of the installed source, which still holds the one
+		// connection the rotation left alone).
 		installed, found := probe.WorkspaceMetadataFields(workspace, "integrationConnections")
-		if !found || len(installed.IntegrationConnections) != 0 || probe.WorkspaceMetadataDecodes() != 0 {
-			t.Fatal("actual policy-only source was substituted or decoded")
+		if !found || len(installed.IntegrationConnections) != 1 || len(legacyReads) != 1 || probe.WorkspaceMetadataDecodes() != 0 {
+			t.Fatal("actual policy-only source was substituted or decoded", found, len(installed.IntegrationConnections), legacyReads)
 		}
 	}
 }

@@ -78,9 +78,13 @@ func TestScaleP21SW19GitLabConfigsInstalledDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// The probe's legacy accessor now answers from a legacy view of its
+		// installed logical source (where the connection's unknown CreatedAt
+		// Location stays opaque while warm); the oracle is each store's
+		// resident image, which the installed projection selects.
 		for _, source := range []*SQLiteStore{f.SQLiteStore, probe} {
 			for _, key := range []string{workspace, "", workspace + "-missing", strings.ToUpper(workspace)} {
-				before, found := source.WorkspaceMetadataFields(key, "integrationConnections")
+				before, found := scaleP21ResidentOracle(source, key)
 				expectedWorkspace, expected := scaleP21SW19GitLabConfigProjection(before)
 				read, actualFound, err := source.BeginGitLabConnectionConfigsRead(t.Context(), key)
 				if err != nil || actualFound != found {
@@ -99,9 +103,9 @@ func TestScaleP21SW19GitLabConfigsInstalledDifferential(t *testing.T) {
 				read.Close()
 			}
 		}
-		owner, _ := f.WorkspaceMetadataFields(workspace, "integrationConnections")
-		cold, _ := probe.WorkspaceMetadataFields(workspace, "integrationConnections")
-		if len(owner.IntegrationConnections) == 0 || len(cold.IntegrationConnections) != 0 {
+		owner, _ := scaleP21ResidentOracle(f.SQLiteStore, workspace)
+		cold, held := scaleP21ResidentOracle(probe, workspace)
+		if len(owner.IntegrationConnections) == 0 || !held || len(cold.IntegrationConnections) != 0 {
 			t.Fatal("independent loader/source hold witness changed")
 		}
 		if probe.WorkspaceMetadataDecodes() != 0 || probe.metadataResidency.work.used != 0 {
