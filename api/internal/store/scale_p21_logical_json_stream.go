@@ -652,55 +652,96 @@ func (s *logicalJSONStream) raw(node metadataLogicalNode) error {
 		return err
 	}
 	return node.StreamBytes(s.ctx, func(input io.Reader) error {
-		reader := bufio.NewReaderSize(input, 4096)
-		quoted, escaped := false, false
-		for {
-			if err := s.ctx.Err(); err != nil {
-				return err
-			}
-			char, err := reader.ReadByte()
+		return s.compactRaw(input)
+	})
+}
+
+// compactRaw writes validated raw JSON as json.Marshal does: insignificant
+// whitespace dropped and <, >, &, U+2028 and U+2029 escaped inside strings.
+// It works on buffered runs, copying unchanged bytes in bulk; cancellation is
+// observed once per run.
+func (s *logicalJSONStream) compactRaw(input io.Reader) error {
+	reader := bufio.NewReaderSize(input, 64<<10)
+	quoted, escaped := false, false
+	for {
+		if err := s.ctx.Err(); err != nil {
+			return err
+		}
+		// Three bytes keep a complete U+2028/U+2029 sequence in view unless
+		// the input itself ends sooner.
+		if head, err := reader.Peek(3); len(head) == 0 {
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
-			if err != nil {
-				return err
-			}
-			if !quoted && (char == ' ' || char == '\n' || char == '\r' || char == '\t') {
-				continue
-			}
-			if escaped {
-				escaped = false
-			} else if quoted && char == '\\' {
-				escaped = true
-			} else if char == '"' {
-				quoted = !quoted
-			} else if quoted {
-				switch char {
-				case '<', '>', '&':
-					if err := s.text(logicalJSONASCIIQuotes[char]); err != nil {
-						return err
-					}
-					continue
-				case 0xe2:
-					next, _ := reader.Peek(2)
-					if len(next) == 2 && next[0] == 0x80 && (next[1] == 0xa8 || next[1] == 0xa9) {
-						_, _ = reader.Discard(2)
-						escape := `\u2028`
-						if next[1] == 0xa9 {
-							escape = `\u2029`
-						}
-						if err := s.text(escape); err != nil {
-							return err
-						}
-						continue
-					}
+			return err
+		}
+		chunk, _ := reader.Peek(reader.Buffered())
+		start, index := 0, 0
+		flush := func(end int) error {
+			if end > start {
+				if _, err := s.out.Write(chunk[start:end]); err != nil {
+					return err
 				}
 			}
-			if err := s.out.WriteByte(char); err != nil {
-				return err
-			}
+			return nil
 		}
-	})
+	scan:
+		for index < len(chunk) {
+			char := chunk[index]
+			switch {
+			case !quoted && (char == ' ' || char == '\n' || char == '\r' || char == '\t'):
+				if err := flush(index); err != nil {
+					return err
+				}
+				index++
+				start = index
+				continue
+			case escaped:
+				escaped = false
+			case quoted && char == '\\':
+				escaped = true
+			case char == '"':
+				quoted = !quoted
+			case quoted && (char == '<' || char == '>' || char == '&'):
+				if err := flush(index); err != nil {
+					return err
+				}
+				if err := s.text(logicalJSONASCIIQuotes[char]); err != nil {
+					return err
+				}
+				index++
+				start = index
+				continue
+			case quoted && char == 0xe2:
+				if index+2 >= len(chunk) && index > 0 {
+					// Re-examine this byte with its successors buffered.
+					break scan
+				}
+				if index+2 < len(chunk) && chunk[index+1] == 0x80 && (chunk[index+2] == 0xa8 || chunk[index+2] == 0xa9) {
+					if err := flush(index); err != nil {
+						return err
+					}
+					escape := `\u2028`
+					if chunk[index+2] == 0xa9 {
+						escape = `\u2029`
+					}
+					if err := s.text(escape); err != nil {
+						return err
+					}
+					index += 3
+					start = index
+					continue
+				}
+			}
+			index++
+		}
+		if err := flush(index); err != nil {
+			return err
+		}
+		if _, err := reader.Discard(index); err != nil {
+			return err
+		}
+	}
 }
 
 func (s *logicalJSONStream) string(input io.Reader) error {
