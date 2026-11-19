@@ -1,6 +1,6 @@
 {
   "source": "store/issue_records.go",
-  "unmigrated": 3,
+  "unmigrated": 1,
   "consumers": {
     "ImportIssues": {
       "owner": "P21",
@@ -12,8 +12,8 @@
     },
     "WorkspaceMetadata": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Pending: TestScaleP21SW286StoreWrapperHotBoundaries finds no allow-listed HOT flag-on reacher left: processIntegrationDelivery dispatches to the bounded delivery worker (SW510), attachmentVisible and generateCommentActions are closed, and refuseFormerMemberCollaborationUpdate reads the selected standalone document through BeginCollaborationDocumentContentRead with the flag on (SW520), so socketWorkspaceMetadata is a guard-closed consumer. Every other flag-on caller is COLD, flag-off-only, guard-closed or a pinned relay.",
+      "status": "reviewed",
+      "reason": "Closed by reachability: TestScaleP21SW286StoreWrapperHotBoundaries (with the SW290 probe) finds no HOT consumer reaching WorkspaceMetadata with FLOW_BOUNDED_METADATA on, and its allow-list is empty; TestScaleP21SW292WriteChainHotBoundaries finds no HOT reacher of the legacy write chain. processIntegrationDelivery dispatches to the bounded delivery worker (TestScaleP21SW510DeliveryOutcomesDifferential), workflow execution and the due-workflow scheduler run on their bounded writers (TestScaleP21SW500WorkflowActionTriggerDifferential, TestScaleP21SW501WorkflowDueSchedulerWeekdayAndSunday, TestScaleP21SW504WorkflowWriterKernelBoundary), attachmentVisible and generateCommentActions are closed, and refuseFormerMemberCollaborationUpdate reads the selected standalone document through BeginCollaborationDocumentContentRead (TestScaleP21SW520FormerMemberDocumentDifferential), so socketWorkspaceMetadata is a guard-closed consumer. Every other flag-on caller is COLD, flag-off-only, guard-closed or a relay pinned by SW225. The literal wrapper is unchanged for flag-off callers.",
       "accessors": [
         "WorkspaceMetadataForRead"
       ],
@@ -112,8 +112,8 @@
     },
     "WorkspaceMetadataForRead": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Pending: reached with the flag on only through WorkspaceMetadata (issueRecordsBootstrapData's development branch is a relay pinned by SW225), whose HOT blockers are all closed (TestScaleP21SW286StoreWrapperHotBoundaries).",
+      "status": "reviewed",
+      "reason": "Closed by reachability: reached with the flag on only through WorkspaceMetadata (issueRecordsBootstrapData's development branch is a relay pinned by SW225), which TestScaleP21SW286StoreWrapperHotBoundaries (with the SW290 probe) and TestScaleP21SW292WriteChainHotBoundaries find no HOT reacher of. The literal reader is unchanged for flag-off callers.",
       "accessors": [
         "resident-state"
       ],
