@@ -1594,6 +1594,9 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 		if _, selected := cycleScheduleMaintenance(ctx); selected && eventType == "cycles.automatically_maintained" {
 			return s.mutateBoundedCycleSchedule(ctx, workspaceKey, eventType, payload, mutate)
 		}
+		if boundedDocumentUpdateEvent(ctx, eventType) {
+			return s.mutateBoundedDocumentUpdate(ctx, workspaceKey, eventType, payload, mutate)
+		}
 		if boundedRecurringOccurrenceEvent(ctx, eventType) {
 			return s.mutateBoundedRecurringOccurrence(ctx, workspaceKey, eventType, payload, mutate)
 		}

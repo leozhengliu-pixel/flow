@@ -1,6 +1,6 @@
 {
   "source": "server/advanced_features.go",
-  "unmigrated": 47,
+  "unmigrated": 46,
   "consumers": {
     "addFavorite": {
       "owner": "P21",
@@ -575,8 +575,9 @@
       ]
     },
     "updateDocument": {
-      "owner": "P17",
-      "status": "unmigrated",
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode installs the closed DocumentUpdateWriteRequest marker (ref, normalized new project IDs, linked-issue read) and a request output owner, then calls MutateWorkspace with the unchanged callback, scope, postcommit compaction, generation conflict, access invalidation, mail and P20 response; the off branch is untouched. store/sqlite.go dispatches only document.updated and favorite.added/removed with that marker to mutateBoundedDocumentUpdate, so the workspace is never hydrated. SW480 runs the real route against legacy and bounded warm and SQL-reloaded sources and compares responses, canonical and installed documents/projects/favorites, collaboration logs, offloaded history, audits, events, webhooks and realtime: title/Markdown/rich/state edits, compaction (accepted, stale, replay), former-member retained/queued/rejected mentions with rollback, favorites, no-op, version conflict and match, links (project, issue, existing issue, unlink, invalid), reciprocal and large linked projects, team move, subscribers, archive/unarchive, trashed, missing, slug over earlier old slug, ID over old slug, duplicate IDs, 4 MiB current body title and content edits with offloaded history, a peer write to the same rows retried to the literal order, and the principal x key matrix on shared, private-team and outsider documents. Root gate (pinned, not certified): a stale image of a document row whose current and history bodies exceed the large-row typed merge allowance (12 MiB native fixture) is refused atomically where the literal writer merges the peer members; current images, including SQL-reloaded rows that only differ by load normalization, take the loaded exit.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

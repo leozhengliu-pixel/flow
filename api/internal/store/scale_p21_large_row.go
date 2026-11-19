@@ -463,3 +463,75 @@ func largeRowDisplayEqual(ctx context.Context, owner *ResourceRead, directory *m
 	}
 	return true, true, ctx.Err()
 }
+
+// largeRowLongStringBytes is the raw length above which a JSON string token
+// is charged at its decode copies rather than the generic per-byte multiple.
+const largeRowLongStringBytes = 32 << 10
+
+// largeRowTypedJSONWork is resourceWindowTypedJSONWork for a large record
+// whose bulk is a few long string tokens (a document's content and resolved
+// current-version bodies). The generic estimate charges sixteen times every
+// raw byte, which refuses a legal record of 8 MiB before its exact decode.
+// Here the typed walk sees each long string as empty (its structure and
+// short tokens keep the original charge) and each long token adds three
+// times its raw length: encoding/json unquotes it into at most one buffer
+// of that size and converts it to a Go string once.
+func largeRowTypedJSONWork(ctx context.Context, owner *ResourceRead, raw []byte, kind reflect.Type) (uint64, error) {
+	if !json.Valid(raw) {
+		var value struct{}
+		return 0, json.Unmarshal(raw, &value)
+	}
+	var spans [][2]int
+	var long uint64
+	start, escaped := -1, false
+	for index, c := range raw {
+		if index&4095 == 0 {
+			if err := ctx.Err(); err != nil {
+				return 0, err
+			}
+		}
+		if start >= 0 {
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				if index-start-1 > largeRowLongStringBytes {
+					spans = append(spans, [2]int{start + 1, index})
+					long += uint64(index - start - 1)
+				}
+				start = -1
+			}
+			continue
+		}
+		if c == '"' {
+			start = index
+		}
+	}
+	if len(spans) == 0 {
+		return resourceWindowTypedJSONWork(ctx, raw, kind)
+	}
+	size := uint64(len(raw)) - long
+	if size > metadataWorkBytes-4096 || uint64(len(spans)) > (metadataWorkBytes-4096-size)/16 {
+		return 0, ErrMetadataWorkBudget
+	}
+	if err := owner.reserve(ctx, size+uint64(len(spans))*16+4096); err != nil {
+		return 0, err
+	}
+	skeleton := make([]byte, 0, int(size))
+	previous := 0
+	for _, span := range spans {
+		skeleton = append(skeleton, raw[previous:span[0]]...)
+		previous = span[1]
+	}
+	skeleton = append(skeleton, raw[previous:]...)
+	typed, err := resourceWindowTypedJSONWork(ctx, skeleton, kind)
+	if err != nil {
+		return 0, err
+	}
+	if long > (metadataWorkBytes-typed)/3 {
+		return 0, ErrMetadataWorkBudget
+	}
+	return typed + long*3, nil
+}
