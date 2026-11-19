@@ -13,7 +13,8 @@ import (
 // SW496: request-body predicates under projects, initiatives and the
 // document create root, including the escaped relation-ID PATCH whose
 // decoded segments select the project/initiative PATCH body predicate.
-func TestScaleP21SW496BodyAuthorizationDifferential(t *testing.T) {
+func scaleP21SW496Table(t *testing.T, part, parts int) {
+	t.Helper()
 	fx := scaleP21SW491Setup(t, func(fx *scaleP21SW491Fixture, data *domain.Bootstrap) {
 		data.Customers = append(data.Customers, domain.Customer{ID: fx.prefix + "cust", Name: "c"})
 	})
@@ -83,7 +84,7 @@ func TestScaleP21SW496BodyAuthorizationDifferential(t *testing.T) {
 		scaleP21SW491Row{"document-create-issue", http.MethodPost, "POST /api/documents", "/api/documents", `{"issueId":" ` + p + `missing-issue "}`},
 		scaleP21SW491Row{"document-create-invalid", http.MethodPost, "POST /api/documents", "/api/documents", `{"teamIds":"x"}`},
 	)
-	fx.run(t, "SW496", rows, []scaleP21SW491Control{
+	fx.runPart(t, "SW496", rows, []scaleP21SW491Control{
 		{"project-create-empty/member-private-outsider/session", true},
 		{"project-create-team-private/member-private-outsider/session", false},
 		{"project-create-dependency-slug/member-private-outsider/session", true},
@@ -105,5 +106,13 @@ func TestScaleP21SW496BodyAuthorizationDifferential(t *testing.T) {
 		{"initiative-patch-favorite/member-private-outsider/app-initiatives", true},
 		{"document-create-empty/member-private-outsider/session", true},
 		{"document-create-team-private/member-private-outsider/session", false},
-	})
+	}, part, parts)
 }
+
+// The SW496 table runs in 3 top-level tests (every third row each) so the
+// CI shards spread it: on PostgreSQL and MySQL the whole table took 15-21 minutes.
+func TestScaleP21SW496BodyAuthorizationDifferential(t *testing.T) { scaleP21SW496Table(t, 0, 3) }
+
+func TestScaleP21SW496BodyAuthorizationDifferentialPart2(t *testing.T) { scaleP21SW496Table(t, 1, 3) }
+
+func TestScaleP21SW496BodyAuthorizationDifferentialPart3(t *testing.T) { scaleP21SW496Table(t, 2, 3) }
