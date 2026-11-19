@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"sync/atomic"
+	"testing"
 	"time"
 
 	"flow/api/internal/domain"
@@ -17,6 +19,20 @@ import (
 // writer does not reproduce, such as a callback that changes unrelated
 // metadata. It wraps ErrBoundedMetadataCoverage; nothing is written.
 var ErrIssueSuggestionWriteRefused = fmt.Errorf("%w: issue suggestion writer refused the input", ErrBoundedMetadataCoverage)
+
+// issueSuggestionWriteAttempts counts the transaction attempts of the bounded
+// issue suggestion writer (IssueSuggestionWriteAttemptsForTesting).
+var issueSuggestionWriteAttempts atomic.Int64
+
+// IssueSuggestionWriteAttemptsForTesting returns how many transaction attempts
+// the bounded issue suggestion writer has started in this process: a write
+// that lost a race to another server and ran again counts twice.
+func IssueSuggestionWriteAttemptsForTesting() int64 {
+	if !testing.Testing() {
+		return 0
+	}
+	return issueSuggestionWriteAttempts.Load()
+}
 
 // IssueSuggestionWrite declares the installed records an issue suggestion
 // callback may apply beyond the scoped issues' own references and the targets
@@ -30,6 +46,13 @@ var ErrIssueSuggestionWriteRefused = fmt.Errorf("%w: issue suggestion writer ref
 type IssueSuggestionWrite struct {
 	Users, Projects, Labels, Teams []string
 	Complete                       bool
+	// HistoryHeads declares a callback that reads and edits the scoped
+	// issues' history (comments, activities, notifications) only through
+	// RecordIssueActivity. It then receives no history: RecordIssueActivity
+	// loads an issue's latest activity and comment on demand, and the writer
+	// syncs every scoped issue's history in bounded chunks with the
+	// callback's timeline edits applied, as the full callback would leave it.
+	HistoryHeads bool
 }
 
 type issueSuggestionWriteKey struct{}
@@ -455,6 +478,7 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		if _, found := s.storedWorkspace(workspace); !found {
 			return fmt.Errorf("workspace not found")
 		}
+		issueSuggestionWriteAttempts.Add(1)
 		unbindTimestampInputs, err := s.bindMetadataTimestampInputs(ctx)
 		if err != nil {
 			return err
@@ -540,34 +564,41 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		if data.Workspace.ID != baseStamp.workspaceID {
 			return ErrResourceAccessChanged
 		}
+		// The rows keep only the stored payloads: the issue write compares
+		// them and progress decodes its preimages from them again. The
+		// decoded preimages live only until the selected image encodes them.
 		attempt.rows = s.newIssueMutationRows(tx, workspace)
+		attempt.rows.rawOnly = true
 		records, err := attempt.rows.load(ctx, ids, true)
 		if err != nil {
 			return err
 		}
-		if err := attempt.owner.reserve(ctx, uint64(len(records))*4096+64<<10); err != nil {
+		// The payload map and key list; the decoded issues are admitted by
+		// their measured size where they are decoded.
+		if err := attempt.owner.reserve(ctx, uint64(len(records))*256+64<<10); err != nil {
 			return err
 		}
-		data.Issues = make([]domain.Issue, 0, len(records))
 		rawBefore := make(map[string][]byte, len(records))
-		loaded := make([]domain.Issue, 0, len(records))
 		keys := make([]string, 0, len(records))
 		for _, id := range ids {
 			record, found := records[id]
 			if !found || slices.Contains(keys, id) {
 				continue
 			}
-			data.Issues = append(data.Issues, record.issue)
-			loaded = append(loaded, record.issue)
 			rawBefore[id] = record.raw
 			keys = append(keys, id)
+		}
+		preimages := &ResourceRead{store: s}
+		defer func() { preimages.Close() }()
+		if data.Issues, err = decodeIssueSuggestionPreimages(ctx, preimages, keys, rawBefore, nil); err != nil {
+			return err
 		}
 		data.Comments = map[string][]domain.Comment{}
 		data.Activities = map[string][]domain.ActivityEvent{}
 		data.Notifications = []domain.Notification{}
 		data.NotificationDeliveries = []domain.NotificationDelivery{}
 		attempt.content = s.newIssueChildContentRows(tx, workspace)
-		if len(keys) != 0 {
+		if len(keys) != 0 && !input.HistoryHeads {
 			content, err := attempt.content.loadMutationScope(ctx, keys)
 			if err != nil {
 				return err
@@ -584,14 +615,33 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			return err
 		}
 		defer selected.Release()
+		// The selected image owns encoded copies of the SQL issues and child
+		// content; the callback reads the display values decoded below.
+		data.Issues, data.Comments, data.Activities = nil, nil, nil
+		data.Notifications, data.NotificationDeliveries = nil, nil
+		preimages.Close()
+		attempt.content.Close()
+		attempt.content = nil
 		display, err := s.refreshLegacyDisplayImage(ctx, selected)
 		if err != nil {
 			return err
 		}
 		defer display.Release()
-		for _, name := range []string{"issues", "comments", "activities", "notifications", "notificationDeliveries"} {
+		decoded := []string{"issues", "comments", "activities", "notifications", "notificationDeliveries"}
+		if input.HistoryHeads {
+			// The scoped history stays in SQL: heads load it per chunk
+			// for the callback and the sync writes it back per chunk.
+			decoded = decoded[:1]
+			data.Comments, data.Activities = map[string][]domain.Comment{}, map[string][]domain.ActivityEvent{}
+			data.Notifications, data.NotificationDeliveries = []domain.Notification{}, []domain.NotificationDelivery{}
+		}
+		// The display values stay admitted by their decoded size until the
+		// callback's results are measured (see below).
+		decodedWork := &boundedDiscussionAttempt{owner: &ResourceRead{store: s}}
+		attempt.owner.release = append(attempt.owner.release, decodedWork.owner.Close)
+		for _, name := range decoded {
 			index, _, _ := metadataLogicalField(name)
-			value, err := attempt.collectionValue(ctx, display.fields[index])
+			value, err := decodedWork.collectionValue(ctx, display.fields[index])
 			if err != nil {
 				return err
 			}
@@ -620,7 +670,9 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		if callbackCost > (metadataWorkBytes-(64<<10))/3 {
 			return ErrMetadataWorkBudget
 		}
-		if err := attempt.owner.reserve(ctx, callbackCost*2); err != nil {
+		callbackWork := &ResourceRead{store: s}
+		attempt.owner.release = append(attempt.owner.release, callbackWork.Close)
+		if err := callbackWork.reserve(ctx, callbackCost*2); err != nil {
 			return err
 		}
 		_, releaseBeforeCallback, err := s.tryAdmitAdditionalMetadataWork(ctx, int(callbackCost+64<<10))
@@ -634,6 +686,13 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		}
 		data.FormerMembers = attempt.lookups.formerMembers
 		data.CollaborationUpdates = attempt.lookups.collaborationUpdates
+		var history *issueSuggestionHistoryHeads
+		if input.HistoryHeads {
+			history = s.newIssueSuggestionHistoryHeads(ctx, tx, workspace, cloned, keys)
+			defer history.close()
+			data.ActivityHistoryHeads = map[string]domain.ActivityEvent{}
+			data.ActivityHistoryLoader = history.load
+		}
 		if !registerMetadataOutputClose(ctx, attempt.Close) {
 			return ErrBoundedMetadataCoverage
 		}
@@ -641,6 +700,8 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		traceMark(ctx, "load")
 		aggregate, callbackErr := mutate(&data)
 		data.FormerMembers, data.CollaborationUpdates = nil, nil
+		historyErr := data.ActivityHistoryError
+		data.ActivityHistoryLoader, data.ActivityHistoryError = nil, nil
 		if err := attempt.lookups.check(); err != nil {
 			return err
 		}
@@ -648,7 +709,22 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		if callbackErr != nil {
 			return callbackErr
 		}
+		if historyErr != nil {
+			return historyErr
+		}
 		move := attempt.suggestions.move
+		var timeline map[string][]domain.ActivityEvent
+		var recorded map[string]domain.ActivityEvent
+		if history != nil {
+			// The callback saw history heads only: check and keep its
+			// timeline edits, then validate the rest as the full shape.
+			if timeline, err = history.check(data, scope, move != nil); err != nil {
+				return err
+			}
+			recorded = data.ActivityHistoryHeads
+			data.Comments, data.Activities = beforeCallback.Comments, beforeCallback.Activities
+			data.ActivityHistoryHeads = nil
+		}
 		if err := validateIssueSuggestionCallback(beforeCallback, data, scope, move != nil); err != nil {
 			return err
 		}
@@ -676,37 +752,42 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			}
 		}
 		writeCtx := context.WithValue(ctx, legacyContentWriteBudgetKey{}, s)
-		releaseContent, err := reserveIssueBatchContentEncoding(ctx, s, data)
-		if err != nil {
-			return err
-		}
-		defer releaseContent()
-		if err := syncContentRecords(writeCtx, tx, workspace, "comment", data.Comments, data, keys); err != nil {
-			return err
-		}
-		if err := syncContentRecords(writeCtx, tx, workspace, "activity", data.Activities, data, keys); err != nil {
-			return err
-		}
-		if err := syncContentRecords(writeCtx, tx, workspace, "notification", notificationRecords(data.Notifications), data, keys); err != nil {
-			return err
-		}
-		for _, delivery := range data.NotificationDeliveries {
-			delete(oldDeliveries, delivery.ID)
-			if err := writeContentRecord(writeCtx, tx, workspace, "delivery", "", delivery); err != nil {
+		if history != nil {
+			if err := history.sync(writeCtx, data, recorded, timeline, aggregate); err != nil {
 				return err
 			}
-		}
-		for id := range oldDeliveries {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND resource_id='' AND id=?`, workspace, id); err != nil {
+			history.close()
+		} else if err := func() error {
+			releaseContent, err := reserveIssueBatchContentEncoding(ctx, s, data)
+			if err != nil {
 				return err
 			}
+			defer releaseContent()
+			if err := syncContentRecords(writeCtx, tx, workspace, "comment", data.Comments, data, keys); err != nil {
+				return err
+			}
+			if err := syncContentRecords(writeCtx, tx, workspace, "activity", data.Activities, data, keys); err != nil {
+				return err
+			}
+			if err := syncContentRecords(writeCtx, tx, workspace, "notification", notificationRecords(data.Notifications), data, keys); err != nil {
+				return err
+			}
+			for _, delivery := range data.NotificationDeliveries {
+				delete(oldDeliveries, delivery.ID)
+				if err := writeContentRecord(writeCtx, tx, workspace, "delivery", "", delivery); err != nil {
+					return err
+				}
+			}
+			for id := range oldDeliveries {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND resource_id='' AND id=?`, workspace, id); err != nil {
+					return err
+				}
+			}
+			return nil
+		}(); err != nil {
+			return err
 		}
-		// The callback uses separately decoded display values. The original
-		// child rows and their SQL decoding scratch end after content sync.
 		oldDeliveries = nil
-		releaseContent()
-		attempt.content.Close()
-		attempt.content = nil
 		patch, releasePatch, err := s.issueSuggestionPatchNode(ctx, display, dropped, edits, appended)
 		if err != nil {
 			return err
@@ -742,6 +823,22 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			return err
 		}
 		defer restored.Release()
+		// The patches and the requested image own encoded copies of the
+		// callback's suggestion and document results, which end here. The
+		// rest of its inputs and results stay admitted by their measured
+		// size for as long as the attempt holds them, in place of the
+		// display decoding, input selection and callback allowances.
+		data.IssueSuggestions, data.Documents = nil, nil
+		retained, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(data), 0)
+		if err != nil {
+			return err
+		}
+		decodedWork.owner.Close()
+		callbackWork.Close()
+		attempt.suggestions.close()
+		if err := attempt.owner.reserve(ctx, retained+64<<10); err != nil {
+			return err
+		}
 		for _, name := range []string{"viewer", "viewerRole"} {
 			index, _, _ := metadataLogicalField(name)
 			value, err := attempt.owner.node(ctx, stored.fields[index], false)
@@ -752,6 +849,18 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		}
 		var progress *scopedIssueReactionProgress
 		if progressEvent(eventType) {
+			// The preimages decoded again from the same stored payloads,
+			// after the callback's private preimage was released.
+			preimages = &ResourceRead{store: s}
+			defer preimages.Close()
+			// Progress reads the preimages of project issues only (their
+			// contributions); the others' teams only select unused settings.
+			loaded, err := decodeIssueSuggestionPreimages(ctx, preimages, keys, rawBefore, func(issue domain.Issue) bool {
+				return issue.Project != nil && issue.Project.ID != ""
+			})
+			if err != nil {
+				return err
+			}
 			progress, err = s.prepareScopedIssueReactionProgress(ctx, restored, loaded, data.Issues)
 			if err != nil {
 				return err
@@ -761,7 +870,7 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		// Progress was the final user of the original issue preimages.
 		// Keep the callback/result owner live, but release raw SQL preimages
 		// before materializing an inline metadata field for persistence.
-		rawBefore, records, loaded = nil, nil, nil
+		rawBefore, records = nil, nil
 		attempt.rows.Close()
 		attempt.rows = nil
 		extraFields := []string{"issueSuggestions"}
@@ -769,6 +878,9 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 			extraFields = append(extraFields, "documents")
 		}
 		persistCtx := context.WithValue(ctx, legacyMetadataExtraFieldsKey{}, extraFields)
+		// Dismissed suggestions move behind the regenerated ones: the
+		// list is renumbered a chunk of rows at a time, not materialized.
+		persistCtx = withLegacyMetadataStreamedOrder(persistCtx, "issueSuggestions")
 		var merged *metadataLogicalSource
 		if progress != nil {
 			merged, err = s.persistLegacyMetadataImageWithProgress(persistCtx, tx, workspace, stored, restored, progress)
@@ -991,4 +1103,48 @@ func (s *SQLiteStore) issueSuggestionPatchNode(ctx context.Context, source *meta
 		patch.appended = append(patch.appended, node)
 	}
 	return patch, release, ctx.Err()
+}
+
+// decodeIssueSuggestionPreimages decodes the stored payloads of keys in order
+// as issueMutationRows decodes a row: the decoding work is admitted while it
+// runs, and each decoded issue stays admitted on owner by its measured size.
+func decodeIssueSuggestionPreimages(ctx context.Context, owner *ResourceRead, keys []string, raw map[string][]byte, keep func(domain.Issue) bool) ([]domain.Issue, error) {
+	size := uint64(reflect.TypeFor[domain.Issue]().Size())
+	issues := []domain.Issue{}
+	fixed := size*2 + 4096
+	for _, id := range keys {
+		body := raw[id]
+		work, err := metadataAggregatePayloadJSONWork(ctx, body)
+		if err != nil {
+			return nil, err
+		}
+		if work > metadataWorkBytes-fixed {
+			return nil, ErrMetadataWorkBudget
+		}
+		_, release, err := owner.store.tryAdmitAdditionalMetadataWork(ctx, int(work+fixed))
+		if err != nil {
+			return nil, err
+		}
+		var issue domain.Issue
+		err = json.Unmarshal(body, &issue)
+		release()
+		if err != nil {
+			return nil, err
+		}
+		normalizeIssueRecord(&issue)
+		if keep != nil && !keep(issue) {
+			continue
+		}
+		retained, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(issue), 0)
+		if err != nil {
+			return nil, err
+		}
+		// The issue and its slot; the slice grows by doubling, so the
+		// abandoned backing arrays are covered by a second slot.
+		if err := owner.reserve(ctx, retained+size*2); err != nil {
+			return nil, err
+		}
+		issues = append(issues, issue)
+	}
+	return issues, ctx.Err()
 }

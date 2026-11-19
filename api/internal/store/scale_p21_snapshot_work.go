@@ -29,6 +29,7 @@ func (s *SQLiteStore) tryAdmitAdditionalMetadataWork(ctx context.Context, bytes 
 	}
 	lease := &metadataWorkLease{budget: budget, bytes: bytes, live: true}
 	budget.used += bytes
+	budget.peak = max(budget.peak, budget.used)
 	var once sync.Once
 	release := func() {
 		once.Do(func() {

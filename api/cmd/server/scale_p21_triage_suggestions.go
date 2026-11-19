@@ -326,6 +326,7 @@ func (s *server) generateTriageIntelligenceForIssuesBounded(ctx context.Context,
 	if found {
 		defer installed.Close()
 	}
+	closeViewer := func() {}
 	if actor.User.ID == "" && found {
 		viewer, ok, err := s.store.BeginInstalledViewerRead(reads, workspace)
 		if err != nil {
@@ -333,6 +334,7 @@ func (s *server) generateTriageIntelligenceForIssuesBounded(ctx context.Context,
 		}
 		if ok {
 			defer viewer.Close()
+			closeViewer = viewer.Close
 			actor.User = viewer.Viewer()
 		}
 	}
@@ -427,10 +429,18 @@ func (s *server) generateTriageIntelligenceForIssuesBounded(ctx context.Context,
 			return nil, err
 		}
 	}
+	autoMove := triageTeamAutoMove(core.Data.WorkspaceSettings.FeatureSettings.TriageIntelligence)
+	// The policy reads end before the write, which needs the work budget
+	// they hold for a scope of up to 1000 issues.
+	core.Close()
+	installed.Close()
+	closeViewer()
 	owned, closeOwned := beginMetadataOutputReads(ctx)
 	defer closeOwned()
-	input := store.IssueSuggestionWrite{Complete: true}
-	if triageTeamAutoMove(core.Data.WorkspaceSettings.FeatureSettings.TriageIntelligence) {
+	// The callback reads and edits history only through RecordIssueActivity
+	// (a team move's activity), so the writer serves history heads.
+	input := store.IssueSuggestionWrite{Complete: true, HistoryHeads: true}
+	if autoMove {
 		// inferTeam proposes the teams of scoring candidates besides the
 		// store-derived ones (scoped issues and their projects).
 		owned = store.WithIssueRenumbering(owned)
@@ -446,6 +456,9 @@ func (s *server) generateTriageIntelligenceForIssuesBounded(ctx context.Context,
 
 func generateBoundedTriageMutation(ctx context.Context, issueIDs []string, source *store.IssueSuggestionCandidates, updated *domain.Issue, results *[]domain.Issue, generated *bool) func(*domain.Bootstrap) error {
 	return func(data *domain.Bootstrap) error {
+		// A write that lost a race to another server runs the callback
+		// again: the results are those of the attempt that commits.
+		*results, *generated = (*results)[:0], false
 		scoped := len(data.Issues)
 		var encountered []string
 		maxNumber := 0
