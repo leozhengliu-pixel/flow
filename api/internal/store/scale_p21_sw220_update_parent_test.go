@@ -293,7 +293,7 @@ func TestScaleP21SW220ParentMapCancellationAndRelease(t *testing.T) {
 				cancel()
 			} else {
 				ctx = WithSQLStatementObserver(ctx, func(query string) {
-					if strings.HasPrefix(query, "UPDATE bounded_metadata_write_stage SET data=") {
+					if strings.HasPrefix(query, "INSERT INTO bounded_metadata_write_chunks(operation_id,part,seq,chunk) VALUES(?,0,") {
 						cancelled = true
 						cancel()
 					}
