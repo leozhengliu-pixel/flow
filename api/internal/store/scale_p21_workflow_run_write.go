@@ -36,6 +36,10 @@ func (r *workflowRunAttempt) Close() {
 	}
 }
 
+// errWorkflowRunPreparedStale: another writer ran while a workflow run
+// prepared its inputs without the write lock.
+var errWorkflowRunPreparedStale = errors.New("workflow run inputs changed while prepared")
+
 // MutateWorkflowRun retains the literal workflow callback. A failed action is
 // part of its successful failed-run postimage: earlier actions, retry changes,
 // the definition and the exact 500-run tail commit in one SQL transaction.
@@ -76,15 +80,35 @@ func (s *SQLiteStore) MutateWorkflowRun(ctx context.Context, workspace, workflow
 		return workflowID, mutate(data)
 	})
 	written := false
-	apply := func(ctx context.Context) error {
+	// The full image, its display and actor passes and the record
+	// fingerprints take seconds in a large workspace; holding the shared
+	// write lock for them stalled every HOT writer behind the per-minute
+	// scheduler. A single-replica first attempt prepares them unlocked and
+	// keeps them only when no writer released the lock meanwhile and the
+	// installed source is the one it read; otherwise it prepares again under
+	// the lock, as before.
+	optimistic := s.coordinator == nil
+	apply := func(ctx context.Context, early bool) error {
 		if eventOwner != nil {
 			eventOwner.Close()
 			eventOwner = nil
 		}
-		s.writeMu.Lock()
-		defer s.writeMu.Unlock()
-		traceLocked(ctx)
-		defer traceUnlocked(ctx)
+		locked := false
+		lock := func() {
+			s.writeMu.Lock()
+			locked = true
+			traceLocked(ctx)
+		}
+		defer func() {
+			if locked {
+				traceUnlocked(ctx)
+				s.writeMu.Unlock()
+			}
+		}()
+		generation := s.writeMu.Generation()
+		if !early {
+			lock()
+		}
 		if s.coordinator != nil {
 			if err := s.reloadResidentWorkspace(ctx, workspace); err != nil {
 				return err
@@ -152,6 +176,17 @@ func (s *SQLiteStore) MutateWorkflowRun(ctx context.Context, workspace, workflow
 		}
 		attempt.lookups.install(data)
 		traceMark(ctx, "inputs")
+		if early {
+			lock()
+			current, err := s.retainMetadataLogicalSource(ctx, workspace)
+			if err != nil {
+				return err
+			}
+			current.Release()
+			if s.writeMu.Generation() != generation || current != stored {
+				return errWorkflowRunPreparedStale
+			}
+		}
 		// Every action can prepend one issue and append one notification.
 		// The selected config strings are borrowed under the input owner.
 		actions := 0
@@ -309,9 +344,15 @@ func (s *SQLiteStore) MutateWorkflowRun(ctx context.Context, workspace, workflow
 	}
 	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
 		if s.coordinator != nil {
-			return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx) })
+			return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx, false) })
 		}
-		return apply(ctx)
+		early := optimistic
+		optimistic = false
+		err := apply(ctx, early)
+		if errors.Is(err, errWorkflowRunPreparedStale) {
+			err = apply(ctx, false)
+		}
+		return err
 	}, s.refreshWorkflowRunStreamConflict(ctx, workspace))
 	if written {
 		s.dropMetadataCache(ctx, workspace)

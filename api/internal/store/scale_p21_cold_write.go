@@ -22,6 +22,17 @@ type coldWriteMutex struct {
 	// the lock, so no other writer runs between its base, its commit and
 	// the parent's image.
 	onLock, onUnlock func()
+	// generation counts the releases of the live lock: a writer that saw it
+	// unchanged across its unlocked preparation knows no other writer ran.
+	generation atomic.Uint64
+}
+
+// Generation returns the live lock's release count.
+func (m *coldWriteMutex) Generation() uint64 {
+	if m.shared != nil {
+		return m.shared.Generation()
+	}
+	return m.generation.Load()
 }
 
 func (m *coldWriteMutex) Lock() {
@@ -80,6 +91,7 @@ func (m *coldWriteMutex) Unlock() {
 		}
 		return
 	}
+	m.generation.Add(1)
 	m.local.Unlock()
 }
 

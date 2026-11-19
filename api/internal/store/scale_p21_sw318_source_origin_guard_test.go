@@ -20,7 +20,7 @@ import (
 func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 	contracts := map[string]string{
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
-		"scale_p21_workflow_run_write.go":             "d596f61a88cadfb708ac4ad416fc0c148a661e8489505ec6d4e45494b074954c",
+		"scale_p21_workflow_run_write.go":             "14e482477dc64418f5577f7077817a721d32952bc06409e9f11047d64308876f",
 		"issue_records.go":                            "8a8904df034274fc5b25d1b3af93e127970314f1998fecbe33cd1a110be6571a",
 		"issue_query.go":                              "16289207dd74d88be3308084b7483ea38f575f8549bf396bbfbb83f599220c45",
 		"auth.go":                                     "47915d692b1cb20f50a3b586e62887e6dc8720cbbdb6bb626770176dd7128426",
@@ -70,7 +70,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_bootstrap_projection_read.go":                        "855a7297d42689b586b5ce71cede55451ff25bc00d1efeb3f5504839c8c1c2ff",
 		"scale_p21_collaboration_document_read.go":                      "d4839174c25808b899839955839d6cd2d9e4a74b5ac76d1158c8a0fb1fb8fae8",
 		"scale_p21_collection_snapshot.go":                              "e8d843ee5626ba45c1aa11009ddf1e6860289895367d581fd8552309dbaec1fa",
-		"scale_p21_cycle_schedule_write.go":                             "2620140f60327e0f06beaaaa280ff89b887109e4fb925ff455a529e16eb9b407",
+		"scale_p21_cycle_schedule_write.go":                             "6f826778c8ab852ecfce93de24ffbd7cebd099f84c731486f03a550833c7fe14",
 		"scale_p21_delivery_context.go":                                 "53b0754c98b8e3473f4658777aaa0594f9b5caa07ca28f7c3599879332f9c609",
 		"scale_p21_desktop_ack_write.go":                                "caca6a6974572bf3205f7dcf5280b54dd7ad502f75b761967281665259b90682",
 		"scale_p21_document_auxiliary_read.go":                          "509970bec9f7e70a18b5054485374e46e441f5a03c31dfb491497ba16b570a6d",

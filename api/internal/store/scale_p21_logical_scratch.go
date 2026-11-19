@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"os"
-	"path/filepath"
 )
 
 type metadataLogicalScratchKey struct{}
@@ -20,7 +19,7 @@ func metadataLogicalSourceScratchContext(ctx context.Context, source *metadataLo
 	if source != nil {
 		source.mu.Lock()
 		if source.refs != 0 && len(source.stores) != 0 {
-			config.directory = filepath.Dir(source.stores[0].file.Name())
+			config.directory = source.stores[0].Dir()
 		}
 		source.mu.Unlock()
 	}

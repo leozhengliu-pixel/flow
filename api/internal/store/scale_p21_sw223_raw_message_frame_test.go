@@ -25,7 +25,7 @@ func scaleP21SW223Builder(t *testing.T, ctx context.Context) *metadataLogicalBui
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := builder.storage.file.Name()
+	name := builder.storage.Name()
 	t.Cleanup(func() {
 		builder.Close()
 		if _, err := os.Stat(name); !errors.Is(err, os.ErrNotExist) {

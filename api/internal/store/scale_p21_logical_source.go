@@ -44,7 +44,6 @@ type metadataLogicalSource struct {
 // field never retains an unbounded chain of obsolete source descriptors.
 type metadataLogicalStorage struct {
 	mu            sync.Mutex
-	file          *os.File
 	refs          int
 	types         []reflect.Type
 	times         []time.Time
@@ -52,15 +51,25 @@ type metadataLogicalStorage struct {
 	locationBytes int64
 	bytes         int64
 	genericStore  *SQLiteStore
-	// Spool I/O (scale_p21_logical_spool_io.go): flushed is the length the
-	// file holds; pending holds later appends; blocks cache small reads.
-	flushed   atomic.Int64
+	// Spool I/O (scale_p21_logical_spool_io.go, invariants there): file is
+	// created lazily in directory and holds [0, flushed); pending holds later
+	// appends; blocks cache small reads of flushed bytes.
+	directory string
 	pendingMu sync.Mutex
+	file      *os.File
+	closed    bool
 	pending   []byte
+	flushed   atomic.Int64
 	blocks    [metadataLogicalReadSlots]atomic.Pointer[metadataLogicalBlock]
-	// patches counts in-place writes of flushed bytes; a block read that
-	// overlapped one is not cached.
+	victim    atomic.Uint32
+	// patches is odd while a patch of flushed bytes is in flight and changes
+	// with each one; a block read that overlapped one is never served.
 	patches atomic.Int64
+	// Frame memo (scale_p21_logical_frame_memo.go): verbatim copies by
+	// offset and child headers of scanned collections.
+	memoMu  sync.Mutex
+	copies  []metadataLogicalCopy
+	indexes map[int64]metadataLogicalChildIndex
 }
 
 type metadataLogicalNode struct {
@@ -106,13 +115,8 @@ func newMetadataLogicalBuilder(ctx context.Context) (*metadataLogicalBuilder, er
 		return nil, ErrMetadataWorkBudget
 	}
 	config, _ := ctx.Value(metadataLogicalScratchKey{}).(metadataLogicalScratch)
-	file, err := os.CreateTemp(config.directory, "flow-p21-logical-*")
-	if err != nil {
-		metadataLogicalDescriptorsUsed.Add(-metadataLogicalDescriptorBytes)
-		return nil, err
-	}
 	t := reflect.TypeFor[domain.Bootstrap]()
-	storage := &metadataLogicalStorage{file: file, refs: 1}
+	storage := &metadataLogicalStorage{directory: config.directory, refs: 1}
 	source := &metadataLogicalSource{refs: 1, fields: make([]metadataLogicalNode, t.NumField()), stores: []*metadataLogicalStorage{storage}}
 	return &metadataLogicalBuilder{ctx: ctx, source: source, storage: storage, active: -1}, nil
 }
@@ -289,7 +293,7 @@ func (b *metadataLogicalBuilder) Finish(stamp copyStamp) (*metadataLogicalSource
 	if err := b.ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := b.storage.flush(); err != nil {
+	if err := b.storage.settle(); err != nil {
 		return nil, err
 	}
 	b.source.stamp = stamp
@@ -340,11 +344,8 @@ func (s *metadataLogicalStorage) Release() {
 	}
 	s.refs--
 	if s.refs == 0 {
-		name := s.file.Name()
-		_ = s.file.Close()
-		s.dropBuffers()
 		// An orphan still occupies the temporary volume and keeps its charge.
-		if err := os.Remove(name); err == nil || errors.Is(err, os.ErrNotExist) {
+		if err := s.discard(); err == nil || errors.Is(err, os.ErrNotExist) {
 			metadataLogicalDiskUsed.Add(-s.bytes)
 		}
 		metadataLogicalDescriptorsUsed.Add(-metadataLogicalDescriptorBytes - s.locationBytes)
