@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
 	"strconv"
@@ -16,6 +17,12 @@ const (
 	issueMutationRowsBatchSize  = 32
 	issueMutationRowsBatchBytes = 256 << 10
 )
+
+// errIssueMutationRowTooLarge: a stored issue row is larger than one point
+// read admits (metadataWorkBytes/16). Every caller sees ErrMetadataWorkBudget
+// (same message, errors.Is matches); a writer with a full-image fallback can
+// tell this per-row refusal apart from budget pressure.
+var errIssueMutationRowTooLarge = fmt.Errorf("%w", ErrMetadataWorkBudget)
 
 // issueMutationRows owns complete mutation preimages and their raw comparison
 // payloads. Its transaction belongs to the caller and outlives this owner.
@@ -177,7 +184,7 @@ func (r *issueMutationRows) headers(ctx context.Context, ids []string, lock bool
 		}
 		if size.Int64 > metadataWorkBytes/16 {
 			rows.Close()
-			return nil, ErrMetadataWorkBudget
+			return nil, errIssueMutationRowTooLarge
 		}
 		header.id, header.size = id.String, size.Int64
 		headers = append(headers, header)
