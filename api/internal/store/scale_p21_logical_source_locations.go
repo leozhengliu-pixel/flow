@@ -75,20 +75,8 @@ func (b *metadataLogicalBuilder) auditJSONLocation(location *time.Location) erro
 	if location == time.UTC || location == metadataLogicalProcessLocal || slices.Contains(b.storage.locations, location) {
 		return nil
 	}
-	value := reflect.ValueOf(location).Elem()
-	name, extend := value.FieldByName("name"), value.FieldByName("extend")
-	zones, transitions, cached := value.FieldByName("zone"), value.FieldByName("tx"), value.FieldByName("cacheZone")
-	if !name.IsValid() || !extend.IsValid() || !zones.IsValid() || !transitions.IsValid() || !cached.IsValid() ||
-		name.Kind() != reflect.String || extend.Kind() != reflect.String ||
-		zones.Kind() != reflect.Slice || transitions.Kind() != reflect.Slice || cached.Kind() != reflect.Pointer ||
-		name.Len() != 0 || extend.Len() != 0 || zones.Len() != 1 || zones.Cap() != 1 ||
-		transitions.Len() != 1 || transitions.Cap() != 1 || cached.IsNil() ||
-		cached.Pointer() != zones.Index(0).Addr().Pointer() {
+	if !metadataLogicalFixedZoneShape(location) {
 		return fmt.Errorf("%w: JSON timestamp has unaudited location shape", ErrBoundedMetadataCoverage)
-	}
-	zoneName := zones.Index(0).FieldByName("name")
-	if !zoneName.IsValid() || zoneName.Kind() != reflect.String || zoneName.Len() != 0 {
-		return ErrBoundedMetadataCoverage
 	}
 	return b.retainAuditedLocation(location)
 }

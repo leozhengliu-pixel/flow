@@ -359,16 +359,25 @@ const (
 	loopContractReadTimeout    = 4 * time.Minute
 )
 
-// loopContractFlights runs one extraction per loop text at a time.
+// loopContractFlights runs one extraction per loop text at a time. A flight
+// stays registered until its contract is stored, so a run starting while the
+// store waits gets the read contract instead of asking the model again.
 var loopContractFlights = struct {
 	mu      sync.Mutex
 	running map[string]*loopContractFlight
 }{running: map[string]*loopContractFlight{}}
 
 type loopContractFlight struct {
-	done     chan struct{}
-	contract *domain.LoopOutputContract
+	// done closes once contract is read, stored once it is stored (or its
+	// store gave up).
+	done, stored chan struct{}
+	contract     *domain.LoopOutputContract
 }
+
+// A contract store that finds the workspace busy (bounded metadata: the COLD
+// slot stayed taken for its whole wait) is retried after these pauses; a
+// flag-off store never is busy.
+var loopContractStoreBackoff = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}
 
 // loopFallbackRetry is how long a fallback contract stands before the model
 // is asked again.
@@ -376,8 +385,21 @@ const loopFallbackRetry = 10 * time.Minute
 
 // loopContractFor is the contract a loop's runs use now: a stored one when
 // it fits the text, else read by the model and stored, else the fallback
-// (stored too, so the editor shows the warning).
+// (stored too, so the editor shows the warning). It returns once the read
+// contract is stored.
 func (s *server) loopContractFor(ctx context.Context, workspace string, loop domain.Loop) *domain.LoopOutputContract {
+	return s.loopContract(ctx, workspace, loop, true)
+}
+
+// loopRunContract is loopContractFor for a starting run. With bounded
+// metadata the store is COLD work that may wait for a busy workspace (and
+// retries); the run needs the contract, not its store, so it does not wait
+// for it. Flag off, the run starts after the store, as it always did.
+func (s *server) loopRunContract(ctx context.Context, workspace string, loop domain.Loop) *domain.LoopOutputContract {
+	return s.loopContract(ctx, workspace, loop, !s.store.BoundedMetadataEnabled())
+}
+
+func (s *server) loopContract(ctx context.Context, workspace string, loop domain.Loop, untilStored bool) *domain.LoopOutputContract {
 	if contract, ok := loopStoredContract(loop); ok {
 		return contract
 	}
@@ -394,7 +416,7 @@ func (s *server) loopContractFor(ctx context.Context, workspace string, loop dom
 	loopContractFlights.mu.Lock()
 	flight, ok := loopContractFlights.running[key]
 	if !ok {
-		flight = &loopContractFlight{done: make(chan struct{})}
+		flight = &loopContractFlight{done: make(chan struct{}), stored: make(chan struct{})}
 		loopContractFlights.running[key] = flight
 		// The read outlives the request or run that asked for it (an editor
 		// that navigates away, a cancelled run): others may be waiting on it,
@@ -402,8 +424,12 @@ func (s *server) loopContractFor(ctx context.Context, workspace string, loop dom
 		go s.readLoopContract(context.WithoutCancel(ctx), workspace, loop, hash, key, flight)
 	}
 	loopContractFlights.mu.Unlock()
+	wait := flight.done
+	if untilStored {
+		wait = flight.stored
+	}
 	select {
-	case <-flight.done:
+	case <-wait:
 		return flight.contract
 	case <-ctx.Done():
 		// This caller stops waiting; the contract it gets is never stored.
@@ -411,14 +437,18 @@ func (s *server) loopContractFor(ctx context.Context, workspace string, loop dom
 	}
 }
 
-// readLoopContract is one flight's model read: it stores the result (the
-// fallback when the read fails) and hands it to every waiter.
+// readLoopContract is one flight's model read: it hands the result (the
+// fallback when the read fails) to every waiter, then stores it.
 func (s *server) readLoopContract(ctx context.Context, workspace string, loop domain.Loop, hash, key string, flight *loopContractFlight) {
+	read := false
 	defer func() {
+		if !read {
+			close(flight.done)
+		}
 		loopContractFlights.mu.Lock()
 		delete(loopContractFlights.running, key)
 		loopContractFlights.mu.Unlock()
-		close(flight.done)
+		close(flight.stored)
 	}()
 	teams := []domain.Team{}
 	if data, ok := s.store.WorkspaceMetadataFields(workspace, "teams"); ok {
@@ -431,21 +461,44 @@ func (s *server) readLoopContract(ctx context.Context, workspace string, loop do
 		log.Printf("Loop output contract workspace=%s loop=%s: %v", workspace, loop.ID, err)
 		contract = loopFallbackContractFor(hash, err)
 	}
-	s.storeLoopContract(workspace, loop.ID, hash, contract)
 	flight.contract = contract
+	read = true
+	close(flight.done)
+	s.storeLoopContract(workspace, loop.ID, hash, contract)
 }
 
 // storeLoopContract caches a read contract on the loop, when its text is
 // still the one read and no person set the outputs, and on the loop's
 // versions with the same text.
+//
+// A store that finds the workspace busy is retried after
+// loopContractStoreBackoff, so a busy COLD slot delays the contract rather
+// than losing it.
 func (s *server) storeLoopContract(workspace, loopID, hash string, contract *domain.LoopOutputContract) {
+	for attempt := 0; ; attempt++ {
+		err := s.storeLoopContractOnce(workspace, loopID, hash, contract)
+		if errors.Is(err, store.ErrColdMetadataBusy) && attempt < len(loopContractStoreBackoff) {
+			select {
+			case <-s.store.WorkerContext().Done():
+			case <-time.After(loopContractStoreBackoff[attempt]):
+				continue
+			}
+		}
+		if err != nil && !errors.Is(err, errNotFound) {
+			log.Printf("Loop output contract store workspace=%s loop=%s: %v", workspace, loopID, err)
+		}
+		return
+	}
+}
+
+func (s *server) storeLoopContractOnce(workspace, loopID, hash string, contract *domain.LoopOutputContract) error {
 	// The store outlives the request or run that read the contract, and keeps
 	// no request values (actor, cancellation). It is background COLD work:
 	// with bounded metadata on, the loop contract writer runs literally on a
 	// COLD facade for this one write (store.WithColdWork); off, the marker is
 	// inert.
 	ctx := store.WithColdWork(context.Background(), "loop-output-contract")
-	err := s.store.MutateWorkspace(ctx, workspace, "loop.output_contract", loopID, nil, func(data *domain.Bootstrap) error {
+	return s.store.MutateWorkspace(ctx, workspace, "loop.output_contract", loopID, nil, func(data *domain.Bootstrap) error {
 		loop := loopByID(data, loopID)
 		if loop == nil {
 			return errNotFound
@@ -470,9 +523,6 @@ func (s *server) storeLoopContract(workspace, loopID, hash string, contract *dom
 		}
 		return nil
 	})
-	if err != nil && !errors.Is(err, errNotFound) {
-		log.Printf("Loop output contract store workspace=%s loop=%s: %v", workspace, loopID, err)
-	}
 }
 
 // mergeLoopPersonChoices keeps choices made in the editor when a fresh model

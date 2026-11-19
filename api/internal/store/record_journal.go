@@ -364,6 +364,9 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 			return nil
 		}
 	}
+	if err := tx.openNewCatalogCollections(ctx); err != nil {
+		return err
+	}
 	pending := map[string]*pendingRecordJournal{}
 	get := func(workspace string) *pendingRecordJournal {
 		if pending[workspace] == nil {

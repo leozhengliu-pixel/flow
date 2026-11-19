@@ -670,6 +670,9 @@ func (b *metadataLogicalBuilder) writeTime(node metadataLogicalNode, value time.
 		}
 	}
 	if location != time.UTC && location != metadataLogicalProcessLocal && receipt < 0 {
+		if offset, ok := metadataLogicalOffsetZone(value); ok {
+			return b.writeOffsetTime(node, value, offset)
+		}
 		node.unavailable, node.blocked = true, true
 		return b.writeWireTime(node, value)
 	}
