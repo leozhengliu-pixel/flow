@@ -5,7 +5,7 @@
     "writeAPIKeyUse": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Existing usage telemetry updates at most one API key and one grant through native SQL JSON expressions, with unchanged minute/revocation predicates and canonical hooks. The bounded resident policy has no credential body collections to copy or hydrate; root installation only retires the complete-copy stamp. TestScaleP21M1APIKeyTelemetryDifferential compares exact canonical key/grant bytes for active and revoked records, selected-empty scope and oversized unrelated settings. Credential lookup consumers remain independently blocked.",
+      "reason": "Existing usage telemetry updates at most one API key and one grant through native SQL JSON expressions, with unchanged minute/revocation predicates and canonical hooks. On a bounded store the post-commit patch goes to the installed logical generation instead of the policy-only copy (publishBoundedAPIKeyUse: first record with the id, unless revoked there, takes the use time natively; unknown stamp; no decode or policy change), exactly the legacy patch of the resident copy. TestScaleP21M1APIKeyTelemetryDifferential compares exact canonical key/grant bytes for active and revoked records, selected-empty scope and oversized unrelated settings; TestScaleP21SW293APIKeyUseDifferential compares legacy and bounded warm state, rows and SQL-reloaded state for active, revoked, key-only, absent, duplicate inline and minute-skipped records. Credential lookup consumers remain independently blocked.",
       "accessors": [
         "resident-state"
       ]

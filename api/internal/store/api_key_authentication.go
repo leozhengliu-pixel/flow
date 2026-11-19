@@ -215,6 +215,11 @@ func (s *SQLiteStore) writeAPIKeyUse(ctx context.Context, use apiKeyUse) error {
 		return err
 	}
 	s.dropMetadataCache(ctx, use.workspace)
+	if s.metadataResidency != nil {
+		// The bounded resident copy holds no credentials: the use is
+		// installed into the logical generation (scale_p21_write_chain.go).
+		return s.publishBoundedAPIKeyUse(ctx, use)
+	}
 	s.lockWorkspaceWrites()
 	defer s.unlockWorkspaceWrites()
 	data, ok := s.workspaces[use.workspace]
