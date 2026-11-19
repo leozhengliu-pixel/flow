@@ -7,8 +7,8 @@ package main
 // for a route proven bounded, else "cold" with the first legacy consumer a
 // flag-on path from its handler reaches. A pattern missing here runs COLD.
 var scaleP21RouteTemperature = map[string]string{
-	"/mcp":                           "cold: unresolved-handler",
-	"/mcp/readonly":                  "cold: unresolved-handler",
+	"/mcp":                           "cold: server/server.workerLoopContext",
+	"/mcp/readonly":                  "cold: server/server.workerLoopContext",
 	"/scim/v2/{workspace}/{rest...}": "hot",
 	"DELETE /api/account":            "cold: server/server.erasePersonInWorkspace",
 	"DELETE /api/account/code-host-accounts/{id}":                                "cold: server/server.auditCodeHostAccount",
@@ -838,8 +838,8 @@ var scaleP21RouteTemperature = map[string]string{
 	"POST /internal/llm-proxy/openai/v1/responses":                               "hot",
 	"POST /internal/llm-proxy/opensource/v1/chat/completions":                    "hot",
 	"POST /internal/llm-proxy/opensource/v1/responses":                           "hot",
-	"POST /mcp":                                                          "cold: unresolved-handler",
-	"POST /mcp/readonly":                                                 "cold: unresolved-handler",
+	"POST /mcp":                                                          "cold: server/server.workerLoopContext",
+	"POST /mcp/readonly":                                                 "cold: server/server.workerLoopContext",
 	"POST /oauth/introspect":                                             "hot",
 	"POST /oauth/register":                                               "hot",
 	"POST /oauth/revoke":                                                 "hot",
