@@ -608,6 +608,37 @@ func scaleP21SW500AllActions(env *scaleP21SW500Env) []domain.WorkflowAction {
 	}
 }
 
+// scaleP21SW500ProjectDrift adds projects whose stored IssueCount has drifted
+// (too high, too low, and for an unused project), an active and an archived
+// issue naming one of them.
+func scaleP21SW500ProjectDrift(env *scaleP21SW500Env, data *domain.Bootstrap) {
+	project := func(suffix string, count int) domain.Project {
+		return domain.Project{ID: env.prefix + "project-" + suffix, Name: "SW500 " + suffix, SlugID: "sw500-" + suffix, Color: "#123456",
+			IssueCount: count, CreatedAt: env.fixtureClock, UpdatedAt: env.fixtureClock}
+	}
+	data.Projects = append(data.Projects, project("high", 7), project("low", 0), project("unused", 3))
+	summary := func(suffix string) *domain.ProjectSummary {
+		return &domain.ProjectSummary{ID: env.prefix + "project-" + suffix, Name: "SW500 " + suffix, Color: "#123456"}
+	}
+	used := 0
+	for index := range data.Issues {
+		if data.Issues[index].ID == env.issue.ID {
+			continue
+		}
+		switch used {
+		case 0, 1:
+			data.Issues[index].Project = summary("low")
+		case 2:
+			data.Issues[index].Project = summary("high")
+			at := env.fixtureClock
+			data.Issues[index].ArchivedAt = &at
+		}
+		if used++; used > 2 {
+			break
+		}
+	}
+}
+
 func scaleP21SW500Cases() []scaleP21SW500Case {
 	notify := scaleP21SW500Actions(scaleP21SW500Action("notify"))
 	large := strings.Repeat("x", 4<<20)
@@ -651,6 +682,23 @@ func scaleP21SW500Cases() []scaleP21SW500Case {
 			}
 		}, want: "succeeded"},
 		{name: "all-actions", issue: true, actions: scaleP21SW500AllActions, want: "succeeded"},
+		// Projects' derived IssueCount: a run recounts every project from the
+		// active issues naming it, rewriting only the rows that drifted.
+		{name: "project-count-drift", issue: true, actions: scaleP21SW500AllActions, seed: scaleP21SW500ProjectDrift, want: "succeeded"},
+		{name: "project-count-drift-create", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
+			return []domain.WorkflowAction{scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "SW500 created")}
+		}, seed: scaleP21SW500ProjectDrift, want: "succeeded"},
+		{name: "project-count-exact", actions: notify, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			scaleP21SW500ProjectDrift(env, data)
+			for index := range data.Projects {
+				data.Projects[index].IssueCount = 0
+				for _, issue := range data.Issues {
+					if issue.ArchivedAt == nil && issue.Project != nil && issue.Project.ID == data.Projects[index].ID {
+						data.Projects[index].IssueCount++
+					}
+				}
+			}
+		}, want: "succeeded"},
 		{name: "unknown-action-ignored", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("webhook", "url", "https://example.test"), scaleP21SW500Action("notify")), want: "succeeded"},
 		{name: "no-actions", issue: true, actions: scaleP21SW500Actions(), want: "succeeded"},
 

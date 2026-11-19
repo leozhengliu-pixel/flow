@@ -275,7 +275,7 @@ func (s *SQLiteStore) loadWorkflowRunInputs(ctx context.Context, source *metadat
 // image patches the callback's results into r.source. labels, when not nil,
 // replaces the IssueCount of the labels at those ordinals (the point writer's
 // count delta; the full writer recounts the image afterwards).
-func (r *workflowRunInputs) image(ctx context.Context, labels map[int]int) (*metadataLogicalSource, error) {
+func (r *workflowRunInputs) image(ctx context.Context, labels, projects map[int]int) (*metadataLogicalSource, error) {
 	after := r.data
 	created := len(after.Issues) - len(r.before.Issues)
 	if created < 0 || len(after.WorkflowRuns) > 500 || len(after.WorkflowDefinitions) != len(r.before.WorkflowDefinitions) {
@@ -327,7 +327,7 @@ func (r *workflowRunInputs) image(ctx context.Context, labels map[int]int) (*met
 		return nil, err
 	}
 	shapes := map[string]metadataLogicalNode{}
-	for _, name := range []string{"issues", "workflowRuns", "notifications", "labels"} {
+	for _, name := range []string{"issues", "workflowRuns", "notifications", "labels", "projects"} {
 		index, _, _ := metadataLogicalField(name)
 		shape, err := legacyDiscussionShape(frames, r.source.fields[index].typ, false)
 		if err != nil {
@@ -383,6 +383,10 @@ func (r *workflowRunInputs) image(ctx context.Context, labels map[int]int) (*met
 		case "labels":
 			if len(labels) > 0 {
 				return workflowRunLabelCounts{base: node, shape: shapes[name], counts: labels}, true, nil
+			}
+		case "projects":
+			if len(projects) > 0 {
+				return workflowRunLabelCounts{base: node, shape: shapes[name], counts: projects}, true, nil
 			}
 		}
 		return metadataAggregateStoredNode{node}, false, nil

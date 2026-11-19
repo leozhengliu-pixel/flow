@@ -209,7 +209,7 @@ func (s *SQLiteStore) workflowRunFullAttempt(ctx context.Context, w *workflowRun
 	if err := attempt.runCallback(ctx, w); err != nil {
 		return err
 	}
-	callbackImage, err := attempt.inputs.image(ctx, nil)
+	callbackImage, err := attempt.inputs.image(ctx, nil, nil)
 	if err != nil {
 		return err
 	}

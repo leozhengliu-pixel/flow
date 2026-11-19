@@ -106,7 +106,7 @@ func TestScaleP21SW201WorkflowSelectedInputs(t *testing.T) {
 				if len(expectedRuns) > 500 {
 					expectedRuns = expectedRuns[len(expectedRuns)-500:]
 				}
-				image, err := inputs.image(t.Context(), nil)
+				image, err := inputs.image(t.Context(), nil, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -163,7 +163,7 @@ func TestScaleP21SW201WorkflowLargeRetainedRunBodies(t *testing.T) {
 	inputs.data.WorkflowRuns[2].NextRetryAt = nil
 	appended := domain.WorkflowRun{ID: "new", WorkflowID: "target", Status: "succeeded", Output: map[string]string{"new": "exact"}}
 	inputs.data.WorkflowRuns = append(inputs.data.WorkflowRuns, appended)
-	image, err := inputs.image(t.Context(), nil)
+	image, err := inputs.image(t.Context(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestScaleP21SW201WorkflowRetainedRunPatchGuard(t *testing.T) {
 			case "reorder":
 				inputs.data.WorkflowRuns[0], inputs.data.WorkflowRuns[1] = inputs.data.WorkflowRuns[1], inputs.data.WorkflowRuns[0]
 			}
-			image, err := inputs.image(t.Context(), nil)
+			image, err := inputs.image(t.Context(), nil, nil)
 			if image != nil {
 				image.Release()
 			}
