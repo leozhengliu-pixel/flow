@@ -43,8 +43,10 @@ func (r *ColdMetadataRead) Close() {
 		r.state.mu.Lock()
 		facade := r.state.facade
 		r.state.mu.Unlock()
-		if facade != nil {
-			facade.mu.Lock()
+		// A writer that panicked while holding the facade's lock (its
+		// install) never returns it: the facade is private to this flow, so
+		// its graph is dropped by reference instead of waiting (SW554).
+		if facade != nil && facade.mu.TryLock() {
 			facade.workspaces, facade.viewer = nil, domain.User{}
 			facade.lastWorkspaceKey = ""
 			facade.coldParent = nil
@@ -128,25 +130,12 @@ func (s *SQLiteStore) beginColdMetadataRead(ctx context.Context) (read *ColdMeta
 			return &ColdMetadataRead{context: ctx, state: nested}, nil
 		}
 	}
-	// A COLD scope owns its slot and lends one facade to all its needs.
-	if read, selected, err := s.beginScopedColdMetadataRead(ctx); selected || err != nil {
-		return read, err
-	}
-	if err := ctx.Err(); err != nil {
+	// The replica's COLD slot: FIFO, bounded queue and wait (coldSlotQueue).
+	queue := r.coldQueue()
+	if err := queue.acquire(ctx); err != nil {
 		return nil, err
 	}
-	r.coldOnce.Do(func() { r.coldSlot = make(chan struct{}, 1) })
-	select {
-	case r.coldSlot <- struct{}{}:
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-	coldSlotHolders.Add(1)
-	coldSlotAcquisitions.Add(1)
-	return s.decodeOwnedColdMetadataRead(ctx, func() {
-		coldSlotHolders.Add(-1)
-		<-r.coldSlot
-	})
+	return s.decodeOwnedColdMetadataRead(ctx, queue.release)
 }
 
 // decodeOwnedColdMetadataRead pins and decodes a facade for a caller that

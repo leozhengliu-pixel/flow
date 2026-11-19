@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"flow/api/internal/store"
 )
 
 // The projection gate bounds the resource requests that build the viewer's
@@ -80,8 +82,10 @@ func acquireProjectionWaiting(r *http.Request) bool {
 }
 
 func acquireProjectionSlot(r *http.Request, bounded bool) bool {
-	if held, handled := holdColdProjection(r); handled {
-		return held
+	if store.InColdFacade(r.Context()) {
+		// A registered COLD facade's callback holds the COLD slot, which
+		// bounds its projection; never wait for a gate while holding it.
+		return true
 	}
 	hold, ok := r.Context().Value(projectionHoldKey{}).(*projectionHold)
 	if !ok || hold.gate == nil {

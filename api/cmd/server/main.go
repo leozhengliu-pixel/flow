@@ -48,6 +48,10 @@ type server struct {
 	metadataGate *metadataReadGate
 	// projectionGate bounds resource requests that build the viewer's projection (projection_gate.go).
 	projectionGate *metadataReadGate
+	// coldProjectionGate bounds COLD requests' projections apart from HOT
+	// ones (scale_p21_cold_authorization.go).
+	coldProjectionGate     *metadataReadGate
+	coldProjectionGateOnce sync.Once
 	// coding is the coding-session runtime (coding_runtime.go).
 	coding *codingServices
 	// agentAutoTitle names new Agent chats with a small extra model call (off in test fixtures).
@@ -7376,6 +7380,10 @@ func optionalQueryBool(w http.ResponseWriter, r *http.Request, key string) (*boo
 	return &parsed, true
 }
 func respondMutation(w http.ResponseWriter, err error, success int, value any) {
+	if errors.Is(err, store.ErrColdMetadataBusy) {
+		(&metadataReadGate{}).busy(w, store.ColdMetadataBusyRetryAfter)
+		return
+	}
 	if errors.Is(err, store.ErrAuthForbidden) {
 		writeError(w, http.StatusForbidden, "You don't have permission to perform this action")
 		return

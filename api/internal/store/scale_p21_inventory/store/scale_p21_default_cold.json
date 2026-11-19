@@ -2,15 +2,6 @@
   "source": "store/scale_p21_default_cold.go",
   "unmigrated": 0,
   "consumers": {
-    "coldAccessorView": {
-      "owner": "P21",
-      "status": "reviewed",
-      "reason": "Legacy view behind the context-free legacy whole-workspace accessors (WorkspaceMetadata, BootstrapFor, BootstrapForUser, WorkspaceMetadataFields of a non-resident field, and PagedWorkspaceMetadata in a COLD context): pins the workspace's installed logical source and decodes it (only the named fields for a field read) into a one-workspace legacy store with the COLD facade's own decode, serialized per replica on its own lane, so the accessor answers exactly the legacy image instead of the resident skeleton. A missing workspace answers not found; a workspace without an installed logical source keeps the resident read. SW531 (test view and production store), SW530 (every route legacy vs bounded warm vs reloaded) and SW550 (no proven-bounded route reaches it) cover it.",
-      "accessors": ["workspaces"],
-      "temperature": "cold",
-      "temperatureReason": "Default COLD routing (owner decision 2026-11-14): with bounded metadata on, a route not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD scope. The legacy accessors it serves are COLD; proven-bounded routes never reach them (SW530/SW550).",
-      "callers": ["store/issue_records.go:WorkspaceMetadataForRead", "store/sqlite.go:BootstrapForContext", "store/auth.go:BootstrapForUser", "store/metadata_delta.go:WorkspaceMetadataFields", "store/issue_query.go:PagedWorkspaceMetadata"]
-    },
     "decodeColdWorkspace": {
       "owner": "P21",
       "status": "reviewed",
@@ -28,6 +19,33 @@
       "temperature": "cold",
       "temperatureReason": "Default COLD routing (owner decision 2026-11-14): with bounded metadata on, a route not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD scope.",
       "callers": ["store/scale_p21_default_cold.go:coldLegacyWrite"]
+    },
+    "coldAccessorViewKept": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Legacy view (coldAccessorView keeps the old signature) behind the context-free legacy whole-workspace accessors (WorkspaceMetadata, BootstrapFor, BootstrapForUser, WorkspaceMetadataFields of a non-resident field, and PagedWorkspaceMetadata in a COLD context): pins the workspace's installed logical source and decodes it (only the named fields for a field read) into a one-workspace legacy store with the COLD facade's own decode, serialized per replica on its own lane, so the accessor answers exactly the legacy image instead of the resident skeleton. A missing workspace answers not found; a workspace without an installed logical source keeps the resident read. SW531 (test view and production store), SW530 (every route legacy vs bounded warm vs reloaded) and SW550 (no proven-bounded route reaches it) cover it. With keep (ColdRequestView: a default COLD request's authorization projection) the decoded view outlives the lane and source release for the request.",
+      "accessors": ["workspaces"],
+      "temperature": "cold",
+      "temperatureReason": "Default COLD routing (owner decision 2026-11-14): with bounded metadata on, a route not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD scope. The legacy accessors it serves are COLD; proven-bounded routes never reach them (SW530/SW550).",
+      "callers": ["store/issue_records.go:WorkspaceMetadataForRead", "store/sqlite.go:BootstrapForContext", "store/auth.go:BootstrapForUser", "store/metadata_delta.go:WorkspaceMetadataFields", "store/issue_query.go:PagedWorkspaceMetadata", "store/scale_p21_default_cold.go:ColdRequestView"]
+    },
+    "dropResidentWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "After a default COLD legacy write removed a workspace key from SQL (a rename's old key), under the parent's shared write lock: removes the resident copy, copy revision, installed logical source, stamps and policy charge, and the key's chat-snapshot flag and issue group counts, as the legacy updateWorkspace drops the old key. SW555 renames flag off and bounded and compares the answers under the new key.",
+      "accessors": ["workspaces"],
+      "temperature": "cold",
+      "temperatureReason": "Default COLD routing (owner decision 2026-11-14): with bounded metadata on, a route not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD scope. The legacy accessors it serves are COLD; proven-bounded routes never reach them (SW530/SW550).",
+      "callers": ["store/scale_p21_default_cold.go:publishColdLegacyWriteLocked"]
+    },
+    "setLastWorkspaceKey": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "After a COLD workspace update, records the updated key as the default workspace, as the legacy updateWorkspace does (only for an installed key).",
+      "accessors": ["workspaces"],
+      "temperature": "cold",
+      "temperatureReason": "Default COLD routing (owner decision 2026-11-14): with bounded metadata on, a route not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD scope. The legacy accessors it serves are COLD; proven-bounded routes never reach them (SW530/SW550).",
+      "callers": ["store/sqlite.go:UpdateWorkspace"]
     }
   }
 }
