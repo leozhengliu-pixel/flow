@@ -46,7 +46,8 @@ import './issue-customer-needs.css'
 import { IssueProjectPicker } from '@/components/issue/issue-project-picker'
 import type { NewProjectDraft } from '@/components/projects-page/new-project-dialog'
 import { IssueAttachments, type AttachmentUploadState } from '@/components/issue/issue-attachments'
-import { descriptionImageSrcs } from '@/components/issue/editor/image-extension'
+import { attachmentInBody, descriptionImageSrcs } from '@/components/issue/editor/image-extension'
+import { encodeLegacyAttachmentDirectives } from '@/components/issue/editor/legacy-attachment-directives'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import { cycleDueDateOptions } from '@/components/issue/due-date-utils'
 import { useCurrentTimeMs } from '@/hooks/use-current-time'
@@ -137,9 +138,11 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const availableLabels=labelsForResource(data.labels,'issue',data.labelGroups).filter(label=>!label.scope||label.scope==='Workspace'||labelScopes.has(label.scope))
   const linkedDocuments=data.documents.filter(document=>document.issueId===issue.id&&!document.archivedAt)
   const linkedResources=issue.attachments.filter(attachment=>attachment.contentType==='text/uri-list')
-  const inlineImageSrcs=descriptionImageSrcs(issue.description,issue.descriptionState,issue.documentContent?.contentData)
+  // A Markdown-only body written before directive URLs were encoded: its raw attachment URLs become file cards again.
+  const descriptionMarkdown=encodeLegacyAttachmentDirectives(issue.description,issue.attachments)
+  const inlineImageSrcs=descriptionImageSrcs(descriptionMarkdown,issue.descriptionState,issue.documentContent?.contentData)
   const commentMediaSrcs=comments.reduce((srcs,comment)=>{for(const src of descriptionImageSrcs(comment.body,undefined,comment.bodyData))srcs.add(src);return srcs},new Set<string>())
-  const fileAttachments=issue.attachments.filter(attachment=>attachment.contentType!=='text/uri-list'&&!inlineImageSrcs.has(attachment.url)&&!commentMediaSrcs.has(attachment.url))
+  const fileAttachments=issue.attachments.filter(attachment=>attachment.contentType!=='text/uri-list'&&!attachmentInBody(inlineImageSrcs,attachment.url)&&!attachmentInBody(commentMediaSrcs,attachment.url))
   const [localCustomerRequests,setLocalCustomerRequests]=useState<import('@/types/flow').CustomerRequest[]>([])
   const customerRequests=data.customerRequests.filter(request=>request.issueId===issue.id)
   const linkedReviews=data.reviews.filter(review=>review.issueIds.includes(issue.id))
@@ -192,7 +195,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
             if (!attachment?.url) throw new Error('Upload failed')
             return attachment.url
           }}
-          value={issue.description}
+          value={descriptionMarkdown}
           state={issue.documentContent?.contentData?JSON.stringify(issue.documentContent.contentData):issue.descriptionState}
           onBlur={()=>void flush()}
           collaboration={{
