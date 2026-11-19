@@ -198,9 +198,28 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 			t.Fatal("bounded source may hydrate without a borrowed workspace snapshot")
 		}
 		paged := scaleP21SW305Function(t, filepath.Join(storePath, "issue_query.go"), "*SQLiteStore", "PagedWorkspaceMetadata")
-		if len(paged.Body.List) < 2 ||
-			scaleP21SW305Text(t, paged.Body.List[0]) != "_, data, ok := s.workspaceReadSource(ctx, workspace)" ||
-			scaleP21SW305Text(t, paged.Body.List[1]) != "if !ok {\n\treturn data, ErrAuthForbidden\n}" {
+		body := paged.Body.List
+		// A COLD request (default COLD routing) reads the legacy projection
+		// from the legacy view of the installed workspace; a workspace the
+		// view cannot answer is refused exactly as the no-source path.
+		const cold = `if coldCapable(ctx) {
+	if view, release, handled := s.coldAccessorView(ctx, "PagedWorkspaceMetadata", workspace, nil); handled {
+		defer release()
+		if view == nil {
+			return domain.Bootstrap{}, ErrAuthForbidden
+		}
+		return view.PagedWorkspaceMetadata(ctx, view.lastWorkspaceKey, userID)
+	}
+}`
+		if len(body) > 0 && strings.HasPrefix(scaleP21SW305Text(t, body[0]), "if coldCapable(ctx)") {
+			if strings.Join(strings.Fields(scaleP21SW305Text(t, body[0])), " ") != strings.Join(strings.Fields(cold), " ") {
+				t.Fatal("paged metadata COLD legacy-view refusal changed")
+			}
+			body = body[1:]
+		}
+		if len(body) < 2 ||
+			scaleP21SW305Text(t, body[0]) != "_, data, ok := s.workspaceReadSource(ctx, workspace)" ||
+			scaleP21SW305Text(t, body[1]) != "if !ok {\n\treturn data, ErrAuthForbidden\n}" {
 			t.Fatal("paged metadata no-source refusal changed")
 		}
 	})
