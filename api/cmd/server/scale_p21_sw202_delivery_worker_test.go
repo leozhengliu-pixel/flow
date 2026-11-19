@@ -261,7 +261,8 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleP03ServerTestStores(t) {
+		postgres := driver == "postgres" || driver == "postgresql"
 		f := scaleP03Fixture(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw202-worker-")
 		id, connection, replacement := prefix+"delivery", prefix+"connection", prefix+"replacement"
@@ -271,8 +272,11 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 			for _, mode := range modes {
 				t.Run(fmt.Sprintf("reload=%t/%s", reload, mode), func(t *testing.T) {
 					rawUTF8 := strings.HasPrefix(mode, "http-invalid-utf8")
+					// See scaleP21SW345PostgresInlineRefusal: each leg then
+					// needs its own workspace.
+					refused := postgres && mode == "http-invalid-utf8-inline"
 					var acceptedPayload json.RawMessage
-					if rawUTF8 {
+					if rawUTF8 && !refused {
 						acceptedPayload = scaleP21SW345AcceptedPayload(t, repo, f, connection)
 					}
 					type outcome struct {
@@ -286,6 +290,12 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 					}
 					var results []any
 					for _, bounded := range []bool{false, true} {
+						workspace := workspace
+						if refused {
+							legFixture := scaleP03Fixture(t, repo)
+							workspace = legFixture.data.Workspace.URLKey
+							acceptedPayload = scaleP21SW345AcceptedPayload(t, repo, legFixture, connection)
+						}
 						var duplicateWitness *scaleP21SW345Duplicates
 						repo.SetWebhookSink(nil)
 						repo.SetRealtimeSink(nil)
@@ -457,6 +467,19 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 						case <-received:
 						case result := <-done:
 							joined = true
+							if refused {
+								source.SetWebhookSink(nil)
+								source.SetRealtimeSink(nil)
+								native, closeNative := scaleP21SW202Native(t, source, workspace)
+								results = append(results, scaleP21SW345PostgresInlineRefusal(t, repo, workspace, result.err, native,
+									got.Webhooks, got.Realtime, requestBody, map[string]string{destination.URL: "<captured-endpoint>", other.URL: "<other-endpoint>"}))
+								closeNative()
+								closeOutput()
+								if bounded && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
+									t.Fatal("refused worker retained work or decoded full metadata")
+								}
+								continue
+							}
 							t.Fatalf("worker returned before the held outbound call: bounded=%t mode=%s err=%v resultAttempts=%d", bounded, mode, result.err, result.value.Attempts)
 						// The literal 10s network timeout starts after the
 						// claim commits; it does not bound the claim phase.
