@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type linearMigrationClient struct {
@@ -899,7 +900,7 @@ func linearCopyAttachment(ctx context.Context, client *linearMigrationClient, at
 }
 
 func (s *server) persistLinearMigration(r *http.Request, job domain.MigrationJob) {
-	_ = s.store.MutateWorkspace(context.Background(), workspaceKey(r), "migration.linear_completed", job.ID, nil, func(data *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspace(store.WithColdWork(context.Background(), "migration-import"), workspaceKey(r), "migration.linear_completed", job.ID, nil, func(data *domain.Bootstrap) error {
 		current, err := migrationByID(data, job.ID)
 		if err != nil {
 			return err
@@ -912,7 +913,7 @@ func (s *server) persistLinearMigration(r *http.Request, job domain.MigrationJob
 	})
 }
 func (s *server) failLinearMigration(r *http.Request, id string, err error) {
-	_ = s.store.MutateWorkspace(context.Background(), workspaceKey(r), "migration.linear_failed", id, nil, func(data *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspace(store.WithColdWork(context.Background(), "migration-import"), workspaceKey(r), "migration.linear_failed", id, nil, func(data *domain.Bootstrap) error {
 		job, findErr := migrationByID(data, id)
 		if findErr != nil {
 			return findErr

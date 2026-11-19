@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"flow/api/internal/domain"
 )
 
 // Owned uploads are images the server stores itself for a workspace record
@@ -73,18 +75,30 @@ func (s *SQLiteStore) DeleteStoredUpload(ctx context.Context, objectKey string) 
 func (s *SQLiteStore) BackfillUploadOwners(ctx context.Context) (int, error) {
 	icons := map[string][]FileUpload{}
 	logos := []FileUpload{}
-	s.mu.RLock()
-	for key, data := range s.workspaces {
+	collect := func(key string, data domain.Bootstrap, apps []domain.OAuthApplication) error {
 		if name, ok := strings.CutPrefix(data.Workspace.LogoURL, "/uploads/"); ok && data.Workspace.ID != "" && strings.HasPrefix(name, "workspace_logo_"+data.Workspace.ID+"_") && ownedUploadObject.MatchString(name) {
 			logos = append(logos, FileUpload{WorkspaceKey: key, ObjectKey: name, Purpose: FileUploadPurposeWorkspaceLogo})
 		}
-		for _, app := range data.OAuthApplications {
+		for _, app := range apps {
 			if name, ok := strings.CutPrefix(app.LogoURL, "/uploads/"); ok && oauthAppIconObject.MatchString(name) {
 				icons[name] = append(icons[name], FileUpload{WorkspaceKey: key, UserID: app.CreatorID, ObjectKey: name, Purpose: FileUploadPurposeOAuthAppIcon})
 			}
 		}
+		return nil
 	}
-	s.mu.RUnlock()
+	if s.metadataResidency != nil {
+		// The bounded image does not hold the applications: read them as
+		// the legacy store holds them (installedOAuthApplications).
+		if err := s.installedOAuthApplications(ctx, "BackfillUploadOwners", collect); err != nil {
+			return 0, err
+		}
+	} else {
+		s.mu.RLock()
+		for key, data := range s.workspaces {
+			_ = collect(key, data, data.OAuthApplications)
+		}
+		s.mu.RUnlock()
+	}
 	candidates := logos
 	for _, owners := range icons {
 		if slices.ContainsFunc(owners, func(owner FileUpload) bool { return owner.WorkspaceKey != owners[0].WorkspaceKey }) {
