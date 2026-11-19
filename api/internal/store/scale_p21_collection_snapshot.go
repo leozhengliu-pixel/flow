@@ -17,6 +17,8 @@ type metadataCollectionSnapshot struct {
 	tx        *sqlTx
 	workspace string
 	root      *metadataSnapshotReaderAt
+	// windows serve default-page reads of large rows inside a read scope.
+	windows metadataReadWindows
 }
 
 // MetadataCollectionsInSnapshot borrows a caller-owned repeatable-read
@@ -98,6 +100,7 @@ func (s *SQLiteStore) metadataCollectionsInSnapshot(ctx context.Context, tx *sql
 	if err := r.scanRoot(nil); err != nil {
 		return nil, err
 	}
+	defer snapshot.readScope()()
 	for kind, field := range r.collections {
 		if !field.manifestSeen {
 			continue
@@ -190,6 +193,14 @@ func (r *metadataSnapshotReaderAt) ReadAt(p []byte, offset int64) (int, error) {
 	}
 	n := 0
 	for n < len(p) && offset+int64(n) < r.size {
+		window, err := r.window(table, where, data, offset+int64(n))
+		if err != nil {
+			return n, err
+		}
+		if window != nil {
+			n += copy(p[n:], window.data[offset+int64(n)-window.start:])
+			continue
+		}
 		size := min(int64(pageBytes), int64(len(p)-n), r.size-offset-int64(n))
 		args := []any{offset + int64(n) + 1, size, snapshot.workspace}
 		if r.key.Kind != "" {
@@ -208,6 +219,128 @@ func (r *metadataSnapshotReaderAt) ReadAt(p []byte, offset int64) (int, error) {
 		return n, io.EOF
 	}
 	return n, nil
+}
+
+// Every SQL SUBSTR of a metadata row loads the whole row in each dialect
+// (SQLite and MySQL read the complete value, PostgreSQL detoasts it), so
+// reading a row of size S in fixed 16 KiB pages costs O(S^2 / 16 KiB). Inside
+// a read scope (one collection read operation: a root scan, a visit, a root
+// copy), a default-page reader of a row larger than metadataReadWindowMinRow
+// reads admitted windows of S/32 bytes, at least 64 KiB and at most 256 KiB:
+// about 32 whole-row reads per pass up to 8 MiB, and 16 times fewer than the
+// fixed pages beyond. The window is admitted work (2 x width: the retained
+// window and the driver's copy) that the scope releases when the operation
+// returns; a write in the transaction invalidates it. Readers with explicit
+// pages (the integration delivery pages) and reads outside a scope keep their
+// pages, and a read that cannot be admitted keeps the fixed pages; the bytes
+// are the same.
+const (
+	metadataReadWindowMinRow = 4 * metadataRecordChunkBytes
+	metadataReadWindowMin    = 64 << 10
+	metadataReadWindowMax    = MetadataRecordPageMaxBytes
+)
+
+type metadataReadWindow struct {
+	table       string
+	key         RecordKey
+	size, start int64
+	data        []byte
+}
+
+type metadataReadWindows struct {
+	depth   int
+	width   int
+	release func()
+	writes  uint64
+	slot    metadataReadWindow
+}
+
+// readScope opens (or nests in) a read scope. Its end, at the outermost
+// level, drops the window and returns its admission.
+func (s *metadataCollectionSnapshot) readScope() func() {
+	if s == nil {
+		return func() {}
+	}
+	s.windows.depth++
+	ended := false
+	return func() {
+		if ended {
+			return
+		}
+		ended = true
+		s.windows.depth--
+		if s.windows.depth == 0 {
+			s.dropReadWindows()
+		}
+	}
+}
+
+func (s *metadataCollectionSnapshot) dropReadWindows() {
+	if s == nil {
+		return
+	}
+	windows := &s.windows
+	windows.slot = metadataReadWindow{}
+	if windows.release != nil {
+		windows.release()
+	}
+	windows.release, windows.width = nil, 0
+}
+
+func metadataReadWindowWidth(size int64) int {
+	width := (size + 31) / 32
+	width = (width + metadataRecordChunkBytes - 1) / metadataRecordChunkBytes * metadataRecordChunkBytes
+	return int(min(max(width, metadataReadWindowMin), metadataReadWindowMax))
+}
+
+// window returns the window holding at, filling it when the row is large, the
+// reader uses default pages inside a read scope and the window is admitted;
+// otherwise it returns nil for the page read.
+func (r *metadataSnapshotReaderAt) window(table, where, data string, at int64) (*metadataReadWindow, error) {
+	snapshot := r.snapshot
+	windows := &snapshot.windows
+	if windows.depth == 0 || r.pageBytes != 0 || r.size <= metadataReadWindowMinRow || snapshot.store == nil {
+		return nil, nil
+	}
+	tx := snapshot.tx
+	slot := &windows.slot
+	if slot.data != nil && windows.writes == tx.metadataWrites && slot.table == table && slot.key == r.key &&
+		slot.size == r.size && at >= slot.start && at < slot.start+int64(len(slot.data)) {
+		return slot, nil
+	}
+	// The previous window is unreachable before the next one is read.
+	*slot = metadataReadWindow{}
+	if want := metadataReadWindowWidth(r.size); want > windows.width {
+		_, release, err := snapshot.store.tryAdmitAdditionalMetadataWork(r.ctx, want*2)
+		switch {
+		case err == nil:
+			if windows.release != nil {
+				windows.release()
+			}
+			windows.width, windows.release = want, release
+		case !errors.Is(err, ErrMetadataWorkBudget):
+			return nil, err
+		case windows.width == 0:
+			return nil, nil
+		}
+	}
+	width := int64(windows.width)
+	start := at / width * width
+	length := min(width, r.size-start)
+	args := []any{start + 1, length, snapshot.workspace}
+	if r.key.Kind != "" {
+		args = append(args, r.key.Kind, r.key.ID)
+	}
+	var chunk []byte
+	if err := tx.QueryRowContext(r.ctx, "SELECT SUBSTR("+data+",?,?) FROM "+table+" WHERE "+where, args...).Scan(&chunk); err != nil {
+		return nil, err
+	}
+	if int64(len(chunk)) != length {
+		return nil, io.ErrUnexpectedEOF
+	}
+	*slot = metadataReadWindow{table: table, key: r.key, size: r.size, start: start, data: chunk}
+	windows.writes = tx.metadataWrites
+	return slot, nil
 }
 
 func (r *metadataCollectionSnapshot) scanHeaders(ctx context.Context, kind string, visit func(RecordKey, int64) error) error {

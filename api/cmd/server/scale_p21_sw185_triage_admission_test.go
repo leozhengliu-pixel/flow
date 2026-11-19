@@ -138,13 +138,36 @@ func TestScaleP21SW185TriageScoringProjection(t *testing.T) {
 	}
 }
 
+// Every issue searches up to 500 candidates in each of three legs, so a dense
+// generation costs about count x min(count, 500) candidate rows per leg; it is
+// linear in count (143 s at 350 issues and 396 s at 1000 without the race
+// detector). The 1000-issue batch limit runs as its own test, without the race
+// detector. What the race detector checks does not grow with the batch, so its
+// run keeps one dense size that still crosses the first-2000 qualification
+// cutoff: 119 other scoped issues plus 119 accumulated candidates per
+// encountered issue pass 2000 from the 16th issue on.
 func TestScaleP21SW185TriageLargeGenerationDifferential(t *testing.T) {
+	size := 350
+	if raceDetector {
+		size = 120
+	}
+	scaleP21SW185LargeGeneration(t, size)
+}
+
+func TestScaleP21SW185TriageThousandGenerationDifferential(t *testing.T) {
+	if raceDetector {
+		t.Skip("the 1000-issue batch runs without the race detector (see TestScaleP21SW185TriageLargeGenerationDifferential)")
+	}
+	scaleP21SW185LargeGeneration(t, 1000)
+}
+
+func scaleP21SW185LargeGeneration(t *testing.T, sizes ...int) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP21TriageWriterSetup(t)
 	workspace := f.data.Workspace.URLKey
-	for _, count := range []int{350, 1000} {
+	for _, count := range sizes {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
 			ids := make([]string, count)
 			for index := range ids {

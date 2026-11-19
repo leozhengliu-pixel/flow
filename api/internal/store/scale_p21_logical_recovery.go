@@ -32,6 +32,16 @@ type metadataLogicalRecovery struct {
 	work              []func()
 	currentValueBytes int64
 	currentValueWork  int
+	// rootKeys indexes the root's top-level keys once (see indexRoot).
+	rootKeys         []metadataLogicalRootKey
+	rootIndexed      bool
+	rootIndexUsable  bool
+	rootIndexRelease func()
+}
+
+type metadataLogicalRootKey struct {
+	name  string
+	value metadataCollectionRange
 }
 
 // readRawMetadataLogicalSource preserves decodeWorkspaceMetadata's stored
@@ -67,7 +77,10 @@ func (s *SQLiteStore) readRawMetadataLogicalSourceRoot(ctx context.Context, tx *
 		root.Close()
 		return nil, ErrRecordSpoolBudget
 	}
-	if _, err := io.CopyBuffer(root, io.NewSectionReader(read.rootSource(), 0, read.rootSize), make([]byte, metadataRecordChunkBytes)); err != nil {
+	endRead := read.snapshot.readScope()
+	_, err = io.CopyBuffer(root, io.NewSectionReader(read.rootSource(), 0, read.rootSize), make([]byte, metadataRecordChunkBytes))
+	endRead()
+	if err != nil {
 		root.Close()
 		return nil, err
 	}
@@ -112,6 +125,7 @@ func (s *SQLiteStore) readRawMetadataLogicalSourceRoot(ctx context.Context, tx *
 	}()
 	recovery := &metadataLogicalRecovery{store: s, ctx: ctx, tx: tx, workspace: workspace, read: read, stage: stage, builder: builder, typed: typed, manifest: map[string]string{}}
 	defer recovery.releaseWork()
+	defer recovery.releaseRootIndex()
 	if err := recovery.readManifest(); err != nil {
 		return nil, err
 	}
@@ -152,7 +166,30 @@ func (s *SQLiteStore) readRawMetadataLogicalSourceRoot(ctx context.Context, tx *
 	return source, nil
 }
 
+// rootOccurrences visits, in root order, the value of every top-level root
+// key equal to name under Unicode case folding. Recovery asks once per
+// Bootstrap field, so the immutable root is scanned once into a small index
+// rather than once per field (a root with a few MiB of inline bodies cost
+// minutes per reload). A root the index cannot hold, or whose scan fails,
+// keeps the direct scan, which reproduces its exact errors.
 func (r *metadataLogicalRecovery) rootOccurrences(name string, visit func(metadataCollectionRange) error) error {
+	if !r.rootIndexed {
+		r.rootIndexed = true
+		r.indexRoot()
+	}
+	if r.rootIndexUsable {
+		if err := r.ctx.Err(); err != nil {
+			return err
+		}
+		for _, key := range r.rootKeys {
+			if strings.EqualFold(key.name, name) {
+				if err := visit(key.value); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
 	scanner := r.read.scanner(metadataCollectionRange{size: r.read.rootSize})
 	if err := scanner.spaces(); err != nil {
 		return err
@@ -170,6 +207,50 @@ func (r *metadataLogicalRecovery) rootOccurrences(name string, visit func(metada
 		}
 		return nil
 	}, 0)
+}
+
+const (
+	metadataLogicalRootIndexKeys      = 4096
+	metadataLogicalRootIndexNameBytes = 64 << 10
+)
+
+func (r *metadataLogicalRecovery) indexRoot() {
+	_, release, err := r.store.tryAdmitAdditionalMetadataWork(r.ctx,
+		metadataLogicalRootIndexKeys*int(reflect.TypeFor[metadataLogicalRootKey]().Size())+metadataLogicalRootIndexNameBytes)
+	if err != nil {
+		return
+	}
+	var keys []metadataLogicalRootKey
+	names := 0
+	errIndexFull := errors.New("root index full")
+	scanner := r.read.scanner(metadataCollectionRange{size: r.read.rootSize})
+	err = scanner.spaces()
+	if first, _ := scanner.peek(); err == nil && first != 'n' {
+		err = scanner.object(func(key, value metadataCollectionRange) error {
+			actual, err := r.read.shortString(key)
+			if err != nil {
+				return err
+			}
+			names += len(actual)
+			if len(keys) == metadataLogicalRootIndexKeys || names > metadataLogicalRootIndexNameBytes {
+				return errIndexFull
+			}
+			keys = append(keys, metadataLogicalRootKey{actual, value})
+			return nil
+		}, 0)
+	}
+	if err != nil {
+		release()
+		return
+	}
+	r.rootKeys, r.rootIndexUsable, r.rootIndexRelease = keys, true, release
+}
+
+func (r *metadataLogicalRecovery) releaseRootIndex() {
+	if r.rootIndexRelease != nil {
+		r.rootIndexRelease()
+	}
+	r.rootKeys, r.rootIndexUsable, r.rootIndexRelease = nil, false, nil
 }
 
 func (r *metadataLogicalRecovery) readManifest() error {

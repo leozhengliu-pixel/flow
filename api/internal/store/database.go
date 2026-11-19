@@ -129,6 +129,11 @@ type sqlTx struct {
 	// Staged input must be consumed and deleted before its write commits.
 	metadataSQLStages      int
 	metadataSQLStageOwners map[string]*metadataSQLWriteStage
+	// metadataWrites counts statements that may change rows (writes,
+	// savepoint rollbacks, the transaction's end). Scoped metadata read
+	// windows (scale_p21_collection_snapshot.go) are valid only while it
+	// is unchanged.
+	metadataWrites uint64
 }
 
 // notificationSignal names a notification that is news to its recipient.
@@ -145,6 +150,7 @@ var ErrTransactionWriteBudget = errors.New("transaction write budget exceeded")
 // counters, cache revisions) come last, so a writer holds them only while it
 // commits.
 func (tx *sqlTx) Commit() error {
+	tx.metadataWrites++
 	if tx.writeErr != nil {
 		_ = tx.Rollback()
 		return tx.writeErr
@@ -660,6 +666,7 @@ func (d *sqlDatabase) BeginTx(ctx context.Context, options *sql.TxOptions) (*sql
 }
 
 func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	tx.metadataWrites++
 	if tx.writeErr != nil {
 		return nil, tx.writeErr
 	}
@@ -732,10 +739,20 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 	return result, err
 }
 
+// countMetadataWrite counts a query that is not a plain SELECT (for
+// example INSERT ... RETURNING) as a possible write.
+func (tx *sqlTx) countMetadataWrite(query string) {
+	query = strings.TrimSpace(query)
+	if len(query) < 7 || !strings.EqualFold(query[:7], "SELECT ") {
+		tx.metadataWrites++
+	}
+}
+
 func (tx *sqlTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	if tx.journalOrder.valid {
 		tx.journalOrder.valid = false
 	}
+	tx.countMetadataWrite(query)
 	observeSQLStatement(ctx, query)
 	return tx.Tx.QueryContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
 }
@@ -744,6 +761,7 @@ func (tx *sqlTx) QueryRowContext(ctx context.Context, query string, args ...any)
 	if tx.journalOrder.valid {
 		tx.journalOrder.valid = false
 	}
+	tx.countMetadataWrite(query)
 	observeSQLStatement(ctx, query)
 	return tx.Tx.QueryRowContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
 }

@@ -328,25 +328,28 @@ func scaleP21SW198CaseSource(t *testing.T, f scaleP21IssueUpdateFixture, owner d
 	}
 }
 
-func TestScaleP21SW198AgentSessionLifecycleDifferential(t *testing.T) {
+// The lifecycle differential and permission matrix run one top-level test
+// per operation: each case is a complete legacy/warm and warm/reloaded
+// differential (about 1-2 s without the race detector), and a single test of
+// all four operations ran 13 (differential) and 22 (matrix) minutes under
+// the race detector on CI, too long for one shard.
+func scaleP21SW198Differential(t *testing.T, operation string) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP21IssueUpdateSetup(t)
-	for _, operation := range []string{"marker", "worker", "terminal", "sweep"} {
-		for _, shape := range []string{
-			"native", "first-missing-message", "first-finished-message", "duplicate-message", "deleted-first",
-			"foreign-owner-first", "empty-id", "nul-id", "empty-messages", "nil-messages",
-			"foreign-workspace", "cancel-before", "cancel-persist",
-		} {
-			if shape == "cancel-persist" && operation == "worker" {
-				// worker.save deliberately detaches its input context.
-				continue
-			}
-			t.Run(operation+"/"+shape, func(t *testing.T) {
-				scaleP21SW198Case(t, f, f.data.Viewer, nil, operation, shape)
-			})
+	for _, shape := range []string{
+		"native", "first-missing-message", "first-finished-message", "duplicate-message", "deleted-first",
+		"foreign-owner-first", "empty-id", "nul-id", "empty-messages", "nil-messages",
+		"foreign-workspace", "cancel-before", "cancel-persist",
+	} {
+		if shape == "cancel-persist" && operation == "worker" {
+			// worker.save deliberately detaches its input context.
+			continue
 		}
+		t.Run(operation+"/"+shape, func(t *testing.T) {
+			scaleP21SW198Case(t, f, f.data.Viewer, nil, operation, shape)
+		})
 	}
 	for _, test := range []struct{ operation, shape string }{
 		{"marker", "already-read"}, {"marker", "future-updated"}, {"worker", "slug-shadow"},
@@ -354,24 +357,57 @@ func TestScaleP21SW198AgentSessionLifecycleDifferential(t *testing.T) {
 		{"marker", "missing-session"}, {"worker", "missing-session"},
 		{"marker", "old-slug"}, {"worker", "old-slug"},
 	} {
+		if test.operation != operation {
+			continue
+		}
 		t.Run(test.operation+"/"+test.shape, func(t *testing.T) {
 			scaleP21SW198Case(t, f, f.data.Viewer, nil, test.operation, test.shape)
 		})
 	}
 }
 
-func TestScaleP21SW198AgentSessionLifecycleMatrix(t *testing.T) {
+func TestScaleP21SW198AgentSessionLifecycleDifferentialMarker(t *testing.T) {
+	scaleP21SW198Differential(t, "marker")
+}
+
+func TestScaleP21SW198AgentSessionLifecycleDifferentialWorker(t *testing.T) {
+	scaleP21SW198Differential(t, "worker")
+}
+
+func TestScaleP21SW198AgentSessionLifecycleDifferentialTerminal(t *testing.T) {
+	scaleP21SW198Differential(t, "terminal")
+}
+
+func TestScaleP21SW198AgentSessionLifecycleDifferentialSweep(t *testing.T) {
+	scaleP21SW198Differential(t, "sweep")
+}
+
+func scaleP21SW198Matrix(t *testing.T, operation string) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP21IssueUpdateSetup(t)
 	f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
-		for _, operation := range []string{"marker", "worker", "terminal", "sweep"} {
-			t.Run(operation, func(t *testing.T) {
-				scaleP21SW198Case(t, f, user, key, operation, "native")
-			})
-		}
+		t.Run(operation, func(t *testing.T) {
+			scaleP21SW198Case(t, f, user, key, operation, "native")
+		})
 	})
+}
+
+func TestScaleP21SW198AgentSessionLifecycleMatrixMarker(t *testing.T) {
+	scaleP21SW198Matrix(t, "marker")
+}
+
+func TestScaleP21SW198AgentSessionLifecycleMatrixWorker(t *testing.T) {
+	scaleP21SW198Matrix(t, "worker")
+}
+
+func TestScaleP21SW198AgentSessionLifecycleMatrixTerminal(t *testing.T) {
+	scaleP21SW198Matrix(t, "terminal")
+}
+
+func TestScaleP21SW198AgentSessionLifecycleMatrixSweep(t *testing.T) {
+	scaleP21SW198Matrix(t, "sweep")
 }
 
 // This is an activation gate, not an expected-budget-refusal test. Keep its

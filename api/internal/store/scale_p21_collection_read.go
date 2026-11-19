@@ -307,6 +307,7 @@ func (r *MetadataCollectionRead) VisitRootFieldOccurrences(kind string, visit fu
 	if r.rootSize == 0 {
 		return false, nil
 	}
+	defer r.snapshot.readScope()()
 	scanner := r.scanner(metadataCollectionRange{size: r.rootSize})
 	if err := scanner.spaces(); err != nil {
 		return false, err
@@ -343,6 +344,7 @@ func (r *MetadataCollectionRead) VisitArray(kind string, visit func(context.Cont
 	if field.shape.RequiresTypedMerge {
 		return ErrMetadataArrayMerge
 	}
+	defer r.snapshot.readScope()()
 	err := func() error {
 		ordinal := int64(0)
 		if !field.inlineNil {
@@ -385,6 +387,7 @@ func (r *MetadataCollectionRead) VisitArrayOccurrences(kind string, visit func(c
 	if !field.shape.WorkspaceFound {
 		return nil
 	}
+	defer r.snapshot.readScope()()
 	var finalCount int64
 	err := r.scanRoot(func(name string, part metadataCollectionRange, null bool) error {
 		if name != kind {
@@ -437,6 +440,7 @@ func (r *MetadataCollectionRead) VisitMap(kind string, visit func(context.Contex
 	if !field.shape.WorkspaceFound {
 		return nil
 	}
+	defer r.snapshot.readScope()()
 	err := r.scanRoot(func(name string, part metadataCollectionRange, null bool) error {
 		if name != kind {
 			return nil
@@ -508,6 +512,7 @@ func (r *MetadataCollectionRead) Close() error {
 		return nil
 	}
 	r.closed = true
+	r.snapshot.dropReadWindows()
 	var result error
 	for _, field := range r.collections {
 		result = errors.Join(result, field.index.Close())
@@ -527,6 +532,7 @@ func (r *MetadataCollectionRead) scanner(part metadataCollectionRange) *metadata
 // Only selected field ranges and manifest values are retained. It does not
 // decode/validate domain record fields: that is the consumer's responsibility.
 func (r *MetadataCollectionRead) scanRoot(visit func(string, metadataCollectionRange, bool) error) error {
+	defer r.snapshot.readScope()()
 	scanner := r.scanner(metadataCollectionRange{size: r.rootSize})
 	if err := scanner.spaces(); err != nil {
 		return err
@@ -766,6 +772,25 @@ func (s *metadataCollectionScanner) string() error {
 		return err
 	}
 	for {
+		// Skip a buffered run of ordinary string bytes at once: the byte
+		// path below accepts them unchanged, but checks the (often deeply
+		// wrapped) context for every byte, which dominated scans of large
+		// bodies. Cancellation is still observed once per run.
+		if buffered := s.input.Buffered(); buffered > 0 {
+			run, _ := s.input.Peek(buffered)
+			plain := 0
+			for plain < len(run) && run[plain] != '"' && run[plain] != '\\' && run[plain] >= 0x20 {
+				plain++
+			}
+			if plain > 0 {
+				if err := s.ctx.Err(); err != nil {
+					return err
+				}
+				discarded, _ := s.input.Discard(plain)
+				s.offset += int64(discarded)
+				continue
+			}
+		}
 		b, err := s.byte()
 		if err != nil {
 			return err

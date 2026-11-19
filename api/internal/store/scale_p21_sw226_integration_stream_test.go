@@ -817,7 +817,7 @@ func scaleP21SW226Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 				reads++
 			}
 			if !cancelled && (cancelPhase == "read" && reads == 4 ||
-				cancelPhase == "write" && strings.Contains(lower, "update bounded_metadata_write_stage set data")) {
+				cancelPhase == "write" && strings.Contains(lower, "insert into bounded_metadata_write_chunks(operation_id,part,seq,chunk) values(?,0,")) {
 				cancelled = true
 				cancel()
 			}
