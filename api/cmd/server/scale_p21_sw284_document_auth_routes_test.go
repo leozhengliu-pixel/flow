@@ -311,8 +311,18 @@ func TestScaleP21SW285TrashRestoreHeaderDifferential(t *testing.T) {
 			if _, found := f.probe.TrashRecordHeader(workspace, id); found {
 				t.Fatalf("bounded resident copy holds trash entry %s", id)
 			}
-			if trash := f.probe.TrashSnapshot(workspace); len(trash) != 0 {
-				t.Fatalf("bounded resident copy holds %d trash entries", len(trash))
+			// TrashSnapshot no longer reads the resident copy with the flag
+			// on: it serves the trash from the legacy view (SW559), as the
+			// literal store does.
+			ids := func(entries []domain.TrashEntry) []string {
+				result := []string{}
+				for _, entry := range entries {
+					result = append(result, entry.ID)
+				}
+				return result
+			}
+			if literal, bounded := ids(repo.TrashSnapshot(workspace)), ids(f.probe.TrashSnapshot(workspace)); !reflect.DeepEqual(literal, bounded) {
+				t.Fatalf("bounded trash snapshot %v, literal %v", bounded, literal)
 			}
 		}
 		routes := []scaleP21SW284Route{
