@@ -523,7 +523,12 @@ func TestScaleP21ResourceDirectoryMemoSourcePrecedence(t *testing.T) {
 				view.forgetCopyRevisionLocked(workspace)
 				view.mu.Unlock()
 			}()
-			want := replacement.Teams[0].Key
+			// A bounded image holds only the resident fields, so it is never
+			// certified exact at a revision (copyRevisionLocked, SW559) even
+			// when its copy revision matches: the memo keeps serving the
+			// canonical policy. The installed generation that does take
+			// precedence is the logical source (resourcePolicyMemo.installed).
+			want := canonicalKey
 			if source == "event" {
 				event := resourcePolicyMetadata(before.policy.metadata)
 				event.Teams[0].Key = "new-event-policy"
