@@ -1,3 +1,4 @@
+import { registerSessionCacheClearer } from '@/lib/session-cache-registry'
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { fetchIssueRecord, listProjectRecords } from '@/lib/api'
 import type { BootstrapData, Issue, Project } from '@/types/flow'
@@ -16,6 +17,9 @@ const FOUND_TTL = 2 * 60_000
 const MISSING_TTL = 15_000
 
 const records = new Map<string, Entry>()
+registerSessionCacheClearer((_viewerId, workspaceKey) => {
+  for (const key of [...records.keys()]) if (!workspaceKey || key.startsWith(`${workspaceKey}|`)) records.delete(key)
+})
 const listeners = new Set<() => void>()
 let version = 0
 

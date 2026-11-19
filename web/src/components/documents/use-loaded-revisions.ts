@@ -1,3 +1,4 @@
+import { registerSessionCacheClearer } from '@/lib/session-cache-registry'
 import { useEffect, useMemo, useState } from 'react'
 
 import { fetchDocumentRevisions } from '@/lib/api'
@@ -7,6 +8,7 @@ import { useResourceRevisions, type RevisionSelection } from './scale-p20-revisi
 
 /** Loaded bodies of offloaded versions, by document and version id. A version's body never changes once it is offloaded. */
 const loadedBodies = new Map<string, DocumentRevision>()
+registerSessionCacheClearer(() => loadedBodies.clear())
 const bodyKey = (documentId: string, revisionId: string) => `${documentId}:${revisionId}`
 
 /**
