@@ -802,7 +802,7 @@ var scaleP21RouteTemperature = map[string]string{
 	"POST /api/workspace/audit-log-stream":                                       "cold: server/server.createAuditStream",
 	"POST /api/workspace/documents/{id}/revisions/import":                        "cold: server/server.importDocumentRevision",
 	"POST /api/workspace/welcome-message/test":                                   "cold: server/server.testWelcomeMessage",
-	"POST /api/workspaces":                                                       "cold: store/SQLiteStore.createWorkspace",
+	"POST /api/workspaces":                                                       "cold: store/SQLiteStore.createWorkspaceLocked",
 	"POST /api/workspaces/{workspaceKey}/cancel-deletion":                        "cold: store/SQLiteStore.CancelWorkspaceDeletion",
 	"POST /api/workspaces/{workspaceKey}/deleted-teams/{teamId}/restore":         "hot",
 	"POST /api/workspaces/{workspaceKey}/invitations":                            "cold: server/server.createInvitation",

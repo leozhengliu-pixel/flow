@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"sync"
@@ -146,9 +147,13 @@ func (s *SQLiteStore) BeginApplicationWebhookReconcileRead(ctx context.Context, 
 // every workspace's OAuth applications: ID, ClientID, Name, WebhookEnabled,
 // WebhookURL and WebhookResourceTypes, the fields the reconcile reads.
 type ApplicationWebhookClientsRead struct {
-	Apps    map[string]domain.OAuthApplication
-	release []func()
-	once    sync.Once
+	Apps map[string]domain.OAuthApplication
+	// Uncovered names the workspaces skipped because the store cannot serve
+	// them (ErrBoundedMetadataCoverage), as the original index skips a
+	// workspace it cannot read.
+	Uncovered []string
+	release   []func()
+	once      sync.Once
 }
 
 func (r *ApplicationWebhookClientsRead) Close() {
@@ -166,7 +171,8 @@ func (r *ApplicationWebhookClientsRead) Close() {
 // BeginApplicationWebhookClientsRead indexes the installed OAuth applications
 // of the workspaces in WorkspaceKeys order, each in collection order, so a
 // client ID found in several workspaces maps to the last, as the original
-// index does. A workspace no longer installed is skipped.
+// index does. A workspace no longer installed, or one the coverage check
+// refused, is skipped.
 func (s *SQLiteStore) BeginApplicationWebhookClientsRead(ctx context.Context) (_ *ApplicationWebhookClientsRead, err error) {
 	if !s.BoundedMetadataEnabled() {
 		return nil, ErrBoundedMetadataCoverage
@@ -191,6 +197,10 @@ func (s *SQLiteStore) BeginApplicationWebhookClientsRead(ctx context.Context) (_
 	fields := strings.Fields("ID ClientID Name WebhookEnabled WebhookURL WebhookResourceTypes")
 	for _, workspace := range s.WorkspaceKeys() {
 		read, found, err := s.BeginWebhookDeliveryRead(ctx, workspace, false)
+		if errors.Is(err, ErrBoundedMetadataCoverage) {
+			result.Uncovered = append(result.Uncovered, workspace)
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}

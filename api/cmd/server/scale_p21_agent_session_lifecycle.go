@@ -68,11 +68,12 @@ func (s *server) sweepAgentLiveWorkspace(ctx context.Context, workspace string, 
 	}
 	read, found, err := s.store.BeginAgentSessionRead(ctx, workspace)
 	if err != nil {
-		if ctx.Err() == nil {
+		if ctx.Err() == nil && !s.skipUncoveredWorkspace("probe agent replies", workspace, err) {
 			log.Printf("probe agent replies in workspace %s: %v", workspace, err)
 		}
 		return 0
 	}
+	s.coveredWorkspacePassed("probe agent replies", workspace)
 	if !found {
 		return 0
 	}

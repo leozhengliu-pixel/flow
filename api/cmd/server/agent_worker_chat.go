@@ -2042,8 +2042,10 @@ func (s *server) sweepWorkerChatWorkspace(ctx context.Context, key string, now t
 				return nil
 			})
 		}
-		if err != nil && ctx.Err() == nil {
+		if err != nil && ctx.Err() == nil && !s.skipUncoveredWorkspace("sweep worker chat replies", key, err) {
 			log.Printf("sweep worker chat replies workspace=%s: %v", key, err)
+		} else if err == nil {
+			s.coveredWorkspacePassed("sweep worker chat replies", key)
 		}
 		return swept
 	}
