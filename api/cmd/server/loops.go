@@ -724,7 +724,9 @@ func (s *server) describeLoopAsync(workspace string, loop domain.Loop) {
 		if description == "" || len([]rune(description)) > 200 {
 			return
 		}
-		err = s.store.MutateWorkspace(context.Background(), workspace, "loop.described", loop.ID, nil, func(data *domain.Bootstrap) error {
+		// No migrated writer serves loop.described: COLD work with bounded
+		// metadata on, so the write runs its legacy dispatch (SW557).
+		err = s.store.MutateWorkspace(store.WithColdWork(context.Background(), "loop-description"), workspace, "loop.described", loop.ID, nil, func(data *domain.Bootstrap) error {
 			current := loopByID(data, loop.ID)
 			// Skip when the instructions changed again meanwhile; that change describes itself.
 			if current == nil || current.Instructions != loop.Instructions {

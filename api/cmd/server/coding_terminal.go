@@ -42,6 +42,7 @@ import (
 	"flow/api/internal/coding"
 	"flow/api/internal/domain"
 	"flow/api/internal/sandbox"
+	"flow/api/internal/store"
 )
 
 const (
@@ -123,7 +124,9 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 		ttl = codingTerminalDefaultTTL
 	}
 	expiresAt := time.Now().Add(ttl).UTC()
-	ctx, cancel := context.WithDeadline(context.Background(), expiresAt)
+	// The terminal keeps no request values and writes its audit and
+	// prepare-script records: COLD work with bounded metadata on (SW557).
+	ctx, cancel := context.WithDeadline(store.WithColdWork(context.Background(), "coding-terminal"), expiresAt)
 	defer cancel()
 	// Socket I/O must outlive the TTL context: coder/websocket closes the
 	// connection when a Read's context ends, and the "exit" frame is sent

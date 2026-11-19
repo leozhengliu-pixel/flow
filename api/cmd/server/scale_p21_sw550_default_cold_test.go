@@ -409,7 +409,7 @@ var scaleP21SW550BackgroundWork = map[string]string{
 	"server/server.startLoopContractMigration go server/server.loopContractFor":               "COLD work: store.WorkerContext",
 	"server/server.loopContract go server/server.readLoopContract":                            "inherits its caller's context (store.WorkerContext)",
 	"server/server.commitImport go server/server.commitImportSync":                            "inherits POST /api/imports/{id}/commit's COLD scope",
-	"server/server.codingEnvironmentTerminal go server/server.runCodingTerminalPrepareScript": "inherits GET /api/coding/environments/{id}/terminal's COLD scope",
+	"server/server.codingEnvironmentTerminal go server/server.runCodingTerminalPrepareScript": "COLD work: the terminal context is store.WithColdWork (SW557)",
 	"server/server.startAgentLiveReply go server/agentLiveReply.run":                          "inherits the agent-session route's COLD scope",
 	"server/server.startBoundedLoopRun go server/server.executeLoopRun":                       "COLD work: registerLoopWork's run context is store.WithColdWork (SW552)",
 	"server/server.replyLoopRun go server/server.executeLoopRun":                              "COLD work: registerLoopWork's run context is store.WithColdWork (SW552)",
@@ -417,7 +417,8 @@ var scaleP21SW550BackgroundWork = map[string]string{
 
 // TestScaleP21SW550BackgroundColdWork fails on a goroutine root that reaches a
 // legacy consumer and is not named in scaleP21SW550BackgroundWork, and on a
-// named root that no longer does.
+// named root that no longer does. The context each root runs on is proven
+// by SW557 (scale_p21_sw557_background_cold_context_test.go).
 func TestScaleP21SW550BackgroundColdWork(t *testing.T) {
 	roots := scaleP21SW550BackgroundRoots(t)
 	for root, path := range roots {

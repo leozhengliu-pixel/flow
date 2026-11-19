@@ -283,7 +283,8 @@ func main() {
 	// Replicas starting together would otherwise race to install the same
 	// built-in application rows; the database startup lock makes them take
 	// turns, and later ones find the rows current.
-	if err := s.store.WithStartupLock(shutdownSignal, "built-in applications", func(ctx context.Context) error {
+	// The startup syncs run as COLD work with bounded metadata on (SW557).
+	if err := s.store.WithStartupLock(store.WithColdWork(shutdownSignal, "startup"), "built-in applications", func(ctx context.Context) error {
 		s.ensureBuiltinApplications(ctx)
 		if err := s.store.SyncAllApplicationIdentities(ctx); err != nil {
 			log.Printf("sync application identities: %v", err)
@@ -300,9 +301,11 @@ func main() {
 	}
 	// Other replicas look here for this release's assets once it serves pages.
 	startSharedAssetPublish(s.staticPath, applicationConfig.Assets, 30*time.Second)
-	go s.runCoding(shutdownSignal)
 	// Background work that reaches COLD consumers runs COLD per operation
-	// with bounded metadata on (SW550 background roots).
+	// with bounded metadata on (SW550 background roots, SW557). The coding
+	// service calls back into the server (its notifier and hooks) with the
+	// context runCoding hands its reconcilers.
+	go s.runCoding(store.WithColdWork(shutdownSignal, "coding"))
 	go s.runApplicationAgentWorker(store.WithColdWork(shutdownSignal, "application-agent-worker"))
 	go s.runRecurringIssueScheduler(shutdownSignal)
 	go s.runReviewImportScheduler(store.WithColdWork(shutdownSignal, "review-import-scheduler"))
@@ -4962,7 +4965,15 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	workspace := workspaceKey(r)
 	if workspace == "" {
-		workspace = s.store.Bootstrap().Workspace.URLKey
+		// Only with authentication disabled: an authenticated request names
+		// its workspace. Bounded, the key is resident; the legacy accessor
+		// would decode the whole workspace for it (SW558).
+		if s.store.BoundedMetadataEnabled() {
+			metadata, _ := s.store.WorkspaceSettingsMetadata("")
+			workspace = metadata.Workspace.URLKey
+		} else {
+			workspace = s.store.Bootstrap().Workspace.URLKey
+		}
 	}
 	var updated, current domain.Issue
 	var previousDocumentID string

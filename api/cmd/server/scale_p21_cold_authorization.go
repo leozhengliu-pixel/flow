@@ -29,6 +29,9 @@ func (s *server) withColdMetadataRouteMux(mux *http.ServeMux, next http.Handler)
 			return
 		}
 		ctx := context.WithValue(r.Context(), coldAuthorizationMuxKey{}, mux)
+		// A refused legacy-view wait answers 503 + Retry-After
+		// (scale_p21_legacy_view_busy.go).
+		ctx, w = withLegacyViewBusy(ctx, w)
 		if _, pattern := mux.Handler(r); pattern != "" && !scaleP21RouteHot(pattern) {
 			var scope *store.ColdScope
 			ctx, scope = store.WithColdScope(ctx, pattern)

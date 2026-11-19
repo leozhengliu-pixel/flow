@@ -366,9 +366,8 @@ func (s *SQLiteStore) coldAccessorViewKept(ctx context.Context, accessor, worksp
 	coldAccessorReads.Add(1)
 	none := func() {}
 	lane := r.accessorLane()
-	select {
-	case lane <- struct{}{}:
-	case <-ctx.Done():
+	if r.waitLegacyViewLane(ctx, lane, accessor) != nil {
+		// Cancelled, or refused (scale_p21_legacy_view_lane.go).
 		return nil, none, true
 	}
 	release = func() { <-lane }
