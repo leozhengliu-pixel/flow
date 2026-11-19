@@ -13,7 +13,7 @@
     "installedProjectTemplates": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded BeginProjectTemplatesRead read ProjectTemplates from the resident image, which holds no project templates (SW530: bounded answered null). The exact installed value is decoded from the workspace's installed logical source (BeginInstalledMetadataRead + ResourceRead charge, the AccountCollectionRead pattern) and released with the response. SW530 GET /api/project-templates compares legacy, warm and reloaded.",
+      "reason": "Bounded BeginProjectTemplatesRead read ProjectTemplates from the resident image, which holds no project templates (SW530: bounded answered null). The exact installed value is decoded from the workspace's installed logical source (BeginInstalledMetadataRead + ResourceRead charge, the AccountCollectionRead pattern) and released with the response. It is decoded as the wire value, matching the resident handle's wire-equivalent timestamps: the list is only written as JSON, and a timestamp whose Location the source keeps only as wire output answers the legacy JSON instead of failing coverage. SW530 GET /api/project-templates compares legacy, warm and reloaded.",
       "accessors": ["BeginInstalledMetadataRead"],
       "temperature": "hot",
       "temperatureReason": "Serves the HOT project-template list (GET /api/project-templates).",

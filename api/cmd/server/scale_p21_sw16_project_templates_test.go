@@ -50,7 +50,19 @@ func TestScaleP21SW16ProjectTemplateListDifferential(t *testing.T) {
 				want, got := httptest.NewRecorder(), httptest.NewRecorder()
 				request := f.request(user, key, nil)
 				request.Method, request.URL.Path = http.MethodGet, "/api/project-templates"
-				legacy(source, want, request)
+				// A bounded store answers the installed templates; its own
+				// BootstrapFor reads a legacy view of the installed source,
+				// whose native decode keeps the seed's source-zone Location
+				// opaque. The legacy output is the flag-off owner's, which
+				// the bounded store's own legacy view matches when it answers.
+				legacy(repo, want, request)
+				if source.BoundedMetadataEnabled() {
+					own := httptest.NewRecorder()
+					legacy(source, own, request)
+					if own.Code == http.StatusOK && !bytes.Equal(own.Body.Bytes(), want.Body.Bytes()) {
+						t.Fatalf("bounded legacy view differs from the flag-off list: %.120s/%.120s", own.Body.Bytes(), want.Body.Bytes())
+					}
+				}
 				(&server{store: source}).scaleP21SW16ListProjectTemplates(got, request)
 				if want.Code != got.Code || !bytes.Equal(want.Body.Bytes(), got.Body.Bytes()) {
 					t.Fatalf("same actual source output differs: %d/%d %.120s/%.120s", want.Code, got.Code, want.Body.Bytes(), got.Body.Bytes())
