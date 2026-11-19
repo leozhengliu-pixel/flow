@@ -4,6 +4,8 @@
  * subscribe here instead of each owning ad-hoc maps.
  */
 
+import { endsSession, registerSessionCacheClearer } from '@/lib/session-cache-registry'
+
 export type DocumentPresenceListener = (documentId: string) => void
 
 const contentById = new Map<string, string>()
@@ -61,3 +63,11 @@ export function resetDocumentContentEditorState(): void {
   contentStateById.clear()
   listenerPresenceListenersById.clear()
 }
+
+// A read-only mirror of what the open editor shows (the editor saves through its own path), not unsaved work
+// of its own: it must not outlive the viewer, so the next viewer in this tab cannot read it by document id.
+registerSessionCacheClearer((_viewerId, workspaceKey) => {
+  if (!endsSession(workspaceKey)) return
+  contentById.clear()
+  contentStateById.clear()
+})

@@ -1,6 +1,7 @@
 import type { Draft } from '@/types/flow'
 import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
 import { ApiError, currentWorkspaceKey } from '@/lib/api-client'
+import { endsSession, registerSessionCacheClearer, registerSessionFlusher } from '@/lib/session-cache-registry'
 import { clearComposerDraft, writeComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
 
 /**
@@ -182,6 +183,22 @@ export class DraftAutosave {
     }
   }
 
+  /**
+   * The session ended: nothing waiting for the autosave delay or a retry is sent any more. The server drafts already
+   * saved stay on the server (and in the local copy) for their owner; a request already in flight was sent as them.
+   */
+  abandon() {
+    this.cancelPending()
+    this.close(this.generation)
+    this.generation = freshGeneration()
+  }
+
+  /** Sends what is waiting for the autosave delay and resolves once no request of this context is in flight or due. */
+  async settle() {
+    this.flush()
+    for (let generation = this.generation; generation.inflight; generation = this.generation) await generation.inflight
+  }
+
   /** Deletes the context's draft, after whatever request it has in flight. */
   discard() {
     return this.detach().discard()
@@ -347,3 +364,14 @@ export function serverDraftId(draft?: { id?: string; metadata?: Record<string, u
   const remote = draft.metadata?.remoteId
   return typeof remote === 'string' && remote ? remote : undefined
 }
+
+// Logout flushes nothing, and its cookie is gone before this runs, so a save still waiting would be sent as the next
+// viewer (a draft they would then own). Waiting and retrying saves are dropped instead; saved drafts are untouched.
+registerSessionCacheClearer((_viewerId, workspaceKey) => {
+  if (!endsSession(workspaceKey)) return
+  for (const autosave of autosaves.values()) autosave.abandon()
+  autosaves.clear()
+  discardedDraftIds.clear()
+})
+
+registerSessionFlusher(() => Promise.all([...autosaves.values()].map(autosave => autosave.settle())))

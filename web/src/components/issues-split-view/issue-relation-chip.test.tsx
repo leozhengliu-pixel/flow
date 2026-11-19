@@ -2,7 +2,9 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Issue } from '@/types/flow'
+import { clearNavigationCache } from '@/lib/navigation-cache'
 import { IssueRelationChip } from './issue-relation-chip'
+import { relatedIssueCacheSize } from './related-issue-cache'
 
 const fetchIssueRecord = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/api', () => ({ fetchIssueRecord }))
@@ -28,5 +30,14 @@ describe('IssueRelationChip', () => {
     const chip = container.querySelector('[data-relation="blocked_by"]') as HTMLElement
     expect(chip).toHaveAttribute('aria-label', 'Blocked by 2 issues')
     expect(chip).toHaveTextContent('')
+  })
+
+  it('forgets fetched related issues on logout and account switch', async () => {
+    fetchIssueRecord.mockResolvedValue(related)
+    const { container } = render(<IssueRelationChip kind="blocks" count={1} ids={['issue-9']} />)
+    await userEvent.hover(container.querySelector('[data-relation="blocks"]') as HTMLElement)
+    await waitFor(() => expect(relatedIssueCacheSize()).toBeGreaterThan(0))
+    clearNavigationCache()
+    expect(relatedIssueCacheSize()).toBe(0)
   })
 })
