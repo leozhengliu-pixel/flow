@@ -396,15 +396,15 @@ func (s *server) captured() func() {
 		got[use.function] = reach
 	}
 	want := map[string]string{
-		"package-level":      "package-level",
-		"server.gated":       "call",
-		"server.guarded":     "call",
-		"server.elseGated":   "call",
-		"server.negated":     "call",
-		"server.partial":     "call-on",
+		"package-level":       "package-level",
+		"server.gated":        "call",
+		"server.guarded":      "call",
+		"server.elseGated":    "call",
+		"server.negated":      "call",
+		"server.partial":      "call-on",
 		"server.fallsThrough": "call-on",
-		"server.loop":        "call-on",
-		"server.captured":    "value",
+		"server.loop":         "call-on",
+		"server.captured":     "value",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("guard reach=%v want=%v", got, want)
