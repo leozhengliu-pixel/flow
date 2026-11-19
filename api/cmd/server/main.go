@@ -208,6 +208,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Deferred first so it runs after repository.Close has released every
+	// installed spool file: the per-process spool directory goes last.
+	defer func() { _ = store.RemoveMetadataSpoolDirectory() }()
 	defer repository.Close()
 	objects, err := objectstore.Open(context.Background(), applicationConfig.Storage)
 	if err != nil {
@@ -318,7 +321,9 @@ func main() {
 	go s.runPersonalConnectionScheduler(shutdownSignal)
 	go s.runStorageMaintenance(store.WithColdWork(shutdownSignal, "storage-maintenance"), applicationConfig.Retention.DomainEvents)
 	go s.resealStoredSecrets(shutdownSignal)
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-shutdownSignal.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
@@ -331,6 +336,12 @@ func main() {
 	log.Printf("Flow API %s (commit %s) listening on %s using database=%s storage=%s redis=%s", version, commit, httpServer.Addr, applicationConfig.Database.Driver, applicationConfig.Storage.Driver, applicationConfig.Redis.Mode)
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
+	}
+	// ListenAndServe returns as soon as Shutdown starts; wait until the drain
+	// ends so the deferred store close (which removes the spool files) never
+	// runs under a request that is still reading.
+	if shutdownSignal.Err() != nil {
+		<-shutdownDone
 	}
 }
 

@@ -312,7 +312,7 @@ case "${1:-help}" in
   seed) cmd_seed "${2:?topology}" ;;
   start) cmd_start "${2:?topology}" "${3:?flag on|off}" ;;
   drive) cmd_drive "${2:?label}" ;;
-  stop) cmd_stop ;;
+  stop) cmd_stop; stop_pid "$RUN/model.pid" ;;
   pair) cmd_pair "${2:?topology}" ;;
   compare) cmd_compare "${2:?a.json}" "${3:?b.json}" "${4:?out.md}" ;;
   smoke) cmd_smoke ;;
