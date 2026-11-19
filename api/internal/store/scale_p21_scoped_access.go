@@ -390,6 +390,22 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				}
 			}()
 		} else {
+			// An append collection the stored root keeps inline has no rows
+			// to append to: the callback gets it whole and it is persisted
+			// as a complete inline field, as the literal writer does.
+			if kinds := metadataAppendKinds(ctx); len(kinds) != 0 {
+				inlineKinds, err := s.inlineMetadataFields(ctx, tx, workspace, kinds...)
+				if err != nil {
+					return err
+				}
+				if len(inlineKinds) != 0 {
+					scope.Fields = append(slices.Clone(scope.Fields), inlineKinds...)
+					ctx = WithMetadataRecords(ctx, scope)
+					ctx = context.WithValue(ctx, metadataAppendKindsKey{}, slices.DeleteFunc(slices.Clone(kinds), func(kind string) bool {
+						return slices.Contains(inlineKinds, kind)
+					}))
+				}
+			}
 			loadScope, inlineFields, inputLimit, releaseInline, err := s.prepareScopedInlineSelection(ctx, tx, workspace, logicalSource, scope)
 			if err != nil {
 				return err
