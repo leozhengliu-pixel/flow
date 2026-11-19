@@ -136,6 +136,11 @@ func (s *SQLiteStore) RecordAPIKeyUse(ctx context.Context, workspace, keyID, aut
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if parent := s.coldParent; parent != nil {
+		// A COLD facade or legacy view records through the live store's
+		// queue: its throttle, its worker and its shutdown.
+		return parent.RecordAPIKeyUse(ctx, workspace, keyID, authorizationID)
+	}
 	s.apiKeyUseMu.Lock()
 	defer s.apiKeyUseMu.Unlock()
 	if s.apiKeyUseClosed {

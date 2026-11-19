@@ -161,6 +161,7 @@ func (s *SQLiteStore) newColdFacadeLocked(workspaces int) *SQLiteStore {
 		startupLock:        s.startupLock,
 		startupLockTimeout: s.startupLockTimeout,
 	}
+	facade.agentRunWake.forward, facade.agentRunCancel.forward = &s.agentRunWake, &s.agentRunCancel
 	facade.realtimeSink.Store(s.realtimeSink.Load())
 	facade.webhookSink.Store(s.webhookSink.Load())
 	facade.accountSink.Store(s.accountSink.Load())
