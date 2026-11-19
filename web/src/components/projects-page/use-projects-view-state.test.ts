@@ -124,4 +124,21 @@ describe('only show lead team projects', () => {
     act(() => result.current.resetDisplay())
     expect(result.current.state.display.onlyLeadTeamProjects).toBe(true)
   })
+
+  it('follows the shared display default the server confirms until the viewer changes the display', () => {
+    const storageKey = `follow-default-${Math.random()}`
+    const cached = { ...DEFAULT_PROJECTS_DISPLAY, layout: 'list' as const }
+    const confirmed = { ...DEFAULT_PROJECTS_DISPLAY, layout: 'board' as const }
+    const { result, rerender } = renderHook(({ workspaceDefault }) => useProjectsViewState(projects, { projectStatuses: statuses, storageKey, workspaceDefault }), { initialProps: { workspaceDefault: cached } })
+    expect(result.current.state.display.layout).toBe('list')
+    rerender({ workspaceDefault: confirmed })
+    expect(result.current.state.display.layout).toBe('board')
+    // The followed default is not stored as the viewer's own choice.
+    const reopened = renderHook(() => useProjectsViewState(projects, { projectStatuses: statuses, storageKey, workspaceDefault: cached }))
+    expect(reopened.result.current.state.display.layout).toBe('list')
+
+    act(() => result.current.setDisplay({ ...result.current.state.display, layout: 'timeline' }))
+    rerender({ workspaceDefault: cached })
+    expect(result.current.state.display.layout).toBe('timeline')
+  })
 })
