@@ -243,6 +243,13 @@ func (s *server) listOAuthApplicationInstalls(w http.ResponseWriter, r *http.Req
 // username (the reference app's "GitHub username": commits and comments in GitHub by
 // that account belong to the app user).
 func (s *server) githubAppUsers(ctx context.Context, workspace string) map[string]domain.User {
+	if s.store.BoundedMetadataEnabled() {
+		// The review sync tick and review import call this outside a
+		// request: own the installation list here (the map copies users).
+		var closeOutputs func()
+		ctx, closeOutputs = applicationOutputContext(ctx)
+		defer closeOutputs()
+	}
 	installations, err := s.store.ListApplications(ctx, workspace)
 	if err != nil {
 		return nil
