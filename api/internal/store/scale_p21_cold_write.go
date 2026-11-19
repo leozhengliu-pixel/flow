@@ -237,7 +237,7 @@ func (s *SQLiteStore) prepareColdFullWrite(ctx context.Context, tx *sqlTx, works
 	for index := 0; index < value.NumField(); index++ {
 		field := value.Type().Field(index)
 		part := value.Field(index)
-		if field.Tag.Get("json") == "-" {
+		if field.Tag.Get("json") == "-" && field.Name != "NextIssueNumber" {
 			part = reflect.Zero(part.Type())
 		}
 		node, err := builder.writeValue(part, 0, false)

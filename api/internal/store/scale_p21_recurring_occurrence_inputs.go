@@ -62,7 +62,11 @@ func (p *recurringOccurrenceImageProfile) issueFamily(ctx context.Context, tx *s
 		return nil, fmt.Errorf("%w: recurring occurrence input refused", ErrBoundedMetadataCoverage)
 	}
 	s := owner.store
-	records, err := rows.load(ctx, []string{p.sourceID}, true)
+	// Only selection/existence escapes this preliminary read; its SQL locks
+	// stay with the borrowed transaction after the native values are closed.
+	sourceRows := s.newIssueMutationRows(tx, workspace)
+	defer sourceRows.Close()
+	records, err := sourceRows.load(ctx, []string{p.sourceID}, true)
 	if err != nil {
 		return nil, err
 	}

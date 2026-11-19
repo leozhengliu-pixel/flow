@@ -57,7 +57,8 @@ func (r *issueMutationRows) Close() {
 }
 
 // Returned maps remain owned until Close, including across subsequent loads.
-// Failed attempts retain their allowance and partial results until Close too.
+// Failed attempts retain their partial results until Close; SQL and decode
+// scratch are separate from the complete retained raw/native row owners.
 func (r *issueMutationRows) load(ctx context.Context, ids []string, lock bool) (map[string]storedIssueRecord, error) {
 	if r == nil {
 		return nil, errMetadataLogicalClosed
@@ -192,8 +193,15 @@ func (r *issueMutationRows) payloads(ctx context.Context, headers []issueMutatio
 		return ErrMetadataWorkBudget
 	}
 	// SQL guards every payload by its own captured size. This allowance covers
-	// retained bytes, driver buffers and Scan copies before the query begins.
-	if err := r.owner.reserve(ctx, uint64(size)*3+uint64(len(headers))*512+64<<10); err != nil {
+	// raw bytes, driver buffers and Scan copies before the query begins.
+	sqlScratch := &ResourceRead{store: r.owner.store}
+	sqlTransferred := false
+	defer func() {
+		if !sqlTransferred {
+			sqlScratch.Close()
+		}
+	}()
+	if err := sqlScratch.reserve(ctx, uint64(size)*3+uint64(len(headers))*512+64<<10); err != nil {
 		return err
 	}
 	queries := make([]string, 0, len(headers))
@@ -231,24 +239,67 @@ func (r *issueMutationRows) payloads(ctx context.Context, headers []issueMutatio
 	if len(bodies) != len(headers) {
 		return io.ErrUnexpectedEOF
 	}
+	rawCost := uint64(len(bodies))*uint64(reflect.TypeFor[[]byte]().Size())*2 + 4096
+	for _, body := range bodies {
+		rawCost += uint64(cap(body))
+	}
+	rows = nil
+	if err := r.owner.reserve(ctx, rawCost); err == nil {
+		sqlScratch.Close()
+	} else if errors.Is(err, ErrMetadataWorkBudget) {
+		// Compaction must not add a refusal under pressure. The original
+		// admitted SQL envelope already owns these exact retained bytes.
+		r.owner.release = append(r.owner.release, sqlScratch.Close)
+		sqlTransferred = true
+	} else {
+		return err
+	}
 	for index, body := range bodies {
-		work, err := metadataAggregatePayloadJSONWork(ctx, body)
-		if err != nil {
+		if err := func() error {
+			work, err := metadataAggregatePayloadJSONWork(ctx, body)
+			if err != nil {
+				return err
+			}
+			fixed := uint64(reflect.TypeFor[storedIssueRecord]().Size())*2 + 4096
+			if work > metadataWorkBytes-fixed {
+				return ErrMetadataWorkBudget
+			}
+			decodeScratch := &ResourceRead{store: r.owner.store}
+			decodeTransferred := false
+			defer func() {
+				if !decodeTransferred {
+					decodeScratch.Close()
+				}
+			}()
+			if err := decodeScratch.reserve(ctx, work+fixed); err != nil {
+				return err
+			}
+			record := storedIssueRecord{raw: body, order: headers[index].order}
+			if err := json.Unmarshal(body, &record.issue); err != nil {
+				return err
+			}
+			normalizeIssueRecord(&record.issue)
+			native, nativeErr := metadataAggregateNativeCost(ctx, reflect.ValueOf(record.issue), 0)
+			if nativeErr == nil && native <= metadataWorkBytes-fixed {
+				nativeErr = r.owner.reserve(ctx, native+fixed)
+			} else if nativeErr == nil {
+				nativeErr = ErrMetadataWorkBudget
+			}
+			if nativeErr != nil {
+				if !errors.Is(nativeErr, ErrMetadataWorkBudget) {
+					return nativeErr
+				}
+				// The native meter's depth bound is narrower than the
+				// unchanged decoder. Keep its original complete envelope
+				// if compact admission cannot represent or fit this row.
+				r.owner.release = append(r.owner.release, decodeScratch.Close)
+				decodeTransferred = true
+			}
+			result[headers[index].id] = record
+			return nil
+		}(); err != nil {
 			return err
 		}
-		fixed := uint64(reflect.TypeFor[storedIssueRecord]().Size())*2 + 4096
-		if work > metadataWorkBytes-fixed {
-			return ErrMetadataWorkBudget
-		}
-		if err := r.owner.reserve(ctx, work+fixed); err != nil {
-			return err
-		}
-		record := storedIssueRecord{raw: body, order: headers[index].order}
-		if err := json.Unmarshal(body, &record.issue); err != nil {
-			return err
-		}
-		normalizeIssueRecord(&record.issue)
-		result[headers[index].id] = record
 	}
 	return ctx.Err()
 }
