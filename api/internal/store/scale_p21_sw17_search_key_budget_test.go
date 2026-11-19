@@ -79,8 +79,18 @@ func TestScaleP21SW17SearchKeyBoundDifferential(t *testing.T) {
 	f, legacy, probe := sw17SearchBudgetFixture(t)
 	workspace := f.data.Workspace.URLKey
 	prefix := strings.Repeat("界", 180)
+	if f.dialect == "mysql" {
+		// MySQL record keys are VARBINARY(191), bytes; the metadata splitter
+		// stores no longer ID (it keeps such collections inline), so multi-byte
+		// keys must fit 191 bytes there.
+		prefix = strings.Repeat("界", 60)
+	}
 	keyFor := func(index int) string { return fmt.Sprintf("%s-%03d", prefix, index) }
-	if len(keyFor(0)) <= 191 || utf8.RuneCountInString(keyFor(0)) > 191 {
+	if f.dialect == "mysql" {
+		if len(keyFor(0)) > 191 || utf8.RuneCountInString(keyFor(0)) == len(keyFor(0)) {
+			t.Fatal("UTF8 fixture does not fit the MySQL byte bound with multi-byte keys")
+		}
+	} else if len(keyFor(0)) <= 191 || utf8.RuneCountInString(keyFor(0)) > 191 {
 		t.Fatal("UTF8 fixture does not distinguish byte/character bounds")
 	}
 	for index := range 270 {

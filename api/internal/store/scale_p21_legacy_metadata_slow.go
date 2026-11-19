@@ -151,7 +151,13 @@ func (s *SQLiteStore) writeLegacyMetadataSlowFields(ctx context.Context, tx *sql
 			return nil, err
 		}
 		root[metadataCollectionsKey] = manifest
-		return json.Marshal(root)
+		// The root JSON is parsed in SQL, where PostgreSQL refuses \u0000: as in
+		// writeWorkspaceMetadata, NUL is dropped.
+		encoded, err := json.Marshal(root)
+		if err != nil {
+			return nil, err
+		}
+		return StripJSONNUL(encoded), nil
 	}
 	raw, err := patch(root, storedShapes)
 	if err != nil {

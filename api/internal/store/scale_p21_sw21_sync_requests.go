@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"flow/api/internal/domain"
 )
@@ -122,17 +121,29 @@ func (s *SQLiteStore) scaleP21SW21ApplicationCandidate(applicationID string) (st
 	case "postgres":
 		// json, rather than jsonb, preserves duplicate object members. A
 		// candidate matches any member; encoding/json decides the final value.
-		return `EXISTS (SELECT 1 FROM json_each(convert_from(data,'UTF8')::json) AS sw21(key,value) WHERE LOWER(sw21.key)='applicationid' AND (json_typeof(sw21.value)='string' AND sw21.value#>>'{}'=? OR json_typeof(sw21.value)='null' AND ?='')) OR (?='' AND NOT EXISTS (SELECT 1 FROM json_each(convert_from(data,'UTF8')::json) AS sw21(key,value) WHERE LOWER(sw21.key)='applicationid'))`, []any{applicationID, applicationID, applicationID}
+		// json_each refuses a scalar or array document, which has no members
+		// (SQLite's json_each yields none named applicationId): such a
+		// document is a candidate exactly when no application is selected.
+		return `CASE WHEN json_typeof(convert_from(data,'UTF8')::json)='object' THEN EXISTS (SELECT 1 FROM json_each(convert_from(data,'UTF8')::json) AS sw21(key,value) WHERE LOWER(sw21.key)='applicationid' AND (json_typeof(sw21.value)='string' AND sw21.value#>>'{}'=? OR json_typeof(sw21.value)='null' AND ?='')) OR (?='' AND NOT EXISTS (SELECT 1 FROM json_each(convert_from(data,'UTF8')::json) AS sw21(key,value) WHERE LOWER(sw21.key)='applicationid')) ELSE ?='' END`, []any{applicationID, applicationID, applicationID, applicationID}
 	case "mysql":
-		// MySQL's binary JSON functions collapse duplicate keys. Conservatively
-		// decode duplicate/escaped-key candidates instead of trusting whichever
-		// value that parser chose. Normal unrelated large names stay in SQL.
+		// Like SQLite and PostgreSQL, select the top-level members whose key
+		// folds to applicationid (JSON_KEYS decodes escaped keys) and whose
+		// value is the selected string or null, or no such member when no
+		// application is selected. MySQL's binary JSON collapses duplicate keys,
+		// keeping the last member, while encoding/json keeps the last non-null
+		// one, so the candidates where they can differ are decoded as well
+		// instead of trusting whichever value that parser chose: two unescaped
+		// applicationId keys (any case), or an escaped key that may have
+		// collapsed with one (a backslash and a null member). A regular
+		// expression over the raw text exceeded MySQL's regexp_time_limit on
+		// legal large rows, and a search of every member's value selected
+		// unrelated rows with any empty field. Unrelated large rows stay in SQL.
 		text := "CONVERT(data USING utf8mb4)"
 		folded := "LOWER(" + text + ")"
 		key := `"applicationid"`
-		search := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(applicationID)
-		escapedKey := `(^|[,{])[[:space:]]*"([^"\\]|\\.)*\\([^"\\]|\\.)*"[[:space:]]*:`
-		return `JSON_SEARCH(` + text + `,'one',?,'!','$.*') IS NOT NULL OR REGEXP_LIKE(` + text + `,?,'c') OR LENGTH(` + folded + `)-LENGTH(REPLACE(` + folded + `,?,''))>=? OR (?='' AND ` + s.jsonText("data", "applicationId") + ` IS NULL)`, []any{search, escapedKey, key, len(key) * 2, applicationID}
+		keys := `JSON_TABLE(JSON_KEYS(` + text + `),'$[*]' COLUMNS(k LONGTEXT PATH '$')) AS sw21 WHERE LOWER(sw21.k)='applicationid'`
+		member := `JSON_EXTRACT(` + text + `,CONCAT('$.',JSON_QUOTE(sw21.k)))`
+		return `EXISTS (SELECT 1 FROM ` + keys + ` AND (JSON_TYPE(` + member + `)='STRING' AND CAST(JSON_UNQUOTE(` + member + `) AS BINARY)=CAST(? AS BINARY) OR JSON_TYPE(` + member + `)='NULL' AND (?='' OR LOCATE('\\',` + text + `)>0))) OR LENGTH(` + folded + `)-LENGTH(REPLACE(` + folded + `,?,''))>=? OR (?='' AND NOT EXISTS (SELECT 1 FROM ` + keys + `))`, []any{applicationID, applicationID, key, len(key) * 2, applicationID}
 	default:
 		return `EXISTS (SELECT 1 FROM json_each(data) AS sw21 WHERE LOWER(sw21.key)='applicationid' AND (sw21.type='text' AND sw21.value=? OR sw21.type='null' AND ?='')) OR (?='' AND NOT EXISTS (SELECT 1 FROM json_each(data) AS sw21 WHERE LOWER(sw21.key)='applicationid'))`, []any{applicationID, applicationID, applicationID}
 	}

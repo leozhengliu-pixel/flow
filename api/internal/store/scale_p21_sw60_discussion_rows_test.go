@@ -274,10 +274,28 @@ func TestScaleP21SW60DiscussionRows(t *testing.T) {
 					}
 				}
 			})
+			// A failed PostgreSQL statement aborts the transaction; the bounded
+			// reader must meet the same rows, not the literal reader's abort.
+			if f.dialect == "postgres" {
+				if _, err := tx.ExecContext(t.Context(), `SAVEPOINT sw60_literal`); err != nil {
+					t.Fatal(err)
+				}
+			}
 			want, wantErr := invoke(ctx, tx, nil, test.kind, target, selected)
+			if f.dialect == "postgres" && wantErr != nil {
+				if _, err := tx.ExecContext(t.Context(), `ROLLBACK TO SAVEPOINT sw60_literal`); err != nil {
+					t.Fatal(err)
+				}
+			}
 			read := view.newIssueMutationRows(tx, workspace)
 			defer read.Close()
 			got, gotErr := invoke(ctx, tx, read, test.kind, target, selected)
+			if f.dialect == "postgres" && gotErr != nil {
+				// Restore the borrowed transaction for the usability check below.
+				if _, err := tx.ExecContext(t.Context(), `ROLLBACK TO SAVEPOINT sw60_literal`); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if reflect.TypeOf(wantErr) != reflect.TypeOf(gotErr) || wantErr != nil && wantErr.Error() != gotErr.Error() {
 				t.Fatalf("literal/bounded discussion error differs: %T %v / %T %v", wantErr, wantErr, gotErr, gotErr)
 			}

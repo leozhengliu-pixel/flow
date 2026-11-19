@@ -133,19 +133,21 @@ func TestScaleP21SW17NativeOAuthDifferential(t *testing.T) {
 		{"no-subject-membership-check", "all", nil, nil, nil, nil},
 	} {
 		keys = append(keys, domain.APIKey{
-			ID: prefix + "-key-" + spec.name, Name: spec.name, SecretHash: prefix + "-hash-" + spec.name,
+			// Credential hashes are SHA-256 hex, as stored by every writer
+			// (api_key_lookup.secret_hash is VARCHAR(64) on PostgreSQL and MySQL).
+			ID: prefix + "-key-" + spec.name, Name: spec.name, SecretHash: tokenHash(prefix + "-hash-" + spec.name),
 			CreatorID: f.data.Viewer.ID, SubjectUserID: prefix + "-subject", Scopes: spec.scopes, TeamIDs: spec.teams,
 			TeamRestriction: spec.restriction, RevokedAt: spec.revoked, ExpiresAt: spec.expires, CreatedAt: stamp,
 		})
 	}
-	largeKey := domain.APIKey{ID: prefix + "-large-key", Name: "Large selected set", SecretHash: prefix + "-large-hash", CreatorID: f.data.Viewer.ID, TeamRestriction: "selected", CreatedAt: stamp}
+	largeKey := domain.APIKey{ID: prefix + "-large-key", Name: "Large selected set", SecretHash: tokenHash(prefix + "-large-hash"), CreatorID: f.data.Viewer.ID, TeamRestriction: "selected", CreatedAt: stamp}
 	for index := range 16000 {
 		largeKey.TeamIDs = append(largeKey.TeamIDs, fmt.Sprintf("retained-team-reference-%05d", index))
 	}
 	keys = append(keys, largeKey)
 	keys = append(keys,
-		domain.APIKey{ID: prefix + "-duplicate-revoked", SecretHash: prefix + "-duplicate-hash", RevokedAt: &past},
-		domain.APIKey{ID: prefix + "-duplicate-live", SecretHash: prefix + "-duplicate-hash", CreatorID: f.data.Viewer.ID},
+		domain.APIKey{ID: prefix + "-duplicate-revoked", SecretHash: tokenHash(prefix + "-duplicate-hash"), RevokedAt: &past},
+		domain.APIKey{ID: prefix + "-duplicate-live", SecretHash: tokenHash(prefix + "-duplicate-hash"), CreatorID: f.data.Viewer.ID},
 		domain.APIKey{ID: prefix + "-empty-hash", CreatorID: f.data.Viewer.ID},
 	)
 	reset := func(current domain.OAuthApplication) {
@@ -256,9 +258,10 @@ func TestScaleP21SW17NativeOAuthDifferential(t *testing.T) {
 		t.Fatal("key lookup reused revoked policy")
 	}
 	keys[0].RevokedAt = nil
-	keys[0].SecretHash += "-rotated"
+	predecessor := keys[0].SecretHash
+	keys[0].SecretHash = tokenHash(predecessor + "-rotated")
 	reset(app)
-	if _, _, found := bounded.FindAPIKey(strings.TrimSuffix(keys[0].SecretHash, "-rotated")); found {
+	if _, _, found := bounded.FindAPIKey(predecessor); found {
 		t.Fatal("key lookup accepted the predecessor of a rotated hash")
 	}
 	if _, current, found := bounded.FindAPIKey(keys[0].SecretHash); !found || !same(current, keys[0]) {
