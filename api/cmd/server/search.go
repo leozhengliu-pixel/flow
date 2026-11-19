@@ -19,7 +19,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	r = r.WithContext(ctx)
 	policy, scope, err := s.searchQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -55,7 +55,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	candidateLimit := min(max(limit*4, 40), 200)
 	data, err := s.store.SearchMetadata(r.Context(), policy, store.SearchMetadataQuery{Scope: scope, Types: types, Terms: terms, Recent: recent, Limit: candidateLimit})
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
@@ -75,7 +75,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 		labelIDs, labelErr := s.store.MatchingIssueSearchLabels(r.Context(), scope, query)
 		if labelErr != nil {
-			issueRecordsError(w, labelErr)
+			issueRecordsErrorFor(w, r, labelErr)
 			return
 		}
 		err := s.store.SearchIssueCandidates(r.Context(), scope, query, labelIDs, candidateLimit, func(issue domain.Issue) error {
@@ -88,7 +88,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 			return nil
 		})
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 	}
@@ -105,7 +105,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 			scope.Limit = 100
 			page, err := s.store.QueryIssueRecords(r.Context(), scope)
 			if err != nil {
-				issueRecordsError(w, err)
+				issueRecordsErrorFor(w, r, err)
 				return
 			}
 			data.Issues = page.Items
@@ -131,7 +131,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 func (s *server) clearSearchHistory(w http.ResponseWriter, r *http.Request) {
 	data, _, err := s.searchQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	userID := authUser(r).ID
@@ -161,14 +161,14 @@ func (s *server) recordRecentResource(w http.ResponseWriter, r *http.Request) {
 	input.Type, input.ID = strings.TrimSpace(input.Type), strings.TrimSpace(input.ID)
 	data, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	visible := false
 	if input.Type == "issue" {
 		ids, err := s.store.VisibleIssueRecordIDs(r.Context(), query, []string{input.ID})
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 		visible = ids[input.ID]
@@ -177,7 +177,7 @@ func (s *server) recordRecentResource(w http.ResponseWriter, r *http.Request) {
 		// projection intentionally contains only policy and team hierarchy.
 		data, err = s.preferenceMetadata(r)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 		visible = searchResourceVisible(data, input.Type, input.ID)

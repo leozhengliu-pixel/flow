@@ -179,6 +179,10 @@ func writeSyncError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "invalid sync query")
 	case errors.Is(err, store.ErrMetadataCursor):
 		writeError(w, http.StatusConflict, "Sync cursor changed; reload the manifest")
+	case isRetryableBusy(err):
+		retryAfter, _ := retryableBusy(err)
+		slog.Warn("sync records busy", "error", err)
+		(&metadataReadGate{}).busy(w, retryAfter)
 	default:
 		// The response stays generic; the cause (an unready collection, a
 		// coverage gap or a database error) is logged for diagnosis.

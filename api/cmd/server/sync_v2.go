@@ -238,12 +238,12 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 	}
 	access, err := s.resolveSyncAccess(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	result, err := s.collectSyncChanges(r, access, journal, after, limit)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "Changes are temporarily unavailable")
+		writeSyncChangesUnavailable(w, r, err)
 		return
 	}
 	raw, err := json.Marshal(result)
@@ -254,6 +254,17 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Flow-Sync", "delta")
 	_, _ = w.Write(raw)
+}
+
+// writeSyncChangesUnavailable answers a failed changes read: a retryable busy
+// error keeps its own Retry-After, every other failure is the same 503 with a
+// short one (a sync client re-polls).
+func writeSyncChangesUnavailable(w http.ResponseWriter, r *http.Request, err error) {
+	if writeRetryableBusy(w, r, err) {
+		return
+	}
+	w.Header().Set("Retry-After", "2")
+	writeError(w, http.StatusServiceUnavailable, "Changes are temporarily unavailable")
 }
 
 func (s *server) collectSyncChanges(r *http.Request, access store.EventAccess, journal committedChangeReader, after string, limit int) (syncV2ChangesResponse, error) {

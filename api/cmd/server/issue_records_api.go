@@ -149,30 +149,30 @@ func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
 	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	query.Nested = r.URL.Query().Get("nested") == "true"
 	page, err := s.store.QueryIssueRecords(r.Context(), query)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	page.Items, err = s.projectIssueRecordReferences(r, metadata, query, page.Items)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if len(page.Descendants) > 0 {
 		if page.Descendants, err = s.projectIssueRecordReferences(r, metadata, query, page.Descendants); err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 	}
 	if r.URL.Query().Get("includeStatusHistory") == "true" {
 		intervals, err := s.store.IssueInsightIntervals(r.Context(), query.Workspace, page.Items, metadata.States)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, struct {
@@ -217,14 +217,14 @@ func (s *server) issueRecordsBootstrapData(w http.ResponseWriter, r *http.Reques
 		}
 		data.ViewerRole = "admin"
 		if err := s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID); err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return data, false
 		}
 	} else {
 		var err error
 		data, err = s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return data, false
 		}
 		filterBootstrapForAPIKey(&data, r)
@@ -232,7 +232,7 @@ func (s *server) issueRecordsBootstrapData(w http.ResponseWriter, r *http.Reques
 	data.IssueCollectionPaged = true
 	data.CommentActions = nil
 	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return data, false
 	}
 	if projectListBootstrapRequested(r) {
@@ -240,11 +240,11 @@ func (s *server) issueRecordsBootstrapData(w http.ResponseWriter, r *http.Reques
 	} else if r.Header.Get("X-Flow-Projection") == "issue-detail" {
 		store.IssueDetailBootstrapProjection(&data)
 	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return data, false
 	}
 	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return data, false
 	}
 	sanitizeBootstrap(&data)
@@ -270,7 +270,7 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if s.store.BoundedMetadataEnabled() {
@@ -289,7 +289,7 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 			metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
 		}
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 	}
@@ -348,13 +348,13 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 func (s *server) searchIssueRecordIDs(w http.ResponseWriter, r *http.Request) {
 	_, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	ids, truncated, err := s.store.SearchIssueIDs(r.Context(), query, r.URL.Query().Get("q"), limit)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ids": ids, "truncated": truncated})
@@ -363,13 +363,13 @@ func (s *server) searchIssueRecordIDs(w http.ResponseWriter, r *http.Request) {
 func (s *server) listIssueRecordGroups(w http.ResponseWriter, r *http.Request) {
 	_, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	query.Nested = r.URL.Query().Get("nested") == "true"
 	groups, err := s.store.QueryIssueGroups(r.Context(), query)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
@@ -378,7 +378,7 @@ func (s *server) listIssueRecordGroups(w http.ResponseWriter, r *http.Request) {
 func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Request) {
 	_, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if len(query.ProjectIDs) != 1 {
@@ -387,7 +387,7 @@ func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Reques
 	}
 	metadata, err := s.store.IssueReferenceMetadata(r.Context(), query, []domain.Issue{{Project: &domain.ProjectSummary{ID: query.ProjectIDs[0]}}})
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if len(metadata.Projects) == 0 {
@@ -396,7 +396,7 @@ func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Reques
 	}
 	summary, err := s.store.QueryIssueRecordSummary(r.Context(), query)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, summary)
@@ -405,7 +405,7 @@ func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Reques
 func (s *server) getIssueRecord(w http.ResponseWriter, r *http.Request) {
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	id := r.PathValue("id")
@@ -416,7 +416,7 @@ func (s *server) getIssueRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{issue})
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, items[0])
@@ -441,7 +441,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	id := r.PathValue("id")
@@ -450,7 +450,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	query.Archived = "all"
 	page, err := s.store.QueryIssueRecords(r.Context(), query)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if len(page.Items) == 0 {
@@ -460,7 +460,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 			id = resolved
 			query.Filter = store.IssueFilter{Field: "id", Values: []string{id}}
 			if page, err = s.store.QueryIssueRecords(r.Context(), query); err != nil {
-				issueRecordsError(w, err)
+				issueRecordsErrorFor(w, r, err)
 				return
 			}
 		}
@@ -476,7 +476,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	if input.ExpectedVersion == nil && issueUpdateIsNoop(page.Items[0], input) && store.ChatMutationKey(r.Context()) == "" {
 		projected, projectionErr := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{page.Items[0]})
 		if projectionErr != nil {
-			issueRecordsError(w, projectionErr)
+			issueRecordsErrorFor(w, r, projectionErr)
 			return
 		}
 		writeJSON(w, http.StatusOK, projected[0])
@@ -507,7 +507,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 				metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
 			}
 			if err != nil {
-				issueRecordsError(w, err)
+				issueRecordsErrorFor(w, r, err)
 				return
 			}
 		}
@@ -554,7 +554,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		for _, direction := range []string{"asc", "desc"} {
 			boundary, err := s.store.QueryIssueRecords(r.Context(), store.IssueRecordQuery{Workspace: query.Workspace, TeamIDs: []string{stateTeamID}, StateIDs: []string{*input.StateID}, Sort: "sortOrder", Direction: direction, Archived: "all", Limit: 1})
 			if err != nil {
-				issueRecordsError(w, err)
+				issueRecordsErrorFor(w, r, err)
 				return
 			}
 			if len(boundary.Items) > 0 {
@@ -609,7 +609,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	if updated.ID != "" {
 		projected, projectionErr := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{updated})
 		if projectionErr != nil {
-			issueRecordsError(w, projectionErr)
+			issueRecordsErrorFor(w, r, projectionErr)
 			return
 		}
 		updated = projected[0]
@@ -619,7 +619,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, store.ErrAuthForbidden) {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if err == nil && triageIntelligenceWorkspaceEnabled(s, query.Workspace) {
@@ -646,7 +646,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 func (s *server) getIssueRecordContext(w http.ResponseWriter, r *http.Request) {
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	issue, err := s.store.AuthorizedIssueRecord(r.Context(), query, r.PathValue("id"))
@@ -656,13 +656,13 @@ func (s *server) getIssueRecordContext(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{issue})
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	issue = items[0]
 	history, err := s.store.IssueHistoryPage(r.Context(), query.Workspace, issue.ID, r.URL.Query().Get("commentsCursor"), r.URL.Query().Get("activitiesCursor"))
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	ids := []string{}
@@ -679,12 +679,12 @@ func (s *server) getIssueRecordContext(w http.ResponseWriter, r *http.Request) {
 		query.Limit = 500
 		result, err := s.store.QueryIssueRecords(r.Context(), query)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 		related, err = s.projectIssueRecordReferences(r, metadata, query, result.Items)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 	}
@@ -783,6 +783,13 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 const issueEditForbiddenMessage = "You can view this issue but don't have permission to edit it"
 
 func issueRecordsError(w http.ResponseWriter, err error) {
+	issueRecordsErrorFor(w, nil, err)
+}
+
+// issueRecordsErrorFor is issueRecordsError with the request, which the busy
+// answer logs (route, COLD scope). A retryable busy error (COLD slot, lock,
+// work budget, the handler's deadline) is 503 + Retry-After, never a 500.
+func issueRecordsErrorFor(w http.ResponseWriter, r *http.Request, err error) {
 	if err == nil || errors.Is(err, context.Canceled) {
 		return
 	}
@@ -792,6 +799,9 @@ func issueRecordsError(w http.ResponseWriter, err error) {
 	}
 	if errors.Is(err, store.ErrAuthForbidden) {
 		writeError(w, http.StatusForbidden, "You don't have access to this workspace")
+		return
+	}
+	if writeRetryableBusy(w, r, err) {
 		return
 	}
 	writeError(w, http.StatusInternalServerError, "Could not query issues")

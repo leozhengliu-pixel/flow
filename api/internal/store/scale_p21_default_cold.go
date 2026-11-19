@@ -237,7 +237,11 @@ func (q *coldSlotQueue) acquire(ctx context.Context) error {
 		return ctx.Err()
 	case <-timer.C:
 		coldSlotRefusals.Add(1)
-		slog.Warn("bounded metadata: COLD slot wait timed out", "timeout", time.Duration(q.timeout.Load()), "waiting", q.waiting.Load())
+		pattern := ""
+		if scope, ok := ColdScopeFromContext(ctx); ok {
+			pattern = scope.Pattern()
+		}
+		slog.Warn("bounded metadata: COLD slot wait timed out", "timeout", time.Duration(q.timeout.Load()), "waiting", q.waiting.Load(), "cold_scope_route", pattern, "cold_work_or_scope", coldCapable(ctx))
 		return ErrColdMetadataBusy
 	}
 }
