@@ -771,6 +771,22 @@ func (s *server) socketIssue(r *http.Request, issueID string) (domain.Issue, boo
 		return domain.Issue{}, false, false, nil
 	}
 	issue := data.Issues[index]
+	if s.store.BoundedMetadataEnabled() && (issue.DocumentContent == nil || issue.DocumentContent.ID == "") {
+		// The bounded issue headers omit the description; the join compares
+		// the client's document id with the stored generation, so read just
+		// that id from the issue record (the legacy record carries it).
+		workspace := workspaceKey(r)
+		if workspace == "" {
+			workspace = data.Workspace.URLKey
+		}
+		id, _, err := s.store.IssueDocumentContentID(r.Context(), workspace, issueID)
+		if err != nil {
+			return domain.Issue{}, false, false, err
+		}
+		if id != "" {
+			issue.DocumentContent = &domain.DocumentContent{ID: id}
+		}
+	}
 	canEdit := issue.ArchivedAt == nil && (s.authDisabled || issuePermissionRank(issueRole(s, data, issue)) >= issuePermissionRank("editor") && socketCredentialMayWrite(r, path.Path))
 	return issue, true, canEdit, nil
 }
