@@ -28,9 +28,22 @@ func TestScaleP21SW191ColdRouteBindings(t *testing.T) {
 	if !ok {
 		t.Fatal("locate production route registrations")
 	}
-	file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(filepath.Dir(path), "main.go"), nil, 0)
+	// Routes are registered in main.go and per-area route files
+	// (oauth_platform.go); every production file is read.
+	sources, err := filepath.Glob(filepath.Join(filepath.Dir(path), "*.go"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	var files []*ast.File
+	for _, source := range sources {
+		if strings.HasSuffix(source, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), source, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, file)
 	}
 	roots, expected := map[string]bool{}, map[string]string{}
 	for _, route := range scaleP21ColdRoutes {
@@ -46,30 +59,32 @@ func TestScaleP21SW191ColdRouteBindings(t *testing.T) {
 		expected[pattern] = method
 	}
 	actual := map[string]string{}
-	ast.Inspect(file, func(node ast.Node) bool {
-		call, ok := node.(*ast.CallExpr)
-		if !ok || len(call.Args) != 2 {
+	for _, file := range files {
+		ast.Inspect(file, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok || len(call.Args) != 2 {
+				return true
+			}
+			selector, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || selector.Sel.Name != "HandleFunc" {
+				return true
+			}
+			target, ok := call.Args[1].(*ast.SelectorExpr)
+			if !ok || !roots[target.Sel.Name] {
+				return true
+			}
+			literal, ok := call.Args[0].(*ast.BasicLit)
+			if !ok {
+				t.Fatal("cold route registration needs an explicit pattern")
+			}
+			pattern, err := strconv.Unquote(literal.Value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual[pattern] = target.Sel.Name
 			return true
-		}
-		selector, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || selector.Sel.Name != "HandleFunc" {
-			return true
-		}
-		target, ok := call.Args[1].(*ast.SelectorExpr)
-		if !ok || !roots[target.Sel.Name] {
-			return true
-		}
-		literal, ok := call.Args[0].(*ast.BasicLit)
-		if !ok {
-			t.Fatal("cold route registration needs an explicit pattern")
-		}
-		pattern, err := strconv.Unquote(literal.Value)
-		if err != nil {
-			t.Fatal(err)
-		}
-		actual[pattern] = target.Sel.Name
-		return true
-	})
+		})
+	}
 	if len(expected) == 0 || !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("cold route manifest no longer covers its production bindings: manifest=%v actual=%v", expected, actual)
 	}

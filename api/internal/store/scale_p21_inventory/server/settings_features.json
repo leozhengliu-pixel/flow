@@ -1,6 +1,6 @@
 {
   "source": "server/settings_features.go",
-  "unmigrated": 29,
+  "unmigrated": 28,
   "consumers": {
     "connectIntegration": {
       "owner": "P21",
@@ -471,16 +471,17 @@
     },
     "updateOAuthApplication": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
-        "Bootstrap",
-        "MutateWorkspace"
+        "withColdMetadataRequest"
       ],
       "temperature": "cold",
       "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
       "callers": [
         "PATCH /api/oauth-applications/{id} (api/cmd/server/main.go:641)"
-      ]
+      ],
+      "coldDispatch": "server/settings_features.go:updateOAuthApplication",
+      "reason": "COLD production route after the original decode, validateOAuthInput and logo check. Flag off withColdMetadataRequest runs updateOAuthApplicationWithStore on the server's store literally. Bounded, PATCH /api/oauth-applications/{id} is registered in scaleP21ColdRoutes: authorization's projection and the oauth_application.updated metadata-only mutation share the replica cold slot, the literal callback (applyOAuthInput, GitHub username uniqueness, CredentialsAuthorizedBy, unchanged-edit ErrNoMutation) runs on the cold facade and the existing cold full-metadata publication installs its postimage before output; the identity sync (bounded SyncApplicationIdentity) and the asynchronous webhook reconcile use the server's store. Bounded before this, the route answered 500 (no migrated point writer). TestScaleP21SW430OAuthColdRoutes compares rename (installed/uninstalled/webhook app, then the listing), scopes edit by an admin, unchanged, member forbidden, unknown app, taken GitHub username, invalid input, duplicate client and a large record: responses, rows, app users, events, publications and installed image == reload, after the reconcile finished."
     },
     "updateProjectStatus": {
       "owner": "P16",

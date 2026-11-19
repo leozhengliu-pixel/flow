@@ -5,7 +5,7 @@
     "boundedOAuthMetadataTransaction": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded oauthMetadataTransaction. storedWorkspace reads the resident policy copy only (callback base: workspace, viewer, teams/settings); records come from the installed logical image through oauthMetadataSelect under independent work admission and are published as described for oauthMetadataTransaction. Only a stale image found before the callback runs is retried (the callback runs once at most). TestScaleP21SW294OAuthMetadataDifferential/Concurrent/Budget and TestScaleP21TeamCreateDifferential, persistent SQLite x2 and race.",
+      "reason": "Bounded oauthMetadataTransaction. storedWorkspace reads the resident policy copy only (callback base: workspace, viewer, teams/settings); records come from the installed logical image through oauthMetadataSelect under independent work admission and are published as described for oauthMetadataTransaction. Only a stale image found before the callback runs is retried (the callback runs once at most). TestScaleP21SW294OAuthMetadataDifferential/Concurrent/Budget and TestScaleP21TeamCreateDifferential, persistent SQLite x2 and race. oauthMetadataSelectWhere selects records by a scalar-field predicate on the installed record (the token exchange's sweep); a handed record the callback drops from its copy is read back and, when its row is gone, left out of the installed collection (later ordinals close up; load positions account for it). TestScaleP21SW430OAuthColdRoutes and TestScaleP21SW431OAuthExchangeSweepDifferential.",
       "accessors": [
         "storedWorkspace"
       ],
