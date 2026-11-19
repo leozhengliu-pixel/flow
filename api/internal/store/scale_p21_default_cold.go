@@ -404,7 +404,9 @@ func (s *SQLiteStore) coldAccessorViewKept(ctx context.Context, accessor, worksp
 		release()
 		return nil, none, true
 	}
-	coldAccessorDecodeNanos.Add(int64(time.Since(decodeStarted)))
+	decoded := int64(time.Since(decodeStarted))
+	coldAccessorDecodeNanos.Add(decoded)
+	storeMaxInt64(&coldAccessorDecodeMax, decoded)
 	return view, release, true
 }
 
@@ -417,6 +419,9 @@ func ColdAccessorReadsForTesting() int64 { return coldAccessorReads.Load() }
 
 // Decode cost of COLD facades and legacy views (the measured hydration time).
 var coldFacadeDecodes, coldFacadeDecodeNanos, coldAccessorDecodeNanos atomic.Int64
+
+// The longest single decode of each kind (the periodic stats line).
+var coldFacadeDecodeMax, coldAccessorDecodeMax atomic.Int64
 
 // ColdHydrationForTesting reports the COLD facade decodes, their total time
 // and the total time of legacy-view decodes so far.

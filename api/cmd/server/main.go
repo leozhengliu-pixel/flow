@@ -299,6 +299,12 @@ func main() {
 	}); err != nil {
 		log.Fatal(err)
 	}
+	// With bounded metadata on, operators see the catalog state per workspace
+	// once and the COLD path counters periodically (FLOW_BOUNDED_METADATA_STATS_INTERVAL).
+	if s.store.BoundedMetadataEnabled() {
+		s.store.LogMetadataCatalogCompleteness(store.WithColdWork(shutdownSignal, "catalog-report"))
+		go store.RunColdMetricsLog(shutdownSignal, store.BoundedMetadataStatsInterval())
+	}
 	// Other replicas look here for this release's assets once it serves pages.
 	startSharedAssetPublish(s.staticPath, applicationConfig.Assets, 30*time.Second)
 	// Background work that reaches COLD consumers runs COLD per operation
