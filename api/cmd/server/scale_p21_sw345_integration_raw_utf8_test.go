@@ -10,9 +10,7 @@ import (
 	"net/http"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
-	"time"
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
@@ -182,49 +180,32 @@ func scaleP21SW345RawWitnesses(t *testing.T, value any) []string {
 	return result
 }
 
-// scaleP21SW345PostgresInlineRefusal witnesses, on PostgreSQL, a limit of the
-// literal writer (unchanged from main) that the bounded worker must share
-// exactly. The workspace root is BYTEA and the seed write stores an inline
-// collection's raw invalid UTF-8 payload bytes, but metadataFieldRecordBacked
-// probes the stored root's collection shapes with
-// convert_from(data,'UTF8')::jsonb, which PostgreSQL refuses (SQLSTATE
-// 22021). Every later write that rebases a field without a record row (the
-// inline deliveries here) fails: the claim is refused before any network call
-// and nothing is committed, published or installed, and the workspace stays
-// refused for later writes in both modes. SQLite and MySQL read those bytes,
-// so there the worker delivers as in the split shape.
-func scaleP21SW345PostgresInlineRefusal(t *testing.T, repo *store.SQLiteStore, workspace string, err error, native map[string]json.RawMessage, webhooks, realtime []any, requestBody string, endpoints map[string]string) any {
+// scaleP21SW345UnrelatedWrite renames a connection after a raw invalid UTF-8
+// delivery was accepted and processed: the workspace must stay writable on
+// every dialect (PostgreSQL once refused it with SQLSTATE 22021).
+func scaleP21SW345UnrelatedWrite(t *testing.T, repo *store.SQLiteStore, workspace, connection string) {
 	t.Helper()
-	const refusal = "SQLSTATE 22021"
-	if err == nil || !strings.Contains(err.Error(), refusal) || requestBody != "" || len(webhooks) != 0 || len(realtime) != 0 {
-		t.Fatal("PostgreSQL inline raw-UTF-8 claim was not refused before the network call", err, len(requestBody), len(webhooks), len(realtime))
-	}
-	warm, _ := repo.WorkspaceMetadataFields(workspace, "integrationDeliveries", "integrationConnections")
-	scaleP21SW202ReloadOracle(t, repo, workspace)
-	state, _ := repo.WorkspaceMetadataFields(workspace, "integrationDeliveries", "integrationConnections")
-	// Warm and SQL-loaded connections differ only in nil versus empty
-	// collections; their delivery counters are the claim's only writes.
-	counters := func(values []domain.IntegrationConnection) []string {
-		var result []string
-		for _, value := range values {
-			result = append(result, fmt.Sprint(value.ID, value.DeliveryAttempts, value.LastDeliveryAt, value.LastError))
+	renamed := false
+	err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw345_unrelated_write", "", nil, func(data *domain.Bootstrap) error {
+		for i := range data.IntegrationConnections {
+			if data.IntegrationConnections[i].ID == connection {
+				data.IntegrationConnections[i].Name = "renamed after raw delivery"
+				renamed = true
+				break
+			}
 		}
-		return result
-	}
-	if len(state.IntegrationDeliveries) != 2 || state.IntegrationDeliveries[0].Status != "failed" || state.IntegrationDeliveries[0].Attempts != 1 ||
-		!reflect.DeepEqual(warm.IntegrationDeliveries, state.IntegrationDeliveries) ||
-		!slices.Equal(counters(warm.IntegrationConnections), counters(state.IntegrationConnections)) {
-		t.Fatal("refused claim committed or installed a change")
-	}
-	probe := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw345_refusal_probe", "", nil, func(data *domain.Bootstrap) error {
-		data.IntegrationConnections[0].Name = "later write"
 		return nil
 	})
-	if probe == nil || !strings.Contains(probe.Error(), refusal) {
-		t.Fatal("the literal PostgreSQL refusal is no longer persistent; restate this witness", probe)
+	if err != nil || !renamed {
+		t.Fatal("workspace is not writable after a raw invalid UTF-8 delivery", renamed, err)
 	}
-	outcome := []any{err.Error(), probe.Error(), native, state.IntegrationDeliveries, state.IntegrationConnections}
-	return []any{scaleP21SW202Normalize(t, outcome, time.Time{}, time.Time{}, endpoints), scaleP21SW345RawWitnesses(t, outcome)}
+	state, _ := repo.WorkspaceMetadataFields(workspace, "integrationConnections")
+	for _, value := range state.IntegrationConnections {
+		if value.ID == connection && value.Name == "renamed after raw delivery" {
+			return
+		}
+	}
+	t.Fatal("unrelated write was not stored")
 }
 
 func TestScaleP21SW345IntegrationHTTPRawUTF8(t *testing.T) {
