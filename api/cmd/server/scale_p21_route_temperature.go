@@ -423,7 +423,7 @@ var scaleP21RouteTemperature = map[string]string{
 	"GET /uploads/{name}":                                                        "hot",
 	"PATCH /api/account/passkeys/{id}":                                           "cold: server/server.updatePasskey",
 	"PATCH /api/account/profile":                                                 "cold: server/server.updateAccountProfile",
-	"PATCH /api/account/settings":                                                "cold: server/server.updateUserSettings",
+	"PATCH /api/account/settings":                                                "hot",
 	"PATCH /api/agent-tasks/{id}":                                                "hot",
 	"PATCH /api/agent/activities/{id}":                                           "cold: server/server.updateAgentActivity",
 	"PATCH /api/agent/sessions/{id}":                                             "cold: server/server.updateAgentSession",
