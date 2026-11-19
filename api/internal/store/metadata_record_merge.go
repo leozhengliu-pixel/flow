@@ -802,6 +802,13 @@ func metadataFieldRecordBacked(ctx context.Context, tx *sqlTx, workspace, field 
 	}
 	var shape sql.NullString
 	path := (&SQLiteStore{dialect: tx.dialect}).jsonText("data", metadataCollectionsKey+"."+field)
+	if tx.dialect == "postgres" {
+		// The root may hold a raw payload with invalid UTF-8 (an inline
+		// delivery); parsing it as UTF8 would refuse every later write of
+		// the workspace. Only ASCII keys and shape names matter here, and
+		// LATIN1 decodes every byte, so such a root is still probed.
+		path = "(convert_from(data,'LATIN1')::jsonb #>> '{" + metadataCollectionsKey + "," + field + "}')"
+	}
 	err := tx.QueryRowContext(ctx, `SELECT `+path+` FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&shape)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
