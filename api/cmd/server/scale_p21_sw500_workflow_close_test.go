@@ -118,6 +118,9 @@ type scaleP21SW500Case struct {
 	// pinned: the bounded writer refuses atomically where the literal writer
 	// succeeds (shared aggregate-envelope admission); not certified behavior.
 	pinned bool
+	// full: the bounded point writer hands this run to the full-image
+	// writer (errWorkflowRunFullImage); every other run must stay point.
+	full bool
 }
 
 type scaleP21SW500Result struct {
@@ -129,6 +132,10 @@ type scaleP21SW500Result struct {
 	unchanged         bool
 	published         int
 	newRuns           []domain.WorkflowRun
+	// tables: every row of the issue side tables (SW580); full: the
+	// full-image attempts the call made.
+	tables map[string][]string
+	full   int64
 }
 
 type scaleP21SW500Call struct {
@@ -377,6 +384,7 @@ func (env *scaleP21SW500Env) outcome(t *testing.T, source *store.SQLiteStore, ca
 		env.repo.SetRealtimeSink(captureRealtime)
 	}
 	result := scaleP21SW500Result{}
+	fallbacks := store.WorkflowRunFullImageAttemptsForTesting()
 	started := time.Now().UTC()
 	func() {
 		ctx := t.Context()
@@ -397,6 +405,8 @@ func (env *scaleP21SW500Env) outcome(t *testing.T, source *store.SQLiteStore, ca
 		result.run, result.err = call.run(ctx)
 	}()
 	finished := time.Now().UTC()
+	result.full = store.WorkflowRunFullImageAttemptsForTesting() - fallbacks
+	result.tables = scaleP21SW580Rows(t, env.database, started, finished)
 	source.SetWebhookSink(nil)
 	source.SetRealtimeSink(nil)
 	env.repo.SetRealtimeSink(nil)
@@ -439,7 +449,13 @@ func (env *scaleP21SW500Env) outcome(t *testing.T, source *store.SQLiteStore, ca
 		normalized := scaleP21SW201Normalize(t, scaleP21SW59Normalized(t, value, before, started, finished), result.run.ID, started, finished)
 		return scaleP21SW500Replace(scaleP21SW500NextRuns(normalized, call.schedules, started, finished), ids)
 	}
-	result.normalized = normalize(got, map[string]any{"run": result.run, "error": scaleP21SW500ErrorClass(result.err), "metadata": metadata})
+	// The installed workflow fields: the literal writer's snapshot, the
+	// bounded writer's installed image.
+	var installed any
+	if err := json.Unmarshal(scaleP21WriterInstalled(t, env.workspace, source, []string{"workflowDefinitions", "workflowRuns"}), &installed); err != nil {
+		t.Fatal(err)
+	}
+	result.normalized = normalize(got, map[string]any{"run": result.run, "error": scaleP21SW500ErrorClass(result.err), "metadata": metadata, "installed": installed})
 	result.state = normalize(scaleP21SW59Outcome{Header: make(http.Header), Rows: got.Rows, Events: got.Events}, metadata)
 	return result
 }
@@ -447,6 +463,7 @@ func (env *scaleP21SW500Env) outcome(t *testing.T, source *store.SQLiteStore, ca
 func (env *scaleP21SW500Env) runCase(t *testing.T, test scaleP21SW500Case) {
 	t.Helper()
 	expected := map[string]any{}
+	tables := map[string]map[string][]string{}
 	for _, mode := range scaleP21SW500Modes {
 		t.Run(mode, func(t *testing.T) {
 			env.reset(t, test, nil)
@@ -488,12 +505,24 @@ func (env *scaleP21SW500Env) runCase(t *testing.T, test scaleP21SW500Case) {
 			state := strings.TrimPrefix(strings.TrimPrefix(mode, "legacy-"), "bounded-")
 			if strings.HasPrefix(mode, "legacy") {
 				expected[state] = result.normalized
-			} else if !reflect.DeepEqual(expected[state], result.normalized) {
-				want, _ := json.Marshal(expected[state])
-				got, _ := json.Marshal(result.normalized)
-				t.Fatalf("workflow response/rows/events/publication differ from literal (%s/%s)\nlegacy:  %.4000s\nbounded: %.4000s", test.name, mode, scaleP21SW500FirstDifference(want, got), scaleP21SW500FirstDifference(got, want))
+				tables[state] = result.tables
+			} else {
+				if !reflect.DeepEqual(expected[state], result.normalized) {
+					want, _ := json.Marshal(expected[state])
+					got, _ := json.Marshal(result.normalized)
+					t.Fatalf("workflow response/rows/events/publication differ from literal (%s/%s)\nlegacy:  %.4000s\nbounded: %.4000s", test.name, mode, scaleP21SW500FirstDifference(want, got), scaleP21SW500FirstDifference(got, want))
+				}
+				if difference := scaleP21SW580Equal(tables[state], result.tables); difference != "" {
+					t.Fatalf("workflow issue side tables differ from literal (%s/%s): %s", test.name, mode, difference)
+				}
+				if full := result.full != 0; full != test.full {
+					t.Fatalf("workflow case %s/%s: full-image attempts %d, want full=%v", test.name, mode, result.full, test.full)
+				}
+				if result.err == nil && test.peer == nil {
+					scaleP21SW580Installed(t, env, source)
+				}
 			}
-			t.Logf("workflow case=%s mode=%s result=%s SQL=%d", test.name, mode, class, result.statements)
+			t.Logf("workflow case=%s mode=%s result=%s SQL=%d full=%d", test.name, mode, class, result.statements, result.full)
 		})
 	}
 }
@@ -802,6 +831,51 @@ func scaleP21SW500Cases() []scaleP21SW500Case {
 			data.WorkflowRuns = append(data.WorkflowRuns, env.priorRun("peer-other", "other-workflow", "succeeded", 1, nil))
 		}},
 	}
+	cases = append(cases,
+		// Event-triggered definitions retried by the scheduler on their issue.
+		scaleP21SW500Case{name: "event-retry-multi-action", trigger: "retry", dueOnly: true, defTrigger: "issueCreated", issue: true, actions: scaleP21SW500AllActions,
+			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+				env.definition(data).TeamID = env.issue.Team.ID
+				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 1, &env.past)}
+			}, want: "succeeded"},
+		scaleP21SW500Case{name: "event-retry-label-fails-after-priority", trigger: "retry", dueOnly: true, defTrigger: "issueCreated", issue: true,
+			actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
+				return []domain.WorkflowAction{scaleP21SW500Action("setIssuePriority", "priority", "2"), scaleP21SW500Action("notify"), scaleP21SW500Action("addIssueLabel", "labelId", env.archived)}
+			}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 1, &env.past)}
+			}, want: "failed"},
+		// Scheduled multi-action runs.
+		scaleP21SW500Case{name: "schedule-due-multi-action", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "*/5 * * * *",
+			actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
+				return []domain.WorkflowAction{scaleP21SW500Action("notify"), scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "Scheduled one"),
+					scaleP21SW500Action("notify", "recipientId", env.other.ID), scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "Scheduled two")}
+			}, want: "succeeded"},
+		scaleP21SW500Case{name: "label-on-archived-issue", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
+			return []domain.WorkflowAction{scaleP21SW500Action("addIssueLabel", "labelId", env.plain), scaleP21SW500Action("addIssueLabel", "labelId", env.grouped)}
+		}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			env.target(data).ArchivedAt = &env.past
+		}, want: "succeeded"},
+		// The point writer hands these to the full-image writer.
+		scaleP21SW500Case{name: "full-workflow-id-is-notification-id", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("setIssuePriority", "priority", "1")),
+			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+				data.Notifications = append(data.Notifications, domain.Notification{ID: env.workflowID, RecipientID: env.viewer.ID, Type: "comment",
+					IssueID: env.issue.ID, Actor: env.viewer, Category: "comments", LatestActorIDs: []string{}, CreatedAt: env.fixtureClock})
+			}, want: "succeeded", full: true},
+		scaleP21SW500Case{name: "full-created-id-stored", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
+			return []domain.WorkflowAction{scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "Collides")}
+		}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			number := 0
+			for _, issue := range data.Issues {
+				number = max(number, issue.Number)
+			}
+			for index := range data.Issues {
+				if data.Issues[index].ID == env.otherIssueID {
+					data.Issues[index].ID = fmt.Sprintf("issue_%d", number+1)
+					data.Issues[index].Identifier = env.prefix + "COLLIDE-1"
+				}
+			}
+		}, want: "succeeded", full: true},
+	)
 	for _, schedule := range []string{"@hourly", "@daily", "@weekly", "0 10 * * 1-5", "0 10 * * 0", "*/5 * * * *", "30 9-17 * 1,6,12 1-5", "bad schedule", "@every 30s"} {
 		cases = append(cases, scaleP21SW500Case{
 			name: "schedule-due/" + schedule, trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: schedule,

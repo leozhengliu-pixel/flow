@@ -84,7 +84,7 @@ func TestScaleP21SW232WorkflowActionFieldsKeepEditorFrames(t *testing.T) {
 		defer source.Release()
 		for _, action := range []string{"priority", "assignee", "label", "detached-after-prepend"} {
 			t.Run(fmt.Sprintf("body-%d/%s", size, action), func(t *testing.T) {
-				inputs, err := repo.loadWorkflowRunInputs(t.Context(), source, "workflow", "issue", "target")
+				inputs, err := repo.loadWorkflowRunInputs(t.Context(), source, "workflow", "issue", "target", nil)
 				if err != nil {
 					t.Fatal("legal editor body entered action input decoding", err)
 				}
@@ -126,7 +126,7 @@ func TestScaleP21SW232WorkflowActionFieldsKeepEditorFrames(t *testing.T) {
 				inputs.data.WorkflowRuns = append(inputs.data.WorkflowRuns, domain.WorkflowRun{
 					ID: "new-run", WorkflowID: "workflow", Status: "succeeded",
 				})
-				image, err := inputs.image(t.Context())
+				image, err := inputs.image(t.Context(), nil)
 				if err != nil {
 					t.Fatal("closed action delta materialized the editor/body", err)
 				}
@@ -166,7 +166,7 @@ func TestScaleP21SW232WorkflowActionDeltaRejectsUnrelatedChanges(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer source.Release()
-			inputs, err := repo.loadWorkflowRunInputs(t.Context(), source, "workflow", "issue", "target")
+			inputs, err := repo.loadWorkflowRunInputs(t.Context(), source, "workflow", "issue", "target", nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -187,7 +187,7 @@ func TestScaleP21SW232WorkflowActionDeltaRejectsUnrelatedChanges(t *testing.T) {
 				issue.Number++
 			}
 			inputs.data.WorkflowRuns = append(inputs.data.WorkflowRuns, domain.WorkflowRun{ID: "new-run", WorkflowID: "workflow"})
-			image, err := inputs.image(t.Context())
+			image, err := inputs.image(t.Context(), nil)
 			if image != nil {
 				image.Release()
 			}

@@ -33,7 +33,16 @@ func (r *workflowRunInputs) close() {
 	r.issueHotInputs.close()
 }
 
-func (s *SQLiteStore) loadWorkflowRunInputs(ctx context.Context, source *metadataLogicalSource, id, resourceType, resourceID string) (_ *workflowRunInputs, err error) {
+// workflowRunIssueNumbers folds the Number of every stored issue for the
+// point writer: the largest one and whether any issue exists. It runs only
+// when the definition creates an issue.
+type workflowRunIssueNumbers func(context.Context) (largest int, found bool, err error)
+
+// loadWorkflowRunInputs selects the callback inputs from source. With numbers
+// nil, source carries every issue and its issues fold the next Number; the
+// point writer's source carries only the resource issue and numbers folds the
+// rest in SQL.
+func (s *SQLiteStore) loadWorkflowRunInputs(ctx context.Context, source *metadataLogicalSource, id, resourceType, resourceID string, numbers workflowRunIssueNumbers) (_ *workflowRunInputs, err error) {
 	if err := source.Retain(); err != nil {
 		return nil, err
 	}
@@ -231,6 +240,26 @@ func (s *SQLiteStore) loadWorkflowRunInputs(ctx context.Context, source *metadat
 	if err := read.reserve(ctx, uint64(reflect.TypeFor[domain.Issue]().Size())*4+4096); err != nil {
 		return nil, err
 	}
+	if numbers != nil {
+		if len(createTeams) == 0 {
+			// No action reads another issue's Number.
+			read.before = cloneBootstrap(read.data)
+			return read, nil
+		}
+		largest, found, err := numbers(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if found && largest == math.MaxInt {
+			// The literal fold overflows here and then depends on the
+			// order of the issues after it.
+			return nil, errWorkflowRunFullImage
+		}
+		next, overflow = 1, false
+		if found && largest >= 1 {
+			next = largest + 1
+		}
+	}
 	if overflow {
 		read.data.Issues = append(read.data.Issues, domain.Issue{Number: math.MaxInt})
 		read.placeholders++
@@ -243,7 +272,10 @@ func (s *SQLiteStore) loadWorkflowRunInputs(ctx context.Context, source *metadat
 	return read, nil
 }
 
-func (r *workflowRunInputs) image(ctx context.Context) (*metadataLogicalSource, error) {
+// image patches the callback's results into r.source. labels, when not nil,
+// replaces the IssueCount of the labels at those ordinals (the point writer's
+// count delta; the full writer recounts the image afterwards).
+func (r *workflowRunInputs) image(ctx context.Context, labels map[int]int) (*metadataLogicalSource, error) {
 	after := r.data
 	created := len(after.Issues) - len(r.before.Issues)
 	if created < 0 || len(after.WorkflowRuns) > 500 || len(after.WorkflowDefinitions) != len(r.before.WorkflowDefinitions) {
@@ -295,7 +327,7 @@ func (r *workflowRunInputs) image(ctx context.Context) (*metadataLogicalSource, 
 		return nil, err
 	}
 	shapes := map[string]metadataLogicalNode{}
-	for _, name := range []string{"issues", "workflowRuns", "notifications"} {
+	for _, name := range []string{"issues", "workflowRuns", "notifications", "labels"} {
 		index, _, _ := metadataLogicalField(name)
 		shape, err := legacyDiscussionShape(frames, r.source.fields[index].typ, false)
 		if err != nil {
@@ -347,6 +379,10 @@ func (r *workflowRunInputs) image(ctx context.Context) (*metadataLogicalSource, 
 		case "notifications":
 			if len(after.Notifications) > 0 {
 				return workflowRunAppendNotifications{base: node, shape: shapes[name], values: after.Notifications}, true, nil
+			}
+		case "labels":
+			if len(labels) > 0 {
+				return workflowRunLabelCounts{base: node, shape: shapes[name], counts: labels}, true, nil
 			}
 		}
 		return metadataAggregateStoredNode{node}, false, nil
@@ -437,4 +473,26 @@ func (n workflowRunAppendNotifications) nodeChildren(ctx context.Context, visit 
 		}
 	}
 	return ctx.Err()
+}
+
+// workflowRunLabelCounts keeps every label framed except the IssueCount of the
+// labels at the given ordinals.
+type workflowRunLabelCounts struct {
+	base, shape metadataLogicalNode
+	counts      map[int]int
+}
+
+func (n workflowRunLabelCounts) nodeType() reflect.Type           { return n.base.typ }
+func (n workflowRunLabelCounts) logicalBase() metadataLogicalNode { return n.shape }
+func (n workflowRunLabelCounts) nodeValue(ctx context.Context, limit int) (reflect.Value, error) {
+	return metadataAggregateMaterializeChildren(ctx, n, limit)
+}
+func (n workflowRunLabelCounts) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
+	return n.base.Children(ctx, func(index reflect.Value, node metadataLogicalNode) error {
+		var child metadataAggregateNode = metadataAggregateStoredNode{node}
+		if count, ok := n.counts[int(index.Int())]; ok {
+			child = legacyDiscussionNativeDelta{base: node, changed: map[string]reflect.Value{"IssueCount": reflect.ValueOf(count)}}
+		}
+		return visit(index, child)
+	})
 }
