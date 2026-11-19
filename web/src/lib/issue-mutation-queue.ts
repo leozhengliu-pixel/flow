@@ -1,5 +1,5 @@
 import { ApiError } from './api-client'
-import { endsSession, registerSessionCacheClearer } from '@/lib/session-cache-registry'
+import { endsSession, registerSessionCacheClearer, registerSessionFlusher } from '@/lib/session-cache-registry'
 import type { Issue, IssueUpdateInput } from '@/types/flow'
 
 /*
@@ -35,6 +35,9 @@ const waiting = new Map<string, WaitingUpdate>()
 // Bumped when the session ends: a write still waiting behind an earlier one is never sent for the next viewer, and a
 // write that was already in flight does not record versions into the next viewer's lineages.
 let sessionEpoch = 0
+// Settles when this epoch's session ends, so a write waiting behind one that never finishes is rejected at once.
+let endCurrentSession!: () => void
+let currentSessionEnd = new Promise<void>(resolve => { endCurrentSession = resolve })
 
 function sessionEnded() {
   return new ApiError('The session ended before the change was sent', 401)
@@ -44,7 +47,9 @@ function enqueue<T>(ids: string[], run: () => Promise<T>): Promise<T> {
   const previous = ids.flatMap(id => tails.get(id) ?? [])
   const epoch = sessionEpoch
   const guarded = () => epoch === sessionEpoch ? run() : Promise.reject(sessionEnded())
-  const task = previous.length ? Promise.all(previous).then(guarded) : guarded()
+  const task = previous.length
+    ? Promise.race([Promise.all(previous).then(guarded), currentSessionEnd.then(() => Promise.reject(sessionEnded()))])
+    : guarded()
   const tail: Promise<unknown> = task.then(() => undefined, () => undefined)
   for (const id of ids) tails.set(id, tail)
   void tail.then(() => {
@@ -173,5 +178,11 @@ export function resetIssueMutationQueue() {
 registerSessionCacheClearer((_viewerId, workspaceKey) => {
   if (!endsSession(workspaceKey)) return
   sessionEpoch++
+  endCurrentSession()
+  currentSessionEnd = new Promise<void>(resolve => { endCurrentSession = resolve })
   resetIssueMutationQueue()
+})
+
+registerSessionFlusher(async () => {
+  while (tails.size) await Promise.all([...tails.values()])
 })

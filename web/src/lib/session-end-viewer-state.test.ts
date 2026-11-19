@@ -16,10 +16,11 @@ vi.mock('@/lib/api', async importOriginal => ({
   setInitiativeProjectUpdatesSubscription: async (_id: string, subscribed: boolean) => ({ subscribed }),
 }))
 
-import { clearSessionCaches } from '@/lib/session-cache-registry'
+import { clearSessionCaches, flushBeforeSessionEnd } from '@/lib/session-cache-registry'
 import { ApiError } from '@/lib/api-client'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import { getDocumentContent, resetDocumentContentEditorState, setDocumentContent } from '@/components/documents/document-content-editor-state'
+import { logoutAccount } from '@/lib/api'
 import { liveActorUser, setLiveApplicationIdentities } from './actor-attribution'
 import { DraftAutosave, draftAutosaveFor, resetDraftAutosaves } from './draft-autosave'
 import { overlayPendingFavoriteIntents, resetFavoriteIntents, toggleFavorite } from './favorites'
@@ -133,5 +134,53 @@ describe('viewer state is dropped when the session ends', () => {
     expect(getInlineFilter('issues').lastSearchTerm).toBe('kept')
     await vi.advanceTimersByTimeAsync(400)
     expect(api.calls.map(call => call.kind)).toEqual(['create'])
+  })
+
+  describe('flush before logout', () => {
+    const draft = (body: string) => ({ type: 'comment', resourceId: 'i1', title: '', body, metadata: {} }) as never
+
+    it('saves a draft typed right before logout as the current viewer', async () => {
+      const autosave = draftAutosaveFor('acme|comment|issue|i1|top-level')
+      autosave.schedule(draft('typed just now'))
+      let done = false
+      const flushed = flushBeforeSessionEnd().then(() => { done = true })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(api.calls.map(call => call.kind)).toEqual(['create'])
+      expect(done).toBe(false)
+      api.calls[0].resolve({ id: 'd1', userId: 'u', type: 'comment', title: '', body: '', createdAt: '', updatedAt: '' })
+      await flushed
+      expect(done).toBe(true)
+      clearSessionCaches()
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(api.calls.map(call => call.kind)).toEqual(['create'])
+    })
+
+    it('waits for queued issue writes before the logout request is made', async () => {
+      const order: string[] = []
+      let release!: () => void
+      const first = queueIssueWrite('i1', () => new Promise(resolve => { release = () => { order.push('write'); resolve({ id: 'i1', version: 2 }) } }))
+      vi.stubGlobal('fetch', vi.fn(async () => { order.push('logout'); return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }) }))
+      const loggedOut = logoutAccount().catch(() => undefined)
+      await vi.advanceTimersByTimeAsync(100)
+      expect(order).toEqual([])
+      release()
+      await first
+      await vi.advanceTimersByTimeAsync(0)
+      await loggedOut
+      expect(order[0]).toBe('write')
+      vi.unstubAllGlobals()
+    })
+
+    it('gives up after the bound and rejects what is still pending instead of sending it', async () => {
+      const sent = vi.fn(async () => ({ id: 'i1', version: 3 }))
+      void queueIssueWrite('i1', () => new Promise(() => undefined)).catch(() => undefined)
+      const waiting = queueIssueUpdate('i1', '/api/issues/i1', { title: 'late' } as never, sent as never).then(() => 'sent', error => error)
+      const flushed = flushBeforeSessionEnd(1500)
+      await vi.advanceTimersByTimeAsync(1500)
+      await flushed
+      clearSessionCaches()
+      expect(await waiting).toBeInstanceOf(ApiError)
+      expect(sent).not.toHaveBeenCalled()
+    })
   })
 })

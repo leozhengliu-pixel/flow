@@ -1,7 +1,7 @@
 import type { Draft } from '@/types/flow'
 import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
 import { ApiError, currentWorkspaceKey } from '@/lib/api-client'
-import { endsSession, registerSessionCacheClearer } from '@/lib/session-cache-registry'
+import { endsSession, registerSessionCacheClearer, registerSessionFlusher } from '@/lib/session-cache-registry'
 import { clearComposerDraft, writeComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
 
 /**
@@ -193,6 +193,12 @@ export class DraftAutosave {
     this.generation = freshGeneration()
   }
 
+  /** Sends what is waiting for the autosave delay and resolves once no request of this context is in flight or due. */
+  async settle() {
+    this.flush()
+    for (let generation = this.generation; generation.inflight; generation = this.generation) await generation.inflight
+  }
+
   /** Deletes the context's draft, after whatever request it has in flight. */
   discard() {
     return this.detach().discard()
@@ -367,3 +373,5 @@ registerSessionCacheClearer((_viewerId, workspaceKey) => {
   autosaves.clear()
   discardedDraftIds.clear()
 })
+
+registerSessionFlusher(() => Promise.all([...autosaves.values()].map(autosave => autosave.settle())))
