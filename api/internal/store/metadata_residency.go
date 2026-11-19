@@ -52,11 +52,21 @@ func boundedMetadataRequested() bool {
 	return false
 }
 
+// loadRigAllowColdConsumers is set only by the load-test rig build
+// (loadrig.go, -tags loadtest, FLOW_LOADRIG_ALLOW_COLD_UNMIGRATED=1). It is
+// always false in production builds.
+var loadRigAllowColdConsumers bool
+
 func validateBoundedMetadataCoverage() error {
 	if _, err := metadataConsumerReviews(); err != nil {
 		return fmt.Errorf("%w: %w", ErrBoundedMetadataCoverage, err)
 	}
 	consumers := metadataFullWorkspaceConsumers()
+	if len(consumers) != 0 && loadRigAllowColdConsumers && len(registeredHotMetadataConsumers()) == 0 {
+		// Load-test builds only (-tags loadtest): measure default-COLD routing
+		// while COLD consumers are still registered; every other check holds.
+		consumers = nil
+	}
 	if len(consumers) != 0 {
 		owners := []string{}
 		for _, consumer := range consumers {

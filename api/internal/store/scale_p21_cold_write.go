@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"flow/api/internal/domain"
 )
@@ -24,11 +26,34 @@ type coldWriteMutex struct {
 
 func (m *coldWriteMutex) Lock() {
 	if m.shared != nil {
-		m.shared.Lock()
+		if !m.shared.TryLock() {
+			started := time.Now()
+			m.shared.Lock()
+			observeWriteLockWait(&coldWriterLockWaits, started)
+		}
 		m.locked()
 		return
 	}
+	if m.local.TryLock() {
+		return
+	}
+	started := time.Now()
 	m.local.Lock()
+	observeWriteLockWait(&writerLockWaits, started)
+}
+
+// writeLockWaitStats counts the writers that found a store's write lock held
+// and how long they waited (load measurement). writerLockWaits covers every
+// writer of a live store; coldWriterLockWaits the COLD facades among them.
+type writeLockWaitStats struct{ waits, nanos, longest atomic.Int64 }
+
+var writerLockWaits, coldWriterLockWaits writeLockWaitStats
+
+func observeWriteLockWait(stats *writeLockWaitStats, started time.Time) {
+	waited := int64(time.Since(started))
+	stats.waits.Add(1)
+	stats.nanos.Add(waited)
+	storeMaxInt64(&stats.longest, waited)
 }
 
 // locked runs onLock; if it panics the shared lock is returned first, so a
