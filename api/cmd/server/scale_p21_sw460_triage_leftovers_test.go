@@ -112,7 +112,15 @@ func (f scaleP21IssueUpdateFixture) sw460Differential(t *testing.T, sources []st
 	for _, source := range sources {
 		got, started := f.sw460Run(t, source, peer, call, fresh)
 		outcomes = append(outcomes, got)
-		normalized = append(normalized, scaleP21IssueUpdateNormalize(t, got, started))
+		compared := got
+		if fresh {
+			// Every source's image equals the SQL reload up to NUL (sw460Run).
+			// A bounded writer that lost the race to the other server
+			// installs that reload (installedGenerationBehind), whose rows
+			// had NUL stripped when stored; a legacy server keeps its copy.
+			compared.Installed = json.RawMessage(strings.ReplaceAll(string(got.Installed), `\u0000`, ""))
+		}
+		normalized = append(normalized, scaleP21IssueUpdateNormalize(t, compared, started))
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
 			t.Fatalf("%s changed: %s", source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
 		}
