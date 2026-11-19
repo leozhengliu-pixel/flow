@@ -25,6 +25,11 @@ type DocumentReadRequest struct {
 	Suffix             bool
 	ReadOnly           bool
 	ProjectionFallback bool
+	// SkipProjects leaves out the reciprocal project closure (the projects
+	// that list the document as a resource): a caller that never reads
+	// Data.Projects does not pay a scan of every project of the workspace.
+	// Proposed ProjectIDs are not affected: they are still selected.
+	SkipProjects bool
 }
 
 // DocumentRead owns native callback inputs as well as their response lifetime.
@@ -218,8 +223,10 @@ func (s *SQLiteStore) BeginDocumentRead(ctx context.Context, workspace, userID s
 			if err != nil {
 				return nil, err
 			}
-			if err = read.documentProjects(snapshot, request.ProjectIDs, request.ReadOnly); err != nil {
-				return nil, err
+			if !request.SkipProjects {
+				if err = read.documentProjects(snapshot, request.ProjectIDs, request.ReadOnly); err != nil {
+					return nil, err
+				}
 			}
 			if err = read.documentFavorites(snapshot); err != nil {
 				return nil, err
@@ -481,6 +488,9 @@ func (r *DocumentRead) documentLegacyScope(ctx context.Context, request Document
 	if id != "" && !request.TrashOnly {
 		scope.Write = append(scope.Write, RecordKey{Kind: "documents", ID: id})
 		err := r.owner.withHeader(ctx, node, []string{"ProjectIDs"}, func(value reflect.Value) error {
+			if request.SkipProjects {
+				return nil
+			}
 			projectIDs := append(slices.Clone(value.Interface().(domain.Document).ProjectIDs), request.ProjectIDs...)
 			return r.owner.visitNative(ctx, "projects", func(_ int, project metadataLogicalNode) error {
 				return r.documentProjectMatch(ctx, project, projectIDs, []string{id}, func(projectID string, match bool) error {
