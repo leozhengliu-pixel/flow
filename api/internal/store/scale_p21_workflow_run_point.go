@@ -236,7 +236,11 @@ func (s *SQLiteStore) workflowRunPointAttempt(ctx context.Context, w *workflowRu
 	if err != nil {
 		return err
 	}
-	counted, err := inputs.image(ctx, labels)
+	projects, err := s.workflowRunProjectCounts(ctx, tx, workspace, inputs, createdIssues)
+	if err != nil {
+		return err
+	}
+	counted, err := inputs.image(ctx, labels, projects)
 	if err != nil {
 		return err
 	}
@@ -425,6 +429,58 @@ func (s *SQLiteStore) workflowRunLabelCounts(ctx context.Context, tx *sqlTx, wor
 			return err
 		}
 		counts[int(ordinal.Int())] = totals[value.Interface().(domain.IssueLabel).ID]
+		return nil
+	})
+	return counts, err
+}
+
+// workflowRunProjectCounts returns every project's derived IssueCount by
+// ordinal, as the full writer's recount computes it: the active issues naming
+// the project (one SQL GROUP BY over the stored issue rows, plus the active
+// issues the callback creates). No action changes an existing issue's project
+// or archive state. Like the recount, it covers every stored project, so a row
+// whose stored count has drifted is rewritten and the others stay untouched.
+func (s *SQLiteStore) workflowRunProjectCounts(ctx context.Context, tx *sqlTx, workspace string, inputs *workflowRunInputs, created []domain.Issue) (map[int]int, error) {
+	index, _, _ := metadataLogicalField("projects")
+	empty, err := inputs.source.fields[index].isNil(ctx)
+	if err != nil || empty {
+		return nil, err
+	}
+	totals := map[string]int{}
+	rows, err := tx.QueryContext(ctx, `SELECT project_id,COUNT(*) FROM issue_records WHERE workspace_key=? AND archived=0 AND project_id<>'' GROUP BY project_id`, workspace)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id string
+		var count int
+		if err := rows.Scan(&id, &count); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if err := inputs.reserve(ctx, uint64(len(id))*2+64); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		totals[id] = count
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for _, issue := range created {
+		if issue.ArchivedAt == nil && issue.Project != nil && issue.Project.ID != "" {
+			totals[issue.Project.ID]++
+		}
+	}
+	counts := map[int]int{}
+	err = inputs.source.fields[index].Children(ctx, func(ordinal reflect.Value, node metadataLogicalNode) error {
+		work := &ResourceRead{store: s}
+		defer work.Close()
+		value, err := work.projectNode(ctx, node, "ID")
+		if err != nil {
+			return err
+		}
+		counts[int(ordinal.Int())] = totals[value.Interface().(domain.Project).ID]
 		return nil
 	})
 	return counts, err

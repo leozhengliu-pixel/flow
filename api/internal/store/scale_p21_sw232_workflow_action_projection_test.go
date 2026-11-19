@@ -126,7 +126,7 @@ func TestScaleP21SW232WorkflowActionFieldsKeepEditorFrames(t *testing.T) {
 				inputs.data.WorkflowRuns = append(inputs.data.WorkflowRuns, domain.WorkflowRun{
 					ID: "new-run", WorkflowID: "workflow", Status: "succeeded",
 				})
-				image, err := inputs.image(t.Context(), nil)
+				image, err := inputs.image(t.Context(), nil, nil)
 				if err != nil {
 					t.Fatal("closed action delta materialized the editor/body", err)
 				}
@@ -187,7 +187,7 @@ func TestScaleP21SW232WorkflowActionDeltaRejectsUnrelatedChanges(t *testing.T) {
 				issue.Number++
 			}
 			inputs.data.WorkflowRuns = append(inputs.data.WorkflowRuns, domain.WorkflowRun{ID: "new-run", WorkflowID: "workflow"})
-			image, err := inputs.image(t.Context(), nil)
+			image, err := inputs.image(t.Context(), nil, nil)
 			if image != nil {
 				image.Release()
 			}

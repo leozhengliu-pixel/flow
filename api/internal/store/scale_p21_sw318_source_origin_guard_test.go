@@ -20,7 +20,7 @@ import (
 func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 	contracts := map[string]string{
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
-		"scale_p21_workflow_run_write.go":             "e3a4d1481069aff155ca1122253409c610768938df1b8be405e73abfc8da44e8",
+		"scale_p21_workflow_run_write.go":             "82b916096b9c5e7493da777bc8741a7b59d7e7fd94e8d2f21f217f5966519d71",
 		"issue_records.go":                            "8a8904df034274fc5b25d1b3af93e127970314f1998fecbe33cd1a110be6571a",
 		"issue_query.go":                              "16289207dd74d88be3308084b7483ea38f575f8549bf396bbfbb83f599220c45",
 		"auth.go":                                     "47915d692b1cb20f50a3b586e62887e6dc8720cbbdb6bb626770176dd7128426",

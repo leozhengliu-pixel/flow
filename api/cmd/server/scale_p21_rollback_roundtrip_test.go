@@ -893,9 +893,7 @@ func TestScaleP21RollbackRoundTrip(t *testing.T) {
 
 	t.Run("flag on writes then flag off", func(t *testing.T) {
 		got := rtScenario(t, seed, "on-then-off", true, false, true)
-		if rtCompare(t, reference, got) && !t.Failed() {
-			t.Skip("FINDING 1: a flag-on workflow run leaves projects[].issueCount stale (flag off recounts it to 1, bumping the project record and the authz epoch 27 vs 28); everything else, including every served GET, matches")
-		}
+		rtCompare(t, reference, got)
 	})
 	t.Run("flag off writes then flag on", func(t *testing.T) {
 		got := rtScenario(t, seed, "off-then-on", false, true, true)
