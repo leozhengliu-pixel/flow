@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -1373,33 +1372,24 @@ func apiKeyUpdateString(raw json.RawMessage) (value string, present bool, isNull
 	return strings.TrimSpace(value), true, false, nil
 }
 
+// GET /api/api-keys is COLD (registered in scaleP21ColdRoutes): the listing
+// runs on the store withColdMetadataRequest lends it.
 func (s *server) listAPIKeys(w http.ResponseWriter, r *http.Request) {
-	actor := requestActor(s, r)
-	data := s.workspaceData(r)
-	result := []domain.APIKey{}
-	admin := strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner")
-	apiKeyID := ""
-	if token, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
-		// A token-authenticated request must not enumerate the creator's other
-		// credentials, even when that creator is a workspace administrator.
-		apiKeyID = token.ID
-	}
-	for _, key := range data.APIKeys {
-		if key.RevokedAt == nil && (apiKeyID != "" && key.ID == apiKeyID || apiKeyID == "" && (admin || key.CreatorID == actor.ID)) {
-			result = append(result, publicAPIKey(key))
-		}
-	}
-	writeJSON(w, http.StatusOK, result)
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:listAPIKeys", "", func(repo *store.SQLiteStore, request *http.Request) {
+		s.listAPIKeysWithStore(w, request, repo)
+	})
+}
+
+type apiKeyCreateInput struct {
+	Name            string   `json:"name"`
+	Scopes          []string `json:"scopes"`
+	TeamIDs         []string `json:"teamIds"`
+	TeamRestriction string   `json:"teamRestriction"`
+	ExpiresAt       *string  `json:"expiresAt,omitempty"`
 }
 
 func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name            string   `json:"name"`
-		Scopes          []string `json:"scopes"`
-		TeamIDs         []string `json:"teamIds"`
-		TeamRestriction string   `json:"teamRestriction"`
-		ExpiresAt       *string  `json:"expiresAt,omitempty"`
-	}
+	var input apiKeyCreateInput
 	if !decodeJSON(w, r, &input) {
 		return
 	}
@@ -1415,67 +1405,9 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor := requestActor(s, r)
-	var created domain.APIKey
-	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "api_key.created", input, func(data *domain.Bootstrap) (string, error) {
-		if s.authDisabled {
-			data.ViewerRole = "admin"
-		}
-		if strings.EqualFold(data.ViewerRole, "guest") {
-			return "", fmt.Errorf("%w: guest users cannot create personal API keys", store.ErrAuthForbidden)
-		}
-		if !roleSatisfiesWorkspacePermission(data.ViewerRole, data.WorkspaceSettings.APIKeyPermission) {
-			return "", fmt.Errorf("%w: API key creation is limited by workspace security policy", store.ErrAuthForbidden)
-		}
-		for _, existing := range data.APIKeys {
-			if existing.RevokedAt == nil && existing.CreatorID == actor.ID && strings.EqualFold(strings.TrimSpace(existing.Name), input.Name) {
-				return "", fmt.Errorf("%w: API key name already exists", errInvalid)
-			}
-		}
-		scopes := normalizeAPIKeyScopes(input.Scopes)
-		if err := validateAPIKeyScopes(data, scopes); err != nil {
-			return "", err
-		}
-		teamIDs := normalizedStrings(input.TeamIDs)
-		for _, id := range teamIDs {
-			if !teamExists(data, id) {
-				return "", fmt.Errorf("%w: unknown team", errInvalid)
-			}
-		}
-		restriction := strings.ToLower(strings.TrimSpace(input.TeamRestriction))
-		if restriction == "" {
-			if len(teamIDs) > 0 {
-				restriction = "selected"
-			} else {
-				restriction = "all"
-			}
-		}
-		if restriction != "all" && restriction != "selected" {
-			return "", fmt.Errorf("%w: teamRestriction must be all or selected", errInvalid)
-		}
-		if restriction == "selected" && len(teamIDs) == 0 {
-			return "", fmt.Errorf("%w: selected team access requires at least one team", errInvalid)
-		}
-		if restriction == "all" {
-			teamIDs = nil
-		}
-		var expiresAt *time.Time
-		if input.ExpiresAt != nil {
-			var parseErr error
-			expiresAt, parseErr = parseAPIKeyExpiry(input.ExpiresAt)
-			if parseErr != nil {
-				return "", parseErr
-			}
-		}
-		created = domain.APIKey{ID: idgen.New("api_key_"), Name: input.Name, Prefix: secret[:min(len(secret), 17)], SecretHash: secretHash(secret), CreatorID: actor.ID, Scopes: scopes, TeamIDs: teamIDs, TeamRestriction: restriction, CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt}
-		data.APIKeys = append([]domain.APIKey{created}, data.APIKeys...)
-		appendAudit(data, "created", "api_key", created.ID, map[string]any{"name": created.Name, "prefix": created.Prefix, "scopes": created.Scopes, "teamRestriction": created.TeamRestriction})
-		return created.ID, nil
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:createAPIKey", "api_key.created", func(repo *store.SQLiteStore, request *http.Request) {
+		s.createAPIKeyWithStore(w, request, repo, input, secret, actor)
 	})
-	if err != nil {
-		respondMutation(w, err, http.StatusCreated, nil)
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"key": publicAPIKey(created), "secret": secret})
 }
 
 // updateAPIKey changes the non-secret metadata of an existing personal key.
@@ -1540,81 +1472,11 @@ func (s *server) updateAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	actor := requestActor(s, r)
-	var updated domain.APIKey
-	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "api_key.updated", map[string]any{
-		"id": id, "name": name, "scopes": scopes, "teamIds": teamIDs, "teamRestriction": restrictionValue, "expiresAt": expiresAt,
-	}, func(data *domain.Bootstrap) (string, error) {
-		if s.authDisabled {
-			data.ViewerRole = "admin"
-		}
-		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
-			return key.ID == id && key.RevokedAt == nil && (key.CreatorID == actor.ID || workspaceAdminRole(data.ViewerRole))
-		})
-		if index < 0 {
-			return "", errNotFound
-		}
-		current := &data.APIKeys[index]
-		before := *current
-		if input.Name != nil {
-			for _, existing := range data.APIKeys {
-				if existing.ID != id && existing.RevokedAt == nil && existing.CreatorID == current.CreatorID && strings.EqualFold(strings.TrimSpace(existing.Name), name) {
-					return "", fmt.Errorf("%w: API key name already exists", errInvalid)
-				}
-			}
-			current.Name = name
-		}
-		if scopesSet {
-			if err := validateAPIKeyScopes(data, scopes); err != nil {
-				return "", err
-			}
-			current.Scopes = scopes
-		}
-		if teamIDsSet || restrictionSet {
-			ids := slices.Clone(current.TeamIDs)
-			restriction := strings.ToLower(strings.TrimSpace(current.TeamRestriction))
-			if teamIDsSet {
-				ids = teamIDs
-			}
-			if restrictionSet {
-				restriction = strings.ToLower(restrictionValue)
-			}
-			if restriction == "" {
-				if len(ids) > 0 {
-					restriction = "selected"
-				} else {
-					restriction = "all"
-				}
-			}
-			if restriction != "all" && restriction != "selected" {
-				return "", fmt.Errorf("%w: teamRestriction must be all or selected", errInvalid)
-			}
-			for _, teamID := range ids {
-				if !teamExists(data, teamID) {
-					return "", fmt.Errorf("%w: unknown team", errInvalid)
-				}
-			}
-			if restriction == "selected" && len(ids) == 0 {
-				return "", fmt.Errorf("%w: selected team access requires at least one team", errInvalid)
-			}
-			if restriction == "all" {
-				ids = nil
-			}
-			current.TeamIDs, current.TeamRestriction = ids, restriction
-		}
-		if expiresSet {
-			current.ExpiresAt = expiresAt
-		}
-		updated = publicAPIKey(*current)
-		if unchangedEdit(before, *current) {
-			return id, store.ErrNoMutation
-		}
-		return id, nil
+	update := apiKeyUpdate{id: id, name: name, nameSet: input.Name != nil, scopes: scopes, scopesSet: scopesSet, teamIDs: teamIDs, teamIDsSet: teamIDsSet,
+		restrictionValue: restrictionValue, restrictionSet: restrictionSet, expiresSet: expiresSet, expiresAt: expiresAt}
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:updateAPIKey", "api_key.updated", func(repo *store.SQLiteStore, request *http.Request) {
+		s.updateAPIKeyWithStore(w, request, repo, update, actor)
 	})
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
-		return
-	}
-	writeJSON(w, http.StatusOK, updated)
 }
 
 // rotateAPIKeySecret revokes the previous secret and returns a replacement
@@ -1627,83 +1489,30 @@ func (s *server) rotateAPIKeySecret(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusInternalServerError, nil)
 		return
 	}
-	var rotated domain.APIKey
-	err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "api_key.secret_rotated", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "apiKeys", ID: id}}}, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
-			return key.ID == id && key.RevokedAt == nil && (key.CreatorID == actor.ID || strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner"))
-		})
-		if index < 0 {
-			return errNotFound
-		}
-		data.APIKeys[index].SecretHash = secretHash(secret)
-		data.APIKeys[index].Prefix = secret[:min(len(secret), 17)]
-		rotated = publicAPIKey(data.APIKeys[index])
-		appendAudit(data, "secret_rotated", "api_key", id, map[string]any{"name": rotated.Name, "prefix": rotated.Prefix})
-		return nil
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:rotateAPIKeySecret", "api_key.secret_rotated", func(repo *store.SQLiteStore, request *http.Request) {
+		s.rotateAPIKeySecretWithStore(w, request, repo, id, secret, actor)
 	})
-	if err != nil {
-		respondMutation(w, err, http.StatusNotFound, nil)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"key": rotated, "secret": secret})
 }
 
 func (s *server) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
-	id, actor := r.PathValue("id"), requestActor(s, r)
-	viewerRole := "admin"
-	if !s.store.BoundedMetadataEnabled() {
-		viewerRole = s.workspaceData(r).ViewerRole
-	} else if !s.authDisabled {
-		var key *domain.APIKey
-		if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
-			key = &credential
-		}
-		viewer, err := s.store.ProjectScopedMetadata(r.Context(), workspaceKey(r), authUser(r).ID, key, store.MetadataRecordScope{})
-		if err != nil {
-			respondMutation(w, err, http.StatusNoContent, nil)
-			return
-		}
-		viewerRole = viewer.ViewerRole
-	}
-	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "api_key.revoked", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "apiKeys", ID: id}}}, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
-			return key.ID == id && (key.CreatorID == actor.ID || workspaceAdminRole(viewerRole))
-		})
-		if index < 0 {
-			return errNotFound
-		}
-		now := time.Now().UTC()
-		data.APIKeys[index].RevokedAt = &now
-		appendAudit(data, "revoked", "api_key", id, map[string]any{"name": data.APIKeys[index].Name, "prefix": data.APIKeys[index].Prefix, "ownerId": data.APIKeys[index].CreatorID})
-		return nil
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:revokeAPIKey", "api_key.revoked", func(repo *store.SQLiteStore, request *http.Request) {
+		s.revokeAPIKeyWithStore(w, request, repo)
 	})
-	if err != nil {
-		respondMutation(w, err, http.StatusNoContent, nil)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
+// GET /api/oauth-applications is COLD (registered in scaleP21ColdRoutes).
 func (s *server) listOAuthApplications(w http.ResponseWriter, r *http.Request) {
-	result := s.workspaceData(r).OAuthApplications
-	for index := range result {
-		result[index].ClientSecret = ""
-	}
-	writeJSON(w, http.StatusOK, result)
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:listOAuthApplications", "", func(repo *store.SQLiteStore, request *http.Request) {
+		s.listOAuthApplicationsWithStore(w, request, repo)
+	})
 }
 
 // GET /api/oauth-applications/{id} returns one application (without its
-// client secret).
+// client secret). COLD (registered in scaleP21ColdRoutes).
 func (s *server) getOAuthApplication(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
-	index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == r.PathValue("id") })
-	if index < 0 {
-		writeError(w, http.StatusNotFound, "Application not found")
-		return
-	}
-	app := data.OAuthApplications[index]
-	app.ClientSecret = ""
-	writeJSON(w, http.StatusOK, app)
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:getOAuthApplication", "", func(repo *store.SQLiteStore, request *http.Request) {
+		s.getOAuthApplicationWithStore(w, request, repo)
+	})
 }
 
 type oauthInput = publicapi.OAuthApplicationInput
@@ -1725,24 +1534,9 @@ func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) 
 	clientID, _ := randomSecret("flow_client_")
 	secret, _ := randomSecret("flow_secret_")
 	actor := requestActor(s, r)
-	var created domain.OAuthApplication
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "oauth_application.created", input, func(data *domain.Bootstrap) (string, error) {
-		created = domain.OAuthApplication{ID: idgen.New("oauth_app_"), Name: strings.TrimSpace(*input.Name), ClientID: clientID, ClientSecret: secret, CreatorID: actor.ID, CredentialsAuthorizedBy: actor.ID, RedirectURIs: []string{}, Scopes: []string{"read"}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
-		applyOAuthInput(&created, input)
-		if err := checkGitHubUsernameAvailable(data, created.ID, created.GitHubUsername); err != nil {
-			return "", err
-		}
-		data.OAuthApplications = append([]domain.OAuthApplication{created}, data.OAuthApplications...)
-		return created.ID, nil
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:createOAuthApplication", "oauth_application.created", func(repo *store.SQLiteStore, request *http.Request) {
+		s.createOAuthApplicationWithStore(w, request, repo, input, clientID, secret, actor)
 	})
-	if err == nil {
-		// Keep each workspace's managed app webhook in step, as manifest saves do.
-		go s.reconcileAllApplicationWebhooks(context.Background())
-		// The response carries the client secret.
-		s.auditAPIKeyCredential(r, "client_secret_issued", created)
-		w.Header().Set("Cache-Control", "no-store")
-	}
-	respondMutation(w, err, http.StatusCreated, created)
 }
 
 func applyOAuthInput(app *domain.OAuthApplication, input oauthInput) {
@@ -1798,47 +1592,12 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// DELETE /api/oauth-applications/{id} is COLD (registered in
+// scaleP21ColdRoutes).
 func (s *server) deleteOAuthApplication(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	clientID := ""
-	var deleted domain.OAuthApplication
-	deletedFrom := ""
-	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "oauth_application.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "oauthApplications", ID: id}}}, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
-		if index < 0 {
-			return errNotFound
-		}
-		clientID = data.OAuthApplications[index].ClientID
-		deleted, deletedFrom = data.OAuthApplications[index], data.Workspace.Name
-		data.OAuthApplications = slices.Delete(data.OAuthApplications, index, index+1)
-		return nil
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:deleteOAuthApplication", "oauth_application.deleted", func(repo *store.SQLiteStore, request *http.Request) {
+		s.deleteOAuthApplicationWithStore(w, request, repo)
 	})
-	if err != nil {
-		respondMutation(w, err, http.StatusNoContent, nil)
-		return
-	}
-	// Like the reference app, a deleted application leaves every workspace it was
-	// installed in: its app users are listed as "Left workspace".
-	if clientID != "" {
-		installations, err := s.store.ApplicationInstallationsByClient(r.Context(), clientID)
-		if err != nil {
-			respondMutation(w, err, http.StatusNoContent, nil)
-			return
-		}
-		for _, installation := range installations {
-			if _, err := s.store.UninstallApplication(r.Context(), installation.WorkspaceKey, installation.ID); err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					continue
-				}
-				respondMutation(w, err, http.StatusNoContent, nil)
-				return
-			}
-			s.reconcileApplicationWebhooks(context.WithoutCancel(r.Context()), installation.WorkspaceKey)
-		}
-	}
-	// The application's tokens are gone with it; its creator hears so by email.
-	s.notifyApplicationRevoked(context.WithoutCancel(r.Context()), deleted, deletedFrom)
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) exchangeOAuthToken(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,6 @@
 {
   "source": "server/oauth_authorized_applications.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "listAuthorizedApplications": {
       "owner": "P21",
@@ -18,15 +18,17 @@
     },
     "revokeMCPAuthorizations": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
-        "WorkspaceMetadata"
+        "withColdMetadataRequest"
       ],
       "temperature": "cold",
       "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
       "callers": [
         "DELETE /api/oauth/authorized-applications/mcp (api/cmd/server/oauth_platform.go:37)"
-      ]
+      ],
+      "coldDispatch": "server/oauth_authorized_applications.go:revokeMCPAuthorizations",
+      "reason": "COLD production route. The workspace access check runs first on the server's store (refusals take no cold slot); flag off withColdMetadataRequest runs revokeMCPAuthorizationsWithStore on the server's store literally. Bounded, DELETE /api/oauth/authorized-applications/mcp is registered in scaleP21ColdRoutes (authorization's projection and the handler share the replica cold slot); the handler refreshes the facade and reads every grant (WorkspaceMetadata) and the installations from it, then revokes each MCP grant of the viewer (every member's for admins) with RevokeOAuthAuthorizationRecords (the bounded OAuth metadata transaction, which also revokes the grant's tokens) and records its audit entry on the server's store, as legacy. Bounded before this, its WorkspaceMetadata read returned the resident policy copy without oauthAuthorizations and the route revoked nothing ({\"revoked\":0}; the tokens kept authenticating). TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares owner/admin/member/guest revocations, repeated and empty revocations, an unknown workspace and the tokens authenticating afterwards: responses, rows, audit, events and installed image == reload."
     }
   }
 }
