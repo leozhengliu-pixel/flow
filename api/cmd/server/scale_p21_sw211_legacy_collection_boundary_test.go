@@ -35,18 +35,11 @@ func scaleP21SW211FunctionName(fn *ast.FuncDecl) string {
 }
 
 func TestScaleP21SW211LegacyCollectionHotBoundaries(t *testing.T) {
-	// These cold callers retain literal storage semantics until the separate
-	// production cold-routing manifest supplies their facade. This allowlist
-	// is a callset guard, not certification of those cold routing obligations.
-	coldAccount := map[string]string{
-		"codingDirectory.CodingUser":     "coding provisioning/signing setup",
-		"server.userHasLegacySigningKey": "coding signing setup",
-		"server.accountPasskeys":         "MFA setup/authenticator account directory",
-		"server.listPasskeys":            "account security settings",
-		"server.getUserSettings":         "account settings endpoint",
-		"server.getCommitSigningKey":     "account signing setup",
-		"server.removeCommitSigningKey":  "account signing setup",
-	}
+	// Every account reader goes through server.accountCollections, which
+	// with bounded metadata on copies the values out of the reviewed
+	// BeginAccountCollectionRead; the literal store.AccountCollections runs
+	// only in flag-off branches of that adapter and of the account settings
+	// adapter. The HOT comment-action entries still dispatch bounded first.
 	hotAccount := map[string]string{
 		"server.startCommentActions": "s.startCommentActionsBounded(r, issueID, comment)",
 		"server.listCommentActions":  "s.listCommentActionsBounded(w, r)",
@@ -102,20 +95,7 @@ func TestScaleP21SW211LegacyCollectionHotBoundaries(t *testing.T) {
 					return true
 				}
 				if selector.Sel.Name == "AccountCollections" {
-					if coldAccount[name] != "" {
-						return true
-					}
-					if boundedCall := hotAccount[name]; boundedCall != "" {
-						first, ok := fn.Body.List[0].(*ast.IfStmt)
-						if !ok || scaleP21SW211Node(t, first.Cond) != "s.store.BoundedMetadataEnabled()" ||
-							len(first.Body.List) != 2 || scaleP21SW211Node(t, first.Body.List[0]) != boundedCall {
-							t.Errorf("%s lost its first bounded owned dispatch", name)
-						} else if _, returns := first.Body.List[1].(*ast.ReturnStmt); !returns {
-							t.Errorf("%s bounded dispatch falls through to legacy account collections", name)
-						}
-						return true
-					}
-					if name == "server.requestAccountSettings" {
+					if name == "server.requestAccountSettings" || name == "server.accountCollections" {
 						offOnly := false
 						for _, ancestor := range ancestors {
 							if branch, ok := ancestor.(*ast.IfStmt); ok && scaleP21SW211Node(t, branch.Cond) == "!s.store.BoundedMetadataEnabled()" &&
@@ -124,7 +104,7 @@ func TestScaleP21SW211LegacyCollectionHotBoundaries(t *testing.T) {
 							}
 						}
 						if !offOnly {
-							t.Error("owned account settings adapter reaches the wrapper with the flag on")
+							t.Errorf("%s reaches the literal account collections with the flag on", name)
 						}
 						return true
 					}
@@ -153,18 +133,39 @@ func TestScaleP21SW211LegacyCollectionHotBoundaries(t *testing.T) {
 			})
 		}
 	}
-	for name := range coldAccount {
-		if counts["AccountCollections/"+name] != 1 {
-			t.Errorf("cold account caller changed: %s count=%d", name, counts["AccountCollections/"+name])
+	// The HOT comment-action entries dispatch bounded before any account read.
+	for _, file := range []string{"comment_actions.go"} {
+		parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range parsed.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			boundedCall, hot := hotAccount[scaleP21SW211FunctionName(fn)]
+			if !hot {
+				continue
+			}
+			counts["hot/"+scaleP21SW211FunctionName(fn)]++
+			first, ok := fn.Body.List[0].(*ast.IfStmt)
+			if !ok || scaleP21SW211Node(t, first.Cond) != "s.store.BoundedMetadataEnabled()" ||
+				len(first.Body.List) != 2 || scaleP21SW211Node(t, first.Body.List[0]) != boundedCall {
+				t.Errorf("%s lost its first bounded owned dispatch", scaleP21SW211FunctionName(fn))
+			} else if _, returns := first.Body.List[1].(*ast.ReturnStmt); !returns {
+				t.Errorf("%s bounded dispatch falls through to legacy account collections", scaleP21SW211FunctionName(fn))
+			}
 		}
 	}
 	for name := range hotAccount {
-		if counts["AccountCollections/"+name] != 1 {
-			t.Errorf("HOT account branch guard lost its witnessed literal call: %s", name)
+		if counts["hot/"+name] != 1 {
+			t.Errorf("HOT account entry missing: %s", name)
 		}
 	}
 	for _, key := range []string{
 		"AccountCollections/server.requestAccountSettings",
+		"AccountCollections/server.accountCollections",
 		"TrashSnapshot/server.authorizeWorkspaceRequest",
 		"TrashSnapshot/server.restoreAgentChangeEntity",
 	} {
