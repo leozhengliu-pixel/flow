@@ -447,7 +447,11 @@ func (s *SQLiteStore) rewriteWorkspaceKeyJSON(ctx context.Context, tx *sqlTx, ta
 		var set, match string
 		switch {
 		case s.dialect == "postgres" && column.binary:
-			set = `convert_to(replace(convert_from(` + name + `,'UTF8'),?,?),'UTF8')`
+			// A body may hold raw invalid UTF-8 (an opaque payload), which a
+			// UTF8 decode refuses. Replacing in the LATIN1 view is a byte
+			// replacement: exact for valid UTF-8, whose needle never starts
+			// inside a character, and lossless for every other byte.
+			set = `convert_to(replace(convert_from(` + name + `,'LATIN1'),convert_from(convert_to(?,'UTF8'),'LATIN1'),convert_from(convert_to(?,'UTF8'),'LATIN1')),'LATIN1')`
 			match = `position(convert_to(?,'UTF8') IN ` + name + `)>0`
 		case s.dialect == "postgres":
 			set, match = `replace(`+name+`,?,?)`, `strpos(`+name+`,?)>0`

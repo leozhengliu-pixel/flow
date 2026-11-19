@@ -157,7 +157,7 @@ func (s *SQLiteStore) scaleP21SW18CollectionState(field string) string {
 			return "LOWER(JSON_TYPE(JSON_EXTRACT(CONVERT(data USING utf8mb4),'$." + path + "')))"
 		case "postgres":
 			parts := strings.ReplaceAll(path, ".", ",")
-			return "jsonb_typeof(convert_from(data,'UTF8')::jsonb #> '{" + parts + "}')"
+			return "jsonb_typeof(flow_utf8(data)::jsonb #> '{" + parts + "}')"
 		default:
 			return "json_type(data,'$." + path + "')"
 		}
@@ -169,7 +169,7 @@ func (s *SQLiteStore) scaleP21SW18CollectionState(field string) string {
 		length = "JSON_LENGTH(JSON_EXTRACT(CONVERT(data USING utf8mb4),'$." + field + "'))"
 		textKind = "'string'"
 	case "postgres":
-		length = "jsonb_array_length(convert_from(data,'UTF8')::jsonb -> '" + field + "')"
+		length = "jsonb_array_length(flow_utf8(data)::jsonb -> '" + field + "')"
 		textKind = "'string'"
 	}
 	manifest := metadataCollectionsKey + "." + field

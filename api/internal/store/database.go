@@ -85,6 +85,9 @@ type sqlDatabase struct {
 	// flush opens the catalog checkpoint of a collection a write starts
 	// (bounded_catalog_collections.go).
 	boundedCatalog atomic.Bool
+	// utf8Repair: PostgreSQL's flow_utf8 is the repair decoder, so a write
+	// of a raw invalid UTF-8 body needs no switch (postgres_utf8_decoder.go).
+	utf8Repair atomic.Bool
 }
 
 // commitHooks run inside sqlTx.Commit: beforeCommit once the transaction's
@@ -124,6 +127,9 @@ type sqlTx struct {
 	// numbering: this transaction assigns change-log cursors
 	// (sequenceWorkspaceBatch); commit hooks skip it.
 	numbering bool
+	// utf8Repair: this transaction switched PostgreSQL to the repair
+	// decoder (postgres_utf8_decoder.go).
+	utf8Repair bool
 	// audit: the mutation whose staged audit entries this transaction
 	// inserts when it commits (audit_events.go).
 	audit                *auditCollector
@@ -263,6 +269,9 @@ func (tx *sqlTx) Commit() error {
 	}
 	if write != nil {
 		write.observe(revision, revisionErr)
+	}
+	if tx.utf8Repair && tx.database != nil {
+		tx.database.utf8Repair.Store(true)
 	}
 	if tx.audit != nil {
 		tx.audit.pending = nil
@@ -642,6 +651,9 @@ func (d *sqlDatabase) ExecContext(ctx context.Context, query string, args ...any
 		}
 		return result, tx.Commit()
 	}
+	if _, err := d.admitRawUTF8(ctx, d.DB, false, args); err != nil {
+		return nil, err
+	}
 	observeSQLStatement(ctx, query)
 	return d.DB.ExecContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
@@ -731,6 +743,13 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 		if workspace, ok := metadataWriteWorkspace(query, args); ok {
 			tx.queueCacheRevision(workspace, cacheKindMetadata)
 		}
+	}
+	if !tx.utf8Repair {
+		switched, err := tx.database.admitRawUTF8(ctx, tx.Tx, true, args)
+		if err != nil {
+			return nil, err
+		}
+		tx.utf8Repair = switched
 	}
 	observeSQLStatement(ctx, query)
 	var result sql.Result

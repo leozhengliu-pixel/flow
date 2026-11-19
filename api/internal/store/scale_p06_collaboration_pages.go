@@ -63,7 +63,7 @@ func (s *SQLiteStore) ReadCollaborationRecoveryPage(ctx context.Context, workspa
 						p += string(c)
 					}
 				}
-				return "(convert_from(data, 'UTF8')::jsonb #>> '{" + p + "}')"
+				return "(flow_utf8(data)::jsonb #>> '{" + p + "}')"
 			}
 			return s.jsonText("data", path)
 		}

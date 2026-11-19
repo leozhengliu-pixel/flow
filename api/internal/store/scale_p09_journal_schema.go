@@ -351,7 +351,7 @@ func recordJournalTriggerSpecs(dialect string) []recordJournalTrigger {
 						without := func(row, field string) string { return `json_remove(` + row + `.data,'$.` + field + `')` }
 						if dialect == "postgres" {
 							without = func(row, field string) string {
-								return `(convert_from(` + row + `.data,'UTF8')::jsonb - '` + field + `')`
+								return `(flow_utf8(` + row + `.data)::jsonb - '` + field + `')`
 							}
 						} else if dialect == "mysql" {
 							without = func(row, field string) string {

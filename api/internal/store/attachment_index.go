@@ -139,7 +139,7 @@ func (s *SQLiteStore) IssueAttachmentParent(ctx context.Context, q IssueRecordQu
 	if s.dialect == "mysql" {
 		match = "JSON_CONTAINS(JSON_EXTRACT(CONVERT(i.data USING utf8mb4), '$.attachments'), JSON_OBJECT('id', ?))"
 	} else if s.dialect == "postgres" {
-		match = "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(convert_from(i.data,'UTF8')::jsonb->'attachments','[]'::jsonb)) a WHERE a->>'id'=?)"
+		match = "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(flow_utf8(i.data)::jsonb->'attachments','[]'::jsonb)) a WHERE a->>'id'=?)"
 	}
 	prefix, prefixArgs := issueAccessCTE(q)
 	var parent string

@@ -93,7 +93,7 @@ func (s *SQLiteStore) labelDeletionWrite(ctx context.Context, tx *sqlTx, workspa
 		text = "CAST(data AS CHAR)"
 	}
 	if s.dialect == "postgres" {
-		text = "convert_from(data,'UTF8')"
+		text = "flow_utf8(data)"
 	}
 	lock := ""
 	if s.dialect != "sqlite" {

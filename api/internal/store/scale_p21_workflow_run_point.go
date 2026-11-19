@@ -330,7 +330,7 @@ func (s *SQLiteStore) workflowRunLargestIssueNumber(ctx context.Context, tx *sql
 	case "mysql":
 		expression = `CAST(JSON_EXTRACT(CONVERT(data USING utf8mb4),'$.number') AS SIGNED)`
 	case "postgres":
-		expression = `CAST(convert_from(data,'UTF8')::jsonb->>'number' AS BIGINT)`
+		expression = `CAST(flow_utf8(data)::jsonb->>'number' AS BIGINT)`
 	}
 	var largest sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `SELECT MAX(`+expression+`) FROM issue_records WHERE workspace_key=?`, workspace).Scan(&largest); err != nil {

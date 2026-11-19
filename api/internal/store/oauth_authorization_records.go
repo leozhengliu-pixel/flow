@@ -223,7 +223,7 @@ func (s *SQLiteStore) CreateOAuthAuthorizationGrant(ctx context.Context, code st
 			text = "CAST(data AS CHAR)"
 		}
 		if s.dialect == "postgres" {
-			text = "convert_from(data,'UTF8')"
+			text = "flow_utf8(data)"
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='oauthAuthorizations' AND `+text+` LIKE ? ESCAPE '!' AND `+text+` LIKE ? ESCAPE '!' ORDER BY collection_order,record_key`+lock, grant.WorkspaceKey, labelReferencePattern(grant.ClientID), labelReferencePattern(grant.UserID))
 		if err != nil {
@@ -381,7 +381,7 @@ func (s *SQLiteStore) RevokeOAuthAuthorizationRecords(ctx context.Context, works
 			text = "CAST(data AS CHAR)"
 		}
 		if s.dialect == "postgres" {
-			text = "convert_from(data,'UTF8')"
+			text = "flow_utf8(data)"
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='apiKeys' AND `+text+` LIKE ? ESCAPE '!'`+lock, workspace, labelReferencePattern(id))
 		if err != nil {

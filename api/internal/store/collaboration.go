@@ -37,7 +37,7 @@ func collaborationUpdatesLookup(ctx context.Context, q metadataReader, workspace
 func (s *SQLiteStore) IssueDocumentID(ctx context.Context, workspace, issueID string) (string, error) {
 	expression := s.jsonText("data", "documentContent.id")
 	if s.dialect == "postgres" {
-		expression = "(convert_from(data, 'UTF8')::jsonb #>> '{documentContent,id}')"
+		expression = "(flow_utf8(data)::jsonb #>> '{documentContent,id}')"
 	}
 	var documentID string
 	err := s.db.QueryRowContext(ctx, "SELECT COALESCE(NULLIF("+expression+", ''), ?) FROM issue_records WHERE workspace_key=? AND id=?", "document_content_"+issueID, workspace, issueID).Scan(&documentID)

@@ -528,7 +528,7 @@ func (s *SQLiteStore) scaleP21SW17JSONArrayLength(column, field string) string {
 	case "mysql":
 		return "COALESCE(JSON_LENGTH(JSON_EXTRACT(CONVERT(" + column + " USING utf8mb4),'$." + field + "')),0)"
 	case "postgres":
-		value := "(convert_from(" + column + ",'UTF8')::jsonb -> '" + field + "')"
+		value := "(flow_utf8(" + column + ")::jsonb -> '" + field + "')"
 		return "CASE WHEN jsonb_typeof(" + value + ")='array' THEN jsonb_array_length(" + value + ") ELSE 0 END"
 	default:
 		return "COALESCE(json_array_length(" + column + ",'$." + field + "'),0)"
