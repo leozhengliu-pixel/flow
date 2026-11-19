@@ -20,7 +20,7 @@ beforeEach(() => localStorage.setItem('flow:locale', 'en'))
 
 describe('release notes painted from cached data', () => {
   it('shows the note the server confirms until the viewer edits it', () => {
-    const cached = makeBootstrap({ favorites: [], releasePipelines: [pipeline], releases: [release], releaseNotes: [{ id: 'note-1', releaseId: 'release-1', title: 'Cached title', body: 'Cached body' }] } as Partial<BootstrapData>)
+    const cached = makeBootstrap({ favorites: [], releasePipelines: [pipeline], releases: [release], releaseNotes: [{ id: 'note-1', releaseId: 'release-1', title: 'Cached title', body: 'Cached body' }] } as unknown as Partial<BootstrapData>)
     const view = render(page(cached))
     expect(screen.getByLabelText('Release notes title')).toHaveValue('Cached title')
     view.rerender(page({ ...cached, releaseNotes: [{ id: 'note-1', releaseId: 'release-1', title: 'Fresh title', body: 'Fresh body' }] } as unknown as BootstrapData))
