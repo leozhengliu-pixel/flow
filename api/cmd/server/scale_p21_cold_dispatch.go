@@ -11,8 +11,8 @@ type scaleP21ColdRoute struct {
 	method, path, consumer, writer string
 }
 
-// This manifest registers only production bridges already installed below.
-// It is deliberately not an activation waiver for other cold consumers.
+// These bindings admit the installed authorization bridge and selected handler
+// bridges. Writer names alone certify neither publication nor activation.
 var scaleP21ColdRoutes = []scaleP21ColdRoute{
 	{http.MethodPost, "/api/project-statuses", "server/settings_features.go:createProjectStatus", "project_status.created"},
 	{http.MethodPatch, "/api/project-statuses/{id}", "server/settings_features.go:updateProjectStatus", "project_status.updated"},
@@ -41,6 +41,8 @@ var scaleP21ColdRoutes = []scaleP21ColdRoute{
 	{http.MethodGet, "/api/oauth-applications/{id}", "server/settings_features.go:getOAuthApplication", ""},
 	{http.MethodPost, "/api/oauth-applications", "server/settings_features.go:createOAuthApplication", "oauth_application.created"},
 	{http.MethodDelete, "/api/oauth-applications/{id}", "server/settings_features.go:deleteOAuthApplication", "oauth_application.deleted"},
+	{http.MethodPost, "/api/trash/{id}/restore", "server/advanced_features.go:restoreTrashEntry", "trash.restored"},
+	{http.MethodDelete, "/api/trash/{id}", "server/advanced_features.go:purgeTrashEntry", "trash.purged"},
 }
 
 func (s *server) withColdMetadataRequest(w http.ResponseWriter, r *http.Request, consumer, writer string, run func(*store.SQLiteStore, *http.Request)) {

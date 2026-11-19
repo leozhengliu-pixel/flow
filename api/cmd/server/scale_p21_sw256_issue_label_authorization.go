@@ -3,15 +3,14 @@ package main
 import (
 	"context"
 	"net/http"
-	"strings"
 )
 
 func scaleP21SW256IssueLabelPointRequest(r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
-	parts := strings.Split(r.URL.Path, "/")
-	return len(parts) == 4 && parts[0] == "" && parts[1] == "api" && parts[2] == "issue-labels" && parts[3] != ""
+	_, matched := scaleP21EscapedRouteParts(r, "/api/issue-labels/{id}")
+	return matched
 }
 
 // The literal wrapper has no issue-label predicate. The handler's existing
