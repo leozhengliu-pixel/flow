@@ -121,7 +121,7 @@ func (s *server) prepareLoopRun(ctx context.Context, workspace string, loop doma
 		if stored, ok := s.store.WorkspaceMetadataFields(workspace, "documents"); ok {
 			documents = stored.Documents
 		}
-		contract = resolveLoopContract(data, documents, loop, s.loopContractFor(ctx, workspace, loop), trigger, time.Now())
+		contract = resolveLoopContract(data, documents, loop, s.loopRunContract(ctx, workspace, loop), trigger, time.Now())
 		rec.timing.LoadMs += time.Since(contractStarted).Milliseconds()
 		if ctx.Err() != nil {
 			return nil, ctx.Err()

@@ -117,6 +117,9 @@ func (tx *sqlTx) flushSQLRecordJournal() (bool, error) {
 		}
 		tx.journalBudget = &recordJournalBudgetState{tx.writtenBytes, len(tx.sequencing), len(tx.signals), tx.issueCounts}
 	}
+	if err := tx.openNewCatalogCollections(ctx); err != nil {
+		return true, err
+	}
 	writer := tx.Tx.StmtContext(ctx, tx.database.journalSQLFlush)
 	observeSQLStatement(ctx, recordJournalPointCommitSQL)
 	type revision struct {

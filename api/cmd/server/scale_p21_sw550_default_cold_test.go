@@ -407,7 +407,7 @@ var scaleP21SW550BackgroundWork = map[string]string{
 	"server/server.createPersonalDataExport go server/server.buildPersonalDataExport":         "COLD work: store.WorkerContext",
 	"server/server.extractLoopContractAsync go server/server.loopContractFor":                 "COLD work: store.WorkerContext",
 	"server/server.startLoopContractMigration go server/server.loopContractFor":               "COLD work: store.WorkerContext",
-	"server/server.loopContractFor go server/server.readLoopContract":                         "inherits its caller's context (store.WorkerContext)",
+	"server/server.loopContract go server/server.readLoopContract":                            "inherits its caller's context (store.WorkerContext)",
 	"server/server.commitImport go server/server.commitImportSync":                            "inherits POST /api/imports/{id}/commit's COLD scope",
 	"server/server.codingEnvironmentTerminal go server/server.runCodingTerminalPrepareScript": "inherits GET /api/coding/environments/{id}/terminal's COLD scope",
 	"server/server.startAgentLiveReply go server/agentLiveReply.run":                          "inherits the agent-session route's COLD scope",

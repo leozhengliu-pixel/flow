@@ -18,7 +18,7 @@
 # unmigrated (FLOW_LOADRIG_ALLOW_COLD_UNMIGRATED=1, HOT inventory must be empty); production builds refuse.
 #
 # Settings (environment): LOADRIG_HOME (~/.flow-local/live/loadrig), LOADRIG_PORT_BASE (47610), SCALE (1), VUS (10), DURATION (60s), WARMUP (5s),
-# THINK (300ms), STREAMS (VUS/2), MIX (op=weight,...), MODEL (fake|proxy|off; fake = local fake model, proxy = the
+# LOADRIG_API_PORT (port base, +1 for the second replica), LOADRIG_METRIC_PORT (port base+10), THINK (300ms), STREAMS (VUS/2), MIX (op=weight,...), MODEL (fake|proxy|off; fake = local fake model, proxy = the
 # shared 127.0.0.1:8787 proxy, deepseek-v4.1-flash), AGENT_EVERY (20s), AGENT_MAX (0 = no cap; proxy defaults to 6),
 # GOMAXPROCS_REPLICA (4), GOMEMLIMIT_REPLICA (1536MiB), MAX_LOAD (20: refuse to start above this load average),
 # KEEP (1 keeps data after smoke), LOADRIG_ALLOW_PULL (1 allows pulling a missing image), EXTRA_ENV ("NAME=value ..."
@@ -34,13 +34,16 @@ DATA="$HOME_DIR/data"
 REPORTS="$HOME_DIR/reports"
 HEAVY="$HOME/.flow-local/heavy.sh"
 # LOADRIG_PORT_BASE moves every port (API base+0/1, metrics base+10/11, model base+81, Redis base+82,
-# PostgreSQL base+23) so two rigs (each with its own LOADRIG_HOME) can run side by side.
+# PostgreSQL base+23) so two rigs (each with its own LOADRIG_HOME) can run side by side; LOADRIG_API_PORT,
+# LOADRIG_METRIC_PORT and the other LOADRIG_*_PORT settings override single ports.
 PORT_BASE="${LOADRIG_PORT_BASE:-47610}"
 PG_PORT="${LOADRIG_PG_PORT:-$((PORT_BASE + 23))}"
 REDIS_PORT="${LOADRIG_REDIS_PORT:-$((PORT_BASE + 82))}"
 MODEL_PORT="${LOADRIG_MODEL_PORT:-$((PORT_BASE + 81))}"
-API_PORTS=($((PORT_BASE)) $((PORT_BASE + 1)))
-METRIC_PORTS=($((PORT_BASE + 10)) $((PORT_BASE + 11)))
+API_PORT="${LOADRIG_API_PORT:-$PORT_BASE}"
+METRIC_PORT="${LOADRIG_METRIC_PORT:-$((PORT_BASE + 10))}"
+API_PORTS=("$API_PORT" "$((API_PORT + 1))")
+METRIC_PORTS=("$METRIC_PORT" "$((METRIC_PORT + 1))")
 MAX_LOAD="${MAX_LOAD:-20}"
 mkdir -p "$BIN" "$RUN" "$DATA" "$REPORTS"
 chmod 700 "$HOME_DIR"

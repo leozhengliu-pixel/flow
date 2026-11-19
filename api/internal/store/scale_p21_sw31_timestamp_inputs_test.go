@@ -276,28 +276,69 @@ func TestScaleP21SW31TimestampInputsForeignConcurrentAndCancellation(t *testing.
 	}
 }
 
+// An unreceipted native callback time in a named zone stays opaque and is
+// rejected before commit. One with an unnamed RFC 3339 offset, even a
+// caller-owned copy inside a larger allocation, commits as the legacy writer
+// commits it: the installed source holds it by value (an offset time) and
+// keeps no pointer to the caller's location.
 func TestScaleP21SW31TimestampInputsOpaqueNativeRejectedBeforeCommit(t *testing.T) {
 	f, view, id := scaleP21SW31TimestampFixture(t)
-	ctx, timestamps := view.WithMetadataTimestampInputs(WithMetadataFields(t.Context(), "integrationConnections"))
+	workspace := f.data.Workspace.URLKey
 	scope := MetadataRecordScope{Write: []RecordKey{{Kind: "integrationConnections", ID: id}}}
-	err := view.MutateWorkspaceScoped(ctx, f.data.Workspace.URLKey, "integration.adapter_configured", id, nil, scope, func(data *domain.Bootstrap) error {
-		_, err := timestamps.ParseRFC3339("2026-11-13T01:02:03+05:45")
-		if err != nil {
-			return err
+	write := func(at time.Time) error {
+		ctx, timestamps := view.WithMetadataTimestampInputs(WithMetadataFields(t.Context(), "integrationConnections"))
+		return view.MutateWorkspaceScoped(ctx, workspace, "integration.adapter_configured", id, nil, scope, func(data *domain.Bootstrap) error {
+			if _, err := timestamps.ParseRFC3339("2026-11-13T01:02:03+05:45"); err != nil {
+				return err
+			}
+			data.IntegrationConnections[0].LastWebhookAt = &at
+			return nil
+		})
+	}
+	installed := func() *time.Time {
+		t.Helper()
+		data, _, err := view.WorkspaceMetadataScoped(t.Context(), workspace, MetadataRecordScope{Read: []RecordKey{{Kind: "integrationConnections", ID: id}}})
+		if err != nil || len(data.IntegrationConnections) != 1 {
+			t.Fatal("installed connection", err)
 		}
-		fat := scaleP21SW31TimestampFatLocation()
-		data.IntegrationConnections[0].LastWebhookAt = &fat
-		return nil
-	})
-	if !errors.Is(err, ErrBoundedMetadataCoverage) {
-		t.Fatal("unreceipted native callback value reached commit", err)
+		return data.IntegrationConnections[0].LastWebhookAt
 	}
-	data, _, err := view.WorkspaceMetadataScoped(t.Context(), f.data.Workspace.URLKey, MetadataRecordScope{Read: []RecordKey{{Kind: "integrationConnections", ID: id}}})
-	if err != nil || len(data.IntegrationConnections) != 1 || data.IntegrationConnections[0].LastWebhookAt != nil {
-		t.Fatal("rejected private pointer changed the prior installed source", err)
+	stored := func() []byte {
+		t.Helper()
+		var raw []byte
+		if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='integrationConnections' AND record_key=?`, workspace, id).Scan(&raw); err != nil || !json.Valid(raw) {
+			t.Fatal("opaque hold modified canonical JSON behavior", err)
+		}
+		return raw
 	}
-	var raw []byte
-	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='integrationConnections' AND record_key=?`, f.data.Workspace.URLKey, id).Scan(&raw); err != nil || !json.Valid(raw) {
-		t.Fatal("opaque hold modified canonical JSON behavior", err)
+	named := time.Date(2026, 11, 13, 1, 2, 3, 4, time.FixedZone("caller-owned", 20700))
+	if err := write(named); !errors.Is(err, ErrBoundedMetadataCoverage) {
+		t.Fatal("unreceipted named-zone callback value reached commit", err)
+	}
+	if installed() != nil {
+		t.Fatal("rejected private pointer changed the prior installed source")
+	}
+	stored()
+	fat := scaleP21SW31TimestampFatLocation()
+	if err := write(fat); err != nil {
+		t.Fatal("an unnamed RFC 3339 offset callback value was refused", err)
+	}
+	got := installed()
+	if got == nil || !got.Equal(fat) || got.Format(time.RFC3339Nano) != fat.Format(time.RFC3339Nano) || got.Location() == fat.Location() {
+		t.Fatal("offset time was not installed by value", got)
+	}
+	var row domain.IntegrationConnection
+	if err := json.Unmarshal(stored(), &row); err != nil || row.LastWebhookAt == nil || row.LastWebhookAt.Format(time.RFC3339Nano) != fat.Format(time.RFC3339Nano) {
+		t.Fatal("canonical row differs from the legacy encoding", err)
+	}
+	source, err := view.retainMetadataLogicalSource(t.Context(), workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Release()
+	for _, storage := range source.stores {
+		if slices.Contains(storage.locations, fat.Location()) {
+			t.Fatal("the installed source retained the caller's location")
+		}
 	}
 }

@@ -162,8 +162,10 @@ func TestScaleP21SW158TransformTimestampInputsScopeAndOpaqueGuards(t *testing.T)
 					check(context.Canceled)
 					return context.Canceled
 				case "opaque":
-					fat := scaleP21SW31TimestampFatLocation()
-					values[0].LastWebhookAt = &fat
+					// A named caller-owned zone has no receipt and no offset
+					// encoding (an unnamed offset is held by value).
+					opaque := time.Date(2026, 11, 13, 1, 2, 3, 4, time.FixedZone("caller-owned", 20700))
+					values[0].LastWebhookAt = &opaque
 					check(ErrBoundedMetadataCoverage)
 				}
 				return ErrNoMutation

@@ -131,6 +131,14 @@ func (n metadataLogicalNode) materialize(ctx context.Context, depth int, wire bo
 			}
 		} else if mode == 1 && first < uint64(len(n.source.times)) {
 			result = n.source.times[first].Add(time.Duration(second))
+		} else if mode == metadataLogicalOffsetTime {
+			offset, err := c.uint()
+			if err != nil {
+				return v, err
+			}
+			if result, err = metadataLogicalOffsetValue(first, second, offset); err != nil {
+				return v, err
+			}
 		} else {
 			return v, ErrMetadataRecordQuery
 		}

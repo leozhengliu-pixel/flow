@@ -235,12 +235,30 @@ func TestScaleP21ColdWritersLoopContractStore(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	// Stored contracts carry UTC times, as the server writes them.
+	scaleP21ColdWritersLoopContractStore(t, scaleP21TeamCreateSetup(t), time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC))
+}
+
+// A stored contract time with another RFC 3339 offset (older data, or a
+// database driver's rendering) decodes on the COLD facade as the legacy
+// decode reads it: the contract store reads the person contract's time.
+func TestScaleP21ColdWritersLoopContractStoreOffsetTimes(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP21TeamCreateSetup(t)
+	for _, offset := range []int{0, 8 * 3600, -(3*3600 + 30*60), 5*3600 + 45*60} {
+		t.Run(strconv.Itoa(offset), func(t *testing.T) {
+			scaleP21ColdWritersLoopContractStore(t, f, time.Date(2026, 11, 13, 12, 0, 0, 0, time.FixedZone("", offset)))
+		})
+	}
+}
+
+func scaleP21ColdWritersLoopContractStore(t *testing.T, f scaleP21TeamCreateFixture, extracted time.Time) {
+	t.Helper()
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	const loopID, otherID = "cold-writers-loop", "cold-writers-other"
-	// Stored contracts carry UTC times, as the server writes them.
-	extracted := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
-	base := domain.Loop{ID: loopID, Name: "Contract loop", Instructions: "Summarize the open bugs", Status: "active", TriggerType: "manual", ConnectorIDs: []string{}}
+	base :=domain.Loop{ID: loopID, Name: "Contract loop", Instructions: "Summarize the open bugs", Status: "active", TriggerType: "manual", ConnectorIDs: []string{}}
 	hash := loopContractHashOf(base)
 	model := &domain.LoopOutputContract{Source: loopContractModel, InstructionsHash: hash, ReadOnly: true, Outputs: []domain.LoopContractOutput{}, ExtractedAt: &extracted}
 	person := &domain.LoopOutputContract{Source: loopContractPerson, InstructionsHash: "older", Outputs: []domain.LoopContractOutput{}, ExtractedAt: &extracted}

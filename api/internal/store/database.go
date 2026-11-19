@@ -77,6 +77,10 @@ type sqlDatabase struct {
 	journalRollbackHook atomic.Pointer[recordJournalRollbackHook]
 	journalStop         context.CancelFunc
 	journalWorkers      sync.WaitGroup
+	// boundedCatalog: a bounded store serves this database, so the journal
+	// flush opens the catalog checkpoint of a collection a write starts
+	// (bounded_catalog_collections.go).
+	boundedCatalog atomic.Bool
 }
 
 // commitHooks run inside sqlTx.Commit: beforeCommit once the transaction's
@@ -437,6 +441,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes, content: newContentOffload(config), searchMaxChars: max(config.SearchIndexMaxChars, 0)}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
 	if bounded {
 		s.metadataResidency = newMetadataResidency()
+		s.db.boundedCatalog.Store(true)
 	}
 	s.changeLogMinRows.Store(DefaultChangeLogMinRows)
 	notify := s.publishNotificationSignals
