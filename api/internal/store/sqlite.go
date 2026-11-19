@@ -2330,16 +2330,23 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 }
 
 func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, workspace domain.Workspace) (domain.Bootstrap, error) {
-	if s.metadataResidency != nil && coldCapable(ctx) && (workspace.URLKey == "" || workspace.URLKey == workspaceKey) {
+	if s.metadataResidency != nil && coldCapable(ctx) {
 		// COLD: the literal legacy update on the COLD facade, which answers
-		// the complete workspace (scale_p21_default_cold.go). A rename keeps
-		// the bounded path: the parent's image moves keys.
+		// and writes the complete workspace (scale_p21_default_cold.go). A
+		// rename also publishes the new key and drops the old one (SW555).
+		next := workspace.URLKey
+		if next == "" {
+			next = workspaceKey
+		}
 		var updated domain.Bootstrap
 		err := s.coldLegacyWrite(ctx, workspaceKey, func(ctx context.Context, facade *SQLiteStore) error {
 			var err error
 			updated, err = facade.UpdateWorkspace(ctx, workspaceKey, workspace)
 			return err
-		})
+		}, next)
+		if err == nil {
+			s.setLastWorkspaceKey(next)
+		}
 		return updated, err
 	}
 	if s.coordinator == nil {

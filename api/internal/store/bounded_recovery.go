@@ -852,9 +852,16 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) reloadResidentWorkspace(ctx context.Context, workspace string) error {
+	return s.reloadResidentWorkspaceLogical(ctx, workspace, false)
+}
+
+// reloadResidentWorkspaceLogical is reloadResidentWorkspace; logical also
+// builds the installed logical source of a workspace a test view does not
+// hold yet (a COLD rename's new key on a view that captured the old one).
+func (s *SQLiteStore) reloadResidentWorkspaceLogical(ctx context.Context, workspace string, logical bool) error {
 	ctx = metadataLogicalUnpinnedContext(ctx)
 	s.metadataResidency.mu.Lock()
-	hasLogical := s.metadataResidency.logical[workspace] != nil
+	hasLogical := s.metadataResidency.logical[workspace] != nil || logical
 	s.metadataResidency.mu.Unlock()
 	if !s.metadataResidency.requireCoverage && !hasLogical {
 		ctx, release, err := s.metadataResidency.work.acquire(ctx, metadataPolicyBytes+2<<20)
