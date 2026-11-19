@@ -31,6 +31,10 @@ func (c *metadataLogicalCursor) read(p []byte) error {
 		c.offset += int64(len(p))
 		return nil
 	}
+	if c.slide(len(p)) && c.node.window.read(p, c.node.source, c.offset) {
+		c.offset += int64(len(p))
+		return nil
+	}
 	_, err := c.node.source.ReadAt(p, c.offset)
 	c.offset += int64(len(p))
 	return err
@@ -59,7 +63,39 @@ func (c *metadataLogicalCursor) child(t reflect.Type) (metadataLogicalNode, erro
 		return metadataLogicalNode{}, io.ErrUnexpectedEOF
 	}
 	c.offset = start + int64(size)
-	return metadataLogicalNode{source: c.node.source, offset: start, size: int64(size), cost: cost & metadataLogicalCostMask, typ: t, unavailable: cost&(uint64(1)<<63) != 0, blocked: cost&(uint64(1)<<62) != 0, generic: cost&metadataLogicalGenericJSON != 0, window: c.node.window}, nil
+	window := c.node.window
+	if window != nil && (start < window.at || start+int64(size) > window.at+int64(len(window.data))) {
+		// A sliding window holds part of the child at most: the child takes
+		// its own (windowed).
+		window = nil
+	}
+	return metadataLogicalNode{source: c.node.source, offset: start, size: int64(size), cost: cost & metadataLogicalCostMask, typ: t, unavailable: cost&(uint64(1)<<63) != 0, blocked: cost&(uint64(1)<<62) != 0, generic: cost&metadataLogicalGenericJSON != 0, window: window}, nil
+}
+
+// metadataLogicalSlideBytes is the read-ahead of a cursor over a node too
+// large for one window (a large collection): its child headers and small
+// children are read in chunks of this size instead of one shared-cache block
+// (a pread at every miss) per header.
+const metadataLogicalSlideBytes = 64 << 10
+
+// slide replaces the cursor's window, for a small read of a node too large
+// for one window, by the next chunk of the node from the read's offset. It
+// reports whether it read one. Like a window, a chunk is the cursor's own
+// copy of bytes the traversal reads anyway, dropped with the cursor.
+func (c *metadataLogicalCursor) slide(size int) bool {
+	if c.node.source == nil || c.node.size <= metadataLogicalWindowBytes || size > metadataLogicalSlideBytes/4 {
+		return false
+	}
+	end := min(c.node.offset+c.node.size, c.offset+metadataLogicalSlideBytes)
+	if end-c.offset < int64(size) {
+		return false
+	}
+	data := make([]byte, end-c.offset)
+	if count, err := c.node.source.ReadAt(data, c.offset); err != nil || count != len(data) {
+		return false
+	}
+	c.node.window = &metadataLogicalWindow{storage: c.node.source, at: c.offset, data: data}
+	return true
 }
 
 // Value admits the entire decoded object before allocation. The caller must

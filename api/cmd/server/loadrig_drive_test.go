@@ -1006,6 +1006,7 @@ func (d *loadRigDriver) report(label string, measured time.Duration, vus, stream
 			}
 			replica["counters"] = delta
 			replica["bounded"] = loadRigBoundedDerived(delta)
+			replica["lockHolds"] = loadRigLockHolds(delta)
 		}
 		replicas = append(replicas, replica)
 	}
@@ -1063,10 +1064,33 @@ func loadRigBoundedDerived(c map[string]int64) map[string]float64 {
 		"coldPublishIncrementals": float64(c["coldPublishIncrementals"]), "coldPublishIncrementalAvgMs": avg(c["coldPublishIncrementalNanos"], c["coldPublishIncrementals"]),
 		"coldPublishFulls": float64(c["coldPublishFulls"]), "coldPublishFullAvgMs": avg(c["coldPublishFullNanos"], c["coldPublishFulls"]),
 		"coldPublishUnchanged": float64(c["coldPublishUnchanged"]), "coldPublishFallbacks": float64(c["coldPublishFallbacks"]),
+		"reloadIncrementals": float64(c["reloadIncrementals"]), "reloadIncrementalAvgMs": avg(c["reloadIncrementalNanos"], c["reloadIncrementals"]),
+		"reloadFulls": float64(c["reloadFulls"]), "reloadFullAvgMs": avg(c["reloadFullNanos"], c["reloadFulls"]),
+		"coldFullWriteDecodes": float64(c["coldFullWriteDecodes"]), "coldFullWriteDecodeSkips": float64(c["coldFullWriteDecodeSkips"]),
 	} {
 		derived[key] = value
 	}
 	return derived
+}
+
+// loadRigLockHolds lists the writers by their total write-lock hold in the
+// run, longest first: holds, total, average and longest hold in ms.
+func loadRigLockHolds(c map[string]int64) []map[string]any {
+	holds := []map[string]any{}
+	for key, nanos := range c {
+		name, ok := strings.CutPrefix(key, "writeLockHold ")
+		if !ok {
+			continue
+		}
+		if name, ok = strings.CutSuffix(name, " nanos"); !ok || nanos == 0 {
+			continue
+		}
+		count := c["writeLockHold "+name+" holds"]
+		holds = append(holds, map[string]any{"writer": name, "holds": count, "totalMs": float64(nanos) / 1e6,
+			"avgMs": float64(nanos) / 1e6 / float64(max(count, 1)), "maxMs": float64(c["writeLockHold "+name+" Max"]) / 1e6})
+	}
+	sort.Slice(holds, func(i, j int) bool { return holds[i]["totalMs"].(float64) > holds[j]["totalMs"].(float64) })
+	return holds
 }
 
 var loadRigClassOrder = []string{"hot-read", "hot-write", "search", "sync", "page-load", "api-key", "cold-read", "cold-write", "agent"}
@@ -1118,6 +1142,14 @@ func loadRigMarkdown(report map[string]any) string {
 		fmt.Fprintf(&b, "- replica %d (flag on: %v): peak RSS %.0f MiB (ps), end RSS %.0f MiB, max RSS %.0f MiB (getrusage), peak heap in use %.0f MiB, CPU %.1fs (%.0f%% of one core; ps avg %.0f%%), GC runs %v, peak goroutines %v, peak COLD queue %v, peak COLD held %v\n  - bounded: `%s`\n",
 			index, replica["boundedMetadata"], loadRigNumber(replica["peakRSSMiB"]), loadRigNumber(replica["endRSSMiB"]), loadRigNumber(replica["maxRSSMiB"]), loadRigNumber(replica["peakHeapInuseMiB"]),
 			loadRigNumber(replica["cpuSeconds"]), loadRigNumber(replica["cpuPercentOfOneCore"]), loadRigNumber(replica["psCPUPercentAvg"]), replica["gcRuns"], replica["peakGoroutines"], replica["peakColdSlotWaiting"], replica["peakColdSlotsHeld"], bounded)
+		if holds, _ := replica["lockHolds"].([]any); len(holds) > 0 {
+			b.WriteString("\n  | write-lock holder (replica " + strconv.Itoa(index) + ") | holds | total ms | avg ms | max ms |\n  |---|---:|---:|---:|---:|\n")
+			for _, entry := range holds[:min(15, len(holds))] {
+				hold, _ := entry.(map[string]any)
+				fmt.Fprintf(&b, "  | %v | %.0f | %.0f | %.1f | %.0f |\n", hold["writer"], loadRigNumber(hold["holds"]), loadRigNumber(hold["totalMs"]), loadRigNumber(hold["avgMs"]), loadRigNumber(hold["maxMs"]))
+			}
+			b.WriteString("\n")
+		}
 	}
 	realtime, _ := json.Marshal(r.Realtime)
 	agent, _ := json.Marshal(r.Agent)

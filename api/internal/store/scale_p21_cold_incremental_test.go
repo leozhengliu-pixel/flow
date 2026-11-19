@@ -34,8 +34,22 @@ func coldIncrementalFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string
 			status = data.ProjectStatuses[0]
 		}
 		for i := range 12 {
-			data.Projects = append(data.Projects, domain.Project{ID: fmt.Sprintf("ci-project-%02d", i), Name: fmt.Sprintf("Project %d", i), SlugID: fmt.Sprintf("project-%d-%012x", i, i),
-				Color: "#112233", Status: status, LabelIDs: []string{fmt.Sprintf("ci-label-%d", i%4)}, CreatedAt: at, UpdatedAt: at})
+			project := domain.Project{ID: fmt.Sprintf("ci-project-%02d", i), Name: fmt.Sprintf("Project %d", i), SlugID: fmt.Sprintf("project-%d-%012x", i, i),
+				Color: "#112233", Status: status, LabelIDs: []string{fmt.Sprintf("ci-label-%d", i%4)}, CreatedAt: at, UpdatedAt: at}
+			// Leads and creators: a user change reaches only these projects.
+			if len(data.Users) > 0 && i%3 == 0 {
+				lead := data.Users[i%len(data.Users)]
+				project.Lead = &lead
+			}
+			if len(data.Users) > 0 && i%4 == 1 {
+				creator := data.Users[(i+1)%len(data.Users)]
+				project.Creator = &creator
+			}
+			if i == 5 {
+				// An escaped character: the row is read whatever user changed.
+				project.Description = "R&D <notes>"
+			}
+			data.Projects = append(data.Projects, project)
 		}
 		for i := range 5 {
 			data.SavedViews = append(data.SavedViews, domain.SavedView{ID: fmt.Sprintf("ci-view-%d", i), Name: fmt.Sprintf("View %d", i), Resource: "issues", Scope: "workspace"})
@@ -361,6 +375,32 @@ func coldIncrementalWrites(rng *rand.Rand, step int) []coldIncrementalWrite {
 			}
 			return nil
 		}, "", nil},
+		{"user-add", plain, "user.created", func(data *domain.Bootstrap) error {
+			// With stored settings: a synthesized default carries the
+			// normalization's clock, which no two reloads share.
+			user := id("user")
+			data.Users = append(data.Users, domain.User{ID: user, Name: "Added", DisplayName: id("Added"), Email: id("added") + "@example.test"})
+			settings, preferences := defaultUserSettings(user), defaultNotificationPreferences(user)
+			settings.UpdatedAt, preferences.UpdatedAt = at, at
+			if data.UserSettings == nil {
+				data.UserSettings = map[string]domain.UserSettings{}
+			}
+			if data.NotificationPreferences == nil {
+				data.NotificationPreferences = map[string]domain.NotificationPreferences{}
+			}
+			data.UserSettings[user], data.NotificationPreferences[user] = settings, preferences
+			return nil
+		}, "", nil},
+		{"user-and-project", plain, "user.updated", func(data *domain.Bootstrap) error {
+			if len(data.Users) > 0 && len(data.Projects) > 0 {
+				user := &data.Users[pick(len(data.Users))]
+				user.DisplayName = id("Both")
+				project := &data.Projects[pick(len(data.Projects))]
+				lead := *user
+				project.Lead, project.UpdatedAt = &lead, at
+			}
+			return nil
+		}, "", nil},
 		{"team-rename", plain, "team.updated", func(data *domain.Bootstrap) error {
 			if len(data.Teams) > 0 {
 				data.Teams[pick(len(data.Teams))].Color = id("#team")
@@ -417,6 +457,7 @@ func TestColdIncrementalPublicationDifferential(t *testing.T) {
 	f, view, workspace := coldIncrementalFixture(t)
 	rng := rand.New(rand.NewPCG(20261119, 1))
 	incremental, full, unchanged := ColdPublishCountsForTesting()
+	userReaders := ColdPublishUserReaderPatchesForTesting()
 	ran := map[string]int{}
 	for step := range 160 {
 		writes := coldIncrementalWrites(rng, step)
@@ -451,6 +492,16 @@ func TestColdIncrementalPublicationDifferential(t *testing.T) {
 			}
 		}
 		ctx := write.ctx(WithColdWork(t.Context(), "cold-incremental-test"))
+		if step%7 == 3 {
+			// The legacy writer stores the request actor's account over its
+			// user row: a change of that user alone.
+			current := scaleP21ColdTeamNative(t, view, workspace)
+			if len(current.Users) > 0 {
+				actor := current.Users[rng.IntN(len(current.Users))]
+				actor.DisplayName = fmt.Sprintf("Actor %d", step)
+				ctx = ContextWithActor(ctx, actor)
+			}
+		}
 		var err error
 		if write.aggregate != "" || write.payload != nil {
 			// The production dispatch (the special legacy writers select on
@@ -473,13 +524,18 @@ func TestColdIncrementalPublicationDifferential(t *testing.T) {
 		t.Fatalf("only %d of 160 publications were incremental", afterIncremental-incremental)
 	}
 	plans := ColdPublishFieldPlansForTesting()
-	t.Logf("field plans (patched, rebuilt): %v", plans)
+	t.Logf("field plans (patched, rebuilt): %v; user readers patched %d", plans, ColdPublishUserReaderPatchesForTesting()-userReaders)
+	if ColdPublishUserReaderPatchesForTesting() == userReaders {
+		t.Error("no user-reading field was patched in the items holding a changed user")
+	}
 	for _, name := range []string{"apiKeys", "savedViews", "projects", "documents", "webhooks", "workflowDefinitions", "importJobs", "trash", "oauthApplications", "labels", "settings", "users", "teams"} {
 		if plans[name][0] == 0 {
 			t.Errorf("%s was never patched", name)
 		}
 	}
-	for _, name := range []string{"labels", "issues", "projects", "projectStatuses", "teamSettings", "members", "initiatives", "viewer"} {
+	// (Members hold no canonical rows here: a user change, patched in the
+	// items holding the user, leaves them as installed.)
+	for _, name := range []string{"labels", "issues", "projects", "projectStatuses", "teamSettings", "initiatives", "viewer"} {
 		if plans[name][1] == 0 {
 			t.Errorf("%s was never rebuilt", name)
 		}
@@ -598,8 +654,10 @@ func TestColdIncrementalPublicationFallbacks(t *testing.T) {
 	run("incremental after the reload", "", outcome{1, 0}, func() {
 		coldIncrementalRun(t, view, workspace, "view.created", addView("fb-view-2e"))
 	})
-	// A behind marker (a conflict refresh patched only some records).
-	run("behind marker", "installed generation not exact", outcome{0, 1}, func() {
+	// A behind marker (a conflict refresh patched only some records) on the
+	// installed generation: the known publication's generation is exact at
+	// its state whatever was committed since, so it stays the base.
+	run("behind marker", "", outcome{1, 0}, func() {
 		view.metadataResidency.mu.Lock()
 		view.metadataResidency.logical[workspace].behind.Store(true)
 		view.metadataResidency.mu.Unlock()
@@ -623,8 +681,9 @@ func TestColdIncrementalPublicationFallbacks(t *testing.T) {
 			return addView("fb-view-5")(data)
 		})
 	})
-	// The normalizer's base changed.
-	run("base field", "base field workspaceSettings changed", outcome{0, 1}, func() {
+	// The normalizer's base changed: workspaceSettings shapes no other
+	// field, so only it is rebuilt.
+	run("base field", "", outcome{1, 0}, func() {
 		coldIncrementalRun(t, view, workspace, "workspace_settings.updated", func(data *domain.Bootstrap) error {
 			data.WorkspaceSettings.WelcomeMessage = "changed"
 			return nil
@@ -819,5 +878,175 @@ func TestColdIncrementalWorkflowStateDeletionPublishes(t *testing.T) {
 	afterIncremental, afterFull, _ := ColdPublishCountsForTesting()
 	if afterIncremental-incremental != 1 || afterFull != full {
 		t.Fatalf("publications: incremental %d, full %d (fallbacks %v)", afterIncremental-incremental, afterFull-full, ColdPublishFallbacksForTesting())
+	}
+}
+
+// Reloads of the installed generation (a peer's commit, ReloadWorkspace)
+// derive from the known publication and the records changed since, as COLD
+// publications do; a reload in full keeps its generation as the known one.
+// Every reload equals a fresh one.
+func TestColdIncrementalReloadDerivesFromKnown(t *testing.T) {
+	f, view, workspace := coldIncrementalFixture(t)
+	peer := func(field, key, raw string) {
+		t.Helper()
+		if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field=? AND record_key=?`, []byte(raw), workspace, field, key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reload := func(label string, incremental, full int64) {
+		t.Helper()
+		beforeIncremental, beforeFull := residentReloadIncrementals.Load(), residentReloadFulls.Load()
+		if err := view.ReloadWorkspace(t.Context(), workspace); err != nil {
+			t.Fatal(label, err)
+		}
+		if got := [2]int64{residentReloadIncrementals.Load() - beforeIncremental, residentReloadFulls.Load() - beforeFull}; got != [2]int64{incremental, full} {
+			t.Fatalf("%s: reloads (incremental, full) %v, want %v (fallbacks %v)", label, got, [2]int64{incremental, full}, ColdPublishFallbacksForTesting())
+		}
+		coldIncrementalAssertExact(t, f, view, workspace, label)
+	}
+	// The fixture's full reload is the known publication.
+	peer("apiKeys", "ci-key-1", `{"id":"ci-key-1","name":"Peer one","prefix":"flw_1","creatorId":"","scopes":["read"],"teamIds":[]}`)
+	reload("peer commit after a full reload", 1, 0)
+	reload("nothing changed", 0, 0)
+	coldIncrementalRun(t, view, workspace, "view.created", func(data *domain.Bootstrap) error {
+		data.SavedViews = append(data.SavedViews, domain.SavedView{ID: "reload-view", Name: "Reload", Resource: "issues", Scope: "workspace"})
+		return nil
+	})
+	users := scaleP21ColdTeamNative(t, view, workspace).Users
+	if len(users) == 0 {
+		t.Fatal("fixture has no users")
+	}
+	user := users[0]
+	user.DisplayName = "Peer renamed user"
+	raw, err := json.Marshal(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer("users", user.ID, string(raw))
+	peer("webhooks", "ci-hook-2", `{"id":"ci-hook-2","name":"Peer hook","url":"https://example.test/peer","resourceTypes":["Issue"],"teamIds":[],"enabled":true}`)
+	reload("peer commit after a COLD publication", 1, 0)
+	forgetColdPublications(view.metadataResidency, workspace)
+	peer("apiKeys", "ci-key-2", `{"id":"ci-key-2","name":"Peer two","prefix":"flw_2","creatorId":"","scopes":["read"],"teamIds":[]}`)
+	reload("nothing known", 0, 1)
+	peer("apiKeys", "ci-key-3", `{"id":"ci-key-3","name":"Peer three","prefix":"flw_3","creatorId":"","scopes":["read"],"teamIds":[]}`)
+	reload("after the full reload", 1, 0)
+	SetColdIncrementalPublicationForTesting(false)
+	peer("apiKeys", "ci-key-4", `{"id":"ci-key-4","name":"Peer four","prefix":"flw_4","creatorId":"","scopes":["read"],"teamIds":[]}`)
+	reload("disabled", 0, 1)
+	SetColdIncrementalPublicationForTesting(true)
+}
+
+// A bounded store's startup load keeps each workspace's generation as its
+// known publication: the first COLD write after a commit the installed
+// generation lacks publishes incrementally instead of reloading in full.
+func TestColdIncrementalStartupKeepsKnownPublication(t *testing.T) {
+	f, view, workspace := coldIncrementalFixture(t)
+	forgetColdPublications(view.metadataResidency, workspace)
+	view.writeMu.Lock()
+	err := view.loadResidentWorkspaces(t.Context())
+	view.writeMu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	known, ok := knownColdPublication(coldLabelCacheKey{view.metadataResidency, workspace})
+	if !ok {
+		t.Fatal("startup load kept no known publication")
+	}
+	known.source.Release()
+	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field=? AND record_key=?`,
+		[]byte(`{"id":"ci-key-1","name":"Peer","prefix":"flw_1","creatorId":"","scopes":["read"],"teamIds":[]}`), workspace, "apiKeys", "ci-key-1"); err != nil {
+		t.Fatal(err)
+	}
+	incremental, full, _ := ColdPublishCountsForTesting()
+	coldIncrementalRun(t, view, workspace, "view.created", func(data *domain.Bootstrap) error {
+		data.SavedViews = append(data.SavedViews, domain.SavedView{ID: "startup-view", Name: "Startup", Resource: "issues", Scope: "workspace"})
+		return nil
+	})
+	if afterIncremental, afterFull, _ := ColdPublishCountsForTesting(); afterIncremental-incremental != 1 || afterFull != full {
+		t.Fatalf("publications after startup: incremental %d, full %d (fallbacks %v)", afterIncremental-incremental, afterFull-full, ColdPublishFallbacksForTesting())
+	}
+	coldIncrementalAssertExact(t, f, view, workspace, "after startup")
+}
+
+// A COLD full write whose facade holds the parent's installed generation when
+// it takes the lock (onLock brought it there) keeps that decode instead of
+// decoding the workspace again under the lock; a write after another
+// generation was installed still writes from that generation.
+func TestColdFullWriteKeepsCurrentFacadeDecode(t *testing.T) {
+	f, view, workspace := coldIncrementalFixture(t)
+	decodes, skips := coldFullWriteDecodes.Load(), coldFullWriteDecodeSkips.Load()
+	coldIncrementalRun(t, view, workspace, "view.created", func(data *domain.Bootstrap) error {
+		data.SavedViews = append(data.SavedViews, domain.SavedView{ID: "decode-view-1", Name: "One", Resource: "issues", Scope: "workspace"})
+		return nil
+	})
+	if got := [2]int64{coldFullWriteDecodes.Load() - decodes, coldFullWriteDecodeSkips.Load() - skips}; got != [2]int64{0, 1} {
+		t.Fatalf("full write decodes under the lock, kept decodes = %v, want [0 1]", got)
+	}
+	coldIncrementalAssertExact(t, f, view, workspace, "first write")
+	// A HOT generation installed after the facade decoded: onLock refreshes
+	// the facade to it and the write keeps that refresh.
+	err := view.coldLegacyWrite(WithColdWork(t.Context(), "cold-incremental-test"), workspace, func(ctx context.Context, facade *SQLiteStore) error {
+		var closes []func()
+		output := WithMetadataOutputOwner(t.Context(), func(close func()) bool {
+			closes = append(closes, close)
+			return true
+		})
+		err := view.MutateWorkflowRun(output, workspace, "ci-flow-3", "", "", nil, func(data *domain.Bootstrap) error {
+			data.WorkflowRuns = append(data.WorkflowRuns, domain.WorkflowRun{ID: "decode-run", WorkflowID: "ci-flow-3", Trigger: "manual", Status: "succeeded", Attempt: 1})
+			return nil
+		})
+		for _, close := range closes {
+			close()
+		}
+		if err != nil {
+			return err
+		}
+		return facade.dispatchMutation(ctx, workspace, "view.created", nil, func(data *domain.Bootstrap) (string, error) {
+			if !slices.ContainsFunc(data.WorkflowRuns, func(run domain.WorkflowRun) bool { return run.ID == "decode-run" }) {
+				return "", errors.New("the write's base lacks the HOT generation installed before it took the lock")
+			}
+			data.SavedViews = append(data.SavedViews, domain.SavedView{ID: "decode-view-2", Name: "Two", Resource: "issues", Scope: "workspace"})
+			return "", nil
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	coldIncrementalAssertExact(t, f, view, workspace, "write after a HOT generation")
+}
+
+// A registered COLD consumer's write (WithColdMetadataMutation) with a known
+// publication publishes as a default COLD legacy write: incrementally, from
+// the records it changed, instead of capturing the whole workspace under the
+// lock; the result equals a fresh reload.
+func TestColdMetadataMutationPublishesIncrementally(t *testing.T) {
+	f, view, workspace := coldIncrementalFixture(t)
+	at := time.Date(2026, 11, 19, 13, 0, 0, 0, time.UTC)
+	for i, event := range []string{"api_key.created", "api_key.revoked"} {
+		incremental, full, _ := ColdPublishCountsForTesting()
+		err := view.WithColdMetadataMutation(t.Context(), "server/settings_features.go:createAPIKey", workspace, event, nil, func(ctx context.Context, facade *SQLiteStore) error {
+			return facade.MutateWorkspace(ctx, workspace, event, "", nil, func(data *domain.Bootstrap) error {
+				if i == 0 {
+					data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "registered-key", Name: "Registered", Prefix: "flw_r", Scopes: []string{"read"}, TeamIDs: []string{}, CreatedAt: at})
+					return nil
+				}
+				for index := range data.APIKeys {
+					if data.APIKeys[index].ID == "registered-key" {
+						data.APIKeys[index].RevokedAt = &at
+					}
+				}
+				return nil
+			})
+		})
+		if err != nil {
+			t.Fatal(event, err)
+		}
+		if afterIncremental, afterFull, _ := ColdPublishCountsForTesting(); afterIncremental-incremental != 1 || afterFull != full {
+			t.Fatalf("%s: publications incremental %d, full %d (fallbacks %v)", event, afterIncremental-incremental, afterFull-full, ColdPublishFallbacksForTesting())
+		}
+		got := coldIncrementalAssertExact(t, f, view, workspace, event)
+		if !slices.ContainsFunc(got.APIKeys, func(key domain.APIKey) bool { return key.ID == "registered-key" && (i == 0 || key.RevokedAt != nil) }) {
+			t.Fatalf("%s: the installed image lacks the write", event)
+		}
 	}
 }

@@ -11,10 +11,12 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"flow/api/internal/domain"
 )
@@ -56,8 +58,7 @@ import (
 // Anything the comparison cannot show exact falls back to the full reload:
 // no exact installed generation when the write took the lock (a peer commit
 // since the image's revision, a behind marker, an unknown stamp), a journal
-// that is not capturing or changed generation, a changed workspaceSettings
-// field (the normalizer's base for every field), a changed manifest
+// that is not capturing or changed generation, a changed manifest
 // presence, a replaced workspace, a generation the writer installed itself,
 // a rename (also keys), and any error. TestColdIncrementalPublication* prove
 // the result equals a fresh reload after each of many COLD legacy writers.
@@ -188,9 +189,11 @@ var coldPublishFieldNames = sync.OnceValue(func() []string {
 })
 
 // coldPublishBaseFields are the normalizer's base (newMetadataLogicalNormalizer),
-// always recovered. Of them only workspaceSettings shapes other fields
-// (normalizeStoredMetadata of the base gives every collection's empty
-// default): a change of it reloads in full. The viewer is read only for
+// always recovered. The base's normalization (normalizeStoredMetadata: every
+// collection's empty default) reads workspaceSettings only to normalize
+// workspaceSettings itself (normalize, normalizeParity), and a record's
+// normalization sees no settings: a change of it rebuilds that field alone.
+// The viewer is read only for
 // initiatives (normalize defaults an initiative's creator to it, and the
 // normalizer's index looks the viewer up among users), a dependency below;
 // workspace and viewerRole are read by no other field's normalization.
@@ -293,30 +296,71 @@ func (s *SQLiteStore) captureColdPublishBase(ctx context.Context, workspace stri
 	return nil, reason
 }
 
-// rememberReloadedColdPublication keeps the generation a full reload just
-// installed (exact at the stored stamp) as the known publication, with its
-// state read at that stamp, so the next publication need not reload in full
-// when a HOT writer installs a generation that is not exact meanwhile. The
-// caller holds the write lock.
-func (s *SQLiteStore) rememberReloadedColdPublication(ctx context.Context, workspace string) {
-	if coldIncrementalDisabled.Load() || s.metadataResidency == nil {
-		return
+// coldPublishReloadState reads, in the snapshot tx a full reload read source
+// from, the state source is exact at (nil when it cannot be compared: the
+// incremental path is off, the journal is not capturing, a large root).
+func (s *SQLiteStore) coldPublishReloadState(ctx context.Context, tx *sqlTx, workspace string, source *metadataLogicalSource) *coldPublishState {
+	if coldIncrementalDisabled.Load() || s.metadataResidency == nil || source == nil {
+		return nil
 	}
-	base, reason := s.captureColdPublishBase(ctx, workspace)
-	if base == nil {
-		slog.Info("bounded metadata: reloaded generation not kept as the COLD publication base", "workspace", workspace, "reason", reason)
-		return
+	started := time.Now()
+	defer func() { coldPublishBaseNanos.Add(int64(time.Since(started))) }()
+	state, err := s.readColdPublishState(ctx, tx, workspace)
+	if err != nil || state.stamp != source.Stamp() {
+		if err != nil && !errors.Is(err, errColdPublishInexact) {
+			slog.Info("bounded metadata: reloaded generation not kept as the COLD publication base", "workspace", workspace, "error", err)
+		}
+		return nil
 	}
+	return state
+}
+
+// Reloads of the installed generation (peer commits, a writer's stale base,
+// a COLD publication's fallback): incremental from the known publication, or
+// in full.
+var (
+	residentReloadIncrementals, residentReloadIncrementalNanos atomic.Int64
+	residentReloadFulls, residentReloadFullNanos               atomic.Int64
+)
+
+// coldReloadFullKey marks a reload whose caller already tried the known
+// publication (a COLD publication's fallback).
+type coldReloadFullKey struct{}
+
+// reloadResidentWorkspaceFromKnown brings the installed generation of
+// workspace to SQL's state from its known publication (the generation and the
+// state it is exact at) and the records changed since, as an incremental COLD
+// publication does. It reports whether it did (or found the generation
+// exact); otherwise the caller reloads in full. The caller holds the write
+// lock.
+func (s *SQLiteStore) reloadResidentWorkspaceFromKnown(ctx context.Context, workspace string) bool {
+	if coldIncrementalDisabled.Load() || s.metadataResidency == nil || ctx.Value(coldReloadFullKey{}) != nil {
+		return false
+	}
+	known, ok := knownColdPublication(coldLabelCacheKey{s.metadataResidency, workspace})
+	if !ok {
+		return false
+	}
+	started := time.Now()
+	base := &coldPublishBase{workspace: workspace, source: known.source, state: known.state}
 	defer base.release()
-	r := s.metadataResidency
-	r.mu.Lock()
-	current := r.logical[workspace]
-	r.mu.Unlock()
-	if base.source == current && base.state.stamp == current.Stamp() {
-		rememberColdPublication(coldLabelCacheKey{r, workspace}, current, base.state)
-		return
+	unchanged, err := s.publishColdIncrementalLocked(ctx, base)
+	if err != nil {
+		reason := err.Error()
+		if !errors.Is(err, errColdPublishInexact) {
+			slog.Warn("bounded metadata: incremental reload failed; reloading in full", "workspace", workspace, "error", err)
+			reason = "error"
+		} else {
+			reason = strings.TrimPrefix(reason, errColdPublishInexact.Error()+": ")
+		}
+		noteColdPublishFallback("reload " + reason)
+		return false
 	}
-	slog.Info("bounded metadata: reloaded generation not kept as the COLD publication base", "workspace", workspace, "reason", "base of another generation")
+	if !unchanged {
+		residentReloadIncrementals.Add(1)
+		residentReloadIncrementalNanos.Add(int64(time.Since(started)))
+	}
+	return true
 }
 
 // coldPublishKnown is the generation (source, retained) an incremental
@@ -348,15 +392,34 @@ func rememberColdPublication(key coldLabelCacheKey, source *metadataLogicalSourc
 }
 
 // knownColdPublication returns workspace's known publication with its
-// source retained for the caller, unless that generation is marked behind.
+// source retained for the caller.
 func knownColdPublication(key coldLabelCacheKey) (coldPublishKnown, bool) {
 	coldPublishKnownMu.Lock()
 	defer coldPublishKnownMu.Unlock()
+	// (A known generation is exact at its state whatever was committed
+	// since: it need not be the installed one, nor current.)
 	known, ok := coldPublishKnownStates[key]
-	if !ok || known.source.behind.Load() || known.source.Retain() != nil {
+	if !ok || known.source.Retain() != nil {
 		return coldPublishKnown{}, false
 	}
 	return known, true
+}
+
+// coldPublicationKnown reports whether workspace (the last workspace when
+// empty) has a known publication, so a COLD write can publish incrementally.
+func (s *SQLiteStore) coldPublicationKnown(workspace string) bool {
+	if coldIncrementalDisabled.Load() || s.metadataResidency == nil {
+		return false
+	}
+	if workspace == "" {
+		s.mu.RLock()
+		workspace = s.lastWorkspaceKey
+		s.mu.RUnlock()
+	}
+	coldPublishKnownMu.Lock()
+	defer coldPublishKnownMu.Unlock()
+	_, ok := coldPublishKnownStates[coldLabelCacheKey{s.metadataResidency, workspace}]
+	return ok
 }
 
 // forgetColdPublications drops the known publications of residency (of one
@@ -573,6 +636,7 @@ func diffColdPublishStates(before, after *coldPublishState) map[string]*coldPubl
 // the write lock. It returns errColdPublishInexact (or another error) when
 // the caller must reload in full; nothing was installed then.
 func (s *SQLiteStore) publishColdIncrementalLocked(ctx context.Context, base *coldPublishBase) (unchanged bool, err error) {
+	started := time.Now()
 	workspace := base.workspace
 	r := s.metadataResidency
 	ctx = metadataLogicalUnpinnedContext(ctx)
@@ -621,9 +685,6 @@ func (s *SQLiteStore) publishColdIncrementalLocked(ctx context.Context, base *co
 		return false, coldPublishInexact("manifest presence changed")
 	}
 	changes := diffColdPublishStates(before, after)
-	if changes["workspaceSettings"] != nil {
-		return false, coldPublishInexact("base field workspaceSettings changed")
-	}
 	plan, err := s.planColdPublish(ctx, tx, workspace, installed, before, after, changes)
 	if err != nil {
 		return false, err
@@ -658,7 +719,8 @@ func (s *SQLiteStore) publishColdIncrementalLocked(ctx context.Context, base *co
 	source = nil
 	noteColdPublishPlan(plan)
 	slog.Info("bounded metadata: COLD publication", "workspace", workspace, "patched", slices.Sorted(maps.Keys(plan.patch)),
-		"rebuilt", slices.Sorted(maps.Keys(plan.rebuild)), "recovered", slices.Sorted(maps.Keys(plan.part)), "labelCounts", len(plan.supplied) != 0)
+		"rebuilt", slices.Sorted(maps.Keys(plan.rebuild)), "recovered", slices.Sorted(maps.Keys(plan.part)), "labelCounts", len(plan.supplied) != 0,
+		"changes", describeColdPublishChanges(changes), "fieldMs", describeColdPublishTimings(plan.timings), "ms", time.Since(started).Milliseconds())
 	return false, nil
 }
 
@@ -678,6 +740,46 @@ type coldPublishPlan struct {
 	// order, before: the rows of patched fields in recovery order, after
 	// and before the write.
 	order, before map[string][]string
+	// timings: how long each rewritten field took (the log).
+	timings map[string]time.Duration
+	// keys: the rows each patched field normalizes (its changed rows, and
+	// the rows holding a changed user), sorted.
+	keys map[string][]string
+}
+
+// describeColdPublishChanges formats changed fields for the log:
+// name[+root][+manifest][:rows].
+func describeColdPublishChanges(changes map[string]*coldPublishChange) string {
+	parts := []string{}
+	for _, name := range slices.Sorted(maps.Keys(changes)) {
+		change := changes[name]
+		part := name
+		if change.root {
+			part += "+root"
+		}
+		if change.manifest {
+			part += "+manifest"
+		}
+		if len(change.keys) > 0 {
+			part += fmt.Sprintf(":%d", len(change.keys))
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, " ")
+}
+
+// describeColdPublishTimings formats the rewritten fields that took 10 ms or
+// more, slowest first.
+func describeColdPublishTimings(timings map[string]time.Duration) string {
+	names := slices.Collect(maps.Keys(timings))
+	slices.SortFunc(names, func(a, b string) int { return int(timings[b] - timings[a]) })
+	parts := []string{}
+	for _, name := range names {
+		if timings[name] >= 10*time.Millisecond {
+			parts = append(parts, fmt.Sprintf("%s=%d", name, timings[name].Milliseconds()))
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 func (p *coldPublishPlan) close() {}
@@ -686,7 +788,8 @@ func (p *coldPublishPlan) close() {}
 // dependencies are unchanged keep their installed node.
 func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace string, installed *metadataLogicalSource, before, after *coldPublishState, changes map[string]*coldPublishChange) (*coldPublishPlan, error) {
 	plan := &coldPublishPlan{changes: changes, rebuild: map[string]bool{}, patch: map[string]bool{}, part: map[string]bool{},
-		supplied: map[string]reflect.Value{}, rows: map[string]map[string]reflect.Value{}, order: map[string][]string{}, before: map[string][]string{}}
+		supplied: map[string]reflect.Value{}, rows: map[string]map[string]reflect.Value{}, order: map[string][]string{}, before: map[string][]string{},
+		timings: map[string]time.Duration{}, keys: map[string][]string{}}
 	labels := newColdLabelUses(s, workspace, after)
 	// A project change reaches labels and issues only through label counts:
 	// when every changed project uses the same labels as before, it does not.
@@ -698,10 +801,17 @@ func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace 
 		}
 		countNeutral = neutral
 	}
+	// A change of user rows alone reaches the fields that look users up only
+	// in the items that hold a changed user's ID (users below).
+	users, err := s.coldPublishUserChange(ctx, tx, workspace, installed, before, after, changes)
+	if err != nil {
+		return nil, err
+	}
 	affected := map[string]bool{}
 	for name := range changes {
 		affected[name] = true
 	}
+	viaUsers := map[string]bool{}
 	for _, name := range coldPublishFieldNames() {
 		for _, dependency := range coldPublishDependencies[name] {
 			if changes[dependency] == nil || dependency == name {
@@ -710,12 +820,56 @@ func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace 
 			if dependency == "projects" && countNeutral {
 				continue
 			}
+			if dependency == "users" && users != nil {
+				if name == "userSettings" || name == "notificationPreferences" {
+					// They read the users' keys only (missing defaults).
+					if users.bodyOnly {
+						continue
+					}
+				} else if coldPublishUserReaders[name] && (name != "initiatives" || !users.viewer) {
+					viaUsers[name] = true
+					continue
+				}
+			}
 			affected[name] = true
 		}
 	}
+	for name := range viaUsers {
+		if affected[name] && !coldPublishOnlyUsersChanged(name, changes) {
+			// Another dependency changed: rebuilt (or patched) as before.
+			delete(viaUsers, name)
+			continue
+		}
+		readers, err := s.coldPublishUserReaderRows(ctx, tx, workspace, name, users)
+		if err != nil {
+			return nil, err
+		}
+		keys := readers
+		if change := changes[name]; change != nil {
+			keys = append(slices.Clone(change.keys), readers...)
+			slices.Sort(keys)
+			keys = slices.Compact(keys)
+		}
+		if len(keys) == 0 {
+			// No item of name holds a changed user: its installed node stays.
+			delete(viaUsers, name)
+			continue
+		}
+		affected[name] = true
+		plan.keys[name] = keys
+	}
 	for name := range affected {
-		if s.coldPublishPatchable(name, installed, before, after, changes) {
+		ignore := ""
+		if viaUsers[name] {
+			ignore = "users"
+		} else if change := changes[name]; change != nil {
+			plan.keys[name] = change.keys
+		}
+		if s.coldPublishPatchable(name, installed, before, after, changes, ignore, len(plan.keys[name])) {
 			plan.patch[name] = true
+			if viaUsers[name] {
+				coldPublishUserReaderPatches.Add(1)
+			}
 		} else {
 			plan.rebuild[name] = true
 		}
@@ -749,7 +903,7 @@ func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace 
 		}
 	}
 	for name := range plan.patch {
-		if err := s.readColdPublishRows(ctx, tx, workspace, name, before, after, changes[name].keys, plan); err != nil {
+		if err := s.readColdPublishRows(ctx, tx, workspace, name, before, after, plan.keys[name], plan); err != nil {
 			return nil, err
 		}
 	}
@@ -758,15 +912,16 @@ func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace 
 
 // coldPublishPatchable reports whether field name can be patched: only its
 // own canonical rows changed (no root occurrence, the same manifest shape, no
-// dependency change), it is a collection of structured items normalized one
-// by one, and the installed field holds exactly the before rows.
-func (s *SQLiteStore) coldPublishPatchable(name string, installed *metadataLogicalSource, before, after *coldPublishState, changes map[string]*coldPublishChange) bool {
+// dependency change but ignore), it is a collection of structured items
+// normalized one by one, and the installed field holds exactly the before
+// rows. keys is how many rows the patch normalizes.
+func (s *SQLiteStore) coldPublishPatchable(name string, installed *metadataLogicalSource, before, after *coldPublishState, changes map[string]*coldPublishChange, ignore string, keys int) bool {
 	change := changes[name]
-	if change == nil || change.root || change.manifest || coldPublishUnpatchable[name] {
+	if change == nil && ignore == "" || change != nil && (change.root || change.manifest) || coldPublishUnpatchable[name] {
 		return false
 	}
 	for _, dependency := range coldPublishDependencies[name] {
-		if dependency != name && changes[dependency] != nil {
+		if dependency != name && dependency != ignore && changes[dependency] != nil {
 			return false
 		}
 	}
@@ -791,7 +946,7 @@ func (s *SQLiteStore) coldPublishPatchable(name string, installed *metadataLogic
 		return false
 	}
 	rows, current := len(before.records[name]), len(after.records[name])
-	if rows == 0 || current == 0 || len(change.keys)*2 > current+1 {
+	if rows == 0 || current == 0 || keys*2 > current+1 {
 		// Empty collections take the normalizer's default branch; a field
 		// mostly rewritten is rebuilt.
 		return false
@@ -801,6 +956,185 @@ func (s *SQLiteStore) coldPublishPatchable(name string, installed *metadataLogic
 		return false
 	}
 	return true
+}
+
+// coldPublishUserReaders look users up by the IDs their items hold
+// (metadataLogicalNormalizer.record): an item's normalized value depends on
+// the rows of exactly those users (and, for an initiative without a creator,
+// the viewer's).
+var coldPublishUserReaders = map[string]bool{"members": true, "initiatives": true, "projectUpdates": true, "initiativeUpdates": true,
+	"comments": true, "activities": true, "notifications": true, "projects": true}
+
+// coldPublishUserReaderPatches counts user-reading fields patched in the
+// items that hold a changed user (tests).
+var coldPublishUserReaderPatches atomic.Int64
+
+// ColdPublishUserReaderPatchesForTesting reports coldPublishUserReaderPatches.
+func ColdPublishUserReaderPatchesForTesting() int64 { return coldPublishUserReaderPatches.Load() }
+
+// coldPublishUsers is a change of user rows alone: the changed users' IDs
+// (their row keys).
+type coldPublishUsers struct {
+	ids   [][]byte
+	runes map[rune]bool
+	// bodyOnly: no user row was inserted or removed.
+	bodyOnly bool
+	// viewer: the viewer's ID is among them.
+	viewer bool
+}
+
+// coldPublishOnlyUsersChanged reports whether users is the only dependency
+// of name that changed.
+func coldPublishOnlyUsersChanged(name string, changes map[string]*coldPublishChange) bool {
+	for _, dependency := range coldPublishDependencies[name] {
+		if dependency != name && dependency != "users" && changes[dependency] != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// coldPublishUserChange describes a change of user rows alone (nil when users
+// did not change that way): no root occurrence or manifest change, users
+// patchable, each changed row's key is the ID of its user before (the
+// installed item) and after (the stored row), and each ID is plain enough to
+// be found in a stored row's bytes (coldPublishUsers.referenced).
+func (s *SQLiteStore) coldPublishUserChange(ctx context.Context, tx *sqlTx, workspace string, installed *metadataLogicalSource, before, after *coldPublishState, changes map[string]*coldPublishChange) (*coldPublishUsers, error) {
+	change := changes["users"]
+	if change == nil || change.root || change.manifest || len(change.keys) == 0 ||
+		!s.coldPublishPatchable("users", installed, before, after, changes, "", len(change.keys)) {
+		return nil, nil
+	}
+	users := &coldPublishUsers{runes: map[rune]bool{}, bodyOnly: true}
+	for _, key := range change.keys {
+		if !coldPublishPlainID(key) {
+			return nil, nil
+		}
+		users.ids = append(users.ids, []byte(key))
+		for _, r := range key {
+			users.runes[r] = true
+		}
+		_, inBefore := before.records["users"][key]
+		record, inAfter := after.records["users"][key]
+		users.bodyOnly = users.bodyOnly && inBefore && inAfter
+		if !inAfter {
+			continue
+		}
+		raw, err := s.readColdPublishRow(ctx, tx, workspace, "users", key, record)
+		if err != nil {
+			return nil, err
+		}
+		var user struct {
+			ID *string `json:"id"`
+		}
+		if err := json.Unmarshal(raw, &user); err != nil || user.ID == nil || *user.ID != key {
+			// (The row is decoded as recovery decodes it: domain.User's id.)
+			return nil, nil
+		}
+	}
+	index, _, _ := metadataLogicalField("users")
+	items := []metadataLogicalNode{}
+	if err := installed.fields[index].Children(ctx, func(_ reflect.Value, item metadataLogicalNode) error {
+		items = append(items, item)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	order := coldPublishRecoveryOrder(before.records["users"], false)
+	if len(items) != len(order) {
+		return nil, nil
+	}
+	for position, key := range order {
+		if _, changed := slices.BinarySearch(change.keys, key); !changed {
+			continue
+		}
+		if match, err := coldPublishItemID(ctx, items[position], key); err != nil || !match {
+			return nil, err
+		}
+	}
+	viewerIndex, _, _ := metadataLogicalField("viewer")
+	viewer, err := issueHotField(ctx, installed.fields[viewerIndex], "ID")
+	if err != nil {
+		return nil, nil
+	}
+	for _, key := range change.keys {
+		same, err := viewer.StringEqual(ctx, key)
+		if err != nil {
+			return nil, nil
+		}
+		users.viewer = users.viewer || same
+	}
+	return users, nil
+}
+
+// coldPublishPlainID reports whether id is non-empty valid UTF-8 of
+// printable characters of the Basic Multilingual Plane that JSON writes
+// either as themselves or as one \uXXXX escape (no '"', '\\', '/', control
+// characters, U+FFFD or surrogate pairs), so a stored row that holds id holds its
+// bytes or such an escape of one of its characters.
+func coldPublishPlainID(id string) bool {
+	if id == "" || !utf8.ValidString(id) {
+		return false
+	}
+	for _, r := range id {
+		if r < 0x20 || r == 0x7f || r == '"' || r == '\\' || r == '/' || r == utf8.RuneError || r > 0xffff || r >= 0xd800 && r <= 0xdfff {
+			return false
+		}
+	}
+	return true
+}
+
+// referenced reports whether a stored row may hold one of the changed users'
+// IDs: it contains one's bytes, or a \uXXXX escape of a character of one.
+// (A superset: a row with neither holds none of them.)
+func (u *coldPublishUsers) referenced(raw []byte) bool {
+	for _, id := range u.ids {
+		if bytes.Contains(raw, id) {
+			return true
+		}
+	}
+	for offset := 0; ; {
+		i := bytes.Index(raw[offset:], []byte(`\u`))
+		if i < 0 {
+			return false
+		}
+		at := offset + i
+		if at+6 <= len(raw) {
+			if code, err := strconv.ParseUint(string(raw[at+2:at+6]), 16, 32); err == nil && u.runes[rune(code)] {
+				return true
+			}
+		}
+		offset = at + 2
+	}
+}
+
+// coldPublishUserReaderRows returns the keys of the stored rows of field name
+// that may hold a changed user's ID (coldPublishUsers.referenced), sorted.
+func (s *SQLiteStore) coldPublishUserReaderRows(ctx context.Context, tx *sqlTx, workspace, name string, users *coldPublishUsers) ([]string, error) {
+	data := "data"
+	if s.dialect == "sqlite" {
+		data = "CAST(data AS BLOB)"
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT record_key,`+data+` FROM workspace_metadata_records WHERE workspace_key=? AND field=?`, workspace, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	keys := []string{}
+	for rows.Next() {
+		var key, raw []byte
+		if err := rows.Scan(&key, &raw); err != nil {
+			return nil, err
+		}
+		if users.referenced(raw) {
+			keys = append(keys, string(key))
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	slices.Sort(keys)
+	return slices.Compact(keys), nil
 }
 
 // coldPublishRootEmpty reports whether every root occurrence of a split
@@ -928,6 +1262,7 @@ func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, works
 	}
 	defer installed.Release()
 	scratch := metadataLogicalSourceScratchContext(ctx, installed)
+	rawStarted := time.Now()
 	raw, err := s.readRawMetadataLogicalSourcePart(scratch, tx, workspace, true, plan.part, plan.supplied)
 	if err != nil {
 		return nil, err
@@ -945,6 +1280,7 @@ func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, works
 		return nil, err
 	}
 	defer done()
+	plan.timings["(raw+index)"] = time.Since(rawStarted)
 	patched := map[string]map[string]reflect.Value{}
 	for name := range plan.patch {
 		values, err := s.normalizeColdPublishRows(normalizeCtx, n, name, plan)
@@ -994,6 +1330,7 @@ func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, works
 		if err := b.inheritTimestampInputs(normalizeCtx); err != nil {
 			return err
 		}
+		defer func(started time.Time) { plan.timings[name] = time.Since(started) }(time.Now())
 		if plan.rebuild[name] {
 			return n.field(normalizeCtx, b, name, raw.fields[index])
 		}
@@ -1113,7 +1450,7 @@ func (s *SQLiteStore) normalizeColdPublishRows(ctx context.Context, n *metadataL
 // rows copy the installed item's frames, changed rows their normalized value.
 func (s *SQLiteStore) patchColdPublicationField(ctx context.Context, b *metadataLogicalBuilder, name string, node metadataLogicalNode, plan *coldPublishPlan, normalized map[string]reflect.Value) error {
 	changed := map[string]bool{}
-	for _, key := range plan.changes[name].keys {
+	for _, key := range plan.keys[name] {
 		changed[key] = true
 	}
 	if err := b.BeginCollection(name, false); err != nil {

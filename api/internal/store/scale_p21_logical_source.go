@@ -79,6 +79,9 @@ type metadataLogicalStorage struct {
 	memoMu  sync.Mutex
 	copies  []metadataLogicalCopy
 	indexes map[int64]metadataLogicalChildIndex
+	clones  map[int64]metadataLogicalCloneCheck
+	// userIndexes: the IDs of users frames (scale_p21_aggregate_user_index.go).
+	userIndexes map[int64]metadataLogicalUserIndex
 }
 
 type metadataLogicalNode struct {

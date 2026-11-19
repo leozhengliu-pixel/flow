@@ -693,11 +693,14 @@ func (s *SQLiteStore) publishColdLegacyWriteLocked(ctx context.Context, workspac
 		s.dropResidentWorkspace(workspace)
 		return false
 	}
+	if base != nil && base.workspace == workspace {
+		// The known publication was tried already.
+		ctx = context.WithValue(ctx, coldReloadFullKey{}, true)
+	}
 	if err := s.reloadResidentWorkspaceLogical(ctx, workspace, logical); err != nil {
 		slog.Error("bounded metadata: COLD legacy write could not publish its workspace", "workspace", workspace, "error", err)
 		return false
 	}
-	s.rememberReloadedColdPublication(ctx, workspace)
 	return false
 }
 

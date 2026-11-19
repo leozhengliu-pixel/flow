@@ -3,16 +3,18 @@
 # topology with the flag off or on, drive a mixed workload and report flag off vs on.
 #
 #   scripts/loadrig/loadrig.sh build                      build bin/flow-server and bin/loadrig.test (-tags loadtest)
-#   scripts/loadrig/loadrig.sh seed  <sqlite|pg2>          seed one workspace (SCALE=1, 10, ...) and keep it as the seed copy
-#   scripts/loadrig/loadrig.sh start <sqlite|pg2> <on|off> start the replicas on a fresh copy of the seed
+#   scripts/loadrig/loadrig.sh seed  <sqlite|pg2|mysql2>   seed one workspace (SCALE=1, 10, ...) and keep it as the seed copy
+#   scripts/loadrig/loadrig.sh start <sqlite|pg2|mysql2> <on|off> start the replicas on a fresh copy of the seed
 #   scripts/loadrig/loadrig.sh drive <label>               drive the started replicas (VUS, DURATION, ...)
 #   scripts/loadrig/loadrig.sh stop                        stop the replicas (by PID)
-#   scripts/loadrig/loadrig.sh pair  <sqlite|pg2>          start off, drive, stop, start on, drive, stop, compare
+#   scripts/loadrig/loadrig.sh pair  <sqlite|pg2|mysql2>   start off, drive, stop, start on, drive, stop, compare
 #   scripts/loadrig/loadrig.sh smoke                       build, seed 1x and run a tiny pair on both topologies, then clean up
 #   scripts/loadrig/loadrig.sh down                        stop everything the rig started and remove its containers and data
 #
 # Topologies: sqlite = one replica on SQLite; pg2 = two replicas on PostgreSQL (container loadrig-pg) with Redis
-# coordination (container loadrig-redis when the redis:7-alpine image is present, else an in-memory Redis process).
+# coordination (container loadrig-redis when the redis:7-alpine image is present, else an in-memory Redis process);
+# mysql2 = two replicas on MySQL 8.4 (container loadrig-mysql from the local mysql:8.4 image, 1.5 GiB) with the same
+# Redis coordination. Each start copies the seed database into a fresh run database inside the container.
 # Both flag states run with FLOW_RECORD_HYDRATION=on, FLOW_RECORD_JOURNAL=on and FLOW_SYNC_V2=on; "on" adds
 # FLOW_BOUNDED_METADATA=on, which starts once every HOT consumer is migrated (COLD ones run on the COLD facade).
 #
@@ -37,6 +39,7 @@ HEAVY="$HOME/.flow-local/heavy.sh"
 # LOADRIG_METRIC_PORT and the other LOADRIG_*_PORT settings override single ports.
 PORT_BASE="${LOADRIG_PORT_BASE:-47610}"
 PG_PORT="${LOADRIG_PG_PORT:-$((PORT_BASE + 23))}"
+MYSQL_PORT="${LOADRIG_MYSQL_PORT:-$((PORT_BASE + 24))}"
 REDIS_PORT="${LOADRIG_REDIS_PORT:-$((PORT_BASE + 82))}"
 MODEL_PORT="${LOADRIG_MODEL_PORT:-$((PORT_BASE + 81))}"
 API_PORT="${LOADRIG_API_PORT:-$PORT_BASE}"
@@ -119,6 +122,55 @@ pg_up() {
 
 pg_sql() { docker exec loadrig-pg psql -v ON_ERROR_STOP=1 -q -U flow -d postgres -c "$1" >/dev/null; }
 
+# ---- MySQL ----------------------------------------------------------------------------------------------------------
+mysql_secret() {
+  if [ ! -f "$HOME_DIR/mysql.env" ]; then
+    umask 077
+    printf 'MYSQL_ROOT_PASSWORD=%s\nMYSQL_USER=flow\nMYSQL_PASSWORD=%s\n' "$(openssl rand -hex 16)" "$(openssl rand -hex 16)" > "$HOME_DIR/mysql.env"
+  fi
+}
+
+mysql_url() { # database name -> URL (never printed)
+  local password
+  password=$(sed -n 's/^MYSQL_PASSWORD=//p' "$HOME_DIR/mysql.env")
+  printf 'mysql://flow:%s@127.0.0.1:%s/%s' "$password" "$MYSQL_PORT" "$1"
+}
+
+# mysql_root runs a command in the container as the MySQL root user (password from the env file, never printed).
+mysql_root() { docker exec -e MYSQL_PWD="$(sed -n 's/^MYSQL_ROOT_PASSWORD=//p' "$HOME_DIR/mysql.env")" loadrig-mysql "$@"; }
+
+mysql_sql() { mysql_root mysql -uroot -e "$1" >/dev/null; }
+
+mysql_up() {
+  mysql_secret
+  if docker ps --format '{{.Names}}' | grep -qx loadrig-mysql; then return 0; fi
+  docker image inspect mysql:8.4 >/dev/null 2>&1 || [ "${LOADRIG_ALLOW_PULL:-0}" = 1 ] || die "mysql:8.4 is not present locally (LOADRIG_ALLOW_PULL=1 to pull it)"
+  port_free "$MYSQL_PORT" || die "port $MYSQL_PORT is in use"
+  log "starting container loadrig-mysql (mysql:8.4, 1.5 GiB)"
+  # No binary log (a single server; triggers need no extra privilege) and a group-commit log flush, as pg2 runs with
+  # synchronous_commit=off.
+  docker run -d --name loadrig-mysql --memory 1536m --env-file "$HOME_DIR/mysql.env" -p "127.0.0.1:$MYSQL_PORT:3306" mysql:8.4 \
+    --skip-log-bin --innodb-buffer-pool-size=768M --innodb-flush-log-at-trx-commit=2 --max-connections=300 \
+    --max-allowed-packet=256M >/dev/null
+  for _ in $(seq 1 90); do
+    mysql_root mysql -uroot -Nse 'SELECT 1' >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  die "loadrig-mysql did not become ready"
+}
+
+# mysql_database recreates database name (empty) for the flow user.
+mysql_database() {
+  mysql_sql "DROP DATABASE IF EXISTS $1; CREATE DATABASE $1 CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL PRIVILEGES ON $1.* TO 'flow'@'%'; FLUSH PRIVILEGES"
+}
+
+# mysql_copy copies the seed database into a fresh run database inside the container (no TEMPLATE in MySQL).
+mysql_copy() {
+  mysql_database flow_run
+  mysql_root sh -c 'mysqldump -uroot --single-transaction --quick --triggers --routines --skip-lock-tables flow_seed | mysql -uroot flow_run' ||
+    die "copying the MySQL seed failed"
+}
+
 redis_up() {
   if [ -f "$RUN/redis.pid" ] && kill -0 "$(cat "$RUN/redis.pid")" 2>/dev/null; then return 0; fi
   if docker ps --format '{{.Names}}' | grep -qx loadrig-redis; then return 0; fi
@@ -165,7 +217,8 @@ db_env() { # topology phase(seed|run) -> FLOW_DATABASE_* assignments
   case "$1" in
     sqlite) if [ "$2" = seed ]; then echo "FLOW_DATABASE_DRIVER=sqlite FLOW_DATABASE_PATH=$DATA/sqlite-seed/flow.db"; else echo "FLOW_DATABASE_DRIVER=sqlite FLOW_DATABASE_PATH=$RUN/sqlite/flow.db"; fi ;;
     pg2) if [ "$2" = seed ]; then echo "FLOW_DATABASE_DRIVER=postgres FLOW_DATABASE_URL=$(pg_url flow_seed)"; else echo "FLOW_DATABASE_DRIVER=postgres FLOW_DATABASE_URL=$(pg_url flow_run)"; fi ;;
-    *) die "topology must be sqlite or pg2" ;;
+    mysql2) if [ "$2" = seed ]; then echo "FLOW_DATABASE_DRIVER=mysql FLOW_DATABASE_URL=$(mysql_url flow_seed)"; else echo "FLOW_DATABASE_DRIVER=mysql FLOW_DATABASE_URL=$(mysql_url flow_run)"; fi ;;
+    *) die "topology must be sqlite, pg2 or mysql2" ;;
   esac
 }
 
@@ -176,6 +229,9 @@ cmd_seed() {
   if [ "$topology" = pg2 ]; then
     pg_up
     pg_sql "DROP DATABASE IF EXISTS flow_run" ; pg_sql "DROP DATABASE IF EXISTS flow_seed" ; pg_sql "CREATE DATABASE flow_seed"
+  elif [ "$topology" = mysql2 ]; then
+    mysql_up
+    mysql_sql "DROP DATABASE IF EXISTS flow_run"; mysql_database flow_seed
   else
     rm -rf "$DATA/sqlite-seed"; mkdir -p "$DATA/sqlite-seed"
   fi
@@ -204,6 +260,10 @@ cmd_start() {
     replicas=2
     pg_up; redis_up
     pg_sql "DROP DATABASE IF EXISTS flow_run"; pg_sql "CREATE DATABASE flow_run TEMPLATE flow_seed"
+  elif [ "$topology" = mysql2 ]; then
+    replicas=2
+    mysql_up; redis_up
+    mysql_copy
   else
     rm -rf "$RUN/sqlite"; mkdir -p "$RUN/sqlite"
     for file in "$DATA/sqlite-seed"/flow.db*; do cp -c "$file" "$RUN/sqlite/" 2>/dev/null || cp "$file" "$RUN/sqlite/"; done
@@ -283,7 +343,7 @@ cmd_down() {
   cmd_stop
   stop_pid "$RUN/model.pid"
   stop_pid "$RUN/redis.pid"
-  for name in loadrig-pg loadrig-redis; do
+  for name in loadrig-pg loadrig-mysql loadrig-redis; do
     if docker ps -a --format '{{.Names}}' | grep -qx "$name"; then docker rm -f -v "$name" >/dev/null; log "removed container $name"; fi
   done
   rm -f "$RUN/redis.kind"
@@ -291,7 +351,7 @@ cmd_down() {
 
 cmd_clean() {
   cmd_down
-  rm -rf "$RUN" "$DATA" "$HOME_DIR/pg.env" "$HOME_DIR/secrets.env"
+  rm -rf "$RUN" "$DATA" "$HOME_DIR/pg.env" "$HOME_DIR/mysql.env" "$HOME_DIR/secrets.env"
   log "removed rig data (binaries and reports kept)"
 }
 

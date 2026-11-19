@@ -149,6 +149,43 @@ func (r *issueHotInputs) withHeader(ctx context.Context, record metadataLogicalN
 	return visit(value)
 }
 
+// selectSliceByID is selectSlice of the records whose ID is one of keys,
+// through the collection frame's ID index when it has one (in collection
+// order, as the scan selects them).
+func (r *issueHotInputs) selectSliceByID(ctx context.Context, field string, keys map[string]bool, names ...string) error {
+	index, _, _ := metadataLogicalField(field)
+	ids, ok, err := metadataAggregateUserIndexOf(ctx, r.source.fields[index])
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return r.selectSlice(ctx, field, func(record metadataLogicalNode) (bool, error) {
+			return issueHotMatches(ctx, record, "ID", keys)
+		}, names...)
+	}
+	selected := []metadataLogicalIndexed{}
+	for key := range keys {
+		selected = append(selected, ids.users[key]...)
+	}
+	slices.SortFunc(selected, func(a, b metadataLogicalIndexed) int { return a.position - b.position })
+	target := reflect.ValueOf(&r.data).Elem().Field(index)
+	for _, record := range selected {
+		cost, err := issueHotProjectionCost(ctx, record.node, names)
+		if err != nil {
+			return err
+		}
+		if err := r.reserve(ctx, cost); err != nil {
+			return err
+		}
+		value, err := issueHotProjection(ctx, record.node, names, cost)
+		if err != nil {
+			return err
+		}
+		target.Set(reflect.Append(target, value))
+	}
+	return ctx.Err()
+}
+
 func (r *issueHotInputs) selectSlice(ctx context.Context, field string, match func(metadataLogicalNode) (bool, error), names ...string) error {
 	index, _, _ := metadataLogicalField(field)
 	target := reflect.ValueOf(&r.data).Elem().Field(index)

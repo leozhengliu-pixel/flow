@@ -63,6 +63,13 @@ func (s *SQLiteStore) WithColdMetadataMutation(ctx context.Context, consumer, wo
 		if facade.coldWrite != nil {
 			return run(ctx, facade)
 		}
+		if s.coldPublicationKnown(workspace) {
+			// Published as a default COLD legacy write: from the known
+			// publication and the records the write changed when the shared
+			// lock is returned, instead of an image of the whole workspace
+			// captured under the lock (prepareColdFullWrite).
+			return s.coldLegacyWrite(ctx, workspace, run)
+		}
 		return s.withColdMutationStore(ctx, workspace, run)
 	})
 }

@@ -1,11 +1,13 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +51,12 @@ func ColdMetricsSnapshot() map[string]int64 {
 		"coldPublishUnchanged":        coldPublishUnchanged.Load(),
 		"coldPublishBaseKnown":        coldPublishBaseKnown.Load(),
 		"coldPublishFallbacks":        fallbacks,
+		"coldFullWriteDecodes":        coldFullWriteDecodes.Load(),
+		"coldFullWriteDecodeSkips":    coldFullWriteDecodeSkips.Load(),
+		"reloadIncrementals":          residentReloadIncrementals.Load(),
+		"reloadIncrementalNanos":      residentReloadIncrementalNanos.Load(),
+		"reloadFulls":                 residentReloadFulls.Load(),
+		"reloadFullNanos":             residentReloadFullNanos.Load(),
 		"coldSlotAcquisitions":        coldSlotAcquisitions.Load(),
 		"coldSlotRefusals":            coldSlotRefusals.Load(),
 		"coldSlotsHeld":               coldSlotHolders.Load(),
@@ -81,7 +89,43 @@ func ColdMetricsSnapshot() map[string]int64 {
 	for reason, count := range reasons {
 		snapshot["coldPublishFallback "+reason] = count
 	}
+	for name, hold := range WriteLockHoldsSnapshot() {
+		snapshot[writeLockHoldKey+name+" holds"] = hold[0]
+		snapshot[writeLockHoldKey+name+" nanos"] = hold[1]
+		snapshot[writeLockHoldKey+name+" Max"] = hold[2]
+	}
 	return snapshot
+}
+
+// writeLockHoldKey prefixes a snapshot's write-lock hold counters by writer.
+const writeLockHoldKey = "writeLockHold "
+
+// topWriteLockHolds formats the n writers that held the write lock longest
+// in total between prev and cur: "name=holds/totalMs/maxMs".
+func topWriteLockHolds(prev, cur map[string]int64, n int) string {
+	type hold struct {
+		name         string
+		holds, nanos int64
+	}
+	holds := []hold{}
+	for key, nanos := range cur {
+		name, ok := strings.CutPrefix(key, writeLockHoldKey)
+		if !ok {
+			continue
+		}
+		name, ok = strings.CutSuffix(name, " nanos")
+		if !ok || nanos == prev[key] {
+			continue
+		}
+		count := writeLockHoldKey + name + " holds"
+		holds = append(holds, hold{name, cur[count] - prev[count], nanos - prev[key]})
+	}
+	slices.SortFunc(holds, func(a, b hold) int { return cmp.Compare(b.nanos, a.nanos) })
+	parts := []string{}
+	for _, h := range holds[:min(n, len(holds))] {
+		parts = append(parts, fmt.Sprintf("%s=%d/%dms/%dms", h.name, h.holds, h.nanos/1e6, cur[writeLockHoldKey+h.name+" Max"]/1e6))
+	}
+	return strings.Join(parts, " ")
 }
 
 // DefaultBoundedMetadataStatsInterval is the period of the COLD summary line.
@@ -118,7 +162,8 @@ func coldMetricsDelta(prev, cur map[string]int64, interval time.Duration) []any 
 	}
 	changed := d("coldSlotWaits") != 0 || d("coldSlotRefusals") != 0 || d("legacyViewRefusals") != 0 ||
 		d("coldFacadeDecodes") != 0 || d("coldViewReads") != 0 || d("coldViewFailures") != 0 ||
-		d("writerLockWaits") != 0 || d("coldWriterLockWaits") != 0 || d("coldWriteLockHolds") != 0
+		d("writerLockWaits") != 0 || d("coldWriterLockWaits") != 0 || d("coldWriteLockHolds") != 0 ||
+		d("reloadIncrementals") != 0 || d("reloadFulls") != 0
 	if !changed {
 		return nil
 	}
@@ -150,6 +195,11 @@ func coldMetricsDelta(prev, cur map[string]int64, interval time.Duration) []any 
 		"coldPublishFull", d("coldPublishFulls"),
 		"coldPublishFullAvg", avg(d("coldPublishFullNanos"), d("coldPublishFulls")),
 		"coldPublishFallbacks", d("coldPublishFallbacks"),
+		"reloadIncremental", d("reloadIncrementals"),
+		"reloadIncrementalAvg", avg(d("reloadIncrementalNanos"), d("reloadIncrementals")),
+		"reloadFull", d("reloadFulls"),
+		"reloadFullAvg", avg(d("reloadFullNanos"), d("reloadFulls")),
+		"lockHolds", topWriteLockHolds(prev, cur, 6),
 	}
 }
 

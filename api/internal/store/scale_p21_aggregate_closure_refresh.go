@@ -149,6 +149,21 @@ func metadataAggregateLookupUser(ctx context.Context, source *metadataLogicalSou
 		if name != "users" {
 			return nil
 		}
+		if want, plain, err := metadataAggregatePlainString(ctx, id); err != nil {
+			return err
+		} else if plain {
+			// The scan's result from the users frame's ID index.
+			index, ok, err := metadataAggregateUserIndexOf(ctx, users)
+			if err != nil {
+				return err
+			}
+			if ok {
+				if users := index.users[want]; len(users) != 0 {
+					found = metadataAggregateStoredNode{users[len(users)-1].node}
+				}
+				return nil
+			}
+		}
 		return users.Children(ctx, func(_ reflect.Value, user metadataLogicalNode) error {
 			candidate := metadataAggregateStoredNode{user}
 			userID, err := metadataAggregateChild(ctx, candidate, "ID")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,9 @@ type coldWriteMutex struct {
 	// while every other writer waits.
 	stale   func() bool
 	refresh func()
+	// The current holder of local and since when (writeLockHolds).
+	holder   writeLockHolder
+	acquired time.Time
 }
 
 // coldWriteRefreshAttempts bounds Lock's refreshes outside the shared lock;
@@ -54,11 +58,20 @@ func (m *coldWriteMutex) Lock() {
 		return
 	}
 	if m.local.TryLock() {
+		m.held()
 		return
 	}
 	started := time.Now()
 	m.local.Lock()
 	observeWriteLockWait(&writerLockWaits, started)
+	m.held()
+}
+
+// held records the new holder of local (the caller holds it).
+func (m *coldWriteMutex) held() {
+	m.holder = writeLockHolder{}
+	runtime.Callers(3, m.holder[:])
+	m.acquired = time.Now()
 }
 
 // writeLockWaitStats counts the writers that found a store's write lock held
@@ -99,7 +112,9 @@ func (m *coldWriteMutex) Unlock() {
 		}
 		return
 	}
+	holder, acquired := m.holder, m.acquired
 	m.local.Unlock()
+	noteWriteLockHold(&holder, acquired)
 }
 
 func (m *coldWriteMutex) TryLock() bool {
@@ -110,7 +125,11 @@ func (m *coldWriteMutex) TryLock() bool {
 		m.locked()
 		return true
 	}
-	return m.local.TryLock()
+	if !m.local.TryLock() {
+		return false
+	}
+	m.held()
+	return true
 }
 
 type coldFullWrite struct {
@@ -201,6 +220,37 @@ func (s *SQLiteStore) withColdMutationStore(ctx context.Context, workspace strin
 	})
 }
 
+// COLD full writes that decoded their facade again under the lock, and those
+// whose facade already held the parent's installed generation.
+var coldFullWriteDecodes, coldFullWriteDecodeSkips atomic.Int64
+
+// coldFacadeCurrentLocked reports whether the facade's decoded image of the
+// requested workspace is the decode of the parent's installed generation: it
+// pins that generation (onLock refreshed it under the lock) and no earlier
+// write of this request changed it (a write's publication installs another
+// generation in the parent). The caller holds the parent's write lock.
+func (s *SQLiteStore) coldFacadeCurrentLocked(read *coldMetadataRead, state *coldFullWrite) bool {
+	parent := s.coldParent
+	if parent == nil || parent != state.parent || read == nil || read.facade != s {
+		return false
+	}
+	s.mu.RLock()
+	workspace := state.requested
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	s.mu.RUnlock()
+	read.mu.Lock()
+	pinned := read.sources[workspace]
+	read.mu.Unlock()
+	r := parent.metadataResidency
+	r.mu.Lock()
+	current := r.logical[workspace]
+	r.mu.Unlock()
+	// (Every pinned generation is decoded into the facade with its pin.)
+	return pinned != nil && pinned == current
+}
+
 // The parent write lock is already held; refresh explicitly before the
 // original callback chooses its base. Errors never hide inside mutex methods.
 func (s *SQLiteStore) refreshColdFullWriteLocked(ctx context.Context) (string, error) {
@@ -230,15 +280,24 @@ func (s *SQLiteStore) refreshColdFullWriteLocked(ctx context.Context) (string, e
 			return selected, nil
 		}
 	}
+	retry := state.source != nil
 	state.close()
-	if err := s.refreshColdMetadataRead(ctx, state.requested); err != nil {
-		return "", err
+	read := ctx.Value(coldMetadataReadKey{}).(*coldMetadataRead)
+	if retry || !s.coldFacadeCurrentLocked(read, state) {
+		// (A first attempt whose facade already holds the parent's installed
+		// generation, as onLock leaves it, keeps that decode: decoding the
+		// same generation again under the lock gave the same image.)
+		if err := s.refreshColdMetadataRead(ctx, state.requested); err != nil {
+			return "", err
+		}
+		coldFullWriteDecodes.Add(1)
+	} else {
+		coldFullWriteDecodeSkips.Add(1)
 	}
 	workspace := state.requested
 	if workspace == "" {
 		workspace = s.lastWorkspaceKey
 	}
-	read := ctx.Value(coldMetadataReadKey{}).(*coldMetadataRead)
 	read.mu.Lock()
 	source := read.sources[workspace]
 	if source == nil {
