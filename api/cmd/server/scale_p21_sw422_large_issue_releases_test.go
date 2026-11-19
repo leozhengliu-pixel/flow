@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,7 +20,8 @@ import (
 // issue rows, activities, events, webhooks and realtime), warm and
 // SQL-reloaded, including a peer that commits to the large release row
 // after the copies were installed (merged, or conflicting and retried).
-func TestScaleP21SW422LargeIssueReleasesDifferential(t *testing.T) {
+func scaleP21SW422Run(t *testing.T, names ...string) {
+	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -108,13 +110,14 @@ func TestScaleP21SW422LargeIssueReleasesDifferential(t *testing.T) {
 			}
 		}
 	}
-	cases := []struct {
+	type sw422Case struct {
 		name    string
 		prepare func(*testing.T)
 		peer    func(*testing.T)
 		ids     []string
 		code    int
-	}{
+	}
+	cases := []sw422Case{
 		{name: "add-to-many-issues", prepare: grow(64<<10, 300_000, false, 0), ids: []string{large}, code: http.StatusOK},
 		{name: "remove-from-many-issues", prepare: grow(64<<10, 300_000, true, 0), ids: []string{}, code: http.StatusOK},
 		{name: "add-large-description-7mib", prepare: grow(7<<20, 1000, false, 0), ids: []string{large, seed.id("add")}, code: http.StatusOK},
@@ -127,8 +130,16 @@ func TestScaleP21SW422LargeIssueReleasesDifferential(t *testing.T) {
 		{name: "peer-renamed", prepare: grow(4<<20, 1000, false, 0), ids: []string{large}, code: http.StatusOK,
 			peer: peer(func(release *domain.Release) { release.Name = "Peer renamed release" })},
 	}
+	for _, name := range names {
+		if !slices.ContainsFunc(cases, func(test sw422Case) bool { return test.name == name }) {
+			t.Fatal("unknown SW422 case", name)
+		}
+	}
 	for _, alias := range []bool{true, false} {
 		for _, test := range cases {
+			if !slices.Contains(names, test.name) {
+				continue
+			}
 			t.Run(fmt.Sprintf("%s/alias=%t", test.name, alias), func(t *testing.T) {
 				f.prepare = test.prepare
 				defer func() { f.prepare = nil }()
@@ -153,4 +164,23 @@ func TestScaleP21SW422LargeIssueReleasesDifferential(t *testing.T) {
 			})
 		}
 	}
+}
+
+// The cases run in four top-level tests so the CI shards spread them: on
+// PostgreSQL and MySQL all of them took over 24 minutes in one test.
+func TestScaleP21SW422LargeIssueReleasesDifferential(t *testing.T) {
+	scaleP21SW422Run(t, "add-to-many-issues")
+}
+
+func TestScaleP21SW422LargeIssueReleasesRemoveDifferential(t *testing.T) {
+	scaleP21SW422Run(t, "remove-from-many-issues")
+}
+
+func TestScaleP21SW422LargeIssueReleasesDescriptionDifferential(t *testing.T) {
+	scaleP21SW422Run(t, "add-large-description-7mib", "add-large-description-at-max", "remove-large-description-at-max",
+		"add-plain-description-14mb", "add-large-description-over")
+}
+
+func TestScaleP21SW422LargeIssueReleasesPeerDifferential(t *testing.T) {
+	scaleP21SW422Run(t, "peer-added-issue", "peer-renamed")
 }

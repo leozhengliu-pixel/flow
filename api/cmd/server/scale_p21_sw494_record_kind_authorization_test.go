@@ -11,7 +11,8 @@ import (
 
 // SW494: reviews, releases, release pipelines, customers, customer requests
 // and asks by ID, with their create/reorder roots and body references.
-func TestScaleP21SW494RecordKindAuthorizationDifferential(t *testing.T) {
+func scaleP21SW494Table(t *testing.T, part, parts int) {
+	t.Helper()
 	fx := scaleP21SW491Setup(t, nil)
 	p, workspace := fx.prefix, fx.workspace
 	host, err := url.Parse(fx.f.host.URL)
@@ -167,7 +168,7 @@ func TestScaleP21SW494RecordKindAuthorizationDifferential(t *testing.T) {
 		row("ask-create-private", http.MethodPost, "POST /api/asks", "/api/asks", `{"teamId":"`+fx.privateTeam+`"}`),
 		row("ask-create-invalid", http.MethodPost, "POST /api/asks", "/api/asks", `{"teamId":3}`),
 	)
-	fx.run(t, "SW494", rows, []scaleP21SW491Control{
+	fx.runPart(t, "SW494", rows, []scaleP21SW491Control{
 		{"review-get-rev-public/member-private-outsider/session", true},
 		{"review-get-rev-private/member-private-outsider/session", false},
 		{"review-get-rev-private/admin/session", true},
@@ -192,5 +193,17 @@ func TestScaleP21SW494RecordKindAuthorizationDifferential(t *testing.T) {
 		{"ask-delete-ask-private/member-private-outsider/session", false},
 		{"ask-delete-ask-dup/member-private-outsider/session", true},
 		{"ask-create-private/member-private-outsider/session", false},
-	})
+	}, part, parts)
+}
+
+// The SW494 table runs in 3 top-level tests (every third row each) so the
+// CI shards spread it: on PostgreSQL and MySQL the whole table took 15-21 minutes.
+func TestScaleP21SW494RecordKindAuthorizationDifferential(t *testing.T) { scaleP21SW494Table(t, 0, 3) }
+
+func TestScaleP21SW494RecordKindAuthorizationDifferentialPart2(t *testing.T) {
+	scaleP21SW494Table(t, 1, 3)
+}
+
+func TestScaleP21SW494RecordKindAuthorizationDifferentialPart3(t *testing.T) {
+	scaleP21SW494Table(t, 2, 3)
 }

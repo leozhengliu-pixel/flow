@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -171,13 +172,30 @@ func scaleP21SW400Actions(f scaleP21IssueUpdateFixture, edit func(*domain.Triage
 	}
 }
 
+// The four cases run in two top-level tests so the CI shards spread them:
+// on MySQL all four took 20 minutes in one test.
 func TestScaleP21SW400ThousandIssueBatchTriageDifferential(t *testing.T) {
+	scaleP21SW400Run(t, "priority-suggest", "priority-auto")
+}
+
+func TestScaleP21SW400ThousandIssueBatchTriageMoveDifferential(t *testing.T) {
+	scaleP21SW400Run(t, "team-auto-move", "batch-move-into-triage-team")
+}
+
+func scaleP21SW400Run(t *testing.T, names ...string) {
+	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP21IssueUpdateSetup(t)
 	ids := scaleP21SW400Bulk(t, f, 1000)
 	owner := f.data.Viewer
+	ran := 0
+	defer func() {
+		if ran != len(names) {
+			t.Fatal("SW400 ran", ran, "of the named cases", names)
+		}
+	}()
 	for _, test := range []struct {
 		name   string
 		setup  func(*testing.T)
@@ -195,6 +213,10 @@ func TestScaleP21SW400ThousandIssueBatchTriageDifferential(t *testing.T) {
 		}), update: map[string]any{"priority": 1}, moved: 100},
 		{name: "batch-move-into-triage-team", update: map[string]any{"teamId": scaleP21SW400Team}},
 	} {
+		if !slices.Contains(names, test.name) {
+			continue
+		}
+		ran++
 		t.Run(test.name, func(t *testing.T) {
 			f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{setup: test.setup, issue: f.triage.ID})
 			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()

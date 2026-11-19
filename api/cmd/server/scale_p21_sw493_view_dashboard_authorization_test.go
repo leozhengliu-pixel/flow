@@ -13,7 +13,8 @@ import (
 // owner/body checks. Views follow the literal projection (team scope, own
 // personal views, exact-ID visible project) before viewAllowed; dashboards
 // follow the store's settings filter before dashboardVisible.
-func TestScaleP21SW493ViewDashboardAuthorizationDifferential(t *testing.T) {
+func scaleP21SW493Table(t *testing.T, part, parts int) {
+	t.Helper()
 	fx := scaleP21SW491Setup(t, func(fx *scaleP21SW491Fixture, data *domain.Bootstrap) {
 		p := fx.prefix
 		member, admin := fx.f.principals[2].user.ID, fx.f.principals[1].user.ID
@@ -102,7 +103,7 @@ func TestScaleP21SW493ViewDashboardAuthorizationDifferential(t *testing.T) {
 		scaleP21SW491Row{"dash-create-team-private", http.MethodPost, "POST /api/dashboards", "/api/dashboards", `{"teamIds":["` + fx.privateTeam + `"]}`},
 		scaleP21SW491Row{"dash-create-invalid", http.MethodPost, "POST /api/dashboards", "/api/dashboards", `nope`},
 	)
-	fx.run(t, "SW493", rows, []scaleP21SW491Control{
+	fx.runPart(t, "SW493", rows, []scaleP21SW491Control{
 		{"delete-view-workspace/admin/session", true},
 		{"delete-view-workspace/member-private-outsider/session", false},
 		{"share-view-project-public/member-private-outsider/session", true},
@@ -124,5 +125,15 @@ func TestScaleP21SW493ViewDashboardAuthorizationDifferential(t *testing.T) {
 		{"delete-dash-team-mixed/member-private-outsider/session", true},
 		{"delete-dash-workspace/member-private-outsider/session", false},
 		{"dash-create-team-private/member-private-outsider/session", false},
-	})
+	}, part, parts)
+}
+
+// The SW493 table runs in 2 top-level tests (every other row each) so the
+// CI shards spread it: on PostgreSQL the whole table took 14 minutes.
+func TestScaleP21SW493ViewDashboardAuthorizationDifferential(t *testing.T) {
+	scaleP21SW493Table(t, 0, 2)
+}
+
+func TestScaleP21SW493ViewDashboardAuthorizationDifferentialPart2(t *testing.T) {
+	scaleP21SW493Table(t, 1, 2)
 }

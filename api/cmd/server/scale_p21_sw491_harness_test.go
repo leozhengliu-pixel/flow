@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -161,6 +162,25 @@ func scaleP21SW491Setup(t *testing.T, seed func(*scaleP21SW491Fixture, *domain.B
 
 func (fx *scaleP21SW491Fixture) run(t *testing.T, label string, rows []scaleP21SW491Row, controls []scaleP21SW491Control) {
 	t.Helper()
+	fx.runPart(t, label, rows, controls, 0, 1)
+}
+
+// runPart runs the rows whose index is part modulo parts, so a long table
+// runs in several top-level tests that the CI shards spread. A row keeps its
+// index in the whole table (and so its FLOW_RECORD_ACCESS mode), and only the
+// controls of the selected rows apply.
+func (fx *scaleP21SW491Fixture) runPart(t *testing.T, label string, rows []scaleP21SW491Row, controls []scaleP21SW491Control, part, parts int) {
+	t.Helper()
+	selected, count := map[string]bool{}, 0
+	for index, item := range rows {
+		if index%parts == part {
+			selected[item.name] = true
+			count++
+		}
+	}
+	if parts > 1 {
+		label = fmt.Sprintf("%s part %d/%d", label, part+1, parts)
+	}
 	type outcome struct {
 		Allowed  bool
 		Resource bool
@@ -192,6 +212,9 @@ func (fx *scaleP21SW491Fixture) run(t *testing.T, label string, rows []scaleP21S
 	pairs, successes, refusals, legacySQL, boundedSQL := 0, 0, 0, 0, 0
 	allowedBy := map[string]bool{}
 	for index, item := range rows {
+		if index%parts != part {
+			continue
+		}
 		t.Run(item.name, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_ACCESS", []string{"off", "shadow", "on"}[index%3])
 			for _, phase := range []string{"warm", "reloaded"} {
@@ -303,11 +326,14 @@ func (fx *scaleP21SW491Fixture) run(t *testing.T, label string, rows []scaleP21S
 	}
 	// Independent policy controls, so equality cannot hold vacuously.
 	for _, required := range controls {
+		if !selected[strings.SplitN(required.key, "/", 2)[0]] {
+			continue
+		}
 		if allowedBy[required.key] != required.allowed {
 			t.Error("independent policy control failed", required.key, required.allowed)
 		}
 	}
-	if want := len(rows) * 2 * len(fx.principals) * len(fx.credentials); pairs != want || successes == 0 || refusals == 0 {
+	if want := count * 2 * len(fx.principals) * len(fx.credentials); pairs != want || successes == 0 || refusals == 0 {
 		t.Fatal(label+" table lost cells", pairs, want, successes, refusals)
 	}
 	t.Logf("%s fallback policy pairs=%d SQL literal/bounded=%d/%d success/refusal=%d/%d", label, pairs, legacySQL, boundedSQL, successes, refusals)
