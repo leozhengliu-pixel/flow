@@ -165,7 +165,9 @@ func (s *SQLiteStore) decodeOwnedColdMetadataRead(ctx context.Context, releaseSl
 		return nil, err
 	}
 	coldFacadeDecodes.Add(1)
-	coldFacadeDecodeNanos.Add(int64(time.Since(decodeStarted)))
+	decoded := int64(time.Since(decodeStarted))
+	coldFacadeDecodeNanos.Add(decoded)
+	storeMaxInt64(&coldFacadeDecodeMax, decoded)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

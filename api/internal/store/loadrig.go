@@ -18,41 +18,7 @@ import (
 // LoadRigColdCounters reports the process-wide bounded-metadata counters
 // the load rig samples: COLD slot use and waits, COLD facade and legacy-view
 // decodes, COLD legacy write-lock holds and writer lock waits.
-func LoadRigColdCounters() map[string]int64 {
-	waiting := int64(0)
-	queues := int64(0)
-	coldSlotQueues.Range(func(_, value any) bool {
-		waiting += value.(*coldSlotQueue).waiting.Load()
-		queues++
-		return true
-	})
-	facades, facadeTime, viewTime := ColdHydrationForTesting()
-	holds, holdTotal, holdMax := ColdWriteLockHoldForTesting()
-	return map[string]int64{
-		"coldSlotAcquisitions":  coldSlotAcquisitions.Load(),
-		"coldSlotRefusals":      coldSlotRefusals.Load(),
-		"coldSlotsHeld":         coldSlotHolders.Load(),
-		"coldSlotWaiting":       waiting,
-		"coldSlotQueues":        queues,
-		"coldSlotWaits":         coldSlotWaits.Load(),
-		"coldSlotWaitNanos":     coldSlotWaitNanos.Load(),
-		"coldSlotWaitMaxNanos":  coldSlotWaitMax.Load(),
-		"coldFacadeDecodes":     facades,
-		"coldFacadeDecodeNanos": int64(facadeTime),
-		"coldViewReads":         coldAccessorReads.Load(),
-		"coldViewDecodeNanos":   int64(viewTime),
-		"coldViewFailures":      coldAccessorFailures.Load(),
-		"coldWriteLockHolds":    holds,
-		"coldWriteLockNanos":    int64(holdTotal),
-		"coldWriteLockMaxNanos": int64(holdMax),
-		"writerLockWaits":       writerLockWaits.waits.Load(),
-		"writerLockWaitNanos":   writerLockWaits.nanos.Load(),
-		"writerLockWaitMax":     writerLockWaits.longest.Load(),
-		"coldWriterLockWaits":   coldWriterLockWaits.waits.Load(),
-		"coldWriterWaitNanos":   coldWriterLockWaits.nanos.Load(),
-		"coldWriterWaitMax":     coldWriterLockWaits.longest.Load(),
-	}
-}
+func LoadRigColdCounters() map[string]int64 { return ColdMetricsSnapshot() }
 
 // SetLoadRigSeedBatchBytes sets SeedSyntheticMetadata's per-transaction
 // write budget (default 6 MiB) and returns the previous value.
