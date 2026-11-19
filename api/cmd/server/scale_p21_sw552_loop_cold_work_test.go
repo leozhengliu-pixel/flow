@@ -20,9 +20,11 @@ import (
 // literal legacy dispatch on a COLD facade and publishes to the bounded
 // image. Both runs finish with the same status, output and tool result; the
 // label each wrote is in SQL and in the bounded store's installed image with
-// the same fields. Runs are read back through the flag-off handler (the
-// stored run rows; this harness disables authentication).
+// the same fields. Runs are read back through each handler's own
+// GET /api/loops/{id}/runs (this harness disables authentication; bounded
+// metadata needs record hydration on, as production activation requires).
 func TestScaleP21SW552LoopRunColdToolWrite(t *testing.T) {
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	provider := &fakeLoopProvider{}
 	upstream := httptest.NewServer(http.HandlerFunc(provider.serve))
 	t.Cleanup(upstream.Close)
@@ -52,7 +54,7 @@ func TestScaleP21SW552LoopRunColdToolWrite(t *testing.T) {
 		before := len(provider.inputs)
 		provider.mu.Unlock()
 		requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
-		finished := waitForLoopRun(t, legacy, loop.ID)
+		finished := waitForLoopRun(t, handler, loop.ID)
 		provider.mu.Lock()
 		result := provider.inputs[len(provider.inputs)-1]
 		calls := len(provider.inputs) - before
