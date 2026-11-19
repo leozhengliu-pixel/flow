@@ -104,10 +104,10 @@ func metadataLogicalSpoolTestPoint(s *metadataLogicalStorage, point metadataLogi
 
 // Dir is the directory the spool's file is (or will be) created in.
 func (s *metadataLogicalStorage) Dir() string {
-	if s.directory == "" {
-		return os.TempDir()
+	if dir := metadataSpoolDirectory(s.directory); dir != "" {
+		return dir
 	}
-	return s.directory
+	return os.TempDir()
 }
 
 // Name creates the spool file if needed and returns its path ("" once the
@@ -128,7 +128,7 @@ func (s *metadataLogicalStorage) createLocked() error {
 	if s.closed {
 		return errMetadataLogicalClosed
 	}
-	file, err := os.CreateTemp(s.directory, "flow-p21-logical-*")
+	file, err := os.CreateTemp(metadataSpoolDirectory(s.directory), "flow-p21-logical-*")
 	if err != nil {
 		return err
 	}

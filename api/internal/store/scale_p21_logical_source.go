@@ -126,7 +126,7 @@ func newMetadataLogicalBuilder(ctx context.Context) (*metadataLogicalBuilder, er
 	}
 	config, _ := ctx.Value(metadataLogicalScratchKey{}).(metadataLogicalScratch)
 	t := reflect.TypeFor[domain.Bootstrap]()
-	storage := &metadataLogicalStorage{directory: config.directory, refs: 1}
+	storage := &metadataLogicalStorage{directory: metadataSpoolDirectory(config.directory), refs: 1}
 	source := &metadataLogicalSource{refs: 1, fields: make([]metadataLogicalNode, t.NumField()), stores: []*metadataLogicalStorage{storage}}
 	return &metadataLogicalBuilder{ctx: ctx, source: source, storage: storage, active: -1}, nil
 }

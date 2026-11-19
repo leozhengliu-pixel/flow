@@ -41,7 +41,7 @@ func newMetadataLogicalRecordSpool(ctx context.Context) (*RecordSpool, error) {
 		return nil, ErrRecordSpoolBudget
 	}
 	config, _ := ctx.Value(metadataLogicalScratchKey{}).(metadataLogicalScratch)
-	file, err := os.CreateTemp(config.directory, "flow-p21-root-*")
+	file, err := os.CreateTemp(metadataSpoolDirectory(config.directory), "flow-p21-root-*")
 	if err != nil {
 		return nil, err
 	}

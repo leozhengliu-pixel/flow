@@ -45,7 +45,7 @@ func sw26NewMigrationStage(ctx context.Context) (_ *sw26MigrationStage, err erro
 			err = errors.Join(err, stage.Close())
 		}
 	}()
-	file, err := os.CreateTemp(config.directory, "flow-p21-sw26-stage-*.db")
+	file, err := os.CreateTemp(metadataSpoolDirectory(config.directory), "flow-p21-sw26-stage-*.db")
 	if err != nil {
 		return nil, err
 	}

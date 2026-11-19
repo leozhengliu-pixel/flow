@@ -56,7 +56,7 @@ func (s *SQLiteStore) BeginIssueSuggestionCandidates(ctx context.Context) (*Issu
 	}
 	scratch, _ := ctx.Value(metadataLogicalScratchKey{}).(metadataLogicalScratch)
 	var err error
-	r.file, err = os.CreateTemp(scratch.directory, "flow-p21-triage-*")
+	r.file, err = os.CreateTemp(metadataSpoolDirectory(scratch.directory), "flow-p21-triage-*")
 	if err != nil {
 		r.Close()
 		return nil, err
