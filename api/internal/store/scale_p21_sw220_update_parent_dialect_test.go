@@ -9,25 +9,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW220ParentPostgresNativeNULDoesNotQuery(t *testing.T) {
-	for _, parent := range []string{"ordinary\x00parent", "\x00"} {
-		// A native parent is a known/wanted map key. textArgs strips NUL
-		// only at SQL execution, while scanned canonical keys are stripped.
-		// Literal applyMetadataRecords skips this known-but-absent native key;
-		// a point lookup must not turn it into a canonical alias.
-		got := textArgs("postgres", []any{parent})
-		if got[0] == parent {
-			t.Fatal("fixture parent did not differ from its physical SQL key")
-		}
-		// No underlying SQL transaction or store is present: any query,
-		// reservation or stage attempt is a regression.
-		plan := &legacyMetadataWritePlan{tx: &sqlTx{dialect: "postgres"}}
-		if err := plan.writeProjectUpdateScheduleParent(t.Context(), &legacyMetadataWriteField{}, parent, legacySessionJSONPart{}); err != nil {
-			t.Fatal("native NUL parent did not preserve the literal skipped write", err)
-		}
-	}
-}
-
+// A parent with NUL is stored without it on PostgreSQL. The literal delta
+// matches known and wanted rows under that stored key, so the streamed
+// parent-map writer replaces the row too, as on SQLite and MySQL.
 func TestScaleP21SW220ParentNativeNULDifferential(t *testing.T) {
 	f, view, seed := scaleP21SW77Fixture(t)
 	for _, test := range []struct {
@@ -55,7 +39,7 @@ func TestScaleP21SW220ParentNativeNULDifferential(t *testing.T) {
 				if !found || json.Unmarshal(row.data, &updates) != nil || len(updates) != 2 {
 					t.Fatal("native NUL parent lost its canonical row")
 				}
-				if updates[0].Missing != (view.dialect != "postgres") {
+				if !updates[0].Missing {
 					t.Fatal("SQL dialect parent identity changed literal persistence", view.dialect, updates[0].Missing)
 				}
 			}

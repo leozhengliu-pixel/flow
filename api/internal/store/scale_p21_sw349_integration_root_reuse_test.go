@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -46,8 +47,14 @@ func scaleP21SW349Root(t *testing.T, event string) *scaleP21SW349RootFixture {
 			f.queries++
 		}
 	})
+	// rootShapes is a writer step: on PostgreSQL and MySQL it pins the root
+	// with SELECT ... FOR UPDATE, which a read-only transaction refuses.
+	options := metadataReadOptions(view.dialect)
+	if view.dialect != "sqlite" {
+		options = &sql.TxOptions{Isolation: options.Isolation}
+	}
 	var err error
-	f.tx, err = view.db.BeginTx(f.ctx, metadataReadOptions(view.dialect))
+	f.tx, err = view.db.BeginTx(f.ctx, options)
 	if err != nil {
 		t.Fatal(err)
 	}

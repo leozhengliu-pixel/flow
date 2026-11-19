@@ -147,6 +147,9 @@ func TestScaleP21SW421LoopNextRunDifferential(t *testing.T) {
 		if reader.reader == nil {
 			_ = reader.query(t, `SELECT 1 FROM workspace_states WHERE workspace_key=?`, workspace).Close()
 		}
+		if config.Driver == "postgres" || config.Driver == "postgresql" {
+			statement = scaleDB{driver: "postgres"}.rebind(statement)
+		}
 		rows, err := reader.reader.QueryContext(context.Background(), statement, args...)
 		if err != nil {
 			t.Fatal(err)

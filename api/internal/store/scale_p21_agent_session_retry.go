@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"strings"
 )
 
 // The generic retry adapter has a page-sized raw-row transfer limit. Session
@@ -72,6 +73,15 @@ func (s *SQLiteStore) refreshMetadataLifecycleConflict(ctx context.Context, work
 		for _, key := range sessions {
 			if err := owner.reserve(ctx, uint64(len(key.key))*8+512); err != nil {
 				return err
+			}
+			if s.dialect == "postgres" && strings.IndexByte(key.key, 0) >= 0 {
+				// The literal refresh (refreshMetadataRecords) matches the
+				// stored keys it reads with the conflicted one. PostgreSQL
+				// stores this record without NUL, so the literal copy finds no
+				// row under its key and drops the record, while SQL keeps the
+				// row: the installed image drops it too.
+				replacements[key.key] = metadataLogicalNode{}
+				continue
 			}
 			var size int64
 			err := tx.QueryRowContext(ctx, "SELECT "+owner.byteLength("data")+" FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?",
