@@ -1,5 +1,6 @@
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useServerDraft } from "@/hooks/use-server-draft";
 import { WelcomeMessageSettingsPage } from "./welcome-message-settings-page";
 import { CodingToolsSettingsPage } from "./coding-tools-settings-page";
 import {
@@ -1497,8 +1498,8 @@ function WorkspacePage(
   const { t } = useI18n();
   const phone = usePhoneLayout();
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const [name, setName] = useState(props.data.workspace.name);
-  const [urlKey, setUrlKey] = useState(props.data.workspace.urlKey);
+  const [name, setName] = useServerDraft(props.data.workspace.name);
+  const [urlKey, setUrlKey] = useServerDraft(props.data.workspace.urlKey);
   const [confirm, setConfirm] = useState(false);
   const save = async (patch: WorkspaceMutationInput) => {
     const changed = Object.fromEntries(

@@ -141,6 +141,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const [draftInsights, setDraftInsights] = useState<SavedViewInsightsConfig>()
   // "Set default for everyone" on a team issue view: the team's shared Insights default.
   const [teamInsightDefault, setTeamInsightDefault] = useState<Record<string, unknown> | undefined>(() => scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewInsights?.[teamViewKey] : undefined)
+  const serverTeamInsights = scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewInsights?.[teamViewKey] : undefined
+  useResetOnChange([JSON.stringify(serverTeamInsights ?? null)], () => setTeamInsightDefault(serverTeamInsights))
   const [detailsWidth, setDetailsWidth] = useState(350)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [filterOpenSignal, setFilterOpenSignal] = useState(0)
@@ -245,6 +247,13 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const initialSaveTarget = saveTargets.find(target => target.scope === (sourceView?.scope ?? defaultSaveScope ?? scope.kind) && (target.scope !== 'team' || target.teamId === (sourceView?.teamId ?? (scope.kind === 'team' ? scope.team.id : undefined)))) ?? saveTargets[0]
 
   const workspaceKey = data.workspace.urlKey
+  // A saved view painted from a cached snapshot (or edited by a member meanwhile) shows the server's filters and
+  // layout once they change; an open edit card and the personal display layer keep the user's own choices.
+  useResetOnChange([savedView?.id, JSON.stringify(savedView?.filters ?? null), JSON.stringify(savedView?.display ?? null)], () => {
+    if (!savedView || viewEditor || hydratedSavedViewId.current !== savedView.id) return
+    setFilters(filtersFromSavedView(savedView))
+    setDisplay(readPersonalDisplay(`${workspaceKey}:issue-explorer:view:${savedView.id}:display`, savedView, savedView.view))
+  })
   useEffect(() => {
     if (!savedView || hydratedSavedViewId.current === savedView.id) return
     hydratedSavedViewId.current = savedView.id

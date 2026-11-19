@@ -48,6 +48,15 @@ describe('complete issue grouping', () => {
     expect(screen.getByRole('list', { name: 'Issue board' })).toBeInTheDocument()
   })
 
+  it('follows the layout of a saved view the server changed after mounting from cached data', () => {
+    const data = dataWithGroups(0, 3)
+    const cached = { id: 'saved', name: 'Saved', resource: 'issues', scope: 'personal', view: 'all', filters: [], display: {} } as unknown as SavedView
+    const view = render(page(data, { savedView: cached }))
+    expect(screen.queryByRole('list', { name: 'Issue board' })).not.toBeInTheDocument()
+    view.rerender(page(data, { savedView: { ...cached, display: { layout: 'board' } } as unknown as SavedView }))
+    expect(screen.getByRole('list', { name: 'Issue board' })).toBeInTheDocument()
+  })
+
   it('counts only issues in the current display and clears persisted team filters from the empty state', async () => {
     const data = dataWithGroups(0, 3)
     const key = `${data.workspace.urlKey}:issue-explorer:workspace:all:filters`
