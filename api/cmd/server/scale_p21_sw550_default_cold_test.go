@@ -402,9 +402,8 @@ var scaleP21SW550BackgroundWork = map[string]string{
 	"server/server.commitImport go server/server.commitImportSync":                            "inherits POST /api/imports/{id}/commit's COLD scope",
 	"server/server.codingEnvironmentTerminal go server/server.runCodingTerminalPrepareScript": "inherits GET /api/coding/environments/{id}/terminal's COLD scope",
 	"server/server.startAgentLiveReply go server/agentLiveReply.run":                          "inherits the agent-session route's COLD scope",
-	"server/server.startBoundedLoopRun go server/server.executeLoopRun": "OPEN (loop run group): registerLoopWork starts from context.Background(); legacy reads are served, " +
-		"a tool write no migrated writer serves fails closed until the loop work context carries store.WithColdWork",
-	"server/server.replyLoopRun go server/server.executeLoopRun": "OPEN (loop run group): as startBoundedLoopRun",
+	"server/server.startBoundedLoopRun go server/server.executeLoopRun":                       "COLD work: registerLoopWork's run context is store.WithColdWork (SW552)",
+	"server/server.replyLoopRun go server/server.executeLoopRun":                              "COLD work: registerLoopWork's run context is store.WithColdWork (SW552)",
 }
 
 // TestScaleP21SW550BackgroundColdWork fails on a goroutine root that reaches a
