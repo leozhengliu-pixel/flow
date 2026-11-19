@@ -71,8 +71,9 @@ import (
 // the wrapper, stopping at route registrations (a route's temperature is its
 // own inventory classification) and at the pinned scaleP21SW286Boundaries.
 // Every inventory consumer it meets whose temperature is hot is a HOT
-// reacher, except the pinned relays (helpers judged by their callers) and
-// unrouted handlers. Reviewed entries without a temperature are outside the
+// reacher, except the pinned relays (helpers judged by their callers), the
+// closed consumers (nothing references them with the flag on) and unrouted
+// handlers. Reviewed entries without a temperature are outside the
 // route/ticker table: the walk passes them. A second walk through the
 // functions the inventory does not classify must meet no route handler and
 // no startup root, so no entry point escapes classification. The walks do
@@ -1083,7 +1084,16 @@ var scaleP21SW286Relays = map[string]string{
 	"server/server.findIssueForPermissions":   "permission helper shared by the GET list and the COLD permission writers",
 	"server/server.issueRecordsBootstrapData": "literal bootstrap helper: the HTTP route returns through issueRecordsBootstrapBounded first and chat is pinned by SW225",
 	"server/server.publicMetadata":            "public API metadata helper: its other callers are COLD public API routes",
-	"server/server.socketWorkspaceMetadata":   "collaboration socket helper: the bounded socket paths read owned collaboration documents first",
+}
+
+// scaleP21SW286Closed are HOT inventory consumers that call a wrapper
+// directly but that nothing references with the flag on (no call, value,
+// route or package-level reference outside a flag-off-only branch): their
+// bounded callers dispatch to an owned reader first. Each names the existing
+// differential that proves the bounded dispatch. The walk passes them.
+var scaleP21SW286Closed = map[string]string{
+	"server/server.oauthApplicationsByClient": "TestScaleP21SW295ApplicationWebhookClients",
+	"server/server.socketWorkspaceMetadata":   "TestScaleP21SW520FormerMemberDocumentDifferential",
 }
 
 type scaleP21SW286Allowance struct {
@@ -1099,10 +1109,6 @@ type scaleP21SW286Allowance struct {
 var scaleP21SW286Allowed = map[string]scaleP21SW286Allowance{
 	"server/server.processIntegrationDelivery": {wrappers: []string{"WorkspaceMetadata", "WorkspaceMetadataForRead"},
 		owner: "swarm: integration delivery", reason: "every-tick integration delivery reads the workspace metadata for the delivery's integration"},
-	"server/server.refuseFormerMemberCollaborationUpdate": {wrappers: []string{"WorkspaceMetadata", "WorkspaceMetadataForRead"},
-		owner: "swarm: former members", reason: "collaboration frames of a standalone document read socketWorkspaceMetadata, whose development-mode branch is WorkspaceMetadata"},
-	"server/server.oauthApplicationsByClient": {wrappers: []string{"WorkspaceMetadataFields"},
-		owner: "unowned (reported)", reason: "the once-a-minute HOT delivery tick (reconcileAllApplicationWebhooks) and HOT dispatchWebhookEvent (application, OAuth authorization and team lifecycle events, on its own goroutine) index every workspace's OAuth applications"},
 }
 
 func scaleP21SW286Cut(ref scaleP21SW286Ref) bool {
@@ -1342,7 +1348,7 @@ type scaleP21SW286Reacher struct {
 // HOT inventory consumers it meets (temperature "hot", relays and unrouted
 // handlers excepted) with the shortest path that reached each, the
 // allow-listed consumers in stop it met (it does not pass them) and the
-// relays it passed.
+// relays and closed consumers it passed.
 func (g *scaleP21SW286Graph) reach(inventory map[string]scaleP21SW286Review, start string, stop map[string]bool) (reachers []scaleP21SW286Reacher, met, relays map[string]string) {
 	type step struct{ key, path string }
 	seen := map[string]bool{start: true}
@@ -1363,6 +1369,8 @@ func (g *scaleP21SW286Graph) reach(inventory map[string]scaleP21SW286Review, sta
 				continue
 			}
 			if scaleP21SW286Relays[ref.from] != "" {
+				relays[ref.from] = path
+			} else if scaleP21SW286Closed[ref.from] != "" {
 				relays[ref.from] = path
 			} else if review := inventory[g.inventoryKey(ref.from)]; review.Temperature == "hot" && scaleP21SW286Unrouted[ref.from] == "" && !slices.Contains(scaleP21SW286Wrappers, ref.from) {
 				reachers = append(reachers, scaleP21SW286Reacher{ref.from, path})
@@ -1481,6 +1489,28 @@ func TestScaleP21SW286StoreWrapperHotBoundaries(t *testing.T) {
 		}
 		if !passedRelays[relay] {
 			t.Errorf("stale relay %s: no wrapper walk passes it", relay)
+		}
+	}
+	for consumer, test := range scaleP21SW286Closed {
+		if graph.funcs[consumer] == nil {
+			t.Errorf("closed consumer %s no longer exists", consumer)
+		}
+		if review := inventory[graph.inventoryKey(consumer)]; review.Temperature != "hot" || review.Status != "reviewed" {
+			t.Errorf("closed consumer %s is not a reviewed HOT inventory consumer (%+v)", consumer, review)
+		}
+		if !scaleP21SW286TestExists(t, test) {
+			t.Errorf("closed consumer %s cites a missing test %q", consumer, test)
+		}
+		if files := graph.pkgLevel[consumer]; len(files) != 0 {
+			t.Errorf("closed consumer %s is referenced at package level in %v", consumer, files)
+		}
+		for _, index := range graph.into[consumer] {
+			if ref := graph.refs[index]; !ref.offOnly {
+				t.Errorf("closed consumer %s is referenced with the flag on by %s (%s %s:%d)", consumer, ref.from, ref.kind, ref.file, ref.line)
+			}
+		}
+		if !passedRelays[consumer] {
+			t.Errorf("stale closed consumer %s: no wrapper walk meets it", consumer)
 		}
 	}
 	for _, wrapper := range scaleP21SW286Wrappers {

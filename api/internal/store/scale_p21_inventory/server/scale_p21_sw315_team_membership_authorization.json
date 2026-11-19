@@ -1,15 +1,15 @@
 {
   "source": "server/scale_p21_sw315_team_membership_authorization.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "boundedTeamRowAuthorization": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": ["BeginTeamMemberRequestRead"],
       "temperature": "hot",
       "temperatureReason": "Team member list and membership request authorization.",
       "callers": ["server/scale_p21_sw315_team_membership_authorization.go:boundedTeamMembershipAuthorization", "server/scale_p21_sw306_membership_authorization.go:boundedMembershipAuthorization", "server/scale_p21_sw307_team_resource_authorization.go:boundedTeamResourceAuthorization", "server/scale_p21_sw490_fallback_authorization.go:boundedFallbackAuthorization"],
-      "reason": "Mechanical reuse of the existing team-member owner with literal installed team-ID resolution, shared by the team member route (SW315), the escaped membership route (SW306) and the team row decision (SW307); the grouped Tier B route differentials have not been certified."
+      "reason": "Mechanical reuse of the existing team-member owner (BeginTeamMemberRequestRead) with literal installed team-ID resolution (ResolveTeamID) and the shared ErrResourceAccessChanged retry with API-key reauthentication; a team row may stay visible to an admin who cannot read that private team's content. Every caller path is certified on this branch: the team member routes (TestScaleP21SW315TeamMembershipAuthorization, escaped TestScaleP21SW330EscapedTeamAuthorizationDifferential), the workspace team membership route (TestScaleP21SW306MembershipAuthorization, escaped TestScaleP21SW332EscapedMembershipAuthorization with id, alias, private, missing and empty refs), the escaped team resource row (TestScaleP21SW307TeamResourceRouteDifferential and its cancellation/boundary test) and the fallback team-row shape for /api/teams/{id}/... and /api/workspaces/{key}/teams/{teamId}/... (TestScaleP21SW491FallbackAuthorizationDifferential, warm and SQL-reloaded, with key and lowercase-alias refs, retired, child, private and missing teams and a foreign path), all legacy-equal with zero full decodes."
     }
   }
 }

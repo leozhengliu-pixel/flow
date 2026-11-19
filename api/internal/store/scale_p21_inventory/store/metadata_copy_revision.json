@@ -1,6 +1,6 @@
 {
   "source": "store/metadata_copy_revision.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "copyRevisionLocked": {
       "owner": "P21",
@@ -12,7 +12,7 @@
     },
     "installWrittenWorkspaceLocked": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap"
       ],
@@ -26,7 +26,7 @@
         "store/SQLiteStore.mutateTeamMetadata",
         "store/SQLiteStore.mutateUserSettingsRecord"
       ],
-      "reason": "Pending: TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the five legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it); its allow-list still names UpdateIssueRecord, whose non-project hot-input path installs progressMetadata from persistIssueMetadata (owned by review/scale-p21-setup-fixtures, which makes it return nil on every bounded path; then replace the entry by a proof boundary). mutateTeamMetadata is closed; the favorite, feature-flag, user-settings and project-selection writers are not reached with the flag on."
+      "reason": "Closed by reachability: TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the five legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it) and finds no HOT reacher; its allow-list is empty. UpdateIssueRecord -> installWrittenWorkspace is a pinned proof boundary: the install runs only under progressMetadata != nil, progressMetadata is assigned only nil or from persistIssueMetadata, whose single flag-on return is nil (refuseBoundedHotIssueMetadata; its non-nil return &next is flag-off-only), proven by TestScaleP21SW278BoundedIssueMetadataRefusal and pinned by TestScaleP21SW278PersistIssueMetadataCallset. mutateTeamMetadata is closed; the favorite, feature-flag, user-settings and project-selection writers are not reached with the flag on. The literal flag-off chain is unchanged."
     },
     "refreshWorkspaceCopy": {
       "owner": "P21",

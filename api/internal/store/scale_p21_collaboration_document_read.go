@@ -72,7 +72,19 @@ func (r *CollaborationDocumentRead) TransferOutput(ctx context.Context) error {
 // BeginCollaborationDocumentRead preserves collaborationDocument's occurrence
 // order, including an earlier ID/slug conflict before a later current match.
 // The empty principal is the literal unprojected development accessor.
-func (s *SQLiteStore) BeginCollaborationDocumentRead(ctx context.Context, workspace, userID, ref string, key *domain.APIKey) (_ *CollaborationDocumentRead, err error) {
+func (s *SQLiteStore) BeginCollaborationDocumentRead(ctx context.Context, workspace, userID, ref string, key *domain.APIKey) (*CollaborationDocumentRead, error) {
+	return s.beginCollaborationDocumentRead(ctx, workspace, userID, ref, key, false)
+}
+
+// BeginCollaborationDocumentContentRead is BeginCollaborationDocumentRead
+// whose selected Document also carries the installed ContentState and
+// ContentData, as the literal projection's collaborationDocument returns them.
+// The content stays charged to, and valid until, Close.
+func (s *SQLiteStore) BeginCollaborationDocumentContentRead(ctx context.Context, workspace, userID, ref string, key *domain.APIKey) (*CollaborationDocumentRead, error) {
+	return s.beginCollaborationDocumentRead(ctx, workspace, userID, ref, key, true)
+}
+
+func (s *SQLiteStore) beginCollaborationDocumentRead(ctx context.Context, workspace, userID, ref string, key *domain.APIKey, content bool) (_ *CollaborationDocumentRead, err error) {
 	if !s.BoundedMetadataEnabled() {
 		return nil, ErrBoundedMetadataCoverage
 	}
@@ -161,7 +173,7 @@ func (s *SQLiteStore) BeginCollaborationDocumentRead(ctx context.Context, worksp
 	}
 	credentialScope := NewDocumentLinkScope(read.Data.Teams, read.Data.TeamSettings)
 
-	selectHeader := func(header domain.Document, conflict bool, candidate *ResourceRead) error {
+	selectHeader := func(header domain.Document, conflict bool, candidate *ResourceRead, body func(*domain.Document) error) error {
 		cost := uint64(len(policy.data.Teams)) + uint64(len(header.TeamIDs)) + uint64(len(header.InheritedTeamIDs))
 		if cost > (metadataWorkBytes-(64<<10))/4096 {
 			candidate.Close()
@@ -181,6 +193,14 @@ func (s *SQLiteStore) BeginCollaborationDocumentRead(ctx context.Context, worksp
 			if !allowed {
 				candidate.Close()
 				return nil
+			}
+		}
+		if content {
+			// Only the selected document's body is read, after every
+			// visibility and credential predicate passed.
+			if err := body(&header); err != nil {
+				candidate.Close()
+				return err
 			}
 		}
 		read.owner.mu.Lock()
@@ -216,7 +236,11 @@ func (s *SQLiteStore) BeginCollaborationDocumentRead(ctx context.Context, worksp
 				candidate.Close()
 				return nil, headerErr
 			}
-			err = selectHeader(header, conflict, candidate)
+			err = selectHeader(header, conflict, candidate, func(selected *domain.Document) error {
+				// The caller owns its hydrated snapshot for the request.
+				selected.ContentState, selected.ContentData = document.ContentState, document.ContentData
+				return nil
+			})
 			if err != nil {
 				break
 			}
@@ -237,7 +261,15 @@ func (s *SQLiteStore) BeginCollaborationDocumentRead(ctx context.Context, worksp
 					candidate.Close()
 					return err
 				}
-				return selectHeader(header, conflict, candidate)
+				return selectHeader(header, conflict, candidate, func(selected *domain.Document) error {
+					value, err := candidate.projectNode(snapshot, node, "ContentState", "ContentData")
+					if err != nil {
+						return err
+					}
+					body := value.Interface().(domain.Document)
+					selected.ContentState, selected.ContentData = body.ContentState, body.ContentData
+					return nil
+				})
 			})
 		})
 	}

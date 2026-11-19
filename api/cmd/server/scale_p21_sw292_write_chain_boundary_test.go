@@ -988,6 +988,12 @@ func scaleP21SW292Short(target string) string {
 
 type scaleP21SW292Boundary struct {
 	mode, reason string
+	// proof only:
+	test    string              // an existing test of cmd/server or internal/store that proves the edge
+	guard   string              // every reference of the edge lies in then:<cond> or else:<cond>
+	assigns map[string][]string // local of the caller -> every statement that may assign it
+	off     map[string]string   // function -> statement that runs only with the flag off
+	results map[string]string   // function -> first result of each of its flag-on returns
 }
 
 // scaleP21SW292Boundaries are the edges at which the walk stops, besides
@@ -996,7 +1002,11 @@ type scaleP21SW292Boundary struct {
 //     run to its worker after the HOT start boundary has committed;
 //   - "handler": an in-process dispatch to a route handler that is also
 //     bound by HandleFunc, so its temperature is that route's inventory
-//     classification, exactly like a route registration.
+//     classification, exactly like a route registration;
+//   - "proof": a data-flow fact the flag-insensitive walk cannot see (a
+//     local that is nil with the flag on), pinned by the guard of every
+//     reference, every assignment of the local, the flag-on results of the
+//     function that produces it and the existing test that proves it.
 var scaleP21SW292Boundaries = map[string]scaleP21SW292Boundary{
 	"server/server.startLoopRun->server/server.executeLoopRun": {mode: "async",
 		reason: "the loop AI run (model and tool calls: executeLoopRun -> runToolCall -> callFlowTool -> runFlowTool, COLD in the inventory) runs on its worker after the HOT start boundary"},
@@ -1008,6 +1018,19 @@ var scaleP21SW292Boundaries = map[string]scaleP21SW292Boundary{
 		reason: "chat DM agent follow-up is POST /api/agent/sessions/{id}/messages/stream, a COLD agent-session route"},
 	"server/server.chatDMAgentCall->server/server.resolveAgentApproval": {mode: "handler",
 		reason: "chat DM approval card is POST /api/agent/sessions/{id}/approvals/{approvalId}, a COLD agent-session route"},
+	"store/SQLiteStore.UpdateIssueRecord->store/SQLiteStore.installWrittenWorkspace": {mode: "proof",
+		reason: "UpdateIssueRecord installs progressMetadata only when it is non-nil, and assigns it only from persistIssueMetadata, whose every flag-on return " +
+			"is nil (the bounded non-project hot path refuses progress and team-move changes instead of writing them); project inputs and team moves " +
+			"publish through persistSelectedIssueMetadata",
+		test:  "TestScaleP21SW278BoundedIssueMetadataRefusal",
+		guard: "then:progressMetadata != nil",
+		assigns: map[string][]string{"progressMetadata": {
+			"progressMetadata, metadataWritten, written, affected = nil, false, nil, nil",
+			"progressMetadata, err = s.persistIssueMetadata(ctx, tx, workspace, loadedIssues, metadata.Issues, documents)",
+		}},
+		off:     map[string]string{"store/SQLiteStore.persistIssueMetadata": "return &next, nil"},
+		results: map[string]string{"store/SQLiteStore.persistIssueMetadata": "nil"},
+	},
 }
 
 func scaleP21SW292Cut(ref scaleP21SW292Ref) bool {
@@ -1045,12 +1068,7 @@ type scaleP21SW292Allowance struct {
 // reach a target with the flag on. The walk does not pass them. An entry must
 // name exactly the targets it still reaches: the test fails when one no
 // longer reaches a target, so the list shrinks as the migrations land.
-var scaleP21SW292Allowed = map[string]scaleP21SW292Allowance{
-	"store/SQLiteStore.UpdateIssueRecord": {targets: []string{"installWrittenWorkspaceLocked"},
-		owner: "lead: setup fixtures (review/scale-p21-setup-fixtures, persistIssueMetadata) and issue update (issue_record_mutation.go)",
-		reason: "the non-project hot-input path assigns progressMetadata from persistIssueMetadata, which still reads the policy-only copy on this branch; " +
-			"once persistIssueMetadata returns nil on every flag-on path, replace this entry by a proof boundary pinning that return"},
-}
+var scaleP21SW292Allowed = map[string]scaleP21SW292Allowance{}
 
 type scaleP21SW292Reacher struct {
 	key, path string
@@ -1154,6 +1172,123 @@ func scaleP21SW292TestExists(t *testing.T, name string) bool {
 	return false
 }
 
+func (g *scaleP21SW292Graph) refAncestors(ref scaleP21SW292Ref) [][]ast.Node {
+	fn := g.funcs[ref.from]
+	defer g.enter(fn)()
+	var result [][]ast.Node
+	var ancestors []ast.Node
+	ast.Inspect(fn.decl.Body, func(node ast.Node) bool {
+		if node == nil {
+			ancestors = ancestors[:len(ancestors)-1]
+			return false
+		}
+		ancestors = append(ancestors, node)
+		if len(ancestors) < 2 || g.fset.Position(node.Pos()).Line != ref.line {
+			return true
+		}
+		if slices.Contains(g.targets(node, ancestors[len(ancestors)-2]), ref.to) {
+			result = append(result, slices.Clone(ancestors))
+		}
+		return true
+	})
+	return result
+}
+
+// statements returns the statements of fn whose source is text, each with
+// whether it runs only with the flag off.
+func (g *scaleP21SW292Graph) statements(key, text string) []bool {
+	fn := g.funcs[key]
+	if fn == nil {
+		return nil
+	}
+	defer g.enter(fn)()
+	var result []bool
+	var ancestors []ast.Node
+	ast.Inspect(fn.decl.Body, func(node ast.Node) bool {
+		if node == nil {
+			ancestors = ancestors[:len(ancestors)-1]
+			return false
+		}
+		ancestors = append(ancestors, node)
+		if statement, ok := node.(ast.Stmt); ok && scaleP21SW292Source(g.fset, statement) == text {
+			result = append(result, g.offOnly(ancestors))
+		}
+		return true
+	})
+	return result
+}
+
+// assignments returns the source of every statement of fn that can change
+// the local named name: an assignment to it (or an inc/dec), and any
+// expression that takes its address, which is reported as "&name".
+func (g *scaleP21SW292Graph) assignments(key, name string) []string {
+	fn := g.funcs[key]
+	if fn == nil {
+		return []string{"<missing function>"}
+	}
+	named := func(expression ast.Expr) bool {
+		ident, ok := ast.Unparen(expression).(*ast.Ident)
+		return ok && ident.Name == name
+	}
+	var result []string
+	ast.Inspect(fn.decl.Body, func(node ast.Node) bool {
+		switch node := node.(type) {
+		case *ast.AssignStmt:
+			if slices.ContainsFunc(node.Lhs, named) {
+				result = append(result, scaleP21SW292Source(g.fset, node))
+			}
+		case *ast.IncDecStmt:
+			if named(node.X) {
+				result = append(result, scaleP21SW292Source(g.fset, node))
+			}
+		case *ast.UnaryExpr:
+			if node.Op == token.AND && named(node.X) {
+				result = append(result, "&"+name)
+			}
+		case *ast.RangeStmt:
+			if node.Key != nil && named(node.Key) || node.Value != nil && named(node.Value) {
+				result = append(result, "range "+name)
+			}
+		}
+		return true
+	})
+	return result
+}
+
+// flagOnReturns returns the source of the first result of every return
+// statement of fn (outside function literals) that can run with the flag on.
+// A function with named results and a bare return is reported as "<bare>".
+func (g *scaleP21SW292Graph) flagOnReturns(key string) []string {
+	fn := g.funcs[key]
+	if fn == nil {
+		return []string{"<missing function>"}
+	}
+	defer g.enter(fn)()
+	var result []string
+	var ancestors []ast.Node
+	ast.Inspect(fn.decl.Body, func(node ast.Node) bool {
+		if node == nil {
+			ancestors = ancestors[:len(ancestors)-1]
+			return false
+		}
+		if _, literal := node.(*ast.FuncLit); literal {
+			return false
+		}
+		ancestors = append(ancestors, node)
+		statement, ok := node.(*ast.ReturnStmt)
+		if !ok || g.offOnly(ancestors) {
+			return true
+		}
+		if len(statement.Results) == 0 {
+			result = append(result, "<bare>")
+		} else {
+			result = append(result, scaleP21SW292Source(g.fset, statement.Results[0]))
+		}
+		return true
+	})
+	return result
+}
+
 func (g *scaleP21SW292Graph) verifyPins(t *testing.T) {
 	t.Helper()
 	for edge, boundary := range scaleP21SW292Boundaries {
@@ -1177,6 +1312,30 @@ func (g *scaleP21SW292Graph) verifyPins(t *testing.T) {
 				if ref.kind != "value" {
 					t.Errorf("boundary %s is no longer a handler dispatch (%s:%d)", edge, ref.file, ref.line)
 				}
+			case "proof":
+				if ref.kind != "call" {
+					t.Errorf("boundary %s is no longer a call (%s %s:%d)", edge, ref.kind, ref.file, ref.line)
+				}
+				branch, condition, _ := strings.Cut(boundary.guard, ":")
+				matches := g.refAncestors(ref)
+				if len(matches) == 0 {
+					t.Errorf("boundary %s: reference at %s:%d not found", edge, ref.file, ref.line)
+				}
+				for _, ancestors := range matches {
+					guarded := false
+					for depth := 0; depth+1 < len(ancestors); depth++ {
+						statement, ok := ancestors[depth].(*ast.IfStmt)
+						if !ok || scaleP21SW292Source(g.fset, statement.Cond) != condition {
+							continue
+						}
+						if branch == "then" && ancestors[depth+1] == statement.Body || branch == "else" && statement.Else != nil && ancestors[depth+1] == statement.Else {
+							guarded = true
+						}
+					}
+					if !guarded {
+						t.Errorf("boundary %s lost its %s guard at %s:%d", edge, boundary.guard, ref.file, ref.line)
+					}
+				}
 			default:
 				t.Errorf("boundary %s has unknown mode %q", edge, boundary.mode)
 			}
@@ -1186,6 +1345,43 @@ func (g *scaleP21SW292Graph) verifyPins(t *testing.T) {
 		}
 		if boundary.mode == "handler" && !routed {
 			t.Errorf("boundary %s dispatches to a handler that no route binds", edge)
+		}
+		if boundary.mode != "proof" {
+			continue
+		}
+		if boundary.test == "" || !scaleP21SW292TestExists(t, boundary.test) {
+			t.Errorf("boundary %s cites a missing test %q", edge, boundary.test)
+		}
+		if boundary.guard == "" || len(boundary.assigns) == 0 || len(boundary.results) == 0 {
+			t.Errorf("proof boundary %s must name its guard, assignments and results", edge)
+		}
+		for local, allowed := range boundary.assigns {
+			for _, text := range g.assignments(from, local) {
+				if !slices.Contains(allowed, text) {
+					t.Errorf("boundary %s: %s assigns %s in %q", edge, from, local, text)
+				}
+			}
+			for _, text := range allowed {
+				if found := g.statements(from, text); len(found) != 1 {
+					t.Errorf("boundary %s: %s contains %q %d times, want 1", edge, from, text, len(found))
+				}
+			}
+		}
+		for key, text := range boundary.off {
+			if found := g.statements(key, text); len(found) != 1 || !found[0] {
+				t.Errorf("boundary %s: %s must contain %q once, only with the flag off (%v)", edge, key, text, found)
+			}
+		}
+		for key, want := range boundary.results {
+			returns := g.flagOnReturns(key)
+			if len(returns) == 0 {
+				t.Errorf("boundary %s: %s has no flag-on return", edge, key)
+			}
+			for _, result := range returns {
+				if result != want {
+					t.Errorf("boundary %s: %s returns %q with the flag on, want %q", edge, key, result, want)
+				}
+			}
 		}
 	}
 	for edge, reason := range scaleP21SW292Dispatches {
