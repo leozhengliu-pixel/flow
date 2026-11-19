@@ -743,7 +743,16 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 		costs[""] = s.metadataResidency.policy[""]
 		s.metadataResidency.mu.Unlock()
 	}
-	last, started, total := "", false, 0
+	var workspaceCount int64
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_states`).Scan(&workspaceCount); err != nil {
+		return err
+	}
+	if buildLogical && initial {
+		if err := checkMetadataSourceBudget(workspaceCount); err != nil {
+			return err
+		}
+	}
+	last, started, total, loaded := "", false, 0, 0
 	total = costs[""]
 	for {
 		query, args := `SELECT workspace_key FROM workspace_states`, []any{}
@@ -798,9 +807,10 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 				sources[key] = source
 			}
 			if cost > s.metadataResidency.policyLimit-total {
-				return ErrMetadataWorkBudget
+				return metadataPolicyBudgetError(s.metadataResidency.policyLimit, total+cost, loaded+1, workspaceCount)
 			}
 			total += cost
+			loaded++
 			workspaces[key], costs[key] = data, cost
 			stamps[key] = stamp
 			if heads[key], err = residentJournalHead(ctx, tx, data.Workspace.ID); err != nil {
@@ -990,4 +1000,28 @@ func residentJournalHead(ctx context.Context, tx *sqlTx, workspaceID string) (in
 	var head int64
 	err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(head),0) FROM workspace_record_journal_heads WHERE workspace_id=?`, workspaceID).Scan(&head)
 	return head, err
+}
+
+// checkMetadataSourceBudget refuses a bounded start up front when the
+// installed sources of every workspace cannot fit the source budget, rather
+// than after recovering hundreds of workspaces.
+func checkMetadataSourceBudget(workspaces int64) error {
+	limit := metadataLogicalDescriptorCap()
+	need := workspaces*metadataLogicalDescriptorBytes + metadataSourceReloadHeadroom
+	if available := limit - metadataLogicalDescriptorsUsed.Load(); need > available {
+		return fmt.Errorf("%w: %d workspaces need %d MiB of installed workspace sources (%d KiB each plus %d MiB for reloads), over FLOW_METADATA_SOURCE_BYTES (%d MiB); set FLOW_METADATA_SOURCE_BYTES to at least %d",
+			ErrMetadataWorkBudget, workspaces, ceilMiB(need), metadataLogicalDescriptorBytes>>10, metadataSourceReloadHeadroom/metadataMiB, ceilMiB(limit), need+(limit-available))
+	}
+	return nil
+}
+
+// metadataPolicyBudgetError names the setting and estimates what every
+// workspace needs from the ones recovered so far.
+func metadataPolicyBudgetError(limit, used, loaded int, workspaces int64) error {
+	estimate := int64(used)
+	if loaded > 0 && workspaces > int64(loaded) {
+		estimate = int64(used) / int64(loaded) * workspaces
+	}
+	return fmt.Errorf("%w: the resident policy of %d of %d workspaces takes %d MiB, over FLOW_METADATA_POLICY_BYTES (%d MiB); all %d need about %d MiB, so set FLOW_METADATA_POLICY_BYTES to at least %d",
+		ErrMetadataWorkBudget, loaded, workspaces, ceilMiB(int64(used)), ceilMiB(int64(limit)), workspaces, ceilMiB(estimate), estimate+estimate/4)
 }

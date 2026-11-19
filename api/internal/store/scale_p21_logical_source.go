@@ -121,8 +121,8 @@ func newMetadataLogicalBuilder(ctx context.Context) (*metadataLogicalBuilder, er
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if !reserveMetadataLogicalBytes(&metadataLogicalDescriptorsUsed, metadataLogicalDescriptorBytes, metadataLogicalDescriptorLimit) {
-		return nil, ErrMetadataWorkBudget
+	if limit := metadataLogicalDescriptorCap(); !reserveMetadataLogicalBytes(&metadataLogicalDescriptorsUsed, metadataLogicalDescriptorBytes, limit) {
+		return nil, fmt.Errorf("%w: installed workspace sources use all of FLOW_METADATA_SOURCE_BYTES (%d bytes, %d KiB per workspace)", ErrMetadataWorkBudget, limit, metadataLogicalDescriptorBytes>>10)
 	}
 	config, _ := ctx.Value(metadataLogicalScratchKey{}).(metadataLogicalScratch)
 	t := reflect.TypeFor[domain.Bootstrap]()
@@ -395,7 +395,7 @@ func (b *metadataLogicalBuilder) write(data []byte) error {
 	if int64(len(data)) > metadataLogicalDiskBytes-b.offset {
 		return ErrMetadataWorkBudget
 	}
-	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, int64(len(data)), metadataLogicalDiskBytes) {
+	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, int64(len(data)), metadataLogicalDiskCap()) {
 		return ErrMetadataWorkBudget
 	}
 	count := len(data)

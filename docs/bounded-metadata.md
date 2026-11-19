@@ -12,9 +12,15 @@ decision or a test by the operator or the maintainers before you rely on it.
 
 With the flag on, each replica:
 
-- keeps workspace policy data (teams, team settings, workspace settings) in a
-  resident, paged form with a 192 MiB policy budget, plus a 64 MiB evictable
-  body cache, and admits internal metadata work against a 256 MiB budget;
+- keeps workspace policy data (teams, team settings, workspace settings) of
+  every workspace in a resident, paged form with a 192 MiB policy budget
+  (`FLOW_METADATA_POLICY_BYTES`), plus a 64 MiB evictable body cache, and
+  admits internal metadata work against a 256 MiB budget;
+- installs one logical source per workspace, charged 128 KiB each against a
+  64 MiB budget (`FLOW_METADATA_SOURCE_BYTES`) and spooled to temporary files
+  within 1 GiB (`FLOW_METADATA_SOURCE_DISK_BYTES`). Every workspace is
+  resident from startup on, so these budgets grow with the number of
+  workspaces (see [Tuning](#tuning));
 - reads records through the record tables and journal rather than copying the
   whole workspace;
 - sorts every HTTP route into **HOT** (proven to touch only bounded data) or
@@ -33,7 +39,7 @@ table runs COLD.
 | `FLOW_RECORD_HYDRATION` | must be `1`, `true` or `on` | Bounded record scopes that keep unloaded values. |
 | `FLOW_RECORD_JOURNAL` | must be `on` | `off` (default), `shadow` and `on`. `shadow` is not enough. |
 | `FLOW_RECORD_PEER_SYNC` | must **not** be `shadow` | `off` (default) and `on` are accepted. |
-| `FLOW_METADATA_CATALOG` | `shadow` on the replicas that build the catalog | Starts a background worker that builds the metadata catalog. Not needed once the catalog is complete and journal maintenance keeps it current. |
+| `FLOW_METADATA_CATALOG` | `shadow` on the replicas that build the catalog | Starts a background worker that repairs the record journal and builds the metadata catalog. Not needed once the catalog is complete and journal maintenance keeps it current. `server metadata-prepare` does the same work once, in the foreground. |
 | `FLOW_SYNC_V2` | recommended, not checked at startup | `on`, `1` or `true`. Only takes effect with `FLOW_RECORD_JOURNAL=on`. The load rig runs both states with it on. |
 | `FLOW_RECORD_SPOOL_MAX_BYTES` | optional | Process-wide byte budget for temporary files used by record hydration. Default `268435456` (256 MiB). `0` streams directly. A negative or invalid value falls back to the default. The load rig sets the default explicitly. |
 
@@ -54,17 +60,74 @@ table runs COLD.
    [Startup refusals](#startup-refusals)).
 
 Enabling `FLOW_RECORD_JOURNAL=shadow` or `on` on a database that had it `off`
-repairs existing workspaces in bounded steps before consumers trust the
-journal. Do this, and let it finish, before the catalog step.
+marks every existing workspace as lacking journal writer coverage. A bounded
+start refuses such workspaces (`record journal writer coverage is
+incomplete`) until the journal repair has walked them. The repair runs in
+bounded, resumable steps in the catalog worker (`FLOW_METADATA_CATALOG=shadow`)
+and in `server metadata-prepare`; nothing else runs it. Each repaired
+workspace publishes one workspace invalidation to its clients.
+
+### Preparing a database: `server metadata-prepare`
+
+`server metadata-prepare` runs the journal repair over every workspace that
+needs it, then the catalog over every collection, once and at full speed, and
+exits. Give it the same configuration as the server (environment or
+`--config`); it needs `FLOW_RECORD_JOURNAL=on`. It always opens the database
+flag-off, whatever `FLOW_BOUNDED_METADATA` says, and starts no catalog worker.
+It uses the same bounded, checkpointed transactions as the worker, so it is
+safe to run while flag-off replicas serve the database, it can be interrupted
+(`Ctrl-C`, `SIGTERM`) and it can be run again; a second run repeats the
+catalog scan and finds nothing to repair.
+
+It writes progress to stderr and a JSON report to stdout:
+
+| Field | Meaning |
+| --- | --- |
+| `journal.workspaces`, `journal.repaired` | Workspaces that needed the journal repair, and those finished. |
+| `journal.incomplete` | Workspaces not finished, with the error. |
+| `catalog.collections`, `catalog.completed` | Collections scanned, and those whose catalog is complete. |
+| `catalog.normalized` | Canonical rows stored as SQLite text, rewritten as blobs (see below). |
+| `catalog.skipped` | Collections that could not be cataloged: `workspace`, `field` and the `error`, which names the record. |
+| `journalSeconds`, `catalogSeconds` | Wall time of each step. |
+| `uncoveredWorkspaces`, `incompleteCollections`, `ready` | What a bounded start would still refuse, from the SQL checks below. `ready` is true when both counts are 0. |
+
+Exit status 0 means ready, 1 that something is still incomplete (see
+`journal.incomplete` and `catalog.skipped`), 2 an error (the message is on
+stderr; the progress made so far is kept).
+
+For scale: on a SQLite database with 2520 small workspaces (25,200
+collections), on a busy development machine, the journal repair took 30
+seconds and the catalog 44 seconds (49 seconds for a second run, which
+rescans everything). The worker's previous pace, 25 ms per step, managed
+about 9 collections per second there, some 45 minutes per pass.
 
 ### Completing the metadata catalog
 
-On the flag-off replicas, set `FLOW_METADATA_CATALOG=shadow` (with the
-journal on) and leave them running. Each replica starts one background worker
-that scans every collection of every workspace and records a checkpoint per
-collection. After a full pass it waits 30 seconds and scans again, to catch
-changes made by older writers. It stops with the warning
-`metadata catalog shadow worker stopped` and an error if the scan fails.
+Run `server metadata-prepare` (above), or, on the flag-off replicas, set
+`FLOW_METADATA_CATALOG=shadow` (with the journal on) and leave them running.
+Each replica then starts one background worker. Each pass of the worker
+first runs the journal repair, then scans every collection of every workspace
+and records a checkpoint per collection. Collections that still need the
+catalog are scanned back to back, pausing a quarter of each step's time
+between steps; collections already complete are rescanned at a gentle pace
+(25 ms between steps) to catch changes made by older writers. After a pass
+the worker logs `metadata catalog pass finished` (with `collections`,
+`complete`, `skipped`, `normalized` and `duration`), waits 30 seconds and
+starts the next pass.
+
+A collection the worker cannot catalog does not stop it. It logs
+`metadata catalog: collection skipped` with the workspace, the field and the
+error (which names the record, for example `metadata agentSessions/<id>:
+invalid canonical JSON`), leaves that collection incomplete and goes on with
+the next one; every later pass tries it again. Fix or remove the record, and
+the next pass completes the collection. A bounded start refuses the
+workspace while the collection is incomplete.
+
+Older SQLite writers stored some canonical rows as text instead of blobs.
+The worker and `server metadata-prepare` rewrite those rows as blobs with the
+same bytes (the record and its version do not change; clients see one
+update of it) and log `metadata catalog: canonical rows stored as text
+rewritten as blobs`. PostgreSQL and MySQL store bytes only and need nothing.
 
 The catalog is complete for a workspace when every collection that holds
 records has a finished checkpoint and no rows are waiting for repair. To
@@ -84,10 +147,12 @@ GROUP BY r.workspace_key, r.field;
 SELECT DISTINCT workspace_key FROM record_journal_dirty;
 ```
 
-The `GROUP BY` form above is valid on PostgreSQL, MySQL and SQLite. There is
-no log line or metric that says "catalog complete"; the SQL check is the
-signal (**to be confirmed**: whether a dedicated indicator should be added).
-A flag-on replica applies the full check itself, per workspace, and refuses a
+The `GROUP BY` form above is valid on PostgreSQL, MySQL and SQLite. The
+same checks, with the journal coverage (`record_journal_coverage` and
+`record_journal_dirty` must be empty too), give the `ready` field of
+`server metadata-prepare`, and a worker pass that ends with `skipped=0`
+after the repair pass found nothing left is the signal in the logs. A
+flag-on replica applies the full check itself, per workspace, and refuses a
 workspace that fails it.
 
 ## Startup refusals
@@ -110,10 +175,19 @@ prefix:
 | Message | Meaning |
 | --- | --- |
 | `record journal is not authoritative` | The journal is not ready on this replica, or the mode is not `on`. |
-| `record journal authority: ...` | The journal's writer coverage for the workspace is incomplete, for example after old replicas wrote to it. |
-| `canonical records, catalog or old-writer repair is incomplete for "<workspace>"` | The catalog is not complete or repair is pending. Run the catalog step again. |
+| `record journal authority: ...` (`record journal writer coverage is incomplete`) | The journal's writer coverage for the workspace is incomplete: the journal was enabled on existing data, or old replicas wrote to it. Run `server metadata-prepare` or the catalog worker, which run the journal repair. |
+| `canonical records, catalog or old-writer repair is incomplete for "<workspace>"` | The catalog is not complete or repair is pending. Run `server metadata-prepare` (or the catalog step) again and fix the records it reports as skipped. |
 | `canonical field "<name>" is outside the collection manifest` | The workspace holds a collection this build does not know. |
 | `unsplit field "<name>"` | A large legacy field has not been split into records. |
+
+A start also refuses when every workspace cannot be resident within the
+budgets. These messages start with `metadata process work budget exceeded`:
+
+| Message | Fix |
+| --- | --- |
+| `N workspaces need X MiB of installed workspace sources (128 KiB each plus 16 MiB for reloads), over FLOW_METADATA_SOURCE_BYTES (Y MiB); set FLOW_METADATA_SOURCE_BYTES to at least Z` | Checked before any workspace is read. Set the variable to at least the bytes named. |
+| `the resident policy of K of N workspaces takes X MiB, over FLOW_METADATA_POLICY_BYTES (Y MiB); all N need about Z MiB, so set FLOW_METADATA_POLICY_BYTES to at least B` | The estimate extrapolates from the workspaces read so far and adds a quarter. Set the variable as suggested and start again. |
+| `recover logical workspace "<key>": metadata process work budget exceeded: installed workspace sources use all of FLOW_METADATA_SOURCE_BYTES ...` | Sources outgrew the budget during recovery; raise `FLOW_METADATA_SOURCE_BYTES`. |
 
 A workspace that fails admission at startup stops the replica starting; one
 that fails later (for example the first record of a new collection written
@@ -132,20 +206,25 @@ all replicas, within one maintenance window.
 1. Back up the database (see [Backup boundary](operations.md#backup-boundary)).
 2. On all replicas, set `FLOW_RECORD_HYDRATION=on` and
    `FLOW_RECORD_JOURNAL=on`, and leave `FLOW_RECORD_PEER_SYNC` at `off` or
-   `on`. Restart them one at a time and wait for the journal repair to finish.
-3. Add `FLOW_METADATA_CATALOG=shadow` and restart. Wait until the SQL checks
-   above return no rows for every workspace. Run
+   `on`. Restart them one at a time.
+3. Run `server metadata-prepare` with the replicas' configuration until it
+   exits 0, or add `FLOW_METADATA_CATALOG=shadow` and restart, and wait until
+   the SQL checks above return no rows for every workspace. Fix the records
+   named in `catalog.skipped` (or the `collection skipped` log lines). Run
    `scripts/loadrig/loadrig.sh` against a copy of production-sized data first
    (see [Pre-production check](#pre-production-check-the-load-rig)).
-4. Stop all replicas and start **one** with `FLOW_BOUNDED_METADATA=on`, so
+4. Size the budgets for the number of workspaces (see [Tuning](#tuning)).
+   Starting one replica flag-on against a copy of the database is the
+   simplest check: a start that does not fit names the setting and the size.
+5. Stop all replicas and start **one** with `FLOW_BOUNDED_METADATA=on`, so
    that no flag-off replica runs next to it. Check that it starts and watch the logs under
    [Monitoring](#monitoring). **To be confirmed:** the observation period
    before moving on; the code does not set one.
-5. Set the flag on, and restart, every remaining replica. Remove
+6. Set the flag on, and restart, every remaining replica. Remove
    `FLOW_METADATA_CATALOG=shadow` when you no longer need the worker.
    **To be confirmed:** whether the worker should stay on after activation.
 
-A single-replica deployment follows steps 1 to 4 only.
+A single-replica deployment follows steps 1 to 5 only.
 
 ## What changes for users
 
@@ -171,9 +250,29 @@ A single-replica deployment follows steps 1 to 4 only.
 | `FLOW_COLD_PROJECTION_CONCURRENCY` | `2` | Concurrent COLD projections per replica. Positive integer. |
 | `FLOW_RECORD_SPOOL_MAX_BYTES` | `268435456` | See [Related settings](#related-settings). |
 | `FLOW_SLOW_MUTATION_MS` | `500` | Threshold for the `slow workspace mutation` log line. `0` disables it. |
+| `FLOW_METADATA_POLICY_BYTES` | `201326592` (192 MiB) | Resident policy of all workspaces together, in bytes. One workspace's policy may take at most 192 MiB whatever the setting. |
+| `FLOW_METADATA_SOURCE_BYTES` | `67108864` (64 MiB) | Memory for installed workspace sources, in bytes: 128 KiB per workspace (its read cache and write buffer) plus 16 MiB that a start keeps free for reloads. The default fits 384 workspaces. |
+| `FLOW_METADATA_SOURCE_DISK_BYTES` | `1073741824` (1 GiB) | Temporary-file space for workspace sources, in bytes, in the process's metadata spool directory. |
 
-The 192 MiB policy, 64 MiB cache and 256 MiB work budgets are constants in
-this build, not settings. The retry delay (5 seconds) is also fixed.
+The three budget settings take a positive whole number of bytes; anything
+else uses the default. They are upper limits that the replica accounts
+against, not allocations: an idle workspace's source uses well under its
+128 KiB. Raise them with the number of workspaces a replica holds. For
+example, 2520 workspaces need `FLOW_METADATA_SOURCE_BYTES` of at least
+`347078656` (331 MiB); the resident policy of small workspaces takes about
+60 KiB each, about 150 MiB for 2520, and more for workspaces with many teams
+or large settings. A start that does not fit says what it needs (see
+[Startup refusals](#startup-refusals)). A bounded start reads every
+workspace once: with 2520 small workspaces on SQLite it took 83 seconds and
+about 160 MiB of heap (150 MiB of accounted policy, 315 MiB of source
+budget in use, 42 MiB of spool). Large workspaces take longer.
+
+Every workspace stays resident: the budgets bound memory per replica, they
+do not evict workspaces. Installing workspaces on first use with eviction is
+not supported in this build.
+
+The 64 MiB cache and 256 MiB work budgets are constants in this build, not
+settings. The retry delay (5 seconds) is also fixed.
 
 Raise `FLOW_COLD_QUEUE_LIMIT` or the timeout only if 503s appear under normal
 load and the slot is not the bottleneck. **To be confirmed:** sizing guidance
@@ -187,7 +286,13 @@ per workspace size; use the load rig to measure it.
 | `bounded metadata: legacy view wait refused` | A whole-workspace read was refused (queue full or timeout). Attributes: `accessor`, `reason`, `timeout`, `waiting`. Users see 503 with `Retry-After`. |
 | `slow workspace mutation` | A write or its workspace lock hold exceeded `FLOW_SLOW_MUTATION_MS`. Includes per-stage timings. |
 | `record journal deferred to bounded repair` | A very large transaction skipped journal sidecars; the catalog is unavailable for those keys until repair runs. |
-| `metadata catalog shadow worker stopped` | The catalog worker failed. |
+| `metadata catalog: collection skipped` | The catalog worker (or `server metadata-prepare`) could not catalog a collection; the error names the record. The collection stays incomplete; later passes retry it. |
+| `metadata catalog pass finished` | `INFO` after a worker pass, `WARN` when `skipped` is not 0. Attributes: `collections`, `complete`, `skipped`, `normalized`, `duration`. |
+| `metadata catalog pass failed` | A pass could not list collections; the worker tries again 30 seconds later. |
+| `record journal repair: workspace skipped` | The journal repair of a workspace failed or did not finish in this pass; the next pass continues it. |
+| `record journal repair pass finished` | `INFO` after a worker pass that repaired workspaces: `workspaces`, `repaired`, `incomplete`, `duration`. |
+| `metadata catalog: canonical rows stored as text rewritten as blobs` | SQLite rows from older writers were normalised. |
+| `metadata catalog shadow worker stopped` | The catalog worker ended without being cancelled. |
 | `Peer sync disabled: FLOW_RECORD_PEER_SYNC=... requires an enabled, ready record journal` | Peer sync fell back to off. |
 
 Repeated COLD slot or legacy-view refusals on a route mean that route is

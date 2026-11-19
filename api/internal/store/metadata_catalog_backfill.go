@@ -5,12 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 	"testing"
-	"time"
 )
 
 const MetadataCatalogBackfillBatch = 128
@@ -89,9 +86,12 @@ func (s *SQLiteStore) BackfillMetadataCatalog(ctx context.Context, workspace, ki
 		where += ` AND record_key>?`
 		args = append(args, position.last)
 	}
-	table, columns := "workspace_metadata_records", "record_key,collection_order,LENGTH(data)"
+	// Byte lengths: SQLite's LENGTH counts characters of a TEXT value, and
+	// older writers stored some canonical rows as TEXT. The canonical reader
+	// streams bytes, so a character count cut a non-ASCII row short.
+	table, columns := "workspace_metadata_records", "record_key,collection_order,"+metadataByteLength(s.dialect, "data")
 	if position.phase == 1 {
-		table, columns = "metadata_catalog", "record_key,collection_order,LENGTH(summary)"
+		table, columns = "metadata_catalog", "record_key,collection_order,"+metadataByteLength(s.dialect, "summary")
 	}
 	rows, err := read.QueryContext(ctx, `SELECT `+columns+` FROM `+table+` WHERE `+where+` ORDER BY record_key LIMIT 128`, args...)
 	if err != nil {
@@ -307,57 +307,6 @@ func (s *SQLiteStore) nextMetadataCatalogCollection(ctx context.Context, workspa
 	return nextWorkspace, nextKind, nil
 }
 
-// RunMetadataCatalogBackfill is a cancellable, single-worker shadow scan. It
-// revisits completed collections to repair changes made by old writers,
-// including entirely deleted collections. It installs no canonical triggers.
-func (s *SQLiteStore) RunMetadataCatalogBackfill(ctx context.Context) error {
-	workspace, kind := "", ""
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(25 * time.Millisecond):
-		}
-		nextWorkspace, nextKind, err := s.nextMetadataCatalogCollection(ctx, workspace, kind)
-		if err != nil {
-			if !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-			workspace, kind = "", ""
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(30 * time.Second):
-				continue
-			}
-		}
-		status, err := s.MetadataCatalogStatus(ctx, nextWorkspace, nextKind)
-		if err != nil {
-			return err
-		}
-		if status.Complete {
-			if err := s.ResetMetadataCatalogBackfill(ctx, nextWorkspace, nextKind); err != nil {
-				return err
-			}
-		}
-		for {
-			progress, err := s.BackfillMetadataCatalog(ctx, nextWorkspace, nextKind)
-			if err != nil && !errors.Is(err, ErrConcurrentWrite) {
-				return err
-			}
-			if progress.Complete {
-				break
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(25 * time.Millisecond):
-			}
-		}
-		workspace, kind = nextWorkspace, nextKind
-	}
-}
-
 // CompleteMetadataCatalogForTesting runs the catalog backfill over every
 // collection of every workspace to completion, as an operator does before a
 // bounded start (a bounded store refuses an incomplete catalog). Test
@@ -394,15 +343,5 @@ func (s *SQLiteStore) CompleteMetadataCatalogForTesting(ctx context.Context) err
 			}
 		}
 		workspace, kind = next, nextKind
-	}
-}
-
-func (s *SQLiteStore) startMetadataCatalog() {
-	if metadataCatalogShadowEnabled() {
-		go func() {
-			if err := s.RunMetadataCatalogBackfill(s.WorkerContext()); err != nil && s.WorkerContext().Err() == nil {
-				slog.Warn("metadata catalog shadow worker stopped", "error", fmt.Sprint(err))
-			}
-		}()
 	}
 }

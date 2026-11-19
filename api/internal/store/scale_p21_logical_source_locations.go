@@ -99,7 +99,7 @@ func (b *metadataLogicalBuilder) retainAuditedLocation(location *time.Location) 
 		return ErrMetadataWorkBudget
 	}
 	if len(b.storage.locations) >= 32 {
-		if !reserveMetadataLogicalBytes(&metadataLogicalDescriptorsUsed, 512, metadataLogicalDescriptorLimit) {
+		if !reserveMetadataLogicalBytes(&metadataLogicalDescriptorsUsed, 512, metadataLogicalDescriptorCap()) {
 			return ErrMetadataWorkBudget
 		}
 		b.storage.locationBytes += 512

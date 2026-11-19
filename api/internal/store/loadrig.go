@@ -4,9 +4,7 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -120,41 +118,19 @@ func (s *SQLiteStore) LoadRigDatabaseBytes(ctx context.Context) int64 {
 	return size
 }
 
-// CompleteLoadRigMetadataCatalog runs the metadata catalog backfill (the
-// FLOW_METADATA_CATALOG=shadow worker) once over every collection of every
-// workspace, to completion. A bounded store refuses to start until the
-// catalog covers every canonical record (validateResidentBackfill).
+// CompleteLoadRigMetadataCatalog runs the production catalog pass (the one
+// `server metadata-prepare` runs) once over every collection of every
+// workspace. A bounded store refuses to start until the catalog covers every
+// canonical record (validateResidentBackfill), so a skipped collection fails
+// the rig here.
 func (s *SQLiteStore) CompleteLoadRigMetadataCatalog(ctx context.Context) (int, error) {
-	workspace, kind, collections := "", "", 0
-	for {
-		next, nextKind, err := s.nextMetadataCatalogCollection(ctx, workspace, kind)
-		if errors.Is(err, sql.ErrNoRows) {
-			return collections, nil
-		}
-		if err != nil {
-			return collections, err
-		}
-		status, err := s.MetadataCatalogStatus(ctx, next, nextKind)
-		if err != nil {
-			return collections, err
-		}
-		if status.Complete {
-			// Revisit, as the shadow worker does: writes after its pass
-			// may have changed the collection.
-			if err := s.ResetMetadataCatalogBackfill(ctx, next, nextKind); err != nil {
-				return collections, err
-			}
-		}
-		for {
-			progress, err := s.BackfillMetadataCatalog(ctx, next, nextKind)
-			if err != nil && !errors.Is(err, ErrConcurrentWrite) {
-				return collections, fmt.Errorf("catalog %s/%s: %w", next, nextKind, err)
-			}
-			if err == nil && progress.Complete {
-				break
-			}
-		}
-		collections++
-		workspace, kind = next, nextKind
+	report, err := s.metadataCatalogPass(ctx, false)
+	if err != nil {
+		return report.Collections, err
 	}
+	if len(report.Skipped) > 0 {
+		skip := report.Skipped[0]
+		return report.Collections, fmt.Errorf("catalog %s/%s: %s (%d collections skipped)", skip.Workspace, skip.Field, skip.Error, len(report.Skipped))
+	}
+	return report.Collections, nil
 }

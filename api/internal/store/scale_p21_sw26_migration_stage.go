@@ -136,7 +136,7 @@ func (s *sw26MigrationStage) reserve(bytes int64) error {
 	if !s.logical {
 		return sw26MigrationReserve(bytes)
 	}
-	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, bytes, metadataLogicalDiskBytes) {
+	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, bytes, metadataLogicalDiskCap()) {
 		return ErrRecordSpoolBudget
 	}
 	return nil

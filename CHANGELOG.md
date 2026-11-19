@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- `server metadata-prepare` repairs the record journal and completes the metadata catalog in one foreground run before bounded metadata is turned on; the `FLOW_METADATA_CATALOG=shadow` worker now runs the same journal repair, completes the catalog at full speed, rewrites SQLite canonical rows stored as text as blobs, and skips (and logs) a collection it cannot catalog instead of stopping. Bounded starts refuse up front, naming the setting, when the workspaces do not fit the new `FLOW_METADATA_POLICY_BYTES`, `FLOW_METADATA_SOURCE_BYTES` and `FLOW_METADATA_SOURCE_DISK_BYTES` budgets. Bounded metadata stays off by default.
 - Bounded integration delivery retries preserve captured network inputs, HTTP-accepted raw JSON bytes and atomic publication without loading complete workspaces.
 - Bounded batch updates retain response values while releasing completed mutation work before triage.
 - Bounded workflow execution and the due-workflow scheduler preserve action order, large editor values, failure and retry history and atomic publication without loading complete workspaces.
