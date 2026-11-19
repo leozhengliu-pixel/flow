@@ -586,11 +586,11 @@ func (s *logicalJSONStream) activityIDs(node metadataLogicalNode) error {
 		return ErrMetadataRecordQuery
 	}
 	part := metadataCollectionRange{offset: cursor.offset, size: int64(length)}
-	parser := taskIssueJSON{ctx: s.ctx, input: node.source.file, owner: s.owner}
+	parser := taskIssueJSON{ctx: s.ctx, input: node.source, owner: s.owner}
 	if err := parser.validate(part, reflect.TypeFor[[]string](), 0); err != nil {
 		return err
 	}
-	scanner := sw17CredentialScanner(s.ctx, node.source.file, part.offset, part.size)
+	scanner := sw17CredentialScanner(s.ctx, node.source, part.offset, part.size)
 	if err := scanner.spaces(); err != nil {
 		return err
 	}
@@ -615,7 +615,7 @@ func (s *logicalJSONStream) activityIDs(node metadataLogicalNode) error {
 		if err := s.text(`"`); err != nil {
 			return err
 		}
-		_, err := VisitMetadataJSONStringChunks(s.ctx, io.NewSectionReader(node.source.file, value.offset, value.size), func(chunk []byte) error {
+		_, err := VisitMetadataJSONStringChunks(s.ctx, io.NewSectionReader(node.source, value.offset, value.size), func(chunk []byte) error {
 			return s.stringContentBytes(chunk)
 		})
 		if err != nil {

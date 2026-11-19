@@ -68,10 +68,10 @@ func TestScaleP21SW223RawMessageFrameRoundTrip(t *testing.T) {
 				t.Fatal("streamed RawMessage changed typed byte-frame shape or cost")
 			}
 			actualFrame, expectedFrame := make([]byte, node.size), make([]byte, typed.size)
-			if _, err := builder.storage.file.ReadAt(actualFrame, node.offset); err != nil {
+			if _, err := builder.storage.ReadAt(actualFrame, node.offset); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := builder.storage.file.ReadAt(expectedFrame, typed.offset); err != nil {
+			if _, err := builder.storage.ReadAt(expectedFrame, typed.offset); err != nil {
 				t.Fatal(err)
 			}
 			if !bytes.Equal(actualFrame, expectedFrame) {

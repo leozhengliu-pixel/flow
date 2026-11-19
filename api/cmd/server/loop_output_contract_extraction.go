@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Output contract extraction: the configured model reads a loop's output
@@ -438,7 +439,13 @@ func (s *server) readLoopContract(ctx context.Context, workspace string, loop do
 // still the one read and no person set the outputs, and on the loop's
 // versions with the same text.
 func (s *server) storeLoopContract(workspace, loopID, hash string, contract *domain.LoopOutputContract) {
-	err := s.store.MutateWorkspace(context.Background(), workspace, "loop.output_contract", loopID, nil, func(data *domain.Bootstrap) error {
+	// The store outlives the request or run that read the contract, and keeps
+	// no request values (actor, cancellation). It is background COLD work:
+	// with bounded metadata on, the loop contract writer runs literally on a
+	// COLD facade for this one write (store.WithColdWork); off, the marker is
+	// inert.
+	ctx := store.WithColdWork(context.Background(), "loop-output-contract")
+	err := s.store.MutateWorkspace(ctx, workspace, "loop.output_contract", loopID, nil, func(data *domain.Bootstrap) error {
 		loop := loopByID(data, loopID)
 		if loop == nil {
 			return errNotFound

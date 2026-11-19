@@ -176,7 +176,7 @@ func legacyProjectFrameString(ctx context.Context, builder *metadataLogicalBuild
 	}
 	var size [8]byte
 	binary.LittleEndian.PutUint64(size[:], length)
-	if _, err := builder.storage.file.WriteAt(size[:], node.offset+16); err != nil {
+	if err := builder.storage.writeAt(size[:], node.offset+16); err != nil {
 		return metadataLogicalNode{}, err
 	}
 	node.size = builder.offset - node.offset

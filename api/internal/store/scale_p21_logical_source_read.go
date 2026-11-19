@@ -27,7 +27,7 @@ func (c *metadataLogicalCursor) read(p []byte) error {
 	if int64(len(p)) > c.node.offset+c.node.size-c.offset {
 		return io.ErrUnexpectedEOF
 	}
-	_, err := c.node.source.file.ReadAt(p, c.offset)
+	_, err := c.node.source.ReadAt(p, c.offset)
 	c.offset += int64(len(p))
 	return err
 }

@@ -18,7 +18,7 @@ func (b *metadataLogicalBuilder) copyNode(node metadataLogicalNode) (metadataLog
 		return b.writeGenericJSONPart(node.typ, node.genericPart(), node.cost)
 	}
 	start := b.offset
-	count, err := io.CopyBuffer(metadataLogicalWriter{b}, io.NewSectionReader(node.source.file, node.offset, node.size), b.buffer[:])
+	count, err := io.CopyBuffer(metadataLogicalWriter{b}, io.NewSectionReader(node.source, node.offset, node.size), b.buffer[:])
 	if err != nil {
 		return metadataLogicalNode{}, err
 	}
@@ -350,7 +350,7 @@ func (n metadataLogicalNode) StreamBytes(ctx context.Context, visit func(io.Read
 			return err
 		}
 		if present == 0 {
-			return visit(io.LimitReader(&metadataLogicalByteReader{ctx, n.source.file, c.offset}, 0))
+			return visit(io.LimitReader(&metadataLogicalByteReader{ctx, n.source, c.offset}, 0))
 		}
 	} else if n.typ.Kind() != reflect.String {
 		return ErrMetadataRecordQuery
@@ -359,7 +359,7 @@ func (n metadataLogicalNode) StreamBytes(ctx context.Context, visit func(io.Read
 	if err != nil || size > uint64(n.size) {
 		return io.ErrUnexpectedEOF
 	}
-	return visit(io.LimitReader(&metadataLogicalByteReader{ctx, n.source.file, c.offset}, int64(size)))
+	return visit(io.LimitReader(&metadataLogicalByteReader{ctx, n.source, c.offset}, int64(size)))
 }
 
 type metadataLogicalByteReader struct {

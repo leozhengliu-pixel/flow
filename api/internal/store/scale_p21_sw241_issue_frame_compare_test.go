@@ -276,7 +276,7 @@ func TestScaleP21SW241IssueFrameCompareLargeEditor(t *testing.T) {
 				child.cost = uint64(metadataWorkBytes) + 1
 				var cost [8]byte
 				binary.LittleEndian.PutUint64(cost[:], child.cost)
-				if _, err := input.storage.file.WriteAt(cost[:], child.offset+8); err != nil {
+				if err := input.storage.writeAt(cost[:], child.offset+8); err != nil {
 					return err
 				}
 				if _, err := child.Value(t.Context(), metadataWorkBytes); !errors.Is(err, ErrMetadataWorkBudget) {

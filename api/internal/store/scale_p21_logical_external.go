@@ -319,7 +319,7 @@ func (e *metadataLogicalExternal) collection(name, kind string, typ reflect.Type
 		}
 		var data [8]byte
 		binary.LittleEndian.PutUint64(data[:], count)
-		if _, err := e.builder.storage.file.WriteAt(data[:], groupNode.offset+17); err != nil {
+		if err := e.builder.storage.writeAt(data[:], groupNode.offset+17); err != nil {
 			return err
 		}
 		groupNode.size = e.builder.offset - groupNode.offset

@@ -241,11 +241,11 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 	} else {
 		var data [8]byte
 		binary.LittleEndian.PutUint64(data[:], count)
-		if _, err := b.storage.file.WriteAt(data[:], countOffset); err != nil {
+		if err := b.storage.writeAt(data[:], countOffset); err != nil {
 			return node, err
 		}
 		if count > 0 {
-			if _, err := b.storage.file.WriteAt([]byte{1}, countOffset-1); err != nil {
+			if err := b.storage.writeAt([]byte{1}, countOffset-1); err != nil {
 				return node, err
 			}
 		}

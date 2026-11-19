@@ -263,7 +263,7 @@ func (r *ResourceWindowRead) trashPayload(ctx context.Context, trash metadataLog
 		return nil, ErrMetadataRecordQuery
 	}
 	offset := cursor.offset
-	scanner := metadataCollectionScanner{ctx: ctx, input: bufio.NewReaderSize(io.NewSectionReader(node.source.file, offset, int64(length)), metadataRecordChunkBytes)}
+	scanner := metadataCollectionScanner{ctx: ctx, input: bufio.NewReaderSize(io.NewSectionReader(node.source, offset, int64(length)), metadataRecordChunkBytes)}
 	if err := scanner.spaces(); err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (r *ResourceWindowRead) trashPayload(ctx context.Context, trash metadataLog
 				return nil
 			}
 			raw := make([]byte, int(key.size))
-			if _, err := node.source.file.ReadAt(raw, offset+key.offset); err != nil {
+			if _, err := node.source.ReadAt(raw, offset+key.offset); err != nil {
 				return err
 			}
 			var name string
@@ -297,7 +297,7 @@ func (r *ResourceWindowRead) trashPayload(ctx context.Context, trash metadataLog
 				return err
 			}
 			raw = make([]byte, int(value.size))
-			if _, err := node.source.file.ReadAt(raw, offset+value.offset); err != nil {
+			if _, err := node.source.ReadAt(raw, offset+value.offset); err != nil {
 				return err
 			}
 			if err := r.admitJSON(ctx, raw, field.Type); err != nil {

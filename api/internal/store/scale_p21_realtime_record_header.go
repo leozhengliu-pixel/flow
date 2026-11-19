@@ -177,7 +177,7 @@ func realtimeRecordJSONValid(ctx context.Context, view *WebhookAggregateRead, va
 		if size > uint64(node.offset+node.size-cursor.offset) {
 			return ErrMetadataRecordQuery
 		}
-		err = validateMetadataCollectionJSON(ctx, io.NewSectionReader(node.source.file, cursor.offset, int64(size)))
+		err = validateMetadataCollectionJSON(ctx, io.NewSectionReader(node.source, cursor.offset, int64(size)))
 		if err != nil && ctx.Err() == nil {
 			return errWebhookJSONInvalid
 		}

@@ -65,6 +65,9 @@ func TestScaleP21SW228RawMessageNativeOwnership(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if err := builder.storage.settleForTesting(); err != nil {
+			t.Fatal(err)
+		}
 		if err := builder.storage.file.Truncate(node.offset + node.size - 1); err != nil {
 			t.Fatal(err)
 		}

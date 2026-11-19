@@ -658,7 +658,7 @@ func (r *DocumentRead) documentPayloadHeader(ctx context.Context, node metadataL
 	if length > uint64(payload.size) || cursor.offset+int64(length) > payload.offset+payload.size {
 		return ErrMetadataRecordQuery
 	}
-	return r.documentJSONHeader(ctx, payload.source.file, cursor.offset, int64(length), visit)
+	return r.documentJSONHeader(ctx, payload.source, cursor.offset, int64(length), visit)
 }
 
 func (r *DocumentRead) documentJSONHeader(ctx context.Context, source io.ReaderAt, offset, length int64, visit func(domain.Document) error) error {

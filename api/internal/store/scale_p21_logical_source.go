@@ -52,6 +52,12 @@ type metadataLogicalStorage struct {
 	locationBytes int64
 	bytes         int64
 	genericStore  *SQLiteStore
+	// Spool I/O (scale_p21_logical_spool_io.go): flushed is the length the
+	// file holds; pending holds later appends; blocks cache small reads.
+	flushed   atomic.Int64
+	pendingMu sync.Mutex
+	pending   []byte
+	blocks    [metadataLogicalReadSlots]atomic.Pointer[metadataLogicalBlock]
 }
 
 type metadataLogicalNode struct {
@@ -242,13 +248,13 @@ func (b *metadataLogicalBuilder) EndCollection() error {
 		return ErrMetadataRecordQuery
 	}
 	if b.count > 0 {
-		if _, err := b.storage.file.WriteAt([]byte{1}, b.header+16); err != nil {
+		if err := b.storage.writeAt([]byte{1}, b.header+16); err != nil {
 			return err
 		}
 	}
 	var count [8]byte
 	binary.LittleEndian.PutUint64(count[:], b.count)
-	if _, err := b.storage.file.WriteAt(count[:], b.header+17); err != nil {
+	if err := b.storage.writeAt(count[:], b.header+17); err != nil {
 		return err
 	}
 	node := metadataLogicalNode{source: b.storage, offset: b.header, size: b.offset - b.header, cost: b.cost, typ: b.collection, unavailable: b.unavailable}
@@ -278,6 +284,9 @@ func (b *metadataLogicalBuilder) Finish(stamp copyStamp) (*metadataLogicalSource
 		}
 	}
 	if err := b.ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := b.storage.flush(); err != nil {
 		return nil, err
 	}
 	b.source.stamp = stamp
@@ -330,6 +339,7 @@ func (s *metadataLogicalStorage) Release() {
 	if s.refs == 0 {
 		name := s.file.Name()
 		_ = s.file.Close()
+		s.dropBuffers()
 		// An orphan still occupies the temporary volume and keeps its charge.
 		if err := os.Remove(name); err == nil || errors.Is(err, os.ErrNotExist) {
 			metadataLogicalDiskUsed.Add(-s.bytes)
@@ -374,7 +384,11 @@ func (b *metadataLogicalBuilder) write(data []byte) error {
 	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, int64(len(data)), metadataLogicalDiskBytes) {
 		return ErrMetadataWorkBudget
 	}
-	count, err := b.storage.file.Write(data)
+	count := len(data)
+	err := b.storage.append(data)
+	if err != nil {
+		count = 0
+	}
 	b.offset += int64(count)
 	b.storage.bytes += int64(count)
 	metadataLogicalDiskUsed.Add(int64(count) - int64(len(data)))
@@ -404,8 +418,7 @@ func (b *metadataLogicalBuilder) patch(n metadataLogicalNode) error {
 		cost |= metadataLogicalGenericJSON
 	}
 	binary.LittleEndian.PutUint64(data[8:], cost)
-	_, err := b.storage.file.WriteAt(data[:], n.offset)
-	return err
+	return b.storage.writeAt(data[:], n.offset)
 }
 
 func (b *metadataLogicalBuilder) writeValue(v reflect.Value, depth int, key bool) (node metadataLogicalNode, err error) {

@@ -344,10 +344,16 @@ func TestScaleP21SW238IssueFrameValuesFailureRelease(t *testing.T) {
 				during = &scaleP21SW238CancelContext{Context: ctx, cancel: cancel, after: 128}
 				callContext = during
 			case "input-io":
+				if err := input.storage.settleForTesting(); err != nil {
+					t.Fatal(err)
+				}
 				if err := input.storage.file.Close(); err != nil {
 					t.Fatal(err)
 				}
 			case "short-input":
+				if err := input.storage.settleForTesting(); err != nil {
+					t.Fatal(err)
+				}
 				if err := input.storage.file.Truncate(node.offset + node.size - 1); err != nil {
 					t.Fatal(err)
 				}
@@ -536,7 +542,7 @@ func TestScaleP21SW238IssueFrameValuesLargeEditorNoNativeBody(t *testing.T) {
 		child.cost = uint64(metadataWorkBytes) + 1
 		var cost [8]byte
 		binary.LittleEndian.PutUint64(cost[:], child.cost)
-		if _, err := frames.storage.file.WriteAt(cost[:], child.offset+8); err != nil {
+		if err := frames.storage.writeAt(cost[:], child.offset+8); err != nil {
 			return err
 		}
 		if _, err := child.Value(t.Context(), metadataWorkBytes); !errors.Is(err, ErrMetadataWorkBudget) {

@@ -1,6 +1,6 @@
 {
   "source": "server/loop_output_contract_extraction.go",
-  "unmigrated": 5,
+  "unmigrated": 4,
   "consumers": {
     "analyzeLoopOutputs": {
       "owner": "P18",
@@ -55,7 +55,9 @@
     },
     "storeLoopContract": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "coldDispatch": "server/loop_output_contract_extraction.go:storeLoopContract",
+      "reason": "COLD background write. The contract store outlives the request or loop run that read the contract and keeps no request values, so it runs on store.WithColdWork(context.Background(), \"loop-output-contract\"): flag off the marker is inert and the original MutateWorkspace(\"loop.output_contract\") call, callback and errNotFound handling are literal. Bounded, no migrated bounded writer selects loop.output_contract, so the dispatch runs the literal legacy dispatch on a COLD facade for this one write (coldLegacyMutation): mutateLoopContract locks the loop and its versions, runs the callback on those canonical records, writes the changed rows, event and publication, and publishes the facade's exact image to the parent. Before this it ran on context.Background(), which is not COLD work, and the bounded dispatch refused it (\"has no migrated point writer\"; load rig smoke). TestScaleP21ColdWritersLoopContractStore compares legacy vs warm vs SQL-reloaded bounded views: a model contract on the loop and its matching versions, person outputs kept with the suggestion merged, a stale hash, a fallback and a missing loop; every metadata row, events, webhooks, realtime publications and the installed loops/loopVersions equal to a reload.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
