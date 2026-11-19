@@ -251,6 +251,11 @@ func (s *SQLiteStore) installWrittenWorkspaceLocked(workspace string, data domai
 	// A default COLD legacy writer without a prepared publication (any
 	// writer but the full metadata writer) publishes through the parent's
 	// reload when it returns the shared write lock (coldLegacyMutation).
+	if s.coldWrite != nil {
+		if hook := coldInstallHookForTesting.Load(); hook != nil {
+			(*hook)()
+		}
+	}
 	if s.coldWrite != nil && (s.coldWrite.prepared != nil || !s.coldWrite.legacy) {
 		s.installColdFullWriteLocked(workspace, write, current, ok)
 	}
