@@ -136,7 +136,7 @@ func TestScaleP21SW15InstalledViewerWireTimeDifferential(t *testing.T) {
 			original = *until
 		}
 		repo := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"workspace": {Viewer: viewer}}, lastWorkspaceKey: "workspace", metadataResidency: newMetadataResidency()}
-		expected, found := repo.WorkspaceMetadata("workspace")
+		expected, found := scaleP21ResidentOracle(repo, "workspace")
 		read, ok, err := repo.BeginInstalledViewerRead(t.Context(), "")
 		if err != nil || !found || !ok {
 			t.Fatal("viewer wire read failed", err)

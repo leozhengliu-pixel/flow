@@ -29,6 +29,28 @@ func scaleP21SW0InstalledIdentity(t *testing.T, source *SQLiteStore, ref string)
 	}, found
 }
 
+// scaleP21ResidentOracle answers what the installed reads select from: the
+// store's resident image under the legacy key rules (an empty key is the
+// default workspace). A flag-off store answers its legacy accessor. A bounded
+// store's legacy accessor no longer reads that image (SW531 refuses it on a
+// store that requires coverage; a store with an installed logical source
+// answers from a legacy view of it), so the oracle reads the image itself.
+func scaleP21ResidentOracle(source *SQLiteStore, workspace string) (domain.Bootstrap, bool) {
+	if source.metadataResidency == nil {
+		return source.WorkspaceMetadata(workspace)
+	}
+	source.mu.RLock()
+	defer source.mu.RUnlock()
+	if workspace == "" {
+		workspace = source.lastWorkspaceKey
+	}
+	data, found := source.workspaces[workspace]
+	if !found {
+		return domain.Bootstrap{}, false
+	}
+	return cloneBootstrap(data), true
+}
+
 func TestScaleP21SW0InstalledWorkspaceExactRegistry(t *testing.T) {
 	for _, bounded := range []bool{false, true} {
 		source := &SQLiteStore{
@@ -50,7 +72,7 @@ func TestScaleP21SW0InstalledWorkspaceExactRegistry(t *testing.T) {
 			if selected == "" {
 				selected = source.lastWorkspaceKey
 			}
-			legacy, wantFound := source.WorkspaceMetadata(ref)
+			legacy, wantFound := scaleP21ResidentOracle(source, ref)
 			if found != wantFound {
 				t.Fatalf("bounded=%v ref=%q found=%v want=%v", bounded, ref, found, wantFound)
 			}
