@@ -124,10 +124,33 @@ func (s *SQLiteStore) pinColdMetadataRead(ctx context.Context) (*SQLiteStore, ma
 	r := s.metadataResidency
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	facade := s.newColdFacadeLocked(len(s.workspaces))
+	sources := make(map[string]*metadataLogicalSource, len(s.workspaces))
+	for workspace := range s.workspaces {
+		if err := ctx.Err(); err != nil {
+			return facade, sources, err
+		}
+		source := r.logical[workspace]
+		if source == nil {
+			return facade, sources, ErrBoundedMetadataCoverage
+		}
+		if err := source.Retain(); err != nil {
+			return facade, sources, err
+		}
+		sources[workspace] = source
+	}
+	return facade, sources, nil
+}
+
+// newColdFacadeLocked returns an empty legacy store sharing s's database and
+// services. The caller holds s.mu. Fresh locks, counters and caches belong to
+// the facade; service pointers are loaded explicitly, since copying
+// SQLiteStore would also copy live locks.
+func (s *SQLiteStore) newColdFacadeLocked(workspaces int) *SQLiteStore {
 	facade := &SQLiteStore{
 		db: s.db, dialect: s.dialect,
 		coldParent:         s,
-		workspaces:         make(map[string]domain.Bootstrap, len(s.workspaces)),
+		workspaces:         make(map[string]domain.Bootstrap, workspaces),
 		lastWorkspaceKey:   s.lastWorkspaceKey,
 		viewer:             s.viewer,
 		coordinator:        s.coordinator,
@@ -138,8 +161,7 @@ func (s *SQLiteStore) pinColdMetadataRead(ctx context.Context) (*SQLiteStore, ma
 		startupLock:        s.startupLock,
 		startupLockTimeout: s.startupLockTimeout,
 	}
-	// Fresh locks, counters and caches belong to the facade. Service pointers
-	// are loaded explicitly; copying SQLiteStore would also copy live locks.
+	facade.agentRunWake.forward, facade.agentRunCancel.forward = &s.agentRunWake, &s.agentRunCancel
 	facade.realtimeSink.Store(s.realtimeSink.Load())
 	facade.webhookSink.Store(s.webhookSink.Load())
 	facade.accountSink.Store(s.accountSink.Load())
@@ -156,19 +178,5 @@ func (s *SQLiteStore) pinColdMetadataRead(ctx context.Context) (*SQLiteStore, ma
 		via := *s.viewer.Via
 		facade.viewer.Via = &via
 	}
-	sources := make(map[string]*metadataLogicalSource, len(s.workspaces))
-	for workspace := range s.workspaces {
-		if err := ctx.Err(); err != nil {
-			return facade, sources, err
-		}
-		source := r.logical[workspace]
-		if source == nil {
-			return facade, sources, ErrBoundedMetadataCoverage
-		}
-		if err := source.Retain(); err != nil {
-			return facade, sources, err
-		}
-		sources[workspace] = source
-	}
-	return facade, sources, nil
+	return facade
 }

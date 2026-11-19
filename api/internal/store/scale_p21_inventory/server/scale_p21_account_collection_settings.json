@@ -10,6 +10,15 @@
       "temperature": "hot",
       "temperatureReason": "Shared adapter prepared for HOT account-settings consumers.",
       "callers": []
+    },
+    "accountCollections": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "store.AccountCollections reads the installed in-memory image, which a bounded store holds without user settings and passkeys (SW530: GET /api/account/settings answered empty settings). Flag off it calls AccountCollections literally; bounded it copies the same values (workspace existence, the user's settings, passkeys in source order when asked) out of the reviewed BeginAccountCollectionRead before closing it; a failed bounded read reports the workspace missing. Every AccountCollections caller (account settings, passkeys, MFA, commit signing key, comment actions, coding) uses it.",
+      "accessors": ["BeginAccountCollectionRead"],
+      "temperature": "hot",
+      "temperatureReason": "Account settings, passkey and MFA reads are HOT.",
+      "callers": ["server/settings_features.go:getUserSettings", "server/passkeys.go:listPasskeys", "server/mfa.go:accountPasskeys", "server/signing_keys.go:getCommitSigningKey", "server/signing_keys.go:removeCommitSigningKey", "server/comment_actions.go:startCommentActions", "server/comment_actions.go:listCommentActions", "server/coding_adapters.go:CodingUser", "server/coding_llm_proxy.go:userHasLegacySigningKey"]
     }
   }
 }

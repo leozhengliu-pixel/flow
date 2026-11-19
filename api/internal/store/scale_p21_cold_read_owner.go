@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"sync"
+	"time"
 
 	"flow/api/internal/domain"
 )
@@ -42,8 +43,10 @@ func (r *ColdMetadataRead) Close() {
 		r.state.mu.Lock()
 		facade := r.state.facade
 		r.state.mu.Unlock()
-		if facade != nil {
-			facade.mu.Lock()
+		// A writer that panicked while holding the facade's lock (its
+		// install) never returns it: the facade is private to this flow, so
+		// its graph is dropped by reference instead of waiting (SW554).
+		if facade != nil && facade.mu.TryLock() {
 			facade.workspaces, facade.viewer = nil, domain.User{}
 			facade.lastWorkspaceKey = ""
 			facade.coldParent = nil
@@ -99,8 +102,12 @@ func (s *SQLiteStore) BeginColdMetadataRead(ctx context.Context, consumer string
 	if !s.BoundedMetadataEnabled() {
 		return &ColdMetadataRead{context: ctx, literal: s}, nil
 	}
-	if err := validateColdMetadataDispatch(consumer); err != nil {
-		return nil, err
+	// A default COLD request (no registered consumer) borrows its scope's
+	// facade; the route table decided it runs COLD.
+	if consumer != "" || !InColdScope(ctx) {
+		if err := validateColdMetadataDispatch(consumer); err != nil {
+			return nil, err
+		}
 	}
 	return s.beginColdMetadataRead(ctx)
 }
@@ -123,18 +130,22 @@ func (s *SQLiteStore) beginColdMetadataRead(ctx context.Context) (read *ColdMeta
 			return &ColdMetadataRead{context: ctx, state: nested}, nil
 		}
 	}
-	if err := ctx.Err(); err != nil {
+	// The replica's COLD slot: FIFO, bounded queue and wait (coldSlotQueue).
+	queue := r.coldQueue()
+	if err := queue.acquire(ctx); err != nil {
 		return nil, err
 	}
-	r.coldOnce.Do(func() { r.coldSlot = make(chan struct{}, 1) })
-	select {
-	case r.coldSlot <- struct{}{}:
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
+	return s.decodeOwnedColdMetadataRead(ctx, queue.release)
+}
+
+// decodeOwnedColdMetadataRead pins and decodes a facade for a caller that
+// holds the COLD slot; releaseSlot returns it when the read closes (also on
+// failure).
+func (s *SQLiteStore) decodeOwnedColdMetadataRead(ctx context.Context, releaseSlot func()) (read *ColdMetadataRead, err error) {
+	r := s.metadataResidency
 	owned := &ColdMetadataRead{
 		state:       &coldMetadataRead{owner: r},
-		releaseSlot: func() { <-r.coldSlot },
+		releaseSlot: releaseSlot,
 	}
 	defer func() {
 		if err != nil {
@@ -144,6 +155,7 @@ func (s *SQLiteStore) beginColdMetadataRead(ctx context.Context) (read *ColdMeta
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	decodeStarted := time.Now()
 	facade, sources, err := s.pinColdMetadataRead(ctx)
 	owned.state.facade, owned.state.sources = facade, sources
 	if err != nil {
@@ -152,6 +164,8 @@ func (s *SQLiteStore) beginColdMetadataRead(ctx context.Context) (read *ColdMeta
 	if err := facade.decodeColdMetadataRead(ctx, sources); err != nil {
 		return nil, err
 	}
+	coldFacadeDecodes.Add(1)
+	coldFacadeDecodeNanos.Add(int64(time.Since(decodeStarted)))
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

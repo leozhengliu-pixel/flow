@@ -748,6 +748,16 @@ func (s *SQLiteStore) WorkspaceMetadata(workspace string) (domain.Bootstrap, boo
 // WorkspaceMetadataForRead uses the caller's explicit snapshot-buffer lifetime.
 // Callers without one retain the ordinary owned-snapshot behavior.
 func (s *SQLiteStore) WorkspaceMetadataForRead(ctx context.Context, workspace string) (domain.Bootstrap, bool) {
+	if view, release, handled := s.coldAccessorView(ctx, "WorkspaceMetadata", workspace, nil); handled {
+		defer release()
+		if view == nil {
+			return domain.Bootstrap{}, false
+		}
+		return view.WorkspaceMetadataForRead(ctx, view.lastWorkspaceKey)
+	}
+	if s.skeletalRead("WorkspaceMetadata") {
+		return domain.Bootstrap{}, false
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if workspace == "" {

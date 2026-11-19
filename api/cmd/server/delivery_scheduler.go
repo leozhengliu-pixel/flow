@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 const defaultDeliverySchedulerInterval = 5 * time.Second
@@ -21,7 +22,9 @@ func (s *server) startDeliveryScheduler() {
 	if interval <= 0 {
 		interval = defaultDeliverySchedulerInterval
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	// Delivery ticks reach COLD consumers (chat integration ticks, DM reply
+	// jobs): with bounded metadata on they run COLD per operation (SW550).
+	ctx, cancel := context.WithCancel(store.WithColdWork(context.Background(), "delivery-scheduler"))
 	done := make(chan struct{})
 	s.deliverySchedulerMu.Lock()
 	s.deliverySchedulerCancel, s.deliverySchedulerDone = cancel, done

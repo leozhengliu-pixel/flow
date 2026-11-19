@@ -105,6 +105,17 @@ func ArchivedTeamIDs(data domain.Bootstrap) []string {
 }
 
 func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, userID string) (domain.Bootstrap, error) {
+	if coldCapable(ctx) {
+		// A COLD request's projection is the legacy one, from the legacy
+		// view of the installed workspace (scale_p21_default_cold.go).
+		if view, release, handled := s.coldAccessorView(ctx, "PagedWorkspaceMetadata", workspace, nil); handled {
+			defer release()
+			if view == nil {
+				return domain.Bootstrap{}, ErrAuthForbidden
+			}
+			return view.PagedWorkspaceMetadata(ctx, view.lastWorkspaceKey, userID)
+		}
+	}
 	_, data, ok := s.workspaceReadSource(ctx, workspace)
 	if !ok {
 		return data, ErrAuthForbidden

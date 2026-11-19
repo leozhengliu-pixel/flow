@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"flow/api/internal/store"
 )
@@ -13,6 +14,14 @@ type coldAuthorizationMuxKey struct{}
 // Authorization runs before ServeMux fills Request.Pattern. Carry the actual
 // complete mux without selecting or executing a handler before authorization.
 // A cold-only mux could incorrectly claim a more-specific HOT route.
+//
+// Default COLD routing: with bounded metadata on, every request whose route
+// is not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD
+// scope for its whole lifetime, authentication included. Its COLD needs take
+// the replica's COLD slot per operation only (store/scale_p21_default_cold.go)
+// and its projections take the COLD projection gate in place of the
+// projection gate, so a COLD request never holds a slot a HOT request waits
+// for; a proven-bounded route never opens a scope.
 func (s *server) withColdMetadataRouteMux(mux *http.ServeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.store == nil || !s.store.BoundedMetadataEnabled() {
@@ -20,8 +29,46 @@ func (s *server) withColdMetadataRouteMux(mux *http.ServeMux, next http.Handler)
 			return
 		}
 		ctx := context.WithValue(r.Context(), coldAuthorizationMuxKey{}, mux)
+		if _, pattern := mux.Handler(r); pattern != "" && !scaleP21RouteHot(pattern) {
+			var scope *store.ColdScope
+			ctx, scope = store.WithColdScope(ctx, pattern)
+			defer scope.Close()
+			// The COLD projection gate replaces the request's projection
+			// hold: acquireProjection, projectionRefused and the 503 +
+			// Retry-After answers work unchanged.
+			gate := s.coldGate()
+			hold := &projectionHold{gate: gate}
+			defer func() {
+				hold.mu.Lock()
+				held := hold.held
+				hold.held = false
+				hold.mu.Unlock()
+				if held {
+					<-gate.slots
+				}
+			}()
+			ctx = context.WithValue(ctx, projectionHoldKey{}, hold)
+		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// coldGate is the COLD projection gate: COLD requests' projections, bounded
+// apart from HOT ones (FLOW_COLD_PROJECTION_CONCURRENCY, default 2;
+// FLOW_COLD_QUEUE_LIMIT, default 64; FLOW_COLD_QUEUE_TIMEOUT, default 15s).
+func (s *server) coldGate() *metadataReadGate {
+	s.coldProjectionGateOnce.Do(func() {
+		if s.coldProjectionGate == nil {
+			s.coldProjectionGate = newMetadataReadGate(envInt("FLOW_COLD_PROJECTION_CONCURRENCY", 2), envInt("FLOW_COLD_QUEUE_LIMIT", 64), envDuration("FLOW_COLD_QUEUE_TIMEOUT", 15*time.Second), 0)
+		}
+	})
+	return s.coldProjectionGate
+}
+
+// scaleP21RouteHot reports a route proven bounded (SW550). Any other
+// pattern, including one missing from the generated table, runs COLD.
+func scaleP21RouteHot(pattern string) bool {
+	return scaleP21RouteTemperature[pattern] == "hot"
 }
 
 func scaleP21ColdAuthorizationRoute(r *http.Request) (scaleP21ColdRoute, bool) {
@@ -50,7 +97,10 @@ func (s *server) legacyColdAuthorizationRepository(r *http.Request) (*store.SQLi
 	}
 	route, selected := scaleP21ColdAuthorizationRoute(r)
 	if !selected {
-		return s.store, nil
+		// A default COLD request's projection is read from its legacy
+		// view of the installed workspace (no COLD slot); a HOT route's
+		// falls back to the live store, which refuses it.
+		return s.store.ColdRequestView(r.Context(), workspaceKey(r))
 	}
 	scope, ok := r.Context().Value(requestResourceReadsKey{}).(*requestResourceReads)
 	if !ok || scope == nil {

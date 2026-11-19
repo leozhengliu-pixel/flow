@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -52,7 +53,7 @@ func (s *server) accountPasskeys(userID string) []accountPasskey {
 	result := []accountPasskey{}
 	seen := map[string]bool{}
 	for _, workspace := range s.store.WorkspaceKeys() {
-		passkeys, _, ok := s.store.AccountCollections(workspace, userID)
+		passkeys, _, ok := s.accountCollections(context.Background(), workspace, userID, true)
 		if !ok {
 			continue
 		}

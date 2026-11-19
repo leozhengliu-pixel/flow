@@ -20,6 +20,15 @@ type workspaceRead struct {
 // The caller must release it when writing finishes or the request is cancelled.
 func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) (context.Context, func(), error) {
 	scope, scoped := metadataRecordScopeFromContext(ctx)
+	if s.metadataResidency != nil && !scoped && coldCapable(ctx) {
+		// COLD: the legacy snapshot, decoded from SQL in its transaction.
+		if workspace == "" {
+			s.mu.RLock()
+			workspace = s.lastWorkspaceKey
+			s.mu.RUnlock()
+		}
+		return s.coldReceiver().BeginWorkspaceRead(ctx, workspace)
+	}
 	if s.metadataResidency != nil && !scoped {
 		return ctx, nil, fmt.Errorf("%w: an unscoped workspace read must use the compatibility stream", ErrBoundedMetadataCoverage)
 	}

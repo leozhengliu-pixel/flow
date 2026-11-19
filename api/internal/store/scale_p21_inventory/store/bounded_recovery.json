@@ -2,10 +2,10 @@
   "source": "store/bounded_recovery.go",
   "unmigrated": 0,
   "consumers": {
-    "reloadResidentWorkspace": {
+    "reloadResidentWorkspaceLogical": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "SW216 admits the parser and actual retained policy/directory independently around the unchanged transactional stamp, journal and installed-source reload. The public reload no longer holds a redundant blanket policy reservation. Exact warm/stale peer reload, occupied 32 MiB budget, large normalization base, predecode policy denial and cancellation preserve the installed source and release work. SW216 plus SW21 personal-scrub regressions pass normally, twice on persistent SQLite and with race; SW27/SW30/SW33 lifecycle regressions also pass. One actual-header MAX query per logical reload bounds driver allocation before reading strings.",
+      "reason": "SW216 admits the parser and actual retained policy/directory independently around the unchanged transactional stamp, journal and installed-source reload. The public reload no longer holds a redundant blanket policy reservation. Exact warm/stale peer reload, occupied 32 MiB budget, large normalization base, predecode policy denial and cancellation preserve the installed source and release work. SW216 plus SW21 personal-scrub regressions pass normally, twice on persistent SQLite and with race; SW27/SW30/SW33 lifecycle regressions also pass. One actual-header MAX query per logical reload bounds driver allocation before reading strings. reloadResidentWorkspace delegates to it with logical=false; logical=true (a default COLD write publishing a key a test view does not hold yet, SW555) builds the installed logical source instead of the policy-only probe reload.",
       "accessors": ["readMetadataLogicalWorkspaceAdmitted"],
       "temperature": "hot",
       "temperatureReason": "Installed source freshness supports HOT requests and tickers.",

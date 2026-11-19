@@ -9,6 +9,15 @@
       "accessors": [
         "resident-state"
       ]
+    },
+    "installedProjectTemplates": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded BeginProjectTemplatesRead read ProjectTemplates from the resident image, which holds no project templates (SW530: bounded answered null). The exact installed value is decoded from the workspace's installed logical source (BeginInstalledMetadataRead + ResourceRead charge, the AccountCollectionRead pattern) and released with the response. SW530 GET /api/project-templates compares legacy, warm and reloaded.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Serves the HOT project-template list (GET /api/project-templates).",
+      "callers": ["store/scale_p21_sw16_project_templates.go:BeginProjectTemplatesRead"]
     }
   }
 }

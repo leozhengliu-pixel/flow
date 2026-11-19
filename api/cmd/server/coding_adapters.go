@@ -48,7 +48,7 @@ func (d codingDirectory) CodingUser(ctx context.Context, workspaceKey, userID st
 		return coding.UserInfo{}, coding.ErrNotFound
 	}
 	info := coding.UserInfo{ID: user.ID, Name: user.Name, Email: user.Email}
-	if _, settings, ok := d.s.store.AccountCollections(workspaceKey, userID); ok && settings.CommitSigningKey != nil {
+	if _, settings, ok := d.s.accountCollections(ctx, workspaceKey, userID, false); ok && settings.CommitSigningKey != nil {
 		info.SigningFormat = "ssh"
 		if kind := strings.ToLower(settings.CommitSigningKey.Type); strings.Contains(kind, "pgp") || strings.Contains(kind, "gpg") {
 			info.SigningFormat = "openpgp"

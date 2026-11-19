@@ -58,7 +58,7 @@ func (s *server) startCommentActions(r *http.Request, issueID string, comment do
 		if ok && settings.UserID != "" {
 			data.UserSettings = map[string]domain.UserSettings{data.Viewer.ID: settings}
 		}
-	} else if _, settings, ok := s.store.AccountCollections(data.Workspace.URLKey, data.Viewer.ID); ok && settings.UserID != "" {
+	} else if _, settings, ok := s.accountCollections(r.Context(), data.Workspace.URLKey, data.Viewer.ID, false); ok && settings.UserID != "" {
 		data.UserSettings = map[string]domain.UserSettings{data.Viewer.ID: settings}
 	}
 	issue, err := issueByID(&data, issueID)
@@ -316,7 +316,7 @@ func (s *server) listCommentActions(w http.ResponseWriter, r *http.Request) {
 	}
 	data := s.workspaceData(r)
 	data.Viewer = requestActor(s, r)
-	if _, settings, ok := s.store.AccountCollections(data.Workspace.URLKey, data.Viewer.ID); ok && settings.UserID != "" {
+	if _, settings, ok := s.accountCollections(r.Context(), data.Workspace.URLKey, data.Viewer.ID, false); ok && settings.UserID != "" {
 		data.UserSettings = map[string]domain.UserSettings{data.Viewer.ID: settings}
 	}
 	issue, err := issueByID(&data, r.PathValue("id"))

@@ -14,19 +14,45 @@ import (
 type coldWriteMutex struct {
 	local  sync.Mutex
 	shared *coldWriteMutex
+	// A default COLD legacy write (coldLegacyMutation) brings the facade
+	// up to the parent's latest generation right after it takes the shared
+	// lock and publishes its result to the parent right before it returns
+	// the lock, so no other writer runs between its base, its commit and
+	// the parent's image.
+	onLock, onUnlock func()
 }
 
 func (m *coldWriteMutex) Lock() {
 	if m.shared != nil {
 		m.shared.Lock()
+		m.locked()
 		return
 	}
 	m.local.Lock()
 }
 
+// locked runs onLock; if it panics the shared lock is returned first, so a
+// panicking COLD write never leaves the live store's writers locked out.
+func (m *coldWriteMutex) locked() {
+	if m.onLock == nil {
+		return
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			m.shared.Unlock()
+			panic(recovered)
+		}
+	}()
+	m.onLock()
+}
+
 func (m *coldWriteMutex) Unlock() {
 	if m.shared != nil {
-		m.shared.Unlock()
+		// The shared lock is returned even when publication panics.
+		defer m.shared.Unlock()
+		if m.onUnlock != nil {
+			m.onUnlock()
+		}
 		return
 	}
 	m.local.Unlock()
@@ -34,12 +60,18 @@ func (m *coldWriteMutex) Unlock() {
 
 func (m *coldWriteMutex) TryLock() bool {
 	if m.shared != nil {
-		return m.shared.TryLock()
+		if !m.shared.TryLock() {
+			return false
+		}
+		m.locked()
+		return true
 	}
 	return m.local.TryLock()
 }
 
 type coldFullWrite struct {
+	// legacy marks a default COLD legacy write (coldLegacyMutation).
+	legacy    bool
 	parent    *SQLiteStore
 	requested string
 	workspace string
@@ -207,11 +239,20 @@ func (s *SQLiteStore) setColdMetadataRecords(ctx context.Context, data *domain.B
 
 func (s *SQLiteStore) prepareColdFullWrite(ctx context.Context, tx *sqlTx, workspace string, data domain.Bootstrap) (err error) {
 	state := s.coldWrite
+	if state.legacy && state.source == nil {
+		// A default COLD legacy writer that never selected an installed
+		// base (anything but the integrated writers) publishes through the
+		// parent's reload (coldLegacyMutation).
+		return nil
+	}
 	if state.prepared != nil || state.source == nil {
 		return ErrMetadataRecordQuery
 	}
-	if data.Issues != nil || data.Activities != nil || data.Comments != nil ||
-		data.Notifications != nil || data.NotificationDeliveries != nil {
+	// A default COLD legacy write persisted its issue and content records
+	// in this transaction, exactly as legacy; only the metadata image is
+	// published (collectionMetadata below drops the record collections).
+	if !coldLegacyWrite(ctx) && (data.Issues != nil || data.Activities != nil || data.Comments != nil ||
+		data.Notifications != nil || data.NotificationDeliveries != nil) {
 		return fmt.Errorf("%w: cold metadata callback changed external collections", ErrBoundedMetadataCoverage)
 	}
 	builder, err := newMetadataLogicalBuilder(metadataLogicalSourceScratchContext(ctx, state.source))

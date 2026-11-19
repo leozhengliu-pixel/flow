@@ -48,6 +48,10 @@ type server struct {
 	metadataGate *metadataReadGate
 	// projectionGate bounds resource requests that build the viewer's projection (projection_gate.go).
 	projectionGate *metadataReadGate
+	// coldProjectionGate bounds COLD requests' projections apart from HOT
+	// ones (scale_p21_cold_authorization.go).
+	coldProjectionGate     *metadataReadGate
+	coldProjectionGateOnce sync.Once
 	// coding is the coding-session runtime (coding_runtime.go).
 	coding *codingServices
 	// agentAutoTitle names new Agent chats with a small extra model call (off in test fixtures).
@@ -297,11 +301,13 @@ func main() {
 	// Other replicas look here for this release's assets once it serves pages.
 	startSharedAssetPublish(s.staticPath, applicationConfig.Assets, 30*time.Second)
 	go s.runCoding(shutdownSignal)
-	go s.runApplicationAgentWorker(shutdownSignal)
+	// Background work that reaches COLD consumers runs COLD per operation
+	// with bounded metadata on (SW550 background roots).
+	go s.runApplicationAgentWorker(store.WithColdWork(shutdownSignal, "application-agent-worker"))
 	go s.runRecurringIssueScheduler(shutdownSignal)
-	go s.runReviewImportScheduler(shutdownSignal)
+	go s.runReviewImportScheduler(store.WithColdWork(shutdownSignal, "review-import-scheduler"))
 	go s.runPersonalConnectionScheduler(shutdownSignal)
-	go s.runStorageMaintenance(shutdownSignal, applicationConfig.Retention.DomainEvents)
+	go s.runStorageMaintenance(store.WithColdWork(shutdownSignal, "storage-maintenance"), applicationConfig.Retention.DomainEvents)
 	go s.resealStoredSecrets(shutdownSignal)
 	go func() {
 		<-shutdownSignal.Done()
@@ -7374,6 +7380,10 @@ func optionalQueryBool(w http.ResponseWriter, r *http.Request, key string) (*boo
 	return &parsed, true
 }
 func respondMutation(w http.ResponseWriter, err error, success int, value any) {
+	if errors.Is(err, store.ErrColdMetadataBusy) {
+		(&metadataReadGate{}).busy(w, store.ColdMetadataBusyRetryAfter)
+		return
+	}
 	if errors.Is(err, store.ErrAuthForbidden) {
 		writeError(w, http.StatusForbidden, "You don't have permission to perform this action")
 		return
