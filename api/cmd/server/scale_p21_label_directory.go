@@ -25,7 +25,6 @@ import (
 // does; any other key keeps the viewer's counts.
 func (s *server) listLabelsBounded(w http.ResponseWriter, r *http.Request, keep func(domain.IssueLabel) bool) {
 	workspace := workspaceKey(r)
-	ctx := r.Context()
 	userID := ""
 	var key *domain.APIKey
 	var handed *domain.Bootstrap
@@ -53,10 +52,19 @@ func (s *server) listLabelsBounded(w http.ResponseWriter, r *http.Request, keep 
 	// A concurrent access change (another request's key use stamp, a
 	// membership edit) restarts the read on the changed access, as the
 	// other bounded resource reads do; the literal read has no such check.
-	var read *store.ResourceDirectoryRead
+	// Each label load revalidates the access, so a change that lands while
+	// the labels are visited restarts the whole read too: nothing is
+	// written before the list is complete.
+	var result []domain.IssueLabel
 	var err error
 	for attempt := 0; attempt < 3; attempt++ {
-		read, err = s.store.BeginResourceDirectoryRead(ctx, workspace, userID, key, "labels", handed)
+		var read *store.ResourceDirectoryRead
+		read, result, err = s.readLabelsBounded(r, workspace, userID, key, handed, access, keep)
+		if err == nil {
+			// The list's reservation stays held until it is written.
+			defer read.Close()
+			break
+		}
 		if !errors.Is(err, store.ErrResourceAccessChanged) {
 			break
 		}
@@ -65,11 +73,26 @@ func (s *server) listLabelsBounded(w http.ResponseWriter, r *http.Request, keep 
 		s.labelsBoundedError(w, err)
 		return
 	}
-	defer read.Close()
+	writeJSON(w, http.StatusOK, result)
+}
+
+// readLabelsBounded is one attempt of listLabelsBounded: the directory read,
+// its counts and the visited labels. On success the caller closes the
+// returned read once the list is written; on an error it is closed here.
+func (s *server) readLabelsBounded(r *http.Request, workspace, userID string, key *domain.APIKey, handed *domain.Bootstrap, access *store.IssueRecordAccess, keep func(domain.IssueLabel) bool) (_ *store.ResourceDirectoryRead, _ []domain.IssueLabel, err error) {
+	ctx := r.Context()
+	read, err := s.store.BeginResourceDirectoryRead(ctx, workspace, userID, key, "labels", handed)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if err != nil {
+			read.Close()
+		}
+	}()
 	issues, err := s.store.VisibleLabelIssueCounts(ctx, read.Data.Workspace.URLKey, access, nil)
 	if err != nil {
-		s.labelsBoundedError(w, err)
-		return
+		return nil, nil, err
 	}
 	counts := labelResourceCounts(read.Data, issues)
 	if !s.authDisabled {
@@ -77,8 +100,7 @@ func (s *server) listLabelsBounded(w http.ResponseWriter, r *http.Request, keep 
 		if key != nil && apiKeyTeamRestrictionSelected(*key) {
 			issues, err = s.store.VisibleLabelIssueCounts(ctx, read.Data.Workspace.URLKey, access, key.TeamIDs)
 			if err != nil {
-				s.labelsBoundedError(w, err)
-				return
+				return nil, nil, err
 			}
 			counts = labelResourceCounts(read.Data, issues)
 		}
@@ -104,10 +126,9 @@ func (s *server) listLabelsBounded(w http.ResponseWriter, r *http.Request, keep 
 		return nil
 	})
 	if err != nil {
-		s.labelsBoundedError(w, err)
-		return
+		return nil, nil, err
 	}
-	writeJSON(w, http.StatusOK, result)
+	return read, result, nil
 }
 
 // labelResourceCounts is refreshResourceCounts' label counts of data (whose
