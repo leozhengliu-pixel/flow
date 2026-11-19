@@ -76,10 +76,16 @@ func TestScaleP21SW17NativeSearchRepairDifferential(t *testing.T) {
 			}
 			repair()
 			var mismatches, total, retainedNeedle int
-			if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM workspace_metadata_records r LEFT JOIN metadata_search_documents d
+			if source.dialect == "mysql" {
+				// MySQL repairs write the application's text (SW470).
+				mismatches = sw17SearchApplicationTextMismatches(t, f, workspace)
+			} else if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM workspace_metadata_records r LEFT JOIN metadata_search_documents d
 				ON d.workspace_key=r.workspace_key AND d.field=r.field AND d.record_key=r.record_key
-				WHERE r.workspace_key=? AND r.field='projects' AND (d.record_key IS NULL OR d.content<>`+source.metadataSearchContent("r.data")+`)`, workspace).Scan(&mismatches); err != nil || mismatches != 0 {
-				t.Fatalf("search repair mismatches=%d err=%v", mismatches, err)
+				WHERE r.workspace_key=? AND r.field='projects' AND (d.record_key IS NULL OR d.content<>`+source.metadataSearchContent("r.data")+`)`, workspace).Scan(&mismatches); err != nil {
+				t.Fatal(err)
+			}
+			if mismatches != 0 {
+				t.Fatalf("search repair mismatches=%d", mismatches)
 			}
 			if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM metadata_search_documents WHERE workspace_key=? AND field='projects'`, workspace).Scan(&total); err != nil || total != 270 {
 				t.Fatalf("search repair rows=%d err=%v", total, err)
@@ -113,4 +119,32 @@ func TestScaleP21SW17NativeSearchRepairDifferential(t *testing.T) {
 		bounded.metadataResidency.work.used != 0 || hash() != before {
 		t.Fatal("cancelled native repair changed canonical metadata or leaked admission", err)
 	}
+}
+
+// sw17SearchApplicationTextMismatches counts the projects of workspace whose
+// search document is missing or differs from the application's text.
+func sw17SearchApplicationTextMismatches(t *testing.T, f scaleP09Fixture, workspace string) int {
+	t.Helper()
+	rows, err := f.db.QueryContext(t.Context(), `SELECT r.data,d.content FROM workspace_metadata_records r LEFT JOIN metadata_search_documents d
+		ON d.workspace_key=r.workspace_key AND d.field=r.field AND d.record_key=r.record_key
+		WHERE r.workspace_key=? AND r.field='projects'`, workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	mismatches := 0
+	for rows.Next() {
+		var raw []byte
+		var content *string
+		if err := rows.Scan(&raw, &content); err != nil {
+			t.Fatal(err)
+		}
+		if content == nil || *content != capSearchText(metadataSearchText(raw), f.db.searchMaxChars) {
+			mismatches++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return mismatches
 }
