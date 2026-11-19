@@ -2,18 +2,17 @@
   "source": "server/scale_p21_label_directory.go",
   "unmigrated": 0,
   "consumers": {
-    "listLabelsBounded": {
+    "readLabelsBounded": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Replays workspaceData BootstrapForUser + filterBootstrapForAPIKey for labels without a full decode: labels, projects and initiatives come from the reviewed BeginResourceDirectoryRead (the projectBootstrapForUser viewer projection of the installed source, or the handed-off authorization projection), each surviving label loaded whole in source order; issueCount replays refreshResourceCounts as the visible unarchived issues carrying the label (VisibleLabelIssueCounts over the request issue access: team visibility, issue grants, archived teams) plus unarchived projects and initiatives carrying it, each resource counting a label once; a team-restricted key recounts after its narrowing as applyAPIKeyProjection does. TestScaleP21SW600LabelRoutes (legacy vs warm vs SQL-reloaded, zero full decodes).",
+      "reason": "Replays workspaceData BootstrapForUser + filterBootstrapForAPIKey for labels without a full decode: labels, projects and initiatives come from the reviewed BeginResourceDirectoryRead (the projectBootstrapForUser viewer projection of the installed source, or the handed-off authorization projection), each surviving label loaded whole in source order; issueCount replays refreshResourceCounts as the visible unarchived issues carrying the label (VisibleLabelIssueCounts over the request issue access: team visibility, issue grants, archived teams) plus unarchived projects and initiatives carrying it, each resource counting a label once; a team-restricted key recounts after its narrowing as applyAPIKeyProjection does. One attempt of listLabelsBounded, which restarts it (up to three attempts) when the access changes during the read. TestScaleP21SW600LabelRoutes (legacy vs warm vs SQL-reloaded, zero full decodes).",
       "accessors": [
         "BeginResourceDirectoryRead"
       ],
       "temperature": "hot",
       "temperatureReason": "Shared bounded label list for the HOT label settings reads.",
       "callers": [
-        "server/settings_features.go:listWorkspaceLabels",
-        "server/notifications_workflow.go:listTeamLabels"
+        "server/scale_p21_label_directory.go:listLabelsBounded"
       ]
     }
   }
