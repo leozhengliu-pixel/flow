@@ -119,6 +119,15 @@ func (f scaleP21TeamCreateFixture) sw450Differential(t *testing.T, name string, 
 			if json.Unmarshal([]byte(text), &item) != nil {
 				continue
 			}
+			// The use stamp of a key the request authenticated with is written
+			// asynchronously (RecordAPIKeyUse's worker) and races the route's own
+			// metadata write in both modes: a stamp from this request is not
+			// part of the route's answer.
+			if stamp, ok := item["lastUsedAt"].(string); ok {
+				if at, err := time.Parse(time.RFC3339Nano, stamp); err == nil && !at.Before(started) {
+					delete(item, "lastUsedAt")
+				}
+			}
 			if item["teamRestriction"] == nil {
 				item["teamRestriction"] = "all"
 				if teams, _ := item["teamIds"].([]any); len(teams) > 0 {
