@@ -78,13 +78,15 @@ func TestScaleP21SW19GitLabConfigsInstalledDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// The probe's legacy accessor now answers from a legacy view of its
-		// installed logical source (where the connection's unknown CreatedAt
-		// Location stays opaque while warm); the oracle is each store's
-		// resident image, which the installed projection selects.
+		// The oracle is the legacy owner's image: the bounded view's image
+		// holds no connections, so its read decodes them from the installed
+		// logical source (SW559; it read the empty image before).
 		for _, source := range []*SQLiteStore{f.SQLiteStore, probe} {
 			for _, key := range []string{workspace, "", workspace + "-missing", strings.ToUpper(workspace)} {
-				before, found := scaleP21ResidentOracle(source, key)
+				before, found := scaleP21ResidentOracle(f.SQLiteStore, key)
+				if _, resident := scaleP21ResidentOracle(source, key); resident != found {
+					t.Fatal(stage, "bounded view and owner disagree on the workspace", key)
+				}
 				expectedWorkspace, expected := scaleP21SW19GitLabConfigProjection(before)
 				read, actualFound, err := source.BeginGitLabConnectionConfigsRead(t.Context(), key)
 				if err != nil || actualFound != found {

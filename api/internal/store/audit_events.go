@@ -847,12 +847,12 @@ func (s *SQLiteStore) VerifyAuditChain(ctx context.Context, workspaceID string) 
 func (s *SQLiteStore) MigrateLegacyAuditLog(ctx context.Context) error {
 	moved := 0
 	for _, key := range s.WorkspaceKeys() {
-		if data, ok := s.storedWorkspace(key); !ok || len(data.AuditLog) == 0 {
+		if !s.legacyAuditLogPending(ctx, key) {
 			continue
 		}
 		var count int
 		err := s.rerunBackgroundWrite(ctx, "audit log migration", key, func() (err error) {
-			count, err = s.migrateWorkspaceAuditLog(ctx, key)
+			count, err = s.migrateWorkspaceAuditLogWrite(ctx, key)
 			return err
 		})
 		if err != nil {
@@ -864,6 +864,34 @@ func (s *SQLiteStore) MigrateLegacyAuditLog(ctx context.Context) error {
 		slog.Info("moved audit log entries into the audit_events table", "entries", moved)
 	}
 	return nil
+}
+
+// legacyAuditLogPending reports whether the workspace document still holds
+// audit entries. A bounded image holds no audit log, so the maintenance pass
+// never moved the entries an older server left (SW559): bounded, the entries
+// are read from the workspace's legacy view.
+func (s *SQLiteStore) legacyAuditLogPending(ctx context.Context, key string) bool {
+	if view, release, handled := s.coldAccessorView(ctx, "MigrateLegacyAuditLog", key, []string{"auditLog"}); handled {
+		defer release()
+		return view != nil && view.legacyAuditLogPending(ctx, view.lastWorkspaceKey)
+	}
+	data, ok := s.storedWorkspace(key)
+	return ok && len(data.AuditLog) != 0
+}
+
+// migrateWorkspaceAuditLogWrite moves one workspace's entries. A bounded
+// store runs the literal legacy move on a COLD facade, which holds the
+// complete workspace, and publishes its result (coldLegacyWrite).
+func (s *SQLiteStore) migrateWorkspaceAuditLogWrite(ctx context.Context, key string) (count int, err error) {
+	if s.metadataResidency == nil || s.coldParent != nil {
+		return s.migrateWorkspaceAuditLog(ctx, key)
+	}
+	err = s.coldLegacyWrite(ctx, key, func(ctx context.Context, facade *SQLiteStore) error {
+		var err error
+		count, err = facade.migrateWorkspaceAuditLog(ctx, key)
+		return err
+	})
+	return count, err
 }
 
 func (s *SQLiteStore) migrateWorkspaceAuditLog(ctx context.Context, key string) (int, error) {

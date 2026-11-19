@@ -1,6 +1,6 @@
 {
   "source": "store/member_directory.go",
-  "unmigrated": 1,
+  "unmigrated": 2,
   "consumers": {
     "FormerMembers": {
       "owner": "P21",
@@ -23,6 +23,18 @@
       "callers": [
         "store/SQLiteStore.syncMemberDirectoryLogged",
         "store/SQLiteStore.migrateMemberDirectory"
+      ]
+    },
+    "memberDirectorySource": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Member joins, sign-ins and the startup directory migration (syncMemberDirectory); flag off it reads the image, bounded the users field of the legacy view (coldAccessorView, SW559)",
+      "callers": [
+        "store/SQLiteStore.syncMemberDirectory"
       ]
     }
   }
