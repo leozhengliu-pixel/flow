@@ -14,8 +14,7 @@
 # Topologies: sqlite = one replica on SQLite; pg2 = two replicas on PostgreSQL (container loadrig-pg) with Redis
 # coordination (container loadrig-redis when the redis:7-alpine image is present, else an in-memory Redis process).
 # Both flag states run with FLOW_RECORD_HYDRATION=on, FLOW_RECORD_JOURNAL=on and FLOW_SYNC_V2=on; "on" adds
-# FLOW_BOUNDED_METADATA=on. A loadtest build may start the flag while COLD consumers are still registered as
-# unmigrated (FLOW_LOADRIG_ALLOW_COLD_UNMIGRATED=1, HOT inventory must be empty); production builds refuse.
+# FLOW_BOUNDED_METADATA=on, which starts once every HOT consumer is migrated (COLD ones run on the COLD facade).
 #
 # Settings (environment): LOADRIG_HOME (~/.flow-local/live/loadrig), LOADRIG_PORT_BASE (47610), SCALE (1), VUS (10), DURATION (60s), WARMUP (5s),
 # LOADRIG_API_PORT (port base, +1 for the second replica), LOADRIG_METRIC_PORT (port base+10), THINK (300ms), STREAMS (VUS/2), MIX (op=weight,...), MODEL (fake|proxy|off; fake = local fake model, proxy = the
@@ -184,7 +183,7 @@ cmd_seed() {
   log "seeding $topology at scale $scale"
   # shellcheck disable=SC2046
   (cd "$HOME_DIR" && env $(db_env "$topology" seed) FLOW_LOADRIG_SEED=1 FLOW_LOADRIG_OUT="$DATA/$topology-out" FLOW_LOADRIG_SCALE="$scale" \
-    FLOW_RECORD_HYDRATION=on FLOW_RECORD_JOURNAL=on FLOW_SYNC_V2=on FLOW_LOADRIG_ALLOW_COLD_UNMIGRATED=1 FLOW_WORKSPACE_TUTORIAL=off \
+    FLOW_RECORD_HYDRATION=on FLOW_RECORD_JOURNAL=on FLOW_SYNC_V2=on FLOW_WORKSPACE_TUTORIAL=off \
     GOMAXPROCS="${GOMAXPROCS_SEED:-4}" GOMEMLIMIT="${GOMEMLIMIT_SEED:-3GiB}" \
     "$BIN/loadrig.test" -test.run '^TestLoadRigSeed$' -test.v -test.timeout 4h) 2>&1 | tee "$REPORTS/seed-$topology.log" | grep -E '^(=== RUN|--- |\s+loadrig_seed_test.go|PASS|FAIL|ok|panic)' | cut -c1-300 >&2 || true
   [ -f "$DATA/$topology-out/fixture.json" ] || die "seed failed"
@@ -220,7 +219,7 @@ cmd_start() {
     env $(db_env "$topology" run) $redis_env $(model_env) \
       FLOW_HTTP_ADDR="127.0.0.1:$port" FLOW_APP_URL="http://127.0.0.1:$port" FLOW_STORAGE_LOCAL_PATH="$RUN/uploads" FLOW_WORKSPACE_TUTORIAL=off \
       FLOW_RECORD_HYDRATION=on FLOW_RECORD_JOURNAL=on FLOW_SYNC_V2=on FLOW_RECORD_SPOOL_MAX_BYTES=268435456 \
-      FLOW_BOUNDED_METADATA="$flag" FLOW_LOADRIG_ALLOW_COLD_UNMIGRATED=1 FLOW_LOADRIG_METRICS_ADDR="127.0.0.1:$mport" \
+      FLOW_BOUNDED_METADATA="$flag" FLOW_LOADRIG_METRICS_ADDR="127.0.0.1:$mport" \
       GOMAXPROCS="${GOMAXPROCS_REPLICA:-4}" GOMEMLIMIT="${GOMEMLIMIT_REPLICA:-1536MiB}" ${EXTRA_ENV:-} \
       "$BIN/flow-server" >"$RUN/replica-$index.log" 2>&1 &
     echo $! > "$RUN/replica-$index.pid"

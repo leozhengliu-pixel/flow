@@ -9,23 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 )
 
 // The bounded-metadata load rig (scripts/loadrig, cmd/server/loadrig_*).
 // Built only with -tags loadtest; production builds contain none of this.
-
-func init() {
-	// FLOW_LOADRIG_ALLOW_COLD_UNMIGRATED=1 lets a load-test build start
-	// FLOW_BOUNDED_METADATA while COLD consumers are still registered as
-	// unmigrated (default-COLD routing serves them). The HOT inventory must
-	// be empty, and every other activation check (record hydration, journal,
-	// CRDT runtime, peer shadow) still applies.
-	if os.Getenv("FLOW_LOADRIG_ALLOW_COLD_UNMIGRATED") == "1" {
-		loadRigAllowColdConsumers = true
-	}
-}
 
 // LoadRigColdCounters reports the process-wide bounded-metadata counters
 // the load rig samples: COLD slot use and waits, COLD facade and legacy-view

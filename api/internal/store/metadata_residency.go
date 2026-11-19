@@ -52,21 +52,17 @@ func boundedMetadataRequested() bool {
 	return false
 }
 
-// loadRigAllowColdConsumers is set only by the load-test rig build
-// (loadrig.go, -tags loadtest, FLOW_LOADRIG_ALLOW_COLD_UNMIGRATED=1). It is
-// always false in production builds.
-var loadRigAllowColdConsumers bool
-
 func validateBoundedMetadataCoverage() error {
 	if _, err := metadataConsumerReviews(); err != nil {
 		return fmt.Errorf("%w: %w", ErrBoundedMetadataCoverage, err)
 	}
-	consumers := metadataFullWorkspaceConsumers()
-	if len(consumers) != 0 && loadRigAllowColdConsumers && len(registeredHotMetadataConsumers()) == 0 {
-		// Load-test builds only (-tags loadtest): measure default-COLD routing
-		// while COLD consumers are still registered; every other check holds.
-		consumers = nil
-	}
+	// Activation needs every HOT consumer migrated. An unmigrated consumer
+	// reviewed as COLD (with a reason) keeps its legacy full-workspace
+	// behaviour: its routes run on the COLD scope (default-COLD routing,
+	// SW530/SW550) and its background work under WithColdWork, one COLD slot
+	// per replica, and the store refuses a whole-workspace read outside a
+	// COLD facade (SW531).
+	consumers := registeredHotMetadataConsumers()
 	if len(consumers) != 0 {
 		owners := []string{}
 		for _, consumer := range consumers {
