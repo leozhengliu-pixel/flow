@@ -44,8 +44,19 @@ func scaleP21SW24ConsentWireOutcome(w *httptest.ResponseRecorder) any {
 
 func scaleP21SW24ConsentWireCompare(t *testing.T, service *server, request *http.Request) *httptest.ResponseRecorder {
 	t.Helper()
+	return scaleP21SW24ConsentWireCompareWith(t, service, service, request)
+}
+
+// scaleP21SW24ConsentWireCompareWith answers the literal handler from
+// oracle. A bounded store's legacy whole-workspace accessor reads a legacy
+// view of its installed logical source, not its resident image (default
+// COLD routing): the source's opaque time Locations answer missing there,
+// and installed values replaced in place are not seen. The literal output
+// for a bounded store is the flag-off owner's over the same image.
+func scaleP21SW24ConsentWireCompareWith(t *testing.T, oracle, service *server, request *http.Request) *httptest.ResponseRecorder {
+	t.Helper()
 	left, right := httptest.NewRecorder(), httptest.NewRecorder()
-	service.scaleP21SW24OldConsentTeams(left, request.Clone(request.Context()))
+	oracle.scaleP21SW24OldConsentTeams(left, request.Clone(request.Context()))
 	service.applicationConsentTeams(right, request.Clone(request.Context()))
 	if !reflect.DeepEqual(scaleP21SW24ConsentWireOutcome(left), scaleP21SW24ConsentWireOutcome(right)) {
 		t.Fatalf("literal consent wire changed bounded=%v: old=%v new=%v", service.store.BoundedMetadataEnabled(), scaleP21SW24ConsentWireOutcome(left), scaleP21SW24ConsentWireOutcome(right))
@@ -98,7 +109,7 @@ func TestScaleP21SW24ConsentWireMatrix(t *testing.T) {
 					for _, cancelled := range []bool{false, true} {
 						service := &server{store: source}
 						r := scaleP21SW24ConsentWireRequest(user, key, workspace, role, cancelled)
-						response := scaleP21SW24ConsentWireCompare(t, service, r)
+						response := scaleP21SW24ConsentWireCompareWith(t, &server{store: repo}, service, r)
 						want := http.StatusForbidden
 						if workspaceAdminRole(role) {
 							want = http.StatusOK
@@ -152,32 +163,37 @@ func TestScaleP21SW24ConsentWireTimestampErrors(t *testing.T) {
 			base.In(time.FixedZone("invalid-positive", 86400)),
 			base.In(time.FixedZone("invalid-negative", -86400)),
 		}
-		for _, source := range []*store.SQLiteStore{repo, probe} {
+		slots := func(source *store.SQLiteStore) []*time.Time {
 			metadata, found := source.IssueAccessMetadata(t.Context(), workspace)
 			if !found {
 				t.Fatal("installed time fixture missing")
 			}
-			var target *domain.Team
 			for index := range metadata.Teams {
-				if metadata.Teams[index].ID == id {
-					target = &metadata.Teams[index]
+				if target := &metadata.Teams[index]; target.ID == id {
+					return []*time.Time{target.RetiredAt, target.ArchivedAt, target.CreatedAt, target.UpdatedAt}
 				}
 			}
-			if target == nil {
-				t.Fatal("installed time target missing")
-			}
+			t.Fatal("installed time target missing")
+			return nil
+		}
+		owner := slots(repo)
+		oracle := &server{store: repo}
+		for _, source := range []*store.SQLiteStore{repo, probe} {
 			// IssueAccessMetadata exposes the installed timestamp pointers.
 			// Replace them only for this same-source wire/error fixture, then
-			// restore before any database write or fixture cleanup.
-			for _, slot := range []*time.Time{target.RetiredAt, target.ArchivedAt, target.CreatedAt, target.UpdatedAt} {
-				saved := *slot
-				defer func() { *slot = saved }()
+			// restore before any database write or fixture cleanup. The
+			// literal output is the flag-off owner's, so a bounded source's
+			// replacement is mirrored into the owner's image.
+			for index, slot := range slots(source) {
+				mirror := owner[index]
+				saved, savedMirror := *slot, *mirror
+				defer func() { *slot, *mirror = saved, savedMirror }()
 				for _, when := range cases {
-					*slot = when
+					*slot, *mirror = when, when
 					for _, cancelled := range []bool{false, true} {
 						service := &server{store: source}
 						r := scaleP21SW24ConsentWireRequest(f.data.Viewer, nil, workspace, "admin", cancelled)
-						response := scaleP21SW24ConsentWireCompare(t, service, r)
+						response := scaleP21SW24ConsentWireCompareWith(t, oracle, service, r)
 						if response.Code != http.StatusOK {
 							t.Fatal("encoding-error status was normalized")
 						}
@@ -185,12 +201,12 @@ func TestScaleP21SW24ConsentWireTimestampErrors(t *testing.T) {
 							t.Fatal("invalid timestamp did not preserve empty JSON output")
 						}
 						denied := scaleP21SW24ConsentWireRequest(f.data.Viewer, nil, workspace, "member", cancelled)
-						if got := scaleP21SW24ConsentWireCompare(t, service, denied); got.Code != http.StatusForbidden {
+						if got := scaleP21SW24ConsentWireCompareWith(t, oracle, service, denied); got.Code != http.StatusForbidden {
 							t.Fatal("role check moved after wire validation")
 						}
 					}
 				}
-				*slot = saved
+				*slot, *mirror = saved, savedMirror
 			}
 		}
 		if probe.WorkspaceMetadataDecodes() != 0 {
