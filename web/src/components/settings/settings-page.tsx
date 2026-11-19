@@ -330,6 +330,8 @@ type SettingsPageProps = {
   apiView?: "keys";
   usageView?: UsageSettingsView;
   onOpenUsageView?: (view?: UsageSettingsView) => void;
+  /** The workspace on screen is a cached snapshot that no bootstrap has confirmed yet. */
+  snapshotPending?: boolean;
   webhookId?: string;
   releasePipelineSlug?: string;
   integrationProvider?: IntegrationProvider;
@@ -994,7 +996,9 @@ function SettingsBody(
         <span>{t(hiddenSettingsMessage(props.page))}</span>
       </div>
     );
-  const body = <SettingsBodyContent {...props} />;
+  // Forms and editors copy the record they edit when they mount. The page painted from a cached workspace snapshot
+  // mounts them again once the confirming bootstrap arrives, so none of them keeps the cached copy.
+  const body = <SettingsBodyContent key={props.snapshotPending ? "cached" : "confirmed"} {...props} />;
   return access.kind === "read" ? <ReadOnlySettings notice={access.notice} name={chat.name} banner={props.page === "team"}>{body}</ReadOnlySettings> : body;
 }
 
