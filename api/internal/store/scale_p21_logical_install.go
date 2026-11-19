@@ -66,6 +66,10 @@ func (s *SQLiteStore) installMetadataLogicalSource(workspace string, candidate *
 		r.logical = map[string]*metadataLogicalSource{}
 	}
 	previous := r.logical[workspace]
+	if previous != nil && previous.behind.Load() && candidate.Stamp().revision < 0 {
+		// A patch of a generation that lacks a peer's commit still lacks it.
+		candidate.behind.Store(true)
+	}
 	r.logical[workspace] = candidate
 	if len(last) != 0 && last[0] {
 		s.lastWorkspaceKey = workspace

@@ -144,6 +144,12 @@ type scaleP21SW500Call struct {
 	// unowned runs the call without an outer metadata output owner, as the
 	// production ticker does (it opens one per due item).
 	unowned bool
+	// peer: another server committed after the writer's image was installed.
+	// The literal writer keeps its stale copy at an unknown revision (the
+	// next check reloads it), while the bounded writer reloads its image
+	// from SQL after the commit: the installed fields are compared with the
+	// SQL reload (scaleP21SW580Installed) instead of with the literal copy.
+	peer    bool
 	wrap    func(context.Context) context.Context
 	observe func()
 	run     func(context.Context) (domain.WorkflowRun, error)
@@ -239,6 +245,16 @@ func (env *scaleP21SW500Env) reset(t *testing.T, test scaleP21SW500Case, seed fu
 		t.Fatal(err)
 	}
 	scaleP21SW201Exec(t, env.database, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, env.baseline.NextIssueNumber-1, env.workspace)
+	// A server's copy is exact at its stored revision once loaded, and a
+	// peer's commit then provably moves the stored revision past it. A
+	// fixture write on a copy left at an unknown revision (a previous peer
+	// race, or none loaded yet) stays unknown: peer cases load it, so their
+	// warm images start exact whatever ran before (a current copy is kept).
+	if test.peer != nil {
+		if err := env.repo.ReloadWorkspace(t.Context(), env.workspace); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // source returns the mode's writer. Reloaded modes advance the metadata
@@ -452,8 +468,10 @@ func (env *scaleP21SW500Env) outcome(t *testing.T, source *store.SQLiteStore, ca
 	// The installed workflow fields: the literal writer's snapshot, the
 	// bounded writer's installed image.
 	var installed any
-	if err := json.Unmarshal(scaleP21WriterInstalled(t, env.workspace, source, []string{"workflowDefinitions", "workflowRuns"}), &installed); err != nil {
-		t.Fatal(err)
+	if !call.peer {
+		if err := json.Unmarshal(scaleP21WriterInstalled(t, env.workspace, source, []string{"workflowDefinitions", "workflowRuns"}), &installed); err != nil {
+			t.Fatal(err)
+		}
 	}
 	result.normalized = normalize(got, map[string]any{"run": result.run, "error": scaleP21SW500ErrorClass(result.err), "metadata": metadata, "installed": installed})
 	result.state = normalize(scaleP21SW59Outcome{Header: make(http.Header), Rows: got.Rows, Events: got.Events}, metadata)
@@ -481,7 +499,7 @@ func (env *scaleP21SW500Env) runCase(t *testing.T, test scaleP21SW500Case) {
 				resourceType, resourceID = "issue", env.issue.ID
 			}
 			service := &server{store: source}
-			result := env.outcome(t, source, scaleP21SW500Call{aggregates: []string{env.workflowID}, schedules: []string{test.schedule},
+			result := env.outcome(t, source, scaleP21SW500Call{aggregates: []string{env.workflowID}, schedules: []string{test.schedule}, peer: test.peer != nil,
 				run: func(ctx context.Context) (domain.WorkflowRun, error) {
 					return service.runWorkflow(ctx, env.workspace, env.workflowID, firstNonEmpty(test.trigger, "manual"), resourceType, resourceID, test.dueOnly)
 				}})
@@ -518,7 +536,11 @@ func (env *scaleP21SW500Env) runCase(t *testing.T, test scaleP21SW500Case) {
 				if full := result.full != 0; full != test.full {
 					t.Fatalf("workflow case %s/%s: full-image attempts %d, want full=%v", test.name, mode, result.full, test.full)
 				}
-				if result.err == nil && test.peer == nil {
+				// A write that lost a race to a peer leaves an installed
+				// image equal to the SQL reload too. A retry refused after
+				// its conflict refresh (not due) installs only that refresh,
+				// which these peers' edits are confined to.
+				if result.err == nil || test.peer != nil {
 					scaleP21SW580Installed(t, env, source)
 				}
 			}

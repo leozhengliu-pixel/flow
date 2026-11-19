@@ -38,6 +38,12 @@ type metadataLogicalSource struct {
 	stamp  copyStamp
 	fields []metadataLogicalNode
 	stores []*metadataLogicalStorage
+	// behind: this generation is known to lack another server's commit. A
+	// conflict refresh replaced only the records the lost race named, so the
+	// rest of that commit (records it added, removed or changed beside them)
+	// is missing here. A publication derived from it reloads the generation
+	// from SQL instead (installedGenerationBehind).
+	behind atomic.Bool
 }
 
 // Storage owners contain no parent-generation links, so sharing an unchanged
