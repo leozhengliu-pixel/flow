@@ -79,6 +79,9 @@ func (s *server) pipelineForAccessKey(ctx context.Context, secret, pipelineID st
 	for _, key := range s.store.WorkspaceKeys() {
 		if s.store.BoundedMetadataEnabled() {
 			id, ok, err := s.store.ReleasePipelineForKeyHash(ctx, key, secretHash(secret), pipelineID, now)
+			if s.skipUncoveredWorkspace("Release pipeline key lookup", key, err) {
+				continue
+			}
 			if err != nil {
 				return "", "", false, err
 			}

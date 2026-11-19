@@ -545,7 +545,7 @@
         "resident-state"
       ]
     },
-    "createWorkspace": {
+    "createWorkspaceLocked": {
       "owner": "P21",
       "status": "unmigrated",
       "accessors": [
@@ -554,7 +554,8 @@
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
-        "store/SQLiteStore.CreateWorkspaceWith"
+        "store/SQLiteStore.createWorkspace",
+        "store/SQLiteStore.createResidentWorkspace"
       ]
     },
     "dispatchMutation": {

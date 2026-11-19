@@ -76,7 +76,7 @@
         "store/SQLiteStore.installWorkspace",
         "store/SQLiteStore.ReloadWorkspace",
         "store/SQLiteStore.loadOrSeed",
-        "store/SQLiteStore.createWorkspace",
+        "store/SQLiteStore.createWorkspaceLocked",
         "store/SQLiteStore.updateWorkspace",
         "store/SQLiteStore.mutateTeamMetadata",
         "store/SQLiteStore.DeleteWorkflowStateRecords",

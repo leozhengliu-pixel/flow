@@ -100,9 +100,15 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 		if sweepSettings {
 			s.sweepIssueSLAWebhooks(ctx, key, now)
 			if err := s.maintainTeamSettings(ctx, key, now); err != nil {
+				if s.skipUncoveredWorkspace("Delivery scheduler", key, err) {
+					continue
+				}
 				return err
 			}
 			if err := s.preparePulseSummaries(ctx, key, now); err != nil {
+				if s.skipUncoveredWorkspace("Delivery scheduler", key, err) {
+					continue
+				}
 				return err
 			}
 			s.runDueLoops(key, now)
@@ -112,6 +118,9 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 			}
 		}
 		if err := s.prepareDueNotificationDeliveries(ctx, key, now); err != nil {
+			if s.skipUncoveredWorkspace("Delivery scheduler", key, err) {
+				continue
+			}
 			return err
 		}
 		s.streamAuditLog(ctx, key, now)
@@ -126,8 +135,12 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 				return nil
 			})
 			if err != nil {
+				if s.skipUncoveredWorkspace("Delivery scheduler", key, err) {
+					continue
+				}
 				return err
 			}
+			s.coveredWorkspacePassed("Delivery scheduler", key)
 			continue
 		}
 		data, ok := s.store.WorkspaceMetadataFields(key, "integrationDeliveries")

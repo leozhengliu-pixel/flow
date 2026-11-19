@@ -2326,8 +2326,18 @@ func (s *SQLiteStore) CreateWorkspaceWith(ctx context.Context, name, urlKey, reg
 }
 
 func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region string, seed WorkspaceSeed) (domain.Bootstrap, error) {
+	if s.metadataResidency != nil {
+		return s.createResidentWorkspace(ctx, name, urlKey, region, seed)
+	}
 	s.lockWorkspaceWrites()
 	defer s.unlockWorkspaceWrites()
+	return s.createWorkspaceLocked(ctx, name, urlKey, region, seed, nil)
+}
+
+// createWorkspaceLocked is the workspace creation write. The caller holds the
+// workspace write locks. persisted, when set, reports whether the workspace's
+// metadata committed (the later membership writes can still fail).
+func (s *SQLiteStore) createWorkspaceLocked(ctx context.Context, name, urlKey, region string, seed WorkspaceSeed, persisted *bool) (domain.Bootstrap, error) {
 	if _, exists := s.workspaces[urlKey]; exists {
 		return domain.Bootstrap{}, ErrWorkspaceKeyTaken
 	}
@@ -2358,10 +2368,17 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	if err := s.persistWorkspace(ctx, urlKey, data, event); err != nil {
 		return domain.Bootstrap{}, err
 	}
-	stored := collectionMetadata(data)
-	domain.RebuildTeamDirectory(&stored)
-	s.setWorkspaceLocked(urlKey, stored)
-	s.lastWorkspaceKey = urlKey
+	if persisted != nil {
+		*persisted = true
+	}
+	if s.metadataResidency == nil {
+		// A bounded store installs the workspace's resident image from SQL
+		// once the write is done (createResidentWorkspace).
+		stored := collectionMetadata(data)
+		domain.RebuildTeamDirectory(&stored)
+		s.setWorkspaceLocked(urlKey, stored)
+		s.lastWorkspaceKey = urlKey
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,display_name=excluded.display_name,active=excluded.active,updated_at=excluded.updated_at`, viewer.ID, nullableString(viewer.Email), viewer.Name, viewer.DisplayName, viewer.AvatarURL, "", nullableTime(viewer.EmailVerified, time.Now().UTC()), boolInt(viewer.Active), now, now); err != nil {
 		return domain.Bootstrap{}, fmt.Errorf("auth user: %w", err)

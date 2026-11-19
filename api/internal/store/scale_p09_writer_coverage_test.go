@@ -68,7 +68,7 @@ scim.go:SyncSCIMGroupTeamChanges
 scim.go:UpdateSCIMUser
 scim.go:recomputeSCIMUserRole
 scim.go:writeSCIMUser
-sqlite.go:createWorkspace
+sqlite.go:createWorkspaceLocked
 sqlite.go:updateWorkspace
 team_hierarchy.go:syncTeamAncestorMembers
 team_membership_origin.go:RemoveMemberWithChanges

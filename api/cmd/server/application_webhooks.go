@@ -304,6 +304,16 @@ func (s *server) applicationWebhookClients(ctx context.Context) (map[string]doma
 		log.Printf("Application webhooks: application index: %v", err)
 		return nil, nil, false
 	}
+	uncovered := map[string]bool{}
+	for _, workspace := range read.Uncovered {
+		uncovered[workspace] = true
+		s.skipUncoveredWorkspace("Application webhooks", workspace, store.ErrBoundedMetadataCoverage)
+	}
+	for _, workspace := range s.store.WorkspaceKeys() {
+		if !uncovered[workspace] {
+			s.coveredWorkspacePassed("Application webhooks", workspace)
+		}
+	}
 	return read.Apps, read.Close, true
 }
 
@@ -359,7 +369,9 @@ func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace
 		// all the reconcile reads of these fields.
 		read, found, err := s.store.BeginApplicationWebhookReconcileRead(ctx, workspace)
 		if err != nil {
-			log.Printf("Application webhooks workspace=%s: %v", workspace, err)
+			if !s.skipUncoveredWorkspace("Application webhooks", workspace, err) {
+				log.Printf("Application webhooks workspace=%s: %v", workspace, err)
+			}
 			return
 		}
 		if !found {
