@@ -2,9 +2,12 @@ package store
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"os"
 	"reflect"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,18 +19,23 @@ import (
 // migrated to bounded reads and writes; COLD consumers keep their full legacy
 // behaviour behind a per-replica limit of one.
 //
-// A ColdScope marks a flow that runs COLD: the server opens one for every
-// request whose route is not proven bounded (and for background COLD work).
-// Inside a scope:
+// A ColdScope marks a request whose route is not proven bounded; WithColdWork
+// marks background COLD work. In either, a COLD need never holds the COLD
+// slot beyond its own operation, so a long request (a stream, a terminal, an
+// MCP session) or a long job never holds it between operations:
 //
-//   - the projection permit (acquireProjection) and the legacy authorization
-//     projection take the replica's COLD slot for the rest of the scope; the
-//     scope owns the slot and the one facade it lends to every later need,
-//     and Close releases them. Any other COLD need of the scope (a legacy
-//     write, a COLD facade) takes the slot for that operation only;
-//   - a write that no migrated bounded writer selects runs its literal
-//     legacy dispatch on the scope's facade and publishes exactly as the
-//     registered COLD writers do (coldLegacyMutation).
+//   - a write that no migrated bounded writer selects takes the slot, runs
+//     its literal legacy dispatch on a COLD facade and publishes exactly as
+//     the registered COLD writers do, then returns the slot
+//     (coldLegacyMutation);
+//   - a legacy projection (PagedWorkspaceMetadata, the authorization's
+//     request view) is read from a legacy view of the installed workspace.
+//
+// The slot is a FIFO queue with a bounded wait (coldSlotQueue): a waiter
+// beyond the queue limit, or one that waited past the timeout, gets
+// ErrColdMetadataBusy, which the server answers with 503 + Retry-After. The
+// server bounds COLD projections separately from HOT ones (its COLD projection
+// gate), so a COLD request never holds a slot a HOT one waits for.
 //
 // The legacy whole-workspace accessors (WorkspaceMetadata, BootstrapFor,
 // BootstrapForUser, WorkspaceMetadataFields of a non-resident field) carry no
@@ -36,27 +44,25 @@ import (
 // installed workspace (coldAccessorView): the complete image decoded from the
 // installed logical source, the same decode the COLD facade performs, so the
 // answer is exactly the legacy one. Those decodes are serialized per replica
-// on their own lane, which never waits for the COLD slot (a COLD scope may
-// call them while it holds the slot).
+// on their own lane, which never waits for the COLD slot (a COLD facade's
+// callback may call them while it holds the slot).
 
 type coldScopeKey struct{}
 
-// ColdScope is one COLD flow's claim on a store's COLD slot.
+// ColdScope marks one COLD request and caches its authorization view.
 type ColdScope struct {
 	mu      sync.Mutex
 	pattern string
-	owner   *metadataResidency
-	store   *SQLiteStore
-	held    bool
-	read    *ColdMetadataRead
 	closed  bool
-	// slotWait is the time the scope waited for the COLD slot (SW551).
-	slotWait time.Duration
+	// view is the request's legacy view for the authorization projection
+	// (ColdRequestView), decoded once and dropped at Close.
+	view      *SQLiteStore
+	viewStore *SQLiteStore
 }
 
-// WithColdScope opens a COLD scope for ctx. pattern names the route (or the
-// background work) for diagnostics. The caller must Close the scope when the
-// flow ends; values the flow read stay valid, its facades do not.
+// WithColdScope opens a COLD scope for ctx. pattern names the route for
+// diagnostics. The caller must Close the scope when the request ends; work
+// the request leaves running stays COLD per operation.
 func WithColdScope(ctx context.Context, pattern string) (context.Context, *ColdScope) {
 	scope := &ColdScope{pattern: pattern}
 	return context.WithValue(ctx, coldScopeKey{}, scope), scope
@@ -81,17 +87,15 @@ func InColdScope(ctx context.Context) bool {
 
 type coldWorkKey struct{}
 
-// WithColdWork marks background COLD work (a ticker, a worker, a job): with
-// bounded metadata on, each of its COLD needs takes the COLD slot on its own
-// for that operation only (a write no migrated writer serves runs its
-// literal legacy dispatch on a COLD facade, a legacy projection is read from
-// a legacy view), so long-lived work never holds the slot between them.
+// WithColdWork marks background COLD work (a ticker, a worker, a job, a loop
+// run): with bounded metadata on, each of its COLD needs takes the COLD slot
+// for that operation only.
 func WithColdWork(ctx context.Context, name string) context.Context {
 	return context.WithValue(ctx, coldWorkKey{}, name)
 }
 
 // coldCapable reports whether ctx may run COLD needs: a COLD scope (open, or
-// closed for work the flow left running) or COLD work.
+// closed for work the request left running) or COLD work.
 func coldCapable(ctx context.Context) bool {
 	if _, scoped := ColdScopeFromContext(ctx); scoped {
 		return true
@@ -100,44 +104,150 @@ func coldCapable(ctx context.Context) bool {
 	return work
 }
 
-// Pattern names the scope's route or background work.
+// InColdFacade reports whether ctx runs inside the callback of a COLD facade
+// (it holds the COLD slot), which bounds its projections itself.
+func InColdFacade(ctx context.Context) bool {
+	read, ok := ctx.Value(coldMetadataReadKey{}).(*coldMetadataRead)
+	if !ok {
+		return false
+	}
+	read.mu.Lock()
+	defer read.mu.Unlock()
+	return read.facade != nil
+}
+
+// Pattern names the scope's route.
 func (c *ColdScope) Pattern() string { return c.pattern }
 
-// Held reports whether the scope holds a COLD slot.
-func (c *ColdScope) Held() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.held
-}
-
-// SlotWait is how long the scope waited for its COLD slot.
-func (c *ColdScope) SlotWait() time.Duration {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.slotWait
-}
-
-// Close releases the scope's facade and COLD slot. Later COLD needs of the
-// flow fail closed.
+// Close ends the scope and drops its view.
 func (c *ColdScope) Close() {
 	if c == nil {
 		return
 	}
 	c.mu.Lock()
-	read, held, owner := c.read, c.held, c.owner
-	c.read, c.held, c.closed = nil, false, true
+	c.view, c.viewStore, c.closed = nil, nil, true
 	c.mu.Unlock()
-	if read != nil {
-		read.Close()
+}
+
+// ColdRequestView returns the COLD request's legacy view of workspace for its
+// authorization projection: a legacy store holding the installed image,
+// decoded once per request on the legacy-view lane (no COLD slot) and kept
+// until the scope closes, so the projection and the values authorization
+// hands to the handler are the legacy ones. Outside an open scope, or flag
+// off, it returns s.
+func (s *SQLiteStore) ColdRequestView(ctx context.Context, workspace string) (*SQLiteStore, error) {
+	scope, ok := ColdScopeFromContext(ctx)
+	if !ok || s.metadataResidency == nil || s.coldParent != nil {
+		return s, nil
 	}
-	if held {
-		<-owner.coldSlot
-		coldSlotHolders.Add(-1)
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+	if scope.closed {
+		return s, nil
+	}
+	if scope.view != nil && scope.viewStore == s && scope.view.lastWorkspaceKey == workspace {
+		return scope.view, nil
+	}
+	view, release, handled := s.coldAccessorViewKept(ctx, "ColdRequestView", workspace, nil, true)
+	if !handled {
+		return s, nil
+	}
+	release()
+	if view == nil {
+		// A missing workspace: the live store answers it as before.
+		return s, nil
+	}
+	scope.view, scope.viewStore = view, s
+	return view, nil
+}
+
+// ErrColdMetadataBusy reports that the COLD slot's queue was full or the wait
+// ran out; the request may be retried (503 + Retry-After).
+var ErrColdMetadataBusy = errors.New("the workspace is busy with other requests; retry in a moment")
+
+// ColdMetadataBusyRetryAfter is the retry delay answered with
+// ErrColdMetadataBusy.
+const ColdMetadataBusyRetryAfter = 5 * time.Second
+
+// coldSlotQueue is the replica's COLD slot: one holder, waiters served in
+// arrival order (a buffered channel's blocked senders queue FIFO), at most
+// limit of them, each for at most timeout.
+type coldSlotQueue struct {
+	slot    chan struct{}
+	waiting atomic.Int64
+	limit   atomic.Int64
+	timeout atomic.Int64
+}
+
+var coldSlotQueues sync.Map // *metadataResidency -> *coldSlotQueue
+
+func (r *metadataResidency) coldQueue() *coldSlotQueue {
+	r.coldOnce.Do(func() { r.coldSlot = make(chan struct{}, 1) })
+	if queue, ok := coldSlotQueues.Load(r); ok {
+		return queue.(*coldSlotQueue)
+	}
+	queue := &coldSlotQueue{slot: r.coldSlot}
+	queue.limit.Store(int64(envPositiveInt("FLOW_COLD_QUEUE_LIMIT", 64)))
+	queue.timeout.Store(int64(envPositiveDuration("FLOW_COLD_QUEUE_TIMEOUT", 15*time.Second)))
+	actual, _ := coldSlotQueues.LoadOrStore(r, queue)
+	return actual.(*coldSlotQueue)
+}
+
+// SetColdQueueForTesting sets the COLD slot's queue limit and wait timeout.
+func (s *SQLiteStore) SetColdQueueForTesting(limit int, timeout time.Duration) {
+	queue := s.metadataResidency.coldQueue()
+	queue.limit.Store(int64(limit))
+	queue.timeout.Store(int64(timeout))
+}
+
+// ColdSlotWaitingForTesting reports how many waiters the COLD slot has.
+func (s *SQLiteStore) ColdSlotWaitingForTesting() int64 {
+	return s.metadataResidency.coldQueue().waiting.Load()
+}
+
+// acquire waits for the slot in arrival order. It fails with
+// ErrColdMetadataBusy when limit others already wait or the wait times out,
+// and with the context's error when the caller leaves.
+func (q *coldSlotQueue) acquire(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case q.slot <- struct{}{}:
+		coldSlotHolders.Add(1)
+		coldSlotAcquisitions.Add(1)
+		return nil
+	default:
+	}
+	if q.waiting.Add(1) > q.limit.Load() {
+		q.waiting.Add(-1)
+		coldSlotRefusals.Add(1)
+		return ErrColdMetadataBusy
+	}
+	defer q.waiting.Add(-1)
+	timer := time.NewTimer(time.Duration(q.timeout.Load()))
+	defer timer.Stop()
+	select {
+	case q.slot <- struct{}{}:
+		coldSlotHolders.Add(1)
+		coldSlotAcquisitions.Add(1)
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		coldSlotRefusals.Add(1)
+		slog.Warn("bounded metadata: COLD slot wait timed out", "timeout", time.Duration(q.timeout.Load()), "waiting", q.waiting.Load())
+		return ErrColdMetadataBusy
 	}
 }
 
+func (q *coldSlotQueue) release() {
+	coldSlotHolders.Add(-1)
+	<-q.slot
+}
+
 // coldSlotHolders counts the COLD slots held process-wide (SW551).
-var coldSlotHolders atomic.Int64
+var coldSlotHolders, coldSlotRefusals atomic.Int64
 
 // coldSlotAcquisitions counts COLD slot acquisitions process-wide (SW550).
 var coldSlotAcquisitions atomic.Int64
@@ -148,92 +258,21 @@ func ColdSlotAcquisitionsForTesting() int64 { return coldSlotAcquisitions.Load()
 // ColdSlotsHeldForTesting reports how many COLD slots are held right now.
 func ColdSlotsHeldForTesting() int64 { return coldSlotHolders.Load() }
 
-// acquireLocked takes s's COLD slot for the scope. The caller holds c.mu. A
-// scope serves one bounded store; another store's needs take their own slot.
-func (c *ColdScope) acquireLocked(ctx context.Context, s *SQLiteStore) (bool, error) {
-	r := s.metadataResidency
-	if c.closed {
-		// Work the flow left running after it ended (a goroutine with its
-		// context) is COLD per operation: each takes the slot on its own.
-		return false, nil
+// ColdSlotRefusalsForTesting reports how many COLD slot waits were refused.
+func ColdSlotRefusalsForTesting() int64 { return coldSlotRefusals.Load() }
+
+func envPositiveInt(name string, fallback int) int {
+	if value, err := strconv.Atoi(os.Getenv(name)); err == nil && value > 0 {
+		return value
 	}
-	if c.owner != nil && c.owner != r {
-		return false, nil
-	}
-	if c.held {
-		return true, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	r.coldOnce.Do(func() { r.coldSlot = make(chan struct{}, 1) })
-	started := time.Now()
-	select {
-	case r.coldSlot <- struct{}{}:
-	case <-ctx.Done():
-		return false, ctx.Err()
-	}
-	coldSlotHolders.Add(1)
-	coldSlotAcquisitions.Add(1)
-	c.slotWait += time.Since(started)
-	c.owner, c.store, c.held = r, s, true
-	return true, nil
+	return fallback
 }
 
-// HoldColdScope takes the COLD slot for the scope ctx carries, for the rest
-// of the scope, without building a facade: the projection permit of a COLD
-// request (in place of the projection slot) and the authorization projection.
-// Later COLD needs of the scope share the slot and one facade. It reports
-// whether ctx carries an open scope this store serves.
-func (s *SQLiteStore) HoldColdScope(ctx context.Context) (bool, error) {
-	if s.coldParent != nil {
-		return s.coldParent.HoldColdScope(ctx)
+func envPositiveDuration(name string, fallback time.Duration) time.Duration {
+	if value, err := time.ParseDuration(os.Getenv(name)); err == nil && value > 0 {
+		return value
 	}
-	scope, ok := ColdScopeFromContext(ctx)
-	if !ok || s.metadataResidency == nil {
-		return false, nil
-	}
-	if nested, ok := ctx.Value(coldMetadataReadKey{}).(*coldMetadataRead); ok && nested.owner == s.metadataResidency {
-		nested.mu.Lock()
-		active := nested.facade != nil
-		nested.mu.Unlock()
-		if active {
-			// Inside a COLD facade's callback: its slot is this flow's.
-			return true, nil
-		}
-	}
-	scope.mu.Lock()
-	defer scope.mu.Unlock()
-	return scope.acquireLocked(ctx, s)
-}
-
-// beginScopedColdMetadataRead lends the facade of a scope that holds its
-// COLD slot (it took its projection or authorization permit), decoding it on
-// first use. selected is false when ctx carries no such scope: the COLD need
-// then takes the slot for its own operation only, so a long request (a
-// stream, a terminal) never holds the slot for a write it made.
-func (s *SQLiteStore) beginScopedColdMetadataRead(ctx context.Context) (read *ColdMetadataRead, selected bool, err error) {
-	scope, ok := ColdScopeFromContext(ctx)
-	if !ok || s.metadataResidency == nil {
-		return nil, false, nil
-	}
-	scope.mu.Lock()
-	defer scope.mu.Unlock()
-	if scope.closed || !scope.held || scope.owner != s.metadataResidency {
-		return nil, false, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, true, err
-	}
-	if scope.read == nil {
-		owned, err := s.decodeOwnedColdMetadataRead(ctx, func() {})
-		if err != nil {
-			return nil, true, err
-		}
-		scope.read = owned
-	}
-	state := scope.read.state
-	return &ColdMetadataRead{context: context.WithValue(ctx, coldMetadataReadKey{}, state), state: state}, true, nil
+	return fallback
 }
 
 // coldAccessorObservers report each legacy accessor a bounded store served
@@ -253,6 +292,13 @@ func (r *metadataResidency) accessorLane() chan struct{} {
 // resident skeleton). view is nil when the workspace does not exist. release
 // must be called once the accessor's answer is built.
 func (s *SQLiteStore) coldAccessorView(ctx context.Context, accessor, workspace string, fields []string) (view *SQLiteStore, release func(), handled bool) {
+	return s.coldAccessorViewKept(ctx, accessor, workspace, fields, false)
+}
+
+// coldAccessorViewKept is coldAccessorView; with keep, release returns the
+// lane and the installed source but leaves the decoded view usable (its
+// values are its own memory) for the caller to keep.
+func (s *SQLiteStore) coldAccessorViewKept(ctx context.Context, accessor, workspace string, fields []string, keep bool) (view *SQLiteStore, release func(), handled bool) {
 	r := s.metadataResidency
 	if r == nil || s.coldParent != nil {
 		return nil, nil, false
@@ -321,9 +367,11 @@ func (s *SQLiteStore) coldAccessorView(ctx context.Context, accessor, workspace 
 	done := release
 	release = func() {
 		source.Release()
-		view.mu.Lock()
-		view.workspaces, view.coldParent = nil, nil
-		view.mu.Unlock()
+		if !keep {
+			view.mu.Lock()
+			view.workspaces, view.coldParent = nil, nil
+			view.mu.Unlock()
+		}
 		done()
 	}
 	decodeStarted := time.Now()
@@ -419,7 +467,11 @@ func (s *SQLiteStore) coldLegacyMutation(ctx context.Context, workspace, eventTy
 
 // coldLegacyWrite runs one literal legacy writer (run, on the facade) as
 // coldLegacyMutation describes.
-func (s *SQLiteStore) coldLegacyWrite(ctx context.Context, workspace string, run func(context.Context, *SQLiteStore) error) error {
+//
+// also names further workspace keys the write may create or remove (a
+// rename's new key): each is published the same way, a key SQL no longer
+// holds is dropped from the parent.
+func (s *SQLiteStore) coldLegacyWrite(ctx context.Context, workspace string, run func(context.Context, *SQLiteStore) error, also ...string) error {
 	ctx = context.WithValue(ctx, coldLegacyWriteKey{}, true)
 	return s.withColdMutationStore(ctx, workspace, func(ctx context.Context, facade *SQLiteStore) error {
 		facade.coldWrite.legacy = true
@@ -436,8 +488,16 @@ func (s *SQLiteStore) coldLegacyWrite(ctx context.Context, workspace string, run
 			locked = time.Now()
 			facade.syncColdLegacyWriteLocked(ctx, requested())
 		}
+		// The store keeps installed logical sources (always in production;
+		// a test view once it captured one): a key the write creates gets one.
+		s.metadataResidency.mu.Lock()
+		logical := len(s.metadataResidency.logical) != 0
+		s.metadataResidency.mu.Unlock()
 		facade.writeMu.onUnlock = func() {
-			s.publishColdLegacyWriteLocked(ctx, requested())
+			s.publishColdLegacyWriteLocked(ctx, requested(), logical)
+			for _, key := range also {
+				s.publishColdLegacyWriteLocked(ctx, key, logical)
+			}
 			held := int64(time.Since(locked))
 			coldWriteLocks.Add(1)
 			coldWriteLockNanos.Add(held)
@@ -493,8 +553,74 @@ func (s *SQLiteStore) syncColdLegacyWriteLocked(ctx context.Context, workspace s
 // workspace from SQL after a COLD legacy write committed. The caller holds
 // the parent's write lock. reloadResidentWorkspace keeps an image whose
 // stamp already matches SQL.
-func (s *SQLiteStore) publishColdLegacyWriteLocked(ctx context.Context, workspace string) {
-	if err := s.reloadResidentWorkspace(context.WithoutCancel(ctx), workspace); err != nil {
+func (s *SQLiteStore) publishColdLegacyWriteLocked(ctx context.Context, workspace string, logical bool) {
+	ctx = context.WithoutCancel(ctx)
+	var present int
+	switch err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&present); {
+	case err != nil:
+		slog.Error("bounded metadata: COLD legacy write could not publish its workspace", "workspace", workspace, "error", err)
+		return
+	case present == 0:
+		// The legacy writer removed the key (a rename's old key).
+		s.dropResidentWorkspace(workspace)
+		return
+	}
+	if err := s.reloadResidentWorkspaceLogical(ctx, workspace, logical); err != nil {
 		slog.Error("bounded metadata: COLD legacy write could not publish its workspace", "workspace", workspace, "error", err)
 	}
+}
+
+// coldInstallHookForTesting runs inside a COLD write's install, while the
+// facade's lock is held (SW554).
+var coldInstallHookForTesting atomic.Pointer[func()]
+
+// SetColdInstallHookForTesting sets (nil clears) the COLD install hook.
+func SetColdInstallHookForTesting(hook func()) {
+	if hook == nil {
+		coldInstallHookForTesting.Store(nil)
+		return
+	}
+	coldInstallHookForTesting.Store(&hook)
+}
+
+// dropResidentWorkspace removes workspace from the bounded store's installed
+// image after a COLD legacy write removed it from SQL (a rename's old key):
+// the resident copy, its installed logical source, stamps and policy charge.
+// The caller holds the write lock.
+func (s *SQLiteStore) dropResidentWorkspace(workspace string) {
+	r := s.metadataResidency
+	s.mu.Lock()
+	delete(s.workspaces, workspace)
+	s.forgetCopyRevisionLocked(workspace)
+	r.mu.Lock()
+	source := r.logical[workspace]
+	delete(r.logical, workspace)
+	delete(r.stamps, workspace)
+	delete(r.applied, workspace)
+	costs := make(map[string]int, len(r.policy))
+	for key, cost := range r.policy {
+		if key != workspace {
+			costs[key] = cost
+		}
+	}
+	r.mu.Unlock()
+	s.mu.Unlock()
+	if err := r.replacePolicyCosts(costs); err != nil {
+		slog.Error("bounded metadata: dropping a renamed workspace's policy charge", "workspace", workspace, "error", err)
+	}
+	if source != nil {
+		source.Release()
+	}
+	s.forgetChatSnapshotFlag(workspace)
+	s.issueGroupCounts.drop(workspace)
+}
+
+// setLastWorkspaceKey records the workspace the legacy writer last wrote, as
+// the legacy store does after a workspace update.
+func (s *SQLiteStore) setLastWorkspaceKey(workspace string) {
+	s.mu.Lock()
+	if _, ok := s.workspaces[workspace]; ok {
+		s.lastWorkspaceKey = workspace
+	}
+	s.mu.Unlock()
 }
