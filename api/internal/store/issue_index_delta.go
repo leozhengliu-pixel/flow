@@ -93,6 +93,12 @@ func syncIssueIndexRows(ctx context.Context, tx *sqlTx, workspace, table string,
 		wanted[key(row)] = row
 	}
 	changed := [][]string{}
+	// MySQL drops the rows that a multi-row INSERT ... ON DUPLICATE KEY
+	// UPDATE changes from an InnoDB FULLTEXT index (8.4: later MATCH queries
+	// miss them; single-row upserts and UPDATE keep them). Existing rows of
+	// a full-text table are therefore updated in place there.
+	var updated [][]string
+	fullText := tx.dialect == "mysql" && mysqlFullTextIndexTables[table] && keyColumns == 1
 	for k, row := range wanted {
 		old, exists := previous[k]
 		same := exists
@@ -100,7 +106,11 @@ func syncIssueIndexRows(ctx context.Context, tx *sqlTx, workspace, table string,
 			same = old[i] == row[i]
 		}
 		if !same {
-			changed = append(changed, row)
+			if fullText && exists {
+				updated = append(updated, row)
+			} else {
+				changed = append(changed, row)
+			}
 		}
 		delete(previous, k)
 	}
@@ -124,6 +134,28 @@ func syncIssueIndexRows(ctx context.Context, tx *sqlTx, workspace, table string,
 			updates = append(updates, c+"=excluded."+c)
 		}
 		conflict = " ON CONFLICT(workspace_key," + strings.Join(columns[:keyColumns], ",") + ") DO UPDATE SET " + strings.Join(updates, ",")
+	}
+	for start := 0; start < len(updated); start += 200 {
+		part := updated[start:min(start+200, len(updated))]
+		sets := make([]string, 0, len(columns)-keyColumns)
+		args := []any{}
+		for c := keyColumns; c < len(columns); c++ {
+			cases := make([]string, 0, len(part))
+			for _, row := range part {
+				cases = append(cases, "WHEN ? THEN ?")
+				args = append(args, row[0], row[c])
+			}
+			sets = append(sets, columns[c]+"=CASE "+columns[0]+" "+strings.Join(cases, " ")+" END")
+		}
+		ids := make([]string, 0, len(part))
+		for _, row := range part {
+			ids = append(ids, row[0])
+		}
+		clause, values := bindList(columns[0], ids)
+		args = append(append(args, workspace), values...)
+		if _, err := tx.ExecContext(ctx, "UPDATE "+table+" SET "+strings.Join(sets, ",")+" WHERE workspace_key=? AND "+clause, args...); err != nil {
+			return err
+		}
 	}
 	for start := 0; start < len(changed); start += 200 {
 		tuples := []string{}

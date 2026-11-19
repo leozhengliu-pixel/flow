@@ -193,7 +193,17 @@ func (s *SQLiteStore) scaleP21SW18MigrateIssueSearchIndex(ctx context.Context) e
 					}
 					// INSERT SELECT has no text argument for ExecContext to charge.
 					tx.writtenBytes += int(copied)
-					if _, err := tx.ExecContext(ctx, `INSERT INTO issue_search_documents(workspace_key,issue_id,content) SELECT workspace_key,id,`+content+` FROM issue_records WHERE workspace_key=? AND `+clause+conflict, args...); err != nil {
+					if s.dialect == "mysql" {
+						// A multi-row upsert that changes rows drops them from
+						// the FULLTEXT index (mysqlFullTextIndexTables): update
+						// the existing documents in place, then insert the rest.
+						if _, err := tx.ExecContext(ctx, `UPDATE issue_search_documents idx JOIN issue_records ON issue_records.workspace_key=idx.workspace_key AND issue_records.id=idx.issue_id SET idx.content=`+content+` WHERE issue_records.workspace_key=? AND `+clause+` AND NOT (`+s.metadataRecordKeyEquals("idx.content", content)+`)`, args...); err != nil {
+							return err
+						}
+						if _, err := tx.ExecContext(ctx, `INSERT INTO issue_search_documents(workspace_key,issue_id,content) SELECT workspace_key,id,`+content+` FROM issue_records WHERE workspace_key=? AND `+clause+` AND NOT EXISTS (SELECT 1 FROM issue_search_documents idx WHERE idx.workspace_key=issue_records.workspace_key AND idx.issue_id=issue_records.id)`, args...); err != nil {
+							return err
+						}
+					} else if _, err := tx.ExecContext(ctx, `INSERT INTO issue_search_documents(workspace_key,issue_id,content) SELECT workspace_key,id,`+content+` FROM issue_records WHERE workspace_key=? AND `+clause+conflict, args...); err != nil {
 						return err
 					}
 				}
