@@ -63,12 +63,11 @@ func (s *SQLiteStore) BatchNotificationRecords(ctx context.Context, workspace, u
 	var updated int
 	var event domain.DomainEvent
 	err := func() error {
-		s.lockWorkspaceWrites()
-		defer s.unlockWorkspaceWrites()
-		tx, err := s.db.BeginTx(ctx, nil)
+		tx, err := s.lockWorkspaceWritesTx(ctx)
 		if err != nil {
 			return err
 		}
+		defer s.unlockWorkspaceWrites()
 		defer tx.Rollback()
 		now := time.Now().UTC()
 		var value any = now.Format(time.RFC3339Nano)

@@ -62,12 +62,11 @@ func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, u
 	var event domain.DomainEvent
 	var realtime json.RawMessage
 	err := func() error {
-		s.lockWorkspaceWrites()
-		defer s.unlockWorkspaceWrites()
-		tx, err := s.db.BeginTx(ctx, nil)
+		tx, err := s.lockWorkspaceWritesTx(ctx)
 		if err != nil {
 			return err
 		}
+		defer s.unlockWorkspaceWrites()
 		defer tx.Rollback()
 		lock := ""
 		if s.dialect != "sqlite" {

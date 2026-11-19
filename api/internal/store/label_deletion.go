@@ -24,8 +24,14 @@ func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventT
 	}
 	var event domain.DomainEvent
 	apply := func() error {
-		s.lockWorkspaceWrites()
+		// The transaction starts before the store lock (lockWorkspaceWritesTx):
+		// a read snapshot holding SQLite's connection may wait for the lock.
+		tx, err := s.lockWorkspaceWritesTx(ctx)
+		if err != nil {
+			return err
+		}
 		defer s.unlockWorkspaceWrites()
+		defer tx.Rollback()
 		if workspace == "" {
 			workspace = s.lastWorkspaceKey
 		}
@@ -33,11 +39,6 @@ func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventT
 		if !ok {
 			return sql.ErrNoRows
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
 		ids, changes, err := s.labelDeletionWrite(ctx, tx, workspace, id, group, mutate)
 		if err != nil {
 			return err

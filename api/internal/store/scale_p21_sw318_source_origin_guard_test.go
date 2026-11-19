@@ -21,7 +21,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 	contracts := map[string]string{
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
 		"scale_p21_workflow_run_write.go":             "82b916096b9c5e7493da777bc8741a7b59d7e7fd94e8d2f21f217f5966519d71",
-		"issue_records.go":                            "8a8904df034274fc5b25d1b3af93e127970314f1998fecbe33cd1a110be6571a",
+		"issue_records.go":                            "be5f667c4a1f80d046771f6a2c72b1f6d899ed88e6c9494266ba4fdf628bf843",
 		"issue_query.go":                              "16289207dd74d88be3308084b7483ea38f575f8549bf396bbfbb83f599220c45",
 		"auth.go":                                     "47915d692b1cb20f50a3b586e62887e6dc8720cbbdb6bb626770176dd7128426",
 		"team_default_favorites.go":                   "8ba62b09173955d3f412bba9820ba6292e3ee06fec852571c691e5a62e49e657",
@@ -45,7 +45,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/settings_features.go":                         "bc6978233bf9d0a041acc84b04493978b22ba2ed01244a430152ef177ba16a69",
 		"authz_epoch.go":                                                "ce59afa33d8daca93d0901d13d86a0f7bb5f140cc479efc38395ab568173e9c4",
 		"content_records.go":                                            "711cc4e036099177c87ed23e50f56c81703b4aa7af2c3123053cc3873cfaccba",
-		"database.go":                                                   "494475002da610a00a0f2150d7ec07369836e9fa184a4f87bc38ba3d4c7526eb",
+		"database.go":                                                   "c9a2a0a74eb26a40e7e17d1396910cff3d7cba65943884550b33a3db082c90aa",
 		"issue_access_metadata.go":                                      "2463acc37c961816b884c1f4f47dbf70a989912b58550985af97cef38bc21814",
 		"metadata_decode.go":                                            "ce3352e177e4b1ed19c6822a04ddc9d1b715fa81d83d4905d1041c1a4ce2fc45",
 		"metadata_delta.go":                                             "a79e58b9c65fd49c020acf27493596a9ce1546378d3a4ffa5548ccc9e81b7b0b",

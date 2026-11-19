@@ -523,12 +523,11 @@ func (s *SQLiteStore) ImportIssues(ctx context.Context, workspace string, issues
 	} else if !ok {
 		return fmt.Errorf("workspace not found")
 	}
-	s.lockWorkspaceWrites()
-	defer s.unlockWorkspaceWrites()
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.lockWorkspaceWritesTx(ctx)
 	if err != nil {
 		return err
 	}
+	defer s.unlockWorkspaceWrites()
 	defer tx.Rollback()
 	ids := []string{}
 	seen := map[string]bool{}

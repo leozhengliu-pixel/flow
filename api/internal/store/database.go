@@ -67,6 +67,10 @@ type sqlDatabase struct {
 	// searchMaxChars caps the text indexed per issue and per document; 0
 	// indexes everything.
 	searchMaxChars int
+	// snapshots, on SQLite with bounded metadata on, is a pool of separate
+	// connections for read-only transactions (scale_p21_sqlite_snapshot_pool.go);
+	// nil uses the main pool.
+	snapshots *sql.DB
 	// commitHooks lets tests pause a transaction around its commit
 	// (change_cursor_test.go); nil in production.
 	commitHooks         atomic.Pointer[commitHooks]
@@ -442,6 +446,12 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	if bounded {
 		s.metadataResidency = newMetadataResidency()
 		s.db.boundedCatalog.Store(true)
+		if driver == "sqlite" {
+			if err := s.db.openSQLiteSnapshotPool(sqlDriver, dsn, sqlitePath, maxOpen); err != nil {
+				db.Close()
+				return nil, fmt.Errorf("configure sqlite: %w", err)
+			}
+		}
 	}
 	s.changeLogMinRows.Store(DefaultChangeLogMinRows)
 	notify := s.publishNotificationSignals
@@ -663,7 +673,11 @@ func (d *sqlDatabase) BeginTx(ctx context.Context, options *sql.TxOptions) (*sql
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return nil, errors.New("cannot start a transaction inside a workspace read snapshot")
 	}
-	tx, err := d.DB.BeginTx(ctx, options)
+	pool := d.DB
+	if d.snapshots != nil && options != nil && options.ReadOnly {
+		pool = d.snapshots
+	}
+	tx, err := pool.BeginTx(ctx, options)
 	if err != nil {
 		return nil, err
 	}

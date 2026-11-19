@@ -101,6 +101,24 @@ func (s *SQLiteStore) unlockWorkspaceWrites() {
 	s.writeMu.Unlock()
 }
 
+// lockWorkspaceWritesTx is lockWorkspaceWrites for a writer whose SQL under
+// the locks runs in one transaction: the transaction begins after the write
+// lock and before the store lock. A read snapshot holds a database
+// connection (SQLite has one) and may then wait for the store's read lock
+// (ResolveAccess, a resource read); a writer that waited for a connection
+// while holding the store lock deadlocked with it until a request timed out.
+// The caller ends the transaction and calls unlockWorkspaceWrites.
+func (s *SQLiteStore) lockWorkspaceWritesTx(ctx context.Context) (*sqlTx, error) {
+	s.writeMu.Lock()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.writeMu.Unlock()
+		return nil, err
+	}
+	s.mu.Lock()
+	return tx, nil
+}
+
 // storedWorkspace reads a workspace snapshot. Copy-on-write writers call it
 // while holding writeMu, so the snapshot cannot change until they install
 // their result.

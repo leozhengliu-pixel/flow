@@ -40,5 +40,8 @@ func (d *sqlDatabase) Close() error {
 		d.journalStop()
 	}
 	d.journalWorkers.Wait()
+	if d.snapshots != nil {
+		_ = d.snapshots.Close()
+	}
 	return d.DB.Close()
 }

@@ -31,9 +31,10 @@ import (
 //   - a legacy projection (PagedWorkspaceMetadata, the authorization's
 //     request view) is read from a legacy view of the installed workspace.
 //
-// The slot is a FIFO queue with a bounded wait (coldSlotQueue): a waiter
-// beyond the queue limit, or one that waited past the timeout, gets
-// ErrColdMetadataBusy, which the server answers with 503 + Retry-After. The
+// The slot is a FIFO queue (coldSlotQueue). A live request's wait is bounded:
+// a request beyond the queue limit, or one that waited past the timeout, gets
+// ErrColdMetadataBusy, which the server answers with 503 + Retry-After.
+// Background COLD work waits for as long as its own context allows. The
 // server bounds COLD projections separately from HOT ones (its COLD projection
 // gate), so a COLD request never holds a slot a HOT one waits for.
 //
@@ -205,9 +206,9 @@ func (s *SQLiteStore) ColdSlotWaitingForTesting() int64 {
 	return s.metadataResidency.coldQueue().waiting.Load()
 }
 
-// acquire waits for the slot in arrival order. It fails with
-// ErrColdMetadataBusy when limit others already wait or the wait times out,
-// and with the context's error when the caller leaves.
+// acquire waits for the slot in arrival order. A live request's wait fails
+// with ErrColdMetadataBusy when limit others already wait or the wait times
+// out; any wait fails with the context's error when the caller leaves.
 func (q *coldSlotQueue) acquire(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -219,15 +220,28 @@ func (q *coldSlotQueue) acquire(ctx context.Context) error {
 		return nil
 	default:
 	}
-	if q.waiting.Add(1) > q.limit.Load() {
+	// Only a live request's wait is bounded (requestColdWait); background
+	// COLD work and work a request left running wait for as long as their
+	// own context allows, as the legacy store let them.
+	// A refusal is recorded on the request too: a handler that answers the
+	// busy error as an error of its own (403, 404) is answered 503 +
+	// Retry-After, as a refused legacy-view wait is.
+	busy := requestColdWait(ctx)
+	request := busy != nil
+	if q.waiting.Add(1) > q.limit.Load() && request {
 		q.waiting.Add(-1)
 		coldSlotRefusals.Add(1)
+		busy.refused.Store(true)
 		return ErrColdMetadataBusy
 	}
 	defer q.waiting.Add(-1)
 	defer observeColdSlotWait(time.Now())
-	timer := time.NewTimer(time.Duration(q.timeout.Load()))
-	defer timer.Stop()
+	var expired <-chan time.Time
+	if request {
+		timer := time.NewTimer(time.Duration(q.timeout.Load()))
+		defer timer.Stop()
+		expired = timer.C
+	}
 	select {
 	case q.slot <- struct{}{}:
 		coldSlotHolders.Add(1)
@@ -235,8 +249,9 @@ func (q *coldSlotQueue) acquire(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-timer.C:
+	case <-expired:
 		coldSlotRefusals.Add(1)
+		busy.refused.Store(true)
 		pattern := ""
 		if scope, ok := ColdScopeFromContext(ctx); ok {
 			pattern = scope.Pattern()
