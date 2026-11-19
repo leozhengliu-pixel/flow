@@ -32,8 +32,12 @@ func standaloneFavoriteMutation(event string, payload any) bool {
 	return fields.Type == "release" || fields.Type == "release_pipeline"
 }
 
+// readFavoriteRecords answers the favorites in collection order, as a load
+// of the workspace orders them (sortMetadataRecordRows). Without an ORDER BY
+// the callback's input and the installed copy followed the dialect's row
+// order: primary-key order on SQLite, heap order on PostgreSQL.
 func readFavoriteRecords(ctx context.Context, tx *sqlTx, workspace, lock string) ([]domain.Favorite, map[string]int, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='favorites'`+lock, workspace)
+	rows, err := tx.QueryContext(ctx, `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='favorites' ORDER BY collection_order,record_key`+lock, workspace)
 	if err != nil {
 		return nil, nil, err
 	}
