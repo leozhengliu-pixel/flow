@@ -342,6 +342,9 @@ func (n metadataLogicalNode) Children(ctx context.Context, visit func(reflect.Va
 	default:
 		return nil
 	}
+	if (n.typ.Kind() == reflect.Slice || n.typ.Kind() == reflect.Array) && length >= metadataLogicalIndexMinimum {
+		return n.indexedChildren(ctx, &c, length, visit)
+	}
 	for i := 0; i < length; i++ {
 		key := reflect.ValueOf(i)
 		t := n.typ.Elem
@@ -365,6 +368,48 @@ func (n metadataLogicalNode) Children(ctx context.Context, visit func(reflect.Va
 		if err := visit(key, node); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// indexedChildren visits a large array or slice from its storage's header index,
+// reading and admitting the index on the first complete scan.
+func (n metadataLogicalNode) indexedChildren(ctx context.Context, c *metadataLogicalCursor, length int, visit func(reflect.Value, metadataLogicalNode) error) error {
+	t := n.typ.Elem()
+	storage := n.source
+	if headers, found := storage.childIndex(n.offset, n.size, c.offset, length); found {
+		for i, header := range headers {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if err := visit(reflect.ValueOf(i), header.node(n.source, t)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	start := c.offset
+	var headers []metadataLogicalChildHeader
+	if reserveMetadataLogicalChildIndex(length) {
+		headers = make([]metadataLogicalChildHeader, 0, length)
+	}
+	for i := 0; i < length; i++ {
+		node, err := c.child(t)
+		if err == nil && headers != nil {
+			headers = append(headers, metadataLogicalHeaderOf(node))
+		}
+		if err == nil {
+			err = visit(reflect.ValueOf(i), node)
+		}
+		if err != nil {
+			if headers != nil {
+				metadataLogicalIndexBytes.Add(-int64(cap(headers)) * metadataLogicalIndexEntry)
+			}
+			return err
+		}
+	}
+	if headers != nil {
+		storage.storeChildIndex(n.offset, n.size, start, headers)
 	}
 	return nil
 }

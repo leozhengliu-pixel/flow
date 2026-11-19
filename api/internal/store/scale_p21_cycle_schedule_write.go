@@ -543,6 +543,7 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		if err := profile.validate(attempt.before, attempt.data); err != nil {
 			return err
 		}
+		traceMark(ctx, "callback")
 		metadata, err := profile.image(ctx, attempt.owner, prepared, attempt.before, attempt.data)
 		if err != nil {
 			return err
@@ -558,6 +559,7 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 			return err
 		}
 		defer requested.Release()
+		traceMark(ctx, "image")
 		payloadRaw, err := json.Marshal(payload)
 		if err != nil {
 			return err
@@ -614,6 +616,7 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 			return err
 		}
 		releaseEncoding()
+		traceMark(ctx, "records")
 		progress, err := s.prepareScopedIssueReactionProgress(ctx, requested, loadedSlice, attempt.data.Issues)
 		if err != nil {
 			return fmt.Errorf("scoped image progress: %w", err)
@@ -628,6 +631,7 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 			return fmt.Errorf("scoped image metadata: %w", err)
 		}
 		defer merged.Release()
+		traceMark(ctx, "metadata")
 		candidate, err := metadataLogicalInstalledCandidate(ctx, merged)
 		if err != nil {
 			return err
@@ -638,6 +642,7 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 			return err
 		}
 		defer publication.Close()
+		traceMark(ctx, "publication")
 		if err := budget.reserveValue(ctx, s.viewer); err != nil {
 			return err
 		}

@@ -141,9 +141,22 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 	for _, name := range legacyMetadataExtraFields(ctx) {
 		allowed[name] = true
 	}
+	// A progress image that rebuilds no project leaves every project as the
+	// callback wrote it: the projects field then takes part only when it
+	// changed, and the canonical project rebuild below is skipped. Forcing it
+	// in compared and rewrote every project of the workspace on each write.
+	progressProjects := false
+	if progress != nil {
+		if err := progress.ForEachProject(ctx, func(string) error {
+			progressProjects = true
+			return errMetadataAggregateStop
+		}); err != nil && !errors.Is(err, errMetadataAggregateStop) {
+			return nil, err
+		}
+	}
 	for _, field := range persistedMetadataFields() {
 		a, b := before.fields[field.index], target.fields[field.index]
-		if a == b && (progress == nil || field.name != "projects") {
+		if a == b && (!progressProjects || field.name != "projects") {
 			continue
 		}
 		f := &legacyMetadataWriteField{field: field, before: a, next: b}
@@ -160,9 +173,13 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 		if err := plan.headers(ctx, f); err != nil {
 			return nil, err
 		}
-		if f.changed || progress != nil && field.name == "projects" {
+		if f.changed || progressProjects && field.name == "projects" {
 			plan.fields = append(plan.fields, f)
 		}
+	}
+	planProjects := false
+	for _, field := range plan.fields {
+		planProjects = planProjects || field.field.name == "projects"
 	}
 	// Rebase the union in the original field/key order before any metadata
 	// row or root write. The callback-final directory is immutable here.
@@ -180,7 +197,7 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 	if len(conflicts) > 0 {
 		return nil, &metadataConflictError{keys: conflicts}
 	}
-	if progress != nil {
+	if progress != nil && (progressProjects || planProjects) {
 		rebased, err := plan.postimage(ctx, target)
 		if err != nil {
 			return nil, err
@@ -505,6 +522,11 @@ func legacyMetadataWriteEqualMode(ctx context.Context, a, b metadataLogicalNode,
 	}
 	if a.blocked || b.blocked || a.unavailable || b.unavailable {
 		return false, ErrBoundedMetadataCoverage
+	}
+	// Verbatim copies of one frame hold the same bytes: comparing them would
+	// read both completely (every record of a large collection per write).
+	if metadataLogicalFrameOrigin(a) == metadataLogicalFrameOrigin(b) {
+		return true, nil
 	}
 	if a.generic || b.generic {
 		return metadataGenericJSONEqual(ctx, a, b)

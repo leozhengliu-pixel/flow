@@ -17,7 +17,7 @@
 # FLOW_BOUNDED_METADATA=on. A loadtest build may start the flag while COLD consumers are still registered as
 # unmigrated (FLOW_LOADRIG_ALLOW_COLD_UNMIGRATED=1, HOT inventory must be empty); production builds refuse.
 #
-# Settings (environment): LOADRIG_HOME (~/.flow-local/live/loadrig), SCALE (1), VUS (10), DURATION (60s), WARMUP (5s),
+# Settings (environment): LOADRIG_HOME (~/.flow-local/live/loadrig), LOADRIG_PORT_BASE (47610), SCALE (1), VUS (10), DURATION (60s), WARMUP (5s),
 # THINK (300ms), STREAMS (VUS/2), MIX (op=weight,...), MODEL (fake|proxy|off; fake = local fake model, proxy = the
 # shared 127.0.0.1:8787 proxy, deepseek-v4.1-flash), AGENT_EVERY (20s), AGENT_MAX (0 = no cap; proxy defaults to 6),
 # GOMAXPROCS_REPLICA (4), GOMEMLIMIT_REPLICA (1536MiB), MAX_LOAD (20: refuse to start above this load average),
@@ -33,11 +33,14 @@ RUN="$HOME_DIR/run"
 DATA="$HOME_DIR/data"
 REPORTS="$HOME_DIR/reports"
 HEAVY="$HOME/.flow-local/heavy.sh"
-PG_PORT="${LOADRIG_PG_PORT:-47633}"
-REDIS_PORT="${LOADRIG_REDIS_PORT:-47692}"
-MODEL_PORT="${LOADRIG_MODEL_PORT:-47691}"
-API_PORTS=(47610 47611)
-METRIC_PORTS=(47620 47621)
+# LOADRIG_PORT_BASE moves every port (API base+0/1, metrics base+10/11, model base+81, Redis base+82,
+# PostgreSQL base+23) so two rigs (each with its own LOADRIG_HOME) can run side by side.
+PORT_BASE="${LOADRIG_PORT_BASE:-47610}"
+PG_PORT="${LOADRIG_PG_PORT:-$((PORT_BASE + 23))}"
+REDIS_PORT="${LOADRIG_REDIS_PORT:-$((PORT_BASE + 82))}"
+MODEL_PORT="${LOADRIG_MODEL_PORT:-$((PORT_BASE + 81))}"
+API_PORTS=($((PORT_BASE)) $((PORT_BASE + 1)))
+METRIC_PORTS=($((PORT_BASE + 10)) $((PORT_BASE + 11)))
 MAX_LOAD="${MAX_LOAD:-20}"
 mkdir -p "$BIN" "$RUN" "$DATA" "$REPORTS"
 chmod 700 "$HOME_DIR"

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -441,6 +442,20 @@ func (s *logicalJSONStream) mapKey(node metadataLogicalNode, visit func(string) 
 	return visit(name)
 }
 
+// A small map is sorted in memory. The SQL stage that bounds a large map
+// cost a temporary database (file, schema, several statements per key) for
+// every record encoded with any map member.
+const (
+	logicalJSONMemoryMapEntries = 64
+	logicalJSONMemoryMapBytes   = 16 << 10
+)
+
+type logicalJSONMapEntry struct {
+	key     string
+	ordinal int
+	value   metadataLogicalNode
+}
+
 func (s *logicalJSONStream) mapping(node metadataLogicalNode, depth int, activity bool) error {
 	if !logicalJSONMapKeyType(node.typ.Key()) {
 		return &json.UnsupportedTypeError{Type: node.typ}
@@ -450,48 +465,80 @@ func (s *logicalJSONStream) mapping(node metadataLogicalNode, depth int, activit
 		keyType != reflect.TypeFor[time.Time]() && keyType != reflect.TypeFor[*time.Time]() {
 		return fmt.Errorf("%w: logical JSON map-key codec %s", ErrBoundedMetadataCoverage, keyType)
 	}
-	if s.stage == nil {
-		stage, err := sw26NewMigrationStage(s.ctx)
-		if err != nil {
-			return err
+	textKeys := keyType.Kind() != reflect.String && keyType.Implements(reflect.TypeFor[encoding.TextMarshaler]())
+	var memory []logicalJSONMapEntry
+	memoryBytes, staged := 0, false
+	var id int64
+	stage := func(entry logicalJSONMapEntry) error {
+		if textKeys {
+			// No known repo producer creates these ties. Their literal
+			// order depends on fresh Go map traversal, not captured order.
+			var exists int
+			err := s.stage.db.QueryRowContext(s.ctx,
+				`SELECT 1 FROM json_keys WHERE map_id=? AND key=CAST(? AS BLOB) LIMIT 1`, id, []byte(entry.key)).Scan(&exists)
+			if err == nil {
+				return fmt.Errorf("%w: duplicate encoded text map key", ErrBoundedMetadataCoverage)
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
 		}
-		s.stage = stage
-		if _, err := stage.exec(s.ctx, 4096, `CREATE TABLE json_keys(map_id INTEGER,key BLOB,ordinal INTEGER,offset INTEGER,size INTEGER,cost INTEGER,unavailable INTEGER,blocked INTEGER,PRIMARY KEY(map_id,key,ordinal))`); err != nil {
-			return err
+		cost := entry.value.cost
+		if entry.value.generic {
+			cost |= metadataLogicalGenericJSON
 		}
+		_, err := s.stage.exec(s.ctx, int64(len(entry.key)+256),
+			`INSERT INTO json_keys VALUES(?,?,?,?,?,?,?,?)`, id, []byte(entry.key), entry.ordinal,
+			entry.value.offset, entry.value.size, cost, entry.value.unavailable, entry.value.blocked)
+		return err
 	}
-	s.mapID++
-	id := s.mapID
+	startStage := func() error {
+		if s.stage == nil {
+			stage, err := sw26NewMigrationStage(s.ctx)
+			if err != nil {
+				return err
+			}
+			s.stage = stage
+			if _, err := stage.exec(s.ctx, 4096, `CREATE TABLE json_keys(map_id INTEGER,key BLOB,ordinal INTEGER,offset INTEGER,size INTEGER,cost INTEGER,unavailable INTEGER,blocked INTEGER,PRIMARY KEY(map_id,key,ordinal))`); err != nil {
+				return err
+			}
+		}
+		s.mapID++
+		id = s.mapID
+		staged = true
+		for _, entry := range memory {
+			if err := stage(entry); err != nil {
+				return err
+			}
+		}
+		memory = nil
+		return nil
+	}
 	ordinal := 0
 	err := node.MapEntries(s.ctx, func(key, value metadataLogicalNode) error {
 		err := s.mapKey(key, func(name string) error {
-			if keyType.Kind() != reflect.String && keyType.Implements(reflect.TypeFor[encoding.TextMarshaler]()) {
-				// No known repo producer creates these ties. Their literal
-				// order depends on fresh Go map traversal, not captured order.
-				var exists int
-				err := s.stage.db.QueryRowContext(s.ctx,
-					`SELECT 1 FROM json_keys WHERE map_id=? AND key=CAST(? AS BLOB) LIMIT 1`, id, []byte(name)).Scan(&exists)
-				if err == nil {
-					return fmt.Errorf("%w: duplicate encoded text map key", ErrBoundedMetadataCoverage)
-				}
-				if !errors.Is(err, sql.ErrNoRows) {
-					return err
-				}
+			entry := logicalJSONMapEntry{key: name, ordinal: ordinal, value: value}
+			if staged {
+				return stage(entry)
 			}
-			cost := value.cost
-			if value.generic {
-				cost |= metadataLogicalGenericJSON
+			if len(memory) < logicalJSONMemoryMapEntries && memoryBytes+len(name) <= logicalJSONMemoryMapBytes {
+				memory = append(memory, entry)
+				memoryBytes += len(name)
+				return nil
 			}
-			_, err := s.stage.exec(s.ctx, int64(len(name)+256),
-				`INSERT INTO json_keys VALUES(?,?,?,?,?,?,?,?)`, id, []byte(name), ordinal,
-				value.offset, value.size, cost, value.unavailable, value.blocked)
-			return err
+			if err := startStage(); err != nil {
+				return err
+			}
+			return stage(entry)
 		})
 		ordinal++
 		return err
 	})
 	if err != nil {
 		return err
+	}
+	if !staged {
+		return s.memoryMapping(node, memory, memoryBytes, textKeys, depth, activity)
 	}
 	if err := s.text("{"); err != nil {
 		return err
@@ -575,6 +622,59 @@ func (s *logicalJSONStream) mapping(node metadataLogicalNode, depth int, activit
 	_, err = s.stage.exec(s.ctx, 0, `DELETE FROM json_keys WHERE map_id=?`, id)
 	if err != nil {
 		return err
+	}
+	return s.text("}")
+}
+
+// memoryMapping writes a small map in the staged order: by encoded key bytes,
+// then by entry order.
+func (s *logicalJSONStream) memoryMapping(node metadataLogicalNode, entries []logicalJSONMapEntry, keyBytes int, textKeys bool, depth int, activity bool) error {
+	slices.SortStableFunc(entries, func(a, b logicalJSONMapEntry) int {
+		if order := strings.Compare(a.key, b.key); order != 0 {
+			return order
+		}
+		return a.ordinal - b.ordinal
+	})
+	if textKeys {
+		for index := 1; index < len(entries); index++ {
+			if entries[index].key == entries[index-1].key {
+				return fmt.Errorf("%w: duplicate encoded text map key", ErrBoundedMetadataCoverage)
+			}
+		}
+	}
+	_, release, err := s.owner.store.tryAdmitAdditionalMetadataWork(s.ctx, keyBytes*8+64<<10)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := s.text("{"); err != nil {
+		return err
+	}
+	for index, entry := range entries {
+		if err := s.ctx.Err(); err != nil {
+			return err
+		}
+		if index != 0 {
+			if err := s.text(","); err != nil {
+				return err
+			}
+		}
+		if err := s.stringBytes([]byte(entry.key)); err != nil {
+			return err
+		}
+		if err := s.text(":"); err != nil {
+			return err
+		}
+		// The same value the staged row decodes to.
+		value := metadataLogicalNode{source: node.source, typ: node.typ.Elem(), offset: entry.value.offset, size: entry.value.size,
+			cost: entry.value.cost & metadataLogicalCostMask, unavailable: entry.value.unavailable, blocked: entry.value.blocked, generic: entry.value.generic}
+		if activity && (entry.key == "addedLabelIds" || entry.key == "removedLabelIds") {
+			if err := s.activityIDs(value); err != nil {
+				return err
+			}
+		} else if err := s.write(webhookJSONValue{node: value}, depth+1); err != nil {
+			return err
+		}
 	}
 	return s.text("}")
 }

@@ -17,7 +17,7 @@ func TestScaleP21SW29LogicalOrphanRetainsDiskAdmission(t *testing.T) {
 	if _, err := builder.writeValue(reflect.ValueOf("owned logical bytes"), 0, false); err != nil {
 		t.Fatal(err)
 	}
-	name := builder.storage.file.Name()
+	name := builder.storage.Name()
 	orphan := name + ".owned-orphan"
 	if err := os.Rename(name, orphan); err != nil {
 		t.Fatal(err)

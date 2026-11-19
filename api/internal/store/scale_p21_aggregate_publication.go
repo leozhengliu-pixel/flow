@@ -205,14 +205,24 @@ func (s *SQLiteStore) metadataAggregateEncodeOwned(ctx context.Context, node met
 			return nil, nil, err
 		}
 	}
-	spool, err := newMetadataLogicalRecordSpool(ctx)
-	if err != nil {
-		return nil, nil, err
+	if metadataLogicalDiskUsed.Load() >= metadataLogicalDiskBytes {
+		return nil, nil, ErrRecordSpoolBudget
 	}
-	defer func() { err = errors.Join(err, spool.Close()) }()
+	// A value that fits the stream buffer is admitted and kept in memory at
+	// its single flush; a larger one spools as before. A temporary file per
+	// record cost far more than the record's encoding (thousands per write).
+	output := &metadataAggregateEncodeOutput{ctx: ctx, store: s}
+	defer func() {
+		if output.spool != nil {
+			err = errors.Join(err, output.spool.Close())
+		}
+		if err != nil && output.release != nil {
+			output.release()
+		}
+	}()
 	stream := &logicalJSONStream{
 		ctx: ctx, owner: scratch, view: &WebhookAggregateRead{store: s},
-		out:                 bufio.NewWriterSize(spool, 64<<10),
+		out:                 bufio.NewWriterSize(output, metadataAggregateEncodeBuffer),
 		classifyCodecErrors: true,
 	}
 	defer func() {
@@ -226,9 +236,23 @@ func (s *SQLiteStore) metadataAggregateEncodeOwned(ctx context.Context, node met
 	if err := stream.write(webhookJSONValue{node: framed}, 0); err != nil {
 		return nil, nil, err
 	}
+	output.flushing = true
 	if err := stream.out.Flush(); err != nil {
 		return nil, nil, err
 	}
+	if output.spool == nil {
+		raw, release := output.raw, output.release
+		output.release = nil
+		if raw == nil {
+			raw, release = json.RawMessage{}, func() {}
+		}
+		if err := ctx.Err(); err != nil {
+			release()
+			return nil, nil, err
+		}
+		return raw, release, nil
+	}
+	spool := output.spool
 	if spool.bytes < 0 || spool.bytes > metadataWorkBytes {
 		return nil, nil, ErrMetadataWorkBudget
 	}
@@ -627,4 +651,40 @@ func metadataAggregateNormalizedEqual(ctx context.Context, left, right any, work
 	default:
 		return false, ErrMetadataRecordQuery
 	}
+}
+
+const metadataAggregateEncodeBuffer = 64 << 10
+
+// metadataAggregateEncodeOutput receives a JSON stream's buffered output: the
+// whole value at once when it fits the buffer, else a record spool.
+type metadataAggregateEncodeOutput struct {
+	ctx      context.Context
+	store    *SQLiteStore
+	flushing bool
+	raw      json.RawMessage
+	release  func()
+	spool    *RecordSpool
+}
+
+func (o *metadataAggregateEncodeOutput) Write(p []byte) (int, error) {
+	if o.spool == nil && o.raw == nil && o.flushing {
+		cost := ((uint64(len(p)) + 8191) &^ uint64(8191)) + 64
+		_, release, err := o.store.tryAdmitAdditionalMetadataWork(o.ctx, int(cost))
+		if err != nil {
+			return 0, err
+		}
+		o.raw, o.release = append(make(json.RawMessage, 0, len(p)), p...), release
+		return len(p), nil
+	}
+	if o.spool == nil {
+		if o.raw != nil {
+			return 0, ErrMetadataRecordQuery
+		}
+		spool, err := newMetadataLogicalRecordSpool(o.ctx)
+		if err != nil {
+			return 0, err
+		}
+		o.spool = spool
+	}
+	return o.spool.Write(p)
 }

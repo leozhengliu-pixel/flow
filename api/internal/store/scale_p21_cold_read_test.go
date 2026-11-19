@@ -180,7 +180,7 @@ func TestScaleP21ColdReadGateEncodingLifetimeAndCancellation(t *testing.T) {
 	view.metadataResidency.work.limit = 1
 	view.metadataResidency.mu.Lock()
 	old := view.metadataResidency.logical[workspace]
-	path := old.stores[0].file.Name()
+	path := old.stores[0].Name()
 	view.metadataResidency.mu.Unlock()
 	writer := scaleP21ColdBlockingWriter{make(chan struct{}), make(chan struct{})}
 	done := make(chan error, 1)
@@ -351,7 +351,7 @@ func TestScaleP21ColdReadRefreshLatestInstalledGeneration(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		path := old.stores[0].file.Name()
+		path := old.stores[0].Name()
 		previousPath = path
 		old.Release()
 		latest := cloneBootstrap(before)
