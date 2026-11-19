@@ -454,7 +454,7 @@ func (r *NotificationVisibilityRead) readBody(id string) (domain.Notification, e
 	expression := "json_remove(data,'$.pulseSummary','$.summaryReports')"
 	switch r.store.dialect {
 	case "postgres":
-		expression = "(convert_from(data,'UTF8')::jsonb - 'pulseSummary' - 'summaryReports')::text"
+		expression = "(flow_utf8(data)::jsonb - 'pulseSummary' - 'summaryReports')::text"
 	case "mysql":
 		expression = "JSON_REMOVE(CONVERT(data USING utf8mb4),'$.pulseSummary','$.summaryReports')"
 	}

@@ -475,6 +475,9 @@ func (s *SQLiteStore) loadWorkspaceStamped(ctx context.Context, workspaceKey str
 }
 
 func (s *SQLiteStore) migrate(ctx context.Context) error {
+	if err := s.ensurePostgresUTF8Decoder(ctx); err != nil {
+		return err
+	}
 	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name VARCHAR(191) NOT NULL, applied_at VARCHAR(40) NOT NULL)`); err != nil {
 		return fmt.Errorf("create schema migrations table: %w", err)
 	}

@@ -645,7 +645,7 @@ func (s *SQLiteStore) migrateIssueSequences(ctx context.Context) error {
 			expression = `CAST(JSON_UNQUOTE(JSON_EXTRACT(CONVERT(data USING utf8mb4),'$.number')) AS UNSIGNED)`
 		}
 		if s.dialect == "postgres" {
-			expression = `CAST(convert_from(data,'UTF8')::jsonb->>'number' AS BIGINT)`
+			expression = `CAST(flow_utf8(data)::jsonb->>'number' AS BIGINT)`
 		}
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO issue_number_sequences(workspace_key,last_number) SELECT ?,COALESCE(MAX(`+expression+`),0) FROM issue_records WHERE workspace_key=? ON CONFLICT(workspace_key) DO UPDATE SET last_number=excluded.last_number`, workspace, workspace); err != nil {
 			return err

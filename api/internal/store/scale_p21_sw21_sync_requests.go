@@ -124,7 +124,7 @@ func (s *SQLiteStore) scaleP21SW21ApplicationCandidate(applicationID string) (st
 		// json_each refuses a scalar or array document, which has no members
 		// (SQLite's json_each yields none named applicationId): such a
 		// document is a candidate exactly when no application is selected.
-		return `CASE WHEN json_typeof(convert_from(data,'UTF8')::json)='object' THEN EXISTS (SELECT 1 FROM json_each(convert_from(data,'UTF8')::json) AS sw21(key,value) WHERE LOWER(sw21.key)='applicationid' AND (json_typeof(sw21.value)='string' AND sw21.value#>>'{}'=? OR json_typeof(sw21.value)='null' AND ?='')) OR (?='' AND NOT EXISTS (SELECT 1 FROM json_each(convert_from(data,'UTF8')::json) AS sw21(key,value) WHERE LOWER(sw21.key)='applicationid')) ELSE ?='' END`, []any{applicationID, applicationID, applicationID, applicationID}
+		return `CASE WHEN json_typeof(flow_utf8(data)::json)='object' THEN EXISTS (SELECT 1 FROM json_each(flow_utf8(data)::json) AS sw21(key,value) WHERE LOWER(sw21.key)='applicationid' AND (json_typeof(sw21.value)='string' AND sw21.value#>>'{}'=? OR json_typeof(sw21.value)='null' AND ?='')) OR (?='' AND NOT EXISTS (SELECT 1 FROM json_each(flow_utf8(data)::json) AS sw21(key,value) WHERE LOWER(sw21.key)='applicationid')) ELSE ?='' END`, []any{applicationID, applicationID, applicationID, applicationID}
 	case "mysql":
 		// Like SQLite and PostgreSQL, select the top-level members whose key
 		// folds to applicationid (JSON_KEYS decodes escaped keys) and whose

@@ -38,7 +38,7 @@ func (s *SQLiteStore) LoopRecordExists(ctx context.Context, workspace, id string
 	case "mysql":
 		inline = `JSON_CONTAINS(JSON_EXTRACT(CONVERT(w.data USING utf8mb4),'$.loops'),JSON_OBJECT('id',?))`
 	case "postgres":
-		value := `convert_from(w.data,'UTF8')::jsonb->'loops'`
+		value := `flow_utf8(w.data)::jsonb->'loops'`
 		inline = `EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(` + value + `)='array' THEN ` + value + ` ELSE '[]'::jsonb END) item WHERE ` + s.metadataRecordKeyEquals("item->>'id'", "?") + `)`
 	}
 	err = s.db.QueryRowContext(ctx, `SELECT CASE WHEN r.record_key IS NOT NULL OR `+inline+` THEN 1 ELSE 0 END

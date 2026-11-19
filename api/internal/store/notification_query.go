@@ -39,9 +39,9 @@ func (s *SQLiteStore) jsonText(column, field string) string {
 		return "NULLIF(JSON_UNQUOTE(JSON_EXTRACT(CONVERT(" + column + " USING utf8mb4), '$." + field + "')), 'null')"
 	case "postgres":
 		if strings.Contains(field, ".") {
-			return "(convert_from(" + column + ", 'UTF8')::jsonb #>> '{" + strings.ReplaceAll(field, ".", ",") + "}')"
+			return "(flow_utf8(" + column + ")::jsonb #>> '{" + strings.ReplaceAll(field, ".", ",") + "}')"
 		}
-		return "(convert_from(" + column + ", 'UTF8')::jsonb ->> '" + field + "')"
+		return "(flow_utf8(" + column + ")::jsonb ->> '" + field + "')"
 	default:
 		return "json_extract(" + column + ", '$." + field + "')"
 	}

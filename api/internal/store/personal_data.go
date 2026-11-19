@@ -690,7 +690,7 @@ func (s *SQLiteStore) textCast(column string) string {
 		if personTextColumns[column] {
 			return column
 		}
-		return "convert_from(" + column + ",'UTF8')"
+		return "flow_utf8(" + column + ")"
 	default:
 		return "CAST(" + column + " AS TEXT)"
 	}

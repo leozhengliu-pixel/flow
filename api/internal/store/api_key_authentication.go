@@ -246,7 +246,7 @@ func (s *SQLiteStore) writeAPIKeyUseRows(ctx context.Context, tx *sqlTx, use api
 		expression = "JSON_SET(CONVERT(data USING utf8mb4),'$.lastUsedAt',?)"
 	}
 	if s.dialect == "postgres" {
-		expression = "convert_to(jsonb_set(convert_from(data,'UTF8')::jsonb,'{lastUsedAt}',to_jsonb(?::text))::text,'UTF8')"
+		expression = "convert_to(jsonb_set(flow_utf8(data)::jsonb,'{lastUsedAt}',to_jsonb(?::text))::text,'UTF8')"
 	}
 	for _, record := range []struct{ field, id string }{{"apiKeys", use.keyID}, {"oauthAuthorizations", use.authorizationID}} {
 		if record.id == "" {
