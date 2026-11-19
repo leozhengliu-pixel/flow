@@ -126,9 +126,15 @@ func (s *metadataSQLWriteStage) writer(ctx context.Context, column string) (*met
 	if column == "content" {
 		columnIndex = 1
 	}
+	chunk := min(s.appendChunkBytes, s.expectedBytes(columnIndex))
+	if chunk < 0 || chunk > metadataSQLIntegrationOwnedChunkBytes {
+		// admitTarget accepts only the fixed append sizes; the buffer never
+		// exceeds the largest of them.
+		return nil, ErrBoundedMetadataCoverage
+	}
 	return &metadataSQLStageWriter{
 		ctx: ctx, stage: s, column: column,
-		buffer: make([]byte, 0, min(s.appendChunkBytes, s.expectedBytes(columnIndex))),
+		buffer: make([]byte, 0, chunk),
 	}, nil
 }
 

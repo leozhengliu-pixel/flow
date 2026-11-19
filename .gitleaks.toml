@@ -6,12 +6,16 @@
 useDefault = true
 
 [allowlist]
-description = "Helm chart test fixtures"
+description = "Synthetic test fixtures (Helm chart scenarios, scale differential tests)"
 # Scenarios use a fake coding secret key (base64 of "test-key-test-key-...")
 # and the goldens are their rendered output, including checksum/secret
 # annotations. Nothing in these directories is a real credential.
 paths = [
   '''^deploy/helm/flow/tests/(scenarios|golden)/[^/]+\.yaml$''',
+  # Scale differential tests (legacy vs bounded): every identifier, event
+  # type, client secret and API key in them is a synthetic fixture
+  # ("scale_p21.sw461_suggestions", "sw450-secret-owner-key", ...).
+  '''^api/(cmd/server|internal/store)/scale_p[0-9]+_[a-z0-9_]+_test\.go$''',
 ]
 # The same fake key, reused by the sandbox envtest RBAC test.
 regexes = [

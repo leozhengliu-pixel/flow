@@ -87,7 +87,24 @@ func TestScaleP21SW24ApplicationIdentityIDsSource(t *testing.T) {
 			OAuthApplications: []domain.OAuthApplication{{ClientID: "enumerated-after-cancel"}},
 		}}}
 		if bounded {
-			blankName.metadataResidency = newMetadataResidency()
+			// The bounded lookup reads the application from canonical SQL,
+			// so the stub shares a database holding the nameless application
+			// under the installed workspace.
+			t.Setenv("FLOW_BOUNDED_METADATA", "off")
+			f := scaleP09Database(t)
+			workspace := f.data.Workspace.URLKey
+			if err := f.MutateWorkspace(ContextWithActor(t.Context(), f.data.Viewer), workspace, "scale_p21_sw24.nameless", "", nil, func(data *domain.Bootstrap) error {
+				data.OAuthApplications = append(data.OAuthApplications, domain.OAuthApplication{ID: "sw24-nameless", ClientID: "enumerated-after-cancel"})
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			blankName = &SQLiteStore{db: f.db, dialect: f.dialect, maxStateBytes: f.maxStateBytes,
+				workspaces:        map[string]domain.Bootstrap{workspace: blankName.workspaces["source"]},
+				metadataResidency: newMetadataResidency()}
+			if app, found := blankName.OAuthApplicationByClientID("enumerated-after-cancel"); !found || app.Name != "" {
+				t.Fatal("bounded stub does not read the nameless application", found, app.Name)
+			}
 		}
 		if err := blankName.SyncAllApplicationIdentities(cancelled); err != nil {
 			t.Fatal("enumeration introduced cancellation before the unchanged no-name decision", err)
