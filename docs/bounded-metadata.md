@@ -195,9 +195,35 @@ doing whole-workspace work often. The route name in `cold_scope_route` is the
 pattern from the route table. A route that runs COLD is listed there as
 `cold: <first legacy consumer>`.
 
-Counters for COLD slot waits and refusals are collected only for the load rig
-(`FLOW_LOADRIG_METRICS_ADDR`). **To be confirmed:** whether to expose
-them to operators.
+### Summary lines
+
+With the flag on the server also writes two structured lines. There is no
+metrics endpoint.
+
+**`bounded metadata: catalog`**, once per workspace at startup: `workspace`,
+`complete`, `collections`, `incompleteCollections`. It is `INFO` when the
+catalog is complete and `WARN` (with a `hint`) when collections still need the
+catalog backfill. It is a SQL count and decodes no workspace.
+
+**`bounded metadata: cold path`** (`INFO`), once per interval and only when
+something changed since the previous line:
+
+| Field | Meaning |
+| --- | --- |
+| `interval` | The reporting period. |
+| `slotWaits`, `slotWaitAvg` | COLD slot waits in the period and their average. |
+| `slotWaitMax` | Longest slot wait since start. |
+| `slotRefusals` | COLD slot refusals in the period. |
+| `slotsHeld`, `slotWaiting` | COLD slots held and callers waiting now. |
+| `viewRefusals` | Legacy-view lane refusals in the period. |
+| `facadeDecodes`, `facadeDecodeAvg`, `facadeDecodeMax` | COLD facade decodes: count and average in the period, maximum since start. |
+| `viewDecodes`, `viewDecodeAvg`, `viewDecodeMax`, `viewFailures` | Legacy-view decodes, the same way, plus failures in the period. |
+| `lockWaits`, `lockWaitAvg`, `lockWaitMax` | Writers that waited on the store write lock. |
+| `coldLockWaits`, `coldLockWaitAvg`, `coldLockWaitMax` | The same for COLD facade writers. |
+| `coldWriteLockHolds` | COLD legacy writes that held the shared lock in the period. |
+
+`FLOW_BOUNDED_METADATA_STATS_INTERVAL` sets the period (a Go duration such as
+`30s`, or whole seconds). The default is 60 s; `0` turns the summary off.
 
 ## Rollback
 
@@ -255,5 +281,4 @@ pass/fail limits.
 - Whether any admission failure aborts startup or only fails requests for that workspace.
 - A tested flag-on to flag-off rollback on a restored production copy.
 - Sizing guidance for `FLOW_COLD_QUEUE_LIMIT`, `FLOW_COLD_QUEUE_TIMEOUT` and `FLOW_COLD_PROJECTION_CONCURRENCY`.
-- An operator-visible "catalog complete" indicator and public counters for COLD waits.
 - Load-rig pass/fail thresholds.
