@@ -1,10 +1,11 @@
 {
   "source": "server/scale_p21_workflow_schedule_tick.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "boundedWorkflowScheduleTick": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Iterates WorkspaceKeys, retains one BeginWorkflowScheduleRead generation per workspace and calls the literal runWorkflow for each due definition then each due retry, in native order, each under its own released output owner; errors are ignored per item as in the literal loop. SW501 (Sunday and Monday 10:00 UTC, boundaries, duplicates, stale/superseded/disabled/missing retries, failing runs, cancellation) and SW342 compare it with the literal loop on warm and SQL-reloaded sources: same runs, order, rows, events and publication, no leaked work and no full hydration.",
       "accessors": ["BeginWorkflowScheduleRead"],
       "temperature": "hot",
       "temperatureReason": "Production workflow ticker's owned due/retry loop.",

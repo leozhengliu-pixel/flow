@@ -158,6 +158,22 @@ func (s *SQLiteStore) loadWorkflowRunInputs(ctx context.Context, source *metadat
 	}); err != nil {
 		return nil, err
 	}
+	// addIssueLabel's literal availability check also reads the label's
+	// group (first occurrence by ID, and whether it is archived).
+	groups, err := read.keys(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, label := range read.data.Labels {
+		if err := read.addKey(ctx, groups, label.GroupID); err != nil {
+			return nil, err
+		}
+	}
+	if err := read.selectSlice(ctx, "labelGroups", func(node metadataLogicalNode) (bool, error) {
+		return issueHotMatches(ctx, node, "ID", groups)
+	}, "ID", "ArchivedAt"); err != nil {
+		return nil, err
+	}
 	stateData := read.data
 	if err := read.reserve(ctx, uint64(len(createTeams))*uint64(reflect.TypeFor[domain.Issue]().Size())*2+4096); err != nil {
 		return nil, err

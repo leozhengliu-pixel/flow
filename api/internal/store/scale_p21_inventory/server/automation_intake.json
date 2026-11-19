@@ -1,6 +1,6 @@
 {
   "source": "server/automation_intake.go",
-  "unmigrated": 20,
+  "unmigrated": 18,
   "consumers": {
     "createPushSubscription": {
       "owner": "P21",
@@ -199,7 +199,8 @@
     },
     "runWorkflow": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode calls MutateWorkflowRun with the one literal callback, aggregate, event type and payload that the off branch passes to MutateWorkspace (SW503 AST guard); the off branch is byte-for-byte the pre-P21 code. SW500 compares the actual runWorkflow outcome, run, error class, SQL issue/content/metadata rows, root, events, webhooks and realtime against legacy on bounded warm and SQL-reloaded sources for every action type (notify default/explicit, assignIssue, setIssuePriority, addIssueLabel plain/grouped/already present, createIssue, unknown types, no actions, all seven in one run, detached pointer after prepend), every action failure postimage (missing/former recipient and creator, missing/former assignee, no/missing/non-issue resource, out-of-range/non-numeric priority, missing/archived/archived-group/missing-group/project labels, missing team, blank title, no default state), retry history (backoff, capped backoff, max attempts reached/zero, manual retry of a not-yet-due run, retry after success, due retry superseded by success, duplicate run IDs, 499/500-run tails dropping the cleared predecessor), consecutive error reset/increment, manual/schedule/retry/issueCreated triggers on enabled and disabled definitions, missing definitions, every schedule rule (@hourly/@daily/@weekly, weekday and Sunday cron, steps, ranges/lists, invalid and sub-minute rules), 4 MiB issue descriptions with all actions, 4 MiB unrelated issues on create, 4 MiB definition rows and retained predecessors, and peer-replica writes (rescheduled/claimed retries and schedules, renamed/deleted definitions, issue title and same-field priority, appended runs) merged or refreshed and retried. Root gate (pinned, not certified): a definition over about 4 MiB exceeds the shared aggregate-plan envelope (sixteen copies of both definition images) and is refused atomically where the literal writer succeeds; 3 MiB definitions are certified. SW502 cancels at sampled SQL statements and requires the untouched preimage or the exact literal postimage with no leaked work. SW201 and SW322 (principal/key matrix) remain.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -213,7 +214,8 @@
     },
     "startWorkflowScheduler": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode dispatches each 15-second tick to boundedWorkflowScheduleTick before the literal WorkspaceMetadataFields loop, which stays the unchanged off branch (SW503 pins the dispatch order and the literal loop copy used by the differentials). SW501 compares the literal loop with the bounded tick on warm and SQL-reloaded sources at Sunday 10:00 UTC and Monday 10:00 UTC: exact due boundaries, one-nanosecond-late definitions, weekday/Sunday cron and @daily/@hourly/@weekly rules, disabled and manual definitions with due NextRunAt, duplicate definition IDs, due/stale/superseded/disabled/missing retry targets, a failing scheduled run with retry history, run order, rows, events and publication, plus a canceled tick that changes nothing. SW342 remains.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
