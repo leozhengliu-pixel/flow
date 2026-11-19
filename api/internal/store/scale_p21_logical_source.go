@@ -59,15 +59,18 @@ type metadataLogicalStorage struct {
 	genericStore  *SQLiteStore
 	// Spool I/O (scale_p21_logical_spool_io.go, invariants there): file is
 	// created lazily in directory and holds [0, flushed); pending holds later
-	// appends; blocks cache small reads of flushed bytes.
+	// appends; blocks cache small reads of flushed bytes under cacheMu and
+	// spare keeps evicted block buffers for the next block read.
 	directory string
 	pendingMu sync.Mutex
 	file      *os.File
 	closed    bool
 	pending   []byte
 	flushed   atomic.Int64
-	blocks    [metadataLogicalReadSlots]atomic.Pointer[metadataLogicalBlock]
-	victim    atomic.Uint32
+	cacheMu   sync.RWMutex
+	blocks    [metadataLogicalReadSlots]*metadataLogicalBlock
+	spare     []*metadataLogicalBlock
+	victim    uint32
 	// patches is odd while a patch of flushed bytes is in flight and changes
 	// with each one; a block read that overlapped one is never served.
 	patches atomic.Int64

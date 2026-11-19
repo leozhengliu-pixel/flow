@@ -29,9 +29,7 @@ func (s *metadataLogicalStorage) settleForTesting() error {
 	s.pendingMu.Lock()
 	s.dropFrameMemo(0, metadataLogicalMemoEnd)
 	s.pendingMu.Unlock()
-	for index := range s.blocks {
-		s.blocks[index].Store(nil)
-	}
+	s.dropReadCache()
 	return nil
 }
 
