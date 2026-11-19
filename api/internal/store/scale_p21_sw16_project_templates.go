@@ -439,7 +439,10 @@ func scaleP21SW16CloneTemplateValue(value reflect.Value) reflect.Value {
 
 // installedProjectTemplates decodes the projectTemplates field of the
 // workspace's installed logical source, charged to its own resource read;
-// release returns the charge once the response is written.
+// release returns the charge once the response is written. The list is only
+// written as JSON, so it decodes the wire value: a timestamp whose Location
+// the source keeps only as its wire output (SW16 native time wire) answers
+// the same JSON as the legacy list instead of failing coverage.
 func (s *SQLiteStore) installedProjectTemplates(ctx context.Context, workspace string) (_ []domain.ProjectTemplate, release func(), found bool, err error) {
 	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)
 	source, found, err := s.BeginInstalledMetadataRead(ctx, workspace)
@@ -456,7 +459,7 @@ func (s *SQLiteStore) installedProjectTemplates(ctx context.Context, workspace s
 		if name != "projectTemplates" {
 			return nil
 		}
-		value, err := owner.node(ctx, field, false)
+		value, err := owner.node(ctx, field, true)
 		if err == nil {
 			templates = value.Interface().([]domain.ProjectTemplate)
 		}
