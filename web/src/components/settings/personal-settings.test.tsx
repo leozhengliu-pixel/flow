@@ -19,6 +19,7 @@ import { I18nProvider } from '@/i18n/i18n'
 import type { SettingsPageId } from '@/lib/app-routes'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import { MemoryRouter } from 'react-router-dom'
+import { clearSessionCaches } from '@/lib/session-cache-registry'
 
 const api = vi.hoisted(() => ({
   updateAccountProfile: vi.fn(), removeMember: vi.fn(), fetchAccountIdentities: vi.fn(), fetchAccountSessions: vi.fn(),
@@ -500,6 +501,49 @@ describe('personal settings workflows', () => {
     })))
     expect(onOpenAPIKey).toHaveBeenCalledWith(expect.objectContaining({ id: 'key-full' }))
     expect(sessionStorage.getItem('flow.api-key-secret:key-full')).toBeNull()
+  })
+
+  describe('one-time API key secret hand-off', () => {
+    const created = { id: 'key-full', name: 'Full access', scopes: null, teamIds: null, creatorId: viewer.id, prefix: 'flow_api_hidden', createdAt: '2026-09-01T00:00:00.000Z' }
+    async function createWithoutOpeningDetail() {
+      const user = userEvent.setup()
+      const input = props('account-security')
+      input.onOpenAPIKey = vi.fn()
+      api.createAPIKey.mockResolvedValue({ key: created, secret: 'flow_full_secret' })
+      input.apiKeyMode = 'new'
+      const view = render(<MemoryRouter><I18nProvider><PersonalSettings {...input}/></I18nProvider></MemoryRouter>)
+      await user.type(screen.getByRole('textbox', { name: 'Key name' }), 'Full access')
+      await user.click(screen.getByRole('button', { name: 'Create' }))
+      await waitFor(() => expect(input.onOpenAPIKey).toHaveBeenCalled())
+      return { view, input }
+    }
+    function detailProps() {
+      const input = props('account-security')
+      input.data = { ...input.data, apiKeys: [created] } as never
+      input.apiKeyMode = 'detail'
+      input.apiKeyId = created.id
+      return input
+    }
+
+    it('drops an unopened secret when the settings view unmounts', async () => {
+      const { view } = await createWithoutOpeningDetail()
+      view.unmount()
+      render(<MemoryRouter><I18nProvider><PersonalSettings {...detailProps()}/></I18nProvider></MemoryRouter>)
+      expect(screen.queryByText('flow_full_secret')).not.toBeInTheDocument()
+    })
+
+    it('drops an unopened secret on logout or account switch', async () => {
+      await createWithoutOpeningDetail()
+      clearSessionCaches()
+      render(<MemoryRouter><I18nProvider><PersonalSettings {...detailProps()}/></I18nProvider></MemoryRouter>)
+      expect(screen.queryByText('flow_full_secret')).not.toBeInTheDocument()
+    })
+
+    it('still shows the secret once to the detail page opened right after creation', async () => {
+      const { view, input } = await createWithoutOpeningDetail()
+      view.rerender(<MemoryRouter><I18nProvider><PersonalSettings {...{ ...detailProps(), onOpenAPIKey: input.onOpenAPIKey }}/></I18nProvider></MemoryRouter>)
+      expect(await screen.findByText('flow_full_secret')).toBeVisible()
+    })
   })
 
   it('edits API-key permissions and team policy through the dedicated form', async () => {

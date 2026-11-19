@@ -1,3 +1,4 @@
+import { endsSession, registerSessionCacheClearer } from '@/lib/session-cache-registry'
 import { toast } from '@/lib/toast'
 
 import type { BootstrapData, Favorite } from '@/types/flow'
@@ -29,12 +30,16 @@ type FavoriteDelta = {
 
 const pendingIntents = new Map<string, FavoriteIntent>()
 const pendingRequests = new Map<string, Promise<unknown>>()
+// Bumped when the session ends: favorite requests still waiting behind an earlier one are not sent for the next viewer.
+let sessionEpoch = 0
 const CONFIRMED_INTENT_TTL_MS = 30_000
 
 function serializeFavoriteRequest<T>(key: string, operation: () => Promise<T>): Promise<T> {
   const previous = pendingRequests.get(key)
+  const epoch = sessionEpoch
   const request = (async () => {
     if (previous) await previous.catch(() => undefined)
+    if (epoch !== sessionEpoch) throw new Error('The session ended before the favorite was sent')
     return operation()
   })()
   pendingRequests.set(key, request)
@@ -234,3 +239,10 @@ export function resetFavoriteIntents() {
   pendingIntents.clear()
   pendingRequests.clear()
 }
+
+registerSessionCacheClearer((_viewerId, workspaceKey) => {
+  if (!endsSession(workspaceKey)) return
+  sessionEpoch++
+  pendingIntents.clear()
+  pendingRequests.clear()
+})

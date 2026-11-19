@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { fetchInitiativeProjectUpdatesSubscription, setInitiativeProjectUpdatesSubscription, setPulseSubscription } from "@/lib/api";
 import { request } from "@/lib/api-client";
+import { endsSession, registerSessionCacheClearer } from "@/lib/session-cache-registry";
 import type { Initiative, Project, PulseSubscriptionType, Subscription, TeamMember } from "@/types/flow";
 
 /**
@@ -209,3 +210,10 @@ export function useInitiativeProjectUpdatesSubscription(initiativeId: string | u
 export function resetInitiativeProjectUpdatesChoices() {
   projectUpdatesChoices.clear();
 }
+
+// Choices are the viewer's own; the next viewer in this tab must start from their own bootstrap data.
+registerSessionCacheClearer((_viewerId, workspaceKey) => {
+  if (!endsSession(workspaceKey)) return;
+  sessionChoices.clear();
+  projectUpdatesChoices.clear();
+});

@@ -3,6 +3,7 @@
  * Holds the last search term consumed by list headers; full FilterBlock registry is out of scope.
  */
 import { useCallback, useSyncExternalStore } from "react";
+import { endsSession, registerSessionCacheClearer } from "@/lib/session-cache-registry";
 
 type InlineFilterState = {
   lastSearchTerm: string;
@@ -61,3 +62,14 @@ export function useInlineFilter(key: string) {
   );
   return { lastSearchTerm: state.lastSearchTerm, setTerm };
 }
+
+// A search term typed by one viewer is not the next viewer's starting filter.
+registerSessionCacheClearer((_viewerId, workspaceKey) => {
+  if (!endsSession(workspaceKey)) return;
+  for (const [key, state] of stores) {
+    if (!state.lastSearchTerm) continue;
+    state.lastSearchTerm = "";
+    emit(key);
+  }
+  stores.clear();
+});

@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import * as Popover from "@radix-ui/react-popover";
 import { toast } from "@/lib/toast";
+import { registerSessionCacheClearer } from "@/lib/session-cache-registry";
 import { mcpConnectorsEnabled } from "@/lib/mcp-connectors";
 import { NotificationChannelSettings } from './notification-channel-settings';
 import { PersonalConnectorSettings } from './personal-connectors';
@@ -150,6 +151,8 @@ type PersonalTranslate = (source: string) => string;
 // even when a browser blocks sessionStorage. It is deleted as soon as the
 // detail page consumes it and is never sent back to the API.
 const pendingAPIKeySecrets = new Map<string, string>();
+// A secret nobody opened (the detail page never mounted) must not outlive the viewer: the next one in this tab could read it.
+registerSessionCacheClearer(() => pendingAPIKeySecrets.clear());
 
 // Personal settings are kept local until the shared catalog owns every key.
 // This avoids falling back to partially translated legacy DOM mutations.
@@ -618,6 +621,8 @@ export function PersonalSettings(props: Props) {
     (source) => (locale === "zh-CN" ? (PERSONAL_ZH[source] ?? translateToChinese(source)) : source),
     [locale],
   );
+  // Leaving the settings view drops a hand-off secret that was never shown.
+  useEffect(() => () => pendingAPIKeySecrets.clear(), []);
   let content: ReactNode;
   if (props.page === "preferences") content = <Preferences {...props} p={p} />;
   else if (props.page === "profile") content = <Profile {...props} p={p} />;
