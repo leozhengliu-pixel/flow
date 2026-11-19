@@ -181,7 +181,7 @@ func (s *SQLiteStore) CreateTeamRecords(ctx context.Context, workspace string, p
 			}
 			return err
 		}
-		if _, err := s.persistTeamMetadata(ctx, workspace, data, &event, upserts, membersChanged, teamMembersChanged, prepare); err != nil {
+		if _, err := s.persistTeamMetadata(ctx, workspace, data, &event, upserts, membersChanged, teamMembersChanged, prepare, nil); err != nil {
 			return err
 		}
 		return publication.Install()

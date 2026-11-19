@@ -833,10 +833,6 @@ var scaleP21SW559Reviewed = map[string]struct{ fields, reason string }{
 	"store/SQLiteStore.UpdateIssueRecord": {"ActivityHistoryError ActivityHistoryHeads ActivityHistoryLoader Documents ImportJobs MigrationJobs NextIssueNumber Projects States Trash Users ViewerTeamIDs whole",
 		"Bounded issue writer: its callback inputs are installed from the logical source (loadIssueWorkflowStates, loadIssueHotInputs, " +
 			"loadIssueProjectInputs; issueMoveAudience from SQL), and an update outside those shapes refuses with ErrBoundedMetadataCoverage."},
-	"store/SQLiteStore.backfillWorkspaceProjectProgress": {"Activities Comments ImportJobs Issues LabelIndex Labels MigrationJobs NotificationDeliveries Notifications Projects States Users whole",
-		"OPEN (reported, not fixed here): the unversioned startup backfill (backfillAllProjectProgress) finds no project without a progress " +
-			"history in the skeleton, so a bounded open never backfills a project created since the split; flag off it does. A fix runs the pass " +
-			"on a COLD facade at open."},
 	"store/SQLiteStore.boundedOAuthMetadataTransaction": {"whole",
 		"The callback's copy is the policy copy with every record field it may read cleared (Users, APIKeys, OAuthAuthorizations, OAuthApplications, " +
 			"Settings); it selects its records through the transaction state."},
@@ -930,6 +926,7 @@ func TestScaleP21SW559ResidentImageReadersDetect(t *testing.T) {
 		"store/SQLiteStore.ProjectByID":                      "Projects",
 		"store/SQLiteStore.syncMemberDirectory":              "Users",
 		"store/SQLiteStore.legacyAuditLogPending":            "AuditLog",
+		"store/SQLiteStore.projectProgressPending":           "Projects",
 	}
 	guarded, unguarded := scaleP21SW559Load(t), scaleP21SW559Load(t)
 	unguarded.noGuards = true

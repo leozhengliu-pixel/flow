@@ -638,7 +638,10 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), current.Workspace.ID)
 	}
 	var updated domain.TeamSettings
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "team.settings_updated", teamID, input, func(data *domain.Bootstrap) error {
+	ctx := store.WithTeamIssueCascade(r.Context(), func(data *domain.Bootstrap) []string {
+		return teamSettingsIssueCascade(data, teamID, input)
+	})
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "team.settings_updated", teamID, input, func(data *domain.Bootstrap) error {
 		if len(data.TeamMembers) == 0 && len(persistedTeamMembers) > 0 {
 			data.TeamMembers = slices.Clone(persistedTeamMembers)
 		}
@@ -1107,6 +1110,33 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// teamSettingsIssueCascade lists the teams whose issues a settings patch
+// rewrites, from the metadata before it: a default status the first time
+// the team owns statuses (materializeTeamStates), private access (outsiders
+// leave the team's issues), and a new parent or inherited cycles (the
+// subtree's statuses are remapped and its inherited cycles reconciled).
+func teamSettingsIssueCascade(data *domain.Bootstrap, teamID string, input domain.TeamSettingsMutationInput) []string {
+	teams := []string{}
+	add := func(ids ...string) {
+		for _, id := range ids {
+			if !slices.Contains(teams, id) {
+				teams = append(teams, id)
+			}
+		}
+	}
+	if input.DefaultStateID != nil && !slices.ContainsFunc(data.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID }) {
+		add(teamID)
+	}
+	if input.Access != nil && strings.EqualFold(*input.Access, "private") && !strings.EqualFold(strings.TrimSpace(data.TeamSettings[teamID].Access), "private") {
+		add(teamID)
+	}
+	if input.ParentTeamID != nil && *input.ParentTeamID != "" && *input.ParentTeamID != teamSettings(data, teamID).ParentTeamID || input.InheritCycles != nil && *input.InheritCycles {
+		add(teamID)
+		add(teamDescendantIDs(data, teamID)...)
+	}
+	return teams
 }
 
 func (s *server) listIssueTemplates(w http.ResponseWriter, r *http.Request) {
