@@ -153,8 +153,10 @@ var (
 	sw530EscapedToken = regexp.MustCompile(`\\"(secretPrefix)\\":\\"[^"\\]*\\"`)
 	sw530ShareToken   = regexp.MustCompile(`dsh_[A-Za-z0-9_-]{16}`)
 	sw530Registration = regexp.MustCompile(`passkey_reg_[A-Za-z0-9_-]{16,}`)
-	sw530SlugSuffix   = regexp.MustCompile(`("slugId\\?":\\?"[^"\\]*-)[0-9a-f]{12}(\\?")`)
-	sw530Since        = regexp.MustCompile(`"since":"[^"]*"`)
+	// A WebAuthn challenge stored inside an escaped session row.
+	sw530Challenge  = regexp.MustCompile(`(challenge\\+":\\+")[A-Za-z0-9_-]{16,}`)
+	sw530SlugSuffix = regexp.MustCompile(`("slugId\\?":\\?"[^"\\]*-)[0-9a-f]{12}(\\?")`)
+	sw530Since      = regexp.MustCompile(`"since":"[^"]*"`)
 )
 
 func sw530Normalize(text string, started time.Time) string {
@@ -175,6 +177,7 @@ func sw530Normalize(text string, started time.Time) string {
 	text = sw530EscapedToken.ReplaceAllString(text, `\"$1\":\"<random>\"`)
 	text = sw530ShareToken.ReplaceAllString(text, "dsh_<random>")
 	text = sw530Registration.ReplaceAllString(text, "passkey_reg_<random>")
+	text = sw530Challenge.ReplaceAllString(text, "${1}<random>")
 	text = sw530SlugSuffix.ReplaceAllString(text, "${1}<suffix>${2}")
 	text = sw530Since.ReplaceAllString(text, `"since":"<since>"`)
 	return sw530RandomHex.ReplaceAllString(text, "<hex>")
