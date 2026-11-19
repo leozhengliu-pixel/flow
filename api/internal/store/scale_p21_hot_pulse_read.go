@@ -3,6 +3,7 @@ package store
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"maps"
 	"reflect"
@@ -86,16 +87,29 @@ func (r *PulseRead) value(ctx context.Context, node metadataLogicalNode) (reflec
 // BeginPulseRead preserves the exact installed PulseFeed/PulseSources source.
 // indexed=false skips all update records. It is a trusted read, not authority.
 func (s *SQLiteStore) BeginPulseRead(ctx context.Context, workspace string, indexed bool) (_ *PulseRead, found bool, err error) {
-	return s.beginPulseRead(ctx, workspace, indexed, false)
+	return s.beginPulseRead(ctx, workspace, indexed, pulseReadSources)
 }
 
 // BeginPulseScheduleRead first loads only identity and feature settings. A
 // disabled scheduler never visits per-user settings or update collections.
 func (s *SQLiteStore) BeginPulseScheduleRead(ctx context.Context, workspace string) (*PulseRead, bool, error) {
-	return s.beginPulseRead(ctx, workspace, false, true)
+	return s.beginPulseRead(ctx, workspace, false, pulseReadSchedule)
 }
 
-func (s *SQLiteStore) beginPulseRead(ctx context.Context, workspace string, indexed, schedule bool) (_ *PulseRead, found bool, err error) {
+// pulseReadSelection is what a bounded pulse read selects when it opens: the
+// source rules (PulseSources), only identity and feature settings (the
+// scheduler), or nothing (one event source loads its own records). Off mode
+// treats nothing as the source rules.
+type pulseReadSelection int
+
+const (
+	pulseReadSources pulseReadSelection = iota
+	pulseReadSchedule
+	pulseReadNothing
+)
+
+func (s *SQLiteStore) beginPulseRead(ctx context.Context, workspace string, indexed bool, selection pulseReadSelection) (_ *PulseRead, found bool, err error) {
+	schedule := selection == pulseReadSchedule
 	if !s.BoundedMetadataEnabled() {
 		var snapshot *PulseFeedSnapshot
 		if schedule {
@@ -144,7 +158,7 @@ func (s *SQLiteStore) beginPulseRead(ctx context.Context, workspace string, inde
 			}
 			reflect.ValueOf(item.target).Elem().Set(value)
 		}
-	} else {
+	} else if selection == pulseReadSources {
 		if err := read.sources(ctx); err != nil {
 			return nil, true, err
 		}
@@ -240,38 +254,57 @@ func (r *PulseRead) field(name string) metadataLogicalNode {
 	return r.source.fields[index]
 }
 
+// errPulseFieldsRead ends a record's field walk once every wanted field was
+// read: the remaining fields are not visited (each visit reads its header).
+var errPulseFieldsRead = errors.New("pulse record fields read")
+
 func (r *PulseRead) project(ctx context.Context, node metadataLogicalNode, target reflect.Value, fields []string) error {
-	return node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
+	remaining := len(fields)
+	err := node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
 		if !slices.Contains(fields, key.String()) {
 			return nil
 		}
-		if child.typ == reflect.TypeFor[*domain.User]() {
-			return child.Children(ctx, func(_ reflect.Value, user metadataLogicalNode) error {
-				value := reflect.New(reflect.TypeFor[domain.User]())
-				if err := r.project(ctx, user, value.Elem(), strings.Fields("ID Name DisplayName")); err != nil {
-					return err
-				}
-				target.FieldByName(key.String()).Set(value)
-				return nil
-			})
+		if err := r.projectField(ctx, key.String(), child, target); err != nil {
+			return err
 		}
-		if key.String() == "Milestones" {
-			return child.Children(ctx, func(_ reflect.Value, milestone metadataLogicalNode) error {
-				var value domain.ProjectMilestone
-				if err := r.project(ctx, milestone, reflect.ValueOf(&value).Elem(), strings.Fields("ID Name TargetDate")); err != nil {
-					return err
-				}
-				field := target.FieldByName("Milestones")
-				field.Set(reflect.Append(field, reflect.ValueOf(value)))
-				return nil
-			})
+		if remaining--; remaining == 0 {
+			return errPulseFieldsRead
 		}
-		value, err := r.value(ctx, child)
-		if err == nil {
-			target.FieldByName(key.String()).Set(value)
-		}
-		return err
+		return nil
 	})
+	if errors.Is(err, errPulseFieldsRead) {
+		return nil
+	}
+	return err
+}
+
+func (r *PulseRead) projectField(ctx context.Context, name string, child metadataLogicalNode, target reflect.Value) error {
+	if child.typ == reflect.TypeFor[*domain.User]() {
+		return child.Children(ctx, func(_ reflect.Value, user metadataLogicalNode) error {
+			value := reflect.New(reflect.TypeFor[domain.User]())
+			if err := r.project(ctx, user, value.Elem(), strings.Fields("ID Name DisplayName")); err != nil {
+				return err
+			}
+			target.FieldByName(name).Set(value)
+			return nil
+		})
+	}
+	if name == "Milestones" {
+		return child.Children(ctx, func(_ reflect.Value, milestone metadataLogicalNode) error {
+			var value domain.ProjectMilestone
+			if err := r.project(ctx, milestone, reflect.ValueOf(&value).Elem(), strings.Fields("ID Name TargetDate")); err != nil {
+				return err
+			}
+			field := target.FieldByName("Milestones")
+			field.Set(reflect.Append(field, reflect.ValueOf(value)))
+			return nil
+		})
+	}
+	value, err := r.value(ctx, child)
+	if err == nil {
+		target.FieldByName(name).Set(value)
+	}
+	return err
 }
 
 var pulseProjectFields = strings.Fields("ID Name SlugID PreviousSlugIDs Icon Color Priority PriorityLabel Status Lead MemberIDs LabelIDs TeamIDs DependencyIDs Initiatives Milestones StartDate TargetDate ArchivedAt")
@@ -802,15 +835,8 @@ func (r *PulseRead) LoadSource(ctx context.Context, kind, id string) error {
 	return r.field(kind+"s").Children(ctx, func(_ reflect.Value, node metadataLogicalNode) error {
 		current := index
 		index++
-		match := false
-		if err := node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
-			if key.String() == "ID" {
-				var err error
-				match, err = child.StringEqual(ctx, id)
-				return err
-			}
-			return nil
-		}); err != nil || !match {
+		match, err := pulseRecordIDEqual(ctx, node, id)
+		if err != nil || !match {
 			return err
 		}
 		value, err := r.value(ctx, node)
@@ -823,4 +849,112 @@ func (r *PulseRead) LoadSource(ctx context.Context, kind, id string) error {
 		}
 		return err
 	})
+}
+
+// pulseRecordIDEqual compares a project's or initiative's ID field, reading no
+// other field.
+func pulseRecordIDEqual(ctx context.Context, node metadataLogicalNode, id string) (bool, error) {
+	match := false
+	err := node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
+		if key.String() != "ID" {
+			return nil
+		}
+		var err error
+		if match, err = child.StringEqual(ctx, id); err != nil {
+			return err
+		}
+		return errPulseFieldsRead
+	})
+	if errors.Is(err, errPulseFieldsRead) {
+		err = nil
+	}
+	return match, err
+}
+
+// BeginPulseSourceRead opens the installed source for one realtime event
+// source without selecting the workspace-wide pulse snapshot: the caller loads
+// only what the event needs (LoadSourceRoot, or LoadSourceLinks and
+// LoadSource). Off mode returns the literal PulseSources read, which already
+// holds every record those loads would add.
+func (s *SQLiteStore) BeginPulseSourceRead(ctx context.Context, workspace string) (*PulseRead, bool, error) {
+	return s.beginPulseRead(ctx, workspace, false, pulseReadNothing)
+}
+
+// LoadSourceRoot adds the complete installed project or initiative whose ID
+// matches; with duplicate IDs the last one, which is the one a rule index
+// keyed by ID keeps. A missing record adds nothing.
+func (r *PulseRead) LoadSourceRoot(ctx context.Context, kind, id string) error {
+	if r.Snapshot == nil {
+		return errMetadataLogicalClosed
+	}
+	if r.source == nil {
+		return nil
+	}
+	if kind != "project" && kind != "initiative" {
+		return ErrMetadataRecordQuery
+	}
+	var value reflect.Value
+	if err := r.field(kind+"s").Children(ctx, func(_ reflect.Value, node metadataLogicalNode) error {
+		match, err := pulseRecordIDEqual(ctx, node, id)
+		if err != nil || !match {
+			return err
+		}
+		value, err = r.value(ctx, node)
+		return err
+	}); err != nil || !value.IsValid() {
+		return err
+	}
+	if kind == "project" {
+		r.Snapshot.Projects = append(r.Snapshot.Projects, value.Interface().(domain.Project))
+	} else {
+		r.Snapshot.Initiatives = append(r.Snapshot.Initiatives, value.Interface().(domain.Initiative))
+	}
+	return nil
+}
+
+var pulseLinkProjectFields = []string{"ID", "Initiatives"}
+var pulseLinkInitiativeFields = strings.Fields("ID LeadTeamID ContributingTeamIDs ParentInitiativeIDs ProjectIDs")
+
+// LoadSourceLinks selects the project/initiative link graph in installed order:
+// initiative relations, project IDs and initiatives, and initiative IDs, teams,
+// parents and projects. It is what the realtime rule index derives
+// initiative parents and projects from; no other field is read.
+func (r *PulseRead) LoadSourceLinks(ctx context.Context) error {
+	if r.Snapshot == nil {
+		return errMetadataLogicalClosed
+	}
+	if r.source == nil {
+		return nil
+	}
+	value, err := r.value(ctx, r.field("initiativeRelations"))
+	if err != nil {
+		return err
+	}
+	reflect.ValueOf(&r.Snapshot.InitiativeRelations).Elem().Set(value)
+	for _, kind := range []string{"projects", "initiatives"} {
+		err := r.field(kind).Children(ctx, func(_ reflect.Value, node metadataLogicalNode) error {
+			if kind == "projects" {
+				var project domain.Project
+				if err := r.project(ctx, node, reflect.ValueOf(&project).Elem(), pulseLinkProjectFields); err != nil {
+					return err
+				}
+				r.Snapshot.Projects = append(r.Snapshot.Projects, project)
+			} else {
+				var initiative domain.Initiative
+				if err := r.project(ctx, node, reflect.ValueOf(&initiative).Elem(), pulseLinkInitiativeFields); err != nil {
+					return err
+				}
+				r.Snapshot.Initiatives = append(r.Snapshot.Initiatives, initiative)
+			}
+			release, err := r.reserve(ctx, 2048)
+			if err == nil {
+				r.releases = append(r.releases, release)
+			}
+			return err
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

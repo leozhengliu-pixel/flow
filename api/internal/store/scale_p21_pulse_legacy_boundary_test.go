@@ -24,7 +24,7 @@ func TestScaleP21PulseLegacyFeedBoundary(t *testing.T) {
 	// exact mode dispatch. Both legacy initiative-card callers and the sole
 	// pulseWorkspaceKey caller dispatch through their owned alternatives.
 	invariants := map[string]string{
-		"internal/store/scale_p21_hot_pulse_read.go:beginPulseRead":              "270a37c18133c04d1b1ac8d8cbda5449e633ea4a5c3788bdee4702199da274ac",
+		"internal/store/scale_p21_hot_pulse_read.go:beginPulseRead":              "7df1f6eda31eeffa86aaf14811dd4a3a68e2145b3fcccfd45df38c012c942e29",
 		"internal/store/scale_p21_hot_pulse_read.go:Close":                       "36570cd11e1f9b0e932d050c0918140f1350180bc862677e65ab1ea4d9b518d6",
 		"internal/store/scale_p21_hot_pulse_read.go:LoadFeed":                    "666a5ed3c46d87228920afd1e211fe1bcd3c927a025d85c0f1dc33ada8da6b51",
 		"cmd/server/chat_update_cards.go:chatSendProjectUpdate":                  "d28aa38e558a4d26ea1d132d1ba9d9f8384880aa6d46fe119d18ea6f3b344c88",
@@ -227,7 +227,7 @@ func TestScaleP21PulseLegacySourcesBoundary(t *testing.T) {
 	sites := map[string]string{
 		"internal/store/scale_p21_hot_pulse_read.go:beginPulseRead":     "BeginInstalledMetadataRead",
 		"cmd/server/realtime_entity_payloads.go:pagedPulseSourceEvent":  "BeginPulseRead",
-		"cmd/server/scale_p12_metadata_source.go:buildPulseEventSource": "BeginPulseRead",
+		"cmd/server/scale_p12_metadata_source.go:buildPulseEventSource": "BeginPulseSourceRead",
 	}
 	seen := map[string]bool{}
 	root := filepath.Clean("../..")
