@@ -80,7 +80,10 @@ func issueCollabRun(t *testing.T, selected *store.SQLiteStore, f scaleP21M2Fixtu
 	}
 	close(stop)
 	var result issueCollabOutcome
-	result.Messages = <-done
+	// A frame queued without a delivery wait (document.conflict) may still be
+	// in the channel when the collector sees stop: select picks among ready
+	// cases at random.
+	result.Messages = append(<-done, drain()...)
 	service.realtime.mu.Lock()
 	_, result.Joined = client.documents[documentID]
 	if access := client.issueAccess[documentID]; access != nil {
