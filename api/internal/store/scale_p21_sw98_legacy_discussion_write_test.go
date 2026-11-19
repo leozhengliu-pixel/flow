@@ -571,6 +571,23 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 					if _, err := json.Marshal(got.Callback); err != nil {
 						t.Fatal(err)
 					}
+					installed := got.Installed
+					if test.peer != "" {
+						// The canonical actor peer is another server's commit:
+						// the literal writer keeps its copy (callback request
+						// attribution and in-memory recounts included), while
+						// the bounded writer that lost the race reloads its
+						// image from SQL after the commit (installedGenerationBehind).
+						// The bounded image must equal that SQL load; the two
+						// writers' images are not equated.
+						if bounded {
+							loaded := scaleP21SW98Installed(t, scaleP21IssuePersistenceView(t, f, true, true), workspace)
+							if !reflect.DeepEqual(installed, loaded) {
+								t.Fatalf("bounded image after the peer race differs from the SQL load: fields=%v", changedMetadataFields(loaded, installed))
+							}
+						}
+						got.Installed, got.InstalledVia = domain.Bootstrap{}, nil
+					}
 					outputs = append(outputs, scaleP21SW63JSON(t, got))
 					installedOutputs = append(installedOutputs, got.Installed)
 					installedVia = append(installedVia, got.InstalledVia)
@@ -582,7 +599,7 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 								t.Fatal("closed ordinary response retained callback data")
 							}
 						}
-						if !reflect.DeepEqual(scaleP21SW98Installed(t, repo, workspace), got.Installed) ||
+						if !reflect.DeepEqual(scaleP21SW98Installed(t, repo, workspace), installed) ||
 							repo.MetadataWorkUsedForTesting() != 0 || repo.WorkspaceMetadataDecodes() != 0 {
 							t.Fatal("ordinary response close damaged installed source or leaked/hydrated metadata")
 						}
