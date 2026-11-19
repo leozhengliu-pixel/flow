@@ -729,7 +729,7 @@ func TestScaleP21SW270WorkspaceDataHotBoundaries(t *testing.T) {
 			"listCommentActions", "connectorForRequest", "filterSuggestions", "documentWorkspaceData*2",
 			"getNotificationPreferences", "acknowledgeDesktopNotifications", "listProjectRelations",
 			"listInitiativeRelations", "listDocumentDrafts", "documentContentHistory", "updatePresence",
-			"listPresence", "workspaceDataScoped",
+			"listPresence", "workspaceDataScoped", "listWorkspaceLabels", "listTeamLabels", "getTeamSettings",
 		),
 		// The HOT GET/HEAD permission list answers from its retained bounded
 		// read (listIssuePermissionsBounded); only the COLD permission writes
@@ -807,13 +807,13 @@ func scaleP21SW270WorkspaceDataCold() map[string]int {
 		"scanLinearMigrationTarget", "listMigrations", "getMigration", "downloadMigrationManifest",
 		"previewMigration", "inviteMigrationUsers*2", "executeMigration", "rollbackMigration",
 		"downloadMigrationBundle", "updateNotificationPreferences", "listNotificationDeliveries",
-		"retryNotificationDelivery", "listWorkflowStates", "getTeamSettings", "listIssueTemplates",
-		"listTeamLabels", "exportOAuthApplicationManifest", "developerTokenApplication",
+		"retryNotificationDelivery", "listWorkflowStates", "listIssueTemplates",
+		"exportOAuthApplicationManifest", "developerTokenApplication",
 		"workspaceOAuthApplication", "getApplicationWebhookSecret", "listOAuthApplicationInstalls",
 		"listReleaseNotes", "releaseHistory", "listAgentActivities", "listAIConversations",
 		"finishPasskeyRegistration", "listReleases", "getRelease", "listReleasePipelines", "getReleasePipeline",
 		"syncReviewFromCodeHost", "listReviews", "getReview", "updateReview*2", "submitReview",
-		"commentOnReview", "resolveReviewThread", "listWorkspaceLabels", "listWorkspaceIssueTemplates",
+		"commentOnReview", "resolveReviewThread", "listWorkspaceIssueTemplates",
 		"coldWorkspaceData", "listIntegrations",
 		"disconnectIntegrationConnection", "disconnectIntegration",
 	)

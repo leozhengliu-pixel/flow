@@ -1,6 +1,6 @@
 {
   "source": "server/notifications_workflow.go",
-  "unmigrated": 16,
+  "unmigrated": 13,
   "consumers": {
     "acknowledgeDesktopNotifications": {
       "owner": "P21",
@@ -33,14 +33,14 @@
     },
     "createTeamLabel": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "Pending complete before-image aggregate closure. The new label_ record makes the post-image typed lookup safe, but the ID is absent before insertion and legacy lookup can select an earlier nested object with that ID. The bounded selection then loses webhook PreviousValues. SW26's creation-before-image differential reproduces canonical/post-event parity with missing previous values. Existing SW15 matrix proves ordinary inputs, canonical ordering, callbacks and off-mode behavior only; it does not certify this before-image case.",
+      "status": "reviewed",
+      "reason": "Flag off forwards to the literal MutateWorkspaceWithAggregate. Bounded the appending writer appends labels and reads teams/<id> and labelGroups/<groupId>. The earlier pending before-image closure concern does not arise: the aggregate is a label_ ID minted inside the callback (nanosecond stamp plus 50 random bits), so no stored object can precede it, and the bounded publication resolves the aggregate over the whole installed source. TestScaleP21SW600LabelRoutes compares plain, grouped, workspace-grouped, refused and private-team creations legacy vs warm vs SQL-reloaded: webhooks with previous values, realtime, rows, installed image == reload, zero full decodes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "temperature": "hot",
+      "temperatureReason": "Team label creation by team members.",
       "callers": [
         "POST /api/teams/{id}/labels -> createTeamLabel"
       ]
@@ -96,12 +96,14 @@
     },
     "getTeamSettings": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Flag off the literal body reads workspaceData unchanged. Bounded it returns before workspaceData through getTeamSettingsBounded: teamSettings reads only the projected teamSettings entries (the team and its parent chain) and, for a team without settings, the projected workflow states, so the reviewed BeginTeamSettingsRead (those fields of the installed source projected by the same projectBootstrapForUser; development mode unprojected with the admin role) narrowed by the same filterBootstrapForAPIKey answers the same settings; a refused projection answers the literal empty-projection defaults, a busy one 503. TestScaleP21SW601TeamSettingsRead compares the real route legacy vs warm vs SQL-reloaded for every role, private, inheriting, settings-less and missing teams and team-restricted keys, with zero full decodes.",
       "accessors": [
-        "workspaceData"
+        "workspaceData",
+        "BeginTeamSettingsRead"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "temperature": "hot",
+      "temperatureReason": "Team settings page read by team members (every team settings tab).",
       "callers": [
         "GET /api/teams/{id}/settings -> getTeamSettings"
       ]
@@ -132,12 +134,13 @@
     },
     "listTeamLabels": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Flag off the literal body reads workspaceData unchanged. Bounded it returns before workspaceData through listLabelsBounded with the literal scope==path-id predicate. TestScaleP21SW600LabelRoutes compares the real route legacy vs warm vs SQL-reloaded for public and private teams, admins outside the private team, guests and team-restricted keys, with zero full decodes.",
       "accessors": [
         "workspaceData"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
+      "temperature": "hot",
+      "temperatureReason": "Team label settings list read by team members.",
       "callers": [
         "GET /api/teams/{id}/labels -> listTeamLabels"
       ]

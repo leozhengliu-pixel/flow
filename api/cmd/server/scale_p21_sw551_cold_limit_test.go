@@ -22,7 +22,7 @@ import (
 // operations, and a COLD request never blocks a HOT one.
 func TestScaleP21SW551ColdLimitAndHotIsolation(t *testing.T) {
 	f, workspace := scaleP21SW550Fixture(t)
-	const coldPattern, hotPattern = "GET /api/labels", "GET /api/issue-records"
+	const coldPattern, hotPattern = "GET /api/workflow-runs", "GET /api/issue-records"
 	if scaleP21RouteHot(coldPattern) || !scaleP21RouteHot(hotPattern) {
 		t.Fatalf("SW551 fixture routes changed temperature: %s=%q %s=%q", coldPattern, scaleP21RouteTemperature[coldPattern], hotPattern, scaleP21RouteTemperature[hotPattern])
 	}
@@ -92,7 +92,7 @@ func TestScaleP21SW551ColdLimitAndHotIsolation(t *testing.T) {
 			wait.Add(1)
 			go func() {
 				defer wait.Done()
-				if w, _ := send(handler, "/api/labels", t.Context()); w.Code != http.StatusNoContent {
+				if w, _ := send(handler, "/api/workflow-runs", t.Context()); w.Code != http.StatusNoContent {
 					t.Errorf("SW551 COLD request answered %d", w.Code)
 				}
 			}()
@@ -139,9 +139,9 @@ func TestScaleP21SW551ColdLimitAndHotIsolation(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 		})
 		handler := s.projectionGate.holdProjections(s.withColdMetadataRouteMux(mux, mux))
-		go send(handler, "/api/labels?hold=1", t.Context())
+		go send(handler, "/api/workflow-runs?hold=1", t.Context())
 		<-holding
-		w, _ := send(handler, "/api/labels", t.Context())
+		w, _ := send(handler, "/api/workflow-runs", t.Context())
 		if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") == "" {
 			t.Fatalf("SW551 a COLD read over the queue answered %d (Retry-After %q)", w.Code, w.Header().Get("Retry-After"))
 		}
@@ -257,7 +257,7 @@ func TestScaleP21SW551ColdLimitAndHotIsolation(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 		})
 		handler := s.projectionGate.holdProjections(s.withColdMetadataRouteMux(mux, mux))
-		go send(handler, "/api/labels", t.Context())
+		go send(handler, "/api/workflow-runs", t.Context())
 		<-streaming
 		if held := store.ColdSlotsHeldForTesting(); held != 0 {
 			t.Fatalf("SW551 a streaming COLD request holds %d COLD slots between operations", held)

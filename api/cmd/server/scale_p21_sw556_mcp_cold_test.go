@@ -21,7 +21,7 @@ import (
 //     (users, members, states, labels ...); the other tools (list_teams,
 //     list_documents, get_workspace) read the legacy projection from a
 //     legacy view per call;
-//   - a write tool no migrated writer serves (save_label) takes the slot for
+//   - a write tool no migrated writer serves (save_view) takes the slot for
 //     its own write only.
 //
 // Every answer equals flag off.
@@ -97,17 +97,18 @@ func TestScaleP21SW556MCPToolsColdPerOperation(t *testing.T) {
 	}
 	// A legacy write tool takes the slot for its write only.
 	slots := store.ColdSlotAcquisitionsForTesting()
-	want := call(legacy, 90, "save_label", map[string]any{"name": "SW556 legacy", "color": "#ff0000"})
-	got := call(bounded, 90, "save_label", map[string]any{"name": "SW556 bounded", "color": "#ff0000"})
+	filters := []map[string]any{{"field": "priority", "values": []string{"High"}}}
+	want := call(legacy, 90, "save_view", map[string]any{"name": "SW556 legacy", "filters": filters})
+	got := call(bounded, 90, "save_view", map[string]any{"name": "SW556 bounded", "filters": filters})
 	if store.ColdSlotAcquisitionsForTesting()-slots < 1 || store.ColdSlotsHeldForTesting() != 0 {
-		t.Fatal("SW556 the bounded save_label did not run COLD per operation")
+		t.Fatal("SW556 the bounded save_view did not run COLD per operation")
 	}
-	labels, _ := probe.WorkspaceMetadataFields(workspace, "labels")
+	views, _ := probe.WorkspaceMetadataFields(workspace, "savedViews")
 	found := false
-	for _, label := range labels.Labels {
-		found = found || label.Name == "SW556 bounded"
+	for _, view := range views.SavedViews {
+		found = found || view.Name == "SW556 bounded"
 	}
 	if !found || len(got) == 0 || len(want) == 0 {
-		t.Fatalf("SW556 the bounded save_label is missing from the bounded image: %s", got)
+		t.Fatalf("SW556 the bounded save_view is missing from the bounded image: %s", got)
 	}
 }

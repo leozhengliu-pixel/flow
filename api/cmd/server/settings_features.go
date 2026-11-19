@@ -434,6 +434,12 @@ type labelInput struct {
 
 func (s *server) listWorkspaceLabels(w http.ResponseWriter, r *http.Request) {
 	resource := r.URL.Query().Get("resourceType")
+	if s.store.BoundedMetadataEnabled() {
+		s.listLabelsBounded(w, r, func(label domain.IssueLabel) bool {
+			return labelScopeIsWorkspace(label.Scope) && (resource == "" || labelResourceType(label) == resource)
+		})
+		return
+	}
 	result := []domain.IssueLabel{}
 	for _, label := range s.workspaceData(r).Labels {
 		if labelScopeIsWorkspace(label.Scope) && (resource == "" || labelResourceType(label) == resource) {
@@ -451,7 +457,11 @@ func (s *server) createWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := requestActor(s, r)
 	var created domain.IssueLabel
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "label.created", input, func(data *domain.Bootstrap) (string, error) {
+	scope := store.MetadataAppendScope{AppendKinds: []string{"labels"}}
+	if input.GroupID != nil {
+		scope.Read = labelGroupReads(strings.TrimSpace(*input.GroupID))
+	}
+	err := s.store.MutateWorkspaceAppendingWithAggregate(r.Context(), workspaceKey(r), "label.created", input, scope, func(data *domain.Bootstrap) (string, error) {
 		var err error
 		created, err = newLabel(data, actor.ID, "Workspace", input)
 		if err != nil {
@@ -473,7 +483,20 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	// The event carries the updated label (payload.label) so clients patch their
 	// embedded copies without refetching; it is filled in by the mutation.
 	payload := inputEventPayload(input)
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "label.updated", id, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceResolved(r.Context(), workspaceKey(r), "label.updated", id, payload, store.MetadataResolvedScope{
+		MetadataRecordScope: labelRecordScope(id),
+		ResolveRead: func(data domain.Bootstrap) ([]store.RecordKey, error) {
+			// The label's group: the requested one, else its current one.
+			var keys []store.RecordKey
+			if input.GroupID != nil {
+				keys = labelGroupReads(strings.TrimSpace(*input.GroupID))
+			} else if index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id }); index >= 0 {
+				keys = labelGroupReads(data.Labels[index].GroupID)
+			}
+			projects, err := teamMetadataProjectDisplayReads(data)
+			return append(keys, projects...), err
+		},
+	}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
 		if index < 0 {
 			return errNotFound
@@ -678,7 +701,11 @@ func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.LabelGroup
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "label_group.created", input, func(data *domain.Bootstrap) (string, error) {
+	scope := store.MetadataAppendScope{AppendKinds: []string{"labelGroups"}}
+	if input.Scope != nil && *input.Scope != "" && *input.Scope != "Workspace" && validLabelRecordKey(*input.Scope) {
+		scope.Read = []store.RecordKey{{Kind: "teams", ID: *input.Scope}}
+	}
+	err := s.store.MutateWorkspaceAppendingWithAggregate(r.Context(), workspaceKey(r), "label_group.created", input, scope, func(data *domain.Bootstrap) (string, error) {
 		resource := "issue"
 		if input.ResourceType != nil {
 			resource = strings.TrimSpace(*input.ResourceType)
@@ -712,7 +739,19 @@ func (s *server) updateLabelGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.LabelGroup
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "label_group.updated", id, input, func(data *domain.Bootstrap) error {
+	scope := labelRecordScope(id)
+	scope.Write = nil
+	if validLabelRecordKey(id) {
+		scope.Write = []store.RecordKey{{Kind: "labelGroups", ID: id}}
+	}
+	if input.ArchivedAt != nil {
+		// Archiving a group archives each of its labels.
+		scope.Fields = []string{"labels"}
+	}
+	err := s.store.MutateWorkspaceResolved(r.Context(), workspaceKey(r), "label_group.updated", id, input, store.MetadataResolvedScope{
+		MetadataRecordScope: scope,
+		ResolveRead:         teamMetadataProjectDisplayReads,
+	}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -1500,16 +1539,39 @@ func (s *server) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /api/oauth-applications is COLD (registered in scaleP21ColdRoutes).
+// GET /api/oauth-applications lists the workspace's applications without
+// their client secrets.
 func (s *server) listOAuthApplications(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.withOAuthApplicationsBounded(w, r, func(result []domain.OAuthApplication) {
+			for index := range result {
+				result[index].ClientSecret = ""
+			}
+			writeJSON(w, http.StatusOK, result)
+		})
+		return
+	}
 	s.withColdMetadataRequest(w, r, "server/settings_features.go:listOAuthApplications", "", func(repo *store.SQLiteStore, request *http.Request) {
 		s.listOAuthApplicationsWithStore(w, request, repo)
 	})
 }
 
 // GET /api/oauth-applications/{id} returns one application (without its
-// client secret). COLD (registered in scaleP21ColdRoutes).
+// client secret).
 func (s *server) getOAuthApplication(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.withOAuthApplicationsBounded(w, r, func(apps []domain.OAuthApplication) {
+			index := slices.IndexFunc(apps, func(app domain.OAuthApplication) bool { return app.ID == r.PathValue("id") })
+			if index < 0 {
+				writeError(w, http.StatusNotFound, "Application not found")
+				return
+			}
+			app := apps[index]
+			app.ClientSecret = ""
+			writeJSON(w, http.StatusOK, app)
+		})
+		return
+	}
 	s.withColdMetadataRequest(w, r, "server/settings_features.go:getOAuthApplication", "", func(repo *store.SQLiteStore, request *http.Request) {
 		s.getOAuthApplicationWithStore(w, request, repo)
 	})

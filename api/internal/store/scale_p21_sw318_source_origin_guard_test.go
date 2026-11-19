@@ -32,7 +32,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/main.go":                    "342020b9802affa550080e5518ed0d3d4089f3da8a7e39d95521e6e4f8b7f346",
 		"../../cmd/server/notification_state.go":      "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
 		"../../cmd/server/personal_data.go":           "df7f342d4fdd9a5908cfbaf6cceddd89e8be2be0ff5dbe23e94e9643e9cb26a3",
-		"../../cmd/server/scale_p21_cold_dispatch.go": "a978048df479254deecb701499a7e8c3095855add0ed17b138eb8d5098ed7e46",
+		"../../cmd/server/scale_p21_cold_dispatch.go": "c1ab1f26d39d007e298201b7d5d24080afb46c60263d440b0ba7c8a9ad78337e",
 		// Background comment-action generator: borrows the issue bootstrap
 		// projection for its own run; never reaches request authorization.
 		"../../cmd/server/scale_p21_comment_action_writes.go":           "5765c0ab53a9346be3631aa48ab3d55c96204256e4ce63bdc5eb31db83983c39",
@@ -42,7 +42,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/scale_p21_issue_record_authorization_read.go": "6026fba608d49f31c47ac07de86b8ea1f000f94b93a7f0758e0ee964303025d4",
 		"../../cmd/server/scale_p21_issue_update_targets.go":            "58665b35304f51e087403d1abba92894e319e4f5900039ee17de0a86902745c3",
 		"../../cmd/server/scale_p21_triage_suggestions.go":              "ce4dc87da131244726aadae31d61b8a7fe9cd5760d05b895013aa8ac88fc2002",
-		"../../cmd/server/settings_features.go":                         "8d1cc6303fa64ff5ffd8236a4ca25e25e96b17292d7fc3bb5937f7b57188934f",
+		"../../cmd/server/settings_features.go":                         "bc6978233bf9d0a041acc84b04493978b22ba2ed01244a430152ef177ba16a69",
 		"authz_epoch.go":                                                "ce59afa33d8daca93d0901d13d86a0f7bb5f140cc479efc38395ab568173e9c4",
 		"content_records.go":                                            "711cc4e036099177c87ed23e50f56c81703b4aa7af2c3123053cc3873cfaccba",
 		"database.go":                                                   "494475002da610a00a0f2150d7ec07369836e9fa184a4f87bc38ba3d4c7526eb",

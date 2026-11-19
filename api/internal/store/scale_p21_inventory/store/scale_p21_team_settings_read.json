@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_team_settings_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginTeamSettingsRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Decodes (wire form, as the legacy snapshot decodes them) only workspace, viewer, teams, teamSettings, teamParents, states and workspaceSettings from the retained installed source and projects them with the literal projectBootstrapForUser for the viewer, as PagedWorkspaceMetadata does for these fields (its other passes touch neither settings nor states); without a viewer it answers them unprojected with the admin role as WorkspaceMetadata does. Reservations are owned by the read until Close. TestScaleP21SW601TeamSettingsRead (legacy vs warm vs SQL-reloaded).",
+      "accessors": [
+        "BeginInstalledMetadataRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Backs the HOT team settings read.",
+      "callers": [
+        "server/scale_p21_team_settings_read.go:getTeamSettingsBounded"
+      ]
+    }
+  }
+}

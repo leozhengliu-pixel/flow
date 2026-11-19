@@ -44,7 +44,7 @@ content_offload.go:migrateOffloadedRecord
 favorite_mutation.go:mutateStandaloneFavorite
 feature_flags_mutation.go:mutateFeatureFlags
 issue_records.go:replaceIssueRecords
-label_deletion.go:MutateLabelDeletion
+label_deletion.go:labelDeletionWrite
 oauth_application_credentials.go:IssueApplicationCredential
 oauth_authorization_records.go:CreateOAuthAuthorizationGrant
 oauth_authorization_records.go:RequestOAuthApplicationApproval

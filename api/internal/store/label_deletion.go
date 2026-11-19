@@ -19,6 +19,9 @@ import (
 // In particular, deleting an unused project label never reads issue bodies,
 // discussion records, or serializes the workspace snapshot.
 func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventType, id string, group bool, mutate func(*domain.Bootstrap) error) error {
+	if s.metadataResidency != nil {
+		return s.mutateBoundedLabelDeletion(ctx, workspace, eventType, id, group, mutate)
+	}
 	var event domain.DomainEvent
 	apply := func() error {
 		s.lockWorkspaceWrites()
@@ -35,214 +38,9 @@ func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventT
 			return err
 		}
 		defer tx.Rollback()
-		text := "CAST(data AS TEXT)"
-		if s.dialect == "mysql" {
-			text = "CAST(data AS CHAR)"
-		}
-		if s.dialect == "postgres" {
-			text = "convert_from(data,'UTF8')"
-		}
-		lock := ""
-		if s.dialect != "sqlite" {
-			lock = " FOR UPDATE"
-		}
-		field := "labels"
-		if group {
-			field = "labelGroups"
-		}
-		var raw []byte
-		if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`+lock, workspace, field, id).Scan(&raw); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				if validationErr := mutate(&domain.Bootstrap{}); validationErr != nil {
-					return validationErr
-				}
-			}
+		ids, changes, err := s.labelDeletionWrite(ctx, tx, workspace, id, group, mutate)
+		if err != nil {
 			return err
-		}
-		base := domain.Bootstrap{}
-		if err := appendLabelProjection(&base, field, raw); err != nil {
-			return err
-		}
-		if group {
-			rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='labels' AND `+text+` LIKE ? ESCAPE '!'`+lock, workspace, labelReferencePattern(id))
-			if err != nil {
-				return err
-			}
-			for rows.Next() {
-				var value []byte
-				if err := rows.Scan(&value); err != nil {
-					rows.Close()
-					return err
-				}
-				var label domain.IssueLabel
-				if err := json.Unmarshal(value, &label); err != nil {
-					rows.Close()
-					return err
-				}
-				if label.GroupID == id {
-					base.Labels = append(base.Labels, label)
-				}
-			}
-			err = rows.Err()
-			rows.Close()
-			if err != nil {
-				return err
-			}
-		}
-		validate := cloneBootstrap(base)
-		if err := mutate(&validate); err != nil {
-			return err
-		}
-		ids := make([]string, 0, len(base.Labels))
-		issueLabels := false
-		for _, label := range base.Labels {
-			ids = append(ids, label.ID)
-			issueLabels = issueLabels || label.ResourceType != "project"
-		}
-		changes := map[string]map[string]json.RawMessage{}
-		remember := func(field, key string, value json.RawMessage) {
-			if changes[field] == nil {
-				changes[field] = map[string]json.RawMessage{}
-			}
-			changes[field][key] = value
-		}
-		// Metadata remains row-backed. SQL rejects unrelated rows before decoding;
-		// the existing cascade validates any literal match in free-form content.
-		referenceIDs := append([]string{}, ids...)
-		if group {
-			referenceIDs = append(referenceIDs, id)
-		}
-		for _, labelID := range referenceIDs {
-			lastField, lastID := "", ""
-			for {
-				rows, err := tx.QueryContext(ctx, `SELECT field,record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('projects','initiatives','issueTemplates','projectTemplates','triageRoutingRules','savedViews','favorites','subscriptions') AND (field>? OR (field=? AND record_key>?)) AND `+text+` LIKE ? ESCAPE '!' ORDER BY field,record_key LIMIT 100`+lock, workspace, lastField, lastField, lastID, labelReferencePattern(labelID))
-				if err != nil {
-					return err
-				}
-				type record struct {
-					field, id string
-					raw       []byte
-				}
-				batch := []record{}
-				for rows.Next() {
-					var item record
-					if err := rows.Scan(&item.field, &item.id, &item.raw); err != nil {
-						rows.Close()
-						return err
-					}
-					batch = append(batch, item)
-				}
-				err = rows.Err()
-				rows.Close()
-				if err != nil {
-					return err
-				}
-				if len(batch) == 0 {
-					break
-				}
-				for _, item := range batch {
-					lastField, lastID = item.field, item.id
-					next := cloneBootstrap(base)
-					if err := appendLabelProjection(&next, item.field, item.raw); err != nil {
-						return err
-					}
-					if err := mutate(&next); err != nil {
-						return err
-					}
-					updated, err := labelProjectionRecord(next, item.field)
-					if err != nil {
-						return err
-					}
-					if bytes.Equal(updated, item.raw) {
-						continue
-					}
-					if len(updated) == 0 {
-						_, err = tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, item.field, item.id)
-					} else {
-						_, err = tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field=? AND record_key=?`, []byte(updated), workspace, item.field, item.id)
-					}
-					if err != nil {
-						return err
-					}
-					remember(item.field, item.id, updated)
-				}
-			}
-		}
-		if issueLabels {
-			for _, labelID := range ids {
-				// Applied labels use the label reverse index; suggested labels use
-				// the sparse suggestedLabel:<id> attribute rows.
-				for _, suggested := range []bool{false, true} {
-					lastID := ""
-					for {
-						query := `SELECT i.id FROM issue_label_records l JOIN issue_records i ON i.workspace_key=l.workspace_key AND i.id=l.issue_id WHERE l.workspace_key=? AND l.label_id=? AND i.id>? ORDER BY i.id LIMIT 100`
-						args := []any{workspace, labelID, lastID}
-						if suggested {
-							query = `SELECT issue_id FROM issue_attribute_records WHERE workspace_key=? AND field=? AND value='true' AND issue_id>? ORDER BY issue_id LIMIT 100`
-							args = []any{workspace, indexKey("suggestedLabel:" + labelID), lastID}
-						}
-						rows, err := tx.QueryContext(ctx, query, args...)
-						if err != nil {
-							return err
-						}
-						batch := []string{}
-						for rows.Next() {
-							var key string
-							if err := rows.Scan(&key); err != nil {
-								rows.Close()
-								return err
-							}
-							batch = append(batch, key)
-						}
-						err = rows.Err()
-						rows.Close()
-						if err != nil {
-							return err
-						}
-						if len(batch) == 0 {
-							break
-						}
-						for _, key := range batch {
-							lastID = key
-							var value []byte
-							if err := tx.QueryRowContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND id=?`+lock, workspace, key).Scan(&value); err != nil {
-								return err
-							}
-							next := cloneBootstrap(base)
-							if err := appendLabelProjection(&next, "issues", value); err != nil {
-								return err
-							}
-							if err := mutate(&next); err != nil {
-								return err
-							}
-							updated, err := json.Marshal(next.Issues[0])
-							if err != nil {
-								return err
-							}
-							if bytes.Equal(value, updated) {
-								continue
-							}
-							next.Issues[0].Version++
-							next.Issues[0].UpdatedAt = time.Now().UTC()
-							if err := s.writeIssueRecord(ctx, tx, workspace, next.Issues[0]); err != nil {
-								return err
-							}
-						}
-					}
-				}
-			}
-		}
-		for _, labelID := range ids {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='labels' AND record_key=?`, workspace, labelID); err != nil {
-				return err
-			}
-			remember("labels", labelID, nil)
-		}
-		if group {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='labelGroups' AND record_key=?`, workspace, id); err != nil {
-				return err
-			}
-			remember("labelGroups", id, nil)
 		}
 		now := time.Now().UTC()
 		payload, err := json.Marshal(map[string]any{"labelIds": ids})
@@ -281,6 +79,224 @@ func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventT
 		sink(workspace, domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: id, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: event.Payload, CreatedAt: event.CreatedAt})
 	}
 	return nil
+}
+
+// labelDeletionWrite applies the label cascade in tx: the deleted label or
+// group (and its labels) and every referencing metadata record, issue and
+// suggested-label row, each through the callback on a one-record projection.
+// It returns the deleted label IDs and the metadata records it changed
+// (field, key, written value; nil when deleted).
+func (s *SQLiteStore) labelDeletionWrite(ctx context.Context, tx *sqlTx, workspace, id string, group bool, mutate func(*domain.Bootstrap) error) ([]string, map[string]map[string]json.RawMessage, error) {
+	text := "CAST(data AS TEXT)"
+	if s.dialect == "mysql" {
+		text = "CAST(data AS CHAR)"
+	}
+	if s.dialect == "postgres" {
+		text = "convert_from(data,'UTF8')"
+	}
+	lock := ""
+	if s.dialect != "sqlite" {
+		lock = " FOR UPDATE"
+	}
+	field := "labels"
+	if group {
+		field = "labelGroups"
+	}
+	var raw []byte
+	if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`+lock, workspace, field, id).Scan(&raw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			if validationErr := mutate(&domain.Bootstrap{}); validationErr != nil {
+				return nil, nil, validationErr
+			}
+		}
+		return nil, nil, err
+	}
+	base := domain.Bootstrap{}
+	if err := appendLabelProjection(&base, field, raw); err != nil {
+		return nil, nil, err
+	}
+	if group {
+		rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='labels' AND `+text+` LIKE ? ESCAPE '!'`+lock, workspace, labelReferencePattern(id))
+		if err != nil {
+			return nil, nil, err
+		}
+		for rows.Next() {
+			var value []byte
+			if err := rows.Scan(&value); err != nil {
+				rows.Close()
+				return nil, nil, err
+			}
+			var label domain.IssueLabel
+			if err := json.Unmarshal(value, &label); err != nil {
+				rows.Close()
+				return nil, nil, err
+			}
+			if label.GroupID == id {
+				base.Labels = append(base.Labels, label)
+			}
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	validate := cloneBootstrap(base)
+	if err := mutate(&validate); err != nil {
+		return nil, nil, err
+	}
+	ids := make([]string, 0, len(base.Labels))
+	issueLabels := false
+	for _, label := range base.Labels {
+		ids = append(ids, label.ID)
+		issueLabels = issueLabels || label.ResourceType != "project"
+	}
+	changes := map[string]map[string]json.RawMessage{}
+	remember := func(field, key string, value json.RawMessage) {
+		if changes[field] == nil {
+			changes[field] = map[string]json.RawMessage{}
+		}
+		changes[field][key] = value
+	}
+	// Metadata remains row-backed. SQL rejects unrelated rows before decoding;
+	// the existing cascade validates any literal match in free-form content.
+	referenceIDs := append([]string{}, ids...)
+	if group {
+		referenceIDs = append(referenceIDs, id)
+	}
+	for _, labelID := range referenceIDs {
+		lastField, lastID := "", ""
+		for {
+			rows, err := tx.QueryContext(ctx, `SELECT field,record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('projects','initiatives','issueTemplates','projectTemplates','triageRoutingRules','savedViews','favorites','subscriptions') AND (field>? OR (field=? AND record_key>?)) AND `+text+` LIKE ? ESCAPE '!' ORDER BY field,record_key LIMIT 100`+lock, workspace, lastField, lastField, lastID, labelReferencePattern(labelID))
+			if err != nil {
+				return nil, nil, err
+			}
+			type record struct {
+				field, id string
+				raw       []byte
+			}
+			batch := []record{}
+			for rows.Next() {
+				var item record
+				if err := rows.Scan(&item.field, &item.id, &item.raw); err != nil {
+					rows.Close()
+					return nil, nil, err
+				}
+				batch = append(batch, item)
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return nil, nil, err
+			}
+			if len(batch) == 0 {
+				break
+			}
+			for _, item := range batch {
+				lastField, lastID = item.field, item.id
+				next := cloneBootstrap(base)
+				if err := appendLabelProjection(&next, item.field, item.raw); err != nil {
+					return nil, nil, err
+				}
+				if err := mutate(&next); err != nil {
+					return nil, nil, err
+				}
+				updated, err := labelProjectionRecord(next, item.field)
+				if err != nil {
+					return nil, nil, err
+				}
+				if bytes.Equal(updated, item.raw) {
+					continue
+				}
+				if len(updated) == 0 {
+					_, err = tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, item.field, item.id)
+				} else {
+					_, err = tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field=? AND record_key=?`, []byte(updated), workspace, item.field, item.id)
+				}
+				if err != nil {
+					return nil, nil, err
+				}
+				remember(item.field, item.id, updated)
+			}
+		}
+	}
+	if issueLabels {
+		for _, labelID := range ids {
+			// Applied labels use the label reverse index; suggested labels use
+			// the sparse suggestedLabel:<id> attribute rows.
+			for _, suggested := range []bool{false, true} {
+				lastID := ""
+				for {
+					query := `SELECT i.id FROM issue_label_records l JOIN issue_records i ON i.workspace_key=l.workspace_key AND i.id=l.issue_id WHERE l.workspace_key=? AND l.label_id=? AND i.id>? ORDER BY i.id LIMIT 100`
+					args := []any{workspace, labelID, lastID}
+					if suggested {
+						query = `SELECT issue_id FROM issue_attribute_records WHERE workspace_key=? AND field=? AND value='true' AND issue_id>? ORDER BY issue_id LIMIT 100`
+						args = []any{workspace, indexKey("suggestedLabel:" + labelID), lastID}
+					}
+					rows, err := tx.QueryContext(ctx, query, args...)
+					if err != nil {
+						return nil, nil, err
+					}
+					batch := []string{}
+					for rows.Next() {
+						var key string
+						if err := rows.Scan(&key); err != nil {
+							rows.Close()
+							return nil, nil, err
+						}
+						batch = append(batch, key)
+					}
+					err = rows.Err()
+					rows.Close()
+					if err != nil {
+						return nil, nil, err
+					}
+					if len(batch) == 0 {
+						break
+					}
+					for _, key := range batch {
+						lastID = key
+						var value []byte
+						if err := tx.QueryRowContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND id=?`+lock, workspace, key).Scan(&value); err != nil {
+							return nil, nil, err
+						}
+						next := cloneBootstrap(base)
+						if err := appendLabelProjection(&next, "issues", value); err != nil {
+							return nil, nil, err
+						}
+						if err := mutate(&next); err != nil {
+							return nil, nil, err
+						}
+						updated, err := json.Marshal(next.Issues[0])
+						if err != nil {
+							return nil, nil, err
+						}
+						if bytes.Equal(value, updated) {
+							continue
+						}
+						next.Issues[0].Version++
+						next.Issues[0].UpdatedAt = time.Now().UTC()
+						if err := s.writeIssueRecord(ctx, tx, workspace, next.Issues[0]); err != nil {
+							return nil, nil, err
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, labelID := range ids {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='labels' AND record_key=?`, workspace, labelID); err != nil {
+			return nil, nil, err
+		}
+		remember("labels", labelID, nil)
+	}
+	if group {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='labelGroups' AND record_key=?`, workspace, id); err != nil {
+			return nil, nil, err
+		}
+		remember("labelGroups", id, nil)
+	}
+	return ids, changes, nil
 }
 
 func labelReferencePattern(id string) string {
