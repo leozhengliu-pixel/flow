@@ -37,7 +37,7 @@ func TestScaleP21SW17ViewerDefaultSwitchBetweenLocks(t *testing.T) {
 	for _, explicit := range []bool{false, true} {
 		t.Run(map[bool]string{false: "default", true: "explicit"}[explicit], func(t *testing.T) {
 			repo := sw17ViewerDefaultSwitchStore()
-			before, found := repo.WorkspaceMetadata("")
+			before, found := scaleP21ResidentOracle(repo, "")
 			if !found || before.Viewer.Name != "before" {
 				t.Fatal("old default oracle missing")
 			}
@@ -53,7 +53,7 @@ func TestScaleP21SW17ViewerDefaultSwitchBetweenLocks(t *testing.T) {
 				old.Viewer.Name = "changed-after-switch"
 				repo.workspaces["old\x00physical"] = old
 				repo.mu.Unlock()
-				legacy, found := repo.WorkspaceMetadata(workspace)
+				legacy, found := scaleP21ResidentOracle(repo, workspace)
 				if !found {
 					t.Fatal("post-switch oracle missing")
 				}
