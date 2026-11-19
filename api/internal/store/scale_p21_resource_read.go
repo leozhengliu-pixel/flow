@@ -132,7 +132,13 @@ func (s *SQLiteStore) BeginResourceRead(ctx context.Context, access AccessContex
 		}
 		snapshot := context.WithValue(ctx, workspaceReadKey{}, workspaceRead{database: s.db, workspace: p.workspace, reader: tx})
 		snapshot = context.WithValue(snapshot, resourceOwnedReadKey{}, read)
-		data, err = s.resourceReadRecords(snapshot, p, kind, ref)
+		var inline bool
+		inline, err = read.inlineSnapshotSource(snapshot, tx, p.workspace, resourceReadCanonicalFields)
+		if err == nil && inline {
+			data, err = read.installed(ctx, p, kind, ref)
+		} else if err == nil {
+			data, err = s.resourceReadRecords(snapshot, p, kind, ref)
+		}
 		if !borrowed {
 			closeErr := tx.Rollback()
 			if err == nil {

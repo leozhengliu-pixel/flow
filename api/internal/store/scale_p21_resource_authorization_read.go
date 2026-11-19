@@ -94,7 +94,13 @@ func (s *SQLiteStore) BeginResourceAuthorizationRead(ctx context.Context, access
 			}
 		}
 		snapshot := context.WithValue(ctx, workspaceReadKey{}, workspaceRead{database: s.db, workspace: p.workspace, reader: tx})
-		read.Allowed, err = read.canonical(snapshot, tx, p, kind, ref)
+		var inline bool
+		inline, err = read.owner.inlineSnapshotSource(snapshot, tx, p.workspace, resourceAuthorizationCanonicalFields)
+		if err == nil && inline {
+			read.Allowed, err = read.installed(ctx, p, kind, ref)
+		} else if err == nil {
+			read.Allowed, err = read.canonical(snapshot, tx, p, kind, ref)
+		}
 		if !borrowed {
 			if closeErr := tx.Rollback(); err == nil {
 				err = closeErr
