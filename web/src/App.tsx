@@ -5259,6 +5259,7 @@ function App() {
       >
         <SettingsPage
           data={data}
+          snapshotPending={snapshotUnconfirmed}
           page={settingsRoute.page}
           notificationChannel={settingsRoute.notificationChannel}
           onNavigateNotification={channel => navigateTo(`${settingsPath(data.workspace.urlKey,'notifications')}${channel ? `/${channel}` : ''}`)}
