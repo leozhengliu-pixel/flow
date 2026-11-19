@@ -1,6 +1,6 @@
 {
   "source": "store/project_progress_records.go",
-  "unmigrated": 1,
+  "unmigrated": 2,
   "consumers": {
     "backfillWorkspaceProjectProgress": {
       "owner": "P21",
@@ -9,7 +9,19 @@
         "resident-state"
       ],
       "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch. Bounded, it runs only on a COLD facade (backfillWorkspaceProjectProgressWrite, coldLegacyWrite)",
+      "callers": [
+        "store/SQLiteStore.backfillWorkspaceProjectProgressWrite"
+      ]
+    },
+    "projectProgressPending": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Startup only (backfillAllProjectProgress); flag off it reads the image, bounded the projects field of the legacy view (coldAccessorView)",
       "callers": [
         "store/SQLiteStore.backfillAllProjectProgress"
       ]
