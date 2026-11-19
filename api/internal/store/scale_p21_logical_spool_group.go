@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 )
 
 // A spool group is the lineage of one workspace's installed source: the
@@ -45,10 +44,18 @@ type metadataLogicalSpoolGroup struct {
 }
 
 // metadataLogicalBlockCache holds the cached blocks of a group's storages,
-// each tagged with the storage it was read from.
+// each tagged with the storage it was read from, and the spare buffers of
+// blocks that left their slots (scale_p21_logical_spool_io.go, invariant 4).
+// blocks (cached blocks and slots a block read has taken) and spare together
+// never hold more than metadataLogicalReadSlots buffers, so the cache stays
+// within the group's charge; released is set when the group's last storage
+// leaves, and from then on the cache keeps nothing.
 type metadataLogicalBlockCache struct {
-	blocks [metadataLogicalReadSlots]atomic.Pointer[metadataLogicalBlock]
-	victim atomic.Uint32
+	mu       sync.RWMutex
+	blocks   [metadataLogicalReadSlots]*metadataLogicalBlock
+	spare    []*metadataLogicalBlock
+	victim   uint32
+	released bool
 }
 
 func metadataLogicalSourceBudgetError(limit int64) error {
@@ -112,9 +119,7 @@ func (g *metadataLogicalSpoolGroup) leave(resident int64) {
 	last := g.refs == 0
 	g.mu.Unlock()
 	if last {
-		for index := range g.cache.blocks {
-			g.cache.blocks[index].Store(nil)
-		}
+		g.cache.release()
 		metadataLogicalDescriptorsUsed.Add(-metadataLogicalDescriptorBytes)
 	}
 }
@@ -161,10 +166,22 @@ func (s *metadataLogicalStorage) blockCache() *metadataLogicalBlockCache {
 // dropCachedBlocks drops every cached block read from the storage.
 func (s *metadataLogicalStorage) dropCachedBlocks() {
 	cache := s.blockCache()
-	for index := range cache.blocks {
-		slot := &cache.blocks[index]
-		if cached := slot.Load(); cached != nil && cached.owner == s {
-			slot.CompareAndSwap(cached, nil)
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	for index, cached := range cache.blocks {
+		if cached != nil && cached.owner == s {
+			cache.blocks[index] = nil
+			cache.recycleLocked(cached)
 		}
 	}
+}
+
+// release drops the cached blocks and the spare buffers; the cache keeps no
+// buffer afterwards.
+func (c *metadataLogicalBlockCache) release() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.blocks = [metadataLogicalReadSlots]*metadataLogicalBlock{}
+	c.spare = nil
+	c.released = true
 }
