@@ -148,6 +148,16 @@ load_weights() {
   key=$(timings_key "$package")
   jq -r --arg key "$key" '(.[$key] // {}) | to_entries[] | "\(.key) \(.value * 1000 | round)"' "$timings_file" |
     LC_ALL=C sort -k2,2nr -k1,1 > "$work/weights"
+  # The scope's known failures run in their own job, so they take no part in the
+  # packing: a long known-failing test packed alone would leave its shard empty
+  # once it is left out (2026-11-18: race store shard 4/14 ran no test).
+  if [ -n "${SHARD_SCOPE:-}" ]; then
+    known_tests "$package" "$SHARD_SCOPE" > "$work/weights-skip"
+    if [ -s "$work/weights-skip" ]; then
+      awk 'NR == FNR { skip[$1]; next } !($1 in skip)' "$work/weights-skip" "$work/weights" > "$work/weights-kept"
+      mv "$work/weights-kept" "$work/weights"
+    fi
+  fi
 }
 
 # Print "<shard> <name> <ms>" for every test read from stdin; <ms> is the
