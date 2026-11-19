@@ -88,6 +88,10 @@ type metadataLogicalNode struct {
 	blocked      bool
 	generic      bool
 	genericRange bool
+	// window holds the bytes of an enclosing node read in one piece when it
+	// was materialized (scale_p21_logical_read_window.go); nil reads the
+	// storage.
+	window *metadataLogicalWindow
 }
 
 type metadataLogicalBuilder struct {

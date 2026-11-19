@@ -27,6 +27,10 @@ func (c *metadataLogicalCursor) read(p []byte) error {
 	if int64(len(p)) > c.node.offset+c.node.size-c.offset {
 		return io.ErrUnexpectedEOF
 	}
+	if c.node.window.read(p, c.node.source, c.offset) {
+		c.offset += int64(len(p))
+		return nil
+	}
 	_, err := c.node.source.ReadAt(p, c.offset)
 	c.offset += int64(len(p))
 	return err
@@ -55,7 +59,7 @@ func (c *metadataLogicalCursor) child(t reflect.Type) (metadataLogicalNode, erro
 		return metadataLogicalNode{}, io.ErrUnexpectedEOF
 	}
 	c.offset = start + int64(size)
-	return metadataLogicalNode{source: c.node.source, offset: start, size: int64(size), cost: cost & metadataLogicalCostMask, typ: t, unavailable: cost&(uint64(1)<<63) != 0, blocked: cost&(uint64(1)<<62) != 0, generic: cost&metadataLogicalGenericJSON != 0}, nil
+	return metadataLogicalNode{source: c.node.source, offset: start, size: int64(size), cost: cost & metadataLogicalCostMask, typ: t, unavailable: cost&(uint64(1)<<63) != 0, blocked: cost&(uint64(1)<<62) != 0, generic: cost&metadataLogicalGenericJSON != 0, window: c.node.window}, nil
 }
 
 // Value admits the entire decoded object before allocation. The caller must
@@ -94,6 +98,7 @@ func (n metadataLogicalNode) materialize(ctx context.Context, depth int, wire bo
 	if depth >= metadataLogicalDepth {
 		return reflect.Value{}, ErrMetadataWorkBudget
 	}
+	n = n.windowed()
 	c := metadataLogicalCursor{n, n.offset + 16, ctx}
 	v := reflect.New(n.typ).Elem()
 	if n.typ == reflect.TypeFor[time.Time]() {

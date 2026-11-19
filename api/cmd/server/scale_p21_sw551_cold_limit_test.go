@@ -210,6 +210,12 @@ func TestScaleP21SW551ColdLimitAndHotIsolation(t *testing.T) {
 	t.Run("cold-slot-wait-is-bounded", func(t *testing.T) {
 		f.probe.SetColdQueueForTesting(1, 50*time.Millisecond)
 		defer f.probe.SetColdQueueForTesting(64, 15*time.Second)
+		// A live COLD request's wait is bounded (the server marks every
+		// request); background work's is not (background-cold-work-waits).
+		request, refused, endRequest := store.WithLegacyViewBusyRecorder(context.Background())
+		defer endRequest()
+		request, scope := store.WithColdScope(request, coldPattern)
+		defer scope.Close()
 		release, holding := make(chan struct{}), make(chan struct{})
 		done := make(chan error, 1)
 		go func() {
@@ -220,23 +226,93 @@ func TestScaleP21SW551ColdLimitAndHotIsolation(t *testing.T) {
 		}()
 		<-holding
 		queued := make(chan error, 1)
-		go func() { queued <- coldWrite(work, "timed-out", nil) }()
+		go func() { queued <- coldWrite(request, "timed-out", nil) }()
 		deadline := time.Now().Add(5 * time.Second)
 		for coldWaiting(f.probe) < 1 && time.Now().Before(deadline) {
 			time.Sleep(time.Millisecond)
 		}
 		// The queue holds one waiter: the next is refused at once.
-		if err := coldWrite(work, "refused", nil); !errors.Is(err, store.ErrColdMetadataBusy) {
+		if err := coldWrite(request, "refused", nil); !errors.Is(err, store.ErrColdMetadataBusy) {
 			t.Fatalf("SW551 a COLD write beyond the queue limit returned %v", err)
 		}
 		err := <-queued
 		if !errors.Is(err, store.ErrColdMetadataBusy) {
 			t.Fatalf("SW551 a COLD write that waited past the timeout returned %v", err)
 		}
+		// The refusal is recorded on the request, so a handler answering it
+		// as an error of its own is answered 503 + Retry-After.
+		if !refused() {
+			t.Fatal("SW551 a refused COLD slot wait was not recorded on the request")
+		}
 		w := httptest.NewRecorder()
 		respondMutation(w, err, http.StatusOK, nil)
 		if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "5" {
 			t.Fatalf("SW551 a busy COLD write answered %d (Retry-After %q)", w.Code, w.Header().Get("Retry-After"))
+		}
+		close(release)
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("background-cold-work-waits", func(t *testing.T) {
+		// Background COLD work (and work a request left running after its
+		// handler returned) waits past the timeout and beyond the queue
+		// limit, bounded only by its own context; it is never refused.
+		f.probe.SetColdQueueForTesting(1, 30*time.Millisecond)
+		defer f.probe.SetColdQueueForTesting(64, 15*time.Second)
+		left, _, endLeft := store.WithLegacyViewBusyRecorder(context.Background())
+		endLeft()
+		left, scope := store.WithColdScope(left, coldPattern)
+		scope.Close()
+		release, holding := make(chan struct{}), make(chan struct{})
+		done := make(chan error, 1)
+		go func() {
+			done <- coldWrite(work, "bg-holder", func() {
+				close(holding)
+				<-release
+			})
+		}()
+		<-holding
+		refusals := store.ColdSlotRefusalsForTesting()
+		waiters := make(chan error, 3)
+		for index, ctx := range []context.Context{work, f.probe.WorkerContext(), left} {
+			go func() { waiters <- coldWrite(ctx, "bg-"+strconv.Itoa(index), nil) }()
+			deadline := time.Now().Add(5 * time.Second)
+			for coldWaiting(f.probe) < index+1 && time.Now().Before(deadline) {
+				time.Sleep(time.Millisecond)
+			}
+		}
+		select {
+		case err := <-waiters:
+			t.Fatalf("SW551 background COLD work did not wait for the slot: %v", err)
+		case <-time.After(300 * time.Millisecond):
+		}
+		close(release)
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		for range 3 {
+			if err := <-waiters; err != nil {
+				t.Fatalf("SW551 background COLD work failed after waiting: %v", err)
+			}
+		}
+		if store.ColdSlotRefusalsForTesting() != refusals {
+			t.Fatal("SW551 background COLD work was refused")
+		}
+		// Its own context still ends the wait.
+		release, holding = make(chan struct{}), make(chan struct{})
+		go func() {
+			done <- coldWrite(work, "bg-holder-2", func() {
+				close(holding)
+				<-release
+			})
+		}()
+		<-holding
+		cancelled, cancel := context.WithTimeout(work, 30*time.Millisecond)
+		defer cancel()
+		if err := coldWrite(cancelled, "bg-cancelled", nil); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("SW551 a cancelled background COLD write returned %v", err)
 		}
 		close(release)
 		if err := <-done; err != nil {

@@ -54,17 +54,16 @@ func (s *SQLiteStore) oauthMetadataTransaction(ctx context.Context, workspace st
 		return s.boundedOAuthMetadataTransaction(ctx, workspace, mutate)
 	}
 	apply := func() error {
-		s.lockWorkspaceWrites()
+		tx, err := s.lockWorkspaceWritesTx(ctx)
+		if err != nil {
+			return err
+		}
 		defer s.unlockWorkspaceWrites()
+		defer tx.Rollback()
 		current, ok := s.workspaces[workspace]
 		if !ok {
 			return ErrAuthForbidden
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
 		lock := ""
 		if s.dialect != "sqlite" {
 			lock = " FOR UPDATE"

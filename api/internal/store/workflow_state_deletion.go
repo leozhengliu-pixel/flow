@@ -17,8 +17,12 @@ import (
 func (s *SQLiteStore) DeleteWorkflowStateRecords(ctx context.Context, workspace, teamID string, validate func(*domain.Bootstrap, bool) (domain.WorkflowState, *domain.WorkflowState, error)) error {
 	var event domain.DomainEvent
 	apply := func() error {
-		s.lockWorkspaceWrites()
+		tx, err := s.lockWorkspaceWritesTx(ctx)
+		if err != nil {
+			return err
+		}
 		defer s.unlockWorkspaceWrites()
+		defer tx.Rollback()
 		if workspace == "" {
 			workspace = s.lastWorkspaceKey
 		}
@@ -26,11 +30,6 @@ func (s *SQLiteStore) DeleteWorkflowStateRecords(ctx context.Context, workspace,
 		if !ok {
 			return ErrAuthForbidden
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
 		lock := ""
 		if s.dialect != "sqlite" {
 			lock = " FOR UPDATE"

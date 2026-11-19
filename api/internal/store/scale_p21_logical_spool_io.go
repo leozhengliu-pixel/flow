@@ -52,11 +52,16 @@ import (
 //     buffer, the cache and the frame memo; no file is created afterwards,
 //     and a never-created file has nothing to remove.
 //
-// The cache and the buffer (at most 64 KiB per storage) are covered by the
-// storage's descriptor charge (metadataLogicalDescriptorBytes).
+// The cache and the buffer (at most 128 KiB per storage) are covered by the
+// storage's descriptor charge (metadataLogicalDescriptorBytes). Twelve slots:
+// an installed storage is traversed by several readers at once (COLD
+// decodes, a reload's normalization, pulse, schedule and resource reads),
+// each walking the child headers of a large collection; with four slots
+// they evicted each other's blocks and nearly every header read was a pread
+// (the load rig at scale 1).
 const (
 	metadataLogicalReadBlock  = 8 << 10
-	metadataLogicalReadSlots  = 4
+	metadataLogicalReadSlots  = 12
 	metadataLogicalWriteBytes = 32 << 10
 )
 
