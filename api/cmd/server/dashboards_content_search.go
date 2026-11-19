@@ -1563,14 +1563,28 @@ func (s *server) filterSuggestions(w http.ResponseWriter, r *http.Request) {
 			result = append(result, *item)
 		}
 	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].Count == result[j].Count {
-			return result[i].Label < result[j].Label
-		}
-		return result[i].Count > result[j].Count
-	})
+	sortFilterSuggestions(result)
 	if len(result) > 50 {
 		result = result[:50]
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// sortFilterSuggestions orders suggestions by count, then label. Equal
+// counts and labels (unnamed teams) fall back to field and value, so the
+// order and the top-50 cut never follow map iteration.
+func sortFilterSuggestions(result []domain.FilterSuggestion) {
+	sort.Slice(result, func(i, j int) bool {
+		a, b := result[i], result[j]
+		if a.Count != b.Count {
+			return a.Count > b.Count
+		}
+		if a.Label != b.Label {
+			return a.Label < b.Label
+		}
+		if a.Field != b.Field {
+			return a.Field < b.Field
+		}
+		return a.Value < b.Value
+	})
 }

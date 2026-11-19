@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
-	"sort"
 	"strings"
 
 	"flow/api/internal/domain"
@@ -136,12 +135,7 @@ func (s *server) boundedFilterSuggestions(w http.ResponseWriter, r *http.Request
 			result = append(result, *item)
 		}
 	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].Count == result[j].Count {
-			return result[i].Label < result[j].Label
-		}
-		return result[i].Count > result[j].Count
-	})
+	sortFilterSuggestions(result)
 	if len(result) > 50 {
 		result = result[:50]
 	}
