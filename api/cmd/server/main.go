@@ -2943,7 +2943,10 @@ func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		settings := data.CycleSettings[teamID]
 		if settings.DurationWeeks == 0 {
-			settings = domain.CycleSettings{Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2}
+			// A team without stored settings starts from the built-in defaults
+			// (the values a new team gets), with cycles turned on.
+			settings = domain.TeamCreationDefaults{}.NewTeamCycleSettings()
+			settings.Enabled = true
 		}
 		if input.Enabled != nil {
 			settings.Enabled = *input.Enabled

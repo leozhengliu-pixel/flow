@@ -37,6 +37,7 @@ func (s *SQLiteStore) dataMigrations() []struct {
 		{version: resourceSlugMigrationVersion, name: "stable project and initiative slugs", apply: s.migrateResourceSlugs},
 		{version: documentInheritedScopeMigrationVersion, name: "inherited document scope", apply: s.migrateDocumentInheritedScope},
 		{version: cycleCapacityOverrideMigrationVersion, name: "cycle capacity overrides", apply: s.migrateCycleCapacityOverrides},
+		{version: cycleSettingsDefaultsMigrationVersion, name: "defaults for cycle settings stored without a capacity", apply: s.migrateCycleSettingsDefaults},
 		{version: memberDirectoryMigrationVersion, name: "joined members in the workspace directory", apply: s.migrateMemberDirectory},
 		{version: commentActionsMigrationVersion, name: "personal comment action preference", apply: s.migrateCommentActions},
 		{version: workspaceInitialsColorMigrationVersion, name: "workspace initials colour from the workspace id", apply: s.migrateWorkspaceInitialsColor},

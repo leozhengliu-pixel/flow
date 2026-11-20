@@ -1193,13 +1193,6 @@ func normalize(data *domain.Bootstrap) {
 			settings.AgentSkills = []domain.TeamAgentSkill{}
 		}
 		data.TeamSettings[team.ID] = settings
-		cycle := data.CycleSettings[team.ID]
-		if cycle.DurationWeeks > 0 && cycle.Capacity == 0 {
-			cycle.Capacity = 4
-			cycle.AutoCreate = true
-			cycle.AutoMigrate = true
-			data.CycleSettings[team.ID] = cycle
-		}
 	}
 	if len(data.ProjectStatuses) == 0 {
 		data.ProjectStatuses = canonicalProjectStatuses()
