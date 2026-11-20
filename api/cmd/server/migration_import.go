@@ -834,22 +834,42 @@ func linearArchiveIssue(ctx context.Context, client *linearMigrationClient, id s
 	return client.call(ctx, query, map[string]any{"id": id}, &map[string]any{})
 }
 
+const migrationAttachmentFetchTimeout = 30 * time.Second
+
 func linearCopyAttachment(ctx context.Context, client *linearMigrationClient, attachment domain.Attachment) (string, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, attachment.URL, nil)
+	// The source URL is member-controlled data in the bundle, so it is fetched
+	// like an attachment imported from a URL: http(s) only, no userinfo, every
+	// connection and redirect hop checked by the outbound policy (public
+	// addresses only), the same 20 MiB cap. The copy is sequential, one
+	// attachment at a time.
+	parsed, err := parseFetchURL(strings.TrimSpace(attachment.URL))
 	if err != nil {
 		return "", err
 	}
-	response, err := client.client.Do(request)
+	fetchCtx, cancel := context.WithTimeout(ctx, migrationAttachmentFetchTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, parsed.String(), nil)
 	if err != nil {
 		return "", err
+	}
+	request.Header.Set("User-Agent", "FlowAttachmentFetcher/1.0")
+	response, err := attachmentFetchClient().Do(request)
+	if err != nil {
+		return "", errors.New("source attachment could not be fetched (blocked or unreachable address)")
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return "", fmt.Errorf("source returned HTTP %d", response.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, 50<<20))
+	if response.ContentLength > maxAttachmentFromURLBytes {
+		return "", errors.New("source attachment exceeds 20 MB")
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, maxAttachmentFromURLBytes+1))
 	if err != nil {
 		return "", err
+	}
+	if len(data) > maxAttachmentFromURLBytes {
+		return "", errors.New("source attachment exceeds 20 MB")
 	}
 	contentType := attachment.ContentType
 	if contentType == "" {
