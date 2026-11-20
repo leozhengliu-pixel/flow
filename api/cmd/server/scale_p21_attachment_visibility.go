@@ -53,6 +53,9 @@ func (s *server) boundedAttachmentVisible(ctx context.Context, account domain.Ac
 		return true
 	}
 	for _, membership := range account.Workspaces {
+		if !workspacePolicyAllows(ctx, membership.Workspace.URLKey, membership.Role) {
+			continue
+		}
 		data, access, err := s.store.IssueQueryAccess(ctx, membership.Workspace.URLKey, userID)
 		if err != nil {
 			recordUploadVisibilityRefusal(ctx, err)

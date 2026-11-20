@@ -27,7 +27,7 @@
         "server/server.sweepAppUserNotifications",
         "server/server.dispatchAppAssignmentNotifications",
         "server/server.sweepIssueSLAWebhooks",
-        "server/server.authorizeAuthenticationPolicy",
+        "server/server.workspaceAuthenticationFailure",
         "server/server.startWorkflowScheduler",
         "server/server.chatGroupQuickControls",
         "server/server.chatPersonalIssueCard",

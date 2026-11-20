@@ -169,6 +169,9 @@ var issueAccessRevocations = []issueAccessRevocation{
 	{"member removed from the workspace", issueAccessSetup{role: "member", inTeam: true}, func(t *testing.T, baseURL string, fixture issueAccessFixture) {
 		authRequest[any](t, fixture.admin, http.MethodDelete, baseURL+"/api/workspaces/test-workspace/members/"+fixture.memberUser.ID, nil, "", http.StatusNoContent)
 	}},
+	{"workspace requires two-factor", issueAccessSetup{role: "member", inTeam: true}, func(t *testing.T, baseURL string, fixture issueAccessFixture) {
+		authRequest[domain.WorkspaceSettings](t, fixture.admin, http.MethodPatch, baseURL+"/api/workspace/preferences", map[string]any{"requireTwoFactor": true}, "test-workspace", http.StatusOK)
+	}},
 	{"session signed out", issueAccessSetup{role: "member", inTeam: true}, func(t *testing.T, baseURL string, fixture issueAccessFixture) {
 		authRequest[any](t, fixture.member, http.MethodPost, baseURL+"/api/auth/logout", nil, "", http.StatusNoContent)
 	}},

@@ -534,6 +534,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		_, ok := s.oauthWorkspaceForRequest(w, r, workspaceKey(r), user)
 		return ok
 	}
+	if !s.authorizeAccountFactorChange(w, r, user) {
+		return false
+	}
 	key := workspaceKey(r)
 	if key == "" && s.authDisabled && r.URL.Path == "/api/workspace/preferences" {
 		if metadata, ok := s.store.WorkspaceSettingsMetadata(""); ok {

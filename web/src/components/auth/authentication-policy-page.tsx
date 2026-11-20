@@ -1,9 +1,9 @@
 import {useState} from 'react'
 import {ShieldCheck} from 'lucide-react'
 import {useI18n} from '@/i18n/i18n'
-import {beginPasskeyRegistration,finishPasskeyRegistration,logoutAccount} from '@/lib/api'
-import {ApiError,jsonRequest,request} from '@/lib/api-client'
-import {decodeBase64Url,encodeBase64Url,toCredentialCreationOptions,serializeCreationCredential} from '@/lib/webauthn'
+import {beginPasskeyRegistration,finishPasskeyRegistration,logoutAccount,verifyMfaWithPasskey} from '@/lib/api'
+import {ApiError} from '@/lib/api-client'
+import {toCredentialCreationOptions,serializeCreationCredential} from '@/lib/webauthn'
 
 export function AuthenticationPolicyPage({code}:{code:string}) {
   const {t}=useI18n()
@@ -20,12 +20,7 @@ export function AuthenticationPolicyPage({code}:{code:string}) {
         await finishPasskeyRegistration({registrationId:start.registrationId,name:'Two-factor passkey',credential:serializeCreationCredential(credential,credential.response as AuthenticatorAttestationResponse)})
         setEnroll(false)
       }
-      const start=await request<{challengeId:string;options:{publicKey:PublicKeyCredentialRequestOptions & {challenge:string;allowCredentials?:{id:string;type:'public-key'}[]}}}>('/api/account/mfa/start',{method:'POST'})
-      const source=start.options.publicKey
-      const credential=await navigator.credentials.get({publicKey:{...source,challenge:decodeBase64Url(String(source.challenge)),allowCredentials:source.allowCredentials?.map(item=>({...item,id:decodeBase64Url(String(item.id))}))}}) as PublicKeyCredential|null
-      if(!credential)throw new Error(t('Verification was canceled'))
-      const response=credential.response as AuthenticatorAssertionResponse
-      await request('/api/account/mfa/finish',jsonRequest('POST',{challengeId:start.challengeId,credential:{id:credential.id,type:credential.type,rawId:encodeBase64Url(credential.rawId),response:{clientDataJSON:encodeBase64Url(response.clientDataJSON),authenticatorData:encodeBase64Url(response.authenticatorData),signature:encodeBase64Url(response.signature),userHandle:response.userHandle?encodeBase64Url(response.userHandle):null}}}))
+      await verifyMfaWithPasskey(t('Verification was canceled'))
       location.reload()
     } catch(reason) {
       if(reason instanceof ApiError&&reason.code==='mfa_enrollment_required') {setEnroll(true);setError(t('Register a passkey, then verify it to access this workspace'))}

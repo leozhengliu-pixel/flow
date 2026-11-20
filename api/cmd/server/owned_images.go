@@ -41,7 +41,7 @@ func (s *server) resolveOwnedImage(ctx context.Context, name string) (ownedImage
 	}
 	if logo, ok := s.resolveWorkspaceLogo(name, owner); ok {
 		return ownedImage{name: name, contentType: logo.contentType, readable: func(ctx context.Context, userID string) bool {
-			return s.activeWorkspaceMember(ctx, logo.workspaceKey, userID, false)
+			return s.workspaceLogoReadable(ctx, logo.workspaceKey, userID)
 		}}, true
 	}
 	return ownedImage{}, false
@@ -67,9 +67,20 @@ func (s *server) ownedImageAccess(ctx context.Context, name, userID string, chec
 	}
 	if logo, found := s.resolveWorkspaceLogo(name, owner); found {
 		return ownedImage{name: name, contentType: logo.contentType}, true,
-			!checkPermission || s.activeWorkspaceMember(ctx, logo.workspaceKey, userID, false), nil
+			!checkPermission || s.workspaceLogoReadable(ctx, logo.workspaceKey, userID), nil
 	}
 	return ownedImage{}, false, false, nil
+}
+
+// workspaceLogoReadable is the logo's read permission: an active member whose
+// sign-in satisfies the workspace's authentication policy.
+func (s *server) workspaceLogoReadable(ctx context.Context, workspace, userID string) bool {
+	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspace)
+	if err != nil {
+		return false
+	}
+	role, status, err := s.store.WorkspaceRole(ctx, workspaceID, userID)
+	return err == nil && status == "active" && workspacePolicyAllows(ctx, workspace, role)
 }
 
 // workspaceLogo is an uploaded workspace logo that is its workspace's logo now.
