@@ -24,6 +24,33 @@ const metadataLogicalDiskBytes = 1 << 30
 const metadataLogicalDescriptorBytes = 128 << 10
 const metadataLogicalDescriptorLimit = 64 << 20
 
+// metadataStructField is what frame writers and readers ask of a struct
+// field for every value: its name and type, whether it is exported and
+// whether its JSON tag is "-".
+type metadataStructField struct {
+	name                  string
+	typ                   reflect.Type
+	exported, jsonOmitted bool
+}
+
+var metadataStructFieldTypes sync.Map
+
+// metadataStructFields lists a struct type's fields in declaration order,
+// computed once per type (reflect builds a field's name and tag anew on each
+// lookup).
+func metadataStructFields(t reflect.Type) []metadataStructField {
+	if fields, found := metadataStructFieldTypes.Load(t); found {
+		return fields.([]metadataStructField)
+	}
+	fields := make([]metadataStructField, t.NumField())
+	for index := range fields {
+		field := t.Field(index)
+		fields[index] = metadataStructField{name: field.Name, typ: field.Type, exported: field.PkgPath == "", jsonOmitted: field.Tag.Get("json") == "-"}
+	}
+	metadataStructFieldTypes.Store(t, fields)
+	return fields
+}
+
 var errMetadataLogicalClosed = errors.New("installed logical metadata source is closed")
 var metadataLogicalDiskUsed atomic.Int64
 var metadataLogicalDescriptorsUsed atomic.Int64
@@ -609,14 +636,15 @@ func (b *metadataLogicalBuilder) writeValue(v reflect.Value, depth int, key bool
 			}
 		}
 	case reflect.Struct:
+		fields := metadataStructFields(v.Type())
 		for i := 0; i < v.NumField() && err == nil; i++ {
-			f := v.Type().Field(i)
-			if f.PkgPath != "" {
+			f := fields[i]
+			if !f.exported {
 				node.unavailable, node.blocked = true, true
 				return node, nil
 			}
 			value := v.Field(i)
-			if f.Tag.Get("json") == "-" && !key {
+			if f.jsonOmitted && !key {
 				value = reflect.Zero(value.Type())
 			}
 			err = child(value, key)

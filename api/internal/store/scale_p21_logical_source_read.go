@@ -407,12 +407,16 @@ func (n metadataLogicalNode) Children(ctx context.Context, visit func(reflect.Va
 	if (n.typ.Kind() == reflect.Slice || n.typ.Kind() == reflect.Array) && length >= metadataLogicalIndexMinimum {
 		return n.indexedChildren(ctx, &c, length, visit)
 	}
+	var fields []metadataStructField
+	if n.typ.Kind() == reflect.Struct {
+		fields = metadataStructFields(n.typ)
+	}
 	for i := 0; i < length; i++ {
 		key := reflect.ValueOf(i)
 		t := n.typ.Elem
 		if n.typ.Kind() == reflect.Struct {
-			f := n.typ.Field(i)
-			key, t = reflect.ValueOf(f.Name), func() reflect.Type { return f.Type }
+			f := fields[i]
+			key, t = reflect.ValueOf(f.name), func() reflect.Type { return f.typ }
 		} else if n.typ.Kind() == reflect.Map {
 			node, err := c.child(n.typ.Key())
 			if err != nil {
@@ -444,7 +448,14 @@ func (n metadataLogicalNode) indexedChildren(ctx context.Context, c *metadataLog
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if err := visit(reflect.ValueOf(i), header.node(n.source, t)); err != nil {
+			child := header.node(n.source, t)
+			// As from the cursor (child): a child inside the node's
+			// window reads from it rather than taking its own.
+			if window := n.window; window != nil && !window.slid && window.storage == n.source &&
+				child.offset >= window.at && child.offset+child.size <= window.at+int64(len(window.data)) {
+				child.window = window
+			}
+			if err := visit(reflect.ValueOf(i), child); err != nil {
 				return err
 			}
 		}

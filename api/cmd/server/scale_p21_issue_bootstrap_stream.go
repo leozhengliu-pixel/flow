@@ -14,12 +14,38 @@ import (
 	"flow/api/internal/store"
 )
 
+// issueBootstrapAttempts bounds the reads of one request when workspace
+// authorization keeps changing under them (store.ErrAccessChanged).
+const issueBootstrapAttempts = 3
+
+// errIssueBootstrapWorkspaceNotFound is a development read of a missing
+// workspace (answered 404 "workspace not found").
+var errIssueBootstrapWorkspaceNotFound = errors.New("workspace not found")
+
 // The HTTP stream owns opaque body references. In-process bootstrap consumers
 // continue to use their independent typed input contract.
 func (s *server) issueRecordsBootstrapBounded(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
-	read, ok := s.beginIssueRecordsBootstrapRead(w, r)
-	if !ok {
+	var read *store.IssueBootstrapRead
+	for attempt := 1; ; attempt++ {
+		var err error
+		read, err = s.openIssueRecordsBootstrapRead(w, r)
+		if err == nil {
+			// Authority and the output's admission are settled before the
+			// status is written: a refusal is still a response.
+			if err = read.Prepare(r.Context()); err != nil {
+				read.Close()
+			}
+		}
+		if err == nil {
+			break
+		}
+		// The flag-off bootstrap reads one consistent workspace; a bounded
+		// read whose authorization moved under it is read again.
+		if errors.Is(err, store.ErrAccessChanged) && attempt < issueBootstrapAttempts && r.Context().Err() == nil {
+			continue
+		}
+		writeIssueBootstrapReadError(w, err)
 		return
 	}
 	defer read.Close()
@@ -42,15 +68,33 @@ func (s *server) issueRecordsBootstrapBounded(w http.ResponseWriter, r *http.Req
 
 // The caller owns the read through streaming or through its declared typed
 // projection. All route filters and decoration errors share this boundary.
-func (s *server) beginIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.Request) (_ *store.IssueBootstrapRead, ok bool) {
+func (s *server) beginIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.Request) (*store.IssueBootstrapRead, bool) {
+	read, err := s.openIssueRecordsBootstrapRead(w, r)
+	if err != nil {
+		writeIssueBootstrapReadError(w, err)
+		return nil, false
+	}
+	return read, true
+}
+
+func writeIssueBootstrapReadError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errIssueBootstrapWorkspaceNotFound) {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	issueBootstrapError(w, err)
+}
+
+// openIssueRecordsBootstrapRead is beginIssueRecordsBootstrapRead without
+// answering its failure.
+func (s *server) openIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.Request) (_ *store.IssueBootstrapRead, err error) {
 	workspace := workspaceKey(r)
 	s.setChangeCursor(w, r, workspace)
 	principal := ""
 	if !s.authDisabled {
 		principal = authUser(r).ID
 		if principal == "" {
-			issueRecordsError(w, store.ErrAuthForbidden)
-			return nil, false
+			return nil, store.ErrAuthForbidden
 		}
 	}
 	var credential *domain.APIKey
@@ -60,14 +104,12 @@ func (s *server) beginIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.R
 	read, err := s.store.BeginIssueBootstrapRead(r.Context(), workspace, principal, credential)
 	if err != nil {
 		if principal == "" && errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "workspace not found")
-			return nil, false
+			return nil, errIssueBootstrapWorkspaceNotFound
 		}
-		issueBootstrapError(w, err)
-		return nil, false
+		return nil, err
 	}
 	defer func() {
-		if !ok {
+		if err != nil {
 			read.Close()
 		}
 	}()
@@ -78,37 +120,40 @@ func (s *server) beginIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.R
 	data.IssueCollectionPaged = true
 	data.CommentActions = nil
 	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
-		issueBootstrapError(w, err)
-		return nil, false
+		return nil, err
 	}
 	if projectListBootstrapRequested(r) {
 		store.ProjectListBootstrapProjection(&data)
 	} else if r.Header.Get("X-Flow-Projection") == "issue-detail" {
 		store.IssueDetailBootstrapProjection(&data)
 	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
-		issueBootstrapError(w, err)
-		return nil, false
+		return nil, err
 	}
 	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
-		issueBootstrapError(w, err)
-		return nil, false
+		return nil, err
 	}
 	if err := scaleP21SanitizeBootstrap(r.Context(), &data, read.StreamString); err != nil {
-		issueBootstrapError(w, err)
-		return nil, false
+		return nil, err
 	}
 	s.applyCalendarAway(r.Context(), &data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
 	data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
 	data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
 	read.Data = data
-	return read, true
+	return read, nil
 }
 
 // issueBootstrapError answers a bounded work refusal like the other bounded
 // reads (503 with Retry-After); the original accessors had no budget. Every
 // other failure keeps the original response.
 func issueBootstrapError(w http.ResponseWriter, err error) {
+	if errors.Is(err, store.ErrAccessChanged) {
+		// Authorization kept changing under every read: a later read finds
+		// it settled (a principal who lost access is refused by that read).
+		w.Header().Set("Retry-After", "2")
+		writeError(w, http.StatusServiceUnavailable, "The workspace is busy loading for other people; retry in a moment")
+		return
+	}
 	if !readLeafBusy(w, err) {
 		issueRecordsError(w, err)
 	}

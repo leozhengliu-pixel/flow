@@ -501,9 +501,11 @@ func TestScaleP21SW138BootstrapBodyProjectionAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Binding exchanges the build's admission for its own: the projected
+	// headers it charges whole and every body occurrence.
 	bindWork := view.MetadataWorkUsedForTesting()
-	if output == nil || bindWork <= buildWork {
-		t.Fatal("binding had no independent admitted output")
+	if output == nil || bindWork <= 0 || bindWork == buildWork || !reflect.DeepEqual(projection.Data, domain.Bootstrap{}) || len(projection.leases) != 1 {
+		t.Fatal("binding had no independent admitted output", buildWork, bindWork)
 	}
 	if second, _, err := projection.bind(t.Context(), domain.Bootstrap{}); second != nil || !errors.Is(err, ErrMetadataRecordQuery) {
 		t.Fatal("second binding accepted", err)

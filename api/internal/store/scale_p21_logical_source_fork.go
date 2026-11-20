@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -355,6 +356,13 @@ func (n metadataLogicalNode) StreamBytes(ctx context.Context, visit func(io.Read
 	size, err := c.uint()
 	if err != nil || size > uint64(n.size) {
 		return io.ErrUnexpectedEOF
+	}
+	// A node read in a window streams its bytes from it.
+	if window := c.node.window; window != nil && window.storage == n.source && c.offset >= window.at && c.offset+int64(size) <= window.at+int64(len(window.data)) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return visit(bytes.NewReader(window.data[c.offset-window.at : c.offset-window.at+int64(size)]))
 	}
 	return visit(io.LimitReader(&metadataLogicalByteReader{ctx, n.source, c.offset}, int64(size)))
 }

@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- With bounded metadata on, the workspace bootstrap (`GET /api/issue-records/bootstrap`) of a workspace with many projects and long progress histories answers as it does with the flag off instead of refusing every request with 503: it admits the memory its decoded headers actually take, and exchanges that admission for the response's when it starts writing. The response encoding reads each record once, which makes large bootstraps several times faster. Bounded metadata stays off by default.
 - `server metadata-prepare` repairs the record journal and completes the metadata catalog in one foreground run before bounded metadata is turned on; the `FLOW_METADATA_CATALOG=shadow` worker now runs the same journal repair, completes the catalog at full speed, rewrites SQLite canonical rows stored as text as blobs, and skips (and logs) a collection it cannot catalog instead of stopping. Bounded starts refuse up front, naming the setting, when the workspaces do not fit the new `FLOW_METADATA_POLICY_BYTES`, `FLOW_METADATA_SOURCE_BYTES` and `FLOW_METADATA_SOURCE_DISK_BYTES` budgets. Bounded metadata stays off by default.
 - Bounded integration delivery retries preserve captured network inputs, HTTP-accepted raw JSON bytes and atomic publication without loading complete workspaces.
 - Bounded batch updates retain response values while releasing completed mutation work before triage.

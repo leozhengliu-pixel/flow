@@ -491,6 +491,20 @@ func (r *WebhookAggregateRead) omitted(ctx context.Context, node metadataLogical
 				}
 			}
 		case reflect.Struct:
+		case reflect.Bool:
+			// A scalar frame holds its value: a byte, or the integer or
+			// IEEE bits as written (zero exactly when IsZero holds).
+			flag, err := cursor.byte()
+			if err != nil || flag == 0 {
+				return flag == 0, err
+			}
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+			reflect.Float32, reflect.Float64:
+			bits, err := cursor.uint()
+			if err != nil || bits == 0 {
+				return bits == 0, err
+			}
 		default:
 			var empty bool
 			err := r.native(ctx, node, func(value reflect.Value) { empty = value.IsZero() })
