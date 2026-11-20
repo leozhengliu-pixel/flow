@@ -37,6 +37,11 @@ func (s *Service) provision(ctx context.Context, session domain.CodingSession, s
 		return ProvisionOutcome{Code: domain.CodingErrInternal, Message: err.Error(), Transient: true}
 	}
 	policy := NormalizeAgentSettings(info.Settings.CodingAgentSettings)
+	// Before environment secrets or git credentials are touched: the person
+	// the session runs as must still be allowed to use it.
+	if denied := s.creatorStillAllowed(ctx, session); denied != nil {
+		return *denied
+	}
 	env, selection, outcome := s.resolveEnvironment(ctx, session)
 	if outcome != nil {
 		return *outcome
@@ -367,7 +372,7 @@ func pullRequestTitle(session domain.CodingSession) string {
 func (s *Service) pullRequestBody(ctx context.Context, session domain.CodingSession) string {
 	body := firstLine(session.Summary, 400)
 	if body == "" && session.IssueID != "" && s.directory != nil {
-		if issue, err := s.directory.CodingIssue(ctx, session.WorkspaceKey, session.IssueID); err == nil && issue.Identifier != "" {
+		if issue, err := s.issueFor(ctx, session.WorkspaceKey, session.CreatorID, session.IssueID); err == nil && issue.Identifier != "" {
 			body = "Fixes " + issue.Identifier
 		}
 	}

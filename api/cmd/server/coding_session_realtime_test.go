@@ -103,11 +103,12 @@ func TestCodingSessionPushesFollowSessionAccess(t *testing.T) {
 		t.Fatalf("member pushes = %v (another member's chat session must not be pushed)", got)
 	}
 
-	// A guest sees only their own sessions, not the issue's.
+	// A guest sees only their own sessions, not the issue's. (A guest cannot
+	// start a session, so it began while they were still a member.)
+	own := f.start(coding.StartInput{Source: domain.CodingSourceAgentChat, CreatorID: "usr_member"})
 	if err := f.s.store.UpdateMemberRole(t.Context(), f.workspace.Workspace.ID, "usr_member", "guest"); err != nil {
 		t.Fatal(err)
 	}
-	own := f.start(coding.StartInput{Source: domain.CodingSourceAgentChat, CreatorID: "usr_member"})
 	guest := open("usr_member")
 	push(own)
 	push(shared)

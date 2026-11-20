@@ -162,6 +162,11 @@ func (s *server) codingLLMPolicy(ctx context.Context, caller codingSandboxCaller
 	if s.workspaceAIPolicy(ctx, caller.grant.WorkspaceKey, caller.session.CreatorID) != nil {
 		return llmproxy.ErrPolicy
 	}
+	// The session runs as its creator: once they lost the workspace or the
+	// issue, no further model request goes out for it.
+	if s.coding != nil && s.coding.service != nil && s.coding.service.CreatorAllowed(ctx, caller.session) != nil {
+		return llmproxy.ErrPolicy
+	}
 	return nil
 }
 
