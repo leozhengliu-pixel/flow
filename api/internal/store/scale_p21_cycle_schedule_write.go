@@ -678,12 +678,23 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		traceMark(ctx, "commit")
 		return nil
 	}
-	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
-		if s.coordinator != nil {
-			return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx) })
+	// An attempt the work budget refused for want of room (concurrent work
+	// held it) committed nothing: it runs again once the budget has room
+	// for it (scale_p21_work_retry.go).
+	deadline := time.Now().Add(time.Duration(metadataWorkRetryWait.Load()))
+	for {
+		attemptCtx, demand := withMetadataWorkDemand(ctx)
+		err = mutationAttempts(attemptCtx, fullMutationAttempts, func(ctx context.Context) error {
+			if s.coordinator != nil {
+				return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx) })
+			}
+			return apply(ctx)
+		}, s.refreshConflictedLogicalMetadata(ctx, workspace))
+		if written || !errors.Is(err, ErrMetadataWorkBudget) || !s.awaitMetadataWork(ctx, demand, deadline) {
+			break
 		}
-		return apply(ctx)
-	}, s.refreshConflictedLogicalMetadata(ctx, workspace))
+		traceMark(ctx, "work-wait")
+	}
 	if written {
 		s.dropMetadataCache(ctx, workspace)
 	}

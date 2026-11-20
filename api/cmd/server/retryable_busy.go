@@ -50,6 +50,26 @@ func writeRetryableBusy(w http.ResponseWriter, r *http.Request, err error) bool 
 	return true
 }
 
+// writeStoreBusy answers a store that was too busy to serve the request (a
+// full or timed-out COLD slot, a workspace lock another replica holds, a
+// metadata work budget concurrent work held) with the shared 503 +
+// Retry-After. It returns false for any other error, including the request's
+// own deadline and a budget refusal of work no budget admits (a size bound,
+// which a retry cannot cure), which keep the response their handler gives.
+func writeStoreBusy(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, store.ErrColdMetadataBusy):
+		(&metadataReadGate{}).busy(w, store.ColdMetadataBusyRetryAfter)
+	case errors.Is(err, coordination.ErrWorkspaceLockBusy):
+		(&metadataReadGate{}).busy(w, workspaceLockBusyRetryAfter)
+	case store.MetadataWorkContended(err):
+		(&metadataReadGate{}).busy(w, busyDeadlineRetryAfter)
+	default:
+		return false
+	}
+	return true
+}
+
 func isRetryableBusy(err error) bool {
 	_, busy := retryableBusy(err)
 	return busy

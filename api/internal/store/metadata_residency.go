@@ -296,6 +296,7 @@ func (b *metadataWorkBudget) acquire(ctx context.Context, bytes int) (context.Co
 			return ctx, nil, err
 		}
 		if bytes <= b.limit-b.used {
+			noteMetadataWorkDemand(ctx, bytes, 0)
 			b.used += bytes
 			b.peak = max(b.peak, b.used)
 			lease := &metadataWorkLease{b, bytes, true}
@@ -319,7 +320,8 @@ func (b *metadataWorkBudget) acquire(ctx context.Context, bytes int) (context.Co
 		case <-ctx.Done():
 			return ctx, nil, ctx.Err()
 		case <-timer.C:
-			return ctx, nil, ErrMetadataWorkBudget
+			noteMetadataWorkDemand(ctx, 0, bytes)
+			return ctx, nil, errMetadataWorkContended
 		case <-changed:
 		}
 	}
