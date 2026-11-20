@@ -68,10 +68,19 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var statusPostedAs *domain.ReviewPostedAs
 	statusActor := requestActor(s, r)
+	// One workspace read serves the permission, status and merge checks.
+	var loaded *domain.Bootstrap
+	workspace := func() domain.Bootstrap {
+		if loaded == nil {
+			data := s.workspaceData(r)
+			loaded = &data
+		}
+		return *loaded
+	}
 	// A favorite is the viewer's own; every other edit needs a non-guest
 	// member who can see the review (the route already checked visibility).
 	if input.Title != nil || input.Status != nil || input.ReviewerIDs != nil || input.IssueIDs != nil || input.IssueLinkTypes != nil || input.Draft != nil || input.BranchState != nil || input.MergeMethod != nil {
-		if !reviewMemberCanAct(w, s.workspaceData(r)) {
+		if !reviewMemberCanAct(w, workspace()) {
 			return
 		}
 	}
@@ -83,7 +92,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 		if slices.Contains([]string{"inReview", "approved"}, *input.Status) {
 			// Approval and requested changes are host decisions made through
 			// submit; a PATCH may only repeat the status the review has.
-			current, err := reviewByID(s.workspaceData(r), id)
+			current, err := reviewByID(workspace(), id)
 			if err != nil {
 				respondMutation(w, err, 200, nil)
 				return
@@ -98,7 +107,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 				writeError(w, 400, "submit repository status changes separately from metadata edits")
 				return
 			}
-			data := s.workspaceData(r)
+			data := workspace()
 			current, err := reviewByID(data, id)
 			if err != nil {
 				respondMutation(w, err, 200, nil)

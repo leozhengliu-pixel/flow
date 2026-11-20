@@ -40,6 +40,8 @@ var InternalRoutes = []string{
 	"DELETE /api/account/signing-key",
 	"GET /api/account/bootstrap",
 	"GET /api/account/identities",
+	"GET /api/account/identities/link/{provider}/start",
+	"GET /api/account/identities/link/enterprise/{id}/start",
 	"GET /api/account/passkeys",
 	"GET /api/account/sessions",
 	"GET /api/account/settings",
