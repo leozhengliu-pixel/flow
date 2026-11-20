@@ -164,12 +164,13 @@ func (s *server) createWorkspaceIssueTemplateWithStore(w http.ResponseWriter, r 
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
-func (s *server) updateWorkspaceIssueTemplateWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore, input domain.IssueTemplateMutationInput) {
+func (s *server) updateWorkspaceIssueTemplateWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore, input domain.IssueTemplateMutationInput, viewer templateAccess) {
 	id := r.PathValue("id")
 	var updated domain.IssueTemplate
 	err := repo.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.updated", id, input, func(data *domain.Bootstrap) error {
+		// Team templates change only through their team's routes.
 		index := slices.IndexFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool {
-			return template.ID == id && (template.Scope == "workspace" || template.VisibilityTeamID == "")
+			return template.ID == id && workspaceIssueTemplate(template) && issueTemplateReachable(viewer, template)
 		})
 		if index < 0 {
 			return errNotFound
@@ -189,12 +190,13 @@ func (s *server) updateWorkspaceIssueTemplateWithStore(w http.ResponseWriter, r 
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
-func (s *server) deleteWorkspaceIssueTemplateWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore) {
+func (s *server) deleteWorkspaceIssueTemplateWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore, viewer templateAccess) {
 	id := r.PathValue("id")
 	err := repo.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "issue_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "issueTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.IssueTemplates)
+		// Team templates are deleted only through their team's routes.
 		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool {
-			return template.ID == id && (template.Scope == "workspace" || template.VisibilityTeamID == "")
+			return template.ID == id && workspaceIssueTemplate(template) && issueTemplateReachable(viewer, template)
 		})
 		if before == len(data.IssueTemplates) {
 			return errNotFound
@@ -222,7 +224,7 @@ func (s *server) createDocumentTemplateWithStore(w http.ResponseWriter, r *http.
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
-func (s *server) updateDocumentTemplateWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore, input documentTemplateInput) {
+func (s *server) updateDocumentTemplateWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore, input documentTemplateInput, viewer templateAccess) {
 	id := r.PathValue("id")
 	var updated domain.DocumentTemplate
 	scope := store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "documentTemplates", ID: id}}}
@@ -233,6 +235,9 @@ func (s *server) updateDocumentTemplateWithStore(w http.ResponseWriter, r *http.
 		index := slices.IndexFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
+		}
+		if err := viewer.documentTemplateWritable(data.DocumentTemplates[index]); err != nil {
+			return err
 		}
 		before := data.DocumentTemplates[index]
 		if err := applyDocumentTemplateInput(data, &data.DocumentTemplates[index], input); err != nil {
@@ -248,9 +253,14 @@ func (s *server) updateDocumentTemplateWithStore(w http.ResponseWriter, r *http.
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
-func (s *server) deleteDocumentTemplateWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore) {
+func (s *server) deleteDocumentTemplateWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore, viewer templateAccess) {
 	id := r.PathValue("id")
 	err := repo.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "document_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "documentTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
+		if index := slices.IndexFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == id }); index >= 0 {
+			if err := viewer.documentTemplateWritable(data.DocumentTemplates[index]); err != nil {
+				return err
+			}
+		}
 		before := len(data.DocumentTemplates)
 		data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == id })
 		if before == len(data.DocumentTemplates) {

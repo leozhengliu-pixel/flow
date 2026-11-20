@@ -11,6 +11,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 // Run only on the completion edge. Replayed CI events and later metadata edits
@@ -190,9 +191,16 @@ func generateReleaseNotesOnCompletion(data *domain.Bootstrap, pipeline *domain.R
 		return
 	}
 	lines := []string{}
+	// The notes are read by everyone who sees the pipeline: only issues
+	// within its scope are listed (its teams, or the teams that keep no
+	// content from non-members when it has none).
+	scope := store.NewDocumentLinkScope(data.Teams, data.TeamSettings)
 	for _, id := range release.IssueIDs {
 		issue, err := issueByID(data, id)
 		if err != nil || issue.ArchivedAt != nil || issue.State.Type != "completed" {
+			continue
+		}
+		if len(pipeline.TeamIDs) > 0 && !slices.Contains(pipeline.TeamIDs, issue.Team.ID) || len(pipeline.TeamIDs) == 0 && scope.TeamClosed(issue.Team.ID) {
 			continue
 		}
 		lines = append(lines, "- "+strings.TrimSpace(issue.Identifier+" "+issue.Title))

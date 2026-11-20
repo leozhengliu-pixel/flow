@@ -975,13 +975,15 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 		address := data.EmailIntakeAddresses[addressIndex]
 		teamID := address.TeamID
 		var template *domain.IssueTemplate
+		templateID := ""
 		if address.TemplateID != "" {
-			if index := slices.IndexFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.ID == address.TemplateID }); index >= 0 {
+			// Issues land in the address's team. A template of another team
+			// (configured before this was enforced, or moved since) is not
+			// applied: it would create the issue, with its properties, in a
+			// team the address's managers may not reach.
+			if index := slices.IndexFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.ID == address.TemplateID }); index >= 0 && emailIntakeTemplateFits(data.IssueTemplates[index], teamID) {
 				template = &data.IssueTemplates[index]
-				// Like the reference app, a template from another team creates issues there.
-				if template.TeamID != "" {
-					teamID = template.TeamID
-				}
+				templateID = template.ID
 			}
 		}
 		teamIndex := slices.IndexFunc(data.Teams, func(item domain.Team) bool { return item.ID == teamID })
@@ -1039,7 +1041,7 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if address.Type == "asks" || slices.ContainsFunc(data.WorkspaceSettings.FeatureSettings.AsksEmailAddresses, func(value string) bool { return strings.EqualFold(value, address.Address) }) {
-			data.Asks = append(data.Asks, domain.Ask{ID: idgen.New("ask_email_"), Title: created.Title, Body: created.Description, Source: "email", TeamID: teamID, TemplateID: address.TemplateID, Requester: requester, Status: "approved", IssueID: created.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now})
+			data.Asks = append(data.Asks, domain.Ask{ID: idgen.New("ask_email_"), Title: created.Title, Body: created.Description, Source: "email", TeamID: teamID, TemplateID: templateID, Requester: requester, Status: "approved", IssueID: created.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now})
 		}
 		// "Link incoming emails as customer requests": attach the email to the
 		// customer whose domain matches the sender.

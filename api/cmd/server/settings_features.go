@@ -1199,6 +1199,9 @@ func (s *server) createWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 		return
 	}
 	actor := requestActor(s, r)
+	if _, ok := s.issueTemplateEditAccess(w, r, input); !ok {
+		return
+	}
 	if s.store.BoundedMetadataEnabled() {
 		s.withColdMetadataRequest(w, r, "server/settings_features.go:createWorkspaceIssueTemplate", "issue_template.created", func(repo *store.SQLiteStore, request *http.Request) {
 			s.createWorkspaceIssueTemplateWithStore(w, request, repo, input, actor)
@@ -1223,17 +1226,22 @@ func (s *server) updateWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	viewer, ok := s.issueTemplateEditAccess(w, r, input)
+	if !ok {
+		return
+	}
 	if s.store.BoundedMetadataEnabled() {
 		s.withColdMetadataRequest(w, r, "server/settings_features.go:updateWorkspaceIssueTemplate", "issue_template.updated", func(repo *store.SQLiteStore, request *http.Request) {
-			s.updateWorkspaceIssueTemplateWithStore(w, request, repo, input)
+			s.updateWorkspaceIssueTemplateWithStore(w, request, repo, input, viewer)
 		})
 		return
 	}
 	id := r.PathValue("id")
 	var updated domain.IssueTemplate
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.updated", id, input, func(data *domain.Bootstrap) error {
+		// Team templates change only through their team's routes.
 		index := slices.IndexFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool {
-			return template.ID == id && (template.Scope == "workspace" || template.VisibilityTeamID == "")
+			return template.ID == id && workspaceIssueTemplate(template) && issueTemplateReachable(viewer, template)
 		})
 		if index < 0 {
 			return errNotFound
@@ -1254,17 +1262,22 @@ func (s *server) updateWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 }
 
 func (s *server) deleteWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Request) {
+	viewer, ok := s.issueTemplateEditAccess(w, r, domain.IssueTemplateMutationInput{})
+	if !ok {
+		return
+	}
 	if s.store.BoundedMetadataEnabled() {
 		s.withColdMetadataRequest(w, r, "server/settings_features.go:deleteWorkspaceIssueTemplate", "issue_template.deleted", func(repo *store.SQLiteStore, request *http.Request) {
-			s.deleteWorkspaceIssueTemplateWithStore(w, request, repo)
+			s.deleteWorkspaceIssueTemplateWithStore(w, request, repo, viewer)
 		})
 		return
 	}
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "issue_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "issueTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.IssueTemplates)
+		// Team templates are deleted only through their team's routes.
 		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool {
-			return template.ID == id && (template.Scope == "workspace" || template.VisibilityTeamID == "")
+			return template.ID == id && workspaceIssueTemplate(template) && issueTemplateReachable(viewer, template)
 		})
 		if before == len(data.IssueTemplates) {
 			return errNotFound
@@ -2423,6 +2436,9 @@ func (s *server) createDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	actor := requestActor(s, r)
+	if _, ok := s.documentTemplateEditAccess(w, r, input); !ok {
+		return
+	}
 	if s.store.BoundedMetadataEnabled() {
 		s.withColdMetadataRequest(w, r, "server/settings_features.go:createDocumentTemplate", "document_template.created", func(repo *store.SQLiteStore, request *http.Request) {
 			s.createDocumentTemplateWithStore(w, request, repo, input, actor)
@@ -2447,9 +2463,13 @@ func (s *server) updateDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	viewer, ok := s.documentTemplateEditAccess(w, r, input)
+	if !ok {
+		return
+	}
 	if s.store.BoundedMetadataEnabled() {
 		s.withColdMetadataRequest(w, r, "server/settings_features.go:updateDocumentTemplate", "document_template.updated", func(repo *store.SQLiteStore, request *http.Request) {
-			s.updateDocumentTemplateWithStore(w, request, repo, input)
+			s.updateDocumentTemplateWithStore(w, request, repo, input, viewer)
 		})
 		return
 	}
@@ -2463,6 +2483,9 @@ func (s *server) updateDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 		index := slices.IndexFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
+		}
+		if err := viewer.documentTemplateWritable(data.DocumentTemplates[index]); err != nil {
+			return err
 		}
 		before := data.DocumentTemplates[index]
 		if err := applyDocumentTemplateInput(data, &data.DocumentTemplates[index], input); err != nil {
@@ -2479,14 +2502,23 @@ func (s *server) updateDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) deleteDocumentTemplate(w http.ResponseWriter, r *http.Request) {
+	viewer, ok := s.documentTemplateEditAccess(w, r, documentTemplateInput{})
+	if !ok {
+		return
+	}
 	if s.store.BoundedMetadataEnabled() {
 		s.withColdMetadataRequest(w, r, "server/settings_features.go:deleteDocumentTemplate", "document_template.deleted", func(repo *store.SQLiteStore, request *http.Request) {
-			s.deleteDocumentTemplateWithStore(w, request, repo)
+			s.deleteDocumentTemplateWithStore(w, request, repo, viewer)
 		})
 		return
 	}
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "document_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "documentTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
+		if index := slices.IndexFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == id }); index >= 0 {
+			if err := viewer.documentTemplateWritable(data.DocumentTemplates[index]); err != nil {
+				return err
+			}
+		}
 		before := len(data.DocumentTemplates)
 		data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == id })
 		if before == len(data.DocumentTemplates) {

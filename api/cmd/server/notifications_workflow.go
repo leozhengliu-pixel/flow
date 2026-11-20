@@ -1158,9 +1158,13 @@ func (s *server) createIssueTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	teamID := r.PathValue("id")
+	viewer, ok := s.issueTemplateEditAccess(w, r, input)
+	if !ok {
+		return
+	}
 	var created domain.IssueTemplate
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "issue_template.created", input, func(data *domain.Bootstrap) (string, error) {
-		if !teamExists(data, teamID) {
+		if !teamExists(data, teamID) || !viewer.teamRow(teamID) {
 			return "", errNotFound
 		}
 		now := time.Now().UTC()
@@ -1180,10 +1184,14 @@ func (s *server) updateIssueTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	teamID, templateID := r.PathValue("id"), r.PathValue("templateId")
+	viewer, ok := s.issueTemplateEditAccess(w, r, input)
+	if !ok {
+		return
+	}
 	var updated domain.IssueTemplate
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.updated", templateID, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool {
-			return item.ID == templateID && issueTemplateOwnedByTeam(item, teamID)
+			return item.ID == templateID && issueTemplateOwnedByTeam(item, teamID) && issueTemplateReachable(viewer, item)
 		})
 		if index < 0 {
 			return errNotFound
@@ -1205,10 +1213,14 @@ func (s *server) updateIssueTemplate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteIssueTemplate(w http.ResponseWriter, r *http.Request) {
 	teamID, templateID := r.PathValue("id"), r.PathValue("templateId")
+	viewer, ok := s.issueTemplateEditAccess(w, r, domain.IssueTemplateMutationInput{})
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "issue_template.deleted", templateID, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "issueTemplates", ID: templateID}}}, func(data *domain.Bootstrap) error {
 		before := len(data.IssueTemplates)
 		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool {
-			return item.ID == templateID && issueTemplateOwnedByTeam(item, teamID)
+			return item.ID == templateID && issueTemplateOwnedByTeam(item, teamID) && issueTemplateReachable(viewer, item)
 		})
 		if len(data.IssueTemplates) == before {
 			return errNotFound

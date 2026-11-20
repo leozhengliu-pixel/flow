@@ -34,13 +34,18 @@ func (r *InstalledMetadataRead) ReadIssueCreateTemplate(ctx context.Context, id 
 	}()
 	err = owner.visitNative(ctx, "issueTemplates", func(_ int, record metadataLogicalNode) error {
 		var template domain.IssueTemplate
-		if err := owner.withHeader(ctx, record, []string{"ID", "TeamID"}, func(value reflect.Value) error {
+		if err := owner.withHeader(ctx, record, []string{"ID", "TeamID", "VisibilityTeamID"}, func(value reflect.Value) error {
 			template = value.Interface().(domain.IssueTemplate)
 			return nil
 		}); err != nil {
 			return err
 		}
-		if template.ID != id || template.TeamID != "" && (scope != nil && !scope.Teams[template.TeamID] || credential != nil && !credential(template.TeamID)) {
+		// The projection's rule (FilterTeamScopedCollections): every team the
+		// template names is a visible team row within the key's teams.
+		visible := func(teamID string) bool {
+			return (scope == nil || scope.Teams[teamID]) && (credential == nil || credential(teamID))
+		}
+		if template.ID != id || !IssueTemplateTeamsVisible(template, visible) {
 			return nil
 		}
 		children, err := issueHotField(ctx, record, "SubIssues")
@@ -56,6 +61,10 @@ func (r *InstalledMetadataRead) ReadIssueCreateTemplate(ctx context.Context, id 
 			return nil
 		}); err != nil {
 			return err
+		}
+		if !IssueTemplateTeamsVisible(template, visible) {
+			// A sub-issue names a hidden team: the projection drops it.
+			return nil
 		}
 		read.Template = &template
 		return ErrMetadataIterationDone
