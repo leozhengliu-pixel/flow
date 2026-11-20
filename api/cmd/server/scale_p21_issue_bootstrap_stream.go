@@ -143,6 +143,7 @@ func (s *server) openIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.Re
 		return nil, err
 	}
 	s.applyCalendarAway(r.Context(), &data)
+	s.hideUnreadableLoops(&data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
 	data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
 	data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}

@@ -231,6 +231,10 @@ func (s *server) getLoopVersion(w http.ResponseWriter, r *http.Request) {
 // restoreLoopVersion applies a snapshot's definition as a new version.
 func (s *server) restoreLoopVersion(w http.ResponseWriter, r *http.Request) {
 	id, versionID := r.PathValue("id"), r.PathValue("versionId")
+	access, ok := s.loopWriteAccess(w, r)
+	if !ok {
+		return
+	}
 	var restored domain.Loop
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "loop.version_restored", id, map[string]string{"versionId": versionID}, func(data *domain.Bootstrap) error {
 		loop := loopByID(data, id)
@@ -240,7 +244,8 @@ func (s *server) restoreLoopVersion(w http.ResponseWriter, r *http.Request) {
 		if loop.Status == "draft" {
 			return fmt.Errorf("%w: only created loops have published versions", errConflict)
 		}
-		if err := s.checkLoopEditor(data, *loop); err != nil {
+		view := s.loopMutationView(data, access)
+		if err := s.checkLoopEditor(view, *loop); err != nil {
 			return err
 		}
 		var source *domain.LoopVersion
@@ -271,6 +276,10 @@ func (s *server) restoreLoopVersion(w http.ResponseWriter, r *http.Request) {
 		if err := checkLoop(data, next, false); err != nil {
 			return err
 		}
+		if err := s.checkLoopTeamTarget(view, next); err != nil {
+			return err
+		}
+		s.trackLoopBehaviorEditor(view, &before, &next)
 		now := time.Now().UTC()
 		next.UpdatedAt = now
 		recordLoopVersion(data, &before, &next, now, source.Version)

@@ -1312,6 +1312,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	sanitizeBootstrap(&data)
 	s.applyCalendarAway(r.Context(), &data)
+	s.hideUnreadableLoops(&data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
 	if leanBootstrapRequested(r) {
 		// Everything before the streamed body; the body is a pure encode of data.
@@ -5918,7 +5919,7 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 		if err == nil && visible {
 			return true
 		}
-		if metadata, ok := s.store.WorkspaceMetadata(data.Workspace.URLKey); ok && loopAttachmentVisible(metadata, userID, url) {
+		if metadata, ok := s.store.WorkspaceMetadata(data.Workspace.URLKey); ok && loopAttachmentVisible(metadata, userID, url, loopTeamReadableBy(access)) {
 			return true
 		}
 		data, err = s.store.PagedWorkspaceMetadata(ctx, data.Workspace.URLKey, userID)

@@ -249,6 +249,7 @@ func (s *server) issueRecordsBootstrapData(w http.ResponseWriter, r *http.Reques
 	}
 	sanitizeBootstrap(&data)
 	s.applyCalendarAway(r.Context(), &data)
+	s.hideUnreadableLoops(&data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
 	// Paged clients read project and initiative updates (with their comments
 	// and reactions) from /api/pulse/feed and the per-project and

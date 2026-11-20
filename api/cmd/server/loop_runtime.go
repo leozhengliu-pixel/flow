@@ -227,6 +227,23 @@ func (s *server) runLoopNow(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "loop not found")
 		return
 	}
+	if !s.authDisabled {
+		// A manual run acts as the loop's owner and shows its output to the
+		// caller: the caller needs the team's loop access.
+		access, err := s.loopAccessData(r)
+		if err != nil {
+			writeError(w, http.StatusForbidden, "workspace access denied")
+			return
+		}
+		if !s.loopReadable(&access, *loop) {
+			writeError(w, http.StatusNotFound, "loop not found")
+			return
+		}
+		if loop.TeamID != "" && !loopIdentityMayUseTeam(&access, loop.TeamID, access.Viewer.ID, access.ViewerRole) {
+			writeError(w, http.StatusForbidden, errLoopTeamForbidden.Error())
+			return
+		}
+	}
 	trigger := loopTrigger{Kind: "manual"}
 	if loop.TriggerType != "schedule" {
 		if strings.TrimSpace(input.EntityID) == "" {
@@ -241,6 +258,16 @@ func (s *server) runLoopNow(w http.ResponseWriter, r *http.Request) {
 		entityID, issue, err := s.resolveLoopEntity(r.Context(), data.Workspace.URLKey, data, entityType, strings.TrimSpace(input.EntityID))
 		if err != nil {
 			writeErrorFor(w, r, http.StatusBadRequest, err)
+			return
+		}
+		var pipelines []domain.ReleasePipeline
+		if entityType == "release" {
+			if stored, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "releasePipelines"); ok {
+				pipelines = stored.ReleasePipelines
+			}
+		}
+		if !s.loopEntityReadable(r, data, pipelines, entityType, entityID, issue) {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("%s %q not found", entityType, input.EntityID))
 			return
 		}
 		if !loopScopeMatches(data, *loop, loopEntityTeams(data, entityType, entityID, issue)) {
@@ -1332,6 +1359,11 @@ func (s *server) loopEntityContext(ctx context.Context, workspace string, data d
 	case "issue":
 		issue, err := s.store.IssueRecord(ctx, workspace, trigger.EntityID)
 		if err != nil {
+			return ""
+		}
+		// The model reads what the run's owner may read: an issue of a team
+		// the owner cannot see is not put into the prompt.
+		if !s.authDisabled && !workspaceAdminRole(data.ViewerRole) && !store.TeamContentVisible(data, issue.Team.ID, data.Viewer.ID, data.ViewerRole) {
 			return ""
 		}
 		labels := []string{}

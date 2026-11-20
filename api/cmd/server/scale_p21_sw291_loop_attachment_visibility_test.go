@@ -18,10 +18,11 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW291: a loop's uploads follow the loop's read rule. Every active member
-// (admins, members outside the loop's private team, guests, apps) reads every
-// loop through GET /api/loops, so a file on an existing loop is served to all
-// of them, disabled or draft alike; once the loop is deleted, neither the copy
+// SW291: a loop's uploads follow the loop's read rule. Workspace loops are
+// read by every active member through GET /api/loops, and a private team's
+// loop only by people who can see that team (admins, its members), so a file
+// on an existing loop is served to exactly the principals whose loop list
+// names it, disabled or draft alike; once the loop is deleted, neither the copy
 // on the loop nor the claimed upload record serves its file, not even to the
 // uploader. A pending upload stays its uploader's. Legacy and bounded checks
 // answer identically, warm and SQL-reloaded.
@@ -90,6 +91,7 @@ func TestScaleP21SW291LoopAttachmentVisibility(t *testing.T) {
 		// The loop list every principal reads names the private team's loop
 		// and its file: the rule the upload check follows.
 		service := &server{store: repo, uploadPath: f.uploads}
+		readsPrivate := map[string]bool{}
 		for _, principal := range f.principals {
 			writer := httptest.NewRecorder()
 			r := f.literalRequest(principal.user, nil, nil)
@@ -100,9 +102,16 @@ func TestScaleP21SW291LoopAttachmentVisibility(t *testing.T) {
 				t.Fatalf("%s: list loops %d %s", principal.name, writer.Code, writer.Body.String())
 			}
 			index := slices.IndexFunc(loops, func(loop domain.Loop) bool { return loop.ID == prefix+"private" })
-			if index < 0 || len(loops[index].Attachments) != 1 || loops[index].Attachments[0].URL != url("private-loop") {
-				t.Fatalf("%s does not read the private team's loop and its file", principal.name)
+			if index >= 0 && (len(loops[index].Attachments) != 1 || loops[index].Attachments[0].URL != url("private-loop")) {
+				t.Fatalf("%s reads the private team's loop without its file", principal.name)
 			}
+			readsPrivate[principal.name] = index >= 0
+			if !slices.ContainsFunc(loops, func(loop domain.Loop) bool { return loop.ID == prefix+"disabled" }) {
+				t.Fatalf("%s does not read the workspace loop", principal.name)
+			}
+		}
+		if !readsPrivate["admin-private-outsider"] || readsPrivate["member-private-outsider"] {
+			t.Fatalf("private team loop reads = %v, want admins and not the member outside the team", readsPrivate)
 		}
 		// Delete through the app's own handler: the loop goes, its claimed
 		// upload records stay behind.
@@ -117,7 +126,7 @@ func TestScaleP21SW291LoopAttachmentVisibility(t *testing.T) {
 		want := map[string]map[string]bool{}
 		for _, principal := range f.principals {
 			want[principal.name] = map[string]bool{
-				"private-loop": true, "disabled-loop": true,
+				"private-loop": readsPrivate[principal.name], "disabled-loop": true,
 				"deleted-loop": false, "deleted-claim-only": false, "orphan-claim": false,
 				"guest-pending": principal.user.ID == guest.ID,
 			}

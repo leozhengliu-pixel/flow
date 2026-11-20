@@ -1214,40 +1214,44 @@ type Loop struct {
 	ID string `json:"id"`
 	// SlugID is the loop's URL slug, `<name-slug>-<12 hex>` (see LoopSlugID);
 	// it is derived whenever a loop is served, so it always follows the name.
-	SlugID                     string           `json:"slugId,omitempty"`
-	Name                       string           `json:"name"`
-	Description                string           `json:"description"`
-	Status                     string           `json:"status"` // draft | published; loops stored before drafts are published
-	TemplateID                 string           `json:"templateId,omitempty"`
-	SourcePrompt               string           `json:"sourcePrompt,omitempty"`
-	TeamID                     string           `json:"teamId,omitempty"`
-	Icon                       string           `json:"icon,omitempty"`
-	Color                      string           `json:"color,omitempty"`
-	Level                      string           `json:"level"`
-	TriggerType                string           `json:"triggerType"`
-	TriggerConfig              map[string]any   `json:"triggerConfig,omitempty"`
-	Instructions               string           `json:"instructions"`
-	InstructionsData           map[string]any   `json:"instructionsData,omitempty"`
-	ConnectorIDs               []string         `json:"connectorIds"`
-	TeamAccess                 string           `json:"teamAccess"`
-	AllowChangesOutsideTrigger bool             `json:"allowChangesOutsideTrigger"`
-	AllowExternalSync          bool             `json:"allowExternalSync"`
-	WebSearch                  bool             `json:"webSearch"`
-	CodeAccess                 string           `json:"codeAccess"` // disabled | read | readWrite
-	Enabled                    bool             `json:"enabled"`
-	OwnerID                    string           `json:"ownerId,omitempty"`
-	EditPolicy                 string           `json:"editPolicy,omitempty"` // "Who can edit": all (default) | teamOwners | owner
-	TrustedSourceKeys          []string         `json:"trustedSourceKeys,omitempty"`
-	Creator                    User             `json:"creator"`
-	LastRunAt                  *time.Time       `json:"lastRunAt,omitempty"`
-	NextRunAt                  *time.Time       `json:"nextRunAt,omitempty"`
-	RunCount30d                int              `json:"runCount30d"`
-	CreatedAt                  time.Time        `json:"createdAt"`
-	UpdatedAt                  time.Time        `json:"updatedAt"`
-	PublishedAt                *time.Time       `json:"publishedAt,omitempty"`
-	Attachments                []LoopAttachment `json:"attachments,omitempty"`
-	Version                    int              `json:"version,omitempty"`
-	VersionID                  string           `json:"versionId,omitempty"`
+	SlugID                     string         `json:"slugId,omitempty"`
+	Name                       string         `json:"name"`
+	Description                string         `json:"description"`
+	Status                     string         `json:"status"` // draft | published; loops stored before drafts are published
+	TemplateID                 string         `json:"templateId,omitempty"`
+	SourcePrompt               string         `json:"sourcePrompt,omitempty"`
+	TeamID                     string         `json:"teamId,omitempty"`
+	Icon                       string         `json:"icon,omitempty"`
+	Color                      string         `json:"color,omitempty"`
+	Level                      string         `json:"level"`
+	TriggerType                string         `json:"triggerType"`
+	TriggerConfig              map[string]any `json:"triggerConfig,omitempty"`
+	Instructions               string         `json:"instructions"`
+	InstructionsData           map[string]any `json:"instructionsData,omitempty"`
+	ConnectorIDs               []string       `json:"connectorIds"`
+	TeamAccess                 string         `json:"teamAccess"`
+	AllowChangesOutsideTrigger bool           `json:"allowChangesOutsideTrigger"`
+	AllowExternalSync          bool           `json:"allowExternalSync"`
+	WebSearch                  bool           `json:"webSearch"`
+	CodeAccess                 string         `json:"codeAccess"` // disabled | read | readWrite
+	Enabled                    bool           `json:"enabled"`
+	OwnerID                    string         `json:"ownerId,omitempty"`
+	// BehaviorEditorID is the person, neither the owner nor an admin, who last
+	// changed what the loop does; a run reads only what both they and the
+	// owner can read. An owner's or admin's save clears it.
+	BehaviorEditorID  string           `json:"behaviorEditorId,omitempty"`
+	EditPolicy        string           `json:"editPolicy,omitempty"` // "Who can edit": all (default) | teamOwners | owner
+	TrustedSourceKeys []string         `json:"trustedSourceKeys,omitempty"`
+	Creator           User             `json:"creator"`
+	LastRunAt         *time.Time       `json:"lastRunAt,omitempty"`
+	NextRunAt         *time.Time       `json:"nextRunAt,omitempty"`
+	RunCount30d       int              `json:"runCount30d"`
+	CreatedAt         time.Time        `json:"createdAt"`
+	UpdatedAt         time.Time        `json:"updatedAt"`
+	PublishedAt       *time.Time       `json:"publishedAt,omitempty"`
+	Attachments       []LoopAttachment `json:"attachments,omitempty"`
+	Version           int              `json:"version,omitempty"`
+	VersionID         string           `json:"versionId,omitempty"`
 	// ExpectedOutputs are what a successful run must produce: statusUpdate,
 	// issue, comment, document or change (any Flow change); ["none"] when a
 	// run may legitimately change nothing. Empty means inferred from the
