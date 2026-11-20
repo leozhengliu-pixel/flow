@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,15 @@ func TestScaleP21SW15EmailIntakeLegacySourceMatrix(t *testing.T) {
 			w := httptest.NewRecorder()
 			service.listEmailIntakeAddresses(w, r)
 			var result []emailIntakeAddressView
+			// Team intake addresses are team settings: a key whose team
+			// selection leaves the team out sees none of them (records
+			// without a team stay in every projection).
+			if key != nil && apiKeyTeamRestrictionSelected(*key) && !slices.Contains(key.TeamIDs, f.public) {
+				if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &result) != nil || result == nil || len(result) != 0 {
+					t.Fatal("key outside the address's team still reads its team intake directory", w.Code, w.Body.String())
+				}
+				return
+			}
 			if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &result) != nil || len(result) != 1 {
 				t.Fatal("legacy active workspace principal lost unfiltered intake directory", w.Code, w.Body.String())
 			}
