@@ -478,7 +478,15 @@ func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace
 			}
 			kept = append(kept, hook)
 		}
-		for clientID, item := range desired {
+		// New hooks are appended in client ID order, not map order, so the
+		// stored order is the same on every run.
+		clientIDs := make([]string, 0, len(desired))
+		for clientID := range desired {
+			clientIDs = append(clientIDs, clientID)
+		}
+		sort.Strings(clientIDs)
+		for _, clientID := range clientIDs {
+			item := desired[clientID]
 			if slices.ContainsFunc(kept, func(hook domain.Webhook) bool {
 				return hook.ManagedBy == "application" && hook.ApplicationClientID == clientID
 			}) {
