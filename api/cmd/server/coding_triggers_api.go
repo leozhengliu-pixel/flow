@@ -148,12 +148,12 @@ func (s *server) startIssueCodingSession(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	workspace := firstNonEmpty(workspaceKey(r), data.Workspace.URLKey)
-	issue, err := s.store.IssueRecord(r.Context(), workspace, r.PathValue("id"))
+	// Read as the actor (the rule of GET /api/issues/{id}, API key scope
+	// included): an unreadable issue is not found.
+	issue, err := s.codingIssueReadable(r.Context(), workspace, actor.ID, r.PathValue("id"))
 	if err != nil {
-		if issue, err = s.issueByIdentifier(r.Context(), workspace, r.PathValue("id")); err != nil {
-			writeError(w, http.StatusNotFound, "Issue not found")
-			return
-		}
+		writeError(w, http.StatusNotFound, "Issue not found")
+		return
 	}
 	if issuePermissionRank(issueRole(s, data, issue)) < issuePermissionRank("editor") {
 		writeJSON(w, http.StatusForbidden, map[string]any{"error": "You cannot change this issue.", "code": domain.CodingErrPermissionDenied})
@@ -304,9 +304,9 @@ func (s *server) startReviewCodingSession(w http.ResponseWriter, r *http.Request
 		CreatorID: actor.ID, AnchorAppUserID: s.builtinAgentUserID(r.Context(), workspace),
 	}
 	if len(review.IssueIDs) > 0 {
-		trigger.IssueID = review.IssueIDs[0]
-		if issue, err := s.store.IssueRecord(r.Context(), workspace, trigger.IssueID); err == nil {
-			trigger.TeamID = issue.Team.ID
+		// The linked issue only joins the session when the actor can read it.
+		if issue, err := s.codingIssueReadable(r.Context(), workspace, actor.ID, review.IssueIDs[0]); err == nil {
+			trigger.IssueID, trigger.TeamID = issue.ID, issue.Team.ID
 		}
 	}
 	if key := strings.TrimSpace(r.Header.Get("Idempotency-Key")); key != "" {

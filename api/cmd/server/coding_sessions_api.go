@@ -462,11 +462,20 @@ func (s *server) createCodingSession(w http.ResponseWriter, r *http.Request) {
 		writeCodingError(w, fmt.Errorf("%w: source must be issue, agentChat or comment (other sources start through their triggers)", coding.ErrInvalidInput))
 		return
 	}
+	if input.Source == domain.CodingSourceAgentChat && input.SourceID != "" {
+		writeCodingError(w, fmt.Errorf("%w: sourceId does not apply to a chat session", coding.ErrInvalidInput))
+		return
+	}
 	if input.IssueID != "" {
-		if _, err := s.store.IssueRecord(r.Context(), viewer.workspace, input.IssueID); err != nil {
-			writeCodingError(w, coding.ErrNotFound)
+		// The viewer's own read of the issue (the rule of GET /api/issues/{id},
+		// with an API key's team scope): an unreadable issue is not found, and
+		// nothing is built from it or sent to a model.
+		issue, err := s.codingIssueReadable(r.Context(), viewer.workspace, viewer.user.ID, input.IssueID)
+		if err != nil {
+			writeCodingError(w, err)
 			return
 		}
+		input.IssueID = issue.ID
 	}
 	session, created, err := s.coding.service.Start(r.Context(), coding.StartInput{
 		WorkspaceKey: viewer.workspace, Source: input.Source, SourceID: input.SourceID, IssueID: input.IssueID, Prompt: input.Prompt, EnvironmentID: input.EnvironmentID,

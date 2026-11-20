@@ -196,3 +196,20 @@ type Directory interface {
 	CodingIssue(ctx context.Context, workspaceKey, issueID string) (IssueContext, error)
 	CodingUser(ctx context.Context, workspaceKey, userID string) (UserInfo, error)
 }
+
+// ActorDirectory is the actor-aware part of the server's Directory: what a
+// session may know and use depends on the person it runs as (its creator),
+// not on the server. A Directory that implements it is consulted before a
+// session starts and again whenever the session reads the issue (bootstrap,
+// pull request text) or provisions a sandbox.
+type ActorDirectory interface {
+	// CodingActorAllowed refuses (ErrForbidden) an actor who is no longer an
+	// active member of the workspace, or is a guest unless allowGuest.
+	CodingActorAllowed(ctx context.Context, workspaceKey, userID string, allowGuest bool) error
+	// CodingIssueFor reads an issue with the actor's access (the rule of
+	// GET /api/issues/{id}); an issue the actor cannot read is ErrNotFound.
+	CodingIssueFor(ctx context.Context, workspaceKey, actorID, issueID string) (IssueContext, error)
+	// CodingSourceReadable checks that sourceID names content the actor can
+	// read for a session started from source on issueID.
+	CodingSourceReadable(ctx context.Context, workspaceKey, actorID, source, sourceID, issueID string) error
+}
