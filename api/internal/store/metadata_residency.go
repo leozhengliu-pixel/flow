@@ -153,6 +153,9 @@ type metadataResidency struct {
 	logical                  map[string]*metadataLogicalSource
 	coldOnce                 sync.Once
 	coldSlot                 chan struct{}
+	// coldImages: decoded images of installed generations reused by COLD
+	// facades and legacy views (scale_p21_cold_decode_cache.go).
+	coldImages coldDecodeCache
 }
 
 type metadataResidentCacheKey struct {

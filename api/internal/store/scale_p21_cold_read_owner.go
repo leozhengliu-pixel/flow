@@ -164,6 +164,9 @@ func (s *SQLiteStore) decodeOwnedColdMetadataRead(ctx context.Context, releaseSl
 	if err := facade.decodeColdMetadataRead(ctx, sources); err != nil {
 		return nil, err
 	}
+	facade.mu.Lock()
+	facade.noteColdFacadeRevisionsLocked(sources)
+	facade.mu.Unlock()
 	coldFacadeDecodes.Add(1)
 	decoded := int64(time.Since(decodeStarted))
 	coldFacadeDecodeNanos.Add(decoded)

@@ -89,6 +89,18 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 	if depth >= metadataLogicalDepth || value == nil {
 		return node, ErrMetadataWorkBudget
 	}
+	if record, ok := value.(metadataAggregateRefreshRecord); ok {
+		// A display-refreshed record whose users are already the
+		// directory's is the stored record: copied (or imported) as stored,
+		// so it keeps its frame origin.
+		stored, unchanged, err := record.unchanged(b.ctx)
+		if err != nil {
+			return node, err
+		}
+		if unchanged {
+			value = stored
+		}
+	}
 	if stored, ok := value.(metadataAggregateStoredNode); ok {
 		// Transform starts with this field's registry. A foreign stored node
 		// (for example a directory User) is encoded as an owned replacement.
@@ -163,10 +175,16 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 	if err := b.write(make([]byte, 16)); err != nil {
 		return node, err
 	}
+	// The child headers of a slice or array this writes, kept as its child
+	// index once it is complete (scale_p21_logical_written_index.go).
+	var headers *writtenChildIndex
 	defer func() {
 		if err == nil {
 			node.size = b.offset - node.offset
 			err = b.patch(node)
+			if err == nil {
+				headers.keep(b.storage, node)
+			}
 		}
 	}()
 	count, countOffset := uint64(0), int64(0)
@@ -191,10 +209,14 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 			return node, err
 		}
 	}
+	headers = newWrittenChildIndex(t, b.offset)
 	child := func(child metadataAggregateNode) error {
 		written, err := b.writeAggregateNode(child, depth+1)
 		node.cost += written.cost
 		node.unavailable = node.unavailable || written.unavailable
+		if err == nil {
+			headers.add(written)
+		}
 		return err
 	}
 	if t.Kind() == reflect.Map {

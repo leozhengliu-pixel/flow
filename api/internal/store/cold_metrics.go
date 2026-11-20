@@ -85,6 +85,15 @@ func ColdMetricsSnapshot() map[string]int64 {
 		"coldWriterLockWaits":         coldWriterLockWaits.waits.Load(),
 		"coldWriterWaitNanos":         coldWriterLockWaits.nanos.Load(),
 		"coldWriterWaitMax":           coldWriterLockWaits.longest.Load(),
+		"coldDecodeImageHits":         coldDecodeImageHits.Load(),
+		"coldDecodeImageBuilds":       coldDecodeImageBuilds.Load(),
+		"coldDecodeFieldReuses":       coldDecodeFieldReuses.Load(),
+		"coldDecodeFieldDecodes":      coldDecodeFieldDecodes.Load(),
+		"coldDecodeElementReuses":     coldDecodeElementReuses.Load(),
+		"coldDecodeElementDecodes":    coldDecodeElementDecode.Load(),
+		"coldDecodeEvictions":         coldDecodeEvictions.Load(),
+		"coldDecodeCopyNanos":         coldDecodeCopyNanos.Load(),
+		"coldDecodeCachedBytes":       coldDecodeCachedBytes.Load(),
 	}
 	for reason, count := range reasons {
 		snapshot["coldPublishFallback "+reason] = count
@@ -199,6 +208,12 @@ func coldMetricsDelta(prev, cur map[string]int64, interval time.Duration) []any 
 		"reloadIncrementalAvg", avg(d("reloadIncrementalNanos"), d("reloadIncrementals")),
 		"reloadFull", d("reloadFulls"),
 		"reloadFullAvg", avg(d("reloadFullNanos"), d("reloadFulls")),
+		"decodeImageHits", d("coldDecodeImageHits"),
+		"decodeImageBuilds", d("coldDecodeImageBuilds"),
+		"decodeRecordsReused", d("coldDecodeElementReuses"),
+		"decodeRecordsDecoded", d("coldDecodeElementDecodes"),
+		"decodeCopyAvg", avg(d("coldDecodeCopyNanos"), d("coldDecodeImageHits")+d("coldDecodeImageBuilds")),
+		"decodeCachedBytes", cur["coldDecodeCachedBytes"],
 		"lockHolds", topWriteLockHolds(prev, cur, 6),
 	}
 }

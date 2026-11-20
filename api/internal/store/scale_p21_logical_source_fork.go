@@ -26,6 +26,7 @@ func (b *metadataLogicalBuilder) copyNode(node metadataLogicalNode) (metadataLog
 		return metadataLogicalNode{}, io.ErrUnexpectedEOF
 	}
 	b.storage.recordCopy(start, metadataLogicalFrameOrigin(node))
+	b.storage.copyChildIndex(node.source, node.offset, start, node.size)
 	node.source, node.offset = b.storage, start
 	return node, nil
 }

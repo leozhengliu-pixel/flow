@@ -267,6 +267,9 @@ A single-replica deployment follows steps 1 to 5 only.
 | `FLOW_COLD_QUEUE_LIMIT` | `64` | Waiters allowed for the COLD slot, for the legacy-view lane and for the COLD projection gate. Positive integer; anything else uses the default. |
 | `FLOW_COLD_QUEUE_TIMEOUT` | `15s` | How long a COLD waiter waits before it is refused. Go duration such as `30s`. Positive; anything else uses the default. |
 | `FLOW_COLD_PROJECTION_CONCURRENCY` | `2` | Concurrent COLD projections per replica. Positive integer. |
+| `FLOW_COLD_SLOTS` | `1` | COLD facades a replica runs at once. Each holds its own copy of the decoded workspace, so memory grows with it; COLD writes stay one at a time. Positive integer. |
+| `FLOW_COLD_DECODE_CACHE_BYTES` | `268435456` (256 MiB) | Installed workspace images, in spool bytes, that a replica keeps decoded for COLD requests. A COLD request then copies the decoded image of the installed generation instead of decoding it, and after a write only the changed records are decoded again. The least recently used images are dropped beyond the budget; a workspace larger than the budget is decoded per request as before. `0` turns the cache off. |
+| `FLOW_COLD_DECODE_CACHE_IDLE` | `5m` | A cached image unused this long is dropped. Go duration. |
 | `FLOW_RECORD_SPOOL_MAX_BYTES` | `268435456` | See [Related settings](#related-settings). |
 | `FLOW_SLOW_MUTATION_MS` | `500` | Threshold for the `slow workspace mutation` log line. `0` disables it. |
 | `FLOW_METADATA_POLICY_BYTES` | `201326592` (192 MiB) | Resident policy of all workspaces together, in bytes. One workspace's policy may take at most 192 MiB whatever the setting. |

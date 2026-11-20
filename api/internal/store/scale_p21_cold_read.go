@@ -36,6 +36,19 @@ func (s *SQLiteStore) withColdMetadataRead(ctx context.Context, run func(context
 }
 
 func (s *SQLiteStore) decodeColdMetadataRead(ctx context.Context, sources map[string]*metadataLogicalSource) error {
+	if s.coldParent != nil && s.coldParent.metadataResidency != nil {
+		// Each workspace's owned copy of its decoded generation
+		// (scale_p21_cold_decode_cache.go).
+		r := s.coldParent.metadataResidency
+		for workspace, source := range sources {
+			data, err := r.decodeColdImage(ctx, workspace, source, nil)
+			if err != nil {
+				return err
+			}
+			s.workspaces[workspace] = data
+		}
+		return ctx.Err()
+	}
 	ctx = coldMetadataGenericDecodeContext(ctx, sources)
 	for workspace, source := range sources {
 		var data domain.Bootstrap
@@ -59,6 +72,25 @@ func (s *SQLiteStore) decodeColdMetadataRead(ctx context.Context, sources map[st
 		s.workspaces[workspace] = data
 	}
 	return ctx.Err()
+}
+
+// noteColdFacadeRevisionsLocked records, for each workspace a facade decoded
+// from sources, the metadata revision its copy is exact at: the installed
+// generation's stamp, when the generation is exact (not behind a peer's
+// commit). A legacy writer on the facade then reloads the workspace from SQL
+// only when the stored metadata moved past that revision, as the live store's
+// writers do; with the revision unknown, every COLD legacy write under the
+// coordinator reloaded the complete workspace from SQL under the write lock.
+// refreshColdFullWriteLocked records the same stamp for the full writer.
+// The caller holds s.mu.
+func (s *SQLiteStore) noteColdFacadeRevisionsLocked(sources map[string]*metadataLogicalSource) {
+	for workspace, source := range sources {
+		if stamp := source.Stamp(); stamp.revision >= 0 && !source.behind.Load() {
+			s.setCopyRevisionLocked(workspace, stamp)
+		} else {
+			s.forgetCopyRevisionLocked(workspace)
+		}
+	}
 }
 
 // refreshColdMetadataRead replaces a facade's graph from the latest installed
@@ -107,6 +139,7 @@ func (s *SQLiteStore) refreshColdMetadataRead(ctx context.Context, workspace str
 	}
 	s.mu.Lock()
 	s.workspaces, s.lastWorkspaceKey, s.viewer = next.workspaces, next.lastWorkspaceKey, next.viewer
+	s.noteColdFacadeRevisionsLocked(sources)
 	s.mu.Unlock()
 	previous := read.sources
 	read.sources = sources
