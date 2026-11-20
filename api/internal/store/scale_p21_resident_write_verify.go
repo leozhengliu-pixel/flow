@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"flow/api/internal/domain"
 )
@@ -70,13 +71,13 @@ func (e *residentDocumentEdit) verify(ctx context.Context, payload any) error {
 	}
 	switch {
 	case shadow.mismatch != "":
-		return fmt.Errorf("%w: resident document write differs from the scoped writer: %s", ErrBoundedMetadataCoverage, shadow.mismatch)
+		return residentVerifyMismatch("resident document write differs from the scoped writer", shadow.mismatch)
 	case !errors.Is(err, errResidentShadow) || !shadow.captured:
-		return fmt.Errorf("%w: the scoped writer's reference run did not reach its commit: %v", ErrBoundedMetadataCoverage, err)
+		return residentVerifyMismatch("the scoped writer's reference run did not reach its commit", fmt.Sprint(err))
 	case !bytes.Equal(shadow.previous, e.previous):
-		return fmt.Errorf("%w: resident previous values differ from the scoped writer's:\n%s\n%s", ErrBoundedMetadataCoverage, e.previous, shadow.previous)
+		return residentVerifyMismatch("resident previous values differ from the scoped writer's", string(e.previous)+"\n"+string(shadow.previous))
 	case !bytes.Equal(shadow.realtime, e.realtime):
-		return fmt.Errorf("%w: resident realtime payload differs from the scoped writer's:\n%s\n%s", ErrBoundedMetadataCoverage, e.realtime, shadow.realtime)
+		return residentVerifyMismatch("resident realtime payload differs from the scoped writer's", string(e.realtime)+"\n"+string(shadow.realtime))
 	}
 	e.shadow = shadow
 	residentWritesVerified.Add(1)
@@ -121,7 +122,7 @@ func (shadow *residentWriteShadow) compareCommit(ctx context.Context, tx *sqlTx,
 		got, gotOK := rows[key]
 		want, wantOK := shadow.rows[key]
 		if got != want || gotOK != wantOK {
-			return fmt.Errorf("%w: resident document write stored %s differently from the scoped writer:\n%s\n%s", ErrBoundedMetadataCoverage, key, residentClip(got, want), residentClip(want, got))
+			return residentVerifyMismatch("resident document write stored a row differently from the scoped writer", key+"\n"+residentClip(got, want)+"\n"+residentClip(want, got))
 		}
 	}
 	image, err := buildColdDecodedImage(ctx, candidate, nil, nil, false)
@@ -129,9 +130,21 @@ func (shadow *residentWriteShadow) compareCommit(ctx context.Context, tx *sqlTx,
 		return err
 	}
 	if field := residentBootstrapDifference(image.data, shadow.image); field != "" {
-		return fmt.Errorf("%w: resident next generation differs from the scoped writer's in %s", ErrBoundedMetadataCoverage, field)
+		return residentVerifyMismatch("resident next generation differs from the scoped writer's", field)
 	}
 	return nil
+}
+
+// residentWriteVerifyDetail holds the last verify mismatch's detail: stored
+// values and payloads stay out of the returned error, which callers log.
+var residentWriteVerifyDetail atomic.Pointer[string]
+
+// residentVerifyMismatch fails a verified edit with a fixed message and keeps
+// the detail (stored rows, payloads) in residentWriteVerifyDetail.
+func residentVerifyMismatch(message, detail string) error {
+	full := message + ":\n" + detail
+	residentWriteVerifyDetail.Store(&full)
+	return fmt.Errorf("%w: %s (detail in residentWriteVerifyDetail)", ErrBoundedMetadataCoverage, message)
 }
 
 // residentClip shows a stored value around where it first differs from
