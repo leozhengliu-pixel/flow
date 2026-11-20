@@ -1100,7 +1100,7 @@ func (u *coldPublishUsers) referenced(raw []byte) bool {
 		}
 		at := offset + i
 		if at+6 <= len(raw) {
-			if code, err := strconv.ParseUint(string(raw[at+2:at+6]), 16, 32); err == nil && u.runes[rune(code)] {
+			if code, err := strconv.ParseUint(string(raw[at+2:at+6]), 16, 16); err == nil && u.runes[rune(code)] {
 				return true
 			}
 		}
