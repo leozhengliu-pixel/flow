@@ -347,7 +347,22 @@ func (s *server) enterpriseOIDCClient(ctx context.Context, workspaceKey, provide
 	redirect := strings.TrimRight(s.allowedOrigin, "/") + "/api/auth/enterprise/" + url.PathEscape(p.ID) + "/callback?workspace=" + url.QueryEscape(workspaceKey)
 	ctx = oidc.ClientContext(ctx, secureOutboundClient(10*time.Second, outboundTrustedPrivate))
 	client, err := discoverOIDC(ctx, p.Name, p.Issuer, p.ClientID, secret, redirect, p.Scopes)
-	return client, p, err
+	if err != nil {
+		return nil, p, err
+	}
+	// The discovery document is remote data: its endpoints get the same
+	// check as the issuer before the client secret is ever sent to them.
+	if !safeOutboundHTTPS(ctx, client.oauth.Endpoint.AuthURL, outboundTrustedPrivate) || !safeOutboundHTTPS(ctx, client.oauth.Endpoint.TokenURL, outboundTrustedPrivate) {
+		return nil, p, errors.New("unsafe identity provider endpoint")
+	}
+	return client, p, nil
+}
+
+// enterpriseOIDCContext carries the outbound-policy HTTP client for the token
+// exchange and token verification (oauth2 and go-oidc read it from the
+// context; without it they would use http.DefaultClient).
+func enterpriseOIDCContext(ctx context.Context) context.Context {
+	return oidc.ClientContext(ctx, secureOutboundClient(10*time.Second, outboundTrustedPrivate))
 }
 
 func (s *server) startEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
@@ -400,6 +415,7 @@ func (s *server) finishEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "identity provider is unavailable")
 		return
 	}
+	ctx = enterpriseOIDCContext(ctx)
 	token, err := client.oauth.Exchange(ctx, r.URL.Query().Get("code"), oauth2.SetAuthURLParam("code_verifier", state.Verifier))
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "identity provider token exchange failed")

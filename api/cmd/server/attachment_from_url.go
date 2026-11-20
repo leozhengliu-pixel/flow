@@ -32,6 +32,17 @@ var attachmentFetchClient = func() *http.Client {
 	return client
 }
 
+// parseFetchURL is the shared shape check for user-supplied download URLs:
+// absolute http or https, a host, no userinfo. The address itself is checked
+// by the outbound policy when the connection is made.
+func parseFetchURL(raw string) (*url.URL, error) {
+	parsed, err := url.ParseRequestURI(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+		return nil, errors.New("a valid http or https URL is required")
+	}
+	return parsed, nil
+}
+
 func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		URL   string `json:"url"`
@@ -42,8 +53,8 @@ func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	raw := strings.TrimSpace(input.URL)
-	parsed, err := url.ParseRequestURI(raw)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+	parsed, err := parseFetchURL(raw)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "a valid http or https URL is required")
 		return
 	}

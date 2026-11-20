@@ -229,6 +229,8 @@ func TestScaleP21SW9EnterpriseOIDCClientDifferential(t *testing.T) {
 			{name: "discovery-unavailable", discovery: "unavailable"},
 			{name: "discovery-invalid", discovery: "invalid-json"},
 			{name: "issuer-mismatch", discovery: "different-issuer"},
+			{name: "discovery-unsafe-token-endpoint", discovery: "unsafe-token"},
+			{name: "discovery-unsafe-authorization-endpoint", discovery: "unsafe-authorization"},
 		} {
 			t.Run(spec.name, func(t *testing.T) {
 				target := original
