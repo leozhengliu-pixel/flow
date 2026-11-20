@@ -201,6 +201,14 @@ func scaleP21SW59Normalized(t *testing.T, result scaleP21SW59Outcome, before sca
 				if clock, err := time.Parse(time.RFC3339Nano, item); err == nil && strings.EqualFold(field, "nextattemptat") && !clock.Add(-time.Hour).Before(started) && !clock.Add(-time.Hour).After(finished) {
 					return "<generated-clock+1h>"
 				}
+				// Outside working hours the hour later moves to the next 09:00 (at most a weekend away). Modes run
+				// moments apart, so one may fall just before a working-hours boundary and the other just after it:
+				// that fixed due time stands for the same generated digest.
+				if clock, err := time.Parse(time.RFC3339Nano, item); err == nil && strings.EqualFold(field, "nextattemptat") &&
+					clock.Minute() == 0 && clock.Second() == 0 && clock.Nanosecond() == 0 &&
+					clock.After(finished.Add(time.Hour)) && !clock.After(finished.Add(time.Hour+4*24*time.Hour)) {
+					return "<generated-clock+1h>"
+				}
 			}
 		case map[string]any:
 			for key, child := range item {
