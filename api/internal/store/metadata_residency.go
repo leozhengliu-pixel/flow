@@ -156,6 +156,9 @@ type metadataResidency struct {
 	// coldImages: decoded images of installed generations reused by COLD
 	// facades and legacy views (scale_p21_cold_decode_cache.go).
 	coldImages coldDecodeCache
+	// residentBuilds serializes the image builds of shared resident readers
+	// per workspace (scale_p21_resident_generation.go).
+	residentBuilds residentImageBuilds
 }
 
 type metadataResidentCacheKey struct {

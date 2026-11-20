@@ -144,43 +144,46 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 		}
 	}
 	expected := map[string]int{
-		"issueRecordsBootstrapData/server.issueRecordsBootstrap":             1,
-		"issueRecordsBootstrapData/server.chatAuthorizedMutation":            1,
-		"issueRecordsBootstrapBounded/server.issueRecordsBootstrap":          1,
-		"beginIssueRecordsBootstrapRead/server.issueRecordsBootstrapBounded": 1,
-		"beginIssueRecordsBootstrapRead/server.chatBootstrapHeaders":         1,
-		"BeginIssueBootstrapRead/server.beginIssueRecordsBootstrapRead":      1,
-		"BeginIssueBootstrapRead/server.commentActionGenerationInputs":       2,
-		"chatAuthorizedMutation/server.chatRunQuickAction":                   1,
-		"chatAuthorizedMutation/server.chatDMComment":                        1,
-		"chatAuthorizedMutation/server.chatDMCreateIssue":                    1,
-		"chatAuthorizedMutation/server.executeChatGroupRequest":              1,
-		"chatAuthorizedMutation/server.processChatThreadReply":               1,
-		"chatAuthorizedMutation/server.chatCreateFromMessage":                1,
-		"chatAuthorizedMutation/server.chatFileRequest":                      1,
-		"chatAuthorizedMutation/server.chatLinkPreviewFor":                   2,
-		"chatAuthorizedMutation/server.chatExecuteAction":                    4,
-		"chatAuthorizedMutation/server.chatAuthorizedBootstrapHeaders":       1,
-		"chatAuthorizedMutation/server.chatAuthorizedWorkflowHeaders":        1,
-		"chatAuthorizedMutation/server.chatAuthorizedPointRead":              2,
-		"chatAuthorizedPointRead/server.chatPersonalNotificationCard":        1,
-		"chatAuthorizedPointRead/server.chatRunQuickAction":                  1,
-		"chatAuthorizedPointRead/server.chatSendUpdateForm":                  1,
-		"chatAuthorizedPointRead/server.chatDMComment":                       1,
-		"chatAuthorizedPointRead/server.chatDMLinkPreview":                   1,
-		"chatAuthorizedPointRead/server.processChatThreadReply":              1,
-		"chatAuthorizedPointRead/server.processChatMessageResult":            1,
-		"chatAuthorizedPointRead/server.chatMessageIntakeExists":             1,
-		"chatAuthorizedPointRead/server.processChatNotification":             1,
+		"issueRecordsBootstrapData/server.issueRecordsBootstrap":              1,
+		"issueRecordsBootstrapData/server.chatAuthorizedMutation":             1,
+		"issueRecordsBootstrapBounded/server.issueRecordsBootstrap":           1,
+		"openIssueRecordsBootstrapRead/server.issueRecordsBootstrapBounded":   1,
+		"openIssueRecordsBootstrapRead/server.beginIssueRecordsBootstrapRead": 1,
+		"beginIssueRecordsBootstrapRead/server.chatBootstrapHeaders":          1,
+		"BeginIssueBootstrapRead/server.openIssueRecordsBootstrapRead":        1,
+		"BeginIssueBootstrapRead/server.commentActionGenerationInputs":        2,
+		"chatAuthorizedMutation/server.chatRunQuickAction":                    1,
+		"chatAuthorizedMutation/server.chatDMComment":                         1,
+		"chatAuthorizedMutation/server.chatDMCreateIssue":                     1,
+		"chatAuthorizedMutation/server.executeChatGroupRequest":               1,
+		"chatAuthorizedMutation/server.processChatThreadReply":                1,
+		"chatAuthorizedMutation/server.chatCreateFromMessage":                 1,
+		"chatAuthorizedMutation/server.chatFileRequest":                       1,
+		"chatAuthorizedMutation/server.chatLinkPreviewFor":                    2,
+		"chatAuthorizedMutation/server.chatExecuteAction":                     4,
+		"chatAuthorizedMutation/server.chatAuthorizedBootstrapHeaders":        1,
+		"chatAuthorizedMutation/server.chatAuthorizedWorkflowHeaders":         1,
+		"chatAuthorizedMutation/server.chatAuthorizedPointRead":               2,
+		"chatAuthorizedPointRead/server.chatPersonalNotificationCard":         1,
+		"chatAuthorizedPointRead/server.chatRunQuickAction":                   1,
+		"chatAuthorizedPointRead/server.chatSendUpdateForm":                   1,
+		"chatAuthorizedPointRead/server.chatDMComment":                        1,
+		"chatAuthorizedPointRead/server.chatDMLinkPreview":                    1,
+		"chatAuthorizedPointRead/server.processChatThreadReply":               1,
+		"chatAuthorizedPointRead/server.processChatMessageResult":             1,
+		"chatAuthorizedPointRead/server.chatMessageIntakeExists":              1,
+		"chatAuthorizedPointRead/server.processChatNotification":              1,
 	}
 	targets := map[string]bool{
 		"issueRecordsBootstrapData": true, "issueRecordsBootstrapBounded": true,
 		"beginIssueRecordsBootstrapRead": true, "chatAuthorizedMutation": true,
 		"chatAuthorizedPointRead": true, "BeginIssueBootstrapRead": true,
+		"openIssueRecordsBootstrapRead": true,
 	}
 	owned := map[string]bool{
 		"server.issueRecordsBootstrapBounded":   true,
 		"server.beginIssueRecordsBootstrapRead": true,
+		"server.openIssueRecordsBootstrapRead":  true,
 		"server.chatBootstrapHeaders":           true,
 	}
 	legacyReads := map[string]bool{
@@ -374,11 +377,14 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 		t.Errorf("gateway boundaries changed: bootstrap cases=%d point guards=%d", bootstrapCases, pointGuards)
 	}
 	stream := require("issueRecordsBootstrapBounded")
+	// The HTTP entry opens its read (again while authorization moves under
+	// it) and owns it for the whole response.
 	if !scaleP21SW225Statements(stream.Body,
 		"started := time.Now()",
-		"read, ok := s.beginIssueRecordsBootstrapRead(w, r)",
-		"if !ok {\n\treturn\n}",
-		"defer read.Close()") {
+		"resident := r.WithContext(store.WithResidentBootstrap(r.Context()))",
+		"var read *store.IssueBootstrapRead") ||
+		len(stream.Body.List) < 5 || scaleP21SW225Node(stream.Body.List[4]) != "defer read.Close()" ||
+		!strings.Contains(scaleP21SW225Node(stream.Body.List[3]), "read, err = s.openIssueRecordsBootstrapRead(w, resident)") {
 		t.Error("HTTP owned entry lost its read and containing response lifetime")
 	}
 	chat := require("chatBootstrapHeaders")

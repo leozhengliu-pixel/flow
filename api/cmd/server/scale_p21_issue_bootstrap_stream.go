@@ -26,10 +26,13 @@ var errIssueBootstrapWorkspaceNotFound = errors.New("workspace not found")
 // continue to use their independent typed input contract.
 func (s *server) issueRecordsBootstrapBounded(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
+	// The read may come from the workspace's resident decoded image; this
+	// handler then encodes Data itself, exactly as flag-off does.
+	resident := r.WithContext(store.WithResidentBootstrap(r.Context()))
 	var read *store.IssueBootstrapRead
 	for attempt := 1; ; attempt++ {
 		var err error
-		read, err = s.openIssueRecordsBootstrapRead(w, r)
+		read, err = s.openIssueRecordsBootstrapRead(w, resident)
 		if err == nil {
 			// Authority and the output's admission are settled before the
 			// status is written: a refusal is still a response.
@@ -50,6 +53,10 @@ func (s *server) issueRecordsBootstrapBounded(w http.ResponseWriter, r *http.Req
 	}
 	defer read.Close()
 	w.Header().Add("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
+	if read.Resident() {
+		writeStreamedJSON(r.Context(), w, http.StatusOK, read.Data)
+		return
+	}
 	ctx := hydratedSigningContext(r.Context(), w)
 	signing, _ := ctx.Value(hydratedURLSigningKey{}).(*hydratedURLSigning)
 	var rewrite store.MetadataJSONRewriter

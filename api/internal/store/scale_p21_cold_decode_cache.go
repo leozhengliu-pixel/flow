@@ -104,6 +104,9 @@ type coldDecodedImage struct {
 	data   domain.Bootstrap
 	bytes  int64
 	used   time.Time
+	// view: the decoded size of the paged bootstrap's view of a shared
+	// image (scale_p21_resident_generation.go), measured once.
+	view residentViewSize
 }
 
 type coldDecodeCache struct {
