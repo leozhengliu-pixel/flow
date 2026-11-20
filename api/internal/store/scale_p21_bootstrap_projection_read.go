@@ -29,6 +29,53 @@ type IssueBootstrapRead struct {
 	borrowed  bool
 	output    *issueBootstrapOutput
 	once      sync.Once
+	// resident: Data came from the shared resident image of the pinned
+	// generation (beginResident) instead of a body projection. It holds
+	// every value itself (no body tokens); the caller encodes it as flag-off
+	// does, and WriteJSON refuses it.
+	resident bool
+}
+
+type residentBootstrapKey struct{}
+
+// WithResidentBootstrap lets BeginIssueBootstrapRead serve a read whose
+// caller encodes Data itself (IssueBootstrapRead.Resident) from the resident
+// decoded image of the workspace's generation.
+func WithResidentBootstrap(ctx context.Context) context.Context {
+	return context.WithValue(ctx, residentBootstrapKey{}, true)
+}
+
+func residentBootstrapRequested(ctx context.Context) bool {
+	requested, _ := ctx.Value(residentBootstrapKey{}).(bool)
+	return requested
+}
+
+// Resident reports that Data holds the complete values (read from the
+// resident image): the caller encodes Data directly after Prepare, and
+// WriteJSON is not available.
+func (r *IssueBootstrapRead) Resident() bool { return r != nil && r.resident }
+
+// beginResident takes Data from the resident image of the pinned generation
+// (read.owner.source) when the image is available, and admits the paged
+// projection's copy of it. Without an image the read stays on the body
+// projection.
+func (r *IssueBootstrapRead) beginResident(ctx context.Context, workspace string) error {
+	image, ok, err := r.owner.store.metadataResidency.residentImage(ctx, workspace, r.owner.source)
+	if err != nil || !ok {
+		return err
+	}
+	view := residentBootstrapView(image)
+	bytes, err := image.viewBytes(ctx, view)
+	if err != nil {
+		return err
+	}
+	// The paged projection copies the view once (as flag-off copies the
+	// resident workspace); the encoder streams that copy.
+	if err := r.owner.reserve(ctx, bytes); err != nil {
+		return err
+	}
+	r.Data, r.resident = view, true
+	return nil
 }
 
 // issueBootstrapOutput is a prepared read's bound output and the stream's
@@ -85,7 +132,7 @@ func (r *IssueBootstrapRead) TransferOutput(ctx context.Context) error {
 // StreamString borrows its chunk buffer only until visit returns. It accepts
 // unchanged body tokens and newly generated literal strings.
 func (r *IssueBootstrapRead) StreamString(ctx context.Context, value string, visit func([]byte) error) error {
-	if r == nil || r.body == nil || r.owner == nil || visit == nil {
+	if r == nil || r.body == nil && !r.resident || r.owner == nil || visit == nil {
 		return ErrBoundedMetadataCoverage
 	}
 	if node, found := r.body.originalString(value); found {
@@ -172,27 +219,38 @@ func (s *SQLiteStore) BeginIssueBootstrapRead(ctx context.Context, workspace, us
 	if err != nil {
 		return nil, err
 	}
-	omitted := []string{
-		"projectUpdates", "initiativeUpdates", "providerJobs", "commentActions",
-		"loopRuns", "loopVersions", "loopAttachments",
+	if !handed && residentBootstrapRequested(ctx) {
+		if err := read.beginResident(ctx, workspace); err != nil {
+			return nil, err
+		}
 	}
-	if !handed {
-		omitted = append(omitted, "issues", "comments", "activities", "notifications", "notificationDeliveries")
-	}
-	read.body, err = s.beginBootstrapBodyProjection(ctx, read.owner.source, omitted...)
-	if err != nil {
-		return nil, err
-	}
-	read.Data = read.body.Data
-	if !handed {
-		read.Data.Issues = []domain.Issue{}
-		read.Data.Comments = map[string][]domain.Comment{}
-		read.Data.Activities = map[string][]domain.ActivityEvent{}
-		read.Data.Notifications = []domain.Notification{}
-		read.Data.NotificationDeliveries = []domain.NotificationDelivery{}
+	if !read.resident {
+		omitted := []string{
+			"projectUpdates", "initiativeUpdates", "providerJobs", "commentActions",
+			"loopRuns", "loopVersions", "loopAttachments",
+		}
+		if !handed {
+			omitted = append(omitted, "issues", "comments", "activities", "notifications", "notificationDeliveries")
+		}
+		read.body, err = s.beginBootstrapBodyProjection(ctx, read.owner.source, omitted...)
+		if err != nil {
+			return nil, err
+		}
+		read.Data = read.body.Data
+		if !handed {
+			read.Data.Issues = []domain.Issue{}
+			read.Data.Comments = map[string][]domain.Comment{}
+			read.Data.Activities = map[string][]domain.ActivityEvent{}
+			read.Data.Notifications = []domain.Notification{}
+			read.Data.NotificationDeliveries = []domain.NotificationDelivery{}
+		}
 	}
 	snapshot := read.owner.metadataOutputContext(ctx)
 	if userID == "" {
+		if read.resident {
+			// The development read decorates Data itself: it owns a copy.
+			read.Data = coldImageCopy(read.Data, nil)
+		}
 		read.Data.ViewerRole = "admin"
 		if read.Data.Workspace.URLKey == "" || read.Data.Viewer.ID == "" {
 			return read, ctx.Err()
@@ -278,7 +336,7 @@ func (r *IssueBootstrapRead) favoriteWork(ctx context.Context) error {
 // prepares a read that was not prepared. A failed Prepare closes the
 // projection: the read can only be closed.
 func (r *IssueBootstrapRead) Prepare(ctx context.Context) error {
-	if r == nil || r.body == nil || r.owner == nil {
+	if r == nil || r.body == nil && !r.resident || r.owner == nil {
 		return ErrBoundedMetadataCoverage
 	}
 	if r.output != nil {
@@ -294,6 +352,11 @@ func (r *IssueBootstrapRead) Prepare(ctx context.Context) error {
 		if err := r.owner.store.ValidateAccess(ctx, r.access); err != nil {
 			return accessChangedDuringRead(err)
 		}
+	}
+	if r.resident {
+		// Data is complete and owned: nothing to bind, and the caller's
+		// encoder needs no stream scratch.
+		return nil
 	}
 	output, replacements, err := r.body.bind(ctx, r.Data)
 	if err != nil {
@@ -320,7 +383,7 @@ func (r *IssueBootstrapRead) WriteJSON(ctx context.Context, dst io.Writer, rewri
 // WriteJSONWithFields lets an owning snapshot stream SQL-backed root fields
 // while retaining the same native metadata and body restoration boundary.
 func (r *IssueBootstrapRead) WriteJSONWithFields(ctx context.Context, dst io.Writer, fieldWriter func(string, *bufio.Writer, *json.Encoder) (bool, error), rewrite ...MetadataJSONRewriter) (err error) {
-	if r == nil || r.body == nil || r.owner == nil || dst == nil || len(rewrite) > 1 {
+	if r == nil || r.body == nil || r.resident || r.owner == nil || dst == nil || len(rewrite) > 1 {
 		return ErrBoundedMetadataCoverage
 	}
 	if err := r.Prepare(ctx); err != nil {
