@@ -751,6 +751,14 @@ jobs:
           docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
           "SET GLOBAL log_bin_trust_function_creators=1;"
 
+      # Differentials that start a server on an empty database (SW602) create
+      # and drop their own scratch databases beside the shared one.
+      - name: Permit scratch databases in the isolated MySQL service
+        if: matrix.dialect == 'mysql'
+        run: >-
+          docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
+          "GRANT ALL ON \`flow\\_sw602\\_%\`.* TO 'flow'@'%';"
+
       - name: Scale differentials
         working-directory: api
         env:
