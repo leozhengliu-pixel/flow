@@ -447,8 +447,12 @@ func (s *SQLiteStore) mutateBoundedCommentActionProposal(ctx context.Context, wo
 			if err != nil {
 				return err
 			}
-			if err := attempt.owner.reserve(ctx, uint64(len(chain))*4096); err != nil {
-				return err
+			// An issue without ancestors has nothing to admit (a zero-byte
+			// admission is refused as over budget).
+			if len(chain) != 0 {
+				if err := attempt.owner.reserve(ctx, uint64(len(chain))*4096); err != nil {
+					return err
+				}
 			}
 			for _, record := range chain {
 				data.Issues = append(data.Issues, record.issue)
