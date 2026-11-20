@@ -39,6 +39,7 @@ func TestScaleP21SW5SettingsPointDifferential(t *testing.T) {
 		r.SetPathValue("provider", "slack")
 		s.updateIntegration(w, r)
 	}
+	var templateTeamID string
 	operations := []scaleP21M3PointOperation{
 		{
 			name: "sw5-issue-template-delete", kind: "issueTemplates", id: "sw5-issue-template", body: `{}`,
@@ -46,7 +47,24 @@ func TestScaleP21SW5SettingsPointDifferential(t *testing.T) {
 			otherKeys: []store.RecordKey{{Kind: "issueTemplates", ID: "sw5-other-issue-template"}},
 		},
 		{
+			// A team template is deleted through its team's route (the
+			// workspace route changes only templates no team owns).
 			name: "sw5-team-template-empty-visibility-delete", kind: "issueTemplates", id: "sw5-issue-template", body: `{}`,
+			seed: func(data *domain.Bootstrap, actor domain.User) {
+				issueSeed(data, actor)
+				templateTeamID = data.Teams[0].ID
+				data.IssueTemplates[0].Scope, data.IssueTemplates[0].TeamID = "team", templateTeamID
+			},
+			handler: func(s *server, w http.ResponseWriter, r *http.Request) {
+				r.SetPathValue("templateId", r.PathValue("id"))
+				r.SetPathValue("id", templateTeamID)
+				s.deleteIssueTemplate(w, r)
+			},
+			otherKeys: []store.RecordKey{{Kind: "issueTemplates", ID: "sw5-other-issue-template"}},
+		},
+		{
+			// The workspace route leaves a team template alone.
+			name: "sw5-team-template-workspace-route-delete", kind: "issueTemplates", id: "sw5-issue-template", body: `{}`,
 			seed: func(data *domain.Bootstrap, actor domain.User) {
 				issueSeed(data, actor)
 				data.IssueTemplates[0].Scope, data.IssueTemplates[0].TeamID = "team", data.Teams[0].ID

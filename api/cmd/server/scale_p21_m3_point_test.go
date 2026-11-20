@@ -134,6 +134,10 @@ func scaleP21M3PointDifferential(t *testing.T, operations []scaleP21M3PointOpera
 										if w.Code != http.StatusNotFound {
 											t.Fatalf("foreign subscription fixture status=%d", w.Code)
 										}
+									case operation.name == "sw5-team-template-workspace-route-delete":
+										if w.Code != http.StatusNotFound {
+											t.Fatalf("team template deleted through the workspace route: status=%d", w.Code)
+										}
 									default:
 										if w.Code < 200 || w.Code >= 300 {
 											t.Fatalf("legacy fixture did not succeed: status=%d body=%s", w.Code, w.Body.String())
