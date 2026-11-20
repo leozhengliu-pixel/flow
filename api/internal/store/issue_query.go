@@ -40,6 +40,7 @@ type IssueRecordQuery struct {
 	IssueIDs           []string
 	RestrictToIssueIDs bool
 	AllowedTeamIDs     []string // nil is unrestricted; empty is denied.
+	AllowedTeamsAppKey bool     // AllowedTeamIDs come from an application key (documents of its teams' issues and projects stay reachable).
 	Access             *IssueRecordAccess
 	Text               string
 	SearchText         string // Indexed title, identifier and description search.
