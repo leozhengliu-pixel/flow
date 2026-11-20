@@ -211,9 +211,9 @@ func TestSyncChangesPulsePagesDifferential(t *testing.T) {
 				name = principal.name
 			}
 		}
-		// The owner's restricted key still reads the owner's own private
-		// document (its creator grant), so only the outsiders check it.
-		if (name == "member-private-outsider" || name == "guest-explicit") && strings.Contains(bodies, privateDocument) {
+		// The owner's restricted key is held to its teams like the outsiders:
+		// the creator grant of its owner does not widen it.
+		if (name == "member-private-outsider" || name == "guest-explicit" || key != nil) && strings.Contains(bodies, privateDocument) {
 			t.Fatalf("a private document reached an outsider: %s", bodies)
 		}
 		if (key != nil || name == "member-private-outsider" || name == "guest-explicit") && (strings.Contains(bodies, hidden) || strings.Contains(bodies, removed) || strings.Contains(bodies, linked) || strings.Contains(bodies, "project secret") || strings.Contains(bodies, "initiative secret")) {

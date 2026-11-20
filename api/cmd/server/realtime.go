@@ -704,7 +704,7 @@ func (s *server) documentPresenceAllowed(r *http.Request, documentID string) boo
 	if !ok {
 		return false
 	}
-	return documentRole(s, data, document) != "none"
+	return documentRole(s, data, document) != "none" && !apiKeyDocumentOutsideScope(r, data, document)
 }
 
 func (s *server) presenceDocumentPermission(r *http.Request, documentID string) (bool, error) {
@@ -726,7 +726,7 @@ func (s *server) presenceDocumentPermission(r *http.Request, documentID string) 
 		return false, err
 	}
 	defer read.Close()
-	return read.Found && documentRole(s, data, read.Document) != "none", nil
+	return read.Found && documentRole(s, data, read.Document) != "none" && !apiKeyDocumentOutsideScope(r, data, read.Document), nil
 }
 
 func filterPresenceForViewer(data domain.Bootstrap, values []domain.Presence) []domain.Presence {

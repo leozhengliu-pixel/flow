@@ -70,7 +70,7 @@ func (s *server) pagedPresenceFor(r *http.Request, data domain.Bootstrap, query 
 				return true
 			}
 			defer read.Close()
-			return !read.Found || documentRole(s, data, read.Document) == "none"
+			return !read.Found || documentRole(s, data, read.Document) == "none" || apiKeyDocumentOutsideScope(r, data, read.Document)
 		})
 		if readErr != nil {
 			return nil, readErr
@@ -81,7 +81,7 @@ func (s *server) pagedPresenceFor(r *http.Request, data domain.Bootstrap, query 
 				return false
 			}
 			document, ok := s.store.DocumentByID(workspaceKey(r), item.DocumentID)
-			return !ok || documentRole(s, data, document) == "none"
+			return !ok || documentRole(s, data, document) == "none" || apiKeyDocumentOutsideScope(r, data, document)
 		})
 	}
 	return filterPresenceForViewer(data, values), nil
