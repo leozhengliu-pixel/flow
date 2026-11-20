@@ -29,15 +29,15 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"snapshot_clone.go":                           "eed939fd6798a8ade89c9f80a12040f1f5e285dc212e521ad2c38e04fcbc6063",
 		"../../cmd/server/advanced_features.go":       "c96192b95c5c42206382825e35e65a7865bbf56f2dcd0da603ce7f577fdcce5f",
 		"../../cmd/server/loop_settings.go":           "740fef6080e4e84f17b8c69a0bd5167ce357ce7287485aa1cf0cba4f7e4751a0",
-		"../../cmd/server/main.go":                    "f2697eb0479551e6a9104221ea654a2c10a5c9b14ce93e177941a323f54f576a",
+		"../../cmd/server/main.go":                    "ff192f8f8100bccb14b10b1246f5d10cf251d4f91ecd566ca7b6d6603ff86d6c",
 		"../../cmd/server/notification_state.go":      "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
 		"../../cmd/server/personal_data.go":           "df7f342d4fdd9a5908cfbaf6cceddd89e8be2be0ff5dbe23e94e9643e9cb26a3",
 		"../../cmd/server/scale_p21_cold_dispatch.go": "c1ab1f26d39d007e298201b7d5d24080afb46c60263d440b0ba7c8a9ad78337e",
 		// Background comment-action generator: borrows the issue bootstrap
 		// projection for its own run; never reaches request authorization.
 		"../../cmd/server/scale_p21_comment_action_writes.go":           "5765c0ab53a9346be3631aa48ab3d55c96204256e4ce63bdc5eb31db83983c39",
-		"../../cmd/server/scale_p21_general_bootstrap.go":               "1328d785e6bd79d8fd72d74192857674fdcaecc4c8c57b4909217bf2707fee73",
-		"../../cmd/server/scale_p21_issue_bootstrap_stream.go":          "8956871aafbfbcf44476a0c4d2fc4883e713cb90af7b21447c33c945792b52c2",
+		"../../cmd/server/scale_p21_general_bootstrap.go":               "4a4d2c67bc03934b0ab5306a249648e2101f2e22e5eab4bb48f920ac329bf94d",
+		"../../cmd/server/scale_p21_issue_bootstrap_stream.go":          "69d2a77a1aa57e9661d3df47398c95132da7872ef7a4609deeb7738b13b214b6",
 		"../../cmd/server/scale_p21_issue_create_targets.go":            "4797fc2981774f90cbd94a0f00a835e5391e323bc28d5e067692b0b426172523",
 		"../../cmd/server/scale_p21_issue_record_authorization_read.go": "6026fba608d49f31c47ac07de86b8ea1f000f94b93a7f0758e0ee964303025d4",
 		"../../cmd/server/scale_p21_issue_update_targets.go":            "58665b35304f51e087403d1abba92894e319e4f5900039ee17de0a86902745c3",
