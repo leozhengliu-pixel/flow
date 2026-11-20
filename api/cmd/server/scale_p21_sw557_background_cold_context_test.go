@@ -95,6 +95,7 @@ var scaleP21SW557Callbacks = map[string]string{
 	"store/SQLiteStore.backfillAllProjectProgress":      scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateDocumentDefaultAccess":    scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateDocumentInheritedScope":   scaleP21SW557OpenStage,
+	"store/SQLiteStore.migrateDocumentOwnerGrants":      scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateResourceSlugs":            scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateMemberDirectory":          scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateCommentActions":           scaleP21SW557OpenStage,

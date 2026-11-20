@@ -270,7 +270,7 @@ func (s *server) pagedDocumentEvent(r *http.Request, data domain.Bootstrap, even
 		return anonymousRealtimeEvent(event), true
 	}
 	scopeChanged := s.realtime.scopeChanged(event)
-	if documentRole(s, data, document) == "none" {
+	if documentRole(s, data, document) == "none" || apiKeyDocumentOutsideScope(r, data, document) {
 		if scopeChanged {
 			// It may have just left this viewer's reach: an anonymous signal, they reload.
 			return anonymousRealtimeEvent(event), true
@@ -308,7 +308,7 @@ func (s *server) boundedLegacyDocumentPresenceAllowed(r *http.Request, documentI
 		return false, err
 	}
 	defer read.Close()
-	return read.Found && documentRole(s, data, read.Document) != "none", nil
+	return read.Found && documentRole(s, data, read.Document) != "none" && !apiKeyDocumentOutsideScope(r, data, read.Document), nil
 }
 
 func boundedLegacyDocumentMetadataFailure(ctx context.Context, err error) error {
@@ -352,7 +352,7 @@ func (s *server) boundedPagedDocumentEvent(r *http.Request, data domain.Bootstra
 		return anonymousRealtimeEvent(event), true, nil
 	}
 	scopeChanged := s.realtime.scopeChanged(event)
-	if documentRole(s, data, read.Document) == "none" {
+	if documentRole(s, data, read.Document) == "none" || apiKeyDocumentOutsideScope(r, data, read.Document) {
 		if scopeChanged {
 			return anonymousRealtimeEvent(event), true, nil
 		}

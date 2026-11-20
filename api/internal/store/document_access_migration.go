@@ -45,6 +45,7 @@ func (s *SQLiteStore) dataMigrations() []struct {
 		{version: auditLegacyMigrationVersion, name: "audit log entries into the audit_events table", apply: s.MigrateLegacyAuditLog},
 		{version: workspaceKeyRepairMigrationVersion, name: "rows left under previous workspace keys", apply: s.migrateRenamedWorkspaceKeys},
 		// coding sessions (track K)
+		{version: documentOwnerGrantMigrationVersion, name: "creator owner grant on documents stored without one", apply: s.migrateDocumentOwnerGrants},
 		{version: codingEnvironmentsMigrationVersion, name: "coding environments table", apply: s.migrateLegacyCodingEnvironments},
 	}
 }

@@ -1,0 +1,30 @@
+{
+  "source": "store/document_owner_grant_migration.go",
+  "unmigrated": 2,
+  "consumers": {
+    "migrateDocumentOwnerGrantBatch": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.migrateWorkspaceDocumentOwnerGrants"
+      ]
+    },
+    "migrateWorkspaceDocumentOwnerGrants": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.migrateDocumentOwnerGrants"
+      ]
+    }
+  }
+}

@@ -366,6 +366,20 @@ func apiKeyDocumentOutsideScope(r *http.Request, data domain.Bootstrap, document
 	return apiKeyDocumentOutOfTeams(key, allowed, apiKeyDocumentLinkScope(data, allowed), document)
 }
 
+// documentOutsideTeamList is apiKeyDocumentOutsideScope for the realtime
+// projections, which carry the key's team list in the access query
+// (IssueRecordQuery.AllowedTeamIDs: nil for a session or an unrestricted key).
+func documentOutsideTeamList(data domain.Bootstrap, allowedTeamIDs []string, document domain.Document) bool {
+	if allowedTeamIDs == nil {
+		return false
+	}
+	allowed := make(map[string]bool, len(allowedTeamIDs))
+	for _, id := range allowedTeamIDs {
+		allowed[id] = true
+	}
+	return apiKeyDocumentOutOfTeams(allowed, store.NewDocumentLinkScope(data.Teams, data.TeamSettings), document)
+}
+
 // apiKeyTrashOutsideScope is apiKeyDocumentOutsideScope for a deleted
 // resource: a restricted key restores or purges only entries within its teams,
 // whoever deleted them.

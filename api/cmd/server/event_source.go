@@ -450,7 +450,7 @@ func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, er
 			if source.document == nil {
 				return nil
 			}
-			if documentRole(&server{}, data, *source.document) == "none" {
+			if documentRole(&server{}, data, *source.document) == "none" || documentOutsideTeamList(data, query.AllowedTeamIDs, *source.document) {
 				if strings.Contains(event.Type, "permission") || realtimeScopeChanged(event) {
 					projected = anonymousRealtimeEvent(event)
 					break

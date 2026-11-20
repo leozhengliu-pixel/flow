@@ -511,3 +511,108 @@ func TestKeyTeamScopeViews(t *testing.T) {
 		}
 	}
 }
+
+// TestKeyTeamScopeLegacyGrantlessDocuments: documents stored before the owner
+// grant existed (no permissions at all). Every load of the workspace
+// (normalize in the store) adds the creator's owner grant, in the flag-off
+// image after a (re)load and in the bounded reads alike, so both answer
+// alike for every role and credential. Before the first reload of a process
+// that wrote the raw rows, the flag-off image has not been normalized yet.
+func TestKeyTeamScopeLegacyGrantlessDocuments(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
+	for _, repo := range scaleP03ServerTestStores(t) {
+		f := scaleP21M2Setup(t, repo)
+		workspace, prefix := f.data.Workspace.URLKey, idgen.New("keylegacy-")
+		if err := repo.MutateWorkspace(t.Context(), workspace, "key_scope.legacy_seed", "", nil, func(data *domain.Bootstrap) error {
+			private := ""
+			for _, team := range data.Teams {
+				if strings.HasPrefix(team.ID, "m2-private-") {
+					private = team.ID
+				}
+			}
+			data.Documents = []domain.Document{
+				{ID: prefix + "unscoped", Title: "Legacy unscoped", Creator: data.Viewer, Version: 1},
+				{ID: prefix + "public", Title: "Legacy public", Creator: data.Viewer, Version: 1, TeamIDs: []string{f.public}},
+				{ID: prefix + "private", Title: "Legacy private", Creator: data.Viewer, Version: 1, TeamIDs: []string{private}},
+			}
+			for _, p := range f.principals {
+				data.Documents = append(data.Documents,
+					domain.Document{ID: prefix + "own-" + p.user.ID, Title: "Legacy own", Creator: p.user, Version: 1, TeamIDs: []string{private}},
+					domain.Document{ID: prefix + "own-open-" + p.user.ID, Title: "Legacy own open", Creator: p.user, Version: 1})
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		tokens := map[string]string{}
+		for _, p := range f.principals {
+			_, token, err := repo.Login(t.Context(), p.user.Email, "p03-fixture-password")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tokens[p.user.ID] = token
+		}
+		credentials := []struct {
+			name string
+			key  *domain.APIKey
+		}{
+			{"session", nil},
+			{"unrestricted", &domain.APIKey{ID: prefix + "all", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "all"}},
+			{"restricted", &domain.APIKey{ID: prefix + "selected", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}}},
+		}
+		for _, state := range []string{"raw", "reloaded", "migrated"} {
+			switch state {
+			case "reloaded":
+				if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
+					t.Fatal(err)
+				}
+			case "migrated":
+				if err := repo.MigrateDocumentOwnerGrantsForTesting(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+				if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+				t.Fatal(err)
+			}
+			differ, compared := 0, 0
+			for _, caller := range f.principals {
+				for _, ref := range []string{"unscoped", "public", "private", "own-" + caller.user.ID, "own-open-" + caller.user.ID} {
+					id := prefix + ref
+					for _, op := range []struct{ method, path string }{
+						{http.MethodGet, "/api/documents/" + id},
+						{http.MethodGet, "/api/documents/" + id + "/comments"},
+						{http.MethodGet, "/api/documents/" + id + "/subscribers"},
+						{http.MethodGet, "/api/documents/" + id + "/permissions"},
+						{http.MethodPost, "/api/documents/" + id + "/comments"},
+						{http.MethodGet, "/api/documents"},
+					} {
+						for _, credential := range credentials {
+							want := keyTeamScopeServe(f, repo, tokens[caller.user.ID], caller.user, credential.key, op.method, op.path, map[string]any{"body": "hello"})
+							got := keyTeamScopeServe(f, f.probe, tokens[caller.user.ID], caller.user, credential.key, op.method, op.path, map[string]any{"body": "hello"})
+							if strings.HasSuffix(op.path, "/comments") && op.method == http.MethodGet || op.path == "/api/documents" {
+								want.body, got.body = fmt.Sprint(len(want.body) > 3), fmt.Sprint(len(got.body) > 3)
+							}
+							compared++
+							if want != got {
+								differ++
+								if state == "migrated" {
+									t.Errorf("%s/%s %s %s differs: literal=%d %.200s bounded=%d %.200s", caller.name, credential.name, op.method, op.path, want.code, want.body, got.code, got.body)
+								}
+							}
+						}
+					}
+				}
+			}
+			t.Logf("state=%s compared=%d differ=%d", state, compared, differ)
+			if state == "reloaded" && differ == 0 {
+				t.Fatal("the legacy rows do not exercise the difference the migration closes")
+			}
+		}
+	}
+}
