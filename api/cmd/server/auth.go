@@ -1306,6 +1306,12 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 				return false
 			}
 			if item.Scope == "personal" {
+				// A restricted key reaches its owner's personal view only
+				// when the project the view is bound to lies within the
+				// key's teams; sessions and unrestricted keys are unchanged.
+				if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) && item.ProjectID != "" && !projectAllowed(item.ProjectID) {
+					return false
+				}
 				return item.OwnerID == userID || workspaceAdminRole(data.ViewerRole)
 			}
 			if item.Scope == "team" && item.TeamID != "" && !teamAllowed(item.TeamID) {

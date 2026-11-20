@@ -112,6 +112,14 @@ func (s *server) boundedViewAllowed(r *http.Request, access store.AccessContext,
 		allowed := false
 		if item.Scope == "personal" {
 			allowed = item.OwnerID == userID || workspaceAdminRole(role)
+			// As in resourceAllowedLegacy: a team-restricted key reaches a
+			// personal view bound to a project only within its teams.
+			if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && allowed && apiKeyTeamRestrictionSelected(key) && item.ProjectID != "" {
+				var err error
+				if allowed, err = s.boundedProjectAllowed(r, access, item.ProjectID); err != nil {
+					return false, projected, err
+				}
+			}
 		} else if item.Scope == "team" && item.TeamID != "" && !access.TeamContentAllowed(item.TeamID) {
 			allowed = false
 		} else if item.ProjectID == "" {
