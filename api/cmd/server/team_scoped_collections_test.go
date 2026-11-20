@@ -64,11 +64,16 @@ func teamScopedSeed(t *testing.T, repo *store.SQLiteStore) teamScopedFixture {
 			data.TeamPinnedResources = append(data.TeamPinnedResources, domain.TeamPinnedResource{ID: "tsc-pinned-" + label, TeamID: team, SectionID: "tsc-section-" + label, ResourceType: "link", URL: "https://example.test/" + label, Title: "Pinned " + label, CreatedAt: at, UpdatedAt: at})
 		}
 		// Workspace documents (no team of their own): unlinked, and attached
-		// to an issue of the public and of the private team.
+		// to an issue of the public and of the private team. Like every
+		// document created (or migrated, 1041) they carry their creator's
+		// owner grant.
+		owner := func(id string) []domain.DocumentPermission {
+			return []domain.DocumentPermission{{ID: "document_permission_" + data.Viewer.ID, DocumentID: id, SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: at, UpdatedAt: at}}
+		}
 		data.Documents = append(data.Documents,
-			domain.Document{ID: "tsc-doc-ws", Title: "Workspace doc", Content: "workspace", Creator: data.Viewer, Version: 1, CreatedAt: at, UpdatedAt: at},
-			domain.Document{ID: "tsc-doc-inherited-pub", Title: "Public issue doc", Content: "public", Creator: data.Viewer, Version: 1, InheritedTeamIDs: []string{f.public}, CreatedAt: at, UpdatedAt: at},
-			domain.Document{ID: "tsc-doc-inherited-priv", Title: "Private issue doc", Content: "private", Creator: data.Viewer, Version: 1, InheritedTeamIDs: []string{result.teams["priv"]}, CreatedAt: at, UpdatedAt: at},
+			domain.Document{ID: "tsc-doc-ws", Title: "Workspace doc", Content: "workspace", Creator: data.Viewer, Version: 1, Permissions: owner("tsc-doc-ws"), CreatedAt: at, UpdatedAt: at},
+			domain.Document{ID: "tsc-doc-inherited-pub", Title: "Public issue doc", Content: "public", Creator: data.Viewer, Version: 1, InheritedTeamIDs: []string{f.public}, Permissions: owner("tsc-doc-inherited-pub"), CreatedAt: at, UpdatedAt: at},
+			domain.Document{ID: "tsc-doc-inherited-priv", Title: "Private issue doc", Content: "private", Creator: data.Viewer, Version: 1, InheritedTeamIDs: []string{result.teams["priv"]}, Permissions: owner("tsc-doc-inherited-priv"), CreatedAt: at, UpdatedAt: at},
 		)
 		// A workspace template whose default team is private, a template
 		// narrowed to the private team and a public template whose sub-issue
@@ -291,15 +296,15 @@ func TestKeyTeamScopeWorkspaceDocuments(t *testing.T) {
 		f := teamScopedSeed(t, repo)
 		documents := []string{"tsc-doc-ws", "tsc-doc-inherited-pub", "tsc-doc-inherited-priv"}
 		for _, principal := range f.principals {
-			// The admin reads every one of these documents as a session; the
-			// admin outside the private team reads all but its issue's.
+			// Both admins read every one of these documents as a session: the
+			// admin of the private team as its member, the admin outside it
+			// as the documents' creator (the owner grant is a person grant,
+			// which an unrestricted key keeps and a restricted key does not
+			// widen).
 			if principal.name != "admin" && principal.name != "admin-private-outsider" {
 				continue
 			}
 			session := documents
-			if principal.name == "admin-private-outsider" {
-				session = documents[:2]
-			}
 			for _, credential := range []struct {
 				key     *domain.APIKey
 				visible []string

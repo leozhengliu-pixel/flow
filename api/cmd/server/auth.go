@@ -381,7 +381,7 @@ func documentOutsideTeamList(data domain.Bootstrap, allowedTeamIDs []string, app
 	if appKey {
 		key.Actor = "app"
 	}
-	return apiKeyDocumentOutOfTeams(key, allowed, store.NewDocumentLinkScope(data.Teams, data.TeamSettings), document)
+	return apiKeyDocumentOutOfTeams(key, allowed, apiKeyDocumentLinkScope(data, allowed), document)
 }
 
 // apiKeyTrashOutsideScope is apiKeyDocumentOutsideScope for a deleted
