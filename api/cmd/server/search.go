@@ -53,7 +53,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		terms = append(terms, query)
 	}
 	candidateLimit := min(max(limit*4, 40), 200)
-	data, err := s.store.SearchMetadata(r.Context(), policy, store.SearchMetadataQuery{Scope: scope, Types: types, Terms: terms, Recent: recent, Limit: candidateLimit})
+	data, err := s.store.SearchMetadata(r.Context(), policy, searchMetadataQueryForRequest(r, scope, types, terms, recent, candidateLimit))
 	if err != nil {
 		issueRecordsErrorFor(w, r, err)
 		return
@@ -126,6 +126,11 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	s.attachSearchResultLinks(r, results, data)
 	writeJSON(w, http.StatusOK, domain.SearchResponse{Results: results, History: history, Recent: recent})
+}
+
+func searchMetadataQueryForRequest(r *http.Request, scope store.IssueRecordQuery, types map[string]bool, terms []string, recent []domain.RecentResource, limit int) store.SearchMetadataQuery {
+	key, _ := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	return store.SearchMetadataQuery{Scope: scope, Types: types, Terms: terms, Recent: recent, Limit: limit, CredentialID: key.ID, SkipSharedCache: key.Actor == "app"}
 }
 
 func (s *server) clearSearchHistory(w http.ResponseWriter, r *http.Request) {

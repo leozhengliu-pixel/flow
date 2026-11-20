@@ -303,6 +303,11 @@ func Load() (Config, error) {
 			Prefix: value("FLOW_REDIS_PREFIX", "flow"), PoolSize: integer("FLOW_REDIS_POOL_SIZE", 40), MinIdleConns: integer("FLOW_REDIS_MIN_IDLE_CONNS", 5),
 			DialTimeout: duration("FLOW_REDIS_DIAL_TIMEOUT", 5*time.Second), ReadTimeout: duration("FLOW_REDIS_READ_TIMEOUT", 3*time.Second), WriteTimeout: duration("FLOW_REDIS_WRITE_TIMEOUT", 3*time.Second),
 			ConnectTimeout: duration("FLOW_REDIS_CONNECT_TIMEOUT", 15*time.Second), LockTTL: duration("FLOW_REDIS_LOCK_TTL", 30*time.Second), LockWait: duration("FLOW_REDIS_LOCK_WAIT", 5*time.Second),
+			Cache: coordination.SharedCacheConfig{
+				Disabled: switchedOff("FLOW_REDIS_CACHE"), TTL: duration("FLOW_REDIS_CACHE_TTL", 5*time.Minute),
+				OpTimeout: duration("FLOW_REDIS_CACHE_TIMEOUT", 25*time.Millisecond), MaxEntryBytes: integer("FLOW_REDIS_CACHE_MAX_ENTRY_BYTES", 1<<20),
+				MaxBytes: integer("FLOW_REDIS_CACHE_MAX_BYTES", 64<<20),
+			},
 		},
 		ContentStoragePrefix: value("FLOW_S3_CONTENT_PREFIX", "content"),
 		Storage: objectstore.Config{

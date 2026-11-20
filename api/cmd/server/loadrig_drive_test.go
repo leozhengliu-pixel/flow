@@ -143,9 +143,17 @@ func loadRigOps() []loadRigOp {
 			d.request(ctx, vu, vu.client, "document.update", http.MethodPatch, "/api/documents/"+loadRigPickRef(vu, vu.documents), map[string]any{"title": fmt.Sprintf("Load runbook (edit %d)", vu.random.IntN(1e6))}, nil)
 		}},
 		{name: "search", weight: 4, run: func(ctx context.Context, d *loadRigDriver, vu *loadRigVU) {
-			d.request(ctx, vu, vu.client, "search", http.MethodGet, "/api/search?q="+url.QueryEscape(d.pick(vu, d.fixture.Words)), nil, nil)
+			query := os.Getenv("FLOW_LOADRIG_SEARCH_QUERY")
+			if query == "" {
+				query = "q=" + url.QueryEscape(d.pick(vu, d.fixture.Words))
+			}
+			d.request(ctx, vu, vu.client, "search", http.MethodGet, "/api/search?"+query, nil, nil)
 		}},
 		{name: "sync.changes", weight: 5, run: func(ctx context.Context, d *loadRigDriver, vu *loadRigVU) {
+			if after := os.Getenv("FLOW_LOADRIG_SYNC_REPLAY_AFTER"); after != "" {
+				d.request(ctx, vu, vu.client, "sync.changes", http.MethodGet, "/api/sync/changes?limit=1&after="+url.QueryEscape(after), nil, nil)
+				return
+			}
 			// As the web sync client: it starts from the head of its snapshot,
 			// never from the start of the log (the rig's replicas do not serve
 			// the sync manifest, so the first read of an empty cursor only takes
@@ -369,25 +377,26 @@ func (s *loadRigOpStats) add(code int, elapsed time.Duration, cause string, netw
 }
 
 type loadRigDriver struct {
-	fixture    loadRigFixture
-	bases      []string
-	admin      *http.Client
-	keyClient  *http.Client
-	recording  atomic.Bool
-	startAt    atomic.Int64 // UnixNano of the measured window's start and end
-	endAt      atomic.Int64
-	statsMu    sync.Mutex
-	stats      map[string]*loadRigOpStats
-	sent       sync.Map // issue id -> UnixNano of the last write sent
-	lagMu      sync.Mutex
-	lags       []float64
-	events     atomic.Int64
-	eventTypes sync.Map
-	streamsUp  atomic.Int64
-	streamFail atomic.Int64
-	streamConn atomic.Int64
-	agentRuns  sync.Map // final status -> *atomic.Int64
-	adminBase  atomic.Int64
+	fixture     loadRigFixture
+	bases       []string
+	rotateReads bool
+	admin       *http.Client
+	keyClient   *http.Client
+	recording   atomic.Bool
+	startAt     atomic.Int64 // UnixNano of the measured window's start and end
+	endAt       atomic.Int64
+	statsMu     sync.Mutex
+	stats       map[string]*loadRigOpStats
+	sent        sync.Map // issue id -> UnixNano of the last write sent
+	lagMu       sync.Mutex
+	lags        []float64
+	events      atomic.Int64
+	eventTypes  sync.Map
+	streamsUp   atomic.Int64
+	streamFail  atomic.Int64
+	streamConn  atomic.Int64
+	agentRuns   sync.Map // final status -> *atomic.Int64
+	nextBase    atomic.Uint64
 }
 
 func (d *loadRigDriver) pick(vu *loadRigVU, values []string) string {
@@ -412,8 +421,8 @@ func (d *loadRigDriver) request(ctx context.Context, vu *loadRigVU, client *http
 	return d.requestWith(ctx, vu, client, name, method, path, input, out, "")
 }
 
-// requestWith sends one request to the VU's replica (admin requests rotate
-// over the replicas) and records it. bearer is an API key secret.
+// requestWith records one request. Admin requests and optional rotating reads
+// exercise both replicas with the same credential. bearer is an API key secret.
 func (d *loadRigDriver) requestWith(ctx context.Context, vu *loadRigVU, client *http.Client, name, method, path string, input, out any, bearer string) bool {
 	var body io.Reader
 	if input != nil {
@@ -421,8 +430,8 @@ func (d *loadRigDriver) requestWith(ctx context.Context, vu *loadRigVU, client *
 		body = bytes.NewReader(raw)
 	}
 	base := vu.base
-	if client == d.admin {
-		base = d.bases[int(d.adminBase.Add(1))%len(d.bases)]
+	if client == d.admin || d.rotateReads && method == http.MethodGet {
+		base = d.bases[d.nextBase.Add(1)%uint64(len(d.bases))]
 	}
 	request, err := http.NewRequestWithContext(ctx, method, base+path, body)
 	if err != nil {
@@ -604,7 +613,7 @@ func TestLoadRigDrive(t *testing.T) {
 	}
 	transport := &http.Transport{MaxIdleConnsPerHost: vus*2 + streams + 8, MaxConnsPerHost: 0, IdleConnTimeout: 30 * time.Second}
 	defer transport.CloseIdleConnections()
-	d := &loadRigDriver{fixture: fixture, bases: bases, stats: map[string]*loadRigOpStats{}}
+	d := &loadRigDriver{fixture: fixture, bases: bases, rotateReads: os.Getenv("FLOW_LOADRIG_ROTATE_READS") == "on", stats: map[string]*loadRigOpStats{}}
 	d.admin = loadRigClient(fixture.Admin, bases, transport, timeout)
 	d.keyClient = &http.Client{Transport: transport, Timeout: timeout}
 	ops := loadRigMix(t, loadRigOps())

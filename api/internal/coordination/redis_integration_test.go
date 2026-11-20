@@ -3,6 +3,7 @@
 package coordination
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"testing"
@@ -10,6 +11,40 @@ import (
 
 	"flow/api/internal/domain"
 )
+
+func TestExternalRedisSharedCacheRoundTrip(t *testing.T) {
+	address := os.Getenv("FLOW_TEST_REDIS_ADDR")
+	if address == "" {
+		t.Skip("external Redis address is not set")
+	}
+	config := Config{Mode: "standalone", Addrs: []string{address}, Prefix: "flow-integration-" + randomID(), Cache: SharedCacheConfig{OpTimeout: time.Second}}
+	open := func() *Redis {
+		client, err := Open(t.Context(), config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = client.Close() })
+		return client
+	}
+	first, peer := open(), open()
+	key := first.SharedCacheKey("workspace", "viewer", "1.8", "viewer-one")
+	want := bytes.Repeat([]byte("owned projected data\n"), 512)
+	first.shared.Set(t.Context(), key, want, time.Second)
+	if got, ok := peer.shared.Get(t.Context(), key); !ok || !bytes.Equal(got, want) {
+		t.Fatal("peer did not read the exact encoded projection")
+	}
+	if _, ok := peer.shared.Get(t.Context(), peer.SharedCacheKey("workspace", "viewer", "1.9", "viewer-one")); ok {
+		t.Fatal("a newer epoch reused an older entry")
+	}
+	bucket, _ := first.shared.entry(key)
+	// Redis evicts the exact key that contains both the entries and their budget.
+	if err := first.client.Del(t.Context(), bucket).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := peer.shared.Get(t.Context(), key); ok {
+		t.Fatal("the peer retained an evicted entry")
+	}
+}
 
 func TestExternalRedisCoordinationRoundTrip(t *testing.T) {
 	address := os.Getenv("FLOW_TEST_REDIS_ADDR")

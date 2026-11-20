@@ -20,9 +20,11 @@ import (
 func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 	contracts := map[string]string{
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
-		"scale_p21_workflow_run_write.go":             "82b916096b9c5e7493da777bc8741a7b59d7e7fd94e8d2f21f217f5966519d71",
-		"issue_records.go":                            "b07dd81e23dc23367d1165a84a0e878062fe3999de21db2d498f236b7239e4de",
-		"issue_query.go":                              "a249e44eef6971cd8f0c2db1fc3f62a009a60f4e1f33bbd0c91caac0de4a2378",
+		"scale_p21_workflow_run_write.go": "82b916096b9c5e7493da777bc8741a7b59d7e7fd94e8d2f21f217f5966519d71",
+		"issue_records.go":                "b07dd81e23dc23367d1165a84a0e878062fe3999de21db2d498f236b7239e4de",
+		"issue_query.go":                  "951b2acfb2d65b694267b4313e3603af31ea0abe15c4978242daef317e6fdc1e",
+		// The result cache only checks for a borrowed snapshot to bypass Redis.
+		"shared_result_cache.go":                      "09bb1fb7becc1e20ef24cae2681a6dea391515c0473fabafd6de9c25c5136f5a",
 		"auth.go":                                     "d54f4f27ecc772ebd8a444efc6bc9fc8cc5c35a3c007c14ae5ffb13c0125c8b8",
 		"team_default_favorites.go":                   "8ba62b09173955d3f412bba9820ba6292e3ee06fec852571c691e5a62e49e657",
 		"scale_p15_snapshot_buffers.go":               "850c692283182c9cfbde136b622dd27e068dc329a764939faeb0acadb15ee1b8",
