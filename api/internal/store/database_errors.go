@@ -37,3 +37,18 @@ func sqliteBusy(err error) bool {
 	var sqliteErr *sqlite.Error
 	return errors.As(err, &sqliteErr) && sqliteErr.Code()&0xff == 5
 }
+
+// databaseDeadlock reports a transaction the database rolled back to break a
+// lock cycle or a serialization conflict (MySQL 1213, PostgreSQL 40P01 and
+// 40001): nothing of it was written, so the whole attempt can run again.
+func databaseDeadlock(err error) bool {
+	var mysqlErr *mysql.MySQLError
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.As(err, &mysqlErr):
+		return mysqlErr.Number == 1213
+	case errors.As(err, &pgErr):
+		return pgErr.Code == "40P01" || pgErr.Code == "40001"
+	}
+	return false
+}

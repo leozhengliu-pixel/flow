@@ -1390,6 +1390,15 @@ func mutationAttempts(ctx context.Context, attempts int, attempt func(context.Co
 	var err error
 	for number := 1; ; number++ {
 		err = attempt(ctx)
+		if databaseDeadlock(err) && number < attempts {
+			// The database rolled the attempt back to break a lock cycle
+			// with a concurrent writer: run it again, as after a lost race.
+			traceMark(ctx, "deadlock-retry")
+			if waitErr := concurrentWriteBackoff(ctx, number); waitErr != nil {
+				return err
+			}
+			continue
+		}
 		if !errors.Is(err, ErrConcurrentWrite) || number >= attempts {
 			return err
 		}

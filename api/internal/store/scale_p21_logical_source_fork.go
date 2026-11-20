@@ -7,9 +7,18 @@ import (
 	"io"
 	"reflect"
 	"slices"
+	"sync"
+	"sync/atomic"
 
 	"flow/api/internal/domain"
 )
+
+// metadataLogicalCopyBuffers are the buffers of large frame copies (1 MiB,
+// pooled: a copy holds one only while it runs).
+var metadataLogicalCopyBuffers = sync.Pool{New: func() any {
+	buffer := make([]byte, 1<<20)
+	return &buffer
+}}
 
 func (b *metadataLogicalBuilder) copyNode(node metadataLogicalNode) (metadataLogicalNode, error) {
 	if b.storage.genericStore == nil {
@@ -19,7 +28,15 @@ func (b *metadataLogicalBuilder) copyNode(node metadataLogicalNode) (metadataLog
 		return b.writeGenericJSONPart(node.typ, node.genericPart(), node.cost)
 	}
 	start := b.offset
-	count, err := io.CopyBuffer(metadataLogicalWriter{b}, io.NewSectionReader(node.source, node.offset, node.size), b.buffer[:])
+	buffer := b.buffer[:]
+	if node.size > int64(len(buffer)) {
+		// A large frame (a document body, a whole collection) is copied
+		// in large reads: each read of the copy is one pread.
+		pooled := metadataLogicalCopyBuffers.Get().(*[]byte)
+		defer metadataLogicalCopyBuffers.Put(pooled)
+		buffer = *pooled
+	}
+	count, err := io.CopyBuffer(metadataLogicalWriter{b}, io.NewSectionReader(node.source, node.offset, node.size), buffer)
 	if err != nil {
 		return metadataLogicalNode{}, err
 	}
@@ -30,6 +47,106 @@ func (b *metadataLogicalBuilder) copyNode(node metadataLogicalNode) (metadataLog
 	b.storage.copyChildIndex(node.source, node.offset, start, node.size)
 	node.source, node.offset = b.storage, start
 	return node, nil
+}
+
+// metadataLogicalCopyRun copies consecutive frames of one storage that a
+// collection keeps verbatim (its unchanged records) as one range: a record
+// by record copy of a large collection was one read and about one write per
+// record, most of a project or document edit. Each frame of the run gets
+// exactly what copyNode gives it (offset, origin, child index); the bytes are
+// written when the run is flushed. The builder writes nothing else while a
+// run is open: its owner flushes before any other write to the builder and
+// when the collection's children end.
+type metadataLogicalCopyRun struct {
+	b        *metadataLogicalBuilder
+	source   *metadataLogicalStorage
+	from, to int64
+	start    int64
+	nodes    []metadataLogicalNode
+}
+
+// metadataLogicalCopyRunFrames counts frames copied through runs and the
+// runs themselves (tests and load measurement).
+var metadataLogicalCopyRunFrames, metadataLogicalCopyRuns atomic.Int64
+
+// add takes node into the run and returns its copy as copyNode would return
+// it. ok is false (nothing taken) for a frame copyNode does not copy byte for
+// byte.
+func (r *metadataLogicalCopyRun) add(node metadataLogicalNode) (_ metadataLogicalNode, ok bool, err error) {
+	if node.generic && node.genericRange || node.source == nil || node.size <= 0 {
+		return node, false, nil
+	}
+	if len(r.nodes) != 0 && (node.source != r.source || node.offset != r.to) {
+		if err := r.flush(); err != nil {
+			return node, false, err
+		}
+	}
+	if len(r.nodes) == 0 {
+		// A node may be visited from a storage that lives only while its
+		// visit runs: the run keeps it until it is flushed.
+		if err := node.source.Retain(); err != nil {
+			return node, false, nil
+		}
+		r.source, r.from, r.to, r.start = node.source, node.offset, node.offset, r.b.offset
+	}
+	if r.b.storage.genericStore == nil {
+		r.b.storage.genericStore = node.source.genericStore
+	}
+	r.nodes = append(r.nodes, node)
+	r.to += node.size
+	copied := node
+	copied.source, copied.offset = r.b.storage, r.start+(node.offset-r.from)
+	return copied, true, nil
+}
+
+// abandon drops an open run without writing it (its builder failed).
+func (r *metadataLogicalCopyRun) abandon() {
+	if r != nil && len(r.nodes) != 0 {
+		r.source.Release()
+		clear(r.nodes)
+		r.nodes = r.nodes[:0]
+	}
+}
+
+// flush writes the run's bytes and records each frame's origin and child
+// index as copyNode does.
+func (r *metadataLogicalCopyRun) flush() error {
+	if r == nil || len(r.nodes) == 0 {
+		return nil
+	}
+	defer func() {
+		r.source.Release()
+		clear(r.nodes)
+		r.nodes = r.nodes[:0]
+	}()
+	if r.b.offset != r.start {
+		// Something wrote to the builder while the run was open.
+		return ErrMetadataRecordQuery
+	}
+	size := r.to - r.from
+	// A large range of a settled storage is borrowed, not copied
+	// (scale_p21_logical_borrowed_range.go).
+	if borrowed, err := r.b.borrowRange(r.source, r.from, size); err != nil {
+		return err
+	} else if !borrowed {
+		pooled := metadataLogicalCopyBuffers.Get().(*[]byte)
+		defer metadataLogicalCopyBuffers.Put(pooled)
+		count, err := io.CopyBuffer(metadataLogicalWriter{r.b}, io.NewSectionReader(r.source, r.from, size), *pooled)
+		if err != nil {
+			return err
+		}
+		if count != size {
+			return io.ErrUnexpectedEOF
+		}
+	}
+	for _, node := range r.nodes {
+		at := r.start + (node.offset - r.from)
+		r.b.storage.recordCopy(at, metadataLogicalFrameOrigin(node))
+		r.b.storage.copyChildIndex(node.source, node.offset, at, node.size)
+	}
+	metadataLogicalCopyRuns.Add(1)
+	metadataLogicalCopyRunFrames.Add(int64(len(r.nodes)))
+	return nil
 }
 
 // Fork copies untouched typed frames without decoding them. Only selected
@@ -127,10 +244,20 @@ func (s *metadataLogicalSource) Fork(ctx context.Context, before, next domain.Bo
 			return err
 		}
 		seen := map[string]bool{}
-		err = node.Children(ctx, func(_ reflect.Value, item metadataLogicalNode) error {
+		ids := make([]string, 0, len(writes))
+		for _, write := range writes {
+			ids = append(ids, write.ID)
+		}
+		hinted, _ := residentSelectedOrdinals(ctx, name, node, ids)
+		run := &metadataLogicalCopyRun{b: b}
+		defer run.abandon()
+		err = node.Children(ctx, func(ordinal reflect.Value, item metadataLogicalNode) error {
 			id := ""
 			selected := false
-			if err := item.Children(ctx, func(field reflect.Value, child metadataLogicalNode) error {
+			if hinted != nil && !hinted[int(ordinal.Int())] {
+				// The resident image of this frame holds no written ID at
+				// this ordinal: copied without reading its ID.
+			} else if err := item.Children(ctx, func(field reflect.Value, child metadataLogicalNode) error {
 				if field.String() != "ID" {
 					return nil
 				}
@@ -152,6 +279,9 @@ func (s *metadataLogicalSource) Fork(ctx context.Context, before, next domain.Bo
 					return fmt.Errorf("%w: duplicate logical write key in %s", ErrMetadataRecordQuery, name)
 				}
 				seen[id] = true
+				if err := run.flush(); err != nil {
+					return err
+				}
 				found := false
 				for i := 0; i < value.Len(); i++ {
 					candidateID, ok := metadataRecordValueKey(value.Index(i))
@@ -167,12 +297,23 @@ func (s *metadataLogicalSource) Fork(ctx context.Context, before, next domain.Bo
 				}
 				return nil
 			}
-			copy, err := b.copyNode(item)
+			copy, batched, err := run.add(item)
+			if err == nil && !batched {
+				if err = run.flush(); err == nil {
+					copy, err = b.copyNode(item)
+				}
+			}
+			if err == nil {
+				b.collectionIndex.add(copy)
+			}
 			b.cost += copy.cost + uint64(item.typ.Size())*2
 			b.unavailable = b.unavailable || copy.unavailable
 			b.count++
 			return err
 		})
+		if err == nil {
+			err = run.flush()
+		}
 		if err != nil {
 			return err
 		}

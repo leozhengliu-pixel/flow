@@ -210,7 +210,31 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 		}
 	}
 	headers = newWrittenChildIndex(t, b.offset)
+	// Consecutive stored records of a slice or array copied verbatim are
+	// copied as one range (metadataLogicalCopyRun).
+	var run *metadataLogicalCopyRun
+	if (t.Kind() == reflect.Slice || t.Kind() == reflect.Array) && depth+1 < metadataLogicalDepth {
+		run = &metadataLogicalCopyRun{b: b}
+		defer run.abandon()
+	}
 	child := func(child metadataAggregateNode) error {
+		if run != nil {
+			if stored, ok := child.(metadataAggregateStoredNode); ok && metadataLogicalRegistryContains(b.storage, stored.value.source) {
+				written, batched, err := run.add(stored.value)
+				if err != nil {
+					return err
+				}
+				if batched {
+					node.cost += written.cost
+					node.unavailable = node.unavailable || written.unavailable
+					headers.add(written)
+					return nil
+				}
+			}
+			if err := run.flush(); err != nil {
+				return err
+			}
+		}
 		written, err := b.writeAggregateNode(child, depth+1)
 		node.cost += written.cost
 		node.unavailable = node.unavailable || written.unavailable
@@ -248,6 +272,9 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 			count++
 			return child(item)
 		})
+		if err == nil {
+			err = run.flush()
+		}
 	}
 	if err != nil {
 		return node, err

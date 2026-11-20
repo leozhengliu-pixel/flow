@@ -133,6 +133,99 @@ Writes (planned, after the read tiers):
   the spool cheaper is the wrong lever: hot paths should stop walking it
   (resident image and indexes), leaving it for cold workspaces.
 
+- **No larger spool block cache either.** A process-wide 128 MiB LRU of
+  spool blocks behind each group's 96 KiB cache (SQLite, sequential edits)
+  left document edits at p50 1491 ms (1370 ms without it) and project edits
+  at 228 ms (278 ms), and raised RSS from 365 to 781 MiB. Profiles of the
+  edits show why: 60% of the remaining `pread` time is large frame reads
+  (record bodies read whole), not header walks; the writers spend their
+  time on data volume, not on lookups.
+
+### What document and project edits spend (flag on, SQLite, sequential)
+
+A document title edit (p50 about 1.4 s against 0.4 s flag off) runs the
+scoped image writer, all of it under the workspace lock. Its plan rewrites
+exactly one row (the document; logged per field over 20 edits), yet the
+edit streams that document's large body (content and revisions) through the
+spool about six times:
+
+| Share of CPU | Work |
+| --- | --- |
+| 28% | Legacy metadata persistence: rebasing the document's large row (a streamed comparison of before, stored and next) and writing it |
+| 17% | Aggregate publication: encoding the document before and after for previous values and the realtime payload |
+| 8% | Workspace-wide display refresh (`Transform`) over the spool |
+| about 10% | Selections and forks finding records by ID |
+
+So collection ID indexes, the first planned step, address about a tenth of
+an edit. The larger wins: decode the edited record once (from the resident
+image) and derive the comparison, the row and both payloads from that one
+decoded pair, and do it before the lock, keeping under the lock only the
+version check, the SQL write and the install.
+
+### Document edits from the resident image (done)
+
+`scale_p21_resident_document_write.go`. The edit pins the installed
+generation and its shared image, runs the callback on inputs taken from
+the image and derives everything else from the before and after values of
+the records it changes: the rows (rebased onto the stored rows as the
+scoped writer rebases them), the previous values, the realtime payload,
+the next generation (only the changed records are new frames) and that
+generation's decoded image, seeded with the edit's own values so nothing
+is decoded again. All of it happens before the lock. Under the lock the
+writer checks that the installed generation and the stored stamp are
+still the pinned ones and that the content rows it read are unchanged,
+then writes the rows, the viewer (when another principal edits), the
+event, commits and installs.
+
+What else the outputs depend on, and how it stays exact:
+
+- The display refresh rewrites people embedded in members, projects,
+  initiatives, updates, comments, activities and notifications with the
+  user directory's values. The resident write runs only when that refresh
+  changes nothing (checked once per image, and per edit for the loaded
+  content).
+- Actor substitution stores the actor as the viewer and as its user
+  record. The resident write requires the stored user record to equal the
+  actor (no request attribution) and stores the viewer itself when it
+  differs.
+- Lookups the callback may read (former members, collaboration states),
+  favorites, issues, content changes and a document stored twice send the
+  edit to the scoped writer.
+
+A concurrent write invalidates a prepared edit; it is prepared again on
+the new generation (three attempts). With coordinated servers a
+generation behind the stored stamp is reloaded first, as the scoped
+writer reloads it; a single server leaves it to the scoped writer, which
+merges its installed generation into the stored rows.
+
+In tests every resident edit also runs through the scoped writer up to
+its commit: the callback input, previous values, realtime payload, SQL
+state (records, search documents, blobs, content records, root, account)
+and next generation must be identical, and the seeded image must equal a
+fresh decode.
+
+### Collection copies
+
+A generation that changes one record of a collection still writes the
+whole collection frame. Record by record that was one read and about one
+write per record (2,321 projects, 36 MB, per project edit). Two steps:
+
+- Consecutive records kept verbatim are copied as one range in 1 MiB
+  reads (`metadataLogicalCopyRun`), each keeping the offset, origin and
+  child index a single copy gives it. CPU per project edit fell from about
+  117 to 46 ms, but an execution trace showed the edits blocked in `pwrite`
+  for up to two seconds: 36 MB of page-cache writes per edit stall on a
+  busy machine, which a CPU profile does not show.
+- So a large range of a settled storage is now borrowed, not copied
+  (`scale_p21_logical_borrowed_range.go`): it takes its place in the new
+  storage's offsets (a hole in the file) and its reads are served by the
+  storage that holds the bytes, which stays open until its last borrower
+  is discarded. Ranges resolve to the holder, so a read is redirected
+  once; settled bytes never change and a patch of a borrowed range is
+  refused. A storage borrows from at most 48 storages and copies
+  otherwise, so a long run of edits does not keep every earlier
+  generation's files alive.
+
 ## Increments
 
 Each increment is one commit with tests, measured on the load rig (MySQL
@@ -147,7 +240,9 @@ first, then PostgreSQL and SQLite) against flag-off.
 3. Collection indexes in the resident image; writers and realtime entity
    lookup use them.
 4. Single-record generations and shorter lock holds for project and document
-   writes; peer delta application outside the lock.
+   writes; peer delta application outside the lock. Document edits are
+   done (above); collection copies are borrowed for both. Project edits
+   still run the selection writer under the lock.
 5. Encoded per-record caches for the bootstrap and list routes.
 6. Budget in decoded bytes; HOT point reads (project, document, issue
    detail) from the image.
@@ -188,3 +283,33 @@ Still slower or not yet faster with the flag on: search (p95), project
 edits (p50 1734 ms on against 1999 ms off, p95 4841 against 6218: better,
 but far from flag-off SQLite's 69 ms), the bootstrap's p50 (it still copies
 the view once and encodes 57 MB per admin request, as flag-off does).
+
+Document and project edits (resident document write, borrowed collection
+ranges), same rig and seed procedure, flag off → on:
+
+| class | req/s | p50 ms | p95 ms | p99 ms | 5xx |
+| --- | --- | --- | --- | --- | --- |
+| overall | 11.92 → 18.08 | 54 → 32 | 2600 → 1004 | 5059 → 1993 | 60 → 37 |
+| hot-read | 7.36 → 11.13 | 25 → 16 | 1539 → 239 | 3005 → 839 | 18 → 0 |
+| hot-write | 1.59 → 2.38 | 223 → 170 | 2732 → 861 | 5483 → 1296 | 2 → 0 |
+| cold-write | 0.43 → 0.72 | 1576 → 487 | 5946 → 2006 | 8060 → 3255 | 7 → 3 |
+| search | 0.59 → 0.91 | 1079 → 1018 | 12919 → 15004 | 15609 → 15119 | 8 → 9 |
+
+project.update: 19 → 45 requests, p50 1008 → 517 ms, p95 5946 → 2006 ms;
+its two flag-on 500s were MySQL deadlocks (error 1213), which mutation
+attempts now retry like a lost race (labels and loop runs hit the same
+before). document.update succeeded only 6 and 3 times (the rig's VUs mostly
+lack permission; 403 in both modes): p50 1497 → 106 ms. Peak RSS per
+replica 897/1008 MiB off, 739/758 MiB on. Realtime lag p95 4597 → 957 ms.
+
+SQLite, one request at a time (load rig seed, 20 rounds of five project
+and five document title edits):
+
+| edit | off p50 / p95 | on p50 / p95 |
+| --- | --- | --- |
+| project | 174 / 268 ms | 21 / 53 ms |
+| document | 353 / 1071 ms | 138 / 373 ms |
+
+(Before this step flag on was 315 / 1369 ms and 1398 / 2772 ms.) End RSS
+503 MiB on, 683 MiB off in that run; the off value varies with GC timing
+(245-683 MiB across runs).

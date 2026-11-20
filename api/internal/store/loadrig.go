@@ -16,7 +16,15 @@ import (
 // LoadRigColdCounters reports the process-wide bounded-metadata counters
 // the load rig samples: COLD slot use and waits, COLD facade and legacy-view
 // decodes, COLD legacy write-lock holds and writer lock waits.
-func LoadRigColdCounters() map[string]int64 { return ColdMetricsSnapshot() }
+func LoadRigColdCounters() map[string]int64 {
+	counters := ColdMetricsSnapshot()
+	for key, value := range ResidentWriteStatsForTesting() {
+		counters["residentWrite."+key] = value
+	}
+	counters["copyRuns"], counters["copyRunFrames"] = metadataLogicalCopyRuns.Load(), metadataLogicalCopyRunFrames.Load()
+	counters["imageElementSeeded"] = coldDecodeElementSeeded.Load()
+	return counters
+}
 
 // SetLoadRigSeedBatchBytes sets SeedSyntheticMetadata's per-transaction
 // write budget (default 6 MiB) and returns the previous value.

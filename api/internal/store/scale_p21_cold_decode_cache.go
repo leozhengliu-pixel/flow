@@ -107,6 +107,12 @@ type coldDecodedImage struct {
 	// view: the decoded size of the paged bootstrap's view of a shared
 	// image (scale_p21_resident_generation.go), measured once.
 	view residentViewSize
+	// display: whether the writers' display refresh changes nothing in
+	// the image (scale_p21_resident_document_write.go), checked once.
+	display residentDisplayChecks
+	// ordinals: record ID to ordinals per slice field, built on first use
+	// (scale_p21_resident_record_ordinals.go).
+	ordinals recordOrdinalIndex
 }
 
 type coldDecodeCache struct {
@@ -134,7 +140,7 @@ func ColdDecodeCacheStatsForTesting() map[string]int64 {
 	return map[string]int64{
 		"imageHits": coldDecodeImageHits.Load(), "imageBuilds": coldDecodeImageBuilds.Load(),
 		"fieldReuses": coldDecodeFieldReuses.Load(), "fieldDecodes": coldDecodeFieldDecodes.Load(),
-		"elementReuses": coldDecodeElementReuses.Load(), "elementDecodes": coldDecodeElementDecode.Load(),
+		"elementReuses": coldDecodeElementReuses.Load(), "elementDecodes": coldDecodeElementDecode.Load(), "elementSeeded": coldDecodeElementSeeded.Load(),
 		"evictions": coldDecodeEvictions.Load(), "cachedBytes": coldDecodeCachedBytes.Load(),
 	}
 }
@@ -233,7 +239,8 @@ func buildColdDecodedImage(ctx context.Context, source *metadataLogicalSource, p
 			coldDecodeFieldReuses.Add(1)
 			field = coldDecodedField{key: key, keyed: true, value: before.value, elements: before.elements}
 		} else {
-			decoded, elements, err := decodeColdField(ctx, node, before, memo)
+			seeds, _ := ctx.Value(coldDecodeSeedsKey{}).(coldDecodeSeeds)
+			decoded, elements, err := decodeColdField(ctx, node, before, memo, seeds[name])
 			if err != nil {
 				return err
 			}
@@ -252,10 +259,28 @@ func buildColdDecodedImage(ctx context.Context, source *metadataLogicalSource, p
 	return image, ctx.Err()
 }
 
+// coldDecodeSeeds are decoded values a writer hands to the image of the
+// generation it wrote (withColdDecodeSeeds): per field name, per ordinal,
+// exactly the value the writer encoded as that record's frame.
+type coldDecodeSeeds map[string]map[int]reflect.Value
+
+type coldDecodeSeedsKey struct{}
+
+// withColdDecodeSeeds makes the image builds under ctx take seeds instead of
+// decoding the records they name. The caller guarantees that each seeded
+// ordinal of the source it builds holds a frame encoding that value.
+func withColdDecodeSeeds(ctx context.Context, seeds coldDecodeSeeds) context.Context {
+	return context.WithValue(ctx, coldDecodeSeedsKey{}, seeds)
+}
+
+var coldDecodeElementSeeded atomic.Int64
+
 // decodeColdField decodes one field. A large slice of records decodes record
 // by record, reusing the previous generation's value of every record whose
-// frame has the same origin; any other field decodes whole, as before.
-func decodeColdField(ctx context.Context, node metadataLogicalNode, before *coldDecodedField, memo bool) (reflect.Value, map[coldFrameKey]reflect.Value, error) {
+// frame has the same origin, and taking the seeded value of a record the
+// writer of this generation encoded; any other field decodes whole, as
+// before.
+func decodeColdField(ctx context.Context, node metadataLogicalNode, before *coldDecodedField, memo bool, seed map[int]reflect.Value) (reflect.Value, map[coldFrameKey]reflect.Value, error) {
 	whole := func() (reflect.Value, map[coldFrameKey]reflect.Value, error) {
 		// Value's cap is solely an integer representability check here.
 		// The cold slot, rather than HOT admission, owns the decoded graph.
@@ -279,13 +304,19 @@ func decodeColdField(ctx context.Context, node metadataLogicalNode, before *cold
 	}
 	elements := map[coldFrameKey]reflect.Value{}
 	values := []reflect.Value{}
-	err = node.Children(ctx, func(_ reflect.Value, child metadataLogicalNode) error {
+	err = node.Children(ctx, func(ordinal reflect.Value, child metadataLogicalNode) error {
 		key, keyed := coldFrameKeyOf(child)
 		if keyed && !child.generic {
 			if reused, found := previous[key]; found {
 				coldDecodeElementReuses.Add(1)
 				elements[key] = reused
 				values = append(values, reused)
+				return nil
+			}
+			if seeded, found := seed[int(ordinal.Int())]; found && seeded.Type() == child.typ {
+				coldDecodeElementSeeded.Add(1)
+				elements[key] = seeded
+				values = append(values, seeded)
 				return nil
 			}
 		}

@@ -667,6 +667,10 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		}); err != nil {
 			return err
 		}
+		if shadow := residentWriteShadowFrom(ctx); shadow != nil {
+			// The resident write's reference run ends here.
+			return shadow.capture(ctx, s, tx, workspace, previous, nextRealtime, candidate)
+		}
 		if err := tx.Commit(); err != nil {
 			return err
 		}
@@ -684,12 +688,25 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 	deadline := time.Now().Add(time.Duration(metadataWorkRetryWait.Load()))
 	for {
 		attemptCtx, demand := withMetadataWorkDemand(ctx)
-		err = mutationAttempts(attemptCtx, fullMutationAttempts, func(ctx context.Context) error {
-			if s.coordinator != nil {
-				return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx) })
+		// A document edit is made from the resident image when it can be
+		// (scale_p21_resident_document_write.go); otherwise, and when it
+		// falls back, by the scoped writer below.
+		resident := false
+		if document, ok := profile.(*documentUpdateImageProfile); ok {
+			outcome := residentWriteOutcome{}
+			resident, err = s.writeResidentDocument(attemptCtx, workspace, eventType, payload, document, mutate, webhookEnabled, &outcome)
+			if outcome.written {
+				written, committed, realtime = true, outcome.event, outcome.realtime
 			}
-			return apply(ctx)
-		}, s.refreshConflictedLogicalMetadata(ctx, workspace))
+		}
+		if !resident {
+			err = mutationAttempts(attemptCtx, fullMutationAttempts, func(ctx context.Context) error {
+				if s.coordinator != nil {
+					return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx) })
+				}
+				return apply(ctx)
+			}, s.refreshConflictedLogicalMetadata(ctx, workspace))
+		}
 		if written || !errors.Is(err, ErrMetadataWorkBudget) || !s.awaitMetadataWork(ctx, demand, deadline) {
 			break
 		}
