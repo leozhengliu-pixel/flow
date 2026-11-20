@@ -69,6 +69,9 @@ func (c *metadataLogicalCursor) child(t reflect.Type) (metadataLogicalNode, erro
 		// its own (windowed).
 		window = nil
 	}
+	if window != nil && window.slid {
+		window.lent = true
+	}
 	return metadataLogicalNode{source: c.node.source, offset: start, size: int64(size), cost: cost & metadataLogicalCostMask, typ: t, unavailable: cost&(uint64(1)<<63) != 0, blocked: cost&(uint64(1)<<62) != 0, generic: cost&metadataLogicalGenericJSON != 0, window: window}, nil
 }
 
@@ -81,7 +84,8 @@ const metadataLogicalSlideBytes = 64 << 10
 // slide replaces the cursor's window, for a small read of a node too large
 // for one window, by the next chunk of the node from the read's offset. It
 // reports whether it read one. Like a window, a chunk is the cursor's own
-// copy of bytes the traversal reads anyway, dropped with the cursor.
+// copy of bytes the traversal reads anyway, dropped with the cursor; a chunk
+// no child was given is refilled in place (metadataLogicalWindow.lent).
 func (c *metadataLogicalCursor) slide(size int) bool {
 	if c.node.source == nil || c.node.size <= metadataLogicalWindowBytes || size > metadataLogicalSlideBytes/4 {
 		return false
@@ -90,11 +94,20 @@ func (c *metadataLogicalCursor) slide(size int) bool {
 	if end-c.offset < int64(size) {
 		return false
 	}
-	data := make([]byte, end-c.offset)
+	window := c.node.window
+	if window != nil && window.slid && !window.lent && window.storage == c.node.source && int64(cap(window.data)) >= end-c.offset {
+		// A refilled chunk no longer holds its old bytes, even when the read
+		// fails.
+		c.node.window = nil
+	} else {
+		window = &metadataLogicalWindow{storage: c.node.source, slid: true, data: make([]byte, end-c.offset)}
+	}
+	data := window.data[:end-c.offset]
 	if count, err := c.node.source.ReadAt(data, c.offset); err != nil || count != len(data) {
 		return false
 	}
-	c.node.window = &metadataLogicalWindow{storage: c.node.source, at: c.offset, data: data}
+	window.at, window.data = c.offset, data
+	c.node.window = window
 	return true
 }
 

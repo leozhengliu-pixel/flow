@@ -32,6 +32,12 @@ type metadataLogicalWindow struct {
 	storage *metadataLogicalStorage
 	at      int64
 	data    []byte
+	// slid marks a cursor's read-ahead chunk (slide); lent marks that a child
+	// node holds it, so the cursor never refills it. A chunk only the cursor
+	// read from is refilled by its next slide: a header scan of a large
+	// collection whose children take no window (a resource read) allocates
+	// one chunk, not one per 64 KiB. Only the cursor's goroutine sets either.
+	slid, lent bool
 }
 
 // windowed returns n with a window over its bytes when it has none and its

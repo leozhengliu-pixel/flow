@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -840,14 +841,17 @@ func TestScaleP21SW27LogicalSourceNativeMonotonicTime(t *testing.T) {
 	}
 }
 
+// scaleP21SW27CancelAfterChecks is cancelled from its limit-th Err call on.
+// database/sql calls Err from its rows' context goroutines too, so the count
+// is atomic.
 type scaleP21SW27CancelAfterChecks struct {
 	context.Context
-	checks, limit int
+	checks atomic.Int64
+	limit  int64
 }
 
 func (ctx *scaleP21SW27CancelAfterChecks) Err() error {
-	ctx.checks++
-	if ctx.checks >= ctx.limit {
+	if ctx.checks.Add(1) >= ctx.limit {
 		return context.Canceled
 	}
 	return ctx.Context.Err()
@@ -881,8 +885,8 @@ func TestScaleP21SW27LogicalSourceCaptureQuotasAndCleanup(t *testing.T) {
 	t.Run("mid-capture-cancel", func(t *testing.T) {
 		ctx := &scaleP21SW27CancelAfterChecks{Context: t.Context(), limit: 12}
 		source, err := captureMetadataLogicalSource(ctx, data, copyStamp{})
-		if source != nil || !errors.Is(err, context.Canceled) || ctx.checks < ctx.limit {
-			t.Fatal("capture ignored cancellation after storage creation", source != nil, err, ctx.checks)
+		if source != nil || !errors.Is(err, context.Canceled) || ctx.checks.Load() < ctx.limit {
+			t.Fatal("capture ignored cancellation after storage creation", source != nil, err, ctx.checks.Load())
 		}
 	})
 	if metadataLogicalDiskUsed.Load() != diskBefore || metadataLogicalDescriptorsUsed.Load() != descriptorsBefore {
