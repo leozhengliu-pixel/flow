@@ -2445,6 +2445,10 @@ func (s *server) updateCustomer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteCustomer(w http.ResponseWriter, r *http.Request) {
+	// Deleting a customer is a manual edit like creating or updating one.
+	if !s.allowManualCustomerEdit(w, r) {
+		return
+	}
 	id := r.PathValue("id")
 	var uploads []string
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer.deleted", id, nil, func(data *domain.Bootstrap) error {

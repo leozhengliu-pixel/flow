@@ -51,3 +51,30 @@ func TestMergeCustomerMovesRequestsAndDeletesSource(t *testing.T) {
 		}
 	}
 }
+
+// With manual customer edits off (customers synced from elsewhere), merging
+// and deleting are refused like creating and updating; nothing changes.
+func TestCustomerMergeAndDeleteRefusedWhenManualEditsOff(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { repository.Close() })
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	source := requestJSON[domain.Customer](t, handler, http.MethodPost, "/api/customers", map[string]any{"name": "Acme Old"}, http.StatusCreated)
+	target := requestJSON[domain.Customer](t, handler, http.MethodPost, "/api/customers", map[string]any{"name": "Acme"}, http.StatusCreated)
+	workspace := repository.Bootstrap().Workspace.URLKey
+	if err := repository.MutateWorkspace(t.Context(), workspace, "test.customer_settings", "", nil, func(data *domain.Bootstrap) error {
+		data.WorkspaceSettings.FeatureSettings.CustomerManualEdits = false
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/customers/"+source.ID, map[string]any{"name": "Renamed"}, http.StatusForbidden)
+	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/customers/"+source.ID+"/merge", map[string]any{"targetCustomerId": target.ID}, http.StatusForbidden)
+	requestJSON[map[string]any](t, handler, http.MethodDelete, "/api/customers/"+source.ID, nil, http.StatusForbidden)
+	customers := repository.Bootstrap().Customers
+	if !slices.ContainsFunc(customers, func(c domain.Customer) bool { return c.ID == source.ID }) || !slices.ContainsFunc(customers, func(c domain.Customer) bool { return c.ID == target.ID }) {
+		t.Fatalf("a refused merge or delete changed the customers: %v", customers)
+	}
+}
