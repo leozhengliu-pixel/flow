@@ -474,3 +474,54 @@ func TestScaleP21HotDocumentReadQueuedRevocation(t *testing.T) {
 		})
 	}
 }
+
+// The detail read leaves out the projects that list the document: the same
+// document and policy, no Projects, and no scan of the other projects.
+func TestScaleP21DocumentReadSkipProjects(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := scaleP09Database(t)
+	workspace, target := f.data.Workspace.URLKey, idgen.New("p21-document-skip-")
+	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.document_skip", "", nil, func(data *domain.Bootstrap) error {
+		data.Documents = []domain.Document{{ID: target, Title: "Skip", Content: "body", Creator: data.Viewer, ProjectIDs: []string{target + "-linked"}}}
+		data.Projects = []domain.Project{
+			{ID: target + "-linked", Name: "Linked"},
+			{ID: target + "-listed", Name: "Listed", Resources: []domain.ProjectResource{{ID: target, Title: "Skip"}}},
+		}
+		for range 200 {
+			data.Projects = append(data.Projects, domain.Project{ID: idgen.New("other-project-"), Description: strings.Repeat("body", 64)})
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer view.releaseMetadataLogicalSources()
+	full, err := view.BeginDocumentRead(t.Context(), workspace, f.data.Viewer.ID, nil, DocumentReadRequest{Ref: target, ReadOnly: true, ProjectionFallback: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer full.Close()
+	skipped, err := view.BeginDocumentRead(t.Context(), workspace, f.data.Viewer.ID, nil, DocumentReadRequest{Ref: target, ReadOnly: true, ProjectionFallback: true, SkipProjects: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer skipped.Close()
+	want, _ := json.Marshal(full.Data.Documents)
+	got, _ := json.Marshal(skipped.Data.Documents)
+	if len(full.Data.Documents) != 1 || string(want) != string(got) {
+		t.Fatalf("document differs:\nfull=%s\nskipped=%s", want, got)
+	}
+	if len(full.Data.Projects) != 2 || len(skipped.Data.Projects) != 0 {
+		t.Fatalf("projects full=%d skipped=%d", len(full.Data.Projects), len(skipped.Data.Projects))
+	}
+	a, _ := json.Marshal(full.Data.Teams)
+	b, _ := json.Marshal(skipped.Data.Teams)
+	if string(a) != string(b) || full.Data.ViewerRole != skipped.Data.ViewerRole {
+		t.Fatal("policy differs")
+	}
+}

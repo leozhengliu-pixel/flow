@@ -52,6 +52,17 @@ type pagedMetadataHandoff struct {
 // two handlers take it.
 type issueWriteMetadataKey struct{}
 
+// documentWriteMetadataKey carries the document the authorization of a PATCH
+// /api/documents/{id} read (with the viewer's policy) to updateDocument, which
+// refuses an edit the viewer's role cannot make before it queues for the
+// workspace write lock. Only that handler takes it, and only with bounded
+// metadata.
+type documentWriteMetadataKey struct{}
+
+func takeDocumentWriteMetadata(r *http.Request, workspace, userID string) (domain.Bootstrap, bool) {
+	return takeMetadata(r, documentWriteMetadataKey{}, workspace, userID)
+}
+
 func handOffPagedMetadata(r *http.Request, workspace, userID string, data domain.Bootstrap) {
 	handOffMetadata(r, pagedMetadataHandoffKey{}, workspace, userID, data)
 }

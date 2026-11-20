@@ -135,6 +135,12 @@ func (s *server) documentAuthorizationMetadata(r *http.Request, workspace, userI
 				request.ProjectIDs = normalizedStrings(*input.ProjectIDs)
 			}
 		}
+		// The detail read and an edit that names no project use the document
+		// and the viewer's policy only: the projects that list the document
+		// (a scan of every project) are not read for them. An API key's
+		// projection filters the document's project links by the projects
+		// read, so keys keep the closure.
+		request.SkipProjects = len(parts) == 3 && documentRecordCredential(r) == nil && (request.ReadOnly || r.Method == http.MethodPatch && len(request.ProjectIDs) == 0)
 		for attempt := 0; attempt < 3; attempt++ {
 			read, err := s.store.BeginDocumentRead(r.Context(), workspace, userID, documentRecordCredential(r), request)
 			if errors.Is(err, store.ErrResourceAccessChanged) && errors.Is(err, store.ErrAuthForbidden) && attempt < 2 {

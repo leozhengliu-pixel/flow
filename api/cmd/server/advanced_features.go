@@ -569,12 +569,34 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
+// documentEditRefused reports that the authorization of this request read the
+// document and the viewer's role on it cannot edit: the write callback would
+// answer store.ErrAuthForbidden for the same document and role. It decides
+// nothing else (a missing, ambiguous or editable document takes the write path).
+func (s *server) documentEditRefused(r *http.Request, ref string) bool {
+	if !s.store.BoundedMetadataEnabled() || s.authDisabled {
+		return false
+	}
+	data, ok := takeDocumentWriteMetadata(r, workspaceKey(r), authUser(r).ID)
+	if !ok {
+		return false
+	}
+	document, err := documentByID(&data, ref)
+	return err == nil && !canEditDocument(documentRole(s, data, *document))
+}
+
 func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 	var input documentInput
 	if !decodeJSON(w, r, &input) {
 		return
 	}
 	id := r.PathValue("id")
+	if s.documentEditRefused(r, id) {
+		// The same answer the write callback gives, without queueing for the
+		// workspace write lock or loading the writer's image first.
+		respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+		return
+	}
 	var updated, current domain.Document
 	var compactCollaborationID, replacedCollaborationID string
 	unchanged := false
