@@ -387,8 +387,21 @@ func (s *server) scimUsers(w http.ResponseWriter, r *http.Request) {
 	if item.Restored {
 		action = "restored"
 	}
-	s.recordSCIMAudit(r, workspaceKey, []scimAuditEntry{scimUserAudit(action, item, map[string]any{"role": item.Role, "active": item.Active(), "linkedExistingAccount": item.Linked})})
-	s.applySCIMProfileSettings(r.Context(), workspaceKey, item.User.ID, store.SCIMProfile{}, item.Profile)
+	// An account that existed before is not enrolled by the directory: it
+	// has an invitation to accept, so the resource reads active=false until
+	// it does, and the account's own settings are left alone.
+	pending := item.LinkedExisting && item.MemberStatus == ""
+	s.recordSCIMAudit(r, workspaceKey, []scimAuditEntry{scimUserAudit(action, item, map[string]any{"role": item.Role, "active": item.Active(), "linkedExistingAccount": item.Linked, "invitationPending": pending})})
+	if item.Invitation != nil && s.mailer != nil {
+		if inviter, err := s.store.UserByID(r.Context(), item.Invitation.InviterID); err == nil {
+			if err := s.mailer.sendInvitation(item.Invitation.Email, item.InvitationWorkspace, inviter, item.Invitation.Token); err != nil {
+				log.Printf("scim: invitation email for a linked account was not sent: %v", err)
+			}
+		}
+	}
+	if !pending {
+		s.applySCIMProfileSettings(r.Context(), workspaceKey, item.User.ID, store.SCIMProfile{}, item.Profile)
+	}
 	resource := scimUserResource(base, item)
 	w.Header().Set("Location", base+"/Users/"+item.User.ID)
 	writeSCIMResource(w, http.StatusCreated, readSCIMProjection(r).apply(resource), scimUserVersion(item))
@@ -516,7 +529,9 @@ func (s *server) scimUser(w http.ResponseWriter, r *http.Request) {
 	}
 	entries = append(entries, s.scimRoleChangeAudits(r.Context(), workspaceID, before, s.scimMemberStates(r.Context(), workspaceID, item.User.ID), nil)...)
 	s.recordSCIMAudit(r, workspaceKey, entries)
-	s.applySCIMProfileSettings(r.Context(), workspaceKey, item.User.ID, current.Profile, item.Profile)
+	if !item.LinkedExisting || item.MemberStatus != "" { // a linked account that has not joined keeps its own settings
+		s.applySCIMProfileSettings(r.Context(), workspaceKey, item.User.ID, current.Profile, item.Profile)
+	}
 	writeSCIMResource(w, http.StatusOK, readSCIMProjection(r).apply(scimUserResource(base, item)), scimUserVersion(item))
 }
 
