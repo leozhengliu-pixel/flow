@@ -351,6 +351,16 @@ func (s *server) enterpriseOIDCClient(ctx context.Context, workspaceKey, provide
 }
 
 func (s *server) startEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
+	s.beginEnterpriseOIDC(w, r, false)
+}
+
+// startEnterpriseOIDCLink starts the round trip for a signed-in account that
+// links a workspace identity provider from its settings.
+func (s *server) startEnterpriseOIDCLink(w http.ResponseWriter, r *http.Request) {
+	s.beginEnterpriseOIDC(w, r, true)
+}
+
+func (s *server) beginEnterpriseOIDC(w http.ResponseWriter, r *http.Request, link bool) {
 	workspaceKey := strings.TrimSpace(r.URL.Query().Get("workspace"))
 	providerID := r.PathValue("id")
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -361,7 +371,15 @@ func (s *server) startEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state, nonce, verifier := randomURLToken(32), randomURLToken(32), randomURLToken(48)
-	encoded := encodeExternalState(externalAuthState{State: state, Nonce: nonce, Verifier: verifier, Provider: enterpriseProviderKey(workspaceKey, providerID)})
+	external := externalAuthState{State: state, Nonce: nonce, Verifier: verifier, Provider: enterpriseProviderKey(workspaceKey, providerID)}
+	if link {
+		if authUser(r).ID == "" {
+			writeError(w, http.StatusUnauthorized, "Sign in required")
+			return
+		}
+		external.Link, external.LinkWorkspace = true, workspaceKey
+	}
+	encoded := encodeExternalState(external)
 	http.SetCookie(w, &http.Cookie{Name: externalAuthCookie, Value: encoded, Path: "/api/auth/", HttpOnly: true, Secure: secureCookie(r), SameSite: http.SameSiteLaxMode, MaxAge: 600})
 	challenge := sha256.Sum256([]byte(verifier))
 	redirect := client.oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.SetAuthURLParam("code_challenge", base64.RawURLEncoding.EncodeToString(challenge[:])), oauth2.SetAuthURLParam("code_challenge_method", "S256"))
@@ -403,30 +421,63 @@ func (s *server) finishEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "identity subject is required")
 		return
 	}
+	// The workspace admin controls the issuer and the domain list, so neither
+	// proves who owns an email. The email picks an existing account only when
+	// the provider states email_verified: true, the domain is in the
+	// provider's domain list, and the account is already an active member of
+	// this workspace; otherwise the person links the provider from settings.
+	domainListed := false
 	if email != "" && len(provider.Domains) > 0 {
 		at := strings.LastIndex(email, "@")
 		if at < 0 || !slices.Contains(provider.Domains, strings.ToLower(email[at+1:])) {
 			writeError(w, http.StatusForbidden, "identity domain is not allowed")
 			return
 		}
+		domainListed = true
 	}
+	emailVerified := oidcEmailVerified(claims)
+	emailTrusted := domainListed && emailVerified
 	if name == "" {
 		name = stringClaim(claims, "preferred_username")
 	}
 	claimsJSON, _ := json.Marshal(claims)
-	autoProvision := s.externalAuth != nil && s.externalAuth.config.AutoProvision
-	session, sessionToken, err := s.store.LoginExternalIdentity(ctx, "enterprise:"+provider.ID, provider.Issuer, subject, stringClaim(claims, "preferred_username"), email, name, picture, string(claimsJSON), autoProvision)
+	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspaceKey)
 	if err != nil {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	appURL := strings.TrimRight(s.allowedOrigin, "/")
+	if state.Link {
+		user, ok := s.linkSessionUser(r)
+		if !ok {
+			redirectAuthError(w, r, appURL, "Sign in to your account to link this provider.")
+			return
+		}
+		if err := s.store.LinkExternalIdentity(ctx, user.ID, "enterprise:"+provider.ID, provider.Issuer, subject, stringClaim(claims, "preferred_username"), string(claimsJSON)); err != nil {
+			message := "could not link this identity"
+			if errors.Is(err, store.ErrIdentityConflict) {
+				message = "This identity is already linked to another account."
+			}
+			redirectAuthError(w, r, appURL, message)
+			return
+		}
+		clearExternalState(w, r)
+		http.Redirect(w, r, linkSettingsRedirect(appURL, state.LinkWorkspace), http.StatusFound)
+		return
+	}
+	autoProvision := s.externalAuth != nil && s.externalAuth.config.AutoProvision
+	policy := store.ExternalLinkPolicy{TrustedEmail: emailTrusted && email != "", UnverifiedEmail: !emailVerified, MembershipWorkspaceID: workspaceID}
+	session, sessionToken, err := s.store.LoginExternalIdentityWithPolicy(ctx, "enterprise:"+provider.ID, provider.Issuer, subject, stringClaim(claims, "preferred_username"), email, name, picture, string(claimsJSON), autoProvision, policy)
+	if err != nil {
+		if errors.Is(err, store.ErrIdentityConflict) {
+			redirectAuthError(w, r, appURL, identityConflictMessage)
+			return
+		}
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return
 	}
 	if err := s.store.SetSessionAuthentication(ctx, sessionToken, "enterprise:"+provider.ID, provider.Issuer, verifiedMFAClaim(claims)); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save authentication context")
-		return
-	}
-	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspaceKey)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
 	if autoProvision {

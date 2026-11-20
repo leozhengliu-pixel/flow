@@ -1899,6 +1899,9 @@ export const zhCN: Record<string, string> = {
   "Review code in Flow and sync attribution of your git-related actions":
     "在 Flow 中评审代码并同步 Git 相关操作的归属",
   "Sign-in identities": "登录身份",
+  "Link this provider to sign in to your account with it":
+    "关联此提供商，以便用它登录你的账户",
+  "Link": "关联",
   "Identity provider accounts connected to your Flow profile":
     "连接到 Flow 个人资料的身份提供商账户",
   "last used": "上次使用时间",

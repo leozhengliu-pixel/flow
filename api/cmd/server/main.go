@@ -477,6 +477,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/account/passkeys/{id}", s.deletePasskey)
 	mux.HandleFunc("GET /api/account/identities", s.listAccountIdentities)
 	mux.HandleFunc("DELETE /api/account/identities/{id}", s.unlinkAccountIdentity)
+	mux.HandleFunc("GET /api/account/identities/link/enterprise/{id}/start", s.startEnterpriseOIDCLink)
+	mux.HandleFunc("GET /api/account/identities/link/{provider}/start", s.startOIDCLink)
 	mux.HandleFunc("POST /api/account/change-password", s.changeAccountPassword)
 	mux.HandleFunc("DELETE /api/account", s.deleteAccount)
 	mux.HandleFunc("GET /api/account/data-exports", s.listPersonalDataExports)

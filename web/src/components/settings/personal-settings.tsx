@@ -56,6 +56,7 @@ import {
   deleteAccount,
   deletePasskey,
   fetchAccountIdentities,
+  fetchAuthProviders,
   fetchAccountSessions,
   fetchCommitSigningKey,
   fetchPasskeys,
@@ -3802,6 +3803,19 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
   const [identities, setIdentities] = useState<
     Awaited<ReturnType<typeof fetchAccountIdentities>>
   >([]);
+  const [linkableProviders, setLinkableProviders] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  useEffect(() => {
+    // SAML signs in only; OIDC providers can be linked from here.
+    void fetchAuthProviders()
+      .then((config) =>
+        setLinkableProviders(
+          config.providers.filter((item) => item.id !== "saml"),
+        ),
+      )
+      .catch(() => setLinkableProviders([]));
+  }, []);
   useEffect(() => {
     void fetchAccountIdentities()
       .then(setIdentities)
@@ -3876,7 +3890,7 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
           </PersonalRow>
         </NavLink>
       </div>
-      {identities.length > 0 && (
+      {(identities.length > 0 || linkableProviders.length > 0) && (
         <PersonalSection
           title={p("Sign-in identities")}
           description={p(
@@ -3917,6 +3931,29 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
               </Action>
             </PersonalRow>
           ))}
+          {linkableProviders
+            .filter(
+              (provider) =>
+                !identities.some((item) => item.provider === provider.id),
+            )
+            .map((provider) => (
+              <PersonalRow
+                key={`link-${provider.id}`}
+                icon={<ShieldCheck />}
+                title={<span data-i18n-ignore>{provider.name}</span>}
+                description={p("Link this provider to sign in to your account with it")}
+              >
+                <Action
+                  onClick={() => {
+                    window.location.assign(
+                      `/api/account/identities/link/${encodeURIComponent(provider.id)}/start?workspace=${encodeURIComponent(data.workspace.urlKey)}`,
+                    );
+                  }}
+                >
+                  {p("Link")}
+                </Action>
+              </PersonalRow>
+            ))}
         </PersonalSection>
       )}
     </>

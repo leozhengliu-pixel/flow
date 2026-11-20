@@ -36,7 +36,7 @@ func TestLoginExternalIdentityWithoutEmailUsesStableProviderIdentity(t *testing.
 	if count != 1 {
 		t.Fatalf("identity rows=%d, want 1", count)
 	}
-	linked, _, err := repository.LoginExternalIdentity(t.Context(), "saml", "https://idp.example/saml", "employee-10042", "A-10042", "zhang.san@example.com", "Zhang San Updated", "", `{"department":"engineering"}`, true)
+	linked, _, err := repository.LoginExternalIdentityWithPolicy(t.Context(), "saml", "https://idp.example/saml", "employee-10042", "A-10042", "zhang.san@example.com", "Zhang San Updated", "", `{"department":"engineering"}`, true, ExternalLinkPolicy{TrustedEmail: true})
 	if err != nil || linked.User.ID != first.User.ID {
 		t.Fatalf("second provider did not link the existing account: linked=%#v err=%v", linked.User, err)
 	}

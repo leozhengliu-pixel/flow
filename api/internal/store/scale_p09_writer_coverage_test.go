@@ -28,7 +28,7 @@ auth.go:ChangePassword
 auth.go:DeleteTeamMemberships
 auth.go:EnsureWorkspaceMembership
 auth.go:LoginExternal
-auth.go:LoginExternalIdentity
+auth.go:LoginExternalIdentityWithPolicy
 auth.go:LoginWithAuthToken
 auth.go:Register
 auth.go:ResetPassword
