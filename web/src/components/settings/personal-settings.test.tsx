@@ -22,7 +22,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { clearSessionCaches } from '@/lib/session-cache-registry'
 
 const api = vi.hoisted(() => ({
-  updateAccountProfile: vi.fn(), removeMember: vi.fn(), fetchAccountIdentities: vi.fn(), fetchAccountSessions: vi.fn(),
+  updateAccountProfile: vi.fn(), removeMember: vi.fn(), fetchAccountIdentities: vi.fn(), fetchAuthProviders: vi.fn(), fetchAccountSessions: vi.fn(),
   listPushSubscriptions: vi.fn(), deletePushSubscription: vi.fn(), revokeAccountSession: vi.fn(),
   revokeOtherAccountSessions: vi.fn(), revokeOAuthAuthorization: vi.fn(), updateNotificationPreferences: vi.fn(),
   createAPIKey: vi.fn(), updateAPIKey: vi.fn(), revokeAPIKey: vi.fn(), rotateAPIKey: vi.fn(), logoutAccount: vi.fn(),
@@ -128,6 +128,7 @@ describe('personal settings workflows', () => {
     api.revokeAPIKey.mockResolvedValue(undefined)
     api.rotateAPIKey.mockResolvedValue({ key: { id: 'key-1' }, secret: 'flow_rotated_secret' })
     api.fetchAccountIdentities.mockResolvedValue([])
+    api.fetchAuthProviders.mockResolvedValue({ email: true, providers: [] })
     api.fetchPasskeys.mockResolvedValue([])
     api.fetchCommitSigningKey.mockResolvedValue(null)
     api.addCommitSigningKey.mockResolvedValue({ name: 'Laptop key', type: 'ssh', fingerprint: 'SHA256:test', addedAt: '2026-09-04T00:00:00.000Z' })

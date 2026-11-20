@@ -13,12 +13,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"flow/api/internal/config"
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/crewjam/saml/samlsp"
@@ -43,6 +45,47 @@ type oidcClient struct {
 
 type externalAuthState struct {
 	State, Nonce, Verifier, Provider, ClientKey string
+	// Link marks a round trip started from account settings to attach the
+	// identity to the signed-in account; LinkWorkspace is where to return.
+	Link          bool
+	LinkWorkspace string
+}
+
+// identityConflictMessage is the sign-in error for an identity whose email
+// belongs to an account the provider may not claim.
+const identityConflictMessage = "An account with this email already exists. Sign in to it and link this provider from your account settings."
+
+var linkWorkspacePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+// oidcEmailVerified is true only for an explicit email_verified: true (or
+// "true", which some providers send as a string).
+func oidcEmailVerified(claims map[string]any) bool {
+	switch value := claims["email_verified"].(type) {
+	case bool:
+		return value
+	case string:
+		return strings.EqualFold(strings.TrimSpace(value), "true")
+	}
+	return false
+}
+
+// linkSessionUser is the account whose live session completes a link round
+// trip: the proof of ownership the email match lacks.
+func (s *server) linkSessionUser(r *http.Request) (domain.User, bool) {
+	cookie, err := r.Cookie(sessionCookieName)
+	if err != nil || cookie.Value == "" {
+		return domain.User{}, false
+	}
+	user, err := s.store.AuthenticateSession(r.Context(), cookie.Value)
+	return user, err == nil && user.ID != ""
+}
+
+func linkSettingsRedirect(appURL, workspace string) string {
+	base := strings.TrimRight(appURL, "/")
+	if workspace == "" || !linkWorkspacePattern.MatchString(workspace) {
+		return base + "/"
+	}
+	return base + "/" + url.PathEscape(workspace) + "/settings/account/connections"
 }
 
 func newExternalAuth(ctx context.Context, authConfig config.AuthConfig, appURL string) (*externalAuth, error) {
@@ -171,6 +214,16 @@ func (s *server) requireEmailAuth(next http.Handler) http.Handler {
 }
 
 func (s *server) startOIDC(w http.ResponseWriter, r *http.Request) {
+	s.beginOIDC(w, r, false)
+}
+
+// startOIDCLink starts the provider round trip for a signed-in account that
+// links the identity from its settings (GET /api/account/identities/link/{provider}/start).
+func (s *server) startOIDCLink(w http.ResponseWriter, r *http.Request) {
+	s.beginOIDC(w, r, true)
+}
+
+func (s *server) beginOIDC(w http.ResponseWriter, r *http.Request, link bool) {
 	providerID := r.PathValue("provider")
 	if s.externalAuth == nil || s.externalAuth.providers[providerID] == nil {
 		http.NotFound(w, r)
@@ -180,7 +233,18 @@ func (s *server) startOIDC(w http.ResponseWriter, r *http.Request) {
 	nonce := randomURLToken(32)
 	verifier := randomURLToken(48)
 	clientKey := strings.TrimSpace(r.URL.Query().Get("client_key"))
-	encoded := encodeExternalState(externalAuthState{State: state, Nonce: nonce, Verifier: verifier, Provider: providerID, ClientKey: clientKey})
+	external := externalAuthState{State: state, Nonce: nonce, Verifier: verifier, Provider: providerID, ClientKey: clientKey}
+	if link {
+		if authUser(r).ID == "" {
+			writeError(w, http.StatusUnauthorized, "Sign in required")
+			return
+		}
+		external.ClientKey, external.Link = "", true
+		if workspace := strings.TrimSpace(r.URL.Query().Get("workspace")); linkWorkspacePattern.MatchString(workspace) {
+			external.LinkWorkspace = workspace
+		}
+	}
+	encoded := encodeExternalState(external)
 	http.SetCookie(w, &http.Cookie{Name: externalAuthCookie, Value: encoded, Path: "/api/auth/", HttpOnly: true, Secure: secureCookie(r), SameSite: http.SameSiteLaxMode, MaxAge: 600})
 	challenge := sha256.Sum256([]byte(verifier))
 	redirect := s.externalAuth.providers[providerID].oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.SetAuthURLParam("code_challenge", base64.RawURLEncoding.EncodeToString(challenge[:])), oauth2.SetAuthURLParam("code_challenge_method", "S256"))
@@ -231,21 +295,17 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 	if subject == "" && identityClaim != "sub" {
 		subject = stringClaim(claims, "sub")
 	}
-	email := stringClaim(claims, "email")
-	if email != "" {
-		if verified, present := claims["email_verified"]; present {
-			if verifiedValue, ok := verified.(bool); ok && !verifiedValue {
-				email = ""
-			}
-		}
-	}
+	// The email is used to find or create an account only when the provider
+	// states email_verified: true; an absent claim is not verified.
+	claimedEmail := stringClaim(claims, "email")
+	email, emailVerified := claimedEmail, oidcEmailVerified(claims)
 	name := stringClaim(claims, "name")
 	if name == "" {
 		name = stringClaim(claims, "preferred_username")
 	}
 	picture := stringClaim(claims, "picture")
-	if subject == "" || nonce != state.Nonce || (email != "" && !allowedExternalEmail(email, s.externalAuth.config.AllowedDomains)) {
-		s.recordSignInFailure(r, email, "identity_not_allowed")
+	if subject == "" || nonce != state.Nonce || (claimedEmail != "" && !allowedExternalEmail(claimedEmail, s.externalAuth.config.AllowedDomains)) {
+		s.recordSignInFailure(r, claimedEmail, "identity_not_allowed")
 		redirectAuthError(w, r, appURL, "identity is not allowed")
 		return
 	}
@@ -258,9 +318,34 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 	if issuer == "" {
 		issuer = client.issuer
 	}
-	session, sessionToken, err := s.store.LoginExternalIdentity(r.Context(), providerID, issuer, subject, username, email, name, picture, string(claimsJSON), s.externalAuth.config.AutoProvision)
+	if state.Link {
+		user, ok := s.linkSessionUser(r)
+		if !ok {
+			redirectAuthError(w, r, appURL, "Sign in to your account to link this provider.")
+			return
+		}
+		if err := s.store.LinkExternalIdentity(r.Context(), user.ID, providerID, issuer, subject, username, string(claimsJSON)); err != nil {
+			message := "could not link this identity"
+			if errors.Is(err, store.ErrIdentityConflict) {
+				message = "This identity is already linked to another account."
+			}
+			redirectAuthError(w, r, appURL, message)
+			return
+		}
+		clearExternalState(w, r)
+		http.Redirect(w, r, linkSettingsRedirect(appURL, state.LinkWorkspace), http.StatusFound)
+		return
+	}
+	// A configured provider that states a verified email in an allowed
+	// domain may attach to the account owning that email on first sign-in.
+	policy := store.ExternalLinkPolicy{TrustedEmail: email != "" && emailVerified, UnverifiedEmail: !emailVerified}
+	session, sessionToken, err := s.store.LoginExternalIdentityWithPolicy(r.Context(), providerID, issuer, subject, username, email, name, picture, string(claimsJSON), s.externalAuth.config.AutoProvision, policy)
 	if err != nil {
 		s.recordSignInFailure(r, email, signInFailureReason(err))
+		if errors.Is(err, store.ErrIdentityConflict) {
+			redirectAuthError(w, r, appURL, identityConflictMessage)
+			return
+		}
 		redirectAuthError(w, r, appURL, "could not create Flow session")
 		return
 	}
@@ -343,21 +428,25 @@ func (s *server) finishSAML(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "SAML identity is not allowed")
 		return
 	}
-	var flowSession domain.AuthSession
-	var token string
-	var err error
-	if email == "" {
-		claims, _ := json.Marshal(map[string]any{"subject": subject, "name": name})
-		issuer := strings.TrimSpace(s.externalAuth.config.SAML.EntityID)
-		if issuer == "" {
-			issuer = "saml"
-		}
-		flowSession, token, err = s.store.LoginExternalIdentity(r.Context(), "saml", issuer, subject, subject, "", name, "", string(claims), s.externalAuth.config.AutoProvision)
-	} else {
-		flowSession, token, err = s.store.LoginExternal(r.Context(), email, name, "", s.externalAuth.config.AutoProvision)
+	// SAML signs in by issuer and subject like every other provider. This IdP
+	// is configured by the server operator, so it is a trusted provider: an
+	// asserted email that passes the operator's domain restriction (checked
+	// above, or no restriction) attaches to the account owning that email on
+	// the first sign-in, and the issuer+subject identity row created then is
+	// what later sign-ins use. Enterprise OIDC providers, configured by
+	// workspace admins, keep the stricter rules.
+	claims, _ := json.Marshal(map[string]any{"subject": subject, "name": name})
+	identityIssuer := strings.TrimSpace(s.externalAuth.config.SAML.EntityID)
+	if identityIssuer == "" {
+		identityIssuer = "saml"
 	}
+	flowSession, token, err := s.store.LoginExternalIdentityWithPolicy(r.Context(), "saml", identityIssuer, subject, subject, email, name, "", string(claims), s.externalAuth.config.AutoProvision, store.ExternalLinkPolicy{TrustedEmail: email != ""})
 	if err != nil {
 		s.recordSignInFailure(r, email, signInFailureReason(err))
+		if errors.Is(err, store.ErrIdentityConflict) {
+			redirectAuthError(w, r, s.externalAuth.appURL, identityConflictMessage)
+			return
+		}
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return
 	}
@@ -435,8 +524,11 @@ func oidcSuccessRedirect(appURL string, state externalAuthState, r *http.Request
 
 func encodeExternalState(state externalAuthState) string {
 	parts := []string{state.Provider, state.State, state.Nonce, state.Verifier}
-	if state.ClientKey != "" {
+	if state.ClientKey != "" || state.Link {
 		parts = append(parts, state.ClientKey)
+	}
+	if state.Link {
+		parts = append(parts, "link:"+state.LinkWorkspace)
 	}
 	return strings.Join(parts, ".")
 }
@@ -447,12 +539,18 @@ func readExternalState(r *http.Request) (externalAuthState, error) {
 		return externalAuthState{}, err
 	}
 	parts := strings.Split(cookie.Value, ".")
-	if len(parts) != 4 && len(parts) != 5 {
+	if len(parts) < 4 || len(parts) > 6 {
 		return externalAuthState{}, errors.New("invalid state cookie")
 	}
 	state := externalAuthState{Provider: parts[0], State: parts[1], Nonce: parts[2], Verifier: parts[3]}
-	if len(parts) == 5 {
+	if len(parts) >= 5 {
 		state.ClientKey = parts[4]
+	}
+	if len(parts) == 6 {
+		if !strings.HasPrefix(parts[5], "link:") {
+			return externalAuthState{}, errors.New("invalid state cookie")
+		}
+		state.Link, state.LinkWorkspace = true, strings.TrimPrefix(parts[5], "link:")
 	}
 	return state, nil
 }

@@ -24,9 +24,14 @@ import (
 )
 
 var (
-	ErrAuthInvalid              = errors.New("invalid email or password")
-	ErrAuthExpired              = errors.New("token is invalid or expired")
-	ErrAuthConflict             = errors.New("account already exists")
+	ErrAuthInvalid  = errors.New("invalid email or password")
+	ErrAuthExpired  = errors.New("token is invalid or expired")
+	ErrAuthConflict = errors.New("account already exists")
+	// ErrIdentityConflict is an external sign-in whose email belongs to an
+	// existing account that the provider is not trusted to claim, or an
+	// identity already linked to another account. The person signs in to the
+	// account and links the provider from their account settings.
+	ErrIdentityConflict         = errors.New("an account with this email already exists")
 	ErrAuthForbidden            = errors.New("forbidden")
 	ErrLastAdmin                = errors.New("a workspace needs at least one admin")
 	ErrLastTeamOwner            = errors.New("a team needs at least one owner")
@@ -251,7 +256,27 @@ func (s *SQLiteStore) LoginExternal(ctx context.Context, email, name, avatarURL 
 // LoginExternalIdentity authenticates an IdP identity independently of email.
 // Email remains the compatibility lookup used by LoginExternal, but is optional
 // here so enterprise providers may identify users with an employee number.
+// ExternalLinkPolicy says whether an unknown identity may be attached to the
+// existing account that owns its email. The zero value never links: an email
+// alone is not proof that the person owns the account.
+type ExternalLinkPolicy struct {
+	// TrustedEmail: the provider vouches for the email (explicit
+	// email_verified, domain allowed for the provider).
+	TrustedEmail bool
+	// UnverifiedEmail: the provider did not state the email is verified. It
+	// never selects or creates an account by itself; an email that belongs to
+	// an existing account is ErrIdentityConflict, any other is dropped.
+	UnverifiedEmail bool
+	// MembershipWorkspaceID, when set, also requires the account to be an
+	// active member of that workspace (enterprise providers).
+	MembershipWorkspaceID string
+}
+
 func (s *SQLiteStore) LoginExternalIdentity(ctx context.Context, provider, issuer, subject, username, email, name, avatarURL, claimsJSON string, autoProvision bool) (domain.AuthSession, string, error) {
+	return s.LoginExternalIdentityWithPolicy(ctx, provider, issuer, subject, username, email, name, avatarURL, claimsJSON, autoProvision, ExternalLinkPolicy{})
+}
+
+func (s *SQLiteStore) LoginExternalIdentityWithPolicy(ctx context.Context, provider, issuer, subject, username, email, name, avatarURL, claimsJSON string, autoProvision bool, policy ExternalLinkPolicy) (domain.AuthSession, string, error) {
 	provider, issuer, subject = strings.TrimSpace(provider), strings.TrimSpace(issuer), strings.TrimSpace(subject)
 	if provider == "" || issuer == "" || subject == "" {
 		return domain.AuthSession{}, "", ErrAuthInvalid
@@ -316,25 +341,33 @@ func (s *SQLiteStore) LoginExternalIdentity(ctx context.Context, provider, issue
 	if !errors.Is(err, sql.ErrNoRows) {
 		return domain.AuthSession{}, "", err
 	}
+	if email != "" && policy.UnverifiedEmail {
+		if _, _, lookupErr := s.authUserByEmail(ctx, email); lookupErr == nil {
+			return domain.AuthSession{}, "", ErrIdentityConflict
+		} else if !errors.Is(lookupErr, sql.ErrNoRows) {
+			return domain.AuthSession{}, "", lookupErr
+		}
+		email = ""
+	}
 	if email != "" {
-		if existing, _, lookupErr := s.authUserByEmail(ctx, email); lookupErr == nil {
+		existing, _, lookupErr := s.authUserByEmail(ctx, email)
+		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+			return domain.AuthSession{}, "", lookupErr
+		}
+		if lookupErr == nil {
 			if !existing.Active {
 				return domain.AuthSession{}, "", ErrAuthInvalid
 			}
+			if !s.externalEmailLinkAllowed(ctx, existing.ID, policy) {
+				return domain.AuthSession{}, "", ErrIdentityConflict
+			}
 			user = existing
-			if name != "" || avatarURL != "" {
-				if name == "" {
-					name = user.Name
-				}
-				if avatarURL == "" {
-					avatarURL = user.AvatarURL
-				}
+			if !user.EmailVerified {
 				now := time.Now().UTC().Format(time.RFC3339Nano)
-				_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,email_verified_at=?,updated_at=? WHERE id=?`, name, name, avatarURL, now, now, user.ID)
-				if err != nil {
+				if _, err = s.db.ExecContext(ctx, `UPDATE auth_users SET email_verified_at=?,updated_at=? WHERE id=? AND email_verified_at IS NULL`, now, now, user.ID); err != nil {
 					return domain.AuthSession{}, "", err
 				}
-				user.Name, user.DisplayName, user.AvatarURL, user.EmailVerified = name, name, avatarURL, true
+				user.EmailVerified = true
 			}
 			if autoProvision {
 				if err = s.provisionExternalMemberships(ctx, user.ID, time.Now().UTC()); err != nil {
@@ -378,6 +411,55 @@ func (s *SQLiteStore) LoginExternalIdentity(ctx context.Context, provider, issue
 		return domain.AuthSession{}, "", err
 	}
 	return s.createSession(ctx, user)
+}
+
+// externalEmailLinkAllowed is the account-takeover guard for a first sign-in
+// whose email matches an existing account.
+func (s *SQLiteStore) externalEmailLinkAllowed(ctx context.Context, userID string, policy ExternalLinkPolicy) bool {
+	if !policy.TrustedEmail {
+		return false
+	}
+	if policy.MembershipWorkspaceID == "" {
+		return true
+	}
+	_, status, err := s.WorkspaceRole(ctx, policy.MembershipWorkspaceID, userID)
+	return err == nil && status == "active"
+}
+
+// LinkExternalIdentity attaches an identity to the signed-in account that
+// proved ownership by completing the provider round trip in its own session.
+// An identity already linked to another account is ErrIdentityConflict.
+func (s *SQLiteStore) LinkExternalIdentity(ctx context.Context, userID, provider, issuer, subject, username, claimsJSON string) error {
+	provider, issuer, subject, username = strings.TrimSpace(provider), strings.TrimSpace(issuer), strings.TrimSpace(subject), strings.TrimSpace(username)
+	if userID == "" || provider == "" || issuer == "" || subject == "" || provider == "scim" {
+		return ErrAuthInvalid
+	}
+	if checkTextFields(textField{"subject", subject, domain.SCIMValueMaxLength}, textField{"issuer", issuer, 2048}) != nil {
+		return ErrAuthInvalid
+	}
+	username = TruncateRunes(username, domain.SCIMValueMaxLength)
+	if strings.TrimSpace(claimsJSON) == "" {
+		claimsJSON = "{}"
+	}
+	var active int
+	if err := s.db.QueryRowContext(ctx, `SELECT active FROM auth_users WHERE id=?`, userID).Scan(&active); err != nil || active == 0 {
+		return ErrAuthInvalid
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	key := externalIdentityKey(provider, issuer, subject)
+	var owner string
+	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM auth_identities WHERE identity_key=?`, key).Scan(&owner)
+	switch {
+	case err == nil && owner != userID:
+		return ErrIdentityConflict
+	case err == nil:
+		_, err = s.db.ExecContext(ctx, `UPDATE auth_identities SET username=?,claims_json=?,last_login_at=? WHERE identity_key=? AND user_id=?`, username, claimsJSON, now, key, userID)
+		return err
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, idgen.New("identity_"), userID, provider, issuer, subject, key, username, claimsJSON, now, now)
+	return err
 }
 
 func externalIdentityKey(provider, issuer, subject string) string {
