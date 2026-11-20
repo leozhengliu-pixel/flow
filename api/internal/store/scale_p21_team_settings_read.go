@@ -13,7 +13,9 @@ import (
 // workflow states for a team without settings) together with the inputs of
 // the viewer projection that narrows them (teams, team visibility settings,
 // workspace settings, the viewer).
-var teamSettingsReadFields = []string{"workspace", "viewer", "teams", "teamSettings", "teamParents", "states", "workspaceSettings"}
+// The template collections let the projection clear default templates the
+// viewer may not see (BlankHiddenTemplateDefaults).
+var teamSettingsReadFields = []string{"workspace", "viewer", "teams", "teamSettings", "teamParents", "states", "workspaceSettings", "issueTemplates", "projectTemplates"}
 
 // TeamSettingsRead owns the viewer projection of teamSettingsReadFields.
 type TeamSettingsRead struct {

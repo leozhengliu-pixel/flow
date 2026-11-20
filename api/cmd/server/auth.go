@@ -449,6 +449,7 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 	// Templates, team settings and team page collections stay within the
 	// key's teams; release notes and history follow the releases left above.
 	store.FilterTeamScopedCollections(data, func(id string) bool { return allowed[id] }, func(id string) bool { return allowed[id] })
+	store.BlankHiddenTemplateDefaults(data)
 	data.SavedViews = slices.DeleteFunc(data.SavedViews, func(view domain.SavedView) bool {
 		return view.Scope == "team" && !allowed[view.TeamID] || view.ProjectID != "" && !visibleProjects[view.ProjectID]
 	})

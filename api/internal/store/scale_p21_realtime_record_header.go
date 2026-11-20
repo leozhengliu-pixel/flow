@@ -20,6 +20,14 @@ type RealtimeRecordHeader struct {
 	IssueID    string   `json:"issueId"`
 	IssueIDs   []string `json:"issueIds"`
 	PipelineID string   `json:"pipelineId"`
+	// An issue template's narrowed team and sub-issue teams.
+	VisibilityTeamID string            `json:"visibilityTeamId"`
+	SubIssues        []RealtimeTeamRef `json:"subIssues"`
+}
+
+// RealtimeTeamRef is a nested record's team, as realtime rules read it.
+type RealtimeTeamRef struct {
+	TeamID string `json:"teamId"`
 }
 
 // RealtimeRecordRead owns the selected header through the caller's last use.

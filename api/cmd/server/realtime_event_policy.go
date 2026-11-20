@@ -62,6 +62,9 @@ type realtimeRecord struct {
 	IssueID    string   `json:"issueId"`
 	IssueIDs   []string `json:"issueIds"`
 	PipelineID string   `json:"pipelineId"`
+	// An issue template's narrowed team and sub-issue teams.
+	VisibilityTeamID string                  `json:"visibilityTeamId"`
+	SubIssues        []store.RealtimeTeamRef `json:"subIssues"`
 }
 
 type realtimeRule struct {
@@ -199,7 +202,7 @@ var realtimeRules = []realtimeRuleEntry{
 	{"label_group.", realtimeRule{audience: realtimeEveryone, fields: []string{"labelGroups"}, visible: realtimeLabelVisible, keep: []string{"labelIds"}, scope: []string{"scope"}}},
 	{"workflow_state.", realtimeRule{audience: realtimeEveryone, fields: []string{"states"}, payloadTeam: true, visible: realtimeTeamRowVisible, keep: []string{"state", "teamId", "stateId", "replacementStateId"}}},
 	{"workflow_states.", realtimeRule{audience: realtimeEveryone, teamAggregate: true, visible: realtimeTeamRowVisible}},
-	{"issue_template.", realtimeRule{audience: realtimeEveryone, fields: []string{"issueTemplates"}, visible: realtimeTeamRowVisible, scope: []string{"teamId"}}},
+	{"issue_template.", realtimeRule{audience: realtimeEveryone, fields: []string{"issueTemplates"}, visible: realtimeIssueTemplateVisible, scope: []string{"teamId", "visibilityTeamId", "subIssues"}}},
 	{"document_template.", realtimeRule{audience: realtimeEveryone, fields: []string{"documentTemplates"}, visible: realtimeTeamRowVisible, scope: []string{"teamId"}}},
 	{"project_template.", realtimeRule{audience: realtimeEveryone, fields: []string{"projectTemplates"}, visible: realtimeAnyTeamRowVisible, scope: []string{"teamIds"}}},
 	{"release_pipeline.", realtimeRule{audience: realtimeEveryone, fields: []string{"releasePipelines"}, visible: realtimeAnyTeamContentVisible, scope: []string{"teamIds"}}},
@@ -334,6 +337,17 @@ func (v *realtimeViewer) anyIssueVisible(ids []string) bool {
 
 func realtimeTeamRowVisible(v *realtimeViewer, record realtimeRecord) bool {
 	return record.TeamID == "" || v.row(record.TeamID)
+}
+
+// realtimeIssueTemplateVisible is the bootstrap's issue template rule
+// (store.IssueTemplateTeamsVisible): every team the template names, its
+// narrowed team and its sub-issues' teams included, is a visible team row.
+func realtimeIssueTemplateVisible(v *realtimeViewer, record realtimeRecord) bool {
+	template := domain.IssueTemplate{TeamID: record.TeamID, VisibilityTeamID: record.VisibilityTeamID}
+	for _, child := range record.SubIssues {
+		template.SubIssues = append(template.SubIssues, domain.TemplateSubIssue{TeamID: child.TeamID})
+	}
+	return store.IssueTemplateTeamsVisible(template, v.row)
 }
 
 func realtimeTeamContentVisible(v *realtimeViewer, record realtimeRecord) bool {
