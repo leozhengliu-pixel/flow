@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -286,34 +287,101 @@ func metadataCatalogShadowEnabled() bool {
 	return mode == "shadow"
 }
 
-func (s *SQLiteStore) nextMetadataCatalogCollection(ctx context.Context, workspace, kind string) (string, string, error) {
-	nextWorkspace, nextKind := "", ""
-	for _, table := range []string{"workspace_metadata_records", "metadata_catalog_collections"} {
-		var candidateWorkspace, candidateKind string
-		// Both tables are compared in byte order, as the candidates are below:
-		// on MySQL workspace_metadata_records keeps its keys in a
-		// case-insensitive collation, whose order ("customers" before
-		// "customerStatuses") made the walk alternate between two
-		// collections forever.
-		key, field := "workspace_key", "field"
-		if s.dialect == "mysql" && table == "workspace_metadata_records" {
-			key, field = "CAST(workspace_key AS BINARY)", "CAST(field AS BINARY)"
+// metadataCollectionCursor is a catalog pass's position in its walk over
+// every collection: first those with canonical rows, then (orphans) the
+// checkpoints whose canonical rows are all gone, which the pass visits to
+// prune their catalog rows.
+type metadataCollectionCursor struct {
+	Workspace, Field string
+	orphans          bool
+}
+
+// metadataCollectionOrphanPage bounds the checkpoints one orphan lookup reads.
+const metadataCollectionOrphanPage = 64
+
+// nextMetadataCatalogCollection returns the collection after the cursor, or
+// sql.ErrNoRows at the end of the walk.
+//
+// Each half of the walk pages one table in that table's own SQL order, and
+// the cursor of each half only ever holds values read from that table, so the
+// walk never compares keys across collations. They differ: on MySQL the
+// canonical workspace_key and field columns are utf8mb4_0900_ai_ci and the
+// catalog's are VARBINARY; on PostgreSQL the canonical ones take the
+// database collation and the catalog's are "C". A walk that merged the two
+// tables' next keys with Go's byte order sorted "teams" before "teamSettings"
+// in one table and after it in the other, and went back and forth between
+// them forever. Comparing both tables as bytes in SQL instead (CAST AS
+// BINARY on MySQL) cannot use the canonical table's index: every step was a
+// scan and sort of the whole table. Here each step is an index range read.
+// Collection names are the app's field names, distinct under any collation,
+// so the first half meets no ties; a checkpoint is visited in the second half
+// only when no canonical row has exactly its key, so no collection is
+// visited twice.
+func (s *SQLiteStore) nextMetadataCatalogCollection(ctx context.Context, after metadataCollectionCursor) (metadataCollectionCursor, error) {
+	if !after.orphans {
+		next := metadataCollectionCursor{}
+		err := s.db.QueryRowContext(ctx, `SELECT workspace_key,field FROM workspace_metadata_records WHERE `+collectionKeysetAfter(s.dialect)+` ORDER BY workspace_key,field LIMIT 1`, collectionKeysetArgs(s.dialect, after)...).Scan(&next.Workspace, &next.Field)
+		if !errors.Is(err, sql.ErrNoRows) {
+			return next, err
 		}
-		err := s.db.QueryRowContext(ctx, `SELECT workspace_key,field FROM `+table+` WHERE (`+key+`,`+field+`)>(?,?) ORDER BY `+key+`,`+field+` LIMIT 1`, workspace, kind).Scan(&candidateWorkspace, &candidateKind)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
+		after = metadataCollectionCursor{orphans: true}
+	}
+	for {
+		rows, err := s.db.QueryContext(ctx, `SELECT workspace_key,field FROM metadata_catalog_collections WHERE `+collectionKeysetAfter(s.dialect)+` ORDER BY workspace_key,field LIMIT `+fmt.Sprint(metadataCollectionOrphanPage), collectionKeysetArgs(s.dialect, after)...)
 		if err != nil {
-			return "", "", err
+			return after, err
 		}
-		if nextWorkspace == "" || candidateWorkspace < nextWorkspace || candidateWorkspace == nextWorkspace && candidateKind < nextKind {
-			nextWorkspace, nextKind = candidateWorkspace, candidateKind
+		page := []metadataCollectionCursor{}
+		for rows.Next() {
+			next := metadataCollectionCursor{orphans: true}
+			if err := rows.Scan(&next.Workspace, &next.Field); err != nil {
+				rows.Close()
+				return after, err
+			}
+			page = append(page, next)
 		}
+		err = errors.Join(rows.Err(), rows.Close())
+		if err != nil {
+			return after, err
+		}
+		for _, next := range page {
+			// The equality finds the index range; on MySQL the binary
+			// comparison then keeps only the checkpoint's exact bytes, which
+			// utf8mb4_0900_ai_ci equates with other cases and accents.
+			exact, args := "", []any{next.Workspace, next.Field}
+			if s.dialect == "mysql" {
+				exact, args = ` AND CAST(workspace_key AS BINARY)=CAST(? AS BINARY) AND CAST(field AS BINARY)=CAST(? AS BINARY)`, append(args, next.Workspace, next.Field)
+			}
+			var canonical int
+			if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (SELECT 1 FROM workspace_metadata_records WHERE workspace_key=? AND field=?`+exact+` LIMIT 1) r`, args...).Scan(&canonical); err != nil {
+				return after, err
+			}
+			if canonical == 0 {
+				return next, nil
+			}
+		}
+		if len(page) < metadataCollectionOrphanPage {
+			return after, sql.ErrNoRows
+		}
+		after = page[len(page)-1]
 	}
-	if nextWorkspace == "" {
-		return "", "", sql.ErrNoRows
+}
+
+// collectionKeysetAfter is the (workspace_key,field) keyset predicate. MySQL
+// evaluates a row-value comparison as a filter over an index scan from the
+// first row; the expanded form is a range on the primary key.
+func collectionKeysetAfter(dialect string) string {
+	if dialect == "mysql" {
+		return `(workspace_key>? OR workspace_key=? AND field>?)`
 	}
-	return nextWorkspace, nextKind, nil
+	return `(workspace_key,field)>(?,?)`
+}
+
+func collectionKeysetArgs(dialect string, after metadataCollectionCursor) []any {
+	if dialect == "mysql" {
+		return []any{after.Workspace, after.Workspace, after.Field}
+	}
+	return []any{after.Workspace, after.Field}
 }
 
 // CompleteMetadataCatalogForTesting runs the catalog backfill over every
@@ -324,15 +392,17 @@ func (s *SQLiteStore) CompleteMetadataCatalogForTesting(ctx context.Context) err
 	if !testing.Testing() {
 		return ErrBoundedMetadataCoverage
 	}
-	workspace, kind := "", ""
+	cursor := metadataCollectionCursor{}
 	for {
-		next, nextKind, err := s.nextMetadataCatalogCollection(ctx, workspace, kind)
+		var err error
+		cursor, err = s.nextMetadataCatalogCollection(ctx, cursor)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
+		next, nextKind := cursor.Workspace, cursor.Field
 		status, err := s.MetadataCatalogStatus(ctx, next, nextKind)
 		if err != nil {
 			return err
@@ -351,6 +421,5 @@ func (s *SQLiteStore) CompleteMetadataCatalogForTesting(ctx context.Context) err
 				break
 			}
 		}
-		workspace, kind = next, nextKind
 	}
 }

@@ -55,19 +55,20 @@ func (s *SQLiteStore) metadataCatalogPass(ctx context.Context, gentleRevisit boo
 	report.Skipped = []MetadataCatalogSkip{}
 	began := time.Now()
 	defer func() { report.Duration = time.Since(began) }()
-	workspace, kind := "", ""
+	cursor := metadataCollectionCursor{}
 	for {
 		if err := ctx.Err(); err != nil {
 			return report, err
 		}
-		next, nextKind, err := s.nextMetadataCatalogCollection(ctx, workspace, kind)
+		next, err := s.nextMetadataCatalogCollection(ctx, cursor)
 		if errors.Is(err, sql.ErrNoRows) {
 			return report, nil
 		}
 		if err != nil {
 			return report, err
 		}
-		workspace, kind = next, nextKind
+		cursor = next
+		workspace, kind := next.Workspace, next.Field
 		report.Collections++
 		normalized, complete, err := s.completeMetadataCatalogCollection(ctx, workspace, kind, gentleRevisit)
 		report.Normalized += normalized

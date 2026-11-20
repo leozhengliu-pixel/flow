@@ -143,15 +143,17 @@ func TestScaleP21SW557BoundedStartupMatchesLegacy(t *testing.T) {
 // scaleP21SW557CompleteCatalog runs the metadata catalog backfill over every
 // collection to completion (what the load rig does before a bounded start).
 func scaleP21SW557CompleteCatalog(ctx context.Context, s *SQLiteStore) error {
-	workspace, kind := "", ""
+	cursor := metadataCollectionCursor{}
 	for {
-		next, nextKind, err := s.nextMetadataCatalogCollection(ctx, workspace, kind)
+		var err error
+		cursor, err = s.nextMetadataCatalogCollection(ctx, cursor)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
+		next, nextKind := cursor.Workspace, cursor.Field
 		status, err := s.MetadataCatalogStatus(ctx, next, nextKind)
 		if err != nil {
 			return err
@@ -170,7 +172,6 @@ func scaleP21SW557CompleteCatalog(ctx context.Context, s *SQLiteStore) error {
 				break
 			}
 		}
-		workspace, kind = next, nextKind
 	}
 }
 
