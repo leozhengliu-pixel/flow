@@ -186,8 +186,9 @@ var realtimeRules = []realtimeRuleEntry{
 	{"schedules.", realtimeMembersRule},
 	{"cycles.", realtimeMembersRule},
 	{"coding_environment.", realtimeMembersRule},
-	// Loops and automations are listed to every member (/api/loops, /api/workflows).
-	{"loop.", realtimeRule{audience: realtimeEveryone}},
+	// Workspace loops and automations are listed to every member (/api/loops,
+	// /api/workflows); a team's loop follows the team's row, like the list.
+	{"loop.", realtimeRule{audience: realtimeEveryone, fields: []string{"loops"}, visible: realtimeTeamRowVisible, scope: []string{"teamId"}}},
 	{"workflow_definition.", realtimeMembersRule},
 	{"workflow_run.", realtimeMembersRule},
 	{"coding.approval_requested", realtimeRule{audience: realtimeEveryone}},

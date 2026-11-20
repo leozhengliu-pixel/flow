@@ -66,21 +66,21 @@ func (s *server) boundedAttachmentVisible(ctx context.Context, account domain.Ac
 			return true
 		}
 		recordUploadVisibilityRefusal(ctx, err)
-		if s.boundedWorkspaceAttachmentVisible(ctx, data.Workspace.URLKey, userID, url) {
+		if s.boundedWorkspaceAttachmentVisible(ctx, data.Workspace.URLKey, userID, url, loopTeamReadableBy(access)) {
 			return true
 		}
 	}
 	return false
 }
 
-func (s *server) boundedWorkspaceAttachmentVisible(ctx context.Context, workspace, userID, url string) bool {
+func (s *server) boundedWorkspaceAttachmentVisible(ctx context.Context, workspace, userID, url string, loopTeamReadable func(string) bool) bool {
 	read, err := s.store.BeginAttachmentVisibilityRead(ctx, workspace)
 	if err != nil {
 		recordUploadVisibilityRefusal(ctx, err)
 		return false
 	}
 	defer read.Close()
-	if loopAttachmentVisible(read.Raw, userID, url) {
+	if loopAttachmentVisible(read.Raw, userID, url, loopTeamReadable) {
 		return true
 	}
 	// The projection only removes records and fields; an upload that no

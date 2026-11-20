@@ -75,6 +75,7 @@ func (s *server) generalBootstrapBounded(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.applyCalendarAway(r.Context(), &data)
+	s.hideUnreadableLoops(&data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
 	if leanBootstrapRequested(r) {
 		// Everything before the streamed body; the body is a pure encode of data.

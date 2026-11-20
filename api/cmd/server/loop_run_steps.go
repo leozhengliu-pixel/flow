@@ -89,6 +89,14 @@ func (s *server) prepareLoopRun(ctx context.Context, workspace string, loop doma
 	if err := agentWorkspacePolicy(data.WorkspaceSettings, data.ViewerRole); err != nil {
 		return nil, &loopRunError{reason: "unavailable", message: err.Error(), err: err}
 	}
+	// Scheduled and manual runs both act as the owner, who must still belong
+	// to the loop's team and pass the loop permission.
+	if err := s.checkLoopOwnerForRun(&data, loop, *owner); err != nil {
+		return nil, err
+	}
+	if err := s.restrictToBehaviorEditor(ctx, workspace, &data, loop, *owner); err != nil {
+		return nil, err
+	}
 	request, err := s.loopRunRequest(ctx, workspace, *owner)
 	if err != nil {
 		return nil, err

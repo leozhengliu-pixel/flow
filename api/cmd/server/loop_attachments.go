@@ -137,9 +137,13 @@ func claimLoopAttachments(data *domain.Bootstrap, ids []string, loopID string) (
 // GET /api/loops/{id} and the bootstrap filter loops by no team, draft or
 // role), so a file is served while its loop exists. Deleting a loop is
 // permanent, so the uploads it had claimed are no longer served to anyone.
-func loopAttachmentVisible(data domain.Bootstrap, userID, url string) bool {
+//
+// A team's loop is the exception: its files follow the team's visibility, so
+// readable (nil: every team) says which teams the viewer may see.
+func loopAttachmentVisible(data domain.Bootstrap, userID, url string, readable func(teamID string) bool) bool {
+	loopReadable := func(loop domain.Loop) bool { return loop.TeamID == "" || readable == nil || readable(loop.TeamID) }
 	for _, loop := range data.Loops {
-		if slices.ContainsFunc(loop.Attachments, func(item domain.LoopAttachment) bool { return item.URL == url }) {
+		if slices.ContainsFunc(loop.Attachments, func(item domain.LoopAttachment) bool { return item.URL == url }) && loopReadable(loop) {
 			return true
 		}
 	}
@@ -150,7 +154,7 @@ func loopAttachmentVisible(data domain.Bootstrap, userID, url string) bool {
 		if item.LoopID == "" {
 			return item.CreatorID == userID
 		}
-		return slices.ContainsFunc(data.Loops, func(loop domain.Loop) bool { return loop.ID == item.LoopID })
+		return slices.ContainsFunc(data.Loops, func(loop domain.Loop) bool { return loop.ID == item.LoopID && loopReadable(loop) })
 	})
 }
 
