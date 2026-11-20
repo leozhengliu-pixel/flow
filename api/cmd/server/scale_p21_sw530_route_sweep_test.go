@@ -553,9 +553,16 @@ func (x *sw530Sweep) seed(t *testing.T) {
 	f, fx := x.fx.f, x.fx
 	public, private, child := f.public, fx.privateTeam, fx.childTeam
 	at := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
+	// Keep fixture keys within the SQL usage throttle for the entire sweep.
+	// reset restores the rows but does not rewind the stores' worker clocks.
+	// SW293 compares usage writes separately.
+	usedThrough := time.Now().UTC().Add(time.Hour)
+	if deadline, ok := t.Deadline(); ok {
+		usedThrough = deadline.UTC()
+	}
 	keyed := func(principal *sw530Principal, workspace string) domain.APIKey {
 		return domain.APIKey{ID: "sw530-key-" + principal.name, Name: "SW530 " + principal.name, Prefix: "sw530_" + principal.name, SecretHash: secretHash(principal.secret),
-			CreatorID: principal.user.ID, Scopes: []string{"read", "write", "admin"}, TeamIDs: []string{}, TeamRestriction: "all", CreatedAt: at}
+			CreatorID: principal.user.ID, Scopes: []string{"read", "write", "admin"}, TeamIDs: []string{}, TeamRestriction: "all", CreatedAt: at, LastUsedAt: &usedThrough}
 	}
 	if err := f.repository.MutateWorkspace(t.Context(), x.workspace, "scale_p21_sw530.seed", "", nil, func(data *domain.Bootstrap) error {
 		for _, principal := range x.principals {
