@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"slices"
@@ -236,15 +237,24 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 	if value, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && value > 0 {
 		limit = min(value, maxChangesLimit)
 	}
-	access, err := s.resolveSyncAccess(r)
-	if err != nil {
-		issueRecordsErrorFor(w, r, err)
-		return
-	}
-	result, err := s.collectSyncChanges(r, access, journal, after, limit)
-	if err != nil {
-		writeSyncChangesUnavailable(w, r, err)
-		return
+	var result syncV2ChangesResponse
+	for attempt := 1; ; attempt++ {
+		access, err := s.resolveSyncAccess(r)
+		if err != nil {
+			issueRecordsErrorFor(w, r, err)
+			return
+		}
+		result, err = s.collectSyncChanges(r, access, journal, after, limit)
+		if err == nil {
+			break
+		}
+		if attempt == syncChangesAttempts || !s.syncChangesRaced(r, access, err) {
+			if attempt > 1 {
+				slog.WarnContext(r.Context(), "sync changes projected again", "request_id", requestIDFrom(r.Context()), "attempts", attempt)
+			}
+			writeSyncChangesUnavailable(w, r, err)
+			return
+		}
 	}
 	raw, err := json.Marshal(result)
 	if err != nil || len(raw) > syncV2DeltaBytes {
@@ -256,6 +266,27 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 	_, _ = w.Write(raw)
 }
 
+// syncChangesAttempts bounds how often one changes read is projected again
+// after the workspace moved under it.
+const syncChangesAttempts = 3
+
+// syncChangesRaced reports that a page failed only because the workspace's
+// source version moved while it was projected (any issue or metadata write):
+// the principal's credential and authorization epoch are unchanged. The page
+// is then projected again from fresh access, which is what the client's retry
+// would read; a revoke or epoch change still fails the read as before.
+func (s *server) syncChangesRaced(r *http.Request, access store.EventAccess, err error) bool {
+	if !errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, errRealtimeProjectionStale) || r.Context().Err() != nil || access.CheckCredential() != nil {
+		return false
+	}
+	ctx, err := s.store.LiveEventContext(r.Context())
+	if err != nil {
+		return false
+	}
+	authority, err := s.readEventAuthority(ctx, workspaceKey(r))
+	return err == nil && authority.version != access.SourceVersion() && authority.epoch == access.AuthzEpoch
+}
+
 // writeSyncChangesUnavailable answers a failed changes read: a retryable busy
 // error keeps its own Retry-After, every other failure is the same 503 with a
 // short one (a sync client re-polls).
@@ -263,6 +294,7 @@ func writeSyncChangesUnavailable(w http.ResponseWriter, r *http.Request, err err
 	if writeRetryableBusy(w, r, err) {
 		return
 	}
+	slog.WarnContext(r.Context(), "sync changes unavailable", "request_id", requestIDFrom(r.Context()), "error_type", fmt.Sprintf("%T", err), "denied", errors.Is(err, store.ErrAuthForbidden), "stale", errors.Is(err, errRealtimeProjectionStale), "budget", errors.Is(err, store.ErrEventSourceBudget), "deadline", errors.Is(err, context.DeadlineExceeded), "error", err.Error())
 	w.Header().Set("Retry-After", "2")
 	writeError(w, http.StatusServiceUnavailable, "Changes are temporarily unavailable")
 }
@@ -517,6 +549,17 @@ func (s *server) projectCommittedMetadata(r *http.Request, access store.EventAcc
 	seq, err := strconv.ParseInt(change.Seq, 10, 64)
 	if err != nil {
 		return syncV2Upsert{}, false, err
+	}
+	// A change whose record has moved on is invalidated whatever the source
+	// holds (the same version check follows the build): check it first and
+	// skip the build. A catch-up page over old history then builds no source
+	// for the records changed again since.
+	current, err := s.store.RealtimeMetadataVersion(r.Context(), workspaceKey(r), record.Key)
+	if err != nil {
+		return syncV2Upsert{}, false, err
+	}
+	if current == "" || current != record.Version {
+		return syncV2Upsert{}, false, errEventSourceUnsupported
 	}
 	event := domain.RealtimeEvent{ID: change.TxID + "/" + record.Key.Kind + "/" + record.Key.ID, Seq: seq, Type: kind + ".updated", AggregateID: record.Key.ID, Payload: json.RawMessage(`{}`)}
 	source, err := s.eventSourceForAuthority(r.Context(), workspaceKey(r), event, eventAuthority{access.SourceVersion(), access.AuthzEpoch})

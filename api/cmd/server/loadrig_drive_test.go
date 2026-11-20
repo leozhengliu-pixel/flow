@@ -146,11 +146,43 @@ func loadRigOps() []loadRigOp {
 			d.request(ctx, vu, vu.client, "search", http.MethodGet, "/api/search?q="+url.QueryEscape(d.pick(vu, d.fixture.Words)), nil, nil)
 		}},
 		{name: "sync.changes", weight: 5, run: func(ctx context.Context, d *loadRigDriver, vu *loadRigVU) {
-			var page struct {
-				Next    string `json:"next"`
-				HasMore bool   `json:"hasMore"`
+			// As the web sync client: it starts from the head of its snapshot,
+			// never from the start of the log (the rig's replicas do not serve
+			// the sync manifest, so the first read of an empty cursor only takes
+			// the head), starts over from the head when the server asks for a
+			// resync, and after a failed read catches up again only later
+			// (Retry-After, then backing off).
+			if time.Now().Before(vu.syncRetryAt) {
+				return
 			}
-			if d.request(ctx, vu, vu.client, "sync.changes", http.MethodGet, "/api/sync/changes?limit=100&maxBytes=262144&after="+cmpOrString(vu.syncCursor, "0"), nil, &page) && page.Next != "" {
+			failed := func() {
+				vu.syncFailures++
+				vu.syncRetryAt = time.Now().Add(min(loadRigSyncRetry<<min(vu.syncFailures-1, 4), 30*time.Second))
+			}
+			if vu.syncCursor == "" {
+				var head struct {
+					Head string `json:"head"`
+				}
+				if !d.request(ctx, vu, vu.client, "sync.changes", http.MethodGet, "/api/sync/changes?limit=1&maxBytes=262144&after=0", nil, &head) || head.Head == "" {
+					failed()
+					return
+				}
+				vu.syncFailures, vu.syncCursor = 0, head.Head
+				return
+			}
+			var page struct {
+				Next           string `json:"next"`
+				HasMore        bool   `json:"hasMore"`
+				ResyncRequired bool   `json:"resyncRequired"`
+			}
+			if !d.request(ctx, vu, vu.client, "sync.changes", http.MethodGet, "/api/sync/changes?limit=100&maxBytes=262144&after="+vu.syncCursor, nil, &page) {
+				failed()
+				return
+			}
+			vu.syncFailures = 0
+			if page.ResyncRequired {
+				vu.syncCursor = ""
+			} else if page.Next != "" {
 				vu.syncCursor = page.Next
 			}
 		}},
@@ -278,8 +310,14 @@ type loadRigVU struct {
 	documents  []loadRigRef
 	random     *rand.Rand
 	syncCursor string
-	member     bool
+	// syncRetryAt and syncFailures pace sync reads after a failed one.
+	syncRetryAt  time.Time
+	syncFailures int
+	member       bool
 }
+
+// loadRigSyncRetry is the sync changes route's Retry-After.
+const loadRigSyncRetry = 2 * time.Second
 
 type loadRigOpStats struct {
 	mu        sync.Mutex

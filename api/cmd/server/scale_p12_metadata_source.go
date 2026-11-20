@@ -99,7 +99,10 @@ func (s *server) buildPulseEventSource(ctx context.Context, workspace string, so
 	var snapshot *store.PulseFeedSnapshot
 	var all *pulseRules
 	if s.store.BoundedMetadataEnabled() {
-		read, ok, err := s.store.BeginPulseRead(ctx, workspace, false)
+		// Only what the rules below read: a project event reads its complete
+		// project; an initiative event its complete initiative and the
+		// project/initiative link graph. No workspace-wide snapshot.
+		read, ok, err := s.store.BeginPulseSourceRead(ctx, workspace)
 		if err != nil {
 			return err
 		}
@@ -111,7 +114,12 @@ func (s *server) buildPulseEventSource(ctx context.Context, workspace string, so
 		if strings.HasPrefix(source.event.Type, "project") {
 			kind = "project"
 		}
-		if err := read.LoadSource(ctx, kind, source.event.AggregateID); err != nil {
+		if kind == "project" {
+			err = read.LoadSourceRoot(ctx, kind, source.event.AggregateID)
+		} else if err = read.LoadSourceLinks(ctx); err == nil {
+			err = read.LoadSource(ctx, kind, source.event.AggregateID)
+		}
+		if err != nil {
 			return err
 		}
 		if strings.HasPrefix(source.event.Type, kind+".update_") {
