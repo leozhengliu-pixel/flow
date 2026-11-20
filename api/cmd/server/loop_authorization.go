@@ -96,6 +96,11 @@ func (s *server) checkLoopTeamTarget(data *domain.Bootstrap, loop domain.Loop) e
 	if s.authDisabled || loop.TeamID == "" {
 		return nil
 	}
+	// A team outside the request's reach (a restricted key's other teams) is
+	// not one the actor can act in, whatever their membership.
+	if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == loop.TeamID }) {
+		return errLoopTeamForbidden
+	}
 	if !loopIdentityMayUseTeam(data, loop.TeamID, data.Viewer.ID, data.ViewerRole) {
 		return errLoopTeamForbidden
 	}
@@ -120,7 +125,25 @@ func (s *server) loopAccessData(r *http.Request) (domain.Bootstrap, error) {
 	if err != nil {
 		return data, store.ErrAuthForbidden
 	}
+	if allowed, restricted := requestKeyTeams(r); restricted {
+		// A team-restricted key reaches only its teams, whatever its owner's
+		// role: the teams outside it are not there, and an admin's shortcut
+		// is dropped so the key acts as a member inside them.
+		data.Teams = slices.DeleteFunc(slices.Clone(data.Teams), func(team domain.Team) bool { return !slices.Contains(allowed, team.ID) })
+		if workspaceAdminRole(data.ViewerRole) {
+			data.ViewerRole = "member"
+		}
+	}
 	return data, nil
+}
+
+// requestKeyTeams returns the teams a team-restricted API key may reach.
+func requestKeyTeams(r *http.Request) ([]string, bool) {
+	key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	if !ok || !apiKeyTeamRestrictionSelected(key) {
+		return nil, false
+	}
+	return key.TeamIDs, true
 }
 
 // loopVisibleToRequest reports whether the request's viewer may see the loop;
@@ -205,11 +228,17 @@ func (s *server) checkLoopOwnerForRun(data *domain.Bootstrap, loop domain.Loop, 
 
 // hideUnreadableLoops drops the loops of teams the bootstrap's viewer cannot
 // see, so the workspace bootstrap lists the same loops as GET /api/loops.
-func (s *server) hideUnreadableLoops(data *domain.Bootstrap) {
+func (s *server) hideUnreadableLoops(r *http.Request, data *domain.Bootstrap) {
 	if s.authDisabled || len(data.Loops) == 0 {
 		return
 	}
 	readable := s.loopReadableFilter(data)
+	if allowed, restricted := requestKeyTeams(r); restricted {
+		inner := readable
+		readable = func(loop domain.Loop) bool {
+			return inner(loop) && (loop.TeamID == "" || slices.Contains(allowed, loop.TeamID))
+		}
+	}
 	data.Loops = slices.DeleteFunc(slices.Clone(data.Loops), func(loop domain.Loop) bool { return !readable(loop) })
 }
 
@@ -302,7 +331,7 @@ func (s *server) loopMutationView(data *domain.Bootstrap, access domain.Bootstra
 		return data
 	}
 	view := *data
-	view.Viewer, view.ViewerRole, view.TeamMembers = access.Viewer, access.ViewerRole, access.TeamMembers
+	view.Viewer, view.ViewerRole, view.TeamMembers, view.Teams = access.Viewer, access.ViewerRole, access.TeamMembers, access.Teams
 	return &view
 }
 

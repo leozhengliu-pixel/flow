@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -164,6 +167,91 @@ func runLoopAuthorizationScenario(t *testing.T, bounded bool) {
 	}
 	if code := authRequestStatus(t, outsider, http.MethodPost, url("/api/loops/"+eventLoop.ID+"/runs"), map[string]any{"entityType": "issue", "entityId": publicIssue.ID}, workspace); code == http.StatusForbidden || code == http.StatusNotFound {
 		t.Fatalf("run on a visible issue = %d", code)
+	}
+
+	// A guest reads and changes no loop of the private team, and changes none at all.
+	guest, guestUser := join("Guest", "loop-guest@example.com")
+	authRequest[domain.WorkspaceMember](t, admin, http.MethodPatch, url("/api/workspaces/"+workspace+"/members/"+guestUser.ID), map[string]string{"role": "guest"}, "", http.StatusOK)
+	denied := func(what string, code int) {
+		t.Helper()
+		if code != http.StatusForbidden && code != http.StatusNotFound {
+			t.Fatalf("%s = %d, want 403 or 404", what, code)
+		}
+	}
+	denied("guest reads the private team's loop", authRequestStatus(t, guest, http.MethodGet, url("/api/loops/"+mine.ID), nil, workspace))
+	denied("guest lists the private team's loop runs", authRequestStatus(t, guest, http.MethodGet, url("/api/loops/"+mine.ID+"/runs"), nil, workspace))
+	denied("guest edits the private team's loop", authRequestStatus(t, guest, http.MethodPatch, url("/api/loops/"+mine.ID), map[string]any{"name": "Guest"}, workspace))
+	denied("guest runs the private team's loop", authRequestStatus(t, guest, http.MethodPost, url("/api/loops/"+mine.ID+"/runs"), nil, workspace))
+	denied("guest edits a workspace loop", authRequestStatus(t, guest, http.MethodPatch, url("/api/loops/"+workspaceLoop.ID), map[string]any{"name": "Guest"}, workspace))
+	denied("guest runs a workspace loop", authRequestStatus(t, guest, http.MethodPost, url("/api/loops/"+workspaceLoop.ID+"/runs"), nil, workspace))
+	denied("guest creates a loop", authRequestStatus(t, guest, http.MethodPost, url("/api/loops"), map[string]any{"name": "Guest", "instructions": "Hello."}, workspace))
+	if code := authRequestStatus(t, guest, http.MethodGet, url("/api/loops"), nil, workspace); code == http.StatusOK {
+		var listed []domain.Loop
+		listed = authRequest[[]domain.Loop](t, guest, http.MethodGet, url("/api/loops"), nil, workspace, http.StatusOK)
+		if slices.ContainsFunc(listed, func(loop domain.Loop) bool { return loop.ID == mine.ID }) {
+			t.Fatal("a guest lists the private team's loop")
+		}
+	} else {
+		denied("guest lists loops", code)
+	}
+
+	// A team-restricted key (an admin's, limited to the shared team) reaches only that team's loops.
+	secret := authRequest[struct {
+		Secret string `json:"secret"`
+	}](t, admin, http.MethodPost, url("/api/api-keys"), map[string]any{"name": "Loop key", "scopes": []string{"read", "write"}, "teamIds": []string{publicTeam.ID}}, workspace, http.StatusCreated).Secret
+	keyDo := func(method, path string, input any) (int, []byte) {
+		t.Helper()
+		var body io.Reader
+		if input != nil {
+			raw, _ := json.Marshal(input)
+			body = bytes.NewReader(raw)
+		}
+		request, _ := http.NewRequest(method, url(path), body)
+		request.Header.Set("Authorization", "Bearer "+secret)
+		request.Header.Set("X-Workspace-Key", workspace)
+		request.Header.Set("Content-Type", "application/json")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		raw, _ := io.ReadAll(response.Body)
+		return response.StatusCode, raw
+	}
+	code, raw := keyDo(http.MethodGet, "/api/loops", nil)
+	var keyed []domain.Loop
+	if code != http.StatusOK || json.Unmarshal(raw, &keyed) != nil {
+		t.Fatalf("key lists loops = %d %s", code, raw)
+	}
+	if slices.ContainsFunc(keyed, func(loop domain.Loop) bool { return loop.ID == mine.ID }) || !slices.ContainsFunc(keyed, func(loop domain.Loop) bool { return loop.ID == workspaceLoop.ID }) {
+		t.Fatal("a team-restricted key does not see exactly the workspace loops and its teams' loops")
+	}
+	if code, _ := keyDo(http.MethodGet, "/api/loops/"+mine.ID, nil); code != http.StatusNotFound {
+		t.Fatalf("key reads the private team's loop = %d", code)
+	}
+	if code, _ := keyDo(http.MethodGet, "/api/loops/"+workspaceLoop.ID, nil); code != http.StatusOK {
+		t.Fatalf("key reads a workspace loop = %d", code)
+	}
+	if code, _ := keyDo(http.MethodGet, "/api/loops/"+mine.ID+"/runs", nil); code != http.StatusNotFound {
+		t.Fatalf("key lists the private team's runs = %d", code)
+	}
+	if code, _ := keyDo(http.MethodPatch, "/api/loops/"+mine.ID, map[string]any{"name": "Key"}); code != http.StatusNotFound {
+		t.Fatalf("key edits the private team's loop = %d", code)
+	}
+	if code, _ := keyDo(http.MethodPost, "/api/loops/"+mine.ID+"/runs", nil); code != http.StatusNotFound {
+		t.Fatalf("key runs the private team's loop = %d", code)
+	}
+	if code, _ := keyDo(http.MethodPost, "/api/loops", teamLoop); code != http.StatusForbidden {
+		t.Fatalf("key creates a loop in the private team = %d", code)
+	}
+	if code, raw := keyDo(http.MethodPatch, "/api/loops/"+workspaceLoop.ID, map[string]any{"name": "Everyone (key)"}); code != http.StatusOK {
+		t.Fatalf("key renames a workspace loop = %d %s", code, raw)
+	}
+	for _, role := range []string{"app", "guest"} {
+		view := &domain.Bootstrap{ViewerRole: role, Viewer: domain.User{ID: "actor"}, WorkspaceSettings: domain.WorkspaceSettings{}, Teams: []domain.Team{{ID: "closed", Private: true}}, TeamSettings: map[string]domain.TeamSettings{"closed": {TeamID: "closed", Access: "private"}}, TeamMembers: []domain.TeamMember{{TeamID: "closed", UserID: "actor", Role: "member"}}}
+		if loopIdentityMayUseTeam(view, "closed", "actor", role) {
+			t.Fatalf("a %s actor may manage or run team loops", role)
+		}
 	}
 
 	// A member's edit of an admin-owned workspace loop bounds its run to what the member can read too.

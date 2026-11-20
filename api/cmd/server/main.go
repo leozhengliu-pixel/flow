@@ -1312,7 +1312,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	sanitizeBootstrap(&data)
 	s.applyCalendarAway(r.Context(), &data)
-	s.hideUnreadableLoops(&data)
+	s.hideUnreadableLoops(r, &data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
 	if leanBootstrapRequested(r) {
 		// Everything before the streamed body; the body is a pure encode of data.
