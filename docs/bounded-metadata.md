@@ -17,7 +17,8 @@ With the flag on, each replica:
   (`FLOW_METADATA_POLICY_BYTES`), plus a 64 MiB evictable body cache, and
   admits internal metadata work against a 256 MiB budget;
 - installs one logical source per workspace, charged 128 KiB each against a
-  64 MiB budget (`FLOW_METADATA_SOURCE_BYTES`) and spooled to temporary files
+  64 MiB budget (`FLOW_METADATA_SOURCE_BYTES`; every later generation of a
+  workspace's source shares that charge) and spooled to temporary files
   within 1 GiB (`FLOW_METADATA_SOURCE_DISK_BYTES`). Every workspace is
   resident from startup on, so these budgets grow with the number of
   workspaces (see [Tuning](#tuning));
@@ -269,7 +270,7 @@ A single-replica deployment follows steps 1 to 5 only.
 | `FLOW_RECORD_SPOOL_MAX_BYTES` | `268435456` | See [Related settings](#related-settings). |
 | `FLOW_SLOW_MUTATION_MS` | `500` | Threshold for the `slow workspace mutation` log line. `0` disables it. |
 | `FLOW_METADATA_POLICY_BYTES` | `201326592` (192 MiB) | Resident policy of all workspaces together, in bytes. One workspace's policy may take at most 192 MiB whatever the setting. |
-| `FLOW_METADATA_SOURCE_BYTES` | `67108864` (64 MiB) | Memory for installed workspace sources, in bytes: 128 KiB per workspace (its read cache and write buffer) plus 16 MiB that a start keeps free for reloads. The default fits 384 workspaces. |
+| `FLOW_METADATA_SOURCE_BYTES` | `67108864` (64 MiB) | Memory for installed workspace sources, in bytes: 128 KiB per workspace (its read cache and write buffer, shared by every generation of its source) plus 16 MiB that a start keeps free for request work and new workspaces. The default fits 384 workspaces at a start; workspaces created afterwards take from what the start left free, at least those 16 MiB. |
 | `FLOW_METADATA_SOURCE_DISK_BYTES` | `1073741824` (1 GiB) | Temporary-file space for workspace sources, in bytes, in the process's metadata spool directory. |
 
 The three budget settings take a positive whole number of bytes; anything

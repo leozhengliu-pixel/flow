@@ -70,7 +70,19 @@ func (s *SQLiteStore) readMetadataLogicalWorkspaceAdmitted(ctx context.Context, 
 		// Let normalization admit its actual base independently.
 		normalizeCtx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
 	}
-	normalized, err := s.normalizeMetadataLogicalSource(normalizeCtx, raw)
+	// A reload replaces the installed generation: the new one joins its
+	// lineage, so the workspace keeps one descriptor charge while older
+	// generations (requests' handoffs, the known COLD publication base) live.
+	var lineage *metadataLogicalSpoolGroup
+	if r := s.metadataResidency; r != nil {
+		r.mu.Lock()
+		current := r.logical[workspace]
+		r.mu.Unlock()
+		if current != nil {
+			lineage = current.spoolGroup()
+		}
+	}
+	normalized, err := s.normalizeMetadataLogicalSourceIn(normalizeCtx, raw, lineage)
 	if err != nil {
 		return domain.Bootstrap{}, copyStamp{}, 0, nil, err
 	}

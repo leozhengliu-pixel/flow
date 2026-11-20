@@ -1102,7 +1102,9 @@ func TestScaleP21SW27LogicalSourcePointForkDiskBoundMeasurement(t *testing.T) {
 				t.Fatal(err)
 			}
 			diskDelta, descriptorDelta := metadataLogicalDiskUsed.Load()-beforeForkDisk, metadataLogicalDescriptorsUsed.Load()-beforeForkDescriptors
-			if diskDelta < int64(size) || diskDelta > int64(size+256<<10) || descriptorDelta < metadataLogicalDescriptorBytes {
+			// The fork writes in its source's spool group: no descriptor
+			// charge of its own once settled.
+			if diskDelta < int64(size) || diskDelta > int64(size+256<<10) || descriptorDelta != 0 {
 				t.Fatal("point fork disk accounting no longer matches documented touched-field bound", size, diskDelta, descriptorDelta)
 			}
 			t.Logf("settings unrelated bytes=%d point fork extra disk bytes=%d descriptor bytes=%d SQL=0 (whole touched field copied)", size, diskDelta, descriptorDelta)

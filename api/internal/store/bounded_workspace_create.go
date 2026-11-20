@@ -92,3 +92,61 @@ func (s *SQLiteStore) InstalledWorkspaceForTesting(workspace string) bool {
 	defer s.metadataResidency.mu.Unlock()
 	return s.metadataResidency.logical[workspace] != nil
 }
+
+// SourceChargeForTesting is the installed logical sources' share of
+// FLOW_METADATA_SOURCE_BYTES.
+type SourceChargeForTesting struct {
+	Sources  int   // installed sources
+	Groups   int   // distinct spool groups their storages belong to
+	Storages int   // distinct storages they share
+	Files    int   // storages whose spool is a file
+	Resident int64 // in-memory bytes of their settled file-less spools
+	Charged  int64 // descriptor bytes those groups and storages hold
+	Process  int64 // descriptor bytes held in the process (every store, installed or not)
+}
+
+// InstalledSourceChargeForTesting reports what the store's installed sources
+// hold of FLOW_METADATA_SOURCE_BYTES.
+func (s *SQLiteStore) InstalledSourceChargeForTesting() SourceChargeForTesting {
+	var out SourceChargeForTesting
+	if !testing.Testing() || s.metadataResidency == nil {
+		out.Process = metadataLogicalDescriptorsUsed.Load()
+		return out
+	}
+	r := s.metadataResidency
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	storages := map[*metadataLogicalStorage]bool{}
+	groups := map[*metadataLogicalSpoolGroup]bool{}
+	for _, source := range r.logical {
+		if source == nil {
+			continue
+		}
+		out.Sources++
+		source.mu.Lock()
+		for _, storage := range source.stores {
+			if storages[storage] {
+				continue
+			}
+			storages[storage] = true
+			storage.mu.Lock()
+			out.Charged += storage.locationBytes
+			storage.mu.Unlock()
+			storage.pendingMu.Lock()
+			out.Charged += storage.writeCharge
+			out.Resident += storage.resident
+			if storage.file != nil {
+				out.Files++
+			}
+			storage.pendingMu.Unlock()
+			if storage.group != nil && !groups[storage.group] {
+				groups[storage.group] = true
+				out.Charged += metadataLogicalDescriptorBytes
+			}
+		}
+		source.mu.Unlock()
+	}
+	out.Storages, out.Groups = len(storages), len(groups)
+	out.Process = metadataLogicalDescriptorsUsed.Load()
+	return out
+}

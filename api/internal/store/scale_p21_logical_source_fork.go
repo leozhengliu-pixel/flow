@@ -37,7 +37,7 @@ func (s *metadataLogicalSource) Fork(ctx context.Context, before, next domain.Bo
 		return nil, err
 	}
 	defer s.Release()
-	b, err := newMetadataLogicalBuilder(ctx)
+	b, err := newMetadataLogicalBuilderIn(ctx, s.spoolGroup())
 	if err != nil {
 		return nil, err
 	}
@@ -73,14 +73,9 @@ func (s *metadataLogicalSource) Fork(ctx context.Context, before, next domain.Bo
 		if complete || len(writes) > 0 {
 			// Each rewritten field has its own registry. Unchanged typed frames
 			// can then be copied without remapping dynamic interface/time IDs.
-			part, err := newMetadataLogicalBuilder(ctx)
-			if err != nil {
+			if err := b.startPart(ctx); err != nil {
 				return err
 			}
-			b.source.stores = append(b.source.stores, part.storage)
-			b.storage, b.offset = part.storage, 0
-			part.source.stores = nil
-			part.source.Release()
 			b.storage.types, b.storage.times = slices.Clone(node.source.types), slices.Clone(node.source.times)
 			if err := b.inheritLocations(node.source); err != nil {
 				return err

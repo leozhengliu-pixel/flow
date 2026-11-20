@@ -23,7 +23,7 @@ func (s *metadataLogicalSource) Transform(ctx context.Context, transform func(st
 		return nil, err
 	}
 	defer s.Release()
-	result, err := newMetadataLogicalBuilder(ctx)
+	result, err := newMetadataLogicalBuilderIn(ctx, s.spoolGroup())
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (s *metadataLogicalSource) Transform(ctx context.Context, transform func(st
 			result.source.fields[index] = original
 			return nil
 		}
-		part, err := newMetadataLogicalBuilder(ctx)
+		part, err := newMetadataLogicalBuilderIn(ctx, result.storage.group)
 		if err != nil {
 			return err
 		}

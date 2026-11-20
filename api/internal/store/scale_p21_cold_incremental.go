@@ -1289,7 +1289,7 @@ func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, works
 		}
 		patched[name] = values
 	}
-	b, err := newMetadataLogicalBuilder(normalizeCtx)
+	b, err := newMetadataLogicalBuilderIn(normalizeCtx, installed.spoolGroup())
 	if err != nil {
 		return nil, err
 	}
@@ -1315,14 +1315,9 @@ func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, works
 		}
 		// Each rewritten field has its own registry (as Fork): copied frames
 		// keep the installed storage's dynamic type and time IDs.
-		part, err := newMetadataLogicalBuilder(normalizeCtx)
-		if err != nil {
+		if err := b.startPart(normalizeCtx); err != nil {
 			return err
 		}
-		b.source.stores = append(b.source.stores, part.storage)
-		b.storage, b.offset = part.storage, 0
-		part.source.stores = nil
-		part.source.Release()
 		b.storage.types, b.storage.times = slices.Clone(node.source.types), slices.Clone(node.source.times)
 		if err := b.inheritLocations(node.source); err != nil {
 			return err

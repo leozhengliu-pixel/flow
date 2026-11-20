@@ -66,7 +66,7 @@ func (s *SQLiteStore) hydrateMetadataLogicalSource(ctx context.Context, tx *sqlT
 			return nil, err
 		}
 	}
-	builder, err := newMetadataLogicalBuilder(ctx)
+	builder, err := newMetadataLogicalBuilderIn(ctx, source.spoolGroup())
 	if err != nil {
 		return nil, err
 	}
@@ -82,15 +82,7 @@ func (s *SQLiteStore) hydrateMetadataLogicalSource(ctx context.Context, tx *sqlT
 		return nil, err
 	}
 	startField := func() error {
-		part, err := newMetadataLogicalBuilder(ctx)
-		if err != nil {
-			return err
-		}
-		builder.source.stores = append(builder.source.stores, part.storage)
-		builder.storage, builder.offset = part.storage, 0
-		part.source.stores = nil
-		part.source.Release()
-		return nil
+		return builder.startPart(ctx)
 	}
 	hydrateField := func(name, kind string) error {
 		node := fields[name]
