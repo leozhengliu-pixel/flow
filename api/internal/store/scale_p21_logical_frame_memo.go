@@ -111,6 +111,55 @@ func (s *metadataLogicalStorage) dropFrameMemo(offset, end int64) {
 			delete(s.indexes, key)
 		}
 	}
+	for key, check := range s.clones {
+		if key < end && offset < key+check.size {
+			delete(s.clones, key)
+		}
+	}
+	for key, index := range s.userIndexes {
+		if key < end && offset < key+index.size {
+			delete(s.userIndexes, key)
+		}
+	}
+}
+
+// metadataLogicalCloneCheck remembers whether the frame of typ at an offset
+// (size bytes) needs cloneMetadataLogicalSnapshot's rewrite: a dropped
+// (json:"-") field holds a value somewhere in it. A snapshot clone otherwise
+// walks every record of every such collection on each HOT write, although
+// installed frames do not change.
+type metadataLogicalCloneCheck struct {
+	size    int64
+	typ     reflect.Type
+	changed bool
+}
+
+// metadataLogicalCloneMemoBytes: smaller frames are walked again (a memo
+// entry would cost more than the walk).
+const metadataLogicalCloneMemoBytes = 4 << 10
+
+func (s *metadataLogicalStorage) cloneCheck(node metadataLogicalNode) (changed, found bool) {
+	s.memoMu.Lock()
+	defer s.memoMu.Unlock()
+	check, found := s.clones[node.offset]
+	if !found || check.size != node.size || check.typ != node.typ {
+		return false, false
+	}
+	return check.changed, true
+}
+
+func (s *metadataLogicalStorage) storeCloneCheck(node metadataLogicalNode, changed bool) {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	s.memoMu.Lock()
+	defer s.memoMu.Unlock()
+	if s.closed || node.offset+node.size > s.logicalSizeLocked() {
+		return
+	}
+	if s.clones == nil {
+		s.clones = map[int64]metadataLogicalCloneCheck{}
+	}
+	s.clones[node.offset] = metadataLogicalCloneCheck{size: node.size, typ: node.typ, changed: changed}
 }
 
 // A large collection is scanned header by header: one read per record, and a

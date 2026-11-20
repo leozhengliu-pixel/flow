@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"flow/api/internal/domain"
 )
@@ -714,6 +715,7 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 			source.Release()
 		}
 	}()
+	states := map[string]*coldPublishState{}
 	s.mu.RLock()
 	lastWorkspace, viewer := s.lastWorkspaceKey, s.viewer
 	initial := len(s.workspaces) == 0
@@ -805,6 +807,9 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 					return fmt.Errorf("recover logical workspace %q: %w", key, err)
 				}
 				sources[key] = source
+				if state := s.coldPublishReloadState(ctx, tx, key, source); state != nil {
+					states[key] = state
+				}
 			}
 			if cost > s.metadataResidency.policyLimit-total {
 				return metadataPolicyBudgetError(s.metadataResidency.policyLimit, total+cost, loaded+1, workspaceCount)
@@ -841,8 +846,12 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 	s.metadataResidency.stamps, s.metadataResidency.applied = stamps, heads
 	oldSources := s.metadataResidency.logical
 	s.metadataResidency.logical = sources
+	installed := sources
 	sources = nil
 	s.metadataResidency.mu.Unlock()
+	for key, state := range states {
+		rememberColdPublication(coldLabelCacheKey{s.metadataResidency, key}, installed[key], state)
+	}
 	for _, source := range oldSources {
 		source.Release()
 	}
@@ -884,6 +893,10 @@ func (s *SQLiteStore) reloadResidentWorkspaceLogical(ctx context.Context, worksp
 	// The installed loader meters normalization separately. Own the actual
 	// retained policy and directory before allocating their native values.
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
+	if hasLogical && s.reloadResidentWorkspaceFromKnown(ctx, workspace) {
+		return nil
+	}
+	started := time.Now()
 	ctx, releaseParser, err := s.metadataResidency.work.acquire(ctx, 2<<20)
 	if err != nil {
 		return err
@@ -922,13 +935,22 @@ func (s *SQLiteStore) reloadResidentWorkspaceLogical(ctx context.Context, worksp
 	if err != nil {
 		return err
 	}
+	// The inputs the reloaded generation is exact at: the next reload or
+	// COLD publication derives from it (scale_p21_cold_incremental.go).
+	state := s.coldPublishReloadState(ctx, tx, workspace, source)
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	if err := s.installResidentPolicy(workspace, data, stamp, head, cost, source); err != nil {
 		return err
 	}
+	installed := source
 	source = nil
+	if state != nil {
+		rememberColdPublication(coldLabelCacheKey{s.metadataResidency, workspace}, installed, state)
+	}
+	residentReloadFulls.Add(1)
+	residentReloadFullNanos.Add(int64(time.Since(started)))
 	return nil
 }
 

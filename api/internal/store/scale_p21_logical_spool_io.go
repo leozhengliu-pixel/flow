@@ -87,6 +87,7 @@ type metadataLogicalBlock struct {
 var (
 	metadataLogicalSpoolCounting  atomic.Bool
 	metadataLogicalSpoolReadBytes atomic.Int64
+	metadataLogicalSpoolReadCalls atomic.Int64
 )
 
 // Tests pause a patch or a block read at these points to force the
@@ -269,6 +270,7 @@ func (s *metadataLogicalStorage) patchFileLocked(data []byte, offset int64) erro
 func (s *metadataLogicalStorage) ReadAt(p []byte, offset int64) (int, error) {
 	if metadataLogicalSpoolCounting.Load() {
 		metadataLogicalSpoolReadBytes.Add(int64(len(p)))
+		metadataLogicalSpoolReadCalls.Add(1)
 	}
 	if offset < 0 {
 		return 0, errMetadataLogicalNegativeOffset

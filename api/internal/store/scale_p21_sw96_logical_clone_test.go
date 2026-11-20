@@ -421,3 +421,54 @@ func TestScaleP21SW96LogicalCloneWarmReload(t *testing.T) {
 		}
 	}
 }
+
+// A snapshot clone remembers, per installed frame, whether it needed the
+// rewrite: a second clone of the same generation reads none of its large
+// collections again and decodes the same, and a write over a frame drops what
+// was remembered of it.
+func TestScaleP21LogicalCloneCheckMemo(t *testing.T) {
+	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "memo", URLKey: "memo", Name: "Memo"}}
+	for i := range 400 {
+		lead := domain.User{ID: "user-" + strings.Repeat("u", i%5), Name: "Lead"}
+		data.Projects = append(data.Projects, domain.Project{ID: "project-" + strings.Repeat("p", i%7) + string(rune('a'+i%26)), Name: strings.Repeat("n", 100), Lead: &lead})
+	}
+	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{workspaceID: "memo", revision: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Release()
+	metadataLogicalSpoolCounting.Store(true)
+	defer metadataLogicalSpoolCounting.Store(false)
+	clone := func() (domain.Bootstrap, int64) {
+		t.Helper()
+		before := metadataLogicalSpoolReadBytes.Load()
+		cloned, err := cloneMetadataLogicalSnapshot(t.Context(), source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		read := metadataLogicalSpoolReadBytes.Load() - before
+		defer cloned.Release()
+		got, err := cloned.Select(t.Context(), MetadataRecordScope{Fields: []string{"projects"}}, 1<<30)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got, read
+	}
+	first, firstRead := clone()
+	second, secondRead := clone()
+	if !reflect.DeepEqual(first.Projects, data.Projects) || !reflect.DeepEqual(second.Projects, data.Projects) {
+		t.Fatal("a remembered clone check changed the clone")
+	}
+	index, _, _ := metadataLogicalField("projects")
+	node := source.fields[index]
+	if secondRead >= firstRead || node.size < metadataLogicalCloneMemoBytes {
+		t.Fatalf("second clone read %d spool bytes, first %d (projects %d bytes)", secondRead, firstRead, node.size)
+	}
+	if _, found := node.source.cloneCheck(node); !found {
+		t.Fatal("the projects frame's clone check was not remembered")
+	}
+	node.source.dropFrameMemo(node.offset+node.size-1, node.offset+node.size)
+	if _, found := node.source.cloneCheck(node); found {
+		t.Fatal("a write over the frame kept its clone check")
+	}
+}

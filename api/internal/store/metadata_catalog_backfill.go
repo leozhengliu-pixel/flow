@@ -290,7 +290,16 @@ func (s *SQLiteStore) nextMetadataCatalogCollection(ctx context.Context, workspa
 	nextWorkspace, nextKind := "", ""
 	for _, table := range []string{"workspace_metadata_records", "metadata_catalog_collections"} {
 		var candidateWorkspace, candidateKind string
-		err := s.db.QueryRowContext(ctx, `SELECT workspace_key,field FROM `+table+` WHERE (workspace_key,field)>(?,?) ORDER BY workspace_key,field LIMIT 1`, workspace, kind).Scan(&candidateWorkspace, &candidateKind)
+		// Both tables are compared in byte order, as the candidates are below:
+		// on MySQL workspace_metadata_records keeps its keys in a
+		// case-insensitive collation, whose order ("customers" before
+		// "customerStatuses") made the walk alternate between two
+		// collections forever.
+		key, field := "workspace_key", "field"
+		if s.dialect == "mysql" && table == "workspace_metadata_records" {
+			key, field = "CAST(workspace_key AS BINARY)", "CAST(field AS BINARY)"
+		}
+		err := s.db.QueryRowContext(ctx, `SELECT workspace_key,field FROM `+table+` WHERE (`+key+`,`+field+`)>(?,?) ORDER BY `+key+`,`+field+` LIMIT 1`, workspace, kind).Scan(&candidateWorkspace, &candidateKind)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue
 		}

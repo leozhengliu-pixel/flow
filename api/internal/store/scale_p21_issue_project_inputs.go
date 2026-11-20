@@ -45,9 +45,7 @@ func (s *SQLiteStore) loadIssueProjectInputs(ctx context.Context, workspace stri
 			return nil, err
 		}
 	}
-	if err := read.selectSlice(ctx, "projects", func(record metadataLogicalNode) (bool, error) {
-		return issueHotMatches(ctx, record, "ID", projects)
-	}); err != nil {
+	if err := read.selectSliceByID(ctx, "projects", projects); err != nil {
 		return nil, err
 	}
 	if read.move != nil {

@@ -78,6 +78,15 @@ func metadataLogicalSnapshotCloneNode(ctx context.Context, node metadataLogicalN
 	if node.blocked {
 		return nil, false, ErrBoundedMetadataCoverage
 	}
+	memo := node.source != nil && node.size >= metadataLogicalCloneMemoBytes
+	if memo {
+		if changed, found := node.source.cloneCheck(node); found {
+			if changed {
+				return metadataLogicalSnapshotCloneNodeView{base: node}, true, nil
+			}
+			return original, false, nil
+		}
+	}
 	changed := false
 	visit := func(child metadataLogicalNode) error {
 		_, childChanged, err := metadataLogicalSnapshotCloneNode(ctx, child)
@@ -119,6 +128,9 @@ func metadataLogicalSnapshotCloneNode(ctx context.Context, node metadataLogicalN
 	}
 	if err != nil && !errors.Is(err, ErrMetadataIterationDone) {
 		return nil, false, err
+	}
+	if memo {
+		node.source.storeCloneCheck(node, changed)
 	}
 	if changed {
 		return metadataLogicalSnapshotCloneNodeView{base: node}, true, nil

@@ -168,8 +168,15 @@ func (s *SQLiteStore) writeMetadataSearchPage(ctx context.Context, workspace, fi
 		}
 		defer release()
 		mine, _ := bindList("m.record_key", keys)
-		updateArgs := append(append(append([]any{}, contentArgs...), args...), contentArgs...)
-		if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_documents idx JOIN workspace_metadata_records m ON m.workspace_key=idx.workspace_key AND m.field=idx.field AND m.record_key=idx.record_key SET idx.content=`+content+` WHERE m.workspace_key=? AND m.field=? AND `+mine+` AND idx.content<>`+content, updateArgs...); err != nil {
+		// The documents' keys are text and the records' bytes, so the join
+		// on record_key uses no index: without the documents' own page
+		// bounds, MySQL evaluated the content comparison (every JSON value
+		// of the record) for each record of the page against each document
+		// of the field (minutes for a page of projects). The bounds are
+		// implied by the join.
+		theirs, _ := bindList("idx.record_key", keys)
+		updateArgs := append(append(append(append([]any{}, contentArgs...), args...), args...), contentArgs...)
+		if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_documents idx JOIN workspace_metadata_records m ON m.workspace_key=idx.workspace_key AND m.field=idx.field AND m.record_key=idx.record_key SET idx.content=`+content+` WHERE m.workspace_key=? AND m.field=? AND `+mine+` AND idx.workspace_key=? AND idx.field=? AND `+theirs+` AND idx.content<>`+content, updateArgs...); err != nil {
 			return err
 		}
 		// The upsert stays for a document written meanwhile; without a
@@ -256,7 +263,7 @@ func (s *SQLiteStore) mysqlMetadataSearchPageContent(ctx context.Context, pageAr
 		if item != nil {
 			text = metadataSearchPart(item)
 		}
-		cases[part] = append(cases[part], "WHEN "+texts[part]+"=CAST(? AS BINARY) THEN ?")
+		cases[part] = append(cases[part], "WHEN CAST(? AS BINARY) THEN ?")
 		caseArgs[part] = append(caseArgs[part], raw, text)
 	}
 	if err := rows.Err(); err != nil {
@@ -271,7 +278,10 @@ func (s *SQLiteStore) mysqlMetadataSearchPageContent(ctx context.Context, pageAr
 			parts[index] = fallback
 			continue
 		}
-		parts[index] = "CASE " + strings.Join(cases[index], " ") + " ELSE " + fallback + " END"
+		// A simple CASE extracts the value once per record; the searched form
+		// (WHEN <value>=? ...) extracted it again for every WHEN, a page
+		// parsing each record's JSON once per record of the page.
+		parts[index] = "CASE " + texts[index] + " " + strings.Join(cases[index], " ") + " ELSE " + fallback + " END"
 		contentArgs = append(contentArgs, caseArgs[index]...)
 	}
 	return s.searchCapExpression("CONCAT_WS(' '," + strings.Join(parts, ",") + ")"), contentArgs, release, nil
