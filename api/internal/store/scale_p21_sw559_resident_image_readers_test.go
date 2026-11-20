@@ -854,7 +854,7 @@ var scaleP21SW559Reviewed = map[string]struct{ fields, reason string }{
 		"NextIssueNumber is json:\"-\": the snapshot's wire output never carries it; the projection reads the installed logical source."},
 	"store/SQLiteStore.projectDirectoryInstalledSource": {"Projects",
 		"Projects == nil detects a policy-only recovery only together with a missing logical source (the documented SQL fallback); otherwise the installed source is read."},
-	"store/SQLiteStore.recordMetadataEvent": {"Cycles ImportJobs Issues Labels MigrationJobs Projects States TeamPinnedResources TeamResourceSections Users whole",
+	"store/SQLiteStore.recordMetadataEvent": {"Cycles ImportJobs Issues Labels MigrationJobs Projects States TeamPinnedResources TeamResourceSections Users WorkflowDefinitions WorkflowRuns whole",
 		"Its only caller (team_member.cleaned_up) names a team, which the resident team directory resolves; the other collections are the generic entity fallback."},
 	"store/SQLiteStore.resourceReadCompatibility": {"Initiatives Projects",
 		"The skeleton never matches the cached-copy fast path, so the record is normalized from SQL as one written after the copy is (bounded readers pass their owned read first)."},
