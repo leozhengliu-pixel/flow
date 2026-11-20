@@ -318,6 +318,10 @@ func metadataAggregatePrefixField(id string) (string, bool) {
 		{"team_resource_", "teamPinnedResources"},
 		{"team_", "teams"}, {"state_", "states"}, {"usr_", "users"},
 		{"label_", "labels"}, {"issue_", "issues"}, {"project_", "projects"}, {"cycle_", "cycles"},
+		// A run's ID starts with its definition's prefix, so the run entry
+		// comes first. (Without these a workflow's lookup walked every
+		// record of every collection, in the before and the after image.)
+		{"workflow_run_", "workflowRuns"}, {"workflow_", "workflowDefinitions"},
 	} {
 		if strings.HasPrefix(id, entry.prefix) {
 			return entry.field, entry.prefix == "team_resource_section_" || entry.prefix == "team_resource_"

@@ -77,6 +77,7 @@ var loadRigRequests = map[string][2]string{
 	"loop.settings":         {"cold-read", "GET /api/workspace/loop-settings"},
 	"loop.list":             {"cold-read", "GET /api/loops"},
 	"workflow.runs":         {"cold-read", "GET /api/workflow-runs"},
+	"workflow.run":          {"workflow-run", "POST /api/workflows/{id}/run"},
 	"project.update":        {"cold-write", "PATCH /api/projects/{id}"},
 	"view.create":           {"cold-write", "POST /api/views"},
 	"view.delete":           {"cold-write", "DELETE /api/views/{id}"},
@@ -184,6 +185,11 @@ func loadRigOps() []loadRigOp {
 		}},
 		{name: "workflow.runs", weight: 0.5, admin: true, run: func(ctx context.Context, d *loadRigDriver, vu *loadRigVU) {
 			d.request(ctx, vu, d.admin, "workflow.runs", http.MethodGet, "/api/workflow-runs", nil, nil)
+		}},
+		{name: "workflow.run", weight: 0, write: true, admin: true, run: func(ctx context.Context, d *loadRigDriver, vu *loadRigVU) {
+			if workflows := d.fixture.Extra["workflows"]; len(workflows) != 0 {
+				d.request(ctx, vu, d.admin, "workflow.run", http.MethodPost, "/api/workflows/"+workflows[vu.random.IntN(len(workflows))]+"/run", map[string]any{}, nil)
+			}
 		}},
 		{name: "project.update", weight: 1, write: true, run: func(ctx context.Context, d *loadRigDriver, vu *loadRigVU) {
 			d.request(ctx, vu, vu.client, "project.update", http.MethodPatch, "/api/projects/"+loadRigPickRef(vu, vu.projects), map[string]any{"summary": fmt.Sprintf("Load rig summary %d", vu.random.IntN(1e6))}, nil)
@@ -1110,7 +1116,7 @@ func loadRigLockHolds(c map[string]int64) []map[string]any {
 	return holds
 }
 
-var loadRigClassOrder = []string{"hot-read", "hot-write", "search", "sync", "page-load", "api-key", "cold-read", "cold-write", "agent"}
+var loadRigClassOrder = []string{"hot-read", "hot-write", "search", "sync", "page-load", "api-key", "cold-read", "cold-write", "workflow-run", "agent"}
 
 func loadRigMarkdown(report map[string]any) string {
 	var b strings.Builder

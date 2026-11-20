@@ -2074,6 +2074,18 @@ func aggregateEntityByID(data domain.Bootstrap, id string) (any, bool) {
 				return data.Cycles[index], true
 			}
 		}
+	case strings.HasPrefix(id, "workflow_run_"):
+		for index := range data.WorkflowRuns {
+			if data.WorkflowRuns[index].ID == id {
+				return data.WorkflowRuns[index], true
+			}
+		}
+	case strings.HasPrefix(id, "workflow_"):
+		for index := range data.WorkflowDefinitions {
+			if data.WorkflowDefinitions[index].ID == id {
+				return data.WorkflowDefinitions[index], true
+			}
+		}
 	}
 	return nil, false
 }
