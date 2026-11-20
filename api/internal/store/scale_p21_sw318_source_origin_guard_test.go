@@ -22,7 +22,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
 		"scale_p21_workflow_run_write.go":             "82b916096b9c5e7493da777bc8741a7b59d7e7fd94e8d2f21f217f5966519d71",
 		"issue_records.go":                            "b07dd81e23dc23367d1165a84a0e878062fe3999de21db2d498f236b7239e4de",
-		"issue_query.go":                              "16289207dd74d88be3308084b7483ea38f575f8549bf396bbfbb83f599220c45",
+		"issue_query.go":                              "a249e44eef6971cd8f0c2db1fc3f62a009a60f4e1f33bbd0c91caac0de4a2378",
 		"auth.go":                                     "d54f4f27ecc772ebd8a444efc6bc9fc8cc5c35a3c007c14ae5ffb13c0125c8b8",
 		"team_default_favorites.go":                   "8ba62b09173955d3f412bba9820ba6292e3ee06fec852571c691e5a62e49e657",
 		"scale_p15_snapshot_buffers.go":               "850c692283182c9cfbde136b622dd27e068dc329a764939faeb0acadb15ee1b8",
