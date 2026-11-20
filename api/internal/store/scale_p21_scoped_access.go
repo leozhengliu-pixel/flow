@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -234,22 +235,29 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	if _, content := mutationScopeFromContext(ctx); content || UsesIssueRecordMutations(ctx) {
 		return fmt.Errorf("%w: scoped metadata callback declares issue/content side effects", ErrMetadataRecordQuery)
 	}
-	policyWrite := slices.ContainsFunc(append(metadataRecordFields(scope), metadataAppendKinds(ctx)...), func(field string) bool {
+	policyFields := slices.ContainsFunc(append(metadataRecordFields(scope), metadataAppendKinds(ctx)...), func(field string) bool {
 		mode := metadataResidencyFields()[field]
 		return mode == "policy" || mode == "core"
 	})
-	policyWrite = policyWrite || hasActor && (!legacyFieldScoped || slices.Contains(fields, "viewer"))
+	policyWrite := policyFields || hasActor && (!legacyFieldScoped || slices.Contains(fields, "viewer"))
+	// A selection write (WithScopedSelectionWrite) reads and writes only
+	// its declared records; see selectionRefreshed below.
+	selection := scopedSelectionWrite(ctx) && profileFactory == nil && !legacyFieldScoped && metadataOnly && metadataScopeResolver(ctx) == nil
 	reservation := 8 << 20
 	if metadataScopeResolver(ctx) != nil {
 		reservation += 8 << 20
 	}
-	if policyWrite {
+	if policyWrite && selection && !policyFields {
+		// Its policy changes only through the viewer: the policy image is
+		// read and derived once each at its installed size.
+		reservation += s.selectionPolicyWork(workspace)
+	} else if policyWrite {
 		reservation += metadataPolicyBytes
 	}
 	if !metadataOnly {
 		reservation = max(reservation, metadataLogicalExternalWork)
 	}
-	if s.coordinator != nil {
+	if s.coordinator != nil && !selection {
 		reservation = max(reservation, metadataPolicyBytes+2<<20)
 	}
 	if profileFactory != nil {
@@ -296,7 +304,14 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
 		if s.coordinator != nil {
-			if err := s.reloadResidentWorkspace(ctx, workspace); err != nil {
+			reloadCtx := ctx
+			if selection {
+				// A selection write does not pre-admit a whole policy image:
+				// the reload admits its own work, as the scoped image
+				// writers' reloads do.
+				reloadCtx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
+			}
+			if err := s.reloadResidentWorkspace(reloadCtx, workspace); err != nil {
 				return err
 			}
 		}
@@ -436,6 +451,15 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			}
 			callbackSource := eventSource
 			refreshComplete := !legacyFieldScoped || slices.Contains(fields, "users")
+			selectionRefreshed := false
+			if selection && refreshComplete && scopedSelectionDirectoryKept(before, actor, hasActor && refreshActor) {
+				// The write leaves the users directory as installed, and the
+				// installed records' display references were refreshed against
+				// it when they were written or loaded: the workspace-wide
+				// refresh would change no record outside the selection, whose
+				// own references refreshDisplayReferences(&next) refreshes.
+				refreshComplete, selectionRefreshed = false, true
+			}
 			if refreshComplete {
 				callbackSource, err = eventSource.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
 					base := metadataAggregateNode(metadataAggregateStoredNode{node})
@@ -504,7 +528,7 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				}
 			}
 			validationBefore := before
-			if metadataScopeResolver(ctx) != nil || refreshComplete {
+			if metadataScopeResolver(ctx) != nil || refreshComplete || selectionRefreshed {
 				validationBefore = cloneBootstrap(next)
 				validationBefore.ViewerRole, validationBefore.ViewerTeamIDs = originalRole, nil
 			}
@@ -996,4 +1020,58 @@ func scanMetadataHeaders(ctx context.Context, tx *sqlTx, workspace, kind string,
 		}
 		last, started, ordinal = page[len(page)-1].id, true, page[len(page)-1].order
 	}
+}
+
+type scopedSelectionWriteKey struct{}
+
+// WithScopedSelectionWrite marks a MutateWorkspaceScoped write whose callback
+// reads and writes only its declared selection. When the write leaves the
+// users directory as installed, the scoped writer refreshes the display
+// references of the selection only (the installed records outside it are
+// current with that directory), and a write whose scope names no policy or
+// core field admits policy work at the installed policy's size.
+func WithScopedSelectionWrite(ctx context.Context) context.Context {
+	return context.WithValue(ctx, scopedSelectionWriteKey{}, true)
+}
+
+func scopedSelectionWrite(ctx context.Context) bool {
+	selected, _ := ctx.Value(scopedSelectionWriteKey{}).(bool)
+	return selected
+}
+
+// scopedSelectionDirectoryKept reports whether the callback's actor refresh
+// (refreshActor) leaves the selected users directory as installed: the
+// actor's entry is installed and encodes identically.
+func scopedSelectionDirectoryKept(before domain.Bootstrap, actor domain.User, refreshActor bool) bool {
+	if !refreshActor {
+		return true
+	}
+	index := slices.IndexFunc(before.Users, func(user domain.User) bool { return user.ID == actor.ID })
+	if index < 0 {
+		return false
+	}
+	installed, err := json.Marshal(before.Users[index])
+	if err != nil {
+		return false
+	}
+	current, err := json.Marshal(actor)
+	return err == nil && bytes.Equal(installed, current)
+}
+
+// selectionPolicyWork bounds the policy work of a write that changes the
+// policy only through the viewer: the resident policy read and the derived
+// policy, each at the installed policy's size, with room for the viewer.
+func (s *SQLiteStore) selectionPolicyWork(workspace string) int {
+	if workspace == "" {
+		s.mu.RLock()
+		workspace = s.lastWorkspaceKey
+		s.mu.RUnlock()
+	}
+	s.metadataResidency.mu.Lock()
+	cost, found := s.metadataResidency.policy[workspace]
+	s.metadataResidency.mu.Unlock()
+	if !found || cost <= 0 {
+		return metadataPolicyBytes
+	}
+	return min(metadataPolicyBytes, 2*cost+4<<20)
 }

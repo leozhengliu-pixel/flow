@@ -14,7 +14,6 @@ import (
 
 	"flow/api/internal/coordination"
 	"flow/api/internal/publicapi"
-	"flow/api/internal/store"
 )
 
 // Public API error categories. Every JSON error response under /api/ carries
@@ -110,14 +109,9 @@ func publicErrorMessage(ctx context.Context, err error) string {
 
 // writeInternalError logs err with the request id and writes the generic 500.
 func writeInternalError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, store.ErrColdMetadataBusy) {
-		// The COLD slot's queue was full or its wait ran out: retryable.
-		(&metadataReadGate{}).busy(w, store.ColdMetadataBusyRetryAfter)
-		return
-	}
-	if errors.Is(err, coordination.ErrWorkspaceLockBusy) {
-		// Another replica holds the distributed workspace lock: retryable.
-		(&metadataReadGate{}).busy(w, workspaceLockBusyRetryAfter)
+	if writeStoreBusy(w, err) {
+		// The COLD slot, another replica's workspace lock or the metadata
+		// work budget was busy: retryable.
 		return
 	}
 	requestID := requestIDFrom(r.Context())

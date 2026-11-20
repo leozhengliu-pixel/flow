@@ -25,9 +25,16 @@ func (s *SQLiteStore) tryAdmitAdditionalMetadataWork(ctx context.Context, bytes 
 		return ctx, nil, ErrMetadataWorkBudget
 	}
 	if bytes <= 0 || bytes > budget.limit-budget.used {
+		if bytes > 0 && metadataWorkDemandFits(ctx, bytes, budget.limit) {
+			// The attempt would fit the budget: other work holds the room
+			// this admission needs.
+			noteMetadataWorkDemand(ctx, 0, bytes)
+			return ctx, nil, errMetadataWorkContended
+		}
 		return ctx, nil, ErrMetadataWorkBudget
 	}
 	lease := &metadataWorkLease{budget: budget, bytes: bytes, live: true}
+	noteMetadataWorkDemand(ctx, bytes, 0)
 	budget.used += bytes
 	budget.peak = max(budget.peak, budget.used)
 	var once sync.Once

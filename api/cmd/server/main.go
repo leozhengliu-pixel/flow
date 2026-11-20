@@ -3529,6 +3529,16 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Project
+	if s.store.BoundedMetadataEnabled() {
+		if scope, hot := boundedProjectEditScope(id, input); hot {
+			// A metadata-only edit of the project record: the scoped
+			// metadata writer selects the callback's declared inputs
+			// (project_edit_scope.go) and never takes the COLD slot.
+			err := s.store.MutateWorkspaceScoped(store.WithScopedSelectionWrite(r.Context()), workspaceKey(r), "project.updated", id, input, scope, projectEditCallback(id, input, &updated))
+			respondMutation(w, err, http.StatusOK, updated)
+			return
+		}
+	}
 	ctx := r.Context()
 	if input.UpdateSchedule != nil || input.StartDate != nil {
 		// Turning update reminders off archives the project's pending
@@ -3538,28 +3548,7 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 		ctx = store.WithMutationScope(ctx, store.MutationScope{Resources: []string{id}})
 	}
 	ctx = projectRecordScope(ctx, "project", "edit", id, input, &updated, &input)
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.updated", id, input, func(data *domain.Bootstrap) error {
-		project, err := fullProjectByID(data, id)
-		if err != nil {
-			return err
-		}
-		before, relationsBefore := *project, projectRelationsOf(data, id)
-		if input.Description != nil && *input.Description != project.Description {
-			project.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: idgen.New("project_description_revision_"), ProjectID: id, Description: project.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, project.DescriptionRevisions...)
-		}
-		previous := projectTrackedProperties(*project)
-		if err := applyProjectUpdate(data, project, input); err != nil {
-			return err
-		}
-		if unchangedEdit(before, *project) && unchangedEdit(relationsBefore, projectRelationsOf(data, id)) {
-			updated = before
-			return store.ErrNoMutation
-		}
-		project.UpdatedAt = time.Now().UTC()
-		appendProjectPropertyAudit(data, previous, *project)
-		updated = *project
-		return nil
-	})
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.updated", id, input, projectEditCallback(id, input, &updated))
 	if err == nil && input.Archived != nil && *input.Archived {
 		s.pruneProjectRecordSuggestions(r.Context(), workspaceKey(r), id)
 	}
@@ -7430,12 +7419,8 @@ func optionalQueryBool(w http.ResponseWriter, r *http.Request, key string) (*boo
 	return &parsed, true
 }
 func respondMutation(w http.ResponseWriter, err error, success int, value any) {
-	if errors.Is(err, store.ErrColdMetadataBusy) {
-		(&metadataReadGate{}).busy(w, store.ColdMetadataBusyRetryAfter)
-		return
-	}
-	if errors.Is(err, coordination.ErrWorkspaceLockBusy) {
-		(&metadataReadGate{}).busy(w, workspaceLockBusyRetryAfter)
+	if writeStoreBusy(w, err) {
+		// COLD slot, workspace lock or metadata work budget: retryable.
 		return
 	}
 	if errors.Is(err, store.ErrAuthForbidden) {

@@ -443,7 +443,7 @@ func (s *server) applyAgentMessageChangesLocked(w http.ResponseWriter, r *http.R
 	// Another server may have just undone or restored these changes: read the
 	// chat as stored, not as this server's copy has it.
 	if err := s.store.RefreshMetadataRecord(r.Context(), workspaceKey(r), "agentSessions", sessionID); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	data := s.workspaceData(r)
