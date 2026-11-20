@@ -82,6 +82,7 @@ type logicalJSONStream struct {
 	stage               *sw26MigrationStage
 	mapID               int64
 	buffer              [32 << 10]byte
+	runes               *bufio.Reader
 	replace             func(metadataLogicalNode) (metadataLogicalNode, error)
 	rewrite             MetadataJSONRewriter
 	classifyCodecErrors bool
@@ -120,6 +121,10 @@ func (s *logicalJSONStream) write(value webhookJSONValue, depth int) error {
 	if err != nil {
 		return err
 	}
+	// Like a decode, the encoding reads a node as many small frame fields:
+	// one read of a node of at most a window serves it and every node nested
+	// in it (scale_p21_logical_read_window.go).
+	value.node = value.node.windowed()
 	node := value.node
 	if node.typ == nil {
 		return s.text("null")
@@ -327,9 +332,26 @@ func (s *logicalJSONStream) object(node metadataLogicalNode, depth int, tool boo
 	if err := s.text("{"); err != nil {
 		return err
 	}
+	// One pass over the struct's frame reads its field frames; each planned
+	// field starts from its own instead of rescanning the frames before it.
+	root := webhookJSONValue{node: node}
+	if node.typ.Kind() == reflect.Struct && len(plan) > 0 {
+		root.fields = make([]metadataLogicalNode, node.typ.NumField())
+		index := 0
+		if err := node.Children(s.ctx, func(_ reflect.Value, child metadataLogicalNode) error {
+			if index >= len(root.fields) {
+				return ErrMetadataRecordQuery
+			}
+			root.fields[index] = child
+			index++
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
 	first := true
 	for _, field := range plan {
-		child, err := s.view.field(s.ctx, webhookJSONValue{node: node}, field.index)
+		child, err := s.view.field(s.ctx, root, field.index)
 		if err != nil {
 			return err
 		}
@@ -877,7 +899,14 @@ func (s *logicalJSONStream) stringContentBytes(value []byte) error {
 // Adapt encodeHydratedStringContent to borrowed frame bytes. ReadRune keeps
 // UTF-8 boundaries across input chunks and matches encoding/json replacements.
 func (s *logicalJSONStream) stringContent(input io.Reader) error {
-	reader := bufio.NewReaderSize(input, 4096)
+	// One reader serves every string of the stream (strings do not nest).
+	if s.runes == nil {
+		s.runes = bufio.NewReaderSize(input, 4096)
+	} else {
+		s.runes.Reset(input)
+	}
+	reader := s.runes
+	defer reader.Reset(nil)
 	for {
 		if err := s.ctx.Err(); err != nil {
 			return err

@@ -272,7 +272,10 @@ func TestScaleP21SW146BootstrapUpdateMapLargeBodies(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(projection.Close)
-		output, replacements, err := projection.bind(ctx, cloneBootstrap(projection.Data))
+		// bind drops the projection's own headers (its caller's projection
+		// of them is what it charges and captures).
+		projected := cloneBootstrap(projection.Data)
+		output, replacements, err := projection.bind(ctx, projected)
 		if err != nil || len(replacements) != 8 {
 			t.Fatal("large body map bind changed", len(replacements), err)
 		}
@@ -289,7 +292,7 @@ func TestScaleP21SW146BootstrapUpdateMapLargeBodies(t *testing.T) {
 		if queries != 0 || view.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("map projection read SQL/full metadata", queries)
 		}
-		if !reflect.DeepEqual(projection.Data.ProjectUpdates["project"][0].Comments[0].User, comment.User) {
+		if !reflect.DeepEqual(projected.ProjectUpdates["project"][0].Comments[0].User, comment.User) {
 			t.Fatal("inspected actor changed")
 		}
 		t.Logf("scale=%d body=%d admitted=%d output=%d", scale, len(body), work, outputSize)

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
 	"sync"
@@ -26,7 +27,29 @@ type IssueBootstrapRead struct {
 	access    AccessContext
 	principal string
 	borrowed  bool
+	output    *issueBootstrapOutput
 	once      sync.Once
+}
+
+// issueBootstrapOutput is a prepared read's bound output and the stream's
+// admitted scratch (Prepare).
+type issueBootstrapOutput struct {
+	source       *metadataLogicalSource
+	replacements map[int64]metadataLogicalNode
+	scratch      *ResourceRead
+}
+
+// ErrAccessChanged reports that the workspace's authorization changed while
+// a read held its access, so its projection may be stale. The principal may
+// well still have access: a caller can read again (a fresh read refuses a
+// principal who lost it). Callers that do not retry see ErrAuthForbidden.
+var ErrAccessChanged = fmt.Errorf("%w: workspace authorization changed during the read", ErrAuthForbidden)
+
+func accessChangedDuringRead(err error) error {
+	if errors.Is(err, ErrAuthForbidden) {
+		return ErrAccessChanged
+	}
+	return err
 }
 
 func (r *IssueBootstrapRead) Close() {
@@ -35,6 +58,10 @@ func (r *IssueBootstrapRead) Close() {
 			r.Data = domain.Bootstrap{}
 			r.access = AccessContext{}
 			r.principal = ""
+			if r.output != nil {
+				r.output.scratch.Close()
+				r.output = nil
+			}
 			if r.body != nil {
 				r.body.Close()
 				r.body = nil
@@ -226,7 +253,7 @@ func (s *SQLiteStore) BeginIssueBootstrapRead(ctx context.Context, workspace, us
 			return nil, err
 		}
 		if err := s.ValidateAccess(ctx, read.access); err != nil {
-			return nil, err
+			return nil, accessChangedDuringRead(err)
 		}
 	}
 	return read, ctx.Err()
@@ -245,6 +272,45 @@ func (r *IssueBootstrapRead) favoriteWork(ctx context.Context) error {
 		r.Data.Workspace.URLKey, r.Data.Viewer.ID)
 }
 
+// Prepare checks the read's authority, then admits and binds its output and
+// the stream's scratch, so that every refusal comes before the caller writes
+// anything (a response that has begun can only be cut off). WriteJSON
+// prepares a read that was not prepared. A failed Prepare closes the
+// projection: the read can only be closed.
+func (r *IssueBootstrapRead) Prepare(ctx context.Context) error {
+	if r == nil || r.body == nil || r.owner == nil {
+		return ErrBoundedMetadataCoverage
+	}
+	if r.output != nil {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// A handed read keeps the caller's authority snapshot, as the original
+	// paged accessor does. A separate live read also cannot use its sole SQL
+	// connection while that caller still owns the transaction.
+	if r.principal != "" && !r.borrowed {
+		if err := r.owner.store.ValidateAccess(ctx, r.access); err != nil {
+			return accessChangedDuringRead(err)
+		}
+	}
+	output, replacements, err := r.body.bind(ctx, r.Data)
+	if err != nil {
+		return err
+	}
+	if len(output.stores) != 1 {
+		return ErrBoundedMetadataCoverage
+	}
+	scratch := &ResourceRead{store: r.owner.store}
+	if err := scratch.reserve(context.WithValue(ctx, metadataWorkLeaseKey{}, nil), logicalJSONStreamWork); err != nil {
+		scratch.Close()
+		return err
+	}
+	r.output = &issueBootstrapOutput{source: output, replacements: replacements, scratch: scratch}
+	return nil
+}
+
 // WriteJSON is the only public encoding boundary for Data. Binding finishes
 // before the first write, and the encoder retains exact opaque source nodes.
 func (r *IssueBootstrapRead) WriteJSON(ctx context.Context, dst io.Writer, rewrite ...MetadataJSONRewriter) (err error) {
@@ -257,31 +323,13 @@ func (r *IssueBootstrapRead) WriteJSONWithFields(ctx context.Context, dst io.Wri
 	if r == nil || r.body == nil || r.owner == nil || dst == nil || len(rewrite) > 1 {
 		return ErrBoundedMetadataCoverage
 	}
-	if err := ctx.Err(); err != nil {
+	if err := r.Prepare(ctx); err != nil {
 		return err
 	}
-	// A handed read keeps the caller's authority snapshot, as the original
-	// paged accessor does. A separate live read also cannot use its sole SQL
-	// connection while that caller still owns the transaction.
-	if r.principal != "" && !r.borrowed {
-		if err := r.owner.store.ValidateAccess(ctx, r.access); err != nil {
-			return err
-		}
-	}
-	output, replacements, err := r.body.bind(ctx, r.Data)
-	if err != nil {
-		return err
-	}
-	if len(output.stores) != 1 {
-		return ErrBoundedMetadataCoverage
-	}
+	output, replacements, scratch := r.output.source, r.output.replacements, r.output.scratch
+	defer scratch.Close()
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
 	ctx = metadataLogicalSourceScratchContext(ctx, output)
-	scratch := &ResourceRead{store: r.owner.store}
-	defer scratch.Close()
-	if err := scratch.reserve(ctx, logicalJSONStreamWork); err != nil {
-		return err
-	}
 	stream := &logicalJSONStream{
 		ctx: ctx, owner: scratch, view: &WebhookAggregateRead{store: r.owner.store},
 		out: bufio.NewWriterSize(dst, 64<<10),

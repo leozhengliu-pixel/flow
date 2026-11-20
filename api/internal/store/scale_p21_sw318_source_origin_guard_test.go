@@ -37,7 +37,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// projection for its own run; never reaches request authorization.
 		"../../cmd/server/scale_p21_comment_action_writes.go":           "5765c0ab53a9346be3631aa48ab3d55c96204256e4ce63bdc5eb31db83983c39",
 		"../../cmd/server/scale_p21_general_bootstrap.go":               "0ef57c05d1a3a3bae01fd62c081248fd6d4426250693d0a54819ed1b60575227",
-		"../../cmd/server/scale_p21_issue_bootstrap_stream.go":          "11ea89bcfbd5c2de9cc7192f37de3b5950a90483be4c97a92f19966c5747c8a2",
+		"../../cmd/server/scale_p21_issue_bootstrap_stream.go":          "df99947503c5413c72da4fb0bffe4bb5f5d3d3ac09fe1fba8a0f621ae9bdb5f8",
 		"../../cmd/server/scale_p21_issue_create_targets.go":            "4797fc2981774f90cbd94a0f00a835e5391e323bc28d5e067692b0b426172523",
 		"../../cmd/server/scale_p21_issue_record_authorization_read.go": "6026fba608d49f31c47ac07de86b8ea1f000f94b93a7f0758e0ee964303025d4",
 		"../../cmd/server/scale_p21_issue_update_targets.go":            "58665b35304f51e087403d1abba92894e319e4f5900039ee17de0a86902745c3",
@@ -67,7 +67,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_application_task_context_read.go":                    "71df6cdfc0fe46f2d149fb90d125eea56515b10c711633e4dab1f464f555f8da",
 		"scale_p21_bootstrap_content_walk.go":                           "b795207a7c8db00fb91479dcb795a6112f6678a5b9213216eac1254936f5ccd0",
 		"scale_p21_bootstrap_issue_walk.go":                             "12f6b78490e7b638a4f9190763fc8988c2202a2f733b025fd31863e489a93a3c",
-		"scale_p21_bootstrap_projection_read.go":                        "855a7297d42689b586b5ce71cede55451ff25bc00d1efeb3f5504839c8c1c2ff",
+		"scale_p21_bootstrap_projection_read.go":                        "655f223ffabf2cc24b275ff32e33a2f995dd80ade1d444db4e7da43bd7a1c89a",
 		"scale_p21_collaboration_document_read.go":                      "d4839174c25808b899839955839d6cd2d9e4a74b5ac76d1158c8a0fb1fb8fae8",
 		"scale_p21_collection_snapshot.go":                              "e8d843ee5626ba45c1aa11009ddf1e6860289895367d581fd8552309dbaec1fa",
 		"scale_p21_cycle_schedule_write.go":                             "11ec25bb72a38c5b53066c0287afb463ea80382733d2ebc3d114340c8af9263c",

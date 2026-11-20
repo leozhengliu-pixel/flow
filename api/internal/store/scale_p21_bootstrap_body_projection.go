@@ -185,18 +185,24 @@ type bootstrapBodyOrigin struct {
 // provenance, bound output source and all work. The input caller keeps its own
 // source reference. bind's returned source/replacements are borrowed until Close.
 type bootstrapBodyProjection struct {
-	Data                 domain.Bootstrap
-	input                *metadataLogicalSource
-	output               *metadataLogicalSource
-	replacements         map[int64]metadataLogicalNode
-	origins              map[bootstrapBodyIdentity]*bootstrapBodyOrigin
-	rawOrigins           map[string]*bootstrapBodyOrigin
-	ranges               []*bootstrapBodyOrigin
-	nativeMarker         map[bootstrapBodyIdentity]string
-	prefix               string
-	rawPrefix            string
-	owner                *ResourceRead
+	Data         domain.Bootstrap
+	input        *metadataLogicalSource
+	output       *metadataLogicalSource
+	replacements map[int64]metadataLogicalNode
+	origins      map[bootstrapBodyIdentity]*bootstrapBodyOrigin
+	rawOrigins   map[string]*bootstrapBodyOrigin
+	ranges       []*bootstrapBodyOrigin
+	nativeMarker map[bootstrapBodyIdentity]string
+	prefix       string
+	rawPrefix    string
+	owner        *ResourceRead
+	// leases hold work, the projection's admission; committed is the part
+	// of it the projection's headers retain: the structural and body
+	// occurrence work admitted up front plus the native bytes of every
+	// decoded header subtree (decode). bind exchanges it for the output's.
+	leases               []func()
 	work                 uint64
+	committed            uint64
 	bound                bool
 	stripUpdateSnapshots bool
 	closed               bool
@@ -222,11 +228,12 @@ func (p *bootstrapBodyProjection) Close() {
 			if p.output != nil {
 				p.output.Release()
 			}
+			p.releaseLeases()
 			p.owner.Close()
 			p.input, p.output = nil, nil
 			p.replacements, p.origins, p.nativeMarker, p.ranges = nil, nil, nil, nil
 			p.rawOrigins, p.rawPrefix = nil, ""
-			p.owner, p.prefix, p.work = nil, "", 0
+			p.owner, p.prefix, p.work, p.committed = nil, "", 0, 0
 		})
 	}
 }
@@ -235,11 +242,230 @@ func (p *bootstrapBodyProjection) reserve(ctx context.Context, cost uint64) erro
 	if cost > metadataWorkBytes-p.work {
 		return ErrMetadataWorkBudget
 	}
-	if err := p.owner.reserve(ctx, cost); err != nil {
+	_, release, err := p.owner.store.tryAdmitAdditionalMetadataWork(ctx, int(cost))
+	if err != nil {
 		return err
 	}
+	p.leases = append(p.leases, release)
 	p.work += cost
 	return nil
+}
+
+func (p *bootstrapBodyProjection) releaseLeases() {
+	for _, release := range p.leases {
+		release()
+	}
+	p.leases, p.work, p.committed = nil, 0, 0
+}
+
+// bootstrapBodyAdmissionStep is the least a decode grows the admission by, so
+// a projection of many small subtrees admits work a few times, not per row.
+const bootstrapBodyAdmissionStep = 1 << 20
+
+// decode materializes one header subtree. While it decodes, the admission
+// covers what earlier subtrees retain plus this subtree's frame cost (the
+// bound Value admits); afterwards only the native bytes it retains stay
+// committed. The admission only grows, so the bytes allocated never exceed
+// it. Charging the frame cost of every subtree for the whole read instead
+// overstates the headers many times over (a frame charges each scalar field
+// as its own node): a 5,000-issue workspace's project progress histories
+// alone came to more than the whole process work budget, so every bootstrap
+// of it was refused although its headers take tens of MiB.
+func (p *bootstrapBodyProjection) decode(ctx context.Context, node metadataLogicalNode) (reflect.Value, error) {
+	if node.cost > metadataWorkBytes-p.committed {
+		return reflect.Value{}, ErrMetadataWorkBudget
+	}
+	if err := p.admitCommitted(ctx, p.committed+node.cost); err != nil {
+		return reflect.Value{}, err
+	}
+	value, err := node.Value(ctx, int(node.cost))
+	if err != nil {
+		return value, err
+	}
+	retained, err := bootstrapNativeBytes(ctx, value, 0)
+	if err != nil {
+		return reflect.Value{}, err
+	}
+	if retained > metadataWorkBytes-p.committed {
+		return reflect.Value{}, ErrMetadataWorkBudget
+	}
+	p.committed += retained
+	return value, p.admitCommitted(ctx, p.committed)
+}
+
+// admitCommitted grows the admission to at least need.
+func (p *bootstrapBodyProjection) admitCommitted(ctx context.Context, need uint64) error {
+	if need <= p.work {
+		return nil
+	}
+	if need > metadataWorkBytes {
+		return ErrMetadataWorkBudget
+	}
+	return p.reserve(ctx, min(max(need-p.work, bootstrapBodyAdmissionStep), metadataWorkBytes-p.work))
+}
+
+// bootstrapNativeBytes bounds the heap a decoded value retains beyond its own
+// inline size: string and byte data, slice backing arrays, pointer and boxed
+// interface targets, and map tables. Every allocation is rounded up for the
+// allocator's size classes and a map is charged whole groups of eight slots,
+// so the bound holds for the small maps and short strings headers consist
+// of. Shared targets are charged at every reference. A time.Time charges
+// nothing: decoded and projected times use the process's shared locations.
+func bootstrapNativeBytes(ctx context.Context, value reflect.Value, depth int) (uint64, error) {
+	if depth >= metadataLogicalDepth {
+		return 0, ErrMetadataWorkBudget
+	}
+	if !value.IsValid() || bootstrapNativeFlat(value.Type()) {
+		return 0, nil
+	}
+	total := uint64(0)
+	add := func(part uint64) error {
+		if part > metadataWorkBytes || total > metadataWorkBytes-part {
+			return ErrMetadataWorkBudget
+		}
+		total += part
+		return nil
+	}
+	child := func(item reflect.Value) error {
+		part, err := bootstrapNativeBytes(ctx, item, depth+1)
+		if err == nil {
+			err = add(part)
+		}
+		return err
+	}
+	switch value.Kind() {
+	case reflect.String:
+		return bootstrapNativeAllocation(uint64(value.Len())), nil
+	case reflect.Pointer, reflect.Interface:
+		if value.IsNil() {
+			return 0, nil
+		}
+		target := value.Elem()
+		if value.Kind() == reflect.Pointer || !bootstrapNativePointerShaped(target.Type()) {
+			if err := add(bootstrapNativeAllocation(uint64(target.Type().Size()))); err != nil {
+				return 0, err
+			}
+		}
+		return total, child(target)
+	case reflect.Slice:
+		if value.IsNil() {
+			return 0, nil
+		}
+		element := value.Type().Elem()
+		if uint64(value.Cap()) > metadataWorkBytes/max(uint64(element.Size()), 1) {
+			return 0, ErrMetadataWorkBudget
+		}
+		if err := add(bootstrapNativeAllocation(uint64(value.Cap()) * uint64(element.Size()))); err != nil {
+			return 0, err
+		}
+		if bootstrapNativeFlat(element) {
+			return total, nil
+		}
+		for index := range value.Len() {
+			if index%1024 == 0 {
+				if err := ctx.Err(); err != nil {
+					return 0, err
+				}
+			}
+			if err := child(value.Index(index)); err != nil {
+				return 0, err
+			}
+		}
+		return total, nil
+	case reflect.Array:
+		for index := range value.Len() {
+			if err := child(value.Index(index)); err != nil {
+				return 0, err
+			}
+		}
+		return total, nil
+	case reflect.Map:
+		if value.IsNil() {
+			return 0, nil
+		}
+		// Swiss tables: one group of eight slots up to eight entries, then a
+		// power-of-two slot count at a 7/8 load factor; a control byte per
+		// slot, table and directory headers.
+		slots := uint64(8)
+		for count := uint64(value.Len()); slots*7 < count*8; {
+			slots *= 2
+		}
+		slot := uint64(value.Type().Key().Size()+value.Type().Elem().Size()) + 1
+		if slots > metadataWorkBytes/slot {
+			return 0, ErrMetadataWorkBudget
+		}
+		if err := add(bootstrapNativeAllocation(slots*slot) + 128 + (slots/1024+1)*64); err != nil {
+			return 0, err
+		}
+		if bootstrapNativeFlat(value.Type().Key()) && bootstrapNativeFlat(value.Type().Elem()) {
+			return total, nil
+		}
+		iter := value.MapRange()
+		for iter.Next() {
+			if err := child(iter.Key()); err != nil {
+				return 0, err
+			}
+			if err := child(iter.Value()); err != nil {
+				return 0, err
+			}
+		}
+		return total, ctx.Err()
+	case reflect.Struct:
+		for index := range value.NumField() {
+			if err := child(value.Field(index)); err != nil {
+				return 0, err
+			}
+		}
+		return total, nil
+	}
+	return 0, nil
+}
+
+// bootstrapNativeAllocation rounds an allocation up for size classes (at
+// most an eighth wasted above the 16-byte classes).
+func bootstrapNativeAllocation(size uint64) uint64 {
+	if size == 0 {
+		return 0
+	}
+	return size + size/8 + 16
+}
+
+// bootstrapNativePointerShaped reports whether an interface holds a value of
+// the type without boxing it.
+func bootstrapNativePointerShaped(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		return true
+	}
+	return false
+}
+
+var bootstrapNativeFlatTypes sync.Map
+
+// bootstrapNativeFlat reports whether values of t own no heap memory.
+func bootstrapNativeFlat(t reflect.Type) bool {
+	if t == reflect.TypeFor[time.Time]() {
+		return true
+	}
+	if flat, found := bootstrapNativeFlatTypes.Load(t); found {
+		return flat.(bool)
+	}
+	flat := true
+	switch t.Kind() {
+	case reflect.String, reflect.Pointer, reflect.Interface, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		flat = false
+	case reflect.Array:
+		flat = t.Len() == 0 || bootstrapNativeFlat(t.Elem())
+	case reflect.Struct:
+		for index := range t.NumField() {
+			if !bootstrapNativeFlat(t.Field(index).Type) {
+				flat = false
+				break
+			}
+		}
+	}
+	bootstrapNativeFlatTypes.Store(t, flat)
+	return flat
 }
 
 func bootstrapBodyAddWork(total *uint64, part uint64) error {
@@ -273,12 +499,18 @@ func (p *bootstrapBodyProjection) projectedWork(ctx context.Context, node metada
 		return bootstrapBodyAddWork(total, 2048)
 	}
 	if !path.containsOpaque() {
-		if node.cost > (metadataWorkBytes-512)/8 {
+		// A header subtree is admitted where it is decoded (decode): its
+		// frame cost while decoding, then the native bytes it retains. Its
+		// inline bytes are its parent's.
+		if node.cost > metadataWorkBytes {
 			return ErrMetadataWorkBudget
 		}
-		return bootstrapBodyAddWork(total, node.cost*8+512)
+		return nil
 	}
-	if err := bootstrapBodyAddWork(total, uint64(node.typ.Size())*8+512); err != nil {
+	// A node on the way to a body is built in place: a value allocated for
+	// it, copied into its parent's inline bytes (a slice's backing array is
+	// the sum of its rows'), and a small fixed allowance.
+	if err := bootstrapBodyAddWork(total, 2*bootstrapNativeAllocation(uint64(node.typ.Size()))+128); err != nil {
 		return err
 	}
 	if node.typ.Kind() == reflect.Map {
@@ -380,7 +612,7 @@ func (p *bootstrapBodyProjection) project(ctx context.Context, node metadataLogi
 		return reflect.ValueOf(map[string]any{token: token}), nil
 	}
 	if !path.containsOpaque() {
-		return node.Value(ctx, int(node.cost))
+		return p.decode(ctx, node)
 	}
 	result := reflect.New(node.typ).Elem()
 	switch node.typ.Kind() {
@@ -406,12 +638,19 @@ func (p *bootstrapBodyProjection) project(ctx context.Context, node metadataLogi
 		})
 		return result, err
 	case reflect.Struct:
+		// A struct frame holds its fields in declaration order.
+		fields, ordinal := metadataStructFields(node.typ), 0
 		err := node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
-			value, err := p.project(ctx, child, path.field(key.String()))
+			index := ordinal
+			ordinal++
+			if index >= len(fields) || fields[index].name != key.String() {
+				return ErrMetadataRecordQuery
+			}
+			value, err := p.project(ctx, child, path.field(fields[index].name))
 			if err != nil {
 				return err
 			}
-			target := result.FieldByName(key.String())
+			target := result.Field(index)
 			if !target.CanSet() || target.Type() != value.Type() {
 				return ErrMetadataRecordQuery
 			}
@@ -538,6 +777,7 @@ func (s *SQLiteStore) beginBootstrapBodyProjectionWithOptions(ctx context.Contex
 	if err = p.reserve(ctx, work); err != nil {
 		return nil, err
 	}
+	p.committed = p.work
 	for index := range target.NumField() {
 		field := target.Type().Field(index)
 		if omitted[index] || field.Tag.Get("json") == "-" && field.Name != "NextIssueNumber" {
@@ -664,9 +904,8 @@ func bootstrapBodyVisitValue(value reflect.Value, visit func(reflect.Value) erro
 			return visit(value.Elem())
 		}
 	case reflect.Struct:
-		for index := range value.NumField() {
-			field := value.Type().Field(index)
-			if field.PkgPath == "" && field.Tag.Get("json") != "-" {
+		for index, field := range metadataStructFields(value.Type()) {
+			if field.exported && !field.jsonOmitted {
 				if err := visit(value.Field(index)); err != nil {
 					return err
 				}
@@ -739,6 +978,9 @@ func (p *bootstrapBodyProjection) bindNode(ctx context.Context, value reflect.Va
 	if value.Type() != node.typ {
 		return ErrMetadataRecordQuery
 	}
+	// The captured frames are read field by field: one read of a node of at
+	// most a window serves it and the nodes nested in it.
+	node = node.windowed()
 	if value.Type() == reflect.TypeFor[json.RawMessage]() && value.Len() <= 256 {
 		if origin := p.rawOrigins[string(value.Bytes())]; origin != nil {
 			if !path.raw() || origin.node.typ != node.typ {
@@ -818,19 +1060,26 @@ func (p *bootstrapBodyProjection) bindNode(ctx context.Context, value reflect.Va
 			return p.bindNode(ctx, item, child, next, depth+1)
 		})
 	}
+	var fields []metadataStructField
+	if value.Kind() == reflect.Struct {
+		fields = metadataStructFields(value.Type())
+	}
+	ordinal := 0
 	return node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
 		var item reflect.Value
 		next := path
 		switch value.Kind() {
 		case reflect.Struct:
-			field, ok := value.Type().FieldByName(key.String())
-			if !ok {
+			// A struct frame holds its fields in declaration order.
+			index := ordinal
+			ordinal++
+			if index >= len(fields) || fields[index].name != key.String() {
 				return ErrMetadataRecordQuery
 			}
-			if field.PkgPath != "" || field.Tag.Get("json") == "-" {
+			if !fields[index].exported || fields[index].jsonOmitted {
 				return nil
 			}
-			item, next = value.FieldByIndex(field.Index), path.field(field.Name)
+			item, next = value.Field(index), path.field(fields[index].name)
 		case reflect.Slice, reflect.Array:
 			index := int(key.Int())
 			item, next = value.Index(index), path.row(index)
@@ -896,14 +1145,28 @@ func (p *bootstrapBodyProjection) bind(ctx context.Context, projected domain.Boo
 		}
 	}()
 	ctx = metadataLogicalSourceScratchContext(context.WithValue(ctx, metadataWorkLeaseKey{}, nil), p.input)
-	cost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(projected), 0)
+	// From here the projection's own headers are referenced only through
+	// projected (the caller's projection of them), which is charged whole,
+	// shared parts included; body occurrences keep their origins and gain a
+	// replacement entry each. The projection's admission is exchanged for
+	// this one, so a read holds the larger of the two, not their sum. The
+	// capture writes to the output spool, whose buffers and child indexes
+	// have budgets of their own.
+	cost, err := bootstrapNativeBytes(ctx, reflect.ValueOf(projected), 0)
 	if err != nil {
 		return nil, nil, err
 	}
-	if cost > (metadataWorkBytes-(512<<10))/8 {
+	occurrences := uint64(len(p.origins) + len(p.rawOrigins))
+	if cost > metadataWorkBytes || occurrences > (metadataWorkBytes-cost)/(2048+256) {
 		return nil, nil, ErrMetadataWorkBudget
 	}
-	if err = p.reserve(ctx, cost*8+(512<<10)); err != nil {
+	cost += occurrences*(2048+256) + uint64(reflect.TypeFor[domain.Bootstrap]().Size()) + 2<<20 + 512<<10
+	if cost > metadataWorkBytes {
+		return nil, nil, ErrMetadataWorkBudget
+	}
+	p.Data = domain.Bootstrap{}
+	p.releaseLeases()
+	if err = p.reserve(ctx, cost); err != nil {
 		return nil, nil, err
 	}
 	p.output, err = p.capture(ctx, projected)
