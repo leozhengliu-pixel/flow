@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -525,7 +526,11 @@ func TestScaleP21SW10IssueTemplateDeletionDifferential(t *testing.T) {
 			code                              int
 		}{
 			{"team-owned", targetID, "", "", f.public, http.StatusNoContent},
-			{"visibility-owned", targetID, "workspace", f.public, f.public + "-other", http.StatusNoContent},
+			{"visibility-owned", targetID, "workspace", f.public, "", http.StatusNoContent},
+			// Every team a template names must be reachable: a default team
+			// the viewer cannot see (here one that does not exist) puts the
+			// template out of reach although its visibility team owns it.
+			{"visibility-owned-unknown-default", targetID, "workspace", f.public, f.public + "-other", http.StatusNotFound},
 			{"workspace-default-only", targetID, "workspace", "", f.public, http.StatusNotFound},
 			{"other-visibility", targetID, "", f.public + "-other", f.public, http.StatusNotFound},
 			{"other-team", targetID, "", "", f.public + "-other", http.StatusNotFound},
@@ -546,6 +551,11 @@ func TestScaleP21SW10IssueTemplateDeletionDifferential(t *testing.T) {
 					r.SetPathValue("templateId", spec.id)
 					w := httptest.NewRecorder()
 					scaleP21M3Call(&server{store: source}, w, r, (*server).deleteIssueTemplate)
+					// A key whose team selection leaves the team out reaches
+					// none of its templates.
+					if key != nil && apiKeyTeamRestrictionSelected(*key) && !slices.Contains(key.TeamIDs, f.public) {
+						spec.code = http.StatusNotFound
+					}
 					wantEvents := 0
 					if spec.code == http.StatusNoContent {
 						wantEvents = 1
@@ -580,6 +590,10 @@ func TestScaleP21SW10IssueTemplateDeletionDifferential(t *testing.T) {
 	}
 	reset(target)
 	before = scaleP21SW6RecordHash(t, repo, workspace, "issueTemplates", targetID)
+	// The deletion reads the viewer's template access first; a cancelled
+	// request stops at that read (the membership read refuses it) before
+	// any write, on both sources alike.
+	var cancelled []any
 	for _, source := range []*store.SQLiteStore{repo, f.probe} {
 		r := f.request(f.data.Viewer, nil, nil)
 		r.SetPathValue("id", f.public)
@@ -588,9 +602,13 @@ func TestScaleP21SW10IssueTemplateDeletionDifferential(t *testing.T) {
 		cancel()
 		w := httptest.NewRecorder()
 		(&server{store: source}).deleteIssueTemplate(w, r.WithContext(ctx))
-		if w.Code != http.StatusInternalServerError || scaleP21SW6RecordHash(t, repo, workspace, "issueTemplates", targetID) != before {
-			t.Fatal("cancelled deletion changed its target")
+		if w.Code < 400 || scaleP21SW6RecordHash(t, repo, workspace, "issueTemplates", targetID) != before {
+			t.Fatal("cancelled deletion changed its target", w.Code, w.Body.String())
 		}
+		cancelled = append(cancelled, []any{w.Code, w.Body.String()})
+	}
+	if !reflect.DeepEqual(cancelled[0], cancelled[1]) {
+		t.Fatalf("cancelled deletion differs between the sources: %v", cancelled)
 	}
 	scaleP21SW10WriteRevocation(t, f, (*server).deleteIssueTemplate, func(user domain.User, key *domain.APIKey) *http.Request {
 		r := f.request(user, key, nil)
