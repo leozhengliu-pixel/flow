@@ -79,7 +79,7 @@ func scaleP21SW268Seed(t *testing.T, repo *store.SQLiteStore) scaleP21SW268Fixtu
 			Attachments: attachments("issue-private"),
 		}
 		data.Issues = append(data.Issues, publicIssue, hiddenIssue)
-		// Loops: attached files have no viewer predicate; drafts follow their creator.
+		// Loops: attached files follow the loop's team; drafts follow their creator.
 		data.Loops = append(data.Loops, domain.Loop{
 			ID: prefix + "loop", Name: "Private loop", TeamID: private, Level: "team", Status: "draft", OwnerID: owner.ID,
 			Creator: owner, CreatedAt: stamp, UpdatedAt: stamp,
@@ -316,8 +316,12 @@ func TestScaleP21SW268AttachmentVisibilityDifferential(t *testing.T) {
 			}
 			for _, principal := range f.principals {
 				expect("unreferenced", principal.name, false)
-				expect("loop-attached", principal.name, true)
-				expect("loop-draft-linked", principal.name, true)
+				// A loop's files follow the loop's team: the private team's
+				// members and workspace admins read them; its outsiders (a
+				// member, a guest, an app installed in the public team) do not.
+				loopReader := principal.name == "admin-private-outsider" || principal.name == "admin" || principal.name == "sub-team-inheritance"
+				expect("loop-attached", principal.name, loopReader)
+				expect("loop-draft-linked", principal.name, loopReader)
 				expect("session-deleted", principal.name, false)
 				expect("document-trashed", principal.name, false)
 				expect("missing", principal.name, visible[scaleP21SW268URL("document-public")][principal.name])
