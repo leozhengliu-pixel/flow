@@ -357,12 +357,15 @@ func (n metadataLogicalNode) StreamBytes(ctx context.Context, visit func(io.Read
 	if err != nil || size > uint64(n.size) {
 		return io.ErrUnexpectedEOF
 	}
-	// A node read in a window streams its bytes from it.
+	// A node read in a window streams its bytes from it. The reader stays a
+	// LimitedReader over the declared size, as from the source below: codec
+	// validation tells truncated JSON (the declared bytes exhausted) from a
+	// short backing read by its remaining count.
 	if window := c.node.window; window != nil && window.storage == n.source && c.offset >= window.at && c.offset+int64(size) <= window.at+int64(len(window.data)) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return visit(bytes.NewReader(window.data[c.offset-window.at : c.offset-window.at+int64(size)]))
+		return visit(io.LimitReader(bytes.NewReader(window.data[c.offset-window.at:c.offset-window.at+int64(size)]), int64(size)))
 	}
 	return visit(io.LimitReader(&metadataLogicalByteReader{ctx, n.source, c.offset}, int64(size)))
 }
