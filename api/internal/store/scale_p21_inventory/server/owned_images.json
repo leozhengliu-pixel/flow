@@ -14,7 +14,7 @@
       "callers": [
         "server/server.serveUploadOrAsset",
         "server/server.serveSignedFile",
-        "server/server.fileReadable"
+        "server/server.fileReadableContext"
       ]
     },
     "resolveWorkspaceLogo": {

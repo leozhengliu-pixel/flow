@@ -53,7 +53,7 @@ func (s *server) boundedAttachmentVisible(ctx context.Context, account domain.Ac
 		return true
 	}
 	for _, membership := range account.Workspaces {
-		if !workspacePolicyAllows(ctx, membership.Workspace.URLKey, membership.Role) {
+		if !workspacePolicyAllows(ctx, membership.Workspace.URLKey, membership.Role) || !apiKeyWorkspaceMatches(ctx, membership.Workspace.URLKey) {
 			continue
 		}
 		data, access, err := s.store.IssueQueryAccess(ctx, membership.Workspace.URLKey, userID)
@@ -61,12 +61,12 @@ func (s *server) boundedAttachmentVisible(ctx context.Context, account domain.Ac
 			recordUploadVisibilityRefusal(ctx, err)
 			continue
 		}
-		visible, err := s.store.IssueAttachmentVisible(ctx, store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access}, url)
+		visible, err := s.store.IssueAttachmentVisible(ctx, attachmentIssueQuery(ctx, data.Workspace.URLKey, &access), url)
 		if err == nil && visible {
 			return true
 		}
 		recordUploadVisibilityRefusal(ctx, err)
-		if s.boundedWorkspaceAttachmentVisible(ctx, data.Workspace.URLKey, userID, url, loopTeamReadableBy(access)) {
+		if s.boundedWorkspaceAttachmentVisible(ctx, data.Workspace.URLKey, userID, url, attachmentLoopReadable(ctx, access)) {
 			return true
 		}
 	}
@@ -92,6 +92,9 @@ func (s *server) boundedWorkspaceAttachmentVisible(ctx context.Context, workspac
 	if err != nil {
 		recordUploadVisibilityRefusal(ctx, err)
 		return false
+	}
+	if key, ok := ctx.Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		applyAPIKeyProjection(&data, key)
 	}
 	return s.projectedAttachmentVisible(data, userID, url)
 }

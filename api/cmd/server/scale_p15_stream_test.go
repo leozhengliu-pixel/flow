@@ -187,7 +187,7 @@ func TestScaleP15DetachedPagedBootstrapReleasesProducer(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("TMPDIR", t.TempDir())
 	done := false
-	s := &server{realtime: &realtimeHub{budget: &realtimeBudget{limit: 2 << 20}}}
+	s := &server{fileSigningAllowAll: true, realtime: &realtimeHub{budget: &realtimeBudget{limit: 2 << 20}}}
 	w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
 		if !done {
 			t.Fatal("paged bootstrap retained the producer while sending")
@@ -237,7 +237,7 @@ func TestScaleP15DownloadCancellationAndPanicRelease(t *testing.T) {
 func TestScaleP15SigningKeepsNonJSONStreaming(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("TMPDIR", t.TempDir()+"/does-not-exist")
-	s := &server{}
+	s := &server{fileSigningAllowAll: true}
 	for _, status := range []int{http.StatusOK, http.StatusBadRequest, http.StatusNoContent} {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("GET", "/api/events", nil)
@@ -265,7 +265,7 @@ func TestScaleP15SigningBeyondLegacyBufferLimit(t *testing.T) {
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "p15-fixture-signing-key")
 	dir := t.TempDir()
 	t.Setenv("TMPDIR", dir)
-	s := &server{realtime: &realtimeHub{budget: &realtimeBudget{limit: 2 << 20}}}
+	s := &server{fileSigningAllowAll: true, realtime: &realtimeHub{budget: &realtimeBudget{limit: 2 << 20}}}
 	var prefix bytes.Buffer
 	w := &scaleP15CountingWriter{header: make(http.Header)}
 	w.onWrite = func() error { return nil }

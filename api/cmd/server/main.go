@@ -44,6 +44,9 @@ var (
 
 type server struct {
 	store *store.SQLiteStore
+	// fileSigningAllowAll lets pipeline tests sign fixture names that no record
+	// references; production never sets it.
+	fileSigningAllowAll bool
 	// metadataGate bounds concurrent workspace metadata projections (metadata_read_gate.go).
 	metadataGate *metadataReadGate
 	// projectionGate bounds resource requests that build the viewer's projection (projection_gate.go).
@@ -5908,23 +5911,26 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 		return true
 	}
 	for _, membership := range account.Workspaces {
-		if !workspacePolicyAllows(ctx, membership.Workspace.URLKey, membership.Role) {
+		if !workspacePolicyAllows(ctx, membership.Workspace.URLKey, membership.Role) || !apiKeyWorkspaceMatches(ctx, membership.Workspace.URLKey) {
 			continue
 		}
 		data, access, err := s.store.IssueQueryAccess(ctx, membership.Workspace.URLKey, userID)
 		if err != nil {
 			continue
 		}
-		visible, err := s.store.IssueAttachmentVisible(ctx, store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access}, url)
+		visible, err := s.store.IssueAttachmentVisible(ctx, attachmentIssueQuery(ctx, data.Workspace.URLKey, &access), url)
 		if err == nil && visible {
 			return true
 		}
-		if metadata, ok := s.store.WorkspaceMetadata(data.Workspace.URLKey); ok && loopAttachmentVisible(metadata, userID, url, loopTeamReadableBy(access)) {
+		if metadata, ok := s.store.WorkspaceMetadata(data.Workspace.URLKey); ok && loopAttachmentVisible(metadata, userID, url, attachmentLoopReadable(ctx, access)) {
 			return true
 		}
 		data, err = s.store.PagedWorkspaceMetadata(ctx, data.Workspace.URLKey, userID)
 		if err != nil {
 			continue
+		}
+		if key, ok := ctx.Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			applyAPIKeyProjection(&data, key)
 		}
 		for _, request := range data.CustomerRequests {
 			if slices.ContainsFunc(request.Attachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
@@ -7550,4 +7556,23 @@ func (s *server) cors(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// attachmentIssueQuery is the issue access a file read runs under: the user's
+// own, narrowed to the teams of a team-restricted API key.
+func attachmentIssueQuery(ctx context.Context, workspace string, access *store.IssueRecordAccess) store.IssueRecordQuery {
+	query := store.IssueRecordQuery{Workspace: workspace, Access: access}
+	if key, ok := ctx.Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
+		query.AllowedTeamIDs = append([]string{}, key.TeamIDs...)
+	}
+	return query
+}
+
+// attachmentLoopReadable is loopTeamReadableBy narrowed to a restricted key's teams.
+func attachmentLoopReadable(ctx context.Context, access store.IssueRecordAccess) func(string) bool {
+	readable := loopTeamReadableBy(access)
+	if key, ok := ctx.Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
+		return func(teamID string) bool { return readable(teamID) && slices.Contains(key.TeamIDs, teamID) }
+	}
+	return readable
 }

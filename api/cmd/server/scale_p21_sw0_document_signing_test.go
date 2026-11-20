@@ -45,7 +45,7 @@ func TestScaleP21SW0DocumentDirectorySigningFallback(t *testing.T) {
 				(&server{store: repo}).listDocuments(literal, request())
 				got := httptest.NewRecorder()
 				var signing *hydratedURLSigning
-				service := &server{store: f.probe}
+				service := &server{store: f.probe, fileSigningAllowAll: true}
 				service.signedFileURLs(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					signing, _ = r.Context().Value(hydratedURLSigningKey{}).(*hydratedURLSigning)
 					service.listDocuments(w, r)

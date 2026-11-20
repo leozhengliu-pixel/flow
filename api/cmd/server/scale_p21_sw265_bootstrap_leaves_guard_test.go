@@ -193,7 +193,7 @@ func TestScaleP21SW265AttachmentVisibilityBoundary(t *testing.T) {
 	pkg := scaleP21SW265Parse(t)
 	scaleP21SW265BoundedFirst(t, pkg.function(t, "attachmentVisible"), "boundedAttachmentVisible")
 	want := []scaleP21SW265Ref{
-		{File: "files_api.go", Function: "fileReadable", Call: true},
+		{File: "files_api.go", Function: "fileReadableContext", Call: true},
 		{File: "main.go", Function: "serveUpload", Call: true},
 	}
 	if got := pkg.references("attachmentVisible"); !reflect.DeepEqual(got, want) {

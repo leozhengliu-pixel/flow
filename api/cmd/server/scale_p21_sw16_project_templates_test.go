@@ -83,7 +83,7 @@ func TestScaleP21SW16ProjectTemplateListDifferential(t *testing.T) {
 				request.Header.Set("X-Flow-File-Urls-Expire-In", "3600")
 			}
 			want, got := httptest.NewRecorder(), httptest.NewRecorder()
-			service := &server{store: repo}
+			service := &server{store: repo, fileSigningAllowAll: true}
 			signingStarted := time.Now()
 			service.signedFileURLs(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { legacy(repo, w, r) })).ServeHTTP(want, request)
 			service.signedFileURLs(http.HandlerFunc(service.scaleP21SW16ListProjectTemplates)).ServeHTTP(got, request)
@@ -172,7 +172,7 @@ func TestScaleP21SW16ProjectTemplateLegacyLargeBaseline(t *testing.T) {
 			if signed {
 				r.Header.Set("X-Flow-File-Urls-Expire-In", "3600")
 			}
-			service := &server{store: repo}
+			service := &server{store: repo, fileSigningAllowAll: true}
 			service.signedFileURLs(http.HandlerFunc(service.listProjectTemplates)).ServeHTTP(w, r)
 			return w
 		}

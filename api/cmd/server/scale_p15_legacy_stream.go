@@ -202,7 +202,7 @@ func sendLegacySpool(ctx context.Context, w http.ResponseWriter, status int, fil
 	return err
 }
 
-func (s *server) signedFileURLsStream(w http.ResponseWriter, r *http.Request, next http.Handler, lifetime time.Duration) {
+func (s *server) signedFileURLsStream(w http.ResponseWriter, r *http.Request, next http.Handler, lifetime time.Duration, authority *fileSigningAuthority) {
 	var release func()
 	defer func() {
 		if release != nil {
@@ -217,7 +217,7 @@ func (s *server) signedFileURLsStream(w http.ResponseWriter, r *http.Request, ne
 	spool.prepareSigning = func() {
 		spool.prepareSigning = nil
 		if key, err := s.fileSigningKey(r.Context()); err == nil {
-			spool.signing.key = key
+			*spool.signing = *authority.signing(key, spool.signing.base, spool.signing.expires)
 		} else {
 			logSigningFailure(r.Context(), err)
 			spool.signing = nil
@@ -265,15 +265,15 @@ func rewriteUploadURLFile(ctx context.Context, source *store.RecordSpool, dst io
 	return rewriteHydratedJSONSource(ctx, source, dst, &hydratedURLSigning{key: key, base: base, expires: expires})
 }
 
-func rewriteUploadURLPass(ctx context.Context, source *store.RecordSpool, dst io.Writer, pattern *regexp.Regexp, quoted bool, key []byte, base string, expires time.Time) error {
+func rewriteUploadURLPass(ctx context.Context, source *store.RecordSpool, dst io.Writer, pattern *regexp.Regexp, quoted bool, signing *hydratedURLSigning) error {
 	info, err := source.Stat()
 	if err != nil {
 		return err
 	}
-	return rewriteUploadURLSourcePass(ctx, source, info.Size(), dst, pattern, quoted, key, base, expires)
+	return rewriteUploadURLSourcePass(ctx, source, info.Size(), dst, pattern, quoted, signing)
 }
 
-func rewriteUploadURLSourcePass(ctx context.Context, source io.ReaderAt, size int64, dst io.Writer, pattern *regexp.Regexp, quoted bool, key []byte, base string, expires time.Time) error {
+func rewriteUploadURLSourcePass(ctx context.Context, source io.ReaderAt, size int64, dst io.Writer, pattern *regexp.Regexp, quoted bool, signing *hydratedURLSigning) error {
 	reader := bufio.NewReaderSize(nil, 32<<10)
 	output := bufio.NewWriterSize(dst, 32<<10)
 	scratch := make([]byte, 32<<10)
@@ -304,14 +304,23 @@ func rewriteUploadURLSourcePass(ctx context.Context, source io.ReaderAt, size in
 				continue
 			}
 		}
+		nameStart, nameEnd := offset+int64(match[nameGroup]), offset+int64(match[nameGroup+1])
+		permitted, err := signing.permit(ctx, source, nameStart, nameEnd)
+		if err != nil {
+			return err
+		}
+		if !permitted {
+			// A file the principal may not read keeps its URL as written.
+			offset = end
+			continue
+		}
 		if err := copyRange(written, start); err != nil {
 			return err
 		}
-		nameStart, nameEnd := offset+int64(match[nameGroup]), offset+int64(match[nameGroup+1])
 		if quoted {
 			output.WriteByte('"')
 		}
-		if err := writeSignedURLSection(ctx, output, source, nameStart, nameEnd, key, base, expires, scratch); err != nil {
+		if err := writeSignedURLSection(ctx, output, source, nameStart, nameEnd, signing, scratch); err != nil {
 			return err
 		}
 		if quoted {
@@ -360,7 +369,8 @@ func (r unescapePathReader) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func writeSignedURLSection(ctx context.Context, output *bufio.Writer, file io.ReaderAt, start, end int64, key []byte, base string, expires time.Time, scratch []byte) error {
+func writeSignedURLSection(ctx context.Context, output *bufio.Writer, file io.ReaderAt, start, end int64, signing *hydratedURLSigning, scratch []byte) error {
+	key, base, expires := signing.key, signing.base, signing.expires
 	reader := bufio.NewReaderSize(nil, 4096)
 	reset := func() io.Reader {
 		reader.Reset(legacyContextReader{ctx, io.NewSectionReader(file, start, end-start)})
@@ -384,6 +394,9 @@ func writeSignedURLSection(ctx context.Context, output *bufio.Writer, file io.Re
 	}
 	unix := strconv.FormatInt(expires.Unix(), 10)
 	_, _ = fmt.Fprintf(mac, "\n%s", unix)
+	if signing.signer.bound() {
+		_, _ = fmt.Fprintf(mac, "\n%s\n%s\n%s", signing.signer.Subject, signing.signer.Workspace, signing.signer.KeyID)
+	}
 	if err := encodeHydratedStringContent(ctx, output, strings.TrimRight(base, "/")+"/api/files/signed/"); err != nil {
 		return err
 	}
@@ -403,5 +416,5 @@ func writeSignedURLSection(ctx context.Context, output *bufio.Writer, file io.Re
 			return err
 		}
 	}
-	return encodeHydratedStringContent(ctx, output, "?expires="+unix+"&signature="+hex.EncodeToString(mac.Sum(nil)))
+	return encodeHydratedStringContent(ctx, output, "?expires="+unix+"&signature="+hex.EncodeToString(mac.Sum(nil))+signerQuery(signing.signer))
 }

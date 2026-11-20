@@ -41,6 +41,37 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 	if err := json.Unmarshal(raw, &result.Key); err != nil {
 		return result, err
 	}
+	return s.finishAPIKeyAuthentication(ctx, result, workspace, hash, approved)
+}
+
+// APIKeyAuthenticationByID is AuthenticateAPIKeyRecord for a caller that holds
+// the key's identifier instead of its secret (a file link signed for the key):
+// the same live checks, including revocation, expiry, the owner's membership,
+// application and authorization state.
+func (s *SQLiteStore) APIKeyAuthenticationByID(ctx context.Context, workspace, keyID string, approved func(*domain.Bootstrap, string, []string) bool) (APIKeyAuthentication, error) {
+	result := APIKeyAuthentication{}
+	if workspace == "" || keyID == "" {
+		return result, ErrAuthForbidden
+	}
+	var raw []byte
+	err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='apiKeys' AND record_key=?`, workspace, keyID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return result, ErrAuthForbidden
+	}
+	if err != nil {
+		return result, err
+	}
+	if err := json.Unmarshal(raw, &result.Key); err != nil {
+		return result, err
+	}
+	if result.Key.ID != keyID || result.Key.SecretHash == "" {
+		return result, ErrAuthForbidden
+	}
+	return s.finishAPIKeyAuthentication(ctx, result, workspace, result.Key.SecretHash, approved)
+}
+
+func (s *SQLiteStore) finishAPIKeyAuthentication(ctx context.Context, result APIKeyAuthentication, workspace, hash string, approved func(*domain.Bootstrap, string, []string) bool) (APIKeyAuthentication, error) {
+	var raw []byte
 	key := result.Key
 	if key.GrantType == "" && key.AuthorizationID == "" && strings.HasPrefix(key.OAuthClientID, "flow_client_") {
 		return result, ErrAuthForbidden
