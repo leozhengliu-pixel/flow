@@ -256,6 +256,8 @@ var scaleP21ReviewedRoutes = []string{
 	"GET /api/account/data-exports\ts.listPersonalDataExports",
 	"GET /api/account/data-exports/{id}/download\ts.downloadPersonalDataExport",
 	"GET /api/account/identities\ts.listAccountIdentities",
+	"GET /api/account/identities/link/enterprise/{id}/start\ts.startEnterpriseOIDCLink",
+	"GET /api/account/identities/link/{provider}/start\ts.startOIDCLink",
 	"GET /api/account/passkeys\ts.listPasskeys",
 	"GET /api/account/sessions\ts.listAccountSessions",
 	"GET /api/account/settings\ts.getUserSettings",
