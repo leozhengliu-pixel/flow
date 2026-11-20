@@ -272,6 +272,7 @@ func (a EventAccess) RealtimeQuery() (IssueRecordQuery, error) {
 	query := IssueRecordQuery{Workspace: a.policy.workspace, Access: &IssueRecordAccess{UserID: data.Viewer.ID, WorkspaceID: data.Workspace.ID, Admin: admin && len(visible) == active, WorkspaceAdmin: admin, VisibleTeamIDs: visible, ArchivedTeamIDs: ArchivedTeamIDs(data)}}
 	if a.policy.selected() {
 		query.AllowedTeamIDs = append([]string{}, a.policy.key.TeamIDs...)
+		query.AllowedTeamsAppKey = a.policy.key.Actor == "app"
 	}
 	return query, nil
 }
