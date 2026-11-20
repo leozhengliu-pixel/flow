@@ -318,15 +318,36 @@ func workspaceAdminRole(role string) bool {
 }
 
 // apiKeyDocumentOutOfTeams reports whether a document lies outside a team
-// restricted key's teams: none of its own teams is allowed, or (with no team of
-// its own) it is scoped by private teams of its issue or project none of
-// which is allowed. It ignores every grant the key's owner holds as a person.
-func apiKeyDocumentOutOfTeams(allowed map[string]bool, linkScope *store.DocumentLinkScope, document domain.Document) bool {
+// restricted key's teams, by the one rule every read applies (the bootstrap,
+// the lists and the single reads): a document with teams of its own is inside
+// when one of them is allowed. A document without a team of its own is
+// outside, except for an application reading the documents attached to the
+// issues and projects of its teams; even then a private team of its issue or
+// project outside the key keeps it out. linkScope must be built from the
+// key's teams only (apiKeyDocumentLinkScope). It ignores every grant the key's
+// owner holds as a person.
+func apiKeyDocumentOutOfTeams(key domain.APIKey, allowed map[string]bool, linkScope *store.DocumentLinkScope, document domain.Document) bool {
+	inKey := func(id string) bool { return allowed[id] }
 	if len(document.TeamIDs) > 0 {
-		return !slices.ContainsFunc(document.TeamIDs, func(id string) bool { return allowed[id] })
+		return !slices.ContainsFunc(document.TeamIDs, inKey)
+	}
+	if key.Actor != "app" || !slices.ContainsFunc(document.InheritedTeamIDs, inKey) {
+		return true
 	}
 	closed := linkScope.ClosedTeams(document)
-	return len(closed) > 0 && !slices.ContainsFunc(closed, func(id string) bool { return allowed[id] })
+	return len(closed) > 0 && !slices.ContainsFunc(closed, inKey)
+}
+
+// apiKeyDocumentLinkScope is the document link scope a key sees: its teams
+// alone, so a team outside the key scopes a document like a private one.
+func apiKeyDocumentLinkScope(data domain.Bootstrap, allowed map[string]bool) *store.DocumentLinkScope {
+	teams := make([]domain.Team, 0, len(allowed))
+	for _, team := range data.Teams {
+		if allowed[team.ID] {
+			teams = append(teams, team)
+		}
+	}
+	return store.NewDocumentLinkScope(teams, data.TeamSettings)
 }
 
 // apiKeyDocumentOutsideScope applies the request key's team restriction over
@@ -342,7 +363,7 @@ func apiKeyDocumentOutsideScope(r *http.Request, data domain.Bootstrap, document
 	for _, id := range key.TeamIDs {
 		allowed[id] = true
 	}
-	return apiKeyDocumentOutOfTeams(allowed, store.NewDocumentLinkScope(data.Teams, data.TeamSettings), document)
+	return apiKeyDocumentOutOfTeams(key, allowed, apiKeyDocumentLinkScope(data, allowed), document)
 }
 
 // apiKeyTrashOutsideScope is apiKeyDocumentOutsideScope for a deleted
@@ -420,12 +441,14 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 			data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
 		}
 	}
-	// A document scoped by a private team of its issue or project follows the
-	// key's teams like its own teams do.
-	linkScope := store.NewDocumentLinkScope(data.Teams, data.TeamSettings)
+	// The one document rule of every key read (apiKeyDocumentOutOfTeams).
+	linkScope := apiKeyDocumentLinkScope(*data, allowed)
 	data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
-		return apiKeyDocumentOutOfTeams(allowed, linkScope, document)
+		return apiKeyDocumentOutOfTeams(key, allowed, linkScope, document)
 	})
+	// Templates, team settings and team page collections stay within the
+	// key's teams; release notes and history follow the releases left above.
+	store.FilterTeamScopedCollections(data, func(id string) bool { return allowed[id] }, func(id string) bool { return allowed[id] })
 	data.SavedViews = slices.DeleteFunc(data.SavedViews, func(view domain.SavedView) bool {
 		return view.Scope == "team" && !allowed[view.TeamID] || view.ProjectID != "" && !visibleProjects[view.ProjectID]
 	})

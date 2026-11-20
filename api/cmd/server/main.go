@@ -1506,6 +1506,10 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 		return
 	}
 	allowed := func(id string) bool { return slices.Contains(key.TeamIDs, id) }
+	keyTeams := make(map[string]bool, len(key.TeamIDs))
+	for _, id := range key.TeamIDs {
+		keyTeams[id] = true
+	}
 	data.Teams = slices.DeleteFunc(data.Teams, func(item domain.Team) bool { return !allowed(item.ID) })
 	data.States = slices.DeleteFunc(data.States, func(item domain.WorkflowState) bool { return item.TeamID != "" && !allowed(item.TeamID) })
 	// Labels and label groups share one scope convention: empty or
@@ -1557,20 +1561,15 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(relation domain.ProjectRelation) bool {
 		return !visibleProject(relation.ProjectID) || !visibleProject(relation.RelatedProjectID)
 	})
-	data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.TeamID != "" && !allowed(item.TeamID) })
 	data.ProjectTemplates = slices.DeleteFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
 	})
-	data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.TeamID != "" && !allowed(item.TeamID) })
+	// The one document rule of every key read, single reads included
+	// (apiKeyDocumentOutOfTeams). The viewer projection has already applied
+	// the document's grants.
+	documentScope := apiKeyDocumentLinkScope(*data, keyTeams)
 	documentOutside := func(item domain.Document) bool {
-		if slices.ContainsFunc(item.TeamIDs, allowed) {
-			return false
-		}
-		// An application reads the documents attached to the issues and
-		// projects of its teams (the parent resources it can read), when the
-		// document has no teams of its own; the viewer projection has already
-		// applied the document's grants.
-		return key.Actor != "app" || len(item.TeamIDs) > 0 || !slices.ContainsFunc(item.InheritedTeamIDs, allowed)
+		return apiKeyDocumentOutOfTeams(key, keyTeams, documentScope, item)
 	}
 	data.Documents = slices.DeleteFunc(data.Documents, documentOutside)
 	// A deleted resource stays within its teams like a live one: the key's
@@ -3350,7 +3349,19 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		input.TeamID = projected.Teams[0].ID
 	}
+	var templateViewer templateAccess
+	if input.TemplateID != "" {
+		viewer, err := s.requestTemplateAccess(r)
+		if err != nil {
+			respondMutation(w, err, http.StatusCreated, nil)
+			return
+		}
+		templateViewer = viewer
+	}
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "issue.created", input, func(data *domain.Bootstrap) (string, error) {
+		if err := issueCreateTemplateUsable(data, templateViewer, input); err != nil {
+			return "", err
+		}
 		return createIssueInWorkspace(data, input, store.IssueCreationKey(r.Context()), &created)
 	})
 	if err == nil && triageIntelligenceWorkspaceEnabled(s, workspaceKey(r)) {

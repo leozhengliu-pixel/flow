@@ -2071,6 +2071,7 @@ func filterBootstrapTeams(data *domain.Bootstrap, scope bootstrapTeamScope, gues
 		data.Releases[index].ProjectIDs = slices.DeleteFunc(data.Releases[index].ProjectIDs, func(id string) bool { return !visibleProjects[id] })
 		data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
 	}
+	FilterTeamScopedCollections(data, func(id string) bool { return teamRows[id] }, func(id string) bool { return allowed[id] })
 	for id := range data.ProjectUpdates {
 		if !visibleProjects[id] {
 			delete(data.ProjectUpdates, id)

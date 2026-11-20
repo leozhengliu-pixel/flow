@@ -477,6 +477,14 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.Document
+	var viewer templateAccess
+	if input.TemplateID != nil && *input.TemplateID != "" {
+		var err error
+		if viewer, err = s.requestTemplateAccess(r); err != nil {
+			respondMutation(w, err, http.StatusCreated, nil)
+			return
+		}
+	}
 	err := s.store.MutateWorkspaceWithAggregate(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), "document.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		title := ""
@@ -485,6 +493,12 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 			index := slices.IndexFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == *input.TemplateID })
 			if index < 0 {
 				return "", errInvalid
+			}
+			// A template of a team the viewer does not see is unknown to
+			// them; one that files the document in its team needs that
+			// team's content access, as choosing the team would.
+			if err := documentTemplateUsableBy(viewer, data.DocumentTemplates[index], input.TeamIDs != nil); err != nil {
+				return "", err
 			}
 			template = &data.DocumentTemplates[index]
 			if template.Title != "" {
@@ -1730,11 +1744,18 @@ func (s *server) createAsk(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "title is required")
 		return
 	}
+	viewer, ok := s.askTemplateAccess(w, r, input.TemplateID != nil && *input.TemplateID != "")
+	if !ok {
+		return
+	}
 	var created domain.Ask
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "ask.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		created = domain.Ask{ID: idgen.New("ask_"), Title: strings.TrimSpace(*input.Title), Source: "web", Requester: data.Viewer, Status: "pending", Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyAskInput(data, &created, input); err != nil {
+			return "", err
+		}
+		if err := askTemplateUsable(data, viewer, created); err != nil {
 			return "", err
 		}
 		data.Asks = append([]domain.Ask{created}, data.Asks...)
@@ -1750,6 +1771,12 @@ func (s *server) updateAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	// The template is checked again when it or the team it fills changes.
+	retemplated := input.TemplateID != nil || input.TeamID != nil
+	viewer, ok := s.askTemplateAccess(w, r, retemplated)
+	if !ok {
+		return
+	}
 	var updated domain.Ask
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "ask.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Asks, func(item domain.Ask) bool { return item.ID == id })
@@ -1759,6 +1786,11 @@ func (s *server) updateAsk(w http.ResponseWriter, r *http.Request) {
 		before := data.Asks[index]
 		if err := applyAskInput(data, &data.Asks[index], input); err != nil {
 			return err
+		}
+		if retemplated {
+			if err := askTemplateUsable(data, viewer, data.Asks[index]); err != nil {
+				return err
+			}
 		}
 		if unchangedEdit(before, data.Asks[index]) {
 			updated = before
@@ -1782,6 +1814,10 @@ func (s *server) decideAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	viewer, ok := s.askTemplateAccess(w, r, input.Decision == "approved")
+	if !ok {
+		return
+	}
 	var updated domain.Ask
 	createdIssueID := ""
 	err := s.store.MutateWorkspace(issueCreationScope(r.Context(), nil), workspaceKey(r), "ask.decided", id, input, func(data *domain.Bootstrap) error {
@@ -1790,6 +1826,12 @@ func (s *server) decideAsk(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		ask := &data.Asks[index]
+		// Approving creates the issue from the ask's template as the approver.
+		if input.Decision == "approved" && ask.IssueID == "" {
+			if err := askTemplateUsable(data, viewer, *ask); err != nil {
+				return err
+			}
+		}
 		now := time.Now().UTC()
 		approval := domain.AskApproval{ID: idgen.New("ask_approval_"), AskID: id, Approver: data.Viewer, Decision: input.Decision, Note: strings.TrimSpace(input.Note), DecidedAt: &now}
 		ask.Approvals = append(ask.Approvals, approval)
