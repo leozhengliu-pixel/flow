@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"testing"
 	"time"
 )
 
@@ -50,4 +51,45 @@ func (s *SQLiteStore) SessionAuthentication(ctx context.Context, token string) (
 		}
 	}
 	return result, nil
+}
+
+// SessionCreatedAt is when the browser session was issued by a sign-in.
+func (s *SQLiteStore) SessionCreatedAt(ctx context.Context, token string) (time.Time, error) {
+	var raw string
+	if err := s.db.QueryRowContext(ctx, `SELECT created_at FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&raw); err != nil {
+		return time.Time{}, err
+	}
+	return time.Parse(time.RFC3339Nano, raw)
+}
+
+// BackdateSessionForTesting makes a session, and the second-factor
+// verification it carries, older by age.
+func (s *SQLiteStore) BackdateSessionForTesting(ctx context.Context, token string, age time.Duration) error {
+	if !testing.Testing() {
+		return sql.ErrConnDone
+	}
+	hash := tokenHash(token)
+	var created string
+	if err := s.db.QueryRowContext(ctx, `SELECT created_at FROM auth_sessions WHERE token_hash=?`, hash).Scan(&created); err != nil {
+		return err
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, created)
+	if err != nil {
+		return err
+	}
+	if _, err = s.db.ExecContext(ctx, `UPDATE auth_sessions SET created_at=? WHERE token_hash=?`, parsed.Add(-age).Format(time.RFC3339Nano), hash); err != nil {
+		return err
+	}
+	var verified sql.NullString
+	if err = s.db.QueryRowContext(ctx, `SELECT mfa_verified_at FROM auth_session_security WHERE token_hash=?`, hash).Scan(&verified); err == sql.ErrNoRows || !verified.Valid {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	parsed, err = time.Parse(time.RFC3339Nano, verified.String)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `UPDATE auth_session_security SET mfa_verified_at=? WHERE token_hash=?`, parsed.Add(-age).Format(time.RFC3339Nano), hash)
+	return err
 }

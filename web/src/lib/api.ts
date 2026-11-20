@@ -116,6 +116,7 @@ import type { ApplicationInstallation } from "@/lib/application-agents";
 import { rememberTrashRetention } from "@/lib/trash-retention";
 import { rememberChatPlatform } from "@/lib/chat-platform";
 import { markSuspendedMembersInactive } from "@/lib/people";
+import { decodeBase64Url, encodeBase64Url } from "@/lib/webauthn";
 import { apiFetch, ApiError as PulseApiError, jsonRequest, request, requestRetryingBusy } from "@/lib/api-client";
 import { queueIssuesWrite, queueIssueUpdate, queueIssueWrite } from "@/lib/issue-mutation-queue";
 import { modelChanges, modelManifest, modelRecordBatch, modelRecordPage, wireRecordKind, type SyncWireRecord } from '@/lib/scale-p13-wire';
@@ -920,27 +921,76 @@ export function rotateAPIKey(id: string): Promise<{ key: APIKey; secret: string 
 export function fetchPasskeys(): Promise<Passkey[]> {
   return request("/api/account/passkeys");
 }
+/**
+ * Verifies the account's second factor with a registered passkey: the server
+ * stamps this session as freshly verified. Used for the workspace prompt and
+ * when a factor change asks for a recent verification.
+ */
+export async function verifyMfaWithPasskey(canceledMessage = "Verification was canceled"): Promise<void> {
+  const start = await request<{
+    challengeId: string;
+    options: { publicKey: PublicKeyCredentialRequestOptions & { challenge: string; allowCredentials?: { id: string; type: "public-key" }[] } };
+  }>("/api/account/mfa/start", { method: "POST" });
+  const source = start.options.publicKey;
+  const credential = (await navigator.credentials.get({
+    publicKey: {
+      ...source,
+      challenge: decodeBase64Url(String(source.challenge)),
+      allowCredentials: source.allowCredentials?.map((item) => ({ ...item, id: decodeBase64Url(String(item.id)) })),
+    },
+  })) as PublicKeyCredential | null;
+  if (!credential) throw new Error(canceledMessage);
+  const response = credential.response as AuthenticatorAssertionResponse;
+  await request(
+    "/api/account/mfa/finish",
+    jsonRequest("POST", {
+      challengeId: start.challengeId,
+      credential: {
+        id: credential.id,
+        type: credential.type,
+        rawId: encodeBase64Url(credential.rawId),
+        response: {
+          clientDataJSON: encodeBase64Url(response.clientDataJSON),
+          authenticatorData: encodeBase64Url(response.authenticatorData),
+          signature: encodeBase64Url(response.signature),
+          userHandle: response.userHandle ? encodeBase64Url(response.userHandle) : null,
+        },
+      },
+    }),
+  );
+}
+/** Changing a registered factor needs a recent verification: ask for it once, then retry. */
+async function withMfaReauth<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof PulseApiError && error.code === "mfa_reauth_required") {
+      await verifyMfaWithPasskey();
+      return run();
+    }
+    throw error;
+  }
+}
 export function beginPasskeyRegistration(): Promise<{
   registrationId: string;
   options: unknown;
 }> {
-  return request("/api/account/passkeys/register/start", { method: "POST" });
+  return withMfaReauth(() => request("/api/account/passkeys/register/start", { method: "POST" }));
 }
 export function finishPasskeyRegistration(input: {
   registrationId: string;
   name?: string;
   credential: unknown;
 }): Promise<Passkey> {
-  return request(
-    "/api/account/passkeys/register/finish",
-    jsonRequest("POST", input),
+  return withMfaReauth(() =>
+    request("/api/account/passkeys/register/finish", jsonRequest("POST", input)),
   );
 }
 export function updatePasskey(id: string, name: string): Promise<Passkey> {
   return request(`/api/account/passkeys/${id}`, jsonRequest("PATCH", { name }));
 }
 export function deletePasskey(id: string): Promise<void> {
-  return request(`/api/account/passkeys/${id}`, { method: "DELETE" });
+  return withMfaReauth(() => request(`/api/account/passkeys/${id}`, { method: "DELETE" }));
 }
 export function fetchCommitSigningKey(): Promise<CommitSigningKey | null> {
   return request("/api/account/signing-key");

@@ -261,6 +261,9 @@ func (s *server) cleanupFileUploads(ctx context.Context) {
 // icons, workspace logos) to the people who see their record, then falls back
 // to the existing attachment visibility rules.
 func (s *server) serveUploadOrAsset(w http.ResponseWriter, r *http.Request) {
+	// Uploads name no workspace, so each workspace the file could come from is
+	// held to its own sign-in policy (SSO enforcement, required second factor).
+	r = s.withSessionPolicy(r)
 	name := r.PathValue("name")
 	if strings.HasPrefix(name, "asset_") && filepath.Base(name) == name {
 		if upload, err := s.store.FileUploadByObject(r.Context(), name); err == nil && upload.Purpose == "asset" && (s.authDisabled || s.assetReadable(r, upload)) {
@@ -289,15 +292,16 @@ func (s *server) assetReadable(r *http.Request, upload store.FileUpload) bool {
 	if user == "" {
 		return false
 	}
-	if user == upload.UserID {
-		return true
-	}
 	workspaceID, err := s.store.WorkspaceIDForKey(r.Context(), upload.WorkspaceKey)
 	if err != nil {
-		return false
+		return user == upload.UserID
 	}
 	role, status, err := s.store.WorkspaceRole(r.Context(), workspaceID, user)
-	return err == nil && status == "active" && role != "guest"
+	member := err == nil && status == "active"
+	if member && !workspacePolicyAllows(r.Context(), upload.WorkspaceKey, role) {
+		return false
+	}
+	return user == upload.UserID || member && role != "guest"
 }
 
 func (s *server) writeStoredObject(w http.ResponseWriter, r *http.Request, name string) {
@@ -394,6 +398,7 @@ type signedFile = publicapi.SignedFile
 // signFileURLs issues signed URLs for files the caller can download now:
 // GET /api/files/sign?url=<file url>&url=…&expiresIn=<seconds, default 3600>.
 func (s *server) signFileURLs(w http.ResponseWriter, r *http.Request) {
+	r = s.withSessionPolicy(r)
 	urls := r.URL.Query()["url"]
 	if len(urls) == 0 || len(urls) > 100 {
 		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Pass 1 to 100 url parameters")

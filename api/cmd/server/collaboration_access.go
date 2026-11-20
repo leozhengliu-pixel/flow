@@ -137,7 +137,9 @@ func collaborationAccessScope(event domain.RealtimeEvent) (socketAccessScope, bo
 	case strings.HasPrefix(kind, "team.") || strings.HasPrefix(kind, "team_member.") || strings.HasPrefix(kind, "workspace_member."),
 		kind == "workspace.updated", kind == "workspace.settings_updated", kind == "workspace.deleted", kind == "workspace.resync_required",
 		kind == "user.updated", strings.HasPrefix(kind, "account."), strings.HasPrefix(kind, "api_key."), strings.HasPrefix(kind, "oauth"),
-		strings.HasPrefix(kind, "application."):
+		strings.HasPrefix(kind, "application."), strings.HasPrefix(kind, "identity_provider."), kind == "workspace_preferences.updated":
+		// Sign-in policy (SSO, second factor, methods) is held by the settings
+		// and the identity providers; sockets are held to it.
 		return socketAccessScope{all: true}, true
 	case kind == "issue.batch_updated", kind == "issues.deleted", kind == "issue.suggestion_accepted":
 		// Batch updates and accepted team suggestions can move issues to
@@ -572,5 +574,19 @@ func (s *server) socketCredentialValid(r *http.Request) bool {
 		return err == nil && auth.Key.ID == key.ID && auth.User.ID == user.ID
 	}
 	cookie, err := r.Cookie(sessionCookieName)
-	return err == nil && s.store.SessionValid(ctx, cookie.Value, user.ID)
+	if err != nil || !s.store.SessionValid(ctx, cookie.Value, user.ID) {
+		return false
+	}
+	// A policy change (SSO enforced, second factor required, sign-in method
+	// withdrawn) closes the sockets a session no longer qualifies for.
+	workspace := workspaceKey(r)
+	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspace)
+	if err != nil {
+		return false
+	}
+	role, status, err := s.store.WorkspaceRole(ctx, workspaceID, user.ID)
+	if err != nil || status != "active" {
+		return false
+	}
+	return s.sessionPolicyChecker(r)(ctx, workspace, role)
 }

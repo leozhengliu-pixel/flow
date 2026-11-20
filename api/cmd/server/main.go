@@ -5896,6 +5896,9 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 		return true
 	}
 	for _, membership := range account.Workspaces {
+		if !workspacePolicyAllows(ctx, membership.Workspace.URLKey, membership.Role) {
+			continue
+		}
 		data, access, err := s.store.IssueQueryAccess(ctx, membership.Workspace.URLKey, userID)
 		if err != nil {
 			continue
