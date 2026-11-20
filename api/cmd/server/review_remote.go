@@ -450,6 +450,10 @@ type memberReviewRemote struct {
 	mu           sync.Mutex
 	revoked      bool
 	used         reviewRemote
+	// strict: the member's own account is the only credential (approve,
+	// request changes, merge, close, reopen, ready for review). A rejected
+	// token asks the member to reconnect instead of using the workspace's.
+	strict bool
 }
 
 func (m *memberReviewRemote) Provider() string { return m.member.Provider() }
@@ -482,6 +486,9 @@ func (m *memberReviewRemote) try(ctx context.Context, call func(reviewRemote) er
 			m.mu.Unlock()
 			if first {
 				m.s.markCodeHostAccountReconnect(ctx, m.account, "The code host rejected the token. Reconnect the account.")
+			}
+			if m.strict {
+				return &reviewAccountRequiredError{provider: m.Provider(), reconnect: true, err: err}
 			}
 			if m.workspace == nil {
 				if m.workspaceErr != nil {
@@ -518,10 +525,43 @@ func (m *memberReviewRemote) GraphQL(ctx context.Context, query string, variable
 	return m.try(ctx, func(remote reviewRemote) error { return remote.GraphQL(ctx, query, variables, out) })
 }
 
+// reviewAccountRequiredError: an action that only the member's own code host
+// account may perform (approve, request changes, merge, close, reopen, mark
+// ready) has no usable linked account: none linked, unusable, or the host
+// rejected its token. The workspace credential never stands in.
+type reviewAccountRequiredError struct {
+	provider  string
+	reconnect bool
+	err       error
+}
+
+const reviewAccountRequiredCode = "code_host_account_required"
+
+func (e *reviewAccountRequiredError) Error() string {
+	host := reviewHostLabel(e.provider)
+	if e.reconnect {
+		return fmt.Sprintf("%s rejected your connected account's token. Reconnect your %s account in Settings > Connected accounts, then try again.", host, host)
+	}
+	return fmt.Sprintf("Connect your %s account in Settings > Connected accounts to approve, request changes, merge or close this review. These actions run as you on %s.", host, host)
+}
+
+func (e *reviewAccountRequiredError) Unwrap() error { return e.err }
+
+// reviewRemoteStrictAs reaches the review's code host only as the actor's own
+// linked account, never through the workspace credential, so the host decides
+// what the actor may approve or merge.
+func (s *server) reviewRemoteStrictAs(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User) (reviewRemote, error) {
+	member := s.memberReviewProvider(ctx, data, review, actor)
+	if member == nil {
+		return nil, &reviewAccountRequiredError{provider: review.Provider}
+	}
+	return &memberReviewRemote{s: s, member: newClassicReviewRemote(member, review), account: *member.account, strict: true}, nil
+}
+
 // reviewRemoteAs is the one credential path for everything Flow writes to a
 // review's code host on a member's behalf (comments, replies, inline
-// comments, resolution, approvals, merge, close, reopen): the actor's
-// linked account first (memberReviewRemote), else the workspace order of
+// comments, resolution; decisions and status changes use
+// reviewRemoteStrictAs): the actor's linked account first (memberReviewRemote), else the workspace order of
 // reviewRemoteFor. Without a linked account (webhooks, system actions,
 // apps) it is reviewRemoteFor.
 func (s *server) reviewRemoteAs(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, readOnly bool) (reviewRemote, error) {
