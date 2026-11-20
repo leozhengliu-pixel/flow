@@ -280,6 +280,15 @@ func (s *server) chatPersonalNotificationItem(ctx context.Context, record domain
 	if err != nil {
 		return notificationEmailItem{}, "", err
 	}
+	if documentNotification(notification) {
+		deliverable, err := s.documentNotificationDeliverable(ctx, record.WorkspaceKey, notification)
+		if err != nil {
+			return notificationEmailItem{}, "", err
+		}
+		if !deliverable {
+			return notificationEmailItem{}, chatPersonalNoAccess, nil
+		}
+	}
 	if display != nil && notification.ReviewID != "" {
 		if err := display.LoadReview(ctx, notification.ReviewID); err != nil {
 			return notificationEmailItem{}, "", err
