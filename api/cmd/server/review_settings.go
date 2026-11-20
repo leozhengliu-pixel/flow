@@ -86,16 +86,26 @@ func (s *server) memberReviewProvider(ctx context.Context, data domain.Bootstrap
 	return provider
 }
 
-// withReviewRemote runs a synchronous action (approve, request changes,
-// merge, close, reopen, ready for review) on the code host as the actor,
-// through the same credential path as comment write-back (reviewRemoteAs).
-// It returns who the action was posted as, or nil when the review has no
-// code host.
-func (s *server) withReviewRemote(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, action func(reviewRemote) error) (*domain.ReviewPostedAs, error) {
+// withReviewRemote runs a synchronous action on the code host as the actor.
+// Comments (strict false) use the comment write-back path (reviewRemoteAs:
+// the member's account, else the workspace credential). Approve, request
+// changes, merge, close, reopen and ready for review (strict) run only as the
+// actor's own linked account. It returns who the action was posted as, or nil
+// when the review has no code host.
+func (s *server) withReviewRemote(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, strict bool, action func(reviewRemote) error) (*domain.ReviewPostedAs, error) {
 	if review.Provider != "github" && review.Provider != "gitlab" {
 		return nil, nil
 	}
-	remote, err := s.reviewRemoteAs(ctx, data, review, actor, false)
+	var remote reviewRemote
+	var err error
+	if strict {
+		if review.Number <= 0 || review.RepositoryOwner == "" || review.RepositoryName == "" {
+			return nil, nil
+		}
+		remote, err = s.reviewRemoteStrictAs(ctx, data, review, actor)
+	} else {
+		remote, err = s.reviewRemoteAs(ctx, data, review, actor, false)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -176,16 +186,20 @@ func (s *server) workspaceReviewProvider(ctx context.Context, data domain.Bootst
 	return nil, fmt.Errorf("connect %s before changing this review", review.Provider)
 }
 
+// syncReviewStatus is the system path (no acting member): the workspace
+// credential. Requests use syncReviewStatusAs.
 func (s *server) syncReviewStatus(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, status, method string) error {
-	_, err := s.syncReviewStatusAs(ctx, data, review, data.Viewer, status, method)
+	_, err := s.withReviewRemote(ctx, data, review, data.Viewer, false, func(remote reviewRemote) error {
+		return reviewStatusAction(ctx, remote, review, status, method)
+	})
 	return err
 }
 
-// syncReviewStatusAs merges, closes or reopens the PR/MR as the actor (their
-// linked account, else the workspace integration) and reports who it was
+// syncReviewStatusAs merges, closes or reopens the PR/MR as the actor's own
+// linked account (never the workspace integration) and reports who it was
 // posted as.
 func (s *server) syncReviewStatusAs(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, status, method string) (*domain.ReviewPostedAs, error) {
-	return s.withReviewRemote(ctx, data, review, actor, func(remote reviewRemote) error {
+	return s.withReviewRemote(ctx, data, review, actor, true, func(remote reviewRemote) error {
 		return reviewStatusAction(ctx, remote, review, status, method)
 	})
 }
@@ -262,7 +276,7 @@ func (s *server) markReviewReady(ctx context.Context, data domain.Bootstrap, rev
 	if !review.Draft {
 		return nil
 	}
-	_, err := s.withReviewRemote(ctx, data, review, data.Viewer, func(remote reviewRemote) error {
+	_, err := s.withReviewRemote(ctx, data, review, data.Viewer, true, func(remote reviewRemote) error {
 		return markReviewReadyAction(ctx, remote, review)
 	})
 	return err
@@ -305,7 +319,8 @@ type reviewCredentialError struct{ message string }
 func (e *reviewCredentialError) Error() string { return e.message }
 
 // postReviewActivity posts a Flow review decision to the PR/MR as the actor
-// (their linked account, else the workspace integration) and reports who it
+// (comments: their linked account, else the workspace integration; approvals
+// and change requests: their linked account only) and reports who it
 // was posted as. A review without a code host, or a workspace without a
 // usable credential, keeps the activity in Flow only (nil, nil).
 func (s *server) postReviewActivity(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, kind, body string) (*domain.ReviewPostedAs, error) {
@@ -325,7 +340,7 @@ func (s *server) postReviewDecision(ctx context.Context, data domain.Bootstrap, 
 		return nil, nil, nil
 	}
 	var ref *domain.ReviewEventRemote
-	postedAs, err := s.withReviewRemote(ctx, data, review, actor, func(remote reviewRemote) error {
+	postedAs, err := s.withReviewRemote(ctx, data, review, actor, kind != "comment", func(remote reviewRemote) error {
 		var err error
 		ref, err = reviewActivityAction(ctx, remote, review, kind, body)
 		return err
