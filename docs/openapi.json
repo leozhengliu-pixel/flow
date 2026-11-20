@@ -713,6 +713,76 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/account/identities/link/{provider}/start": {
+      "get": {
+        "operationId": "get_account_identities_link_provider_start",
+        "tags": [
+          "account"
+        ],
+        "summary": "GET /api/account/identities/link/{provider}/start",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/account/identities/link/enterprise/{id}/start": {
+      "get": {
+        "operationId": "get_account_identities_link_enterprise_id_start",
+        "tags": [
+          "account"
+        ],
+        "summary": "GET /api/account/identities/link/enterprise/{id}/start",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/account/last-workspace": {
       "put": {
         "operationId": "put_account_last_workspace",
