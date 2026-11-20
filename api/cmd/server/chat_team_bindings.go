@@ -604,6 +604,13 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 		writeChatError(w, 400, "Authorize sharing this team with the group to save the binding")
 		return
 	}
+	// The binding's templates create issues as the group's members: the
+	// person binding it must be able to use them in the binding's team.
+	templates, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "issueTemplates", "teams", "teamSettings")
+	if !s.chatBindingTemplatesUsable(r, templates, binding) {
+		writeChatError(w, 400, "Select an active team and a compatible project and template")
+		return
+	}
 	teams, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "teams", "teamSettings")
 	_, private := chatTeamState(teams, binding.TeamID)
 	role := domain.ChatBindingRoleTeamOwner

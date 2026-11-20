@@ -82,3 +82,38 @@ func (scope *DocumentLinkScope) TeamClosed(teamID string) bool {
 	}
 	return scope.teamClosed(teamID)
 }
+
+// BlankHiddenTemplateDefaults clears the default templates a projected team's
+// settings name (for members, for non-members, for projects) when the
+// projection left that template out: the viewer would otherwise learn the id
+// of a template they may not see. A template collection that is absent (nil:
+// a partial read that did not load it) leaves its defaults alone.
+func BlankHiddenTemplateDefaults(data *domain.Bootstrap) {
+	if len(data.TeamSettings) == 0 || data.IssueTemplates == nil && data.ProjectTemplates == nil {
+		return
+	}
+	issueTemplates := make(map[string]bool, len(data.IssueTemplates))
+	for _, template := range data.IssueTemplates {
+		issueTemplates[template.ID] = true
+	}
+	projectTemplates := make(map[string]bool, len(data.ProjectTemplates))
+	for _, template := range data.ProjectTemplates {
+		projectTemplates[template.ID] = true
+	}
+	hiddenIssue := func(id string) bool { return id != "" && data.IssueTemplates != nil && !issueTemplates[id] }
+	for teamID, settings := range data.TeamSettings {
+		changed := false
+		if hiddenIssue(settings.DefaultIssueTemplateForMembersID) {
+			settings.DefaultIssueTemplateForMembersID, changed = "", true
+		}
+		if hiddenIssue(settings.DefaultIssueTemplateForNonMembersID) {
+			settings.DefaultIssueTemplateForNonMembersID, changed = "", true
+		}
+		if settings.DefaultProjectTemplateID != "" && data.ProjectTemplates != nil && !projectTemplates[settings.DefaultProjectTemplateID] {
+			settings.DefaultProjectTemplateID, changed = "", true
+		}
+		if changed {
+			data.TeamSettings[teamID] = settings
+		}
+	}
+}

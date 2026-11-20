@@ -1044,6 +1044,7 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 	data.ProjectTemplates = slices.DeleteFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, func(teamID string) bool { return allowed[teamID] })
 	})
+	BlankHiddenTemplateDefaults(&data)
 	data.Notifications = slices.DeleteFunc(data.Notifications, func(item domain.Notification) bool { return item.RecipientID != userID })
 	data.NotificationDeliveries = slices.DeleteFunc(data.NotificationDeliveries, func(item domain.NotificationDelivery) bool { return item.RecipientID != userID })
 	if preferences, ok := data.NotificationPreferences[userID]; ok {

@@ -98,10 +98,7 @@ func (a templateAccess) teamTemplatesManageable(teamID string) bool {
 			break
 		}
 	}
-	permission := a.templatePermissions[teamID]
-	if permission == "" {
-		permission = "allMembers"
-	}
+	permission := teamTemplatePermission(domain.TeamSettings{TemplatePermission: a.templatePermissions[teamID]})
 	return teamOperationAllowed(domain.TeamSettings{}, permission, role, a.data.ViewerRole)
 }
 
@@ -255,6 +252,11 @@ func (s *server) issueTemplateEditAccess(w http.ResponseWriter, r *http.Request,
 	if err == nil {
 		err = issueTemplateInputReachable(viewer, input)
 	}
+	// Narrowing a template to a team makes it that team's template: the
+	// team's template permission applies, whichever route narrows it.
+	if err == nil && input.VisibilityTeamID != nil {
+		err = viewer.teamTemplateWritable(*input.VisibilityTeamID)
+	}
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return templateAccess{}, false
@@ -311,4 +313,37 @@ func documentTemplateUsableBy(viewer templateAccess, template domain.DocumentTem
 // templates change only through their team's routes, which check the team.
 func workspaceIssueTemplate(template domain.IssueTemplate) bool {
 	return issueTemplateOwnerTeamID(template) == ""
+}
+
+// chatBindingTemplatesUsable applies issueTemplateUsableBy, for the person
+// saving a chat binding, to the templates the binding creates issues from
+// (its create form's and its requests'), in the binding's team. data holds
+// the workspace's issue templates, teams and team settings. A template that
+// does not exist is left to the binding's own validation.
+func (s *server) chatBindingTemplatesUsable(r *http.Request, data domain.Bootstrap, binding domain.ChatBinding) bool {
+	ids := []string{}
+	if binding.TemplateID != "" {
+		ids = append(ids, binding.TemplateID)
+	}
+	if binding.Requests != nil && binding.Requests.TemplateID != "" {
+		ids = append(ids, binding.Requests.TemplateID)
+	}
+	if len(ids) == 0 {
+		return true
+	}
+	viewer, err := s.requestTemplateAccess(r)
+	if err != nil {
+		return false
+	}
+	for _, id := range ids {
+		index := slices.IndexFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool { return template.ID == id })
+		if index < 0 {
+			continue
+		}
+		template := data.IssueTemplates[index]
+		if !issueTemplateReachable(viewer, template) || issueTemplateUsableBy(&data, viewer, template, binding.TeamID) != nil {
+			return false
+		}
+	}
+	return true
 }

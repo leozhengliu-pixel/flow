@@ -1814,9 +1814,12 @@ func (s *server) decideAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	viewer, ok := s.askTemplateAccess(w, r, input.Decision == "approved")
-	if !ok {
-		return
+	// Read now, refused only when an approval creates the issue from a
+	// template (the callback below decides that).
+	var viewer templateAccess
+	var viewerErr error
+	if input.Decision == "approved" {
+		viewer, viewerErr = s.requestTemplateAccess(r)
 	}
 	var updated domain.Ask
 	createdIssueID := ""
@@ -1827,7 +1830,10 @@ func (s *server) decideAsk(w http.ResponseWriter, r *http.Request) {
 		}
 		ask := &data.Asks[index]
 		// Approving creates the issue from the ask's template as the approver.
-		if input.Decision == "approved" && ask.IssueID == "" {
+		if input.Decision == "approved" && ask.IssueID == "" && ask.TemplateID != "" {
+			if viewerErr != nil {
+				return viewerErr
+			}
 			if err := askTemplateUsable(data, viewer, *ask); err != nil {
 				return err
 			}
