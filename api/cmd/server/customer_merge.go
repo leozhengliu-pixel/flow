@@ -18,6 +18,10 @@ type customerMergeInput struct {
 // owner, revenue and size; the source's requests move to the target, project
 // links follow, domains are combined, and the source is deleted.
 func (s *server) mergeCustomer(w http.ResponseWriter, r *http.Request) {
+	// Merging deletes the source customer: a manual edit like any other.
+	if !s.allowManualCustomerEdit(w, r) {
+		return
+	}
 	sourceID := r.PathValue("id")
 	var input customerMergeInput
 	if !decodeJSON(w, r, &input) {

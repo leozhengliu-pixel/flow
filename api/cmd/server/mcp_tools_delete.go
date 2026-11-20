@@ -202,6 +202,9 @@ func (s *server) mcpResolveDeletion(ctx context.Context, actor mcpActor, data do
 	case "delete_agent_skill":
 		return s.mcpResolveSkillDeletion(actor, data, query, stringArg(args, "team"))
 	case "delete_customer":
+		if err := mcpCustomerManualEditsAllowed(actor, data); err != nil {
+			return nil, err
+		}
 		customer, err := mcpFindCustomer(data, query)
 		if err != nil {
 			return nil, err
