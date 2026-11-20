@@ -210,14 +210,14 @@ func (s *server) getDocument(w http.ResponseWriter, r *http.Request) {
 	data := s.documentWorkspaceData(r)
 	id := r.PathValue("id")
 	if document, err := documentByID(&data, id); err == nil {
-		if documentRole(s, data, *document) == "none" {
+		if documentRole(s, data, *document) == "none" || apiKeyDocumentOutsideScope(r, data, *document) {
 			writeError(w, http.StatusNotFound, "document not found")
 			return
 		}
 		writeJSON(w, http.StatusOK, s.withDocumentVersions(r, *document))
 		return
 	}
-	if document, entry, ok := trashedDocument(&data, id); ok && documentRole(s, data, document) != "none" {
+	if document, entry, ok := trashedDocument(&data, id); ok && documentRole(s, data, document) != "none" && !apiKeyDocumentOutsideScope(r, data, document) {
 		deletedAt := entry.DeletedAt
 		document.DeletedAt = &deletedAt
 		writeJSON(w, http.StatusOK, s.withDocumentVersions(r, document))
@@ -275,7 +275,7 @@ func (s *server) restoreDeletedDocument(w http.ResponseWriter, r *http.Request) 
 		if !ok {
 			return errNotFound
 		}
-		if !workspaceAdminRole(data.ViewerRole) && entry.DeletedBy.ID != data.Viewer.ID && documentRole(s, *data, document) != "owner" {
+		if !workspaceAdminRole(data.ViewerRole) && entry.DeletedBy.ID != data.Viewer.ID && documentRole(s, *data, document) != "owner" || apiKeyDocumentOutsideScope(r, *data, document) {
 			return store.ErrAuthForbidden
 		}
 		document.DeletedAt = nil

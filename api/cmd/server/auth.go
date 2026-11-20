@@ -317,6 +317,52 @@ func workspaceAdminRole(role string) bool {
 	return role == "admin" || role == "owner"
 }
 
+// apiKeyDocumentOutOfTeams reports whether a document lies outside a team
+// restricted key's teams: none of its own teams is allowed, or (with no team of
+// its own) it is scoped by private teams of its issue or project none of
+// which is allowed. It ignores every grant the key's owner holds as a person.
+func apiKeyDocumentOutOfTeams(allowed map[string]bool, linkScope *store.DocumentLinkScope, document domain.Document) bool {
+	if len(document.TeamIDs) > 0 {
+		return !slices.ContainsFunc(document.TeamIDs, func(id string) bool { return allowed[id] })
+	}
+	closed := linkScope.ClosedTeams(document)
+	return len(closed) > 0 && !slices.ContainsFunc(closed, func(id string) bool { return allowed[id] })
+}
+
+// apiKeyDocumentOutsideScope applies the request key's team restriction over
+// the grants its owner holds as a person (creator, workspace admin, subscriber,
+// explicit user grant): a restricted key never reaches a document outside its
+// teams. A session and an unrestricted key are never out of scope.
+func apiKeyDocumentOutsideScope(r *http.Request, data domain.Bootstrap, document domain.Document) bool {
+	key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	if !ok || !apiKeyTeamRestrictionSelected(key) {
+		return false
+	}
+	allowed := make(map[string]bool, len(key.TeamIDs))
+	for _, id := range key.TeamIDs {
+		allowed[id] = true
+	}
+	return apiKeyDocumentOutOfTeams(allowed, store.NewDocumentLinkScope(data.Teams, data.TeamSettings), document)
+}
+
+// apiKeyTrashOutsideScope is apiKeyDocumentOutsideScope for a deleted
+// resource: a restricted key restores or purges only entries within its teams,
+// whoever deleted them.
+func apiKeyTrashOutsideScope(r *http.Request, data domain.Bootstrap, entry domain.TrashEntry) bool {
+	key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	if !ok || !apiKeyTeamRestrictionSelected(key) {
+		return false
+	}
+	if len(entry.TeamIDs) > 0 && !slices.ContainsFunc(entry.TeamIDs, func(id string) bool { return slices.Contains(key.TeamIDs, id) }) {
+		return true
+	}
+	if entry.ResourceType != "document" {
+		return false
+	}
+	var document domain.Document
+	return json.Unmarshal(entry.Payload, &document) == nil && apiKeyDocumentOutsideScope(r, data, document)
+}
+
 // applyAPIKeyProjection applies team restrictions after the normal user
 // projection. API keys are often narrower than the creator's membership, so
 // returning the unrestricted bootstrap would expose unrelated resources.
@@ -378,11 +424,7 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 	// key's teams like its own teams do.
 	linkScope := store.NewDocumentLinkScope(data.Teams, data.TeamSettings)
 	data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
-		if len(document.TeamIDs) > 0 {
-			return !slices.ContainsFunc(document.TeamIDs, func(id string) bool { return allowed[id] })
-		}
-		closed := linkScope.ClosedTeams(document)
-		return len(closed) > 0 && !slices.ContainsFunc(closed, func(id string) bool { return allowed[id] })
+		return apiKeyDocumentOutOfTeams(allowed, linkScope, document)
 	})
 	data.SavedViews = slices.DeleteFunc(data.SavedViews, func(view domain.SavedView) bool {
 		return view.Scope == "team" && !allowed[view.TeamID] || view.ProjectID != "" && !visibleProjects[view.ProjectID]
@@ -1210,6 +1252,12 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		}
 		return slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == teamID })
 	}
+	// keyTeamOK is the API key's team restriction alone, which person-level
+	// grants (creator, owner, explicit grants) never widen.
+	keyTeamOK := func(teamID string) bool {
+		key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+		return !ok || !apiKeyTeamRestrictionSelected(key) || slices.Contains(key.TeamIDs, teamID)
+	}
 	teamAllowed := func(teamID string) bool {
 		if !teamRowAllowed(teamID) {
 			return false
@@ -1219,7 +1267,7 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	issueAllowed := func(issueID string) bool {
 		if isIssueRecordsRequest(r) {
 			return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool {
-				return issueAnswersTo(item, issueID) && (teamAllowed(item.Team.ID) || issueRole(s, data, item) != "none")
+				return issueAnswersTo(item, issueID) && keyTeamOK(item.Team.ID) && (teamAllowed(item.Team.ID) || issueRole(s, data, item) != "none")
 			})
 		}
 		return s.pagedIssueVisible(r, issueID)
@@ -1410,7 +1458,7 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 			return releaseAllowed(id)
 		case "document":
 			return slices.ContainsFunc(data.Documents, func(item domain.Document) bool {
-				return (item.ID == id || item.SlugID == id) && documentRole(s, data, item) != "none"
+				return (item.ID == id || item.SlugID == id) && documentRole(s, data, item) != "none" && !apiKeyDocumentOutsideScope(r, data, item)
 			})
 		case "customer":
 			return customerAllowed(id)
@@ -1765,7 +1813,9 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 				if item.ID != id && item.SlugID != id {
 					return false
 				}
-				return len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed) || documentRole(s, data, item) != "none"
+				// The key's team restriction applies over the person-level
+				// grants (creator, admin, user grants) of its owner.
+				return !apiKeyDocumentOutsideScope(r, data, item) && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed) || documentRole(s, data, item) != "none")
 			})
 		}
 		if len(parts) == 2 && (r.Method == http.MethodGet || r.Method == http.MethodHead) {

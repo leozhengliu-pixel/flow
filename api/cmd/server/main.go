@@ -1560,7 +1560,7 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
 	})
 	data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.TeamID != "" && !allowed(item.TeamID) })
-	data.Documents = slices.DeleteFunc(data.Documents, func(item domain.Document) bool {
+	documentOutside := func(item domain.Document) bool {
 		if slices.ContainsFunc(item.TeamIDs, allowed) {
 			return false
 		}
@@ -1569,6 +1569,19 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 		// document has no teams of its own; the viewer projection has already
 		// applied the document's grants.
 		return key.Actor != "app" || len(item.TeamIDs) > 0 || !slices.ContainsFunc(item.InheritedTeamIDs, allowed)
+	}
+	data.Documents = slices.DeleteFunc(data.Documents, documentOutside)
+	// A deleted resource stays within its teams like a live one: the key's
+	// owner having deleted (or created) it does not widen the key.
+	data.Trash = slices.DeleteFunc(data.Trash, func(entry domain.TrashEntry) bool {
+		if len(entry.TeamIDs) > 0 && !slices.ContainsFunc(entry.TeamIDs, allowed) {
+			return true
+		}
+		if entry.ResourceType != "document" {
+			return false
+		}
+		var document domain.Document
+		return json.Unmarshal(entry.Payload, &document) == nil && documentOutside(document)
 	})
 	for id := range data.Comments {
 		if !visibleIssue(id) && !visibleProject(id) && !slices.ContainsFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id }) {

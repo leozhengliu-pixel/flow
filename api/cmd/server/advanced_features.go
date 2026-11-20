@@ -3169,7 +3169,7 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		entry := data.Trash[index]
-		if !workspaceAdminRole(data.ViewerRole) && entry.DeletedBy.ID != data.Viewer.ID {
+		if !workspaceAdminRole(data.ViewerRole) && entry.DeletedBy.ID != data.Viewer.ID || apiKeyTrashOutsideScope(r, *data, entry) {
 			return store.ErrAuthForbidden
 		}
 		switch entry.ResourceType {
@@ -3370,6 +3370,9 @@ func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 		purgedLoopIDs = trashedLoopIDs(data.Trash, func(entry domain.TrashEntry) bool { return entry.ID == id })
 		purgedUploads = trashedUploads(data.Trash, func(entry domain.TrashEntry) bool { return entry.ID == id })
 		before := len(data.Trash)
+		if entryIndex := slices.IndexFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id }); entryIndex >= 0 && apiKeyTrashOutsideScope(r, *data, data.Trash[entryIndex]) {
+			return store.ErrAuthForbidden
+		}
 		if !workspaceAdminRole(data.ViewerRole) {
 			entryIndex := slices.IndexFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id })
 			if entryIndex < 0 {
