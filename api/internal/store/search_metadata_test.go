@@ -505,3 +505,65 @@ func TestMetadataSearchRollbackAndSameContentAvoidIndexWrites(t *testing.T) {
 		t.Fatalf("same-content update changed index: %q %v", content, err)
 	}
 }
+
+func TestMetadataSearchPagesKeepSortAndTieOrder(t *testing.T) {
+	repo := openSearchOrderRepo(t)
+	defer repo.Close()
+	data := repo.Bootstrap()
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_, _ = repo.db.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='documents' AND record_key LIKE 'tie-doc-%'`, data.Workspace.URLKey)
+	})
+	policy, access, err := repo.IssueQueryAccess(ctx, data.Workspace.URLKey, data.Viewer.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type doc struct{ id, title, updated string }
+	docs := []doc{}
+	for i := 0; i < 150; i++ {
+		// Few distinct titles and timestamps force ties across the 64-row batches.
+		title := []string{"alpha", "Alpha", "beta", "gamma", ""}[i%5]
+		updated := fmt.Sprintf("2026-01-0%dT00:00:00Z", i%3+1)
+		d := doc{fmt.Sprintf("tie-doc-%03d", (i*37)%150), title, updated}
+		docs = append(docs, d)
+		insertSearchMetadata(t, repo, data.Workspace.URLKey, "documents", d.id, map[string]any{"id": d.id, "title": d.title, "content": "tiebreakneedle", "updatedAt": d.updated, "createdAt": d.updated, "teamIds": []string{data.Teams[0].ID}})
+	}
+	for _, tc := range []struct{ sort, dir string }{{"title", ""}, {"title", "asc"}, {"", ""}, {"", "asc"}, {"createdAt", ""}} {
+		want := slices.Clone(docs)
+		desc := tc.dir != "asc" && tc.sort != "title"
+		key := func(d doc) string {
+			switch tc.sort {
+			case "title":
+				return strings.ToLower(d.title)
+			case "createdAt":
+				return d.updated
+			}
+			return d.updated
+		}
+		slices.SortFunc(want, func(a, b doc) int {
+			if c := strings.Compare(key(a), key(b)); c != 0 {
+				if desc {
+					return -c
+				}
+				return c
+			}
+			return strings.Compare(a.id, b.id)
+		})
+		q := SearchMetadataQuery{Scope: IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access, Sort: tc.sort, Direction: tc.dir}, Types: map[string]bool{"document": true}, Terms: []string{"tiebreakneedle"}, Limit: 150}
+		got, err := repo.SearchMetadata(ctx, policy, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := []string{}
+		for _, item := range got.Documents {
+			ids = append(ids, item.ID)
+		}
+		wantIDs := []string{}
+		for _, d := range want {
+			wantIDs = append(wantIDs, d.id)
+		}
+		if !slices.Equal(ids, wantIDs) {
+			t.Fatalf("sort=%q dir=%q order differs\n got %v\nwant %v", tc.sort, tc.dir, ids, wantIDs)
+		}
+	}
+}

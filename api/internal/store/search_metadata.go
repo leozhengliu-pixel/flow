@@ -111,7 +111,7 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 		fields := append([]string{"id", "slugId", "createdAt", "updatedAt", "archivedAt"}, kind.fields...)
 		columns := make([]string, len(fields))
 		for i, field := range fields {
-			columns[i] = s.jsonText("data", field)
+			columns[i] = s.jsonText("r.data", field)
 			if field == "description" || field == "content" {
 				columns[i] = "SUBSTR(" + columns[i] + ",1,2048)"
 			}
@@ -152,7 +152,11 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 				pageWhere += " AND (" + orderExpr + op + "? OR (" + orderExpr + "=? AND record_key>?))"
 				pageArgs = append(pageArgs, lastValue, lastValue, lastID)
 			}
-			rows, err := s.db.QueryContext(ctx, "SELECT record_key,"+orderExpr+","+strings.Join(columns, ",")+" FROM workspace_metadata_records WHERE "+pageWhere+" ORDER BY "+orderExpr+" "+direction+",record_key ASC LIMIT 64", pageArgs...)
+			// Pick the page by key and sort value first, then compute the output
+			// columns for those 64 rows only; the planner would otherwise evaluate
+			// every jsonText column for every matching row before sorting.
+			page := "SELECT record_key," + orderExpr + " AS sort_value FROM workspace_metadata_records WHERE " + pageWhere + " ORDER BY " + orderExpr + " " + direction + ",record_key ASC LIMIT 64"
+			rows, err := s.db.QueryContext(ctx, "SELECT p.record_key,p.sort_value,"+strings.Join(columns, ",")+" FROM ("+page+") p JOIN workspace_metadata_records r ON r.workspace_key=? AND r.field=? AND "+s.metadataRecordKeyEquals("r.record_key", "p.record_key")+" ORDER BY p.sort_value "+direction+",p.record_key ASC", append(pageArgs, q.Scope.Workspace, kind.field)...)
 			if err != nil {
 				return result, err
 			}
