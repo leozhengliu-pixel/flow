@@ -388,13 +388,11 @@ test.describe('mobile inbox list', () => {
       expect(response.status()).toBe(202)
       return (await response.json() as { reviewId: string }).reviewId
     }
-    const readyOne = await webhook(201, `${workspaceKey}-open-201`)
-    const readyTwo = await webhook(202, `${workspaceKey}-open-202`)
+    // An open review without failing checks is ready to merge; approvals are
+    // code-host decisions, not local status edits.
+    await webhook(201, `${workspaceKey}-open-201`)
+    await webhook(202, `${workspaceKey}-open-202`)
     const draft = await webhook(203, `${workspaceKey}-open-203`)
-    for (const id of [readyOne, readyTwo]) {
-      const approved = await request.patch(`/api/reviews/${id}`, { headers, data: { status: 'approved' } })
-      expect(approved.status()).toBe(200)
-    }
     const drafted = await request.patch(`/api/reviews/${draft}`, { headers, data: { draft: true } })
     expect(drafted.status()).toBe(200)
 
