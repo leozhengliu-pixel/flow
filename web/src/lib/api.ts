@@ -1,7 +1,8 @@
 import { trackUserSettingsWrite } from './user-settings-overrides';
 import { flushBeforeSessionEnd } from "@/lib/session-cache-registry";
+import { captureLocalStoreBootstrap } from '@/lib/local-store-bootstrap'
+import { clearLocalStores } from '@/lib/local-store-db'
 import type {
-  AccountBootstrap,
   ThreadSubscription,
   ThreadSubscriptionState,
   AccountSessionInfo,
@@ -114,7 +115,7 @@ import type {
 } from "@/types/flow";
 import type { ApplicationInstallation } from "@/lib/application-agents";
 import { rememberTrashRetention } from "@/lib/trash-retention";
-import { rememberChatPlatform } from "@/lib/chat-platform";
+import { rememberChatPlatform } from "@/lib/chat-platform-cache";
 import { markSuspendedMembersInactive } from "@/lib/people";
 import { decodeBase64Url, encodeBase64Url } from "@/lib/webauthn";
 import { apiFetch, ApiError as PulseApiError, jsonRequest, request, requestRetryingBusy } from "@/lib/api-client";
@@ -156,17 +157,12 @@ import type {
   WorkflowRun,
 } from "@/types/flow";
 
-export function fetchAccountBootstrap(): Promise<AccountBootstrap> {
-  return request<AccountBootstrap>("/api/account/bootstrap").then(rememberChatPlatform);
-}
+export { fetchAccountBootstrap, fetchAuthSession } from './api-startup';
 export function setLastWorkspace(workspaceKey: string): Promise<void> {
   return request(
     "/api/account/last-workspace",
     jsonRequest("PUT", { workspaceKey }),
   );
-}
-export function fetchAuthSession(): Promise<AuthSession> {
-  return request("/api/auth/session");
 }
 export type AuthProviderConfig = {
   email: boolean;
@@ -213,6 +209,7 @@ export async function logoutAccount(): Promise<void> {
   // Last edits go out as the current viewer, within a short bound; the rest is dropped when the session caches clear.
   await flushBeforeSessionEnd();
   await request("/api/auth/logout", { method: "POST" });
+  await clearLocalStores();
   const { ClientStorage } = await import("@/lib/client-storage");
   ClientStorage.clearAllNonAuthData();
   // The local workspace snapshots: unreadable already (their localStorage index is gone), deleted here.
@@ -444,10 +441,11 @@ export function fetchBootstrap(workspaceKey?: string, projection?: BootstrapProj
   const headers: Record<string, string> = {}
   if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
   if (projection) headers['X-Flow-Projection'] = projection
+  const shadow = captureLocalStoreBootstrap(headers, projection)
   return request<BootstrapData>(
     "/api/bootstrap",
-    { headers, signal, quiet },
-  ).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform);
+    { headers, signal, quiet, onResponse: shadow?.observe },
+  ).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform).then(data => shadow?.record(data) ?? data);
 }
 
 export function fetchPagedBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
@@ -455,7 +453,8 @@ export function fetchPagedBootstrap(workspaceKey?: string, projection?: Bootstra
   if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
   if (projection) headers['X-Flow-Projection'] = projection
   // The server bounds concurrent metadata loads and answers a crowd with 503 + Retry-After.
-  return requestRetryingBusy<BootstrapData>('/api/issue-records/bootstrap', {headers, signal, quiet}).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform)
+  const shadow = captureLocalStoreBootstrap(headers, projection)
+  return requestRetryingBusy<BootstrapData>('/api/issue-records/bootstrap', {headers, signal, quiet, onResponse: shadow?.observe}).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform).then(data => shadow?.record(data) ?? data)
 }
 export type IssueQueryInput = {
   q?: string;
@@ -520,9 +519,11 @@ export function fetchIssueRecord(id: string, signal?: AbortSignal, workspaceKey?
 }
 
 export type IssueHistoryPage = {comments: Comment[]; activities: BootstrapData['activities'][string]; commentsCursor?: string; activitiesCursor?: string}
-export function fetchIssueHistory(id: string, signal?: AbortSignal, cursors?: { commentsCursor?: string; activitiesCursor?: string }): Promise<IssueHistoryPage> {
+export function fetchIssueHistory(id: string, signal?: AbortSignal, cursors?: { commentsCursor?: string; activitiesCursor?: string }, workspaceKey?: string): Promise<IssueHistoryPage> {
   const query = cursors ? `?${new URLSearchParams({ commentsCursor: cursors.commentsCursor || '-', activitiesCursor: cursors.activitiesCursor || '-' })}` : ''
-  return request(`/api/issue-records/${encodeURIComponent(id)}/history${query}`, {signal})
+  return request(`/api/issue-records/${encodeURIComponent(id)}/history${query}`, {
+    signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}),
+  })
 }
 export function fetchIssueRelated(id: string, signal?: AbortSignal): Promise<Issue[]> {
   return request(`/api/issue-records/${encodeURIComponent(id)}/related`,{signal})

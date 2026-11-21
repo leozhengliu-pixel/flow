@@ -267,7 +267,7 @@ export function writeNavigationCacheWhenIdle(viewerId: string, workspaceKey: str
     writeNavigationCache(viewerId, workspaceKey, data)
   }
   let cancel: () => void
-  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function' && typeof window.cancelIdleCallback === 'function') {
     const handle = window.requestIdleCallback(run, { timeout: 2000 })
     cancel = () => window.cancelIdleCallback(handle)
   } else {
