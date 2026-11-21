@@ -19,15 +19,8 @@ const (
 	maxSigningKeyNameRunes = 255
 )
 
-// parseCommitSigningKey validates an uploaded private key and returns only
-// display-safe metadata. Private key bytes are never part of the metadata.
-func parseCommitSigningKey(raw string) (domain.CommitSigningKey, error) {
-	key, _, err := parseCommitSigningKeyMaterial(raw)
-	return key, err
-}
-
-// parseCommitSigningKeyMaterial also returns the parsed key, whose material
-// coding sessions keep encrypted to sign commits (track E).
+// parseCommitSigningKeyMaterial returns display-safe metadata and the parsed
+// key, whose material coding sessions keep encrypted to sign commits.
 func parseCommitSigningKeyMaterial(raw string) (domain.CommitSigningKey, coding.SigningKey, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

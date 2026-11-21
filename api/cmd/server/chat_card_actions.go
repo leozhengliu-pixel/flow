@@ -145,10 +145,6 @@ func chatMutationCode(err error, fallback string) (string, error) {
 	return fallback, nil
 }
 
-func chatI18nPlain(en, zh string) map[string]any {
-	return map[string]any{"tag": "plain_text", "content": en, "i18n": map[string]string{"en_us": en, "zh_cn": zh}}
-}
-
 func chatPriorityOptions(language string) []map[string]any {
 	options := make([]map[string]any, 0, 5)
 	for priority := range 5 {

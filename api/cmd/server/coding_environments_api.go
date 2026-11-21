@@ -306,14 +306,6 @@ func (s *server) codingSnapshotStrategy() sandbox.SnapshotStrategy {
 	return strategy
 }
 
-func (s *server) codingSnapshotWorkspace(ctx context.Context, snapshotID string) (string, error) {
-	workspace, err := s.store.CodingSnapshotWorkspace(ctx, snapshotID)
-	if err != nil {
-		return "", err
-	}
-	return workspace, nil
-}
-
 // codingSnapshotReconciler builds the (stateless) snapshot reconciler.
 func (s *server) codingSnapshotReconciler(owner string) *coding.SnapshotReconciler {
 	reconciler := &coding.SnapshotReconciler{Store: s.store, Owner: owner}

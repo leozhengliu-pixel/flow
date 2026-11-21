@@ -1064,14 +1064,6 @@ func agentPromptRules(toolRule string) string {
 	return agentPromptRulesHead + toolRule + agentPromptRulesTail
 }
 
-func agentSystemPrompt(workspace string, issues []domain.Issue, skills ...[]domain.PersonalAgentSkill) string {
-	var active []domain.PersonalAgentSkill
-	if len(skills) > 0 {
-		active = skills[0]
-	}
-	return agentPromptRules(agentProgressRule) + agentPromptContext(workspace, issues, active)
-}
-
 // agentPromptContext is the per-request part of the instructions: today, the workspace, loaded issues, skills.
 func agentPromptContext(workspace string, issues []domain.Issue, skills []domain.PersonalAgentSkill) string {
 	var prompt strings.Builder

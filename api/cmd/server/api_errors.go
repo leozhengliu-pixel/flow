@@ -32,9 +32,6 @@ const (
 	apiErrorUnavailable          = "UNAVAILABLE"
 )
 
-// apiErrorTypes lists every documented category (docs/api.md, OpenAPI).
-var apiErrorTypes = []string{apiErrorInvalidInput, apiErrorAuthentication, apiErrorForbidden, apiErrorFeatureNotAccessible, apiErrorNotFound, apiErrorConflict, apiErrorRateLimited, apiErrorInternal, apiErrorUnavailable}
-
 // apiErrorBody is the documented error envelope. Every value is a string so
 // clients that decode errors into string maps keep working.
 type apiErrorBody = publicapi.Error

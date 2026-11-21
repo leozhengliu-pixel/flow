@@ -58,7 +58,7 @@
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
-        "DELETE /api/integrations/{provider}/chat (server/chat_integrations.go:258)"
+        "DELETE /api/integrations/{provider}/chat (server/chat_integrations.go:255)"
       ]
     },
     "recordChatDeliveryResultLocked": {

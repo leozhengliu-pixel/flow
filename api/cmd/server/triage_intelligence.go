@@ -51,13 +51,6 @@ func triageIntelligenceWorkspaceEnabled(s *server, workspace string) bool {
 	return ok && triageIntelligenceEnabled(metadata.WorkspaceSettings)
 }
 
-func generateAndAppendIssueSuggestions(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
-	if !triageIntelligenceEnabled(data.WorkspaceSettings) || !isTriageIssue(data, issue) {
-		return
-	}
-	storeTriageSuggestions(data, issue, generateIssueSuggestions(data, issue, now), now, triageSourceHeuristic, "")
-}
-
 // storeTriageSuggestions replaces the issue's suggestions with generated ones.
 // Dismissed suggestions are retained and never re-suggested; "auto" actions
 // are applied immediately and recorded as accepted.
@@ -296,9 +289,8 @@ func generateTriageMutation(issueIDs []string, candidateSets map[string][]domain
 			if err != nil {
 				continue
 			}
-			// generateAndAppendIssueSuggestions, scanning data.Issues
-			// through the candidate index and the cached project and label
-			// tokens of this generation.
+			// Score candidates using the index and this generation's cached
+			// project and label tokens.
 			now := time.Now().UTC()
 			if triageIntelligenceEnabled(data.WorkspaceSettings) && isTriageIssue(data, issue) {
 				candidates := index.similarTriageIssues(data, issue)

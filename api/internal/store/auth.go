@@ -2299,10 +2299,6 @@ func issuePermissionAllows(data domain.Bootstrap, issue domain.Issue, allowed, a
 	return false
 }
 
-func documentPermissionAllows(data *domain.Bootstrap, document domain.Document, allowed map[string]bool) bool {
-	return documentGrantAllows(data, document, allowed, true)
-}
-
 // documentGrantAllows reports whether one of the document's grants reaches
 // the viewer; workspace grants count only when workspace is true (the
 // viewer passes the document's inherited team scope).

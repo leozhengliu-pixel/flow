@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/build"
-	"go/format"
 	"go/parser"
 	"go/token"
 	"go/types"
@@ -75,14 +73,6 @@ type scaleP21SW270Graph struct {
 	onTrue    map[string]bool
 	onTrueRun map[string]bool
 	selectors map[string][]scaleP21SW270Ref // selector name (any package) -> uses
-}
-
-func scaleP21SW270Source(set *token.FileSet, node ast.Node) string {
-	var text bytes.Buffer
-	if err := format.Node(&text, set, node); err != nil {
-		return fmt.Sprintf("<%T>", node)
-	}
-	return text.String()
 }
 
 // scaleP21SW270Importer resolves every import to an empty package. Only this
