@@ -8,8 +8,9 @@ import (
 	"time"
 )
 
-// The legacy-view lane (coldAccessorView) serializes the replica's
-// whole-workspace decodes of the legacy accessors (WorkspaceMetadata,
+// The legacy-view lane (coldAccessorView) bounds the replica's concurrent
+// (FLOW_COLD_VIEW_LANES, see accessorLane) whole-workspace decodes of the
+// legacy accessors (WorkspaceMetadata,
 // WorkspaceMetadataFields, BootstrapFor, BootstrapForUser, a COLD request's
 // projection and authorization view).
 //
@@ -61,8 +62,14 @@ func (s *SQLiteStore) SetLegacyViewQueueForTesting(limit int, timeout time.Durat
 // release is called.
 func (s *SQLiteStore) HoldLegacyViewLaneForTesting() func() {
 	lane := s.metadataResidency.accessorLane()
-	lane <- struct{}{}
-	return func() { <-lane }
+	for range cap(lane) {
+		lane <- struct{}{}
+	}
+	return func() {
+		for range cap(lane) {
+			<-lane
+		}
+	}
 }
 
 // LegacyViewWaitingForTesting reports how many waiters the legacy-view lane has.
@@ -70,7 +77,7 @@ func (s *SQLiteStore) LegacyViewWaitingForTesting() int64 {
 	return s.metadataResidency.legacyViewLimits().waiting.Load()
 }
 
-// waitLegacyViewLane takes the lane (a buffered channel of one) for
+// waitLegacyViewLane takes a lane (a slot of a buffered channel) for
 // accessor. A live request's wait (boundedColdWait) fails with
 // ErrColdMetadataBusy when the queue is full or the wait times out,
 // recording the refusal on the request; any wait fails with the context's

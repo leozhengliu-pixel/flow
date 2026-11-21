@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -20,6 +21,7 @@ type SearchMetadataQuery struct {
 	Limit           int
 	CredentialID    string // id of a verified personal key, never its secret
 	SkipSharedCache bool   // application-key projections are finished by the caller
+	mysqlHits       map[string][]string
 }
 
 type searchMetadataKind struct {
@@ -55,6 +57,25 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 	}
 	q.Limit = limit
 	q.Terms = normalizeSearchTerms(q.Terms)
+	mysqlSearch := s.dialect == "mysql" && s.BoundedMetadataEnabled() && len(q.Terms) == 1 && utf8.RuneCountInString(q.Terms[0]) >= 2
+	var mysqlRelease func()
+	var mysqlCtx context.Context
+	ensureMySQLSearch := func(runCtx context.Context) (context.Context, error) {
+		if !mysqlSearch {
+			return runCtx, nil
+		}
+		if mysqlCtx != nil {
+			return mysqlCtx, nil
+		}
+		var err error
+		mysqlCtx, q.mysqlHits, mysqlRelease, err = s.beginMySQLMetadataSearch(runCtx, q)
+		return mysqlCtx, err
+	}
+	defer func() {
+		if mysqlRelease != nil {
+			mysqlRelease()
+		}
+	}()
 	cache := s.newSearchMetadataCache(ctx, policy, q)
 	for _, kind := range searchMetadataKinds {
 		if !q.Types[kind.kind] {
@@ -63,8 +84,8 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		collection, err := cache.read(ctx, kind, func(ctx context.Context) (searchMetadataProjection, error) {
-			return s.searchMetadataCollection(ctx, policy, q, allowed, linkScope, kind, limit)
+		collection, err := cache.read(ctx, kind, ensureMySQLSearch, func(searchCtx context.Context) (searchMetadataProjection, error) {
+			return s.searchMetadataCollection(searchCtx, policy, q, allowed, linkScope, kind, limit)
 		})
 		result.Projects = append(result.Projects, collection.Projects...)
 		result.Documents = append(result.Documents, collection.Documents...)
@@ -100,6 +121,14 @@ func (s *SQLiteStore) searchMetadataCollection(ctx context.Context, policy domai
 				ids = append(ids, recent.ResourceID)
 			}
 		}
+		if len(ids) == 0 {
+			return result, nil
+		}
+		clause, values := bindList("record_key", ids)
+		where += " AND " + clause
+		args = append(args, values...)
+	} else if q.mysqlHits != nil {
+		ids := q.mysqlHits[kind.field]
 		if len(ids) == 0 {
 			return result, nil
 		}
@@ -142,13 +171,7 @@ func (s *SQLiteStore) searchMetadataCollection(ctx context.Context, policy domai
 	where += " AND " + clause
 	args = append(args, values...)
 	fields := append([]string{"id", "slugId", "createdAt", "updatedAt", "archivedAt"}, kind.fields...)
-	columns := make([]string, len(fields))
-	for i, field := range fields {
-		columns[i] = s.jsonText("r.data", field)
-		if field == "description" || field == "content" {
-			columns[i] = "SUBSTR(" + columns[i] + ",1,2048)"
-		}
-	}
+	columns, shellJoin := s.searchMetadataShell(fields)
 	sortField, direction := "updatedAt", "DESC"
 	if q.Scope.Sort == "createdAt" {
 		sortField = "createdAt"
@@ -189,7 +212,7 @@ func (s *SQLiteStore) searchMetadataCollection(ctx context.Context, policy domai
 		// columns for those 64 rows only; the planner would otherwise evaluate
 		// every jsonText column for every matching row before sorting.
 		page := "SELECT record_key," + orderExpr + " AS sort_value FROM workspace_metadata_records WHERE " + pageWhere + " ORDER BY " + orderExpr + " " + direction + ",record_key ASC LIMIT 64"
-		rows, err := s.readSearchMetadataPage(ctx, "SELECT p.record_key,p.sort_value,"+strings.Join(columns, ",")+" FROM ("+page+") p JOIN workspace_metadata_records r ON r.workspace_key=? AND r.field=? AND "+s.metadataRecordKeyEquals("r.record_key", "p.record_key")+" ORDER BY p.sort_value "+direction+",p.record_key ASC", append(pageArgs, q.Scope.Workspace, kind.field), len(fields))
+		rows, err := s.readSearchMetadataPage(ctx, "SELECT p.record_key,p.sort_value,"+columns+" FROM ("+page+") p JOIN workspace_metadata_records r ON r.workspace_key=? AND r.field=? AND "+s.metadataRecordKeyEquals("r.record_key", "p.record_key")+shellJoin+" ORDER BY p.sort_value "+direction+",p.record_key ASC", append(pageArgs, q.Scope.Workspace, kind.field), len(fields))
 		if err != nil {
 			return result, err
 		}
@@ -240,6 +263,103 @@ func (s *SQLiteStore) searchMetadataCollection(ctx context.Context, policy domai
 		}
 	}
 	return result, nil
+}
+
+// MySQL's JSON_TABLE parses the BLOB once per selected row. Keep the column
+// values as JSON so arrays, objects and scalar quoting match JSON_EXTRACT.
+func (s *SQLiteStore) searchMetadataShell(fields []string) (columns, join string) {
+	values := make([]string, len(fields))
+	var paths []string
+	if s.dialect == "mysql" && s.BoundedMetadataEnabled() {
+		paths = make([]string, len(fields))
+	}
+	for i, field := range fields {
+		if paths != nil {
+			column := "v" + strconv.Itoa(i)
+			paths[i] = column + " JSON PATH '$." + field + "' ERROR ON ERROR"
+			values[i] = "NULLIF(JSON_UNQUOTE(shell." + column + "),'null')"
+		} else {
+			values[i] = s.jsonText("r.data", field)
+		}
+		if field == "description" || field == "content" {
+			values[i] = "SUBSTR(" + values[i] + ",1,2048)"
+		}
+	}
+	if paths != nil {
+		join = " LEFT JOIN JSON_TABLE(CONVERT(r.data USING utf8mb4), '$' COLUMNS (" + strings.Join(paths, ",") + ")) shell ON TRUE"
+	}
+	return strings.Join(values, ","), join
+}
+
+const mysqlMetadataTermMatch = "MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
+
+// beginMySQLMetadataSearch shares one ngram lookup across kinds and keyset
+// pages. A broad query falls back to the paged plan with no partial hit set.
+// The read transaction keeps hit selection and shell reads together, and
+// limits the number of staged hit sets to the size of the SQL pool.
+func (s *SQLiteStore) beginMySQLMetadataSearch(ctx context.Context, q SearchMetadataQuery) (context.Context, map[string][]string, func(), error) {
+	const maxHits = 4096
+	fields := make([]string, 0, len(searchMetadataKinds))
+	for _, kind := range searchMetadataKinds {
+		if q.Types[kind.kind] {
+			fields = append(fields, kind.field)
+		}
+	}
+	release := func() {}
+	if len(fields) == 0 {
+		return ctx, nil, release, nil
+	}
+	base := ctx
+	// This SQL-only snapshot is local to SearchMetadata. The request's
+	// authorization context and policy remain the caller's live inputs.
+	if existing, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); !ok || existing.database != s.db {
+		tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+		if err != nil {
+			return ctx, nil, release, err
+		}
+		release = func() { _ = tx.Rollback() }
+		ctx = context.WithValue(ctx, workspaceReadKey{}, workspaceRead{database: s.db, workspace: q.Scope.Workspace, reader: tx})
+	}
+	hits, err := s.mysqlMetadataSearchHits(ctx, q.Scope.Workspace, q.Terms[0], fields, maxHits)
+	if err != nil || hits == nil {
+		release()
+		return base, nil, func() {}, err
+	}
+	return ctx, hits, release, nil
+}
+
+func (s *SQLiteStore) mysqlMetadataSearchHits(ctx context.Context, workspace, term string, fields []string, maxHits int) (map[string][]string, error) {
+	// Let SQL classify each field using its collation, just as in the
+	// per-kind lookup. Keys remain byte strings in the canonical table.
+	clause, fieldsArgs := bindList("s.field", fields)
+	fieldIndex := "CASE s.field"
+	args := []any{}
+	for i, field := range fields {
+		fieldIndex += " WHEN ? THEN ?"
+		args = append(args, field, i)
+	}
+	fieldIndex += " END"
+	args = append(args, workspace)
+	args = append(args, fieldsArgs...)
+	args = append(args, mysqlBooleanPhrase(term), maxHits+1)
+	rows, err := s.db.QueryContext(ctx, "SELECT "+fieldIndex+",s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND "+clause+" AND "+mysqlMetadataTermMatch+" LIMIT ?", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	hits := make(map[string][]string, len(fields))
+	for count := 0; rows.Next(); count++ {
+		if count == maxHits {
+			return nil, nil
+		}
+		var field int
+		var key string
+		if err := rows.Scan(&field, &key); err != nil {
+			return nil, err
+		}
+		hits[fields[field]] = append(hits[fields[field]], key)
+	}
+	return hits, rows.Err()
 }
 
 // metadataTermSelection selects the record keys whose indexed text contains

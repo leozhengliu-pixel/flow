@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"math"
 	"os"
 	"reflect"
 	"slices"
@@ -35,12 +36,11 @@ import (
 // the cache is keyed by that generation and by frame origins, never by time,
 // so it cannot serve a stale generation.
 //
-// The cache is bounded (FLOW_COLD_DECODE_CACHE_BYTES of installed spool
-// bytes, default 256 MiB; 0 disables it): the least recently used images are
+// The cache is bounded by decoded bytes (FLOW_COLD_DECODE_CACHE_BYTES,
+// by default 35% of the memory ceiling; 0 disables it): the least recently used images are
 // dropped beyond it, an image larger than the budget is not kept, and an
 // image unused for FLOW_COLD_DECODE_CACHE_IDLE (default 5m) is dropped.
 
-const defaultColdDecodeCacheBytes = 256 << 20
 const defaultColdDecodeCacheIdle = 5 * time.Minute
 
 // coldDecodeElementMinBytes: a slice field smaller than this decodes whole
@@ -51,7 +51,7 @@ func coldDecodeCacheBudget() int64 {
 	if strings.TrimSpace(os.Getenv("FLOW_COLD_DECODE_CACHE_BYTES")) == "0" {
 		return 0
 	}
-	return metadataBudgetBytes("FLOW_COLD_DECODE_CACHE_BYTES", defaultColdDecodeCacheBytes)
+	return metadataBudgetBytes("FLOW_COLD_DECODE_CACHE_BYTES", metadataMemoryShare(35, 100))
 }
 
 func coldDecodeCacheIdle() time.Duration {
@@ -94,8 +94,19 @@ type coldDecodedField struct {
 	key   coldFrameKey
 	keyed bool
 	value reflect.Value
+	// bytes is the heap the decoded value holds (decodedValueBytes).
+	bytes int64
 	// elements memoizes the records of a large slice field by frame key.
-	elements map[coldFrameKey]reflect.Value
+	elements map[coldFrameKey]coldDecodedElement
+	ordinals *recordOrdinalIndex
+	// encodingID is shared with every image that reuses this frame.
+	encodingID IssueBootstrapGeneration
+}
+
+// coldDecodedElement includes its boxed record and its referenced heap.
+type coldDecodedElement struct {
+	value reflect.Value
+	bytes int64
 }
 
 type coldDecodedImage struct {
@@ -110,9 +121,6 @@ type coldDecodedImage struct {
 	// display: whether the writers' display refresh changes nothing in
 	// the image (scale_p21_resident_document_write.go), checked once.
 	display residentDisplayChecks
-	// ordinals: record ID to ordinals per slice field, built on first use
-	// (scale_p21_resident_record_ordinals.go).
-	ordinals recordOrdinalIndex
 }
 
 type coldDecodeCache struct {
@@ -154,6 +162,13 @@ func (r *metadataResidency) decodeColdImage(ctx context.Context, workspace strin
 		return domain.Bootstrap{}, err
 	}
 	budget := coldDecodeCacheBudget()
+	if budget == 0 {
+		image, err := buildColdDecodedImage(ctx, source, nil, fields, false)
+		if err != nil {
+			return domain.Bootstrap{}, err
+		}
+		return image.data, nil
+	}
 	cache := &r.coldImages
 	cache.mu.Lock()
 	previous := cache.images[workspace]
@@ -170,20 +185,23 @@ func (r *metadataResidency) decodeColdImage(ctx context.Context, workspace strin
 		coldDecodeCopyNanos.Add(int64(time.Since(started)))
 		return data, ctx.Err()
 	}
-	if budget <= 0 {
-		// No cache: a private decode, as before.
-		image, err := buildColdDecodedImage(ctx, source, nil, fields, false)
+	var image *coldDecodedImage
+	if fields == nil {
+		// The whole image: built once per generation however many
+		// facades and views ask for it together (residentImage).
+		// One larger than the budget is not kept, but it may share values
+		// with the cached image of an earlier generation: it is copied too.
+		built, _, err := r.residentImageBuild(ctx, workspace, source)
 		if err != nil {
 			return domain.Bootstrap{}, err
 		}
-		return image.data, nil
-	}
-	image, err := buildColdDecodedImage(ctx, source, previous, fields, true)
-	if err != nil {
-		return domain.Bootstrap{}, err
-	}
-	if fields == nil {
-		r.storeColdImage(workspace, image, budget)
+		image = built
+	} else {
+		built, err := buildColdDecodedImage(ctx, source, previous, fields, true)
+		if err != nil {
+			return domain.Bootstrap{}, err
+		}
+		image = built
 	}
 	started := time.Now()
 	data := coldImageCopy(image.data, fields)
@@ -229,7 +247,6 @@ func buildColdDecodedImage(ctx context.Context, source *metadataLogicalSource, p
 		if fields != nil && name != "workspace" && !slices.Contains(fields, name) {
 			return nil
 		}
-		image.bytes += node.size
 		key, keyed := coldFrameKeyOf(node)
 		var before *coldDecodedField
 		if previous != nil && index < len(previous.fields) {
@@ -237,16 +254,25 @@ func buildColdDecodedImage(ctx context.Context, source *metadataLogicalSource, p
 		}
 		if keyed && before != nil && before.keyed && before.key == key && before.value.IsValid() {
 			coldDecodeFieldReuses.Add(1)
-			field = coldDecodedField{key: key, keyed: true, value: before.value, elements: before.elements}
+			field = *before
 		} else {
 			seeds, _ := ctx.Value(coldDecodeSeedsKey{}).(coldDecodeSeeds)
-			decoded, elements, err := decodeColdField(ctx, node, before, memo, seeds[name])
+			decoded, elements, bytes, err := decodeColdField(ctx, node, before, memo, seeds[name])
 			if err != nil {
 				return err
 			}
 			coldDecodeFieldDecodes.Add(1)
-			field = coldDecodedField{key: key, keyed: keyed, value: decoded, elements: elements}
+			field = coldDecodedField{key: key, keyed: keyed, value: decoded, bytes: bytes, elements: elements}
+			if memo && keyed && slices.Contains(bootstrapEncodingFields[:], name) {
+				field.encodingID = IssueBootstrapGeneration(bootstrapEncodingSequence.Add(1))
+			}
+			if memo && decoded.Kind() == reflect.Slice && decoded.Len() > 0 {
+				if _, ok := recordOrdinalField(decoded.Type().Elem()); ok {
+					field.ordinals = &recordOrdinalIndex{}
+				}
+			}
 		}
+		image.bytes += field.bytes
 		image.fields[index] = field
 		value.Field(index).Set(field.value)
 		return nil
@@ -255,8 +281,87 @@ func buildColdDecodedImage(ctx context.Context, source *metadataLogicalSource, p
 		return nil, err
 	}
 	domain.RebuildTeamDirectory(&image.data)
+	if memo {
+		for _, directory := range []any{image.data.TeamByID, image.data.TeamByKey, image.data.TeamChildren, image.data.LabelIndex} {
+			image.bytes += decodedValueBytes(reflect.ValueOf(directory))
+		}
+		image.bytes += int64(reflect.TypeFor[coldDecodedImage]().Size()) +
+			int64(bootstrapNativeAllocation(uint64(cap(image.fields))*uint64(reflect.TypeFor[coldDecodedField]().Size())))
+	}
 	coldDecodeImageBuilds.Add(1)
 	return image, ctx.Err()
+}
+
+// decodedValueBytes is the heap a decoded value holds beyond its own inline
+// size, counted as bootstrapNativeBytes counts it (allocation size classes,
+// whole map groups, every reference of a shared target) but without a cap:
+// the image cache charges images by it.
+func decodedValueBytes(value reflect.Value) int64 {
+	return int64(min(decodedValueBytesAt(value, 0), math.MaxInt64/2))
+}
+
+func decodedValueBytesAt(value reflect.Value, depth int) uint64 {
+	if !value.IsValid() || depth >= metadataLogicalDepth || bootstrapNativeFlat(value.Type()) {
+		return 0
+	}
+	total := uint64(0)
+	switch value.Kind() {
+	case reflect.String:
+		return bootstrapNativeAllocation(uint64(value.Len()))
+	case reflect.Pointer, reflect.Interface:
+		if value.IsNil() {
+			return 0
+		}
+		target := value.Elem()
+		if value.Kind() == reflect.Pointer || !bootstrapNativePointerShaped(target.Type()) {
+			total += bootstrapNativeAllocation(uint64(target.Type().Size()))
+		}
+		return total + decodedValueBytesAt(target, depth+1)
+	case reflect.Slice:
+		if value.IsNil() {
+			return 0
+		}
+		element := value.Type().Elem()
+		total += bootstrapNativeAllocation(uint64(value.Cap()) * uint64(element.Size()))
+		if !bootstrapNativeFlat(element) {
+			for index := range value.Len() {
+				total += decodedValueBytesAt(value.Index(index), depth+1)
+			}
+		}
+		return total
+	case reflect.Array:
+		for index := range value.Len() {
+			total += decodedValueBytesAt(value.Index(index), depth+1)
+		}
+		return total
+	case reflect.Map:
+		if value.IsNil() {
+			return 0
+		}
+		total += decodedMapBytes(value.Len(), value.Type().Key().Size()+value.Type().Elem().Size())
+		if bootstrapNativeFlat(value.Type().Key()) && bootstrapNativeFlat(value.Type().Elem()) {
+			return total
+		}
+		iter := value.MapRange()
+		for iter.Next() {
+			total += decodedValueBytesAt(iter.Key(), depth+1) + decodedValueBytesAt(iter.Value(), depth+1)
+		}
+		return total
+	case reflect.Struct:
+		for index := range value.NumField() {
+			total += decodedValueBytesAt(value.Field(index), depth+1)
+		}
+		return total
+	}
+	return 0
+}
+
+func decodedMapBytes(count int, slotBytes uintptr) uint64 {
+	slots := uint64(8)
+	for slots*7 < uint64(count)*8 {
+		slots *= 2
+	}
+	return bootstrapNativeAllocation(slots*(uint64(slotBytes)+1)) + 128 + (slots/1024+1)*64
 }
 
 // coldDecodeSeeds are decoded values a writer hands to the image of the
@@ -280,12 +385,15 @@ var coldDecodeElementSeeded atomic.Int64
 // frame has the same origin, and taking the seeded value of a record the
 // writer of this generation encoded; any other field decodes whole, as
 // before.
-func decodeColdField(ctx context.Context, node metadataLogicalNode, before *coldDecodedField, memo bool, seed map[int]reflect.Value) (reflect.Value, map[coldFrameKey]reflect.Value, error) {
-	whole := func() (reflect.Value, map[coldFrameKey]reflect.Value, error) {
+func decodeColdField(ctx context.Context, node metadataLogicalNode, before *coldDecodedField, memo bool, seed map[int]reflect.Value) (reflect.Value, map[coldFrameKey]coldDecodedElement, int64, error) {
+	whole := func() (reflect.Value, map[coldFrameKey]coldDecodedElement, int64, error) {
 		// Value's cap is solely an integer representability check here.
 		// The cold slot, rather than HOT admission, owns the decoded graph.
 		decoded, err := node.Value(ctx, int(^uint(0)>>1))
-		return decoded, nil, err
+		if err != nil || !memo {
+			return decoded, nil, 0, err
+		}
+		return decoded, nil, decodedValueBytes(decoded) + coldBoxedValueBytes(decoded) + coldOrdinalBytes(decoded), nil
 	}
 	if !memo || node.generic || node.blocked || node.unavailable || node.size < coldDecodeElementMinBytes ||
 		node.typ.Kind() != reflect.Slice || node.typ.Elem().Kind() == reflect.Uint8 {
@@ -293,30 +401,36 @@ func decodeColdField(ctx context.Context, node metadataLogicalNode, before *cold
 	}
 	missing, err := node.isNil(ctx)
 	if err != nil {
-		return reflect.Value{}, nil, err
+		return reflect.Value{}, nil, 0, err
 	}
 	if missing {
 		return whole()
 	}
-	var previous map[coldFrameKey]reflect.Value
+	var previous map[coldFrameKey]coldDecodedElement
 	if before != nil {
 		previous = before.elements
 	}
-	elements := map[coldFrameKey]reflect.Value{}
+	elements := map[coldFrameKey]coldDecodedElement{}
 	values := []reflect.Value{}
+	var bytes int64
+	appendValue := func(element coldDecodedElement) {
+		bytes += element.bytes
+		values = append(values, element.value)
+	}
 	err = node.Children(ctx, func(ordinal reflect.Value, child metadataLogicalNode) error {
 		key, keyed := coldFrameKeyOf(child)
 		if keyed && !child.generic {
 			if reused, found := previous[key]; found {
 				coldDecodeElementReuses.Add(1)
 				elements[key] = reused
-				values = append(values, reused)
+				appendValue(reused)
 				return nil
 			}
 			if seeded, found := seed[int(ordinal.Int())]; found && seeded.Type() == child.typ {
 				coldDecodeElementSeeded.Add(1)
-				elements[key] = seeded
-				values = append(values, seeded)
+				element := coldDecodedElement{seeded, decodedValueBytes(seeded) + coldBoxedValueBytes(seeded)}
+				elements[key] = element
+				appendValue(element)
 				return nil
 			}
 		}
@@ -327,29 +441,48 @@ func decodeColdField(ctx context.Context, node metadataLogicalNode, before *cold
 			return err
 		}
 		coldDecodeElementDecode.Add(1)
+		element := coldDecodedElement{decoded, decodedValueBytes(decoded)}
 		if keyed && !child.generic {
-			elements[key] = decoded
+			element.bytes += coldBoxedValueBytes(decoded)
+			elements[key] = element
 		}
-		values = append(values, decoded)
+		appendValue(element)
 		return nil
 	})
 	if err != nil {
-		return reflect.Value{}, nil, err
+		return reflect.Value{}, nil, 0, err
 	}
 	result := reflect.MakeSlice(node.typ, len(values), len(values))
 	for i, element := range values {
 		result.Index(i).Set(element)
 	}
-	return result, elements, nil
+	bytes += int64(bootstrapNativeAllocation(uint64(result.Cap()) * uint64(node.typ.Elem().Size())))
+	bytes += int64(decodedMapBytes(len(elements), reflect.TypeFor[coldFrameKey]().Size()+reflect.TypeFor[coldDecodedElement]().Size()))
+	return result, elements, bytes + coldBoxedValueBytes(result) + coldOrdinalBytes(result), nil
+}
+
+func coldBoxedValueBytes(value reflect.Value) int64 {
+	return int64(bootstrapNativeAllocation(uint64(value.Type().Size())))
+}
+
+// Reserve for the lazy ID index, including the backing arrays of duplicate
+// ID lists and map header values. The ID strings are already charged.
+func coldOrdinalBytes(value reflect.Value) int64 {
+	if value.Kind() != reflect.Slice || value.Len() == 0 {
+		return 0
+	}
+	if _, ok := recordOrdinalField(value.Type().Elem()); !ok {
+		return 0
+	}
+	return int64(decodedMapBytes(value.Len(), reflect.TypeFor[string]().Size()+reflect.TypeFor[[]int]().Size())) + int64(value.Len())*32 + 128
 }
 
 // storeColdImage keeps image as workspace's cached image when it is the
 // installed generation, then trims the cache to budget.
 func (r *metadataResidency) storeColdImage(workspace string, image *coldDecodedImage, budget int64) {
 	r.mu.Lock()
-	installed := r.logical[workspace] == image.source
-	r.mu.Unlock()
-	if !installed || image.bytes > budget {
+	defer r.mu.Unlock()
+	if r.logical[workspace] != image.source || image.bytes > budget {
 		return
 	}
 	cache := &r.coldImages

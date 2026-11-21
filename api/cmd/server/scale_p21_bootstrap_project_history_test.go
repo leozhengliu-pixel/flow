@@ -79,15 +79,18 @@ type scaleP21BootstrapHistoryResponse struct {
 }
 
 func scaleP21BootstrapHistoryServe(t *testing.T, f scaleP21SW145Fixture, source *store.SQLiteStore, test scaleP21SW145Case) scaleP21BootstrapHistoryResponse {
+	return scaleP21BootstrapHistoryServeWith(t, f, &server{store: source, authDisabled: test.development}, test)
+}
+
+func scaleP21BootstrapHistoryServeWith(t *testing.T, f scaleP21SW145Fixture, service *server, test scaleP21SW145Case) scaleP21BootstrapHistoryResponse {
 	t.Helper()
-	service := &server{store: source, authDisabled: test.development}
 	request := f.literalRequest(test.user, test.key, nil)
 	request.Method, request.URL.Path = http.MethodGet, "/api/issue-records/bootstrap"
 	request.Header.Set("X-Flow-Projection", test.projection)
 	request, closeOutput := beginRequestResourceReads(request)
 	defer closeOutput()
 	writer := httptest.NewRecorder()
-	service.issueRecordsBootstrap(writer, request)
+	service.signedFileURLs(http.HandlerFunc(service.issueRecordsBootstrap)).ServeHTTP(writer, request)
 	return scaleP21BootstrapHistoryResponse{writer.Code, writer.Header().Get("Retry-After"), writer.Header().Get("Content-Type"), writer.Body.String()}
 }
 

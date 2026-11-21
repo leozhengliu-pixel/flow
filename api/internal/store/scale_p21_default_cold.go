@@ -17,7 +17,7 @@ import (
 
 // Default COLD routing (owner decision of 2026-11-14): HOT consumers are
 // migrated to bounded reads and writes; COLD consumers keep their full legacy
-// behaviour behind a per-replica limit of one.
+// behaviour behind per-replica admission limits.
 //
 // A ColdScope marks a request whose route is not proven bounded; WithColdWork
 // marks background COLD work. In either, a COLD need never holds the COLD
@@ -149,7 +149,7 @@ func (s *SQLiteStore) ColdRequestView(ctx context.Context, workspace string) (*S
 	if scope.view != nil && scope.viewStore == s && scope.view.lastWorkspaceKey == workspace {
 		return scope.view, nil
 	}
-	view, release, handled := s.coldAccessorViewKept(ctx, "ColdRequestView", workspace, nil, true)
+	view, release, handled := s.coldAccessorViewKept(ctx, "ColdRequestView", workspace, nil, true, false)
 	if !handled {
 		return s, nil
 	}
@@ -170,7 +170,7 @@ var ErrColdMetadataBusy = errors.New("the workspace is busy with other requests;
 // ErrColdMetadataBusy.
 const ColdMetadataBusyRetryAfter = 5 * time.Second
 
-// coldSlotQueue is the replica's COLD slot: one holder, waiters served in
+// coldSlotQueue is the replica's COLD slot pool: waiters are served in
 // arrival order (a buffered channel's blocked senders queue FIFO), at most
 // limit of them, each for at most timeout.
 type coldSlotQueue struct {
@@ -183,10 +183,11 @@ type coldSlotQueue struct {
 var coldSlotQueues sync.Map // *metadataResidency -> *coldSlotQueue
 
 func (r *metadataResidency) coldQueue() *coldSlotQueue {
-	// FLOW_COLD_SLOTS (default 1): concurrent COLD facades per replica.
-	// Each holds its own copy of the decoded workspace; COLD writes stay
-	// serialized by the shared write lock.
-	r.coldOnce.Do(func() { r.coldSlot = make(chan struct{}, envPositiveInt("FLOW_COLD_SLOTS", 1)) })
+	// FLOW_COLD_SLOTS (default one per GiB of the memory ceiling, 1 to 4):
+	// concurrent COLD facades per replica. Each holds its own copy of the
+	// decoded workspace; COLD writes stay serialized by the shared write
+	// lock.
+	r.coldOnce.Do(func() { r.coldSlot = make(chan struct{}, metadataColdSlots()) })
 	if queue, ok := coldSlotQueues.Load(r); ok {
 		return queue.(*coldSlotQueue)
 	}
@@ -322,8 +323,14 @@ func envPositiveDuration(name string, fallback time.Duration) time.Duration {
 // through its legacy view (SW530/SW550: a proven-bounded route makes none).
 var coldAccessorLanes sync.Map // *metadataResidency -> chan struct{}
 
+// accessorLane is the replica's legacy-view lane: FLOW_COLD_VIEW_LANES
+// (default one per GiB of the memory ceiling, 1 to 4) decodes at once, each
+// using the shared decoded image for read-only projection inputs.
 func (r *metadataResidency) accessorLane() chan struct{} {
-	lane, _ := coldAccessorLanes.LoadOrStore(r, make(chan struct{}, 1))
+	if lane, ok := coldAccessorLanes.Load(r); ok {
+		return lane.(chan struct{})
+	}
+	lane, _ := coldAccessorLanes.LoadOrStore(r, make(chan struct{}, metadataColdViewLanes()))
 	return lane.(chan struct{})
 }
 
@@ -335,13 +342,19 @@ func (r *metadataResidency) accessorLane() chan struct{} {
 // resident skeleton). view is nil when the workspace does not exist. release
 // must be called once the accessor's answer is built.
 func (s *SQLiteStore) coldAccessorView(ctx context.Context, accessor, workspace string, fields []string) (view *SQLiteStore, release func(), handled bool) {
-	return s.coldAccessorViewKept(ctx, accessor, workspace, fields, false)
+	return s.coldAccessorViewKept(ctx, accessor, workspace, fields, false, false)
+}
+
+// coldProjectionView lends an immutable image to a legacy accessor that
+// deep-copies its projection before filtering or returning it.
+func (s *SQLiteStore) coldProjectionView(ctx context.Context, accessor, workspace string) (view *SQLiteStore, release func(), handled bool) {
+	return s.coldAccessorViewKept(ctx, accessor, workspace, nil, false, true)
 }
 
 // coldAccessorViewKept is coldAccessorView; with keep, release returns the
 // lane and the installed source but leaves the decoded view usable (its
 // values are its own memory) for the caller to keep.
-func (s *SQLiteStore) coldAccessorViewKept(ctx context.Context, accessor, workspace string, fields []string, keep bool) (view *SQLiteStore, release func(), handled bool) {
+func (s *SQLiteStore) coldAccessorViewKept(ctx context.Context, accessor, workspace string, fields []string, keep, borrow bool) (view *SQLiteStore, release func(), handled bool) {
 	r := s.metadataResidency
 	if r == nil || s.coldParent != nil {
 		return nil, nil, false
@@ -417,7 +430,7 @@ func (s *SQLiteStore) coldAccessorViewKept(ctx context.Context, accessor, worksp
 		done()
 	}
 	decodeStarted := time.Now()
-	if err := view.decodeColdWorkspace(ctx, workspace, source, fields); err != nil {
+	if err := view.decodeColdWorkspace(ctx, workspace, source, fields, borrow); err != nil {
 		coldAccessorFailures.Add(1)
 		release()
 		return nil, none, true
@@ -469,9 +482,20 @@ var coldAccessorFailures atomic.Int64
 
 // decodeColdWorkspace is decodeColdMetadataRead for one workspace, limited to
 // fields (and the workspace record) when fields is set.
-func (s *SQLiteStore) decodeColdWorkspace(ctx context.Context, workspace string, source *metadataLogicalSource, fields []string) error {
+func (s *SQLiteStore) decodeColdWorkspace(ctx context.Context, workspace string, source *metadataLogicalSource, fields []string, borrow bool) error {
 	if s.coldParent != nil && s.coldParent.metadataResidency != nil {
-		data, err := s.coldParent.metadataResidency.decodeColdImage(ctx, workspace, source, fields)
+		r := s.coldParent.metadataResidency
+		if borrow {
+			image, _, err := r.residentImageBuild(ctx, workspace, source)
+			if err != nil {
+				return err
+			}
+			if image != nil {
+				s.workspaces[workspace] = image.data
+				return ctx.Err()
+			}
+		}
+		data, err := r.decodeColdImage(ctx, workspace, source, fields)
 		if err != nil {
 			return err
 		}

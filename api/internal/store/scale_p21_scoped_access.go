@@ -294,7 +294,7 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			releaseEvent()
 		}
 	}()
-	apply := func(ctx context.Context) error {
+	apply := func(ctx context.Context, prepared *residentScopedProjectEdit) error {
 		if releaseEvent != nil {
 			committed, realtime = domain.DomainEvent{}, nil
 			releaseEvent()
@@ -427,9 +427,18 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			}
 			defer releaseInline()
 			streamedScoped = streamedScoped || len(inlineFields) != 0
-			before, err := logicalSource.Select(ctx, loadScope, inputLimit)
-			if err != nil {
-				return err
+			if prepared != nil && (!exactSource || !prepared.matches(ctx, logicalSource, loadScope, role, teams, activeActor)) {
+				prepared.before, prepared.next, prepared.validationBefore = domain.Bootstrap{}, domain.Bootstrap{}, domain.Bootstrap{}
+				prepared = nil
+			}
+			var before domain.Bootstrap
+			if prepared != nil {
+				before = prepared.before
+			} else {
+				before, err = logicalSource.Select(ctx, loadScope, inputLimit)
+				if err != nil {
+					return err
+				}
 			}
 			storageBefore := before
 			if !streamedScoped {
@@ -508,36 +517,25 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 					return ErrResourceAccessChanged
 				}
 			}
-			next, err := callbackSource.Select(ctx, loadScope, inputLimit)
-			if err != nil {
-				return err
-			}
-			originalRole := next.ViewerRole
-			refreshDisplayReferences(&next)
-			if hasActor {
-				next.Viewer = actor
-				if activeActor {
-					next.ViewerRole, next.ViewerTeamIDs = role, teams
+			var next, validationBefore domain.Bootstrap
+			var aggregate string
+			if prepared != nil {
+				next, validationBefore, aggregate = prepared.next, prepared.validationBefore, prepared.aggregate
+				if prepared.callbackErr != nil {
+					return prepared.callbackErr
 				}
-				if refreshActor {
-					if index := slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID == actor.ID }); index >= 0 {
-						next.Users[index] = actor
-					} else {
-						next.Users = append(next.Users, actor)
-					}
+			} else {
+				next, err = callbackSource.Select(ctx, loadScope, inputLimit)
+				if err != nil {
+					return err
 				}
-			}
-			validationBefore := before
-			if metadataScopeResolver(ctx) != nil || refreshComplete || selectionRefreshed {
-				validationBefore = cloneBootstrap(next)
-				validationBefore.ViewerRole, validationBefore.ViewerTeamIDs = originalRole, nil
-			}
-			next.FormerMembers = s.formerMemberLookup(ctx, tx, &next)
-			next.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
-			aggregate, err := callback(&next)
-			next.ViewerRole, next.ViewerTeamIDs, next.FormerMembers, next.CollaborationUpdates = originalRole, nil, nil, nil
-			if err != nil {
-				return err
+				validationBefore = before
+				actorState := scopedMetadataActor{actor: actor, hasActor: hasActor, refreshActor: refreshActor, role: role, teams: teams, active: activeActor}
+				revalidated := metadataScopeResolver(ctx) != nil || refreshComplete || selectionRefreshed
+				aggregate, err = s.runScopedMetadataCallback(ctx, tx, workspace, &next, &validationBefore, actorState, revalidated, callback, nil)
+				if err != nil {
+					return err
+				}
 			}
 			if legacyFieldScoped && !slices.Contains(fields, "viewer") {
 				next.Viewer = before.Viewer
@@ -811,10 +809,21 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		refresh = s.refreshIntegrationDeliveryConflict(ctx, workspace)
 	}
 	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
-		if s.coordinator != nil {
-			return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx) })
+		var prepared *residentScopedProjectEdit
+		if selection && event == "project.updated" && len(metadataAppendKinds(ctx)) == 0 && ctx.Value(metadataTimestampOperationKey{}) == nil {
+			prepared = s.prepareResidentScopedProject(ctx, workspace, scope, actor, hasActor, refreshActor, callback)
+			if prepared != nil {
+				defer prepared.close()
+				ctx = withResidentRecordOrdinals(ctx, prepared.image)
+				if hook := residentWriteBeforeCommit.Load(); hook != nil {
+					(*hook)()
+				}
+			}
 		}
-		return apply(ctx)
+		if s.coordinator != nil {
+			return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx, prepared) })
+		}
+		return apply(ctx, prepared)
 	}, refresh)
 	if errors.Is(err, ErrNoMutation) {
 		return nil

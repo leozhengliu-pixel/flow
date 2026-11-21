@@ -303,15 +303,17 @@ func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) 
 }
 
 // ReloadWorkspace replaces this instance's copy of the workspace with the
-// stored one. It reads under writeMu, as a write's own reload does
-// (mutateFull): a write on this instance then cannot install its result
-// between the read and the install, so a reload never puts back a copy older
-// than the one in place (the write's result would be lost here, and the
-// instance, having counted the write as applied, would not reload again).
+// stored one. A bounded incremental reload prepares from its retained base
+// and validates it under writeMu. Other reloads hold writeMu through their
+// read and install, so a local write's result cannot be replaced by an older
+// copy.
 // A copy still at the stored metadata revision is kept without decoding the
 // workspace again (metadata_copy_revision.go).
 func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) error {
 	if s.metadataResidency != nil {
+		if s.reloadKnownPublication(ctx, workspaceKey) {
+			return nil
+		}
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
 		return s.reloadResidentWorkspace(ctx, workspaceKey)
@@ -1461,7 +1463,7 @@ func (s *SQLiteStore) BootstrapFor(workspaceKey string) (domain.Bootstrap, bool)
 // Propagate request cancellation through compatibility collection reads so a
 // disconnected browser does not keep decoding the workspace in the background.
 func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey string) (domain.Bootstrap, bool) {
-	if view, release, handled := s.coldAccessorView(ctx, "BootstrapFor", workspaceKey, nil); handled {
+	if view, release, handled := s.coldProjectionView(ctx, "BootstrapFor", workspaceKey); handled {
 		defer release()
 		if view == nil {
 			return domain.Bootstrap{}, false

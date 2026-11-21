@@ -21,17 +21,17 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 	contracts := map[string]string{
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
 		"scale_p21_workflow_run_write.go": "82b916096b9c5e7493da777bc8741a7b59d7e7fd94e8d2f21f217f5966519d71",
-		"issue_records.go":                "b07dd81e23dc23367d1165a84a0e878062fe3999de21db2d498f236b7239e4de",
-		"issue_query.go":                  "951b2acfb2d65b694267b4313e3603af31ea0abe15c4978242daef317e6fdc1e",
+		"issue_records.go":                "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
+		"issue_query.go":                  "fbbe42adaed6c5920253704649a753d16b9db97af707446d74f7f19251ced6b2",
 		// The result cache only checks for a borrowed snapshot to bypass Redis.
 		"shared_result_cache.go":                      "09bb1fb7becc1e20ef24cae2681a6dea391515c0473fabafd6de9c25c5136f5a",
-		"auth.go":                                     "d54f4f27ecc772ebd8a444efc6bc9fc8cc5c35a3c007c14ae5ffb13c0125c8b8",
+		"auth.go":                                     "487b6136e2f5325aaffb0611aaa392a9153375aa1ab4b0937646b181a9340247",
 		"team_default_favorites.go":                   "8ba62b09173955d3f412bba9820ba6292e3ee06fec852571c691e5a62e49e657",
 		"scale_p15_snapshot_buffers.go":               "850c692283182c9cfbde136b622dd27e068dc329a764939faeb0acadb15ee1b8",
 		"snapshot_clone.go":                           "eed939fd6798a8ade89c9f80a12040f1f5e285dc212e521ad2c38e04fcbc6063",
 		"../../cmd/server/advanced_features.go":       "c96192b95c5c42206382825e35e65a7865bbf56f2dcd0da603ce7f577fdcce5f",
 		"../../cmd/server/loop_settings.go":           "740fef6080e4e84f17b8c69a0bd5167ce357ce7287485aa1cf0cba4f7e4751a0",
-		"../../cmd/server/main.go":                    "57ec880ac2b4e1d953f334425d76bb8e6b506231756116126e46b22a45a4a5e3",
+		"../../cmd/server/main.go":                    "e63731a308b6a11401669704b873ea7d69e129b15bc0d0474c4f2e665807b11e",
 		"../../cmd/server/notification_state.go":      "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
 		"../../cmd/server/personal_data.go":           "df7f342d4fdd9a5908cfbaf6cceddd89e8be2be0ff5dbe23e94e9643e9cb26a3",
 		"../../cmd/server/scale_p21_cold_dispatch.go": "c1ab1f26d39d007e298201b7d5d24080afb46c60263d440b0ba7c8a9ad78337e",
@@ -39,7 +39,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// projection for its own run; never reaches request authorization.
 		"../../cmd/server/scale_p21_comment_action_writes.go":           "5765c0ab53a9346be3631aa48ab3d55c96204256e4ce63bdc5eb31db83983c39",
 		"../../cmd/server/scale_p21_general_bootstrap.go":               "4a4d2c67bc03934b0ab5306a249648e2101f2e22e5eab4bb48f920ac329bf94d",
-		"../../cmd/server/scale_p21_issue_bootstrap_stream.go":          "69d2a77a1aa57e9661d3df47398c95132da7872ef7a4609deeb7738b13b214b6",
+		"../../cmd/server/scale_p21_issue_bootstrap_stream.go":          "d51ae67d4011bf1fe2c515c6c852fa15ac54832144895bde9dfffca673bbd2bb",
 		"../../cmd/server/scale_p21_issue_create_targets.go":            "4797fc2981774f90cbd94a0f00a835e5391e323bc28d5e067692b0b426172523",
 		"../../cmd/server/scale_p21_issue_record_authorization_read.go": "6026fba608d49f31c47ac07de86b8ea1f000f94b93a7f0758e0ee964303025d4",
 		"../../cmd/server/scale_p21_issue_update_targets.go":            "58665b35304f51e087403d1abba92894e319e4f5900039ee17de0a86902745c3",
@@ -47,7 +47,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/settings_features.go":                         "6a153a047c63aa6d5643700c68c46f3167be6fbfc2a5dc9f4eaf852582118413",
 		"authz_epoch.go":                                                "ce59afa33d8daca93d0901d13d86a0f7bb5f140cc479efc38395ab568173e9c4",
 		"content_records.go":                                            "711cc4e036099177c87ed23e50f56c81703b4aa7af2c3123053cc3873cfaccba",
-		"database.go":                                                   "2ec7c9788c169dcf7e62a95475c53e6b22cb749447100adb749bacabe4580e7a",
+		"database.go":                                                   "5e2c1e00725c8be012939fb6df932d23f47cc4597924e96de80f50714636c181",
 		"issue_access_metadata.go":                                      "e94330023938805faa4db03459377c9807c5bcb467182e4919a756924fd5ae74",
 		"metadata_decode.go":                                            "ce3352e177e4b1ed19c6822a04ddc9d1b715fa81d83d4905d1041c1a4ce2fc45",
 		"metadata_delta.go":                                             "a79e58b9c65fd49c020acf27493596a9ce1546378d3a4ffa5548ccc9e81b7b0b",
@@ -69,7 +69,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_application_task_context_read.go":                    "71df6cdfc0fe46f2d149fb90d125eea56515b10c711633e4dab1f464f555f8da",
 		"scale_p21_bootstrap_content_walk.go":                           "b795207a7c8db00fb91479dcb795a6112f6678a5b9213216eac1254936f5ccd0",
 		"scale_p21_bootstrap_issue_walk.go":                             "12f6b78490e7b638a4f9190763fc8988c2202a2f733b025fd31863e489a93a3c",
-		"scale_p21_bootstrap_projection_read.go":                        "06e14a26d35b53a72597b521cad00a254660781115c0ee5efb2877423ec1bdc6",
+		"scale_p21_bootstrap_projection_read.go":                        "036df90e8bce39fddf54425c95cf711c1b47396b2a6aa2389b9a44cedba93ca6",
 		"scale_p21_collaboration_document_read.go":                      "d4839174c25808b899839955839d6cd2d9e4a74b5ac76d1158c8a0fb1fb8fae8",
 		"scale_p21_collection_snapshot.go":                              "e8d843ee5626ba45c1aa11009ddf1e6860289895367d581fd8552309dbaec1fa",
 		"scale_p21_cycle_schedule_write.go":                             "231b4806a1578b79829d651cae23eacab8988089416f48bbd256464673235cbc",
@@ -77,7 +77,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_desktop_ack_write.go":                                "caca6a6974572bf3205f7dcf5280b54dd7ad502f75b761967281665259b90682",
 		"scale_p21_document_auxiliary_read.go":                          "509970bec9f7e70a18b5054485374e46e441f5a03c31dfb491497ba16b570a6d",
 		"scale_p21_document_directory_read.go":                          "8f82ff264a997bfdd6dc71f5c3992856f5df4ece322ea248ff29f60f2e2c3247",
-		"scale_p21_document_read.go":                                    "3795397a6bfaf69c8ee150b333b435287daa19bad9cd8bc5f07237ec67ca4897",
+		"scale_p21_document_read.go":                                    "dbb5f22aa06b5d6cb2d90ca0646fb4e4dceea1df2e96acf54724cdf9038d5a9f",
 		"scale_p21_general_bootstrap_read.go":                           "d7a45918ea4ec4fdfad5bab2614ea5135cd2dbdc50db14db27c47eb873adb32d",
 		"scale_p21_installed_resource_point_read.go":                    "9ea5e51dc1e426ffe0a3fda73a001acfef726c1b07798498f79fee5ab3b16e9e",
 		"scale_p21_issue_authorization_policy.go":                       "3b1db13512c208deb9b7c7c650e50cb15e926835c5151fc2e841d85313416d21",
@@ -94,7 +94,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_resource_authorization_read.go":                      "21963760ddcf2bebadff8433da6b321b14e2771f959100eda1ddb7ddedf2d699",
 		"scale_p21_resource_directory_read.go":                          "525958c0a677927a6045fad929752239bfe97d092aa538d5e0f4f172e21a93d6",
 		"scale_p21_resource_policy_memo.go":                             "f4134522db037aadc7cc519e1ceb6f64eb65db899b616681eaeb4257886601e3",
-		"scale_p21_resource_read.go":                                    "69d1da57bbf88fa565ae5842ff15fd96612fb2e592cf9293459b8aef060a39c1",
+		"scale_p21_resource_read.go":                                    "5ca09910f1c137dfd89587667b24c63996fb802783b8e5e6a6f50a0b6a7e9d5c",
 		"scale_p21_sw16_former_members.go":                              "b9cc69d0ce8e48f062ab38f6bf9d617baaa2c47aa9ff89dc1f9bc78f72f5e716",
 		"scale_p21_sw21_sync_requests.go":                               "813f93f5de089ba2a7ebdc0985ee9d434adf1494fd49068afda17fad6d1c8295",
 		"scale_p21_sw307_team_resource_read.go":                         "e91a2ec9e65996dc2e2ca07c7ebfb8e618bf3274c29679cd0fda488f6bb675c8",
@@ -104,6 +104,8 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// own Project call; the context never reaches request authorization.
 		"scale_p21_attachment_visibility_read.go": "d6ae0a5f2e25635ae7a834a18e27eccb2b23b1ef31848d7cb47c376418729221",
 		"scale_p21_sw318_issue_read_source.go":    "434b6412f3e6546786feba97a97e5dd5c9c1a726f579949b03bf9d78bf0f9286",
+		// Search binds its local SQL reader only for bounded MySQL candidate selection.
+		"search_metadata.go": "553b73ef7d75e568484dd05c0bb660ccc5b93b85ebb550d86aa7bc1a8d1f5044",
 		// Cold-request route: the cold store stays inside its callback.
 		"../../cmd/server/oauth_authorized_applications.go": "8a0e9bec2c8ea317de40e3e4872b8587a6930369391d9e70fa7b895c38c94e9a",
 	}
@@ -139,6 +141,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_sw21_sync_requests.go:scaleP21SW21VisitRequest:sql":                1,
 		"scale_p21_triage_suggestion_read.go:ViewerProjectionScope:metadata":          1,
 		"scale_p21_triage_suggestion_read.go:projectedWorkspace:metadata":             1,
+		"search_metadata.go:beginMySQLMetadataSearch:sql":                             1,
 	}
 	var files []string
 	root, err := os.Getwd()

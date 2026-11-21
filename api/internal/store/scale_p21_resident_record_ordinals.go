@@ -22,11 +22,10 @@ import (
 
 type residentRecordOrdinalsKey struct{}
 
-// recordOrdinalIndex maps each record ID of one slice field of an image to
-// the ordinals holding it, built once per image and field.
+// An unchanged collection shares its lazy index with the next generation.
 type recordOrdinalIndex struct {
-	mu     sync.Mutex
-	fields map[int]map[string][]int
+	once    sync.Once
+	records map[string][]int
 }
 
 func withResidentRecordOrdinals(ctx context.Context, image *coldDecodedImage) context.Context {
@@ -40,43 +39,46 @@ func withResidentRecordOrdinals(ctx context.Context, image *coldDecodedImage) co
 // name's collection node when node is the frame the context's image decoded.
 func residentRecordOrdinals(ctx context.Context, name string, node metadataLogicalNode) (map[string][]int, bool) {
 	image, _ := ctx.Value(residentRecordOrdinalsKey{}).(*coldDecodedImage)
-	if image == nil || node.typ == nil || node.typ.Kind() != reflect.Slice {
-		return nil, false
-	}
-	index, _, ok := metadataLogicalField(name)
-	if !ok || index >= len(image.fields) {
-		return nil, false
-	}
-	field := image.fields[index]
-	key, keyed := coldFrameKeyOf(node)
-	if !keyed || !field.keyed || field.key != key || !field.value.IsValid() || field.value.Type() != node.typ {
-		return nil, false
-	}
-	return image.recordOrdinals(index)
+	return image.matchingRecordOrdinals(name, node)
 }
 
-func (image *coldDecodedImage) recordOrdinals(index int) (map[string][]int, bool) {
-	value := image.fields[index].value
-	element := value.Type().Elem()
-	id, ok := element.FieldByName("ID")
-	if element.Kind() != reflect.Struct || !ok || id.Type.Kind() != reflect.String || len(id.Index) != 1 {
+func (image *coldDecodedImage) matchingRecordOrdinals(name string, node metadataLogicalNode) (map[string][]int, bool) {
+	if node.typ == nil || node.typ.Kind() != reflect.Slice {
 		return nil, false
 	}
-	image.ordinals.mu.Lock()
-	defer image.ordinals.mu.Unlock()
-	if ordinals, found := image.ordinals.fields[index]; found {
-		return ordinals, true
+	field := image.matchingField(name, node)
+	if field == nil {
+		return nil, false
 	}
-	ordinals := make(map[string][]int, value.Len())
-	for ordinal := 0; ordinal < value.Len(); ordinal++ {
-		key := value.Index(ordinal).Field(id.Index[0]).String()
-		ordinals[key] = append(ordinals[key], ordinal)
+	return field.recordOrdinals()
+}
+
+func (field *coldDecodedField) recordOrdinals() (map[string][]int, bool) {
+	value := field.value
+	id, ok := recordOrdinalField(value.Type().Elem())
+	if !ok {
+		return nil, false
 	}
-	if image.ordinals.fields == nil {
-		image.ordinals.fields = map[int]map[string][]int{}
+	if field.ordinals == nil {
+		return nil, value.Len() == 0
 	}
-	image.ordinals.fields[index] = ordinals
-	return ordinals, true
+	field.ordinals.once.Do(func() {
+		ordinals := make(map[string][]int, value.Len())
+		for ordinal := 0; ordinal < value.Len(); ordinal++ {
+			key := value.Index(ordinal).Field(id.Index[0]).String()
+			ordinals[key] = append(ordinals[key], ordinal)
+		}
+		field.ordinals.records = ordinals
+	})
+	return field.ordinals.records, true
+}
+
+func recordOrdinalField(element reflect.Type) (reflect.StructField, bool) {
+	if element.Kind() != reflect.Struct {
+		return reflect.StructField{}, false
+	}
+	id, ok := element.FieldByName("ID")
+	return id, ok && id.Type.Kind() == reflect.String && len(id.Index) == 1
 }
 
 // residentSelectedOrdinals is the set of ordinals of node's records whose ID

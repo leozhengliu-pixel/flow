@@ -109,7 +109,7 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 	if coldCapable(ctx) {
 		// A COLD request's projection is the legacy one, from the legacy
 		// view of the installed workspace (scale_p21_default_cold.go).
-		if view, release, handled := s.coldAccessorView(ctx, "PagedWorkspaceMetadata", workspace, nil); handled {
+		if view, release, handled := s.coldProjectionView(ctx, "PagedWorkspaceMetadata", workspace); handled {
 			defer release()
 			if view == nil {
 				return domain.Bootstrap{}, ErrAuthForbidden

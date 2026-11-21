@@ -92,6 +92,8 @@ func loadRigSnapshot() loadRigProcessMetrics {
 	if counters == nil {
 		counters = map[string]int64{}
 	}
+	counters["bootstrapEncodingHits"] = bootstrapEncodingHits.Load()
+	counters["bootstrapEncodingStores"] = bootstrapEncodingStores.Load()
 	// The shared Redis cache tier (docs/redis-cache.md).
 	for name, value := range coordination.SharedCacheCounters() {
 		counters[name] = value

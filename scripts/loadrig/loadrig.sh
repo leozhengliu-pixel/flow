@@ -24,6 +24,7 @@
 # FLOW_LOADRIG_SEARCH_QUERY (optional fixed search URL query), FLOW_LOADRIG_SYNC_REPLAY_AFTER (optional fixed cursor for single-transaction sync reads),
 # FLOW_LOADRIG_ROTATE_READS (on rotates reads across replicas),
 # GOMAXPROCS_REPLICA (4), GOMEMLIMIT_REPLICA (1536MiB), MAX_LOAD (20: refuse to start above this load average),
+# LOADRIG_MYSQL_MEMORY (1536m, Docker's memory limit for MySQL),
 # KEEP (1 keeps data after smoke), LOADRIG_ALLOW_PULL (1 allows pulling a missing image), EXTRA_ENV ("NAME=value ..."
 # added to every replica, e.g. EXTRA_ENV="FLOW_METADATA_CATALOG=shadow" for the flag-off replicas of a real rollout).
 # Reports: $LOADRIG_HOME/reports/<label>.{md,json}, compare-<topology>.md, seed-<topology>.json.
@@ -116,7 +117,7 @@ pg_up() {
   docker run -d --name loadrig-pg --memory 1g --env-file "$HOME_DIR/pg.env" -p "127.0.0.1:$PG_PORT:5432" postgres:17-alpine \
     -c max_connections=200 -c shared_buffers=256MB -c synchronous_commit=off >/dev/null
   for _ in $(seq 1 60); do
-    docker exec loadrig-pg pg_isready -U flow -d flow_seed >/dev/null 2>&1 && return 0
+    docker exec loadrig-pg pg_isready -h 127.0.0.1 -U flow -d flow_seed >/dev/null 2>&1 && return 0
     sleep 1
   done
   die "loadrig-pg did not become ready"
@@ -148,14 +149,15 @@ mysql_up() {
   if docker ps --format '{{.Names}}' | grep -qx loadrig-mysql; then return 0; fi
   docker image inspect mysql:8.4 >/dev/null 2>&1 || [ "${LOADRIG_ALLOW_PULL:-0}" = 1 ] || die "mysql:8.4 is not present locally (LOADRIG_ALLOW_PULL=1 to pull it)"
   port_free "$MYSQL_PORT" || die "port $MYSQL_PORT is in use"
-  log "starting container loadrig-mysql (mysql:8.4, 1.5 GiB)"
+  local memory="${LOADRIG_MYSQL_MEMORY:-1536m}"
+  log "starting container loadrig-mysql (mysql:8.4, memory limit $memory)"
   # No binary log (a single server; triggers need no extra privilege) and a group-commit log flush, as pg2 runs with
   # synchronous_commit=off.
-  docker run -d --name loadrig-mysql --memory 1536m --env-file "$HOME_DIR/mysql.env" -p "127.0.0.1:$MYSQL_PORT:3306" mysql:8.4 \
+  docker run -d --name loadrig-mysql --memory "$memory" --env-file "$HOME_DIR/mysql.env" -p "127.0.0.1:$MYSQL_PORT:3306" mysql:8.4 \
     --skip-log-bin --innodb-buffer-pool-size=768M --innodb-flush-log-at-trx-commit=2 --max-connections=300 \
     --max-allowed-packet=256M >/dev/null
   for _ in $(seq 1 90); do
-    mysql_root mysql -uroot -Nse 'SELECT 1' >/dev/null 2>&1 && return 0
+    mysql_root mysql -h127.0.0.1 -uroot -Nse 'SELECT 1' >/dev/null 2>&1 && return 0
     sleep 1
   done
   die "loadrig-mysql did not become ready"

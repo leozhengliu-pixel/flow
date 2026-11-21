@@ -331,7 +331,11 @@ func (s *server) applyLegacyRemoteEvents(workspace string) {
 		if all {
 			err = s.store.ReloadAllWorkspaces(ctx)
 		} else if one {
-			err = s.store.ReloadWorkspace(ctx, workspace)
+			if s.store.BoundedMetadataEnabled() && versionErr == nil && version > 0 {
+				err = s.reloadWorkspaceTo(ctx, workspace, version)
+			} else {
+				err = s.store.ReloadWorkspace(ctx, workspace)
+			}
 		}
 		cancel()
 		if err == nil && versionErr == nil && version > 0 {

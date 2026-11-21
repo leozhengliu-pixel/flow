@@ -120,11 +120,12 @@ workspace and credential identifiers and query text stay out of key names.
 Values contain scope-checked results or the viewer's own membership data.
 Raw credentials and tokens stay in the authentication path.
 
-Fills confirm their versions after computation. Committed writes and
-revocations change key material as soon as a new request reads the SQL
-authority. Old fields expire with their shard. Concurrent lookups for one
-key share one flight per replica. A waiter can compute locally when the
-leader's request ends or its result cannot be shared.
+Fills confirm their versions after computation. Batched MySQL fills confirm
+the stamp in the same SQL snapshot as their candidates and rows. Committed
+writes and revocations change key material as soon as a new request reads
+the SQL authority. Old fields expire with their shard. Concurrent lookups
+for one key share one flight per replica. A waiter can compute locally
+when the leader's request ends or its result cannot be shared.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |

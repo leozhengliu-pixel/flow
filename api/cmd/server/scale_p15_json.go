@@ -313,6 +313,12 @@ func encodeHydratedRawJSON(ctx context.Context, buffer *bufio.Writer, raw []byte
 }
 
 func encodeHydratedStruct(ctx context.Context, buffer *bufio.Writer, value reflect.Value, plan []streamField, depth int) error {
+	return encodeHydratedStructFields(ctx, buffer, value, plan, depth, nil)
+}
+
+type hydratedFieldEncoder func(context.Context, *bufio.Writer, streamField, reflect.Value, int) error
+
+func encodeHydratedStructFields(ctx context.Context, buffer *bufio.Writer, value reflect.Value, plan []streamField, depth int, encode hydratedFieldEncoder) error {
 	buffer.WriteByte('{')
 	first := true
 	for _, field := range plan {
@@ -325,7 +331,13 @@ func encodeHydratedStruct(ctx context.Context, buffer *bufio.Writer, value refle
 		}
 		first = false
 		buffer.Write(field.key)
-		if err := encodeHydratedJSON(ctx, buffer, item, depth+1); err != nil {
+		var err error
+		if encode == nil {
+			err = encodeHydratedJSON(ctx, buffer, item, depth+1)
+		} else {
+			err = encode(ctx, buffer, field, item, depth+1)
+		}
+		if err != nil {
 			return err
 		}
 	}

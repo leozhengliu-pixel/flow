@@ -54,7 +54,7 @@ func (s *server) issueRecordsBootstrapBounded(w http.ResponseWriter, r *http.Req
 	defer read.Close()
 	w.Header().Add("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
 	if read.Resident() {
-		writeStreamedJSON(r.Context(), w, http.StatusOK, read.Data)
+		s.bootstrapEncodings.write(w, r, read)
 		return
 	}
 	ctx := hydratedSigningContext(r.Context(), w)

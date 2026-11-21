@@ -33,7 +33,8 @@ type IssueBootstrapRead struct {
 	// generation (beginResident) instead of a body projection. It holds
 	// every value itself (no body tokens); the caller encodes it as flag-off
 	// does, and WriteJSON refuses it.
-	resident bool
+	resident            bool
+	encodingGenerations [len(bootstrapEncodingFields)]IssueBootstrapGeneration
 }
 
 type residentBootstrapKey struct{}
@@ -75,6 +76,7 @@ func (r *IssueBootstrapRead) beginResident(ctx context.Context, workspace string
 		return err
 	}
 	r.Data, r.resident = view, true
+	r.setEncodingGenerations(image)
 	return nil
 }
 

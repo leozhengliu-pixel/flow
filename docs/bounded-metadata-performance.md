@@ -8,9 +8,9 @@ Status: in progress. Operator settings stay in
 `FLOW_BOUNDED_METADATA` exists to keep a replica's memory under a ceiling. The
 ceiling is a constraint, not the objective: with the flag on, every route
 class should be faster than with it off (p50, p95, p99 and throughput, at 1x
-and 10x load, on MySQL, PostgreSQL and SQLite), while peak RSS stays bounded
-and no higher than flag-off. Memory below the ceiling is there to be spent on
-speed.
+and 10x load, on MySQL, PostgreSQL and SQLite). RSS should stabilize below
+the configured per-replica target. The bounded replica may retain more
+memory than the flag-off replica within that target.
 
 ## Where the time goes today
 
@@ -83,11 +83,14 @@ refusing work:
      unchanged; rebuilt for a changed collection in one pass over decoded
      values (no I/O). Writers, realtime entity lookup and aggregate lookup use
      them instead of scans.
-4. **Encoded caches** (planned): the JSON of large viewer-independent records
-   (projects, documents, initiatives) memoized per record by frame origin, so
-   a bootstrap concatenates cached bytes for the records the viewer may see
-   and re-encodes only records changed since; per-request parts (signed URLs,
-   viewer flags) are applied on top as today.
+4. **Encoded bootstrap cache**: the process retains encoded project,
+   document and initiative fields by collection generation and visibility
+   scope. A collection that keeps its frame across writes keeps its ID.
+   Each request resolves live authorization and checks that the finalized
+   projection equals the value that was encoded. Fields that need file
+   signing are encoded per request. The cache bounds retained encodings,
+   their projection witnesses and one active builder to 1/16 of the memory
+   target.
 
 Writes (planned, after the read tiers):
 
@@ -113,14 +116,13 @@ Writes (planned, after the read tiers):
   already holds the right image under a budget; HOT readers now take it by
   reference while COLD facades keep taking copies (legacy code mutates its
   graph). One cache, one budget, one eviction policy.
-- **Budget accounting.** The image budget is still counted in spool bytes
-  (`FLOW_COLD_DECODE_CACHE_BYTES`, 256 MiB). Decoded images are larger than
-  their spool; the budget moves to measured decoded bytes before the image
-  serves more routes, so the ceiling is a real heap ceiling.
-- **Per-request copies stay for now.** The paged bootstrap projection still
-  copies the view it projects (the same copy flag-off makes). Removing it
-  needs every in-place mutation on that path audited; that comes with the
-  encoded caches, route by route, each with an immutability test.
+- **Budget accounting.** The image cache charges decoded containers, values,
+  record memos and ordinal indexes. Its default allowance is 35% of
+  `FLOW_METADATA_MEMORY_BYTES`. The process sizes work admission, policy
+  and other caches from the same target. See the [operator settings](bounded-metadata.md#tuning).
+- **The bootstrap still owns its projection.** Live authorization and
+  decoration operate on a copy of the resident view. Cache hits skip JSON
+  encoding and reuse bytes for the finalized field.
 - **No memory mapping of the spool.** Mapping every settled spool file of at
   least 256 KiB (read-only, shared; a seqlock against patches; unmapped by
   the storage's cleanup) removed the `pread`s, but on the rig (mysql2,
@@ -237,24 +239,25 @@ first, then PostgreSQL and SQLite) against flag-off.
    on it and encodes the result with the flag-off encoder.
 2. Resident spool bytes through memory mappings: measured and rejected (see
    Decisions).
-3. Collection indexes in the resident image; writers and realtime entity
-   lookup use them.
-4. Single-record generations and shorter lock holds for project and document
-   writes; peer delta application outside the lock. Document edits are
-   done (above); collection copies are borrowed for both. Project edits
-   still run the selection writer under the lock.
-5. Encoded per-record caches for the bootstrap and list routes.
-6. Budget in decoded bytes; HOT point reads (project, document, issue
-   detail) from the image.
+3. Size the image cache, admission and concurrency from a replica memory
+   target. Evict whole workspaces and charge decoded allocations.
+4. Cache encoded project, document and initiative fields for the bootstrap.
+5. Batch single-term MySQL metadata search candidates and extract each
+   selected row's result columns with one JSON parse.
+6. Prepare the scoped project callback from the image before taking the
+   lock. The locked path revalidates its inputs and persists the selected
+   changes. Peer reloads and verified pages also prepare before locking.
+7. Share lazy ID indexes across unchanged collections. Project, document and
+   initiative detail reads can use matching fields from a cached image.
+   Issue detail still uses the canonical record reader.
 
 ## Correctness
 
-Every increment keeps flag-on responses identical to flag-off: the P21
-differential tests of the touched routes run on SQLite, MySQL and
-PostgreSQL. New tests cover snapshot isolation (a reader holding a generation
-sees no later write), concurrent readers and writers under `-race`, eviction
-and budget accounting, index exactness after every write kind, peer delta
-application and the memory budget.
+The P21 differential tests compare flag-on and flag-off responses and
+persistence on SQLite, MySQL and PostgreSQL. SW480 checks the large peer
+document merge at 768 MiB of work admission and the atomic refusal at
+64 MiB. Focused tests cover eviction, budget accounting, concurrent
+readers, stale write preparation and peer publication races.
 
 ## Measurements
 
@@ -313,3 +316,79 @@ and five document title edits):
 (Before this step flag on was 315 / 1369 ms and 1398 / 2772 ms.) End RSS
 503 MiB on, 683 MiB off in that run; the off value varies with GC timing
 (245-683 MiB across runs).
+
+### Replica memory target and resident fast paths
+
+The MySQL measurements below use two replicas, MySQL 8.4, real Redis,
+fresh database copies for each flag state and a 3 GiB target per replica.
+The plan allows 1,075 MiB of decoded images, 768 MiB of admitted work,
+192 MiB of policy, 96 MiB each for rows and source descriptors, and
+192 MiB for bootstrap encodings and their builder. It allows three COLD
+slots, three legacy-view lanes and six bootstrap readers.
+
+| Report | Workload | req/s off to on | p50 / p95 / p99 ms off to on | 5xx + transport off to on | Peak RSS MiB per replica off to on |
+| --- | --- | --- | --- | --- | --- |
+| `01-memory-mysql2-1x` | Mixed, 10 VUs | 16.19 to 23.21 | 32 / 1521 / 2525 to 14 / 583 / 957 | 5 to 10 | 839 / 766 to 673 / 543 |
+| `03-bootstrap-mysql2-1x` | Bootstrap, 10 VUs | 10.06 to 9.47 | 343 / 2460 / 3972 to 390 / 2548 / 4207 | 0 to 0 | 600 / 671 to 520 / 567 |
+| `04-search-mysql2-1x` | Search-heavy, 10 VUs | 2.50 to 5.87 | 3238 / 14810 / 15068 to 815 / 9586 / 15007 | 26 to 9 | 589 / 447 to 612 / 658 |
+| `05-bootstrap-search-mysql2-1x` | Bootstrap and search, 10 VUs | 6.61 to 10.42 | 475 / 1944 / 15014 to 287 / 1510 / 11670 | 16 to 6 | 587 / 491 to 706 / 606 |
+| `06-mixed-mysql2-1x` | Mixed, 10 VUs for 100s | 12.59 to 23.18 | 57 / 2370 / 3663 to 15 / 395 / 1846 | 19 to 15 | 783 / 835 to 884 / 860 |
+
+In `01`, search p95 rose from 7.74 to 9.10 s. The first bootstrap cache
+in `03` reduced RSS and CPU, with higher latency. `04` profiles the
+initial batched search plan. Its SQL statement digest puts the largest
+remaining cost in shell extraction for projects and documents. The
+single-parse `JSON_TABLE` extraction in `05` cut search p95 from 15.01 to
+7.80 s. Bootstrap throughput in that mix rose from 3.81 to 6.25 req/s
+with p95 at 774 and 785 ms and 257 encoding hits.
+
+The mixed run `06` includes resident project preparation, out-of-lock
+incremental peer reloads, collection generations and image-based detail
+reads. Every measured class improved at p95 and p99. Agent p50 rose from
+72 to 231 ms across 12 and 13 samples. The measurements combine the
+changes, so they give the resulting latency for each operation.
+
+| Operation | p95 ms off to on |
+| --- | --- |
+| Project update | 5246 to 1064 |
+| Document update | 6007 to 825 |
+| Project detail | 1155 to 261 |
+| Document detail | 2125 to 169 |
+| Workspace bootstrap | 2550 to 927 |
+| Search | 15005 to 8282 |
+| Realtime lag | 2925 to 1133 |
+
+### Sustained MySQL load
+
+`18-mixed-mysql2-10x` ran the scale-1 seed with 100 VUs and 50 streams for
+600 seconds per flag state, using a 3 GiB per-replica metadata target and
+a 3 GiB MySQL container. Both database and Redis stayed up throughout.
+This pair predates the larger COLD projection gate and the later changes
+to project preparation and peer reloads. The earlier `07` 100-VU pair
+lost MySQL and is excluded.
+
+| Class | req/s off to on | p50 / p95 / p99 ms off to on | 5xx + transport off to on |
+| --- | --- | --- | --- |
+| Overall | 36.17 to 55.35 | 2676 / 6246 / 11657 to 386 / 5378 / 14221 | 7770 to 5154 |
+| HOT read | 24.29 to 37.36 | 1704 / 3140 / 3493 to 179 / 3025 / 3162 | 4388 to 2175 |
+| HOT write | 4.05 to 5.96 | 3117 / 12012 / 18724 to 3019 / 10098 / 13741 | 952 to 481 |
+| Search | 1.83 to 2.70 | 3022 / 15030 / 16952 to 963 / 14930 / 15496 | 422 to 252 |
+| Sync | 1.58 to 1.94 | 3035 / 7346 / 10036 to 2310 / 6127 / 10926 | 833 to 1053 |
+| Bootstrap | 0.22 to 0.38 | 2556 / 4352 / 5930 to 1192 / 3468 / 7355 | 52 to 22 |
+| API key | 1.26 to 2.18 | 1916 / 3206 / 3394 to 212 / 3041 / 3193 | 254 to 108 |
+| COLD read | 1.96 to 3.26 | 3006 / 4966 / 6866 to 1409 / 15023 / 23913 | 391 to 321 |
+| COLD write | 0.93 to 1.52 | 6005 / 10635 / 15118 to 5651 / 21479 / 30001 | 452 to 722 |
+| Agent | 0.06 to 0.06 | 3049 / 15626 / 29724 to 3006 / 8245 / 23608 | 26 to 20 |
+
+Successful responses rose from 23.2 to 46.4 per second. Successful sync
+responses fell from 110 to 101 over the run. The rig includes HTTP
+refusals and transport failures in its latency percentiles. Its
+`projection-gate` label groups multiple busy responses, including lock
+contention and deadlines. Replica logs recorded 45 resource projection
+timeouts and eight COLD facade slot timeouts with the flag on.
+
+Flag-on RSS peaked at 1556 and 1616 MiB by `getrusage`. Four-second samples
+averaged 1100 and 1114 MiB in minutes 6-8, then 1070 and 1209 MiB in
+minutes 8-10. Both replicas stayed below the 3072 MiB target throughout
+the run. Fixed data scale and sample duration limit the scope of this
+measurement.

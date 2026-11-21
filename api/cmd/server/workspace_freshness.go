@@ -189,7 +189,11 @@ func (s *server) requireCurrentWorkspace(w http.ResponseWriter, r *http.Request,
 // meanwhile already brought it to version target.
 func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target int64) error {
 	versions := &s.workspaceVersions
+	bounded := s.store != nil && s.store.BoundedMetadataEnabled()
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		versions.mu.Lock()
 		if versions.applied == nil {
 			versions.applied = map[string]int64{}
@@ -205,7 +209,12 @@ func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target
 			versions.mu.Unlock()
 			select {
 			case <-inFlight.done:
-				return inFlight.err
+				if inFlight.err != nil || target <= 0 || !bounded {
+					return inFlight.err
+				}
+				// A reload shared with the peer worker can have captured a
+				// lower version. Recheck the target before serving this read.
+				continue
 			case <-ctx.Done():
 				return ctx.Err()
 			}

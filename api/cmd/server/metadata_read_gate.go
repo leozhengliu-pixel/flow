@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"flow/api/internal/store"
 )
 
 // metadataReadGate bounds how many requests build and encode a viewer's
@@ -35,11 +37,15 @@ func newMetadataReadGate(concurrency, maxQueue int, wait, write time.Duration) *
 	return &metadataReadGate{slots: make(chan struct{}, max(1, concurrency)), wait: wait, write: write, maxQueue: int64(max(0, maxQueue))}
 }
 
-// metadataReadGateFromEnv reads FLOW_METADATA_READ_CONCURRENCY (default 4),
+// metadataReadGateFromEnv reads FLOW_METADATA_READ_CONCURRENCY,
 // FLOW_METADATA_READ_QUEUE_LIMIT (default 64), FLOW_METADATA_READ_QUEUE_TIMEOUT
 // (default 20s) and FLOW_METADATA_READ_WRITE_TIMEOUT (default 2m).
-func metadataReadGateFromEnv() *metadataReadGate {
-	return newMetadataReadGate(envInt("FLOW_METADATA_READ_CONCURRENCY", 4), envInt("FLOW_METADATA_READ_QUEUE_LIMIT", 64), envDuration("FLOW_METADATA_READ_QUEUE_TIMEOUT", 20*time.Second), envDuration("FLOW_METADATA_READ_WRITE_TIMEOUT", 2*time.Minute))
+func metadataReadGateFromEnv(bounded bool) *metadataReadGate {
+	concurrency := 4
+	if bounded {
+		concurrency = store.BoundedMetadataReadConcurrency()
+	}
+	return newMetadataReadGate(envInt("FLOW_METADATA_READ_CONCURRENCY", concurrency), envInt("FLOW_METADATA_READ_QUEUE_LIMIT", 64), envDuration("FLOW_METADATA_READ_QUEUE_TIMEOUT", 20*time.Second), envDuration("FLOW_METADATA_READ_WRITE_TIMEOUT", 2*time.Minute))
 }
 
 func (g *metadataReadGate) busy(w http.ResponseWriter, retryAfter time.Duration) {

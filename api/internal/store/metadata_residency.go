@@ -22,13 +22,9 @@ var (
 )
 
 const (
-	// metadataPolicyBytes is the default resident policy budget of all
-	// workspaces together (FLOW_METADATA_POLICY_BYTES) and the most one
-	// workspace's policy image may take; whole-policy operations admit that
-	// much work.
-	metadataPolicyBytes    = 192 << 20
-	metadataBodyCacheBytes = 64 << 20
-	metadataWorkBytes      = 256 << 20
+	// Whole-policy operations admit up to this much work per workspace.
+	metadataPolicyBytes = 192 << 20
+	metadataWorkBytes   = 256 << 20
 	// metadataSourceReloadHeadroom is the share of the installed source
 	// budget a bounded start keeps free for the work that runs beside the
 	// installed sources: requests' and publications' scratch spools (a
@@ -60,13 +56,13 @@ func metadataBudgetBytes(name string, fallback int64) int64 {
 // metadataLogicalDescriptorBytes (its read cache and write buffer), shared by
 // every generation of its source (scale_p21_logical_spool_group.go).
 func metadataLogicalDescriptorCap() int64 {
-	return metadataBudgetBytes("FLOW_METADATA_SOURCE_BYTES", metadataLogicalDescriptorLimit)
+	return metadataBudgetBytes("FLOW_METADATA_SOURCE_BYTES", metadataMemoryShare(1, 32))
 }
 
 // metadataLogicalDiskCap is the process-wide spool disk budget of logical
-// sources, installed ones included.
+// sources, installed ones included. It defaults to the memory ceiling.
 func metadataLogicalDiskCap() int64 {
-	return metadataBudgetBytes("FLOW_METADATA_SOURCE_DISK_BYTES", metadataLogicalDiskBytes)
+	return metadataBudgetBytes("FLOW_METADATA_SOURCE_DISK_BYTES", metadataMemoryShare(1, 1))
 }
 
 // metadataWorkspacePolicyLimit is the most one workspace's resident policy
@@ -159,6 +155,7 @@ type metadataResidency struct {
 	// residentBuilds serializes the image builds of shared resident readers
 	// per workspace (scale_p21_resident_generation.go).
 	residentBuilds residentImageBuilds
+	reloadBuilds   residentImageBuilds
 }
 
 type metadataResidentCacheKey struct {
@@ -174,7 +171,8 @@ type metadataResidentCacheEntry struct {
 }
 
 func newMetadataResidency() *metadataResidency {
-	return &metadataResidency{requireCoverage: true, cache: map[metadataResidentCacheKey]*list.Element{}, cacheLimit: metadataBodyCacheBytes, policy: map[string]int{}, policyLimit: int(min(metadataBudgetBytes("FLOW_METADATA_POLICY_BYTES", metadataPolicyBytes), 1<<46)), stamps: map[string]copyStamp{}, applied: map[string]int64{}, work: newMetadataWorkBudget(metadataWorkBytes)}
+	// Budgets derive from the memory ceiling (metadata_memory.go).
+	return &metadataResidency{requireCoverage: true, cache: map[metadataResidentCacheKey]*list.Element{}, cacheLimit: metadataBodyCacheBudgetBytes(), policy: map[string]int{}, policyLimit: metadataPolicyBudgetBytes(), stamps: map[string]copyStamp{}, applied: map[string]int64{}, work: newMetadataWorkBudget(metadataWorkBudgetBytes())}
 }
 
 func (s *SQLiteStore) residentStamp(workspace string) (copyStamp, int64, bool) {

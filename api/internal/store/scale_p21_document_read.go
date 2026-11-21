@@ -140,6 +140,7 @@ func (s *SQLiteStore) BeginDocumentRead(ctx context.Context, workspace, userID s
 	}
 	owner.source = source
 	current := source.Stamp() == stamp
+	owner.image = s.metadataResidency.cachedResidentImage(workspace)
 	canonical := false
 	scope, selected, err := read.documentLegacyScope(snapshot, request)
 	if err != nil {
@@ -193,13 +194,12 @@ func (s *SQLiteStore) BeginDocumentRead(ctx context.Context, workspace, userID s
 		}
 	}
 	if !canonical && !request.TrashOnly && request.Ref != "" {
-		var node metadataLogicalNode
-		var id string
-		node, id, err = read.documentChoice(snapshot, request)
+		var choice documentNativeChoice
+		choice, err = read.documentChoice(snapshot, request)
 		if err != nil {
 			return nil, err
 		}
-		if id != "" {
+		if choice.id != "" {
 			if fallback {
 				err = owner.visitNative(snapshot, "documents", func(_ int, candidate metadataLogicalNode) error {
 					return owner.withHeader(snapshot, candidate, []string{"ID", "SlugID", "PreviousSlugIDs"}, func(header reflect.Value) error {
@@ -215,7 +215,7 @@ func (s *SQLiteStore) BeginDocumentRead(ctx context.Context, workspace, userID s
 				})
 			} else {
 				var value reflect.Value
-				value, err = owner.node(snapshot, node, request.ReadOnly)
+				value, err = owner.residentRecord(snapshot, "documents", choice.ordinal, choice.node, request.ReadOnly)
 				if err == nil {
 					read.Data.Documents = []domain.Document{value.Interface().(domain.Document)}
 				}
@@ -481,27 +481,23 @@ func (r *DocumentRead) documentLegacyScope(ctx context.Context, request Document
 	if request.Ref == "" {
 		return scope, true, nil
 	}
-	node, id, err := r.documentChoice(ctx, request)
+	choice, err := r.documentChoice(ctx, request)
 	if err != nil {
 		return scope, false, err
 	}
-	if id != "" && !request.TrashOnly {
-		scope.Write = append(scope.Write, RecordKey{Kind: "documents", ID: id})
-		err := r.owner.withHeader(ctx, node, []string{"ProjectIDs"}, func(value reflect.Value) error {
+	if choice.id != "" && !request.TrashOnly {
+		scope.Write = append(scope.Write, RecordKey{Kind: "documents", ID: choice.id})
+		err := r.owner.withHeader(ctx, choice.node, []string{"ProjectIDs"}, func(value reflect.Value) error {
 			if request.SkipProjects {
 				return nil
 			}
 			projectIDs := append(slices.Clone(value.Interface().(domain.Document).ProjectIDs), request.ProjectIDs...)
-			return r.owner.visitNative(ctx, "projects", func(_ int, project metadataLogicalNode) error {
-				return r.documentProjectMatch(ctx, project, projectIDs, []string{id}, func(projectID string, match bool) error {
-					if match {
-						if err := r.owner.reserve(ctx, uint64(len(projectID))*16+2048); err != nil {
-							return err
-						}
-						scope.Write = append(scope.Write, RecordKey{Kind: "projects", ID: projectID})
-					}
-					return nil
-				})
+			return r.visitDocumentProjects(ctx, projectIDs, []string{choice.id}, func(_ int, _ metadataLogicalNode, projectID string) error {
+				if err := r.owner.reserve(ctx, uint64(len(projectID))*16+2048); err != nil {
+					return err
+				}
+				scope.Write = append(scope.Write, RecordKey{Kind: "projects", ID: projectID})
+				return nil
 			})
 		})
 		if err != nil || !request.Suffix {
@@ -567,20 +563,52 @@ func (r *DocumentRead) documentProjectMatch(ctx context.Context, node metadataLo
 
 func (r *DocumentRead) documentNativeField(ctx context.Context, kind string, wire bool) error {
 	field, _, _ := metadataLogicalField(kind)
-	value, err := r.owner.node(ctx, r.owner.source.fields[field], wire)
+	node := r.owner.source.fields[field]
+	var value reflect.Value
+	var err error
+	if resident := r.owner.residentField(kind); resident.IsValid() {
+		value, err = r.owner.ownedResidentValue(ctx, node, resident)
+	} else {
+		value, err = r.owner.node(ctx, node, wire)
+	}
 	if err == nil {
 		reflect.ValueOf(&r.Data).Elem().Field(field).Set(value)
 	}
 	return err
 }
 
-func (r *DocumentRead) documentChoice(ctx context.Context, request DocumentReadRequest) (metadataLogicalNode, string, error) {
-	best, id, rank := metadataLogicalNode{}, "", 0
-	err := r.owner.visitNative(ctx, "documents", func(_ int, node metadataLogicalNode) error {
+type documentNativeChoice struct {
+	node    metadataLogicalNode
+	id      string
+	ordinal int
+}
+
+func (r *DocumentRead) documentChoice(ctx context.Context, request DocumentReadRequest) (documentNativeChoice, error) {
+	best, rank := documentNativeChoice{}, 0
+	if decoded := r.owner.residentField("documents"); decoded.IsValid() {
+		documents := decoded.Interface().([]domain.Document)
+		for ordinal, item := range documents {
+			if next := documentReadRank(item, request); next > rank {
+				best.id, best.ordinal, rank = item.ID, ordinal, next
+				if rank == 3 {
+					break
+				}
+			}
+		}
+		if rank == 0 {
+			return best, ctx.Err()
+		}
+		err := r.owner.visitResidentOrdinals(ctx, "documents", len(documents), []int{best.ordinal}, func(_ int, node metadataLogicalNode) error {
+			best.node = node
+			return nil
+		})
+		return best, err
+	}
+	err := r.owner.visitNative(ctx, "documents", func(ordinal int, node metadataLogicalNode) error {
 		return r.owner.withHeader(ctx, node, []string{"ID", "SlugID", "PreviousSlugIDs"}, func(value reflect.Value) error {
 			item := value.Interface().(domain.Document)
 			if next := documentReadRank(item, request); next > rank {
-				best, id, rank = node, item.ID, next
+				best, rank = documentNativeChoice{node, item.ID, ordinal}, next
 			}
 			if rank == 3 {
 				return ErrMetadataIterationDone
@@ -588,7 +616,7 @@ func (r *DocumentRead) documentChoice(ctx context.Context, request DocumentReadR
 			return nil
 		})
 	})
-	return best, id, err
+	return best, err
 }
 
 func (r *DocumentRead) documentProjects(ctx context.Context, proposed []string, wire bool) error {
@@ -597,20 +625,37 @@ func (r *DocumentRead) documentProjects(ctx context.Context, proposed []string, 
 		ids = append(ids, item.ProjectIDs...)
 		documentIDs = append(documentIDs, item.ID)
 	}
-	return r.owner.visitNative(ctx, "projects", func(_ int, node metadataLogicalNode) error {
-		match := false
-		err := r.documentProjectMatch(ctx, node, ids, documentIDs, func(_ string, found bool) error {
-			match = found
-			return nil
-		})
-		if err != nil || !match {
-			return err
-		}
-		value, err := r.owner.node(ctx, node, wire)
+	return r.visitDocumentProjects(ctx, ids, documentIDs, func(ordinal int, node metadataLogicalNode, _ string) error {
+		value, err := r.owner.residentRecord(ctx, "projects", ordinal, node, wire)
 		if err == nil {
 			r.Data.Projects = append(r.Data.Projects, value.Interface().(domain.Project))
 		}
 		return err
+	})
+}
+
+func (r *DocumentRead) visitDocumentProjects(ctx context.Context, ids, documents []string, visit func(int, metadataLogicalNode, string) error) error {
+	if decoded := r.owner.residentField("projects"); decoded.IsValid() {
+		projects := decoded.Interface().([]domain.Project)
+		var ordinals []int
+		for i, project := range projects {
+			if slices.Contains(ids, project.ID) || slices.ContainsFunc(project.Resources, func(resource domain.ProjectResource) bool {
+				return slices.Contains(documents, resource.ID)
+			}) {
+				ordinals = append(ordinals, i)
+			}
+		}
+		return r.owner.visitResidentOrdinals(ctx, "projects", len(projects), ordinals, func(ordinal int, node metadataLogicalNode) error {
+			return visit(ordinal, node, projects[ordinal].ID)
+		})
+	}
+	return r.owner.visitNative(ctx, "projects", func(ordinal int, node metadataLogicalNode) error {
+		return r.documentProjectMatch(ctx, node, ids, documents, func(id string, match bool) error {
+			if match {
+				return visit(ordinal, node, id)
+			}
+			return nil
+		})
 	})
 }
 
