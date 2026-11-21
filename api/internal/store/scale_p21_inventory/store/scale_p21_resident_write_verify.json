@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_resident_write_verify.go",
+  "unmigrated": 0,
+  "consumers": {
+    "verify": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Test-only reference run of the resident document write (residentWriteVerify is on only under go test): it runs the declared scoped-image executor on the same request with the resident callback's result replayed, stops it before its commit (the transaction is rolled back) and compares callback input, previous values, realtime payload, SQL state and next generation. It adds no production read or write; with verification off the function is never called.",
+      "accessors": ["mutateBoundedScopedImage"],
+      "temperature": "hot",
+      "temperatureReason": "Runs only in tests, beside each resident document edit.",
+      "callers": ["store/scale_p21_resident_document_write.go:writeResidentDocumentOnce"]
+    }
+  }
+}

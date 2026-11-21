@@ -267,6 +267,10 @@ func (s *metadataLogicalStorage) writeAt(data []byte, offset int64) error {
 		return errMetadataLogicalClosed
 	}
 	end := offset + int64(len(data))
+	if s.borrowedOverlap(offset, end) {
+		// Borrowed bytes belong to another storage and never change.
+		return ErrMetadataRecordQuery
+	}
 	s.dropFrameMemo(offset, end)
 	flushed := s.flushed.Load()
 	if end > flushed+int64(len(s.pending)) {
@@ -312,6 +316,15 @@ func (s *metadataLogicalStorage) ReadAt(p []byte, offset int64) (int, error) {
 	if offset < 0 {
 		return 0, errMetadataLogicalNegativeOffset
 	}
+	if borrows := s.borrows.Load(); borrows != nil {
+		// Ranges another storage holds (scale_p21_logical_borrowed_range.go).
+		return s.readBorrowedAt(p, offset, *borrows)
+	}
+	return s.readOwnAt(p, offset)
+}
+
+// readOwnAt reads bytes this storage holds itself.
+func (s *metadataLogicalStorage) readOwnAt(p []byte, offset int64) (int, error) {
 	if offset+int64(len(p)) > s.flushed.Load() {
 		return s.readPendingAt(p, offset)
 	}
@@ -534,6 +547,7 @@ func (s *metadataLogicalStorage) discard() error {
 	if own := s.ownCache.Load(); own != nil {
 		own.release()
 	}
+	s.releaseBorrowed()
 	if file == nil {
 		return nil
 	}

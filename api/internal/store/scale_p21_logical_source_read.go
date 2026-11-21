@@ -629,7 +629,22 @@ func (s *metadataLogicalSource) Select(ctx context.Context, scope MetadataRecord
 				return nil
 			})
 		}
+		var hinted map[int]bool
+		if node.typ.Kind() == reflect.Slice {
+			ids := []string{}
+			for _, selected := range append(slices.Clone(scope.Read), scope.Write...) {
+				if selected.Kind == name {
+					ids = append(ids, selected.ID)
+				}
+			}
+			hinted, _ = residentSelectedOrdinals(ctx, name, node, ids)
+		}
 		return node.Children(ctx, func(key reflect.Value, item metadataLogicalNode) error {
+			if hinted != nil && !hinted[int(key.Int())] {
+				// The resident image of this frame holds none of the
+				// selected IDs at this ordinal.
+				return nil
+			}
 			id := ""
 			matched := false
 			if node.typ.Kind() == reflect.Map {

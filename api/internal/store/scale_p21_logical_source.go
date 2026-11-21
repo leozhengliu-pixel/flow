@@ -115,6 +115,12 @@ type metadataLogicalStorage struct {
 	clones  map[int64]metadataLogicalCloneCheck
 	// userIndexes: the IDs of users frames (scale_p21_aggregate_user_index.go).
 	userIndexes map[int64]metadataLogicalUserIndex
+
+	// borrows are the ranges whose bytes other storages hold
+	// (scale_p21_logical_borrowed_range.go), replaced whole under pendingMu;
+	// lenders are those storages, each retained once.
+	borrows atomic.Pointer[[]metadataLogicalBorrow]
+	lenders []*metadataLogicalStorage
 }
 
 type metadataLogicalNode struct {
@@ -144,7 +150,11 @@ type metadataLogicalBuilder struct {
 	cost        uint64
 	collection  reflect.Type
 	unavailable bool
-	path        [metadataLogicalDepth]metadataLogicalAncestor
+	// collectionIndex collects the child headers of the collection
+	// between BeginCollection and EndCollection (written child indexes,
+	// scale_p21_logical_written_index.go).
+	collectionIndex *writtenChildIndex
+	path            [metadataLogicalDepth]metadataLogicalAncestor
 	buffer      [32 << 10]byte
 	finished    bool
 	closed      bool
@@ -274,7 +284,11 @@ func (b *metadataLogicalBuilder) BeginCollection(name string, nilValue bool) err
 	if err := b.write([]byte{flag}); err != nil {
 		return err
 	}
-	return b.writeUint(0)
+	if err := b.writeUint(0); err != nil {
+		return err
+	}
+	b.collectionIndex = newWrittenChildIndex(f.Type, b.offset)
+	return nil
 }
 
 func (b *metadataLogicalBuilder) Append(key, value reflect.Value) error {
@@ -297,6 +311,7 @@ func (b *metadataLogicalBuilder) Append(key, value reflect.Value) error {
 	if err != nil {
 		return err
 	}
+	b.collectionIndex.add(node)
 	b.cost += cost + node.cost + uint64(value.Type().Size())*2
 	b.unavailable = b.unavailable || node.unavailable
 	b.count++
@@ -321,6 +336,12 @@ func (b *metadataLogicalBuilder) EndCollection() error {
 	if err := b.patch(node); err != nil {
 		return err
 	}
+	// Only a collection each of whose children was added keeps the
+	// headers (writers that copy children by other means add none).
+	if index := b.collectionIndex; index != nil && uint64(len(index.headers)) == b.count {
+		index.keep(b.storage, node)
+	}
+	b.collectionIndex = nil
 	b.source.fields[b.active] = node
 	b.active, b.collection = -1, nil
 	return nil
