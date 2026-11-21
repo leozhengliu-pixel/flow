@@ -203,7 +203,7 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 		// from the legacy view of the installed workspace; a workspace the
 		// view cannot answer is refused exactly as the no-source path.
 		const cold = `if coldCapable(ctx) {
-	if view, release, handled := s.coldAccessorView(ctx, "PagedWorkspaceMetadata", workspace, nil); handled {
+	if view, release, handled := s.coldProjectionView(ctx, "PagedWorkspaceMetadata", workspace); handled {
 		defer release()
 		if view == nil {
 			return domain.Bootstrap{}, ErrAuthForbidden
