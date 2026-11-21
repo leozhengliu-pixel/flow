@@ -533,6 +533,9 @@ func (w *scaleP20ReadRecorder) WriteHeader(code int)           { w.code = code }
 func (w *scaleP20ReadRecorder) Write(data []byte) (int, error) { return len(data), nil }
 
 func (s *server) scaleP20Changes(w http.ResponseWriter, r *http.Request) bool {
+	if s.localStoreChanges(w, r) {
+		return true
+	}
 	if !scaleP20SyncRequest(r) {
 		return false
 	}

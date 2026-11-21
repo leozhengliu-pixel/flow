@@ -105,6 +105,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			if !s.authorizeWorkspaceRequest(w, r, viewer) {
 				return
 			}
+			s.stampLocalStoreBootstrap(w, r, workspaceKey(r))
 			recordFileSigningPrincipal(r.Context(), viewer, nil, workspaceKey(r))
 			next.ServeHTTP(w, r)
 			return
@@ -171,6 +172,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 		if !s.authorizeWorkspaceRequest(w, r, user) {
 			return
 		}
+		s.stampLocalStoreBootstrap(w, r, workspaceKey(r))
 		recordFileSigningPrincipal(r.Context(), user, apiKey, apiWorkspace)
 		next.ServeHTTP(w, r)
 	})
