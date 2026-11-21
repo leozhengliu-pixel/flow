@@ -71,7 +71,7 @@ func defaultMetadataMemory(cgroup, physical, runtimeLimit int64) (int64, string)
 // whole number of bytes) is used as given.
 func metadataMemoryCeiling() (int64, string) {
 	if raw := strings.TrimSpace(os.Getenv("FLOW_METADATA_MEMORY_BYTES")); raw != "" {
-		if value, err := strconv.ParseInt(raw, 10, 64); err == nil && value > 0 {
+		if value, err := strconv.ParseInt(raw, 10, strconv.IntSize); err == nil && value > 0 {
 			return value, "FLOW_METADATA_MEMORY_BYTES"
 		}
 	}

@@ -115,7 +115,7 @@ signed URLs stay local to the response.
 
 Each Redis key is a hash shard named `<prefix>:sc:{result-N}`, for `N` from
 0 to 31. A field is `<kind>:<format and version>:<digest>`. Length-prefixed
-inputs feed SHA-256 and the first 128 bits form the digest. Principal,
+inputs feed BLAKE2b-256 and the first 128 bits form the digest. Principal,
 workspace and credential identifiers and query text stay out of key names.
 Values contain scope-checked results or the viewer's own membership data.
 Raw credentials and tokens stay in the authentication path.

@@ -44,7 +44,7 @@ func metadataBudgetBytes(name string, fallback int64) int64 {
 	if raw == "" {
 		return fallback
 	}
-	value, err := strconv.ParseInt(raw, 10, 64)
+	value, err := strconv.ParseInt(raw, 10, strconv.IntSize)
 	if err != nil || value <= 0 {
 		return fallback
 	}

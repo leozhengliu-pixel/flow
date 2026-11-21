@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/flate"
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/crypto/blake2b"
 )
 
 // SharedCache is the cross-replica cache tier (docs/redis-cache.md). Every
@@ -217,10 +217,10 @@ func (r *Redis) SharedCacheDo(ctx context.Context, key string, compute func(cont
 
 // Key names one entry: prefix:sc:{shard}:kind:version:digest. The
 // version is the readable immutable stamp (never a secret); the
-// digest is SHA-256 over every other input (principal, scope, query), so
+// digest is BLAKE2b-256 over every other input (principal, scope, query), so
 // identifiers, tokens and query text never appear in Redis.
 func (c *SharedCache) Key(workspace, kind, version string, material ...string) string {
-	sum := sha256.New()
+	sum, _ := blake2b.New256(nil)
 	for _, part := range append([]string{workspace, kind, version}, material...) {
 		var length [8]byte
 		n := len(part)
