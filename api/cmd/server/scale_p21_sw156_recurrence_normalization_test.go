@@ -297,7 +297,16 @@ func TestScaleP21SW156RecurringNormalizationTickerDifferential(t *testing.T) {
 				if measureSQL {
 					t.Logf("representative_recurrence_normalization bounded=%t observed_SQL=%d", source.BoundedMetadataEnabled(), statements)
 				}
-				outcomes = append(outcomes, map[string]any{"effects": scaleP21SW59Normalized(t, got, before, started, finished), "log": output.String()})
+				// The standard logger is process-wide: background schedulers of
+				// servers other tests closed can write to it meanwhile ("sql:
+				// database is closed"). Compare the recurrence ticker's own lines.
+				var recurrenceLog strings.Builder
+				for _, line := range strings.SplitAfter(output.String(), "\n") {
+					if strings.HasPrefix(line, "Recurring issue ") {
+						recurrenceLog.WriteString(line)
+					}
+				}
+				outcomes = append(outcomes, map[string]any{"effects": scaleP21SW59Normalized(t, got, before, started, finished), "log": recurrenceLog.String()})
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
 				t.Fatal("actual normalization ticker SQL/event/publication/log differential", scaleP21M2Diff(outcomes[0], outcomes[1]))

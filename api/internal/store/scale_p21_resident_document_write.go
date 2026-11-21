@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"reflect"
 	"slices"
 	"strings"
@@ -271,7 +270,6 @@ func (s *SQLiteStore) writeResidentDocumentOnce(ctx context.Context, workspace, 
 			edit.owner.Close()
 		}
 		noteResidentFallback(reason)
-		slog.Debug("resident document write falls back", "workspace", workspace, "reason", reason)
 		traceMark(ctx, "fallback:"+strings.ReplaceAll(reason, " ", "-"))
 		return false, reason, nil
 	}

@@ -41,7 +41,7 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 	if err := json.Unmarshal(raw, &result.Key); err != nil {
 		return result, err
 	}
-	return s.finishAPIKeyAuthentication(ctx, result, workspace, hash, approved)
+	return s.checkLiveKeyRecord(ctx, result, workspace, hash, approved)
 }
 
 // APIKeyAuthenticationByID is AuthenticateAPIKeyRecord for a caller that holds
@@ -67,10 +67,10 @@ func (s *SQLiteStore) APIKeyAuthenticationByID(ctx context.Context, workspace, k
 	if result.Key.ID != keyID || result.Key.SecretHash == "" {
 		return result, ErrAuthForbidden
 	}
-	return s.finishAPIKeyAuthentication(ctx, result, workspace, result.Key.SecretHash, approved)
+	return s.checkLiveKeyRecord(ctx, result, workspace, result.Key.SecretHash, approved)
 }
 
-func (s *SQLiteStore) finishAPIKeyAuthentication(ctx context.Context, result APIKeyAuthentication, workspace, hash string, approved func(*domain.Bootstrap, string, []string) bool) (APIKeyAuthentication, error) {
+func (s *SQLiteStore) checkLiveKeyRecord(ctx context.Context, result APIKeyAuthentication, workspace, hash string, approved func(*domain.Bootstrap, string, []string) bool) (APIKeyAuthentication, error) {
 	var raw []byte
 	key := result.Key
 	if key.GrantType == "" && key.AuthorizationID == "" && strings.HasPrefix(key.OAuthClientID, "flow_client_") {
