@@ -22,6 +22,13 @@ import (
 
 var errEventSourceUnsupported = errors.New("event uses its dedicated realtime channel")
 var errRealtimeProjectionStale = errors.New("realtime projection authorization changed")
+var errLiveEventSourceStale = fmt.Errorf("live realtime source revision changed: %w", errRealtimeProjectionStale)
+
+type eventSourceBuildKey struct{}
+type eventSourceBuildInput struct {
+	epoch    string
+	expected *store.EventSourceVersion
+}
 
 // EventSource owns the viewer-independent records read for an event. A source
 // is immutable after construction; its bounded encoding cache is synchronized.
@@ -136,7 +143,16 @@ func (s *server) BuildEventSource(ctx context.Context, workspace string, event d
 	if err != nil {
 		return nil, err
 	}
-	epoch, _ := ctx.Value(eventSourceEpochKey{}).(string)
+	input, _ := ctx.Value(eventSourceBuildKey{}).(eventSourceBuildInput)
+	if input.expected != nil && version != *input.expected {
+		// SQL may advance while a builder waits for a slot. A newer source
+		// cannot populate this key, so restart delivery before projecting it.
+		if input.epoch != "" && s.store.RealtimeEpochsReady() {
+			return nil, errLiveEventSourceStale
+		}
+		return nil, errRealtimeProjectionStale
+	}
+	epoch := input.epoch
 	if !s.store.RealtimeEpochsReady() {
 		epoch = ""
 	} else if epoch == "" {
@@ -553,24 +569,81 @@ func (source *EventSource) cacheKey() string {
 const (
 	eventSourceCacheEntries = 32
 	eventSourceCacheBytes   = 4 << 20
+	eventSourceCacheBuilds  = 2
 )
 
 type eventSourceCache struct {
-	mu      sync.Mutex
-	entries map[string]*EventSource
-	order   []string
-	bytes   int
+	mu         sync.Mutex
+	entries    map[string]*EventSource
+	order      []string
+	bytes      int
+	building   map[string]*eventSourceFlight
+	spaceReady chan struct{}
+}
+
+type eventSourceFlight struct {
+	ready chan struct{}
+	stale bool
 }
 
 func (cache *eventSourceCache) load(ctx context.Context, key string, build func() (*EventSource, error)) (*EventSource, error) {
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return nil, err
+	for {
+		cache.mu.Lock()
+		if err := ctx.Err(); err != nil {
+			cache.mu.Unlock()
+			return nil, err
+		}
+		if source := cache.entries[key]; source != nil {
+			cache.mu.Unlock()
+			return source, nil
+		}
+		flight := cache.building[key]
+		if flight == nil && len(cache.building) < eventSourceCacheBuilds {
+			if cache.building == nil {
+				cache.building = make(map[string]*eventSourceFlight, eventSourceCacheBuilds)
+			}
+			flight = &eventSourceFlight{ready: make(chan struct{})}
+			cache.building[key] = flight
+			cache.mu.Unlock()
+			return cache.loadMiss(key, flight, build)
+		}
+		var ready chan struct{}
+		if flight != nil {
+			ready = flight.ready
+		} else {
+			if cache.spaceReady == nil {
+				cache.spaceReady = make(chan struct{})
+			}
+			ready = cache.spaceReady
+		}
+		cache.mu.Unlock()
+		select {
+		case <-ready:
+			if flight != nil && flight.stale && ctx.Err() == nil {
+				return nil, errLiveEventSourceStale
+			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
-	if source := cache.entries[key]; source != nil {
-		return source, nil
-	}
+}
+
+func (cache *eventSourceCache) loadMiss(key string, flight *eventSourceFlight, build func() (*EventSource, error)) (_ *EventSource, err error) {
+	// Builders may wait on SQL. The cache lock protects publication and
+	// waiter state, so a slow build does not block existing entries.
+	defer func() {
+		cache.mu.Lock()
+		// Only live authority invalidates the key for the entire flight.
+		// A legacy snapshot or request failure applies to the builder alone.
+		flight.stale = err == errLiveEventSourceStale
+		close(flight.ready)
+		delete(cache.building, key)
+		if cache.spaceReady != nil {
+			close(cache.spaceReady)
+			cache.spaceReady = nil
+		}
+		cache.mu.Unlock()
+	}()
 	source, err := build()
 	if err != nil {
 		return nil, err
@@ -578,6 +651,8 @@ func (cache *eventSourceCache) load(ctx context.Context, key string, build func(
 	if source.bytes > eventSourceCacheBytes {
 		return nil, store.ErrEventSourceBudget
 	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
 	if cache.entries == nil {
 		cache.entries = map[string]*EventSource{}
 	}
@@ -768,14 +843,8 @@ func (s *server) eventSourceForAuthority(ctx context.Context, workspace string, 
 	}
 	identity := &EventSource{event: event, version: authority.version, authzEpoch: authority.epoch}
 	build := func() (*EventSource, error) {
-		source, err := s.BuildEventSource(context.WithValue(ctx, eventSourceEpochKey{}, authority.epoch), workspace, event)
-		if err != nil {
-			return nil, err
-		}
-		if source.version != authority.version {
-			return nil, errRealtimeProjectionStale
-		}
-		return source, nil
+		input := eventSourceBuildInput{epoch: authority.epoch, expected: &authority.version}
+		return s.BuildEventSource(context.WithValue(ctx, eventSourceBuildKey{}, input), workspace, event)
 	}
 	if s.realtime != nil {
 		return s.realtime.rules.sources.load(ctx, identity.cacheKey(), build)

@@ -12,6 +12,8 @@ import (
 // the cache never fails a read (Redis errors and timeouts compute locally).
 type sharedResultCache interface {
 	SharedCacheEnabled() bool
+	SharedCacheViewerEnabled() bool
+	SharedCacheSearchReusable(workspace, user, credential string, terms []string) bool
 	SharedCacheKey(workspace, kind, version string, material ...string) string
 	SharedCacheDo(ctx context.Context, key string, compute func(context.Context) ([]byte, error)) ([]byte, bool, error)
 }

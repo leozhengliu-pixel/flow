@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -31,7 +30,6 @@ type eventAuthorityRead struct {
 type eventDeliveryKey struct{}
 type eventDeliverySuppressKey struct{}
 type eventAccessRefreshKey struct{}
-type eventSourceEpochKey struct{}
 type eventDelivery struct {
 	id      string
 	viewers int
@@ -110,17 +108,7 @@ func (s *server) readEventProjectionAuthority(ctx context.Context, workspace str
 
 func (s *server) readEventAuthorityForPhase(ctx context.Context, workspace, phase string) (eventAuthority, error) {
 	read := func(readCtx context.Context) (eventAuthority, error) {
-		version, err := s.store.RealtimeSourceVersion(readCtx, workspace)
-		if err != nil {
-			return eventAuthority{}, err
-		}
-		if !s.store.RealtimeEpochsReady() {
-			return eventAuthority{version: version}, nil
-		}
-		epoch, err := s.store.AuthzEpoch(readCtx, version.WorkspaceID)
-		if errors.Is(err, store.ErrRecordJournalUnavailable) {
-			return eventAuthority{version: version}, nil
-		}
+		version, epoch, err := s.store.RealtimeSourceVersionAndEpoch(readCtx, workspace)
 		return eventAuthority{version, epoch}, err
 	}
 	if s.realtime == nil || !s.store.RealtimeEpochsReady() {

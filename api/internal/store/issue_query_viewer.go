@@ -18,7 +18,7 @@ type issueQueryMembership struct {
 // Profile edits need not advance it. Read the profile live with the stamp.
 func (s *SQLiteStore) issueQueryViewer(ctx context.Context, workspace, workspaceID, userID string) (domain.User, issueQueryMembership, error) {
 	cache := s.sharedResults(ctx)
-	if cache != nil && workspace != "" && userID != "" && s.RecordJournalReady() && !strings.HasPrefix(userID, "app_") {
+	if cache != nil && cache.SharedCacheViewerEnabled() && workspace != "" && userID != "" && s.RecordJournalReady() && !strings.HasPrefix(userID, "app_") {
 		user, generation, epoch, err := s.readIssueViewerEpoch(ctx, workspaceID, userID)
 		if err == nil && generation != "" {
 			version := "1." + strconv.FormatInt(epoch, 10)

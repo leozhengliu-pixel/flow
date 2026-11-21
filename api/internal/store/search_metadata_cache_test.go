@@ -2,6 +2,7 @@ package store
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,12 +39,24 @@ func TestMetadataSearchCacheRetiresOnIndexOnlyRepair(t *testing.T) {
 		t.Fatal(err)
 	}
 	query := SearchMetadataQuery{Scope: IssueRecordQuery{Workspace: workspace, Access: &access}, Types: map[string]bool{"project": true}, Terms: []string{project.Name}, Limit: 10}
+	stampReads := 0
+	ctx := WithSQLStatementObserver(t.Context(), func(statement string) {
+		if strings.Contains(statement, "m.generation") && strings.Contains(statement, "record_versions") {
+			stampReads++
+		}
+	})
 	search := func(want int) {
 		t.Helper()
-		got, err := repo.SearchMetadata(t.Context(), policy, query)
+		got, err := repo.SearchMetadata(ctx, policy, query)
 		if err != nil || len(got.Projects) != want {
 			t.Fatalf("search returned %d projects, want %d: %v", len(got.Projects), want, err)
 		}
+	}
+	misses := coordination.SharedCacheCounters()["redisCacheSearchMisses"]
+	search(0)
+	search(0)
+	if stampReads != 0 || coordination.SharedCacheCounters()["redisCacheSearchMisses"] != misses {
+		t.Fatal("first two searches should bypass stamp SQL and Redis lookups")
 	}
 	search(0)
 	hits := coordination.SharedCacheCounters()["redisCacheSearchHits"]

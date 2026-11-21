@@ -407,6 +407,20 @@ func mysqlSearchProjectTeams(teamIDs string, allowed map[string]bool, allowTeaml
 func (s *SQLiteStore) searchMetadataPageSQL(page, direction, table, column string, fields []string, pageSize int) string {
 	from := "(" + page + ") p JOIN " + table + " r ON r.workspace_key=? AND r.field=? AND " + s.metadataRecordKeyEquals("r.record_key", "p.record_key")
 	column = "r." + column
+	if s.dialect == "mysql" && s.BoundedMetadataEnabled() {
+		values := make([]string, len(fields))
+		paths := make([]string, len(fields))
+		for i, field := range fields {
+			columnName := "v" + strconv.Itoa(i)
+			paths[i] = columnName + " JSON PATH '$." + field + "' ERROR ON ERROR"
+			values[i] = "NULLIF(JSON_UNQUOTE(shell." + columnName + "),'null')"
+			if field == "description" || field == "content" {
+				values[i] = "SUBSTR(" + values[i] + ",1,2048)"
+			}
+		}
+		from += " LEFT JOIN JSON_TABLE(CONVERT(" + column + " USING utf8mb4), '$' COLUMNS (" + strings.Join(paths, ",") + ")) shell ON TRUE"
+		return "SELECT p.record_key,p.sort_value," + strings.Join(values, ",") + " FROM " + from + " ORDER BY p.sort_value " + direction + ",p.record_key ASC"
+	}
 	var nativeJSON string
 	if s.BoundedMetadataEnabled() {
 		switch s.dialect {

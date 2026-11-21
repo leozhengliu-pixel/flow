@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -61,6 +62,78 @@ func TestScaleP12EpochContextsReuseAcrossEvents(t *testing.T) {
 		if err != nil || frame.Visible() || resolves != 1 {
 			t.Fatalf("revocation did not re-resolve once: visible=%v resolves=%d err=%v", frame.Visible(), resolves, err)
 		}
+	}
+}
+
+func TestScaleP12EpochAuthorityMatchesSeparateReads(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	for _, repo := range scaleP03ServerTestStores(t) {
+		f := newScaleP12Fixture(t, repo)
+		workspace := f.data.Workspace.URLKey
+		check := func() eventAuthority {
+			t.Helper()
+			version, err := repo.RealtimeSourceVersion(t.Context(), workspace)
+			if err != nil {
+				t.Fatal(err)
+			}
+			epoch, err := repo.AuthzEpoch(t.Context(), version.WorkspaceID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			statements := 0
+			ctx := store.WithSQLStatementObserver(t.Context(), func(string) { statements++ })
+			authority, err := f.service.readEventAuthority(ctx, workspace)
+			if err != nil || authority != (eventAuthority{version, epoch}) || statements != 1 {
+				t.Fatalf("authority=%+v statements=%d err=%v, want version=%+v epoch=%s in one statement", authority, statements, err, version, epoch)
+			}
+			return authority
+		}
+		before := check()
+		if err := repo.SetTeamMembership(t.Context(), f.data.Workspace.ID, f.private, f.principals[4].user.ID, "member", false); err != nil {
+			t.Fatal(err)
+		}
+		if after := check(); before.epoch == after.epoch {
+			t.Fatal("authority retained the epoch from before revocation")
+		}
+	}
+}
+
+func TestScaleP12StaleSourceBuildSkipsProjection(t *testing.T) {
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	t.Setenv("FLOW_SYNC_V2", "on")
+	for _, bounded := range []string{"off", "on"} {
+		t.Run(bounded, func(t *testing.T) {
+			t.Setenv("FLOW_BOUNDED_METADATA", bounded)
+			for _, repo := range scaleP03ServerTestStores(t) {
+				f := scaleP03Fixture(t, repo)
+				workspace := f.data.Workspace.URLKey
+				issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
+					map[string]string{"title": "Before source changed", "teamId": f.data.Teams[0].ID}, workspace, http.StatusCreated)
+				event := domain.RealtimeEvent{ID: "p12-source-build", Type: "issue.updated", AggregateID: issue.ID, Payload: json.RawMessage(`{}`)}
+				s := &server{store: repo, realtime: newRealtimeHub()}
+				authority, err := s.readEventAuthority(t.Context(), workspace)
+				if err != nil {
+					t.Fatal(err)
+				}
+				authRequest[domain.Issue](t, f.admin, http.MethodPatch, f.host.URL+"/api/issue-records/"+issue.ID,
+					map[string]string{"title": "After source changed"}, workspace, http.StatusOK)
+
+				statements := 0
+				ctx := store.WithSQLStatementObserver(t.Context(), func(string) { statements++ })
+				source, err := s.eventSourceForAuthority(ctx, workspace, event, authority)
+				if source != nil || !errors.Is(err, errRealtimeProjectionStale) || statements != 1 {
+					t.Fatalf("stale source returned source=%t, err=%v, SQL=%d; want one version check", source != nil, err, statements)
+				}
+
+				request := scaleP12Request(workspace, f.data.Viewer)
+				scaleP12EqualEvent(t, s, request, event)
+				projected, visible, err := s.pagedRealtimeEvent(request, event)
+				if err != nil || !visible || !strings.Contains(string(projected.Payload), "After source changed") {
+					t.Fatalf("fresh source did not project the updated issue: visible=%v err=%v", visible, err)
+				}
+			}
+		})
 	}
 }
 

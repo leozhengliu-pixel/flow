@@ -244,7 +244,13 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 			issueRecordsErrorFor(w, r, err)
 			return
 		}
-		result, err = s.collectSyncChanges(r, access, journal, after, limit)
+		pageLimit := limit
+		if attempt == syncChangesAttempts {
+			// After two source races, narrow the projection window. The journal
+			// keeps the next cursor and hasMore tied to the complete transaction.
+			pageLimit = 1
+		}
+		result, err = s.collectSyncChanges(r, access, journal, after, pageLimit)
 		if err == nil {
 			break
 		}
@@ -321,7 +327,7 @@ func (s *server) collectSyncChanges(r *http.Request, access store.EventAccess, j
 	project := func(ctx context.Context) (syncV2ChangesResponse, error) {
 		return s.projectSyncPage(r.WithContext(ctx), access, page, result)
 	}
-	if journal == s.store && s.coordinator.SharedCacheEnabled() && !s.authDisabled && cacheableSyncPage(page) {
+	if journal == s.store && s.coordinator.SharedCacheSyncPageEnabled() && !s.authDisabled && cacheableSyncPage(page) {
 		return s.sharedSyncPage(r.Context(), access, page, after, limit, project)
 	}
 	return project(r.Context())
@@ -629,7 +635,8 @@ func (s *server) committedDeletionSource(r *http.Request, access store.EventAcce
 			return nil, errEventSourceUnsupported
 		}
 		record := page.Records[0]
-		return s.BuildEventSource(context.WithValue(r.Context(), eventSourceEpochKey{}, access.AuthzEpoch), workspaceKey(r), domain.RealtimeEvent{ID: record.Event.ID, Seq: seq, Type: record.Event.Type, AggregateID: record.Event.AggregateID, ActorID: record.ActorID, Payload: record.Event.Payload, CreatedAt: record.Event.CreatedAt})
+		ctx := context.WithValue(r.Context(), eventSourceBuildKey{}, eventSourceBuildInput{epoch: access.AuthzEpoch})
+		return s.BuildEventSource(ctx, workspaceKey(r), domain.RealtimeEvent{ID: record.Event.ID, Seq: seq, Type: record.Event.Type, AggregateID: record.Event.AggregateID, ActorID: record.ActorID, Payload: record.Event.Payload, CreatedAt: record.Event.CreatedAt})
 	}
 	if s.realtime != nil {
 		return s.realtime.rules.sources.load(r.Context(), key, build)

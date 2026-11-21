@@ -546,6 +546,8 @@ server:
 | `proxy.trustedProxies` | `FLOW_TRUSTED_PROXIES` | list |
 | `redis.addrs` | `FLOW_REDIS_ADDRS` | list |
 | `redis.cache.enabled` | `FLOW_REDIS_CACHE` | boolean |
+| `redis.cache.viewer` | `FLOW_REDIS_CACHE_VIEWER` | boolean |
+| `redis.cache.syncPage` | `FLOW_REDIS_CACHE_SYNC_PAGE` | boolean |
 | `redis.cache.maxBytes` | `FLOW_REDIS_CACHE_MAX_BYTES` | number |
 | `redis.cache.maxEntryBytes` | `FLOW_REDIS_CACHE_MAX_ENTRY_BYTES` | number |
 | `redis.cache.timeout` | `FLOW_REDIS_CACHE_TIMEOUT` | duration |
@@ -636,6 +638,8 @@ structured logging.
 | `FLOW_RECORD_PEER_SYNC` | `off` | `shadow` compares eligible journal installs to compatibility reloads and keeps legacy Redis envelopes. `on` uses the SQL journal and compact Redis hints. Both need a ready journal. Bounded metadata refuses `shadow`. Switch to and from `on` fleet-wide. |
 | `FLOW_METADATA_CATALOG` | `off` | `shadow` runs background journal repair and catalog backfill with bounded metadata off. After preparation, use `off` to stop this worker and retain the completed catalog. |
 | `FLOW_METADATA_MEMORY_BYTES` | 70% of the detected cgroup limit or physical RAM | Per-replica bounded metadata target in bytes, with a 1 GiB automatic floor where it fits. A lower `GOMEMLIMIT` limits automatic sizing. The target sizes decoded images (35%), concurrent work (25%), policy (1/16), installed sources (1/32), the spool disk budget, and COLD and bootstrap concurrency. See [all tier overrides](bounded-metadata.md#tuning). |
+| `FLOW_COLD_SLOTS` | One per GiB, from 1 to 4 | Concurrent COLD facades per replica, each with its own decoded workspace. The 3 GiB target defaults to three slots. See the [MySQL slot control](bounded-metadata-performance.md#mysql-cold-slots). |
+| `FLOW_COLD_PROJECTION_CONCURRENCY` | One per 512 MiB, from 2 to 8 | Concurrent COLD projections per replica. The 3 GiB target defaults to six slots. |
 
 Every HTTP request receives an `X-Request-ID` response header. Clients may send
 their own `X-Request-ID`; otherwise Flow generates one and includes it in the
@@ -980,7 +984,9 @@ Awareness messages, and workspace entity events.
 | `FLOW_REDIS_CONNECT_TIMEOUT` | `15s` | Startup probe deadline. |
 | `FLOW_REDIS_LOCK_TTL` | `30s` | Distributed write lease, renewed while a mutation runs. |
 | `FLOW_REDIS_LOCK_WAIT` | `5s` | Maximum wait to acquire a workspace write lock. |
-| `FLOW_REDIS_CACHE` | `on` | Shared result cache across API instances ([redis-cache.md](redis-cache.md)). `off` computes every read locally. |
+| `FLOW_REDIS_CACHE` | `off` | Set to `on` to share repeated metadata search results across API instances. See [Redis cache measurements](redis-cache.md#measurements). |
+| `FLOW_REDIS_CACHE_VIEWER` | `false` | `true` opts into sharing viewer memberships when the result tier is enabled. |
+| `FLOW_REDIS_CACHE_SYNC_PAGE` | `false` | `true` opts into sharing eligible projected sync pages when the result tier is enabled. |
 | `FLOW_REDIS_CACHE_TTL` | `5m` | Maximum lifetime of one cache entry. A Redis cache shard starts its TTL on the first insertion. |
 | `FLOW_REDIS_CACHE_TIMEOUT` | `25ms` | Deadline of one cache read or write; a slower or failed Redis counts as a miss. |
 | `FLOW_REDIS_CACHE_MAX_ENTRY_BYTES` | `1048576` | Largest stored entry after compression; larger results are not cached. |

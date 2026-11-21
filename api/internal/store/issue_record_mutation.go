@@ -210,7 +210,6 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 				}
 			}
 		}
-		clause, args := bindList("id", ids)
 		family := "(parent_id=?"
 		familyArgs := []any{id}
 		if original.ParentID != nil {
@@ -220,17 +219,37 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		family += ")"
 		previous := map[string]domain.Issue{}
 		metadata.Issues = []domain.Issue{}
+		addIssue := func(encoded []byte) error {
+			var issue domain.Issue
+			if err := json.Unmarshal(encoded, &issue); err != nil {
+				return err
+			}
+			normalizeIssueRecord(&issue)
+			if _, seen := previous[issue.ID]; !seen {
+				previous[issue.ID] = issue
+				metadata.Issues = append(metadata.Issues, issue)
+			}
+			return nil
+		}
 		// Combining primary-key and parent-index predicates with OR makes MySQL
 		// scan the workspace primary-key range. Keep both lookups independently indexed.
-		lookups := []struct {
+		type lookup struct {
 			where string
 			args  []any
-		}{{clause, args}}
+		}
+		var lookups []lookup
+		if len(ids) == 1 {
+			// The target is already locked. Decode a separate callback copy so
+			// edits to nested fields cannot modify original.
+			if err := addIssue(raw); err != nil {
+				return err
+			}
+		} else {
+			clause, args := bindList("id", ids)
+			lookups = append(lookups, lookup{clause, args})
+		}
 		if scope.IncludeFamily {
-			lookups = append(lookups, struct {
-				where string
-				args  []any
-			}{family, familyArgs})
+			lookups = append(lookups, lookup{family, familyArgs})
 		}
 		for _, lookup := range lookups {
 			rows, err := tx.QueryContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND `+lookup.where+` ORDER BY id LIMIT 1001`+lock, append([]any{workspace}, lookup.args...)...)
@@ -243,15 +262,9 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 					rows.Close()
 					return err
 				}
-				var issue domain.Issue
-				if err := json.Unmarshal(encoded, &issue); err != nil {
+				if err := addIssue(encoded); err != nil {
 					rows.Close()
 					return err
-				}
-				normalizeIssueRecord(&issue)
-				if _, seen := previous[issue.ID]; !seen {
-					previous[issue.ID] = issue
-					metadata.Issues = append(metadata.Issues, issue)
 				}
 			}
 			if err := rows.Err(); err != nil {

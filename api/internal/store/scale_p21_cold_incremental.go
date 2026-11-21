@@ -336,16 +336,29 @@ func (s *SQLiteStore) reloadKnownPublication(ctx context.Context, workspace stri
 	}
 	unlock := r.reloadBuilds.lock(workspace)
 	defer unlock()
+	// A writer can invalidate a prepared delta while it waits to install.
+	// Try once more outside writeMu before falling back to a locked reload.
+	for range 2 {
+		installed, raced := s.tryReloadKnownPublication(ctx, workspace)
+		if !raced || ctx.Err() != nil {
+			return installed
+		}
+	}
+	return false
+}
+
+func (s *SQLiteStore) tryReloadKnownPublication(ctx context.Context, workspace string) (installed, raced bool) {
+	r := s.metadataResidency
 	known, ok := knownColdPublication(coldLabelCacheKey{r, workspace})
 	if !ok {
-		return false
+		return false, false
 	}
 	defer known.source.Release()
 	r.mu.Lock()
 	base := r.logical[workspace]
 	if base == nil || base.Retain() != nil {
 		r.mu.Unlock()
-		return false
+		return false, false
 	}
 	baseStamp, baseHead := r.stamps[workspace], r.applied[workspace]
 	r.mu.Unlock()
@@ -357,7 +370,7 @@ func (s *SQLiteStore) reloadKnownPublication(ctx context.Context, workspace stri
 	}
 	prepared, err := s.prepareColdPublication(ctx, &coldPublishBase{workspace: workspace, source: known.source, state: known.state})
 	if err != nil || prepared == nil {
-		return err == nil
+		return err == nil, false
 	}
 	defer prepared.close()
 	if hook := residentReloadBeforeInstall.Load(); hook != nil {
@@ -366,18 +379,24 @@ func (s *SQLiteStore) reloadKnownPublication(ctx context.Context, workspace stri
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	if !stillInstalled() {
-		return false
+		return false, true
 	}
-	stamp, head, err := s.readResidentPublicationStamp(ctx, workspace, prepared.state.stamp.workspaceID)
-	if err != nil || stamp != prepared.state.stamp || head != prepared.head {
-		return false
+	stamp, head, generation, err := s.readResidentPublicationStamp(ctx, workspace, prepared.state.stamp.workspaceID)
+	if err != nil {
+		return false, false
 	}
+	if stamp != prepared.state.stamp || generation == "" || generation != prepared.state.generation || head < prepared.head {
+		return false, true
+	}
+	// The SQL stamp certifies the prepared metadata. The journal may have
+	// sequenced other records meanwhile. Keep the head we actually captured.
+	prepared.journalAdvanced = head > prepared.head
 	if err := prepared.install(s, workspace); err != nil {
-		return false
+		return false, false
 	}
 	residentReloadIncrementals.Add(1)
 	residentReloadIncrementalNanos.Add(int64(time.Since(prepared.started)))
-	return true
+	return true, false
 }
 
 var residentReloadBeforeInstall atomic.Pointer[func()]
@@ -499,11 +518,16 @@ var coldPublishBaseKnown atomic.Int64
 
 // readColdPublishState reads workspace's metadata inputs in tx's snapshot.
 func (s *SQLiteStore) readColdPublishState(ctx context.Context, tx *sqlTx, workspace string) (*coldPublishState, error) {
-	state := &coldPublishState{records: map[string]map[string]coldPublishRecord{}, occurrences: map[string][]byte{}, manifest: map[string]string{}}
-	var err error
-	if state.stamp, err = readMetadataStamp(ctx, tx, workspace); err != nil {
+	stamp, err := readMetadataStamp(ctx, tx, workspace)
+	if err != nil {
 		return nil, err
 	}
+	return s.readColdPublishStateWithStamp(ctx, tx, workspace, stamp)
+}
+
+// readColdPublishStateWithStamp requires a stamp read for workspace in tx's snapshot.
+func (s *SQLiteStore) readColdPublishStateWithStamp(ctx context.Context, tx *sqlTx, workspace string, stamp copyStamp) (*coldPublishState, error) {
+	state := &coldPublishState{stamp: stamp, records: map[string]map[string]coldPublishRecord{}, occurrences: map[string][]byte{}, manifest: map[string]string{}}
 	var enabled, capturing int
 	if err := tx.QueryRowContext(ctx, `SELECT enabled,capturing,generation FROM record_journal_mode WHERE id=1`).Scan(&enabled, &capturing, &state.generation); err != nil {
 		return nil, err
@@ -700,15 +724,16 @@ func (s *SQLiteStore) publishColdIncrementalLocked(ctx context.Context, base *co
 }
 
 type preparedColdPublication struct {
-	source  *metadataLogicalSource
-	owner   *ResourceRead
-	state   *coldPublishState
-	policy  domain.Bootstrap
-	head    int64
-	cost    int
-	plan    *coldPublishPlan
-	changes map[string]*coldPublishChange
-	started time.Time
+	source          *metadataLogicalSource
+	owner           *ResourceRead
+	state           *coldPublishState
+	policy          domain.Bootstrap
+	head            int64
+	cost            int
+	plan            *coldPublishPlan
+	changes         map[string]*coldPublishChange
+	started         time.Time
+	journalAdvanced bool
 }
 
 func (p *preparedColdPublication) close() {
@@ -729,7 +754,7 @@ func (p *preparedColdPublication) install(s *SQLiteStore, workspace string) erro
 	noteColdPublishPlan(p.plan)
 	slog.Info("bounded metadata: COLD publication", "workspace", workspace, "patched", slices.Sorted(maps.Keys(p.plan.patch)),
 		"rebuilt", slices.Sorted(maps.Keys(p.plan.rebuild)), "recovered", slices.Sorted(maps.Keys(p.plan.part)), "labelCounts", len(p.plan.supplied) != 0,
-		"changes", describeColdPublishChanges(p.changes), "fieldMs", describeColdPublishTimings(p.plan.timings), "ms", time.Since(p.started).Milliseconds())
+		"changes", describeColdPublishChanges(p.changes), "fieldMs", describeColdPublishTimings(p.plan.timings), "ms", time.Since(p.started).Milliseconds(), "journalAdvanced", p.journalAdvanced)
 	return nil
 }
 
@@ -774,7 +799,7 @@ func (s *SQLiteStore) prepareColdPublication(ctx context.Context, base *coldPubl
 	// The retained base is exact at before. The prepared source is exact at
 	// after, even when another writer installs a generation during this read.
 	installed := base.source
-	after, err := s.readColdPublishState(ctx, tx, workspace)
+	after, err := s.readColdPublishStateWithStamp(ctx, tx, workspace, stamp)
 	if err != nil {
 		return nil, err
 	}

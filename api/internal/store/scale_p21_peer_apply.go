@@ -68,7 +68,7 @@ func (s *SQLiteStore) applyResidentCommittedPage(ctx context.Context, workspaceI
 	if current, applied, ok := s.residentStamp(workspace); !ok || current != basis || applied != after || !s.residentPeerSourceCurrent(workspace, stamp) {
 		return "", ErrPeerSnapshotRequired
 	}
-	latest, latestHead, err := s.readResidentPublicationStamp(ctx, workspace, workspaceID)
+	latest, latestHead, _, err := s.readResidentPublicationStamp(ctx, workspace, workspaceID)
 	if err != nil {
 		return "", err
 	}
@@ -92,12 +92,14 @@ func (s *SQLiteStore) residentPeerSourceCurrent(workspace string, stamp copyStam
 	return source.Stamp() == stamp && !source.behind.Load()
 }
 
-func (s *SQLiteStore) readResidentPublicationStamp(ctx context.Context, workspace, workspaceID string) (copyStamp, int64, error) {
+func (s *SQLiteStore) readResidentPublicationStamp(ctx context.Context, workspace, workspaceID string) (copyStamp, int64, string, error) {
 	var stamp copyStamp
 	var head int64
-	err := s.db.QueryRowContext(ctx, `SELECT `+metadataStampColumns+`,COALESCE((SELECT MAX(head) FROM workspace_record_journal_heads WHERE workspace_id=?),0)
-		FROM workspace_states WHERE workspace_key=?`, workspace, cacheKindMetadata, workspaceID, workspace).Scan(&stamp.workspaceID, &stamp.revision, &head)
-	return stamp, head, err
+	var generation string
+	err := s.db.QueryRowContext(ctx, `SELECT `+metadataStampColumns+`,COALESCE((SELECT MAX(head) FROM workspace_record_journal_heads WHERE workspace_id=?),0),
+		COALESCE((SELECT generation FROM record_journal_mode WHERE id=1 AND enabled=1 AND capturing=1),'')
+		FROM workspace_states WHERE workspace_key=?`, workspace, cacheKindMetadata, workspaceID, workspace).Scan(&stamp.workspaceID, &stamp.revision, &head, &generation)
+	return stamp, head, generation, err
 }
 
 func verifyResidentCommittedTransactions(ctx context.Context, tx *sqlTx, workspaceID string, after, next int64, page CommittedPage) error {

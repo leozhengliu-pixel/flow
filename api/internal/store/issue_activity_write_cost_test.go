@@ -50,11 +50,14 @@ func TestIssueActivityWriteSQLBudget(t *testing.T) {
 				t.Fatalf("seeded issues=%d want=%d err=%v", seeded, count, err)
 			}
 			measure := func(name string, target string, scope IssueMutationScope, prepare func(*domain.Issue)) {
-				statements, heads := 0, 0
+				statements, heads, relatedReads := 0, 0, 0
 				ctx := WithSQLStatementObserver(t.Context(), func(query string) {
 					statements++
 					if strings.Contains(query, "workspace_content_records") && strings.Contains(query, "ORDER BY created_at DESC,id DESC LIMIT 1") {
 						heads++
+					}
+					if strings.HasPrefix(query, "SELECT data FROM issue_records WHERE workspace_key=? AND ") && strings.Contains(query, "ORDER BY id LIMIT 1001") {
+						relatedReads++
 					}
 				})
 				_, err := repo.UpdateIssueRecord(ctx, workspace, target, nil, scope, func(input *domain.Bootstrap, item *domain.Issue) error {
@@ -70,6 +73,9 @@ func TestIssueActivityWriteSQLBudget(t *testing.T) {
 				t.Logf("ACTIVITY_WRITE_MEASURE scenario=%s issues=%d statements=%d head_lookups=%d", name, count, statements, heads)
 				if heads != 2 {
 					t.Fatalf("%s: one touched issue read %d history heads, want 2", name, heads)
+				}
+				if name == "plain" && relatedReads != 0 {
+					t.Fatalf("single-issue edit re-read its locked target: %d queries", relatedReads)
 				}
 				if previous, ok := baseline[name]; ok && previous != statements {
 					t.Fatalf("%s: write cost grew with the workspace: %d statements, %d at the smaller size", name, statements, previous)
