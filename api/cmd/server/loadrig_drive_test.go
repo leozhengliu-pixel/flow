@@ -146,6 +146,13 @@ func loadRigOps() []loadRigOp {
 			query := os.Getenv("FLOW_LOADRIG_SEARCH_QUERY")
 			if query == "" {
 				query = "q=" + url.QueryEscape(d.pick(vu, d.fixture.Words))
+				if types := os.Getenv("FLOW_LOADRIG_SEARCH_TYPES"); types != "" {
+					query += "&types=" + url.QueryEscape(types)
+				}
+			}
+			if vu.searchBearer != "" {
+				d.requestWith(ctx, vu, d.keyClient, "search", http.MethodGet, "/api/search?"+query, nil, nil, vu.searchBearer)
+				return
 			}
 			d.request(ctx, vu, vu.client, "search", http.MethodGet, "/api/search?"+query, nil, nil)
 		}},
@@ -322,6 +329,7 @@ type loadRigVU struct {
 	syncRetryAt  time.Time
 	syncFailures int
 	member       bool
+	searchBearer string
 }
 
 // loadRigSyncRetry is the sync changes route's Retry-After.
@@ -624,7 +632,7 @@ func TestLoadRigDrive(t *testing.T) {
 	if totalWeight <= 0 {
 		t.Fatal("FLOW_LOADRIG_MIX leaves no operation with a positive weight")
 	}
-	members, readers := []loadRigIdentity{}, []loadRigIdentity{}
+	members, readers, guests := []loadRigIdentity{}, []loadRigIdentity{}, []loadRigIdentity{}
 	for _, identity := range fixture.Identities {
 		if len(identity.TeamIDs) == 0 {
 			continue
@@ -632,11 +640,25 @@ func TestLoadRigDrive(t *testing.T) {
 		readers = append(readers, identity)
 		if identity.Role != "guest" {
 			members = append(members, identity)
+		} else {
+			guests = append(guests, identity)
 		}
 	}
 	if len(readers) == 0 {
 		readers = []loadRigIdentity{fixture.Admin}
 		members = readers
+	}
+	mixedSearch := os.Getenv("FLOW_LOADRIG_SEARCH_PRINCIPALS") == "mixed"
+	var searchKeys []loadRigAPIKey
+	if mixedSearch {
+		for _, key := range fixture.APIKeys {
+			if len(key.TeamIDs) > 0 {
+				searchKeys = append(searchKeys, key)
+			}
+		}
+		if len(guests) == 0 || len(members) == 0 || len(searchKeys) == 0 {
+			t.Fatal("mixed-principal search requires members, guests and team-restricted API keys")
+		}
 	}
 	visible := func(identity loadRigIdentity) []loadRigIssueRef {
 		result := []loadRigIssueRef{}
@@ -711,7 +733,20 @@ func TestLoadRigDrive(t *testing.T) {
 		if !member {
 			identity = readers[index%len(readers)]
 		}
+		if mixedSearch {
+			switch index % 4 {
+			case 0, 3:
+				identity, member = fixture.Admin, true
+			case 1:
+				identity, member = members[(index/4)%len(members)], true
+			case 2:
+				identity, member = guests[(index/4)%len(guests)], false
+			}
+		}
 		vu := newVU(index, identity, member)
+		if mixedSearch && index%4 == 3 {
+			vu.searchBearer = searchKeys[(index/4)%len(searchKeys)].Secret
+		}
 		wait.Add(1)
 		go func() {
 			defer wait.Done()

@@ -73,7 +73,7 @@ func TestScaleP21ResourceConnectionsHTTPTable(t *testing.T) {
 			}
 			data.Documents = []domain.Document{
 				{ID: prefix + "document", Title: "First document", SlugID: "first-document", Content: "searchword body old occurrence", ContentState: "state-only", ContentData: map[string]any{"data-only": true}, Creator: actor, TeamIDs: []string{f.public}, ProjectIDs: []string{prefix + "project", prefix + "private-project"}, CreatedAt: at, UpdatedAt: at, Attachments: []domain.Attachment{{ID: "keep-document-attachment"}}, Revisions: []domain.DocumentRevision{{Content: "excluded"}}},
-				{ID: prefix + "second-document", Title: "Second document", Content: "searchword another result", Creator: actor, TeamIDs: []string{f.public}, CreatedAt: at.Add(-time.Hour), UpdatedAt: at.Add(time.Hour)},
+				{ID: prefix + "second-document", Title: "Second document", Content: strings.Repeat("document body\n", 300) + "searchword another result", Creator: actor, TeamIDs: []string{f.public}, CreatedAt: at.Add(-time.Hour), UpdatedAt: at.Add(time.Hour)},
 				{ID: prefix + "document", Title: "Last document", SlugID: "last-document", Content: "searchword final duplicate \u51c6\u51fa\u6807\u51c6", Creator: actor, TeamIDs: []string{f.public}, CreatedAt: at, UpdatedAt: at},
 				{ID: prefix + "private-document", Title: "Private document", Content: "searchword private", Creator: actor, TeamIDs: []string{private}, CreatedAt: at.Add(time.Hour), UpdatedAt: at},
 				{ID: prefix + "inherited-document", Title: "Inherited document", Content: "searchword inherited", Creator: actor, InheritedTeamIDs: []string{private}, CreatedAt: at, UpdatedAt: at},
@@ -132,7 +132,7 @@ func TestScaleP21ResourceConnectionsHTTPTable(t *testing.T) {
 				case "labels":
 					queries = append(queries, "resourceType=all&includeArchived=true", "resourceType=project&teamId="+f.public+"&includeWorkspace=false", "resourceType=project&filter="+url.QueryEscape(`{"name":{"contains":"Last"}}`))
 				case "documents":
-					queries = append(queries, "query=searchword", "query=searchword&first=1", "query="+url.QueryEscape("\u51c6\u51fa\u6807\u51c6\u662f\u4ec0\u4e48"), "query=state-only", "query=searchword&filter="+url.QueryEscape(`{"title":{"eq":"Last document"},"searchSnippet":{"contains":"final"}}`), "filter="+url.QueryEscape(`{"creator":{"name":{"eq":"Stored Actor"}}}`), "includeArchived=true&teamId="+f.public)
+					queries = append(queries, "query=searchword", "query=searchword&first=1", "query=searchword&first=1&after="+cursor, "query=searchword&last=1&before="+cursor, "query=searchword&includeArchived=true&teamId="+f.public, "query="+url.QueryEscape("\u51c6\u51fa\u6807\u51c6\u662f\u4ec0\u4e48"), "query=state-only", "query=searchword&filter="+url.QueryEscape(`{"title":{"eq":"Last document"},"searchSnippet":{"contains":"final"}}`), "filter="+url.QueryEscape(`{"creator":{"name":{"eq":"Stored Actor"}}}`), "includeArchived=true&teamId="+f.public)
 				}
 				for _, principal := range f.principals {
 					for _, key := range keys {
