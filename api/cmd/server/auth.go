@@ -972,6 +972,11 @@ func chatMemberRoute(method string, path []string) bool {
 }
 
 func permissionForRequest(r *http.Request) string {
+	// The join link is a credential: reading, rotating and disabling it all
+	// need the same invite permission, GET included.
+	if workspaceInviteLinkPath(r.URL.Path) {
+		return "invite"
+	}
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		return ""
 	}
@@ -1000,6 +1005,10 @@ func permissionForRequest(r *http.Request) string {
 	default:
 		return ""
 	}
+}
+
+func workspaceInviteLinkPath(path string) bool {
+	return strings.HasPrefix(path, "/api/workspaces/") && strings.HasSuffix(strings.TrimRight(path, "/"), "/invite-link")
 }
 
 func workspacePermissionAllows(settings domain.WorkspaceSettings, permission, role string) bool {

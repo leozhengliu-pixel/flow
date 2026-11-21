@@ -114,7 +114,7 @@ func (s *SQLiteStore) BeginNotificationDeliveryContextRead(ctx context.Context, 
 				r.Data.Users = append(r.Data.Users, header.Interface().(domain.User))
 			}
 		}
-		fields := []string{"id", "type", "issueId", "reviewId", "title", "text", "actor.id", "actor.name", "actor.displayName", "actor.email", "actor.avatarUrl", "actor.app", "actor.builtinAgent"}
+		fields := []string{"id", "type", "issueId", "reviewId", "title", "text", "actor.id", "actor.name", "actor.displayName", "actor.email", "actor.avatarUrl", "actor.app", "actor.builtinAgent", "sourceType", "sourceId"}
 		values, queryErr := s.deliveryDisplayColumns(ctx, r.owner, "workspace_content_records", "workspace_key=? AND kind='notification' AND id=?", []any{workspace, delivery.NotificationID}, fields)
 		// The original full snapshot ignores missing/query-failed notification
 		// lookups and lets the email dispatcher report unavailable sources.
@@ -124,7 +124,7 @@ func (s *SQLiteStore) BeginNotificationDeliveryContextRead(ctx context.Context, 
 			}
 			continue
 		}
-		notification := domain.Notification{ID: values[0], Type: values[1], IssueID: values[2], ReviewID: values[3], Title: values[4], Text: values[5],
+		notification := domain.Notification{ID: values[0], RecipientID: delivery.RecipientID, SourceType: values[13], SourceID: values[14], Type: values[1], IssueID: values[2], ReviewID: values[3], Title: values[4], Text: values[5],
 			Actor: domain.User{ID: values[6], Name: values[7], DisplayName: values[8], Email: values[9], AvatarURL: values[10], App: values[11] == "true" || values[11] == "1", BuiltinAgent: values[12] == "true" || values[12] == "1"}}
 		r.Data.Notifications = append(r.Data.Notifications, notification)
 		if notification.ReviewID != "" && !reviews[notification.ReviewID] {

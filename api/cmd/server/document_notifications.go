@@ -12,6 +12,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 // Document notification types (the reference app's names). They are inbox
@@ -206,7 +207,33 @@ func documentRoleFor(s *server, data *domain.Bootstrap, directory memberDirector
 			}
 		}
 	}
+	// Workspace admins read every document except those only in private teams
+	// that stay closed to them, as the bootstrap projection decides. A closed
+	// document is judged like a member's: by grants and team membership.
+	if workspaceAdminRole(view.ViewerRole) && documentAdminClosed(view, document) {
+		view.ViewerRole = "member"
+	}
 	return documentRole(s, view, document)
+}
+
+// documentAdminClosed reports whether one of the document's active teams
+// keeps its content from the viewer although they administer the workspace
+// (the projection's AdminClosed set).
+func documentAdminClosed(view domain.Bootstrap, document domain.Document) bool {
+	if len(document.TeamIDs) == 0 {
+		return false
+	}
+	view.TeamMembers = slices.Clone(view.TeamMembers)
+	for _, id := range view.ViewerTeamIDs {
+		view.TeamMembers = append(view.TeamMembers, domain.TeamMember{TeamID: id, UserID: view.Viewer.ID, Role: "member"})
+	}
+	return slices.ContainsFunc(document.TeamIDs, func(teamID string) bool {
+		index := slices.IndexFunc(view.Teams, func(team domain.Team) bool { return team.ID == teamID })
+		if index < 0 || view.Teams[index].ArchivedAt != nil {
+			return false
+		}
+		return !store.TeamContentVisible(view, teamID, view.Viewer.ID, view.ViewerRole)
+	})
 }
 
 type documentNotice struct {

@@ -1379,6 +1379,11 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	for index := range data.Invitations {
 		data.Invitations[index].Token = ""
 	}
+	// The join link token is a credential for whoever may invite; everyone
+	// else gets no link at all (the role comes from the viewer's own record).
+	if !workspacePermissionAllows(data.WorkspaceSettings, "invite", data.ViewerRole) {
+		data.WorkspaceInviteLink = nil
+	}
 	data.DocumentContentDrafts = slices.DeleteFunc(data.DocumentContentDrafts, func(item domain.DocumentContentDraft) bool { return item.UserID != data.Viewer.ID })
 	data.AgentSessions = slices.DeleteFunc(data.AgentSessions, func(item domain.AgentSession) bool { return item.UserID != data.Viewer.ID || item.DeletedAt != nil })
 	for index := range data.AgentSessions {

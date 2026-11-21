@@ -349,7 +349,21 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 		} else {
 			notificationIndex := slices.IndexFunc(data.Notifications, func(item domain.Notification) bool { return item.ID == delivery.NotificationID })
 			recipient := userByID(&data, delivery.RecipientID)
-			if notificationIndex < 0 || recipient == nil {
+			dropped := false
+			if notificationIndex >= 0 && recipient != nil {
+				deliverable, accessErr := s.documentNotificationDeliverable(ctx, key, data.Notifications[notificationIndex])
+				if accessErr != nil {
+					notificationIndex = -1
+					status, message = "failed", documentDeliveryError(accessErr).Error()
+					dropped = true
+				} else if !deliverable {
+					s.dropDocumentDelivery(ctx, key, delivery.ID)
+					continue
+				}
+			}
+			if dropped {
+				// Transient: the normal retry applies.
+			} else if notificationIndex < 0 || recipient == nil {
 				status, message = "failed", "notification source is unavailable"
 			} else if item, err := s.notificationEmailItem(&data, key, data.Notifications[notificationIndex]); err != nil {
 				status, message = "failed", err.Error()

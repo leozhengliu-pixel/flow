@@ -397,7 +397,13 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 	if err != nil || key.Scopes != nil && !slices.ContainsFunc(key.Scopes, func(scope string) bool {
 		return slices.Contains([]string{"read", "write", "admin", "create_issues", "create_comments"}, canonicalAPIKeyScope(scope))
 	}) {
-		s.mcpUnauthorized(w, r, "Token is invalid, expired, or lacks read access")
+		// A rejected token spends its address's unauthenticated budget.
+		if s.limitInvalidRunToken(w, r) {
+			s.mcpUnauthorized(w, r, "Token is invalid, expired, or lacks read access")
+		}
+		return mcpActor{}, false
+	}
+	if !s.limitVerifiedKey(w, r, key, authentication.User.ID) {
 		return mcpActor{}, false
 	}
 	_ = s.store.RecordAPIKeyUse(r.Context(), authentication.Workspace.URLKey, key.ID, key.AuthorizationID)
