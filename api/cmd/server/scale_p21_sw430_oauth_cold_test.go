@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -470,6 +471,13 @@ func TestScaleP21SW430OAuthColdRoutes(t *testing.T) {
 			raw, _ := json.Marshal(body)
 			w := sw430Do(t, s, http.MethodPatch, "/api/oauth-applications/"+id, string(raw), workspace, user, "")
 			record(out, "edit "+id, w)
+			// The edit starts its reconcile in a goroutine (go
+			// reconcileAllApplicationWebhooks), which on a loaded machine may
+			// not have started when sw430Quiet looks for it; the state would
+			// then be captured before the managed hook exists. The reconcile is
+			// idempotent and serialized: run it here so the state is settled
+			// (a goroutine that starts later finds nothing to change).
+			s.reconcileApplicationWebhooks(context.Background(), workspace)
 			sw430Quiet(t, s, workspace, "")
 		}
 	}
