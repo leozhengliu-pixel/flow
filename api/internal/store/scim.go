@@ -63,6 +63,18 @@ type SCIMUser struct {
 	// account deleted through SCIM earlier, or linked an existing account
 	// with the same email.
 	Restored, Linked bool
+	// LinkedExisting is true for an identity attached to an account that
+	// existed before SCIM provisioned it. Such an account is a member only
+	// after its owner accepted an invitation: until then MemberStatus is ""
+	// (the resource reads active=false) and its name, avatar and dates are
+	// the directory's, not the account's.
+	LinkedExisting bool
+	// Invitation is the pending invitation CreateSCIMUser issued to a linked
+	// account that is not a member yet (nil otherwise). It carries the token
+	// the caller delivers to the account's email address.
+	Invitation *domain.Invitation
+	// InvitationWorkspace is the workspace's name, for the invitation email.
+	InvitationWorkspace string
 }
 
 // Active is the SCIM active attribute: the account is active and is an
@@ -97,12 +109,24 @@ type scimIdentityClaims struct {
 	// NoDisplayName records that the IdP set no displayName (the account
 	// still shows one derived from the name), so the resource omits it.
 	NoDisplayName bool `json:"noDisplayName,omitempty"`
+	// LinkedExisting marks an identity attached to an account that already
+	// existed (matched by email). SCIM never writes such an account's own
+	// attributes (name, email, active) and never grants it membership: the
+	// person joins by accepting an invitation.
+	LinkedExisting bool `json:"linkedExisting,omitempty"`
+	// DisplayName is what the directory sent for a linked account, shown
+	// back to it while the account's own name stays private.
+	DisplayName string `json:"displayName,omitempty"`
 }
 
 // SCIMUserInput is a complete SCIM user write. Role is applied only when
 // RoleExplicit is set or the member has no role yet, so profile updates do
 // not reset a role an IdP assigned earlier.
 type SCIMUserInput struct {
+	// linkedExisting is set by the store for an identity attached to a
+	// pre-existing account.
+	linkedExisting bool
+
 	ExternalID   string
 	UserName     string
 	DisplayName  string
@@ -315,6 +339,20 @@ func scanSCIMUser(row scimRowScanner) (SCIMUser, error) {
 	var parsed scimIdentityClaims
 	if json.Unmarshal([]byte(claims), &parsed) == nil {
 		item.Name, item.ExternalIDDefaulted, item.Profile, item.NoDisplayName = parsed.Name, parsed.ExternalIDDefaulted, parsed.Profile, parsed.NoDisplayName
+		item.LinkedExisting = parsed.LinkedExisting
+	}
+	if item.LinkedExisting && item.MemberStatus == "" {
+		// Not a member yet: the directory learns nothing the account's owner
+		// did not hand it (the email it matched on is its own input).
+		name := item.Name.FullName()
+		if name == "" {
+			name = item.UserName
+		}
+		display := parsed.DisplayName
+		if display == "" {
+			display = name
+		}
+		item.User.Name, item.User.DisplayName, item.User.AvatarURL, item.User.Active, item.User.EmailVerified = name, display, "", true, false
 	}
 	return item, nil
 }
@@ -472,6 +510,17 @@ func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, in
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return SCIMUser{}, err
 	}
+	if restored {
+		// An account SCIM only ever linked stays linked when it is restored.
+		var priorClaims string
+		if err := s.db.QueryRowContext(ctx, `SELECT claims_json FROM auth_identities WHERE provider=? AND issuer=? AND `+s.scimExactEquals("subject"), scimDeletedProvider, workspaceID, subject).Scan(&priorClaims); err != nil {
+			return SCIMUser{}, err
+		}
+		var prior scimIdentityClaims
+		if json.Unmarshal([]byte(priorClaims), &prior) == nil {
+			linked = prior.LinkedExisting
+		}
+	}
 	if !restored && input.Email != "" {
 		if err := s.db.QueryRowContext(ctx, `SELECT id FROM auth_users WHERE email=?`, input.Email).Scan(&userID); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return SCIMUser{}, err
@@ -498,10 +547,30 @@ func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, in
 			return SCIMUser{}, ErrSCIMUniqueness
 		}
 	}
+	// An account that existed before SCIM provisioned it is not the
+	// directory's to edit or to enrol: SCIM leaves its attributes alone and
+	// the person joins by accepting an invitation (unless they already are a
+	// member of this workspace).
+	input.linkedExisting = linked
+	pending := false
+	if linked {
+		var memberships int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&memberships); err != nil {
+			return SCIMUser{}, err
+		}
+		pending = memberships == 0
+		if pending {
+			if err := s.refuseErasedMember(ctx, s.db, workspaceID, userID); err != nil {
+				return SCIMUser{}, err
+			}
+		}
+		claims = scimClaimsJSON(input, defaulted)
+	}
+	err = nil
 	if userID == "" {
 		userID = idgen.New("usr_")
 		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, userID, nullableString(input.Email), scimFullName(input), scimDisplayName(input), input.AvatarURL, "", nullableTime(input.Active && input.Email != "", now), boolInt(input.Active), stamp, stamp)
-	} else {
+	} else if !linked {
 		_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET email=?,name=?,display_name=?,active=?,updated_at=? WHERE id=?`, nullableString(input.Email), scimFullName(input), scimDisplayName(input), boolInt(input.Active), stamp, userID)
 	}
 	if err != nil {
@@ -517,9 +586,56 @@ func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, in
 	}
 	// A restored account keeps the role it had unless the IdP sends one.
 	input.RoleExplicit = input.RoleExplicit || !restored
+	var invitation *domain.Invitation
+	if pending {
+		var err error
+		if invitation, err = s.inviteSCIMLinkedAccount(ctx, workspaceID, userID, input, now); err != nil {
+			return SCIMUser{}, err
+		}
+	}
 	item, err := s.writeSCIMUser(ctx, workspaceID, userID, input, now)
-	item.Restored, item.Linked = restored, linked
+	item.Restored, item.Linked, item.Invitation = restored, linked, invitation
+	if invitation != nil {
+		if data, _, ok := s.workspaceByID(workspaceID); ok {
+			item.InvitationWorkspace = data.Workspace.Name
+		}
+	}
 	return item, err
+}
+
+// inviteSCIMLinkedAccount invites the existing account SCIM matched by email
+// to the workspace. Membership exists only once the account's owner accepts
+// while signed in, so a directory token cannot enrol an account it does not
+// control. An invitation still open for the email is kept (nil is returned,
+// its token is not recoverable).
+func (s *SQLiteStore) inviteSCIMLinkedAccount(ctx context.Context, workspaceID, userID string, input SCIMUserInput, now time.Time) (*domain.Invitation, error) {
+	stamp := now.Format(time.RFC3339Nano)
+	var open int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_invitations WHERE workspace_id=? AND lower(email)=? AND status='pending' AND expires_at>?`, workspaceID, strings.ToLower(input.Email), stamp).Scan(&open); err != nil {
+		return nil, err
+	}
+	if open > 0 || input.Email == "" {
+		return nil, nil
+	}
+	role := strings.ToLower(strings.TrimSpace(input.Role))
+	if !validWorkspaceRole(role) {
+		role = "member"
+	}
+	// The inviter is the workspace's longest-standing owner; the invited
+	// account itself when the workspace has none.
+	inviter := userID
+	if err := s.db.QueryRowContext(ctx, `SELECT user_id FROM workspace_memberships WHERE workspace_id=? AND role='owner' AND status='active' ORDER BY joined_at LIMIT 1`, workspaceID).Scan(&inviter); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	token, err := randomToken()
+	if err != nil {
+		return nil, err
+	}
+	item := domain.Invitation{ID: idgen.New("invite_"), WorkspaceID: workspaceID, Email: input.Email, Role: role, TeamIDs: []string{}, Status: "pending", InviterID: inviter, ExpiresAt: now.Add(7 * 24 * time.Hour), CreatedAt: now, Token: token}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO workspace_invitations(id,workspace_id,email,role,team_ids,token_hash,inviter_id,status,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, item.ID, workspaceID, item.Email, item.Role, []byte("[]"), tokenHash(token), inviter, item.Status, item.ExpiresAt.Format(time.RFC3339Nano), stamp); err != nil {
+		return nil, err
+	}
+	return &item, nil
 }
 
 // UpdateSCIMUser replaces a SCIM user's attributes (PUT, or the result of a
@@ -533,6 +649,7 @@ func (s *SQLiteStore) UpdateSCIMUser(ctx context.Context, workspaceID, userID st
 	if err != nil {
 		return SCIMUser{}, err
 	}
+	input.linkedExisting = current.LinkedExisting
 	if input.UserName == "" {
 		return SCIMUser{}, fmt.Errorf("%w: userName is required", ErrSCIMInvalid)
 	}
@@ -571,8 +688,10 @@ func (s *SQLiteStore) UpdateSCIMUser(ctx context.Context, workspaceID, userID st
 		return SCIMUser{}, err
 	}
 	now := time.Now().UTC()
-	if _, err := s.db.ExecContext(ctx, `UPDATE auth_users SET email=?,name=?,display_name=?,avatar_url=?,active=?,updated_at=? WHERE id=?`, nullableString(input.Email), scimFullName(input), scimDisplayName(input), input.AvatarURL, boolInt(input.Active), now.Format(time.RFC3339Nano), current.User.ID); err != nil {
-		return SCIMUser{}, err
+	if !current.LinkedExisting {
+		if _, err := s.db.ExecContext(ctx, `UPDATE auth_users SET email=?,name=?,display_name=?,avatar_url=?,active=?,updated_at=? WHERE id=?`, nullableString(input.Email), scimFullName(input), scimDisplayName(input), input.AvatarURL, boolInt(input.Active), now.Format(time.RFC3339Nano), current.User.ID); err != nil {
+			return SCIMUser{}, err
+		}
 	}
 	return s.writeSCIMUser(ctx, workspaceID, current.User.ID, input, now)
 }
@@ -597,7 +716,7 @@ func (s *SQLiteStore) writeSCIMUser(ctx context.Context, workspaceID, userID str
 	if input.Active {
 		status = "active"
 	}
-	if !input.Active && input.KeepRemoved {
+	if input.linkedExisting || !input.Active && input.KeepRemoved {
 		var memberships int
 		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&memberships); err != nil {
 			return SCIMUser{}, err
@@ -663,8 +782,15 @@ func scimDisplayName(input SCIMUserInput) string {
 	return scimFullName(input)
 }
 
+func linkedDisplayName(input SCIMUserInput) string {
+	if input.linkedExisting {
+		return input.DisplayName
+	}
+	return ""
+}
+
 func scimClaimsJSON(input SCIMUserInput, externalIDDefaulted bool) string {
-	raw, _ := json.Marshal(scimIdentityClaims{Name: input.Name, ExternalIDDefaulted: externalIDDefaulted, Profile: input.Profile, NoDisplayName: input.DisplayName == ""})
+	raw, _ := json.Marshal(scimIdentityClaims{Name: input.Name, ExternalIDDefaulted: externalIDDefaulted, Profile: input.Profile, NoDisplayName: input.DisplayName == "", LinkedExisting: input.linkedExisting, DisplayName: linkedDisplayName(input)})
 	return string(raw)
 }
 

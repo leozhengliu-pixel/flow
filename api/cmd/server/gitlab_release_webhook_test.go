@@ -311,3 +311,25 @@ func TestGitLabReleaseHookRespectsFrozenStagesLikeCI(t *testing.T) {
 		t.Fatalf("frozen release accepted a hook issue or did not complete: %#v", result)
 	}
 }
+
+func TestGitLabReleaseHookOutOfScopeIssuesAreUnknown(t *testing.T) {
+	e := newGitLabReleaseHookEnv(t)
+	openTeam, closedTeam := e.bootstrap.Teams[0], domain.Team{ID: "hook-closed-team", Key: "HKC", Name: "Closed", Private: true}
+	base := e.bootstrap.Issues[0]
+	open, secret := base, base
+	open.ID, open.Identifier, open.Team = "hook-open-issue", "HKO-1", openTeam
+	secret.ID, secret.Identifier, secret.Team = "hook-closed-issue", "HKC-1", closedTeam
+	if err := e.repository.MutateWorkspace(t.Context(), e.bootstrap.Workspace.URLKey, "gitlab_hook_scope.seed", "", nil, func(data *domain.Bootstrap) error {
+		data.Teams = append(data.Teams, closedTeam)
+		data.TeamSettings[closedTeam.ID] = domain.TeamSettings{TeamID: closedTeam.ID, Access: "private"}
+		data.Issues = append(data.Issues, open, secret)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	e.pipeline(map[string]any{"name": "Scoped", "type": "continuous", "teamIds": []string{openTeam.ID}})
+	result := e.release("", gitlabReleasePayload("create", "v9.0.0", "Nine", "Fixes HKC-1 and HKO-1"), http.StatusAccepted)
+	if result.Release.IssueCount != 1 || !slices.Equal(result.UnknownIssueIdentifiers, []string{"HKC-1"}) || len(result.SkippedIssueIdentifiers) != 0 {
+		t.Fatalf("the hook linked or reported an out-of-scope issue: %#v", result)
+	}
+}

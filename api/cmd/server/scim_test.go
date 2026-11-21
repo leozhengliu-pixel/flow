@@ -688,3 +688,44 @@ func TestSCIMProvisionedMemberUsernameAndPresence(t *testing.T) {
 	}
 	requestJSON[domain.WorkspaceMember](t, f.handler, http.MethodPatch, "/api/workspaces/test-workspace/members/"+id, map[string]any{"username": "never-signed-in"}, http.StatusOK)
 }
+
+// A directory cannot enrol an account that already exists: the IdP gets a
+// user resource for it (201) that reads active=false, the account is not a
+// member, and its own attributes are untouched until its owner accepts the
+// invitation SCIM issued.
+func TestSCIMExistingAccountIsInvitedNotEnrolled(t *testing.T) {
+	f := newSCIMFixture(t)
+	outsider, token, err := f.repository.Register(t.Context(), "Existing Person", "existing.person@example.com", "a-long-test-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.repository.VerifyEmail(t.Context(), token); err != nil {
+		t.Fatal(err)
+	}
+	created := f.call(t, http.MethodPost, "/scim/v2/test-workspace/Users", map[string]any{"userName": outsider.Email, "externalId": "emp-77", "displayName": "Directory Name", "active": true, "roles": []map[string]string{{"value": "admin"}}}, http.StatusCreated)
+	if created["id"] != outsider.ID || created["active"] != false {
+		t.Fatalf("resource = %v", created)
+	}
+	members, err := f.repository.ListMembers(t.Context(), f.seed.Workspace.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if findWorkspaceMember(members, outsider.ID) != nil {
+		t.Fatal("SCIM enrolled an existing account")
+	}
+	invitations, err := f.repository.ListInvitations(t.Context(), f.seed.Workspace.ID)
+	if err != nil || !slices.ContainsFunc(invitations, func(item domain.Invitation) bool {
+		return item.Email == outsider.Email && item.Status == "pending" && item.Role == "admin"
+	}) {
+		t.Fatalf("no pending invitation: %v err=%v", invitations, err)
+	}
+	if got := f.call(t, http.MethodGet, "/scim/v2/test-workspace/Users/"+outsider.ID, nil, http.StatusOK); got["active"] != false || got["displayName"] != "Directory Name" {
+		t.Fatalf("GET = %v", got)
+	}
+	// The IdP deactivating or renaming the pending user changes neither the account nor its membership.
+	f.call(t, http.MethodPatch, "/scim/v2/test-workspace/Users/"+outsider.ID, map[string]any{"Operations": []map[string]any{{"op": "replace", "path": "active", "value": false}, {"op": "replace", "path": "displayName", "value": "Other"}}}, http.StatusOK)
+	account, err := f.repository.UserByID(t.Context(), outsider.ID)
+	if err != nil || !account.Active || account.DisplayName != "Existing Person" {
+		t.Fatalf("account = %+v err=%v", account, err)
+	}
+}

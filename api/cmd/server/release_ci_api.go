@@ -266,7 +266,7 @@ type releaseCIResult struct {
 	Release *releaseCIRelease `json:"release"`
 	// SkippedIssueIdentifiers were not added because the release's stage is frozen.
 	SkippedIssueIdentifiers []string `json:"skippedIssueIdentifiers,omitempty"`
-	// UnknownIssueIdentifiers matched no issue in the workspace.
+	// UnknownIssueIdentifiers matched no issue the pipeline may reference (missing and out-of-scope issues are reported alike).
 	UnknownIssueIdentifiers []string `json:"unknownIssueIdentifiers,omitempty"`
 }
 
@@ -855,18 +855,13 @@ func moveReleaseCIStage(data *domain.Bootstrap, pipeline *domain.ReleasePipeline
 // Frozen releases keep their issue set: syncs never add to frozen stages.
 func applyReleaseCIIssues(data *domain.Bootstrap, release *domain.Release, input releaseCIInput) ([]string, []string) {
 	skipped, unknown := []string{}, []string{}
+	pipeline := releasePipelineByID(data, release.PipelineID)
+	scope := store.NewDocumentLinkScope(data.Teams, data.TeamSettings)
+	// An issue outside the pipeline's scope is indistinguishable from one that
+	// does not exist: it is never linked, unlinked or reported differently.
 	find := func(identifier string) *domain.Issue {
-		for index := range data.Issues {
-			if strings.EqualFold(data.Issues[index].Identifier, identifier) && data.Issues[index].ArchivedAt == nil {
-				return &data.Issues[index]
-			}
-		}
-		// A commit can name an issue by an identifier it had before it moved
-		// to another team.
-		for index := range data.Issues {
-			if data.Issues[index].ArchivedAt == nil && slices.ContainsFunc(data.Issues[index].PreviousIdentifiers, func(previous string) bool { return strings.EqualFold(previous, identifier) }) {
-				return &data.Issues[index]
-			}
+		if issue := findReleaseCIIssue(data, identifier); issue != nil && pipeline != nil && issueInPipelineScope(scope, pipeline, issue) {
+			return issue
 		}
 		return nil
 	}
@@ -903,6 +898,32 @@ func applyReleaseCIIssues(data *domain.Bootstrap, release *domain.Release, input
 		unknown = nil
 	}
 	return skipped, unknown
+}
+
+// issueInPipelineScope reports whether a pipeline's automation may see an
+// issue: the pipeline's teams when it has any, otherwise the teams that do
+// not keep their content from non-members (the rule release notes use).
+func issueInPipelineScope(scope *store.DocumentLinkScope, pipeline *domain.ReleasePipeline, issue *domain.Issue) bool {
+	if len(pipeline.TeamIDs) > 0 {
+		return slices.Contains(pipeline.TeamIDs, issue.Team.ID)
+	}
+	return !scope.TeamClosed(issue.Team.ID)
+}
+
+func findReleaseCIIssue(data *domain.Bootstrap, identifier string) *domain.Issue {
+	for index := range data.Issues {
+		if strings.EqualFold(data.Issues[index].Identifier, identifier) && data.Issues[index].ArchivedAt == nil {
+			return &data.Issues[index]
+		}
+	}
+	// A commit can name an issue by an identifier it had before it moved
+	// to another team.
+	for index := range data.Issues {
+		if data.Issues[index].ArchivedAt == nil && slices.ContainsFunc(data.Issues[index].PreviousIdentifiers, func(previous string) bool { return strings.EqualFold(previous, identifier) }) {
+			return &data.Issues[index]
+		}
+	}
+	return nil
 }
 
 // applyReleaseCIResources adds links (deduplicated by URL) and upserts

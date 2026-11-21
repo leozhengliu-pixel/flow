@@ -515,6 +515,14 @@ SCIM provisioning writes its own entries with `source` `scim`: resource type
 `roleBefore`/`roleAfter`) and `scim_group` (`created`, `linked`, `updated`,
 `deleted`, `members_changed` with the added and removed user ids).
 
+A SCIM `POST /Users` whose email belongs to an account that already exists and
+is not a member of the workspace does not enrol it: the IdP gets `201` with the
+user resource (`id` is the account id, `active` is `false`), the account gets a
+workspace invitation by email, and it becomes a member, with the role the
+directory sent, only when its owner accepts while signed in. Until then SCIM
+writes change neither the account (name, email, active) nor its settings, and
+the account does not count as a member for enterprise sign-in linking.
+
 Workspace members provisioned by an active SCIM connection have
 `managedBy: "scim"`; changing their role, name or email
 (`PATCH /api/workspaces/{workspaceKey}/members/{userId}`), suspending,
