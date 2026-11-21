@@ -30,14 +30,14 @@ func TestLocalStoreIssueWriteReplay(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			key := "667e3c46-1d81-4fc8-a556-776cdb6a906b"
+			mutationID := "667e3c46-1d81-4fc8-a556-776cdb6a906b"
 			send := func(t *testing.T, handler http.Handler, viewer, epoch, auth, title string, expected int64, want int) domain.Issue {
 				t.Helper()
 				r := httptest.NewRequest(http.MethodPatch, f.host.URL+issuePath, bytes.NewReader(mustJSON(t, domain.IssueUpdateInput{Title: &title, ExpectedVersion: &expected})))
 				r.Header.Set("Content-Type", "application/json")
 				r.Header.Set("X-Workspace-Key", workspace)
 				r.Header.Set(localStoreHeader, viewer)
-				r.Header.Set("X-Flow-Local-Mutation", key)
+				r.Header.Set("X-Flow-Local-Mutation", mutationID)
 				r.Header.Set("X-Flow-Local-Authz-Epoch", epoch)
 				if auth != "" {
 					r.Header.Set("Authorization", "Bearer "+auth)
