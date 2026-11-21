@@ -384,6 +384,25 @@ func collectionKeysetArgs(dialect string, after metadataCollectionCursor) []any 
 	return []any{after.Workspace, after.Field}
 }
 
+// completeActivationTestCatalog prepares new collections between the seeded
+// phases of an opt-in differential. The test view still takes its preimage
+// from the literal owner.
+func (s *SQLiteStore) completeActivationTestCatalog(ctx context.Context) error {
+	if os.Getenv("FLOW_TEST_BOUNDED_ACTIVATION") != "1" {
+		return nil
+	}
+	catalogs, err := s.MetadataCatalogCompleteness(ctx)
+	if err != nil {
+		return err
+	}
+	for _, catalog := range catalogs {
+		if catalog.Incomplete != 0 {
+			return s.CompleteMetadataCatalogForTesting(ctx)
+		}
+	}
+	return nil
+}
+
 // CompleteMetadataCatalogForTesting runs the catalog backfill over every
 // collection of every workspace to completion, as an operator does before a
 // bounded start (a bounded store refuses an incomplete catalog). Test

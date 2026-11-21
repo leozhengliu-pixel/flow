@@ -131,6 +131,25 @@ func (s *SQLiteStore) awaitMetadataWork(ctx context.Context, demand *metadataWor
 	}
 }
 
+// retryMetadataWriteWork waits after the attempt releases its transaction and
+// write lock. The attempt stops retries before running a callback that can
+// leave results in caller-owned memory.
+func (s *SQLiteStore) retryMetadataWriteWork(ctx context.Context, attempt func(context.Context, func()) error) error {
+	if s.metadataResidency == nil {
+		return attempt(ctx, func() {})
+	}
+	deadline := time.Now().Add(time.Duration(metadataWorkRetryWait.Load()))
+	for {
+		attemptCtx, demand := withMetadataWorkDemand(ctx)
+		allowRetry := true
+		err := attempt(attemptCtx, func() { allowRetry = false })
+		if !allowRetry || !MetadataWorkContended(err) || !s.awaitMetadataWork(ctx, demand, deadline) {
+			return err
+		}
+		traceMark(ctx, "work-wait")
+	}
+}
+
 // HoldMetadataWorkForTesting admits bytes of metadata work, as concurrent
 // reads and writes would, until the returned release runs.
 func (s *SQLiteStore) HoldMetadataWorkForTesting(bytes int) (func(), error) {

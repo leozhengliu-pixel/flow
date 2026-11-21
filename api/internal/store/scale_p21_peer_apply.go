@@ -7,8 +7,8 @@ import (
 	"strconv"
 )
 
-// Body records stay in canonical SQL. A verified page advances the resident
-// policy snapshot and invalidates revision-bound cache entries atomically.
+// A verified page can advance resident policy only if the installed logical
+// generation already represents the same metadata revision.
 func (s *SQLiteStore) applyResidentCommittedPage(ctx context.Context, workspaceID string, page CommittedPage) (string, error) {
 	next, err := strconv.ParseInt(page.Next, 10, 64)
 	if err != nil || next < 0 || page.Head != page.Next || page.HasMore || page.ResyncRequired || len(page.Transactions) > 100 {
@@ -40,7 +40,7 @@ func (s *SQLiteStore) applyResidentCommittedPage(ctx context.Context, workspaceI
 		return "", err
 	}
 	basis, after, known := s.residentStamp(workspace)
-	if !known || basis.workspaceID != workspaceID || after > next {
+	if !known || basis.workspaceID != workspaceID || after > next || !s.residentPeerSourceCurrent(workspace, stamp) {
 		return "", ErrPeerSnapshotRequired
 	}
 	if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
@@ -65,7 +65,7 @@ func (s *SQLiteStore) applyResidentCommittedPage(ctx context.Context, workspaceI
 	// check for a local install or a newer canonical snapshot or journal head.
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	if current, applied, ok := s.residentStamp(workspace); !ok || current != basis || applied != after {
+	if current, applied, ok := s.residentStamp(workspace); !ok || current != basis || applied != after || !s.residentPeerSourceCurrent(workspace, stamp) {
 		return "", ErrPeerSnapshotRequired
 	}
 	latest, latestHead, err := s.readResidentPublicationStamp(ctx, workspace, workspaceID)
@@ -79,6 +79,17 @@ func (s *SQLiteStore) applyResidentCommittedPage(ctx context.Context, workspaceI
 		return "", err
 	}
 	return page.Next, nil
+}
+
+func (s *SQLiteStore) residentPeerSourceCurrent(workspace string, stamp copyStamp) bool {
+	r := s.metadataResidency
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	source := r.logical[workspace]
+	if source == nil {
+		return !r.requireCoverage // Policy-only storage probes.
+	}
+	return source.Stamp() == stamp && !source.behind.Load()
 }
 
 func (s *SQLiteStore) readResidentPublicationStamp(ctx context.Context, workspace, workspaceID string) (copyStamp, int64, error) {

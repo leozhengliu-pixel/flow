@@ -358,6 +358,8 @@ func TestScaleP11RoutineCredentialEventsStaySilent(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 1)
+	f.service.realtime.ordered = true
+	f.service.realtime.followPeerReplay(f.workspace, f.service.remoteEvents.consumer(f.workspace).eventCursor)
 	channel, stop := f.service.realtime.subscribe(f.workspace)
 	defer stop()
 	if err := f.writer.MutateWorkspace(t.Context(), f.workspace, "api_key.used", "p11-key", nil, func(*domain.Bootstrap) error { return nil }); err != nil {
@@ -367,10 +369,15 @@ func TestScaleP11RoutineCredentialEventsStaySilent(t *testing.T) {
 	if err != nil || head <= f.service.remoteEvents.consumer(f.workspace).eventCursor {
 		t.Fatalf("credential fixture did not append a legacy event: head=%d error=%v", head, err)
 	}
+	next := scaleP11Rename(t, f, "after silent event")
+	f.service.publishPeerEvent(f.workspace, next)
+	if len(channel) != 0 {
+		t.Fatal("a later event bypassed an unclassified sequence")
+	}
 	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil {
 		t.Fatal(err)
 	}
-	if len(channel) != 0 {
-		t.Fatal("a deliberately silent credential event triggered peer traffic")
+	if got := drainRealtime(channel); len(got) != 1 || got[0].ID != next.ID {
+		t.Fatal("silent credential replay did not release exactly the later event")
 	}
 }

@@ -70,7 +70,7 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 	var event domain.DomainEvent
 	var realtime json.RawMessage
 	metadataWritten := false
-	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+	apply := func(ctx context.Context, stopWorkRetry func()) error {
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
 		if _, found := s.storedWorkspace(workspace); !found {
@@ -228,6 +228,7 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 			return ErrBoundedMetadataCoverage
 		}
 		transferred = true
+		stopWorkRetry()
 		id, err := mutate(&data)
 		releaseCallback()
 		data.FormerMembers, data.CollaborationUpdates, data.CollaborationWork = nil, nil, nil
@@ -368,6 +369,9 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 		}
 		metadataWritten = tx.metadataWritten
 		return nil
+	}
+	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+		return s.retryMetadataWriteWork(ctx, apply)
 	}, s.refreshConflictedLogicalMetadata(ctx, workspace))
 	if metadataWritten {
 		s.dropMetadataCache(ctx, workspace)

@@ -155,7 +155,7 @@ var (
 	sw530Registration = regexp.MustCompile(`passkey_reg_[A-Za-z0-9_-]{16,}`)
 	// A WebAuthn challenge stored inside an escaped session row.
 	sw530Challenge  = regexp.MustCompile(`(challenge\\+":\\+")[A-Za-z0-9_-]{16,}`)
-	sw530SlugSuffix = regexp.MustCompile(`("slugId\\?":\\?"[^"\\]*-)[0-9a-f]{12}(\\?")`)
+	sw530SlugSuffix = regexp.MustCompile(`("slugId\\?":\\?"[^"\\]*-)([0-9a-f]{1,12})(\\?")`)
 	sw530Since      = regexp.MustCompile(`"since":"[^"]*"`)
 )
 
@@ -178,9 +178,41 @@ func sw530Normalize(text string, started time.Time) string {
 	text = sw530ShareToken.ReplaceAllString(text, "dsh_<random>")
 	text = sw530Registration.ReplaceAllString(text, "passkey_reg_<random>")
 	text = sw530Challenge.ReplaceAllString(text, "${1}<random>")
-	text = sw530SlugSuffix.ReplaceAllString(text, "${1}<suffix>${2}")
+	text = sw530NormalizeSlugSuffix(text, started, time.Now())
 	text = sw530Since.ReplaceAllString(text, `"since":"<since>"`)
 	return sw530RandomHex.ReplaceAllString(text, "<hex>")
+}
+
+func sw530NormalizeSlugSuffix(text string, started, finished time.Time) string {
+	const clockMask = 1<<48 - 1
+	first := started.UnixNano() & clockMask
+	elapsed := finished.Sub(started).Nanoseconds()
+	return sw530SlugSuffix.ReplaceAllStringFunc(text, func(match string) string {
+		parts := sw530SlugSuffix.FindStringSubmatch(match)
+		// Release slugs omit leading zeroes from the low 48 bits of the
+		// creation clock. Keep short literal suffixes outside the run.
+		suffix, _ := strconv.ParseInt(parts[2], 16, 64)
+		if len(parts[2]) < 12 && (suffix-first)&clockMask > elapsed {
+			return match
+		}
+		return parts[1] + "<suffix>" + parts[3]
+	})
+}
+
+func TestScaleP21SW530ReleaseSlugNormalization(t *testing.T) {
+	created := time.Unix(0, 0xabc_d123_4567)
+	release := uniqueReleaseSlug(&domain.Bootstrap{}, "Example release", created)
+	for _, format := range []string{`{"slugId":"%s"}`, `{\"slugId\":\"%s\"}`} {
+		before := fmt.Sprintf(format, release)
+		want := fmt.Sprintf(format, "example-release-<suffix>")
+		if got := sw530NormalizeSlugSuffix(before, created, created.Add(time.Second)); got != want {
+			t.Error("the generated release suffix survived normalization")
+		}
+		literal := fmt.Sprintf(format, "example-release-2")
+		if got := sw530NormalizeSlugSuffix(literal, created, created.Add(time.Second)); got != literal {
+			t.Error("normalization changed a literal slug")
+		}
+	}
 }
 
 // Headers that carry per-request values only.

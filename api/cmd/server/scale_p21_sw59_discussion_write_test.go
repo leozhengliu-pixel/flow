@@ -117,6 +117,25 @@ func scaleP21SW59SQL(t *testing.T, f scaleP21SW10Fixture) scaleP21SW59Rows {
 	return result
 }
 
+func scaleP21SW59GeneratedDigestTime(due, started, finished time.Time) bool {
+	inRequest := func(clock time.Time) bool {
+		return !clock.Before(started) && !clock.After(finished)
+	}
+	notice := due.Add(-time.Hour)
+	if inRequest(notice) {
+		return true
+	}
+	// During working hours on a weekend the digest keeps its clock time
+	// when it moves to Monday.
+	if due.Weekday() == time.Monday && (inRequest(notice.AddDate(0, 0, -1)) || inRequest(notice.AddDate(0, 0, -2))) {
+		return true
+	}
+	// Outside working hours, a generated digest can land on the next
+	// workday's fixed opening time, including across a weekend.
+	return due.Minute() == 0 && due.Second() == 0 && due.Nanosecond() == 0 &&
+		due.After(finished.Add(time.Hour)) && !due.After(finished.Add(time.Hour+4*24*time.Hour))
+}
+
 func scaleP21SW59Normalized(t *testing.T, result scaleP21SW59Outcome, before scaleP21SW59Rows, started, finished time.Time) any {
 	t.Helper()
 	existing := map[string]bool{}
@@ -193,21 +212,13 @@ func scaleP21SW59Normalized(t *testing.T, result scaleP21SW59Outcome, before sca
 			}
 			switch strings.ToLower(field) {
 			case "createdat", "updatedat", "editedat", "nextattemptat":
-				if clock, err := time.Parse(time.RFC3339Nano, item); err == nil && !clock.Before(started) && !clock.After(finished) {
-					return "<generated-clock>"
-				}
-				// A digest email is due an hour after its notification during the team's working hours (and at a fixed
-				// 09:00 otherwise), so on weekday working hours its due time is a generated clock plus one hour.
-				if clock, err := time.Parse(time.RFC3339Nano, item); err == nil && strings.EqualFold(field, "nextattemptat") && !clock.Add(-time.Hour).Before(started) && !clock.Add(-time.Hour).After(finished) {
-					return "<generated-clock+1h>"
-				}
-				// Outside working hours the hour later moves to the next 09:00 (at most a weekend away). Modes run
-				// moments apart, so one may fall just before a working-hours boundary and the other just after it:
-				// that fixed due time stands for the same generated digest.
-				if clock, err := time.Parse(time.RFC3339Nano, item); err == nil && strings.EqualFold(field, "nextattemptat") &&
-					clock.Minute() == 0 && clock.Second() == 0 && clock.Nanosecond() == 0 &&
-					clock.After(finished.Add(time.Hour)) && !clock.After(finished.Add(time.Hour+4*24*time.Hour)) {
-					return "<generated-clock+1h>"
+				if clock, err := time.Parse(time.RFC3339Nano, item); err == nil {
+					if !clock.Before(started) && !clock.After(finished) {
+						return "<generated-clock>"
+					}
+					if strings.EqualFold(field, "nextattemptat") && scaleP21SW59GeneratedDigestTime(clock, started, finished) {
+						return "<generated-clock+1h>"
+					}
 				}
 			}
 		case map[string]any:

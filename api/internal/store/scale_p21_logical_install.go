@@ -83,6 +83,9 @@ func (s *SQLiteStore) installMetadataLogicalSource(workspace string, candidate *
 // Test views transfer the actual owner-installed logical generation. This is
 // deliberately separate from cold SQL recovery, which normalizes its source.
 func (s *SQLiteStore) captureLogicalTestView(ctx context.Context, owner *SQLiteStore, keys []string) error {
+	if err := owner.completeActivationTestCatalog(ctx); err != nil {
+		return err
+	}
 	owner.mu.Lock()
 	if !slices.Contains(owner.logicalTestViews, s.metadataResidency) {
 		owner.logicalTestViews = append(owner.logicalTestViews, s.metadataResidency)

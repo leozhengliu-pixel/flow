@@ -405,6 +405,7 @@ type loadRigDriver struct {
 	streamConn  atomic.Int64
 	agentRuns   sync.Map // final status -> *atomic.Int64
 	nextBase    atomic.Uint64
+	errors500   atomic.Uint64
 }
 
 func (d *loadRigDriver) pick(vu *loadRigVU, values []string) string {
@@ -502,6 +503,13 @@ func (d *loadRigDriver) requestWith(ctx context.Context, vu *loadRigVU, client *
 	// in flight at the end is waited for (up to its timeout) and counted.
 	if start, end := d.startAt.Load(), d.endAt.Load(); start != 0 && began.UnixNano() >= start && (end == 0 || began.UnixNano() < end) {
 		d.opStats(name).add(code, elapsed, cause, err != nil, timeout, example, vu.random)
+		if code == http.StatusInternalServerError && os.Getenv("FLOW_LOADRIG_DIAGNOSE_500") == "1" && d.errors500.Add(1) <= 32 {
+			// The rig sends no X-Request-ID, so this is server-generated.
+			id := response.Header.Get("X-Request-ID")
+			if len(id) == 32 && strings.Trim(id, "0123456789abcdef") == "" {
+				fmt.Fprintf(os.Stderr, "loadrig HTTP 500: op=%s replica=%d request_id=%s\n", name, slices.Index(d.bases, base), id)
+			}
+		}
 	}
 	if err != nil || code < 200 || code > 299 {
 		return false

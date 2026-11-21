@@ -162,6 +162,7 @@ func TestScaleP11FailedApplyKeepsCursorAndPublishesNothing(t *testing.T) {
 	c := f.service.remoteEvents.consumer(f.workspace)
 	before := c.cursor
 	change := scaleP11Rename(t, f, "retry after database recovery")
+	f.service.remoteEvents.push(f.workspace, change, true, func(string) {})
 	channel, stop := f.service.realtime.subscribe(f.workspace)
 	defer stop()
 	if err := f.peer.Close(); err != nil {
@@ -181,7 +182,7 @@ func TestScaleP11FailedApplyKeepsCursorAndPublishesNothing(t *testing.T) {
 	}
 	select {
 	case event := <-channel:
-		if event.ID != change.ID && event.Type != "workspace.resync_required" {
+		if event.ID != change.ID {
 			t.Fatal("recovery did not publish the committed change")
 		}
 	case <-time.After(time.Second):
