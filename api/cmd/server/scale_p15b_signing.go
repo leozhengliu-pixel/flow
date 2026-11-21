@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"sort"
@@ -20,6 +21,34 @@ type hydratedURLSigning struct {
 	base    string
 	expires time.Time
 	encoded bool
+	// signer is who the links are signed for; allow (nil: every name) is asked
+	// once per name before it is signed, and a refused name stays unsigned.
+	signer fileSigner
+	allow  func(name string) bool
+}
+
+// maxSignedNameBytes bounds the name a permission check reads: no stored
+// object has a longer name (even percent-encoded).
+const maxSignedNameBytes = 3 * 255
+
+// permit reports whether the name in source[start:end] (as written in the
+// response, percent-encoded) may be signed.
+func (signing *hydratedURLSigning) permit(ctx context.Context, source io.ReaderAt, start, end int64) (bool, error) {
+	if signing.allow == nil {
+		return true, nil
+	}
+	if end-start > maxSignedNameBytes || end <= start {
+		return false, nil
+	}
+	raw := make([]byte, end-start)
+	if _, err := io.ReadFull(legacyContextReader{ctx, io.NewSectionReader(source, start, end-start)}, raw); err != nil {
+		return false, err
+	}
+	name := string(raw)
+	if decoded, err := url.PathUnescape(name); err == nil {
+		name = decoded
+	}
+	return signing.allow(name), nil
 }
 
 type hydratedURLSigningKey struct{}
@@ -60,7 +89,7 @@ func rewriteHydratedURLSource(ctx context.Context, source io.ReaderAt, size int6
 	output := bufio.NewWriterSize(dst, 32<<10)
 	scratch := make([]byte, 32<<10)
 	text := func(start, end int64) error {
-		return rewriteUploadURLSourcePass(ctx, io.NewSectionReader(source, start, end-start), end-start, output, uploadURLText, false, signing.key, signing.base, signing.expires)
+		return rewriteUploadURLSourcePass(ctx, io.NewSectionReader(source, start, end-start), end-start, output, uploadURLText, false, signing)
 	}
 	var offset int64
 	for offset < size {
@@ -76,8 +105,20 @@ func rewriteHydratedURLSource(ctx context.Context, source io.ReaderAt, size int6
 		if err := text(offset, start); err != nil {
 			return err
 		}
+		permitted, err := signing.permit(ctx, source, offset+int64(match[4]), offset+int64(match[5]))
+		if err != nil {
+			return err
+		}
+		if !permitted {
+			// A file the principal may not read keeps its URL as written.
+			if _, err := io.CopyBuffer(output, legacyContextReader{ctx, io.NewSectionReader(source, start, end-start)}, scratch); err != nil {
+				return err
+			}
+			offset = end
+			continue
+		}
 		output.WriteByte('"')
-		if err := writeSignedURLSection(ctx, output, source, offset+int64(match[4]), offset+int64(match[5]), signing.key, signing.base, signing.expires, scratch); err != nil {
+		if err := writeSignedURLSection(ctx, output, source, offset+int64(match[4]), offset+int64(match[5]), signing, scratch); err != nil {
 			return err
 		}
 		output.WriteByte('"')

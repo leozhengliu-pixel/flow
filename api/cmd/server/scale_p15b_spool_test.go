@@ -49,7 +49,7 @@ func TestScaleP15BHTTPSpoolCleanup(t *testing.T) {
 						}
 						return nil
 					}}
-					s := &server{}
+					s := &server{fileSigningAllowAll: true}
 					r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/issue-records/bootstrap", nil)
 					if path == "signed" {
 						r.Header.Set("X-Flow-File-Urls-Expire-In", "3600")
@@ -157,7 +157,7 @@ func TestScaleP15BConcurrentLargeResponsesShareStoreBudget(t *testing.T) {
 			if i%2 == 0 {
 				serializeLegacyBootstrap(producer).ServeHTTP(w, r)
 			} else {
-				(&server{}).signedFileURLs(producer).ServeHTTP(w, r)
+				(&server{fileSigningAllowAll: true}).signedFileURLs(producer).ServeHTTP(w, r)
 			}
 			if w.bytes != (4<<20)+12 || w.max > 64<<10 {
 				t.Errorf("incomplete/unbounded direct output: bytes=%d chunk=%d", w.bytes, w.max)
@@ -178,7 +178,7 @@ func TestScaleP15BUnavailableTemporaryDirectory(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing"))
 	for _, handler := range []http.Handler{
 		serializeLegacyBootstrap(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { writeBootstrapJSON(w, domain.Bootstrap{}) })),
-		(&server{}).signedFileURLs(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		(&server{fileSigningAllowAll: true}).signedFileURLs(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			writeStreamedJSON(r.Context(), w, 200, domain.Bootstrap{})
 		})),
 	} {
@@ -198,7 +198,7 @@ func TestScaleP15BSigningKeepsNonJSONHeaders(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/api/plain", nil)
 		r.Header.Set("X-Flow-File-Urls-Expire-In", "3600")
-		(&server{}).signedFileURLs(http.HandlerFunc(func(out http.ResponseWriter, _ *http.Request) {
+		(&server{fileSigningAllowAll: true}).signedFileURLs(http.HandlerFunc(func(out http.ResponseWriter, _ *http.Request) {
 			out.Header().Set("Content-Type", "text/plain")
 			out.Header().Set("Content-Length", strconv.Itoa(len(body)))
 			out.WriteHeader(status)
@@ -241,7 +241,7 @@ func TestScaleP15BSigningSurvivesSpoolFallback(t *testing.T) {
 					r := httptest.NewRequest(http.MethodGet, "/api/bootstrap", nil)
 					r.Header.Set("X-Flow-File-Urls-Expire-In", "3600")
 					got := httptest.NewRecorder()
-					(&server{}).signedFileURLs(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+					(&server{fileSigningAllowAll: true}).signedFileURLs(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 						signing, _ = request.Context().Value(hydratedURLSigningKey{}).(*hydratedURLSigning)
 						encode(w, request.Context())
 					})).ServeHTTP(got, r)
@@ -268,7 +268,7 @@ func TestScaleP15BProductionMiddlewareSignsWithoutSpool(t *testing.T) {
 			workspace := f.data.Workspace.URLKey
 			prefix := strings.Repeat("body x ", 32<<10) + " ![image]("
 			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p15b.seed", "", nil, func(data *domain.Bootstrap) error {
-				data.Projects = append(data.Projects, domain.Project{ID: "p15b-signed", Name: "Signed", TeamIDs: []string{f.data.Teams[0].ID}, Description: prefix + "/uploads/p15b.png)"})
+				data.Projects = append(data.Projects, domain.Project{ID: "p15b-signed", Name: "Signed", TeamIDs: []string{f.data.Teams[0].ID}, Description: prefix + "/uploads/p15b.png)", CommentAttachments: []domain.Attachment{{ID: "p15b-attachment", URL: "/uploads/p15b.png", Title: "p15b.png"}}})
 				return nil
 			}); err != nil {
 				t.Fatal(err)
@@ -314,7 +314,7 @@ func TestScaleP15BProductionMiddlewareSignsWithoutSpool(t *testing.T) {
 						t.Fatal(err)
 					}
 					expires, err := strconv.ParseInt(parsed.Query().Get("expires"), 10, 64)
-					want := signedFileURL([]byte(signingKey), f.host.URL, "p15b.png", time.Unix(expires, 0))
+					want := signedFileURLFor([]byte(signingKey), f.host.URL, "p15b.png", time.Unix(expires, 0), fileSigner{Subject: f.data.Viewer.ID, Workspace: workspace})
 					if err != nil || link != want {
 						t.Fatalf("%s budget=%d: URL signature changed", path, budget)
 					}

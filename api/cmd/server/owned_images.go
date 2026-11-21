@@ -75,6 +75,9 @@ func (s *server) ownedImageAccess(ctx context.Context, name, userID string, chec
 // workspaceLogoReadable is the logo's read permission: an active member whose
 // sign-in satisfies the workspace's authentication policy.
 func (s *server) workspaceLogoReadable(ctx context.Context, workspace, userID string) bool {
+	if !apiKeyWorkspaceMatches(ctx, workspace) {
+		return false
+	}
 	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspace)
 	if err != nil {
 		return false

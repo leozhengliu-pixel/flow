@@ -412,10 +412,15 @@ short-lived signed URLs, valid for 1 second to 7 days:
   `{"files":[{"url","signedUrl","expiresAt"}]}` for files you can read.
 - Or send `X-Flow-File-Urls-Expire-In: <seconds>` (alias
   `Public-File-Urls-Expire-In`) on any API request: every `/uploads/…` URL in
-  the JSON response, including Markdown, is replaced by a signed URL.
+  the JSON response, including Markdown, is replaced by a signed URL. Only
+  files you can read are signed; any other `/uploads/…` URL in the response
+  stays as written.
 
 Signed URLs (`/api/files/signed/{name}?expires=…&signature=…`) work without
-credentials until they expire; treat them as secrets. They are HMAC-signed
+credentials until they expire; treat them as secrets. A link names who it was
+signed for and is checked again when it is used: it stops working once the
+file's record is deleted, the signer loses access to it, or the signer's API
+key is revoked. They are HMAC-signed
 with `FLOW_FILE_URL_SIGNING_KEY`, or with a random key that Flow stores in the
 database on first use.
 

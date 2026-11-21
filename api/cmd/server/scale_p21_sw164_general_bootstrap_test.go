@@ -131,7 +131,7 @@ func scaleP21SW164Serve(t *testing.T, f scaleP21SW145Fixture, source *store.SQLi
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", strconv.Itoa(test.spool))
 	directory := t.TempDir()
 	t.Setenv("TMPDIR", directory)
-	service := &server{store: source, authDisabled: test.development}
+	service := &server{store: source, authDisabled: test.development, fileSigningAllowAll: true}
 	request := f.literalRequest(test.user, test.key, nil)
 	request.Method, request.URL.Path = http.MethodGet, "/api/bootstrap"
 	request.Header.Set("X-Workspace-Key", test.workspace)

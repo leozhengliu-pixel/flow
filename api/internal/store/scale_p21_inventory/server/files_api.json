@@ -20,7 +20,7 @@
       "temperatureReason": "Signed files are reached by ordinary image views.",
       "callers": ["GET /api/files/signed/{name}"]
     },
-    "fileReadable": {
+    "fileReadableContext": {
       "owner": "P21",
       "status": "reviewed",
       "reason": "Owned-image permission uses the bounded pinned scalar visitor and rejects errors before the unchanged account/attachment fallback. Flag-off invokes the original image resolver/readable closure. TestScaleP21HotOAuthLogoAccessDifferential and OwnedImageBoundary exercise the identical shared boundary.",
