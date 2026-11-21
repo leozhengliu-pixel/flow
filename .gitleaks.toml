@@ -20,4 +20,6 @@ paths = [
 # The same fake key, reused by the sandbox envtest RBAC test.
 regexes = [
   '''dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdC0=''',
+  # A fixed local-store mutation ID (a UUID) in local_store_issue_writes_test.go.
+  '''667e3c46-1d81-4fc8-a556-776cdb6a906b''',
 ]
