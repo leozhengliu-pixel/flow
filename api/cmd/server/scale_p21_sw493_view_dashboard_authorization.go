@@ -35,14 +35,25 @@ func (s *server) boundedProjectAllowed(r *http.Request, access store.AccessConte
 // boundedViewPredicate mirrors resourceAllowedLegacy's "views" case for a
 // saved-view point (ref != "") or the create root (create).
 func (s *server) boundedViewPredicate(r *http.Request, userID, ref string, create bool) scaleP21RecordPredicate {
-	return func(access store.AccessContext, data domain.Bootstrap) (bool, error) {
+	return s.boundedViewMutationPredicate(r, userID, ref, create, func(input *domain.SavedViewMutationInput) bool {
+		return peekRequestJSON(r, input)
+	})
+}
+
+func (s *server) boundedViewMutationPredicate(r *http.Request, userID, ref string, create bool, readInput func(*domain.SavedViewMutationInput) bool) scaleP21RecordPredicate {
+	return func(access store.AccessContext, data domain.Bootstrap) (permitted bool, err error) {
+		defer func() {
+			if permitted && err == nil && (create || r.Method == http.MethodPatch || r.Method == http.MethodDelete) {
+				bindSavedViewAuthorization(r, access, ref, data)
+			}
+		}()
 		role := access.ViewerRole()
 		if create {
 			if role == "guest" {
 				return false, nil
 			}
 			var input domain.SavedViewMutationInput
-			if !peekRequestJSON(r, &input) {
+			if !readInput(&input) {
 				return false, nil
 			}
 			if input.TeamID != nil && *input.TeamID != "" && !access.TeamContentAllowed(*input.TeamID) {
@@ -67,7 +78,7 @@ func (s *server) boundedViewPredicate(r *http.Request, userID, ref string, creat
 			}
 			if r.Method == http.MethodPatch {
 				var input domain.SavedViewMutationInput
-				if !peekRequestJSON(r, &input) {
+				if !readInput(&input) {
 					return false, nil
 				}
 				if input.OwnerID != nil && *input.OwnerID != "" && *input.OwnerID != item.OwnerID && !workspaceAdminRole(role) {

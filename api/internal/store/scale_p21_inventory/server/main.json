@@ -1,6 +1,6 @@
 {
   "source": "server/main.go",
-  "unmigrated": 61,
+  "unmigrated": 57,
   "consumers": {
     "accountBootstrap": {
       "owner": "P21",
@@ -348,19 +348,6 @@
         "POST /api/issues/{id}/relations (server/main.go:1084)"
       ]
     },
-    "createSavedView": {
-      "owner": "P21",
-      "status": "unmigrated",
-      "accessors": [
-        "Bootstrap",
-        "MutateWorkspaceWithAggregate"
-      ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
-      "callers": [
-        "POST /api/views (server/main.go:890)"
-      ]
-    },
     "createTeam": {
       "owner": "P21",
       "status": "reviewed",
@@ -562,19 +549,6 @@
         "DELETE /api/issues/{id}/relations/{relationId} (server/main.go:1085)"
       ]
     },
-    "deleteSavedView": {
-      "owner": "P21",
-      "status": "unmigrated",
-      "accessors": [
-        "Bootstrap",
-        "MutateWorkspace"
-      ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
-      "callers": [
-        "DELETE /api/views/{id} (server/main.go:892)"
-      ]
-    },
     "deleteTeamCycles": {
       "owner": "P21",
       "status": "unmigrated",
@@ -598,19 +572,6 @@
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
         "DELETE /api/workspaces/{workspaceKey}/logo (server/main.go:494)"
-      ]
-    },
-    "getSharedView": {
-      "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Prepared typed selected-view reader passed its initial matrix and persistent SQLite repetition, but SW26 audit found an unresolved K/privacy gap: native SQL exact JSON tags and duplicate-key semantics differ from encoding/json's case-insensitive tagged fields and last-occurrence decoding. A sparse Team record with Private:true can be private in legacy while the SQL lowercase private predicate permits the public link; token/scope/team/project aliases have analogous selection gaps. Keep pending until canonical header normalization with writer coverage or a bounded typed header reader preserves these semantics. Adaptive selected-body admission and output spooling alone do not certify the privacy facts.",
-      "accessors": [
-        "BootstrapFor"
-      ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
-      "callers": [
-        "GET /api/shared/views/{token} (server/main.go:895)"
       ]
     },
     "listNotifications": {
@@ -970,19 +931,6 @@
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
         "PATCH /api/projects/{id}/updates/{updateId} (server/main.go:1043)"
-      ]
-    },
-    "updateSavedView": {
-      "owner": "P21",
-      "status": "unmigrated",
-      "accessors": [
-        "Bootstrap",
-        "MutateWorkspace"
-      ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
-      "callers": [
-        "PATCH /api/views/{id} (server/main.go:891)"
       ]
     },
     "updateTeam": {

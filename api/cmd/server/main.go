@@ -2788,7 +2788,7 @@ func (s *server) createSavedView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.SavedView
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "view.created", input, func(data *domain.Bootstrap) (string, error) {
+	err := s.mutateSavedViewWithAggregate(r, "view.created", "", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		createdID := idgen.New("view_")
 		created = domain.SavedView{ID: createdID, SlugID: savedViewSlugID(*input.Name, createdID), CreatedAt: now, UpdatedAt: now}
@@ -2812,7 +2812,7 @@ func (s *server) updateSavedView(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.SavedView
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("view.updated", input), id, input, func(data *domain.Bootstrap) error {
+	err := s.mutateSavedView(r, favoriteMutationEvent("view.updated", input), id, input, func(data *domain.Bootstrap) error {
 		view, err := savedViewByID(data, id)
 		if err != nil {
 			return err
@@ -2834,7 +2834,7 @@ func (s *server) updateSavedView(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteSavedView(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "view.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	err := s.mutateSavedView(r, "view.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.SavedViews, func(view domain.SavedView) bool { return view.ID == id || view.SlugID == id })
 		if index < 0 {
 			return errNotFound
@@ -2903,7 +2903,8 @@ func (s *server) getSharedView(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "workspace is required")
 		return
 	}
-	data, ok := s.store.BootstrapFor(workspace)
+	data, closeRead, ok := s.sharedViewInputs(r, workspace)
+	defer closeRead()
 	if !ok {
 		writeSharedResourceNotFound(w)
 		return

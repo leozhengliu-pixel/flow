@@ -1,0 +1,30 @@
+{
+  "source": "server/bounded_views_personal.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateSavedView": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The flag-off branch runs the original mutation. The bounded branch keeps the literal callback and requested event aggregate, with transactional view and personal preference selection.",
+      "accessors": ["MutateWorkspace"],
+      "temperature": "hot",
+      "callers": ["PATCH /api/views/{id}", "DELETE /api/views/{id}"]
+    },
+    "mutateSavedViewWithAggregate": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The flag-off branch runs the original aggregate mutation. The bounded branch appends the new view with named validation inputs and selected favorite position. The writer checks the policy and authorization headers in the write attempt.",
+      "accessors": ["MutateWorkspaceWithAggregate"],
+      "temperature": "hot",
+      "callers": ["POST /api/views", "server/bounded_views_personal.go:mutateSavedView"]
+    },
+    "sharedViewInputs": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The flag-off branch uses BootstrapFor. The bounded branch retains the first matching typed token, exact project and private team headers, and workspace identity through response encoding.",
+      "accessors": ["BootstrapFor"],
+      "temperature": "hot",
+      "callers": ["GET /api/shared/views/{token}"]
+    }
+  }
+}
