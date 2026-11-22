@@ -1240,20 +1240,26 @@ func TestColdFullWriteKeepsCurrentFacadeDecode(t *testing.T) {
 // lock; the result equals a fresh reload.
 func TestColdMetadataMutationPublishesIncrementally(t *testing.T) {
 	f, view, workspace := coldIncrementalFixture(t)
-	at := time.Date(2026, 11, 19, 13, 0, 0, 0, time.UTC)
-	for i, event := range []string{"api_key.created", "api_key.revoked"} {
+	const id = "registered-status"
+	for _, operation := range []struct {
+		consumer, event, name string
+	}{
+		{"server/settings_features.go:createProjectStatus", "project_status.created", "Registered"},
+		{"server/settings_features.go:updateProjectStatus", "project_status.updated", "Renamed"},
+	} {
+		event := operation.event
 		incremental, full, _ := ColdPublishCountsForTesting()
-		err := view.WithColdMetadataMutation(t.Context(), "server/settings_features.go:createAPIKey", workspace, event, nil, func(ctx context.Context, facade *SQLiteStore) error {
-			return facade.MutateWorkspace(ctx, workspace, event, "", nil, func(data *domain.Bootstrap) error {
-				if i == 0 {
-					data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "registered-key", Name: "Registered", Prefix: "flw_r", Scopes: []string{"read"}, TeamIDs: []string{}, CreatedAt: at})
+		err := view.WithColdMetadataMutation(t.Context(), operation.consumer, workspace, event, nil, func(ctx context.Context, facade *SQLiteStore) error {
+			return facade.MutateWorkspace(ctx, workspace, event, id, nil, func(data *domain.Bootstrap) error {
+				if event == "project_status.created" {
+					data.ProjectStatuses = append(data.ProjectStatuses, domain.ProjectStatus{ID: id, Name: operation.name, Type: "planned", Position: float64(len(data.ProjectStatuses))})
 					return nil
 				}
-				for index := range data.APIKeys {
-					if data.APIKeys[index].ID == "registered-key" {
-						data.APIKeys[index].RevokedAt = &at
-					}
+				index := slices.IndexFunc(data.ProjectStatuses, func(status domain.ProjectStatus) bool { return status.ID == id })
+				if index < 0 {
+					return errors.New("created project status missing from the next mutation")
 				}
+				data.ProjectStatuses[index].Name = operation.name
 				return nil
 			})
 		})
@@ -1264,7 +1270,7 @@ func TestColdMetadataMutationPublishesIncrementally(t *testing.T) {
 			t.Fatalf("%s: publications incremental %d, full %d (fallbacks %v)", event, afterIncremental-incremental, afterFull-full, ColdPublishFallbacksForTesting())
 		}
 		got := coldIncrementalAssertExact(t, f, view, workspace, event)
-		if !slices.ContainsFunc(got.APIKeys, func(key domain.APIKey) bool { return key.ID == "registered-key" && (i == 0 || key.RevokedAt != nil) }) {
+		if !slices.ContainsFunc(got.ProjectStatuses, func(status domain.ProjectStatus) bool { return status.ID == id && status.Name == operation.name }) {
 			t.Fatalf("%s: the installed image lacks the write", event)
 		}
 	}

@@ -12,9 +12,8 @@ import (
 )
 
 // The bounded workflow writer owns its full-record attempt and never reaches
-// the shared scoped kernel's ordinal profile, whose only production profile
-// is integration delivery. The kernel's inventory entry therefore cannot be
-// certified by the workflow differentials.
+// the shared scoped kernel. Its only ordinal profile is integration delivery.
+// The workflow differentials do not certify any of the kernel's profiles.
 func TestScaleP21SW504WorkflowWriterKernelBoundary(t *testing.T) {
 	paths, err := filepath.Glob("*.go")
 	if err != nil {
@@ -63,7 +62,13 @@ func TestScaleP21SW504WorkflowWriterKernelBoundary(t *testing.T) {
 	}
 	slices.Sort(callers["mutateWorkspaceScopedWithAggregate"])
 	if !slices.Equal(callers["mutateWorkspaceScopedWithAggregate"], []string{
+		// Saved views use the nil ordinal profile and select the target and
+		// preference rows after checking the authorization proof under the
+		// write lock. The kernel then commits a streamed scoped delta.
+		"bounded_views_personal.go:MutateSavedViewRecords",
+		// Integration delivery is the only caller that supplies an ordinal factory.
 		"scale_p21_metadata_ordinal_profile.go:mutateMetadataOrdinalProfile",
+		// The public scoped adapter supplies the declared record scope and no factory.
 		"scale_p21_scoped_access.go:MutateWorkspaceScopedWithAggregate",
 	}) {
 		t.Fatal("shared scoped kernel gained a caller; recertify its profiles", callers["mutateWorkspaceScopedWithAggregate"])
