@@ -92,7 +92,7 @@ func TestInternalErrorResponseHidesDatabaseText(t *testing.T) {
 	for name, handler := range cases {
 		t.Run(name, func(t *testing.T) {
 			logs := captureServerLogs(t)
-			chain := requestLog(apiErrorEnvelope(handler))
+			chain := requestLog(nil, apiErrorEnvelope(handler))
 			recorder := httptest.NewRecorder()
 			chain.ServeHTTP(recorder, httptest.NewRequest(http.MethodPatch, "/api/documents/doc_1", nil))
 			if recorder.Code != http.StatusInternalServerError {
@@ -152,7 +152,7 @@ func TestClientErrorMessagesUnchanged(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
-			requestLog(apiErrorEnvelope(test.handler)).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/issues", nil))
+			requestLog(nil, apiErrorEnvelope(test.handler)).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/issues", nil))
 			body := decodeErrorBody(t, recorder)
 			if recorder.Code != test.status || !strings.Contains(fmt.Sprint(body["error"]), test.message) || body["requestId"] == nil {
 				t.Fatalf("status %d body %s, want %d %q", recorder.Code, recorder.Body.String(), test.status, test.message)
@@ -376,7 +376,7 @@ func TestClientErrorResponseHidesBackendText(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
-			requestLog(apiErrorEnvelope(test.handler)).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/issues", nil))
+			requestLog(nil, apiErrorEnvelope(test.handler)).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/issues", nil))
 			raw := recorder.Body.String()
 			if recorder.Code != test.status {
 				t.Fatalf("status = %d, want %d: %s", recorder.Code, test.status, raw)
@@ -402,7 +402,7 @@ func TestClientErrorResponseHidesBackendText(t *testing.T) {
 	}
 	if body := decodeErrorBody(t, func() *httptest.ResponseRecorder {
 		recorder := httptest.NewRecorder()
-		requestLog(apiErrorEnvelope(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestLog(nil, apiErrorEnvelope(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusConflict, map[string]any{"error": "x", "code": "SAVE_FAILED", "details": "SQLSTATE 23505"})
 		}))).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/issues", nil))
 		return recorder

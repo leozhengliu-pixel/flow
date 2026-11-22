@@ -641,9 +641,10 @@ structured logging.
 | `FLOW_COLD_SLOTS` | One per GiB, from 1 to 4 | Concurrent COLD facades per replica, each with its own decoded workspace. The 3 GiB target defaults to three slots. See the [MySQL slot control](bounded-metadata-performance.md#mysql-cold-slots). |
 | `FLOW_COLD_PROJECTION_CONCURRENCY` | One per 512 MiB, from 2 to 8 | Concurrent COLD projections per replica. The 3 GiB target defaults to six slots. |
 
-Every HTTP request receives an `X-Request-ID` response header. Clients may send
-their own `X-Request-ID`; otherwise Flow generates one and includes it in the
-request log record.
+Every HTTP request receives an `X-Request-ID` response header. Flow echoes a
+client-supplied ID or returns the generated one. Request completion and issue
+query diagnostics use the generated ID in either case. Completion logs use the
+registered route pattern for method-qualified routes.
 
 This follows the deployment model used by [Plane](https://developers.plane.so/self-hosting/govern/environment-variables),
 [Outline](https://docs.getoutline.com/s/hosting/doc/docker-7pfeLP5a8t), and
@@ -670,12 +671,25 @@ client host).
 | `FLOW_DATABASE_DRIVER` | `sqlite` | SQL dialect and driver. |
 | `FLOW_DATABASE_PATH` | `data/flow.db` | SQLite file path. |
 | `FLOW_DATABASE_URL` | empty | Required for PostgreSQL and MySQL. |
-| `FLOW_DATABASE_MAX_OPEN_CONNS` | driver default | `1` for SQLite, `20` otherwise. |
-| `FLOW_DATABASE_MAX_IDLE_CONNS` | driver default | `1` for SQLite, `5` otherwise. |
-| `FLOW_DATABASE_CONN_MAX_LIFETIME` | `30m` | Go duration for pooled connections. |
+| `FLOW_DATABASE_MAX_OPEN_CONNS` | `20` (`1` for SQLite) | Maximum open connections in each API replica's main pool. |
+| `FLOW_DATABASE_MAX_IDLE_CONNS` | `5` (`1` for SQLite) | Maximum idle connections in the main pool, capped at the open limit. A negative value disables idle connections. |
+| `FLOW_DATABASE_CONN_MAX_LIFETIME` | `30m` | Maximum lifetime of a pooled connection. Set it below any shorter MySQL `wait_timeout` or database proxy idle timeout. |
 | `FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT` | `10m` | How long a starting server waits for another one that holds the startup lock before it exits with an error naming the holder. Each waiting server spends this budget on its own, and servers after the first wait for each other in turn, so raise it when many replicas start at once on a large database. |
 | `FLOW_WORKSPACE_STATE_MAX_BYTES` | `67108864` | Maximum serialized workspace state size. Mutations fail before exceeding this limit. |
 | `FLOW_DATABASE_MAX_TRANSACTION_BYTES` | `33554432` | Cumulative SQL write text and parameter bytes per transaction. Exceeding the budget rolls back the transaction, even if a caller ignores the first error. Minimum 1 MiB. This is not a measurement of physical binlog bytes. |
+
+Budget `max_connections` for the sum of the pools across replicas, a separate
+connection per replica during startup, and other database clients. Requests
+waiting for a full local pool use their context deadline. On MySQL, error 1040
+indicates the server connection limit. A refused TCP dial indicates an
+unreachable listener, and an EOF during packet reads indicates a dropped
+connection. Check database uptime and container lifecycle logs when those
+errors start together across replicas.
+
+The MySQL driver checks pooled connections for liveness on checkout by
+default. Flow answers a recognized connection failure during an issue read or
+a workspace reload before a legacy mutation with `503` and `Retry-After: 2`.
+A connection error with an uncertain commit outcome gets no `Retry-After` header.
 
 ### Database growth
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -797,9 +798,8 @@ func issueRecordsError(w http.ResponseWriter, err error) {
 	issueRecordsErrorFor(w, nil, err)
 }
 
-// issueRecordsErrorFor is issueRecordsError with the request, which the busy
-// answer logs (route, COLD scope). A retryable busy error (COLD slot, lock,
-// work budget, the handler's deadline) is 503 + Retry-After, never a 500.
+// issueRecordsErrorFor classifies retryable errors and logs the cause without
+// including the error text or request data.
 func issueRecordsErrorFor(w http.ResponseWriter, r *http.Request, err error) {
 	if err == nil || errors.Is(err, context.Canceled) {
 		return
@@ -812,10 +812,30 @@ func issueRecordsErrorFor(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusForbidden, "You don't have access to this workspace")
 		return
 	}
-	if writeRetryableBusy(w, r, err) {
+	if r == nil {
+		r = apiErrorRequest(w)
+	}
+	retryAfter := storeBusyRetryAfter(err)
+	if retryAfter == 0 {
+		retryAfter, _ = retryableBusy(err)
+	}
+	// Some mutations use this helper for post-commit projections.
+	if retryAfter == 0 && r != nil && (r.Method == http.MethodGet || r.Method == http.MethodHead) && store.IsDatabaseConnectionError(err) {
+		retryAfter = busyDeadlineRetryAfter
+	}
+	if r != nil {
+		level := slog.LevelError
+		if retryAfter > 0 {
+			level = slog.LevelWarn
+		}
+		slog.Log(r.Context(), level, "issue query failed",
+			"request_id", serverRequestIDFrom(r.Context()), "cause", requestErrorCode(err), "retry_after", retryAfter)
+	}
+	if retryAfter > 0 {
+		(&metadataReadGate{}).busy(w, retryAfter)
 		return
 	}
-	writeError(w, http.StatusInternalServerError, "Could not query issues")
+	writeError(w, http.StatusInternalServerError, internalErrorMessage)
 }
 
 func optionalID(value *string) string {

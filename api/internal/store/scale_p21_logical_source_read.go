@@ -59,7 +59,10 @@ func (c *metadataLogicalCursor) child(t reflect.Type) (metadataLogicalNode, erro
 		return metadataLogicalNode{}, err
 	}
 	cost, err := c.uint()
-	if err != nil || size < 16 || size > uint64(c.node.offset+c.node.size-start) {
+	if err != nil {
+		return metadataLogicalNode{}, err
+	}
+	if size < 16 || size > uint64(c.node.offset+c.node.size-start) {
 		return metadataLogicalNode{}, io.ErrUnexpectedEOF
 	}
 	c.offset = start + int64(size)
@@ -226,7 +229,10 @@ func (n metadataLogicalNode) materialize(ctx context.Context, depth int, wire bo
 		return v, err
 	case reflect.String:
 		length, err := c.uint()
-		if err != nil || length > uint64(n.size) {
+		if err != nil {
+			return v, err
+		}
+		if length > uint64(n.size) {
 			return v, io.ErrUnexpectedEOF
 		}
 		data := make([]byte, int(length))
@@ -244,7 +250,10 @@ func (n metadataLogicalNode) materialize(ctx context.Context, depth int, wire bo
 			var t reflect.Type
 			if n.typ.Kind() == reflect.Interface {
 				index, err := c.uint()
-				if err != nil || index >= uint64(len(n.source.types)) {
+				if err != nil {
+					return v, err
+				}
+				if index >= uint64(len(n.source.types)) {
 					return v, ErrMetadataRecordQuery
 				}
 				t = n.source.types[index]
@@ -268,7 +277,10 @@ func (n metadataLogicalNode) materialize(ctx context.Context, depth int, wire bo
 			return v, nil
 		}
 		length, err := c.uint()
-		if err != nil || length > uint64(n.cost) {
+		if err != nil {
+			return v, err
+		}
+		if length > uint64(n.cost) {
 			return v, io.ErrUnexpectedEOF
 		}
 		if n.typ.Kind() == reflect.Slice {
@@ -376,7 +388,10 @@ func (n metadataLogicalNode) Children(ctx context.Context, visit func(reflect.Va
 			var t reflect.Type
 			if n.typ.Kind() == reflect.Interface {
 				index, err := c.uint()
-				if err != nil || index >= uint64(len(n.source.types)) {
+				if err != nil {
+					return err
+				}
+				if index >= uint64(len(n.source.types)) {
 					return ErrMetadataRecordQuery
 				}
 				t = n.source.types[index]
@@ -393,7 +408,10 @@ func (n metadataLogicalNode) Children(ctx context.Context, visit func(reflect.Va
 			return nil
 		}
 		count, err := c.uint()
-		if err != nil || count > uint64(n.cost) {
+		if err != nil {
+			return err
+		}
+		if count > uint64(n.cost) {
 			return ErrMetadataRecordQuery
 		}
 		length = int(count)
@@ -548,7 +566,10 @@ func (n metadataLogicalNode) MapEntries(ctx context.Context, visit func(metadata
 		return err
 	}
 	length, err := c.uint()
-	if err != nil || length > n.cost {
+	if err != nil {
+		return err
+	}
+	if length > n.cost {
 		return ErrMetadataRecordQuery
 	}
 	for i := uint64(0); i < length; i++ {

@@ -453,7 +453,7 @@ func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey strin
 
 // loadWorkspaceStamped decodes the stored workspace metadata and reads, in
 // the same snapshot, the metadata revision the result is exact at.
-func (s *SQLiteStore) loadWorkspaceStamped(ctx context.Context, workspaceKey string) (domain.Bootstrap, copyStamp, error) {
+func (s *SQLiteStore) loadWorkspaceStamped(ctx context.Context, workspaceKey string) (_ domain.Bootstrap, _ copyStamp, err error) {
 	if s.metadataResidency != nil {
 		return domain.Bootstrap{}, copyStamp{}, fmt.Errorf("%w: full workspace load %q", ErrBoundedMetadataCoverage, workspaceKey)
 	}
@@ -462,6 +462,13 @@ func (s *SQLiteStore) loadWorkspaceStamped(ctx context.Context, workspaceKey str
 	if _, scoped := ctx.Value(metadataRecordScopeKey{}).(MetadataRecordScope); scoped {
 		ctx = context.WithValue(ctx, metadataRecordScopeKey{}, nil)
 	}
+	defer func() {
+		// database/sql may roll this snapshot back before the reader learns
+		// its context ended. A live context still gets ErrTxDone.
+		if errors.Is(err, sql.ErrTxDone) && ctx.Err() != nil {
+			err = ctx.Err()
+		}
+	}()
 	var stamp copyStamp
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {

@@ -4,6 +4,9 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"net"
+	"strconv"
+	"syscall"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -35,6 +38,83 @@ func IsDatabaseError(err error) bool {
 // ErrDatabaseWriteBusy means a database lock conflict prevented a mutation
 // from committing. Callers can retry the entire operation.
 var ErrDatabaseWriteBusy = errors.New("database write is busy")
+
+// ErrDatabaseUnavailable marks a connection failure in a pre-write read.
+// Only the caller that knows the write has not started should wrap it.
+var ErrDatabaseUnavailable = errors.New("database temporarily unavailable")
+
+func preWriteDatabaseError(err error) error {
+	if !IsDatabaseConnectionError(err) {
+		return err
+	}
+	return errors.Join(ErrDatabaseUnavailable, err)
+}
+
+// IsDatabaseConnectionError recognizes typed transport and connection-limit
+// errors. A connection failure by itself says nothing about a write's outcome.
+func IsDatabaseConnectionError(err error) bool {
+	return databaseConnectionCode(err) != ""
+}
+
+func databaseConnectionCode(err error) string {
+	var mysqlErr *mysql.MySQLError
+	var pgErr *pgconn.PgError
+	var networkErr *net.OpError
+	switch {
+	case errors.Is(err, driver.ErrBadConn):
+		return "bad_connection"
+	case errors.Is(err, mysql.ErrInvalidConn):
+		return "mysql_invalid_connection"
+	case errors.Is(err, sql.ErrConnDone):
+		return "closed_connection"
+	case errors.As(err, &networkErr) && errors.Is(networkErr, syscall.ECONNREFUSED):
+		return "connection_refused"
+	case errors.As(err, &networkErr) && (errors.Is(networkErr, syscall.ECONNRESET) || errors.Is(networkErr, syscall.EPIPE)):
+		return "connection_lost"
+	case errors.As(err, &mysqlErr) && mysqlErr.Number == 1040:
+		return "mysql_1040"
+	case errors.As(err, &pgErr) && (pgErr.Code == "53300" || pgErr.Code == "57P01"):
+		return "postgres_" + pgErr.Code
+	default:
+		return ""
+	}
+}
+
+// DatabaseErrorCode returns a diagnostic code without SQL text, parameter
+// values, hostnames or error messages.
+func DatabaseErrorCode(err error) string {
+	if code := databaseConnectionCode(err); code != "" {
+		return code
+	}
+	var mysqlErr *mysql.MySQLError
+	var pgErr *pgconn.PgError
+	var pgConnectErr *pgconn.ConnectError
+	var sqliteErr *sqlite.Error
+	switch {
+	case errors.As(err, &mysqlErr):
+		return "mysql_" + strconv.Itoa(int(mysqlErr.Number))
+	case errors.As(err, &pgErr):
+		if len(pgErr.Code) == 5 {
+			for _, c := range pgErr.Code {
+				if (c < '0' || c > '9') && (c < 'A' || c > 'Z') {
+					return "postgres_error"
+				}
+			}
+			return "postgres_" + pgErr.Code
+		}
+		return "postgres_error"
+	case errors.As(err, &pgConnectErr):
+		return "postgres_connect"
+	case errors.As(err, &sqliteErr):
+		return "sqlite_" + strconv.Itoa(sqliteErr.Code())
+	case errors.Is(err, sql.ErrTxDone):
+		return "transaction_ended"
+	case errors.Is(err, sql.ErrNoRows):
+		return "no_rows"
+	default:
+		return ""
+	}
+}
 
 // databaseLockWait matches server replies that explicitly refuse a lock,
 // excluding connection failures and client-side commit timeouts.

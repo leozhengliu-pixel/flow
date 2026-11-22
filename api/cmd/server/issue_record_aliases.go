@@ -50,6 +50,7 @@ func (s *server) issueRecordAuthorizationData(r *http.Request) (domain.Bootstrap
 		return data, nil
 	}
 	data, err := s.buildIssueRecordAuthorizationData(r)
+	noteAuthorizationBusy(r, err)
 	if err == nil {
 		cached := &issueRecordAuthorization{path: r.URL.Path, workspace: workspaceKey(r), userID: userID, data: data}
 		if _, bounded := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); bounded {

@@ -28,7 +28,7 @@ func capturePanicLogs(t *testing.T) *syncBuffer {
 // panicChain is the server's outer middleware order around a handler.
 func panicChain(handler http.Handler) http.Handler {
 	policy := newSecurityHeaderPolicy(appconfig.DefaultSecurityHeaders(), "https://flow.example.com", "")
-	return withSecurityHeaders(policy, recoverPanics(requestLog(apiErrorEnvelope(handler))))
+	return withSecurityHeaders(policy, recoverPanics(requestLog(nil, apiErrorEnvelope(handler))))
 }
 
 func TestPanicRecoveryReturnsEnvelopeWithSecurityHeaders(t *testing.T) {
