@@ -96,10 +96,6 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-	if r.URL.Query().Get("surface") == "local-store" {
-		s.localStoreManifest(w, r)
-		return
-	}
 	if r.URL.Query().Has("surface") {
 		s.scaleP19Manifest(w, r)
 		return

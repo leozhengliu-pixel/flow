@@ -32,9 +32,6 @@ async function removeServiceWorker() {
 export function registerServiceWorker() {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
   const enabled = serviceWorkerEnabled()
-  // A controlled navigation already triggers the browser's update check.
-  // Registering the same script again can overlap the next navigation.
-  if (enabled && navigator.serviceWorker.controller?.scriptURL === new URL('/sw.js', window.location.href).href) return
   // Registration waits for load so the worker never competes with the first paint.
   const run = () => {
     const task = enabled ? navigator.serviceWorker.register('/sw.js') : removeServiceWorker()

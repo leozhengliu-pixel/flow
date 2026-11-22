@@ -34,7 +34,6 @@ import { createAdvancedFilter } from '@/components/issue-explorer/advanced-filte
 
 export interface MyIssuesPageProps {
   data: BootstrapData
-  windowedList?: boolean
   initialView?: MyIssuesView
   loading?: boolean
   error?: string
@@ -56,7 +55,7 @@ export interface MyIssuesPageProps {
 
 const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',triageIntelligence:'Triage Intelligence',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template' }
 
-export function MyIssuesPage({ data, windowedList, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, renderIssuePreview, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues, onConvertIssue }: MyIssuesPageProps) {
+export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, renderIssuePreview, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues, onConvertIssue }: MyIssuesPageProps) {
   const { t } = useI18n()
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [projectedView, setProjectedView] = useState(initialView)
@@ -303,7 +302,6 @@ export function MyIssuesPage({ data, windowedList, initialView = 'assigned', loa
         onPropertyChange={changeProperty}
         onSelectIssue={controller.selectIssue}
       /> : <MyIssuesList
-        windowed={windowedList}
         emptyState={desktop && controller.view === 'assigned' && !controller.filters.length ? <MyIssuesAssignedEmpty onCreateIssue={onCreateIssue ? () => onCreateIssue() : undefined}/> : undefined}
         groups={displayedGroups.filter(group => !controller.display.hiddenGroupIds.includes(group.id) && !controller.display.hiddenGroupIds.includes(group.parentGroupId ?? ''))}
         loading={loading}

@@ -51,7 +51,6 @@ import { BacklogEmptyState } from './backlog-empty-state'
 
 export interface IssueExplorerPageProps {
   data: BootstrapData
-  windowedList?: boolean
   initialLabelId?: string
   initialStatusId?: string
   initialInsightFilters?: { teamIds?: string[]; stateIds?: string[]; assigneeIds?: string[]; labelIds?: string[] }
@@ -111,7 +110,7 @@ export interface IssueExplorerPageProps {
   insightsLabel?: string
 }
 
-export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourceHeader, scopeFilter, scopeConditions, defaultDisplayOverrides, data, windowedList, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues, onConvertIssue, detailsPanel, detailsStorageKey, emptyState, className, insightsLabel }: IssueExplorerPageProps) {
+export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourceHeader, scopeFilter, scopeConditions, defaultDisplayOverrides, data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues, onConvertIssue, detailsPanel, detailsStorageKey, emptyState, className, insightsLabel }: IssueExplorerPageProps) {
   const storageScope = scope.kind === 'team' ? `team:${scope.team.id}` : 'workspace'
   const preferencesKey = `${data.workspace.urlKey}:issue-explorer:${preferenceScope ?? storageScope}:${boardRoute ? 'board' : view}`
   const sourceView = savedView ?? duplicateFrom
@@ -699,7 +698,6 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         onContextAction={(row, action) => { void contextAction(row, action) }}
       /> : display.layout !== 'board' || (desktop && filteredEmptyState && visibleCount === 0) ? <MyIssuesList
         groups={listGroups}
-        windowed={windowedList}
         onHideGroup={groupId => changeDisplay({ ...display, hiddenGroupIds: [...new Set([...display.hiddenGroupIds, groupId])] })}
         selectedIds={selection.selectedIds}
         activeIssueId={split ? previewIssueId : undefined}

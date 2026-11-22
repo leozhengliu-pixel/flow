@@ -19,7 +19,6 @@
  */
 
 import { APPLIED_CURSOR_SCHEMA, appliedRealtimeCursorEnabled } from '@/lib/scale-p08'
-import { holdRealtimeLease, storageChannel } from './realtime-storage'
 
 export interface RealtimeMessage {
   data: string
@@ -71,7 +70,6 @@ export interface SharedRealtimeOptions {
   onAppliedCursor?(cursor: string): void
   onStatus(connected: boolean): void
   onRole?(role: 'leader' | 'follower'): void
-  localStore?: { name: string; cursor(): Promise<string | undefined>; onDisconnect(): void }
   env?: Partial<SharedRealtimeEnv>
 }
 
@@ -148,7 +146,6 @@ class SharedRealtime {
   private disposed = false
   private stream?: StreamLike
   private releaseLock?: () => void
-  private releaseLease?: () => void
   private lockAbort?: AbortController
   private reconnectTimer?: ReturnType<typeof setTimeout>
   private staleTimer?: ReturnType<typeof setInterval>
@@ -179,14 +176,14 @@ class SharedRealtime {
     this.options = options
     this.appliedCursor = options.appliedCursor ?? appliedRealtimeCursorEnabled()
     this.env = { ...defaultEnv(), ...options.env }
-    this.name = options.localStore?.name ?? realtimeChannelName(options.workspaceKey, options.userId, this.appliedCursor ? options.schema ?? APPLIED_CURSOR_SCHEMA : undefined)
+    this.name = realtimeChannelName(options.workspaceKey, options.userId, this.appliedCursor ? options.schema ?? APPLIED_CURSOR_SCHEMA : undefined)
     // Capture a caller-owned baseline once; a follower must not read a newer
     // localStorage checkpoint belonging to a faster tab when it is promoted.
     if (this.appliedCursor) this.initialSince = options.cursor?.()
   }
 
   start() {
-    this.channel = this.env.createChannel(this.name) ?? (this.options.localStore && storageChannel(this.name))
+    this.channel = this.env.createChannel(this.name)
     if (!this.channel) {
       // No way to coordinate: keep a private stream like a lone tab.
       this.becomeLeader()
@@ -194,7 +191,7 @@ class SharedRealtime {
     }
     this.channel.onmessage = event => this.onWire(event.data)
     if (this.env.locks) this.electWithLocks()
-    else this.electWithoutLocks()
+    else this.electWithHeartbeat()
     this.post({ k: 'hello', from: this.tabId })
   }
 
@@ -209,11 +206,6 @@ class SharedRealtime {
     clearTimeout(this.claimTimer)
     clearInterval(this.beatTimer)
     this.closeStream()
-    if (this.role === 'leader') {
-      this.role = 'follower'
-      this.options.onRole?.('follower')
-    }
-    this.releaseLease?.()
     this.releaseLock?.()
     this.lockAbort?.abort()
     if (this.channel) this.channel.onmessage = null
@@ -230,25 +222,15 @@ class SharedRealtime {
     const abort = new AbortController()
     this.lockAbort = abort
     const fallback = () => {
-      if (!this.disposed && !abort.signal.aborted && !this.heartbeat && !this.releaseLease) this.electWithoutLocks()
+      if (!this.disposed && !abort.signal.aborted && !this.heartbeat) this.electWithHeartbeat()
     }
     try {
       void this.env.locks!.request(this.name, { signal: abort.signal }, () => {
         if (this.disposed) return
-        return new Promise<void>(resolve => {
-          this.releaseLock = resolve
-          this.becomeLeader()
-        })
+        this.becomeLeader()
+        return new Promise<void>(resolve => { this.releaseLock = resolve })
       }).catch(fallback)
     } catch { fallback() }
-  }
-
-  private electWithoutLocks() {
-    if (!this.options.localStore) { this.electWithHeartbeat(); return }
-    this.releaseLease = holdRealtimeLease(this.name, this.tabId, owned => {
-      if (owned) this.becomeLeader()
-      else this.stepDown()
-    })
   }
 
   private electWithHeartbeat() {
@@ -284,17 +266,6 @@ class SharedRealtime {
     this.options.onStatus(false)
     this.post({ k: 'status', from: this.tabId, connected: false })
     this.retry = 0
-    if (this.options.localStore) {
-      const generation = ++this.generation
-      this.pending = []
-      void this.options.localStore.cursor().catch(() => undefined).then(cursor => {
-        if (this.disposed || this.role !== 'leader' || this.generation !== generation) return
-        this.cursor = undefined
-        this.initialSince = cursor ?? this.options.cursor?.()
-        this.connect()
-      })
-      return
-    }
     if (!this.appliedCursor) this.initialSince = this.cursor ?? this.options.cursor?.()
     if (!this.appliedCursor && this.sawStream && !this.initialSince) {
       // We followed a live stream but never saw a resumable id, so events may
@@ -308,7 +279,6 @@ class SharedRealtime {
   private stepDown() {
     if (this.role !== 'leader') return
     this.role = 'follower'
-    if (this.options.localStore) ++this.generation
     clearTimeout(this.reconnectTimer)
     this.closeStream()
     this.options.onRole?.('follower')
@@ -345,7 +315,6 @@ class SharedRealtime {
       this.closeStream()
       this.options.onStatus(false)
       this.post({ k: 'status', from: this.tabId, connected: false })
-      this.options.localStore?.onDisconnect()
       const delay = Math.min(reconnectMaxMs, reconnectBaseMs * 2 ** this.retry++)
       this.reconnectTimer = setTimeout(() => this.connect(), delay)
     }

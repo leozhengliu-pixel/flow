@@ -1,5 +1,4 @@
 import { SnapshotUnconfirmedError, snapshotWriteGate } from '@/lib/snapshot-write-gate'
-import { invalidateLocalStoreResponse } from '@/lib/local-store-db'
 const pageRealtimeClientId = crypto.randomUUID()
 
 export class ApiError<T = unknown> extends Error {
@@ -85,9 +84,9 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 /** `quiet` keeps a failed speculative call from raising the authentication-policy event. */
-export type ApiRequestInit = RequestInit & { quiet?: boolean; onResponse?: (response: Response) => void }
+export type ApiRequestInit = RequestInit & { quiet?: boolean }
 
-export function apiFetch(url: string, { quiet, onResponse, ...init }: ApiRequestInit = {}) {
+export function apiFetch(url: string, { quiet, ...init }: ApiRequestInit = {}) {
   if (import.meta.env.VITE_PAGED_ISSUES === 'true') url = url.replace(/^\/api\/issues(?=\/|\?|$)/, '/api/issue-records')
   const workspaceKey = currentWorkspaceKey()
   const headers = new Headers(init.headers)
@@ -95,13 +94,8 @@ export function apiFetch(url: string, { quiet, onResponse, ...init }: ApiRequest
   headers.set('X-Client-ID', realtimeClientId())
   // A write for a workspace shown from an unconfirmed local snapshot waits for the fresh bootstrap.
   const gate = snapshotWriteGate(init.method, url, headers.get('X-Workspace-Key'))
-  const fetchResponse = () => send(url, init, headers, quiet, workspaceKey).then(response => {
-    onResponse?.(response)
-    const clearing = !response.ok && invalidateLocalStoreResponse(url, response.status, headers.get('X-Workspace-Key') ?? '')
-    if (clearing) return clearing.then(() => response)
-    return response
-  })
-  return gate ? gate.then(fetchResponse) : fetchResponse()
+  if (gate) return gate.then(() => send(url, init, headers, quiet, workspaceKey))
+  return send(url, init, headers, quiet, workspaceKey)
 }
 
 function send(url: string, init: RequestInit, headers: Headers, quiet: boolean | undefined, workspaceKey: string) {

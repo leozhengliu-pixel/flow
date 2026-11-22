@@ -2,9 +2,31 @@ import { useI18n } from "@/i18n/i18n";
 import { chatProviderName } from "@/lib/integration-catalog";
 import type { ChatIntegrationProvider } from "@/types/chat-integrations";
 import type { BootstrapData } from "@/types/flow";
-import { chatPlatformOf, type ChatPlatform } from "./chat-platform-cache";
 
-export { chatPlatformOf, rememberChatPlatform, resetRememberedChatPlatform, type ChatPlatform } from "./chat-platform-cache";
+/** The deployment's first-class chat platform, chosen with FLOW_CHAT_PLATFORM. */
+export type ChatPlatform = NonNullable<BootstrapData["chatPlatform"]>;
+
+let rememberedPlatform: ChatPlatform | undefined;
+
+function validPlatform(value: unknown): value is ChatPlatform {
+  return value === "slack" || value === "lark" || value === "feishu";
+}
+
+/** Keeps the chat platform of the last loaded bootstrap, for surfaces rendered without workspace data. */
+export function rememberChatPlatform<T extends Pick<BootstrapData, "chatPlatform">>(data: T): T {
+  if (validPlatform(data.chatPlatform)) rememberedPlatform = data.chatPlatform;
+  return data;
+}
+
+/** Test helper: forget the remembered platform. */
+export function resetRememberedChatPlatform() {
+  rememberedPlatform = undefined;
+}
+
+export function chatPlatformOf(data?: Pick<BootstrapData, "chatPlatform"> | null): ChatPlatform {
+  if (validPlatform(data?.chatPlatform)) return data.chatPlatform;
+  return rememberedPlatform ?? "slack";
+}
 
 export interface ChatPlatformInfo {
   platform: ChatPlatform;

@@ -177,7 +177,6 @@ export const zhCN: Record<string, string> = {
   "Accept related suggestion": "接受相关建议",
   "Loading triage": "正在加载分流",
   "Could not update issue": "无法更新事项",
-  "Issue changed in another session": "事项已在另一个会话中修改",
   "Issue URL copied to clipboard": "已复制事项链接",
   "Favorite page": "收藏页面",
   "Configure triage responsibility": "配置分流职责",

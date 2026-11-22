@@ -41,8 +41,7 @@ describe('useWorkspaceRealtime', () => {
 
   it('opens one stream, syncs remote events, skips its own and presence echoes, and closes on unmount', async () => {
     const onRemoteSync = vi.fn(async () => undefined)
-    const onJournalActivity = vi.fn()
-    const { result, unmount } = renderHook(() => useWorkspaceRealtime({ workspaceKey: 'acme', viewerId: 'u1', route: '/acme', onJournalActivity, onRemoteSync }))
+    const { result, unmount } = renderHook(() => useWorkspaceRealtime({ workspaceKey: 'acme', viewerId: 'u1', route: '/acme', onRemoteSync }))
     expect(FakeEventSource.all).toHaveLength(1)
     expect(FakeEventSource.all[0].url).toBe('/api/realtime/events?workspace=acme')
     const stream = FakeEventSource.all[0]
@@ -55,7 +54,6 @@ describe('useWorkspaceRealtime', () => {
       stream.emit('evt_2', { type: 'comment.created', aggregateId: 'i1', clientId: 'someone-else' })
     })
     expect(result.current.presence).toHaveLength(2)
-    expect(onJournalActivity.mock.calls).toEqual([['u1', 'acme'], ['u1', 'acme']])
     await act(async () => { await vi.advanceTimersByTimeAsync(400) })
     expect(onRemoteSync).toHaveBeenCalledTimes(1)
     expect(onRemoteSync).toHaveBeenCalledWith(expect.objectContaining({ id: 'evt_2', type: 'comment.created' }))

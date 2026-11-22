@@ -50,7 +50,7 @@ func seedChatLifecycle(t *testing.T, repo *SQLiteStore, record domain.ChatIntegr
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = writeChatMutationReceipt(ctx, tx, record.WorkspaceKey, "flow_lifecycle_user", "lifecycle_receipt", issueMutationReceipt{issueID: "issue_lifecycle"}); err != nil {
+	if err = writeChatMutationReceipt(ctx, tx, record.WorkspaceKey, "flow_lifecycle_user", "lifecycle_receipt", "issue_lifecycle"); err != nil {
 		tx.Rollback()
 		t.Fatal(err)
 	}

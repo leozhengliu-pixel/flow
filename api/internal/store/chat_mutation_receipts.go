@@ -41,46 +41,29 @@ type chatReceiptReader interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
-func (s *SQLiteStore) addIssueMutationReceiptVersion(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `ALTER TABLE chat_mutation_receipts ADD COLUMN rebase_version BIGINT NOT NULL DEFAULT 0`)
-	if err != nil {
-		message := strings.ToLower(err.Error())
-		if strings.Contains(message, "duplicate column") || strings.Contains(message, "already exists") {
-			return nil
-		}
-	}
-	return err
-}
-
-type issueMutationReceipt struct {
-	issueID       string
-	rebaseVersion int64
-}
-
-func readChatMutationReceipt(ctx context.Context, reader chatReceiptReader, workspace, userID, key string) (issueMutationReceipt, bool, error) {
-	var receipt issueMutationReceipt
+func readChatMutationReceipt(ctx context.Context, reader chatReceiptReader, workspace, userID, key string) (string, bool, error) {
 	if !validChatKey(workspace, userID, key) {
-		return receipt, false, ErrIssueQuery
+		return "", false, ErrIssueQuery
 	}
-	err := reader.QueryRowContext(ctx, `SELECT issue_id,rebase_version FROM chat_mutation_receipts WHERE workspace_key=? AND user_id=? AND mutation_key=?`, workspace, userID, key).Scan(&receipt.issueID, &receipt.rebaseVersion)
+	var issueID string
+	err := reader.QueryRowContext(ctx, `SELECT issue_id FROM chat_mutation_receipts WHERE workspace_key=? AND user_id=? AND mutation_key=?`, workspace, userID, key).Scan(&issueID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return receipt, false, nil
+		return "", false, nil
 	}
-	return receipt, err == nil, err
+	return issueID, err == nil, err
 }
 
 // ChatMutationReceipt is consulted only after the caller reauthorizes the
 // current issue. It deliberately does not confer resource or actor access.
 func (s *SQLiteStore) ChatMutationReceipt(ctx context.Context, workspace, userID, key string) (string, bool, error) {
-	receipt, found, err := readChatMutationReceipt(ctx, s.db, workspace, userID, key)
-	return receipt.issueID, found, err
+	return readChatMutationReceipt(ctx, s.db, workspace, userID, key)
 }
 
-func writeChatMutationReceipt(ctx context.Context, tx *sqlTx, workspace, userID, key string, receipt issueMutationReceipt) error {
-	if !validChatKey(workspace, userID, key, receipt.issueID) {
+func writeChatMutationReceipt(ctx context.Context, tx *sqlTx, workspace, userID, key, issueID string) error {
+	if !validChatKey(workspace, userID, key, issueID) {
 		return ErrIssueQuery
 	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO chat_mutation_receipts(workspace_key,user_id,mutation_key,issue_id,rebase_version,created_at) VALUES(?,?,?,?,?,?)`, workspace, userID, key, receipt.issueID, receipt.rebaseVersion, time.Now().UTC().UnixMilli())
+	_, err := tx.ExecContext(ctx, `INSERT INTO chat_mutation_receipts(workspace_key,user_id,mutation_key,issue_id,created_at) VALUES(?,?,?,?,?)`, workspace, userID, key, issueID, time.Now().UTC().UnixMilli())
 	return err
 }
 

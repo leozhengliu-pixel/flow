@@ -10,7 +10,6 @@ function loadWorker(network: (url: string) => Response | Promise<Response> = () 
   const stores = new Map<string, Map<string, Response>>()
   const path = (request: string | Request) => new URL(typeof request === 'string' ? request : request.url, 'https://flow.test').pathname
   const caches = {
-    match: async (request: string | Request, options: { cacheName: string }) => stores.get(options.cacheName)?.get(path(request))?.clone(),
     open: async (name: string) => {
       if (!stores.has(name)) stores.set(name, new Map())
       const store = stores.get(name)!
@@ -36,11 +35,11 @@ function loadWorker(network: (url: string) => Response | Promise<Response> = () 
     skipWaiting: vi.fn(), clients: { claim: vi.fn() },
   }
   new Function('self', 'caches', 'fetch', readFileSync(resolve(__dirname, '../../public/sw.js'), 'utf8'))(self, caches, fetch)
-  const dispatch = async (url: string, init: { method?: string; mode?: string; headers?: HeadersInit; cache?: RequestCache } = {}) => {
+  const dispatch = async (url: string, init: { method?: string; mode?: string; headers?: HeadersInit } = {}) => {
     const respondWith = vi.fn()
     const waits: Promise<unknown>[] = []
     listeners.fetch({
-      request: { method: init.method ?? 'GET', url, mode: init.mode ?? 'cors', headers: new Headers(init.headers), cache: init.cache },
+      request: { method: init.method ?? 'GET', url, mode: init.mode ?? 'cors', headers: new Headers(init.headers) },
       respondWith,
       waitUntil: (promise: Promise<unknown>) => waits.push(promise),
     })
@@ -125,18 +124,6 @@ describe('service worker script', () => {
     const error = loadWorker(() => new Response('<html>Bad gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }))
     await error.dispatch('https://flow.test/acme', { mode: 'navigate' })
     expect(error.stores.get('flow-shell-v2')?.has('/__flow-app-shell') ?? false).toBe(false)
-  })
-
-  it('reloads from the stored shell when the network is offline', async () => {
-    let online = true
-    const worker = loadWorker(url => {
-      if (!online) throw new TypeError('Offline')
-      return network()(url)
-    })
-    await worker.dispatch('https://flow.test/acme', { mode: 'navigate' })
-    online = false
-    const response = await worker.dispatch('https://flow.test/acme', { mode: 'navigate', cache: 'reload' })
-    expect(await response?.text()).toBe(SHELL)
   })
 
   it('retires only older Flow caches on activation', async () => {

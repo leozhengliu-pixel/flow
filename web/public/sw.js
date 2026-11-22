@@ -12,7 +12,6 @@ const ASSET_CACHE = 'flow-assets-v2'
 const SHELL_CACHE = 'flow-shell-v2'
 const OWNED_CACHE = /^flow-(?:assets|shell)-/
 const SHELL_KEY = '/__flow-app-shell'
-const SHELL_ASSETS_HEADER = 'x-flow-shell-assets'
 const MAX_ENTRIES = 400
 // Vite emits name-[hash].ext; an unhashed file in /assets/ could change in place, so it is never cached.
 const HASHED = /-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/
@@ -60,11 +59,12 @@ function isShellResponse(response) {
 /** The stored shell, only while every hashed file it references is stored with it. */
 async function cachedShell() {
   const cache = await caches.open(SHELL_CACHE)
-  const [shell, keys] = await Promise.all([cache.match(SHELL_KEY), cache.keys()])
+  const shell = await cache.match(SHELL_KEY)
   if (!shell) return undefined
-  const assets = shell.headers.get(SHELL_ASSETS_HEADER)?.split(' ') ?? shellAssets(await shell.clone().text())
-  const files = new Set(keys.map(request => request.url))
-  if (assets.length && assets.every(path => files.has(new URL(path, self.location.origin).href))) return shell
+  const assets = shellAssets(await shell.clone().text())
+  if (!assets.length) return undefined
+  for (const path of assets) if (!await cache.match(path)) return undefined
+  return shell
 }
 
 let installing = Promise.resolve()
@@ -78,12 +78,10 @@ function installShell(response) {
     if (!assets.length) return
     const shellCache = await caches.open(SHELL_CACHE)
     const assetCache = await caches.open(ASSET_CACHE)
-    const cached = new Set((await shellCache.keys()).map(request => request.url))
     const headers = new Headers(response.headers)
     for (const name of BODY_HEADERS) headers.delete(name)
-    headers.set(SHELL_ASSETS_HEADER, assets.join(' '))
     for (const path of assets) {
-      if (cached.has(new URL(path, self.location.origin).href)) continue
+      if (await shellCache.match(path)) continue
       let file = await assetCache.match(path)
       if (!file) {
         file = await fetch(path, { credentials: 'same-origin' })
@@ -94,8 +92,7 @@ function installShell(response) {
     }
     // The same page as stored (its files are all there now): nothing to replace.
     const previous = await shellCache.match(SHELL_KEY)
-    if (previous && previous.headers.get(SHELL_ASSETS_HEADER) === headers.get(SHELL_ASSETS_HEADER) &&
-        await previous.text() === html && previous.headers.get('content-security-policy') === headers.get('content-security-policy')) return
+    if (previous && await previous.text() === html && previous.headers.get('content-security-policy') === headers.get('content-security-policy')) return
     await shellCache.put(SHELL_KEY, new Response(html, { status: 200, statusText: 'OK', headers }))
     const keep = new Set([SHELL_KEY, ...assets])
     for (const request of await shellCache.keys()) {
@@ -117,26 +114,6 @@ async function revalidateShell(url) {
 }
 
 async function navigate(event) {
-  if (event.request.cache === 'reload' || event.request.cache === 'no-cache') {
-    // Start the requested network reload while checking the offline shell.
-    // Either response can take the fast path without waiting for the other.
-    const network = fetch(event.request)
-    const cached = cachedShell()
-    try {
-      return await Promise.any([
-        network.then(response => {
-          if (!isShellResponse(response)) throw new Error('No app shell from the server')
-          event.waitUntil(installShell(response.clone()))
-          return response
-        }),
-        cached.then(shell => {
-          if (!shell) throw new Error('No stored app shell')
-          event.waitUntil(network.catch(() => undefined))
-          return shell
-        }),
-      ])
-    } catch { return network }
-  }
   const shell = await cachedShell().catch(() => undefined)
   if (shell) {
     event.waitUntil(revalidateShell(event.request.url))
@@ -149,18 +126,15 @@ async function navigate(event) {
 
 async function asset(event) {
   const { request } = event
-  const shellHit = await caches.match(request, { cacheName: SHELL_CACHE })
+  const shellHit = await (await caches.open(SHELL_CACHE)).match(request)
   if (shellHit) return shellHit
-  const hit = await caches.match(request, { cacheName: ASSET_CACHE })
+  const cache = await caches.open(ASSET_CACHE)
+  const hit = await cache.match(request)
   if (hit) return hit
   const response = await fetch(request)
   // Only a complete 200 is stored: a 404 for a stale chunk must keep failing visibly, never be replayed.
   if (response.status === 200 && response.type === 'basic') {
-    const copy = response.clone()
-    event.waitUntil(caches.open(ASSET_CACHE).then(async cache => {
-      await cache.put(request, copy)
-      await trim(cache)
-    }))
+    event.waitUntil(cache.put(request, response.clone()).then(() => trim(cache)))
   }
   return response
 }

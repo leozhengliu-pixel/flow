@@ -1,6 +1,6 @@
 import { registerSessionCacheClearer } from '@/lib/session-cache-registry'
 import { FlowTooltip, TooltipShortcut } from '@/components/ui/tooltip'
-import { memo, useContext, useEffect, useId, useInsertionEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { memo, useContext, useEffect, useInsertionEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { useI18n } from '@/i18n/i18n'
 import { Virtuoso, type Components } from 'react-virtuoso'
 import * as ContextMenu from '@radix-ui/react-context-menu'
@@ -206,7 +206,6 @@ export interface MyIssuesGroupData { id: string; label: string; /** The label is
 
 export interface MyIssuesListProps {
   groups: MyIssuesGroupData[]
-  windowed?: boolean
   loading?: boolean
   error?: string
   selectedIds?: ReadonlySet<string>
@@ -248,7 +247,7 @@ function MyIssuesVirtualFooter({ context }: { context: MyIssuesListContext }) {
   return context.loadingMore ? <LoadingListFooter label="Loading issues"/> : null
 }
 
-export function MyIssuesList({ groups, windowed = false, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onHideGroup, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState, hideGroupHeaders = false }: MyIssuesListProps) {
+export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onHideGroup, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState, hideGroupHeaders = false }: MyIssuesListProps) {
   const rowActions = useIssueRowActions()
   useFlowRowShortcuts(['⌘ ⇧ M'], Boolean(rowActions && rowActions.data.viewerRole !== 'guest'))
   const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap((group, index) => {
@@ -263,11 +262,7 @@ export function MyIssuesList({ groups, windowed = false, loading = false, error,
   useSelectHoveredRowWithX(entries, selectedIds, onSelectIssue)
   const estimateSettingsFor = useTeamEstimateSettings()
   const desktopList = useDesktopLayout()
-  const listId = useId()
-  const virtual = entries.length > (windowed ? 24 : VIRTUALIZATION_THRESHOLD)
-  const identifierTarget = windowed ? `${listId}-${virtual ? 'virtual' : 'static'}` : undefined
-  const identifiers = useMemo(() => groups.flatMap(group => group.issues.map(issue => issue.identifier)), [groups])
-  const identifierColumn = useIdentifierColumnWidth(identifiers, identifierTarget)
+  const identifierColumn = useIdentifierColumnWidth(groups.flatMap(group => group.issues.map(issue => issue.identifier)))
   const listStyle = { '--issue-identifier-width': identifierColumn.width === undefined ? 'max-content' : `${identifierColumn.width}px` } as CSSProperties
   const groupEstimate = (group: MyIssuesGroupData) => displayProperties.has('estimate') ? sumEstimatePoints(group.issues, estimateSettingsFor) : undefined
   const groupMenuActions = (group: MyIssuesGroupData): IssueGroupMenuActions => ({
@@ -283,8 +278,7 @@ export function MyIssuesList({ groups, windowed = false, loading = false, error,
     : entry.kind === 'group'
     ? <div style={{ paddingBottom: (entry.collapsed ? desktopList : !entry.group.issues.length) ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(entry.group)}/></div>
     : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} active={activeIssueId === entry.issue.id} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
-  if (virtual) return <>{identifierColumn.probe}<Virtuoso
-    id={identifierTarget}
+  if (entries.length > VIRTUALIZATION_THRESHOLD) return <>{identifierColumn.probe}<Virtuoso
     className={styles.virtualList}
     role="list"
     aria-label="Issues"
@@ -292,13 +286,12 @@ export function MyIssuesList({ groups, windowed = false, loading = false, error,
     computeItemKey={(_index, entry) => entry.key}
     components={MY_ISSUES_VIRTUAL_COMPONENTS}
     context={{ loadingMore }}
-    initialItemCount={windowed ? 6 : undefined}
-    increaseViewportBy={{ top: 176, bottom: windowed ? 176 : 440 }}
+    increaseViewportBy={{ top: 176, bottom: 440 }}
     itemContent={(_index, entry) => renderEntry(entry)}
     endReached={() => onEndReached?.()}
-    style={windowed ? undefined : listStyle}
+    style={listStyle}
   /></>
-  return <div id={identifierTarget} className={styles.list} role="list" aria-label="Issues" style={windowed ? undefined : listStyle}>
+  return <div className={styles.list} role="list" aria-label="Issues" style={listStyle}>
     {identifierColumn.probe}
     {groups.map((group, index) => {
       const collapsed = collapsedGroupIds.has(group.id)

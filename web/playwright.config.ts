@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
   // The security specs start their own servers and run from playwright.security.config.ts.
-  testIgnore: ['**/security/**', '**/local-store/**'],
+  testIgnore: '**/security/**',
   timeout: 30_000,
   fullyParallel: false,
   workers: 1,
@@ -18,10 +18,10 @@ export default defineConfig({
   projects: [
     // Phone specs select their own viewports/touch settings, including their
     // desktop-width regressions. Running them in both projects repeats them.
-    { name: 'chromium', testIgnore: ['**/security/**', '**/local-store/**', '**/mobile-*.spec.ts'], use: { ...devices['Desktop Chrome'], ...(process.env.CI ? {} : { channel: 'chrome' }) } },
+    { name: 'chromium', testIgnore: ['**/security/**', '**/mobile-*.spec.ts'], use: { ...devices['Desktop Chrome'], ...(process.env.CI ? {} : { channel: 'chrome' }) } },
     // These files already skip phones (or explicitly force desktop settings).
     // Exclude them before sharding so skipped tests do not skew shard sizes.
-    { name: 'mobile-chromium', testIgnore: ['**/security/**', '**/local-store/**', '**/desktop-*.spec.ts', '**/keyboard-shortcuts.spec.ts', '**/loops-output-contract.spec.ts'], use: { ...devices['Pixel 7'], ...(process.env.CI ? {} : { channel: 'chrome' }) } },
+    { name: 'mobile-chromium', testIgnore: ['**/security/**', '**/desktop-*.spec.ts', '**/keyboard-shortcuts.spec.ts', '**/loops-output-contract.spec.ts'], use: { ...devices['Pixel 7'], ...(process.env.CI ? {} : { channel: 'chrome' }) } },
   ],
   webServer: [
     {
