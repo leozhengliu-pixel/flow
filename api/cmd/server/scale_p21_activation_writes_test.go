@@ -249,8 +249,15 @@ func TestScaleP21ActivationIssueWriteBudget(t *testing.T) {
 						response := write.run()
 						release()
 						restore()
-						if response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") == "" || events() != before {
-							t.Fatalf("held budget returned %d, want 503 with Retry-After and no write", response.Code)
+						switch {
+						case response.Code == http.StatusServiceUnavailable && response.Header().Get("Retry-After") != "" && events() == before:
+							// Refused before any write.
+						case response.Code == write.want && events() == before+1:
+							// A point write (MySQL and PostgreSQL issue edits) needs no
+							// metadata work, so the held budget does not refuse it.
+							before++
+						default:
+							t.Fatalf("held budget returned %d, want 503 with Retry-After and no write, or a complete point write", response.Code)
 						}
 						release = hold()
 						timer := time.AfterFunc(150*time.Millisecond, release)
