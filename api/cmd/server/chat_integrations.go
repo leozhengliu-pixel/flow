@@ -66,9 +66,6 @@ func chatBaseURL(provider string) string {
 func chatCredentialID(record domain.ChatIntegrationRecord) string {
 	return store.ChatCredentialID(record.ConnectionID)
 }
-func (s *server) chatIntegrationForProvider(ctx context.Context, workspace, provider string) (domain.ChatIntegrationRecord, error) {
-	return s.store.ChatIntegration(ctx, workspace, provider)
-}
 func (s *server) chatCredentials(ctx context.Context, record domain.ChatIntegrationRecord) (chatCredentials, error) {
 	var credential chatCredentials
 	raw, err := s.store.ReadConnectorSecret(ctx, chatCredentialID(record), false)

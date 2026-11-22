@@ -34,11 +34,6 @@ func agentReplyNotificationFromContext(ctx context.Context) (AgentReplyNotificat
 	return reply, ok && reply.Resource != "" && (reply.Kind == "issue" || reply.Kind == "document" || reply.Kind == "project")
 }
 
-func agentReplyNotificationMutation(ctx context.Context) bool {
-	_, ok := agentReplyNotificationFromContext(ctx)
-	return ok
-}
-
 // agentReplyAudience is the declared audience plus the thread participants of
 // the anchor, read from the callback's own comment and subscription inputs.
 func agentReplyAudience(ctx context.Context, inputs *issueHotInputs, reply AgentReplyNotification, comments []domain.Comment, subscriptions []domain.ThreadSubscription) (map[string]bool, error) {

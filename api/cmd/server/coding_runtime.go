@@ -216,11 +216,6 @@ func (s *server) registerCodingRoutes(mux *http.ServeMux) {
 	s.registerCodingEgressRoutes(mux)
 }
 
-// codingNotImplemented answers a route whose track has not landed yet.
-func codingNotImplemented(w http.ResponseWriter, _ *http.Request) {
-	writeError(w, http.StatusNotImplemented, "Coding sessions: not implemented yet")
-}
-
 // llmSpendChecker is the spend guard the LLM proxy checks per request
 // (llmproxy.GuardedMeter caches decisions for 30s). Over-limit errors are
 // *coding.QuotaError, which match llmproxy.ErrSpendLimit and

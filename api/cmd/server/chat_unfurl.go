@@ -316,10 +316,6 @@ func chatPlainText(text string) map[string]any {
 	return map[string]any{"tag": "plain_text", "content": chatTruncateText(text, 2048)}
 }
 
-func chatUserName(user *domain.User, empty string) string {
-	return firstNonEmpty(chatPersonLabel(user, nil), empty)
-}
-
 func chatTeamNames(data domain.Bootstrap, ids []string) string {
 	names := []string{}
 	for _, id := range ids {

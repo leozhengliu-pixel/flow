@@ -87,7 +87,7 @@
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
-        "POST /api/integrations/{provider}/chat/bindings (server/chat_integrations.go:261)"
+        "POST /api/integrations/{provider}/chat/bindings (server/chat_integrations.go:258)"
       ]
     }
   }

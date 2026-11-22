@@ -236,15 +236,6 @@ func TestScaleP21SW275AuthTestFixtureCallset(t *testing.T) {
 	}
 }
 
-func slicesContains(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
 // scaleP21SW275References lists file:function for every non-test selector or
 // identifier naming one of names (calls and function values alike), skipping
 // the declarations themselves.

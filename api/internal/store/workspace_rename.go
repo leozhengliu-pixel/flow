@@ -44,13 +44,8 @@ import (
 // started before the rename) can write rows under it afterwards. Every rename
 // is recorded in workspace_key_renames, and the storage maintenance pass moves
 // rows found under a recorded previous key to the current one
-// (AdoptRenamedWorkspaceRows) for workspaceKeyAdoptWindow. Data migration 1040
-// does the same for renames made before this existed, finding previous keys in
-// the domain events.
-
-// workspaceKeyAdoptWindow is how long after a rename the maintenance pass
-// looks for rows written under the previous key.
-const workspaceKeyAdoptWindow = 7 * 24 * time.Hour
+// (AdoptRenamedWorkspaceRows) during its adoption window. Data migration 1040
+// handles older renames using previous keys from the domain events.
 
 // workspaceRenameSkipped lists tables with a workspace_key column that the
 // generic rename does not move, and why.

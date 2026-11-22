@@ -505,11 +505,6 @@ func (rec *loopRunRecorder) parts() (*[]domain.LoopRunStep, *[]domain.LoopRunToo
 	return &rec.run.Steps, &rec.run.ToolCalls, &rec.run.Output
 }
 
-func (rec *loopRunRecorder) output() string {
-	_, _, output := rec.parts()
-	return *output
-}
-
 func (rec *loopRunRecorder) toolCount() int {
 	_, calls, _ := rec.parts()
 	return len(*calls)
