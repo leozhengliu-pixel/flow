@@ -421,45 +421,13 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	if boundedScratch != nil {
 		return s.searchIssueCandidateRows(ctx, q.Workspace, prefix, inner, len(prefixArgs), params, outer, orderArgs, visit)
 	}
+	from := ` FROM (` + inner + `) candidates JOIN issue_records output ON output.id=candidates.id AND output.workspace_key=?` + outer
 	readDone := startSearchMetadataPhase(ctx, "issue_rows")
-	rows, err := s.db.QueryContext(ctx, prefix+`SELECT output.list_data,output.data FROM (`+inner+`) candidates JOIN issue_records output ON output.id=candidates.id AND output.workspace_key=?`+outer, append(params, orderArgs...)...)
+	items, err := s.readIssueSearchProjections(ctx, prefix, from, append(params, orderArgs...), s.dialect == "mysql" && len(terms) > 0)
+	readDone()
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	items := []domain.Issue{}
-	seen := map[string]bool{}
-	for rows.Next() {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		var listRaw, dataRaw []byte
-		if err := rows.Scan(&listRaw, &dataRaw); err != nil {
-			return err
-		}
-		raw := listRaw
-		if !json.Valid(raw) {
-			raw = dataRaw
-		}
-		if !json.Valid(raw) {
-			continue
-		}
-		var issue domain.Issue
-		if err := json.Unmarshal(raw, &issue); err != nil {
-			continue
-		}
-		normalizeIssueRecord(&issue)
-		if issue.ID == "" || seen[issue.ID] {
-			continue
-		}
-		seen[issue.ID] = true
-		items = append(items, issueListProjection(issue))
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	rows.Close()
-	readDone()
 	resolveDone := startSearchMetadataPhase(ctx, "issue_refs")
 	err = s.resolveIssueReferences(ctx, q.Workspace, items)
 	resolveDone()
@@ -472,6 +440,55 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 		}
 	}
 	return nil
+}
+
+func (s *SQLiteStore) readIssueSearchProjections(ctx context.Context, prefix, from string, args []any, listOnly bool) ([]domain.Issue, error) {
+	body := "output.data"
+	if listOnly {
+		body = "NULL"
+	}
+	rows, err := s.db.QueryContext(ctx, prefix+`SELECT output.list_data,`+body+from, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.Issue{}
+	seen := map[string]bool{}
+	for rows.Next() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		var listRaw, dataRaw []byte
+		if err := rows.Scan(&listRaw, &dataRaw); err != nil {
+			return nil, err
+		}
+		raw := listRaw
+		if !json.Valid(raw) {
+			if listOnly {
+				if err := rows.Close(); err != nil {
+					return nil, err
+				}
+				// Recheck visibility and order for the whole page so fallback
+				// rows and list projections come from one SQL snapshot.
+				return s.readIssueSearchProjections(ctx, prefix, from, args, false)
+			}
+			raw = dataRaw
+			if !json.Valid(raw) {
+				continue
+			}
+		}
+		var issue domain.Issue
+		if err := json.Unmarshal(raw, &issue); err != nil {
+			continue
+		}
+		normalizeIssueRecord(&issue)
+		if issue.ID == "" || seen[issue.ID] {
+			continue
+		}
+		seen[issue.ID] = true
+		items = append(items, issueListProjection(issue))
+	}
+	return items, rows.Err()
 }
 
 // SearchIssueIDs returns the ids of visible issues whose identifier, title or

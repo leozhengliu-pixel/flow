@@ -130,9 +130,18 @@ func TestScaleP21ApplicationAccessNativeAndOutputOwnership(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		read, err := view.BeginApplicationAccessRead(t.Context(), lookup, "full")
+		installationReads := 0
+		readCtx := WithSQLStatementObserver(t.Context(), func(query string) {
+			if strings.Contains(query, "FROM application_installations WHERE user_id=?") {
+				installationReads++
+			}
+		})
+		read, err := view.BeginApplicationAccessRead(readCtx, lookup, "full")
 		if err != nil || !reflect.DeepEqual(read.Installation, want) || !reflect.DeepEqual(read.User, want.User()) {
 			t.Fatalf("installed native application differs reload=%t: error=%v", reload, err)
+		}
+		if installationReads != 1 {
+			t.Fatalf("small installation used %d statements, want 1", installationReads)
 		}
 		if view.metadataResidency.work.used == 0 || view.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("application output lacks independent ownership or decoded full metadata")

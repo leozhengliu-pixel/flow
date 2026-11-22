@@ -403,6 +403,8 @@ var fileSchema = map[string]*field{
 			"lockWait":       envDuration("FLOW_REDIS_LOCK_WAIT"),
 			"cache": section(map[string]*field{
 				"enabled":       envBool("FLOW_REDIS_CACHE"),
+				"viewer":        envBool("FLOW_REDIS_CACHE_VIEWER"),
+				"syncPage":      envBool("FLOW_REDIS_CACHE_SYNC_PAGE"),
 				"ttl":           envDuration("FLOW_REDIS_CACHE_TTL"),
 				"timeout":       envDuration("FLOW_REDIS_CACHE_TIMEOUT"),
 				"maxEntryBytes": envInt("FLOW_REDIS_CACHE_MAX_ENTRY_BYTES", 1024, 64<<20),

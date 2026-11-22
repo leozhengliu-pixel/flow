@@ -127,9 +127,18 @@ the SQL authority. Old fields expire with their shard. Concurrent lookups
 for one key share one flight per replica. A waiter can compute locally
 when the leader's request ends or its result cannot be shared.
 
+Each replica waits until it has seen three searches for the same workspace,
+principal, credential and normalized terms within 15 seconds before reading
+the SQL version stamp or looking in Redis. It keeps 1,024 hashed observations
+with fixed storage. The Redis lookup still uses the full versioned key above.
+The load rig counts searches that bypass this lookup as
+`redisCacheSearchBypasses`.
+
 | Setting | Default | Behavior |
 | --- | --- | --- |
-| `FLOW_REDIS_CACHE` | `on` | Enables the result tier when Redis coordination is configured |
+| `FLOW_REDIS_CACHE` | `off` | Set to `on` to enable the result tier when Redis coordination is configured |
+| `FLOW_REDIS_CACHE_VIEWER` | `false` | Set to `true` to cache viewer memberships |
+| `FLOW_REDIS_CACHE_SYNC_PAGE` | `false` | Set to `true` to cache eligible projected sync pages |
 | `FLOW_REDIS_CACHE_TTL` | `5m` | Starts when a shard first fills. Later admissions keep the original expiration |
 | `FLOW_REDIS_CACHE_TIMEOUT` | `25ms` | Deadline per Redis operation on a separate connection pool |
 | `FLOW_REDIS_CACHE_MAX_ENTRY_BYTES` | `1048576` | Caps encoded entries. Values above 2 KiB use deflate and decoded values are capped at 16 MiB |
@@ -147,6 +156,12 @@ locally. Three consecutive Redis operation failures skip the result cache
 for two seconds. A deployment without Redis or with the result tier disabled
 uses the ordinary read paths. Traditional Redis coordination has its own
 availability and eviction requirements.
+
+Enable the result tier for deployments with measurable reuse of stable
+metadata searches. The mixed workload mostly bypassed or missed the tier.
+Viewer memberships and sync pages each require an additional opt-in.
+Focused viewer and sync tests reached the client's pacing limit with live
+reads, and the default mix rarely reuses an eligible sync page.
 
 ## Verification
 
@@ -178,6 +193,10 @@ plus misses, after warmup. Redis memory is `used_memory` at the end of each
 run, and replica RSS is the sampled peak during the measured window.
 
 ### MySQL mixed workload
+
+These tables describe the earlier tier with all three artifacts enabled.
+See [Load loop](bounded-metadata-performance.md#load-loop) for the longer runs
+and the revised defaults.
 
 The 30-second runs used 10 VUs with 300 ms think time and five realtime
 streams. Each cell reports req/s and p50/p95/p99 in ms. Legacy runs used

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -292,49 +294,99 @@ func TestSyncChangesReprojectsAPageRacedByAWrite(t *testing.T) {
 		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 			t.Fatal(err)
 		}
+		writeIssue := func() {
+			t.Helper()
+			authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "Race write", "teamId": f.public}, workspace, http.StatusCreated)
+		}
+		const requestedLimit = 100
 		for _, bounded := range []bool{false, true} {
 			target := repo
 			if bounded {
 				target = f.probe
 			}
-			read := func(during func(call int)) (int, int, string) {
+			read := func(cursor string, during func(call, transactions int)) (int, []int, string) {
 				t.Helper()
-				calls := 0
-				journal := scaleP12JournalFunc(func(ctx context.Context, workspace, after string, limit, maxBytes int) (store.CommittedPage, error) {
-					calls++
-					page, err := target.ReadCommittedChanges(ctx, workspace, after, limit, maxBytes)
-					during(calls)
+				var limits []int
+				journal := scaleP12JournalFunc(func(ctx context.Context, id, after string, limit, maxBytes int) (store.CommittedPage, error) {
+					if id != workspaceID || after != cursor || maxBytes != syncV2DeltaBytes {
+						t.Fatalf("journal scope changed on retry: workspace %q, after %q, maxBytes %d", id, after, maxBytes)
+					}
+					limits = append(limits, limit)
+					page, err := target.ReadCommittedChanges(ctx, id, after, limit, maxBytes)
+					if err == nil && during != nil {
+						during(len(limits), len(page.Transactions))
+					}
 					return page, err
 				})
 				r := f.literalRequest(f.data.Viewer, nil, nil)
 				r.Method = http.MethodGet
 				r.URL.Path = "/api/sync/changes"
-				r.URL.RawQuery = "after=" + start
+				r.URL.RawQuery = "after=" + cursor + "&limit=" + strconv.Itoa(requestedLimit)
 				w := httptest.NewRecorder()
 				(&server{store: target, realtime: newRealtimeHub()}).syncChangesWithJournal(w, r, journal)
-				return w.Code, calls, w.Body.String()
+				return w.Code, limits, w.Body.String()
 			}
 			// An issue write during the first projection only.
-			code, calls, body := read(func(call int) {
+			code, limits, body := read(start, func(call, _ int) {
 				if call == 1 {
-					authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "Race write", "teamId": f.public}, workspace, http.StatusCreated)
+					writeIssue()
 				}
 			})
-			if code != http.StatusOK || calls != 2 || !strings.Contains(body, "Race project renamed") {
-				t.Fatalf("bounded=%v: raced page was not projected again: %d after %d reads %s", bounded, code, calls, body)
+			if code != http.StatusOK || !slices.Equal(limits, []int{requestedLimit, requestedLimit}) || !strings.Contains(body, "Race project renamed") {
+				t.Fatalf("bounded=%v: raced page was not projected again: %d after limits %v %s", bounded, code, limits, body)
 			}
-			if _, _, again := read(func(int) {}); again != body {
+			if _, _, again := read(start, nil); again != body {
 				t.Fatalf("bounded=%v: the projected-again page differs from a later read:\n%s\n%s", bounded, body, again)
 			}
-			// A write during every projection: the retries are bounded.
-			code, calls, _ = read(func(int) {
-				authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "Race write", "teamId": f.public}, workspace, http.StatusCreated)
+			// A large page loses its proof on each full-size attempt. Read one
+			// transaction, then resume from its actual cursor and compare with a
+			// quiet full read to detect skipped, duplicated, or split changes.
+			code, limits, body = read(start, func(_, transactions int) {
+				if transactions > 1 {
+					writeIssue()
+				}
 			})
-			if code != http.StatusServiceUnavailable || calls != syncChangesAttempts {
-				t.Fatalf("bounded=%v: unbounded or missing retries: %d after %d reads", bounded, code, calls)
+			if code != http.StatusOK || !slices.Equal(limits, []int{requestedLimit, requestedLimit, 1}) {
+				t.Fatalf("bounded=%v: short retry: %d after limits %v %s", bounded, code, limits, body)
+			}
+			var prefix, suffix syncV2ChangesResponse
+			if err := json.Unmarshal([]byte(body), &prefix); err != nil {
+				t.Fatal(err)
+			}
+			if prefix.ResyncRequired || !prefix.HasMore || len(prefix.Transactions) != 1 || prefix.Next != prefix.Transactions[0].Seq || prefix.Next == start || prefix.Next == prefix.Head {
+				t.Fatalf("bounded=%v: short retry returned the wrong cursor or transaction: %s", bounded, body)
+			}
+			code, _, body = read(prefix.Next, nil)
+			if err := json.Unmarshal([]byte(body), &suffix); err != nil {
+				t.Fatal(err)
+			}
+			if code != http.StatusOK || suffix.ResyncRequired || suffix.HasMore || len(suffix.Transactions) == 0 || suffix.Head != prefix.Head || suffix.AuthzEpoch != prefix.AuthzEpoch {
+				t.Fatalf("bounded=%v: wrong continuation: %d %s", bounded, code, body)
+			}
+			suffix.Transactions = append(prefix.Transactions, suffix.Transactions...)
+			combined, err := json.Marshal(suffix)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if code, _, full := read(start, nil); code != http.StatusOK || full != string(combined) {
+				t.Fatalf("bounded=%v: paged retry differs from a quiet full read:\n%s\n%s", bounded, combined, full)
+			}
+			const futureCursor = "9007199254740993"
+			code, limits, body = read(futureCursor, nil)
+			var reset syncV2ChangesResponse
+			if err := json.Unmarshal([]byte(body), &reset); err != nil {
+				t.Fatal(err)
+			}
+			if code != http.StatusOK || len(limits) != 1 || !reset.ResyncRequired || reset.Next != futureCursor || reset.Head != prefix.Head || reset.AuthzEpoch != prefix.AuthzEpoch || reset.HasMore || len(reset.Transactions) != 0 {
+				t.Fatalf("bounded=%v: invalid resync response: %d after limits %v %s", bounded, code, limits, body)
+			}
+			// A write during every projection: the retries are bounded.
+			code, limits, body = read(start, func(int, int) { writeIssue() })
+			if code != http.StatusServiceUnavailable || len(limits) != syncChangesAttempts || strings.Contains(body, "transactions") {
+				t.Fatalf("bounded=%v: unbounded retries or partial response: %d after limits %v %s", bounded, code, limits, body)
 			}
 			// An authorization change (team membership) is not retried.
-			code, calls, _ = read(func(call int) {
+			code, limits, body = read(start, func(call, _ int) {
 				if call == 1 {
 					if err := repo.SetTeamMembership(t.Context(), workspaceID, f.public, f.principals[2].user.ID, "member", false); err != nil {
 						t.Fatal(err)
@@ -344,8 +396,8 @@ func TestSyncChangesReprojectsAPageRacedByAWrite(t *testing.T) {
 					}
 				}
 			})
-			if code != http.StatusServiceUnavailable || calls != 1 {
-				t.Fatalf("bounded=%v: an authorization change was retried: %d after %d reads", bounded, code, calls)
+			if code != http.StatusServiceUnavailable || len(limits) != 1 || strings.Contains(body, "transactions") {
+				t.Fatalf("bounded=%v: an authorization change was retried or delivered: %d after limits %v %s", bounded, code, limits, body)
 			}
 			if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 				t.Fatal(err)

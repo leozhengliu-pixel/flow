@@ -187,17 +187,25 @@ func TestScaleP21HotMemberDirectoryMembershipOverlay(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer view.releaseMetadataLogicalSources()
-	for _, malformed := range []bool{false, true, false} {
-		raw := valid
-		if malformed {
-			raw = []byte(`{"name":"unrelated broken app","scopes":[7]}`)
-		}
-		if _, err := f.db.ExecContext(t.Context(), `UPDATE application_installations SET data=? WHERE id=?`, raw, installationID); err != nil {
+	small, err := json.Marshal(domain.ApplicationInstallation{UserID: appID, ClientID: clientID, Name: "Small installation", Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fixture := range []struct {
+		raw       []byte
+		malformed bool
+	}{
+		{valid, false},
+		{small, false},
+		{[]byte(`{"name":"unrelated broken app","scopes":[7]}`), true},
+		{valid, false},
+	} {
+		if _, err := f.db.ExecContext(t.Context(), `UPDATE application_installations SET data=? WHERE id=?`, fixture.raw, installationID); err != nil {
 			t.Fatal(err)
 		}
 		data, _ := f.WorkspaceMetadataFields(workspace, "users", "teams")
 		members, listErr := f.ListMembers(t.Context(), data.Workspace.ID)
-		if malformed != (listErr != nil) {
+		if fixture.malformed != (listErr != nil) {
 			t.Fatal("fixture lost all-or-none member error", listErr)
 		}
 		users, teams := scaleP21MemberDirectoryExpected(data, members)
@@ -205,18 +213,26 @@ func TestScaleP21HotMemberDirectoryMembershipOverlay(t *testing.T) {
 		readCtx := WithSQLStatementObserver(t.Context(), func(query string) { queries = append(queries, query) })
 		read, found, err := view.BeginMemberDirectoryRead(readCtx, workspace, true)
 		if err != nil || !found || !reflect.DeepEqual(users, read.Users) || !reflect.DeepEqual(teams, read.Teams) {
-			t.Fatalf("membership overlay changed malformed=%t err=%v got=%v want=%v", malformed, err, read.Users, users)
+			t.Fatalf("membership overlay changed malformed=%t err=%v got=%v want=%v", fixture.malformed, err, read.Users, users)
 		}
-		if !malformed && read.Users[appID].Name != "global final" {
+		if !fixture.malformed && read.Users[appID].Name != "global final" {
 			t.Fatal("installation home narrowed global OAuth name precedence")
 		}
-		if malformed && read.Users[f.data.Viewer.ID].DisplayName != "installed fallback" {
+		if fixture.malformed && read.Users[f.data.Viewer.ID].DisplayName != "installed fallback" {
 			t.Fatal("unrelated invalid app allowed partial member overlay")
 		}
+		installationQueries := 0
 		for _, query := range queries {
 			if strings.Contains(query, "SELECT data FROM application_installations") {
-				t.Fatal("bounded member directory fetched complete installation JSON")
+				t.Fatal("bounded member directory fetched installation JSON without a limit")
 			}
+			if strings.Contains(query, "FROM application_installations WHERE user_id=?") {
+				installationQueries++
+			}
+		}
+		if len(fixture.raw) <= metadataRecordChunkBytes && installationQueries != 1 ||
+			len(fixture.raw) > metadataRecordChunkBytes && installationQueries <= 1 {
+			t.Fatalf("installation read used %d statements for %d bytes", installationQueries, len(fixture.raw))
 		}
 		read.Close()
 		if view.metadataResidency.work.used != 0 {

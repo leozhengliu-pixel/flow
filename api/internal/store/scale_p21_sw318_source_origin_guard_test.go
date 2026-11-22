@@ -24,7 +24,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"issue_records.go":                "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
 		"issue_query.go":                  "fbbe42adaed6c5920253704649a753d16b9db97af707446d74f7f19251ced6b2",
 		// The result cache only checks for a borrowed snapshot to bypass Redis.
-		"shared_result_cache.go":                      "09bb1fb7becc1e20ef24cae2681a6dea391515c0473fabafd6de9c25c5136f5a",
+		"shared_result_cache.go":                      "a8b3776efb34fe28b10957fe5e9e29f064bf2965809262760d29bfa07351afb3",
 		"auth.go":                                     "d6c579edbe9c4874f740795cf8b95b106cbf5bba5d34483da2d9eb6a9097b2cc",
 		"team_default_favorites.go":                   "8ba62b09173955d3f412bba9820ba6292e3ee06fec852571c691e5a62e49e657",
 		"scale_p15_snapshot_buffers.go":               "850c692283182c9cfbde136b622dd27e068dc329a764939faeb0acadb15ee1b8",
@@ -46,7 +46,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/scale_p21_triage_suggestions.go":              "ce4dc87da131244726aadae31d61b8a7fe9cd5760d05b895013aa8ac88fc2002",
 		"../../cmd/server/settings_features.go":                         "6a153a047c63aa6d5643700c68c46f3167be6fbfc2a5dc9f4eaf852582118413",
 		"authz_epoch.go":                                                "ce59afa33d8daca93d0901d13d86a0f7bb5f140cc479efc38395ab568173e9c4",
-		"content_records.go":                                            "711cc4e036099177c87ed23e50f56c81703b4aa7af2c3123053cc3873cfaccba",
+		"content_records.go":                                            "724515af9a4bda3f391d89a05154220b5236aca1c8a7a1b4f21cb4d686e8cb0a",
 		"database.go":                                                   "5e2c1e00725c8be012939fb6df932d23f47cc4597924e96de80f50714636c181",
 		"issue_access_metadata.go":                                      "e94330023938805faa4db03459377c9807c5bcb467182e4919a756924fd5ae74",
 		"metadata_decode.go":                                            "ce3352e177e4b1ed19c6822a04ddc9d1b715fa81d83d4905d1041c1a4ce2fc45",
@@ -65,7 +65,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_issue_record_authorization_release.go":               "9f812ba7e907bca285aeefa89ff5cbb08825046d045e469336ebb0bd81c2d64d",
 		"scale_p21_issue_update_targets.go":                             "6f8158f72b939dadc5a948dbc759a5c59e6243977ec7457ef2b0a21c37e13814",
 		"scale_p21_account_read.go":                                     "764509ac1287b4f3c340e6f0a3cb0082d6cb8b66422b14582217c52324d26c59",
-		"scale_p21_application_access.go":                               "4a8ebfed2bf92d5a8ec543ccb8f9bc68538666ee1f8eea4aebd9099087f1cfbe",
+		"scale_p21_application_access.go":                               "373a4bb17dd58d702b0d52482e8cc3896efd379d3875df8aa5bcc13d639b9ab8",
 		"scale_p21_application_task_context_read.go":                    "71df6cdfc0fe46f2d149fb90d125eea56515b10c711633e4dab1f464f555f8da",
 		"scale_p21_bootstrap_content_walk.go":                           "b795207a7c8db00fb91479dcb795a6112f6678a5b9213216eac1254936f5ccd0",
 		"scale_p21_bootstrap_issue_walk.go":                             "12f6b78490e7b638a4f9190763fc8988c2202a2f733b025fd31863e489a93a3c",
@@ -105,7 +105,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_attachment_visibility_read.go": "d6ae0a5f2e25635ae7a834a18e27eccb2b23b1ef31848d7cb47c376418729221",
 		"scale_p21_sw318_issue_read_source.go":    "434b6412f3e6546786feba97a97e5dd5c9c1a726f579949b03bf9d78bf0f9286",
 		// Search binds its local SQL reader for bounded candidates and catalog coverage.
-		"search_metadata.go": "bac2eb118306d5ac72aeab659869a981ae8ed42b621ef192c1d10674ba362d95",
+		"search_metadata.go": "2035dcdbf551533763079ee658e905e1e44a58bfb8b3dd3e0e6e1f72faf22f17",
 		// Cold-request route: the cold store stays inside its callback.
 		"../../cmd/server/oauth_authorized_applications.go": "8a0e9bec2c8ea317de40e3e4872b8587a6930369391d9e70fa7b895c38c94e9a",
 	}

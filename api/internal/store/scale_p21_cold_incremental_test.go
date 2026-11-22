@@ -8,6 +8,8 @@ import (
 	"math/rand/v2"
 	"reflect"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -896,11 +898,26 @@ func TestColdIncrementalReloadDerivesFromKnown(t *testing.T) {
 	reload := func(label string, incremental, full int64) {
 		t.Helper()
 		beforeIncremental, beforeFull := residentReloadIncrementals.Load(), residentReloadFulls.Load()
-		if err := view.ReloadWorkspace(t.Context(), workspace); err != nil {
+		const stampSelect = "SELECT " + metadataStampColumns
+		var snapshotReads, publicationChecks int
+		ctx := WithSQLStatementObserver(t.Context(), func(query string) {
+			switch {
+			case query == stampSelect+" FROM workspace_states WHERE workspace_key=?":
+				snapshotReads++
+			case strings.HasPrefix(query, stampSelect+",COALESCE((SELECT MAX(head) FROM workspace_record_journal_heads "):
+				publicationChecks++
+			}
+		})
+		if err := view.ReloadWorkspace(ctx, workspace); err != nil {
 			t.Fatal(label, err)
 		}
 		if got := [2]int64{residentReloadIncrementals.Load() - beforeIncremental, residentReloadFulls.Load() - beforeFull}; got != [2]int64{incremental, full} {
 			t.Fatalf("%s: reloads (incremental, full) %v, want %v (fallbacks %v)", label, got, [2]int64{incremental, full}, ColdPublishFallbacksForTesting())
+		}
+		// Preflight and state capture share a stamp. Raw recovery and its root
+		// cursor each read one, then installation rechecks under writeMu.
+		if incremental == 1 && (snapshotReads != 3 || publicationChecks != 1) {
+			t.Fatalf("%s: stamp queries (snapshot, publication) = (%d, %d), want (3, 1)", label, snapshotReads, publicationChecks)
 		}
 		coldIncrementalAssertExact(t, f, view, workspace, label)
 	}
@@ -943,7 +960,8 @@ func TestColdIncrementalReloadPreservesConcurrentLocalWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	prepared, resume := make(chan struct{}), make(chan struct{})
-	hook := func() { close(prepared); <-resume }
+	var pause sync.Once
+	hook := func() { pause.Do(func() { close(prepared); <-resume }) }
 	residentReloadBeforeInstall.Store(&hook)
 	defer residentReloadBeforeInstall.Store(nil)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -988,31 +1006,52 @@ func TestColdIncrementalReloadPreservesConcurrentLocalWrite(t *testing.T) {
 }
 
 func TestColdIncrementalReloadChecksJournalHead(t *testing.T) {
-	f, view, workspace := coldIncrementalFixture(t)
-	ctx := t.Context()
-	if _, err := f.db.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='apiKeys' AND record_key='ci-key-1'`,
-		[]byte(`{"id":"ci-key-1","name":"Peer","prefix":"flw_1","scopes":["read"],"teamIds":[]}`), workspace); err != nil {
-		t.Fatal(err)
-	}
-	stamp, head, err := view.readResidentPublicationStamp(ctx, workspace, f.data.Workspace.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var advanceErr error
-	hook := func() {
-		_, advanceErr = f.db.ExecContext(ctx, `UPDATE workspace_record_journal_heads SET head=head+1 WHERE workspace_id=?`, f.data.Workspace.ID)
-	}
-	residentReloadBeforeInstall.Store(&hook)
-	defer residentReloadBeforeInstall.Store(nil)
-	if view.reloadKnownPublication(ctx, workspace) || advanceErr != nil {
-		t.Fatalf("prepared reload did not reject an advanced journal head: %v", advanceErr)
-	}
-	residentReloadBeforeInstall.Store(nil)
-	if err := view.ReloadWorkspace(ctx, workspace); err != nil {
-		t.Fatal(err)
-	}
-	if got, applied, ok := view.residentStamp(workspace); !ok || got != stamp || applied != head+1 {
-		t.Fatalf("reload installed stamp %v at journal head %d, want %v at %d", got, applied, stamp, head+1)
+	for _, reset := range []bool{false, true} {
+		t.Run(fmt.Sprintf("journal_reset=%t", reset), func(t *testing.T) {
+			f, view, workspace := coldIncrementalFixture(t)
+			ctx := t.Context()
+			before, beforeHead, _ := view.residentStamp(workspace)
+			if _, err := f.db.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='apiKeys' AND record_key='ci-key-1'`,
+				[]byte(`{"id":"ci-key-1","name":"Peer","prefix":"flw_1","scopes":["read"],"teamIds":[]}`), workspace); err != nil {
+				t.Fatal(err)
+			}
+			stamp, head, _, err := view.readResidentPublicationStamp(ctx, workspace, f.data.Workspace.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			preparations := 0
+			hook := func() {
+				preparations++
+				if !view.writeMu.TryLock() {
+					t.Fatal("prepared reload was holding the write lock")
+				}
+				view.writeMu.Unlock()
+				if preparations != 1 {
+					return
+				}
+				if _, err := f.db.ExecContext(ctx, `UPDATE workspace_record_journal_heads SET head=head+1 WHERE workspace_id=?`, f.data.Workspace.ID); err != nil {
+					t.Fatal(err)
+				}
+				if reset {
+					if _, err := f.db.ExecContext(ctx, `UPDATE record_journal_mode SET generation='rjg-reload-reset' WHERE id=1`); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			residentReloadBeforeInstall.Store(&hook)
+			defer residentReloadBeforeInstall.Store(nil)
+			if installed := view.reloadKnownPublication(ctx, workspace); installed == reset || preparations != 1 {
+				t.Fatalf("installed=%t after %d preparations", installed, preparations)
+			}
+			if reset {
+				stamp, head = before, beforeHead
+			} else {
+				coldIncrementalAssertExact(t, f, view, workspace, "after the journal head advanced")
+			}
+			if got, applied, ok := view.residentStamp(workspace); !ok || got != stamp || applied != head {
+				t.Fatalf("reload installed stamp %v at journal head %d, want %v at %d", got, applied, stamp, head)
+			}
+		})
 	}
 }
 

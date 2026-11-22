@@ -13,11 +13,25 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Bounded peer sync refreshes the installed metadata before publishing a peer edit.
 - Bounded issue creates, edits and discussion writes retry temporary metadata-budget refusals before running their callbacks. Sustained contention returns a retryable 503.
 - Peer sync preserves realtime event order across SQL sequencing and delayed Redis hints, reducing avoidable client resyncs.
+- The shared Redis result tier is opt-in. Enable it with `FLOW_REDIS_CACHE=on` for stable, repeated searches.
+- Incremental metadata reloads reuse the revision stamp already read in the same SQL snapshot.
+- Realtime source builders skip projection when their source revision changed while waiting. Requests waiting for that same revision share the failed version check.
+- MySQL groups workspace-wide comment and activity reads using the existing resource-order index.
+- Bounded peer reloads reuse prepared metadata when the journal advances and the live SQL metadata revision and journal generation still match.
+- Realtime source and policy cache hits can finish while other keys are being built.
+- Sync changes retry with one complete transaction after two source-version races, with a cursor for the rest of the page.
+- Bounded application authorization and listing fetch small installation records in one SQL read.
+- MySQL full-text issue search avoids fetching issue bodies when their stored list projections are available.
+- Single-issue updates reuse the SQL row they already hold locked.
+- Bounded peer reloads retry a raced publication outside the workspace writer lock once before using the locked fallback.
+- The bounded member directory fetches small application installations in one SQL read.
+- Realtime delivery checks the source revision and authorization epoch in one SQL read.
+- Redis metadata search skips the shared cache lookup and fill until a replica sees the same terms for a caller three times within 15 seconds.
 - The bounded issue bootstrap reuses encoded project, initiative and document fields across workspace generations that share those collections. Authorization and request-specific fields are evaluated for each read.
 - Bounded project edits and peer reloads prepare their changes before taking the workspace write lock. Project, initiative and document reads can reuse matching resident collections and their ID indexes.
-- Bounded MySQL metadata search batches full-text candidates across collections and parses each returned row once to build the search result.
+- Bounded MySQL metadata search batches full-text candidates across collections, uses covered catalog pages when available, and parses each selected row once to build the search result.
 - Bounded replicas size their decoded caches, admitted work and COLD projection concurrency from `FLOW_METADATA_MEMORY_BYTES`. Read-only projections share decoded inputs and return owned copies. The image cache accounts for decoded allocations and evicts least-recently-used workspaces.
-- API replicas share authorized metadata search results, viewer memberships and projected sync pages through Redis. Entries expire, use a configurable memory budget and fall back to the database when Redis exceeds its deadline.
+- API replicas share authorized metadata search results through Redis. Viewer memberships and eligible projected sync pages are opt-in. Entries expire, use a configurable memory budget and fall back to the database when Redis exceeds its deadline.
 - With bounded metadata on, the workspace bootstrap (`GET /api/issue-records/bootstrap`) of a workspace with many projects and long progress histories answers as it does with the flag off instead of refusing every request with 503: it admits the memory its decoded headers actually take, and exchanges that admission for the response's when it starts writing. The response encoding reads each record once, which makes large bootstraps several times faster. Bounded metadata stays off by default.
 - `server metadata-prepare` repairs the record journal and completes the metadata catalog in one foreground run before bounded metadata is turned on; the `FLOW_METADATA_CATALOG=shadow` worker now runs the same journal repair, completes the catalog at full speed, rewrites SQLite canonical rows stored as text as blobs, and skips (and logs) a collection it cannot catalog instead of stopping. Bounded starts refuse up front, naming the setting, when the workspaces do not fit the new `FLOW_METADATA_POLICY_BYTES`, `FLOW_METADATA_SOURCE_BYTES` and `FLOW_METADATA_SOURCE_DISK_BYTES` budgets. Bounded metadata stays off by default.
 - Bounded integration delivery retries preserve captured network inputs, HTTP-accepted raw JSON bytes and atomic publication without loading complete workspaces.

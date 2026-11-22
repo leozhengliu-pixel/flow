@@ -39,13 +39,16 @@ type SharedCache struct {
 	failures  atomic.Int64
 	openUntil atomic.Int64
 
-	stats SharedCacheStats
+	stats       SharedCacheStats
+	searchReuse sharedSearchReuse
 }
 
 // SharedCacheConfig bounds the tier. Zero values take the defaults below.
 type SharedCacheConfig struct {
 	// Disabled turns the tier off (FLOW_REDIS_CACHE=off): every read computes.
 	Disabled bool
+	// Viewer and SyncPage enable the optional viewer and sync artifacts.
+	Viewer, SyncPage bool
 	// TTL is the lifetime of an entry (default 5m). Entries are never updated
 	// in place, so the TTL bounds how long superseded versions occupy memory.
 	TTL time.Duration
@@ -166,6 +169,7 @@ func SharedCacheCounters() map[string]int64 {
 		"redisCacheOversize": t.Oversize.Load(), "redisCacheShared": t.Shared.Load(),
 		"redisCacheBytesRead": t.BytesRead.Load(), "redisCacheBytesWritten": t.BytesWritten.Load(),
 		"redisCacheBudgetRejected": t.BudgetRejected.Load(),
+		"redisCacheSearchBypasses": sharedSearchBypasses.Load(),
 	}
 	for _, stats := range sharedCacheByKind {
 		result[stats.metric+"Hits"] = stats.hits.Load()
@@ -184,6 +188,14 @@ func (c *SharedCache) count(field func(*SharedCacheStats) *atomic.Int64, n int64
 
 // SharedCacheEnabled reports whether the tier is on.
 func (r *Redis) SharedCacheEnabled() bool { return r != nil && r.shared != nil }
+
+func (r *Redis) SharedCacheViewerEnabled() bool {
+	return r.SharedCacheEnabled() && r.shared.config.Viewer
+}
+
+func (r *Redis) SharedCacheSyncPageEnabled() bool {
+	return r.SharedCacheEnabled() && r.shared.config.SyncPage
+}
 
 // SharedCacheKey is SharedCache.Key on the coordinator's tier.
 func (r *Redis) SharedCacheKey(workspace, kind, version string, material ...string) string {

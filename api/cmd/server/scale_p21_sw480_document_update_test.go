@@ -306,6 +306,13 @@ func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 	// all four modes start from the same bytes.
 	retainedState, deletedState := mentioningCollaborationState(formerID), scaleP21SW480DeletedMentionState(formerID)
 	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw480_seed", "", nil, func(data *domain.Bootstrap) error {
+		// Keep digest delivery in the comparison with a fixed one-hour delay.
+		// The working-hours schedule depends on the day the suite runs.
+		for _, user := range data.Users {
+			prefs := defaultPreferences(user.ID)
+			prefs.EmailFormat, prefs.DelayLowPriority, prefs.UpdatedAt = "digest", false, clock
+			data.NotificationPreferences[user.ID] = prefs
+		}
 		data.Documents = []domain.Document{{
 			ID: documentID, SlugID: "original-" + prefix + "0123456789ab", PreviousSlugIDs: []string{prefix + "old"},
 			Title: "Original document", Content: "Original body", ContentState: oldState,

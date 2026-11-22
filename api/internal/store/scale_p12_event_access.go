@@ -8,6 +8,7 @@ import (
 	"errors"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,18 +26,43 @@ type EventSourceVersion struct {
 	Metadata, Issues int64
 }
 
+const realtimeSourceVersionColumns = `workspace_id,
+	 (SELECT COALESCE(SUM(revision),0) FROM workspace_cache_revisions WHERE workspace_key=? AND kind='metadata'),
+	 (SELECT COALESCE(SUM(revision),0) FROM workspace_cache_revisions WHERE workspace_key=? AND kind='issues')+
+	 (SELECT COALESCE(SUM(revision),0) FROM issue_count_revisions WHERE workspace_key=?)`
+
 func (s *SQLiteStore) RealtimeSourceVersion(ctx context.Context, workspace string) (EventSourceVersion, error) {
 	ctx, err := s.LiveEventContext(ctx)
 	if err != nil {
 		return EventSourceVersion{}, err
 	}
 	var version EventSourceVersion
-	err = s.db.QueryRowContext(ctx, `SELECT workspace_id,
-	 (SELECT COALESCE(SUM(revision),0) FROM workspace_cache_revisions WHERE workspace_key=? AND kind='metadata'),
-	 (SELECT COALESCE(SUM(revision),0) FROM workspace_cache_revisions WHERE workspace_key=? AND kind='issues')+
-	 (SELECT COALESCE(SUM(revision),0) FROM issue_count_revisions WHERE workspace_key=?)
-	 FROM workspace_states WHERE workspace_key=?`, workspace, workspace, workspace, workspace).Scan(&version.WorkspaceID, &version.Metadata, &version.Issues)
+	err = s.db.QueryRowContext(ctx, `SELECT `+realtimeSourceVersionColumns+` FROM workspace_states WHERE workspace_key=?`, workspace, workspace, workspace, workspace).Scan(&version.WorkspaceID, &version.Metadata, &version.Issues)
 	return version, err
+}
+
+// RealtimeSourceVersionAndEpoch checks both delivery proofs in one live read.
+func (s *SQLiteStore) RealtimeSourceVersionAndEpoch(ctx context.Context, workspace string) (EventSourceVersion, string, error) {
+	if !s.RealtimeEpochsReady() {
+		version, err := s.RealtimeSourceVersion(ctx, workspace)
+		return version, "", err
+	}
+	ctx, err := s.LiveEventContext(ctx)
+	if err != nil {
+		return EventSourceVersion{}, "", err
+	}
+	var version EventSourceVersion
+	var epoch int64
+	var generation string
+	var enabled int
+	err = s.db.QueryRowContext(ctx, `SELECT `+realtimeSourceVersionColumns+`,
+	 COALESCE((SELECT epoch FROM workspace_authz_epochs a WHERE a.workspace_id=`+recordJournalIdentity(s.db, "workspace_states.workspace_id")+`),0),m.generation,m.enabled
+	 FROM workspace_states CROSS JOIN record_journal_mode m WHERE workspace_key=? AND m.id=1`, workspace, workspace, workspace, workspace).
+		Scan(&version.WorkspaceID, &version.Metadata, &version.Issues, &epoch, &generation, &enabled)
+	if err != nil || enabled == 0 {
+		return version, "", err
+	}
+	return version, generation + ":" + strconv.FormatInt(epoch, 10), nil
 }
 
 // EventAccess binds immutable P03 policy to a source snapshot. Cached policy

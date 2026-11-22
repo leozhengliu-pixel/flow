@@ -109,11 +109,13 @@ func TestExternalMetadataSearchCacheDifferential(t *testing.T) {
 	err = repo.MutateWorkspace(ctx, workspace, "search.integration", "", nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, domain.Team{ID: "private", Key: "PRV", Name: "Private", Private: true})
 		for i := range 70 {
-			next.Projects = append(next.Projects, domain.Project{ID: fmt.Sprintf("private-%03d", i), Name: "A zephyr", TeamIDs: []string{"private"}, UpdatedAt: stamp.Add(time.Hour)})
+			next.Projects = append(next.Projects,
+				domain.Project{ID: fmt.Sprintf("private-newer-%03d", i), Name: "A zephyr", TeamIDs: []string{"private"}, UpdatedAt: stamp.Add(time.Hour)},
+				domain.Project{ID: fmt.Sprintf("private-older-%03d", i), Name: "ZZ zephyr", TeamIDs: []string{"private"}, UpdatedAt: stamp.Add(-time.Hour)})
 		}
 		next.Projects = append(next.Projects,
 			domain.Project{ID: "shared-key", Name: "Matches only in documents", TeamIDs: []string{team}},
-			domain.Project{ID: "Visible-1", Name: "Z zephyr", TeamIDs: []string{team}, UpdatedAt: stamp},
+			domain.Project{ID: "Visible-1", Name: "Z ZEPHYR", TeamIDs: []string{team}, UpdatedAt: stamp},
 			domain.Project{ID: "visible-2", Name: "Z zephyr", TeamIDs: []string{team}, UpdatedAt: stamp},
 			domain.Project{ID: "archived", Name: "B zephyr", TeamIDs: []string{team}, ArchivedAt: &stamp})
 		next.Documents = append(next.Documents, domain.Document{
@@ -151,23 +153,27 @@ func TestExternalMetadataSearchCacheDifferential(t *testing.T) {
 	// Validate cache fills while the candidate snapshot owns the only connection.
 	repo.db.SetMaxOpenConns(1)
 
-	for _, sort := range []string{"", "title"} {
+	for _, order := range []struct{ sort, direction string }{{"", ""}, {"", "asc"}, {"title", "asc"}} {
 		q := SearchMetadataQuery{
-			Scope: IssueRecordQuery{Workspace: workspace, Sort: sort, AllowedTeamIDs: []string{team}, Access: &IssueRecordAccess{VisibleTeamIDs: []string{team}, Admin: true}},
+			Scope: IssueRecordQuery{Workspace: workspace, Sort: order.sort, Direction: order.direction, AllowedTeamIDs: []string{team}, Access: &IssueRecordAccess{VisibleTeamIDs: []string{team}, Admin: true}},
 			Types: map[string]bool{"project": true, "document": true, "view": true}, Terms: []string{"zephyr"}, Limit: 2, SkipSharedCache: true,
-		}
-		if sort == "title" {
-			q.Scope.Direction = "asc"
 		}
 		want, err := repo.SearchMetadata(ctx, policy, q)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(want.Projects) != 2 || want.Projects[0].ID != "Visible-1" || want.Projects[1].ID != "visible-2" || len(want.Documents) != 1 {
-			t.Fatalf("bad reference results for sort %q: %d projects and %d documents", sort, len(want.Projects), len(want.Documents))
+			t.Fatalf("bad reference results for order %+v: %d projects and %d documents", order, len(want.Projects), len(want.Documents))
 		}
 		if want.Documents[0].Content != strings.Repeat("界", 2048) || want.Documents[0].Color != wantColor {
-			t.Fatalf("unexpected reference projection for sort %q", sort)
+			t.Fatalf("unexpected reference projection for order %+v", order)
+		}
+		// Observe this query before testing the version validation on a fill.
+		q.SkipSharedCache = false
+		for range 2 {
+			if got, err := repo.SearchMetadata(ctx, policy, q); err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("observing search for order %+v changed the result: %v", order, err)
+			}
 		}
 		for _, reader := range []*SQLiteStore{repo, view} {
 			redis.FlushAll()
@@ -178,20 +184,23 @@ func TestExternalMetadataSearchCacheDifferential(t *testing.T) {
 			}{{"disabled", true, 0}, {"fill", false, 0}, {"hit", false, 3}} {
 				q.SkipSharedCache = phase.skip
 				hits := coordination.SharedCacheCounters()["redisCacheSearchHits"]
-				matches := 0
+				matches, pages := 0, 0
 				phaseCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				queryCtx := WithSQLStatementObserver(phaseCtx, func(statement string) {
 					if strings.Contains(statement, mysqlMetadataTermMatch) {
 						matches++
 					}
+					if strings.HasPrefix(strings.TrimSpace(statement), "SELECT p.record_key,p.sort_value,") {
+						pages++
+					}
 				})
 				got, err := reader.SearchMetadata(queryCtx, policy, q)
 				cancel()
 				if err != nil || !reflect.DeepEqual(got, want) {
-					t.Fatalf("search differs for sort %q bounded=%t cache=%s: %v", sort, reader.BoundedMetadataEnabled(), phase.name, err)
+					t.Fatalf("search differs for order %+v bounded=%t cache=%s: %v", order, reader.BoundedMetadataEnabled(), phase.name, err)
 				}
 				if got := coordination.SharedCacheCounters()["redisCacheSearchHits"] - hits; got != phase.hits {
-					t.Fatalf("sort %q bounded=%t cache=%s: %d cache hits, want %d", sort, reader.BoundedMetadataEnabled(), phase.name, got, phase.hits)
+					t.Fatalf("order %+v bounded=%t cache=%s: %d cache hits, want %d", order, reader.BoundedMetadataEnabled(), phase.name, got, phase.hits)
 				}
 				if repo.dialect == "mysql" && reader.BoundedMetadataEnabled() {
 					wantMatches := 1
@@ -199,7 +208,10 @@ func TestExternalMetadataSearchCacheDifferential(t *testing.T) {
 						wantMatches = 0
 					}
 					if matches != wantMatches {
-						t.Fatalf("sort %q cache=%s: %d MySQL candidate lookups, want %d", sort, phase.name, matches, wantMatches)
+						t.Fatalf("order %+v cache=%s: %d MySQL candidate lookups, want %d", order, phase.name, matches, wantMatches)
+					}
+					if phase.hits == 0 && pages != 2 || phase.hits > 0 && pages != 0 {
+						t.Fatalf("order %+v cache=%s: %d MySQL catalog pages", order, phase.name, pages)
 					}
 				}
 			}

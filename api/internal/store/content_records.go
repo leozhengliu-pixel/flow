@@ -545,7 +545,13 @@ func readContentRecords[T any](ctx context.Context, s *SQLiteStore, workspace, k
 		query += ` AND resource_id=?`
 		args = append(args, *resource)
 	}
-	query += ` ORDER BY created_at,id`
+	if resource == nil && s.dialect == "mysql" && (kind == "activity" || kind == "comment") {
+		// These collections return a map of resource slices. MySQL can use
+		// content_resource_order_idx without sorting rows from different resources.
+		query += ` ORDER BY resource_id,created_at,id`
+	} else {
+		query += ` ORDER BY created_at,id`
+	}
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err

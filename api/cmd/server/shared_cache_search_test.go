@@ -65,7 +65,7 @@ func sharedCacheReplicas(t *testing.T, flag string, opTimeout time.Duration) (*m
 			t.Fatalf("replica %d: bounded mode = %v, want %v", index, repository.BoundedMetadataEnabled(), wantBounded)
 		}
 		// Both flag states have an uncached reference.
-		coordinator, err := coordination.Open(context.Background(), coordination.Config{Mode: "standalone", Addrs: []string{redisServer.Addr()}, Prefix: "shared-cache", ConnectTimeout: time.Second, LockTTL: 5 * time.Second, LockWait: 5 * time.Second, Cache: coordination.SharedCacheConfig{Disabled: index >= 2, OpTimeout: opTimeout}})
+		coordinator, err := coordination.Open(context.Background(), coordination.Config{Mode: "standalone", Addrs: []string{redisServer.Addr()}, Prefix: "shared-cache", ConnectTimeout: time.Second, LockTTL: 5 * time.Second, LockWait: 5 * time.Second, Cache: coordination.SharedCacheConfig{Disabled: index >= 2, Viewer: true, SyncPage: true, OpTimeout: opTimeout}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -260,7 +260,9 @@ func testSharedCacheDifferential(t *testing.T, flag string) {
 	}
 
 	evictSharedCache(redisServer)
-	sharedCacheSearch(t, member, "", first, "q=vault&types=project,document")
+	for range 3 {
+		sharedCacheSearch(t, member, "", first, "q=vault&types=project,document")
+	}
 	memberEntries := sharedCacheValues(t, redisServer, "search-meta")
 	if len(memberEntries) != 2 {
 		t.Fatalf("expected two scoped search entries, got %d", len(memberEntries))
@@ -268,6 +270,13 @@ func testSharedCacheDifferential(t *testing.T, flag string) {
 	for _, value := range memberEntries {
 		if value != "F\x00{}" {
 			t.Fatal("a search with only hidden matches stored data for the member")
+		}
+	}
+	// Each replica observes reuse before the first stores the result and the
+	// second reads it. The peer and uncached references still compare below.
+	for _, base := range []string{first, second} {
+		for range 2 {
+			sharedCacheSearch(t, admin, "", base, "q=zephyr")
 		}
 	}
 	hits := coordination.SharedCacheCounters()

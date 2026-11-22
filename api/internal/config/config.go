@@ -258,6 +258,7 @@ type TelemetryConfig struct {
 
 func Load() (Config, error) {
 	appURL := strings.TrimRight(value("FLOW_APP_URL", "http://localhost:5173"), "/")
+	redisResultCache := strings.ToLower(value("FLOW_REDIS_CACHE", "off"))
 	config := Config{
 		HTTPAddr:   value("FLOW_HTTP_ADDR", ":8080"),
 		StaticPath: value("FLOW_STATIC_PATH", ""),
@@ -304,7 +305,8 @@ func Load() (Config, error) {
 			DialTimeout: duration("FLOW_REDIS_DIAL_TIMEOUT", 5*time.Second), ReadTimeout: duration("FLOW_REDIS_READ_TIMEOUT", 3*time.Second), WriteTimeout: duration("FLOW_REDIS_WRITE_TIMEOUT", 3*time.Second),
 			ConnectTimeout: duration("FLOW_REDIS_CONNECT_TIMEOUT", 15*time.Second), LockTTL: duration("FLOW_REDIS_LOCK_TTL", 30*time.Second), LockWait: duration("FLOW_REDIS_LOCK_WAIT", 5*time.Second),
 			Cache: coordination.SharedCacheConfig{
-				Disabled: switchedOff("FLOW_REDIS_CACHE"), TTL: duration("FLOW_REDIS_CACHE_TTL", 5*time.Minute),
+				Viewer: boolean("FLOW_REDIS_CACHE_VIEWER", false), SyncPage: boolean("FLOW_REDIS_CACHE_SYNC_PAGE", false),
+				Disabled: !slices.Contains([]string{"on", "true", "1"}, redisResultCache), TTL: duration("FLOW_REDIS_CACHE_TTL", 5*time.Minute),
 				OpTimeout: duration("FLOW_REDIS_CACHE_TIMEOUT", 25*time.Millisecond), MaxEntryBytes: integer("FLOW_REDIS_CACHE_MAX_ENTRY_BYTES", 1<<20),
 				MaxBytes: integer("FLOW_REDIS_CACHE_MAX_BYTES", 64<<20),
 			},

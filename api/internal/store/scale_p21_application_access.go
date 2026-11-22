@@ -79,14 +79,10 @@ func (s *SQLiteStore) BeginApplicationAccessRead(ctx context.Context, userID, pr
 		}
 		defer tx.Rollback()
 	}
-	var size int64
-	if err = tx.QueryRowContext(ctx, "SELECT "+s.scaleP21SW16AttachmentBytes("data")+" FROM application_installations WHERE user_id=?", userID).Scan(&size); err != nil {
+	input, size, err := s.applicationInstallationInput(ctx, tx, userID)
+	if err != nil {
 		return nil, err
 	}
-	if size < 0 {
-		return nil, ErrMetadataRecordQuery
-	}
-	input := &memberDirectoryInstallationReader{ctx: ctx, store: s, tx: tx, id: userID, size: size}
 	ranges, err := r.installation(ctx, input, size, projection)
 	if err != nil {
 		return nil, err

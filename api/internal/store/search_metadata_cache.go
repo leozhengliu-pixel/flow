@@ -39,6 +39,9 @@ func (s *SQLiteStore) newSearchMetadataCache(ctx context.Context, policy domain.
 	if len(fields) == 0 {
 		return searchMetadataCache{}
 	}
+	if !cache.SharedCacheSearchReusable(q.Scope.Workspace, policy.Viewer.ID, q.CredentialID, q.Terms) {
+		return searchMetadataCache{}
+	}
 	if !q.Types["project"] && (q.Types["initiative"] || q.Types["view"]) {
 		fields = append(fields, "projects")
 	}

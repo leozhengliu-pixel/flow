@@ -2,6 +2,7 @@ package store
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -345,15 +346,10 @@ func (s *SQLiteStore) memberDirectoryApplication(ctx context.Context, id string,
 		return domain.User{}, err
 	}
 	defer tx.Rollback()
-	var size int64
-	length := "OCTET_LENGTH(data)"
-	if s.dialect == "sqlite" {
-		length = "LENGTH(CAST(data AS BLOB))"
-	}
-	if err := tx.QueryRowContext(work, "SELECT "+length+" FROM application_installations WHERE user_id=?", id).Scan(&size); err != nil {
+	input, size, err := s.applicationInstallationInput(work, tx, id)
+	if err != nil {
 		return domain.User{}, err
 	}
-	input := &memberDirectoryInstallationReader{ctx: work, store: s, tx: tx, id: id, size: size}
 	application, err := memberDirectoryProjectInstallation(work, input, size,
 		func(cost int) error { return read.charge(ctx, s, cost) },
 		func(clientID string) (string, bool, error) {
@@ -363,6 +359,27 @@ func (s *SQLiteStore) memberDirectoryApplication(ctx context.Context, id string,
 		return domain.User{}, err
 	}
 	return domain.User{ID: application.UserID, Name: application.Name, DisplayName: application.Name}, nil
+}
+
+// The callers admit scratch for a chunk before opening the read snapshot.
+// Small installations can serve the parser's repeated reads from that chunk.
+func (s *SQLiteStore) applicationInstallationInput(ctx context.Context, tx *sqlTx, id string) (io.ReaderAt, int64, error) {
+	var size int64
+	var raw []byte
+	length := s.scaleP21SW16AttachmentBytes("data")
+	if err := tx.QueryRowContext(ctx, "SELECT "+length+",CASE WHEN "+length+"<=? THEN data ELSE NULL END FROM application_installations WHERE user_id=?", metadataRecordChunkBytes, id).Scan(&size, &raw); err != nil {
+		return nil, 0, err
+	}
+	if size < 0 {
+		return nil, 0, ErrMetadataRecordQuery
+	}
+	if size > metadataRecordChunkBytes {
+		return &memberDirectoryInstallationReader{ctx: ctx, store: s, tx: tx, id: id, size: size}, size, nil
+	}
+	if int64(len(raw)) != size {
+		return nil, 0, io.ErrUnexpectedEOF
+	}
+	return bytes.NewReader(raw), size, nil
 }
 
 func (s *SQLiteStore) memberDirectoryApplicationName(ctx context.Context, clientID string, read *MemberDirectoryRead, sources []*metadataLogicalSource) (string, bool, error) {
