@@ -1341,7 +1341,7 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	candidateLimit := min(max(limit*4, 40), 200)
 	types := searchTypes(r.URL.Query().Get("types"))
-	data, err := s.store.SearchMetadata(ctx, policy, store.SearchMetadataQuery{Scope: scope, Types: types, Terms: terms, Limit: candidateLimit})
+	data, err := s.store.SearchMetadata(ctx, policy, searchMetadataQueryForRequest(r, scope, types, terms, nil, candidateLimit))
 	if err != nil {
 		issueRecordsError(w, err)
 		return

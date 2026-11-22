@@ -261,31 +261,12 @@ func (s *SQLiteStore) IssueQueryAccess(ctx context.Context, workspace, userID st
 	if !ok {
 		return data, IssueRecordAccess{}, ErrAuthForbidden
 	}
-	role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, userID)
-	if err != nil || status != "active" {
-		return data, IssueRecordAccess{}, ErrAuthForbidden
-	}
-	user, err := s.authUserByID(ctx, userID)
+	user, membership, err := s.issueQueryViewer(ctx, workspace, data.Workspace.ID, userID)
 	if err != nil {
 		return data, IssueRecordAccess{}, err
 	}
-	data.Viewer = user
-	data.ViewerRole = role
-	rows, err := s.db.QueryContext(ctx, `SELECT team_id,role FROM team_memberships WHERE workspace_id=? AND user_id=?`, data.Workspace.ID, userID)
-	if err != nil {
-		return data, IssueRecordAccess{}, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		member := domain.TeamMember{UserID: userID}
-		if err := rows.Scan(&member.TeamID, &member.Role); err != nil {
-			return data, IssueRecordAccess{}, err
-		}
-		data.TeamMembers = append(data.TeamMembers, member)
-	}
-	if err := rows.Err(); err != nil {
-		return data, IssueRecordAccess{}, err
-	}
+	role := membership.Role
+	data.Viewer, data.ViewerRole, data.TeamMembers = user, role, membership.Teams
 	visible := visibleIssueTeams(data, userID, role)
 	active := 0
 	for _, team := range data.Teams {

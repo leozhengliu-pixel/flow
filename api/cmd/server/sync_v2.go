@@ -318,6 +318,16 @@ func (s *server) collectSyncChanges(r *http.Request, access store.EventAccess, j
 		result.ResyncRequired = true
 		return result, nil
 	}
+	project := func(ctx context.Context) (syncV2ChangesResponse, error) {
+		return s.projectSyncPage(r.WithContext(ctx), access, page, result)
+	}
+	if journal == s.store && s.coordinator.SharedCacheEnabled() && !s.authDisabled && cacheableSyncPage(page) {
+		return s.sharedSyncPage(r.Context(), access, page, after, limit, project)
+	}
+	return project(r.Context())
+}
+
+func (s *server) projectSyncPage(r *http.Request, access store.EventAccess, page store.CommittedPage, result syncV2ChangesResponse) (syncV2ChangesResponse, error) {
 	header := result
 	header.Next = page.Next
 	headerRaw, err := json.Marshal(header)

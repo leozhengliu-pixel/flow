@@ -176,20 +176,45 @@ func (s *SQLiteStore) writeMetadataSearchPage(ctx context.Context, workspace, fi
 		// implied by the join.
 		theirs, _ := bindList("idx.record_key", keys)
 		updateArgs := append(append(append(append([]any{}, contentArgs...), args...), args...), contentArgs...)
-		if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_documents idx JOIN workspace_metadata_records m ON m.workspace_key=idx.workspace_key AND m.field=idx.field AND m.record_key=idx.record_key SET idx.content=`+content+` WHERE m.workspace_key=? AND m.field=? AND `+mine+` AND idx.workspace_key=? AND idx.field=? AND `+theirs+` AND idx.content<>`+content, updateArgs...); err != nil {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if err := writeSearchIndexRepair(ctx, tx, workspace, `UPDATE metadata_search_documents idx JOIN workspace_metadata_records m ON m.workspace_key=idx.workspace_key AND m.field=idx.field AND m.record_key=idx.record_key SET idx.content=`+content+` WHERE m.workspace_key=? AND m.field=? AND `+mine+` AND idx.workspace_key=? AND idx.field=? AND `+theirs+` AND idx.content<>`+content, updateArgs...); err != nil {
 			return err
 		}
 		// The upsert stays for a document written meanwhile; without a
 		// concurrent writer it only inserts.
-		_, err = s.db.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) SELECT workspace_key,field,record_key,`+content+` FROM workspace_metadata_records m WHERE workspace_key=? AND field=? AND `+where+` AND NOT EXISTS (SELECT 1 FROM metadata_search_documents idx WHERE idx.workspace_key=m.workspace_key AND idx.field=m.field AND idx.record_key=m.record_key) ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`, append(append([]any{}, contentArgs...), args...)...)
-		return err
+		if err := writeSearchIndexRepair(ctx, tx, workspace, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) SELECT workspace_key,field,record_key,`+content+` FROM workspace_metadata_records m WHERE workspace_key=? AND field=? AND `+where+` AND NOT EXISTS (SELECT 1 FROM metadata_search_documents idx WHERE idx.workspace_key=m.workspace_key AND idx.field=m.field AND idx.record_key=m.record_key) ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`, append(append([]any{}, contentArgs...), args...)...); err != nil {
+			return err
+		}
+		return tx.Commit()
 	}
 	upsert := ` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=excluded.content WHERE metadata_search_documents.content<>excluded.content`
 	if s.dialect == "postgres" {
 		upsert = ` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=EXCLUDED.content WHERE metadata_search_documents.content<>EXCLUDED.content`
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) SELECT workspace_key,field,record_key,`+s.metadataSearchContent("data")+` FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+where+upsert, args...)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := writeSearchIndexRepair(ctx, tx, workspace, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) SELECT workspace_key,field,record_key,`+s.metadataSearchContent("data")+` FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+where+upsert, args...); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func writeSearchIndexRepair(ctx context.Context, tx *sqlTx, workspace, statement string, args ...any) error {
+	result, err := tx.ExecContext(ctx, statement, args...)
+	if err != nil {
+		return err
+	}
+	if rows, err := result.RowsAffected(); err != nil || rows > 0 {
+		tx.queueCacheRevision(workspace, cacheKindSearchIndex)
+	}
+	return nil
 }
 
 // mysqlMetadataSearchPageContent is the MySQL text expression, over the

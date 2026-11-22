@@ -13,11 +13,13 @@ import (
 )
 
 type SearchMetadataQuery struct {
-	Scope  IssueRecordQuery
-	Types  map[string]bool
-	Terms  []string
-	Recent []domain.RecentResource
-	Limit  int
+	Scope           IssueRecordQuery
+	Types           map[string]bool
+	Terms           []string
+	Recent          []domain.RecentResource
+	Limit           int
+	CredentialID    string // id of a verified personal key, never its secret
+	SkipSharedCache bool   // application-key projections are finished by the caller
 }
 
 type searchMetadataKind struct {
@@ -51,7 +53,9 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 	if limit < 1 || limit > 500 {
 		limit = 100
 	}
+	q.Limit = limit
 	q.Terms = normalizeSearchTerms(q.Terms)
+	cache := s.newSearchMetadataCache(ctx, policy, q)
 	for _, kind := range searchMetadataKinds {
 		if !q.Types[kind.kind] {
 			continue
@@ -59,165 +63,180 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		where, args := "workspace_key=? AND field=?", []any{q.Scope.Workspace, kind.field}
-		if len(q.Terms) == 0 {
-			ids := []string{}
-			for _, recent := range q.Recent {
-				if recent.ResourceType == kind.kind {
-					ids = append(ids, recent.ResourceID)
-				}
-			}
-			if len(ids) == 0 {
-				continue
-			}
-			clause, values := bindList("record_key", ids)
-			where += " AND " + clause
-			args = append(args, values...)
-		} else {
-			matches := []string{}
-			for _, term := range q.Terms {
-				selection, value := s.metadataTermSelection(term)
-				matches = append(matches, selection)
-				args = append(args, q.Scope.Workspace, kind.field, value)
-			}
-			// Filter visibility before pagination; private records must not consume
-			// the raw search-hit cap and hide an authorized match.
-			where += " AND record_key IN (" + strings.Join(matches, " UNION ") + ")"
-		}
-		if q.Scope.Archived != "all" && q.Scope.Archived != "true" {
-			where += " AND " + s.jsonText("data", "archivedAt") + " IS NULL"
-		}
-		if len(q.Scope.TeamIDs) > 0 {
-			clauses := []string{}
-			for _, id := range q.Scope.TeamIDs {
-				for _, field := range []string{"teamIds", "teamId", "leadTeamId", "contributingTeamIds"} {
-					if field == "teamId" || field == "leadTeamId" {
-						clauses = append(clauses, s.jsonText("data", field)+"=?")
-						args = append(args, id)
-					} else {
-						clauses = append(clauses, s.searchJSONArrayMember("data", field))
-						args = append(args, id)
-					}
-				}
-			}
-			where += " AND (" + strings.Join(clauses, " OR ") + ")"
-		}
-		clause, values, err := s.searchMetadataFilter(kind.kind, q.Scope.Filter, 0)
+		collection, err := cache.read(ctx, kind, func(ctx context.Context) (searchMetadataProjection, error) {
+			return s.searchMetadataCollection(ctx, policy, q, allowed, linkScope, kind, limit)
+		})
+		result.Projects = append(result.Projects, collection.Projects...)
+		result.Documents = append(result.Documents, collection.Documents...)
+		result.Initiatives = append(result.Initiatives, collection.Initiatives...)
+		result.Users = append(result.Users, collection.Users...)
+		result.Customers = append(result.Customers, collection.Customers...)
+		result.Releases = append(result.Releases, collection.Releases...)
+		result.SavedViews = append(result.SavedViews, collection.SavedViews...)
 		if err != nil {
 			return result, err
 		}
+	}
+	return result, nil
+}
+
+type searchMetadataProjection struct {
+	Projects    []domain.Project    `json:",omitempty"`
+	Documents   []domain.Document   `json:",omitempty"`
+	Initiatives []domain.Initiative `json:",omitempty"`
+	Users       []domain.User       `json:",omitempty"`
+	Customers   []domain.Customer   `json:",omitempty"`
+	Releases    []domain.Release    `json:",omitempty"`
+	SavedViews  []domain.SavedView  `json:",omitempty"`
+}
+
+func (s *SQLiteStore) searchMetadataCollection(ctx context.Context, policy domain.Bootstrap, q SearchMetadataQuery, allowed map[string]bool, linkScope *DocumentLinkScope, kind searchMetadataKind, limit int) (searchMetadataProjection, error) {
+	var result searchMetadataProjection
+	where, args := "workspace_key=? AND field=?", []any{q.Scope.Workspace, kind.field}
+	if len(q.Terms) == 0 {
+		ids := []string{}
+		for _, recent := range q.Recent {
+			if recent.ResourceType == kind.kind {
+				ids = append(ids, recent.ResourceID)
+			}
+		}
+		if len(ids) == 0 {
+			return result, nil
+		}
+		clause, values := bindList("record_key", ids)
 		where += " AND " + clause
 		args = append(args, values...)
-		fields := append([]string{"id", "slugId", "createdAt", "updatedAt", "archivedAt"}, kind.fields...)
-		columns := make([]string, len(fields))
-		for i, field := range fields {
-			columns[i] = s.jsonText("r.data", field)
-			if field == "description" || field == "content" {
-				columns[i] = "SUBSTR(" + columns[i] + ",1,2048)"
-			}
+	} else {
+		matches := []string{}
+		for _, term := range q.Terms {
+			selection, value := s.metadataTermSelection(term)
+			matches = append(matches, selection)
+			args = append(args, q.Scope.Workspace, kind.field, value)
 		}
-		sortField, direction := "updatedAt", "DESC"
-		if q.Scope.Sort == "createdAt" {
-			sortField = "createdAt"
-		}
-		if q.Scope.Sort == "title" {
-			sortField = "name"
-			if kind.kind == "document" {
-				sortField = "title"
-			}
-			if kind.kind == "member" {
-				sortField = "displayName"
-			}
-			direction = "ASC"
-		}
-		if q.Scope.Direction == "asc" {
-			direction = "ASC"
-		}
-		orderExpr := "COALESCE(" + s.jsonText("data", sortField) + ",'')"
-		if q.Scope.Sort == "title" {
-			orderExpr = "LOWER(" + orderExpr + ")"
-		}
-		lastValue, lastID := "", ""
-		accepted := 0
-		for accepted < limit {
-			if err := ctx.Err(); err != nil {
-				return result, err
-			}
-			pageWhere, pageArgs := where, slices.Clone(args)
-			if lastID != "" {
-				op := "<"
-				if direction == "ASC" {
-					op = ">"
+		// Filter visibility before pagination; private records must not consume
+		// the raw search-hit cap and hide an authorized match.
+		where += " AND record_key IN (" + strings.Join(matches, " UNION ") + ")"
+	}
+	if q.Scope.Archived != "all" && q.Scope.Archived != "true" {
+		where += " AND " + s.jsonText("data", "archivedAt") + " IS NULL"
+	}
+	if len(q.Scope.TeamIDs) > 0 {
+		clauses := []string{}
+		for _, id := range q.Scope.TeamIDs {
+			for _, field := range []string{"teamIds", "teamId", "leadTeamId", "contributingTeamIds"} {
+				if field == "teamId" || field == "leadTeamId" {
+					clauses = append(clauses, s.jsonText("data", field)+"=?")
+					args = append(args, id)
+				} else {
+					clauses = append(clauses, s.searchJSONArrayMember("data", field))
+					args = append(args, id)
 				}
-				pageWhere += " AND (" + orderExpr + op + "? OR (" + orderExpr + "=? AND record_key>?))"
-				pageArgs = append(pageArgs, lastValue, lastValue, lastID)
 			}
-			// Pick the page by key and sort value first, then compute the output
-			// columns for those 64 rows only; the planner would otherwise evaluate
-			// every jsonText column for every matching row before sorting.
-			page := "SELECT record_key," + orderExpr + " AS sort_value FROM workspace_metadata_records WHERE " + pageWhere + " ORDER BY " + orderExpr + " " + direction + ",record_key ASC LIMIT 64"
-			rows, err := s.db.QueryContext(ctx, "SELECT p.record_key,p.sort_value,"+strings.Join(columns, ",")+" FROM ("+page+") p JOIN workspace_metadata_records r ON r.workspace_key=? AND r.field=? AND "+s.metadataRecordKeyEquals("r.record_key", "p.record_key")+" ORDER BY p.sort_value "+direction+",p.record_key ASC", append(pageArgs, q.Scope.Workspace, kind.field)...)
-			if err != nil {
-				return result, err
+		}
+		where += " AND (" + strings.Join(clauses, " OR ") + ")"
+	}
+	clause, values, err := s.searchMetadataFilter(kind.kind, q.Scope.Filter, 0)
+	if err != nil {
+		return result, err
+	}
+	where += " AND " + clause
+	args = append(args, values...)
+	fields := append([]string{"id", "slugId", "createdAt", "updatedAt", "archivedAt"}, kind.fields...)
+	columns := make([]string, len(fields))
+	for i, field := range fields {
+		columns[i] = s.jsonText("r.data", field)
+		if field == "description" || field == "content" {
+			columns[i] = "SUBSTR(" + columns[i] + ",1,2048)"
+		}
+	}
+	sortField, direction := "updatedAt", "DESC"
+	if q.Scope.Sort == "createdAt" {
+		sortField = "createdAt"
+	}
+	if q.Scope.Sort == "title" {
+		sortField = "name"
+		if kind.kind == "document" {
+			sortField = "title"
+		}
+		if kind.kind == "member" {
+			sortField = "displayName"
+		}
+		direction = "ASC"
+	}
+	if q.Scope.Direction == "asc" {
+		direction = "ASC"
+	}
+	orderExpr := "COALESCE(" + s.jsonText("data", sortField) + ",'')"
+	if q.Scope.Sort == "title" {
+		orderExpr = "LOWER(" + orderExpr + ")"
+	}
+	lastValue, lastID := "", ""
+	accepted := 0
+	for accepted < limit {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		pageWhere, pageArgs := where, slices.Clone(args)
+		if lastID != "" {
+			op := "<"
+			if direction == "ASC" {
+				op = ">"
 			}
-			batch := [][]byte{}
-			for rows.Next() {
-				values := make([]sql.NullString, len(fields))
-				dest := []any{&lastID, &lastValue}
-				for i := range values {
-					dest = append(dest, &values[i])
+			pageWhere += " AND (" + orderExpr + op + "? OR (" + orderExpr + "=? AND record_key>?))"
+			pageArgs = append(pageArgs, lastValue, lastValue, lastID)
+		}
+		// Pick the page by key and sort value first, then compute the output
+		// columns for those 64 rows only; the planner would otherwise evaluate
+		// every jsonText column for every matching row before sorting.
+		page := "SELECT record_key," + orderExpr + " AS sort_value FROM workspace_metadata_records WHERE " + pageWhere + " ORDER BY " + orderExpr + " " + direction + ",record_key ASC LIMIT 64"
+		rows, err := s.readSearchMetadataPage(ctx, "SELECT p.record_key,p.sort_value,"+strings.Join(columns, ",")+" FROM ("+page+") p JOIN workspace_metadata_records r ON r.workspace_key=? AND r.field=? AND "+s.metadataRecordKeyEquals("r.record_key", "p.record_key")+" ORDER BY p.sort_value "+direction+",p.record_key ASC", append(pageArgs, q.Scope.Workspace, kind.field), len(fields))
+		if err != nil {
+			return result, err
+		}
+		batch := [][]byte{}
+		for _, row := range rows {
+			lastID, lastValue = row.Key, row.Sort
+			values := row.Values
+			object := map[string]json.RawMessage{}
+			for i, value := range values {
+				if !value.Valid {
+					continue
 				}
-				if err := rows.Scan(dest...); err != nil {
-					rows.Close()
-					return result, err
-				}
-				object := map[string]json.RawMessage{}
-				for i, value := range values {
-					if !value.Valid {
-						continue
-					}
-					field := fields[i]
-					if field == "active" && (value.String == "1" || value.String == "0") {
-						if value.String == "1" {
-							value.String = "true"
-						} else {
-							value.String = "false"
-						}
-					}
-					if searchMetadataJSONField(field, kind.kind) {
-						object[field] = json.RawMessage(value.String)
+				field := fields[i]
+				if field == "active" && (value.String == "1" || value.String == "0") {
+					if value.String == "1" {
+						value.String = "true"
 					} else {
-						raw, _ := json.Marshal(value.String)
-						object[field] = raw
+						value.String = "false"
 					}
 				}
-				raw, err := json.Marshal(object)
-				if err != nil {
-					rows.Close()
-					return result, err
+				if searchMetadataJSONField(field, kind.kind) {
+					object[field] = json.RawMessage(value.String)
+				} else {
+					raw, _ := json.Marshal(value.String)
+					object[field] = raw
 				}
-				batch = append(batch, raw)
 			}
-			err = rows.Err()
-			rows.Close()
+			raw, err := json.Marshal(object)
 			if err != nil {
 				return result, err
 			}
-			for _, raw := range batch {
-				ok, err := s.appendSearchMetadata(ctx, &result, policy, q.Scope, allowed, linkScope, kind.kind, raw)
-				if err != nil {
-					return result, err
-				}
-				if ok {
-					accepted++
-				}
-				if accepted >= limit {
-					break
-				}
+			batch = append(batch, raw)
+		}
+		for _, raw := range batch {
+			ok, err := s.appendSearchMetadata(ctx, &result, policy, q.Scope, allowed, linkScope, kind.kind, raw)
+			if err != nil {
+				return result, err
 			}
-			if len(batch) < 64 {
+			if ok {
+				accepted++
+			}
+			if accepted >= limit {
 				break
 			}
+		}
+		if len(batch) < 64 {
+			break
 		}
 	}
 	return result, nil
@@ -438,7 +457,7 @@ func (s *SQLiteStore) searchMetadataFilter(kind string, node IssueFilter, depth 
 	return "(" + strings.Join(clauses, " AND ") + ")", args, nil
 }
 
-func (s *SQLiteStore) appendSearchMetadata(ctx context.Context, result *domain.Bootstrap, policy domain.Bootstrap, q IssueRecordQuery, allowed map[string]bool, linkScope *DocumentLinkScope, kind string, raw []byte) (bool, error) {
+func (s *SQLiteStore) appendSearchMetadata(ctx context.Context, result *searchMetadataProjection, policy domain.Bootstrap, q IssueRecordQuery, allowed map[string]bool, linkScope *DocumentLinkScope, kind string, raw []byte) (bool, error) {
 	if !json.Valid(raw) {
 		return false, nil
 	}
@@ -594,4 +613,32 @@ func (s *SQLiteStore) appendSearchMetadata(ctx context.Context, result *domain.B
 		result.SavedViews = append(result.SavedViews, item)
 	}
 	return true, nil
+}
+
+// searchMetadataPageRow is one row of a metadata search page: its record key,
+// sort value and output columns.
+type searchMetadataPageRow struct {
+	Key, Sort string
+	Values    []sql.NullString
+}
+
+func (s *SQLiteStore) readSearchMetadataPage(ctx context.Context, statement string, args []any, width int) ([]searchMetadataPageRow, error) {
+	rows, err := s.db.QueryContext(ctx, statement, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []searchMetadataPageRow
+	for rows.Next() {
+		row := searchMetadataPageRow{Values: make([]sql.NullString, width)}
+		dest := append(make([]any, 0, width+2), &row.Key, &row.Sort)
+		for i := range row.Values {
+			dest = append(dest, &row.Values[i])
+		}
+		if err := rows.Scan(dest...); err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
 }

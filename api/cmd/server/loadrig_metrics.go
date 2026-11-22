@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"flow/api/internal/coordination"
 	"flow/api/internal/store"
 )
 
@@ -87,6 +88,14 @@ func loadRigSnapshot() loadRigProcessMetrics {
 	if runtime.GOOS != "darwin" {
 		maxRSS *= 1024
 	}
+	counters := store.LoadRigColdCounters()
+	if counters == nil {
+		counters = map[string]int64{}
+	}
+	// The shared Redis cache tier (docs/redis-cache.md).
+	for name, value := range coordination.SharedCacheCounters() {
+		counters[name] = value
+	}
 	return loadRigProcessMetrics{
 		PID: os.Getpid(), At: time.Now().UTC(),
 		HeapAllocBytes: memory.HeapAlloc, HeapInuseBytes: memory.HeapInuse, HeapSysBytes: memory.HeapSys, SysBytes: memory.Sys,
@@ -94,7 +103,7 @@ func loadRigSnapshot() loadRigProcessMetrics {
 		CPUUserSeconds:              float64(usage.Utime.Sec) + float64(usage.Utime.Usec)/1e6,
 		CPUSystemSeconds:            float64(usage.Stime.Sec) + float64(usage.Stime.Usec)/1e6,
 		BoundedMetadata:             os.Getenv("FLOW_BOUNDED_METADATA") == "on",
-		Counters:                    store.LoadRigColdCounters(),
+		Counters:                    counters,
 		GOMAXPROCS:                  runtime.GOMAXPROCS(0),
 		MemoryLimitConfiguredString: os.Getenv("GOMEMLIMIT"),
 	}

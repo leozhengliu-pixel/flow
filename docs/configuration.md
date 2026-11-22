@@ -545,6 +545,11 @@ server:
 | `proxy.trustHeaders` | `FLOW_TRUST_PROXY_HEADERS` | boolean |
 | `proxy.trustedProxies` | `FLOW_TRUSTED_PROXIES` | list |
 | `redis.addrs` | `FLOW_REDIS_ADDRS` | list |
+| `redis.cache.enabled` | `FLOW_REDIS_CACHE` | boolean |
+| `redis.cache.maxBytes` | `FLOW_REDIS_CACHE_MAX_BYTES` | number |
+| `redis.cache.maxEntryBytes` | `FLOW_REDIS_CACHE_MAX_ENTRY_BYTES` | number |
+| `redis.cache.timeout` | `FLOW_REDIS_CACHE_TIMEOUT` | duration |
+| `redis.cache.ttl` | `FLOW_REDIS_CACHE_TTL` | duration |
 | `redis.connectTimeout` | `FLOW_REDIS_CONNECT_TIMEOUT` | duration |
 | `redis.db` | `FLOW_REDIS_DB` | number |
 | `redis.dialTimeout` | `FLOW_REDIS_DIAL_TIMEOUT` | duration |
@@ -972,6 +977,11 @@ Awareness messages, and workspace entity events.
 | `FLOW_REDIS_CONNECT_TIMEOUT` | `15s` | Startup probe deadline. |
 | `FLOW_REDIS_LOCK_TTL` | `30s` | Distributed write lease, renewed while a mutation runs. |
 | `FLOW_REDIS_LOCK_WAIT` | `5s` | Maximum wait to acquire a workspace write lock. |
+| `FLOW_REDIS_CACHE` | `on` | Shared result cache across API instances ([redis-cache.md](redis-cache.md)). `off` computes every read locally. |
+| `FLOW_REDIS_CACHE_TTL` | `5m` | Maximum lifetime of one cache entry. A Redis cache shard starts its TTL on the first insertion. |
+| `FLOW_REDIS_CACHE_TIMEOUT` | `25ms` | Deadline of one cache read or write; a slower or failed Redis counts as a miss. |
+| `FLOW_REDIS_CACHE_MAX_ENTRY_BYTES` | `1048576` | Largest stored entry after compression; larger results are not cached. |
+| `FLOW_REDIS_CACHE_MAX_BYTES` | `67108864` | Shared result-cache admission budget per Redis namespace, including encoded values, keys and an overhead allowance. Use the same limit on all replicas. |
 
 ## Container security
 

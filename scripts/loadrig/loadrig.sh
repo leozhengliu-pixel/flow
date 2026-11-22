@@ -21,6 +21,8 @@
 # Settings (environment): LOADRIG_HOME (~/.flow-local/live/loadrig), LOADRIG_PORT_BASE (47610), SCALE (1), VUS (10), DURATION (60s), WARMUP (5s),
 # LOADRIG_API_PORT (port base, +1 for the second replica), LOADRIG_METRIC_PORT (port base+10), THINK (300ms), STREAMS (VUS/2), MIX (op=weight,...: only the listed ops run; a leading "default," keeps the other default weights), MODEL (fake|proxy|off; fake = local fake model, proxy = the
 # shared 127.0.0.1:8787 proxy, deepseek-v4.1-flash), AGENT_EVERY (20s), AGENT_MAX (0 = no cap; proxy defaults to 6),
+# FLOW_LOADRIG_SEARCH_QUERY (optional fixed search URL query), FLOW_LOADRIG_SYNC_REPLAY_AFTER (optional fixed cursor for single-transaction sync reads),
+# FLOW_LOADRIG_ROTATE_READS (on rotates reads across replicas),
 # GOMAXPROCS_REPLICA (4), GOMEMLIMIT_REPLICA (1536MiB), MAX_LOAD (20: refuse to start above this load average),
 # KEEP (1 keeps data after smoke), LOADRIG_ALLOW_PULL (1 allows pulling a missing image), EXTRA_ENV ("NAME=value ..."
 # added to every replica, e.g. EXTRA_ENV="FLOW_METADATA_CATALOG=shadow" for the flag-off replicas of a real rollout).
