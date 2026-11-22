@@ -91,6 +91,17 @@ func ResidentImageStatsForTesting() map[string]int64 {
 // image. ok is false when the cache is off or the image does not fit its
 // budget; the caller then reads source itself. The image is read-only.
 func (r *metadataResidency) residentImage(ctx context.Context, workspace string, source *metadataLogicalSource) (_ *coldDecodedImage, ok bool, err error) {
+	image, shared, err := r.residentImageBuild(ctx, workspace, source)
+	if err != nil || !shared {
+		return nil, false, err
+	}
+	return image, true, nil
+}
+
+// residentImageBuild is residentImage, also returning an image that was
+// built but is larger than the budget (shared false; the caller owns it).
+// image is nil when the cache is off.
+func (r *metadataResidency) residentImageBuild(ctx context.Context, workspace string, source *metadataLogicalSource) (image *coldDecodedImage, shared bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
@@ -111,14 +122,14 @@ func (r *metadataResidency) residentImage(ctx context.Context, workspace string,
 	cache.mu.Lock()
 	previous := cache.images[workspace]
 	cache.mu.Unlock()
-	image, err := buildColdDecodedImage(ctx, source, previous, nil, true)
+	image, err = buildColdDecodedImage(ctx, source, previous, nil, true)
 	if err != nil {
 		return nil, false, err
 	}
 	residentImageBuilt.Add(1)
 	if image.bytes > budget {
 		residentImageRefusals.Add(1)
-		return nil, false, ctx.Err()
+		return image, false, ctx.Err()
 	}
 	r.storeColdImage(workspace, image, budget)
 	return image, true, ctx.Err()
@@ -127,13 +138,7 @@ func (r *metadataResidency) residentImage(ctx context.Context, workspace string,
 // currentResidentImage is the cached image of workspace when it decodes
 // source exactly, else nil.
 func (r *metadataResidency) currentResidentImage(ctx context.Context, workspace string, source *metadataLogicalSource) (*coldDecodedImage, error) {
-	cache := &r.coldImages
-	cache.mu.Lock()
-	image := cache.images[workspace]
-	if image != nil {
-		image.used = time.Now()
-	}
-	cache.mu.Unlock()
+	image := r.cachedResidentImage(workspace)
 	if image == nil {
 		return nil, nil
 	}
@@ -143,6 +148,34 @@ func (r *metadataResidency) currentResidentImage(ctx context.Context, workspace 
 	}
 	residentImageHits.Add(1)
 	return image, nil
+}
+
+// Point readers can share exact fields without requiring a full image build.
+func (r *metadataResidency) cachedResidentImage(workspace string) *coldDecodedImage {
+	cache := &r.coldImages
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	image := cache.images[workspace]
+	if image != nil {
+		image.used = time.Now()
+	}
+	return image
+}
+
+func (image *coldDecodedImage) matchingField(name string, node metadataLogicalNode) *coldDecodedField {
+	if image == nil {
+		return nil
+	}
+	index, _, ok := metadataLogicalField(name)
+	if !ok || index >= len(image.fields) {
+		return nil
+	}
+	field := &image.fields[index]
+	key, keyed := coldFrameKeyOf(node)
+	if !keyed || !field.keyed || field.key != key || !field.value.IsValid() || field.value.Type() != node.typ {
+		return nil
+	}
+	return field
 }
 
 type residentViewSize struct {

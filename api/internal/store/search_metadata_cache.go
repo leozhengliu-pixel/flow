@@ -69,10 +69,19 @@ func (s *SQLiteStore) newSearchMetadataCache(ctx context.Context, policy domain.
 	return searchMetadataCache{s, cache, q.Scope.Workspace, policy.Workspace.ID, string(raw), stamp}
 }
 
-func (c searchMetadataCache) read(ctx context.Context, kind searchMetadataKind, compute func(context.Context) (searchMetadataProjection, error)) (searchMetadataProjection, error) {
+func (c searchMetadataCache) read(ctx context.Context, kind searchMetadataKind, prepare func(context.Context) (context.Context, error), compute func(context.Context) (searchMetadataProjection, error)) (searchMetadataProjection, error) {
+	var sourceCtx context.Context
+	fill := func(ctx context.Context) (searchMetadataProjection, error) {
+		var err error
+		sourceCtx, err = prepare(ctx)
+		if err != nil {
+			return searchMetadataProjection{}, err
+		}
+		return compute(sourceCtx)
+	}
 	// Releases depend on live issue visibility and pipeline records as well.
 	if c.cache == nil || kind.kind == "release" {
-		return compute(ctx)
+		return fill(ctx)
 	}
 	fields := []string{kind.field}
 	if kind.kind == "initiative" || kind.kind == "view" {
@@ -80,8 +89,10 @@ func (c searchMetadataCache) read(ctx context.Context, kind searchMetadataKind, 
 	}
 	version := c.stamp.version(fields)
 	key := c.cache.SharedCacheKey(c.workspace, "search-meta", version, c.workspaceID, c.stamp.generation, c.store.dialect, strconv.Itoa(c.store.db.searchMaxChars), kind.kind, c.material)
-	return sharedJSONResult(ctx, c.cache, key, compute, func(ctx context.Context) bool {
-		current := c.store.readSearchMetadataStamp(ctx, c.workspace, c.workspaceID, fields)
+	return sharedJSONResult(ctx, c.cache, key, fill, func(context.Context) bool {
+		// Check the version against the rows' snapshot. A batched MySQL
+		// fill already holds a connection until the search ends.
+		current := c.store.readSearchMetadataStamp(sourceCtx, c.workspace, c.workspaceID, fields)
 		return current.generation == c.stamp.generation && current.version(fields) == version
 	})
 }

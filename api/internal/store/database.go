@@ -453,6 +453,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	}
 	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes, content: newContentOffload(config), searchMaxChars: max(config.SearchIndexMaxChars, 0)}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
 	if bounded {
+		applyMetadataMemoryPlan()
 		s.metadataResidency = newMetadataResidency()
 		s.db.boundedCatalog.Store(true)
 		if driver == "sqlite" {

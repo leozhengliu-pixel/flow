@@ -26,6 +26,10 @@ import (
 // status line was sent, the response is aborted rather than left as valid
 // but truncated JSON.
 func writeStreamedJSON(ctx context.Context, w http.ResponseWriter, status int, value any) {
+	writeStreamedJSONFields(ctx, w, status, value, nil)
+}
+
+func writeStreamedJSONFields(ctx context.Context, w http.ResponseWriter, status int, value any, encode hydratedFieldEncoder) {
 	if status == http.StatusOK || status == http.StatusCreated {
 		ctx = hydratedSigningContext(ctx, w)
 	}
@@ -41,7 +45,13 @@ func writeStreamedJSON(ctx context.Context, w http.ResponseWriter, status int, v
 		prepareHydratedBootstrapSpool(w, value)
 	}
 	buffer := bufio.NewWriterSize(w, 64<<10)
-	if err := encodeStreamedStruct(ctx, buffer, v, plan); err != nil {
+	var err error
+	if encode != nil && store.RecordHydrationEnabled() {
+		err = encodeHydratedStructFields(ctx, buffer, v, plan, 0, encode)
+	} else {
+		err = encodeStreamedStruct(ctx, buffer, v, plan)
+	}
+	if err != nil {
 		log.Printf("encode streamed response: %v", err)
 		panic(http.ErrAbortHandler)
 	}

@@ -943,7 +943,7 @@ func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey
 }
 
 func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID string) (domain.Bootstrap, bool, error) {
-	if view, release, handled := s.coldAccessorView(ctx, "BootstrapForUser", workspaceKey, nil); handled {
+	if view, release, handled := s.coldProjectionView(ctx, "BootstrapForUser", workspaceKey); handled {
 		defer release()
 		if view == nil {
 			return domain.Bootstrap{}, false, nil

@@ -327,6 +327,61 @@ var (
 // publication (a COLD publication's fallback).
 type coldReloadFullKey struct{}
 
+// reloadKnownPublication prepares the peer's delta without holding writeMu.
+// Concurrent local installs or a newer peer stamp invalidate the result.
+func (s *SQLiteStore) reloadKnownPublication(ctx context.Context, workspace string) bool {
+	r := s.metadataResidency
+	if coldIncrementalDisabled.Load() || ctx.Value(coldReloadFullKey{}) != nil {
+		return false
+	}
+	unlock := r.reloadBuilds.lock(workspace)
+	defer unlock()
+	known, ok := knownColdPublication(coldLabelCacheKey{r, workspace})
+	if !ok {
+		return false
+	}
+	defer known.source.Release()
+	r.mu.Lock()
+	base := r.logical[workspace]
+	if base == nil || base.Retain() != nil {
+		r.mu.Unlock()
+		return false
+	}
+	baseStamp, baseHead := r.stamps[workspace], r.applied[workspace]
+	r.mu.Unlock()
+	defer base.Release()
+	stillInstalled := func() bool {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		return r.logical[workspace] == base && r.stamps[workspace] == baseStamp && r.applied[workspace] == baseHead
+	}
+	prepared, err := s.prepareColdPublication(ctx, &coldPublishBase{workspace: workspace, source: known.source, state: known.state})
+	if err != nil || prepared == nil {
+		return err == nil
+	}
+	defer prepared.close()
+	if hook := residentReloadBeforeInstall.Load(); hook != nil {
+		(*hook)()
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	if !stillInstalled() {
+		return false
+	}
+	stamp, head, err := s.readResidentPublicationStamp(ctx, workspace, prepared.state.stamp.workspaceID)
+	if err != nil || stamp != prepared.state.stamp || head != prepared.head {
+		return false
+	}
+	if err := prepared.install(s, workspace); err != nil {
+		return false
+	}
+	residentReloadIncrementals.Add(1)
+	residentReloadIncrementalNanos.Add(int64(time.Since(prepared.started)))
+	return true
+}
+
+var residentReloadBeforeInstall atomic.Pointer[func()]
+
 // reloadResidentWorkspaceFromKnown brings the installed generation of
 // workspace to SQL's state from its known publication (the generation and the
 // state it is exact at) and the records changed since, as an incremental COLD
@@ -635,93 +690,137 @@ func diffColdPublishStates(before, after *coldPublishState) map[string]*coldPubl
 // legacy write from base and the records the write changed. The caller holds
 // the write lock. It returns errColdPublishInexact (or another error) when
 // the caller must reload in full; nothing was installed then.
-func (s *SQLiteStore) publishColdIncrementalLocked(ctx context.Context, base *coldPublishBase) (unchanged bool, err error) {
-	started := time.Now()
+func (s *SQLiteStore) publishColdIncrementalLocked(ctx context.Context, base *coldPublishBase) (bool, error) {
+	prepared, err := s.prepareColdPublication(ctx, base)
+	if err != nil || prepared == nil {
+		return err == nil, err
+	}
+	defer prepared.close()
+	return false, prepared.install(s, base.workspace)
+}
+
+type preparedColdPublication struct {
+	source  *metadataLogicalSource
+	owner   *ResourceRead
+	state   *coldPublishState
+	policy  domain.Bootstrap
+	head    int64
+	cost    int
+	plan    *coldPublishPlan
+	changes map[string]*coldPublishChange
+	started time.Time
+}
+
+func (p *preparedColdPublication) close() {
+	p.owner.Close()
+	if p.source != nil {
+		p.source.Release()
+	}
+}
+
+// install is called under the workspace writer's lock after the caller has
+// established that this publication can replace the installed source.
+func (p *preparedColdPublication) install(s *SQLiteStore, workspace string) error {
+	if err := s.installResidentPolicy(workspace, p.policy, p.state.stamp, p.head, p.cost, p.source); err != nil {
+		return err
+	}
+	rememberColdPublication(coldLabelCacheKey{s.metadataResidency, workspace}, p.source, p.state)
+	p.source = nil
+	noteColdPublishPlan(p.plan)
+	slog.Info("bounded metadata: COLD publication", "workspace", workspace, "patched", slices.Sorted(maps.Keys(p.plan.patch)),
+		"rebuilt", slices.Sorted(maps.Keys(p.plan.rebuild)), "recovered", slices.Sorted(maps.Keys(p.plan.part)), "labelCounts", len(p.plan.supplied) != 0,
+		"changes", describeColdPublishChanges(p.changes), "fieldMs", describeColdPublishTimings(p.plan.timings), "ms", time.Since(p.started).Milliseconds())
+	return nil
+}
+
+// prepareColdPublication derives the new source from a repeatable SQL
+// snapshot. A nil result means the installed source already has its stamp.
+func (s *SQLiteStore) prepareColdPublication(ctx context.Context, base *coldPublishBase) (_ *preparedColdPublication, err error) {
+	prepared := &preparedColdPublication{owner: &ResourceRead{store: s}, started: time.Now()}
+	keep := false
+	defer func() {
+		if !keep {
+			prepared.close()
+		}
+	}()
 	workspace := base.workspace
 	r := s.metadataResidency
 	ctx = metadataLogicalUnpinnedContext(ctx)
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
 	ctx, releaseParser, err := r.work.acquire(ctx, 2<<20)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	defer releaseParser()
-	owner := &ResourceRead{store: s}
-	defer owner.Close()
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	defer tx.Rollback()
 	stamp, err := readMetadataStamp(ctx, tx, workspace)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	r.mu.Lock()
 	current := r.logical[workspace]
+	currentMatches := current != nil && current.Stamp() == stamp
 	r.mu.Unlock()
-	if current != nil && current.Stamp() == stamp {
+	if currentMatches {
 		// The installed generation is exact at the stored stamp: the write
 		// committed no metadata change, or published an exact image itself
 		// (reloadResidentWorkspace keeps it the same way).
-		return true, tx.Commit()
+		return nil, tx.Commit()
 	}
-	// Under the write lock only this write installs: a generation other than
-	// base's is its own publication with an unknown stamp, which this one
-	// replaces. base's generation (retained) is exact at before.
+	// The retained base is exact at before. The prepared source is exact at
+	// after, even when another writer installs a generation during this read.
 	installed := base.source
 	after, err := s.readColdPublishState(ctx, tx, workspace)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	before := base.state
 	if after.generation != before.generation {
-		return false, coldPublishInexact("journal generation changed")
+		return nil, coldPublishInexact("journal generation changed")
 	}
 	if after.stamp.workspaceID != before.stamp.workspaceID {
-		return false, coldPublishInexact("workspace replaced")
+		return nil, coldPublishInexact("workspace replaced")
 	}
 	if after.manifestRows != before.manifestRows {
-		return false, coldPublishInexact("manifest presence changed")
+		return nil, coldPublishInexact("manifest presence changed")
 	}
 	changes := diffColdPublishStates(before, after)
 	plan, err := s.planColdPublish(ctx, tx, workspace, installed, before, after, changes)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	defer plan.close()
 	source, err := s.buildColdPublication(ctx, tx, workspace, installed, after, plan)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	defer func() {
-		if source != nil {
-			source.Release()
-		}
-	}()
+	prepared.source = source
 	head, err := residentJournalHead(ctx, tx, after.stamp.workspaceID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		return false, err
+		return nil, err
 	}
 	data, cost, err := s.metadataLogicalPolicyAdmitted(ctx, source, func(size uint64) error {
-		return owner.reserve(ctx, size)
+		return prepared.owner.reserve(ctx, size)
 	})
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	if err := s.installResidentPolicy(workspace, data, after.stamp, head, cost, source); err != nil {
-		return false, err
+	prepared.state, prepared.head, prepared.policy, prepared.cost = after, head, data, cost
+	plan.rows, plan.order, plan.before = nil, nil, nil
+	// Keep only the counts and timings needed for publication reporting.
+	for field := range plan.supplied {
+		plan.supplied[field] = reflect.Value{}
 	}
-	rememberColdPublication(coldLabelCacheKey{r, workspace}, source, after)
-	source = nil
-	noteColdPublishPlan(plan)
-	slog.Info("bounded metadata: COLD publication", "workspace", workspace, "patched", slices.Sorted(maps.Keys(plan.patch)),
-		"rebuilt", slices.Sorted(maps.Keys(plan.rebuild)), "recovered", slices.Sorted(maps.Keys(plan.part)), "labelCounts", len(plan.supplied) != 0,
-		"changes", describeColdPublishChanges(changes), "fieldMs", describeColdPublishTimings(plan.timings), "ms", time.Since(started).Milliseconds())
-	return false, nil
+	prepared.plan, prepared.changes = plan, changes
+	keep = true
+	return prepared, nil
 }
 
 // coldPublishPlan says how each field of the publication is produced.

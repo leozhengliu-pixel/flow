@@ -13,20 +13,19 @@ decision or a test by the operator or the maintainers before you rely on it.
 With the flag on, each replica:
 
 - keeps workspace policy data (teams, team settings, workspace settings) of
-  every workspace in a resident, paged form with a 192 MiB policy budget
-  (`FLOW_METADATA_POLICY_BYTES`), plus a 64 MiB evictable body cache, and
-  admits internal metadata work against a 256 MiB budget;
+  every workspace in a resident, paged form. Its evictable row and decoded
+  image caches and concurrent work each use a share of `FLOW_METADATA_MEMORY_BYTES`;
 - installs one logical source per workspace, charged 128 KiB each against a
-  64 MiB budget (`FLOW_METADATA_SOURCE_BYTES`; every later generation of a
-  workspace's source shares that charge) and spooled to temporary files
-  within 1 GiB (`FLOW_METADATA_SOURCE_DISK_BYTES`). Every workspace is
+  descriptor budget (`FLOW_METADATA_SOURCE_BYTES`). All generations of a
+  workspace share the charge. Sources are spooled to temporary files
+  under `FLOW_METADATA_SOURCE_DISK_BYTES`. Every workspace is
   resident from startup on, so these budgets grow with the number of
   workspaces (see [Tuning](#tuning));
 - reads records through the record tables and journal rather than copying the
   whole workspace;
 - sorts every HTTP route into **HOT** (proven to touch only bounded data) or
   **COLD** (still needs a whole-workspace view). HOT routes run normally.
-  COLD routes run in a COLD scope and share one COLD slot per replica.
+  COLD routes run in a COLD scope with configurable concurrency per replica.
 
 The route table is generated into
 `api/cmd/server/scale_p21_route_temperature.go`. A route missing from the
@@ -248,7 +247,7 @@ A single-replica deployment follows steps 1 to 5 only.
 ## What changes for users
 
 - **HOT routes** behave as before and do not wait for any shared slot.
-- **COLD routes** take the replica's single COLD slot for each whole-workspace
+- **COLD routes** take one of the replica's COLD slots for each whole-workspace
   operation. Waiters queue in arrival order. COLD requests also use their own
   projection gate, so they cannot hold a slot a HOT request needs.
 - When the queue is full, or a wait runs longer than the timeout, the API
@@ -262,22 +261,38 @@ A single-replica deployment follows steps 1 to 5 only.
 
 ## Tuning
 
+Set `FLOW_METADATA_MEMORY_BYTES` to the per-replica memory target in bytes.
+The automatic target is 70% of the smaller of the process's Linux cgroup
+limit and detected physical RAM. It has a 1 GiB floor where possible and
+uses at most 80% of detected memory when the floor cannot fit. A lower
+`GOMEMLIMIT` reduces the automatic target. With bounded metadata enabled,
+the runtime uses the lower of its existing soft memory limit and the target.
+
+The target controls accounted caches and work. Process RSS also includes
+live requests, runtime overhead, and native memory. Leave room above the
+target in the deployment limit and verify RSS with your workload. Tier
+overrides can spend additional headroom. Sizing is per replica.
+
 | Variable | Default | Description |
 | --- | --- | --- |
 | `FLOW_COLD_QUEUE_LIMIT` | `64` | Waiters allowed for the COLD slot, for the legacy-view lane and for the COLD projection gate. Positive integer; anything else uses the default. |
 | `FLOW_COLD_QUEUE_TIMEOUT` | `15s` | How long a COLD waiter waits before it is refused. Go duration such as `30s`. Positive; anything else uses the default. |
-| `FLOW_COLD_PROJECTION_CONCURRENCY` | `2` | Concurrent COLD projections per replica. Positive integer. |
-| `FLOW_COLD_SLOTS` | `1` | COLD facades a replica runs at once. Each holds its own copy of the decoded workspace, so memory grows with it; COLD writes stay one at a time. Positive integer. |
-| `FLOW_COLD_DECODE_CACHE_BYTES` | `268435456` (256 MiB) | Installed workspace images, in spool bytes, that a replica keeps decoded for COLD requests and for the issue bootstrap. A COLD request then copies the decoded image of the installed generation instead of decoding it, a bootstrap reads it in place, and after a write only the changed records are decoded again. The least recently used images are dropped beyond the budget; a workspace larger than the budget is decoded per request as before. `0` turns the cache off. |
+| `FLOW_COLD_PROJECTION_CONCURRENCY` | One per 512 MiB, from 2 to 8 | Concurrent COLD projections per replica. Positive integer. |
+| `FLOW_COLD_SLOTS` | One per GiB, from 1 to 4 | Concurrent COLD facades. Each owns a private copy of the decoded workspace. COLD writes still serialize. Positive integer. |
+| `FLOW_COLD_VIEW_LANES` | One per GiB, from 1 to 4 | Concurrent legacy views. Read-only projections clone their output from the shared image. Other views use private copies. Positive integer. |
+| `FLOW_METADATA_READ_CONCURRENCY` | One per 512 MiB, from 4 to 16 | Concurrent issue bootstrap requests on a bounded replica. Readers of one generation share its immutable image and reserve their own projection work. Flag-off defaults to 4. Positive integer. |
+| `FLOW_COLD_DECODE_CACHE_BYTES` | 35% of the target | Budget for decoded workspace images, including record memos and indexes. The cache evicts entire workspaces in least-recently-used order. An image too large for this budget falls back to request-local reads. `0` turns the cache off. |
 | `FLOW_COLD_DECODE_CACHE_IDLE` | `5m` | A cached image unused this long is dropped. Go duration. |
+| Encoded bootstrap cache | 1/16 of the target | Memory shared by retained JSON and the active cache producer. The issue bootstrap reuses encoded project, initiative and document fields for the same generation and visibility scope after computing live authorization and decorations. Fields that depend on file URL signing are encoded per request. |
 | `FLOW_RECORD_SPOOL_MAX_BYTES` | `268435456` | See [Related settings](#related-settings). |
 | `FLOW_SLOW_MUTATION_MS` | `500` | Threshold for the `slow workspace mutation` log line. `0` disables it. |
-| `FLOW_METADATA_POLICY_BYTES` | `201326592` (192 MiB) | Resident policy of all workspaces together, in bytes. One workspace's policy may take at most 192 MiB whatever the setting. |
-| `FLOW_METADATA_SOURCE_BYTES` | `67108864` (64 MiB) | Memory for installed workspace sources, in bytes: 128 KiB per workspace (its read cache and write buffer, shared by every generation of its source) plus 16 MiB that a start keeps free for request work and new workspaces. The default fits 384 workspaces at a start; workspaces created afterwards take from what the start left free, at least those 16 MiB. |
-| `FLOW_METADATA_SOURCE_DISK_BYTES` | `1073741824` (1 GiB) | Temporary-file space for workspace sources, in bytes, in the process's metadata spool directory. |
+| `FLOW_METADATA_WORK_BYTES` | 25% of the target | Aggregate admission across concurrent metadata operations. The existing per-operation limits still apply. |
+| `FLOW_METADATA_POLICY_BYTES` | 1/16 of the target | Resident policy of all workspaces together, in bytes. One workspace's policy may take at most 192 MiB. |
+| `FLOW_METADATA_SOURCE_BYTES` | 1/32 of the target | Memory budget for installed workspace sources. Each workspace uses a 128 KiB descriptor charge. At startup, 16 MiB must remain free for request work and new workspaces. |
+| `FLOW_METADATA_SOURCE_DISK_BYTES` | Same byte count as the target | Separate temporary-file space budget for workspace sources in the metadata spool directory. Check available disk space for your replica. |
 
-The three budget settings take a positive whole number of bytes; anything
-else uses the default. They are upper limits that the replica accounts
+Budget settings take a positive whole number of bytes, aside from the
+documented cache-off value. Invalid values use the default. They are upper limits that the replica accounts
 against, not allocations: an idle workspace's source uses well under its
 128 KiB. Raise them with the number of workspaces a replica holds. For
 example, 2520 workspaces need `FLOW_METADATA_SOURCE_BYTES` of at least
@@ -289,18 +304,18 @@ workspace once: with 2520 small workspaces on SQLite it took 83 seconds and
 about 160 MiB of heap (150 MiB of accounted policy, 315 MiB of source
 budget in use, 42 MiB of spool). Large workspaces take longer.
 
-Every workspace stays resident: the budgets bound memory per replica, they
-do not evict workspaces. Installing workspaces on first use with eviction is
-not supported in this build.
-
-The 64 MiB cache and 256 MiB work budgets are constants in this build, not
-settings. The retry delay (5 seconds) is also fixed.
+Every installed workspace keeps its policy and logical source. Decoded
+images and the row cache (1/32 of the target) are evictable. The retry delay
+is five seconds.
 
 Raise `FLOW_COLD_QUEUE_LIMIT` or the timeout only if 503s appear under normal
 load and the slot is not the bottleneck. **To be confirmed:** sizing guidance
 per workspace size; use the load rig to measure it.
 
 ## Monitoring
+
+`bounded metadata memory` logs the per-replica target and its source, the
+cache and work budgets, and the effective Go runtime limit at startup.
 
 | Log line (warning) | Meaning |
 | --- | --- |
@@ -393,8 +408,9 @@ SCALE=10 scripts/loadrig/loadrig.sh seed pg2     # or sqlite
 scripts/loadrig/loadrig.sh pair pg2              # off, drive, stop, on, drive, stop, compare
 ```
 
-- Topologies: `sqlite` is one replica; `pg2` is two replicas on PostgreSQL
-  with Redis coordination.
+- Topologies include `sqlite` (one replica), `pg2` (two replicas on
+  PostgreSQL) and `mysql2` (two replicas on MySQL 8.4). Both two-replica
+  topologies use Redis coordination.
 - `seed` runs the seeding test with hydration, journal and `FLOW_SYNC_V2` on,
   and keeps the result as the seed copy. Each `start` uses a fresh copy.
 - Both flag states run with `FLOW_RECORD_HYDRATION=on`,
@@ -407,6 +423,9 @@ scripts/loadrig/loadrig.sh pair pg2              # off, drive, stop, on, drive, 
 - Settings include `SCALE`, `VUS`, `DURATION`, `WARMUP`, `THINK`, `MIX`,
   `MODEL`, `GOMAXPROCS_REPLICA` and `GOMEMLIMIT_REPLICA`; the script header
   lists them all. Reports go to `$LOADRIG_HOME/reports`.
+- `LOADRIG_MYSQL_MEMORY` sets the MySQL container limit for `mysql2`
+  (default `1536m`). Use the same limit for both flag states and verify the
+  database stays up throughout the measurement.
 
 Compare latency, error rate, 503 count and memory between the two runs on
 data of your size before you enable the flag in production. **To be

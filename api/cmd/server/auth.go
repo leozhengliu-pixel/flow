@@ -650,7 +650,7 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 				repository := s.store
 				if repository.BoundedMetadataEnabled() {
 					var readErr error
-					repository, readErr = s.legacyColdAuthorizationRepository(r)
+					repository, readErr = s.legacyColdAuthorizationRepository(r, false)
 					if readErr != nil {
 						respondMutation(w, readErr, http.StatusOK, nil)
 						return false
@@ -1261,7 +1261,7 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		}
 		repo := s.store
 		if repo.BoundedMetadataEnabled() {
-			repo, err = s.legacyColdAuthorizationRepository(r)
+			repo, err = s.legacyColdAuthorizationRepository(r, true)
 			if err != nil {
 				return false
 			}

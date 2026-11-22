@@ -389,10 +389,14 @@ func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 		{"peer-unrelated-records", documentID, map[string]any{"title": "After peer"}},
 		{"peer-conflict-retry", documentID, map[string]any{"title": "After peer"}},
 		{"peer-large-merge", documentID, map[string]any{"title": "After peer"}},
+		{"peer-large-merge-limited", documentID, map[string]any{"title": "After peer"}},
 	}
 	formerSuspended := false
 	run := func(t *testing.T, testName, ref string, body map[string]any, principal domain.User, credential *domain.APIKey) {
 		t.Helper()
+		if testName == "peer-large-merge" {
+			defer f.probe.SetMetadataWorkLimitForTesting(768 << 20)()
+		}
 		var expected any
 		for _, mode := range []string{"legacy-warm", "bounded-warm", "legacy-reloaded", "bounded-reloaded"} {
 			repo.SetWebhookSink(nil)
@@ -451,8 +455,8 @@ func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 					duplicate := *document
 					duplicate.SlugID, duplicate.Title, duplicate.Version = prefix+"duplicate-slug", "Later duplicate", 2
 					data.Documents = append(data.Documents, duplicate)
-				case "offloaded-history", "offloaded-history-summary", "large-current-and-history", "large-current-content-edit", "peer-large-merge":
-					if testName == "large-current-and-history" || testName == "large-current-content-edit" || testName == "peer-large-merge" {
+				case "offloaded-history", "offloaded-history-summary", "large-current-and-history", "large-current-content-edit", "peer-large-merge", "peer-large-merge-limited":
+					if testName == "large-current-and-history" || testName == "large-current-content-edit" || strings.HasPrefix(testName, "peer-large-merge") {
 						document.Content = strings.Repeat("x", 4<<20)
 					}
 					document.Revisions = []domain.DocumentRevision{
@@ -590,6 +594,9 @@ func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 			started := time.Now().UTC()
 			statements := 0
 			serve := func() *httptest.ResponseRecorder {
+				if source.BoundedMetadataEnabled() && testName == "peer-large-merge-limited" {
+					defer source.SetMetadataWorkLimitForTesting(64 << 20)()
+				}
 				response := httptest.NewRecorder()
 				request := f.literalRequest(principal, credential, body)
 				request.Method, request.URL.Path = http.MethodPatch, "/api/documents/"+ref
@@ -669,13 +676,9 @@ func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 			normalized := scaleP21SW480Normalize(t, scaleP21SW59Normalized(t, got, before, started, finished), fields, documentID, existing, started, finished)
 			if strings.HasPrefix(mode, "legacy") {
 				expected = normalized
-			} else if testName == "peer-large-merge" {
-				// Known root gate, pinned rather than certified: a stale
-				// image of a document row whose current and history bodies
-				// exceed the large-row typed merge allowance (here 12 MiB
-				// native) is refused atomically, while the literal writer
-				// merges the peer's members. No row, event, audit or
-				// publication changes and every admitted owner is released.
+			} else if testName == "peer-large-merge-limited" {
+				// The 64 MiB allowance must refuse the large stale document
+				// merge without leaving a partial write.
 				if response.Code != http.StatusInternalServerError || len(got.Events) != 0 || len(got.Realtime) != 0 ||
 					len(got.Webhooks) != 0 || len(newAudits) != 0 || !bytes.Equal(beforeCanonical, canonicalRaw) {
 					t.Fatal("large stale document merge was not refused atomically", mode, response.Code, len(got.Events), len(newAudits))

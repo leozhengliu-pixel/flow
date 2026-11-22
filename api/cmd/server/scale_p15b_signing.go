@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -21,6 +22,7 @@ type hydratedURLSigning struct {
 	base    string
 	expires time.Time
 	encoded bool
+	permits atomic.Uint64
 	// signer is who the links are signed for; allow (nil: every name) is asked
 	// once per name before it is signed, and a refused name stays unsigned.
 	signer fileSigner
@@ -34,6 +36,7 @@ const maxSignedNameBytes = 3 * 255
 // permit reports whether the name in source[start:end] (as written in the
 // response, percent-encoded) may be signed.
 func (signing *hydratedURLSigning) permit(ctx context.Context, source io.ReaderAt, start, end int64) (bool, error) {
+	signing.permits.Add(1)
 	if signing.allow == nil {
 		return true, nil
 	}

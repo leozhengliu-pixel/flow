@@ -143,8 +143,21 @@ func TestScaleP21CommittedPeerPageKeepsBodiesEvictable(t *testing.T) {
 	if _, err := probe.ApplyCommittedPage(t.Context(), state.WorkspaceID, partial); !errors.Is(err, ErrPeerSnapshotRequired) {
 		t.Fatalf("partial peer transaction was accepted: %v", err)
 	}
-	if applied, err := probe.ApplyCommittedPage(t.Context(), state.WorkspaceID, page); err != nil || applied != page.Next {
+	verifiedOutsideLock := false
+	ctx := WithSQLStatementObserver(t.Context(), func(query string) {
+		if query != `SELECT COUNT(*) FROM record_journal WHERE workspace_id=? AND seq IS NULL` {
+			return
+		}
+		if probe.writeMu.TryLock() {
+			verifiedOutsideLock = true
+			probe.writeMu.Unlock()
+		}
+	})
+	if applied, err := probe.ApplyCommittedPage(ctx, state.WorkspaceID, page); err != nil || applied != page.Next {
 		t.Fatalf("resident page install failed: applied=%s error=%v", applied, err)
+	}
+	if !verifiedOutsideLock {
+		t.Fatal("peer page verification did not run outside the write lock")
 	}
 	state, err = probe.WorkspacePeerState(t.Context(), workspace)
 	if err != nil || !state.Current {

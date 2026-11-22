@@ -5,7 +5,7 @@
     "hydratedLegacySnapshotReservation": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Own bounded branch: with the flag on the estimator returns the fixed HydratedSnapshotReservationMaxBytes, exactly what WorkspaceReadSnapshotReservation answers for a bounded store, without its store lock or workspace read; flag off is unchanged. SW272 pins the only reference (signedFileURLs' admission estimator value) and the flag-off-only store accessor; SW274 compares the branch with the store estimator for bounded/literal stores and present/default/missing keys and admits a bounded bootstrap.",
+      "reason": "Own bounded branch: the bounded issue bootstrap uses its route read gate and store work reservations in place of the fixed legacy allowance. Other bounded downloads return HydratedSnapshotReservationMaxBytes. Both answers avoid the store lock and workspace read. SW272 pins the only reference (signedFileURLs' admission estimator) and the flag-off-only store accessor. SW274 compares the estimates and checks concurrent paged admission.",
       "accessors": [
         "WorkspaceReadSnapshotReservation"
       ],

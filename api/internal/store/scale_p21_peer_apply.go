@@ -19,8 +19,6 @@ func (s *SQLiteStore) applyResidentCommittedPage(ctx context.Context, workspaceI
 		return "", err
 	}
 	defer release()
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return "", err
@@ -63,10 +61,32 @@ func (s *SQLiteStore) applyResidentCommittedPage(ctx context.Context, workspaceI
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
+	// The policy and page were verified together. Before publishing them,
+	// check for a local install or a newer canonical snapshot or journal head.
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	if current, applied, ok := s.residentStamp(workspace); !ok || current != basis || applied != after {
+		return "", ErrPeerSnapshotRequired
+	}
+	latest, latestHead, err := s.readResidentPublicationStamp(ctx, workspace, workspaceID)
+	if err != nil {
+		return "", err
+	}
+	if latest != stamp || latestHead != next {
+		return "", ErrPeerSnapshotRequired
+	}
 	if err := s.installResidentPolicy(workspace, data, stamp, next, cost); err != nil {
 		return "", err
 	}
 	return page.Next, nil
+}
+
+func (s *SQLiteStore) readResidentPublicationStamp(ctx context.Context, workspace, workspaceID string) (copyStamp, int64, error) {
+	var stamp copyStamp
+	var head int64
+	err := s.db.QueryRowContext(ctx, `SELECT `+metadataStampColumns+`,COALESCE((SELECT MAX(head) FROM workspace_record_journal_heads WHERE workspace_id=?),0)
+		FROM workspace_states WHERE workspace_key=?`, workspace, cacheKindMetadata, workspaceID, workspace).Scan(&stamp.workspaceID, &stamp.revision, &head)
+	return stamp, head, err
 }
 
 func verifyResidentCommittedTransactions(ctx context.Context, tx *sqlTx, workspaceID string, after, next int64, page CommittedPage) error {

@@ -320,6 +320,43 @@ func TestColdDecodeCacheConcurrentReaders(t *testing.T) {
 	}
 }
 
+func TestColdProjectionSharedImage(t *testing.T) {
+	t.Setenv("FLOW_COLD_VIEW_LANES", "3")
+	t.Setenv("FLOW_COLD_DECODE_CACHE_BYTES", "268435456")
+	_, view, workspace := coldDecodeFixture(t)
+	source := coldDecodeInstalled(t, view, workspace)
+	defer source.Release()
+	image, ok, err := view.metadataResidency.residentImage(t.Context(), workspace, source)
+	if !ok || err != nil {
+		t.Fatalf("building the shared image: %v", err)
+	}
+	legacy, release, handled := view.coldProjectionView(t.Context(), "shared-projection-test", workspace)
+	if !handled || legacy == nil {
+		t.Fatal("missing COLD projection view")
+	}
+	projects := legacy.workspaces[workspace].Projects
+	release()
+	if len(projects) == 0 || &projects[0] != &image.data.Projects[0] {
+		t.Fatal("COLD projection input copied the shared image")
+	}
+	want := coldDecodeReference(t, source)
+	var wait sync.WaitGroup
+	for range 9 {
+		wait.Go(func() {
+			ctx, scope := WithColdScope(t.Context(), "test COLD projection")
+			defer scope.Close()
+			data, err := view.PagedWorkspaceMetadata(ctx, workspace, want.Viewer.ID)
+			if err != nil || len(data.Projects) == 0 {
+				t.Errorf("COLD projection got %d projects: %v", len(data.Projects), err)
+				return
+			}
+			coldDecodeScribble(&data)
+		})
+	}
+	wait.Wait()
+	coldDecodeAssertEqual(t, "image after concurrent projections", image.data, want)
+}
+
 // The cache keeps at most its byte budget (least recently used images go
 // first), keeps nothing with a budget of 0 or below one image, and drops an
 // image left unused for the idle period.

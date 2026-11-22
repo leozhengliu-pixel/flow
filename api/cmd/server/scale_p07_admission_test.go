@@ -63,9 +63,42 @@ func TestScaleP07ExistingLimits(t *testing.T) {
 	for _, name := range []string{"FLOW_METADATA_READ_CONCURRENCY", "FLOW_METADATA_READ_QUEUE_LIMIT", "FLOW_METADATA_READ_QUEUE_TIMEOUT", "FLOW_RESOURCE_READ_CONCURRENCY", "FLOW_RESOURCE_READ_QUEUE_LIMIT", "FLOW_RESOURCE_READ_QUEUE_TIMEOUT"} {
 		t.Setenv(name, "")
 	}
-	metadata, projection := metadataReadGateFromEnv(), projectionGateFromEnv()
+	metadata, projection := metadataReadGateFromEnv(false), projectionGateFromEnv()
 	if cap(metadata.slots) != 4 || metadata.maxQueue != 64 || metadata.wait != 20*time.Second || cap(projection.slots) != 6 || projection.maxQueue != 128 || projection.wait != 15*time.Second {
 		t.Fatal("existing admission limits changed")
+	}
+}
+
+func TestMetadataMemoryReadConcurrency(t *testing.T) {
+	t.Setenv("FLOW_METADATA_MEMORY_BYTES", "4294967296")
+	t.Setenv("FLOW_METADATA_READ_CONCURRENCY", "")
+	if defaultOff, defaultOn := cap(metadataReadGateFromEnv(false).slots), cap(metadataReadGateFromEnv(true).slots); defaultOff != 4 || defaultOn != 8 {
+		t.Fatalf("read slots off/on = %d/%d", defaultOff, defaultOn)
+	}
+	t.Setenv("FLOW_METADATA_READ_CONCURRENCY", "6")
+	if got := cap(metadataReadGateFromEnv(true).slots); got != 6 {
+		t.Fatalf("read slots = %d, want the explicit override", got)
+	}
+}
+
+func TestColdProjectionMemoryConcurrency(t *testing.T) {
+	t.Setenv("FLOW_COLD_PROJECTION_CONCURRENCY", "")
+	for _, test := range []struct {
+		bytes string
+		want  int
+	}{
+		{"536870912", 2},
+		{"3221225472", 6},
+		{"8589934592", 8},
+	} {
+		t.Setenv("FLOW_METADATA_MEMORY_BYTES", test.bytes)
+		if got := cap((&server{}).coldGate().slots); got != test.want {
+			t.Fatalf("%s-byte target: %d COLD projection slots, want %d", test.bytes, got, test.want)
+		}
+	}
+	t.Setenv("FLOW_COLD_PROJECTION_CONCURRENCY", "3")
+	if got := cap((&server{}).coldGate().slots); got != 3 {
+		t.Fatalf("%d COLD projection slots, want the explicit override", got)
 	}
 }
 

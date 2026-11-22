@@ -24,6 +24,7 @@ type ResourceRead struct {
 	closed      bool
 	store       *SQLiteStore
 	source      *metadataLogicalSource
+	image       *coldDecodedImage
 	release     []func()
 	jsonStrings *metadataJSONStringScope
 	buffer      [4096]byte
@@ -42,6 +43,7 @@ func (r *ResourceRead) Close() {
 	}
 	r.closed = true
 	r.Data, r.Allowed = domain.Bootstrap{}, false
+	r.image = nil
 	if r.jsonStrings != nil {
 		r.jsonStrings.Close()
 		r.jsonStrings = nil
@@ -115,6 +117,7 @@ func (s *SQLiteStore) BeginResourceRead(ctx context.Context, access AccessContex
 	read.source = source
 	var data domain.Bootstrap
 	if current {
+		read.image = s.metadataResidency.cachedResidentImage(p.workspace)
 		data, err = read.installed(ctx, p, kind, ref)
 	} else {
 		var tx *sqlTx
@@ -226,16 +229,20 @@ func (r *ResourceRead) withHeader(ctx context.Context, node metadataLogicalNode,
 }
 
 func (r *ResourceRead) node(ctx context.Context, node metadataLogicalNode, wire bool) (reflect.Value, error) {
-	if node.cost > (metadataWorkBytes-(128<<10))/8 {
-		return reflect.Value{}, ErrMetadataWorkBudget
-	}
-	if err := r.reserve(ctx, node.cost*8+128<<10); err != nil {
+	if err := r.reserveNode(ctx, node); err != nil {
 		return reflect.Value{}, err
 	}
 	if wire {
 		return node.WireValue(ctx, int(node.cost))
 	}
 	return node.Value(ctx, int(node.cost))
+}
+
+func (r *ResourceRead) reserveNode(ctx context.Context, node metadataLogicalNode) error {
+	if node.cost > (metadataWorkBytes-(128<<10))/8 {
+		return ErrMetadataWorkBudget
+	}
+	return r.reserve(ctx, node.cost*8+128<<10)
 }
 
 var resourceProjectHeader = []string{"ID", "SlugID", "PreviousSlugIDs", "TeamIDs"}
@@ -396,11 +403,7 @@ func (r *ResourceRead) nativeRank(ctx context.Context, node metadataLogicalNode,
 func (r *ResourceRead) nativeProjectChoice(ctx context.Context, p *resourceAccessPolicy, id string) (metadataLogicalNode, int, error) {
 	var best metadataLogicalNode
 	score := 0
-	err := r.visitNative(ctx, "projects", func(_ int, node metadataLogicalNode) error {
-		matched, err := r.nativeID(ctx, node, id)
-		if err != nil || !matched {
-			return err
-		}
+	err := r.visitNativeID(ctx, "projects", id, func(_ int, node metadataLogicalNode) error {
 		return r.withHeader(ctx, node, []string{"TeamIDs"}, func(value reflect.Value) error {
 			item := value.Interface().(domain.Project)
 			flags := 0
@@ -469,8 +472,30 @@ func (r *ResourceRead) installed(ctx context.Context, p *resourceAccessPolicy, k
 	if kind == "initiatives" {
 		names = resourceInitiativeHeader
 	}
-	err := r.visitNative(ctx, kind, func(ordinal int, node metadataLogicalNode) error {
-		rank, err := r.nativeRank(ctx, node, ref)
+	decoded := r.residentField(kind)
+	var residentRank func(int) domain.SlugMatch
+	if decoded.IsValid() {
+		switch items := decoded.Interface().(type) {
+		case []domain.Project:
+			residentRank = func(i int) domain.SlugMatch {
+				item := &items[i]
+				return domain.MatchSlugRef(ref, item.ID, item.SlugID, item.PreviousSlugIDs)
+			}
+		case []domain.Initiative:
+			residentRank = func(i int) domain.SlugMatch {
+				item := &items[i]
+				return domain.MatchSlugRef(ref, item.ID, item.SlugID, item.PreviousSlugIDs)
+			}
+		}
+	}
+	visit := func(ordinal int, node metadataLogicalNode) error {
+		var rank domain.SlugMatch
+		var err error
+		if residentRank != nil {
+			rank = residentRank(ordinal)
+		} else {
+			rank, err = r.nativeRank(ctx, node, ref)
+		}
 		if err != nil || rank <= first.rank && (!p.selected() || rank <= selected.rank) {
 			return err
 		}
@@ -507,7 +532,19 @@ func (r *ResourceRead) installed(ctx context.Context, p *resourceAccessPolicy, k
 			}
 			return nil
 		})
-	})
+	}
+	var err error
+	if residentRank != nil {
+		var ordinals []int
+		for i := range decoded.Len() {
+			if residentRank(i) != domain.SlugNoMatch {
+				ordinals = append(ordinals, i)
+			}
+		}
+		err = r.visitResidentOrdinals(ctx, kind, decoded.Len(), ordinals, visit)
+	} else {
+		err = r.visitNative(ctx, kind, visit)
+	}
 	if err != nil || first.rank == domain.SlugNoMatch {
 		return data, err
 	}
@@ -528,7 +565,7 @@ func (r *ResourceRead) installed(ctx context.Context, p *resourceAccessPolicy, k
 			full = false
 		}
 		if full {
-			value, err = r.node(ctx, choice.node, true)
+			value, err = r.residentRecord(ctx, kind, choice.ordinal, choice.node, true)
 		} else {
 			value, err = r.projectNode(ctx, choice.node, names...)
 		}
@@ -591,11 +628,7 @@ func (r *ResourceRead) nativeReferences(ctx context.Context, p *resourceAccessPo
 		seenParents[id] = true
 		var best metadataLogicalNode
 		score := 0
-		if err := r.visitNative(ctx, "initiatives", func(_ int, node metadataLogicalNode) error {
-			matched, err := r.nativeID(ctx, node, id)
-			if err != nil || !matched {
-				return err
-			}
+		if err := r.visitNativeID(ctx, "initiatives", id, func(_ int, node metadataLogicalNode) error {
 			return r.withHeader(ctx, node, resourceInitiativeHeader, func(value reflect.Value) error {
 				visible, _, readable, err := r.nativeInitiativeFlags(ctx, p, value.Interface().(domain.Initiative))
 				if visible && score == 0 {
@@ -645,11 +678,7 @@ func (r *ResourceRead) nativeReferences(ctx context.Context, p *resourceAccessPo
 				continue
 			}
 			seen[id] = true
-			if err := r.visitNative(ctx, "labels", func(_ int, node metadataLogicalNode) error {
-				matched, err := r.nativeID(ctx, node, id)
-				if err != nil || !matched {
-					return err
-				}
+			if err := r.visitNativeID(ctx, "labels", id, func(_ int, node metadataLogicalNode) error {
 				return r.withHeader(ctx, node, []string{"Scope"}, func(value reflect.Value) error {
 					scope := value.Interface().(domain.IssueLabel).Scope
 					normal := strings.ToLower(strings.TrimSpace(scope))

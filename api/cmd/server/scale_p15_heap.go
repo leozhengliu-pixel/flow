@@ -77,12 +77,14 @@ func boundHydratedLegacyDownloads(next http.Handler, estimates ...func(*http.Req
 		if len(estimates) > 0 {
 			bytes = estimates[0](r)
 		}
-		releaseAdmission, err := hydratedLegacyDownloads.acquire(ctx, bytes)
-		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "Workspace snapshot is busy; retry later")
-			return
+		if bytes != 0 {
+			releaseAdmission, err := hydratedLegacyDownloads.acquire(ctx, bytes)
+			if err != nil {
+				writeError(w, http.StatusServiceUnavailable, "Workspace snapshot is busy; retry later")
+				return
+			}
+			defer releaseAdmission()
 		}
-		defer releaseAdmission()
 		if ctx.Err() != nil {
 			writeError(w, http.StatusServiceUnavailable, "Workspace snapshot is busy; retry later")
 			return
@@ -90,21 +92,27 @@ func boundHydratedLegacyDownloads(next http.Handler, estimates ...func(*http.Req
 		controller := http.NewResponseController(w)
 		_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Minute))
 		defer controller.SetWriteDeadline(time.Time{})
-		ctx, release := store.BeginHydratedSnapshotReuse(ctx)
-		defer release()
-		ctx = context.WithValue(ctx, hydratedProducerReleaseKey{}, release)
+		if bytes != 0 {
+			var release func()
+			ctx, release = store.BeginHydratedSnapshotReuse(ctx)
+			defer release()
+			ctx = context.WithValue(ctx, hydratedProducerReleaseKey{}, release)
+		}
 		ctx = context.WithValue(ctx, hydratedLegacyDownloadKey{}, true)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 // hydratedLegacySnapshotReservation estimates a compatibility download's
-// admission. A bounded store keeps no hydrated workspace graph to measure:
-// its estimate is the fixed maximum, which is what the store's own estimator
-// answers for it, without taking the store lock or reading the workspace.
+// admission. The bounded issue bootstrap has its own read gate and store
+// work reservations. Zero lets it use that admission without a second gate
+// or a legacy buffer pool. Other bounded downloads keep the fixed allowance.
 func (s *server) hydratedLegacySnapshotReservation(r *http.Request) int64 {
 	if s.store != nil {
 		if s.store.BoundedMetadataEnabled() {
+			if r.Method == http.MethodGet && r.URL.Path == "/api/issue-records/bootstrap" && s.metadataGate != nil {
+				return 0
+			}
 			return store.HydratedSnapshotReservationMaxBytes
 		}
 		return s.store.WorkspaceReadSnapshotReservation(workspaceKey(r))

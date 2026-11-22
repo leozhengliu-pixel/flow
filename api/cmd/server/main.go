@@ -48,7 +48,8 @@ type server struct {
 	// references; production never sets it.
 	fileSigningAllowAll bool
 	// metadataGate bounds concurrent workspace metadata projections (metadata_read_gate.go).
-	metadataGate *metadataReadGate
+	metadataGate       *metadataReadGate
+	bootstrapEncodings *bootstrapEncodingRenderer
 	// projectionGate bounds resource requests that build the viewer's projection (projection_gate.go).
 	projectionGate *metadataReadGate
 	// coldProjectionGate bounds COLD requests' projections apart from HOT
@@ -376,7 +377,10 @@ func runHealthcheck() int {
 func newHandler(s *server) http.Handler {
 	legacyReadGate := make(chan struct{}, 1)
 	if s.metadataGate == nil {
-		s.metadataGate = metadataReadGateFromEnv()
+		s.metadataGate = metadataReadGateFromEnv(s.store != nil && s.store.BoundedMetadataEnabled())
+	}
+	if s.bootstrapEncodings == nil && s.store != nil && s.store.BoundedMetadataEnabled() {
+		s.bootstrapEncodings = newBootstrapEncodingRenderer(store.BoundedBootstrapEncodingBytes())
 	}
 	if s.projectionGate == nil {
 		s.projectionGate = projectionGateFromEnv()

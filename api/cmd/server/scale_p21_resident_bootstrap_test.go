@@ -28,6 +28,14 @@ func TestScaleP21ResidentBootstrapImage(t *testing.T) {
 		t.Run(driver, func(t *testing.T) {
 			f := scaleP21BootstrapHistorySeed(t, repo)
 			workspace := f.data.Workspace.URLKey
+			// The projects and documents contain upload links. Add an
+			// independent, cacheable field to exercise hits on the route.
+			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.bootstrap_encoding_seed", "", nil, func(data *domain.Bootstrap) error {
+				data.Initiatives = []domain.Initiative{{ID: "resident-initiative", Name: "Resident initiative", LeadTeamID: f.public}}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
 			view, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace, f.other)
 			if err != nil {
 				t.Fatal(err)
@@ -38,6 +46,10 @@ func TestScaleP21ResidentBootstrapImage(t *testing.T) {
 				{name: "guest", user: f.principals[3].user},
 				{name: "selected-key", user: f.principals[4].user, key: &domain.APIKey{ID: "resident-selected", Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{f.public}}},
 				{name: "development", user: f.data.Viewer, development: true},
+			}
+			encodings := newBootstrapEncodingRenderer(store.BoundedBootstrapEncodingBytes())
+			serve := func(t *testing.T, test scaleP21SW145Case) scaleP21BootstrapHistoryResponse {
+				return scaleP21BootstrapHistoryServeWith(t, f, &server{store: view, authDisabled: test.development, bootstrapEncodings: encodings}, test)
 			}
 			// reference answers a case as the comparison expects it: flag-off
 			// first; after bounded writes (which flag-off sees only through a
@@ -57,13 +69,16 @@ func TestScaleP21ResidentBootstrapImage(t *testing.T) {
 				for _, test := range cases {
 					for _, projection := range []string{"", "project-list"} {
 						test.workspace, test.projection = workspace, projection
-						bounded := scaleP21BootstrapHistoryServe(t, f, view, test)
+						bounded := serve(t, test)
 						want := reference(test)
 						if want.Status != http.StatusOK || bounded.Status != want.Status || bounded.ContentType != want.ContentType {
 							t.Fatalf("%s %s/%s: resident read %d, reference %d: %.200s", label, test.name, projection, bounded.Status, want.Status, bounded.Body)
 						}
 						if bounded.Body != want.Body {
 							t.Fatalf("%s %s/%s: resident bootstrap body differs: %d/%d bytes in %s", label, test.name, projection, len(bounded.Body), len(want.Body), scaleP21ResidentDiff(bounded.Body, want.Body))
+						}
+						if cached := serve(t, test); cached != bounded {
+							t.Fatalf("%s %s/%s: cached bootstrap body or status differs", label, test.name, projection)
 						}
 						if view.MetadataWorkUsedForTesting() != 0 {
 							t.Fatal("bounded bootstrap retained work", view.MetadataWorkUsedForTesting())
@@ -72,7 +87,11 @@ func TestScaleP21ResidentBootstrapImage(t *testing.T) {
 				}
 			}
 			before := store.ResidentImageStatsForTesting()
+			encodedHits := bootstrapEncodingHits.Load()
 			compare(t, "first", legacy)
+			if bootstrapEncodingHits.Load() <= encodedHits {
+				t.Fatal("repeat bootstraps did not reuse their encoding")
+			}
 			after := store.ResidentImageStatsForTesting()
 			if builds := after["builds"] - before["builds"]; builds != 1 {
 				t.Fatal("the resident image was not built exactly once for one generation", builds)
@@ -131,7 +150,7 @@ func TestScaleP21ResidentBootstrapImage(t *testing.T) {
 					test := cases[reader%len(cases)]
 					test.workspace = workspace
 					for range 3 {
-						response := scaleP21BootstrapHistoryServe(t, f, view, test)
+						response := serve(t, test)
 						if response.Status != http.StatusOK && response.Status != http.StatusServiceUnavailable {
 							errs <- fmt.Errorf("concurrent bootstrap answered %d: %.200s", response.Status, response.Body)
 						}

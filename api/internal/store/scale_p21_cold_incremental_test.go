@@ -936,6 +936,86 @@ func TestColdIncrementalReloadDerivesFromKnown(t *testing.T) {
 	SetColdIncrementalPublicationForTesting(true)
 }
 
+func TestColdIncrementalReloadPreservesConcurrentLocalWrite(t *testing.T) {
+	f, view, workspace := coldIncrementalFixture(t)
+	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='apiKeys' AND record_key='ci-key-1'`,
+		[]byte(`{"id":"ci-key-1","name":"Peer","prefix":"flw_1","scopes":["read"],"teamIds":[]}`), workspace); err != nil {
+		t.Fatal(err)
+	}
+	prepared, resume := make(chan struct{}), make(chan struct{})
+	hook := func() { close(prepared); <-resume }
+	residentReloadBeforeInstall.Store(&hook)
+	defer residentReloadBeforeInstall.Store(nil)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	reloaded := make(chan error, 1)
+	go func() { reloaded <- view.ReloadWorkspace(ctx, workspace) }()
+	select {
+	case <-prepared:
+	case err := <-reloaded:
+		close(resume)
+		t.Fatalf("reload skipped preparation: %v", err)
+	case <-ctx.Done():
+		close(resume)
+		t.Fatal("reload did not prepare", <-reloaded)
+	}
+	if !view.writeMu.TryLock() {
+		close(resume)
+		t.Fatal("preparation held the write lock", <-reloaded)
+	}
+	view.writeMu.Unlock()
+	const id = "ci-project-05"
+	scope := MetadataRecordScope{Write: []RecordKey{{Kind: "projects", ID: id}}}
+	err := view.MutateWorkspaceScoped(WithScopedSelectionWrite(ctx), workspace, "project.updated", id, nil, scope, func(next *domain.Bootstrap) error {
+		next.Projects[0].Description = "Local edit during reload"
+		return nil
+	})
+	close(resume)
+	reloadErr := <-reloaded
+	if err != nil || reloadErr != nil {
+		t.Fatalf("local write: %v, reload: %v", err, reloadErr)
+	}
+	source, err := view.retainMetadataLogicalSource(ctx, workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Release()
+	selected, err := source.Select(ctx, scope, 2<<20)
+	if err != nil || len(selected.Projects) != 1 || selected.Projects[0].Description != "Local edit during reload" {
+		t.Fatalf("local edit was lost: %v", err)
+	}
+	coldIncrementalAssertExact(t, f, view, workspace, "after raced reload")
+}
+
+func TestColdIncrementalReloadChecksJournalHead(t *testing.T) {
+	f, view, workspace := coldIncrementalFixture(t)
+	ctx := t.Context()
+	if _, err := f.db.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='apiKeys' AND record_key='ci-key-1'`,
+		[]byte(`{"id":"ci-key-1","name":"Peer","prefix":"flw_1","scopes":["read"],"teamIds":[]}`), workspace); err != nil {
+		t.Fatal(err)
+	}
+	stamp, head, err := view.readResidentPublicationStamp(ctx, workspace, f.data.Workspace.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var advanceErr error
+	hook := func() {
+		_, advanceErr = f.db.ExecContext(ctx, `UPDATE workspace_record_journal_heads SET head=head+1 WHERE workspace_id=?`, f.data.Workspace.ID)
+	}
+	residentReloadBeforeInstall.Store(&hook)
+	defer residentReloadBeforeInstall.Store(nil)
+	if view.reloadKnownPublication(ctx, workspace) || advanceErr != nil {
+		t.Fatalf("prepared reload did not reject an advanced journal head: %v", advanceErr)
+	}
+	residentReloadBeforeInstall.Store(nil)
+	if err := view.ReloadWorkspace(ctx, workspace); err != nil {
+		t.Fatal(err)
+	}
+	if got, applied, ok := view.residentStamp(workspace); !ok || got != stamp || applied != head+1 {
+		t.Fatalf("reload installed stamp %v at journal head %d, want %v at %d", got, applied, stamp, head+1)
+	}
+}
+
 // A bounded store's startup load keeps each workspace's generation as its
 // known publication: the first COLD write after a commit the installed
 // generation lacks publishes incrementally instead of reloading in full.

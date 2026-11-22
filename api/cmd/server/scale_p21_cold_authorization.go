@@ -59,12 +59,12 @@ func (s *server) withColdMetadataRouteMux(mux *http.ServeMux, next http.Handler)
 }
 
 // coldGate is the COLD projection gate: COLD requests' projections, bounded
-// apart from HOT ones (FLOW_COLD_PROJECTION_CONCURRENCY, default 2;
-// FLOW_COLD_QUEUE_LIMIT, default 64; FLOW_COLD_QUEUE_TIMEOUT, default 15s).
+// apart from HOT ones. FLOW_COLD_PROJECTION_CONCURRENCY overrides the default
+// from the replica's memory target. Waits use the COLD queue settings.
 func (s *server) coldGate() *metadataReadGate {
 	s.coldProjectionGateOnce.Do(func() {
 		if s.coldProjectionGate == nil {
-			s.coldProjectionGate = newMetadataReadGate(envInt("FLOW_COLD_PROJECTION_CONCURRENCY", 2), envInt("FLOW_COLD_QUEUE_LIMIT", 64), envDuration("FLOW_COLD_QUEUE_TIMEOUT", 15*time.Second), 0)
+			s.coldProjectionGate = newMetadataReadGate(envInt("FLOW_COLD_PROJECTION_CONCURRENCY", store.BoundedColdProjectionConcurrency()), envInt("FLOW_COLD_QUEUE_LIMIT", 64), envDuration("FLOW_COLD_QUEUE_TIMEOUT", 15*time.Second), 0)
 		}
 	})
 	return s.coldProjectionGate
@@ -93,18 +93,18 @@ func scaleP21ColdAuthorizationRoute(r *http.Request) (scaleP21ColdRoute, bool) {
 	return scaleP21ColdRoute{}, false
 }
 
-// legacyColdAuthorizationRepository is called only when literal resource auth
-// reaches its whole-workspace projection. Membership/admin/feature refusals
-// and earlier resource-specific authorization do not acquire a cold slot.
-func (s *server) legacyColdAuthorizationRepository(r *http.Request) (*store.SQLiteStore, error) {
+// legacyColdAuthorizationRepository supplies the literal resource auth reads.
+// PagedWorkspaceMetadata can project directly from the shared COLD image.
+// Select the facade for registered routes whose handlers also use it.
+func (s *server) legacyColdAuthorizationRepository(r *http.Request, paged bool) (*store.SQLiteStore, error) {
 	if !s.store.BoundedMetadataEnabled() {
 		return s.store, nil
 	}
 	route, selected := scaleP21ColdAuthorizationRoute(r)
 	if !selected {
-		// A default COLD request's projection is read from its legacy
-		// view of the installed workspace (no COLD slot); a HOT route's
-		// falls back to the live store, which refuses it.
+		if paged {
+			return s.store, nil
+		}
 		return s.store.ColdRequestView(r.Context(), workspaceKey(r))
 	}
 	scope, ok := r.Context().Value(requestResourceReadsKey{}).(*requestResourceReads)

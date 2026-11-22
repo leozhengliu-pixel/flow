@@ -443,7 +443,7 @@ func (w *scaleP21SW559Walk) flag(s *ast.AssignStmt) {
 					if obj := w.objectOf(s.Lhs[1]); obj != nil {
 						w.flags[obj] = 1
 					}
-				case "coldAccessorView", "coldAccessorViewKept":
+				case "coldAccessorView", "coldAccessorViewKept", "coldProjectionView":
 					if len(s.Lhs) == 3 {
 						if obj := w.objectOf(s.Lhs[0]); obj != nil {
 							w.markComplete(obj)

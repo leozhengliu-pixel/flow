@@ -568,26 +568,47 @@ func (n metadataLogicalNode) MapEntries(ctx context.Context, visit func(metadata
 }
 
 func (s *metadataLogicalSource) Select(ctx context.Context, scope MetadataRecordScope, maxBytes int) (domain.Bootstrap, error) {
+	return s.selectMetadata(ctx, scope, maxBytes, nil)
+}
+
+// selectMetadata can copy values from an exact immutable image while using
+// the source's selection order and frame costs for admission.
+func (s *metadataLogicalSource) selectMetadata(ctx context.Context, scope MetadataRecordScope, maxBytes int, image *coldDecodedImage) (domain.Bootstrap, error) {
 	var data domain.Bootstrap
 	result := reflect.ValueOf(&data).Elem()
 	remaining := maxBytes
+	valueOf := func(node metadataLogicalNode, decoded reflect.Value) (reflect.Value, error) {
+		if decoded.IsValid() && !node.unavailable {
+			if err := ctx.Err(); err != nil {
+				return reflect.Value{}, err
+			}
+			if remaining < 0 || node.cost > uint64(remaining) {
+				return reflect.Value{}, ErrMetadataWorkBudget
+			}
+			return exactCopyValue(decoded), nil
+		}
+		return node.Value(ctx, remaining)
+	}
 	err := s.VisitFields(ctx, func(name string, node metadataLogicalNode) error {
 		core := name == "workspace" || name == "viewer" || name == "viewerRole"
 		complete := slices.Contains(scope.Fields, name)
+		index, _, _ := metadataLogicalField(name)
+		var decoded reflect.Value
+		if image != nil {
+			decoded = image.fields[index].value
+		}
 		if core || complete {
-			value, err := node.Value(ctx, remaining)
+			value, err := valueOf(node, decoded)
 			if err != nil {
 				return err
 			}
 			remaining -= int(node.cost)
-			index, _, _ := metadataLogicalField(name)
 			result.Field(index).Set(value)
 			return nil
 		}
 		if !slices.Contains(metadataRecordFields(scope), name) {
 			return nil
 		}
-		index, _, _ := metadataLogicalField(name)
 		target := result.Field(index)
 		switch node.Type().Kind() {
 		case reflect.Slice:
@@ -687,7 +708,11 @@ func (s *metadataLogicalSource) Select(ctx context.Context, scope MetadataRecord
 				return fmt.Errorf("%w: ambiguous logical record in %s", ErrMetadataRecordQuery, name)
 			}
 			seen[id] = true
-			owned, err := item.Value(ctx, remaining)
+			var record reflect.Value
+			if hinted != nil && decoded.IsValid() && decoded.Kind() == reflect.Slice {
+				record = decoded.Index(int(key.Int()))
+			}
+			owned, err := valueOf(item, record)
 			if err != nil {
 				return err
 			}

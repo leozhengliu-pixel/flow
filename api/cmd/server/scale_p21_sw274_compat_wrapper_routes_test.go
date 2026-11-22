@@ -246,7 +246,7 @@ func TestScaleP21SW274IssuePermissionListHeadAndGetDifferential(t *testing.T) {
 // estimator branch with the store estimator it replaces: a bounded store's
 // estimate is the fixed maximum for every key, a literal store's estimate is
 // still the store's own measurement, and the storeless fallbacks are
-// unchanged. The admission middleware then admits a bounded bootstrap.
+// unchanged for general bootstrap. The paged route uses its own gate.
 func TestScaleP21SW274SnapshotReservationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
@@ -291,5 +291,42 @@ func TestScaleP21SW274SnapshotReservationDifferential(t *testing.T) {
 		if w.Code != http.StatusNoContent || !served {
 			t.Fatalf("bounded bootstrap admission status=%d admitted=%t", w.Code, served)
 		}
+		service.metadataGate = newMetadataReadGate(2, 2, time.Second, 0)
+		entered, done := make(chan struct{}, 2), make(chan int, 2)
+		finish := make(chan struct{})
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+		handler = boundHydratedLegacyDownloads(service.metadataGate.wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			entered <- struct{}{}
+			select {
+			case <-finish:
+			case <-r.Context().Done():
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})), service.hydratedLegacySnapshotReservation)
+		for range 2 {
+			go func() {
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/issue-records/bootstrap", nil))
+				done <- w.Code
+			}()
+		}
+		for range 2 {
+			select {
+			case <-entered:
+			case <-ctx.Done():
+				cancel()
+				<-done
+				<-done
+				t.Fatal("legacy download admission serialized the bounded issue bootstrap")
+			}
+		}
+		close(finish)
+		for range 2 {
+			if code := <-done; code != http.StatusNoContent {
+				cancel()
+				t.Fatalf("bounded issue bootstrap admission status=%d", code)
+			}
+		}
+		cancel()
 	}
 }
