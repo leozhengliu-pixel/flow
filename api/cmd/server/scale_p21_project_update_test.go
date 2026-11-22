@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -23,7 +24,7 @@ import (
 func scaleP21ProjectUpdateServe(f scaleP21M2Fixture, source *store.SQLiteStore, token string, user domain.User, key *domain.APIKey, ref string, body any) *httptest.ResponseRecorder {
 	service := &server{store: source, realtime: newRealtimeHub(), uploadPath: f.testingT.TempDir()}
 	mux := http.NewServeMux()
-	mux.HandleFunc("PATCH /api/projects/{id}", service.updateProject)
+	mux.HandleFunc("PATCH /api/projects/{id}", service.updatePortfolioProject)
 	w := httptest.NewRecorder()
 	raw, _ := json.Marshal(body)
 	if key == nil {
@@ -151,7 +152,7 @@ func scaleP21ProjectUpdateEmptyAsNull(t *testing.T, fields map[string]json.RawMe
 
 func scaleP21ProjectUpdateInstalled(t *testing.T, repo *store.SQLiteStore, workspace string) map[string]json.RawMessage {
 	t.Helper()
-	names := []string{"projects", "projectRelations", "projectUpdates"}
+	names := []string{"projects", "projectRelations", "projectUpdates", "documents"}
 	result := map[string]json.RawMessage{}
 	if repo.BoundedMetadataEnabled() {
 		read, found, err := repo.BeginInstalledMetadataRead(t.Context(), workspace)
@@ -188,7 +189,7 @@ func scaleP21ProjectUpdateInstalled(t *testing.T, repo *store.SQLiteStore, works
 
 func scaleP21ProjectUpdateRows(t *testing.T, reader *scaleP04Database, workspace string) [][]any {
 	t.Helper()
-	rows := reader.query(t, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('projects','projectRelations','projectUpdates','users','issueSuggestions') ORDER BY field,record_key`, workspace)
+	rows := reader.query(t, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('projects','projectRelations','projectUpdates','documents','users','issueSuggestions') ORDER BY field,record_key`, workspace)
 	defer rows.Close()
 	result := [][]any{}
 	for rows.Next() {
@@ -214,8 +215,7 @@ func scaleP21ProjectUpdateRows(t *testing.T, reader *scaleP04Database, workspace
 // audits, webhooks and realtime. Validation refusals, a missing project and
 // a slug reference compare too, and so does the session and API key matrix
 // on a shared and a private-team project and for an outsider. With the flag
-// on, the edits boundedProjectEditScope admits never take the COLD slot and
-// the others (update schedule, start date, teams, archive) take it.
+// on, no edit takes the COLD slot or a legacy view.
 func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
@@ -239,6 +239,8 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 	sqlFixture := scaleP21SW10Fixture{reader: reader}
 	sqlFixture.data.Workspace.URLKey = workspace
 	projectID, dependencyID, otherID, privateID := prefix+"project", prefix+"dependency", prefix+"other", prefix+"private"
+	inlineID := prefix + strings.Repeat("x", 192)
+	attachedID := prefix + "attached"
 	started, labelID, groupA, groupB := prefix+"started", prefix+"label", prefix+"group-a", prefix+"group-b"
 	initiativeID, formerID := prefix+"initiative", f.principals[2].user.ID
 	issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "Project update suggestion", "teamId": f.public}, workspace, http.StatusCreated)
@@ -273,6 +275,10 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 			domain.Project{ID: otherID, Name: "Other", TeamIDs: []string{f.public}, Status: status, Description: strings.Repeat("other body ", 4000), CreatedAt: clock, UpdatedAt: clock},
 			domain.Project{ID: privateID, Name: "Private", TeamIDs: []string{privateTeam}, Status: status, CreatedAt: clock, UpdatedAt: clock},
 		)
+		data.Documents = append(data.Documents, domain.Document{
+			ID: attachedID, Title: "Attached document", Content: "Keep the attached body", ProjectIDs: []string{projectID, otherID},
+			InheritedTeamIDs: []string{f.public}, Creator: data.Viewer, CreatedAt: clock, UpdatedAt: clock,
+		})
 		data.ProjectRelations = append(data.ProjectRelations, domain.ProjectRelation{ID: prefix + "relation", ProjectID: projectID, RelatedProjectID: dependencyID, Type: "blocked_by", CreatedAt: clock, UpdatedAt: clock})
 		data.Initiatives = append(data.Initiatives, domain.Initiative{ID: initiativeID, Name: "Initiative", Status: "active", CreatedAt: clock, UpdatedAt: clock})
 		if data.ProjectUpdates == nil {
@@ -288,6 +294,11 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 	}
 	if privateTeam == "" {
 		t.Fatal("private team fixture missing")
+	}
+	linked := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
+		map[string]any{"title": "Project progress", "teamId": f.public, "projectId": projectID}, workspace, http.StatusCreated)
+	if linked.Project == nil || linked.Project.ID != projectID {
+		t.Fatal("progress fixture did not attach the issue")
 	}
 	// The baseline is the loaded (normalized) fixture, so a warm copy and
 	// a published image start from the same values.
@@ -337,61 +348,62 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 		name, ref string
 		body      map[string]any
 		code      int
-		cold      bool
 	}
 	cases := []projectCase{
-		{"summary", projectID, map[string]any{"summary": "After"}, 200, false},
-		{"name", projectID, map[string]any{"name": "  Renamed project  "}, 200, false},
-		{"name-empty", projectID, map[string]any{"name": "  "}, 400, false},
-		{"description", projectID, map[string]any{"description": "New description"}, 200, false},
-		{"description-same", projectID, map[string]any{"description": "Before description", "summary": "With same description"}, 200, false},
-		{"icon-color", projectID, map[string]any{"icon": "Rocket", "color": "#ff0000"}, 200, false},
-		{"status", projectID, map[string]any{"statusId": started}, 200, false},
-		{"status-invalid", projectID, map[string]any{"statusId": prefix + "no-status"}, 400, false},
-		{"priority", projectID, map[string]any{"priority": 0}, 200, false},
-		{"priority-invalid", projectID, map[string]any{"priority": 7}, 400, false},
-		{"position", projectID, map[string]any{"position": 3.5}, 200, false},
-		{"health", projectID, map[string]any{"health": "atRisk"}, 200, false},
-		{"health-invalid", projectID, map[string]any{"health": "bad"}, 400, false},
-		{"lead", projectID, map[string]any{"leadId": f.principals[1].user.ID}, 200, false},
-		{"lead-clear", projectID, map[string]any{"leadId": ""}, 200, false},
-		{"lead-invalid", projectID, map[string]any{"leadId": prefix + "nobody"}, 403, false},
-		{"lead-former", projectID, map[string]any{"leadId": formerID}, 400, false},
-		{"members", projectID, map[string]any{"memberIds": []string{f.data.Viewer.ID, f.principals[1].user.ID}}, 200, false},
-		{"members-invalid", projectID, map[string]any{"memberIds": []string{prefix + "nobody"}}, 403, false},
-		{"members-former", projectID, map[string]any{"memberIds": []string{formerID}}, 400, false},
-		{"labels", projectID, map[string]any{"labelIds": []string{labelID, groupA}}, 200, false},
-		{"labels-issue-label", projectID, map[string]any{"labelIds": []string{prefix + "issue-label"}}, 400, false},
-		{"labels-same-group", projectID, map[string]any{"labelIds": []string{groupA, groupB}}, 400, false},
-		{"dependencies", projectID, map[string]any{"dependencyIds": []string{otherID}}, 200, false},
-		{"dependencies-same", projectID, map[string]any{"dependencyIds": []string{dependencyID}}, 200, false},
-		{"dependency-self", projectID, map[string]any{"dependencyIds": []string{projectID}}, 400, false},
-		{"dependency-missing", projectID, map[string]any{"dependencyIds": []string{prefix + "no-project"}}, 403, false},
-		{"dependency-relations", projectID, map[string]any{"dependencyRelations": []map[string]string{{"projectId": otherID, "type": "blocks"}, {"projectId": dependencyID, "type": "blocked_by"}}}, 200, false},
-		{"dependency-relations-conflict", projectID, map[string]any{"dependencyRelations": []map[string]string{{"projectId": otherID, "type": "blocks"}, {"projectId": otherID, "type": "blocked_by"}}}, 400, false},
-		{"initiatives", projectID, map[string]any{"initiatives": []string{initiativeID, initiativeID}}, 200, false},
-		{"initiatives-disabled", projectID, map[string]any{"initiatives": []string{initiativeID}}, 400, false},
-		{"customers-unknown", projectID, map[string]any{"customers": []string{" acme ", "acme"}}, 403, false},
-		{"target-date", projectID, map[string]any{"targetDate": "2027-01-01", "targetDateResolution": "quarter"}, 200, false},
-		{"target-date-clear", projectID, map[string]any{"targetDate": ""}, 200, false},
-		{"target-resolution-invalid", projectID, map[string]any{"targetDateResolution": "week"}, 400, false},
-		{"start-resolution", projectID, map[string]any{"startDateResolution": "month"}, 200, false},
-		{"slack", projectID, map[string]any{"slackChannelId": " C1 ", "slackChannelName": " general "}, 200, false},
-		{"cadence", projectID, map[string]any{"updateCadence": "monthly"}, 200, false},
-		{"cadence-invalid", projectID, map[string]any{"updateCadence": "daily"}, 400, false},
-		{"unarchive", projectID, map[string]any{"archived": false}, 200, false},
-		{"archived-false-noop", projectID, map[string]any{"archived": false}, 200, false},
-		{"no-op", projectID, map[string]any{"summary": "before"}, 200, false},
-		{"empty", projectID, map[string]any{}, 200, false},
-		{"missing", prefix + "missing", map[string]any{"summary": "x"}, 403, false},
-		{"slug-ref", "project-0123456789ab", map[string]any{"summary": "x"}, 404, false},
-		{"many-fields", projectID, map[string]any{"name": "All", "summary": "s", "description": "d", "statusId": started, "priority": 1, "leadId": f.principals[1].user.ID, "targetDate": "2027-02-02", "labelIds": []string{labelID}}, 200, false},
-		{"archive", projectID, map[string]any{"archived": true}, 200, true},
-		{"update-schedule-never", projectID, map[string]any{"updateSchedule": schedule}, 200, true},
-		{"update-schedule-invalid", projectID, map[string]any{"updateSchedule": map[string]any{"mode": "sometimes"}}, 400, true},
-		{"start-date", projectID, map[string]any{"startDate": "2026-01-05"}, 200, true},
-		{"teams-outside", projectID, map[string]any{"teamIds": []string{f.public, privateTeam}}, 403, true},
-		{"summary-and-teams", projectID, map[string]any{"summary": "With teams", "teamIds": []string{f.public}}, 200, true},
+		{"summary", projectID, map[string]any{"summary": "After"}, 200},
+		{"name", projectID, map[string]any{"name": "  Renamed project  "}, 200},
+		{"name-empty", projectID, map[string]any{"name": "  "}, 400},
+		{"description", projectID, map[string]any{"description": "New description"}, 200},
+		{"description-same", projectID, map[string]any{"description": "Before description", "summary": "With same description"}, 200},
+		{"icon-color", projectID, map[string]any{"icon": "Rocket", "color": "#ff0000"}, 200},
+		{"status", projectID, map[string]any{"statusId": started}, 200},
+		{"status-invalid", projectID, map[string]any{"statusId": prefix + "no-status"}, 400},
+		{"priority", projectID, map[string]any{"priority": 0}, 200},
+		{"priority-invalid", projectID, map[string]any{"priority": 7}, 400},
+		{"position", projectID, map[string]any{"position": 3.5}, 200},
+		{"health", projectID, map[string]any{"health": "atRisk"}, 200},
+		{"health-invalid", projectID, map[string]any{"health": "bad"}, 400},
+		{"lead", projectID, map[string]any{"leadId": f.principals[1].user.ID}, 200},
+		{"lead-clear", projectID, map[string]any{"leadId": ""}, 200},
+		{"lead-invalid", projectID, map[string]any{"leadId": prefix + "nobody"}, 403},
+		{"lead-former", projectID, map[string]any{"leadId": formerID}, 400},
+		{"members", projectID, map[string]any{"memberIds": []string{f.data.Viewer.ID, f.principals[1].user.ID}}, 200},
+		{"members-invalid", projectID, map[string]any{"memberIds": []string{prefix + "nobody"}}, 403},
+		{"members-former", projectID, map[string]any{"memberIds": []string{formerID}}, 400},
+		{"labels", projectID, map[string]any{"labelIds": []string{labelID, groupA}}, 200},
+		{"labels-issue-label", projectID, map[string]any{"labelIds": []string{prefix + "issue-label"}}, 400},
+		{"labels-same-group", projectID, map[string]any{"labelIds": []string{groupA, groupB}}, 400},
+		{"dependencies", projectID, map[string]any{"dependencyIds": []string{otherID}}, 200},
+		{"dependencies-same", projectID, map[string]any{"dependencyIds": []string{dependencyID}}, 200},
+		{"dependency-self", projectID, map[string]any{"dependencyIds": []string{projectID}}, 400},
+		{"dependency-missing", projectID, map[string]any{"dependencyIds": []string{prefix + "no-project"}}, 403},
+		{"dependency-relations", projectID, map[string]any{"dependencyRelations": []map[string]string{{"projectId": otherID, "type": "blocks"}, {"projectId": dependencyID, "type": "blocked_by"}}}, 200},
+		{"dependency-relations-conflict", projectID, map[string]any{"dependencyRelations": []map[string]string{{"projectId": otherID, "type": "blocks"}, {"projectId": otherID, "type": "blocked_by"}}}, 400},
+		{"initiatives", projectID, map[string]any{"initiatives": []string{initiativeID, initiativeID}}, 200},
+		{"initiatives-disabled", projectID, map[string]any{"initiatives": []string{initiativeID}}, 400},
+		{"customers-unknown", projectID, map[string]any{"customers": []string{" acme ", "acme"}}, 403},
+		{"target-date", projectID, map[string]any{"targetDate": "2027-01-01", "targetDateResolution": "quarter"}, 200},
+		{"target-date-clear", projectID, map[string]any{"targetDate": ""}, 200},
+		{"target-resolution-invalid", projectID, map[string]any{"targetDateResolution": "week"}, 400},
+		{"start-resolution", projectID, map[string]any{"startDateResolution": "month"}, 200},
+		{"slack", projectID, map[string]any{"slackChannelId": " C1 ", "slackChannelName": " general "}, 200},
+		{"cadence", projectID, map[string]any{"updateCadence": "monthly"}, 200},
+		{"cadence-invalid", projectID, map[string]any{"updateCadence": "daily"}, 400},
+		{"unarchive", projectID, map[string]any{"archived": false}, 200},
+		{"archived-false-noop", projectID, map[string]any{"archived": false}, 200},
+		{"no-op", projectID, map[string]any{"summary": "before"}, 200},
+		{"empty", projectID, map[string]any{}, 200},
+		{"missing", prefix + "missing", map[string]any{"summary": "x"}, 403},
+		{"slug-ref", "project-0123456789ab", map[string]any{"summary": "x"}, 404},
+		{"many-fields", projectID, map[string]any{"name": "All", "summary": "s", "description": "d", "statusId": started, "priority": 1, "leadId": f.principals[1].user.ID, "targetDate": "2027-02-02", "labelIds": []string{labelID}}, 200},
+		{"archive", projectID, map[string]any{"archived": true}, 200},
+		{"update-schedule-never", projectID, map[string]any{"updateSchedule": schedule}, 200},
+		{"update-schedule-invalid", projectID, map[string]any{"updateSchedule": map[string]any{"mode": "sometimes"}}, 400},
+		{"start-date", projectID, map[string]any{"startDate": "2026-01-05"}, 200},
+		{"start-date-clear", projectID, map[string]any{"startDate": ""}, 200},
+		{"teams-outside", projectID, map[string]any{"teamIds": []string{f.public, privateTeam}}, 403},
+		{"summary-and-teams", projectID, map[string]any{"summary": "With teams", "teamIds": []string{f.public}}, 200},
+		{"inline-reference", inlineID, map[string]any{"summary": "Imported record edit"}, 200},
 	}
 	formerSuspended := false
 	run := func(t *testing.T, test projectCase, principal domain.User, credential *domain.APIKey) {
@@ -420,6 +432,8 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 					switch test.name {
 					case "unarchive":
 						data.Projects[index].ArchivedAt = &clock
+					case "start-date-clear":
+						data.Projects[index].StartDate = optionalString("2026-01-05")
 					}
 				}
 				if test.name == "initiatives-disabled" {
@@ -427,6 +441,11 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 						data.WorkspaceSettings.FeatureFlags = map[string]bool{}
 					}
 					data.WorkspaceSettings.FeatureFlags["initiatives"] = false
+				}
+				if test.name == "inline-reference" {
+					data.Projects = append(data.Projects, domain.Project{
+						ID: inlineID, Name: "Legacy imported project", TeamIDs: []string{f.public}, CreatedAt: clock, UpdatedAt: clock,
+					})
 				}
 				return nil
 			})
@@ -485,10 +504,12 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 				repo.SetRealtimeSink(captureRealtime)
 			}
 			coldBefore := store.ColdSlotAcquisitionsForTesting()
+			viewsBefore := store.ColdAccessorReadsForTesting()
 			began := time.Now().UTC()
 			response := scaleP21ProjectUpdateServe(f, source, tokens[principal.ID], principal, credential, test.ref, test.body)
 			finished := time.Now().UTC()
 			coldTaken := store.ColdSlotAcquisitionsForTesting() - coldBefore
+			viewsTaken := store.ColdAccessorReadsForTesting() - viewsBefore
 			source.SetWebhookSink(nil)
 			source.SetRealtimeSink(nil)
 			repo.SetRealtimeSink(nil)
@@ -542,14 +563,32 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 			} else if len(got.Events) != 1 || len(got.Realtime) == 0 {
 				t.Fatalf("a project edit did not publish its one event: case=%s events=%d realtime=%d", test.name, len(got.Events), len(got.Realtime))
 			}
-			if source.BoundedMetadataEnabled() && test.code == 200 && response.Code == 200 {
-				// The router: an admitted edit never takes the COLD slot; the
-				// others run the literal dispatch on the COLD facade.
-				if !test.cold && coldTaken != 0 {
-					t.Fatalf("a HOT project edit took the COLD slot: case=%s acquisitions=%d", test.name, coldTaken)
+			if source.BoundedMetadataEnabled() && (coldTaken != 0 || viewsTaken != 0) {
+				t.Fatalf("project edit used the COLD lane: case=%s acquisitions=%d views=%d", test.name, coldTaken, viewsTaken)
+			}
+			switch test.name {
+			case "start-date", "start-date-clear":
+				var projects []domain.Project
+				if err := json.Unmarshal(installed["projects"], &projects); err != nil {
+					t.Fatal(err)
 				}
-				if test.cold && coldTaken == 0 && len(got.Events) != 0 {
-					t.Fatalf("a COLD project edit ran outside the COLD slot: case=%s", test.name)
+				index := slices.IndexFunc(projects, func(p domain.Project) bool { return p.ID == projectID })
+				if index < 0 {
+					t.Fatal("updated project missing from installed metadata")
+				}
+				history := projects[index].IssueCountHistory
+				if len(history) == 0 || history[len(history)-1].ScopeCount != 1 {
+					t.Errorf("%s project history did not include the linked issue", mode)
+				}
+			case "move-to-private-team":
+				var documents []domain.Document
+				if err := json.Unmarshal(installed["documents"], &documents); err != nil {
+					t.Fatal(err)
+				}
+				if !slices.ContainsFunc(documents, func(doc domain.Document) bool {
+					return doc.ID == attachedID && slices.Equal(doc.InheritedTeamIDs, []string{privateTeam, f.public}) && doc.Content == "Keep the attached body"
+				}) {
+					t.Fatal("project move did not update the linked document's inherited teams")
 				}
 			}
 			t.Logf("project case=%s mode=%s status=%d cold=%d", test.name, mode, response.Code, coldTaken)
@@ -558,6 +597,9 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) { run(t, test, baseline.Viewer, nil) })
 	}
+	t.Run("move-to-private-team", func(t *testing.T) {
+		run(t, projectCase{name: "move-to-private-team", ref: projectID, body: map[string]any{"teamIds": []string{privateTeam}}, code: 200}, f.principals[1].user, nil)
+	})
 	t.Run("permission-shared", func(t *testing.T) {
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			run(t, projectCase{name: "permission-shared", ref: projectID, body: map[string]any{"summary": "Matrix edit"}}, user, key)

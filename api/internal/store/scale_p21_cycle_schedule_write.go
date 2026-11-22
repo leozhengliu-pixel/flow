@@ -24,6 +24,8 @@ const (
 	scopedImageAgentReply
 	scopedImageCommentActionResolve
 	scopedImageRecurringOccurrence
+	scopedImagePortfolioProject
+	scopedImagePortfolioDocument
 )
 
 // Only the closed declarations above enter this executor. Each owns its
@@ -294,7 +296,8 @@ func (r *scopedImageAttempt) issueRecords(ctx context.Context, ids []string) (ma
 func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, eventType string, payload any, profile scopedImageWriteProfile, mutate func(*domain.Bootstrap) (string, error)) error {
 	if s == nil || !s.BoundedMetadataEnabled() || profile == nil || mutate == nil || !metadataOutputOwnerPresent(ctx) ||
 		(profile.kind() != scopedImageDocumentUpdate && profile.kind() != scopedImageCycleSchedule && profile.kind() != scopedImageAdvancedSchedule &&
-			profile.kind() != scopedImageAgentReply && profile.kind() != scopedImageCommentActionResolve && profile.kind() != scopedImageRecurringOccurrence) ||
+			profile.kind() != scopedImageAgentReply && profile.kind() != scopedImageCommentActionResolve && profile.kind() != scopedImageRecurringOccurrence &&
+			profile.kind() != scopedImagePortfolioProject && profile.kind() != scopedImagePortfolioDocument) ||
 		UsesIssueRecordMutations(ctx) || issueRenumbering(ctx) {
 		return ErrBoundedMetadataCoverage
 	}
@@ -622,6 +625,17 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 			return fmt.Errorf("scoped image progress: %w", err)
 		}
 		defer progress.Close()
+		if startDates, ok := profile.(interface {
+			changedProjectStartDates(domain.Bootstrap, domain.Bootstrap) []string
+		}); ok {
+			progress.rebuildProjects = startDates.changedProjectStartDates(attempt.before, attempt.data)
+			for _, id := range progress.rebuildProjects {
+				if !slices.Contains(progress.projects, id) {
+					progress.projects = append(progress.projects, id)
+				}
+			}
+			slices.Sort(progress.projects)
+		}
 		persistContext := context.WithValue(ctx, legacyMetadataExtraFieldsKey{}, profile.extraFields())
 		if err := s.persistLegacyImportInputs(persistContext, tx, workspace, requested); err != nil {
 			return fmt.Errorf("scoped image import inputs: %w", err)

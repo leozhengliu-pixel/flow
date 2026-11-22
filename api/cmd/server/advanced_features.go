@@ -485,7 +485,12 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	err := s.store.MutateWorkspaceWithAggregate(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), "document.created", input, func(data *domain.Bootstrap) (string, error) {
+	err := s.store.MutateWorkspaceWithAggregate(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), "document.created", input, documentCreateCallback(input, viewer, &created))
+	respondMutation(w, err, http.StatusCreated, created)
+}
+
+func documentCreateCallback(input documentInput, viewer templateAccess, result *domain.Document) func(*domain.Bootstrap) (string, error) {
+	return func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		title := ""
 		var template *domain.DocumentTemplate
@@ -528,7 +533,7 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 				return "", errInvalid
 			}
 		}
-		created = domain.Document{ID: idgen.New("document_"), SlugID: documentSlugID(title, newDocumentSlugSuffix()), Title: title, Color: "#8b8b90", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: idgen.New("document_permission_"), DocumentID: "", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: now, UpdatedAt: now}}}
+		created := domain.Document{ID: idgen.New("document_"), SlugID: documentSlugID(title, newDocumentSlugSuffix()), Title: title, Color: "#8b8b90", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: idgen.New("document_permission_"), DocumentID: "", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: now, UpdatedAt: now}}}
 		created.Permissions[0].DocumentID = created.ID
 		created.Permissions = append(created.Permissions, defaultDocumentGrants(created, now)...)
 		inheritDocumentTeams(data, &created)
@@ -578,9 +583,9 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 		data.Documents = append([]domain.Document{created}, data.Documents...)
 		syncDocumentProjectResources(data, created)
 		appendAudit(data, "created", "document", created.ID, map[string]any{"title": created.Title})
+		*result = created
 		return created.ID, nil
-	})
-	respondMutation(w, err, http.StatusCreated, created)
+	}
 }
 
 // documentEditRefused reports that the authorization of this request read the
@@ -883,7 +888,12 @@ func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	workspace, removedID := workspaceKey(r), id
 	directory := s.documentMemberDirectory(r)
-	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.deleted", id, nil, s.documentDeleteCallback(id, directory, &workspace, &removedID))
+	s.finishDocumentDelete(w, r, err, workspace, removedID)
+}
+
+func (s *server) documentDeleteCallback(id string, directory memberDirectory, workspace, removedID *string) func(*domain.Bootstrap) error {
+	return func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id })
 		if index < 0 {
 			if document, err := documentByID(data, id); err == nil {
@@ -897,7 +907,7 @@ func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 			return store.ErrAuthForbidden
 		}
 		removed := data.Documents[index]
-		workspace, removedID = data.Workspace.URLKey, removed.ID
+		*workspace, *removedID = data.Workspace.URLKey, removed.ID
 		if err := appendTrashWithLinks(data, "document", removed.ID, documentDisplayTitle(removed.Title), removed, captureDocumentLinks(data, removed.ID)); err != nil {
 			return err
 		}
@@ -909,7 +919,10 @@ func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		appendDocumentNotifications(s, data, removed, documentNotice{directory: directory, kind: notificationDocumentDeleted, recipients: documentSubscribers(data, removed)}, time.Now().UTC())
 		return nil
-	})
+	}
+}
+
+func (s *server) finishDocumentDelete(w http.ResponseWriter, r *http.Request, err error, workspace, removedID string) {
 	if err == nil {
 		s.realtime.invalidateDocumentAccess(workspace, removedID)
 		s.dispatchNotificationEmails(r.Context(), workspace)

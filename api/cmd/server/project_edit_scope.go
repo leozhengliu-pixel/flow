@@ -43,19 +43,16 @@ func projectEditCallback(id string, input domain.ProjectMutationInput, updated *
 // answers the scoped writer's declared inputs and true for an edit whose
 // callback reads and writes metadata records only: the project record, the
 // workspace users, settings and project relations, and the statuses, labels,
-// teams and dependency projects its input names (projectRecordRequirements,
-// the callback's input closure). The route stays COLD (the literal dispatch
-// on the COLD facade) for the edits with further effects:
+// teams and dependency projects its input names. The portfolio image handles
+// edits with further effects:
 //
 //   - updateSchedule: "never" archives the project's reminder notifications
 //     and clears its updates' due state (content records);
 //   - startDate: rebuilds the project's progress history from its issues;
 //   - teamIds: re-derives the scope of every document attached to the
 //     project (refreshProjectDocuments reads all documents);
-//   - archived=true: prunes the issue suggestions that name the project
-//     after the write (pruneProjectRecordSuggestions);
 //   - an ID the record key cannot hold (empty, over 191 bytes, NUL), which
-//     the requirements answer with the complete projects field.
+//     the image resolves by native project ID.
 func boundedProjectEditScope(id string, input domain.ProjectMutationInput) (store.MetadataRecordScope, bool) {
 	if id == "" || len(id) > 191 || strings.ContainsRune(id, '\x00') ||
 		input.UpdateSchedule != nil || input.StartDate != nil || input.TeamIDs != nil ||

@@ -1,0 +1,15 @@
+{
+  "source": "store/bounded_portfolio_documents.go",
+  "unmigrated": 0,
+  "consumers": {
+    "writePortfolioImage": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Runs the closed project edit and document lifecycle profiles with transactional audit staging and request-owned outputs. Selected content rows use the original scoped writer. Metadata overlays preserve unrelated occurrences and publication uses the logical aggregate resolver.",
+      "accessors": ["mutateBoundedScopedImage"],
+      "temperature": "hot",
+      "temperatureReason": "Closed profile dispatch for project edits and document create/delete.",
+      "callers": ["UpdatePortfolioProject", "CreatePortfolioDocument", "DeletePortfolioDocument"]
+    }
+  }
+}

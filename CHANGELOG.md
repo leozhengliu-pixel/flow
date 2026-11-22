@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded project edits select the affected reminders, progress inputs and linked documents.
+- Document creation and deletion use selected records for project links, audit and trash.
 - Bounded workspace search filters and sorts projects and documents using catalog summaries and reads text after visibility checks. PostgreSQL and SQLite batch trigram lookups across collections. SDK and MCP document search reuse indexed candidates and normalized text.
 - Removed unused internal code
 - Documented peer journal sync and metadata catalog activation for bounded API replicas.

@@ -621,10 +621,11 @@ func validateScopedIssueReaction(before, after domain.Bootstrap) error {
 }
 
 type scopedIssueReactionProgress struct {
-	store         *SQLiteStore
-	inputs        *issueHotInputs
-	before, after []domain.Issue
-	projects      []string
+	store           *SQLiteStore
+	inputs          *issueHotInputs
+	before, after   []domain.Issue
+	projects        []string
+	rebuildProjects []string
 }
 
 func (*scopedIssueReactionProgress) legacyImportCompaction() bool { return true }
@@ -786,6 +787,22 @@ func (p *scopedIssueReactionProgress) Rebuild(ctx context.Context, tx *sqlTx, wo
 	ctx = context.WithValue(ctx, issueProgressWorkKey{}, work)
 	if _, err := refreshIssueProjectProgress(ctx, tx, workspace, &data, p.before, p.after, now); err != nil {
 		return nil, err
+	}
+	for index := range data.Projects {
+		project := &data.Projects[index]
+		if !slices.Contains(p.rebuildProjects, project.ID) {
+			continue
+		}
+		start, err := projectProgressStart(ctx, tx, workspace, *project)
+		if err != nil {
+			return nil, err
+		}
+		if err := work.admitGrid(ctx, start, now); err != nil {
+			return nil, err
+		}
+		if _, err := rebuildProjectProgress(ctx, tx, workspace, &data, project, work.states, now); err != nil {
+			return nil, err
+		}
 	}
 	values, err := newMetadataLogicalBuilder(metadataLogicalSourceScratchContext(ctx, source))
 	if err != nil {
