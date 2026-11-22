@@ -392,3 +392,157 @@ averaged 1100 and 1114 MiB in minutes 6-8, then 1070 and 1209 MiB in
 minutes 8-10. Both replicas stayed below the 3072 MiB target throughout
 the run. Fixed data scale and sample duration limit the scope of this
 measurement.
+
+## Search
+
+The lead's cache-off MySQL run `base-mysql2-1x-cache-off-a` used the
+default mix with 10 virtual users. Search p50/p95/p99 were 244/6419/15113 ms.
+Four of 197 searches returned 503. Their request IDs match `context deadline
+exceeded` in the replica logs. The rig labels this response `projection-gate`
+because it shares the gate's error text.
+
+The repeat `base-mysql2-1x-cache-off-b` measured 274/8525/15006 ms and
+2/170 search 503s. Its two most expensive metadata page statements spent
+149.41 and 33.94 seconds in MySQL, averaging 1698 and 185 ms per statement.
+
+`FLOW_LOADRIG_SEARCH_PRINCIPALS=mixed` rotates the search workload across
+the seeded workspace administrator, members, guests and team-restricted
+personal keys. With `FLOW_LOADRIG_SEARCH_TIMINGS=on`, the API records candidate
+lookup, page reads by kind, visibility, history, issue search and encoding
+in microseconds. Timing logs contain no search terms or credentials.
+The timing line shares the HTTP log's request ID so the two durations can be
+compared. The issue phase reports label lookup, candidate reads and reference
+resolution. `FLOW_LOADRIG_SEARCH_TYPES` selects resource types while retaining
+the rotating terms and mixed principals.
+
+SDK document search now intersects the capped index hits with the authorized
+directory before loading headers. It uses the existing ranking and connection
+pagination. The HTTP differential covers forward and backward search cursors,
+team restrictions, and a match past the document shell's text prefix.
+
+MCP and SDK document scoring now share a single lowercase body between keyword
+scoring and snippet selection. Snippets still quote the original text with the
+same Unicode character offsets and section headings. The snippet benchmark's
+median dropped from 459 to 116 microseconds and from 1033 to 6 allocations.
+An MCP tool call also builds its authorized document lookup once for all its
+keyword sets, after applying the team, project and archived filters.
+In a SQLite benchmark with 2000 authorized documents and five keyword sets,
+the ranking call used about 1.7 MB of allocations per operation, down from
+9.7 MB. This benchmark starts with the document projection already loaded.
+
+Semantic HTTP and MCP issue search now expand the query once before scoring
+the candidates. They normalize each candidate's title once. In
+`BenchmarkSemanticSearchTextScore`, median scoring time fell from 35.3 to
+18.3 microseconds and allocations fell from 23 to 5 per candidate.
+
+Bounded MySQL projects apply the viewer's team scope before sorting. The SQL
+predicate uses the same bytewise team ID comparison as Go. It keeps at most 200
+eligible projects per page so the common search limit needs just one sort.
+Bounded search uses the existing catalog summaries for
+project and document candidates when the collection is complete, has no
+omissions and the journal covers the workspace in the same read snapshot.
+The query applies the original JSON sort and filter expressions to those
+summaries. After the Go visibility checks, one batch reads the canonical
+2,048-character text prefix for the accepted keys in each collection. The
+canonical path also covers explicit `teamId` queries because those can read
+a field outside the catalog projection. MySQL and PostgreSQL materialize
+native JSON for the selected shells to share parsing across output fields.
+PostgreSQL and SQLite batch single-term trigram hits across kinds and fall back
+to per-kind lookups if the batch exceeds 4,096 hits. With the shared result
+cache enabled, PostgreSQL and SQLite release each search snapshot before
+entering the next collection's cache fill.
+
+The store differential exercises result fields for all seven metadata kinds.
+It compares both flags for six principal and key scopes, including title and
+timestamp ties across multiple pages, archived and deleted records, and
+private document grants. An HTTP differential compares workspace and semantic
+search results, including semantic counts and cursors, for members, guests,
+administrators and team-restricted keys.
+
+The MySQL search-only probe used 5,000 issues, 2,341 projects and 90 documents
+with cache disabled. `EXPLAIN ANALYZE` returned 2,341 project hits for `load`
+in about 9 ms. The original project page took 858 ms and a key-and-sort-only
+probe took 1,039 ms. The project team's candidate filter and sort took 664 ms
+with separate JSON expressions and 457 ms when `JSON_TABLE` shared their
+parse. On the final seed, the corresponding catalog selection took 35 ms.
+Project summaries averaged 817 bytes and document summaries averaged 539
+bytes. The collections were complete with zero omissions.
+
+| MySQL search-only run, 10 virtual users | Search p50 / p95 / p99 (ms) | Metadata SQL mean (ms/search) | 5xx / searches |
+| --- | ---: | ---: | ---: |
+| Branch base, flag on | 445 / 5,390 / 15,025 | 942 | 6 / 216 |
+| Branch base, flag off | 1,477 / 4,239 / 15,009 | 1,804 | 4 / 128 |
+| Project team predicate and larger pages | 482 / 3,935 / 4,623 | 556 | 0 / 274 |
+| Shared JSON parse for project candidates | 421 / 1,906 / 2,276 | 325 | 0 / 350 |
+| Covered catalog, flag on | 182 / 320 / 464 | 52 | 0 / 696 |
+| Same build, flag off | 1,299 / 12,490 / 15,119 | 2,075 | 6 / 126 |
+
+The metadata SQL column sums the elapsed candidate, page and text reads per
+handler, including connection wait and row scanning. It includes the catalog
+coverage check. Issue search and search history have their own phases.
+The timing log includes the four-second warmup. The driver latency
+percentiles use its measurement window. The catalog comparison used MySQL
+8.4.13 with a 2,304 MiB container limit and a 128 MiB temporary table memory
+budget. The earlier probes used a 1,536 MiB container limit.
+
+The catalog build at 100 virtual users measured 2,860 / 4,140 / 5,147 ms
+with 236 ms of metadata SQL per search. All 1,230 measured requests returned
+200 with no timeouts. The run missed the 1,500 ms p95 target. Issue candidate
+reads accounted for about 1.29 seconds per handler, including reference
+resolution. The issue statements accounted for 1,232 seconds of summed MySQL time. On the seed,
+`EXPLAIN ANALYZE` sorted 4,800 qualifying issues before returning 120 for
+`search` in 25 ms with an idle database.
+
+A MySQL probe matched issues inside a recent index window, plus an exact
+identifier lookup. It retried with the original query when the window
+contained fewer visible hits than the requested limit. The differential
+passed on MySQL 8.4.13. At 100 users it measured 2,535 / 4,801 / 5,920 ms
+with 215 ms of metadata SQL, 1,237 ms in the issue phase and no errors or
+timeouts in 1,280 requests. The query is excluded from the release changes
+because it increased tail latency.
+
+At 100 users, an ordered join returned 1,239 successful searches at
+2,794 / 4,139 / 5,295 ms. A second probe split `MATCH` into its own query.
+That query accounted for 1,184 seconds of summed MySQL time, even though it
+returned keys alone. The follow-up query failed on 1,308 of 1,347 requests.
+Both probes were discarded.
+
+The resumed all-resource, issue-only and metadata-only comparison could not
+start because it needed both an available rig lock and host load below 20.
+The last measured all-resource p95 remains 4,140 ms.
+
+| PostgreSQL 17.12 search-only run, 10 virtual users | Search p50 / p95 / p99 (ms) | Metadata SQL mean (ms/search) | 5xx / searches |
+| --- | ---: | ---: | ---: |
+| Branch base, flag on | 614 / 7,234 / 15,039 | 1,550 | 5 / 145 |
+| Covered catalog, flag on | 130 / 1,123 / 2,522 | 145 | 0 / 622 |
+| Covered catalog with batched trigram hits, flag on | 101 / 445 / 913 | 53 | 0 / 789 |
+| Covered catalog build, flag off | 632 / 7,806 / 15,022 | 1,134 | 4 / 180 |
+
+On the same seed as the batched run, the catalog build with per-kind lookups
+measured 303 / 2,175 / 3,774 ms, 312 ms of metadata SQL and 2/421 search 5xx.
+Batching reduced repeated trigram scans and eliminated pages for collections
+with no hits.
+
+| SQLite search-only run, 10 virtual users | Search p50 / p95 / p99 (ms) | Metadata SQL mean (ms/search) | 5xx / searches |
+| --- | ---: | ---: | ---: |
+| Branch base, flag on | 807 / 5,043 / 5,690 | 652 | 0 / 209 |
+| Covered catalog and batched trigram hits, flag on | 44 / 288 / 433 | 19 | 0 / 926 |
+| Same build, flag off | 947 / 3,496 / 3,861 | 535 | 0 / 217 |
+
+Each 10-user sample ran for 35 seconds after warmup. The 100-user sample ran
+for 40 seconds. These runs used the rotating fixture terms and measured
+search traffic on a fixed seed. The lead's longer default mix also included
+resource writes and sync traffic. The raw driver reports, phase timings and
+SQL plans are in `~/.flow-local/live/loadrig-search/reports/`.
+
+The store and HTTP search differentials passed on MySQL, PostgreSQL and
+SQLite. Both vet runs, the store guards, and the targeted store search tests
+exited 0. The server guards exited 1 on SW480's webhook `nextAttemptAt`
+mismatch, which reproduced on the branch base. SW530 and SW559 passed on
+the final run. An earlier SW530 generated release slug mismatch also
+reproduced on the branch base.
+
+The resumed targeted server search suite exited 1 when
+`TestSharedCacheDifferential` compared different sync heads after a team
+revocation. The focused rerun of that test and `TestSharedCacheSearchWithoutRedis`
+exited 0. Command outcomes are in `reports/verification-resume.txt`.

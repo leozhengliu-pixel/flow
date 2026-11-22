@@ -92,7 +92,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_project_directory_query.go":                          "a7d33c1d062035abe237b4180d0edd386bde44d25dc364f874f96714e676f079",
 		"scale_p21_read_leaf_rows.go":                                   "45c2d9bd63bd19145b8c48771aad80470efa4d75d051449d4b4644a09b50e05f",
 		"scale_p21_resource_authorization_read.go":                      "21963760ddcf2bebadff8433da6b321b14e2771f959100eda1ddb7ddedf2d699",
-		"scale_p21_resource_directory_read.go":                          "525958c0a677927a6045fad929752239bfe97d092aa538d5e0f4f172e21a93d6",
+		"scale_p21_resource_directory_read.go":                          "5401a9c8b2a1f342f0c9d75c03b1f67cc1e0b6a5c5c9f84e67ae714aa8f059be",
 		"scale_p21_resource_policy_memo.go":                             "f4134522db037aadc7cc519e1ceb6f64eb65db899b616681eaeb4257886601e3",
 		"scale_p21_resource_read.go":                                    "5ca09910f1c137dfd89587667b24c63996fb802783b8e5e6a6f50a0b6a7e9d5c",
 		"scale_p21_sw16_former_members.go":                              "b9cc69d0ce8e48f062ab38f6bf9d617baaa2c47aa9ff89dc1f9bc78f72f5e716",
@@ -104,8 +104,8 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// own Project call; the context never reaches request authorization.
 		"scale_p21_attachment_visibility_read.go": "d6ae0a5f2e25635ae7a834a18e27eccb2b23b1ef31848d7cb47c376418729221",
 		"scale_p21_sw318_issue_read_source.go":    "434b6412f3e6546786feba97a97e5dd5c9c1a726f579949b03bf9d78bf0f9286",
-		// Search binds its local SQL reader only for bounded MySQL candidate selection.
-		"search_metadata.go": "553b73ef7d75e568484dd05c0bb660ccc5b93b85ebb550d86aa7bc1a8d1f5044",
+		// Search binds its local SQL reader for bounded candidates and catalog coverage.
+		"search_metadata.go": "bac2eb118306d5ac72aeab659869a981ae8ed42b621ef192c1d10674ba362d95",
 		// Cold-request route: the cold store stays inside its callback.
 		"../../cmd/server/oauth_authorized_applications.go": "8a0e9bec2c8ea317de40e3e4872b8587a6930369391d9e70fa7b895c38c94e9a",
 	}
@@ -141,7 +141,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_sw21_sync_requests.go:scaleP21SW21VisitRequest:sql":                1,
 		"scale_p21_triage_suggestion_read.go:ViewerProjectionScope:metadata":          1,
 		"scale_p21_triage_suggestion_read.go:projectedWorkspace:metadata":             1,
-		"search_metadata.go:beginMySQLMetadataSearch:sql":                             1,
+		"search_metadata.go:beginMetadataSearch:sql":                                  1,
 	}
 	var files []string
 	root, err := os.Getwd()

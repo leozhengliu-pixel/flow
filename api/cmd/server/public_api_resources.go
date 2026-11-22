@@ -692,21 +692,23 @@ func (s *server) listBoundedResourceConnection(w http.ResponseWriter, r *http.Re
 	var search []resourceConnectionMatch
 	if kind == "documents" && query != "" {
 		// SQL's global cap precedes the authorized candidate intersection.
-		byID := map[string]store.ResourceDirectoryToken{}
-		err = read.Visit(ctx, func(value *store.ResourceDirectoryValue) error {
-			if !coarse(value) {
-				return nil
-			}
-			if err := read.Reserve(ctx, uint64(len(value.Document.ID))*8+256); err != nil {
-				return err
-			}
-			byID[strings.Clone(value.Document.ID)] = value.Token
-			return nil
-		})
 		terms := documentSearchTerms(query)
-		if err == nil && len(terms) > 0 {
-			var ids []string
+		var ids []string
+		if len(terms) > 0 {
 			ids, err = s.store.SearchDocumentIDs(r.Context(), read.Data.Workspace.URLKey, terms, true, documentSearchCandidates)
+		}
+		if err == nil && len(ids) > 0 {
+			byID := make(map[string]store.ResourceDirectoryToken, len(ids))
+			err = read.VisitSearchDocuments(ctx, ids, func(value *store.ResourceDirectoryValue) error {
+				if !coarse(value) {
+					return nil
+				}
+				if err := read.Reserve(ctx, uint64(len(value.Document.ID))*8+256); err != nil {
+					return err
+				}
+				byID[strings.Clone(value.Document.ID)] = value.Token
+				return nil
+			})
 			for _, id := range ids {
 				token, found := byID[id]
 				if !found || err != nil {

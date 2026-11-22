@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -309,6 +310,218 @@ func TestMetadataSearchHonorsDocumentACLBeforeReturningTitles(t *testing.T) {
 	result, err = repo.SearchMetadata(ctx, policy, q)
 	if err != nil || len(result.Documents) != 1 || result.Documents[0].ID != "unscoped" {
 		t.Fatalf("API key narrowed team scope not enforced: %+v %v", result.Documents, err)
+	}
+}
+
+func TestMetadataSearchProjectionDifferential(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	legacy := openPreparationDatabase(t, preparationDatabase(t))
+	defer legacy.Close()
+	ctx := t.Context()
+	const workspace, private = "search-differential", "search-private"
+	data, err := legacy.CreateWorkspace(ctx, "Search projection", workspace, "us")
+	if err != nil {
+		t.Fatal(err)
+	}
+	public := data.Teams[0].ID
+	data.Teams = append(data.Teams, domain.Team{ID: private, Private: true})
+	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	for i := range 206 {
+		id := fmt.Sprintf("project-%03d", i)
+		team := public
+		if i < 70 {
+			team = private
+		}
+		item := domain.Project{ID: id, SlugID: id + "-slug", Name: []string{"A zephyr", "a zephyr", "É zephyr"}[i%3],
+			TeamIDs: []string{team}, Status: domain.ProjectStatus{Type: "started"}, Lead: &data.Viewer, UpdatedAt: stamp, CreatedAt: stamp.Add(time.Duration(i%5) * time.Second)}
+		if i%5 == 0 {
+			item.TeamIDs = nil
+		}
+		if i%7 == 0 {
+			item.ArchivedAt = &stamp
+		}
+		insertSearchMetadata(t, legacy, workspace, "projects", id, item)
+	}
+	// Explicit and inherited grants are checked independently of direct teams.
+	large := strings.Repeat("界", 16384)
+	for _, item := range []domain.Document{
+		{ID: "public", TeamIDs: []string{public}, Content: large},
+		{ID: "private", TeamIDs: []string{private}},
+		{ID: "inherited", InheritedTeamIDs: []string{private}},
+		{ID: "teamless"},
+		{ID: "shared", TeamIDs: []string{private}, Permissions: []domain.DocumentPermission{{SubjectType: "user", SubjectID: "reader", Role: "viewer"}}},
+		{ID: "restricted", TeamIDs: []string{public}, Permissions: []domain.DocumentPermission{{SubjectType: "user", SubjectID: "other", Role: "viewer"}}},
+		{ID: "archived", TeamIDs: []string{public}, ArchivedAt: &stamp},
+		{ID: "deleted", TeamIDs: []string{public}},
+	} {
+		item.Title, item.CreatedAt, item.UpdatedAt = "zephyr "+item.ID, stamp, stamp
+		insertSearchMetadata(t, legacy, workspace, "documents", item.ID, item)
+	}
+	if _, err := legacy.db.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='documents' AND record_key='deleted'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	insertSearchMetadata(t, legacy, workspace, "initiatives", "strategy", domain.Initiative{
+		ID: "strategy", Name: "Zephyr strategy", LeadTeamID: public, ContributingTeamIDs: []string{public}, Owner: &data.Viewer, Creator: data.Viewer,
+	})
+	insertSearchMetadata(t, legacy, workspace, "users", "guest", domain.User{ID: "guest", Name: "Zephyr guest", Active: true})
+	insertSearchMetadata(t, legacy, workspace, "customers", "customer", domain.Customer{
+		ID: "customer", Name: "Zephyr customer", Domains: []string{"example.test"}, OwnerID: data.Viewer.ID,
+	})
+	insertSearchMetadata(t, legacy, workspace, "releases", "release", domain.Release{
+		ID: "release", Name: "Zephyr release", Version: "1.2.3", Creator: data.Viewer, ProjectIDs: []string{}, IssueIDs: []string{},
+	})
+	insertSearchMetadata(t, legacy, workspace, "savedViews", "personal", domain.SavedView{
+		ID: "personal", Name: "Zephyr personal view", Scope: "personal", OwnerID: data.Viewer.ID,
+	})
+	insertSearchMetadata(t, legacy, workspace, "savedViews", "team", domain.SavedView{
+		ID: "team", Name: "Zephyr team view", Scope: "team", TeamID: public,
+	})
+	report, err := legacy.metadataCatalogPass(ctx, false)
+	if err != nil || len(report.Skipped) != 0 {
+		t.Fatalf("catalog preparation: %v, skipped: %v", err, report.Skipped)
+	}
+	bounded, err := legacy.BoundedMetadataViewForTesting(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.dialect != "mysql" {
+		fields := []string{"projects", "documents"}
+		hits, err := bounded.metadataSearchHits(ctx, workspace, "zephyr", fields, 4096)
+		if err != nil || len(hits["projects"]) != 206 || len(hits["documents"]) != 7 {
+			t.Fatalf("batched trigram hits: %d projects, %d documents: %v", len(hits["projects"]), len(hits["documents"]), err)
+		}
+		if hits, err := bounded.metadataSearchHits(ctx, workspace, "zephyr", fields, 64); err != nil || hits != nil {
+			t.Fatalf("over-limit trigram lookup retained a partial hit set: %v", err)
+		}
+	}
+	// Keep membership and key restrictions separate, including a selected
+	// empty key scope and a case variant of the stored team ID.
+	for _, principal := range []struct {
+		name, role, id string
+		admin          bool
+		keyTeams       []string
+		wantDocuments  []string
+	}{
+		{"owner", "owner", data.Viewer.ID, true, nil, []string{"inherited", "private", "public", "restricted", "shared", "teamless"}},
+		{"member", "member", "reader", false, nil, []string{"public", "shared", "teamless"}},
+		{"guest", "guest", "guest", false, nil, []string{"public", "teamless"}},
+		{"restricted-key", "member", "reader", false, []string{public}, []string{"public", "teamless"}},
+		{"empty-key", "member", "reader", false, []string{}, []string{"teamless"}},
+		{"case-variant-key", "member", "reader", false, []string{strings.ToUpper(public)}, []string{"teamless"}},
+	} {
+		t.Run(principal.name, func(t *testing.T) {
+			policy := data
+			policy.Viewer, policy.ViewerRole = domain.User{ID: principal.id}, principal.role
+			policy.TeamMembers = []domain.TeamMember{{TeamID: public, UserID: principal.id}}
+			q := SearchMetadataQuery{
+				Scope: IssueRecordQuery{Workspace: workspace, AllowedTeamIDs: principal.keyTeams, Access: &IssueRecordAccess{Admin: principal.admin, WorkspaceAdmin: principal.admin, VisibleTeamIDs: []string{public}}},
+				Types: map[string]bool{"project": true, "document": true, "initiative": true, "member": true, "customer": true, "release": true, "view": true},
+				Terms: []string{"zephyr"}, Limit: 120, SkipSharedCache: true,
+			}
+			for _, sort := range []string{"updatedAt", "createdAt", "title"} {
+				q.Scope.Sort = sort
+				want, err := legacy.SearchMetadata(ctx, policy, q)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var ids []string
+				for _, item := range want.Documents {
+					ids = append(ids, item.ID)
+					if item.ID == "public" && item.Content != strings.Repeat("界", 2048) {
+						t.Fatal("document shell content changed")
+					}
+				}
+				slices.Sort(ids)
+				if !slices.Equal(ids, principal.wantDocuments) {
+					t.Fatalf("document scope = %v, want %v", ids, principal.wantDocuments)
+				}
+				if (principal.name == "member" || principal.name == "restricted-key") && len(want.Projects) <= 64 {
+					t.Fatalf("fixture did not cross the page boundary: %d projects", len(want.Projects))
+				}
+				if principal.admin && (len(want.Initiatives) != 1 || len(want.Users) != 1 || len(want.Customers) != 1 || len(want.Releases) != 1 || len(want.SavedViews) != 2) {
+					t.Fatal("fixture did not exercise all metadata search kinds")
+				}
+				got, err := bounded.SearchMetadata(ctx, policy, q)
+				assertSearchMetadataEqual(t, sort, got, want, err)
+			}
+			q.Scope.Archived = "all"
+			q.Scope.Direction = "asc"
+			q.Scope.Sort = "createdAt"
+			q.Scope.Filter = IssueFilter{And: []IssueFilter{{Field: "team", Values: []string{public}}, {Field: "createdAt", Operator: "gte", Values: []string{stamp.Format(time.RFC3339)}}}}
+			want, err := legacy.SearchMetadata(ctx, policy, q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := bounded.SearchMetadata(ctx, policy, q)
+			assertSearchMetadataEqual(t, "archived/filtered", got, want, err)
+			q.Terms = []string{"nonexistent", "zephyr"}
+			got, err = bounded.SearchMetadata(ctx, policy, q)
+			assertSearchMetadataEqual(t, "multi-term", got, want, err)
+			if principal.admin {
+				q.Scope.Filter = IssueFilter{}
+				q.Terms = []string{"zephyr"}
+				q.Limit = 300
+				want, err := legacy.SearchMetadata(ctx, policy, q)
+				if err != nil || len(want.Projects) != 206 {
+					t.Fatalf("large page fixture: got %d projects, want 206: %v", len(want.Projects), err)
+				}
+				var catalogPages int
+				observed := WithSQLStatementObserver(ctx, func(statement string) {
+					if strings.Contains(statement, "summary AS data FROM metadata_catalog") {
+						catalogPages++
+					}
+				})
+				got, err := bounded.SearchMetadata(observed, policy, q)
+				assertSearchMetadataEqual(t, "large paginated", got, want, err)
+				if catalogPages < 3 {
+					t.Fatalf("catalog path read %d pages, want at least two project pages and one document page", catalogPages)
+				}
+				if _, err := legacy.db.ExecContext(ctx, `UPDATE metadata_catalog_collections SET phase=1 WHERE workspace_key=? AND field='projects'`, workspace); err != nil {
+					t.Fatal(err)
+				}
+				catalogPages = 0
+				got, err = bounded.SearchMetadata(observed, policy, q)
+				assertSearchMetadataEqual(t, "incomplete catalog", got, want, err)
+				if catalogPages != 1 {
+					t.Fatalf("catalog path read %d pages, want only the document page", catalogPages)
+				}
+				if _, err := legacy.db.ExecContext(ctx, `UPDATE metadata_catalog_collections SET phase=2 WHERE workspace_key=? AND field='projects'`, workspace); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func assertSearchMetadataEqual(t *testing.T, name string, got, want domain.Bootstrap, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("%s search: %v", name, err)
+	}
+	if reflect.DeepEqual(got, want) {
+		return
+	}
+	actual, expected := reflect.ValueOf(got), reflect.ValueOf(want)
+	for i := range actual.NumField() {
+		a, b := actual.Field(i), expected.Field(i)
+		if reflect.DeepEqual(a.Interface(), b.Interface()) {
+			continue
+		}
+		field := actual.Type().Field(i).Name
+		if a.Kind() == reflect.Slice && a.Type().Elem().Kind() == reflect.Struct {
+			for j := range min(a.Len(), b.Len()) {
+				left, right := a.Index(j), b.Index(j)
+				for k := range left.NumField() {
+					if !reflect.DeepEqual(left.Field(k).Interface(), right.Field(k).Interface()) {
+						t.Fatalf("%s search %s[%d].%s differs: got %.120v (ID %v), want %.120v (ID %v); lengths %d/%d", name, field, j, left.Type().Field(k).Name, left.Field(k), left.FieldByName("ID"), right.Field(k), right.FieldByName("ID"), a.Len(), b.Len())
+					}
+				}
+			}
+			t.Fatalf("%s search %s differs: lengths %d/%d", name, field, a.Len(), b.Len())
+		}
+		t.Fatalf("%s search %s differs", name, field)
 	}
 }
 

@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,8 +18,12 @@ import (
 func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
+	ctx, phase, finish := searchRequestTiming(ctx)
+	defer finish()
 	r = r.WithContext(ctx)
+	policyDone := phase("policy")
 	policy, scope, err := s.searchQuery(r)
+	policyDone()
 	if err != nil {
 		issueRecordsErrorFor(w, r, err)
 		return
@@ -40,6 +46,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	userID := policy.Viewer.ID
+	historyDone := phase("history")
 	if query != "" {
 		_ = s.store.RecordSearch(r.Context(), policy.Workspace.ID, userID, query)
 	}
@@ -48,6 +55,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	if query == "" {
 		recent, _ = s.store.RecentResources(r.Context(), policy.Workspace.ID, userID, 12)
 	}
+	historyDone()
 	terms := []string{}
 	if query != "" {
 		terms = append(terms, query)
@@ -66,6 +74,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		results = buildSearchResultsLimited(data, query, types, candidateLimit, scope.Archived == "all", true)
 	}
 	if query != "" && types["issue"] {
+		issueDone := phase("issue")
 		scope.Text = ""
 		seen := map[string]bool{}
 		for _, result := range results {
@@ -73,8 +82,11 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 				seen[result.ID] = true
 			}
 		}
+		labelDone := phase("issue_labels")
 		labelIDs, labelErr := s.store.MatchingIssueSearchLabels(r.Context(), scope, query)
+		labelDone()
 		if labelErr != nil {
+			issueDone()
 			issueRecordsErrorFor(w, r, labelErr)
 			return
 		}
@@ -87,6 +99,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 			results = append(results, scoreIssueSearchResult(issue, query))
 			return nil
 		})
+		issueDone()
 		if err != nil {
 			issueRecordsErrorFor(w, r, err)
 			return
@@ -125,7 +138,27 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		results = results[:limit]
 	}
 	s.attachSearchResultLinks(r, results, data)
+	encodeDone := phase("encode")
 	writeJSON(w, http.StatusOK, domain.SearchResponse{Results: results, History: history, Recent: recent})
+	encodeDone()
+}
+
+func searchRequestTiming(ctx context.Context) (context.Context, func(string) func(), func()) {
+	if os.Getenv("FLOW_LOADRIG_SEARCH_TIMINGS") != "on" {
+		return ctx, func(string) func() { return func() {} }, func() {}
+	}
+	started := time.Now()
+	var phases []string
+	observe := func(name string, elapsed time.Duration) {
+		phases = append(phases, name+"="+strconv.FormatInt(elapsed.Microseconds(), 10))
+	}
+	return store.WithSearchMetadataTiming(ctx, observe), func(name string) func() {
+			start := time.Now()
+			return func() { observe(name, time.Since(start)) }
+		}, func() {
+			observe("handler", time.Since(started))
+			log.Printf("search timings us: %s request_id=%q", strings.Join(phases, " "), requestIDFrom(ctx))
+		}
 }
 
 func searchMetadataQueryForRequest(r *http.Request, scope store.IssueRecordQuery, types map[string]bool, terms []string, recent []domain.RecentResource, limit int) store.SearchMetadataQuery {

@@ -488,7 +488,7 @@ func (s *server) searchMCPIssues(ctx context.Context, actor mcpActor, data domai
 			for _, label := range issue.Labels {
 				labels = append(labels, label.Name)
 			}
-			score, _ := semanticTextScore(query, issue.Title, issue.Description, issue.Identifier, issue.Team.Name, issue.State.Name, strings.Join(labels, " "))
+			score, _ := semanticTextScore(terms, issue.Title, issue.Description, issue.Identifier, issue.Team.Name, issue.State.Name, strings.Join(labels, " "))
 			if score == 0 {
 				score = 1
 			}

@@ -402,6 +402,26 @@ func (r *ResourceDirectoryRead) prepare() error {
 
 // Visit releases each header immediately after the typed callback returns.
 func (r *ResourceDirectoryRead) Visit(ctx context.Context, visit func(*ResourceDirectoryValue) error) error {
+	return r.visit(ctx, nil, visit)
+}
+
+// VisitSearchDocuments loads headers only for indexed candidates that also
+// appear in the directory's authorized projection.
+func (r *ResourceDirectoryRead) VisitSearchDocuments(ctx context.Context, ids []string, visit func(*ResourceDirectoryValue) error) error {
+	if r.kind != "documents" {
+		return ErrMetadataRecordQuery
+	}
+	if err := r.Reserve(ctx, uint64(len(ids))*64); err != nil {
+		return err
+	}
+	candidates := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		candidates[id] = true
+	}
+	return r.visit(ctx, candidates, visit)
+}
+
+func (r *ResourceDirectoryRead) visit(ctx context.Context, candidates map[string]bool, visit func(*ResourceDirectoryValue) error) error {
 	accept := func(tag, id string) error {
 		kind := r.kind
 		if kind == "projectMilestones" {
@@ -458,6 +478,9 @@ func (r *ResourceDirectoryRead) Visit(ctx context.Context, visit func(*ResourceD
 		}
 	case "documents":
 		for _, item := range r.Data.Documents {
+			if candidates != nil && !candidates[item.ID] {
+				continue
+			}
 			if err := accept(item.Title, item.ID); err != nil {
 				return err
 			}

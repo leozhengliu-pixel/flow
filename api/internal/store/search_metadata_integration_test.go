@@ -125,6 +125,10 @@ func TestExternalMetadataSearchCacheDifferential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	report, err := repo.metadataCatalogPass(ctx, false)
+	if err != nil || len(report.Skipped) != 0 {
+		t.Fatalf("catalog preparation: %v, skipped: %v", err, report.Skipped)
+	}
 	view, err := repo.BoundedMetadataViewForTesting(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +136,7 @@ func TestExternalMetadataSearchCacheDifferential(t *testing.T) {
 	wantColor := "null"
 	if repo.dialect == "mysql" {
 		wantColor = ""
-		if hits, err := view.mysqlMetadataSearchHits(ctx, workspace, "zephyr", []string{"projects", "documents"}, 1); err != nil || hits != nil {
+		if hits, err := view.metadataSearchHits(ctx, workspace, "zephyr", []string{"projects", "documents"}, 1); err != nil || hits != nil {
 			t.Fatalf("over-limit search retained a partial hit set: %v", err)
 		}
 	}
@@ -144,8 +148,7 @@ func TestExternalMetadataSearchCacheDifferential(t *testing.T) {
 	defer coordinator.Close()
 	repo.SetWorkspaceCoordinator(coordinator)
 	view.SetWorkspaceCoordinator(coordinator)
-	// A cache fill must be able to validate the search result while the
-	// MySQL candidate lookup holds the only connection.
+	// Validate cache fills while the candidate snapshot owns the only connection.
 	repo.db.SetMaxOpenConns(1)
 
 	for _, sort := range []string{"", "title"} {

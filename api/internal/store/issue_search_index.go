@@ -421,6 +421,7 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	if boundedScratch != nil {
 		return s.searchIssueCandidateRows(ctx, q.Workspace, prefix, inner, len(prefixArgs), params, outer, orderArgs, visit)
 	}
+	readDone := startSearchMetadataPhase(ctx, "issue_rows")
 	rows, err := s.db.QueryContext(ctx, prefix+`SELECT output.list_data,output.data FROM (`+inner+`) candidates JOIN issue_records output ON output.id=candidates.id AND output.workspace_key=?`+outer, append(params, orderArgs...)...)
 	if err != nil {
 		return err
@@ -458,7 +459,11 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 		return err
 	}
 	rows.Close()
-	if err := s.resolveIssueReferences(ctx, q.Workspace, items); err != nil {
+	readDone()
+	resolveDone := startSearchMetadataPhase(ctx, "issue_refs")
+	err = s.resolveIssueReferences(ctx, q.Workspace, items)
+	resolveDone()
+	if err != nil {
 		return err
 	}
 	for _, issue := range items {

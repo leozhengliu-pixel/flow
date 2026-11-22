@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -14,6 +15,111 @@ import (
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
+
+func BenchmarkSemanticSearchTextScore(b *testing.B) {
+	const query = "urgent search feature project"
+	const title = "Urgent search feature: project plan"
+	body := strings.Repeat("This project tracks critical search improvements. ", 48)
+	terms := semanticTerms(query)
+	b.ReportAllocs()
+	for b.Loop() {
+		semanticTextScore(terms, title, body, "Feature work", "In Progress")
+	}
+}
+
+func TestMetadataSearchHTTPDifferential(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	for driver, repo := range scaleP03ServerTestStores(t) {
+		t.Run(driver, func(t *testing.T) {
+			f := scaleP21M2Setup(t, repo)
+			workspace := f.data.Workspace.URLKey
+			at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+			if err := repo.MutateWorkspace(t.Context(), workspace, "search.http_fixture", "", nil, func(data *domain.Bootstrap) error {
+				private := ""
+				for _, team := range data.Teams {
+					if strings.HasPrefix(team.ID, "m2-private-") {
+						private = team.ID
+						break
+					}
+				}
+				lead := data.Viewer
+				data.Projects = append(data.Projects,
+					domain.Project{ID: "zephyr-public", Name: "Zephyr public", TeamIDs: []string{f.public}, Lead: &lead, CreatedAt: at, UpdatedAt: at},
+					domain.Project{ID: "zephyr-private", Name: "Zephyr private", TeamIDs: []string{private}, CreatedAt: at, UpdatedAt: at},
+					domain.Project{ID: "zephyr-archived", Name: "Zephyr archived", TeamIDs: []string{f.public}, CreatedAt: at, UpdatedAt: at, ArchivedAt: &at},
+				)
+				data.Documents = append(data.Documents,
+					domain.Document{ID: "zephyr-document", Title: "Zephyr document", TeamIDs: []string{f.public}, Content: strings.Repeat("padding ", 2500) + "zephyr", CreatedAt: at, UpdatedAt: at},
+					domain.Document{ID: "zephyr-inherited", Title: "Zephyr inherited", InheritedTeamIDs: []string{private}, CreatedAt: at, UpdatedAt: at},
+					domain.Document{ID: "zephyr-granted", Title: "Zephyr granted", InheritedTeamIDs: []string{private}, Permissions: []domain.DocumentPermission{{SubjectType: "user", SubjectID: f.principals[3].user.ID, Role: "viewer"}}, CreatedAt: at, UpdatedAt: at},
+				)
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+				t.Fatal(err)
+			}
+			for _, principal := range f.principals {
+				for _, key := range []*domain.APIKey{nil, {ID: "search-http-key", TeamRestriction: "selected", TeamIDs: []string{f.public}}} {
+					for _, semantic := range []bool{false, true} {
+						compare := func(params url.Values) string {
+							t.Helper()
+							serve := func(candidate *store.SQLiteStore) map[string]json.RawMessage {
+								r := f.literalRequest(principal.user, key, nil)
+								r.Method, r.URL.Path, r.URL.RawQuery = http.MethodGet, "/api/search", params.Encode()
+								service := &server{store: candidate}
+								w := httptest.NewRecorder()
+								if semantic {
+									r.URL.Path += "/semantic"
+									service.semanticSearch(w, r)
+								} else {
+									service.searchWorkspace(w, r)
+								}
+								var response map[string]json.RawMessage
+								if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || w.Code != http.StatusOK {
+									t.Fatalf("%s: status %d, body %s, error %v", r.URL, w.Code, w.Body.Bytes(), err)
+								}
+								// Both requests record their own history timestamp and count.
+								delete(response, "history")
+								return response
+							}
+							want, got := serve(repo), serve(f.probe)
+							for field, expected := range want {
+								if actual := got[field]; !bytes.Equal(actual, expected) {
+									t.Fatalf("principal=%s restricted=%t semantic=%t query=%s field=%s\nflag off=%.350s\nflag on=%.350s", principal.name, key != nil, semantic, params.Encode(), field, expected, actual)
+								}
+							}
+							if len(got) != len(want) {
+								t.Fatalf("principal=%s restricted=%t semantic=%t query=%s: flag on has extra response fields", principal.name, key != nil, semantic, params.Encode())
+							}
+							var cursor string
+							if semantic {
+								if err := json.Unmarshal(want["nextCursor"], &cursor); err != nil {
+									t.Fatal(err)
+								}
+							}
+							return cursor
+						}
+						params := url.Values{"q": {"zephyr"}, "types": {"project,document"}, "limit": {"1"}, "sort": {"title"}}
+						if cursor := compare(params); cursor != "" {
+							params.Set("cursor", cursor)
+							compare(params)
+						}
+						params.Del("cursor")
+						params.Set("limit", "20")
+						params.Set("teamId", f.public)
+						params.Set("includeArchived", "true")
+						params.Set("sort", "createdAt")
+						compare(params)
+					}
+				}
+			}
+		})
+	}
+}
 
 func TestSearchFiltersSortAndArchiveRunBeforeCandidateLimit(t *testing.T) {
 	repo, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "search.db"))

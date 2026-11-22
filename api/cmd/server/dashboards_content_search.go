@@ -1295,25 +1295,29 @@ func semanticTerms(value string) []string {
 	return normalizedStrings(result)
 }
 
-func semanticTextScore(query string, fields ...string) (int, []string) {
-	terms := semanticTerms(query)
+func semanticTextScore(terms []string, fields ...string) (int, []string) {
 	if len(terms) == 0 {
 		return 1, nil
 	}
 	haystack := normalizeSearch(strings.Join(fields, " "))
+	title := ""
+	if len(fields) > 0 {
+		title = normalizeSearch(fields[0])
+	}
 	score := 0
 	matched := []string{}
 	for _, term := range terms {
-		if strings.Contains(haystack, normalizeSearch(term)) {
+		normalized := normalizeSearch(term)
+		if strings.Contains(haystack, normalized) {
 			weight := 70
-			if strings.Contains(normalizeSearch(strings.Join(fields[:min(1, len(fields))], " ")), normalizeSearch(term)) {
+			if strings.Contains(title, normalized) {
 				weight = 140
 			}
 			score += weight
 			matched = append(matched, term)
 		}
 	}
-	return score, normalizedStrings(matched)
+	return score, matched
 }
 
 func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
@@ -1358,7 +1362,7 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 			for _, label := range issue.Labels {
 				labels = append(labels, label.Name)
 			}
-			score, matched := semanticTextScore(query, issue.Title, issue.Description, issue.Identifier, issue.Team.Name, issue.State.Name, strings.Join(labels, " "))
+			score, matched := semanticTextScore(terms, issue.Title, issue.Description, issue.Identifier, issue.Team.Name, issue.State.Name, strings.Join(labels, " "))
 			if score == 0 {
 				score = 1
 			}
@@ -1379,7 +1383,7 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	add := func(item domain.SearchResult, fields ...string) {
-		score, matched := semanticTextScore(query, fields...)
+		score, matched := semanticTextScore(terms, fields...)
 		if score == 0 {
 			score = 1
 		}
