@@ -1,0 +1,15 @@
+{
+  "source": "store/bounded_issue_lifecycle.go",
+  "unmigrated": 0,
+  "consumers": {
+    "DeleteIssueScoped": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Reads explicit issues, their parent and relation targets, and the children of the explicit issues with indexed queries. Link headers on the installed metadata select the affected records. The transaction rechecks access and writes deletions, stats, metadata patches, typed trash and event data before installing the committed generation.",
+      "accessors": ["mutateBoundedScopedImage"],
+      "temperature": "hot",
+      "temperatureReason": "Closed issue-delete profile with admitted selected inputs and transactional publication.",
+      "callers": ["server/bounded_issue_lifecycle.go:deleteIssue"]
+    }
+  }
+}

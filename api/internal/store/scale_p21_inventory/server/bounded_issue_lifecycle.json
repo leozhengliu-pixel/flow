@@ -1,0 +1,15 @@
+{
+  "source": "server/bounded_issue_lifecycle.go",
+  "unmigrated": 0,
+  "consumers": {
+    "deleteIssue": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The production mux rewrites the old issue URL before authorization and dispatch. Both URLs enter the same record alias and share the typed trash callback and post-commit collaboration and suggestion cleanup. The bounded deletion transaction rechecks the target and actor. The literal writer remains available for flag-off requests.",
+      "accessors": ["Bootstrap", "DeleteIssueScoped", "MutateWorkspace"],
+      "temperature": "hot",
+      "temperatureReason": "Flag-on issue-record deletion uses scoped issue and content rows and selected metadata links.",
+      "callers": ["DELETE /api/issue-records/{id} (server/main.go)", "DELETE /api/issues/{id} (server/main.go)"]
+    }
+  }
+}
