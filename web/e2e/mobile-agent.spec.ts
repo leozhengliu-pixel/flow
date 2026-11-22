@@ -23,7 +23,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
         const address = server.httpServer!.address() as { port: number }
         await page.goto(`http://127.0.0.1:${address.port}/${workspaceKey}/review/add-exported-whisper2-function/changes?showAgent=true&agentSessionId=mobile-agent-agent-panel`)
         const panel = page.locator('.review-agent-panel')
-        await expect(panel).toBeVisible()
+        // A fresh dev server compiles the app on this first visit; CI machines need longer than the default.
+        await expect(panel).toBeVisible({ timeout: 20_000 })
         const toggle = page.getByRole('button', { name: 'Hide agent', exact: true })
         await expect(toggle).toHaveAttribute('aria-pressed', 'true')
         await expect(toggle.locator('.review-agent-toggle-filled')).toBeVisible()
