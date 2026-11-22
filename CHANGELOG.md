@@ -25,6 +25,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Incremental metadata reloads reuse the revision stamp already read in the same SQL snapshot.
 - Realtime source builders skip projection when their source revision changed while waiting. Requests waiting for that same revision share the failed version check.
 - MySQL groups workspace-wide comment and activity reads using the existing resource-order index.
+- Bounded MySQL content hydration reports the same first malformed record as legacy hydration.
 - Bounded peer reloads reuse prepared metadata when the journal advances and the live SQL metadata revision and journal generation still match.
 - Realtime source and policy cache hits can finish while other keys are being built.
 - Sync changes retry with one complete transaction after two source-version races, with a cursor for the rest of the page.

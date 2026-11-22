@@ -262,7 +262,7 @@ func (n legacyContentImageNode) withCursor(ctx context.Context, visit func(*lega
 }
 
 func (n legacyContentImageNode) stageRows(ctx context.Context, stage *sw26MigrationStage, frames *metadataLogicalBuilder, typ reflect.Type, keyLength, bodyLength string, maxKey, maxBody int64) (err error) {
-	query := "SELECT " + keyLength + "," + bodyLength + ",CASE WHEN " + keyLength + "<=? THEN resource_id ELSE NULL END,CASE WHEN " + bodyLength + "<=? THEN data ELSE NULL END FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY created_at,id"
+	columns := keyLength + "," + bodyLength + ",CASE WHEN " + keyLength + "<=? THEN resource_id ELSE NULL END,CASE WHEN " + bodyLength + "<=? THEN data ELSE NULL END"
 	args := []any{maxKey, maxBody, n.workspace, n.kind}
 	base := legacyRecordBaseCapture(ctx)
 	if base != nil && !base.loaded[n.kind] {
@@ -282,9 +282,10 @@ func (n legacyContentImageNode) stageRows(ctx context.Context, stage *sw26Migrat
 		if err := physical.reserve(ctx, uint64(maxID)*8+64<<10); err != nil {
 			return err
 		}
-		query = "SELECT " + keyLength + "," + bodyLength + ",CASE WHEN " + keyLength + "<=? THEN resource_id ELSE NULL END,CASE WHEN " + bodyLength + "<=? THEN data ELSE NULL END,CASE WHEN " + idLength + "<=? THEN id ELSE NULL END," + idLength + " FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY created_at,id"
+		columns += ",CASE WHEN " + idLength + "<=? THEN id ELSE NULL END," + idLength
 		args = []any{maxKey, maxBody, maxID, n.workspace, n.kind}
 	}
+	query := "SELECT " + columns + " FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY " + contentRecordHydrationOrder(n.store.dialect)
 	rows, err := n.tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
