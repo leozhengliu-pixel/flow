@@ -118,8 +118,15 @@ func (s *server) syncPeerWorkspace(ctx context.Context, workspace string) error 
 	if !c.initialized || replaced {
 		// Capture H0 BEFORE loading the snapshot. Commits racing that load
 		// are replayed after H0 rather than skipped by a later head read.
-		if err := s.store.ReloadWorkspace(ctx, workspace); err != nil {
-			return err
+		// A resident or legacy copy that the authority already marks current
+		// needs no reload. Avoid taking the workspace write lock during the
+		// first request burst after startup. Pending event sequencing still
+		// requires the compatibility reload so the event cursor cannot skip a
+		// publication that is not yet durable.
+		if !state.Current || state.Pending {
+			if err := s.store.ReloadWorkspace(ctx, workspace); err != nil {
+				return err
+			}
 		}
 		c.workspaceID, c.cursor, c.initialized = state.WorkspaceID, state.Head, true
 		c.eventCursor = state.EventHead

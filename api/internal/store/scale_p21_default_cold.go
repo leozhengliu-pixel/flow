@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"flow/api/internal/coordination"
 	"flow/api/internal/domain"
 )
 
@@ -59,6 +60,7 @@ type ColdScope struct {
 	// (ColdRequestView), decoded once and dropped at Close.
 	view      *SQLiteStore
 	viewStore *SQLiteStore
+	copyReuse *coldCopyReuse
 }
 
 // WithColdScope opens a COLD scope for ctx. pattern names the route for
@@ -126,8 +128,20 @@ func (c *ColdScope) Close() {
 		return
 	}
 	c.mu.Lock()
-	c.view, c.viewStore, c.closed = nil, nil, true
+	view, reuse := c.view, c.copyReuse
+	c.view, c.viewStore, c.copyReuse, c.closed = nil, nil, nil, true
 	c.mu.Unlock()
+	graphCleared := view == nil
+	if view != nil && view.mu.TryLock() {
+		view.workspaces, view.viewer = nil, domain.User{}
+		view.lastWorkspaceKey = ""
+		view.coldParent = nil
+		view.mu.Unlock()
+		graphCleared = true
+	}
+	if graphCleared && reuse != nil {
+		reuse.Close()
+	}
 }
 
 // ColdRequestView returns the COLD request's legacy view of workspace for its
@@ -149,7 +163,12 @@ func (s *SQLiteStore) ColdRequestView(ctx context.Context, workspace string) (*S
 	if scope.view != nil && scope.viewStore == s && scope.view.lastWorkspaceKey == workspace {
 		return scope.view, nil
 	}
-	view, release, handled := s.coldAccessorViewKept(ctx, "ColdRequestView", workspace, nil, true, false)
+	copyCtx := ctx
+	if scope.copyReuse == nil {
+		copyCtx, scope.copyReuse, _ = beginColdCopyReuse(ctx)
+	}
+	copyCtx = context.WithValue(copyCtx, coldCopyReuseKey{}, scope.copyReuse)
+	view, release, handled := s.coldAccessorViewKept(copyCtx, "ColdRequestView", workspace, nil, true, false)
 	if !handled {
 		return s, nil
 	}
@@ -532,6 +551,32 @@ func (s *SQLiteStore) decodeColdWorkspace(ctx context.Context, workspace string,
 
 type coldLegacyWriteKey struct{}
 
+// A COLD legacy write can hold a decoded facade while its first attempt waits
+// for another replica's workspace lock. That lock attempt is side-effect free
+// when it returns ErrWorkspaceLockBusy, so retry the complete legacy dispatch
+// after the facade and slot have been released. Keep the retry count bounded
+// by the request deadline and avoid retrying any other error.
+const coldWorkspaceLockRetryAttempts = 3
+
+var coldWorkspaceLockRetries atomic.Int64
+
+func retryColdWorkspaceLock(ctx context.Context, run func() error) error {
+	for attempt := 1; ; attempt++ {
+		err := run()
+		if !errors.Is(err, coordination.ErrWorkspaceLockBusy) || attempt >= coldWorkspaceLockRetryAttempts {
+			return err
+		}
+		coldWorkspaceLockRetries.Add(1)
+		timer := time.NewTimer(50 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
 // coldLegacyWrite reports a default COLD legacy write (coldLegacyMutation).
 func coldLegacyWrite(ctx context.Context) bool {
 	selected, _ := ctx.Value(coldLegacyWriteKey{}).(bool)
@@ -561,98 +606,100 @@ func (s *SQLiteStore) coldLegacyMutation(ctx context.Context, workspace, eventTy
 // holds is dropped from the parent.
 func (s *SQLiteStore) coldLegacyWrite(ctx context.Context, workspace string, run func(context.Context, *SQLiteStore) error, also ...string) error {
 	ctx = context.WithValue(ctx, coldLegacyWriteKey{}, true)
-	return s.withColdMutationStore(ctx, workspace, func(ctx context.Context, facade *SQLiteStore) error {
-		facade.coldWrite.legacy = true
-		requested := func() string {
-			if key := facade.coldWrite.requested; key != "" {
-				return key
+	return retryColdWorkspaceLock(ctx, func() error {
+		return s.withColdMutationStore(ctx, workspace, func(ctx context.Context, facade *SQLiteStore) error {
+			facade.coldWrite.legacy = true
+			requested := func() string {
+				if key := facade.coldWrite.requested; key != "" {
+					return key
+				}
+				facade.mu.RLock()
+				defer facade.mu.RUnlock()
+				return facade.lastWorkspaceKey
 			}
-			facade.mu.RLock()
-			defer facade.mu.RUnlock()
-			return facade.lastWorkspaceKey
-		}
-		var locked time.Time
-		var cancelled atomic.Pointer[error]
-		// The store keeps installed logical sources (always in production;
-		// a test view once it captured one): a key the write creates gets one.
-		s.metadataResidency.mu.Lock()
-		logical := len(s.metadataResidency.logical) != 0
-		s.metadataResidency.mu.Unlock()
-		// base: the inputs the installed generation is exact at when the
-		// write takes the lock, so the publication can apply only what the
-		// write changed (scale_p21_cold_incremental.go).
-		var base *coldPublishBase
-		facade.writeMu.onLock = func() {
-			locked = time.Now()
-			if s.coordinator != nil && logical {
-				// Under the coordinator another replica may have committed
-				// since this replica's installed generation: bring it up to
-				// SQL incrementally, as the HOT writers do before their
-				// write, so the facade syncs to an exact generation and the
-				// legacy writer finds its copy current instead of reloading
-				// the complete workspace from SQL under the lock. A failure
-				// leaves that legacy reload to the writer.
-				if err := s.reloadResidentWorkspace(context.WithValue(ctx, metadataWorkLeaseKey{}, nil), requested()); err != nil && ctx.Err() == nil {
-					slog.Warn("bounded metadata: COLD legacy write could not reload its workspace incrementally", "workspace", requested(), "error", err)
+			var locked time.Time
+			var cancelled atomic.Pointer[error]
+			// The store keeps installed logical sources (always in production;
+			// a test view once it captured one): a key the write creates gets one.
+			s.metadataResidency.mu.Lock()
+			logical := len(s.metadataResidency.logical) != 0
+			s.metadataResidency.mu.Unlock()
+			// base: the inputs the installed generation is exact at when the
+			// write takes the lock, so the publication can apply only what the
+			// write changed (scale_p21_cold_incremental.go).
+			var base *coldPublishBase
+			facade.writeMu.onLock = func() {
+				locked = time.Now()
+				if s.coordinator != nil && logical {
+					// Under the coordinator another replica may have committed
+					// since this replica's installed generation: bring it up to
+					// SQL incrementally, as the HOT writers do before their
+					// write, so the facade syncs to an exact generation and the
+					// legacy writer finds its copy current instead of reloading
+					// the complete workspace from SQL under the lock. A failure
+					// leaves that legacy reload to the writer.
+					if err := s.reloadResidentWorkspace(context.WithValue(ctx, metadataWorkLeaseKey{}, nil), requested()); err != nil && ctx.Err() == nil {
+						slog.Warn("bounded metadata: COLD legacy write could not reload its workspace incrementally", "workspace", requested(), "error", err)
+					}
+				}
+				if err := facade.syncColdLegacyWriteLocked(ctx, requested()); err != nil {
+					cancelled.Store(&err)
+				}
+				synced := time.Now()
+				coldWriteSyncNanos.Add(int64(synced.Sub(locked)))
+				if logical && !slices.ContainsFunc(also, func(key string) bool { return key != requested() }) {
+					var reason string
+					if base, reason = s.captureColdPublishBase(ctx, requested()); base == nil {
+						noteColdPublishFallback(reason)
+					}
 				}
 			}
-			if err := facade.syncColdLegacyWriteLocked(ctx, requested()); err != nil {
-				cancelled.Store(&err)
-			}
-			synced := time.Now()
-			coldWriteSyncNanos.Add(int64(synced.Sub(locked)))
-			if logical && !slices.ContainsFunc(also, func(key string) bool { return key != requested() }) {
-				var reason string
-				if base, reason = s.captureColdPublishBase(ctx, requested()); base == nil {
-					noteColdPublishFallback(reason)
+			facade.writeMu.onUnlock = func() {
+				published := time.Now()
+				incremental := s.publishColdLegacyWriteLocked(ctx, requested(), logical, base)
+				base.release()
+				base = nil
+				for _, key := range also {
+					if incremental && key == requested() {
+						// Published exact at the stored stamp already.
+						continue
+					}
+					s.publishColdLegacyWriteLocked(ctx, key, logical, nil)
+				}
+				coldWritePublishNanos.Add(int64(time.Since(published)))
+				held := int64(time.Since(locked))
+				coldWriteLocks.Add(1)
+				coldWriteLockNanos.Add(held)
+				for {
+					longest := coldWriteLockMax.Load()
+					if held <= longest || coldWriteLockMax.CompareAndSwap(longest, held) {
+						break
+					}
 				}
 			}
-		}
-		facade.writeMu.onUnlock = func() {
-			published := time.Now()
-			incremental := s.publishColdLegacyWriteLocked(ctx, requested(), logical, base)
-			base.release()
-			base = nil
-			for _, key := range also {
-				if incremental && key == requested() {
-					// Published exact at the stored stamp already.
-					continue
-				}
-				s.publishColdLegacyWriteLocked(ctx, key, logical, nil)
+			facade.writeMu.stale = func() bool { return facade.coldFacadeStale(ctx, requested()) }
+			facade.writeMu.refresh = func() {
+				started := time.Now()
+				// A failure is left to onLock, which refreshes (or withdraws the
+				// workspace) under the lock.
+				_ = facade.refreshColdMetadataRead(ctx, requested())
+				coldWriteRefreshes.Add(1)
+				coldWriteRefreshNanos.Add(int64(time.Since(started)))
 			}
-			coldWritePublishNanos.Add(int64(time.Since(published)))
-			held := int64(time.Since(locked))
-			coldWriteLocks.Add(1)
-			coldWriteLockNanos.Add(held)
-			for {
-				longest := coldWriteLockMax.Load()
-				if held <= longest || coldWriteLockMax.CompareAndSwap(longest, held) {
-					break
+			defer func() {
+				facade.writeMu.onLock, facade.writeMu.onUnlock = nil, nil
+				facade.writeMu.stale, facade.writeMu.refresh = nil, nil
+			}()
+			err := run(ctx, facade)
+			if err != nil {
+				// A facade withdrawn because the request was cancelled makes the
+				// writer say "workspace not found"; the cancellation is the cause.
+				if ce := cancelled.Load(); ce != nil {
+					return *ce
 				}
 			}
-		}
-		facade.writeMu.stale = func() bool { return facade.coldFacadeStale(ctx, requested()) }
-		facade.writeMu.refresh = func() {
-			started := time.Now()
-			// A failure is left to onLock, which refreshes (or withdraws the
-			// workspace) under the lock.
-			_ = facade.refreshColdMetadataRead(ctx, requested())
-			coldWriteRefreshes.Add(1)
-			coldWriteRefreshNanos.Add(int64(time.Since(started)))
-		}
-		defer func() {
-			facade.writeMu.onLock, facade.writeMu.onUnlock = nil, nil
-			facade.writeMu.stale, facade.writeMu.refresh = nil, nil
-		}()
-		err := run(ctx, facade)
-		if err != nil {
-			// A facade withdrawn because the request was cancelled makes the
-			// writer say "workspace not found"; the cancellation is the cause.
-			if ce := cancelled.Load(); ce != nil {
-				return *ce
-			}
-		}
-		return err
+			return err
+		})
 	})
 }
 

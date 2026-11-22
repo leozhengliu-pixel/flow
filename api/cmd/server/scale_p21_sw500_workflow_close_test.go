@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -534,15 +533,7 @@ func (env *scaleP21SW500Env) runCase(t *testing.T, test scaleP21SW500Case) {
 				if difference := scaleP21SW580Equal(tables[state], result.tables); difference != "" {
 					t.Fatalf("workflow issue side tables differ from literal (%s/%s): %s", test.name, mode, difference)
 				}
-				// The point writer hands every createIssue run on PostgreSQL
-				// and MySQL to the full-image writer: their ID collation can
-				// differ from the byte order of the legacy order-stability
-				// check (workflowRunPointAttempt's Number fold).
 				wantFull := test.full
-				if driver := env.database.config.Driver; driver != "" && driver != "sqlite" && test.actions != nil &&
-					slices.ContainsFunc(test.actions(env), func(action domain.WorkflowAction) bool { return action.Type == "createIssue" }) {
-					wantFull = true
-				}
 				if full := result.full != 0; full != wantFull {
 					t.Fatalf("workflow case %s/%s: full-image attempts %d, want full=%v", test.name, mode, result.full, wantFull)
 				}

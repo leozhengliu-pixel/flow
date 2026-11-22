@@ -10,15 +10,18 @@ import (
 	"flow/api/internal/domain"
 )
 
-// MetadataAppendScope permits new records at the end of declared collections.
+// MetadataAppendScope permits new records in declared collections. PrependKinds
+// keeps the collection order used by legacy prepend writers.
 // Existing records remain governed by MetadataRecordScope. Callers must declare
 // uniqueness, position and authorization inputs separately.
 type MetadataAppendScope struct {
 	MetadataRecordScope
-	AppendKinds []string
+	AppendKinds  []string
+	PrependKinds []string
 }
 
 type metadataAppendKindsKey struct{}
+type metadataAppendPrependKindsKey struct{}
 type metadataAppendOrdersKey struct{}
 
 func (s *SQLiteStore) MutateWorkspaceAppending(ctx context.Context, workspace, event, aggregate string, payload any, scope MetadataAppendScope, mutate func(*domain.Bootstrap) error) error {
@@ -43,12 +46,23 @@ func (s *SQLiteStore) MutateWorkspaceAppendingWithAggregate(ctx context.Context,
 			return fmt.Errorf("%w: invalid append collection %s", ErrMetadataRecordQuery, kind)
 		}
 	}
+	for _, kind := range scope.PrependKinds {
+		if !slices.Contains(kinds, kind) {
+			return fmt.Errorf("%w: invalid prepend collection %s", ErrMetadataRecordQuery, kind)
+		}
+	}
 	ctx = context.WithValue(ctx, metadataAppendKindsKey{}, kinds)
+	ctx = context.WithValue(ctx, metadataAppendPrependKindsKey{}, slices.Clone(scope.PrependKinds))
 	return s.MutateWorkspaceScopedWithAggregate(ctx, workspace, event, payload, scope.MetadataRecordScope, mutate)
 }
 
 func metadataAppendKinds(ctx context.Context) []string {
 	kinds, _ := ctx.Value(metadataAppendKindsKey{}).([]string)
+	return kinds
+}
+
+func metadataAppendPrependKinds(ctx context.Context) []string {
+	kinds, _ := ctx.Value(metadataAppendPrependKindsKey{}).([]string)
 	return kinds
 }
 
@@ -120,13 +134,21 @@ func (s *SQLiteStore) prepareMetadataAppends(ctx context.Context, tx *sqlTx, wor
 		if exists {
 			return scope, nil, fmt.Errorf("%w: append ID already exists in %s", ErrMetadataRecordQuery, kind)
 		}
-		var last sql.NullInt64
-		if err := tx.QueryRowContext(ctx, `SELECT MAX(collection_order) FROM workspace_metadata_records WHERE workspace_key=? AND field=?`, workspace, kind).Scan(&last); err != nil {
+		var boundary sql.NullInt64
+		orderQuery := `SELECT MAX(collection_order) FROM workspace_metadata_records WHERE workspace_key=? AND field=?`
+		if slices.Contains(metadataAppendPrependKinds(ctx), kind) {
+			orderQuery = `SELECT MIN(collection_order) FROM workspace_metadata_records WHERE workspace_key=? AND field=?`
+		}
+		if err := tx.QueryRowContext(ctx, orderQuery, workspace, kind).Scan(&boundary); err != nil {
 			return scope, nil, err
 		}
 		order := 0
-		if last.Valid {
-			order = int(last.Int64) + 1
+		if boundary.Valid {
+			if slices.Contains(metadataAppendPrependKinds(ctx), kind) {
+				order = int(boundary.Int64) - len(created)
+			} else {
+				order = int(boundary.Int64) + 1
+			}
 		}
 		for _, id := range created {
 			orders[metadataRecordKey{field: kind, key: id}] = order

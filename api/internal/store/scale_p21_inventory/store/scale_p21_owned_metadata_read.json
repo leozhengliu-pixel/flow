@@ -2,6 +2,18 @@
   "source": "store/scale_p21_owned_metadata_read.go",
   "unmigrated": 0,
   "consumers": {
+    "APIKeyNameExists": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The bounded API-key create and rename checks stream only the installed apiKeys records through BeginInstalledMetadataRead, comparing active keys owned by the actor with the requested case-insensitive name and excluding the record being renamed. The reader closes before the scoped mutation proceeds, so no full workspace image is materialized. SW450 covers duplicate-name create and update parity across flag modes, including revoked and actor-scoped keys.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Scoped API-key create and update validation runs on the bounded route path.",
+      "callers": [
+        "server/scale_p21_cold_dispatch_api_keys.go:createAPIKeyWithStore",
+        "server/scale_p21_cold_dispatch_api_keys.go:updateAPIKeyWithStore"
+      ]
+    },
     "BeginInstalledMetadataRead": {
       "owner": "P21",
       "status": "reviewed",

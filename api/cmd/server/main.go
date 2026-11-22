@@ -44,6 +44,9 @@ var (
 
 type server struct {
 	store *store.SQLiteStore
+	// reloadWorkspaceFn is used by focused freshness tests to exercise the
+	// shared reload failure path without replacing the concrete store.
+	reloadWorkspaceFn func(context.Context, string) error
 	// fileSigningAllowAll lets pipeline tests sign fixture names that no record
 	// references; production never sets it.
 	fileSigningAllowAll bool

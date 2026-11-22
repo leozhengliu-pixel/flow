@@ -172,7 +172,14 @@ func readContentRecordsWithBase[T any](ctx context.Context, s *SQLiteStore, work
 	if base == nil {
 		return readContentRecords[T](ctx, s, workspace, kind, nil)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT resource_id,id,data FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY created_at,id`, workspace, kind)
+	query := `SELECT resource_id,id,data FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY created_at,id`
+	if s.dialect == "mysql" {
+		// Values are grouped by resource below, so the cross-resource order
+		// is immaterial. Keep each resource's created-at order while using
+		// content_resource_order_idx instead of sorting the whole collection.
+		query = `SELECT resource_id,id,data FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY resource_id,created_at,id`
+	}
+	rows, err := s.db.QueryContext(ctx, query, workspace, kind)
 	if err != nil {
 		return nil, err
 	}

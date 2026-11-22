@@ -36,6 +36,18 @@ func (s *SQLiteStore) WorkspacePeerState(ctx context.Context, workspace string) 
 	if s.metadataResidency != nil {
 		policy, _, known := s.residentStamp(workspace)
 		result.Current = known && policy == stamp
+		if !result.Current {
+			// HOT bounded writers can install an exact logical generation
+			// without rebuilding the resident policy projection. The
+			// logical source is still the installed metadata that bounded
+			// readers use, so its exact stamp is sufficient for freshness.
+			s.metadataResidency.mu.Lock()
+			source := s.metadataResidency.logical[workspace]
+			if source != nil && !source.behind.Load() && source.Stamp() == stamp {
+				result.Current = true
+			}
+			s.metadataResidency.mu.Unlock()
+		}
 	}
 	return result, nil
 }

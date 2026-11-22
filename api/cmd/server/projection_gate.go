@@ -81,10 +81,33 @@ func acquireProjectionWaiting(r *http.Request) bool {
 	return acquireProjectionSlot(r, false)
 }
 
+// releaseProjection returns a slot before the request ends. COLD writes
+// release the authorization projection before entering their mutation because
+// their handlers either rebuild the state around the write or run on a COLD
+// facade. A later handler projection can acquire the slot again.
+func releaseProjection(r *http.Request) {
+	hold, ok := r.Context().Value(projectionHoldKey{}).(*projectionHold)
+	if !ok || hold == nil || hold.gate == nil {
+		return
+	}
+	hold.mu.Lock()
+	if !hold.held {
+		hold.mu.Unlock()
+		return
+	}
+	hold.held = false
+	hold.mu.Unlock()
+	<-hold.gate.slots
+}
+
 func acquireProjectionSlot(r *http.Request, bounded bool) bool {
-	if store.InColdFacade(r.Context()) {
-		// A registered COLD facade's callback holds the COLD slot, which
-		// bounds its projection; never wait for a gate while holding it.
+	if store.InColdFacade(r.Context()) ||
+		(store.InColdScope(r.Context()) && r.Method != http.MethodGet && r.Method != http.MethodHead) ||
+		registeredColdRoute(r) {
+		// A COLD write's facade or legacy-view lane already bounds its
+		// authorization projection, so it must not wait for a second gate
+		// before the COLD operation can be admitted. Registered COLD reads
+		// make the same guarantee through their retained facade.
 		return true
 	}
 	hold, ok := r.Context().Value(projectionHoldKey{}).(*projectionHold)
@@ -109,6 +132,14 @@ func acquireProjectionSlot(r *http.Request, bounded bool) bool {
 		hold.retryAfter = retryAfter
 	}
 	return false
+}
+
+func registeredColdRoute(r *http.Request) bool {
+	if !store.InColdScope(r.Context()) {
+		return false
+	}
+	_, selected := scaleP21ColdAuthorizationRoute(r)
+	return selected
 }
 
 // projectionRefused reports whether the gate refused this request a slot,

@@ -380,10 +380,15 @@ func TestSyncChangesReprojectsAPageRacedByAWrite(t *testing.T) {
 			if code != http.StatusOK || len(limits) != 1 || !reset.ResyncRequired || reset.Next != futureCursor || reset.Head != prefix.Head || reset.AuthzEpoch != prefix.AuthzEpoch || reset.HasMore || len(reset.Transactions) != 0 {
 				t.Fatalf("bounded=%v: invalid resync response: %d after limits %v %s", bounded, code, limits, body)
 			}
-			// A write during every projection: the retries are bounded.
+			// A write during every projection: a verified final source race
+			// returns an empty reset page instead of a partial or stale page.
 			code, limits, body = read(start, func(int, int) { writeIssue() })
-			if code != http.StatusServiceUnavailable || len(limits) != syncChangesAttempts || strings.Contains(body, "transactions") {
-				t.Fatalf("bounded=%v: unbounded retries or partial response: %d after limits %v %s", bounded, code, limits, body)
+			var resetAfterRace syncV2ChangesResponse
+			if err := json.Unmarshal([]byte(body), &resetAfterRace); err != nil {
+				t.Fatal(err)
+			}
+			if code != http.StatusOK || !slices.Equal(limits, []int{requestedLimit, requestedLimit, 1, 1}) || !resetAfterRace.ResyncRequired || resetAfterRace.Next != start || resetAfterRace.Head == "" || resetAfterRace.AuthzEpoch == "" || resetAfterRace.HasMore || len(resetAfterRace.Transactions) != 0 {
+				t.Fatalf("bounded=%v: final raced page was not a reset: %d after limits %v %s", bounded, code, limits, body)
 			}
 			// An authorization change (team membership) is not retried.
 			code, limits, body = read(start, func(call, _ int) {

@@ -76,6 +76,13 @@ func scaleP21RouteHot(pattern string) bool {
 	return scaleP21RouteTemperature[pattern] == "hot"
 }
 
+func releaseColdWriteProjection(r *http.Request) {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || !store.InColdScope(r.Context()) {
+		return
+	}
+	releaseProjection(r)
+}
+
 func scaleP21ColdAuthorizationRoute(r *http.Request) (scaleP21ColdRoute, bool) {
 	mux, ok := r.Context().Value(coldAuthorizationMuxKey{}).(*http.ServeMux)
 	if !ok || mux == nil {
@@ -96,15 +103,12 @@ func scaleP21ColdAuthorizationRoute(r *http.Request) (scaleP21ColdRoute, bool) {
 // legacyColdAuthorizationRepository supplies the literal resource auth reads.
 // PagedWorkspaceMetadata can project directly from the shared COLD image.
 // Select the facade for registered routes whose handlers also use it.
-func (s *server) legacyColdAuthorizationRepository(r *http.Request, paged bool) (*store.SQLiteStore, error) {
+func (s *server) legacyColdAuthorizationRepository(r *http.Request, _ bool) (*store.SQLiteStore, error) {
 	if !s.store.BoundedMetadataEnabled() {
 		return s.store, nil
 	}
 	route, selected := scaleP21ColdAuthorizationRoute(r)
 	if !selected {
-		if paged {
-			return s.store, nil
-		}
 		return s.store.ColdRequestView(r.Context(), workspaceKey(r))
 	}
 	scope, ok := r.Context().Value(requestResourceReadsKey{}).(*requestResourceReads)

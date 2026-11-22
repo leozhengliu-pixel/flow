@@ -60,6 +60,14 @@ func TestScaleP15SnapshotBufferCacheIsBoundedAndCleared(t *testing.T) {
 	if smaller.Cap() > 2048 || pool.bytes != 0 || len(pool.idle) != 0 {
 		t.Fatal("a smaller workspace retained oversized inactive storage")
 	}
+
+	pool = &hydrationSnapshotBuffers{}
+	pool.put(reflect.ValueOf(make([]int, 1024)))
+	pool.put(reflect.ValueOf(make([]*int, 8192)))
+	_ = pool.take(value.Type(), 1024)
+	if len(pool.idle) != 1 || pool.idle[0].value.Type() != reflect.TypeFor[[]int]() {
+		t.Fatal("a different slice type was evicted with an unusable buffer")
+	}
 }
 
 func TestScaleP15SnapshotBuffersConcurrentLifetimes(t *testing.T) {

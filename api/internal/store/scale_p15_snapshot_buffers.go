@@ -33,9 +33,22 @@ func (p *hydrationSnapshotBuffers) take(t reflect.Type, length int) reflect.Valu
 		}
 	}
 	if best < 0 {
-		// Do not retain a different workspace's storage beside a new shape.
-		p.idle = nil
-		p.bytes = 0
+		// Keep buffers for other slice types. A bootstrap walks several
+		// collection types in one copy, so clearing the entire pool when
+		// one type has no suitable capacity defeats reuse for every field.
+		// Drop only oversized buffers of the requested type so a sequence
+		// of sizes cannot retain an unbounded trail of unusable storage.
+		kept := p.idle[:0]
+		bytes := int64(0)
+		for _, item := range p.idle {
+			if item.value.Type() == t && item.value.Cap() > 2*length {
+				continue
+			}
+			kept = append(kept, item)
+			bytes += item.bytes
+		}
+		clear(p.idle[len(kept):])
+		p.idle, p.bytes = kept, bytes
 		return reflect.MakeSlice(t, length, length)
 	}
 	item := p.idle[best]

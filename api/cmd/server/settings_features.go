@@ -1424,9 +1424,13 @@ func apiKeyUpdateString(raw json.RawMessage) (value string, present bool, isNull
 	return strings.TrimSpace(value), true, false, nil
 }
 
-// GET /api/api-keys is COLD (registered in scaleP21ColdRoutes): the listing
-// runs on the store withColdMetadataRequest lends it.
+// GET /api/api-keys uses the scoped store in bounded mode. Flag off keeps the
+// legacy withColdMetadataRequest path.
 func (s *server) listAPIKeys(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.listAPIKeysWithStore(w, r, s.store)
+		return
+	}
 	s.withColdMetadataRequest(w, r, "server/settings_features.go:listAPIKeys", "", func(repo *store.SQLiteStore, request *http.Request) {
 		s.listAPIKeysWithStore(w, request, repo)
 	})
@@ -1457,6 +1461,10 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor := requestActor(s, r)
+	if s.store.BoundedMetadataEnabled() {
+		s.createAPIKeyWithStore(w, r, s.store, input, secret, actor)
+		return
+	}
 	s.withColdMetadataRequest(w, r, "server/settings_features.go:createAPIKey", "api_key.created", func(repo *store.SQLiteStore, request *http.Request) {
 		s.createAPIKeyWithStore(w, request, repo, input, secret, actor)
 	})
@@ -1526,6 +1534,10 @@ func (s *server) updateAPIKey(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	update := apiKeyUpdate{id: id, name: name, nameSet: input.Name != nil, scopes: scopes, scopesSet: scopesSet, teamIDs: teamIDs, teamIDsSet: teamIDsSet,
 		restrictionValue: restrictionValue, restrictionSet: restrictionSet, expiresSet: expiresSet, expiresAt: expiresAt}
+	if s.store.BoundedMetadataEnabled() {
+		s.updateAPIKeyWithStore(w, r, s.store, update, actor)
+		return
+	}
 	s.withColdMetadataRequest(w, r, "server/settings_features.go:updateAPIKey", "api_key.updated", func(repo *store.SQLiteStore, request *http.Request) {
 		s.updateAPIKeyWithStore(w, request, repo, update, actor)
 	})
@@ -1541,12 +1553,20 @@ func (s *server) rotateAPIKeySecret(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusInternalServerError, nil)
 		return
 	}
+	if s.store.BoundedMetadataEnabled() {
+		s.rotateAPIKeySecretWithStore(w, r, s.store, id, secret, actor)
+		return
+	}
 	s.withColdMetadataRequest(w, r, "server/settings_features.go:rotateAPIKeySecret", "api_key.secret_rotated", func(repo *store.SQLiteStore, request *http.Request) {
 		s.rotateAPIKeySecretWithStore(w, request, repo, id, secret, actor)
 	})
 }
 
 func (s *server) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.revokeAPIKeyWithStore(w, r, s.store)
+		return
+	}
 	s.withColdMetadataRequest(w, r, "server/settings_features.go:revokeAPIKey", "api_key.revoked", func(repo *store.SQLiteStore, request *http.Request) {
 		s.revokeAPIKeyWithStore(w, request, repo)
 	})

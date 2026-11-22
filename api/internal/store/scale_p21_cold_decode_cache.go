@@ -181,7 +181,7 @@ func (r *metadataResidency) decodeColdImage(ctx context.Context, workspace strin
 	} else if current {
 		coldDecodeImageHits.Add(1)
 		started := time.Now()
-		data := coldImageCopy(previous.data, fields)
+		data := coldImageCopy(ctx, previous.data, fields)
 		coldDecodeCopyNanos.Add(int64(time.Since(started)))
 		return data, ctx.Err()
 	}
@@ -204,7 +204,7 @@ func (r *metadataResidency) decodeColdImage(ctx context.Context, workspace strin
 		image = built
 	}
 	started := time.Now()
-	data := coldImageCopy(image.data, fields)
+	data := coldImageCopy(ctx, image.data, fields)
 	coldDecodeCopyNanos.Add(int64(time.Since(started)))
 	return data, ctx.Err()
 }
@@ -560,10 +560,75 @@ func (r *metadataResidency) forgetColdImage(workspace string) {
 // the workspace record, when fields is set): every container is the copy's
 // own, strings are shared (immutable), and unlike cloneBootstrap no field is
 // dropped, so the copy is reflect.DeepEqual to the decode it copies.
-func coldImageCopy(data domain.Bootstrap, fields []string) domain.Bootstrap {
+const coldCopyReuseMinBytes = 1 << 20
+
+type coldCopyReuseKey struct{}
+
+// coldCopyReuse keeps large collection backing arrays borrowed for one COLD
+// facade or authorization scope. The arrays return to the bounded shared pool
+// only after the copied graph is dropped.
+type coldCopyReuse struct {
+	mu      sync.Mutex
+	buffers []reflect.Value
+	closed  bool
+}
+
+func beginColdCopyReuse(ctx context.Context) (context.Context, *coldCopyReuse, func()) {
+	lease := &coldCopyReuse{}
+	return context.WithValue(ctx, coldCopyReuseKey{}, lease), lease, lease.Close
+}
+
+func coldCopyReuseFromContext(ctx context.Context) *coldCopyReuse {
+	lease, _ := ctx.Value(coldCopyReuseKey{}).(*coldCopyReuse)
+	return lease
+}
+
+func (r *coldCopyReuse) take(value reflect.Value) (reflect.Value, bool) {
+	if r == nil || value.Kind() != reflect.Slice || value.IsNil() ||
+		int64(value.Len())*int64(value.Type().Elem().Size()) < coldCopyReuseMinBytes {
+		return reflect.Value{}, false
+	}
+	copied := sharedHydrationSnapshotBuffers.take(value.Type(), value.Len())
+	reflect.Copy(copied, value)
+	if !exactTypeFlat(value.Type().Elem()) {
+		for index := 0; index < copied.Len(); index++ {
+			exactCopyInPlace(copied.Index(index))
+		}
+	}
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		sharedHydrationSnapshotBuffers.put(copied)
+		return reflect.Value{}, false
+	}
+	r.buffers = append(r.buffers, copied)
+	r.mu.Unlock()
+	return copied, true
+}
+
+func (r *coldCopyReuse) Close() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return
+	}
+	r.closed = true
+	buffers := r.buffers
+	r.buffers = nil
+	r.mu.Unlock()
+	for _, buffer := range buffers {
+		sharedHydrationSnapshotBuffers.put(buffer)
+	}
+}
+
+func coldImageCopy(ctx context.Context, data domain.Bootstrap, fields []string) domain.Bootstrap {
 	value := reflect.ValueOf(data)
 	result := reflect.New(value.Type()).Elem()
 	t := value.Type()
+	reuse := coldCopyReuseFromContext(ctx)
 	for i := 0; i < value.NumField(); i++ {
 		if fields != nil {
 			name := jsonFieldName(t.Field(i))
@@ -574,7 +639,12 @@ func coldImageCopy(data domain.Bootstrap, fields []string) domain.Bootstrap {
 		if t.Field(i).PkgPath != "" {
 			continue
 		}
-		result.Field(i).Set(exactCopyValue(value.Field(i)))
+		field := value.Field(i)
+		if copied, ok := reuse.take(field); ok {
+			result.Field(i).Set(copied)
+			continue
+		}
+		result.Field(i).Set(exactCopyValue(field))
 	}
 	copied := result.Interface().(domain.Bootstrap)
 	if fields != nil {

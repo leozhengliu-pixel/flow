@@ -65,6 +65,7 @@ func ColdMetricsSnapshot() map[string]int64 {
 		"coldSlotWaits":               coldSlotWaits.Load(),
 		"coldSlotWaitNanos":           coldSlotWaitNanos.Load(),
 		"coldSlotWaitMaxNanos":        coldSlotWaitMax.Load(),
+		"coldWorkspaceLockRetries":    coldWorkspaceLockRetries.Load(),
 		"legacyViewRefusals":          legacyViewRefusals.Load(),
 		"legacyViewWaits":             legacyViewWaits.Load(),
 		"legacyViewWaitNanos":         legacyViewWaitNanos.Load(),

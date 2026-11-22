@@ -99,6 +99,52 @@ func TestScaleP21RedisRecoveryRechecksPolicyWithoutFullDecode(t *testing.T) {
 	}
 }
 
+func TestScaleP21PeerStateAcceptsExactLogicalSourceWithoutPolicyRebuild(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := scaleP09Database(t)
+	workspace := f.data.Workspace.URLKey
+	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	stamp, _, ok := probe.residentStamp(workspace)
+	if !ok {
+		t.Fatal("resident policy stamp missing")
+	}
+	data, ok := f.WorkspaceMetadata(workspace)
+	if !ok {
+		t.Fatal("workspace metadata missing")
+	}
+	source, err := captureMetadataLogicalSource(t.Context(), data, stamp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe.installMetadataLogicalSource(workspace, source)
+	probe.metadataResidency.mu.Lock()
+	source = probe.metadataResidency.logical[workspace]
+	if source == nil || source.Stamp() != stamp {
+		probe.metadataResidency.mu.Unlock()
+		t.Fatalf("logical source stamp=%v, policy stamp=%v", sourceStamp(source), stamp)
+	}
+	probe.metadataResidency.stamps[workspace] = copyStamp{workspaceID: stamp.workspaceID, revision: stamp.revision - 1}
+	probe.metadataResidency.mu.Unlock()
+	state, err := probe.WorkspacePeerState(t.Context(), workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.Current {
+		t.Fatalf("exact logical source was treated as stale: %+v", state)
+	}
+}
+
+func sourceStamp(source *metadataLogicalSource) copyStamp {
+	if source == nil {
+		return copyStamp{}
+	}
+	return source.Stamp()
+}
+
 func TestScaleP21CommittedPeerPageKeepsBodiesEvictable(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")

@@ -104,6 +104,67 @@ func TestScaleP11OffPreservesLegacyCoordination(t *testing.T) {
 	}
 }
 
+func TestScaleP11LegacyFreshnessChecksSQLBeforeReload(t *testing.T) {
+	t.Setenv("FLOW_RECORD_PEER_SYNC", "off")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+
+	t.Run("current installed copy", func(t *testing.T) {
+		f := scaleP11NewFixture(t, 1)
+		if err := f.service.store.ReloadWorkspace(t.Context(), f.workspace); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.service.coordinator.CacheIncr(t.Context(), f.service.workspaceVersionKey(f.workspace)); err != nil {
+			t.Fatal(err)
+		}
+		beforeDecodes := f.service.store.WorkspaceMetadataDecodes()
+		queries := 0
+		ctx := store.WithSQLStatementObserver(t.Context(), func(string) { queries++ })
+		if err := f.service.ensureCurrentWorkspace(ctx, f.workspace); err != nil {
+			t.Fatal(err)
+		}
+		if queries == 0 {
+			t.Fatal("current legacy freshness skipped the SQL authority check")
+		}
+		if got := f.service.workspaceVersions.current(f.workspace); got != 1 {
+			t.Fatalf("recorded Redis version = %d, want 1", got)
+		}
+		if got := f.service.store.WorkspaceMetadataDecodes(); got != beforeDecodes {
+			t.Fatalf("current legacy freshness reloaded metadata: decodes %d -> %d", beforeDecodes, got)
+		}
+	})
+
+	t.Run("stale installed copy", func(t *testing.T) {
+		f := scaleP11NewFixture(t, 1)
+		f.service.workspaceVersions.record(f.workspace, 1)
+		writer := &server{store: f.writer, coordinator: f.service.coordinator, realtime: newRealtimeHub()}
+		f.writer.SetRealtimeSink(writer.publishRealtime)
+		if err := f.writer.MutateWorkspace(t.Context(), f.workspace, "project.updated", "p11-project-0", map[string]string{"name": "legacy reload"}, func(data *domain.Bootstrap) error {
+			data.Projects[0].Name = "legacy reload"
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := f.service.sharedWorkspaceVersion(t.Context(), f.workspace); err != nil || got != 1 {
+			t.Fatalf("Redis version before reload = %d, want 1: %v", got, err)
+		}
+		if _, err := f.service.coordinator.CacheIncr(t.Context(), f.service.workspaceVersionKey(f.workspace)); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := f.service.sharedWorkspaceVersion(t.Context(), f.workspace); err != nil || got != 2 {
+			t.Fatalf("Redis version after reload setup = %d, want 2: %v", got, err)
+		}
+		if err := f.service.ensureCurrentWorkspace(t.Context(), f.workspace); err != nil {
+			t.Fatal(err)
+		}
+		if got := scaleP11Name(t, f); got != "legacy reload" {
+			t.Fatalf("stale legacy copy was not reloaded: %q", got)
+		}
+		if got := f.service.workspaceVersions.current(f.workspace); got != 2 {
+			t.Fatalf("reloaded Redis version = %d, want 2", got)
+		}
+	})
+}
+
 func TestScaleP11OffKeepsLegacyQueue(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "")
 	var queue remoteEventQueue

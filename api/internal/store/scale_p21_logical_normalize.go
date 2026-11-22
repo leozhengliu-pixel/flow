@@ -66,14 +66,16 @@ func (s *SQLiteStore) newMetadataLogicalNormalizer(ctx context.Context, source *
 		return nil, ctx, nil, err
 	}
 	cleanup := []func(){func() { stage.Close() }}
-	done = func() {
+	cleanupAll := func() {
 		for i := len(cleanup) - 1; i >= 0; i-- {
-			cleanup[i]()
+			if cleanup[i] != nil {
+				cleanup[i]()
+			}
 		}
 	}
 	defer func() {
 		if err != nil {
-			done()
+			cleanupAll()
 		}
 	}()
 	for _, query := range []string{
@@ -122,7 +124,7 @@ func (s *SQLiteStore) newMetadataLogicalNormalizer(ctx context.Context, source *
 	if err := n.index(ctx); err != nil {
 		return nil, ctx, nil, err
 	}
-	return n, ctx, done, nil
+	return n, ctx, cleanupAll, nil
 }
 
 // field writes the normalized value of one raw field (node) into builder.

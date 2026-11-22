@@ -159,6 +159,14 @@ func (s *server) boundedFallbackAuthorization(r *http.Request, workspace, userID
 	if !s.store.BoundedMetadataEnabled() {
 		return false, false
 	}
+	if r.URL.Path == "/api/loop-config" || r.URL.Path == "/api/workspace/loop-settings" || r.URL.Path == "/api/api-keys" || strings.HasPrefix(r.URL.Path, "/api/api-keys/") {
+		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
+		if !ok {
+			return false, true
+		}
+		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		return err == nil && status == "active", true
+	}
 	if _, cold := scaleP21ColdAuthorizationRoute(r); cold {
 		return false, false
 	}

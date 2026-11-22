@@ -314,6 +314,17 @@ func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) 
 		if s.reloadKnownPublication(ctx, workspaceKey) {
 			return nil
 		}
+		if s.metadataResidency.requireCoverage {
+			for range 2 {
+				handled, err := s.reloadResidentWorkspaceOptimistic(ctx, workspaceKey)
+				if !handled {
+					break
+				}
+				if !errors.Is(err, errResidentReloadRace) {
+					return err
+				}
+			}
+		}
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
 		return s.reloadResidentWorkspace(ctx, workspaceKey)

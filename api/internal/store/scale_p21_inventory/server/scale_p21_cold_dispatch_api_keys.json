@@ -6,7 +6,6 @@
       "owner": "P21",
       "status": "reviewed",
       "reason": "workspaceData on the borrowed store for the registered COLD settings routes that read it: flag off workspaceData itself; bounded, for a metadata read (every /api/api-keys request) the projection authorization built on the same cold facade and handed off, else (after the projection gate) a fresh PagedWorkspaceMetadata of the refreshed facade; for other routes (OAuth applications) BootstrapForUser of the refreshed facade; auth disabled WorkspaceMetadata/BootstrapFor as admin. The views, issue-record authorization and paged realtime branches are refused (no cold route reaches them). TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see listAPIKeys).",
-      "coldDispatch": "server/settings_features.go:listAPIKeys",
       "accessors": [
         "workspaceData",
         "WorkspaceMetadata",
@@ -17,22 +16,33 @@
       "temperature": "cold",
       "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
       "callers": [
-        "server/scale_p21_cold_dispatch_api_keys.go:listAPIKeysWithStore",
-        "server/scale_p21_cold_dispatch_api_keys.go:revokeAPIKeyWithStore",
         "server/scale_p21_cold_dispatch_api_keys.go:listOAuthApplicationsWithStore",
         "server/scale_p21_cold_dispatch_api_keys.go:getOAuthApplicationWithStore"
+      ]
+    },
+    "listAPIKeysWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal API-key list body with the repository explicit. Bounded mode reads only the apiKeys field through WorkspaceMetadataScoped and checks the live member role through WorkspaceRole, preserving the flag-off role and visibility rules without hydrating the whole workspace. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real route through cookie and Bearer authentication.",
+      "accessors": [
+        "WorkspaceMetadataScoped",
+        "WorkspaceRole"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Scoped body of the bounded API-key settings GET route.",
+      "callers": [
+        "server/settings_features.go:listAPIKeys"
       ]
     },
     "createAPIKeyWithStore": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Literal createAPIKey mutation with the repository explicit; the api_key.created writer runs on the cold facade. TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see createAPIKey).",
-      "coldDispatch": "server/settings_features.go:createAPIKey",
+      "reason": "Literal createAPIKey mutation with the repository explicit. Bounded mode uses MutateWorkspaceScopedWithAggregate for the apiKeys, workspaceSettings and teams fields, preserving the callback and aggregate publication without hydrating unrelated records. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real route.",
       "accessors": [
-        "MutateWorkspaceWithAggregate"
+        "MutateWorkspaceScopedWithAggregate"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "temperature": "hot",
+      "temperatureReason": "Scoped body of the bounded API-key settings POST route.",
       "callers": [
         "server/settings_features.go:createAPIKey"
       ]
@@ -68,13 +78,14 @@
     "revokeAPIKeyWithStore": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Literal flag-off revokeAPIKey body with the repository explicit: the viewer's role through coldWorkspaceData, the api_key.revoked writer on the cold facade (a legacy store, where the scoped writer is MutateWorkspace). TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see revokeAPIKey).",
-      "coldDispatch": "server/settings_features.go:revokeAPIKey",
+      "reason": "Literal API-key revoke body with the repository explicit. Bounded mode reads workspace identity through WorkspaceSettingsMetadata and checks the live member role through WorkspaceRole before the api_key.revoked scoped writer. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real route through cookie and Bearer authentication.",
       "accessors": [
+        "WorkspaceSettingsMetadata",
+        "WorkspaceRole",
         "MutateWorkspaceScoped"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "temperature": "hot",
+      "temperatureReason": "Scoped body of the bounded API-key settings DELETE route.",
       "callers": [
         "server/settings_features.go:revokeAPIKey"
       ]
@@ -97,12 +108,11 @@
       "owner": "P21",
       "status": "reviewed",
       "reason": "Literal rotateAPIKeySecret mutation with the repository explicit; the api_key.secret_rotated writer runs on the cold facade (a legacy store, where the scoped writer is MutateWorkspace). TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see rotateAPIKeySecret).",
-      "coldDispatch": "server/settings_features.go:rotateAPIKeySecret",
       "accessors": [
         "MutateWorkspaceScoped"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "temperature": "hot",
+      "temperatureReason": "Scoped body of the bounded API-key secret rotation route.",
       "callers": [
         "server/settings_features.go:rotateAPIKeySecret"
       ]
@@ -110,13 +120,12 @@
     "updateAPIKeyWithStore": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Literal updateAPIKey mutation with the repository explicit; the api_key.updated writer runs on the cold facade. TestScaleP21SW450APIKeyAndMCPSettingsRoutes (see updateAPIKey).",
-      "coldDispatch": "server/settings_features.go:updateAPIKey",
+      "reason": "Literal updateAPIKey mutation with the repository explicit. Bounded mode uses MutateWorkspaceScopedWithAggregate for the apiKeys and teams fields, preserving the callback and aggregate publication without hydrating unrelated records. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real route.",
       "accessors": [
-        "MutateWorkspaceWithAggregate"
+        "MutateWorkspaceScopedWithAggregate"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
+      "temperature": "hot",
+      "temperatureReason": "Scoped body of the bounded API-key settings PATCH route.",
       "callers": [
         "server/settings_features.go:updateAPIKey"
       ]

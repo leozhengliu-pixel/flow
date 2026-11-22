@@ -16,6 +16,7 @@ type ColdMetadataRead struct {
 	literal     *SQLiteStore
 	state       *coldMetadataRead
 	releaseSlot func()
+	releaseCopy func()
 	once        sync.Once
 }
 
@@ -43,6 +44,7 @@ func (r *ColdMetadataRead) Close() {
 		r.state.mu.Lock()
 		facade := r.state.facade
 		r.state.mu.Unlock()
+		graphCleared := facade == nil
 		// A writer that panicked while holding the facade's lock (its
 		// install) never returns it: the facade is private to this flow, so
 		// its graph is dropped by reference instead of waiting (SW554).
@@ -51,6 +53,7 @@ func (r *ColdMetadataRead) Close() {
 			facade.lastWorkspaceKey = ""
 			facade.coldParent = nil
 			facade.mu.Unlock()
+			graphCleared = true
 		}
 		r.state.mu.Lock()
 		r.state.facade = nil
@@ -66,6 +69,10 @@ func (r *ColdMetadataRead) Close() {
 			for _, source := range generation {
 				source.Release()
 			}
+		}
+		if graphCleared && r.releaseCopy != nil {
+			r.releaseCopy()
+			r.releaseCopy = nil
 		}
 		r.releaseSlot()
 	})
@@ -143,9 +150,11 @@ func (s *SQLiteStore) beginColdMetadataRead(ctx context.Context) (read *ColdMeta
 // failure).
 func (s *SQLiteStore) decodeOwnedColdMetadataRead(ctx context.Context, releaseSlot func()) (read *ColdMetadataRead, err error) {
 	r := s.metadataResidency
+	copyCtx, _, releaseCopy := beginColdCopyReuse(ctx)
 	owned := &ColdMetadataRead{
 		state:       &coldMetadataRead{owner: r},
 		releaseSlot: releaseSlot,
+		releaseCopy: releaseCopy,
 	}
 	defer func() {
 		if err != nil {
@@ -156,12 +165,12 @@ func (s *SQLiteStore) decodeOwnedColdMetadataRead(ctx context.Context, releaseSl
 		return nil, err
 	}
 	decodeStarted := time.Now()
-	facade, sources, err := s.pinColdMetadataRead(ctx)
+	facade, sources, err := s.pinColdMetadataRead(copyCtx)
 	owned.state.facade, owned.state.sources = facade, sources
 	if err != nil {
 		return nil, err
 	}
-	if err := facade.decodeColdMetadataRead(ctx, sources); err != nil {
+	if err := facade.decodeColdMetadataRead(copyCtx, sources); err != nil {
 		return nil, err
 	}
 	facade.mu.Lock()
@@ -171,9 +180,9 @@ func (s *SQLiteStore) decodeOwnedColdMetadataRead(ctx context.Context, releaseSl
 	decoded := int64(time.Since(decodeStarted))
 	coldFacadeDecodeNanos.Add(decoded)
 	storeMaxInt64(&coldFacadeDecodeMax, decoded)
-	if err := ctx.Err(); err != nil {
+	if err := copyCtx.Err(); err != nil {
 		return nil, err
 	}
-	owned.context = context.WithValue(ctx, coldMetadataReadKey{}, owned.state)
+	owned.context = context.WithValue(copyCtx, coldMetadataReadKey{}, owned.state)
 	return owned, nil
 }

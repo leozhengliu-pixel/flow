@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -229,6 +230,83 @@ func TestScaleP12OldServerAndRollbackWireFallback(t *testing.T) {
 			if w.Code != http.StatusNotFound {
 				t.Fatalf("unavailable journal advertised delta: %d", w.Code)
 			}
+		}
+	}
+}
+
+func TestScaleP12SyncRaceProofAndCoverageReset(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	t.Setenv("FLOW_SYNC_V2", "on")
+	for _, repo := range scaleP03ServerTestStores(t) {
+		f := scaleP21M2Setup(t, repo)
+		access, err := repo.ResolveEventAccess(t.Context(), f.data.Workspace.URLKey, f.data.Viewer.ID, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := f.literalRequest(f.data.Viewer, nil, nil)
+		service := &server{store: repo}
+		if got := service.syncChangesProjectionError(request, access, store.ErrAuthForbidden); errors.Is(got, errRealtimeProjectionStale) {
+			t.Fatal("bare authorization denial was classified as a source race")
+		}
+		beforeEpoch := access.AuthzEpoch
+		authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "sync race moved", "teamId": f.public}, f.data.Workspace.URLKey, http.StatusCreated)
+		afterEpoch, err := repo.AuthzEpoch(t.Context(), f.data.Workspace.ID)
+		if err != nil || afterEpoch != beforeEpoch {
+			t.Fatalf("body write changed authorization epoch: before=%q after=%q err=%v", beforeEpoch, afterEpoch, err)
+		}
+		stale := service.syncChangesProjectionError(request, access, store.ErrAuthForbidden)
+		if !errors.Is(stale, errRealtimeProjectionStale) {
+			t.Fatal("source movement did not acquire the stale proof")
+		}
+		journal := scaleP12JournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
+			return store.CommittedPage{
+				Head:       "7",
+				AuthzEpoch: access.AuthzEpoch,
+			}, store.ErrRecordJournalCoverage
+		})
+		result, ok := service.syncChangesResyncAfterRace(request, access, journal, "0", stale)
+		if !ok || !result.ResyncRequired || result.Next != "0" || result.Head != "7" || result.AuthzEpoch != access.AuthzEpoch || result.HasMore || len(result.Transactions) != 0 {
+			t.Fatalf("coverage-gap reset was not authenticated: ok=%v result=%+v", ok, result)
+		}
+
+		settledAccess, err := repo.ResolveEventAccess(t.Context(), f.data.Workspace.URLKey, f.data.Viewer.ID, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, authzEpoch, err := repo.RealtimeSourceVersionAndEpoch(t.Context(), f.data.Workspace.URLKey)
+		if err != nil || authzEpoch != settledAccess.AuthzEpoch {
+			t.Fatalf("settled stale-source setup moved authorization: epoch=%q expected=%q err=%v", authzEpoch, settledAccess.AuthzEpoch, err)
+		}
+		settledJournal := scaleP12JournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
+			return store.CommittedPage{
+				Head:       "8",
+				AuthzEpoch: settledAccess.AuthzEpoch,
+			}, nil
+		})
+		settled, ok := service.syncChangesResyncAfterRace(request, settledAccess, settledJournal, "7", errLiveEventSourceStale)
+		if !ok || !settled.ResyncRequired || settled.Next != "7" || settled.Head != "8" ||
+			settled.AuthzEpoch != settledAccess.AuthzEpoch || settled.HasMore || len(settled.Transactions) != 0 {
+			t.Fatalf("settled stale source did not produce an authenticated empty reset: ok=%v result=%+v", ok, settled)
+		}
+
+		authzPrincipal := f.principals[2]
+		authzRequest := f.literalRequest(authzPrincipal.user, nil, nil)
+		authzAccess, err := repo.ResolveEventAccess(t.Context(), f.data.Workspace.URLKey, authzPrincipal.user.ID, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		beforeAuthzEpoch := authzAccess.AuthzEpoch
+		if err := repo.SetTeamMembership(t.Context(), f.data.Workspace.ID, f.public, authzPrincipal.user.ID, "member", false); err != nil {
+			t.Fatal(err)
+		}
+		afterAuthzEpoch, err := repo.AuthzEpoch(t.Context(), f.data.Workspace.ID)
+		if err != nil || afterAuthzEpoch == beforeAuthzEpoch {
+			t.Fatalf("membership change did not move authorization epoch: before=%q after=%q err=%v", beforeAuthzEpoch, afterAuthzEpoch, err)
+		}
+		if service.syncChangesResetAllowed(authzRequest, authzAccess, errLiveEventSourceStale) {
+			t.Fatal("stale source reset crossed an authorization epoch change")
 		}
 	}
 }
