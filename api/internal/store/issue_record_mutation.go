@@ -46,8 +46,11 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	webhookEnabled := false
 	if s.BoundedMetadataEnabled() {
 		if s.webhookConfigured() {
-			var err error
-			webhookEnabled, err = s.issueMetadataWebhookNeeded(ctx, workspace)
+			err := s.retryMetadataWriteWork(ctx, func(ctx context.Context, _ func()) error {
+				var err error
+				webhookEnabled, err = s.issueMetadataWebhookNeeded(ctx, workspace)
+				return err
+			})
 			if err != nil {
 				return domain.Issue{}, err
 			}
@@ -108,7 +111,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	if s.BoundedMetadataEnabled() {
 		refresh = s.refreshConflictedLogicalMetadata(ctx, workspace)
 	}
-	err := mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+	apply := func(ctx context.Context, stopWorkRetry func()) error {
 		var err error
 		// The callback edits a metadata clone (sharing only what it never
 		// changes, see issueUpdateMetadata) and progress refreshes copy the
@@ -382,6 +385,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			}
 			copyMutationProjects(&metadata, storedMetadata)
 		}
+		stopWorkRetry()
 		if len(fields) > 0 && verifyNarrowMutationInputs() {
 			_, err = s.verifyMutationCallback(ctx, tx, "issue", storedMetadata, &metadata, fields, scope.Payload, func(input *domain.Bootstrap) (string, error) {
 				for i := range input.Issues {
@@ -564,9 +568,15 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			s.dropMetadataCache(ctx, workspace)
 		}
 		return nil
+	}
+	err := mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+		return s.retryMetadataWriteWork(ctx, apply)
 	}, refresh)
 	if errors.Is(err, ErrNoMutation) {
 		return result, nil
+	}
+	if MetadataWorkContended(err) {
+		return domain.Issue{}, err
 	}
 	if err != nil {
 		return result, err

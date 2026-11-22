@@ -45,6 +45,35 @@ table runs COLD.
 
 `FLOW_METADATA_DIR` appears only in tests; it is not an operator setting.
 
+## Activation
+
+| Setting | State | Effect |
+| --- | --- | --- |
+| `FLOW_RECORD_PEER_SYNC` | `off` (default) | Uses Redis workspace versions and event envelopes for legacy reload and publication. Unrecognized values also select `off`. |
+| | `shadow` | Uses the SQL journal for freshness and peer replay while still sending legacy Redis envelopes. For eligible pages it compares a candidate journal apply with the compatibility snapshot and keeps the compatibility result. `Peer journal shadow differs` reports a mismatch. Pages that need a reload fall back without a comparison. |
+| | `on` | Installs a covered SQL journal page before publishing replayed events. Reloads on gaps or unsupported pages. Sends a compact Redis head hint when a durable event has a journal cursor. |
+| `FLOW_METADATA_CATALOG` | `off` or unset (default) | Stops background backfill. Catalog reads and journal maintenance still use the persisted rows and checkpoints. |
+| | `shadow` | Repairs journal coverage, builds bounded summary batches and revisits completed collections for changes. Tests compare catalog summaries, ordering and filters to canonical reads. The worker itself checks backfill progress and reports skips. |
+
+Peer sync needs a locally ready journal for either active mode and falls back
+to `off` when the journal is unavailable. Coordination must be configured to
+start the poller. Bounded startup requires journal mode `on` and rejects
+peer `shadow` because the comparison needs full workspace snapshots.
+`TestScaleP11*` covers mode guards, journal apply and fallback, missed or
+reordered Redis events, envelope compatibility and permission changes.
+
+Catalog **complete** is persisted coverage. Set `FLOW_METADATA_CATALOG=off`
+after preparing and verifying the data. The parser recognizes only `shadow`
+as a worker mode. Bounded admission checks canonical layout, phase-2
+checkpoints and journal writer coverage. The shadow worker can reset a
+completed checkpoint while revisiting it, so stop it before bounded startup.
+`TestScaleP05*`, `TestBoundedRollout*`, `TestMetadataPrepareCommandReadiesBoundedStart`,
+`TestScaleP21ActivationGuard*` and `TestScaleP21CatalogFirstRecordThenColdWrite`
+cover the catalog, preparation and activation guards.
+
+See the [activation runbook](bounded-metadata-activation.md) for the full
+fleet cutover and rollback.
+
 ## Prerequisites
 
 1. Record hydration and the record journal are on:
@@ -234,13 +263,12 @@ all replicas, within one maintenance window.
 4. Size the budgets for the number of workspaces (see [Tuning](#tuning)).
    Starting one replica flag-on against a copy of the database is the
    simplest check: a start that does not fit names the setting and the size.
-5. Stop all replicas and start **one** with `FLOW_BOUNDED_METADATA=on`, so
+5. Stop all replicas and any catalog shadow workers. Start **one** with
+   `FLOW_BOUNDED_METADATA=on` and `FLOW_METADATA_CATALOG=off`, so
    that no flag-off replica runs next to it. Check that it starts and watch the logs under
    [Monitoring](#monitoring). **To be confirmed:** the observation period
    before moving on; the code does not set one.
-6. Set the flag on, and restart, every remaining replica. Remove
-   `FLOW_METADATA_CATALOG=shadow` when you no longer need the worker.
-   **To be confirmed:** whether the worker should stay on after activation.
+6. Start every remaining replica with the same settings.
 
 A single-replica deployment follows steps 1 to 5 only.
 
@@ -426,6 +454,8 @@ scripts/loadrig/loadrig.sh pair pg2              # off, drive, stop, on, drive, 
 - `LOADRIG_MYSQL_MEMORY` sets the MySQL container limit for `mysql2`
   (default `1536m`). Use the same limit for both flag states and verify the
   database stays up throughout the measurement.
+- Set `LOADRIG_CONTAINER_PREFIX` alongside `LOADRIG_HOME` when the rig needs
+  dedicated container names and a separate reports directory.
 
 Compare latency, error rate, 503 count and memory between the two runs on
 data of your size before you enable the flag in production. **To be
@@ -435,7 +465,6 @@ pass/fail limits.
 ## To be confirmed
 
 - Observation period and exit criteria between the single-replica and fleet-wide steps.
-- Whether the catalog worker stays on after activation.
 - A flag-on to flag-off rollback rehearsed on a restored production copy.
 - Sizing guidance for `FLOW_COLD_QUEUE_LIMIT`, `FLOW_COLD_QUEUE_TIMEOUT` and `FLOW_COLD_PROJECTION_CONCURRENCY`.
 - Load-rig pass/fail thresholds.

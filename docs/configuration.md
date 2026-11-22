@@ -632,7 +632,9 @@ structured logging.
 | `FLOW_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 | `FLOW_LOG_FORMAT` | `text` | `text` for human-readable logs or `json` for log collectors. |
 | `FLOW_SLOW_MUTATION_MS` | `500` | Log a `slow workspace mutation` warning with stage timings (lock wait, clone, load, mutate, persist, publish) when a workspace write, or the time it holds the workspace lock, exceeds this many milliseconds. `0` disables it. |
-| `FLOW_BOUNDED_METADATA` | off | Opt-in bounded metadata residency. Requires `FLOW_RECORD_HYDRATION=on`, `FLOW_RECORD_JOURNAL=on`, a peer sync mode other than `shadow` and a complete metadata catalog. Prepare a database with `server metadata-prepare`. See [Bounded metadata](bounded-metadata.md). |
+| `FLOW_BOUNDED_METADATA` | off | Opt-in bounded metadata residency. Requires `FLOW_RECORD_HYDRATION=on`, `FLOW_RECORD_JOURNAL=on`, a peer sync mode other than `shadow` and a complete metadata catalog. Prepare a database with `server metadata-prepare`. See [Bounded metadata](bounded-metadata.md) and the [activation runbook](bounded-metadata-activation.md). |
+| `FLOW_RECORD_PEER_SYNC` | `off` | `shadow` compares eligible journal installs to compatibility reloads and keeps legacy Redis envelopes. `on` uses the SQL journal and compact Redis hints. Both need a ready journal. Bounded metadata refuses `shadow`. Switch to and from `on` fleet-wide. |
+| `FLOW_METADATA_CATALOG` | `off` | `shadow` runs background journal repair and catalog backfill with bounded metadata off. After preparation, use `off` to stop this worker and retain the completed catalog. |
 | `FLOW_METADATA_MEMORY_BYTES` | 70% of the detected cgroup limit or physical RAM | Per-replica bounded metadata target in bytes, with a 1 GiB automatic floor where it fits. A lower `GOMEMLIMIT` limits automatic sizing. The target sizes decoded images (35%), concurrent work (25%), policy (1/16), installed sources (1/32), the spool disk budget, and COLD and bootstrap concurrency. See [all tier overrides](bounded-metadata.md#tuning). |
 
 Every HTTP request receives an `X-Request-ID` response header. Clients may send

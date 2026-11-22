@@ -171,6 +171,7 @@ func (q *remoteEventQueue) push(workspace string, event domain.RealtimeEvent, pe
 	} else if !q.overflow[workspace] {
 		size := realtimeEventBytes(event)
 		if len(q.pending[workspace]) >= remoteEventQueueMaxEvents || size > remoteEventQueueMaxBytes-q.bytes[workspace] {
+			diagnoseRealtimeResync("redis-sidechannel-overflow")
 			q.pending[workspace] = []domain.RealtimeEvent{{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}}
 			q.bytes[workspace] = realtimeEventBytes(q.pending[workspace][0])
 			q.overflow[workspace] = true
@@ -238,6 +239,12 @@ func (q *remoteEventQueue) clearClients(workspace string) {
 	delete(q.hintOverflow, workspace)
 }
 
+func (q *remoteEventQueue) resetClientOverflow(workspace string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	delete(q.hintOverflow, workspace)
+}
+
 // take returns the workspace's waiting events, or none once its worker should
 // stop.
 func (q *remoteEventQueue) take(workspace string) []domain.RealtimeEvent {
@@ -292,7 +299,7 @@ func (s *server) applyRemoteEvents(workspace string) {
 		cancel()
 		if err != nil {
 			log.Printf("Peer apply workspace=%s: %v", workspace, err)
-			s.peerResync(workspace)
+			s.peerResync(workspace, "peer-apply-failed")
 		}
 	}
 }
@@ -346,6 +353,7 @@ func (s *server) applyLegacyRemoteEvents(workspace string) {
 			// it had the change; the next applied batch reloads it, and the
 			// resync makes them refetch then.
 			log.Printf("Redis reload workspace=%s events=%d: %v", workspace, len(batch), err)
+			diagnoseRealtimeResync("legacy-reload-failed")
 			s.realtime.publish(workspace, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()})
 			continue
 		}

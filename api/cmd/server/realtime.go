@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,6 +21,12 @@ import (
 )
 
 const presenceTTL = 45 * time.Second
+
+func diagnoseRealtimeResync(reason string) {
+	if os.Getenv("FLOW_LOADRIG_DIAGNOSE_REALTIME") == "1" {
+		slog.Warn("loadrig realtime resync", "reason", reason)
+	}
+}
 
 type realtimeHub struct {
 	mu          sync.Mutex
@@ -93,6 +101,7 @@ type realtimeSeqOrder struct {
 	pending      map[int64]domain.RealtimeEvent
 	pendingBytes int64
 	timer        *time.Timer
+	peerReplay   bool
 }
 
 // realtimeReorderWait bounds how long a change waits for an earlier one still
@@ -234,11 +243,12 @@ func (h *realtimeHub) publishInOrderLocked(workspace string, event domain.Realti
 		h.order[workspace] = order
 	}
 	switch {
-	case order.last == 0 || event.Seq == order.last+1:
+	case order.last == 0 && !order.peerReplay || event.Seq == order.last+1:
 		order.last = event.Seq
 		h.deliverLocked(workspace, event)
 		h.releaseInOrderLocked(workspace, order, false)
 	case event.Seq <= order.last:
+		diagnoseRealtimeResync("late-sequence")
 		h.deliverLocked(workspace, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: event.CreatedAt})
 	default:
 		if previous, exists := order.pending[event.Seq]; exists {
@@ -249,12 +259,13 @@ func (h *realtimeHub) publishInOrderLocked(workspace string, event domain.Realti
 		size := int64(realtimeEventBytes(event))
 		if !h.budget.acquire(size) {
 			delete(order.pending, event.Seq)
+			diagnoseRealtimeResync("reorder-budget")
 			h.deliverLocked(workspace, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: event.CreatedAt})
 			return
 		}
 		order.pending[event.Seq] = event
 		order.pendingBytes += size
-		if order.timer == nil {
+		if order.timer == nil && !order.peerReplay {
 			h.awaitGapLocked(workspace, order)
 		}
 	}
@@ -309,15 +320,96 @@ func (h *realtimeHub) releaseInOrderLocked(workspace string, order *realtimeSeqO
 		order.timer.Stop()
 		order.timer = nil
 	}
-	if len(order.pending) > 0 && order.timer == nil {
+	if len(order.pending) > 0 && order.timer == nil && !order.peerReplay {
 		h.awaitGapLocked(workspace, order)
 	}
 }
 
-// resyncAll tells every workspace's subscribers, and every client resuming
-// from before now, to reload: events were lost (this instance missed peer
-// events while its Redis subscription was down). Waiting events go out first
-// and delivery order starts over, since the missed seqs never arrive.
+// In peer mode SQL replay decides when a gap is recoverable. The legacy
+// reorder timer is shorter than the SQL poll interval.
+func (h *realtimeHub) followPeerReplay(workspace string, cursor int64) {
+	if !h.ordered {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.order == nil {
+		h.order = map[string]*realtimeSeqOrder{}
+	}
+	order := h.order[workspace]
+	if order == nil {
+		h.order[workspace] = &realtimeSeqOrder{
+			last: cursor, pending: map[int64]domain.RealtimeEvent{}, peerReplay: true,
+		}
+		return
+	}
+	order.peerReplay = true
+	if order.timer != nil {
+		order.timer.Stop()
+		order.timer = nil
+	}
+	h.advancePeerReplayLocked(workspace, cursor)
+}
+
+// A restored or replaced workspace starts a new replay window. Its old
+// sequence numbers cannot certify delivery in the new generation.
+func (h *realtimeHub) resetPeerReplay(workspace string, cursor int64) {
+	if !h.ordered {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if order := h.order[workspace]; order != nil {
+		if order.timer != nil {
+			order.timer.Stop()
+			order.timer = nil
+		}
+		h.budget.release(order.pendingBytes)
+	}
+	if h.order == nil {
+		h.order = map[string]*realtimeSeqOrder{}
+	}
+	h.order[workspace] = &realtimeSeqOrder{last: cursor, pending: map[int64]domain.RealtimeEvent{}, peerReplay: true}
+	h.historyTotal -= h.historyBytes[workspace]
+	delete(h.history, workspace)
+	delete(h.historyBytes, workspace)
+}
+
+// Replay has classified these sequences as silent or unavailable. Deliver
+// any locally buffered events in this range before releasing later ones.
+func (h *realtimeHub) advancePeerReplay(workspace string, cursor int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.advancePeerReplayLocked(workspace, cursor)
+}
+
+func (h *realtimeHub) advancePeerReplayLocked(workspace string, cursor int64) {
+	order := h.order[workspace]
+	if order == nil || !order.peerReplay || cursor <= order.last {
+		return
+	}
+	var buffered []int64
+	for seq := range order.pending {
+		if seq <= cursor {
+			buffered = append(buffered, seq)
+		}
+	}
+	slices.Sort(buffered)
+	for _, seq := range buffered {
+		event := order.pending[seq]
+		delete(order.pending, seq)
+		size := int64(realtimeEventBytes(event))
+		order.pendingBytes -= size
+		h.budget.release(size)
+		h.deliverLocked(workspace, event)
+	}
+	order.last = cursor
+	h.releaseInOrderLocked(workspace, order, false)
+}
+
+// resyncAll asks active and reconnecting subscribers to reload after a Redis
+// disconnect. Legacy delivery flushes its pending events and starts over.
+// Peer replay retains its pending durable events for SQL to order.
 func (h *realtimeHub) resyncAll() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -329,6 +421,9 @@ func (h *realtimeHub) resyncAll() {
 		workspaces[workspace] = true
 	}
 	for workspace, order := range h.order {
+		if order.peerReplay {
+			continue // SQL will fill durable gaps after the reconnect.
+		}
 		for len(order.pending) > 0 {
 			h.releaseInOrderLocked(workspace, order, true)
 		}
@@ -340,6 +435,7 @@ func (h *realtimeHub) resyncAll() {
 	}
 	now := time.Now().UTC()
 	for workspace := range workspaces {
+		diagnoseRealtimeResync("redis-reconnect")
 		h.deliverLocked(workspace, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: now})
 	}
 }
@@ -347,6 +443,7 @@ func (h *realtimeHub) resyncAll() {
 // deliverLocked appends an event to the replay window and fans it out.
 func (h *realtimeHub) deliverLocked(workspace string, event domain.RealtimeEvent) {
 	if len(event.Payload) > 256<<10 {
+		diagnoseRealtimeResync("oversized-live")
 		event = domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", ClientID: event.ClientID, ActorID: event.ActorID, CreatedAt: event.CreatedAt}
 	}
 	history := append(h.history[workspace], event)
@@ -384,6 +481,7 @@ func (h *realtimeHub) deliverLocked(workspace string, event domain.RealtimeEvent
 		if subscriber.push(event) {
 			continue
 		}
+		diagnoseRealtimeResync("subscriber-overflow")
 		subscriber.collapse(event)
 	}
 }

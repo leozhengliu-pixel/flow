@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Bounded workspace search filters and sorts projects and documents using catalog summaries and reads text after visibility checks. PostgreSQL and SQLite batch trigram lookups across collections. SDK and MCP document search reuse indexed candidates and normalized text.
 - Removed unused internal code
+- Documented peer journal sync and metadata catalog activation for bounded API replicas.
+- Bounded peer sync refreshes the installed metadata before publishing a peer edit.
+- Bounded issue creates, edits and discussion writes retry temporary metadata-budget refusals before running their callbacks. Sustained contention returns a retryable 503.
+- Peer sync preserves realtime event order across SQL sequencing and delayed Redis hints, reducing avoidable client resyncs.
 - The bounded issue bootstrap reuses encoded project, initiative and document fields across workspace generations that share those collections. Authorization and request-specific fields are evaluated for each read.
 - Bounded project edits and peer reloads prepare their changes before taking the workspace write lock. Project, initiative and document reads can reuse matching resident collections and their ID indexes.
 - Bounded MySQL metadata search batches full-text candidates across collections and parses each returned row once to build the search result.

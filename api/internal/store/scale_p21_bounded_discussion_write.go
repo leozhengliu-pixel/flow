@@ -154,7 +154,7 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 	var realtime json.RawMessage
 	metadataWritten := false
 	traceStart(ctx, "issue")
-	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+	apply := func(ctx context.Context, stopWorkRetry func()) error {
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
 		traceLocked(ctx)
@@ -323,6 +323,7 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 			return ErrBoundedMetadataCoverage
 		}
 		transferred = true
+		stopWorkRetry()
 		aggregate, callbackErr := mutate(&data)
 		data.FormerMembers, data.CollaborationUpdates = nil, nil
 		if err := attempt.lookups.check(); err != nil {
@@ -417,6 +418,9 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 		traceMark(ctx, "persist")
 		metadataWritten = tx.metadataWritten
 		return nil
+	}
+	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+		return s.retryMetadataWriteWork(ctx, apply)
 	}, s.refreshConflictedLogicalMetadata(ctx, workspace))
 	if metadataWritten {
 		s.dropMetadataCache(ctx, workspace)

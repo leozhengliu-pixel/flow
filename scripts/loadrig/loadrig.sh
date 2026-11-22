@@ -24,7 +24,7 @@
 # FLOW_LOADRIG_SEARCH_QUERY (optional fixed search URL query), FLOW_LOADRIG_SYNC_REPLAY_AFTER (optional fixed cursor for single-transaction sync reads),
 # FLOW_LOADRIG_ROTATE_READS (on rotates reads across replicas),
 # GOMAXPROCS_REPLICA (4), GOMEMLIMIT_REPLICA (1536MiB), MAX_LOAD (20: refuse to start above this load average),
-# LOADRIG_MYSQL_MEMORY (1536m, Docker's memory limit for MySQL),
+# LOADRIG_MYSQL_MEMORY (1536m, Docker's memory limit for MySQL), LOADRIG_CONTAINER_PREFIX (loadrig),
 # KEEP (1 keeps data after smoke), LOADRIG_ALLOW_PULL (1 allows pulling a missing image), EXTRA_ENV ("NAME=value ..."
 # added to every replica, e.g. EXTRA_ENV="FLOW_METADATA_CATALOG=shadow" for the flag-off replicas of a real rollout).
 # Reports: $LOADRIG_HOME/reports/<label>.{md,json}, compare-<topology>.md, seed-<topology>.json.
@@ -49,6 +49,10 @@ API_PORT="${LOADRIG_API_PORT:-$PORT_BASE}"
 METRIC_PORT="${LOADRIG_METRIC_PORT:-$((PORT_BASE + 10))}"
 API_PORTS=("$API_PORT" "$((API_PORT + 1))")
 METRIC_PORTS=("$METRIC_PORT" "$((METRIC_PORT + 1))")
+CONTAINER_PREFIX="${LOADRIG_CONTAINER_PREFIX:-loadrig}"
+PG_CONTAINER="$CONTAINER_PREFIX-pg"
+MYSQL_CONTAINER="$CONTAINER_PREFIX-mysql"
+REDIS_CONTAINER="$CONTAINER_PREFIX-redis"
 MAX_LOAD="${MAX_LOAD:-20}"
 mkdir -p "$BIN" "$RUN" "$DATA" "$REPORTS"
 chmod 700 "$HOME_DIR"
@@ -110,20 +114,20 @@ pg_url() { # database name -> URL (never printed)
 
 pg_up() {
   pg_secret
-  if docker ps --format '{{.Names}}' | grep -qx loadrig-pg; then return 0; fi
+  if docker container inspect --format '{{.State.Running}}' "$PG_CONTAINER" 2>/dev/null | grep -qx true; then return 0; fi
   docker image inspect postgres:17-alpine >/dev/null 2>&1 || [ "${LOADRIG_ALLOW_PULL:-0}" = 1 ] || die "postgres:17-alpine is not present locally (LOADRIG_ALLOW_PULL=1 to pull it)"
   port_free "$PG_PORT" || die "port $PG_PORT is in use"
-  log "starting container loadrig-pg (postgres:17-alpine, 1 GiB)"
-  docker run -d --name loadrig-pg --memory 1g --env-file "$HOME_DIR/pg.env" -p "127.0.0.1:$PG_PORT:5432" postgres:17-alpine \
+  log "starting container $PG_CONTAINER (postgres:17-alpine, 1 GiB)"
+  docker run -d --name "$PG_CONTAINER" --memory 1g --env-file "$HOME_DIR/pg.env" -p "127.0.0.1:$PG_PORT:5432" postgres:17-alpine \
     -c max_connections=200 -c shared_buffers=256MB -c synchronous_commit=off >/dev/null
   for _ in $(seq 1 60); do
-    docker exec loadrig-pg pg_isready -h 127.0.0.1 -U flow -d flow_seed >/dev/null 2>&1 && return 0
+    docker exec "$PG_CONTAINER" pg_isready -h 127.0.0.1 -U flow -d flow_seed >/dev/null 2>&1 && return 0
     sleep 1
   done
-  die "loadrig-pg did not become ready"
+  die "$PG_CONTAINER did not become ready"
 }
 
-pg_sql() { docker exec loadrig-pg psql -v ON_ERROR_STOP=1 -q -U flow -d postgres -c "$1" >/dev/null; }
+pg_sql() { docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -q -U flow -d postgres -c "$1" >/dev/null; }
 
 # ---- MySQL ----------------------------------------------------------------------------------------------------------
 mysql_secret() {
@@ -140,27 +144,27 @@ mysql_url() { # database name -> URL (never printed)
 }
 
 # mysql_root runs a command in the container as the MySQL root user (password from the env file, never printed).
-mysql_root() { docker exec -e MYSQL_PWD="$(sed -n 's/^MYSQL_ROOT_PASSWORD=//p' "$HOME_DIR/mysql.env")" loadrig-mysql "$@"; }
+mysql_root() { docker exec -e MYSQL_PWD="$(sed -n 's/^MYSQL_ROOT_PASSWORD=//p' "$HOME_DIR/mysql.env")" "$MYSQL_CONTAINER" "$@"; }
 
 mysql_sql() { mysql_root mysql -uroot -e "$1" >/dev/null; }
 
 mysql_up() {
   mysql_secret
-  if docker ps --format '{{.Names}}' | grep -qx loadrig-mysql; then return 0; fi
+  if docker container inspect --format '{{.State.Running}}' "$MYSQL_CONTAINER" 2>/dev/null | grep -qx true; then return 0; fi
   docker image inspect mysql:8.4 >/dev/null 2>&1 || [ "${LOADRIG_ALLOW_PULL:-0}" = 1 ] || die "mysql:8.4 is not present locally (LOADRIG_ALLOW_PULL=1 to pull it)"
   port_free "$MYSQL_PORT" || die "port $MYSQL_PORT is in use"
   local memory="${LOADRIG_MYSQL_MEMORY:-1536m}"
-  log "starting container loadrig-mysql (mysql:8.4, memory limit $memory)"
+  log "starting container $MYSQL_CONTAINER (mysql:8.4, memory limit $memory)"
   # No binary log (a single server; triggers need no extra privilege) and a group-commit log flush, as pg2 runs with
   # synchronous_commit=off.
-  docker run -d --name loadrig-mysql --memory "$memory" --env-file "$HOME_DIR/mysql.env" -p "127.0.0.1:$MYSQL_PORT:3306" mysql:8.4 \
+  docker run -d --name "$MYSQL_CONTAINER" --memory "$memory" --env-file "$HOME_DIR/mysql.env" -p "127.0.0.1:$MYSQL_PORT:3306" mysql:8.4 \
     --skip-log-bin --innodb-buffer-pool-size=768M --innodb-flush-log-at-trx-commit=2 --max-connections=300 \
     --max-allowed-packet=256M >/dev/null
   for _ in $(seq 1 90); do
     mysql_root mysql -h127.0.0.1 -uroot -Nse 'SELECT 1' >/dev/null 2>&1 && return 0
     sleep 1
   done
-  die "loadrig-mysql did not become ready"
+  die "$MYSQL_CONTAINER did not become ready"
 }
 
 # mysql_database recreates database name (empty) for the flow user.
@@ -177,11 +181,11 @@ mysql_copy() {
 
 redis_up() {
   if [ -f "$RUN/redis.pid" ] && kill -0 "$(cat "$RUN/redis.pid")" 2>/dev/null; then return 0; fi
-  if docker ps --format '{{.Names}}' | grep -qx loadrig-redis; then return 0; fi
+  if docker container inspect --format '{{.State.Running}}' "$REDIS_CONTAINER" 2>/dev/null | grep -qx true; then return 0; fi
   port_free "$REDIS_PORT" || die "port $REDIS_PORT is in use"
   if docker image inspect redis:7-alpine >/dev/null 2>&1 || [ "${LOADRIG_ALLOW_PULL:-0}" = 1 ]; then
-    log "starting container loadrig-redis (redis:7-alpine, 256 MiB)"
-    docker run -d --name loadrig-redis --memory 256m -p "127.0.0.1:$REDIS_PORT:6379" redis:7-alpine >/dev/null
+    log "starting container $REDIS_CONTAINER (redis:7-alpine, 256 MiB)"
+    docker run -d --name "$REDIS_CONTAINER" --memory 256m -p "127.0.0.1:$REDIS_PORT:6379" redis:7-alpine >/dev/null
     echo docker > "$RUN/redis.kind"
   else
     log "redis:7-alpine is not present locally: using the in-memory Redis process (miniredis)"
@@ -347,8 +351,12 @@ cmd_down() {
   cmd_stop
   stop_pid "$RUN/model.pid"
   stop_pid "$RUN/redis.pid"
-  for name in loadrig-pg loadrig-mysql loadrig-redis; do
-    if docker ps -a --format '{{.Names}}' | grep -qx "$name"; then docker rm -f -v "$name" >/dev/null; log "removed container $name"; fi
+  local name id
+  for name in "$PG_CONTAINER" "$MYSQL_CONTAINER" "$REDIS_CONTAINER"; do
+    if id=$(docker container inspect --format '{{.Id}}' "$name" 2>/dev/null); then
+      docker rm -f -v "$id" >/dev/null
+      log "removed container $name"
+    fi
   done
   rm -f "$RUN/redis.kind"
 }

@@ -253,6 +253,20 @@ func scaleP21SW480Path(left, right any, path string) string {
 	return fmt.Sprintf("%s: legacy=%.600s bounded=%.600s", path, expected, raw)
 }
 
+func TestScaleP21SW480WeekendDigestTime(t *testing.T) {
+	monday := time.Date(2026, time.November, 23, 9, 30, 20, 0, time.UTC)
+	for _, days := range []int{1, 2} {
+		started := monday.AddDate(0, 0, -days).Add(-time.Hour)
+		finished := started.Add(time.Second)
+		if !scaleP21SW59GeneratedDigestTime(monday, started, finished) {
+			t.Errorf("digest due on Monday did not match the request %d days earlier", days)
+		}
+		if scaleP21SW59GeneratedDigestTime(monday.Add(time.Minute), started, finished) {
+			t.Error("normalization accepted a changed digest delay")
+		}
+	}
+}
+
 func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
