@@ -897,7 +897,7 @@ func (s *SQLiteStore) reloadResidentWorkspaceOptimistic(ctx context.Context, wor
 // builds the installed logical source of a workspace a test view does not
 // hold yet (a COLD rename's new key on a view that captured the old one).
 func (s *SQLiteStore) reloadResidentWorkspaceLogical(ctx context.Context, workspace string, logical bool) error {
-	ctx = metadataLogicalUnpinnedContext(ctx)
+	ctx = trackMetadataWorkDemand(metadataLogicalUnpinnedContext(ctx))
 	optimistic, _ := ctx.Value(optimisticResidentReloadKey{}).(bool)
 	s.metadataResidency.mu.Lock()
 	hasLogical := s.metadataResidency.logical[workspace] != nil || logical

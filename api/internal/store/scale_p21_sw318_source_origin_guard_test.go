@@ -20,7 +20,7 @@ import (
 func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 	contracts := map[string]string{
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
-		"scale_p21_workflow_run_write.go": "82b916096b9c5e7493da777bc8741a7b59d7e7fd94e8d2f21f217f5966519d71",
+		"scale_p21_workflow_run_write.go": "a1fba71672d01fae78447673c322c1d868ca26e39bbc3482969c0c6bb22a5994",
 		"issue_records.go":                "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
 		"issue_query.go":                  "fbbe42adaed6c5920253704649a753d16b9db97af707446d74f7f19251ced6b2",
 		// The result cache only checks for a borrowed snapshot to bypass Redis.
@@ -55,7 +55,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"metadata_mutation.go":                                          "b7589f199a137fbec8cf28d63b4558bc9712e148cd3c67eae2a9984174c21293",
 		"metadata_record_scope.go":                                      "0f02418f3ec0efe4cccc28a7eaf3cf768629493d407c6c2f7b8c80331ce163c1",
 		"read_snapshot.go":                                              "cc14903369aeacba0b8d30fe19573a6f5924790d2a235ed2c71b57bc654756b6",
-		"resource_access.go":                                            "0141d03e3fe562de4bba76926669e55e9f1c3f1bec180f0fd383ba8038c69fa4",
+		"resource_access.go":                                            "460e374d1cf4a0915d8887aa408d68a6bb79f6ae267c3ebfff2d1d298977de64",
 		"scale_p11_peer_state.go":                                       "1b30e92c1d14d8fc973f527a2bb97ce4b574626614403dfbe06da8174be0bcd9",
 		"scale_p12_epoch_access.go":                                     "3a90a16ace7b653f6269cef736dd758162ea758d5e754508dc3d3804f771903a",
 		"scale_p19_metadata.go":                                         "0d847695e8a6dae32226bd778b04736af3e5759416b9ca6e43f2b9cd847aa411",
@@ -83,7 +83,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_issue_authorization_policy.go":                       "3b1db13512c208deb9b7c7c650e50cb15e926835c5151fc2e841d85313416d21",
 		"scale_p21_issue_authorization_rows.go":                         "0b5289e704257da9833d2e335efe53dacafc5cf2ee0b071cb65ed994b3b1d564",
 		"scale_p21_issue_facet_read.go":                                 "61147a9c92d8306b9d4dcdcb6c32272d0bb202c1b64b71a0c8de71792b302069",
-		"scale_p21_legacy_discussion_write.go":                          "8b73c270fcbbca08db33629ab8d9788ea6afc801c586f5efe2d593e4529a2c92",
+		"scale_p21_legacy_discussion_write.go":                          "fb168bbffcffd0d3c616ed2aa0a42c50c036bfe58fd272a1d53758aecdd22f1b",
 		"scale_p21_legacy_event_policy_read.go":                         "974033b2bc4b12a943f916bbf087a927191a26c694c2edb61b17fc7fa1a86c7b",
 		"scale_p21_legacy_import_inputs.go":                             "f5435bd286f1ba1547f54e791fe3b5204b1f28740dd29ec2fad585881c7d10e6",
 		"scale_p21_native_reads.go":                                     "f9f002b8b707a39498b93a2032dcd3833e13e3822bd89acdf080cc1142d40b25",
@@ -91,7 +91,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_p19_snapshot_read.go":                                "d8d326e1fa687b9d3adfe5de6e63351a399e6ee58172b45fe775ed58e15a9160",
 		"scale_p21_project_directory_query.go":                          "a7d33c1d062035abe237b4180d0edd386bde44d25dc364f874f96714e676f079",
 		"scale_p21_read_leaf_rows.go":                                   "45c2d9bd63bd19145b8c48771aad80470efa4d75d051449d4b4644a09b50e05f",
-		"scale_p21_resource_authorization_read.go":                      "21963760ddcf2bebadff8433da6b321b14e2771f959100eda1ddb7ddedf2d699",
+		"scale_p21_resource_authorization_read.go":                      "6a82512ebc0e8087b1de53b815cfeaf05e1c2fe4b1a98e26c67f198eaab07ef4",
 		"scale_p21_resource_directory_read.go":                          "5401a9c8b2a1f342f0c9d75c03b1f67cc1e0b6a5c5c9f84e67ae714aa8f059be",
 		"scale_p21_resource_policy_memo.go":                             "f4134522db037aadc7cc519e1ceb6f64eb65db899b616681eaeb4257886601e3",
 		"scale_p21_resource_read.go":                                    "5ca09910f1c137dfd89587667b24c63996fb802783b8e5e6a6f50a0b6a7e9d5c",

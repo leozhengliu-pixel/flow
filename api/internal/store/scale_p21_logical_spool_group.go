@@ -69,7 +69,7 @@ func newMetadataLogicalStorage(ctx context.Context, group *metadataLogicalSpoolG
 		return nil, err
 	}
 	config, _ := ctx.Value(metadataLogicalScratchKey{}).(metadataLogicalScratch)
-	storage := &metadataLogicalStorage{directory: metadataSpoolDirectory(config.directory), refs: 1}
+	storage := &metadataLogicalStorage{directory: metadataSpoolDirectory(config.directory), refs: 1, diskDemand: metadataLogicalDiskDemand(ctx)}
 	limit := metadataLogicalDescriptorCap()
 	if group != nil {
 		if !reserveMetadataLogicalBytes(&metadataLogicalDescriptorsUsed, metadataLogicalWriteBytes, limit) {

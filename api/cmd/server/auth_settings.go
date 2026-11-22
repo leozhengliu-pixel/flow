@@ -70,10 +70,11 @@ func allowedAuthenticationMethodPolicy(data domain.Bootstrap, role string, auth 
 type authPolicyFailure struct {
 	status int
 	body   map[string]string
+	cause  error
 }
 
 func (f *authPolicyFailure) write(w http.ResponseWriter) {
-	if f.status != 0 {
+	if f.status != 0 && !writeStoreBusy(w, f.cause) {
 		writeJSON(w, f.status, f.body)
 	}
 }
@@ -106,7 +107,7 @@ func (s *server) policyPrincipalFor(ctx context.Context, r *http.Request) policy
 // carries settings only.
 func (s *server) workspaceAuthenticationFailure(ctx context.Context, workspace string, data domain.Bootstrap, role string, principal policyPrincipal, mfaExempt bool) *authPolicyFailure {
 	if principal.err != nil {
-		return &authPolicyFailure{http.StatusServiceUnavailable, map[string]string{"error": "could not validate authentication policy"}}
+		return &authPolicyFailure{status: http.StatusServiceUnavailable, body: map[string]string{"error": "could not validate authentication policy"}, cause: principal.err}
 	}
 	if !principal.found {
 		return &authPolicyFailure{}
@@ -118,15 +119,15 @@ func (s *server) workspaceAuthenticationFailure(ctx context.Context, workspace s
 		var err error
 		enforced, matched, err = s.store.AuthenticationProviderPolicy(ctx, workspace, auth)
 		if errors.Is(err, sql.ErrNoRows) {
-			return &authPolicyFailure{http.StatusForbidden, map[string]string{"error": "Workspace authentication policy is unavailable"}}
+			return &authPolicyFailure{status: http.StatusForbidden, body: map[string]string{"error": "Workspace authentication policy is unavailable"}}
 		}
 		if err != nil {
-			return &authPolicyFailure{http.StatusServiceUnavailable, map[string]string{"error": "could not validate authentication policy"}}
+			return &authPolicyFailure{status: http.StatusServiceUnavailable, body: map[string]string{"error": "could not validate authentication policy"}, cause: err}
 		}
 	} else {
 		policy, ok := s.store.WorkspaceMetadataFields(workspace, "identityProviders")
 		if !ok {
-			return &authPolicyFailure{http.StatusForbidden, map[string]string{"error": "Workspace authentication policy is unavailable"}}
+			return &authPolicyFailure{status: http.StatusForbidden, body: map[string]string{"error": "Workspace authentication policy is unavailable"}}
 		}
 		data.IdentityProviders = policy.IdentityProviders
 	}
@@ -141,10 +142,10 @@ func (s *server) workspaceAuthenticationFailure(ctx context.Context, workspace s
 		allowed = allowedAuthenticationMethod(data, role, auth)
 	}
 	if !allowed {
-		return &authPolicyFailure{http.StatusForbidden, map[string]string{"error": "Sign in using an authentication method allowed by this workspace", "code": "authentication_method_required"}}
+		return &authPolicyFailure{status: http.StatusForbidden, body: map[string]string{"error": "Sign in using an authentication method allowed by this workspace", "code": "authentication_method_required"}}
 	}
 	if !mfaExempt && data.WorkspaceSettings.RequireTwoFactor && auth.MFAVerifiedAt == nil {
-		return &authPolicyFailure{http.StatusForbidden, map[string]string{"error": "Verify a second authentication factor to access this workspace", "code": "mfa_required"}}
+		return &authPolicyFailure{status: http.StatusForbidden, body: map[string]string{"error": "Verify a second authentication factor to access this workspace", "code": "mfa_required"}}
 	}
 	return nil
 }

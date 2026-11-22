@@ -512,6 +512,7 @@ func (s *SQLiteStore) mutateLoopStamp(ctx context.Context, workspace, eventType,
 		}
 	}
 	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)
+	ctx = trackMetadataWorkDemand(ctx)
 	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, metadataTimestampInputBytes)
 	if err != nil {
 		return err

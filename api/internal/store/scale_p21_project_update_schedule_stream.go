@@ -144,8 +144,8 @@ func (p *legacyMetadataWritePlan) rebaseProjectUpdateScheduleRow(ctx context.Con
 		return true, err
 	}
 	defer spool.Close()
-	if !spool.CanAppend(size) {
-		return true, ErrRecordSpoolBudget
+	if err := spool.checkAppend(size); err != nil {
+		return true, err
 	}
 	reader := &canonicalMetadataReader{ctx: ctx, tx: p.tx, workspace: p.workspace, key: RecordKey{f.field.name, key.key}, size: size}
 	if copied, err := io.CopyBuffer(spool, reader, make([]byte, metadataRecordChunkBytes)); err != nil || copied != size {

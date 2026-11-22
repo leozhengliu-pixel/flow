@@ -43,6 +43,7 @@ func (s *server) boundedRecordDecision(r *http.Request, workspace, userID, kind,
 			}
 		}
 		if !errors.Is(err, store.ErrResourceAccessChanged) || attempt == 2 {
+			noteAuthorizationBusy(r, err)
 			return false
 		}
 		if credential != nil {

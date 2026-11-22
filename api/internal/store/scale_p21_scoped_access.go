@@ -208,7 +208,7 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	if !RecordHydrationEnabled() {
 		return ErrBoundedMetadataCoverage
 	}
-	ctx = metadataLogicalUnpinnedContext(ctx)
+	ctx = trackMetadataWorkDemand(metadataLogicalUnpinnedContext(ctx))
 	actor, hasActor := actorFromContext(ctx)
 	actor = mutationInputActor(actor)
 	viewWrite, _ := ctx.Value(savedViewWriteKey{}).(*savedViewWrite)

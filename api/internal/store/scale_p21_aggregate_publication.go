@@ -205,9 +205,6 @@ func (s *SQLiteStore) metadataAggregateEncodeOwned(ctx context.Context, node met
 			return nil, nil, err
 		}
 	}
-	if metadataLogicalDiskUsed.Load() >= metadataLogicalDiskBytes {
-		return nil, nil, ErrRecordSpoolBudget
-	}
 	// A value that fits the stream buffer is admitted and kept in memory at
 	// its single flush; a larger one spools as before. A temporary file per
 	// record cost far more than the record's encoding (thousands per write).

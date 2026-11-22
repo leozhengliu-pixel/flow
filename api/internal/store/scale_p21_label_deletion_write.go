@@ -22,7 +22,7 @@ import (
 // image. Publication is the legacy writer's: the committed event to the
 // webhook sink and its payload to the realtime sink.
 func (s *SQLiteStore) mutateBoundedLabelDeletion(ctx context.Context, workspace, eventType, id string, group bool, mutate func(*domain.Bootstrap) error) error {
-	ctx = metadataLogicalUnpinnedContext(ctx)
+	ctx = trackMetadataWorkDemand(metadataLogicalUnpinnedContext(ctx))
 	ctx, release, err := s.admitMetadataWork(ctx, 8<<20+metadataPolicyBytes)
 	if err != nil {
 		return err

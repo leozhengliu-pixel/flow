@@ -333,6 +333,7 @@ func (s *SQLiteStore) mutateBoundedLegacyDiscussion(ctx context.Context, workspa
 		}
 	}
 	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)
+	ctx = trackMetadataWorkDemand(ctx)
 	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, metadataTimestampInputBytes)
 	if err != nil {
 		return err

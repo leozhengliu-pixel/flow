@@ -197,8 +197,8 @@ func (s *SQLiteStore) scanMetadataInlineRoot(ctx context.Context, tx *sqlTx, wor
 	if err != nil {
 		return nil, err
 	}
-	if !root.spool.CanAppend(size) {
-		return nil, ErrRecordSpoolBudget
+	if err := root.spool.checkAppend(size); err != nil {
+		return nil, err
 	}
 	snapshot := &metadataCollectionSnapshot{store: s, tx: tx, workspace: workspace}
 	source := &metadataSnapshotReaderAt{ctx: ctx, snapshot: snapshot, size: size, pageBytes: pageBytes}

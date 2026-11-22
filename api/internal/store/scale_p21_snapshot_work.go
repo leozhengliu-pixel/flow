@@ -24,17 +24,18 @@ func (s *SQLiteStore) tryAdmitAdditionalMetadataWork(ctx context.Context, bytes 
 	if parent, ok := ctx.Value(metadataWorkLeaseKey{}).(*metadataWorkLease); ok && parent.budget == budget && !parent.live {
 		return ctx, nil, ErrMetadataWorkBudget
 	}
+	demand := metadataWorkDemandFrom(ctx)
 	if bytes <= 0 || bytes > budget.limit-budget.used {
-		if bytes > 0 && metadataWorkDemandFits(ctx, bytes, budget.limit) {
+		if bytes > 0 && demand != nil && demand.fits(bytes, budget.limit) {
 			// The attempt would fit the budget: other work holds the room
 			// this admission needs.
-			noteMetadataWorkDemand(ctx, 0, bytes)
+			demand.refuse(bytes)
 			return ctx, nil, errMetadataWorkContended
 		}
 		return ctx, nil, ErrMetadataWorkBudget
 	}
 	lease := &metadataWorkLease{budget: budget, bytes: bytes, live: true}
-	noteMetadataWorkDemand(ctx, bytes, 0)
+	demand.charge(bytes)
 	budget.used += bytes
 	budget.peak = max(budget.peak, budget.used)
 	var once sync.Once
@@ -43,6 +44,7 @@ func (s *SQLiteStore) tryAdmitAdditionalMetadataWork(ctx context.Context, bytes 
 			budget.mu.Lock()
 			lease.live = false
 			budget.used -= bytes
+			demand.charge(-bytes)
 			close(budget.changed)
 			budget.changed = make(chan struct{})
 			budget.mu.Unlock()

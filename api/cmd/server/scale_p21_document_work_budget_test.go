@@ -93,6 +93,18 @@ func TestScaleP21DocumentUpdateWorkBudget(t *testing.T) {
 		if document := mustDocument(t, repo, workspace, id); document.Title != "After the work ended" || document.Version != 2 || events() != before {
 			t.Fatalf("a refused edit wrote: %q version %d", document.Title, document.Version)
 		}
+		// The webhook preflight runs before the document writer's retry loop.
+		f.probe.SetWebhookSink(func(string, domain.DomainEvent) {})
+		defer f.probe.SetWebhookSink(nil)
+		release = holdLoadErrorsWork(t, f.probe, 32<<10)
+		response = edit("After webhook preflight")
+		release()
+		if response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") == "" || events() != before {
+			t.Fatalf("held webhook preflight returned %d, want 503 with Retry-After and no event", response.Code)
+		}
+		if response := edit("After webhook preflight"); response.Code != http.StatusOK || events() != before+1 {
+			t.Fatalf("released webhook preflight returned %d, want 200 and one event", response.Code)
+		}
 		if used := f.probe.MetadataWorkUsedForTesting(); used != 0 {
 			t.Fatalf("the edits left %d bytes of work admitted", used)
 		}

@@ -86,9 +86,9 @@ func (s *SQLiteStore) readRawMetadataLogicalSourcePart(ctx context.Context, tx *
 	if err != nil {
 		return nil, err
 	}
-	if !root.CanAppend(read.rootSize) {
+	if err := root.checkAppend(read.rootSize); err != nil {
 		root.Close()
-		return nil, ErrRecordSpoolBudget
+		return nil, err
 	}
 	endRead := read.snapshot.readScope()
 	_, err = io.CopyBuffer(root, io.NewSectionReader(read.rootSource(), 0, read.rootSize), make([]byte, metadataRecordChunkBytes))
@@ -768,7 +768,9 @@ func (r *metadataLogicalRecovery) rawObject(name string, value reflect.Value) er
 	if !initialized {
 		return r.field(name, value)
 	}
-	spool, err := NewRecordSpool()
+	// The stage and root use the logical disk budget. This one spool uses
+	// the compatibility budget, so its own bytes determine whether it fits.
+	spool, err := newRecordSpool(true)
 	if err != nil {
 		return err
 	}

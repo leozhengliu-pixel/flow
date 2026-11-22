@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -40,7 +41,7 @@ type projectionHold struct {
 	gate *metadataReadGate
 	mu   sync.Mutex
 	held bool
-	// retryAfter is set when a read was refused (the response is a 503).
+	// retryAfter is set when a projection or authorization read is refused.
 	retryAfter time.Duration
 }
 
@@ -142,8 +143,23 @@ func registeredColdRoute(r *http.Request) bool {
 	return selected
 }
 
-// projectionRefused reports whether the gate refused this request a slot,
-// and how long the client should wait before retrying.
+// An authorization read can fail before it has made a permission decision.
+// Preserve the retry delay for the middleware that consumes the bool result.
+func noteAuthorizationBusy(r *http.Request, err error) {
+	retryAfter := storeBusyRetryAfter(err)
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, store.ErrResourceAccessChanged) {
+		retryAfter = busyDeadlineRetryAfter
+	}
+	hold, _ := r.Context().Value(projectionHoldKey{}).(*projectionHold)
+	if retryAfter > 0 && hold != nil {
+		hold.mu.Lock()
+		hold.retryAfter = max(hold.retryAfter, retryAfter)
+		hold.mu.Unlock()
+	}
+}
+
+// projectionRefused reports how long to wait after a projection or
+// authorization read was refused.
 func projectionRefused(r *http.Request) (time.Duration, bool) {
 	hold, ok := r.Context().Value(projectionHoldKey{}).(*projectionHold)
 	if !ok {

@@ -269,6 +269,7 @@ func (b *metadataWorkBudget) acquire(ctx context.Context, bytes int) (context.Co
 	if err := ctx.Err(); err != nil {
 		return ctx, nil, err
 	}
+	demand := metadataWorkDemandFrom(ctx)
 	b.mu.Lock()
 	if lease, ok := ctx.Value(metadataWorkLeaseKey{}).(*metadataWorkLease); ok && lease.budget == b && lease.live {
 		b.mu.Unlock()
@@ -277,9 +278,14 @@ func (b *metadataWorkBudget) acquire(ctx context.Context, bytes int) (context.Co
 		}
 		return ctx, func() {}, nil
 	}
-	if bytes <= 0 || bytes > b.limit || b.waiting >= 128 {
+	if bytes <= 0 || !demand.fits(bytes, b.limit) {
 		b.mu.Unlock()
 		return ctx, nil, ErrMetadataWorkBudget
+	}
+	if b.waiting >= 128 {
+		demand.refuse(bytes)
+		b.mu.Unlock()
+		return ctx, nil, errMetadataWorkContended
 	}
 	b.waiting++
 	b.mu.Unlock()
@@ -288,16 +294,25 @@ func (b *metadataWorkBudget) acquire(ctx context.Context, bytes int) (context.Co
 		b.waiting--
 		b.mu.Unlock()
 	}()
-	timer := time.NewTimer(5 * time.Second)
+	timer := time.NewTimer(time.Duration(metadataWorkRetryWait.Load()))
 	defer timer.Stop()
+	waited, timedOut := false, false
 	for {
 		b.mu.Lock()
 		if err := ctx.Err(); err != nil {
+			if waited && errors.Is(err, context.DeadlineExceeded) && demand.fits(bytes, b.limit) {
+				demand.refuse(bytes)
+				err = errors.Join(errMetadataWorkContended, err)
+			}
 			b.mu.Unlock()
 			return ctx, nil, err
 		}
+		if !demand.fits(bytes, b.limit) {
+			b.mu.Unlock()
+			return ctx, nil, ErrMetadataWorkBudget
+		}
 		if bytes <= b.limit-b.used {
-			noteMetadataWorkDemand(ctx, bytes, 0)
+			demand.charge(bytes)
 			b.used += bytes
 			b.peak = max(b.peak, b.used)
 			lease := &metadataWorkLease{b, bytes, true}
@@ -308,6 +323,7 @@ func (b *metadataWorkBudget) acquire(ctx context.Context, bytes int) (context.Co
 					b.mu.Lock()
 					lease.live = false
 					b.used -= bytes
+					demand.charge(-bytes)
 					close(b.changed)
 					b.changed = make(chan struct{})
 					b.mu.Unlock()
@@ -315,14 +331,18 @@ func (b *metadataWorkBudget) acquire(ctx context.Context, bytes int) (context.Co
 			}
 			return context.WithValue(ctx, metadataWorkLeaseKey{}, lease), release, nil
 		}
+		if timedOut {
+			demand.refuse(bytes)
+			b.mu.Unlock()
+			return ctx, nil, errMetadataWorkContended
+		}
 		changed := b.changed
 		b.mu.Unlock()
+		waited = true
 		select {
 		case <-ctx.Done():
-			return ctx, nil, ctx.Err()
 		case <-timer.C:
-			noteMetadataWorkDemand(ctx, 0, bytes)
-			return ctx, nil, errMetadataWorkContended
+			timedOut = true
 		case <-changed:
 		}
 	}

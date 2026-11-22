@@ -142,6 +142,7 @@ func (s *SQLiteStore) BeginRecordAuthorizationRead(ctx context.Context, access A
 	if !ok {
 		return nil, ErrMetadataRecordQuery
 	}
+	ctx = trackMetadataWorkDemand(ctx)
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
 	read := &RecordAuthorizationRead{owner: &ResourceRead{store: s}}
 	defer func() {

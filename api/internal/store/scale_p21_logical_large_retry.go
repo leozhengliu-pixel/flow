@@ -168,8 +168,8 @@ func (r *metadataLogicalLargeRetry) captureField(ctx context.Context, workspace,
 		}
 		err = func() error {
 			defer spool.Close()
-			if !spool.CanAppend(header.size) {
-				return ErrRecordSpoolBudget
+			if err := spool.checkAppend(header.size); err != nil {
+				return err
 			}
 			reader := &canonicalMetadataReader{ctx: ctx, tx: tx, workspace: workspace, key: RecordKey{field, header.key}, size: header.size}
 			var input io.Reader = reader

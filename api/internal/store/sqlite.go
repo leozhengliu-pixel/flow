@@ -1650,6 +1650,7 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 		}
 	}
 	if s.metadataResidency != nil {
+		ctx = trackMetadataWorkDemand(ctx)
 		if advancedScheduleMaintenance(ctx) != nil && eventType == "schedules.maintained" {
 			return s.mutateBoundedAdvancedSchedule(ctx, workspaceKey, eventType, payload, mutate)
 		}

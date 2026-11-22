@@ -3,6 +3,9 @@ package store
 import (
 	"context"
 	"os"
+	"sync"
+	"sync/atomic"
+	"testing"
 )
 
 type metadataLogicalScratchKey struct{}
@@ -36,14 +39,50 @@ func (s *SQLiteStore) metadataLogicalScratchContext(ctx context.Context, workspa
 	return metadataLogicalSourceScratchContext(ctx, source)
 }
 
+func metadataLogicalDiskDemand(ctx context.Context) *atomic.Int64 {
+	if demand := metadataWorkDemandFrom(ctx); demand != nil {
+		return demand.disk
+	}
+	return nil
+}
+
+func metadataLogicalDiskContended(demand *atomic.Int64, size, limit int64) bool {
+	return demand != nil && size > 0 && size <= limit-demand.Load()
+}
+
 func newMetadataLogicalRecordSpool(ctx context.Context) (*RecordSpool, error) {
-	if metadataLogicalDiskUsed.Load() >= metadataLogicalDiskBytes {
-		return nil, ErrRecordSpoolBudget
+	spool := &RecordSpool{
+		counter: &metadataLogicalDiskUsed, limit: metadataLogicalDiskCap(),
+		maxSize: metadataLogicalDiskBytes, demand: metadataLogicalDiskDemand(ctx),
+	}
+	if err := spool.checkAppend(1); err != nil {
+		return nil, err
 	}
 	config, _ := ctx.Value(metadataLogicalScratchKey{}).(metadataLogicalScratch)
 	file, err := os.CreateTemp(metadataSpoolDirectory(config.directory), "flow-p21-root-*")
 	if err != nil {
 		return nil, err
 	}
-	return &RecordSpool{file: file, counter: &metadataLogicalDiskUsed, limit: metadataLogicalDiskBytes}, nil
+	spool.file = file
+	return spool, nil
+}
+
+// HoldMetadataLogicalDiskForTesting occupies the available quota without
+// allocating a physical file.
+func HoldMetadataLogicalDiskForTesting(free int64) (func(), error) {
+	if !testing.Testing() || free < 0 {
+		return nil, ErrRecordSpoolBudget
+	}
+	limit := metadataLogicalDiskCap()
+	for {
+		used := metadataLogicalDiskUsed.Load()
+		bytes := limit - used - free
+		if bytes <= 0 {
+			return nil, ErrRecordSpoolBudget
+		}
+		if metadataLogicalDiskUsed.CompareAndSwap(used, used+bytes) {
+			var once sync.Once
+			return func() { once.Do(func() { metadataLogicalDiskUsed.Add(-bytes) }) }, nil
+		}
+	}
 }

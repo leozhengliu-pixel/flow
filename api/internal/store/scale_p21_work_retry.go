@@ -15,9 +15,9 @@ import (
 // ErrMetadataWorkBudget. Such a refusal says nothing about the write itself,
 // only that concurrent reads and writes held the budget at that moment.
 //
-// metadataWorkDemand records one write attempt's admissions: what it was
-// granted and the allowance it was refused for want of room. A refusal of an
-// attempt whose admissions together fit the budget is a contention refusal
+// metadataWorkDemand records what an attempt holds and how much it would
+// have needed at a refusal. An attempt whose live admissions plus the
+// refused allowance fit the budget gets a contention refusal
 // (errMetadataWorkContended): the writer, having committed nothing, waits
 // outside its lock until the budget has room for the whole attempt again and
 // runs it once more (awaitMetadataWork); one that still finds no room when
@@ -45,8 +45,9 @@ func MetadataWorkContended(err error) bool {
 type metadataWorkDemandKey struct{}
 
 type metadataWorkDemand struct {
-	mu                sync.Mutex
-	admitted, refused int
+	mu           sync.Mutex
+	active, need int
+	disk         *atomic.Int64
 }
 
 // metadataWorkRetryWait bounds a writer's wait for room in the budget, as
@@ -57,38 +58,54 @@ func init() { metadataWorkRetryWait.Store(int64(5 * time.Second)) }
 
 func withMetadataWorkDemand(ctx context.Context) (context.Context, *metadataWorkDemand) {
 	demand := &metadataWorkDemand{}
+	demand.disk = metadataLogicalDiskDemand(ctx)
+	if demand.disk == nil {
+		demand.disk = new(atomic.Int64)
+	}
 	return context.WithValue(ctx, metadataWorkDemandKey{}, demand), demand
 }
 
-// metadataWorkDemandFits reports whether ctx belongs to a write attempt
-// whose admissions so far and bytes more fit the whole budget: a refusal of
-// bytes is then for want of room other work holds, not of the attempt's own
-// size.
-func metadataWorkDemandFits(ctx context.Context, bytes, limit int) bool {
-	demand, ok := ctx.Value(metadataWorkDemandKey{}).(*metadataWorkDemand)
-	if !ok || demand == nil {
-		return false
+func trackMetadataWorkDemand(ctx context.Context) context.Context {
+	if metadataWorkDemandFrom(ctx) == nil {
+		ctx, _ = withMetadataWorkDemand(ctx)
 	}
-	demand.mu.Lock()
-	defer demand.mu.Unlock()
-	return bytes <= limit-demand.admitted
+	return ctx
 }
 
-// noteMetadataWorkDemand records an admission (admitted) or a refusal for
-// want of room (refused) on the attempt ctx belongs to.
-func noteMetadataWorkDemand(ctx context.Context, admitted, refused int) {
-	demand, ok := ctx.Value(metadataWorkDemandKey{}).(*metadataWorkDemand)
-	if !ok || demand == nil {
+func metadataWorkDemandFrom(ctx context.Context) *metadataWorkDemand {
+	demand, _ := ctx.Value(metadataWorkDemandKey{}).(*metadataWorkDemand)
+	return demand
+}
+
+func (d *metadataWorkDemand) fits(bytes, limit int) bool {
+	if d == nil {
+		return bytes <= limit
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return bytes <= limit-d.active
+}
+
+func (d *metadataWorkDemand) charge(bytes int) {
+	if d == nil {
 		return
 	}
-	demand.mu.Lock()
-	demand.admitted += admitted
-	demand.refused = max(demand.refused, refused)
-	demand.mu.Unlock()
+	d.mu.Lock()
+	d.active += bytes
+	d.mu.Unlock()
+}
+
+func (d *metadataWorkDemand) refuse(bytes int) {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	d.need = max(d.need, d.active+bytes)
+	d.mu.Unlock()
 }
 
 // awaitMetadataWork waits until the budget has room for the failed attempt
-// again (everything it was granted plus the allowance it was refused) and
+// again (everything it held at refusal plus the refused allowance) and
 // reports whether it may run once more. It answers false at once when the
 // attempt was refused no allowance for want of room, or needs more than the
 // whole budget, and when ctx ends or deadline passes first.
@@ -97,10 +114,10 @@ func (s *SQLiteStore) awaitMetadataWork(ctx context.Context, demand *metadataWor
 		return false
 	}
 	demand.mu.Lock()
-	need, refused := demand.admitted+demand.refused, demand.refused
+	need := demand.need
 	demand.mu.Unlock()
 	budget := s.metadataResidency.work
-	if refused <= 0 || need <= 0 {
+	if need <= 0 {
 		return false
 	}
 	wait := time.Until(deadline)
@@ -171,8 +188,8 @@ func (s *SQLiteStore) MetadataWorkLimitForTesting() int {
 	return work.limit
 }
 
-// SetMetadataWorkRetryWaitForTesting replaces how long a bounded writer
-// waits for room in the work budget until the returned restore runs.
+// SetMetadataWorkRetryWaitForTesting replaces the admission and retry wait
+// for room in the work budget until the returned restore runs.
 func SetMetadataWorkRetryWaitForTesting(wait time.Duration) func() {
 	if !testing.Testing() {
 		return func() {}
