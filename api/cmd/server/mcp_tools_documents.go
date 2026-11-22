@@ -27,7 +27,7 @@ func (s *server) deleteMCPDocument(ctx context.Context, actor mcpActor, data dom
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.invokeMCPRoute(ctx, actor, http.MethodDelete, "/api/documents/"+pathID(document.ID), map[string]string{"id": document.ID}, nil, s.deleteDocument); err != nil {
+	if _, err := s.invokeMCPRoute(ctx, actor, http.MethodDelete, "/api/documents/"+pathID(document.ID), map[string]string{"id": document.ID}, nil, s.deletePortfolioDocument); err != nil {
 		return nil, err
 	}
 	result := map[string]any{"deleted": true, "id": document.ID, "slugId": document.SlugID, "title": document.Title, "restorable": true}

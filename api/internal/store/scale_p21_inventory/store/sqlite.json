@@ -157,7 +157,7 @@
         "server/server.revokeWebhookSecret",
         "server/server.updateDocument",
         "server/server.restoreDocumentRevision",
-        "server/server.deleteDocument",
+        "server/server.deleteLegacyDocument",
         "server/server.createDocumentComment",
         "server/server.updateDocumentComment",
         "server/server.deleteDocumentComment",

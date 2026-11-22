@@ -24,7 +24,7 @@ func keyTeamScopeServe(f scaleP21M2Fixture, source *store.SQLiteStore, token str
 	mux.HandleFunc("GET /api/documents", service.listDocuments)
 	mux.HandleFunc("GET /api/documents/{id}", service.getDocument)
 	mux.HandleFunc("PATCH /api/documents/{id}", service.updateDocument)
-	mux.HandleFunc("DELETE /api/documents/{id}", service.deleteDocument)
+	mux.HandleFunc("DELETE /api/documents/{id}", service.deletePortfolioDocument)
 	mux.HandleFunc("GET /api/search", service.searchWorkspace)
 	mux.HandleFunc("POST /api/documents", service.createDocument)
 	mux.HandleFunc("PATCH /api/views/{id}", service.updateSavedView)
