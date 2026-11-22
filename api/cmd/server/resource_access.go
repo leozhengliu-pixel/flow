@@ -119,7 +119,10 @@ func (s *server) serveResourceRead(w http.ResponseWriter, r *http.Request, kind 
 		return false
 	}
 	if result.err != nil {
-		writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+		noteAuthorizationBusy(r, result.err)
+		if !writeProjectionRefusal(w, r) {
+			writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+		}
 		return true
 	}
 	var item any

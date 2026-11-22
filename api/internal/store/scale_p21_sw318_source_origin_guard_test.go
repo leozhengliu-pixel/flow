@@ -31,7 +31,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"snapshot_clone.go":                           "eed939fd6798a8ade89c9f80a12040f1f5e285dc212e521ad2c38e04fcbc6063",
 		"../../cmd/server/advanced_features.go":       "a59c6771f95ebb29ed6187a194cf472e1e19a6919427ebf06d6744e187e0f8ba",
 		"../../cmd/server/loop_settings.go":           "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
-		"../../cmd/server/main.go":                    "1a6877d7d1f1042921bd435d048f77203f2d8ff67f437a8099df4ecfe9782c0d",
+		"../../cmd/server/main.go":                    "ae481df7ea08d2e4413069a6da32663d29334d59c463971b824d862a186611dd",
 		"../../cmd/server/notification_state.go":      "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
 		"../../cmd/server/personal_data.go":           "df7f342d4fdd9a5908cfbaf6cceddd89e8be2be0ff5dbe23e94e9643e9cb26a3",
 		"../../cmd/server/scale_p21_cold_dispatch.go": "78f6979c7b6492f603c4b1a452786f590b800139ea08d371bc3bc8054ba3e597",

@@ -82,12 +82,7 @@ func TestScaleP21ActivationViewCreateAuthorizationBudget(t *testing.T) {
 	// would stop at authentication policy before reaching resource authorization.
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/views", s.createSavedView)
-	resourceStage := s.withColdMetadataRouteMux(mux, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(store.ContextWithActor(r.Context(), f.data.Viewer))
-		if s.authorizeResourceRequest(w, r, workspace, f.data.Viewer.ID) {
-			mux.ServeHTTP(w, r)
-		}
-	}))
+	resourceStage := resourceAuthorizationStage(s, mux, workspace, f.data.Viewer)
 
 	restore := store.SetMetadataWorkRetryWaitForTesting(50 * time.Millisecond)
 	defer restore()
@@ -101,7 +96,7 @@ func TestScaleP21ActivationViewCreateAuthorizationBudget(t *testing.T) {
 		{name: "authentication-policy", free: 1 << 20},
 		{name: "workspace-authorization", resourceStage: resourceStage, free: 1 << 20},
 		{name: "stale-workspace-policy", resourceStage: resourceStage, free: 3 << 20, stale: true},
-		{name: "project-scoped-view", projectID: project, free: 2 << 20},
+		{name: "project-scoped-view", projectID: project, resourceStage: resourceStage, free: 2 << 20},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before := events()

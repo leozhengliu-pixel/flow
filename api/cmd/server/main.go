@@ -2802,7 +2802,7 @@ func (s *server) createSavedView(w http.ResponseWriter, r *http.Request) {
 		data.SavedViews = append(data.SavedViews, created)
 		return created.ID, nil
 	})
-	respondMutation(w, err, http.StatusCreated, created)
+	respondSavedViewMutation(w, r, err, http.StatusCreated, created)
 }
 
 func (s *server) updateSavedView(w http.ResponseWriter, r *http.Request) {
@@ -2829,7 +2829,7 @@ func (s *server) updateSavedView(w http.ResponseWriter, r *http.Request) {
 		updated = *view
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, updated)
+	respondSavedViewMutation(w, r, err, http.StatusOK, updated)
 }
 
 func (s *server) deleteSavedView(w http.ResponseWriter, r *http.Request) {
@@ -2844,11 +2844,7 @@ func (s *server) deleteSavedView(w http.ResponseWriter, r *http.Request) {
 		removeResourcePreferences(data, "view", removedID)
 		return nil
 	})
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	respondSavedViewMutation(w, r, err, http.StatusNoContent, nil)
 }
 
 // shareSavedView issues a revocable, opaque token. Unlike an authenticated view

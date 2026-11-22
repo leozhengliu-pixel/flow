@@ -150,12 +150,18 @@ func noteAuthorizationBusy(r *http.Request, err error) {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, store.ErrResourceAccessChanged) {
 		retryAfter = busyDeadlineRetryAfter
 	}
-	hold, _ := r.Context().Value(projectionHoldKey{}).(*projectionHold)
-	if retryAfter > 0 && hold != nil {
-		hold.mu.Lock()
-		hold.retryAfter = max(hold.retryAfter, retryAfter)
-		hold.mu.Unlock()
+	if retryAfter <= 0 {
+		return
 	}
+	hold, _ := r.Context().Value(projectionHoldKey{}).(*projectionHold)
+	if hold == nil {
+		// Scoped authorization can run without a projection gate.
+		*r = *r.WithContext(context.WithValue(r.Context(), projectionHoldKey{}, &projectionHold{retryAfter: retryAfter}))
+		return
+	}
+	hold.mu.Lock()
+	hold.retryAfter = max(hold.retryAfter, retryAfter)
+	hold.mu.Unlock()
 }
 
 // projectionRefused reports how long to wait after a projection or
@@ -173,4 +179,12 @@ func projectionRefused(r *http.Request) (time.Duration, bool) {
 // writeProjectionBusy answers a refused read: 503 with Retry-After.
 func writeProjectionBusy(w http.ResponseWriter, retryAfter time.Duration) {
 	(&metadataReadGate{}).busy(w, retryAfter)
+}
+
+func writeProjectionRefusal(w http.ResponseWriter, r *http.Request) bool {
+	if retryAfter, refused := projectionRefused(r); refused {
+		writeProjectionBusy(w, retryAfter)
+		return true
+	}
+	return false
 }
