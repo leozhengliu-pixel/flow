@@ -15,6 +15,10 @@ import (
 const boundedMetadataStagingSchemaVersion = 30
 
 const metadataSQLIntegrationChunkBytes = MetadataRecordPageMaxBytes
+
+// metadataSQLStageMaxChunks bounds the chunk rows one staged column may
+// reassemble (16 GiB at the 16 KiB default chunk), far above any record.
+const metadataSQLStageMaxChunks = 1 << 20
 const metadataSQLIntegrationOwnedChunkBytes = 1 << 20
 
 var ErrMetadataSQLStageOpen = errors.New("metadata SQL staging is still open")
@@ -200,7 +204,11 @@ func (s *metadataSQLWriteStage) valueSQL(column string, asBytes bool) (string, e
 	if column == "content" {
 		part = 1
 	}
-	pieces := make([]string, s.chunks[part])
+	count := s.chunks[part]
+	if count < 0 || count > metadataSQLStageMaxChunks {
+		return "", ErrMetadataRecordQuery
+	}
+	pieces := make([]string, count)
 	for seq := range pieces {
 		pieces[seq] = "(SELECT chunk FROM bounded_metadata_write_chunks WHERE operation_id=bounded_metadata_write_stage.operation_id" +
 			" AND part=" + strconv.Itoa(part) + " AND seq=" + strconv.Itoa(seq) + ")"

@@ -98,8 +98,18 @@ func scaleP21ReplaceScan(text string, match func(string, int) int, replace func(
 
 func scaleP21NormalizeStampsAndClocks(text string, started time.Time) string {
 	text = scaleP21ReplaceScan(text, scaleP21StampAt, func(string) string { return "<stamp>" })
+	// Daily buckets (UTC midnight) of the day the run started, or of the next
+	// day when the run crosses midnight, are the same bucket for both arms.
+	day := started.UTC().Truncate(24 * time.Hour)
 	return scaleP21ReplaceScan(text, scaleP21ClockAt, func(clock string) string {
-		if at, err := time.Parse(time.RFC3339Nano, clock); err == nil && !at.Before(started) {
+		at, err := time.Parse(time.RFC3339Nano, clock)
+		if err != nil {
+			return clock
+		}
+		if at = at.UTC(); at.Equal(day) || at.Equal(day.Add(24*time.Hour)) {
+			return "<today>"
+		}
+		if !at.Before(started) {
 			return "<now>"
 		}
 		return clock
