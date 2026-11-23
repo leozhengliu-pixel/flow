@@ -405,7 +405,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/profile-${viewport.width}.png`, scale: 'css', animations: 'disabled' })
 
       await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Engineer')
+      const saved = page.waitForResponse(response =>
+        response.request().method() === 'PATCH' && new URL(response.url()).pathname === '/api/account/profile')
       await page.getByRole('button', { name: 'Update', exact: true }).click()
+      expect((await saved).ok()).toBe(true)
       await page.reload()
       await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Engineer')
       await page.getByRole('button', { name: 'Leave workspace', exact: true }).click()

@@ -92,6 +92,15 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       let stamp = ''
       let oldReplica = false
       const batchSizes: number[] = []
+      // The mock owns its cursor and authorization epoch. Use compatibility
+      // events as wakeups so a real journal frame cannot replace that baseline.
+      await page.route('**/api/realtime/events?*', route => {
+        const url = new URL(route.request().url())
+        if (url.searchParams.get('sync') !== '2') return route.continue()
+        url.searchParams.delete('sync')
+        url.searchParams.delete('since')
+        return route.continue({ url: url.href })
+      })
       await page.route('**/api/sync/**', async route => {
         const path = new URL(route.request().url()).pathname
         const current = await (await request.get(`/api/documents/${doc.id}`, { headers })).json()
