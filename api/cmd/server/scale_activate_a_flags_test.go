@@ -39,10 +39,13 @@ func TestScaleActivateAFlagDefaults(t *testing.T) {
 			t.Fatalf("%s on value disabled the flag", name)
 		}
 	}
-
 	unsetScaleActivateAEnv(t, "FLOW_SYNC_V2")
+	if !syncV2Enabled() {
+		t.Fatal("FLOW_SYNC_V2 should default to on")
+	}
+	t.Setenv("FLOW_SYNC_V2", "off")
 	if syncV2Enabled() {
-		t.Fatal("P12 FLOW_SYNC_V2 changed its default")
+		t.Fatal("FLOW_SYNC_V2 ignored its explicit rollback")
 	}
 }
 
@@ -51,12 +54,15 @@ func TestScaleActivateASyncV2CapabilityGate(t *testing.T) {
 	unsetScaleActivateAEnv(t, "FLOW_SYNC_MANIFEST")
 	unsetScaleActivateAEnv(t, "FLOW_INDEXED_READS")
 	if syncV2CapabilityAdvertised(true, true) {
-		t.Fatal("sync-v2 was advertised while P12 was off")
+		t.Fatal("sync-v2 was advertised while the manifest and indexed reads were off")
 	}
-
-	t.Setenv("FLOW_SYNC_V2", "on")
 	t.Setenv("FLOW_SYNC_MANIFEST", "on")
 	t.Setenv("FLOW_INDEXED_READS", "on")
+	t.Setenv("FLOW_SYNC_V2", "off")
+	if syncV2CapabilityAdvertised(true, true) {
+		t.Fatal("sync-v2 ignored its explicit rollback")
+	}
+	unsetScaleActivateAEnv(t, "FLOW_SYNC_V2")
 	if !syncV2CapabilityAdvertised(true, true) {
 		t.Fatal("complete sync-v2 dependencies were not advertised")
 	}

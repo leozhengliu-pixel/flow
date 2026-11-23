@@ -2,11 +2,14 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 )
 
 // RepairRecordJournal repairs at most 128 old-writer keys and 128 events in
-// one transaction. Their original transaction boundaries are unknowable, so
+// one transaction. A first activation can also seed a page of missing versions.
+// The original transaction boundaries are unknowable, so
 // the repair publishes a workspace invalidation, never a partial upsert set.
 // Continue while remaining is true. Normal serving still rejects gaps until
 // every batch has committed. P05's bounded catalog pass seeds untouched legacy
@@ -28,8 +31,37 @@ func (s *SQLiteStore) RepairRecordJournal(ctx context.Context, workspaceID strin
 	if err := tx.QueryRowContext(ctx, `SELECT workspace_key FROM workspace_states WHERE workspace_id=?`, workspaceID).Scan(&workspace); err != nil {
 		return true, err
 	}
-	if _, err := tx.repairRecordJournalActivation(ctx, workspace); err != nil {
+	var phase int
+	var field, key string
+	lock := ""
+	if tx.dialect != "sqlite" {
+		lock = " FOR UPDATE"
+	}
+	err = tx.QueryRowContext(ctx, `SELECT phase,last_field,last_key FROM record_journal_coverage WHERE workspace_key=?`+lock, workspace).Scan(&phase, &field, &key)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return true, err
+	}
+	activation := err == nil
+	if activation && phase == journalActivationSeed {
+		more, err := tx.seedRecordJournalVersions(ctx, workspace, field, key)
+		if err != nil {
+			return true, err
+		}
+		if more {
+			return true, tx.Commit()
+		}
+	}
+	if activation && phase != journalActivationSeed {
+		if err := tx.repairRecordJournalActivation(ctx, workspace, field, key); err != nil {
+			return true, err
+		}
+	}
+	if activation && phase == journalActivationSeed {
+		// Publish the workspace invalidation in the same transaction that
+		// finishes the initial version walk.
+		if _, err := tx.ExecContext(ctx, `INSERT INTO record_journal_dirty(tx_id,workspace_key,field,record_key,source) VALUES(?,?,'@core','root','workspace_states') ON CONFLICT(tx_id,workspace_key,field,record_key) DO NOTHING`, tx.journalToken, workspace); err != nil {
+			return true, err
+		}
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT d.tx_id,d.field,d.record_key,COALESCE(LENGTH(m.data),0) FROM record_journal_dirty d LEFT JOIN workspace_metadata_records m ON d.source='workspace_metadata_records' AND m.workspace_key=d.workspace_key AND m.field=d.field AND m.record_key=d.record_key WHERE d.workspace_key=? AND d.tx_id<>? ORDER BY d.tx_id,d.field,d.record_key LIMIT 128`, workspace, tx.journalToken)
 	if err != nil {

@@ -22,11 +22,7 @@ const (
 )
 
 func syncV2Enabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_SYNC_V2"))) {
-	case "on", "1", "true":
-		return true
-	}
-	return false
+	return strings.TrimSpace(os.Getenv("FLOW_SYNC_V2")) == "" || syncFlagEnabled("FLOW_SYNC_V2")
 }
 
 type committedChangeReader interface {
@@ -35,7 +31,7 @@ type committedChangeReader interface {
 
 func (s *server) syncV2Journal() (committedChangeReader, bool) {
 	journal, ok := any(s.store).(committedChangeReader)
-	return journal, ok && syncV2Enabled() && strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")), "on")
+	return journal, ok && syncV2Enabled() && store.RecordJournalEnabled() && s.store.RecordJournalReady()
 }
 
 func syncV2SummaryRequest(r *http.Request) bool {
@@ -643,7 +639,7 @@ func (s *server) projectCommittedChange(r *http.Request, access store.EventAcces
 		if err != nil {
 			return tx, err
 		}
-		if strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")), "on") {
+		if store.RecordJournalEnabled() && s.store.RecordJournalReady() {
 			var deleted bool
 			version, deleted, err = s.store.RecordVersion(r.Context(), workspaceKey(r), record.Key)
 			if err != nil {

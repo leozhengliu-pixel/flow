@@ -99,7 +99,7 @@ func recordJournalMode() string {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL"))) {
 	case "off", "0", "false":
 		return "off"
-	case "on":
+	case "", "on":
 		return "on"
 	case "shadow":
 		return "shadow"
@@ -107,6 +107,10 @@ func recordJournalMode() string {
 		return "off"
 	}
 }
+
+// RecordJournalEnabled excludes shadow mode, which captures changes without
+// making the journal authoritative for serving.
+func RecordJournalEnabled() bool { return recordJournalMode() == "on" }
 
 // RecordJournalReady reports local capture readiness without querying SQL.
 // Consumers still check each workspace's writer coverage before applying changes.

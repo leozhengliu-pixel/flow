@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -122,15 +123,16 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	for index, spec := range recordJournalTriggerSpecs(s.dialect) {
 		if err := s.installRecordJournalTrigger(ctx, spec); err != nil {
 			// Restricted MySQL accounts may lack CREATE TRIGGER. Existing
-			// business writes still work in shadow; journal consumers fail
-			// closed and ResolveAccess keeps its live-policy compatibility path.
-			if s.dialect == "mysql" && isMySQLSearchPermissionError(err) && recordJournalMode() != "on" {
+			// business writes still work on automatic or shadow starts.
+			// ResolveAccess keeps its live-policy compatibility path.
+			if s.dialect == "mysql" && isMySQLSearchPermissionError(err) &&
+				(recordJournalMode() == "shadow" || strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")) == "") {
 				if capturing == 0 && index == 0 {
 					if _, resetErr := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET capturing=0 WHERE id=1`); resetErr != nil {
 						return resetErr
 					}
 				}
-				slog.Warn("record journal unavailable: trigger permission required", "error", err)
+				slog.Warn("record journal unavailable: trigger permission required")
 				return nil
 			}
 			return fmt.Errorf("record journal trigger %s: %w", spec.name, err)
@@ -143,9 +145,17 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	}
 	if enabled == 0 {
 		generation = idgen.New("rjg")
-		// Startup does not scan bodies. Existing workspaces stay unavailable
-		// until their versions and summaries are repaired in bounded batches.
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO record_journal_coverage(workspace_key,phase,last_field,last_key) SELECT workspace_key,0,'','' FROM workspace_states WHERE 1=1 ON CONFLICT(workspace_key) DO UPDATE SET phase=0,last_field='',last_key=''`); err != nil {
+		// An installation without versions can seed them without bumping
+		// retained versions or reconciling tombstones from an earlier epoch.
+		// Only use that walk when a separate catalog pass will build summaries.
+		initialPhase := 0
+		if s.db.boundedCatalog.Load() {
+			initialPhase = journalActivationSeed
+		}
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO record_journal_coverage(workspace_key,phase,last_field,last_key)
+			SELECT w.workspace_key,CASE WHEN EXISTS(SELECT 1 FROM record_versions v WHERE v.workspace_key=w.workspace_key) THEN 0 ELSE ? END,'',''
+			FROM workspace_states w WHERE 1=1
+			ON CONFLICT(workspace_key) DO UPDATE SET phase=excluded.phase,last_field='',last_key=''`, initialPhase); err != nil {
 			return err
 		}
 		if _, err := s.db.ExecContext(ctx, `UPDATE metadata_catalog_collections SET last_record_key='',started=0,phase=0,omissions=0,digest='',revision=''`); err != nil {

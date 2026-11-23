@@ -37,11 +37,10 @@ func metadataRecordPointMutation(ctx context.Context, event string, payload any)
 		userSettingsRecordMutation(event, payload) || standaloneFavoriteMutation(event, payload) || UsesIssueRecordMutations(ctx)
 }
 
-// RecordHydrationEnabled defaults off until the permission differential and
-// the business handlers that declare record requirements are rolled out.
+// RecordHydrationEnabled reports whether handlers can declare record inputs.
 func RecordHydrationEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_RECORD_HYDRATION"))) {
-	case "1", "true", "on":
+	case "", "1", "true", "on":
 		return true
 	}
 	return false

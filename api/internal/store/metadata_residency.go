@@ -96,8 +96,14 @@ func boundedMetadataRequested() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_BOUNDED_METADATA"))) {
 	case "1", "true", "on":
 		return true
+	case "":
+		return RecordHydrationEnabled() && RecordJournalEnabled() && !boundedMetadataShadowIncompatible()
 	}
 	return false
+}
+
+func boundedMetadataShadowIncompatible() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_PEER_SYNC")), "shadow") || metadataCatalogShadowEnabled()
 }
 
 func validateBoundedMetadataCoverage() error {
@@ -127,8 +133,8 @@ func validateBoundedMetadataCoverage() error {
 	if !RecordHydrationEnabled() || recordJournalMode() != "on" {
 		return fmt.Errorf("%w: record hydration and the record journal must both be on", ErrBoundedMetadataCoverage)
 	}
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_PEER_SYNC")), "shadow") {
-		return fmt.Errorf("%w: complete-snapshot peer shadow requires bounded metadata off", ErrBoundedMetadataCoverage)
+	if boundedMetadataShadowIncompatible() {
+		return fmt.Errorf("%w: peer sync and catalog shadow modes require bounded metadata off", ErrBoundedMetadataCoverage)
 	}
 	return nil
 }

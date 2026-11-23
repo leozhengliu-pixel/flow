@@ -43,9 +43,7 @@ func metadataPrepare(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL"))) {
-	case "on", "shadow":
-	default:
+	if !store.RecordJournalEnabled() && !strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")), "shadow") {
 		fmt.Fprintln(stderr, "metadata-prepare: set FLOW_RECORD_JOURNAL=on (as on the replicas) first; the repair and the catalog need the record journal")
 		return 2
 	}
@@ -66,7 +64,12 @@ func metadataPrepare(args []string, stdout, stderr io.Writer) int {
 	defer repository.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	report, err := repository.PrepareBoundedMetadata(ctx)
+	var report store.BoundedMetadataPreparation
+	err = repository.WithStartupLock(ctx, "metadata preparation", func(ctx context.Context) error {
+		var err error
+		report, err = repository.PrepareBoundedMetadata(ctx)
+		return err
+	})
 	encoder := json.NewEncoder(stdout)
 	encoder.SetIndent("", "  ")
 	_ = encoder.Encode(report)

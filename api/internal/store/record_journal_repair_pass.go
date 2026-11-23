@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log/slog"
 	"strings"
 	"time"
 )
@@ -104,10 +103,8 @@ func (s *SQLiteStore) RepairRecordJournalPass(ctx context.Context) (report Recor
 							return report, ctx.Err()
 						}
 						report.Incomplete = append(report.Incomplete, RecordJournalRepairGap{Workspace: key, Error: err.Error()})
-						slog.Warn("record journal repair: orphan journal keys kept", "workspace", key, "error", err.Error())
 					} else if discarded {
 						report.Discarded++
-						slog.Info("record journal repair: journal keys of a missing workspace discarded", "workspace", key)
 					}
 					continue
 				}
@@ -129,7 +126,6 @@ func (s *SQLiteStore) RepairRecordJournalPass(ctx context.Context) (report Recor
 						return report, ctx.Err()
 					}
 					report.Incomplete = append(report.Incomplete, RecordJournalRepairGap{Workspace: key, Error: err.Error()})
-					slog.Warn("record journal repair: workspace skipped", "workspace", key, "error", err.Error())
 					continue
 				}
 				report.Repaired++

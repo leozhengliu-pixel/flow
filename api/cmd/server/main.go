@@ -153,6 +153,8 @@ type server struct {
 	auditLogIP     string
 }
 
+var recordLoadRigMetadataMode = func(bool) {}
+
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
 		os.Exit(runHealthcheck())
@@ -166,9 +168,7 @@ func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "audit-verify" {
 		os.Exit(runAuditVerifyCommand(os.Args[2:]))
 	}
-	// Operators prepare a database for FLOW_BOUNDED_METADATA=on (journal
-	// repair and metadata catalog, docs/bounded-metadata.md) with
-	// `server metadata-prepare`.
+	// Optional foreground journal and catalog maintenance.
 	if len(os.Args) >= 2 && os.Args[1] == "metadata-prepare" {
 		os.Exit(runMetadataPrepareCommand(os.Args[2:]))
 	}
@@ -221,6 +221,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	recordLoadRigMetadataMode(repository.BoundedMetadataEnabled())
 	// Deferred first so it runs after repository.Close has released every
 	// installed spool file: the per-process spool directory goes last.
 	defer func() { _ = store.RemoveMetadataSpoolDirectory() }()
@@ -316,7 +317,7 @@ func main() {
 	}); err != nil {
 		log.Fatal(err)
 	}
-	// With bounded metadata on, operators see the catalog state per workspace
+	// With bounded metadata on, operators see the aggregate catalog state
 	// once and the COLD path counters periodically (FLOW_BOUNDED_METADATA_STATS_INTERVAL).
 	if s.store.BoundedMetadataEnabled() {
 		s.store.LogMetadataCatalogCompleteness(store.WithColdWork(shutdownSignal, "catalog-report"))
