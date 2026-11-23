@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -49,6 +50,16 @@ func (s *server) requestIssueQueryAccess(r *http.Request) (domain.Bootstrap, sto
 		*r = *r.WithContext(context.WithValue(r.Context(), issueRequestAccessKey{}, cached))
 	}
 	return cached.metadata, cached.access, cached.err
+}
+
+// A canceled access check must stop the request with an explicit failure.
+// The query error writer otherwise leaves a disconnected read unanswered.
+func issueRequestAccessError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, context.Canceled) {
+		writeError(w, http.StatusRequestTimeout, "Request canceled")
+		return
+	}
+	issueRecordsErrorFor(w, r, err)
 }
 
 func boundedIssueAuthorizationRequest(r *http.Request) bool {

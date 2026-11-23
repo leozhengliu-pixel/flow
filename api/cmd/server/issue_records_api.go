@@ -272,7 +272,7 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsErrorFor(w, r, err)
+		issueRequestAccessError(w, r, err)
 		return
 	}
 	if s.store.BoundedMetadataEnabled() {
@@ -443,7 +443,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsErrorFor(w, r, err)
+		issueRequestAccessError(w, r, err)
 		return
 	}
 	ctx, ok := s.localStoreIssueWriteContext(w, r, query.Workspace)

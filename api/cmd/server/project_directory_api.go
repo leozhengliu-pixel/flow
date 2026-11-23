@@ -20,7 +20,7 @@ func projectListBootstrapRequested(r *http.Request) bool {
 func (s *server) listProjectRecords(w http.ResponseWriter, r *http.Request) {
 	metadata, access, err := s.requestIssueQueryAccess(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRequestAccessError(w, r, err)
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
