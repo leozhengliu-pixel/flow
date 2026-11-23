@@ -329,22 +329,26 @@ type coldReloadFullKey struct{}
 
 // reloadKnownPublication prepares the peer's delta without holding writeMu.
 // Concurrent local installs or a newer peer stamp invalidate the result.
-func (s *SQLiteStore) reloadKnownPublication(ctx context.Context, workspace string) bool {
+func (s *SQLiteStore) reloadKnownPublication(ctx context.Context, workspace string) (installed, raced bool) {
 	r := s.metadataResidency
 	if coldIncrementalDisabled.Load() || ctx.Value(coldReloadFullKey{}) != nil {
-		return false
+		return false, false
 	}
 	unlock := r.reloadBuilds.lock(workspace)
 	defer unlock()
 	// A writer can invalidate a prepared delta while it waits to install.
 	// Try once more outside writeMu before falling back to a locked reload.
+	trace := workspaceReloadTrace(ctx)
 	for range 2 {
 		installed, raced := s.tryReloadKnownPublication(ctx, workspace)
+		if raced && trace != nil {
+			trace.DeltaRaces++
+		}
 		if !raced || ctx.Err() != nil {
-			return installed
+			return installed, raced
 		}
 	}
-	return false
+	return false, true
 }
 
 func (s *SQLiteStore) tryReloadKnownPublication(ctx context.Context, workspace string) (installed, raced bool) {
@@ -368,7 +372,13 @@ func (s *SQLiteStore) tryReloadKnownPublication(ctx context.Context, workspace s
 		defer r.mu.Unlock()
 		return r.logical[workspace] == base && r.stamps[workspace] == baseStamp && r.applied[workspace] == baseHead
 	}
+	trace := workspaceReloadTrace(ctx)
+	started := time.Now()
 	prepared, err := s.prepareColdPublication(ctx, &coldPublishBase{workspace: workspace, source: known.source, state: known.state})
+	if trace != nil {
+		trace.DeltaAttempts++
+		trace.DeltaBuild += time.Since(started)
+	}
 	if err != nil || prepared == nil {
 		return err == nil, false
 	}
@@ -376,8 +386,12 @@ func (s *SQLiteStore) tryReloadKnownPublication(ctx context.Context, workspace s
 	if hook := residentReloadBeforeInstall.Load(); hook != nil {
 		(*hook)()
 	}
+	started = time.Now()
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
+	if trace != nil {
+		trace.InstallWait += time.Since(started)
+	}
 	if !stillInstalled() {
 		return false, true
 	}

@@ -638,13 +638,18 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			return false
 		}
 	}
-	// The workspace may have changed (or been created) on another server a
-	// moment ago; authorize against, and serve, the committed state.
-	if !s.requireCurrentWorkspace(w, r, key) {
-		return false
+	if s.issueReadUsesSQL(r, key) {
+		if !s.pinIssueRead(w, r, key) {
+			return false
+		}
+	} else {
+		// Authorization and handlers that depend on installed metadata must
+		// wait for the workspace's committed state.
+		if !s.requireCurrentWorkspace(w, r, key) {
+			return false
+		}
 	}
-	// Issue routes accept identifiers, old ones included; authorization and
-	// handlers below see the issue's id.
+	// Authorization and handlers share the visible issue's canonical ID.
 	s.resolveIssuePathReference(r)
 	if key == "" || r.URL.Path == "/api/account/bootstrap" || r.URL.Path == "/api/invitations/accept" || (r.Method == http.MethodPost && r.URL.Path == "/api/workspaces") {
 		return true
@@ -715,6 +720,14 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 					err = s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays)
 					if writeAuthCheckFailure(w, err) {
 						return false
+					}
+					if err != nil {
+						if read, ok := r.Context().Value(issueReadSnapshotKey{}).(*issueReadAttempt); ok {
+							// The read-only snapshot cannot delete an expired session.
+							if live, closeErr := read.End(); closeErr == nil {
+								_ = s.store.EnforceSessionDuration(live, cookie.Value, durationDays)
+							}
+						}
 					}
 				}
 				if err != nil {

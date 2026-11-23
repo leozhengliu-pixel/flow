@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"flow/api/internal/store"
 )
 
 // Read-after-write across servers.
@@ -32,9 +34,13 @@ type workspaceVersions struct {
 }
 
 type workspaceReload struct {
-	done chan struct{}
-	err  error
+	done    chan struct{}
+	started time.Time
+	err     error
 }
+
+var diagnoseWorkspaceRefusal func(*server, *http.Request, string, error, time.Duration)
+var diagnoseWorkspaceReload func(time.Time, time.Duration, store.WorkspaceReloadTrace, error)
 
 // advanceOwn records this server's own change n when it already held every
 // earlier one (its copy then includes n); otherwise a request reloads.
@@ -167,12 +173,15 @@ func (s *server) waitForPeerRefresh(ctx context.Context, workspace string) (curr
 	}
 	load := versions.loading[workspace]
 	if load == nil {
-		load = &workspaceReload{done: make(chan struct{})}
+		load = &workspaceReload{done: make(chan struct{}), started: time.Now()}
 		versions.loading[workspace] = load
 		go func() {
 			workerCtx, cancel := context.WithTimeout(s.store.WorkerContext(), workspaceReloadTimeout)
 			defer cancel()
 			err := s.syncPeerWorkspace(workerCtx, workspace)
+			if diagnoseWorkspaceReload != nil {
+				diagnoseWorkspaceReload(load.started, 0, store.WorkspaceReloadTrace{}, err)
+			}
 			versions.mu.Lock()
 			load.err = err
 			delete(versions.loading, workspace)
@@ -222,10 +231,14 @@ func (s *server) reloadWorkspaceDeadlineResult(workspace string, target int64, e
 }
 
 func (s *server) requireCurrentWorkspace(w http.ResponseWriter, r *http.Request, workspace string) bool {
+	started := time.Now()
 	if err := s.ensureCurrentWorkspace(r.Context(), workspace); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "workspace not found")
 		} else {
+			if diagnoseWorkspaceRefusal != nil {
+				diagnoseWorkspaceRefusal(s, r, workspace, err, time.Since(started))
+			}
 			w.Header().Set("Retry-After", "1")
 			writeError(w, http.StatusServiceUnavailable, "Workspace is temporarily unavailable")
 		}
@@ -268,7 +281,7 @@ func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target
 				return ctx.Err()
 			}
 		}
-		load := &workspaceReload{done: make(chan struct{})}
+		load := &workspaceReload{done: make(chan struct{}), started: time.Now()}
 		versions.loading[workspace] = load
 		versions.mu.Unlock()
 
@@ -284,17 +297,21 @@ func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target
 			reloadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workspaceReloadTimeout)
 			defer cancel()
 			defer context.AfterFunc(s.store.WorkerContext(), cancel)()
-			started := time.Now()
 			var (
-				version    int64
-				versionErr error
-				err        error
+				version     int64
+				versionErr  error
+				err         error
+				versionWait time.Duration
+				trace       store.WorkspaceReloadTrace
 			)
 			defer func() {
 				if recover() != nil {
 					err = errors.New("workspace reload failed")
 				}
-				if elapsed := time.Since(started); err != nil {
+				if diagnoseWorkspaceReload != nil {
+					diagnoseWorkspaceReload(load.started, versionWait, trace, err)
+				}
+				if elapsed := time.Since(load.started); err != nil {
 					log.Printf("Reload workspace failed after %s", elapsed.Round(time.Millisecond))
 				} else if elapsed > time.Second {
 					log.Printf("Reload workspace took %s", elapsed.Round(time.Millisecond))
@@ -311,9 +328,13 @@ func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target
 			// Read the version first: the reload then includes every change it
 			// counts (a writer commits before it bumps the version).
 			version, versionErr = s.sharedWorkspaceVersion(reloadCtx, workspace)
+			versionWait = time.Since(load.started)
 			reload := s.store.ReloadWorkspace
 			if s.reloadWorkspaceFn != nil {
 				reload = s.reloadWorkspaceFn
+			}
+			if diagnoseWorkspaceReload != nil {
+				reloadCtx = store.WithWorkspaceReloadTrace(reloadCtx, &trace)
 			}
 			err = reload(reloadCtx, workspace)
 		}()

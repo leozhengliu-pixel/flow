@@ -8,12 +8,15 @@ import (
 // PeerWorkspaceState is a SQL authority check, including writes that committed
 // before their event was sequenced or their Redis notification was published.
 type PeerWorkspaceState struct {
-	WorkspaceID string
-	Head        int64
-	EventHead   int64
-	Current     bool
-	AuthzEpoch  string
-	Pending     bool
+	WorkspaceID         string
+	Head                int64
+	EventHead           int64
+	MetadataRevision    int64
+	InstalledRevision   int64 // -1 if unknown
+	InstalledPolicyHead int64 // -1 if unknown
+	Current             bool
+	AuthzEpoch          string
+	Pending             bool
 }
 
 func (s *SQLiteStore) WorkspacePeerState(ctx context.Context, workspace string) (PeerWorkspaceState, error) {
@@ -31,10 +34,17 @@ func (s *SQLiteStore) WorkspacePeerState(ctx context.Context, workspace string) 
 	}
 	result.WorkspaceID = stamp.workspaceID
 	result.AuthzEpoch = strconv.FormatInt(epoch, 10)
+	result.MetadataRevision, result.InstalledRevision, result.InstalledPolicyHead = stamp.revision, -1, -1
 	copy, ok := s.copyRevisionOf(workspace)
+	if ok && copy.workspaceID == stamp.workspaceID {
+		result.InstalledRevision = copy.revision
+	}
 	result.Current = ok && copy.workspaceID == stamp.workspaceID && copy.revision == stamp.revision
 	if s.metadataResidency != nil {
-		policy, _, known := s.residentStamp(workspace)
+		policy, head, known := s.residentStamp(workspace)
+		if known && policy.workspaceID == stamp.workspaceID {
+			result.InstalledRevision, result.InstalledPolicyHead = policy.revision, head
+		}
 		result.Current = known && policy == stamp
 		if !result.Current {
 			// HOT bounded writers can install an exact logical generation
@@ -43,8 +53,12 @@ func (s *SQLiteStore) WorkspacePeerState(ctx context.Context, workspace string) 
 			// readers use, so its exact stamp is sufficient for freshness.
 			s.metadataResidency.mu.Lock()
 			source := s.metadataResidency.logical[workspace]
-			if source != nil && !source.behind.Load() && source.Stamp() == stamp {
-				result.Current = true
+			if source != nil && !source.behind.Load() {
+				logical := source.Stamp()
+				if logical.workspaceID == stamp.workspaceID {
+					result.InstalledRevision = max(result.InstalledRevision, logical.revision)
+				}
+				result.Current = logical == stamp
 			}
 			s.metadataResidency.mu.Unlock()
 		}

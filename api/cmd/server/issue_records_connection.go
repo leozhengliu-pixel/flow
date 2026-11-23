@@ -162,5 +162,5 @@ func (s *server) listIssueRecordsConnection(w http.ResponseWriter, r *http.Reque
 		total := page.Total
 		result.TotalCount = &total
 	}
-	writeJSON(w, http.StatusOK, result)
+	s.writeIssueRead(w, r, result)
 }

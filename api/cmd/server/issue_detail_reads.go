@@ -33,7 +33,7 @@ func (s *server) getIssueRecordHistory(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, history)
+	s.writeIssueRead(w, r, history)
 }
 
 func (s *server) getIssueRecordRelated(w http.ResponseWriter, r *http.Request) {

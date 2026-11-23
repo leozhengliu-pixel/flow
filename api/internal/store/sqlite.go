@@ -311,10 +311,17 @@ func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) 
 // workspace again (metadata_copy_revision.go).
 func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) error {
 	if s.metadataResidency != nil {
-		if s.reloadKnownPublication(ctx, workspaceKey) {
+		installed, raced := s.reloadKnownPublication(ctx, workspaceKey)
+		if installed {
 			return nil
 		}
-		if s.metadataResidency.requireCoverage {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// A discarded delta still had a usable base. After repeated install
+		// races, rebuild that delta under the lock. Speculative full copies
+		// cost more and face the same race.
+		if s.metadataResidency.requireCoverage && !raced {
 			for range 2 {
 				handled, err := s.reloadResidentWorkspaceOptimistic(ctx, workspaceKey)
 				if !handled {
@@ -325,9 +332,18 @@ func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) 
 				}
 			}
 		}
+		started := time.Now()
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
-		return s.reloadResidentWorkspace(ctx, workspaceKey)
+		trace := workspaceReloadTrace(ctx)
+		if trace == nil {
+			return s.reloadResidentWorkspace(ctx, workspaceKey)
+		}
+		trace.InstallWait += time.Since(started)
+		started = time.Now()
+		err := s.reloadResidentWorkspace(ctx, workspaceKey)
+		trace.LockedReload += time.Since(started)
+		return err
 	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
