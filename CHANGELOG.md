@@ -7,7 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-- Bounded metadata writes return a retryable 503 when concurrent work exhausts their budget or database lock retries. Saved-view authorization returns the same response when it cannot read permissions under contention.
+- Bounded metadata writes return a retryable 503 when concurrent work exhausts their budget or database lock retries. Saved-view mutations and project and initiative point reads return the same response when contention prevents their authorization checks.
 - Bounded project edits select the affected reminders, progress inputs and linked documents.
 - Document creation and deletion use selected records for project links, audit and trash.
 - Bounded replicas create, edit and delete saved views using selected records and resolve public view links without loading the full workspace.

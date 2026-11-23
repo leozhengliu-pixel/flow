@@ -37,6 +37,7 @@ func (s *server) mutateSavedViewWithAggregate(r *http.Request, event, ref string
 			return err
 		}
 		if attempt >= 2 {
+			noteAuthorizationBusy(r, err)
 			return store.ErrAuthForbidden
 		}
 		if _, keyed := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); keyed {
@@ -61,6 +62,13 @@ func (s *server) mutateSavedViewWithAggregate(r *http.Request, event, ref string
 		}
 		binding, _ = r.Context().Value(savedViewAuthorizationKey{}).(*store.SavedViewAuthorization)
 	}
+}
+
+func respondSavedViewMutation(w http.ResponseWriter, r *http.Request, err error, status int, value any) {
+	if err != nil && writeProjectionRefusal(w, r) {
+		return
+	}
+	respondMutation(w, err, status, value)
 }
 
 func (s *server) sharedViewInputs(r *http.Request, workspace string) (domain.Bootstrap, func(), bool) {

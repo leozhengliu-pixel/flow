@@ -763,9 +763,7 @@ func (s *server) authorizeResourceRequest(w http.ResponseWriter, r *http.Request
 	if s.authDisabled || s.resourceAllowed(r, workspace, userID) {
 		return true
 	}
-	if retryAfter, refused := projectionRefused(r); refused {
-		writeProjectionBusy(w, retryAfter)
-	} else {
+	if !writeProjectionRefusal(w, r) {
 		writeError(w, http.StatusForbidden, "This resource is outside your teams")
 	}
 	return false
@@ -1111,6 +1109,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if recordAccessMode() == "on" {
 			result := s.requestResourceRead(r, workspace, userID)
 			defer result.releaseUnscoped()
+			noteAuthorizationBusy(r, result.err)
 			return result.err == nil && result.allowed
 		}
 		allowed := s.resourceAllowedLegacy(r, workspace, userID)
