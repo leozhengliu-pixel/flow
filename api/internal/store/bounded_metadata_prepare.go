@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -62,6 +64,44 @@ func (s *SQLiteStore) loadStartupMetadata(ctx context.Context, bounded, prepare 
 		slog.Warn("startup metadata: bounded workspace admission failed; using legacy reads")
 	}
 	return s.loadOrSeed(ctx)
+}
+
+// Reload can encounter writes from a replica that was already serving when
+// startup installed the journal triggers. They have durable dirty keys and
+// record versions, but only a journaled transaction can update the catalog.
+func (s *SQLiteStore) repairJournalBeforeReload(ctx context.Context, workspace string) error {
+	if !s.metadataResidency.requireCoverage || s.startupLock == nil {
+		return nil
+	}
+	pending := func(ctx context.Context) (string, error) {
+		var id string
+		err := s.db.QueryRowContext(ctx, `SELECT w.workspace_id FROM workspace_states w
+			WHERE w.workspace_key=? AND EXISTS(SELECT 1 FROM record_journal_mode WHERE id=1 AND enabled=1)
+			AND (EXISTS(SELECT 1 FROM record_journal_coverage WHERE workspace_key=w.workspace_key)
+				OR EXISTS(SELECT 1 FROM record_journal_dirty WHERE workspace_key=w.workspace_key)
+				OR EXISTS(SELECT 1 FROM record_journal_event_pending WHERE workspace_id=`+recordJournalIdentitySQL(s.dialect, "w.workspace_id")+`))`,
+			workspace).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return id, err
+	}
+	if id, err := pending(ctx); err != nil || id == "" {
+		return err
+	}
+	return s.WithStartupLock(ctx, "journal reload repair", func(ctx context.Context) error {
+		id, err := pending(ctx)
+		if err != nil || id == "" {
+			return err
+		}
+		if err := s.repairRecordJournalWorkspace(ctx, id); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return ErrRecordJournalCoverage
+		}
+		return nil
+	})
 }
 
 // prepareStartupMetadata runs under the schema startup lock. A completed

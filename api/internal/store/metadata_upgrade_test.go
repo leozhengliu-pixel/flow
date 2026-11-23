@@ -5,11 +5,67 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 
 	"flow/api/internal/domain"
 )
+
+func TestDefaultMetadataUpgradeUsesLegacyWhenAdmissionFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "flow.db")
+	flags := []string{"FLOW_BOUNDED_METADATA", "FLOW_RECORD_HYDRATION", "FLOW_RECORD_JOURNAL", "FLOW_METADATA_CATALOG"}
+	for _, flag := range flags {
+		t.Setenv(flag, "off")
+	}
+	t.Setenv("FLOW_RECORD_PEER_SYNC", "")
+	open := func() *SQLiteStore {
+		t.Helper()
+		repo, err := OpenSQLiteTestFixture(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return repo
+	}
+	old := open()
+	workspace := old.Bootstrap().Workspace.URLKey
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, flag := range flags {
+		t.Setenv(flag, "")
+	}
+	t.Setenv("FLOW_METADATA_SOURCE_BYTES", "1")
+	fallback := open()
+	t.Cleanup(func() { _ = fallback.Close() })
+	if fallback.BoundedMetadataEnabled() || !fallback.RecordJournalReady() {
+		t.Fatal("bounded admission failure should keep the journal and serve legacy reads")
+	}
+	data, ok := fallback.BootstrapFor(workspace)
+	if !ok || len(data.Issues) == 0 {
+		t.Fatal("legacy fallback lost the installed workspace")
+	}
+	const projectID = "upgrade-fallback-project"
+	if err := fallback.MutateWorkspace(t.Context(), workspace, "test.upgrade_fallback", projectID, nil, func(data *domain.Bootstrap) error {
+		data.Projects = append(data.Projects, domain.Project{ID: projectID, Name: "Written before admission", TeamIDs: []string{data.Teams[0].ID}})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := fallback.Close(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FLOW_METADATA_SOURCE_BYTES", "")
+	upgraded := open()
+	defer upgraded.Close()
+	if !upgraded.BoundedMetadataEnabled() {
+		t.Fatal("default restart did not admit the prepared workspace")
+	}
+	data, ok = upgraded.BootstrapForContext(WithColdWork(t.Context(), "upgrade fixture"), workspace)
+	if !ok || !slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == projectID }) {
+		t.Fatal("bounded restart lost a write committed during legacy fallback")
+	}
+}
 
 func TestDefaultMetadataUpgradeReplacesSQLiteContentTriggers(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "")
@@ -142,5 +198,54 @@ func TestDefaultMetadataUpgradeResumesLegacyWrites(t *testing.T) {
 	var count int
 	if err := upgraded.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM metadata_catalog WHERE workspace_key=? AND field='projects' AND record_key=?`, workspace, removedID).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("repaired catalog retained a deleted project: count=%d, err=%v", count, err)
+	}
+
+	// During a rolling upgrade an old replica can keep writing after the
+	// first bounded replica admits the workspace.
+	if err := old.ReloadWorkspace(t.Context(), workspace); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.MutateWorkspace(t.Context(), workspace, "test.upgrade_live_write", updatedID, nil, func(data *domain.Bootstrap) error {
+		for i := range data.Projects {
+			if data.Projects[i].ID == updatedID {
+				data.Projects[i].Name = "Written after admission"
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkRecordJournalCoverage(t.Context(), upgraded.db, workspace); !errors.Is(err, ErrRecordJournalCoverage) {
+		t.Fatalf("expected a journal gap from the running legacy writer: %v", err)
+	}
+	if err := upgraded.ReloadWorkspace(t.Context(), workspace); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkRecordJournalCoverage(t.Context(), upgraded.db, workspace); err != nil {
+		t.Fatalf("reload left a journal coverage gap: %v", err)
+	}
+	if err := upgraded.db.QueryRowContext(t.Context(), `SELECT summary FROM metadata_catalog WHERE workspace_key=? AND field='projects' AND record_key=?`, workspace, updatedID).Scan(&summary); err != nil {
+		t.Fatal(err)
+	}
+	project = domain.Project{}
+	if err := json.Unmarshal(summary, &project); err != nil || project.Name != "Written after admission" {
+		t.Fatal("repaired catalog lost the live legacy update")
+	}
+	data, ok := upgraded.BootstrapForContext(WithColdWork(t.Context(), "upgrade fixture"), workspace)
+	if !ok || !slices.ContainsFunc(data.Projects, func(p domain.Project) bool {
+		return p.ID == updatedID && p.Name == "Written after admission"
+	}) {
+		t.Fatal("bounded replica did not install the legacy writer's edit")
+	}
+
+	newWorkspace := rolloutWorkspaces(t, old, 1)[0]
+	if err := upgraded.ReloadAllWorkspaces(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if !upgraded.HasWorkspace(newWorkspace) {
+		t.Fatal("bounded replica did not install the workspace created by the legacy writer")
+	}
+	if err := upgraded.boundedMetadataReadiness(t.Context(), &report); err != nil || !report.Ready {
+		t.Fatalf("new workspace was installed without complete journal and catalog coverage: %v", err)
 	}
 }

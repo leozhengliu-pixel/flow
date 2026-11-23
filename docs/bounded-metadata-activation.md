@@ -46,9 +46,11 @@ Run it before starting bounded replicas, or while the fleet is on legacy
 reads, because the command also revisits completed collections.
 
 During a rolling upgrade, leave remaining replicas running until their
-replacements are ready. Starting an older binary with its journal disabled
-can remove the shared capture triggers. Use the rollback steps below before
-reintroducing an older binary.
+replacements are ready. The journal triggers capture their writes, and
+bounded replicas repair pending journal and catalog entries when reloading.
+Starting an older binary with its journal disabled can remove the shared
+capture triggers. Use the rollback steps below before reintroducing an older
+binary.
 
 `FLOW_RECORD_PEER_SYNC` defaults to `off` and keeps the existing Redis event
 envelopes during rolling upgrades. Enable compact peer sync only in a

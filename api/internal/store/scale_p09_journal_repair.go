@@ -18,7 +18,14 @@ func (s *SQLiteStore) RepairRecordJournal(ctx context.Context, workspaceID strin
 	if !s.db.journalReady.Load() || recordJournalMode() == "off" {
 		return true, ErrRecordJournalUnavailable
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	var options *sql.TxOptions
+	if s.dialect == "mysql" {
+		// A legacy writer can refresh a dirty key between the scan and
+		// its removal. After acquiring that row's lock, project the
+		// current record rather than the scan's older read snapshot.
+		options = &sql.TxOptions{Isolation: sql.LevelReadCommitted}
+	}
+	tx, err := s.db.BeginTx(ctx, options)
 	if err != nil {
 		return true, err
 	}
