@@ -644,7 +644,7 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				// The resolved callback was checked against its refreshed input.
 				// Reference-only changes to read records enrich events but must
 				// not rewrite canonical rows, as on the legacy delta path.
-				return metadataScopeResolver(ctx) != nil && !metadataRecordSelected(scope, change.field, change.key, true)
+				return metadataScopeResolver(ctx) != nil && !metadataRecordSelected(writeScope, change.field, change.key, true)
 			})
 			for _, change := range changes {
 				field, _, typed := metadataRecordType(change.field)

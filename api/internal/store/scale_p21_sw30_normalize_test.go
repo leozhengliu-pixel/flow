@@ -70,6 +70,42 @@ func TestScaleP21SW30LogicalReloadLifecycle(t *testing.T) {
 	}
 }
 
+func TestScaleP21SW30LogicalNormalizerErrorCleansUp(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := scaleP09Database(t)
+	source, err := captureMetadataLogicalSource(t.Context(), domain.Bootstrap{
+		Workspace: f.data.Workspace,
+		Projects:  []domain.Project{{ID: "sw30-error-project"}},
+	}, copyStamp{workspaceID: "sw30-error", revision: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Release()
+	projectIndex, _, ok := metadataLogicalField("projects")
+	if !ok {
+		t.Fatal("projects field is not in the logical metadata manifest")
+	}
+	projectNode := source.fields[projectIndex]
+	projectNode.size = 1
+	source.fields[projectIndex] = projectNode
+	beforeDisk, beforeDescriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
+	_, _, done, err := f.SQLiteStore.newMetadataLogicalNormalizer(
+		metadataLogicalSourceScratchContext(t.Context(), source), source,
+	)
+	if err == nil {
+		t.Fatal("malformed project index unexpectedly normalized")
+	}
+	if done != nil {
+		t.Fatal("failed normalizer returned a cleanup function")
+	}
+	if metadataLogicalDiskUsed.Load() != beforeDisk || metadataLogicalDescriptorsUsed.Load() != beforeDescriptors {
+		t.Fatalf("failed normalizer leaked spool resources: disk=%d descriptors=%d, want %d/%d",
+			metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), beforeDisk, beforeDescriptors)
+	}
+}
+
 func TestScaleP21SW30LogicalWriterDefaultWorkspace(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")

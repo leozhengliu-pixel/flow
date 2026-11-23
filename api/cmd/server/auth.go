@@ -106,6 +106,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 				return
 			}
 			s.stampLocalStoreBootstrap(w, r, workspaceKey(r))
+			releaseColdWriteProjection(r)
 			recordFileSigningPrincipal(r.Context(), viewer, nil, workspaceKey(r))
 			next.ServeHTTP(w, r)
 			return
@@ -173,6 +174,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			return
 		}
 		s.stampLocalStoreBootstrap(w, r, workspaceKey(r))
+		releaseColdWriteProjection(r)
 		recordFileSigningPrincipal(r.Context(), user, apiKey, apiWorkspace)
 		next.ServeHTTP(w, r)
 	})

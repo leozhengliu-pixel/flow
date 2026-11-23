@@ -251,7 +251,7 @@ func (s *SQLiteStore) BeginIssueBootstrapRead(ctx context.Context, workspace, us
 	if userID == "" {
 		if read.resident {
 			// The development read decorates Data itself: it owns a copy.
-			read.Data = coldImageCopy(read.Data, nil)
+			read.Data = coldImageCopy(ctx, read.Data, nil)
 		}
 		read.Data.ViewerRole = "admin"
 		if read.Data.Workspace.URLKey == "" || read.Data.Viewer.ID == "" {

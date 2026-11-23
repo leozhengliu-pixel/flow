@@ -251,6 +251,35 @@ func (s *metadataLogicalSource) Fork(ctx context.Context, before, next domain.Bo
 		hinted, _ := residentSelectedOrdinals(ctx, name, node, ids)
 		run := &metadataLogicalCopyRun{b: b}
 		defer run.abandon()
+		if slices.Contains(metadataAppendPrependKinds(ctx), name) {
+			var prepended []reflect.Value
+			for i := 0; i < value.Len(); i++ {
+				id, ok := metadataRecordValueKey(value.Index(i))
+				if !ok {
+					continue
+				}
+				if _, allowed := appendOrders[metadataRecordKey{field: name, key: id}]; !allowed {
+					continue
+				}
+				prepended = append(prepended, value.Index(i))
+			}
+			slices.SortStableFunc(prepended, func(a, b reflect.Value) int {
+				aID, _ := metadataRecordValueKey(a)
+				bID, _ := metadataRecordValueKey(b)
+				return appendOrders[metadataRecordKey{field: name, key: aID}] -
+					appendOrders[metadataRecordKey{field: name, key: bID}]
+			})
+			for _, item := range prepended {
+				id, _ := metadataRecordValueKey(item)
+				if seen[id] {
+					return fmt.Errorf("%w: duplicate logical append key in %s", ErrMetadataRecordQuery, name)
+				}
+				seen[id] = true
+				if err := b.appendAvailableNative(reflect.Value{}, item); err != nil {
+					return err
+				}
+			}
+		}
 		err = node.Children(ctx, func(ordinal reflect.Value, item metadataLogicalNode) error {
 			id := ""
 			selected := false

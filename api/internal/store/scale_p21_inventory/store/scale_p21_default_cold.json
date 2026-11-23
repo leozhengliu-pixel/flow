@@ -2,6 +2,15 @@
   "source": "store/scale_p21_default_cold.go",
   "unmigrated": 0,
   "consumers": {
+    "Close": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "ColdScope.Close drops the request's retained legacy view and reusable copy state after the COLD request ends. It clears the facade graph only when it can acquire the view lock, preserving concurrent output ownership, and releases the reusable copy state after the graph is detached. TestScaleP21SW215ColdAuthorization and the COLD ownership tests cover scope cleanup, retained-view lifetime and repeated close.",
+      "accessors": ["workspaces"],
+      "temperature": "cold",
+      "temperatureReason": "COLD request-scope cleanup for the default legacy route path.",
+      "callers": ["server/scale_p21_cold_authorization.go:withColdMetadataRouteMux"]
+    },
     "decodeColdWorkspace": {
       "owner": "P21",
       "status": "reviewed",

@@ -141,6 +141,28 @@ func TestScaleP11PeerAllocation(t *testing.T) {
 	}
 }
 
+func TestScaleP11PeerSyncReusesCurrentInstalledGeneration(t *testing.T) {
+	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := scaleP11NewFixture(t, 256)
+	service := &server{store: f.peer, coordinator: f.service.coordinator, realtime: newRealtimeHub()}
+	before := f.peer.WorkspaceMetadataDecodes()
+	state, err := f.peer.WorkspacePeerState(t.Context(), f.workspace)
+	if err != nil || !state.Current || state.Pending {
+		t.Fatalf("fixture did not expose a settled current workspace: state=%+v error=%v", state, err)
+	}
+	if err := service.syncPeerWorkspace(t.Context(), f.workspace); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.peer.WorkspaceMetadataDecodes(); got != before {
+		t.Fatalf("current peer sync decoded the workspace again: %d -> %d", before, got)
+	}
+	consumer := service.remoteEvents.consumer(f.workspace)
+	if !consumer.initialized || consumer.workspaceID != state.WorkspaceID || consumer.cursor != state.Head || consumer.eventCursor != state.EventHead {
+		t.Fatalf("current peer sync lost its authority cursors: consumer=%+v state=%+v", consumer, state)
+	}
+}
+
 func scaleP11Rename(t *testing.T, f scaleP11Fixture, name string) domain.RealtimeEvent {
 	t.Helper()
 	var event domain.RealtimeEvent

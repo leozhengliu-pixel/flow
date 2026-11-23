@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,6 +70,139 @@ func TestScaleP21SW215ColdAuthorizationUsesActualMuxWinner(t *testing.T) {
 	r.Pattern = "GET /api/loop-config"
 	if _, selected := scaleP21ColdAuthorizationRoute(r); selected {
 		t.Fatal("Request.Pattern alone certified a cold route")
+	}
+}
+
+func TestScaleP21SW215UnregisteredColdPagedAuthorizationReusesRequestView(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	t.Setenv("FLOW_RECORD_ACCESS", "off")
+	for name, repo := range scaleP03ServerTestStores(t) {
+		t.Run(name, func(t *testing.T) {
+			f := scaleP03Fixture(t, repo)
+			workspace := f.data.Workspace.URLKey
+			view, err := repo.BoundedMetadataViewForTesting(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			service := &server{store: view}
+			mux := http.NewServeMux()
+			mux.HandleFunc("POST /api/documents", func(http.ResponseWriter, *http.Request) {})
+			request := httptest.NewRequest(http.MethodPost, "/api/documents", nil)
+			request.Header.Set("X-Workspace-Key", workspace)
+			ctx, scope := store.WithColdScope(request.Context(), "POST /api/documents")
+			defer scope.Close()
+			ctx = context.WithValue(ctx, coldAuthorizationMuxKey{}, mux)
+			request = request.WithContext(ctx)
+
+			first, err := service.legacyColdAuthorizationRepository(request, true)
+			if err != nil {
+				t.Fatal("first unregistered COLD authorization view", err)
+			}
+			if first == nil || first == view {
+				t.Fatal("unregistered COLD paged authorization did not retain a legacy request view")
+			}
+			release := view.HoldLegacyViewLaneForTesting()
+			second, err := service.legacyColdAuthorizationRepository(request, true)
+			release()
+			if err != nil {
+				t.Fatal("cached unregistered COLD authorization view", err)
+			}
+			if second != first {
+				t.Fatal("unregistered COLD paged authorization decoded a second request view")
+			}
+
+			want, err := repo.PagedWorkspaceMetadata(t.Context(), workspace, f.data.Viewer.ID)
+			if err != nil {
+				t.Fatal("legacy paged authorization projection", err)
+			}
+			got, err := first.PagedWorkspaceMetadata(ctx, workspace, f.data.Viewer.ID)
+			if err != nil {
+				t.Fatal("bounded paged authorization projection", err)
+			}
+			wantJSON, err := json.Marshal(want)
+			if err != nil {
+				t.Fatal(err)
+			}
+			gotJSON, err := json.Marshal(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(gotJSON, wantJSON) {
+				t.Fatalf("unregistered COLD paged authorization changed the projection\nwant %s\ngot %s", wantJSON, gotJSON)
+			}
+			if store.InColdScope(ctx) == false {
+				t.Fatal("request COLD scope closed before the retained view was checked")
+			}
+			scope.Close()
+			if store.InColdScope(ctx) {
+				t.Fatal("request COLD scope retained its view after cleanup")
+			}
+		})
+	}
+}
+
+func TestScaleP21SW215UnregisteredColdPagedAuthorizationViewRace(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	for name, repo := range scaleP03ServerTestStores(t) {
+		t.Run(name, func(t *testing.T) {
+			f := scaleP03Fixture(t, repo)
+			workspace := f.data.Workspace.URLKey
+			view, err := repo.BoundedMetadataViewForTesting(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			service := &server{store: view}
+			mux := http.NewServeMux()
+			mux.HandleFunc("POST /api/documents", func(http.ResponseWriter, *http.Request) {})
+			request := httptest.NewRequest(http.MethodPost, "/api/documents", nil)
+			request.Header.Set("X-Workspace-Key", workspace)
+			ctx, scope := store.WithColdScope(request.Context(), "POST /api/documents")
+			ctx = context.WithValue(ctx, coldAuthorizationMuxKey{}, mux)
+			request = request.WithContext(ctx)
+			t.Cleanup(scope.Close)
+
+			const callers = 16
+			type result struct {
+				view *store.SQLiteStore
+				err  error
+			}
+			results := make(chan result, callers)
+			var workers sync.WaitGroup
+			workers.Add(callers)
+			start := make(chan struct{})
+			for range callers {
+				go func() {
+					defer workers.Done()
+					<-start
+					got, err := service.legacyColdAuthorizationRepository(request, true)
+					results <- result{view: got, err: err}
+				}()
+			}
+			close(start)
+			workers.Wait()
+			close(results)
+			var first *store.SQLiteStore
+			for got := range results {
+				if got.err != nil {
+					t.Fatal("concurrent unregistered COLD authorization view", got.err)
+				}
+				if got.view == nil || got.view == view {
+					t.Fatal("concurrent unregistered COLD authorization lost its retained view")
+				}
+				if first == nil {
+					first = got.view
+				} else if got.view != first {
+					t.Fatal("concurrent unregistered COLD authorization decoded multiple views")
+				}
+			}
+			if !store.InColdScope(ctx) {
+				t.Fatal("request COLD scope closed during concurrent view reuse")
+			}
+		})
 	}
 }
 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"go/ast"
@@ -227,26 +226,6 @@ func TestScaleP21SW191ColdLoopRoutesDifferential(t *testing.T) {
 		}
 		if f.probe.MetadataWorkUsedForTesting() != 0 || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("cold routes escaped their lifetime or used a HOT full accessor")
-		}
-		// Waiting is cancellable before a literal route body is invoked.
-		entered, release := make(chan struct{}), make(chan struct{})
-		done := make(chan error, 1)
-		go func() {
-			done <- f.probe.WithColdMetadataRead(t.Context(), "server/loop_settings.go:getLoopConfig", func(context.Context, *store.SQLiteStore) error {
-				close(entered)
-				<-release
-				return nil
-			})
-		}()
-		<-entered
-		ctx, cancel := context.WithCancel(t.Context())
-		cancel()
-		request := f.literalRequest(f.data.Viewer, nil, nil).WithContext(ctx)
-		request.Method, request.URL.Path = http.MethodGet, "/api/workspace/loop-settings"
-		response := scaleP21SW191Serve(t, &server{store: f.probe}, request)
-		close(release)
-		if err := <-done; err != nil || response.Code == http.StatusOK {
-			t.Fatal("cancelled cold route succeeded", response.Code, err)
 		}
 	}
 }

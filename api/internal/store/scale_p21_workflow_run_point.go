@@ -42,9 +42,7 @@ func WorkflowRunFullImageAttemptsForTesting() int64 {
 //   - a workflow ID that is also the ID of a stored issue or content record
 //     (the event's entity is the first object with that ID in field order,
 //     and issues and content come before the definitions);
-//   - a createIssue run whose Number fold overflows, or that runs on a
-//     dialect whose ID collation can differ from the byte order the legacy
-//     order-stability check uses;
+//   - a createIssue run whose Number fold overflows;
 //   - a resource issue whose stored row is larger than one point read admits
 //     (errIssueMutationRowTooLarge): the full image streams it as framed
 //     records, as the writer did before the point attempt;
@@ -183,9 +181,6 @@ func (s *SQLiteStore) workflowRunPointAttempt(ctx context.Context, w *workflowRu
 		return fold.largest, fold.found, nil
 	}
 	numbers := func(ctx context.Context) (int, bool, error) {
-		if s.dialect != "sqlite" {
-			return 0, false, errWorkflowRunFullImage
-		}
 		return largestStored(ctx)
 	}
 	attempt.inputs, err = s.loadWorkflowRunInputs(ctx, prepared.Source(), workflowID, w.resourceType, w.resourceID, numbers)

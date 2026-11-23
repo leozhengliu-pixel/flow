@@ -15,19 +15,16 @@ import (
 	"flow/api/internal/store"
 )
 
-// These bodies run on the store withColdMetadataRequest lends them: flag off
-// the server's own store, literally; bounded the registered COLD facade,
-// whose legacy accessors read the complete installed workspace.
+// OAuth settings bodies still run on the store withColdMetadataRequest lends
+// them. API-key settings handlers use their scoped store bodies in bounded
+// mode and keep this helper for the remaining OAuth routes.
 
 // coldWorkspaceData is workspaceData on the borrowed store, for the
-// registered COLD settings routes that read it (API keys, OAuth
-// applications). Flag off it is workspaceData itself. Bounded it follows
-// workspaceData's branches with the refreshed facade in place of the live
-// store: a metadata read (every /api/api-keys request) takes the projection
-// authorization built on the same facade (handed off to GETs), else reads a
-// fresh PagedWorkspaceMetadata; any other route reads BootstrapForUser. The
-// views, issue-record authorization and paged realtime branches belong to no
-// cold route and are refused.
+// remaining COLD settings routes that read it, currently OAuth applications.
+// Flag off it is workspaceData itself. Bounded it follows workspaceData's
+// branches with the refreshed facade in place of the live store. The views,
+// issue-record authorization and paged realtime branches belong to no cold
+// route and are refused.
 func (s *server) coldWorkspaceData(r *http.Request, repo *store.SQLiteStore) (domain.Bootstrap, error) {
 	if !s.store.BoundedMetadataEnabled() {
 		return s.workspaceData(r), nil
@@ -76,23 +73,84 @@ func (s *server) coldWorkspaceData(r *http.Request, repo *store.SQLiteStore) (do
 // listAPIKeysWithStore is listAPIKeys with the repository explicit.
 func (s *server) listAPIKeysWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore) {
 	actor := requestActor(s, r)
-	data, err := s.coldWorkspaceData(r, repo)
+	if !repo.BoundedMetadataEnabled() {
+		data, _, err := repo.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{Fields: []string{"apiKeys"}})
+		if err != nil {
+			respondMutation(w, err, http.StatusOK, nil)
+			return
+		}
+		if s.authDisabled {
+			data.ViewerRole = "admin"
+		} else {
+			role, status, roleErr := repo.WorkspaceRole(r.Context(), data.Workspace.ID, actor.ID)
+			if roleErr != nil || status != "active" {
+				respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+				return
+			}
+			data.ViewerRole = role
+		}
+		result := []domain.APIKey{}
+		admin := strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner")
+		apiKeyID := ""
+		if token, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			apiKeyID = token.ID
+		}
+		for _, key := range data.APIKeys {
+			if key.RevokedAt == nil && (apiKeyID != "" && key.ID == apiKeyID || apiKeyID == "" && (admin || key.CreatorID == actor.ID)) {
+				result = append(result, publicAPIKey(key))
+			}
+		}
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+	identity, found, err := repo.BeginInstalledWorkspaceIdentityRead(r.Context(), workspaceKey(r))
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
+	if !found {
+		respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+		return
+	}
+	defer identity.Close()
+	role := "admin"
+	if s.authDisabled {
+	} else {
+		var status string
+		var roleErr error
+		role, status, roleErr = repo.WorkspaceRole(r.Context(), identity.Identity.ID, actor.ID)
+		if roleErr != nil || status != "active" {
+			respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+			return
+		}
+	}
 	result := []domain.APIKey{}
-	admin := strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner")
+	admin := strings.EqualFold(role, "admin") || strings.EqualFold(role, "owner")
 	apiKeyID := ""
 	if token, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		// A token-authenticated request must not enumerate the creator's other
 		// credentials, even when that creator is a workspace administrator.
 		apiKeyID = token.ID
 	}
-	for _, key := range data.APIKeys {
+	read, found, err := repo.BeginInstalledMetadataRead(r.Context(), identity.Identity.RegistryKey)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	if !found || read == nil {
+		respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+		return
+	}
+	defer read.Close()
+	err = read.VisitAPIKeys(r.Context(), func(_ context.Context, key domain.APIKey) error {
 		if key.RevokedAt == nil && (apiKeyID != "" && key.ID == apiKeyID || apiKeyID == "" && (admin || key.CreatorID == actor.ID)) {
 			result = append(result, publicAPIKey(key))
 		}
+		return nil
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
 	}
 	writeJSON(w, http.StatusOK, result)
 }
@@ -101,7 +159,25 @@ func (s *server) listAPIKeysWithStore(w http.ResponseWriter, r *http.Request, re
 // secret generation.
 func (s *server) createAPIKeyWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore, input apiKeyCreateInput, secret string, actor domain.User) {
 	var created domain.APIKey
-	err := repo.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "api_key.created", input, func(data *domain.Bootstrap) (string, error) {
+	if repo.BoundedMetadataEnabled() {
+		exists, err := repo.APIKeyNameExists(r.Context(), workspaceKey(r), actor.ID, input.Name, "")
+		if err != nil {
+			respondMutation(w, err, http.StatusCreated, nil)
+			return
+		}
+		if exists {
+			respondMutation(w, fmt.Errorf("%w: API key name already exists", errInvalid), http.StatusCreated, nil)
+			return
+		}
+	}
+	err := repo.MutateWorkspaceAppendingWithAggregate(r.Context(), workspaceKey(r), "api_key.created", input, store.MetadataAppendScope{
+		MetadataRecordScope: store.MetadataRecordScope{
+			Fields: []string{"teams"},
+			Read:   []store.RecordKey{{Kind: "workspaceSettings", ID: "apiKeyPermission"}},
+		},
+		AppendKinds:  []string{"apiKeys"},
+		PrependKinds: []string{"apiKeys"},
+	}, func(data *domain.Bootstrap) (string, error) {
 		if s.authDisabled {
 			data.ViewerRole = "admin"
 		}
@@ -111,9 +187,11 @@ func (s *server) createAPIKeyWithStore(w http.ResponseWriter, r *http.Request, r
 		if !roleSatisfiesWorkspacePermission(data.ViewerRole, data.WorkspaceSettings.APIKeyPermission) {
 			return "", fmt.Errorf("%w: API key creation is limited by workspace security policy", store.ErrAuthForbidden)
 		}
-		for _, existing := range data.APIKeys {
-			if existing.RevokedAt == nil && existing.CreatorID == actor.ID && strings.EqualFold(strings.TrimSpace(existing.Name), input.Name) {
-				return "", fmt.Errorf("%w: API key name already exists", errInvalid)
+		if !repo.BoundedMetadataEnabled() {
+			for _, existing := range data.APIKeys {
+				if existing.RevokedAt == nil && existing.CreatorID == actor.ID && strings.EqualFold(strings.TrimSpace(existing.Name), input.Name) {
+					return "", fmt.Errorf("%w: API key name already exists", errInvalid)
+				}
 			}
 		}
 		scopes := normalizeAPIKeyScopes(input.Scopes)
@@ -152,7 +230,11 @@ func (s *server) createAPIKeyWithStore(w http.ResponseWriter, r *http.Request, r
 			}
 		}
 		created = domain.APIKey{ID: idgen.New("api_key_"), Name: input.Name, Prefix: secret[:min(len(secret), 17)], SecretHash: secretHash(secret), CreatorID: actor.ID, Scopes: scopes, TeamIDs: teamIDs, TeamRestriction: restriction, CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt}
-		data.APIKeys = append([]domain.APIKey{created}, data.APIKeys...)
+		if repo.BoundedMetadataEnabled() {
+			data.APIKeys = append(data.APIKeys, created)
+		} else {
+			data.APIKeys = append([]domain.APIKey{created}, data.APIKeys...)
+		}
 		appendAudit(data, "created", "api_key", created.ID, map[string]any{"name": created.Name, "prefix": created.Prefix, "scopes": created.Scopes, "teamRestriction": created.TeamRestriction})
 		return created.ID, nil
 	})
@@ -178,8 +260,22 @@ type apiKeyUpdate struct {
 func (s *server) updateAPIKeyWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore, input apiKeyUpdate, actor domain.User) {
 	id, name, scopes, teamIDs, restrictionValue, expiresAt := input.id, input.name, input.scopes, input.teamIDs, input.restrictionValue, input.expiresAt
 	var updated domain.APIKey
-	err := repo.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "api_key.updated", map[string]any{
+	if repo.BoundedMetadataEnabled() && input.nameSet {
+		exists, err := repo.APIKeyNameExists(r.Context(), workspaceKey(r), actor.ID, name, id)
+		if err != nil {
+			respondMutation(w, err, http.StatusOK, nil)
+			return
+		}
+		if exists {
+			respondMutation(w, fmt.Errorf("%w: API key name already exists", errInvalid), http.StatusOK, nil)
+			return
+		}
+	}
+	err := repo.MutateWorkspaceScopedWithAggregate(r.Context(), workspaceKey(r), "api_key.updated", map[string]any{
 		"id": id, "name": name, "scopes": scopes, "teamIds": teamIDs, "teamRestriction": restrictionValue, "expiresAt": expiresAt,
+	}, store.MetadataRecordScope{
+		Fields: []string{"teams"},
+		Write:  []store.RecordKey{{Kind: "apiKeys", ID: id}},
 	}, func(data *domain.Bootstrap) (string, error) {
 		if s.authDisabled {
 			data.ViewerRole = "admin"
@@ -193,9 +289,11 @@ func (s *server) updateAPIKeyWithStore(w http.ResponseWriter, r *http.Request, r
 		current := &data.APIKeys[index]
 		before := *current
 		if input.nameSet {
-			for _, existing := range data.APIKeys {
-				if existing.ID != id && existing.RevokedAt == nil && existing.CreatorID == current.CreatorID && strings.EqualFold(strings.TrimSpace(existing.Name), name) {
-					return "", fmt.Errorf("%w: API key name already exists", errInvalid)
+			if !repo.BoundedMetadataEnabled() {
+				for _, existing := range data.APIKeys {
+					if existing.ID != id && existing.RevokedAt == nil && existing.CreatorID == current.CreatorID && strings.EqualFold(strings.TrimSpace(existing.Name), name) {
+						return "", fmt.Errorf("%w: API key name already exists", errInvalid)
+					}
 				}
 			}
 			current.Name = name
@@ -284,12 +382,17 @@ func (s *server) revokeAPIKeyWithStore(w http.ResponseWriter, r *http.Request, r
 	id, actor := r.PathValue("id"), requestActor(s, r)
 	viewerRole := "admin"
 	if !s.store.BoundedMetadataEnabled() || !s.authDisabled {
-		data, err := s.coldWorkspaceData(r, repo)
-		if err != nil {
-			respondMutation(w, err, http.StatusNoContent, nil)
+		metadata, ok := repo.WorkspaceSettingsMetadata(workspaceKey(r))
+		if !ok {
+			respondMutation(w, store.ErrAuthForbidden, http.StatusNoContent, nil)
 			return
 		}
-		viewerRole = data.ViewerRole
+		role, status, err := repo.WorkspaceRole(r.Context(), metadata.Workspace.ID, actor.ID)
+		if err != nil || status != "active" {
+			respondMutation(w, store.ErrAuthForbidden, http.StatusNoContent, nil)
+			return
+		}
+		viewerRole = role
 	}
 	err := repo.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "api_key.revoked", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "apiKeys", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {

@@ -18,6 +18,10 @@ import (
 
 const metadataRecoveryPageRows = 32
 
+type optimisticResidentReloadKey struct{}
+
+var errResidentReloadRace = errors.New("resident reload raced with a newer installed generation")
+
 // Canonical policy projections remain admitted through their final consumer.
 // This is separate from installed recovery, which must retain complete Teams.
 type scaleP21SW23TeamPolicyRowsRead struct {
@@ -874,11 +878,27 @@ func (s *SQLiteStore) reloadResidentWorkspace(ctx context.Context, workspace str
 	return s.reloadResidentWorkspaceLogical(ctx, workspace, false)
 }
 
+func (s *SQLiteStore) reloadResidentWorkspaceOptimistic(ctx context.Context, workspace string) (bool, error) {
+	r := s.metadataResidency
+	if r == nil || !r.requireCoverage {
+		return false, nil
+	}
+	r.mu.Lock()
+	hasLogical := r.logical[workspace] != nil
+	r.mu.Unlock()
+	if !hasLogical {
+		return false, nil
+	}
+	ctx = context.WithValue(ctx, optimisticResidentReloadKey{}, true)
+	return true, s.reloadResidentWorkspaceLogical(ctx, workspace, false)
+}
+
 // reloadResidentWorkspaceLogical is reloadResidentWorkspace; logical also
 // builds the installed logical source of a workspace a test view does not
 // hold yet (a COLD rename's new key on a view that captured the old one).
 func (s *SQLiteStore) reloadResidentWorkspaceLogical(ctx context.Context, workspace string, logical bool) error {
 	ctx = metadataLogicalUnpinnedContext(ctx)
+	optimistic, _ := ctx.Value(optimisticResidentReloadKey{}).(bool)
 	s.metadataResidency.mu.Lock()
 	hasLogical := s.metadataResidency.logical[workspace] != nil || logical
 	s.metadataResidency.mu.Unlock()
@@ -893,7 +913,7 @@ func (s *SQLiteStore) reloadResidentWorkspaceLogical(ctx context.Context, worksp
 	// The installed loader meters normalization separately. Own the actual
 	// retained policy and directory before allocating their native values.
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
-	if hasLogical && s.reloadResidentWorkspaceFromKnown(ctx, workspace) {
+	if hasLogical && !optimistic && s.reloadResidentWorkspaceFromKnown(ctx, workspace) {
 		return nil
 	}
 	started := time.Now()
@@ -913,10 +933,11 @@ func (s *SQLiteStore) reloadResidentWorkspaceLogical(ctx context.Context, worksp
 	if err != nil {
 		return err
 	}
+	installedExact := false
 	if current, err := s.retainMetadataLogicalSource(ctx, workspace); err == nil {
-		exact := current.Stamp() == storedStamp
+		installedExact = current.Stamp() == storedStamp
 		current.Release()
-		if exact {
+		if installedExact && !optimistic {
 			return tx.Commit()
 		}
 	}
@@ -935,11 +956,35 @@ func (s *SQLiteStore) reloadResidentWorkspaceLogical(ctx context.Context, worksp
 	if err != nil {
 		return err
 	}
+	generation, err := residentJournalGeneration(ctx, tx)
+	if err != nil {
+		return err
+	}
 	// The inputs the reloaded generation is exact at: the next reload or
 	// COLD publication derives from it (scale_p21_cold_incremental.go).
 	state := s.coldPublishReloadState(ctx, tx, workspace, source)
 	if err := tx.Commit(); err != nil {
 		return err
+	}
+	if optimistic {
+		if hook := residentReloadBeforeInstall.Load(); hook != nil {
+			(*hook)()
+		}
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
+		current, currentHead, currentGeneration, err := s.readResidentPublicationStamp(ctx, workspace, data.Workspace.ID)
+		if err != nil {
+			return err
+		}
+		if current != stamp || currentHead != head || currentGeneration != generation {
+			return errResidentReloadRace
+		}
+		if installedExact {
+			installed, applied, ok := s.residentStamp(workspace)
+			if !ok || installed != stamp || applied != head {
+				return errResidentReloadRace
+			}
+		}
 	}
 	if err := s.installResidentPolicy(workspace, data, stamp, head, cost, source); err != nil {
 		return err
@@ -1022,6 +1067,18 @@ func residentJournalHead(ctx context.Context, tx *sqlTx, workspaceID string) (in
 	var head int64
 	err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(head),0) FROM workspace_record_journal_heads WHERE workspace_id=?`, workspaceID).Scan(&head)
 	return head, err
+}
+
+func residentJournalGeneration(ctx context.Context, tx *sqlTx) (string, error) {
+	var enabled, capturing int
+	var generation string
+	if err := tx.QueryRowContext(ctx, `SELECT enabled,capturing,generation FROM record_journal_mode WHERE id=1`).Scan(&enabled, &capturing, &generation); err != nil {
+		return "", err
+	}
+	if enabled != 1 || capturing != 1 {
+		return "", nil
+	}
+	return generation, nil
 }
 
 // checkMetadataSourceBudget refuses a bounded start up front when the

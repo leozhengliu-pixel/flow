@@ -1005,6 +1005,106 @@ func TestColdIncrementalReloadPreservesConcurrentLocalWrite(t *testing.T) {
 	coldIncrementalAssertExact(t, f, view, workspace, "after raced reload")
 }
 
+func TestOptimisticResidentReloadPreservesConcurrentLocalWrite(t *testing.T) {
+	f, view, workspace := coldIncrementalFixture(t)
+	forgetColdPublications(view.metadataResidency, workspace)
+	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='apiKeys' AND record_key='ci-key-1'`,
+		[]byte(`{"id":"ci-key-1","name":"Peer","prefix":"flw_1","scopes":["read"],"teamIds":[]}`), workspace); err != nil {
+		t.Fatal(err)
+	}
+	prepared, resume := make(chan struct{}), make(chan struct{})
+	var pause sync.Once
+	hook := func() { pause.Do(func() { close(prepared); <-resume }) }
+	residentReloadBeforeInstall.Store(&hook)
+	defer residentReloadBeforeInstall.Store(nil)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	reloaded := make(chan error, 1)
+	go func() { reloaded <- view.ReloadWorkspace(ctx, workspace) }()
+	select {
+	case <-prepared:
+	case err := <-reloaded:
+		close(resume)
+		t.Fatalf("reload skipped optimistic preparation: %v", err)
+	case <-ctx.Done():
+		close(resume)
+		t.Fatal("reload did not prepare", <-reloaded)
+	}
+	if !view.writeMu.TryLock() {
+		close(resume)
+		t.Fatal("optimistic preparation held the write lock", <-reloaded)
+	}
+	view.writeMu.Unlock()
+	scope := MetadataRecordScope{Write: []RecordKey{{Kind: "projects", ID: "ci-project-05"}}}
+	err := view.MutateWorkspaceScoped(WithScopedSelectionWrite(ctx), workspace, "project.updated", "ci-project-05", nil, scope, func(next *domain.Bootstrap) error {
+		next.Projects[0].Description = "Local edit during optimistic reload"
+		return nil
+	})
+	close(resume)
+	reloadErr := <-reloaded
+	if err != nil || reloadErr != nil {
+		t.Fatalf("local write: %v, reload: %v", err, reloadErr)
+	}
+	source, err := view.retainMetadataLogicalSource(ctx, workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Release()
+	selected, err := source.Select(ctx, scope, 2<<20)
+	if err != nil || len(selected.Projects) != 1 || selected.Projects[0].Description != "Local edit during optimistic reload" {
+		t.Fatalf("local edit was lost: %v", err)
+	}
+	coldIncrementalAssertExact(t, f, view, workspace, "after raced optimistic reload")
+}
+
+func TestOptimisticResidentReloadRetriesJournalHeadRace(t *testing.T) {
+	f, view, workspace := coldIncrementalFixture(t)
+	forgetColdPublications(view.metadataResidency, workspace)
+	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='apiKeys' AND record_key='ci-key-1'`,
+		[]byte(`{"id":"ci-key-1","name":"Peer","prefix":"flw_1","scopes":["read"],"teamIds":[]}`), workspace); err != nil {
+		t.Fatal(err)
+	}
+	before, _, ok := view.residentStamp(workspace)
+	if !ok {
+		t.Fatal("fixture has no resident stamp")
+	}
+	_, beforeHead, _, err := view.readResidentPublicationStamp(t.Context(), workspace, f.data.Workspace.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, resume := make(chan struct{}), make(chan struct{})
+	var pause sync.Once
+	hook := func() { pause.Do(func() { close(prepared); <-resume }) }
+	residentReloadBeforeInstall.Store(&hook)
+	defer residentReloadBeforeInstall.Store(nil)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	reloaded := make(chan error, 1)
+	go func() { reloaded <- view.ReloadWorkspace(ctx, workspace) }()
+	select {
+	case <-prepared:
+	case err := <-reloaded:
+		close(resume)
+		t.Fatalf("reload skipped optimistic preparation: %v", err)
+	case <-ctx.Done():
+		close(resume)
+		t.Fatal("reload did not prepare", <-reloaded)
+	}
+	if _, err := f.db.ExecContext(ctx, `UPDATE workspace_record_journal_heads SET head=head+1 WHERE workspace_id=?`, f.data.Workspace.ID); err != nil {
+		close(resume)
+		t.Fatal(err)
+	}
+	close(resume)
+	if err := <-reloaded; err != nil {
+		t.Fatal(err)
+	}
+	after, applied, ok := view.residentStamp(workspace)
+	if !ok || after == before || applied != beforeHead+1 {
+		t.Fatalf("journal-head race installed stamp %v at head %d, want changed stamp and head %d (before %v)", after, applied, beforeHead+1, before)
+	}
+	coldIncrementalAssertExact(t, f, view, workspace, "after journal-head race")
+}
+
 func TestColdIncrementalReloadChecksJournalHead(t *testing.T) {
 	for _, reset := range []bool{false, true} {
 		t.Run(fmt.Sprintf("journal_reset=%t", reset), func(t *testing.T) {

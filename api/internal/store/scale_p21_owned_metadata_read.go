@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -217,6 +218,79 @@ func (r *InstalledMetadataRead) Select(ctx context.Context, scope MetadataRecord
 	r.selections[selection] = struct{}{}
 	r.mu.Unlock()
 	return selection, nil
+}
+
+// VisitAPIKeys walks the installed apiKeys collection without materializing
+// the complete directory. Each callback receives one owned record and its
+// admission is released when the callback returns.
+func (r *InstalledMetadataRead) VisitAPIKeys(ctx context.Context, visit func(context.Context, domain.APIKey) error) error {
+	if r == nil || visit == nil {
+		return ErrMetadataRecordQuery
+	}
+	bound, err := r.Context(ctx)
+	if err != nil {
+		return err
+	}
+	var found bool
+	err = r.source.VisitFields(bound, func(name string, node metadataLogicalNode) error {
+		if name != "apiKeys" {
+			return nil
+		}
+		found = true
+		if node.Type().Kind() != reflect.Slice || node.Type().Elem() != reflect.TypeFor[domain.APIKey]() {
+			return ErrMetadataRecordQuery
+		}
+		return node.Children(bound, func(_ reflect.Value, child metadataLogicalNode) error {
+			cost := max(int(child.cost), sw17CredentialFixedWork)
+			if cost > metadataWorkBytes {
+				return ErrMetadataPageBudget
+			}
+			recordCtx, release, err := r.store.admitMetadataWork(bound, cost)
+			if err != nil {
+				if errors.Is(err, ErrMetadataWorkBudget) || errors.Is(err, errMetadataWorkContended) {
+					return ErrMetadataPageBudget
+				}
+				return err
+			}
+			defer release()
+			value, err := child.Value(recordCtx, cost)
+			if err != nil {
+				if errors.Is(err, ErrMetadataWorkBudget) {
+					return ErrMetadataPageBudget
+				}
+				return err
+			}
+			key, ok := value.Interface().(domain.APIKey)
+			if !ok {
+				return ErrMetadataRecordQuery
+			}
+			return visit(recordCtx, key)
+		})
+	})
+	if err == nil && !found {
+		return nil
+	}
+	return err
+}
+
+// APIKeyNameExists checks the installed credential directory without
+// materializing it. The caller supplies the owner and optional record to
+// exclude from a rename check.
+func (s *SQLiteStore) APIKeyNameExists(ctx context.Context, workspace, creatorID, name, excludeID string) (bool, error) {
+	read, found, err := s.BeginInstalledMetadataRead(ctx, workspace)
+	if err != nil || !found {
+		return false, err
+	}
+	defer read.Close()
+	var exists bool
+	err = read.VisitAPIKeys(ctx, func(_ context.Context, key domain.APIKey) error {
+		if key.ID != excludeID && key.RevokedAt == nil && key.CreatorID == creatorID &&
+			strings.EqualFold(strings.TrimSpace(key.Name), name) {
+			exists = true
+		}
+		return nil
+	})
+	return exists, err
 }
 
 func (r *InstalledMetadataRead) Close() {

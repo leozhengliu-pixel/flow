@@ -19,15 +19,14 @@
       "owner": "P21",
       "status": "reviewed",
       "accessors": [
-        "withColdMetadataRequest"
+        "MutateWorkspaceScopedWithAggregate"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "temperature": "hot",
+      "temperatureReason": "Bounded API-key settings write used by active workspace administration.",
       "callers": [
         "POST /api/api-keys (api/cmd/server/main.go:635)"
       ],
-      "coldDispatch": "server/settings_features.go:createAPIKey",
-      "reason": "COLD production route after the original decode, name validation, secret generation and requestActor. Bounded before this, authorization refused every request with 403 (SW450 control run). POST /api/api-keys is registered in scaleP21ColdRoutes: authorization's projection and the metadata-only api_key.created mutation share the replica cold slot; the literal callback (guest refusal, workspace apiKeyPermission, per-creator name uniqueness, scope/admin-scope and team validation, restriction defaults, expiry, staged audit) runs on the cold facade and the existing cold full-metadata publication installs its postimage before output. Flag off unchanged. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real routes through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded: responses, rows, audit, events, publications and installed image == reload."
+      "reason": "Bounded mode decodes and validates the request, then calls createAPIKeyWithStore with the scoped aggregate writer. Flag off keeps the existing cold wrapper. SW450 compares cookie and Bearer authentication, responses, rows, audit, events, publications and installed images across legacy, warm and SQL-reloaded stores."
     },
     "createDocumentTemplate": {
       "owner": "P17",
@@ -238,15 +237,15 @@
       "owner": "P21",
       "status": "reviewed",
       "accessors": [
-        "withColdMetadataRequest"
+        "WorkspaceMetadataScoped",
+        "WorkspaceRole"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "temperature": "hot",
+      "temperatureReason": "Bounded API-key settings read used by active workspace administration.",
       "callers": [
         "GET /api/api-keys (api/cmd/server/main.go:634)"
       ],
-      "coldDispatch": "server/settings_features.go:listAPIKeys",
-      "reason": "COLD production route. Bounded before this, authorization's whole-workspace projection read the server's bounded store for an unregistered route and refused every request with 403 'This resource is outside your teams' (SW450 control run), so the API keys settings page was unusable. GET /api/api-keys is now registered in scaleP21ColdRoutes: authorization projects the viewer's workspace on the replica cold facade and hands it off; listAPIKeysWithStore (coldWorkspaceData: the handoff, else a fresh projection of the refreshed facade, as workspaceData) lists literally. Flag off withColdMetadataRequest runs the literal body on the server's store (workspaceData itself). TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real routes through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded: responses, rows, audit, events, publications and installed image == reload."
+      "reason": "Bounded mode calls listAPIKeysWithStore directly, reading only apiKeys and the live member role through scoped metadata. Flag off keeps the existing cold wrapper. SW450 compares the real route through cookie and Bearer authentication and the route mux across legacy, warm and SQL-reloaded stores."
     },
     "listIntegrations": {
       "owner": "P21",
@@ -355,15 +354,16 @@
       "owner": "P21",
       "status": "reviewed",
       "accessors": [
-        "withColdMetadataRequest"
+        "WorkspaceSettingsMetadata",
+        "WorkspaceRole",
+        "MutateWorkspaceScoped"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "temperature": "hot",
+      "temperatureReason": "Bounded API-key settings write used by active workspace administration.",
       "callers": [
         "DELETE /api/api-keys/{id} (api/cmd/server/main.go:637)"
       ],
-      "coldDispatch": "server/settings_features.go:revokeAPIKey",
-      "reason": "COLD production route. Bounded before this, authorization refused every request with 403 (SW450 control run); its bounded branch (identity-only projection, scoped writer) was unreachable. DELETE /api/api-keys/{id} is registered in scaleP21ColdRoutes; revokeAPIKeyWithStore reads the viewer's role as legacy (workspaceData; bounded coldWorkspaceData on the refreshed facade; auth-disabled bounded keeps admin) and runs the literal api_key.revoked callback (creator/admin predicate, revocation stamp, staged audit) on the cold facade through the existing cold publication, so the key stops authenticating as legacy. Flag off unchanged. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real routes through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded: responses, rows, audit, events, publications and installed image == reload."
+      "reason": "Bounded mode reads workspace identity and role through scoped metadata before the scoped api_key.revoked writer. Flag off keeps the existing cold wrapper. SW450 compares authentication, responses, durable rows, audit, events, publications and installed images across legacy, warm and SQL-reloaded stores."
     },
     "revokeIntegrationOAuth": {
       "owner": "P21",
@@ -384,15 +384,14 @@
       "owner": "P21",
       "status": "reviewed",
       "accessors": [
-        "withColdMetadataRequest"
+        "MutateWorkspaceScoped"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "temperature": "hot",
+      "temperatureReason": "Bounded API-key secret rotation used by active workspace administration.",
       "callers": [
         "POST /api/api-keys/{id}/rotate-secret (api/cmd/server/main.go:638)"
       ],
-      "coldDispatch": "server/settings_features.go:rotateAPIKeySecret",
-      "reason": "COLD production route after its secret generation. Bounded before this, authorization refused every request with 403 (SW450 control run). POST /api/api-keys/{id}/rotate-secret is registered in scaleP21ColdRoutes; the literal api_key.secret_rotated callback (creator/admin and revoked-key checks, new hash/prefix, staged audit) runs on the cold facade through the existing cold publication; the predecessor stops and the replacement starts authenticating as legacy. Flag off unchanged. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real routes through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded: responses, rows, audit, events, publications and installed image == reload."
+      "reason": "Bounded mode calls rotateAPIKeySecretWithStore after secret generation, using the scoped writer. Flag off keeps the existing cold wrapper. SW450 compares authentication, responses, durable rows, audit, events, publications and installed images across legacy, warm and SQL-reloaded stores."
     },
     "startIntegrationOAuth": {
       "owner": "P21",
@@ -411,15 +410,14 @@
       "owner": "P21",
       "status": "reviewed",
       "accessors": [
-        "withColdMetadataRequest"
+        "MutateWorkspaceScopedWithAggregate"
       ],
-      "temperature": "cold",
-      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "temperature": "hot",
+      "temperatureReason": "Bounded API-key settings write used by active workspace administration.",
       "callers": [
         "PATCH /api/api-keys/{id} (api/cmd/server/main.go:636)"
       ],
-      "coldDispatch": "server/settings_features.go:updateAPIKey",
-      "reason": "COLD production route after the original decode and validation (name, scopes, teamIds, teamRestriction, expiresAt). Bounded before this, authorization refused every request with 403 (SW450 control run). PATCH /api/api-keys/{id} is registered in scaleP21ColdRoutes; the literal api_key.updated callback (creator/admin predicate, revoked keys not found, name uniqueness, restriction rules, unchanged-edit ErrNoMutation) runs on the cold facade through the existing cold publication. Flag off unchanged. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real routes through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded: responses, rows, audit, events, publications and installed image == reload."
+      "reason": "Bounded mode decodes and validates the request, then calls updateAPIKeyWithStore with the scoped aggregate writer. Flag off keeps the existing cold wrapper. SW450 compares authentication, responses, durable rows, audit, events, publications and installed images across legacy, warm and SQL-reloaded stores."
     },
     "updateAccountProfile": {
       "owner": "P21",

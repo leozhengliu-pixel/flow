@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Resource reads that build the viewer's whole projection share a bounded
@@ -135,5 +136,95 @@ func TestProjectionGateReleasesTheSlotWhenTheHandlerPanics(t *testing.T) {
 		if len(gate.slots) != 0 {
 			t.Fatalf("slot still held after the handler panicked: %d", len(gate.slots))
 		}
+	}
+}
+
+func TestProjectionGateReleasesColdWriteAfterAuthorization(t *testing.T) {
+	gate := newMetadataReadGate(1, 4, time.Second, 0)
+	request := httptest.NewRequest(http.MethodPatch, "/api/projects/project", nil)
+	ctx, scope := store.WithColdScope(request.Context(), "PATCH /api/projects/{id}")
+	defer scope.Close()
+	hold := &projectionHold{gate: gate}
+	request = request.WithContext(context.WithValue(ctx, projectionHoldKey{}, hold))
+	gate.slots <- struct{}{}
+	if !acquireProjection(request) || hold.held || len(gate.slots) != 1 {
+		t.Fatal("COLD write waited on the shared authorization projection")
+	}
+	hold.mu.Lock()
+	hold.held = true
+	hold.mu.Unlock()
+	releaseColdWriteProjection(request)
+	if hold.held || len(gate.slots) != 0 {
+		t.Fatalf("COLD write retained its authorization projection: held=%v slots=%d", hold.held, len(gate.slots))
+	}
+	if !acquireProjection(request) {
+		t.Fatal("COLD write was not admitted after authorization")
+	}
+	releaseProjection(request)
+	if hold.held || len(gate.slots) != 0 {
+		t.Fatalf("COLD write changed projection ownership after authorization: held=%v slots=%d", hold.held, len(gate.slots))
+	}
+}
+
+func TestProjectionGateRegisteredColdRouteUsesFacadeAdmission(t *testing.T) {
+	gate := newMetadataReadGate(1, 0, time.Second, 0)
+	gate.slots <- struct{}{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/project-statuses", func(http.ResponseWriter, *http.Request) {})
+	request := httptest.NewRequest(http.MethodPost, "/api/project-statuses", nil)
+	ctx, scope := store.WithColdScope(request.Context(), "POST /api/project-statuses")
+	defer scope.Close()
+	ctx = context.WithValue(ctx, coldAuthorizationMuxKey{}, mux)
+	hold := &projectionHold{gate: gate}
+	ctx = context.WithValue(ctx, projectionHoldKey{}, hold)
+	request = request.WithContext(ctx)
+	if !acquireProjection(request) {
+		t.Fatal("registered COLD route waited on the projection gate")
+	}
+	if len(gate.slots) != 1 {
+		t.Fatalf("registered COLD route changed the projection gate: %d", len(gate.slots))
+	}
+
+	unregistered := httptest.NewRequest(http.MethodPatch, "/api/projects/project", nil)
+	unregisteredContext, unregisteredScope := store.WithColdScope(unregistered.Context(), "PATCH /api/projects/{id}")
+	defer unregisteredScope.Close()
+	unregisteredContext = context.WithValue(unregisteredContext, projectionHoldKey{}, &projectionHold{gate: gate})
+	unregistered = unregistered.WithContext(unregisteredContext)
+	if !acquireProjection(unregistered) {
+		t.Fatal("unregistered COLD write waited on the projection gate")
+	}
+	if len(gate.slots) != 1 {
+		t.Fatalf("unregistered COLD write changed the projection gate: %d", len(gate.slots))
+	}
+}
+
+func TestProjectionGateKeepsHotAndReadProjections(t *testing.T) {
+	gate := newMetadataReadGate(2, 4, time.Second, 0)
+	for _, test := range []struct {
+		name   string
+		method string
+		cold   bool
+	}{
+		{name: "hot-write", method: http.MethodPatch},
+		{name: "cold-read", method: http.MethodGet, cold: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(test.method, "/api/projects/project", nil)
+			if test.cold {
+				ctx, scope := store.WithColdScope(request.Context(), "GET /api/projects/{id}")
+				defer scope.Close()
+				request = request.WithContext(ctx)
+			}
+			hold := &projectionHold{gate: gate}
+			request = request.WithContext(context.WithValue(request.Context(), projectionHoldKey{}, hold))
+			if !acquireProjection(request) {
+				t.Fatal("projection was not admitted")
+			}
+			releaseColdWriteProjection(request)
+			if !hold.held || len(gate.slots) == 0 {
+				t.Fatalf("projection was released for %s", test.name)
+			}
+			releaseProjection(request)
+		})
 	}
 }

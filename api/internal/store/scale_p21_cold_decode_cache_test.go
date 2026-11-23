@@ -357,6 +357,75 @@ func TestColdProjectionSharedImage(t *testing.T) {
 	coldDecodeAssertEqual(t, "image after concurrent projections", image.data, want)
 }
 
+func TestColdImageCopyReusePreservesIsolation(t *testing.T) {
+	data := domain.Bootstrap{Projects: make([]domain.Project, 16384)}
+	data.Projects[0] = domain.Project{ID: "source", LabelIDs: []string{"source"}, Lead: &domain.User{ID: "owner"}}
+	ordinary := coldImageCopy(context.Background(), data, nil)
+	if !reflect.DeepEqual(ordinary, data) {
+		t.Fatal("ordinary COLD copy differs from its source")
+	}
+
+	ctx, lease, _ := beginColdCopyReuse(context.Background())
+	first := coldImageCopy(ctx, data, nil)
+	first.Projects[0].ID = "first"
+	first.Projects[0].LabelIDs[0] = "first"
+	first.Projects[0].Lead.ID = "first"
+	if data.Projects[0].ID != "source" || data.Projects[0].LabelIDs[0] != "source" || data.Projects[0].Lead.ID != "owner" {
+		t.Fatal("the first COLD copy changed its source")
+	}
+	lease.Close()
+
+	ctx, lease, _ = beginColdCopyReuse(context.Background())
+	second := coldImageCopy(ctx, data, nil)
+	if !reflect.DeepEqual(second, data) {
+		t.Fatal("reused COLD copy differs from its source")
+	}
+	second.Projects[0].ID = "second"
+	second.Projects[0].LabelIDs[0] = "second"
+	second.Projects[0].Lead.ID = "second"
+	if data.Projects[0].ID != "source" || data.Projects[0].LabelIDs[0] != "source" || data.Projects[0].Lead.ID != "owner" {
+		t.Fatal("the reused COLD copy changed its source")
+	}
+	lease.Close()
+}
+
+// A facade lock held by a panicking COLD callback cannot be acquired during
+// scope cleanup. Keep the pooled arrays leased in that SW554 case so they
+// cannot be reused while the abandoned facade still points at them.
+func TestColdScopeCloseDefersCopyReuseWhenViewLocked(t *testing.T) {
+	data := domain.Bootstrap{Projects: make([]domain.Project, 16384)}
+	ctx, lease, _ := beginColdCopyReuse(t.Context())
+	_ = coldImageCopy(ctx, data, nil)
+	lease.mu.Lock()
+	bufferCount := len(lease.buffers)
+	lease.mu.Unlock()
+	if bufferCount == 0 {
+		t.Fatal("large COLD copy did not retain pooled storage")
+	}
+
+	_, scope := WithColdScope(t.Context(), "copy reuse close")
+	view := &SQLiteStore{}
+	view.mu.Lock()
+	scope.mu.Lock()
+	scope.view, scope.viewStore, scope.copyReuse = view, view, lease
+	scope.mu.Unlock()
+	scope.Close()
+
+	lease.mu.Lock()
+	closed, retained := lease.closed, len(lease.buffers)
+	lease.mu.Unlock()
+	if closed || retained != bufferCount {
+		t.Fatalf("locked facade cleanup changed the pooled lease: closed=%t buffers=%d want closed=false buffers=%d", closed, retained, bufferCount)
+	}
+	view.mu.Unlock()
+	lease.Close()
+	lease.mu.Lock()
+	defer lease.mu.Unlock()
+	if !lease.closed || len(lease.buffers) != 0 {
+		t.Fatal("explicit cleanup did not release deferred COLD copy storage")
+	}
+}
+
 // The cache keeps at most its byte budget (least recently used images go
 // first), keeps nothing with a budget of 0 or below one image, and drops an
 // image left unused for the idle period.

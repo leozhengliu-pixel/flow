@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"flow/api/internal/coordination"
 	"flow/api/internal/domain"
 )
 
@@ -391,5 +394,32 @@ func TestScaleP21ColdFullWriteDefaultCoordinatorBinding(t *testing.T) {
 	var rows int
 	if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field='settings' AND record_key='cold-write-target'`, second).Scan(&rows); err != nil || rows != 0 {
 		t.Fatal("new default was changed under old coordinator key", err, rows)
+	}
+}
+
+func TestScaleP21ColdLegacyWriteRetriesBusyWorkspaceLock(t *testing.T) {
+	_, view, workspace := scaleP21ColdWriteFixture(t)
+	var attempts atomic.Int64
+	view.SetWorkspaceCoordinator(scaleP21ColdWriteCoordinator(func(ctx context.Context, key string, apply func() error) error {
+		if attempts.Add(1) == 1 {
+			return fmt.Errorf("busy: %w", coordination.ErrWorkspaceLockBusy)
+		}
+		return apply()
+	}))
+	before := coldWorkspaceLockRetries.Load()
+	err := view.coldLegacyWrite(WithColdWork(t.Context(), "cold-lock-retry"), workspace, func(ctx context.Context, facade *SQLiteStore) error {
+		return facade.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return nil })
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := attempts.Load(); got != 2 {
+		t.Fatalf("workspace lock attempts = %d, want 2", got)
+	}
+	if got := coldWorkspaceLockRetries.Load() - before; got != 1 {
+		t.Fatalf("cold workspace lock retries = %d, want 1", got)
+	}
+	if got := ColdSlotsHeldForTesting(); got != 0 {
+		t.Fatalf("%d COLD slots leaked", got)
 	}
 }
