@@ -520,6 +520,11 @@ func (s *server) processChatClaimedJob(ctx context.Context, job domain.ChatJob) 
 }
 
 func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {
+	if s.store.BoundedMetadataEnabled() {
+		var closeReads func()
+		ctx, closeReads = beginMetadataOutputReads(ctx)
+		defer closeReads()
+	}
 	record, err := s.chatJobIntegration(ctx, job)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err

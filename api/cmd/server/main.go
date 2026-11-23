@@ -2388,6 +2388,7 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 
 // purgeTeam permanently deletes a team and everything it owns.
 func (s *server) purgeTeam(ctx context.Context, workspaceKey, teamID string) error {
+	ctx = store.WithColdWork(ctx, "purge team")
 	err := s.store.MutateWorkspace(ctx, workspaceKey, "team.deleted", teamID, nil, func(data *domain.Bootstrap) error {
 		err := store.ApplyTeamDeletion(data, teamID)
 		if errors.Is(err, store.ErrTeamNotFound) {
@@ -3706,7 +3707,13 @@ func (s *server) updateInitiative(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Initiative
-	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "edit", id, input, &updated, &input), workspaceKey(r), favoriteMutationEvent("initiative.updated", input), id, input, func(data *domain.Bootstrap) error {
+	ctx := r.Context()
+	// An initiative edit can reconcile reciprocal project links even when
+	// projectIds is omitted. The bounded point writer cannot own that cascade.
+	if !s.store.BoundedMetadataEnabled() {
+		ctx = projectRecordScope(ctx, "initiative", "edit", id, input, &updated, &input)
+	}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), favoriteMutationEvent("initiative.updated", input), id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err

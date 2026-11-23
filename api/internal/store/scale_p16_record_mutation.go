@@ -348,7 +348,10 @@ func scaleP16WriteChanges(ctx context.Context, tx *sqlTx, workspace string, refs
 			change.order = order
 		} else if planned, ok := metadataAppendOrdinal(ctx, key); ok {
 			change.order = planned
-		} else if !updateMetadataField(change.field) {
+		} else if field, ok := metadataFieldByName(change.field); ok && reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type.Kind() == reflect.Slice {
+			// The splitter already assigns map keys and nested updates their
+			// canonical ordinals. Allocate a collection position only for an
+			// inserted element in a top-level array.
 			bound, offset := "MAX", 1
 			if change.field == "trash" || change.field == "favorites" {
 				bound, offset = "MIN", -1

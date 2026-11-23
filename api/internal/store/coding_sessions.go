@@ -189,13 +189,15 @@ func (s *SQLiteStore) endedCodingAnchor(ctx context.Context, anchor domain.Agent
 	if anchor.AppUserID != "" && task.AppUserID != anchor.AppUserID {
 		return nil, ErrCodingAnchorRevoked
 	}
-	app, err := s.ApplicationByUser(ctx, task.AppUserID)
+	read, err := s.BeginApplicationAccessRead(ctx, task.AppUserID, "full")
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrCodingAnchorRevoked
 	}
 	if err != nil {
 		return nil, err
 	}
+	defer read.Close()
+	app := read.Installation
 	if app.WorkspaceKey != anchor.WorkspaceKey || !app.Active || task.TeamID != "" && !slices.Contains(app.AccessTeamIDs(), task.TeamID) {
 		return nil, ErrCodingAnchorRevoked
 	}

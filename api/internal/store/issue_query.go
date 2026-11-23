@@ -825,6 +825,13 @@ func (s *SQLiteStore) applyIssueRecordScope(ctx context.Context, query *IssueRec
 func (s *SQLiteStore) releaseAssociatedIssueIDs(ctx context.Context, workspace string, releaseIDs []string) ([]string, error) {
 	ids := []string{}
 	_, data, ok := s.workspaceReadSource(ctx, workspace)
+	if !ok && s.BoundedMetadataEnabled() {
+		var err error
+		data, ok, err = s.WorkspaceMetadataFieldsScoped(ctx, workspace, MetadataRecordScope{Fields: []string{"releases"}}, "releases")
+		if err != nil {
+			return nil, err
+		}
+	}
 	if !ok {
 		return ids, nil
 	}

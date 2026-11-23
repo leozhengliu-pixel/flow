@@ -130,6 +130,7 @@ func normalizeCodeReviewEvent(provider string, header http.Header, event *extern
 // workspace's CodeReview list. The connection webhook above and the GitHub
 // App webhook (github_app.go, coding sessions track D) share it.
 func (s *server) applyCodeReviewEvent(ctx context.Context, workspace, provider, eventID string, event externalCodeReviewEvent) (domain.CodeReview, error) {
+	ctx = store.WithColdWork(ctx, "code review webhook")
 	var updated domain.CodeReview
 	var mergedNow bool
 	var mergedWorkspace string

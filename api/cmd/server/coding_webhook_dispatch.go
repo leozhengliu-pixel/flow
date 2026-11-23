@@ -116,6 +116,8 @@ func normalizeCodingHarness(value string) string {
 // builtinAgentUserID is the workspace's built-in Flow agent user ("" when
 // it is not installed).
 func (s *server) builtinAgentUserID(ctx context.Context, workspace string) string {
+	ctx, finish := beginMetadataOutputReads(ctx)
+	defer finish()
 	applications, err := s.store.ListApplications(ctx, workspace)
 	if err != nil {
 		return ""

@@ -541,6 +541,8 @@ func (s *server) applyAgentMessageChangesLocked(w http.ResponseWriter, r *http.R
 
 // applyAgentChange undoes (or, with undo false, re-applies) one recorded change and returns its new record.
 func (s *server) applyAgentChange(ctx context.Context, actor mcpActor, call domain.AgentToolCall, undo bool) (domain.AgentChange, error) {
+	ctx, finish := beginMetadataOutputReads(store.WithColdWork(ctx, "agent change"))
+	defer finish()
 	change := *call.Change
 	change.Note, change.Skipped = "", nil
 	var err error
