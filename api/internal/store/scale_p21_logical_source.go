@@ -83,6 +83,7 @@ type metadataLogicalStorage struct {
 	locations     []*time.Location
 	locationBytes int64
 	bytes         int64
+	diskDemand    *atomic.Int64
 	genericStore  *SQLiteStore
 	// group is the lineage this storage was written in
 	// (scale_p21_logical_spool_group.go): it holds the descriptor charge and
@@ -155,9 +156,9 @@ type metadataLogicalBuilder struct {
 	// scale_p21_logical_written_index.go).
 	collectionIndex *writtenChildIndex
 	path            [metadataLogicalDepth]metadataLogicalAncestor
-	buffer      [32 << 10]byte
-	finished    bool
-	closed      bool
+	buffer          [32 << 10]byte
+	finished        bool
+	closed          bool
 }
 
 type metadataLogicalAncestor struct {
@@ -426,6 +427,9 @@ func (s *metadataLogicalStorage) Release() {
 		// An orphan still occupies the temporary volume and keeps its charge.
 		if err := s.discard(); err == nil || errors.Is(err, os.ErrNotExist) {
 			metadataLogicalDiskUsed.Add(-s.bytes)
+			if s.diskDemand != nil {
+				s.diskDemand.Add(-s.bytes)
+			}
 		}
 		s.pendingMu.Lock()
 		writeCharge, resident := s.writeCharge, s.resident
@@ -471,7 +475,12 @@ func (b *metadataLogicalBuilder) write(data []byte) error {
 	if int64(len(data)) > metadataLogicalDiskBytes-b.offset {
 		return ErrMetadataWorkBudget
 	}
-	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, int64(len(data)), metadataLogicalDiskCap()) {
+	limit := metadataLogicalDiskCap()
+	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, int64(len(data)), limit) {
+		if metadataLogicalDiskContended(b.storage.diskDemand, int64(len(data)), limit) {
+			// Disk pressure will not wake a waiter on the memory work budget.
+			return ErrRecordSpoolContended
+		}
 		return ErrMetadataWorkBudget
 	}
 	count := len(data)
@@ -482,6 +491,9 @@ func (b *metadataLogicalBuilder) write(data []byte) error {
 	b.offset += int64(count)
 	b.storage.bytes += int64(count)
 	metadataLogicalDiskUsed.Add(int64(count) - int64(len(data)))
+	if b.storage.diskDemand != nil {
+		b.storage.diskDemand.Add(int64(count))
+	}
 	if err == nil && count != len(data) {
 		return io.ErrShortWrite
 	}

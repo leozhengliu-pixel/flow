@@ -61,6 +61,53 @@ func TestScaleP15BSpoolConfigurationAndAccounting(t *testing.T) {
 	}
 }
 
+func TestScaleP15BOwnedSpoolContention(t *testing.T) {
+	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", "17")
+	t.Setenv("TMPDIR", t.TempDir())
+	other, err := NewRecordSpool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	if _, err := other.Write(make([]byte, 17)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newRecordSpool(true); !errors.Is(err, ErrRecordSpoolContended) {
+		t.Fatal("occupied spool budget must report contention")
+	}
+	if err := other.Close(); err != nil {
+		t.Fatal(err)
+	}
+	spool, err := newRecordSpool(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer spool.Close()
+	if _, err := spool.Write(make([]byte, 5)); err != nil {
+		t.Fatal(err)
+	}
+	other, err = NewRecordSpool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	if _, err := other.Write(make([]byte, 10)); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := spool.Write(make([]byte, 13)); n != 0 || !errors.Is(err, ErrRecordSpoolBudget) || errors.Is(err, ErrRecordSpoolContended) {
+		t.Fatal("a spool larger than the budget must stay a size refusal")
+	}
+	if n, err := spool.Write(make([]byte, 7)); n != 0 || !errors.Is(err, ErrRecordSpoolContended) {
+		t.Fatal("a fitting spool must report restraint by concurrent work")
+	}
+	if err := other.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := spool.Write(make([]byte, 7)); n != 7 || err != nil {
+		t.Fatal("the spool must be writable once other work releases")
+	}
+}
+
 func TestScaleP15BConcurrentSpoolsStayWithinProcessBudget(t *testing.T) {
 	const limit = 256 << 10
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", strconv.Itoa(limit))

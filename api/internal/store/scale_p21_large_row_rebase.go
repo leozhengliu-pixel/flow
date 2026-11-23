@@ -91,8 +91,8 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 		return true, err
 	}
 	defer canonical.Close()
-	if !canonical.CanAppend(size) {
-		return true, ErrRecordSpoolBudget
+	if err := canonical.checkAppend(size); err != nil {
+		return true, err
 	}
 	reader := &canonicalMetadataReader{ctx: ctx, tx: p.tx, workspace: p.workspace, key: RecordKey{name, row.id}, size: size}
 	if copied, err := io.CopyBuffer(canonical, reader, make([]byte, metadataRecordChunkBytes)); err != nil || copied != size {

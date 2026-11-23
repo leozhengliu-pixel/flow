@@ -38,6 +38,7 @@ type resourceAccessPolicy struct {
 // small snapshot. Credential scope stays bound separately from the epoch.
 func (s *SQLiteStore) ResolveAccess(ctx context.Context, workspace, principal string, key *domain.APIKey) (AccessContext, error) {
 	if s.metadataResidency != nil {
+		ctx = trackMetadataWorkDemand(ctx)
 		admitted, release, err := s.admitMetadataWork(ctx, 2<<20)
 		if err != nil {
 			return AccessContext{}, err

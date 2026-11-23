@@ -32,6 +32,24 @@ func IsDatabaseError(err error) bool {
 	return false
 }
 
+// ErrDatabaseWriteBusy means a database lock conflict prevented a mutation
+// from committing. Callers can retry the entire operation.
+var ErrDatabaseWriteBusy = errors.New("database write is busy")
+
+// databaseLockWait matches server replies that explicitly refuse a lock,
+// excluding connection failures and client-side commit timeouts.
+func databaseLockWait(err error) bool {
+	var mysqlErr *mysql.MySQLError
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.As(err, &mysqlErr):
+		return mysqlErr.Number == 1205
+	case errors.As(err, &pgErr):
+		return pgErr.Code == "55P03"
+	}
+	return false
+}
+
 // sqliteBusy reports SQLite's SQLITE_BUSY (any extended code).
 func sqliteBusy(err error) bool {
 	var sqliteErr *sqlite.Error

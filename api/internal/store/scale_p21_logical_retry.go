@@ -357,8 +357,8 @@ func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, work
 		if len(keys) > MetadataRecordBatchMaxKeys {
 			return ErrMetadataPageBudget
 		}
-		ctx = metadataLogicalUnpinnedContext(ctx)
-		ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, 32<<20)
+		retryCtx := trackMetadataWorkDemand(metadataLogicalUnpinnedContext(ctx))
+		ctx, release, err := s.tryAdmitAdditionalMetadataWork(retryCtx, 32<<20)
 		if err != nil {
 			return err
 		}

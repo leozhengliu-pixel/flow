@@ -72,6 +72,7 @@ func (s *SQLiteStore) MutateWorkflowRun(ctx context.Context, workspace, workflow
 	defer func() { trace.report(workspace, "workflow_run.executed", err) }()
 	traceStart(ctx, "workflow")
 	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)
+	ctx = trackMetadataWorkDemand(ctx)
 	ctx, finish, err := s.startMetadataTimestampInputs(ctx)
 	if err != nil {
 		return err

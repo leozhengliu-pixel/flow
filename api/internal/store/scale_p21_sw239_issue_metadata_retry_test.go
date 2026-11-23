@@ -262,6 +262,18 @@ func scaleP21SW239IssueMetadataConflictRetry(t *testing.T, narrow bool) {
 					if !errors.Is(conflict, ErrConcurrentWrite) || !typed || !reflect.DeepEqual(keys, []metadataRecordKey{{"documents", document.ID}}) {
 						t.Fatal("fixture did not create the real keyed document conflict", keys, conflict)
 					}
+					if bounded {
+						before := scaleP21SW63EventIDs(t, source, workspace)
+						release, err := source.HoldMetadataWorkForTesting(source.MetadataWorkLimitForTesting() - 31<<20)
+						if err != nil {
+							t.Fatal("could not hold the conflict refresh budget")
+						}
+						err = source.refreshConflictedLogicalMetadata(t.Context(), workspace)(conflict)
+						release()
+						if !MetadataWorkContended(err) || len(scaleP21SW63NewEvents(t, source, workspace, before)) != 0 {
+							t.Fatal("held conflict refresh did not refuse as contention without writing")
+						}
+					}
 					var callbacks []scaleP21SW239Callback
 					var literalRefresh, logicalRefresh atomic.Int32
 					ctx := WithSQLStatementObserver(t.Context(), func(query string) {

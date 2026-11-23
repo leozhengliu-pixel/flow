@@ -36,8 +36,15 @@ func TestMutationAttemptsRetryDatabaseDeadlocks(t *testing.T) {
 		}
 		calls = 0
 		err = mutationAttempts(context.Background(), 2, func(context.Context) error { calls++; return wrapped }, nil)
-		if !errors.Is(err, deadlock) || calls != 2 {
+		if !errors.Is(err, deadlock) || !errors.Is(err, ErrDatabaseWriteBusy) || calls != 2 {
 			t.Fatalf("%v: bounded attempts: err %v after %d", deadlock, err, calls)
+		}
+	}
+	for _, lock := range []error{&mysql.MySQLError{Number: 1205}, &pgconn.PgError{Code: "55P03"}} {
+		calls := 0
+		err := mutationAttempts(t.Context(), 3, func(context.Context) error { calls++; return lock }, nil)
+		if !errors.Is(err, lock) || !errors.Is(err, ErrDatabaseWriteBusy) || calls != 1 {
+			t.Fatal("a rolled back lock wait must return a classified refusal")
 		}
 	}
 	other := &mysql.MySQLError{Number: 1062, Message: "Duplicate entry"}
@@ -45,7 +52,7 @@ func TestMutationAttemptsRetryDatabaseDeadlocks(t *testing.T) {
 		t.Fatal("a duplicate key is not a deadlock")
 	}
 	calls := 0
-	if err := mutationAttempts(context.Background(), 3, func(context.Context) error { calls++; return other }, nil); !errors.Is(err, other) || calls != 1 {
+	if err := mutationAttempts(context.Background(), 3, func(context.Context) error { calls++; return other }, nil); !errors.Is(err, other) || errors.Is(err, ErrDatabaseWriteBusy) || calls != 1 {
 		t.Fatalf("other errors run once: err %v after %d", err, calls)
 	}
 }

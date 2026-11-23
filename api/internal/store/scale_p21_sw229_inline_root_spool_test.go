@@ -224,9 +224,10 @@ func TestScaleP21SW229InlineRootCancellationAndFailures(t *testing.T) {
 				defer func() { view.metadataResidency.work.limit = previous }()
 				want = ErrMetadataWorkBudget
 			case "disk-denial":
-				metadataLogicalDiskUsed.Add(metadataLogicalDiskBytes)
-				defer metadataLogicalDiskUsed.Add(-metadataLogicalDiskBytes)
-				disk += metadataLogicalDiskBytes
+				limit := metadataLogicalDiskCap()
+				metadataLogicalDiskUsed.Add(limit)
+				defer metadataLogicalDiskUsed.Add(-limit)
+				disk += limit
 				want = ErrRecordSpoolBudget
 			}
 			root, err := view.scanMetadataInlineRoot(ctx, tx, workspace, size)

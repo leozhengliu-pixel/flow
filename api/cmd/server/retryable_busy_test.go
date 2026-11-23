@@ -63,3 +63,19 @@ func TestWriteSyncErrorMapsBusy(t *testing.T) {
 		t.Fatalf("%d %q", w.Code, w.Header().Get("Retry-After"))
 	}
 }
+
+func TestMutationBusyPreservesPermanentRefusals(t *testing.T) {
+	for _, err := range []error{store.ErrDatabaseWriteBusy, store.ErrRecordSpoolContended} {
+		w := httptest.NewRecorder()
+		respondMutation(w, err, http.StatusCreated, nil)
+		if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "2" {
+			t.Fatalf("transient write refusal returned %d", w.Code)
+		}
+	}
+	for _, err := range []error{store.ErrMetadataWorkBudget, store.ErrRecordSpoolBudget, context.DeadlineExceeded} {
+		w := httptest.NewRecorder()
+		if writeStoreBusy(w, err) || w.Header().Get("Retry-After") != "" {
+			t.Fatal("classified a permanent or uncertain write failure as retryable")
+		}
+	}
+}

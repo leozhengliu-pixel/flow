@@ -262,6 +262,9 @@ func (r *Redis) WithWorkspaceLock(ctx context.Context, workspace string, action 
 	for {
 		acquired, err := r.client.SetNX(ctx, key, token, r.lockTTL).Result()
 		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("%w: %w", ErrWorkspaceLockBusy, err)
+			}
 			return fmt.Errorf("acquire Redis workspace lock: %w", err)
 		}
 		if acquired {
@@ -272,7 +275,11 @@ func (r *Redis) WithWorkspaceLock(ctx context.Context, workspace string, action 
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			err := ctx.Err()
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("%w: %w", ErrWorkspaceLockBusy, err)
+			}
+			return err
 		case <-time.After(25 * time.Millisecond):
 		}
 	}

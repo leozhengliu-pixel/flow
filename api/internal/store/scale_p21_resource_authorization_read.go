@@ -49,6 +49,7 @@ func (s *SQLiteStore) BeginResourceAuthorizationRead(ctx context.Context, access
 	if kind != "projects" && kind != "initiatives" {
 		return nil, sql.ErrNoRows
 	}
+	ctx = trackMetadataWorkDemand(ctx)
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
 	read := &ResourceAuthorizationRead{owner: &ResourceRead{store: s}}
 	defer func() {
@@ -202,8 +203,8 @@ func (r *ResourceAuthorizationRead) header(ctx context.Context, tx *sqlTx, works
 			return reflect.Value{}, err
 		}
 		defer spool.Close()
-		if !spool.CanAppend(size) {
-			return reflect.Value{}, ErrRecordSpoolBudget
+		if err := spool.checkAppend(size); err != nil {
+			return reflect.Value{}, err
 		}
 		reader := &canonicalMetadataReader{ctx: ctx, tx: tx, workspace: workspace, key: RecordKey{Kind: kind, ID: key}, size: size}
 		count, err := io.CopyBuffer(spool, reader, make([]byte, metadataRecordChunkBytes))

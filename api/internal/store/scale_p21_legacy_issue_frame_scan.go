@@ -198,7 +198,10 @@ func (s *SQLiteStore) visitLegacyIssueFrame(ctx context.Context, tx *sqlTx, work
 		return err
 	}
 	defer func() { err = errors.Join(err, spool.Close()) }()
-	if !spool.CanAppend(header.size) {
+	if err := spool.checkAppend(header.size); err != nil {
+		if errors.Is(err, ErrRecordSpoolContended) {
+			return err
+		}
 		return ErrMetadataWorkBudget
 	}
 	reader := &legacyIssueFrameReaderAt{ctx: ctx, tx: tx, workspace: workspace, header: header, length: work.byteLength("data")}

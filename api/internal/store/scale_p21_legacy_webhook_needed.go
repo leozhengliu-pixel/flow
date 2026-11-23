@@ -12,7 +12,7 @@ func (s *SQLiteStore) boundedLegacyWebhookNeeded(ctx context.Context, workspace 
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)
+	ctx = trackMetadataWorkDemand(context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil))
 	owner := &ResourceRead{store: s}
 	defer owner.Close()
 	s.mu.RLock()

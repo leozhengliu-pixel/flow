@@ -738,6 +738,9 @@ func residentDeadlockFallback(err error, outcome *residentWriteOutcome) error {
 	if !outcome.written && databaseDeadlock(err) {
 		return residentFallback("concurrent commit")
 	}
+	if !outcome.written && databaseLockWait(err) {
+		return fmt.Errorf("%w: %w", ErrDatabaseWriteBusy, err)
+	}
 	return err
 }
 

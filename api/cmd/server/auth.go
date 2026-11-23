@@ -754,17 +754,21 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			return false
 		}
 	}
+	return s.authorizeResourceRequest(w, r, key, user.ID)
+}
+
+func (s *server) authorizeResourceRequest(w http.ResponseWriter, r *http.Request, workspace, userID string) bool {
 	// AUTH_DISABLED previously skipped authorizeWorkspaceRequest entirely, so
 	// team-scoped resourceAllowed checks must not block local/dev fixtures.
-	if !s.authDisabled && !s.resourceAllowed(r, key, user.ID) {
-		if retryAfter, refused := projectionRefused(r); refused {
-			writeProjectionBusy(w, retryAfter)
-			return false
-		}
-		writeError(w, http.StatusForbidden, "This resource is outside your teams")
-		return false
+	if s.authDisabled || s.resourceAllowed(r, workspace, userID) {
+		return true
 	}
-	return true
+	if retryAfter, refused := projectionRefused(r); refused {
+		writeProjectionBusy(w, retryAfter)
+	} else {
+		writeError(w, http.StatusForbidden, "This resource is outside your teams")
+	}
+	return false
 }
 
 // trashedReleasePipelineAdministrable applies the reference app's canAdministerPipeline to

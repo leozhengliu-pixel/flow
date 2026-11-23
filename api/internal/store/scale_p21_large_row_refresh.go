@@ -51,9 +51,9 @@ func (s *SQLiteStore) readLargeRowRefresh(ctx context.Context, workspace string,
 	if err != nil {
 		return nil, false, err
 	}
-	if !spool.CanAppend(size) {
+	if err := spool.checkAppend(size); err != nil {
 		spool.Close()
-		return nil, false, ErrRecordSpoolBudget
+		return nil, false, err
 	}
 	reader := &canonicalMetadataReader{ctx: ctx, tx: tx, workspace: workspace, key: RecordKey{key.field, key.key}, size: size}
 	if copied, err := io.CopyBuffer(spool, reader, make([]byte, metadataRecordChunkBytes)); err != nil || copied != size {

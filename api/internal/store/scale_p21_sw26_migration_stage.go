@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync/atomic"
 )
 
 const sw26MigrationStageChunk = int64(1 << 20)
@@ -16,6 +17,7 @@ type sw26MigrationStage struct {
 	path     string
 	reserved int64
 	logical  bool
+	demand   *atomic.Int64
 }
 
 func sw26MigrationReserve(bytes int64) error {
@@ -35,7 +37,7 @@ func sw26NewMigrationStage(ctx context.Context) (_ *sw26MigrationStage, err erro
 		return nil, err
 	}
 	config, _ := ctx.Value(metadataLogicalScratchKey{}).(metadataLogicalScratch)
-	stage := &sw26MigrationStage{logical: config.logical}
+	stage := &sw26MigrationStage{logical: config.logical, demand: metadataLogicalDiskDemand(ctx)}
 	if err := stage.reserve(sw26MigrationStageChunk); err != nil {
 		return nil, err
 	}
@@ -125,6 +127,9 @@ func (s *sw26MigrationStage) Close() error {
 	}
 	if s.logical {
 		metadataLogicalDiskUsed.Add(-s.reserved)
+		if s.demand != nil {
+			s.demand.Add(-s.reserved)
+		}
 	} else {
 		recordSpoolBytes.Add(-s.reserved)
 	}
@@ -136,8 +141,15 @@ func (s *sw26MigrationStage) reserve(bytes int64) error {
 	if !s.logical {
 		return sw26MigrationReserve(bytes)
 	}
-	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, bytes, metadataLogicalDiskCap()) {
+	limit := metadataLogicalDiskCap()
+	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, bytes, limit) {
+		if metadataLogicalDiskContended(s.demand, bytes, limit) {
+			return ErrRecordSpoolContended
+		}
 		return ErrRecordSpoolBudget
+	}
+	if s.demand != nil {
+		s.demand.Add(bytes)
 	}
 	return nil
 }
