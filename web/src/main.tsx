@@ -1,48 +1,92 @@
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './styles/tokens.css'
+import './styles/foundations.css'
+import App from './App.tsx'
+import './styles/pill-overrides.css'
+import './styles/micro-audit-overrides.css'
+import './components/ui/tooltip.css'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { I18nProvider } from './i18n/i18n'
+import { prepareInitialLocale } from './i18n/locale'
 import { initializeTheme } from './lib/theme'
 import { installStaleChunkReload } from './lib/stale-chunk-reload'
+import { preloadInitialRoute, preloadRoute } from './lib/route-preload'
 import { registerServiceWorker } from './lib/service-worker'
+import { renderMermaidPreview } from './components/issue/editor/mermaid-preview'
+import { ThemedToaster } from './components/ui/themed-toaster'
+import { ActionDialogHost } from './components/ui/action-dialogs'
+import { DueDateDialogHost } from './components/issue/due-date-dialog'
+import { LightboxEditorProvider } from './components/editor/lightbox-editor-provider'
+import { TooltipProvider } from './components/ui/tooltip'
+import { TitleTooltipBridge } from './components/ui/title-tooltip-bridge'
+import './i18n/i18n.css'
+import { FlowMotionProvider } from './components/ui/motion'
+import './styles/motion.css'
+import './styles/light-parity.css'
+import './styles/picker-parity.css'
+import './styles/dialog-placement.css'
+import './styles/mobile-shell.css'
+import './components/ui/menu-highlight.css'
 import { prepareStartupSnapshot } from './lib/local-snapshot'
-import { initializeLocalStore } from './lib/local-store-db'
-import { localStoreRoute, preloadLocalWorkspace, prepareLocalStartup } from './lib/local-store-resume'
+import { syncV2Enabled } from './lib/sync-client'
+import type { LocalStartup } from './lib/local-store-resume'
 import { beginStartup } from './lib/startup'
-import { fetchAccountBootstrap, fetchAuthSession } from './lib/api-startup'
-import type { fetchBootstrap } from './lib/api'
+import { fetchAccountBootstrap, fetchAuthSession, fetchBootstrap } from './lib/api'
 import { isProjectListRoute, parseAppRoute } from './lib/app-routes'
+import { RouteError } from './components/layout/route-error'
 
-// Start authorization and the retained-store read while the UI modules load.
-const syncV2 = import.meta.env.VITE_SYNC_V2 === 'true'
+const syncV2 = syncV2Enabled()
+const localStoreBuild = import.meta.env.VITE_LOCAL_STORE === 'true' && syncV2
 const route = parseAppRoute(window.location.pathname, window.location.search)
-const localIssues = localStoreRoute(route)
-const workspaceKey = 'workspaceSlug' in route ? route.workspaceSlug ?? '' : ''
-const startup = !syncV2 || localIssues
-  ? beginStartup({
-    fetchSession: fetchAuthSession, fetchAccount: fetchAccountBootstrap,
-    fetchBootstrap: (...args: Parameters<typeof fetchBootstrap>) => import('./lib/api').then(api => api.fetchBootstrap(...args)),
-  }, {
-    requestedWorkspaceKey: workspaceKey,
+
+// The session, account and remembered-workspace requests start now instead of after the first render (App takes
+// them over), and a repeat visit paints from the local workspace snapshot read alongside them.
+if (!syncV2) {
+  beginStartup({ fetchSession: fetchAuthSession, fetchAccount: fetchAccountBootstrap, fetchBootstrap }, {
+    requestedWorkspaceKey: ('workspaceSlug' in route ? route.workspaceSlug : '') ?? '',
     isRoot: route.kind === 'root',
     projection: isProjectListRoute(route) ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined,
-    skipSpeculative: localIssues || undefined,
-  }) : undefined
+  })
+}
 const startupSnapshotRead = prepareStartupSnapshot(window.location.pathname, { enabled: !syncV2 }).catch(() => undefined)
-initializeLocalStore()
-const localStartup = startup && localIssues && workspaceKey && preloadLocalWorkspace(workspaceKey)
-  ? prepareLocalStartup(startup.ready, workspaceKey).catch(() => undefined) : undefined
 installStaleChunkReload()
+// Fetch the current route's page chunks now, in parallel with the session/bootstrap requests, instead of after the data lands.
+preloadInitialRoute()
 registerServiceWorker()
 initializeTheme()
+window.__flowMermaidPreview = renderMermaidPreview
 
-const routePreload = import('./lib/route-preload').then(({ preloadRoute }) =>
-  preloadRoute(window.location.pathname + window.location.search)).catch(() => undefined)
-void import('./app-entry').then(async ({ mountApp }) => {
-  // If authorized data is ready alongside the route, start React directly on
-  // that view. A slow session or route still gets the normal startup UI.
-  let timer: number | undefined
-  try {
-    const prepared = localStartup && await Promise.race([
-      Promise.all([localStartup, routePreload]).then(([resume]) => resume),
-      new Promise<undefined>(resolve => { timer = window.setTimeout(resolve, 100) }),
-    ])
-    await mountApp(startupSnapshotRead, prepared || undefined)
-  } finally { clearTimeout(timer) }
-})
+function renderApp(prepared?: LocalStartup) {
+  const app = prepared ? <App prepared={{ current: prepared }} /> : <App />
+  const router = createBrowserRouter([{ path: '*', element: (
+    <LightboxEditorProvider>
+      <TooltipProvider>
+        {app}
+      </TooltipProvider>
+      <TitleTooltipBridge />
+      <ThemedToaster />
+      <ActionDialogHost />
+      <DueDateDialogHost />
+    </LightboxEditorProvider>
+  ), errorElement: <RouteError /> }])
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <FlowMotionProvider><I18nProvider>
+        <RouterProvider router={router} />
+      </I18nProvider></FlowMotionProvider>
+    </StrictMode>,
+  )
+}
+
+const appReady = Promise.all([prepareInitialLocale(), startupSnapshotRead])
+if (localStoreBuild) {
+  void import('./local-store-startup').then(({ startLocalStoreStartup }) => startLocalStoreStartup({
+    appReady,
+    renderApp,
+    routePreload: preloadRoute(window.location.pathname + window.location.search).catch(() => undefined),
+  })).catch(() => { void appReady.then(() => renderApp()) })
+} else {
+  // Await the (lazily loaded) Chinese dictionary when the saved locale needs it so the first paint is never English.
+  void appReady.then(() => renderApp())
+}

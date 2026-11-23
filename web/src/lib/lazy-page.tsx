@@ -7,19 +7,25 @@ export function lazyPage<Module, Name extends keyof Module>(
   exportName: Name,
 ): Module[Name] extends ComponentType<infer Props> ? ComponentType<Props> & { preload: () => Promise<void> } : never {
   let pending: Promise<{ default: ComponentType<any> }> | undefined
-  let ready: ComponentType<any> | undefined
   const load = () => pending ??= (async () => {
     const module = await loader()
     const component = module[exportName]
     if (typeof component !== 'function' && typeof component !== 'object') {
       throw new Error(`Missing lazy page export: ${String(exportName)}`)
     }
-    ready = component as ComponentType<any>
-    return { default: ready }
+    return { default: component as ComponentType<any> }
   })().catch(error => {
     pending = undefined
     reloadForStaleChunk(error)
     throw error
+  })
+  if (!(import.meta.env.VITE_LOCAL_STORE === 'true' && import.meta.env.VITE_SYNC_V2 === 'true')) {
+    return Object.assign(lazy(load), { preload: () => load().then(() => undefined) }) as never
+  }
+  let ready: ComponentType<any> | undefined
+  const localLoad = () => load().then(module => {
+    ready = module.default
+    return module
   })
   const Lazy = lazy(load)
   // A preloaded route mounts directly. An instance that suspended keeps the
@@ -28,5 +34,5 @@ export function lazyPage<Module, Name extends keyof Module>(
     const [Component] = useState(() => ready ?? Lazy)
     return <Component {...props} />
   }
-  return Object.assign(Page, { preload: () => load().then(() => undefined) }) as never
+  return Object.assign(Page, { preload: () => localLoad().then(() => undefined) }) as never
 }
