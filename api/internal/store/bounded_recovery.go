@@ -488,7 +488,9 @@ func (s *SQLiteStore) readResidentWorkspaceAdmitted(ctx context.Context, tx *sql
 	return s.readResidentWorkspacePolicy(ctx, tx, workspace, reserve, false)
 }
 
-func (s *SQLiteStore) readResidentWorkspacePolicy(ctx context.Context, tx *sqlTx, workspace string, reserve func(uint64) error, legacyInlineTeams bool) (domain.Bootstrap, copyStamp, int, error) {
+// When fields are selected for a SQL point read, auxiliary indexes and
+// unrelated collections are outside that read's authority.
+func (s *SQLiteStore) readResidentWorkspacePolicy(ctx context.Context, tx *sqlTx, workspace string, reserve func(uint64) error, legacyInlineTeams bool, fieldsOnly ...string) (domain.Bootstrap, copyStamp, int, error) {
 	var data domain.Bootstrap
 	var stamp copyStamp
 	if err := ctx.Err(); err != nil {
@@ -534,23 +536,43 @@ func (s *SQLiteStore) readResidentWorkspacePolicy(ctx context.Context, tx *sqlTx
 			return data, stamp, 0, err
 		}
 	}
-	knownFields := make([]string, 0, len(shapes))
-	for field := range shapes {
-		knownFields = append(knownFields, field)
-	}
-	slices.Sort(knownFields)
-	clause, values := bindList("field", knownFields)
-	var unknown string
-	err = tx.QueryRowContext(ctx, `SELECT field FROM workspace_metadata_records WHERE workspace_key=? AND NOT (`+clause+`) ORDER BY field,record_key LIMIT 1`, append([]any{workspace}, values...)...).Scan(&unknown)
-	if err == nil {
-		return data, stamp, 0, fmt.Errorf("%w: canonical field %q is outside the collection manifest", ErrBoundedMetadataCoverage, unknown)
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return data, stamp, 0, err
-	}
-	if s.metadataResidency.requireCoverage {
-		if err := s.validateResidentBackfill(ctx, tx, workspace); err != nil {
+	if len(fieldsOnly) == 0 {
+		knownFields := make([]string, 0, len(shapes))
+		for field := range shapes {
+			knownFields = append(knownFields, field)
+		}
+		slices.Sort(knownFields)
+		clause, values := bindList("field", knownFields)
+		var unknown string
+		err = tx.QueryRowContext(ctx, `SELECT field FROM workspace_metadata_records WHERE workspace_key=? AND NOT (`+clause+`) ORDER BY field,record_key LIMIT 1`, append([]any{workspace}, values...)...).Scan(&unknown)
+		if err == nil {
+			return data, stamp, 0, fmt.Errorf("%w: canonical field %q is outside the collection manifest", ErrBoundedMetadataCoverage, unknown)
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
 			return data, stamp, 0, err
+		}
+		if s.metadataResidency.requireCoverage {
+			if err := s.validateResidentBackfill(ctx, tx, workspace); err != nil {
+				return data, stamp, 0, err
+			}
+		}
+	} else {
+		var missing []string
+		for _, field := range fieldsOnly {
+			if shapes[field] == "" {
+				missing = append(missing, field)
+			}
+		}
+		if len(missing) > 0 {
+			clause, args := bindList("field", missing)
+			var found int
+			err = tx.QueryRowContext(ctx, `SELECT 1 FROM workspace_metadata_records WHERE workspace_key=? AND `+clause+` LIMIT 1`, append([]any{workspace}, args...)...).Scan(&found)
+			if err == nil {
+				return data, stamp, 0, ErrBoundedMetadataCoverage
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return data, stamp, 0, err
+			}
 		}
 	}
 	cost, err := metadataResidentCost(root)
@@ -571,7 +593,7 @@ func (s *SQLiteStore) readResidentWorkspacePolicy(ctx context.Context, tx *sqlTx
 	inlineTeams := len(data.Teams)
 	fields := []string{}
 	for name, mode := range metadataResidencyFields() {
-		if mode == "policy" && shapes[name] != "" {
+		if mode == "policy" && shapes[name] != "" && (len(fieldsOnly) == 0 || slices.Contains(fieldsOnly, name)) {
 			fields = append(fields, name)
 		}
 	}
@@ -970,8 +992,15 @@ func (s *SQLiteStore) reloadResidentWorkspaceLogical(ctx context.Context, worksp
 		if hook := residentReloadBeforeInstall.Load(); hook != nil {
 			(*hook)()
 		}
+		trace := workspaceReloadTrace(ctx)
+		buildDone := time.Now()
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
+		if trace != nil {
+			trace.FullAttempts++
+			trace.FullBuild += buildDone.Sub(started)
+			trace.InstallWait += time.Since(buildDone)
+		}
 		current, currentHead, currentGeneration, err := s.readResidentPublicationStamp(ctx, workspace, data.Workspace.ID)
 		if err != nil {
 			return err

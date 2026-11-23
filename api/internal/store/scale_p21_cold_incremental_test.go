@@ -1140,7 +1140,7 @@ func TestColdIncrementalReloadChecksJournalHead(t *testing.T) {
 			}
 			residentReloadBeforeInstall.Store(&hook)
 			defer residentReloadBeforeInstall.Store(nil)
-			if installed := view.reloadKnownPublication(ctx, workspace); installed == reset || preparations != 1 {
+			if installed, _ := view.reloadKnownPublication(ctx, workspace); installed == reset || preparations != 1 {
 				t.Fatalf("installed=%t after %d preparations", installed, preparations)
 			}
 			if reset {

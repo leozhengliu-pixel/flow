@@ -455,6 +455,82 @@ All 4xx at 10 VUs were 403s. `PATCH /api/documents/{id}` returned 403 on
 40 of 42 attempts OFF and 70 of 85 ON. The other two OFF 403s came from
 `DELETE /api/views/{id}` (2/21 attempts).
 
+#### Freshness follow-up at 10 VUs
+
+A diagnostic flag-on run recorded 87 `workspace-freshness` 503s, including
+20 issue details, 28 issue lists, two history reads and one groups read.
+Every refusal waited 3,000 to 3,003 ms. The rig logged the matched route
+pattern, journal and installed policy heads, SQL and installed metadata
+revisions, and Redis and applied versions. The `reload` timestamp joins
+each refusal to its background reload's duration.
+
+| Reload duration | Refusals | Metadata revisions behind | Redis versions behind | Journal entries behind |
+| ---: | ---: | ---: | ---: | ---: |
+| 15.681 s | 39 | 3–8 | 4–14 | 6–19 |
+| 16.215 s | 16 | 4–5 | 4 | Unknown |
+| 16.970 s | 32 | 1–5 | 1–9 | Unknown |
+
+Legacy peer mode can install a policy with no recorded journal head. SQL
+and installed metadata revisions still show the lag in those cases. This
+run had 2.262% errors, 540.37 ms p95 and 22.60 successful requests per
+second. The per-refusal measurements are in
+`/tmp/codex-freshness/baseline/reports/workspace-freshness-refusals.tsv`.
+
+In the acceptance configuration, Redis notifications and versions tell
+replicas when to reload. A request that sees an outdated metadata copy
+can wait up to three seconds for the shared reload. In a separate trace,
+two journal deltas lost installation races. Two subsequent full builds
+were also discarded and took 22.211 s of the 23.588 s reload. The final
+incremental build under the writer lock took 172 ms. The Redis version
+lookup took less than 1 ms.
+
+Issue rows, history and the data needed to redact references come from
+SQL. Team visibility and workspace policy still need to match those
+rows. Bounded replicas now read these together in a repeatable SQL
+snapshot. They reuse installed policy at the exact SQL revision and
+fetch the needed policy fields from SQL when the revision differs.
+Session and API-key credentials are checked again before delivery and
+the read retries once if the authorization epoch changed. An issue write
+commits to the shared SQL database before returning, so a subsequent
+read sees it on either replica even with delayed Redis notification.
+`X-Flow-Change-Cursor` is the response cursor for journal replay.
+The freshness check applies to release-scoped and status-history requests.
+After two installation races a peer reload rebuilds the delta under the
+writer lock, with full recovery available when the delta is unusable.
+
+An earlier validation run recorded one freshness 503 on issue comment
+creation. The request waited 3.004 s with the installed metadata two
+revisions behind. The reload finished in 3.522 s after two delta
+installation races, with zero full builds.
+
+On November 22, 2026, `e3bd00702` passed both 180-second flag-on repeats
+at 10 VUs. The rig used the same `mysql2`, Redis, fixture size and workload
+settings as the sweep. One-minute host load was 4.29 and 3.04 at the
+start of measurement. Free disk space was 19.15 and 18.99 GiB.
+
+| Run | All / successful req/s | p50 / p95 / p99 ms | Errors | HTTP 503s | Timeouts |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A | 23.43 / 23.11 | 19 / 649 / 1,964 | 0.284% | 12 | 0 |
+| B | 24.67 / 24.40 | 17 / 538 / 1,604 | 0.360% | 16 | 0 |
+
+Median p95 was 593.61 ms, 59.92% lower than the sweep's flag-off
+median. Median successful throughput was 23.76 requests per second,
+63.84% higher. Both repeats recorded zero `workspace-freshness` 503s.
+
+| Route | 503 cause | A | B |
+| --- | --- | ---: | ---: |
+| `GET /api/sync/changes` | `sync-changes` | 10 | 14 |
+| `DELETE /api/documents/{id}` | `projection-gate` | 1 | 0 |
+| `PATCH /api/issue-records/{id}` | `projection-gate` | 1 | 0 |
+| `POST /api/documents` | `projection-gate` | 0 | 1 |
+| `POST /api/issue-records/{id}/comments` | `projection-gate` | 0 | 1 |
+
+Issue GETs recorded zero 403s. Document updates returned 403 on 45 of 51
+attempts in A and 32 of 37 in B. A also recorded one 403 from team
+settings. Peak replica RSS was 708 and 843 MiB in A, and 691 and 893 MiB
+in B. Both recorded zero realtime stream drops or failures. Raw reports
+and the candidate commit are in `/tmp/codex-freshness/committed/reports/`.
+
 #### 20 VUs
 
 | VUs | Flag | Run | All / successful req/s | p50 / p95 / p99 ms | Errors | HTTP 503 causes | Timeouts |

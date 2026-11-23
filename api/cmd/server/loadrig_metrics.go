@@ -3,7 +3,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -57,6 +59,11 @@ func init() {
 		log.Printf("load rig: metrics listener: %v", err)
 		return
 	}
+	diagnoseWorkspaceRefusal = loadRigWorkspaceRefusal
+	diagnoseWorkspaceReload = func(start time.Time, versionWait time.Duration, trace store.WorkspaceReloadTrace, err error) {
+		log.Printf("freshness reload=%d elapsed_ms=%d version_ms=%d delta_attempts=%d delta_races=%d delta_ms=%d full_attempts=%d full_ms=%d install_wait_ms=%d locked_reload_ms=%d ok=%t",
+			start.UnixNano(), time.Since(start).Milliseconds(), versionWait.Milliseconds(), trace.DeltaAttempts, trace.DeltaRaces, trace.DeltaBuild.Milliseconds(), trace.FullAttempts, trace.FullBuild.Milliseconds(), trace.InstallWait.Milliseconds(), trace.LockedReload.Milliseconds(), err == nil)
+	}
 	// One function handler, so the listener adds no API route binding.
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -77,6 +84,29 @@ func init() {
 		}
 	})
 	go func() { _ = http.Serve(listener, handler) }()
+}
+
+func loadRigWorkspaceRefusal(s *server, r *http.Request, workspace string, err error, waited time.Duration) {
+	pattern := "unmatched"
+	if mux, ok := r.Context().Value(coldAuthorizationMuxKey{}).(*http.ServeMux); ok {
+		if _, matched := mux.Handler(r); matched != "" {
+			pattern = matched
+		}
+	}
+	s.workspaceVersions.mu.Lock()
+	load := s.workspaceVersions.loading[workspace]
+	applied := s.workspaceVersions.applied[workspace]
+	s.workspaceVersions.mu.Unlock()
+	var reload, elapsed int64
+	if load != nil {
+		reload, elapsed = load.started.UnixNano(), time.Since(load.started).Milliseconds()
+	}
+	ctx, cancel := context.WithTimeout(s.store.WorkerContext(), workspaceFreshnessProbeTimeout)
+	defer cancel()
+	state, stateErr := s.store.WorkspacePeerState(ctx, workspace)
+	shared, sharedErr := s.sharedWorkspaceVersion(ctx, workspace)
+	log.Printf("freshness refusal route=%q deadline=%t wait_ms=%d reload=%d reload_elapsed_ms=%d sql=%t journal_head=%d policy_head=%d revision=%d installed_revision=%d redis=%t redis_version=%d applied_version=%d",
+		pattern, errors.Is(err, context.DeadlineExceeded), waited.Milliseconds(), reload, elapsed, stateErr == nil, state.Head, state.InstalledPolicyHead, state.MetadataRevision, state.InstalledRevision, sharedErr == nil, shared, applied)
 }
 
 func loadRigSnapshot() loadRigProcessMetrics {

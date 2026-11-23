@@ -1338,6 +1338,9 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 	if _, _, err := issueRecordWhere(query); err != nil {
 		return nil, err
 	}
+	if issueRecordSQLSnapshot(ctx) {
+		return s.countIssueGroups(ctx, query)
+	}
 	// Both caches are keyed by the revision read before counting.
 	revision, err := s.issueCountRevision(ctx, query.Workspace)
 	if err != nil {
@@ -1351,18 +1354,20 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 	if groups, ok := s.issueGroupCounts.get(key, now); ok {
 		return groups, nil
 	}
-	counted := withoutRedundantIssueAccess(query)
-	var groups []IssueRecordGroup
-	if query.Nested {
-		groups, err = s.nestedIssueGroups(ctx, counted)
-	} else {
-		groups, err = s.flatIssueGroups(ctx, counted)
-	}
+	groups, err := s.countIssueGroups(ctx, query)
 	if err == nil {
 		s.issueGroupCounts.put(key, query.Workspace, groups, now)
 		s.cacheSetIssueGroups(ctx, cacheKey, groups)
 	}
 	return groups, err
+}
+
+func (s *SQLiteStore) countIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
+	query = withoutRedundantIssueAccess(query)
+	if query.Nested {
+		return s.nestedIssueGroups(ctx, query)
+	}
+	return s.flatIssueGroups(ctx, query)
 }
 
 // withoutRedundantIssueAccess drops a viewer's team restriction from a query

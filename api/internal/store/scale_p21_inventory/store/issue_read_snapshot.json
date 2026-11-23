@@ -1,0 +1,14 @@
+{
+  "source": "store/issue_read_snapshot.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginIssueReadSnapshot": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Copies resident team and workspace policy only when its stamp matches the repeatable SQL snapshot. Otherwise reads those policy fields in the same transaction as the issue rows.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

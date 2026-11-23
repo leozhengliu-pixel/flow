@@ -182,7 +182,7 @@ func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
 		}{page, intervals})
 		return
 	}
-	writeJSON(w, http.StatusOK, page)
+	s.writeIssueRead(w, r, page)
 }
 
 func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
@@ -374,7 +374,7 @@ func (s *server) listIssueRecordGroups(w http.ResponseWriter, r *http.Request) {
 		issueRecordsErrorFor(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
+	s.writeIssueRead(w, r, map[string]any{"groups": groups})
 }
 
 func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Request) {
@@ -421,7 +421,7 @@ func (s *server) getIssueRecord(w http.ResponseWriter, r *http.Request) {
 		issueRecordsErrorFor(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, items[0])
+	s.writeIssueRead(w, r, items[0])
 }
 
 func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {

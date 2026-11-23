@@ -59,7 +59,7 @@ func (s *SQLiteStore) metadataFieldKey(workspace, field string) string {
 
 func (s *SQLiteStore) cacheGetIssue(ctx context.Context, workspace, id string) ([]byte, bool) {
 	cache := s.hotCache()
-	if cache == nil || workspace == "" || id == "" {
+	if cache == nil || workspace == "" || id == "" || issueRecordSQLSnapshot(ctx) {
 		return nil, false
 	}
 	raw, err := cache.CacheGet(ctx, cache.CacheKey(workspace, "issue", id))
@@ -71,7 +71,7 @@ func (s *SQLiteStore) cacheGetIssue(ctx context.Context, workspace, id string) (
 
 func (s *SQLiteStore) cacheSetIssue(ctx context.Context, workspace, id string, raw []byte) {
 	cache := s.hotCache()
-	if cache == nil || workspace == "" || len(raw) == 0 {
+	if cache == nil || workspace == "" || len(raw) == 0 || issueRecordSQLSnapshot(ctx) {
 		return
 	}
 	keys := []string{}

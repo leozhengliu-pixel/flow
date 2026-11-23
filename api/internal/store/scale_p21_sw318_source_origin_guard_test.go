@@ -22,7 +22,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
 		"scale_p21_workflow_run_write.go": "a1fba71672d01fae78447673c322c1d868ca26e39bbc3482969c0c6bb22a5994",
 		"issue_records.go":                "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
-		"issue_query.go":                  "fbbe42adaed6c5920253704649a753d16b9db97af707446d74f7f19251ced6b2",
+		"issue_query.go":                  "6ca65a3c10ae72d0b57c0b72b369de83ae40e64afaa15214afd6b441f068e843",
 		// The result cache only checks for a borrowed snapshot to bypass Redis.
 		"shared_result_cache.go":                      "a8b3776efb34fe28b10957fe5e9e29f064bf2965809262760d29bfa07351afb3",
 		"auth.go":                                     "ad56ae3cf331a1dc3b2a3225606f6f16f4c41d5ebf54e658735eaf7657caa61a",
@@ -56,7 +56,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"metadata_record_scope.go":                                      "0f02418f3ec0efe4cccc28a7eaf3cf768629493d407c6c2f7b8c80331ce163c1",
 		"read_snapshot.go":                                              "cc14903369aeacba0b8d30fe19573a6f5924790d2a235ed2c71b57bc654756b6",
 		"resource_access.go":                                            "460e374d1cf4a0915d8887aa408d68a6bb79f6ae267c3ebfff2d1d298977de64",
-		"scale_p11_peer_state.go":                                       "1b30e92c1d14d8fc973f527a2bb97ce4b574626614403dfbe06da8174be0bcd9",
+		"scale_p11_peer_state.go":                                       "aabfdf46597e6f84410c9eb70367cc7d3bde01ac0dcd3510b761d8c7feaa173e",
 		"scale_p12_epoch_access.go":                                     "3a90a16ace7b653f6269cef736dd758162ea758d5e754508dc3d3804f771903a",
 		"scale_p19_metadata.go":                                         "0d847695e8a6dae32226bd778b04736af3e5759416b9ca6e43f2b9cd847aa411",
 		"scale_p17_record_selection.go":                                 "6569e3416267eaebeee483c6418859b303ea3a7c6928eed5ffa0de871f6ad287",
@@ -110,10 +110,14 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"search_metadata.go": "2035dcdbf551533763079ee658e905e1e44a58bfb8b3dd3e0e6e1f72faf22f17",
 		// Cold-request route: the cold store stays inside its callback.
 		"../../cmd/server/oauth_authorized_applications.go": "8a0e9bec2c8ea317de40e3e4872b8587a6930369391d9e70fa7b895c38c94e9a",
+		// The issue read owns a SQL transaction and the policy it uses.
+		"issue_read_snapshot.go": "13cae7fbe50f86fd6f36302adfeb909a0277ea3af6a0b03c3330b974d27c3414",
 	}
 	want := map[string]int{
 		"authz_epoch.go:AuthzEpoch:clear":                                             1,
 		"bounded_issue_lifecycle.go:checkAccess:metadata":                             1,
+		"issue_read_snapshot.go:BeginIssueReadSnapshot:metadata":                      1,
+		"issue_read_snapshot.go:BeginIssueReadSnapshot:sql":                           1,
 		"read_snapshot.go:BeginWorkspaceRead:metadata":                                2,
 		"resource_access.go:ResolveAccess:sql":                                        1,
 		"scale_p12_epoch_access.go:LiveEventContext:clear":                            1,
