@@ -1,16 +1,16 @@
 # Bounded metadata activation
 
-Use a restored copy of production data to rehearse this rollout and its
-rollback. Record response status and latency by route, realtime lag and
-resyncs, SQL pool waits, background job results, and RSS per replica with the
-current flags. Keep a database backup from before the upgrade.
+Bounded metadata is on by default. Startup enables the record journal,
+repairs its coverage, and completes the metadata catalog. Rehearse the
+upgrade and rollback on a restored copy. Record route status and latency,
+realtime lag and resyncs, database pool waits, background work, and RSS per
+replica. Keep a database backup from before the upgrade.
 
 ## Prerequisites
 
-- Run the same build everywhere. Let startup finish all schema migrations,
-  including `metadata_catalog` (25) and the current record journal (29) in
-  `schema_migrations`. Keep legacy writers and direct writes to canonical
-  tables out of the fleet.
+- Let startup finish the metadata catalog (25) and record journal (29)
+  schema migrations. The capture triggers record changes from replicas
+  that are still running the previous release during an upgrade.
 - For multiple replicas, use one writable MySQL or PostgreSQL database and
   shared Redis coordination. Check subscription delivery and distributed
   locks on every replica. Use the same `FLOW_REDIS_PREFIX` for the fleet and
@@ -28,56 +28,37 @@ current flags. Keep a database backup from before the upgrade.
   synchronous commit settings. On either engine, budget connections for
   the sum of `FLOW_DATABASE_MAX_OPEN_CONNS` across replicas plus maintenance
   connections. Test with the production pool settings.
-- Set `FLOW_METADATA_MEMORY_BYTES` in bytes per replica. Allow room above it
-  for live requests, native memory and runtime overhead. Size policy and
-  source descriptor budgets for every workspace and provision temporary
-  space for `FLOW_METADATA_SOURCE_DISK_BYTES`. Rehearse startup on the copy
-  with the same process and disk limits. See [Memory tuning](bounded-metadata.md#tuning).
+- The automatic memory target uses available RAM and honors a lower
+  `GOMEMLIMIT`. Provision temporary space for the installed metadata
+  sources. Rehearse startup on the copy with the same memory and disk
+  limits. [Memory tuning](bounded-metadata.md#tuning)
 
-## Switch order
+## Upgrade
 
-1. With bounded metadata off, deploy `FLOW_RECORD_HYDRATION=on` and
-   `FLOW_RECORD_JOURNAL=on` everywhere. Enable `FLOW_SYNC_V2=on` after the
-   journal is ready. If enabling sync changes on an existing fleet, smoke
-   test snapshot and cursor recovery with deployed clients.
-2. Set `FLOW_METADATA_CATALOG=shadow` on the preparation replicas, or run
-   `server metadata-prepare` with the same database configuration. The
-   worker can keep repairing uncovered workspaces while peer sync is in
-   shadow. Check for `record journal repair pass finished` with zero
-   incomplete workspaces and `metadata catalog pass finished` with
-   `complete=collections` and `skipped=0`.
-3. Set `FLOW_RECORD_PEER_SYNC=shadow` while bounded metadata is off. Exercise
-   two-replica writes, permission changes, reconnects, and sync/pulse reads.
-   Treat `Peer journal shadow differs` and unexpected resyncs as rollout
-   failures. Shadow comparisons cover only pages the journal can apply.
-4. Drain and stop every serving replica for the cutover. Stop all catalog
-   shadow workers. Run `server metadata-prepare` with the fleet
-   configuration until it exits `0` with `ready=true`, `uncoveredWorkspaces=0`,
-   `incompleteCollections=0`, and no skipped collections. Restrict access
-   to its detailed report and log only aggregate counts.
-5. Start one replica with the following settings. A complete catalog is
-   recorded in SQL. `FLOW_METADATA_CATALOG=off` leaves the backfill worker
-   stopped so it cannot reset complete checkpoints during a revisit.
+Remove old overrides for the settings you want to inherit. Explicit `off`
+values continue to apply. Startup uses the database's existing startup lock
+to serialize journal installation and catalog preparation across replicas.
+Repair and backfill persist checkpoints as they progress. Later starts
+reuse completed checkpoints. If preparation or admission fails, automatic
+startup uses legacy reads and checks again on restart. The optional
+`server metadata-prepare` command reports remaining gaps and resumes repair.
 
-   ```sh
-   FLOW_BOUNDED_METADATA=on
-   FLOW_RECORD_HYDRATION=on
-   FLOW_RECORD_JOURNAL=on
-   FLOW_SYNC_V2=on
-   FLOW_RECORD_PEER_SYNC=on
-   FLOW_METADATA_CATALOG=off
-   ```
+During a rolling upgrade, leave remaining replicas running until their
+replacements are ready. Starting an older binary with its journal disabled
+can remove the shared capture triggers. Use the rollback steps below before
+reintroducing an older binary.
 
-6. Check readiness, the startup logs, and a smoke test before opening
-   traffic. Start the other replicas with the same settings. Switch peer
-   mode fleet-wide in the same window. A peer in `off` still expects the
-   Redis workspace version and full event envelope, which `on` can omit.
-   Keep bounded and unbounded replicas in separate serving windows.
+`FLOW_RECORD_PEER_SYNC` defaults to `off` and keeps the existing Redis event
+envelopes during rolling upgrades. Enable compact peer sync only in a
+separate fleet-wide switch. Stop catalog shadow workers before starting
+bounded replicas because a shadow revisit resets completed checkpoints.
+The browser local-store allowlist and shared Redis result tier also stay
+opt-in. The latter was slower in mixed-load measurements.
 
 ## Verify
 
-Read `bounded metadata memory` at startup and `bounded metadata: catalog`
-with `complete=true` and `incompleteCollections=0` for every workspace.
+Look for `bounded metadata memory` and the aggregate `bounded metadata:
+catalog` log with `complete=true` and `incompleteCollections=0`.
 Treat `Peer sync disabled`, `Peer apply`, `Redis event subscriber`,
 `bounded metadata coverage is incomplete`, and
 `record journal deferred to bounded repair` as investigation signals.
@@ -135,14 +116,16 @@ Catalog readiness is already required for the baseline to serve bounded
 metadata. See
 [Load rig options](bounded-metadata.md#pre-production-check-the-load-rig).
 
-Run `bash scripts/ci/go-test-bounded-activation.sh` through the local heavy
+Use `LOADRIG_UPGRADE_SEED=1` when seeding to exercise unprepared data, and
+`start <topology> default` to inherit the server defaults. Run
+`bash scripts/ci/go-test-bounded-activation.sh` through the local heavy
 command lock. It uses SQLite by default. Set `FLOW_TEST_DATABASE_DRIVER` and
 `FLOW_TEST_DATABASE_URL` to a disposable MySQL or PostgreSQL database to
 exercise that dialect. The profile completes catalog gaps in route
 differential fixtures and starts a separate pair of bounded stores to
 verify compact peer replay with production admission.
 
-## Rollback
+## Opt Out Or Roll Back
 
 Drain before changing a fleet-wide setting and verify startup and cursor
 recovery on the restarted replica before restoring traffic.
@@ -150,9 +133,10 @@ recovery on the restarted replica before restoring traffic.
 | Setting | Rollback |
 | --- | --- |
 | `FLOW_RECORD_PEER_SYNC` | Switch every replica to `off` together. Keep the journal and prepared catalog. Reconnect realtime clients and verify that writes reach peers through the legacy reload path. |
-| `FLOW_BOUNDED_METADATA` | Switch every replica to `off` together. Leave canonical records, catalog and journal tables in place. Prepare again before the next bounded start. |
-| `FLOW_METADATA_CATALOG` | Keep prepared catalog rows in place. If repair or backfill is needed, switch bounded metadata off fleet-wide first and use `metadata-prepare` or the shadow worker. |
+| `FLOW_BOUNDED_METADATA` | Set `off` on every replica and restart. Leave canonical records, catalog and journal tables in place. Unset the flag to use automatic preparation on a later upgrade. |
+| `FLOW_METADATA_CATALOG` | Set `off` to skip automatic preparation and keep existing catalog rows. `shadow` runs background preparation when bounded metadata is off. |
 | `FLOW_SYNC_V2` | Switch to `off` with the journal still on. Verify the legacy change feed and have clients refresh their snapshot before resuming with legacy cursors. |
+| `FLOW_SYNC_MANIFEST`, `FLOW_INDEXED_READS` | Set both to `off` to disable those endpoints and use compatibility reads. |
 | `FLOW_RECORD_JOURNAL` | Switch bounded metadata, peer sync and sync v2 off first. Disable the catalog worker. Journal `off` removes the capture triggers. Re-enabling it requires another coverage repair. |
 | `FLOW_RECORD_HYDRATION` | Switch bounded metadata off first, then revert hydration and verify legacy reads and writes. |
 

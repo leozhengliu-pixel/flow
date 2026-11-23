@@ -2,8 +2,7 @@
 
 `FLOW_BOUNDED_METADATA` keeps a bounded amount of workspace metadata in
 memory on each API replica instead of loading a whole workspace per request.
-It is off by default. This page covers what it needs, how to turn it on
-safely and how to turn it off again.
+It defaults to on. This page covers admission, sizing and operator controls.
 
 Anything marked **to be confirmed** is not determined by the code and needs a
 decision or a test by the operator or the maintainers before you rely on it.
@@ -35,12 +34,12 @@ table runs COLD.
 
 | Variable | Needed for the flag | Notes |
 | --- | --- | --- |
-| `FLOW_BOUNDED_METADATA` | - | `1`, `true` or `on` enables it. Anything else is off. |
-| `FLOW_RECORD_HYDRATION` | must be `1`, `true` or `on` | Bounded record scopes that keep unloaded values. |
-| `FLOW_RECORD_JOURNAL` | must be `on` | `off` (default), `shadow` and `on`. `shadow` is not enough. |
+| `FLOW_BOUNDED_METADATA` | - | Unset enables it when hydration and journaling are on and shadow modes are off. `off` selects the legacy path. |
+| `FLOW_RECORD_HYDRATION` | must be on | Defaults to `on`. Bounded record scopes keep unloaded values. |
+| `FLOW_RECORD_JOURNAL` | must be on | Defaults to `on`. The explicit modes are `off`, `shadow` and `on`. |
 | `FLOW_RECORD_PEER_SYNC` | must **not** be `shadow` | `off` (default) and `on` are accepted. |
-| `FLOW_METADATA_CATALOG` | `shadow` on the replicas that build the catalog | Starts a background worker that repairs the record journal and builds the metadata catalog. Not needed once the catalog is complete and journal maintenance keeps it current. `server metadata-prepare` does the same work once, in the foreground. |
-| `FLOW_SYNC_V2` | recommended, not checked at startup | `on`, `1` or `true`. Only takes effect with `FLOW_RECORD_JOURNAL=on`. The load rig runs both states with it on. |
+| `FLOW_METADATA_CATALOG` | complete catalog | Unset repairs the record journal and completes missing catalog checkpoints before bounded admission. |
+| `FLOW_SYNC_V2` | optional | Defaults to `on`. It needs a ready record journal. |
 | `FLOW_RECORD_SPOOL_MAX_BYTES` | optional | Process-wide byte budget for temporary files used by record hydration. Default `268435456` (256 MiB). `0` streams directly. A negative or invalid value falls back to the default. The load rig sets the default explicitly. |
 
 `FLOW_METADATA_DIR` appears only in tests; it is not an operator setting.
@@ -52,7 +51,9 @@ table runs COLD.
 | `FLOW_RECORD_PEER_SYNC` | `off` (default) | Uses Redis workspace versions and event envelopes for legacy reload and publication. Unrecognized values also select `off`. |
 | | `shadow` | Uses the SQL journal for freshness and peer replay while still sending legacy Redis envelopes. For eligible pages it compares a candidate journal apply with the compatibility snapshot and keeps the compatibility result. `Peer journal shadow differs` reports a mismatch. Pages that need a reload fall back without a comparison. |
 | | `on` | Installs a covered SQL journal page before publishing replayed events. Reloads on gaps or unsupported pages. Sends a compact Redis head hint when a durable event has a journal cursor. |
-| `FLOW_METADATA_CATALOG` | `off` or unset (default) | Stops background backfill. Catalog reads and journal maintenance still use the persisted rows and checkpoints. |
+| `FLOW_METADATA_CATALOG` | unset (default) | Completes missing checkpoints at startup when bounded metadata is enabled. |
+| | `on` | Runs the startup preparation even with bounded reads off. |
+| | `off` | Skips automatic preparation. Catalog reads and journal writes still use the persisted rows and checkpoints. |
 | | `shadow` | Repairs journal coverage, builds bounded summary batches and revisits completed collections for changes. Tests compare catalog summaries, ordering and filters to canonical reads. The worker itself checks backfill progress and reports skips. |
 
 Peer sync needs a locally ready journal for either active mode and falls back
@@ -62,9 +63,8 @@ peer `shadow` because the comparison needs full workspace snapshots.
 `TestScaleP11*` covers mode guards, journal apply and fallback, missed or
 reordered Redis events, envelope compatibility and permission changes.
 
-Catalog **complete** is persisted coverage. Set `FLOW_METADATA_CATALOG=off`
-after preparing and verifying the data. The parser recognizes only `shadow`
-as a worker mode. Bounded admission checks canonical layout, phase-2
+Catalog **complete** is persisted coverage. Startup reuses completed
+checkpoints. Bounded admission checks canonical layout, phase-2
 checkpoints and journal writer coverage. The shadow worker can reset a
 completed checkpoint while revisiting it, so stop it before bounded startup.
 `TestScaleP05*`, `TestBoundedRollout*`, `TestMetadataPrepareCommandReadiesBoundedStart`,
@@ -88,12 +88,10 @@ fleet cutover and rollback.
    build that still has unreviewed consumers refuses the flag (see
    [Startup refusals](#startup-refusals)).
 
-Enabling `FLOW_RECORD_JOURNAL=shadow` or `on` on a database that had it `off`
-marks every existing workspace as lacking journal writer coverage. A bounded
-start refuses such workspaces (`record journal writer coverage is
-incomplete`) until the journal repair has walked them. The repair runs in
-bounded, resumable steps in the catalog worker (`FLOW_METADATA_CATALOG=shadow`)
-and in `server metadata-prepare`; nothing else runs it. Each repaired
+Enabling the record journal on a database that had it `off` marks each
+existing workspace as needing journal repair. Startup, the catalog shadow
+worker, and `server metadata-prepare` run that repair in bounded, resumable
+steps. Bounded admission checks the resulting coverage. Each repaired
 workspace publishes one workspace invalidation to its clients.
 
 ### Preparing a database: `server metadata-prepare`
@@ -101,8 +99,9 @@ workspace publishes one workspace invalidation to its clients.
 `server metadata-prepare` runs the journal repair over every workspace that
 needs it, then the catalog over every collection, once and at full speed, and
 exits. Give it the same configuration as the server (environment or
-`--config`); it needs `FLOW_RECORD_JOURNAL=on`. It always opens the database
-flag-off, whatever `FLOW_BOUNDED_METADATA` says, and starts no catalog worker.
+`--config`). It uses the default journal setting or an explicit `on` or
+`shadow`. It opens the database with bounded metadata and the catalog worker
+disabled for the duration of the command.
 It uses the same bounded, checkpointed transactions as the worker, so it is
 safe to run while flag-off replicas serve the database, it can be interrupted
 (`Ctrl-C`, `SIGTERM`) and it can be run again; a second run repeats the
@@ -213,7 +212,7 @@ startup with `bounded metadata coverage is incomplete` followed by one of:
 | a coverage review error | The consumer inventory in this build is inconsistent. | Report it; keep the flag off. |
 | a collaboration-engine runtime error | The pinned collaboration engine cannot be admitted in this process. | Report it with the error text; keep the flag off. |
 | `record hydration and the record journal must both be on` | `FLOW_RECORD_HYDRATION` is not on, or `FLOW_RECORD_JOURNAL` is not `on`. | Set both and let the journal repair finish. |
-| `complete-snapshot peer shadow requires bounded metadata off` | `FLOW_RECORD_PEER_SYNC=shadow`. | Set it to `off` or `on`. |
+| `peer sync and catalog shadow modes require bounded metadata off` | A shadow mode conflicts with explicitly enabled bounded metadata. | Disable shadow mode or set `FLOW_BOUNDED_METADATA=off`. |
 
 Once the database is open, a workspace is admitted only if its data is
 covered. These errors use the same `bounded metadata coverage is incomplete`
@@ -236,41 +235,24 @@ budgets. These messages start with `metadata process work budget exceeded`:
 | `the resident policy of K of N workspaces takes X MiB, over FLOW_METADATA_POLICY_BYTES (Y MiB); all N need about Z MiB, so set FLOW_METADATA_POLICY_BYTES to at least B` | The estimate extrapolates from the workspaces read so far and adds a quarter. Set the variable as suggested and start again. |
 | `recover logical workspace "<key>": metadata process work budget exceeded: installed workspace sources use all of FLOW_METADATA_SOURCE_BYTES ...` | Sources outgrew the budget during recovery; raise `FLOW_METADATA_SOURCE_BYTES`. |
 
-A workspace that fails admission at startup stops the replica starting; one
-that fails later (for example the first record of a new collection written
-before its checkpoint exists) is handled by the journal, which opens the
-checkpoint itself when every other record of the collection is already
-cataloged. **To be confirmed:** whether every admission failure aborts
-startup or only fails requests for that workspace.
+Automatic startup falls back to legacy reads for the replica if preparation
+or bounded admission fails. Restart to retry admission. An explicit
+`FLOW_BOUNDED_METADATA=on` with `FLOW_METADATA_CATALOG=off` requires a prepared
+database and reports incomplete admission as a startup error. The journal
+opens checkpoints for new collections when their first records are written.
 
 ## Recommended rollout
 
-Mixed flag-on and flag-off replicas are **not supported**. Replicas share one
-database and one change stream; the flag changes how a replica holds and
-publishes workspace state. Roll the flag out to all replicas, and roll back
-all replicas, within one maintenance window.
-
 1. Back up the database (see [Backup boundary](operations.md#backup-boundary)).
-2. On all replicas, set `FLOW_RECORD_HYDRATION=on` and
-   `FLOW_RECORD_JOURNAL=on`, and leave `FLOW_RECORD_PEER_SYNC` at `off` or
-   `on`. Restart them one at a time.
-3. Run `server metadata-prepare` with the replicas' configuration until it
-   exits 0, or add `FLOW_METADATA_CATALOG=shadow` and restart, and wait until
-   the SQL checks above return no rows for every workspace. Fix the records
-   named in `catalog.skipped` (or the `collection skipped` log lines). Run
-   `scripts/loadrig/loadrig.sh` against a copy of production-sized data first
-   (see [Pre-production check](#pre-production-check-the-load-rig)).
-4. Size the budgets for the number of workspaces (see [Tuning](#tuning)).
-   Starting one replica flag-on against a copy of the database is the
-   simplest check: a start that does not fit names the setting and the size.
-5. Stop all replicas and any catalog shadow workers. Start **one** with
-   `FLOW_BOUNDED_METADATA=on` and `FLOW_METADATA_CATALOG=off`, so
-   that no flag-off replica runs next to it. Check that it starts and watch the logs under
-   [Monitoring](#monitoring). **To be confirmed:** the observation period
-   before moving on; the code does not set one.
-6. Start every remaining replica with the same settings.
-
-A single-replica deployment follows steps 1 to 5 only.
+2. Rehearse the upgrade against a restored copy with the deployment's
+   memory and disk limits. Check [Tuning](#tuning) for budget overrides.
+3. Keep `FLOW_RECORD_PEER_SYNC=off` and stop any catalog shadow workers.
+   Use the same journal setting across replicas because capture triggers
+   are shared. Coordinate upgrades of installations that explicitly
+   disabled the journal to avoid old writers removing those triggers.
+4. Start the new release with the default flags. Check the aggregate
+   preparation and admission logs before sending traffic to each replica.
+   See the [activation runbook](bounded-metadata-activation.md).
 
 ## What changes for users
 
@@ -397,8 +379,7 @@ something changed since the previous line:
 
 ## Rollback
 
-1. Set `FLOW_BOUNDED_METADATA` to `off` (or remove it) on **all** replicas and
-   restart them.
+1. Set `FLOW_BOUNDED_METADATA=off` on every replica and restart them.
 2. Keep `FLOW_RECORD_HYDRATION=on` and `FLOW_RECORD_JOURNAL=on` unless you
    also mean to roll those back. Setting the journal to `off` removes the
    canonical row triggers; turning it back on needs the bounded repair again.
@@ -439,15 +420,15 @@ scripts/loadrig/loadrig.sh pair pg2              # off, drive, stop, on, drive, 
 - Topologies include `sqlite` (one replica), `pg2` (two replicas on
   PostgreSQL) and `mysql2` (two replicas on MySQL 8.4). Both two-replica
   topologies use Redis coordination.
-- `seed` runs the seeding test with hydration, journal and `FLOW_SYNC_V2` on,
-  and keeps the result as the seed copy. Each `start` uses a fresh copy.
-- Both flag states run with `FLOW_RECORD_HYDRATION=on`,
+- `seed` normally runs with hydration, journal and `FLOW_SYNC_V2` enabled and
+  completes the catalog. `LOADRIG_UPGRADE_SEED=1` creates a seed with the
+  previous defaults and leaves its journal and catalog unprepared.
+- Each `start` uses a fresh copy. `start <topology> default` inherits the code
+  defaults from the server. Clear feature overrides before starting it.
+- The explicit `on` and `off` profiles use `FLOW_RECORD_HYDRATION=on`,
   `FLOW_RECORD_JOURNAL=on` and `FLOW_SYNC_V2=on`; `on` adds
   `FLOW_BOUNDED_METADATA=on`. Use `EXTRA_ENV="FLOW_METADATA_CATALOG=shadow"` to
   add the catalog worker to the flag-off replicas, as a real rollout would.
-- The rig completes the metadata catalog over every collection of every
-  workspace before the flag-on start (`CompleteLoadRigMetadataCatalog`), so a
-  flag-on start tests the same state a finished catalog step gives.
 - Settings include `SCALE`, `VUS`, `DURATION`, `WARMUP`, `THINK`, `MIX`,
   `MODEL`, `GOMAXPROCS_REPLICA` and `GOMEMLIMIT_REPLICA`; the script header
   lists them all. Reports go to `$LOADRIG_HOME/reports`.

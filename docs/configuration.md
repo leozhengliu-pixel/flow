@@ -634,10 +634,6 @@ structured logging.
 | `FLOW_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 | `FLOW_LOG_FORMAT` | `text` | `text` for human-readable logs or `json` for log collectors. |
 | `FLOW_SLOW_MUTATION_MS` | `500` | Log a `slow workspace mutation` warning with stage timings (lock wait, clone, load, mutate, persist, publish) when a workspace write, or the time it holds the workspace lock, exceeds this many milliseconds. `0` disables it. |
-| `FLOW_BOUNDED_METADATA` | off | Opt-in bounded metadata residency. Requires `FLOW_RECORD_HYDRATION=on`, `FLOW_RECORD_JOURNAL=on`, a peer sync mode other than `shadow` and a complete metadata catalog. Prepare a database with `server metadata-prepare`. See [Bounded metadata](bounded-metadata.md) and the [activation runbook](bounded-metadata-activation.md). |
-| `FLOW_RECORD_PEER_SYNC` | `off` | `shadow` compares eligible journal installs to compatibility reloads and keeps legacy Redis envelopes. `on` uses the SQL journal and compact Redis hints. Both need a ready journal. Bounded metadata refuses `shadow`. Switch to and from `on` fleet-wide. |
-| `FLOW_METADATA_CATALOG` | `off` | `shadow` runs background journal repair and catalog backfill with bounded metadata off. After preparation, use `off` to stop this worker and retain the completed catalog. |
-| `FLOW_METADATA_MEMORY_BYTES` | 70% of the detected cgroup limit or physical RAM | Per-replica bounded metadata target in bytes, with a 1 GiB automatic floor where it fits. A lower `GOMEMLIMIT` limits automatic sizing. The target sizes decoded images (35%), concurrent work (25%), policy (1/16), installed sources (1/32), the spool disk budget, and COLD and bootstrap concurrency. With bounded metadata off, half of it is the byte budget that issue bootstrap and resource reads share for workspace copies. See [all tier overrides](bounded-metadata.md#tuning). |
 | `FLOW_COLD_SLOTS` | One per GiB, from 1 to 4 | Concurrent COLD facades per replica, each with its own decoded workspace. The 3 GiB target defaults to three slots. See the [MySQL slot control](bounded-metadata-performance.md#mysql-cold-slots). |
 | `FLOW_COLD_PROJECTION_CONCURRENCY` | One per 512 MiB, from 2 to 8 | Concurrent COLD projections per replica. The 3 GiB target defaults to six slots. |
 
@@ -655,6 +651,24 @@ settings use the standard [OpenTelemetry environment variables](https://opentele
 
 `FLOW_DATABASE_DRIVER` accepts `sqlite`, `postgres`, or `mysql`. Migrations run
 automatically at startup for all three drivers.
+
+### Metadata and sync
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_BOUNDED_METADATA` | `on` | Uses bounded metadata residency with hydration, journal coverage, and a complete catalog. Set `off` to use legacy reads and writes. |
+| `FLOW_RECORD_HYDRATION` | `on` | Loads selected metadata records for scoped reads and writes. |
+| `FLOW_RECORD_JOURNAL` | `on` | Captures record changes and authorization epochs. Set `off` consistently across replicas because it removes database triggers. |
+| `FLOW_METADATA_CATALOG` | Automatic with bounded metadata | Completes journal repair and missing catalog checkpoints at startup. `off` skips this work. `shadow` explicitly starts a backfill worker with bounded metadata off. |
+| `FLOW_SYNC_V2` | `on` | Enables negotiated sync v2 when the journal covers the workspace. |
+| `FLOW_SYNC_MANIFEST` | `off` | Opt-in sync capability manifests. The accepted bounded load profile leaves this off. |
+| `FLOW_INDEXED_READS` | `off` | Opt-in permission-bound indexed reads when coverage is ready. The accepted bounded load profile leaves this off. |
+| `FLOW_RECORD_PEER_SYNC` | `off` | Uses the existing Redis event envelopes. Compact journal peer sync changes the cross-replica protocol and requires a fleet-wide switch. |
+| `VITE_LOCAL_STORE`, `FLOW_LOCAL_STORE_WORKSPACES` | Disabled, empty allowlist | Browser local storage is a staged rollout. The build and a workspace allowlist must both opt in. |
+| Shadow modes | `off` | Comparison and catalog revisit workers run only when explicitly selected. |
+| `FLOW_METADATA_MEMORY_BYTES` | 70% of available RAM, with a 1 GiB floor where it fits | Uses the smaller of the cgroup limit and physical RAM, caps the target at 80% of available RAM, and honors a lower `GOMEMLIMIT`. A 1 GiB container uses about 819 MiB and a 2 GiB container uses about 1.4 GiB. See [all tier overrides](bounded-metadata.md#tuning). |
+
+See the [upgrade and rollback runbook](bounded-metadata-activation.md).
 
 Servers that start at the same time on one database take turns with the
 startup work (schema migrations, index backfills, seed rows, built-in
@@ -998,7 +1012,7 @@ Awareness messages, and workspace entity events.
 | `FLOW_REDIS_CONNECT_TIMEOUT` | `15s` | Startup probe deadline. |
 | `FLOW_REDIS_LOCK_TTL` | `30s` | Distributed write lease, renewed while a mutation runs. |
 | `FLOW_REDIS_LOCK_WAIT` | `5s` | Maximum wait to acquire a workspace write lock. |
-| `FLOW_REDIS_CACHE` | `off` | Set to `on` to share repeated metadata search results across API instances. See [Redis cache measurements](redis-cache.md#measurements). |
+| `FLOW_REDIS_CACHE` | `off` | The shared result tier was slower in mixed load. Set `on` to opt in for repeated metadata search results. See [Redis cache measurements](redis-cache.md#measurements). |
 | `FLOW_REDIS_CACHE_VIEWER` | `false` | `true` opts into sharing viewer memberships when the result tier is enabled. |
 | `FLOW_REDIS_CACHE_SYNC_PAGE` | `false` | `true` opts into sharing eligible projected sync pages when the result tier is enabled. |
 | `FLOW_REDIS_CACHE_TTL` | `5m` | Maximum lifetime of one cache entry. A Redis cache shard starts its TTL on the first insertion. |
