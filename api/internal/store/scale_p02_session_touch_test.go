@@ -47,12 +47,14 @@ type scaleP02Conn struct {
 	stats *scaleP02SQL
 }
 
+var errScaleP02AuthRead = errors.New("injected authentication read failure")
+
 func (c *scaleP02Conn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	if strings.HasPrefix(query, "SELECT ") {
 		c.stats.selects.Add(1)
 	}
 	if c.stats.failSessionRead.Load() && strings.Contains(query, "FROM auth_sessions") || c.stats.failUserRead.Load() && strings.Contains(query, "FROM auth_users") {
-		return nil, errors.New("injected authentication read failure")
+		return nil, errScaleP02AuthRead
 	}
 	return c.Conn.(driver.QueryerContext).QueryContext(ctx, query, args)
 }
@@ -391,7 +393,7 @@ func TestScaleP02SessionAuthenticationStaysLive(t *testing.T) {
 						if _, err := repo.db.ExecContext(ctx, `UPDATE auth_sessions SET created_at=? WHERE token_hash=?`, time.Now().Add(-48*time.Hour).UTC().Format(time.RFC3339Nano), tokenHash(token)); err != nil {
 							t.Fatal(err)
 						}
-						if repo.EnforceSessionDuration(ctx, token, 1) {
+						if repo.EnforceSessionDuration(ctx, token, 1) == nil {
 							t.Fatal("expired workspace duration accepted")
 						}
 					case "inactive":
@@ -414,9 +416,11 @@ func TestScaleP02SessionAuthenticationStaysLive(t *testing.T) {
 						}
 						return
 					case "session-read-error":
+						want = errScaleP02AuthRead
 						stats.failSessionRead.Store(true)
 						t.Cleanup(func() { stats.failSessionRead.Store(false) })
 					case "user-read-error":
+						want = errScaleP02AuthRead
 						stats.failUserRead.Store(true)
 						t.Cleanup(func() { stats.failUserRead.Store(false) })
 					}

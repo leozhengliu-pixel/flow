@@ -74,7 +74,7 @@ type authPolicyFailure struct {
 }
 
 func (f *authPolicyFailure) write(w http.ResponseWriter) {
-	if f.status != 0 && !writeStoreBusy(w, f.cause) {
+	if f.status != 0 && !writeStoreReadUnavailable(w, f.cause) {
 		writeJSON(w, f.status, f.body)
 	}
 }
@@ -194,7 +194,11 @@ func (s *server) sessionPolicyChecker(r *http.Request) sessionPolicyChecker {
 		if !ok {
 			return false
 		}
-		return principal.found && s.workspaceAuthenticationFailure(ctx, workspace, data, role, principal, false) == nil
+		failure := s.workspaceAuthenticationFailure(ctx, workspace, data, role, principal, false)
+		if failure != nil {
+			recordUploadVisibilityRefusal(ctx, failure.cause)
+		}
+		return failure == nil
 	}
 }
 

@@ -308,8 +308,11 @@ func (s *SQLiteStore) AuthenticateSCIMToken(ctx context.Context, secret string) 
 	}
 	var workspaceID string
 	err := s.db.QueryRowContext(ctx, `SELECT workspace_id FROM scim_tokens WHERE token_hash=? AND revoked_at IS NULL`, tokenHash(secret)).Scan(&workspaceID)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrAuthInvalid
+	}
+	if err != nil {
+		return "", err
 	}
 	_, _ = s.db.ExecContext(ctx, `UPDATE scim_tokens SET last_used_at=? WHERE token_hash=? AND revoked_at IS NULL`, time.Now().UTC().Format(time.RFC3339Nano), tokenHash(secret))
 	return workspaceID, nil

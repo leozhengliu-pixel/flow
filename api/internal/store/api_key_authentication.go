@@ -88,7 +88,10 @@ func (s *SQLiteStore) checkLiveKeyRecord(ctx context.Context, result APIKeyAuthe
 		return result, err
 	}
 	role, status, err := s.WorkspaceRole(ctx, result.Workspace.ID, key.SubjectID())
-	if err != nil || status != "active" {
+	if err != nil {
+		return result, err
+	}
+	if status != "active" {
 		return result, ErrAuthForbidden
 	}
 	result.Role = role
@@ -101,7 +104,10 @@ func (s *SQLiteStore) checkLiveKeyRecord(ctx context.Context, result APIKeyAuthe
 	}
 	if result.User.App {
 		app, err := s.ApplicationByUser(ctx, result.User.ID)
-		if err != nil || !app.Active || app.WorkspaceKey != workspace || key.OAuthClientID != app.ClientID || !slices.Contains(app.Scopes, "read") {
+		if err != nil {
+			return result, err
+		}
+		if !app.Active || app.WorkspaceKey != workspace || key.OAuthClientID != app.ClientID || !slices.Contains(app.Scopes, "read") {
 			return result, ErrAuthForbidden
 		}
 		if key.Scopes == nil || slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(app.Scopes, scope) }) {
@@ -116,12 +122,18 @@ func (s *SQLiteStore) checkLiveKeyRecord(ctx context.Context, result APIKeyAuthe
 		result.Key.TeamIDs = teams
 	}
 	if key.GrantType == "client_credentials" || key.GrantType == "developer_token" || strings.HasPrefix(key.OAuthClientID, "flow_client_") {
-		home, ok := s.OAuthApplicationHome(key.OAuthClientID)
+		home, ok, err := s.LookupOAuthApplicationHome(ctx, key.OAuthClientID)
+		if err != nil {
+			return result, err
+		}
 		if !ok {
 			return result, ErrAuthForbidden
 		}
 		client, err := s.workspaceOAuthApplication(ctx, home, key.OAuthClientID)
-		if err != nil || slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(client.Scopes, scope) }) {
+		if err != nil {
+			return result, err
+		}
+		if slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(client.Scopes, scope) }) {
 			return result, ErrAuthForbidden
 		}
 		if key.GrantType == "client_credentials" && (!client.SupportsClientCredentials || key.ClientSecretHash == "" || subtle.ConstantTimeCompare([]byte(key.ClientSecretHash), []byte(tokenHash(client.ClientSecret))) != 1) {

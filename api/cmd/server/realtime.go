@@ -36,11 +36,12 @@ type realtimeHub struct {
 	// history keeps a short per-workspace replay window for reconnecting SSE
 	// clients. It is intentionally bounded: clients that fall outside the
 	// window receive workspace.resync_required and fetch a fresh snapshot.
-	history      map[string][]domain.RealtimeEvent
-	historyBytes map[string]int
-	historyTotal int
-	presence     map[string]map[string]domain.Presence
-	sockets      map[string]map[uint64]*realtimeSocketClient
+	history        map[string][]domain.RealtimeEvent
+	historyBytes   map[string]int
+	historyTotal   int
+	presence       map[string]map[string]domain.Presence
+	sockets        map[string]map[uint64]*realtimeSocketClient
+	databaseHealth realtimeDatabaseHealth
 	// node tags this instance's stream ids when several instances share
 	// events (Redis coordination). Each instance has its own replay window, in
 	// its own arrival order, so a cursor from another instance cannot be
@@ -648,7 +649,9 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	workspace := workspaceKey(r)
 	metadata, _, err := s.pagedRealtimeMetadata(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		if !writeStoreReadUnavailable(w, err) {
+			issueRecordsError(w, err)
+		}
 		return
 	}
 	presence, err := s.snapshotPresence(r.Context(), workspace)
@@ -656,10 +659,6 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
 		return
 	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache, no-transform")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
 	since := strings.TrimSpace(r.Header.Get("Last-Event-ID"))
 	if since == "" {
 		since = strings.TrimSpace(r.URL.Query().Get("since"))
@@ -672,7 +671,6 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	since = s.realtime.localCursor(since)
 	// Read the head before subscribing: events committed in between are then
 	// delivered live too, so a client never skips one.
-	head, _ := s.store.WorkspaceChangeHead(r.Context(), workspace)
 	// A numeric cursor is a change-log seq: replay from the durable log, which
 	// outlives the in-memory ring (restarts, eviction). Subscribe first so
 	// nothing committed during the replay is missed; live copies at or below
@@ -680,10 +678,13 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	replaySeq, numeric := strconv.ParseInt(since, 10, 64)
 	durable := numeric == nil && replaySeq >= 0
 	negotiated := s.negotiatedSummaryRequest(r)
+	var head int64
 	if negotiated {
 		journalHead, err := s.store.RecordJournalHead(r.Context(), metadata.Workspace.ID)
 		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "Realtime is temporarily unavailable")
+			if !writeStoreReadUnavailable(w, err) {
+				writeError(w, http.StatusServiceUnavailable, "Realtime is temporarily unavailable")
+			}
 			return
 		}
 		head, err = strconv.ParseInt(journalHead, 10, 64)
@@ -697,6 +698,11 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		r = s.attachSyncStream(r, metadata.Workspace.ID, cursor)
 		w.Header().Set("X-Flow-Sync", "summary")
+	} else {
+		head, err = s.store.WorkspaceChangeHead(r.Context(), workspace)
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
 	}
 	subscriber, unsubscribe := s.realtime.subscribeTransport(workspace, since, durable)
 	if negotiated {
@@ -706,9 +712,15 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	defer unsubscribe()
 	presence, err = s.pagedPresence(r, presence)
 	if err != nil {
-		issueRecordsError(w, err)
+		if !writeStoreReadUnavailable(w, err) {
+			issueRecordsError(w, err)
+		}
 		return
 	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
 	// cursor is the workspace's change-log head when the stream opened. A
 	// client advances its own cursor only from event.seq of events it applied.
 	initialPayload := map[string]any{"presence": presence, "cursor": head}
@@ -766,6 +778,9 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-ticker.C:
+			if writeRealtimeRetry(w, s.realtimeDatabaseError()) {
+				return
+			}
 			// One cleanup per workspace per interval on this server, not one per open stream (each read the
 			// whole roster from Redis).
 			if s.realtime.presenceCleanupDue(workspace, 15*time.Second) {

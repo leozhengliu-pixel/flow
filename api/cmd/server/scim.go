@@ -92,7 +92,9 @@ func (s *server) requireWorkspaceAdmin(w http.ResponseWriter, r *http.Request) b
 	}
 	role, _, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
 	if err != nil || !workspaceAdminRole(role) {
-		writeError(w, http.StatusForbidden, "workspace administrator access required")
+		if !writeAuthCheckFailure(w, err) {
+			writeError(w, http.StatusForbidden, "workspace administrator access required")
+		}
 		return false
 	}
 	return true
@@ -109,8 +111,12 @@ func (s *server) authenticateSCIMRequest(w http.ResponseWriter, r *http.Request)
 	workspaceKey := strings.TrimSpace(r.PathValue("workspace"))
 	workspaceID, err := s.store.AuthenticateSCIMToken(r.Context(), secret)
 	if err != nil {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="Flow SCIM", error="invalid_token"`)
-		writeSCIMError(w, http.StatusUnauthorized, "", "invalid SCIM bearer token")
+		if errors.Is(err, store.ErrAuthInvalid) {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="Flow SCIM", error="invalid_token"`)
+			writeSCIMError(w, http.StatusUnauthorized, "", "invalid SCIM bearer token")
+		} else {
+			writeSCIMRequestError(w, err)
+		}
 		return "", "", false
 	}
 	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "scimEnabled"}}})

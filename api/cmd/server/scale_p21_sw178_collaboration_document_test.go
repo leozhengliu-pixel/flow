@@ -56,7 +56,7 @@ func scaleP21SW178SocketRun(t *testing.T, selected *store.SQLiteStore, f scaleP2
 		t.Fatal("socket admission failed")
 	}
 	client.userID, client.credentialRevoked = test.user.ID, test.revoked
-	client.checkCredential = func() bool { return !test.invalid }
+	client.checkCredential = func() (bool, error) { return !test.invalid, nil }
 	type drained struct {
 		messages               []string
 		badJSON, releasedEarly bool

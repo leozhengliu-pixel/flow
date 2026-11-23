@@ -134,6 +134,7 @@ func (a *fileSigningAuthority) readable(name string) bool {
 // the session must still exist.
 func (s *server) codingArtifactLinkLive(ctx context.Context, name, workspace, sessionID string) bool {
 	owner, session, _, err := s.store.CodingArtifactByObject(ctx, name)
+	recordUploadVisibilityRefusal(ctx, err)
 	if err != nil || owner != workspace || session != sessionID {
 		return false
 	}
@@ -142,6 +143,7 @@ func (s *server) codingArtifactLinkLive(ctx context.Context, name, workspace, se
 		return false
 	}
 	_, err = sessions.CodingSession(ctx, workspace, sessionID)
+	recordUploadVisibilityRefusal(ctx, err)
 	return err == nil
 }
 
@@ -149,6 +151,7 @@ func (s *server) codingArtifactLinkLive(ctx context.Context, name, workspace, se
 // the coding session the named artifact belongs to.
 func (s *server) codingArtifactReadableBy(r *http.Request, name string) bool {
 	workspace, sessionID, _, err := s.store.CodingArtifactByObject(r.Context(), name)
+	recordUploadVisibilityRefusal(r.Context(), err)
 	if err != nil {
 		return false
 	}
@@ -157,6 +160,7 @@ func (s *server) codingArtifactReadableBy(r *http.Request, name string) bool {
 		return false
 	}
 	session, err := sessions.CodingSession(r.Context(), workspace, sessionID)
+	recordUploadVisibilityRefusal(r.Context(), err)
 	if err != nil {
 		return false
 	}
@@ -164,9 +168,10 @@ func (s *server) codingArtifactReadableBy(r *http.Request, name string) bool {
 	request := r.WithContext(ctx)
 	request.Header = http.Header{}
 	request.URL = &url.URL{Path: "/api/coding/sessions/" + url.PathEscape(sessionID)}
-	return codingArtifacts.authorize(s, request, session) == nil
+	err = codingArtifacts.authorize(s, request, session)
+	recordUploadVisibilityRefusal(r.Context(), err)
+	return err == nil
 }
-
 
 // signing is the rewriter's configuration: links for this request's principal
 // and only for files it may read. Without a principal nothing is signed.

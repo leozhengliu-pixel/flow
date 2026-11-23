@@ -41,7 +41,8 @@ func (s *server) mutateSavedViewWithAggregate(r *http.Request, event, ref string
 			return store.ErrAuthForbidden
 		}
 		if _, keyed := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); keyed {
-			user, key, selectedWorkspace := s.authenticateAPIKey(r)
+			user, key, selectedWorkspace, err := s.authenticateAPIKey(r)
+			noteAuthorizationBusy(r, err)
 			if key == nil || user.ID != binding.Access.PrincipalID || selectedWorkspace != workspace {
 				return store.ErrAuthForbidden
 			}

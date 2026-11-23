@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"time"
 
 	"flow/api/internal/domain"
@@ -31,17 +33,21 @@ func (s *SQLiteStore) accountAccessChanged(userID string) {
 
 // SessionValid reports, without touching it, whether a session token is
 // still signed in as userID (not revoked or expired, the account active).
-func (s *SQLiteStore) SessionValid(ctx context.Context, token, userID string) bool {
+func (s *SQLiteStore) SessionValid(ctx context.Context, token, userID string) (bool, error) {
 	var owner, expiresRaw string
-	if err := s.db.QueryRowContext(ctx, `SELECT user_id,expires_at FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&owner, &expiresRaw); err != nil || owner != userID {
-		return false
+	err := s.db.QueryRowContext(ctx, `SELECT user_id,expires_at FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&owner, &expiresRaw)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && owner != userID {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
 	}
 	expires, err := time.Parse(time.RFC3339Nano, expiresRaw)
 	if err != nil || time.Now().After(expires) {
-		return false
+		return false, nil
 	}
 	user, err := s.authUserByID(ctx, userID)
-	return err == nil && user.Active
+	return err == nil && user.Active, err
 }
 
 // HasWorkspace reports whether this instance holds the workspace in memory.

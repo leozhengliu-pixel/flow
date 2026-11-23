@@ -265,16 +265,31 @@ func (s *server) serveUploadOrAsset(w http.ResponseWriter, r *http.Request) {
 	// Uploads name no workspace, so each workspace the file could come from is
 	// held to its own sign-in policy (SSO enforcement, required second factor).
 	r = s.withSessionPolicy(r)
+	ctx, visibilityErr := withUploadVisibilityRefusal(r.Context())
+	r = r.WithContext(ctx)
 	name := r.PathValue("name")
 	if strings.HasPrefix(name, "asset_") && filepath.Base(name) == name {
-		if upload, err := s.store.FileUploadByObject(r.Context(), name); err == nil && upload.Purpose == "asset" && (s.authDisabled || s.assetReadable(r, upload)) {
+		upload, err := s.store.FileUploadByObject(ctx, name)
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
+		if err == nil && upload.Purpose == "asset" && (s.authDisabled || s.assetReadable(r, upload)) {
 			s.writeStoredObject(w, r, name)
 			return
 		}
 	}
+	if writeStoreReadUnavailable(w, visibilityErr()) {
+		return
+	}
 	if name != "" && filepath.Base(name) == name {
-		if image, ok, readable, err := s.ownedImageAccess(r.Context(), name, authUser(r).ID, !s.authDisabled); err != nil {
-			writeAPIError(w, http.StatusServiceUnavailable, apiErrorUnavailable, "File metadata unavailable")
+		image, ok, readable, err := s.ownedImageAccess(ctx, name, authUser(r).ID, !s.authDisabled)
+		if writeStoreReadUnavailable(w, visibilityErr()) {
+			return
+		}
+		if err != nil {
+			if !writeStoreReadUnavailable(w, err) {
+				writeAPIError(w, http.StatusServiceUnavailable, apiErrorUnavailable, "File metadata unavailable")
+			}
 			return
 		} else if ok {
 			if !readable {
@@ -302,9 +317,17 @@ func (s *server) assetReadableContext(ctx context.Context, upload store.FileUplo
 	}
 	workspaceID, err := s.store.WorkspaceIDForKey(ctx, upload.WorkspaceKey)
 	if err != nil {
+		if databaseReadUnavailable(err) {
+			recordUploadVisibilityRefusal(ctx, err)
+			return false
+		}
 		return user == upload.UserID
 	}
 	role, status, err := s.store.WorkspaceRole(ctx, workspaceID, user)
+	if databaseReadUnavailable(err) {
+		recordUploadVisibilityRefusal(ctx, err)
+		return false
+	}
 	member := err == nil && status == "active"
 	if member && !workspacePolicyAllows(ctx, upload.WorkspaceKey, role) {
 		return false
@@ -428,7 +451,9 @@ func (s *server) serveSignedFile(w http.ResponseWriter, r *http.Request) {
 	}
 	key, err := s.fileSigningKey(r.Context())
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "file signing unavailable")
+		if !writeStoreReadUnavailable(w, err) {
+			writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "file signing unavailable")
+		}
 		return
 	}
 	query := r.URL.Query()
@@ -441,9 +466,16 @@ func (s *server) serveSignedFile(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "Invalid file URL signature")
 		return
 	}
-	image, owned, _, err := s.ownedImageAccess(r.Context(), name, "", false)
+	ctx, visibilityErr := withUploadVisibilityRefusal(r.Context())
+	r = r.WithContext(ctx)
+	image, owned, _, err := s.ownedImageAccess(ctx, name, "", false)
+	if writeStoreReadUnavailable(w, visibilityErr()) {
+		return
+	}
 	if err != nil {
-		writeAPIError(w, http.StatusServiceUnavailable, apiErrorUnavailable, "File metadata unavailable")
+		if !writeStoreReadUnavailable(w, err) {
+			writeAPIError(w, http.StatusServiceUnavailable, apiErrorUnavailable, "File metadata unavailable")
+		}
 		return
 	}
 	if !signer.bound() {
@@ -465,7 +497,11 @@ func (s *server) serveSignedFile(w http.ResponseWriter, r *http.Request) {
 		s.serveOwnedImage(w, r, image)
 		return
 	}
-	if !s.signedFileSignerReadable(r, name, signer) {
+	readable := s.signedFileSignerReadable(r, name, signer)
+	if writeStoreReadUnavailable(w, visibilityErr()) {
+		return
+	}
+	if !readable {
 		writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "file not found")
 		return
 	}
@@ -497,15 +533,22 @@ func (s *server) signFileURLs(w http.ResponseWriter, r *http.Request) {
 	}
 	key, err := s.fileSigningKey(r.Context())
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "file signing unavailable")
+		if !writeStoreReadUnavailable(w, err) {
+			writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "file signing unavailable")
+		}
 		return
 	}
 	expires := time.Now().Add(lifetime).Truncate(time.Second)
 	signer := requestFileSigner(r)
 	result := []signedFile{}
+	ctx, visibilityErr := withUploadVisibilityRefusal(r.Context())
 	for _, raw := range urls {
 		name := uploadNameFromURL(raw)
-		if name == "" || !s.fileReadable(r, name) {
+		readable := name != "" && s.fileReadableContext(ctx, name)
+		if writeStoreReadUnavailable(w, visibilityErr()) {
+			return
+		}
+		if !readable {
 			writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "file not found: "+raw)
 			return
 		}
@@ -550,14 +593,19 @@ func (s *server) fileReadableContext(ctx context.Context, name string) bool {
 	}
 	if upload, err := s.store.FileUploadByObject(ctx, name); err == nil && upload.Purpose == "asset" && s.assetReadableContext(ctx, upload) {
 		return true
+	} else if databaseReadUnavailable(err) {
+		recordUploadVisibilityRefusal(ctx, err)
+		return false
 	}
 	user := ctxAuthUser(ctx)
 	if _, ok, readable, err := s.ownedImageAccess(ctx, name, user.ID, true); err != nil {
+		recordUploadVisibilityRefusal(ctx, err)
 		return false
 	} else if ok {
 		return readable
 	}
 	account, err := s.store.AccountForUser(ctx, user.ID)
+	recordUploadVisibilityRefusal(ctx, err)
 	return err == nil && s.attachmentVisible(ctx, account, user.ID, "/uploads/"+name)
 }
 
@@ -590,6 +638,7 @@ func (s *server) signedFileSignerReadable(r *http.Request, name string, signer f
 	user, apiKey := domain.User{}, (*domain.APIKey)(nil)
 	if signer.KeyID != "" {
 		auth, err := s.store.APIKeyAuthenticationByID(ctx, signer.Workspace, signer.KeyID, applicationApproved)
+		recordUploadVisibilityRefusal(ctx, err)
 		if err != nil || auth.User.ID != signer.Subject || !apiKeyAllowsRequest(&http.Request{Method: http.MethodGet, URL: &url.URL{Path: "/api/files"}}, auth.Key) {
 			return false
 		}
@@ -597,6 +646,7 @@ func (s *server) signedFileSignerReadable(r *http.Request, name string, signer f
 	} else {
 		var err error
 		if user, err = s.store.UserByID(ctx, signer.Subject); err != nil || !user.Active || user.Deleted {
+			recordUploadVisibilityRefusal(ctx, err)
 			return false
 		}
 	}

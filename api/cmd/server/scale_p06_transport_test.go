@@ -129,7 +129,7 @@ func TestScaleP06QueuedCollaborationRevocationFailsClosed(t *testing.T) {
 			s.realtime.broadcastDocument("w", "doc", 0, realtimeSocketMessage{binary: true, data: []byte("secret")})
 			message := <-client.send
 			defer message.release(client)
-			client.checkCredential = func() bool { return scenario != "credential" }
+			client.checkCredential = func() (bool, error) { return scenario != "credential", nil }
 			client.checkDocument = func(string) (string, bool, error) {
 				if scenario == "permission error" {
 					return "", false, errors.New("authority unavailable")
@@ -139,7 +139,7 @@ func TestScaleP06QueuedCollaborationRevocationFailsClosed(t *testing.T) {
 				}
 				return "viewer", false, nil
 			}
-			if got := s.socketMessageAllowed(client, message); got != (scenario == "still allowed") {
+			if got := s.socketMessageAccessError(client, message) == nil; got != (scenario == "still allowed") {
 				t.Fatalf("send allowed = %v", got)
 			}
 		})
@@ -369,7 +369,7 @@ func TestScaleP06GenerationConflictNoticeStillReachesOldEditors(t *testing.T) {
 	s.realtime.broadcastDocumentConflict("w", "old-generation")
 	notice := <-client.send
 	defer notice.release(client)
-	if !s.socketMessageAllowed(client, notice) || !bytes.Contains(notice.data, []byte(`"type":"document.conflict"`)) {
+	if s.socketMessageAccessError(client, notice) != nil || !bytes.Contains(notice.data, []byte(`"type":"document.conflict"`)) {
 		t.Fatal("generation replacement lost its control notice")
 	}
 }

@@ -193,6 +193,9 @@ func (s *SQLiteStore) Register(ctx context.Context, name, email, password string
 
 func (s *SQLiteStore) Login(ctx context.Context, email, password string) (domain.AuthSession, string, error) {
 	user, hash, err := s.authUserByEmail(ctx, email)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return domain.AuthSession{}, "", err
+	}
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil || !user.Active {
 		return domain.AuthSession{}, "", ErrAuthInvalid
 	}
@@ -520,50 +523,65 @@ func (s *SQLiteStore) createSession(ctx context.Context, user domain.User) (doma
 }
 
 func (s *SQLiteStore) AuthenticateSession(ctx context.Context, token string) (domain.User, error) {
+	user, _, err := s.authenticatedSession(ctx, token)
+	return user, err
+}
+
+func (s *SQLiteStore) authenticatedSession(ctx context.Context, token string) (domain.User, time.Time, error) {
 	hash := tokenHash(token)
 	var userID, expiresRaw, lastSeenRaw string
 	err := s.db.QueryRowContext(ctx, `SELECT user_id,expires_at,last_seen_at FROM auth_sessions WHERE token_hash=?`, hash).Scan(&userID, &expiresRaw, &lastSeenRaw)
 	if err != nil {
-		return domain.User{}, ErrAuthInvalid
+		if errors.Is(err, sql.ErrNoRows) {
+			err = ErrAuthInvalid
+		}
+		return domain.User{}, time.Time{}, err
 	}
 	expires, err := time.Parse(time.RFC3339Nano, expiresRaw)
 	if err != nil || time.Now().After(expires) {
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE token_hash=?`, tokenHash(token))
-		return domain.User{}, ErrAuthExpired
+		return domain.User{}, time.Time{}, ErrAuthExpired
 	}
 	user, err := s.authUserByID(ctx, userID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return domain.User{}, time.Time{}, err
+	}
 	if err != nil || !user.Active {
-		return domain.User{}, ErrAuthInvalid
+		return domain.User{}, time.Time{}, ErrAuthInvalid
 	}
 	s.touchSession(ctx, hash, lastSeenRaw, time.Now().UTC())
-	return user, nil
+	return user, expires, nil
 }
 
-func (s *SQLiteStore) EnforceSessionDuration(ctx context.Context, token string, days int) bool {
+func (s *SQLiteStore) EnforceSessionDuration(ctx context.Context, token string, days int) error {
 	if token == "" || days < 1 {
-		return false
+		return ErrAuthInvalid
 	}
 	var createdRaw string
 	if err := s.db.QueryRowContext(ctx, `SELECT created_at FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&createdRaw); err != nil {
-		return false
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrAuthInvalid
+		}
+		return err
 	}
 	created, err := time.Parse(time.RFC3339Nano, createdRaw)
 	if err != nil || time.Now().UTC().After(created.Add(time.Duration(days)*24*time.Hour)) {
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE token_hash=?`, tokenHash(token))
-		return false
+		return ErrAuthExpired
 	}
-	return true
+	return nil
 }
 
 func (s *SQLiteStore) Session(ctx context.Context, token string) (domain.AuthSession, error) {
-	user, err := s.AuthenticateSession(ctx, token)
+	user, expires, err := s.authenticatedSession(ctx, token)
 	if err != nil {
 		return domain.AuthSession{}, err
 	}
-	var expiresRaw string
-	_ = s.db.QueryRowContext(ctx, `SELECT expires_at FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&expiresRaw)
-	expires, _ := time.Parse(time.RFC3339Nano, expiresRaw)
-	return s.sessionForUser(ctx, user, expires), nil
+	account, err := s.AccountForUser(ctx, user.ID)
+	if err != nil {
+		return domain.AuthSession{}, err
+	}
+	return domain.AuthSession{User: user, Memberships: account.Workspaces, ExpiresAt: expires}, nil
 }
 
 func (s *SQLiteStore) Logout(ctx context.Context, token string) error {
@@ -797,6 +815,9 @@ func (s *SQLiteStore) ResetPassword(ctx context.Context, token, password string)
 // RequestLoginToken issues a one-time kind=login token for magic-link / SSO bounce (LS-0083).
 func (s *SQLiteStore) RequestLoginToken(ctx context.Context, email string) (string, error) {
 	user, _, err := s.authUserByEmail(ctx, email)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
 	if err != nil || !user.Active {
 		return "", nil
 	}
@@ -814,12 +835,15 @@ func (s *SQLiteStore) LoginWithAuthToken(ctx context.Context, email, token strin
 		return domain.AuthSession{}, "", ErrAuthInvalid
 	}
 	user, _, err := s.authUserByEmail(ctx, email)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return domain.AuthSession{}, "", err
+	}
 	if err != nil || !user.Active {
 		return domain.AuthSession{}, "", ErrAuthInvalid
 	}
 	userID, err := s.consumeAuthToken(ctx, token, "login")
 	if err != nil {
-		return domain.AuthSession{}, "", ErrAuthExpired
+		return domain.AuthSession{}, "", err
 	}
 	if userID != user.ID {
 		return domain.AuthSession{}, "", ErrAuthInvalid
@@ -842,23 +866,30 @@ func (s *SQLiteStore) LoginWithAuthToken(ctx context.Context, email, token strin
 func (s *SQLiteStore) WorkspaceRole(ctx context.Context, workspaceID, userID string) (string, string, error) {
 	var role, status string
 	err := s.db.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&role, &status)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", ErrAuthForbidden
 	}
-	return role, status, nil
+	return role, status, err
 }
 
 func (s *SQLiteStore) TeamRole(ctx context.Context, workspaceID, teamID, userID string) (string, error) {
 	// Workspace owners/admins can administer every team. Team owners are also
 	// inherited by descendants.
-	if workspaceRole, status, err := s.WorkspaceRole(ctx, workspaceID, userID); err == nil && status == "active" && isWorkspaceAdminRole(workspaceRole) {
+	workspaceRole, status, err := s.WorkspaceRole(ctx, workspaceID, userID)
+	if err != nil && !errors.Is(err, ErrAuthForbidden) {
+		return "", err
+	}
+	if status == "active" && isWorkspaceAdminRole(workspaceRole) {
 		return "owner", nil
 	}
 	data, _, ok := s.workspaceByID(workspaceID)
 	if !ok {
 		return "", ErrAuthForbidden
 	}
-	role := s.teamRoleDirect(ctx, workspaceID, teamID, userID)
+	role, err := s.teamRoleDirect(ctx, workspaceID, teamID, userID)
+	if err != nil {
+		return "", err
+	}
 	if role == "owner" {
 		return role, nil
 	}
@@ -872,7 +903,11 @@ func (s *SQLiteStore) TeamRole(ctx context.Context, workspaceID, teamID, userID 
 			break
 		}
 		parent := settings.ParentTeamID
-		if parentRole := s.teamRoleDirect(ctx, workspaceID, parent, userID); parentRole == "owner" {
+		parentRole, err := s.teamRoleDirect(ctx, workspaceID, parent, userID)
+		if err != nil {
+			return "", err
+		}
+		if parentRole == "owner" {
 			return "owner", nil
 		}
 		current = parent
@@ -883,12 +918,13 @@ func (s *SQLiteStore) TeamRole(ctx context.Context, workspaceID, teamID, userID 
 	return "", ErrAuthForbidden
 }
 
-func (s *SQLiteStore) teamRoleDirect(ctx context.Context, workspaceID, teamID, userID string) string {
+func (s *SQLiteStore) teamRoleDirect(ctx context.Context, workspaceID, teamID, userID string) (string, error) {
 	var role string
-	if err := s.db.QueryRowContext(ctx, `SELECT role FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&role); err != nil {
-		return ""
+	err := s.db.QueryRowContext(ctx, `SELECT role FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
 	}
-	return role
+	return role, err
 }
 
 func isWorkspaceAdminRole(role string) bool {
@@ -965,7 +1001,10 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 	}
 	data.CommentActions = nil // Proposals are returned only by their permission-checked issue endpoint.
 	role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, userID)
-	if err != nil || status != "active" {
+	if err != nil {
+		return domain.Bootstrap{}, false, err
+	}
+	if status != "active" {
 		return domain.Bootstrap{}, false, ErrAuthForbidden
 	}
 	user, err := s.authUserByID(ctx, userID)
@@ -1673,8 +1712,11 @@ func (s *SQLiteStore) consumeAuthToken(ctx context.Context, token, kind string) 
 	var userID, expiresRaw string
 	var used sql.NullString
 	err := s.db.QueryRowContext(ctx, `SELECT user_id,expires_at,used_at FROM auth_tokens WHERE token_hash=? AND kind=?`, tokenHash(token), kind).Scan(&userID, &expiresRaw, &used)
-	if err != nil || used.Valid {
+	if errors.Is(err, sql.ErrNoRows) || err == nil && used.Valid {
 		return "", ErrAuthExpired
+	}
+	if err != nil {
+		return "", err
 	}
 	expires, _ := time.Parse(time.RFC3339Nano, expiresRaw)
 	if time.Now().After(expires) {

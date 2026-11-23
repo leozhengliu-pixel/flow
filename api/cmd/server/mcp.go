@@ -382,6 +382,9 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 	if token := strings.TrimSpace(header[len("Bearer "):]); strings.HasPrefix(token, agentRunTokenPrefix) {
 		grant, err := s.authenticateAgentRunToken(r.Context(), token)
 		if err != nil {
+			if writeOAuthStoreUnavailable(w, err) {
+				return mcpActor{}, false
+			}
 			if s.limitInvalidRunToken(w, r) {
 				s.mcpUnauthorized(w, r, "Run token is invalid, expired, or its run has ended")
 			}
@@ -393,6 +396,13 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 		return mcpActor{WorkspaceKey: grant.run.WorkspaceKey, Run: grant}, true
 	}
 	authentication, err := s.store.AuthenticateAPIKeyRecord(r.Context(), "", secretHash(strings.TrimSpace(header[len("Bearer "):])), applicationApproved)
+	if writeOAuthStoreUnavailable(w, err) {
+		return mcpActor{}, false
+	}
+	if err != nil && !errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, sql.ErrNoRows) {
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not check access token")
+		return mcpActor{}, false
+	}
 	key := authentication.Key
 	if err != nil || key.Scopes != nil && !slices.ContainsFunc(key.Scopes, func(scope string) bool {
 		return slices.Contains([]string{"read", "write", "admin", "create_issues", "create_comments"}, canonicalAPIKeyScope(scope))

@@ -5,14 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
-	"flow/api/internal/coordination"
 	"flow/api/internal/publicapi"
 )
 
@@ -82,12 +80,14 @@ func requestIDFrom(ctx context.Context) string {
 
 // writeErrorFor writes err's message with status: the message of a typed
 // request error (validation, conflict, permission) is written for the person
-// who sent the request. A database, driver or object-storage error never is
-// (isInternalError): it becomes a logged 500 with the generic message and the
-// request id.
+// who sent the request. Transient store errors get a retryable 503. Other
+// internal errors get a generic 500 and the request id.
 func writeErrorFor(w http.ResponseWriter, r *http.Request, status int, err error) {
-	if isInternalError(err) || errors.Is(err, coordination.ErrWorkspaceLockBusy) {
-		writeInternalError(w, r, err)
+	if writeStoreBusy(w, err) {
+		return
+	}
+	if isInternalError(err) {
+		writeUnexpectedError(w, r, err)
 		return
 	}
 	writeError(w, status, err.Error())
@@ -104,13 +104,15 @@ func publicErrorMessage(ctx context.Context, err error) string {
 	return internalErrorMessage
 }
 
-// writeInternalError logs err with the request id and writes the generic 500.
+// writeInternalError serves transient store failures and logs unexpected errors.
 func writeInternalError(w http.ResponseWriter, r *http.Request, err error) {
 	if writeStoreBusy(w, err) {
-		// The COLD slot, another replica's workspace lock or the metadata
-		// work budget was busy: retryable.
 		return
 	}
+	writeUnexpectedError(w, r, err)
+}
+
+func writeUnexpectedError(w http.ResponseWriter, r *http.Request, err error) {
 	requestID := requestIDFrom(r.Context())
 	slog.ErrorContext(r.Context(), "internal error response", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "error", err.Error())
 	writeJSON(w, http.StatusInternalServerError, apiErrorBody{Error: internalErrorMessage, Code: apiErrorInternal, Type: apiErrorInternal, RequestID: requestID})

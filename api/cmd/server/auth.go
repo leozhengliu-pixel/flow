@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,10 +120,12 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 		// header was supplied. Otherwise a bearer token that lacks a required
 		// scope could be accidentally upgraded by an ambient cookie session.
 		authorizationHeader := strings.TrimSpace(r.Header.Get("Authorization"))
-		user, apiKey, apiWorkspace := s.authenticateAPIKey(r)
+		user, apiKey, apiWorkspace, keyErr := s.authenticateAPIKey(r)
 		if apiKey == nil {
 			if authorizationHeader != "" {
-				writeError(w, http.StatusUnauthorized, "Invalid authorization credentials")
+				if !writeAuthCheckFailure(w, keyErr) {
+					writeError(w, http.StatusUnauthorized, "Invalid authorization credentials")
+				}
 				return
 			}
 			cookie, err := r.Cookie(sessionCookieName)
@@ -132,6 +135,9 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			}
 			user, err = s.store.AuthenticateSession(r.Context(), cookie.Value)
 			if err != nil {
+				if writeAuthCheckFailure(w, err) {
+					return
+				}
 				clearSessionCookie(w, r)
 				writeError(w, http.StatusUnauthorized, "Your session has expired")
 				return
@@ -190,18 +196,36 @@ func apiKeyRestrictedPersonalPath(path string) bool {
 	return path == "/api/api-keys" || strings.HasPrefix(path, "/api/api-keys/") || path == "/api/account" || strings.HasPrefix(path, "/api/account/")
 }
 
-func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKey, string) {
+// writeAuthCheckFailure handles store errors that cannot establish a
+// credential decision. Callers retain their existing credential denials.
+func writeAuthCheckFailure(w http.ResponseWriter, err error) bool {
+	switch {
+	case err == nil, errors.Is(err, store.ErrAuthInvalid), errors.Is(err, store.ErrAuthExpired),
+		errors.Is(err, store.ErrAuthForbidden), errors.Is(err, sql.ErrNoRows):
+		return false
+	case writeStoreReadUnavailable(w, err):
+		return true
+	default:
+		writeError(w, http.StatusInternalServerError, internalErrorMessage)
+		return true
+	}
+}
+
+func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKey, string, error) {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
-		return domain.User{}, nil, ""
+		return domain.User{}, nil, "", store.ErrAuthInvalid
 	}
 	secret := strings.TrimSpace(header[len("Bearer "):])
 	auth, err := s.store.AuthenticateAPIKeyRecord(r.Context(), workspaceKey(r), secretHash(secret), applicationApproved)
-	if err != nil || !apiKeyAllowsRequest(r, auth.Key) {
-		return domain.User{}, nil, ""
+	if err != nil {
+		return domain.User{}, nil, "", err
+	}
+	if !apiKeyAllowsRequest(r, auth.Key) {
+		return domain.User{}, nil, "", store.ErrAuthForbidden
 	}
 	_ = s.store.RecordAPIKeyUse(r.Context(), auth.Workspace.URLKey, auth.Key.ID, auth.Key.AuthorizationID)
-	return auth.User, &auth.Key, auth.Workspace.URLKey
+	return auth.User, &auth.Key, auth.Workspace.URLKey, nil
 }
 
 // apiKeyAllowsRequest supports the granular scopes exposed by the API-key
@@ -608,7 +632,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			key = account.LastWorkspaceKey
 			*r = *r.WithContext(context.WithValue(r.Context(), workspaceKeyContextKey{}, key))
 		} else {
-			writeError(w, http.StatusForbidden, "You don't have access to this workspace")
+			if !writeAuthCheckFailure(w, err) {
+				writeError(w, http.StatusForbidden, "You don't have access to this workspace")
+			}
 			return false
 		}
 	}
@@ -635,6 +661,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		var accessErr error
 		data, _, accessErr = s.requestIssueQueryAccess(r)
 		ok = accessErr == nil
+		if writeStoreReadUnavailable(w, accessErr) {
+			return false
+		}
 		if accessErr != nil && data.Workspace.ID != "" {
 			writeError(w, http.StatusForbidden, "You don't have access to this workspace")
 			return false
@@ -681,10 +710,18 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": chatReconnectMessage, "code": "chat_identity_expired"})
 					return false
 				}
-			} else if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
-				clearSessionCookie(w, r)
-				writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
-				return false
+			} else {
+				if err == nil {
+					err = s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays)
+					if writeAuthCheckFailure(w, err) {
+						return false
+					}
+				}
+				if err != nil {
+					clearSessionCookie(w, r)
+					writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
+					return false
+				}
 			}
 		}
 	}
@@ -693,7 +730,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		role, status, err = s.store.WorkspaceRole(r.Context(), data.Workspace.ID, user.ID)
 	}
 	if err != nil || status != "active" {
-		writeError(w, http.StatusForbidden, "You don't have access to this workspace")
+		if !writeAuthCheckFailure(w, err) {
+			writeError(w, http.StatusForbidden, "You don't have access to this workspace")
+		}
 		return false
 	}
 	if aiPolicyPath(r.URL.Path) && agentWorkspacePolicy(data.WorkspaceSettings, role) != nil {
@@ -718,7 +757,10 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	}
 	if teamManagementRequest(r) && !workspaceAdminRole(role) && !membershipSelfServiceRequest(r, user.ID) {
 		teamID := s.store.ResolveTeamID(key, teamIDFromWorkspacePath(r.URL.Path))
-		teamRole, _ := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, user.ID)
+		teamRole, err := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, user.ID)
+		if writeStoreReadUnavailable(w, err) {
+			return false
+		}
 		allowed := teamOperationPermission(data.TeamSettings[teamID], r)
 		if !teamOperationAllowed(data.TeamSettings[teamID], allowed, teamRole, role) {
 			writeError(w, http.StatusForbidden, teamOperationDeniedMessage(allowed, role))
@@ -1128,12 +1170,14 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 			return false
 		}
 		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		noteAuthorizationBusy(r, err)
 		return err == nil && status == "active"
 	}
 	if strings.HasSuffix(r.URL.Path, "/default-favorites") {
 		teamID := s.store.ResolveTeamID(workspace, teamIDFromWorkspacePath(r.URL.Path))
 		data, access, err := s.requestIssueQueryAccess(r)
 		if err != nil {
+			noteAuthorizationBusy(r, err)
 			return false
 		}
 		// A team setting: workspace admins manage it for private teams they have not joined.
@@ -1149,6 +1193,7 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 			return false
 		}
 		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		noteAuthorizationBusy(r, err)
 		return err == nil && status == "active" && role != "guest"
 	}
 	if r.URL.Path == "/api/workspace/preferences" {
@@ -1157,10 +1202,12 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 			return false
 		}
 		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		noteAuthorizationBusy(r, err)
 		return err == nil && status == "active"
 	}
 	if r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/api/notifications/") && len(strings.Split(strings.Trim(r.URL.Path, "/"), "/")) == 3 {
 		_, err := s.store.NotificationRecord(r.Context(), workspace, userID, strings.TrimPrefix(r.URL.Path, "/api/notifications/"))
+		noteAuthorizationBusy(r, err)
 		return err == nil
 	}
 	// Bootstrap performs the viewer projection itself. Repeating it here loads
@@ -1184,6 +1231,7 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 			return false
 		}
 		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		noteAuthorizationBusy(r, err)
 		return err == nil && status == "active"
 	}
 	if s.store.BoundedMetadataEnabled() && (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/api/search/filter-suggestions" {
@@ -1233,6 +1281,7 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 				return false
 			}
 			_, err := s.store.NotificationRecord(r.Context(), metadata.Workspace.URLKey, userID, parts[2])
+			noteAuthorizationBusy(r, err)
 			return err == nil
 		}
 		return true
@@ -1277,6 +1326,7 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		ok = err == nil
 	}
 	if err != nil || !ok {
+		noteAuthorizationBusy(r, err)
 		return false
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
@@ -1301,6 +1351,7 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	if documentCommentWrite {
 		comment, readErr := s.store.ResourceComment(r.Context(), data.Workspace.URLKey, parts[2], parts[4])
 		if readErr != nil {
+			noteAuthorizationBusy(r, readErr)
 			return false
 		}
 		data.Comments[parts[2]] = []domain.Comment{comment}
@@ -2111,6 +2162,9 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	session, token, err := s.store.Login(r.Context(), input.Email, input.Password)
 	if err != nil {
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
 		s.recordSignInFailure(r, input.Email, signInFailureReason(err))
 		writeErrorFor(w, r, http.StatusUnauthorized, err)
 		return
@@ -2123,7 +2177,14 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookieName); err == nil {
 		user, authErr := s.store.AuthenticateSession(r.Context(), cookie.Value)
-		if s.store.Logout(r.Context(), cookie.Value) == nil && authErr == nil {
+		if writeStoreReadUnavailable(w, authErr) {
+			return
+		}
+		err := s.store.Logout(r.Context(), cookie.Value)
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
+		if err == nil && authErr == nil {
 			s.recordAccountAudit(r, user, "", "signed_out", store.AuditResultSuccess, nil)
 		}
 	}
@@ -2157,6 +2218,9 @@ func (s *server) authSession(w http.ResponseWriter, r *http.Request) {
 	session, err := s.store.Session(r.Context(), cookie.Value)
 	w.Header().Set("Server-Timing", fmt.Sprintf("session;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
 	if err != nil {
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
 		clearSessionCookie(w, r)
 		writeError(w, http.StatusUnauthorized, "Your session has expired")
 		return
@@ -2228,6 +2292,9 @@ func (s *server) tokenLogin(w http.ResponseWriter, r *http.Request) {
 	_ = input.InviteLink
 	session, token, err := s.store.LoginWithAuthToken(r.Context(), input.Email, input.AuthToken, input.ForceReauth)
 	if err != nil {
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
 		s.recordSignInFailure(r, input.Email, signInFailureReason(err))
 		writeErrorFor(w, r, http.StatusUnauthorized, err)
 		return

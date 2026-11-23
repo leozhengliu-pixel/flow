@@ -76,7 +76,11 @@ func (s *server) requestResourceRead(r *http.Request, workspace, userID string) 
 			break
 		}
 		if key != nil {
-			user, current, currentWorkspace := s.authenticateAPIKey(r)
+			user, current, currentWorkspace, err := s.authenticateAPIKey(r)
+			if err != nil {
+				result.data, result.allowed, result.err = domain.Bootstrap{}, false, err
+				break
+			}
 			if current == nil || user.ID != userID || currentWorkspace != workspace || !apiKeyAllowsRequest(r, *current) {
 				result.data, result.allowed, result.err = domain.Bootstrap{}, false, store.ErrAuthForbidden
 				break

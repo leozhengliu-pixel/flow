@@ -72,10 +72,12 @@ func (s *server) boundedTeamResourceDecision(r *http.Request, workspace, userID,
 			read.Close()
 		}
 		if !errors.Is(err, store.ErrResourceAccessChanged) || attempt == 2 {
+			noteAuthorizationBusy(r, err)
 			return false
 		}
 		if credential != nil {
-			user, current, selectedWorkspace := s.authenticateAPIKey(r)
+			user, current, selectedWorkspace, err := s.authenticateAPIKey(r)
+			noteAuthorizationBusy(r, err)
 			if current == nil || user.ID != userID || selectedWorkspace != workspace || !apiKeyAllowsRequest(r, *current) {
 				return false
 			}

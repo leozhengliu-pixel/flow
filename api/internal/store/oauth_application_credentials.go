@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -68,7 +69,11 @@ func (s *SQLiteStore) IssueApplicationCredential(ctx context.Context, workspace,
 			key.ClientSecretHash = tokenHash(app.ClientSecret)
 		} else {
 			var role, status string
-			if err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`+lock, current.Workspace.ID, issuerID).Scan(&role, &status); err != nil || status != "active" || !isWorkspaceAdminRole(role) {
+			err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`+lock, current.Workspace.ID, issuerID).Scan(&role, &status)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return current, err
+			}
+			if status != "active" || !isWorkspaceAdminRole(role) {
 				return current, ErrAuthForbidden
 			}
 		}
@@ -201,6 +206,21 @@ func (s *SQLiteStore) OAuthApplicationHome(clientID string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// LookupOAuthApplicationHome resolves the home workspace and preserves SQL
+// failures. The legacy workspace copy retains its original identity rules.
+func (s *SQLiteStore) LookupOAuthApplicationHome(ctx context.Context, clientID string) (string, bool, error) {
+	if s.metadataResidency == nil {
+		if err := s.CheckDatabaseConnection(ctx); err != nil {
+			return "", false, err
+		}
+		workspace, found := s.OAuthApplicationHome(clientID)
+		return workspace, found, nil
+	}
+	workspace, found, release, err := s.readOAuthIdentityValue(ctx, "", clientID, residentOAuthHome)
+	defer release()
+	return workspace, found, err
 }
 
 // An application's app user holds one developer token at a time (the reference app's

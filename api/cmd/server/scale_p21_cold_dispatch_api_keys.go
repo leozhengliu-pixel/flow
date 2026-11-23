@@ -84,7 +84,9 @@ func (s *server) listAPIKeysWithStore(w http.ResponseWriter, r *http.Request, re
 		} else {
 			role, status, roleErr := repo.WorkspaceRole(r.Context(), data.Workspace.ID, actor.ID)
 			if roleErr != nil || status != "active" {
-				respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+				if !writeAuthCheckFailure(w, roleErr) {
+					respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+				}
 				return
 			}
 			data.ViewerRole = role
@@ -120,7 +122,9 @@ func (s *server) listAPIKeysWithStore(w http.ResponseWriter, r *http.Request, re
 		var roleErr error
 		role, status, roleErr = repo.WorkspaceRole(r.Context(), identity.Identity.ID, actor.ID)
 		if roleErr != nil || status != "active" {
-			respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+			if !writeAuthCheckFailure(w, roleErr) {
+				respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+			}
 			return
 		}
 	}
@@ -389,7 +393,9 @@ func (s *server) revokeAPIKeyWithStore(w http.ResponseWriter, r *http.Request, r
 		}
 		role, status, err := repo.WorkspaceRole(r.Context(), metadata.Workspace.ID, actor.ID)
 		if err != nil || status != "active" {
-			respondMutation(w, store.ErrAuthForbidden, http.StatusNoContent, nil)
+			if !writeAuthCheckFailure(w, err) {
+				respondMutation(w, store.ErrAuthForbidden, http.StatusNoContent, nil)
+			}
 			return
 		}
 		viewerRole = role

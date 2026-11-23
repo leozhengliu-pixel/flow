@@ -438,7 +438,8 @@ func (s *SQLiteStore) RevokeOAuthRefreshToken(ctx context.Context, token string)
 
 func (s *SQLiteStore) FindAPIKey(secretHash string) (string, domain.APIKey, bool) {
 	if s.BoundedMetadataEnabled() {
-		return s.scaleP21SW17FindAPIKey(secretHash)
+		workspace, key, found, _ := s.LookupAPIKey(context.Background(), secretHash)
+		return workspace, key, found
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -452,7 +453,16 @@ func (s *SQLiteStore) FindAPIKey(secretHash string) (string, domain.APIKey, bool
 	return "", domain.APIKey{}, false
 }
 
-func (s *SQLiteStore) scaleP21SW17FindAPIKey(secretHash string) (string, domain.APIKey, bool) {
+// LookupAPIKey reads the active key and preserves database failures.
+// Revocation and introspection check ownership of the token separately.
+func (s *SQLiteStore) LookupAPIKey(ctx context.Context, secretHash string) (string, domain.APIKey, bool, error) {
+	if !s.BoundedMetadataEnabled() {
+		if err := s.CheckDatabaseConnection(ctx); err != nil {
+			return "", domain.APIKey{}, false, err
+		}
+		workspace, key, found := s.FindAPIKey(secretHash)
+		return workspace, key, found, nil
+	}
 	from := `api_key_lookup locator JOIN workspace_metadata_records record
 		ON record.workspace_key=locator.workspace_key AND ` + s.metadataRecordKeyEquals("record.record_key", "locator.key_id")
 	predicate := "locator.secret_hash=?"
@@ -473,11 +483,11 @@ func (s *SQLiteStore) scaleP21SW17FindAPIKey(secretHash string) (string, domain.
 		limit, advanced := MetadataRecordPageMaxBytes, false
 		for attempt := 0; attempt < 3; attempt++ {
 			if limit > (metadataWorkBytes-(1<<20))/3 {
-				return "", domain.APIKey{}, false
+				return "", domain.APIKey{}, false, ErrMetadataPageBudget
 			}
-			ctx, release, err := s.admitMetadataWork(context.Background(), max(2<<20, 3*limit+(1<<20)))
+			ctx, release, err := s.admitMetadataWork(ctx, max(2<<20, 3*limit+(1<<20)))
 			if err != nil {
-				return "", domain.APIKey{}, false
+				return "", domain.APIKey{}, false, err
 			}
 			query := `SELECT record.workspace_key,record.record_key,record.collection_order,LENGTH(record.data),` + workSize + `,CASE WHEN ` + workSize + `<=? AND LENGTH(record.data)<=? THEN record.data ELSE NULL END
 				FROM ` + from + ` WHERE record.field='apiKeys' AND ` + predicate
@@ -494,12 +504,15 @@ func (s *SQLiteStore) scaleP21SW17FindAPIKey(secretHash string) (string, domain.
 			err = s.db.QueryRowContext(ctx, query, args...).Scan(&workspace, &id, &order, &encodedSize, &size, &raw)
 			if err != nil {
 				release()
-				return "", domain.APIKey{}, false
+				if errors.Is(err, sql.ErrNoRows) {
+					err = nil
+				}
+				return "", domain.APIKey{}, false, err
 			}
 			if raw == nil {
 				release()
 				if size <= limit || encodedSize > s.maxStateBytes {
-					return "", domain.APIKey{}, false
+					return "", domain.APIKey{}, false, ErrMetadataPageBudget
 				}
 				limit = size
 				continue
@@ -508,17 +521,17 @@ func (s *SQLiteStore) scaleP21SW17FindAPIKey(secretHash string) (string, domain.
 			err = json.Unmarshal(raw, &key)
 			release()
 			if err != nil {
-				return "", domain.APIKey{}, false
+				return "", domain.APIKey{}, false, err
 			}
 			if s.HasWorkspace(workspace) && key.SecretHash == secretHash && key.RevokedAt == nil && (key.ExpiresAt == nil || time.Now().UTC().Before(*key.ExpiresAt)) {
-				return workspace, key, true
+				return workspace, key, true, nil
 			}
 			lastWorkspace, lastID, lastOrder, cursor = workspace, id, order, true
 			advanced = true
 			break
 		}
 		if !advanced {
-			return "", domain.APIKey{}, false
+			return "", domain.APIKey{}, false, ErrMetadataPageBudget
 		}
 	}
 }
