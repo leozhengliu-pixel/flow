@@ -1,6 +1,6 @@
 {
   "source": "server/main.go",
-  "unmigrated": 57,
+  "unmigrated": 56,
   "consumers": {
     "accountBootstrap": {
       "owner": "P21",
@@ -454,20 +454,6 @@
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
         "DELETE /api/initiatives/{id}/updates/{updateId} (server/main.go:1064)"
-      ]
-    },
-    "deleteIssue": {
-      "owner": "P21",
-      "status": "unmigrated",
-      "accessors": [
-        "Bootstrap",
-        "MutateWorkspace"
-      ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
-      "callers": [
-        "DELETE /api/issue-records/{id} (server/main.go:925)",
-        "DELETE /api/issues/{id} (server/main.go:1071)"
       ]
     },
     "deleteProject": {

@@ -31,7 +31,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"snapshot_clone.go":                           "eed939fd6798a8ade89c9f80a12040f1f5e285dc212e521ad2c38e04fcbc6063",
 		"../../cmd/server/advanced_features.go":       "a59c6771f95ebb29ed6187a194cf472e1e19a6919427ebf06d6744e187e0f8ba",
 		"../../cmd/server/loop_settings.go":           "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
-		"../../cmd/server/main.go":                    "40bfece67bf432277256061e91ae87a8f2e8ab3d72b734b6f90741efc204c2fd",
+		"../../cmd/server/main.go":                    "1a6877d7d1f1042921bd435d048f77203f2d8ff67f437a8099df4ecfe9782c0d",
 		"../../cmd/server/notification_state.go":      "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
 		"../../cmd/server/personal_data.go":           "df7f342d4fdd9a5908cfbaf6cceddd89e8be2be0ff5dbe23e94e9643e9cb26a3",
 		"../../cmd/server/scale_p21_cold_dispatch.go": "78f6979c7b6492f603c4b1a452786f590b800139ea08d371bc3bc8054ba3e597",
@@ -72,7 +72,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_bootstrap_projection_read.go":                        "27a82fd14f7ba9244cbe70fe286bfd1fc5b4de3f2d6d711cbb56df078912ee5b",
 		"scale_p21_collaboration_document_read.go":                      "d4839174c25808b899839955839d6cd2d9e4a74b5ac76d1158c8a0fb1fb8fae8",
 		"scale_p21_collection_snapshot.go":                              "e8d843ee5626ba45c1aa11009ddf1e6860289895367d581fd8552309dbaec1fa",
-		"scale_p21_cycle_schedule_write.go":                             "a4759060eb139f2920cef48525526f84b6753833fc57d1720908cedf0c0b9c08",
+		"scale_p21_cycle_schedule_write.go":                             "e0effd9f9d6594ddce8b87b32036805a059702a6af22a597c256fbf72862dc5a",
 		"scale_p21_delivery_context.go":                                 "89590bfc452c82e405c4ddd0727946bf6274794ce0c819576ed8da1d0271792a",
 		"scale_p21_desktop_ack_write.go":                                "caca6a6974572bf3205f7dcf5280b54dd7ad502f75b761967281665259b90682",
 		"scale_p21_document_auxiliary_read.go":                          "509970bec9f7e70a18b5054485374e46e441f5a03c31dfb491497ba16b570a6d",
@@ -100,6 +100,8 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_sw307_team_resource_read.go":                         "e91a2ec9e65996dc2e2ca07c7ebfb8e618bf3274c29679cd0fda488f6bb675c8",
 		"scale_p21_team_member_request.go":                              "0360800099462666455efdb0d7b09147467ad20fa5d2dce88a6d20aee0e25c5d",
 		"scale_p21_triage_suggestion_read.go":                           "83681e09dfbf29ea6c4888607bac7d7e97a37605bd1f7ef904f1f6941e65477f",
+		// Issue deletion borrows its own write transaction for policy and issue headers.
+		"bounded_issue_lifecycle.go": "9d33443fd44941047790c547c61d5a1c1925ad8dd8af0e32bfd778f790aa395a",
 		// Attachment visibility binds its owned raw projection only inside its
 		// own Project call; the context never reaches request authorization.
 		"scale_p21_attachment_visibility_read.go": "d6ae0a5f2e25635ae7a834a18e27eccb2b23b1ef31848d7cb47c376418729221",
@@ -111,6 +113,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 	}
 	want := map[string]int{
 		"authz_epoch.go:AuthzEpoch:clear":                                             1,
+		"bounded_issue_lifecycle.go:checkAccess:metadata":                             1,
 		"read_snapshot.go:BeginWorkspaceRead:metadata":                                2,
 		"resource_access.go:ResolveAccess:sql":                                        1,
 		"scale_p12_epoch_access.go:LiveEventContext:clear":                            1,

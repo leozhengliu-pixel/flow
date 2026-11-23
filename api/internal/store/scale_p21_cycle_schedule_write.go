@@ -26,6 +26,7 @@ const (
 	scopedImageRecurringOccurrence
 	scopedImagePortfolioProject
 	scopedImagePortfolioDocument
+	scopedImageIssueDelete
 )
 
 // Only the closed declarations above enter this executor. Each owns its
@@ -297,10 +298,12 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 	if s == nil || !s.BoundedMetadataEnabled() || profile == nil || mutate == nil || !metadataOutputOwnerPresent(ctx) ||
 		(profile.kind() != scopedImageDocumentUpdate && profile.kind() != scopedImageCycleSchedule && profile.kind() != scopedImageAdvancedSchedule &&
 			profile.kind() != scopedImageAgentReply && profile.kind() != scopedImageCommentActionResolve && profile.kind() != scopedImageRecurringOccurrence &&
-			profile.kind() != scopedImagePortfolioProject && profile.kind() != scopedImagePortfolioDocument) ||
+			profile.kind() != scopedImagePortfolioProject && profile.kind() != scopedImagePortfolioDocument &&
+			profile.kind() != scopedImageIssueDelete) ||
 		UsesIssueRecordMutations(ctx) || issueRenumbering(ctx) {
 		return ErrBoundedMetadataCoverage
 	}
+	deletion, deleting := profile.(*issueDeleteImage)
 	if workspace == "" {
 		s.mu.RLock()
 		workspace = s.lastWorkspaceKey
@@ -314,7 +317,7 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 	}
 	defer finishTimestamps()
 	webhookEnabled := false
-	if s.webhookConfigured() {
+	if s.webhookConfigured() && !deleting {
 		webhookEnabled, err = s.boundedLegacyWebhookNeeded(ctx, workspace)
 		if err != nil {
 			return err
@@ -391,7 +394,7 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		var role string
 		var teams []string
 		applyRole := false
-		if hasActor {
+		if hasActor && !deleting {
 			role, teams, applyRole, err = s.boundedLegacyActorDirectory(ctx, attempt.data.Workspace.ID, actor.ID, attempt.owner)
 			if err != nil {
 				return err
@@ -414,6 +417,13 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		if baseStamp.workspaceID != attempt.data.Workspace.ID {
 			return ErrResourceAccessChanged
 		}
+		if deleting && hasActor {
+			role, err = deletion.actorRole(ctx, tx, baseStamp.workspaceID, actor.ID)
+			if err != nil {
+				return err
+			}
+			applyRole = true
+		}
 		// A family profile resolves its status-automation and created issues itself (below); the direct
 		// selection sees only the declared issues.
 		direct := scope
@@ -421,7 +431,9 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 			direct.StatusAutomation, direct.CreateIssues = false, false
 		}
 		var ids []string
-		if selector, ok := profile.(interface {
+		if deleting {
+			// The delete profile loads the family under the same transaction.
+		} else if selector, ok := profile.(interface {
 			selectIssueIDs(context.Context, *sqlTx, string, MutationScope, *ResourceRead) ([]string, error)
 		}); ok {
 			ids, err = selector.selectIssueIDs(ctx, tx, workspace, direct, attempt.owner)
@@ -439,7 +451,12 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 				return err
 			}
 		}
-		records, err := attempt.issueRecords(ctx, ids)
+		var records map[string]storedIssueRecord
+		if deleting {
+			records, err = deletion.loadRecords(ctx, attempt, tx, workspace, direct, cloned)
+		} else {
+			records, err = attempt.issueRecords(ctx, ids)
+		}
 		if err != nil {
 			return err
 		}
@@ -449,7 +466,9 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 			filter.filterIssueRecords(scope, records)
 		}
 		order := sortedKeys(records)
-		sort.SliceStable(order, func(i, j int) bool { return records[order[i]].order < records[order[j]].order })
+		if !deleting {
+			sort.SliceStable(order, func(i, j int) bool { return records[order[i]].order < records[order[j]].order })
+		}
 		loaded, rawBefore := map[string]domain.Issue{}, map[string][]byte{}
 		loadedSlice := make([]domain.Issue, 0, len(order))
 		attempt.data.Issues = []domain.Issue{}
@@ -481,18 +500,20 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 			return err
 		}
 		defer display.Release()
-		var actorPointer *domain.User
-		if hasActor {
-			actorPointer = &actor
+		prepared := display
+		if !deleting {
+			var actorPointer *domain.User
+			if hasActor {
+				actorPointer = &actor
+			}
+			actorImage, err := s.prepareLegacyActorImage(ctx, display, actorPointer)
+			if err != nil {
+				return err
+			}
+			defer actorImage.Close()
+			prepared = actorImage.Source()
 		}
-		actorImage, err := s.prepareLegacyActorImage(ctx, display, actorPointer)
-		if err != nil {
-			return err
-		}
-		defer actorImage.Close()
-		prepared := actorImage.Source()
-		// Re-select complete values after both literal display passes and the
-		// actor substitution; the pre-callback source is never normalized.
+		// Re-select complete values after both literal display passes.
 		attempt.data, err = profile.inputs(ctx, attempt.owner, prepared)
 		if err != nil {
 			return err
@@ -509,20 +530,27 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 			attempt.data.ViewerRole = role
 		}
 		if hasActor {
-			attempt.data.ViewerTeamIDs = teams
+			if deleting {
+				// The issue-record writer only substitutes the callback viewer.
+				attempt.data.Viewer = actor
+			} else {
+				attempt.data.ViewerTeamIDs = teams
+			}
 		}
 		if err := reserveCycleScheduleClone(ctx, attempt.owner, attempt.data); err != nil {
 			return err
 		}
 		attempt.before = cloneCallbackInput(attempt.data)
-		documentID := scopedImageEditorDocument(profile, attempt.data)
-		inputs := &issueHotInputs{store: s, source: prepared}
-		attempt.lookups, err = newIssueEditorLookups(ctx, inputs, tx, workspace, attempt.data.Workspace.ID,
-			domain.Issue{DocumentContent: &domain.DocumentContent{ID: documentID}})
-		if err != nil {
-			return err
+		if !deleting {
+			documentID := scopedImageEditorDocument(profile, attempt.data)
+			inputs := &issueHotInputs{store: s, source: prepared}
+			attempt.lookups, err = newIssueEditorLookups(ctx, inputs, tx, workspace, attempt.data.Workspace.ID,
+				domain.Issue{DocumentContent: &domain.DocumentContent{ID: documentID}})
+			if err != nil {
+				return err
+			}
+			attempt.lookups.install(&attempt.data)
 		}
-		attempt.lookups.install(&attempt.data)
 		budget := &boundedDiscussionAttempt{owner: attempt.owner}
 		if err := profile.reserveCallback(ctx, attempt.owner, attempt.data, payload); err != nil {
 			return err
@@ -534,8 +562,10 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		transferred = true
 		aggregate, callbackErr := mutate(&attempt.data)
 		attempt.data.FormerMembers, attempt.data.CollaborationUpdates, attempt.data.CollaborationWork = nil, nil, nil
-		if err := attempt.lookups.check(); err != nil {
-			return err
+		if !deleting {
+			if err := attempt.lookups.check(); err != nil {
+				return err
+			}
 		}
 		if callbackErr != nil {
 			return callbackErr
@@ -614,6 +644,13 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 				}
 			}
 		}
+		var deleted []string
+		if deleting {
+			deleted, err = deletion.persistDeleted(ctx, tx, workspace, loaded)
+			if err != nil {
+				return err
+			}
+		}
 		changed, err := s.persistScopedRecords(writeContext, tx, workspace, persistData, loaded, rawBefore, createIssues, keys, oldDeliveries)
 		if err != nil {
 			return err
@@ -657,18 +694,20 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		}
 		defer publication.Close()
 		traceMark(ctx, "publication")
-		if err := budget.reserveValue(ctx, s.viewer); err != nil {
-			return err
-		}
-		viewerRaw, _ := json.Marshal(s.viewer)
-		if len(viewerRaw) == 0 || string(viewerRaw) == "{}" {
-			if err := budget.reserveValue(ctx, attempt.data.Viewer); err != nil {
+		if !deleting {
+			if err := budget.reserveValue(ctx, s.viewer); err != nil {
 				return err
 			}
-			viewerRaw, _ = json.Marshal(attempt.data.Viewer)
-		}
-		if err := writeAccountMetadata(ctx, tx, workspace, viewerRaw); err != nil {
-			return err
+			viewerRaw, _ := json.Marshal(s.viewer)
+			if len(viewerRaw) == 0 || string(viewerRaw) == "{}" {
+				if err := budget.reserveValue(ctx, attempt.data.Viewer); err != nil {
+					return err
+				}
+				viewerRaw, _ = json.Marshal(attempt.data.Viewer)
+			}
+			if err := writeAccountMetadata(ctx, tx, workspace, viewerRaw); err != nil {
+				return err
+			}
 		}
 		storedPrevious, err := storedEventPreviousValues(ctx, tx, workspace, event.Type, aggregate, previous)
 		if err != nil {
@@ -692,7 +731,7 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		if err := publication.Install(); err != nil {
 			return err
 		}
-		changedIssues, committed, realtime = changed, event, nextRealtime
+		changedIssues, committed, realtime = append(changed, deleted...), event, nextRealtime
 		traceMark(ctx, "commit")
 		return nil
 	}
@@ -730,6 +769,9 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		s.dropMetadataCache(ctx, workspace)
 	}
 	if errors.Is(err, errScopeTooLarge) {
+		if deleting {
+			return ErrMetadataWorkBudget
+		}
 		return s.mutateBoundedScopedImageFull(ctx, workspace, eventType, payload, profile, mutate)
 	}
 	if errors.Is(err, ErrNoMutation) {
