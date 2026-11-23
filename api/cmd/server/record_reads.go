@@ -10,6 +10,10 @@ import (
 )
 
 func (s *server) syncRecords(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("surface") == "local-store" {
+		s.localStoreIssuePage(w, r)
+		return
+	}
 	if s.scaleP20Records(w, r) {
 		return
 	}
@@ -78,6 +82,10 @@ func (s *server) syncBatch(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.Projection == "" {
 		input.Projection = "detail"
+	}
+	if r.URL.Query().Get("surface") == "local-store" {
+		s.localStoreIssueBatch(w, r, input.Keys, input.Projection)
+		return
 	}
 	if s.scaleP20Batch(w, r, input.Keys, input.Projection) {
 		return

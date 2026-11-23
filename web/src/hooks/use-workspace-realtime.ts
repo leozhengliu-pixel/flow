@@ -13,10 +13,14 @@ import { APPLIED_CURSOR_SCHEMA, appliedRealtimeCursorEnabled, boundedBrowserCach
 import { SYNC_V2_STREAM_SCHEMA } from '@/lib/scale-p13-wire'
 import { retainOpenIssueDetail } from '@/lib/issue-detail-cache'
 import { clearNavigationCache } from '@/lib/navigation-cache'
+import { LocalStoreDB, localStoreGeneration } from '@/lib/local-store-db'
+import { connectLocalOutbox, type LocalOutboxView } from '@/lib/local-store-outbox'
+import { localStoreOwnerName } from '@/lib/local-store-notice'
+import type { ApiError } from '@/lib/api-client'
 import type { BootstrapData, Presence, RealtimeEvent } from '@/types/flow'
 import { ISSUE_QUERY_INVALIDATED, type IssueQueryInvalidation } from '@/components/issue-explorer/paged-issue-invalidation'
 
-export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, syncV2 = false, syncCursor, onRemoteSync }: {
+export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, syncV2 = false, syncCursor, baselineCursor, localWorkspaceId, onStoreOwner, onReplayError, onPendingEdits, onJournalActivity, onRemoteSync }: {
   workspaceKey?: string
   /** Tabs share one stream only with other tabs of the same user. */
   viewerId?: string
@@ -25,12 +29,27 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, s
   snapshot?: BootstrapData | null
   syncV2?: boolean
   syncCursor?: string
+  /** An authorized snapshot's domain-event cursor. It differs from the record-journal cursor. */
+  baselineCursor?: string
+  localWorkspaceId?: string
+  onStoreOwner?: (viewerId: string, workspaceKey: string, owned: boolean) => void
+  onReplayError?: (error: ApiError) => void
+  onPendingEdits?: (view?: LocalOutboxView) => void
+  onJournalActivity?: (viewerId: string | undefined, workspaceKey: string) => void
   onRemoteSync: (event: RealtimeEvent) => Promise<void>
 }) {
   const [presence, setPresence] = useState<Presence[]>([])
   const [connected, setConnected] = useState(false)
   const syncRef = useLatestRef(onRemoteSync)
-  const appliedCursor = syncV2 || appliedRealtimeCursorEnabled()
+  const journalRef = useLatestRef(onJournalActivity)
+  const ownerRef = useLatestRef(onStoreOwner)
+  const errorRef = useLatestRef(onReplayError)
+  const pendingRef = useLatestRef(onPendingEdits)
+  // A local owner reads the committed cursor on promotion. Advancing that
+  // cursor must not tear down an active stream or release the ownership lock.
+  const legacyBaseline = localWorkspaceId ? undefined : baselineCursor
+  const baselineRef = useLatestRef(baselineCursor)
+  const appliedCursor = syncV2 || baselineCursor !== undefined || !!localWorkspaceId || appliedRealtimeCursorEnabled()
   const cursorSchema = syncV2 ? SYNC_V2_STREAM_SCHEMA : APPLIED_CURSOR_SCHEMA
   const presenceViewerId = appliedCursor ? viewerId : undefined
   const boundedCache = boundedBrowserCacheEnabled()
@@ -41,6 +60,10 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, s
   // reset here before subscribing.
   useEffect(() => {
     if (!workspaceKey) return
+    const scope = viewerId && localWorkspaceId ? { viewerId, workspaceKey, workspaceId: localWorkspaceId } : undefined
+    const outbox = scope && connectLocalOutbox(scope,
+      () => journalRef.current?.(scope.viewerId, scope.workspaceKey), error => errorRef.current?.(error), view => pendingRef.current?.(view))
+    if (scope) ownerRef.current?.(scope.viewerId, workspaceKey, false)
     const clientId = realtimeClientId()
     let disposed = false
     let timer: number | undefined
@@ -117,7 +140,7 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, s
         return
       }
       if (appliedCursor && /^(resync$|workspace\.resync_required$|.*permission|issue\.(shared|unshared)$|team_member\.|workspace_member\.|membership\.)/.test(event.type)) {
-        clearNavigationCache(viewerId, workspaceKey)
+        if (!scope || event.type !== 'resync' && event.type !== 'workspace.resync_required') clearNavigationCache(viewerId, workspaceKey)
         // Revoke cached query rows immediately, even while an older apply is
         // waiting on the network. Reconciliation below remains ordered.
         window.dispatchEvent(new CustomEvent(ISSUE_QUERY_INVALIDATED, { detail: { workspaceKey, issueId: event.aggregateId, force: true } satisfies IssueQueryInvalidation }))
@@ -148,7 +171,10 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, s
         acknowledge()
         return
       }
-      if (event.type === 'presence.updated' || !appliedCursor && event.clientId === clientId) { acknowledge(); return }
+      if (event.type === 'presence.updated') { acknowledge(); return }
+      // The journal mirror needs a wakeup for this tab's edits too.
+      journalRef.current?.(viewerId, workspaceKey)
+      if (!appliedCursor && event.clientId === clientId) { acknowledge(); return }
       schedule(event, message.data.length, appliedCursor ? acknowledge : undefined)
     }
     const disconnect = connectSharedRealtime({
@@ -156,6 +182,22 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, s
       userId: viewerId,
       schema: cursorSchema,
       appliedCursor,
+      localStore: scope && {
+        name: localStoreOwnerName(scope),
+        // EventSource does not expose an HTTP refusal. Check the journal
+        // when the connection fails so an idle owner can revoke its store.
+        onDisconnect: () => journalRef.current?.(scope.viewerId, scope.workspaceKey),
+        async cursor() {
+          const db = await LocalStoreDB.openRetained(scope.viewerId, scope.workspaceId, scope.workspaceKey, localStoreGeneration())
+          try { return (await db?.readMeta())?.resume?.eventCursor }
+          finally { db?.close() }
+        },
+      },
+      onRole: scope && (role => {
+        const owned = role === 'leader'
+        ownerRef.current?.(scope.viewerId, scope.workspaceKey, owned)
+        outbox?.owner(owned)
+      }),
       url: cursor => {
         const params = new URLSearchParams({ workspace: workspaceKey })
         if (import.meta.env.VITE_PAGED_ISSUES === 'true') params.set('issues', 'paged')
@@ -163,7 +205,7 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, s
         if (cursor) params.set('since', cursor)
         return `/api/realtime/events?${params.toString()}`
       },
-      cursor: () => syncV2 ? syncCursor : appliedCursor ? undefined : loadRealtimeCursor(workspaceKey),
+      cursor: () => syncV2 ? syncCursor : (scope ? baselineRef.current : legacyBaseline) ?? (appliedCursor ? undefined : loadRealtimeCursor(workspaceKey)),
       onAppliedCursor: checkpoint,
       onStatus: connected => { if (!disposed) setConnected(connected) },
       onMessage,
@@ -171,12 +213,13 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, s
     return () => {
       disposed = true
       disconnect()
+      outbox?.close()
       window.clearTimeout(timer)
       window.clearTimeout(cursorTimer)
       setConnected(false)
       setPresence([])
     }
-  }, [workspaceKey, viewerId, syncRef, appliedCursor, cursorSchema, syncV2, syncCursor])
+  }, [workspaceKey, viewerId, syncRef, journalRef, ownerRef, errorRef, pendingRef, baselineRef, appliedCursor, cursorSchema, syncV2, syncCursor, legacyBaseline, localWorkspaceId])
 
   useEffect(() => {
     if (!workspaceKey) return

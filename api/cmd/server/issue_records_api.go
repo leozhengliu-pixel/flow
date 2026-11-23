@@ -445,6 +445,10 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		issueRecordsErrorFor(w, r, err)
 		return
 	}
+	ctx, ok := s.localStoreIssueWriteContext(w, r, query.Workspace)
+	if !ok {
+		return
+	}
 	id := r.PathValue("id")
 	query.Filter = store.IssueFilter{Field: "id", Values: []string{id}}
 	query.Limit = 1
@@ -474,7 +478,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, issueEditForbiddenMessage)
 		return
 	}
-	if input.ExpectedVersion == nil && issueUpdateIsNoop(page.Items[0], input) && store.ChatMutationKey(r.Context()) == "" {
+	if input.ExpectedVersion == nil && issueUpdateIsNoop(page.Items[0], input) && store.ChatMutationKey(ctx) == "" {
 		projected, projectionErr := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{page.Items[0]})
 		if projectionErr != nil {
 			issueRecordsErrorFor(w, r, projectionErr)
@@ -526,7 +530,6 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	ctx := r.Context()
 	if input.TeamID != nil && *input.TeamID != page.Items[0].Team.ID {
 		// A team move needs access to the target team too (and a new number
 		// from the workspace sequence).
@@ -564,6 +567,10 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	mutationScope := store.IssueMutationScope{RelatedIDs: extra, IncludeFamily: input.StateID != nil || input.ParentID != nil, Payload: input}
+	var rebaseVersion int64
+	if r.Header.Get("X-Flow-Local-Mutation") != "" {
+		mutationScope.RebaseVersion = &rebaseVersion
+	}
 	if input.ParentID != nil {
 		mutationScope.NewParentID = *input.ParentID
 	}
@@ -640,6 +647,9 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		if deleteErr := s.store.DeleteDocumentCollaborationUpdates(r.Context(), query.Workspace, updated.DocumentContent.ID, input.DocumentUpdateIDs); deleteErr != nil {
 			log.Printf("compact collaboration updates document=%s: %v", updated.DocumentContent.ID, deleteErr)
 		}
+	}
+	if err == nil && rebaseVersion > 0 {
+		w.Header().Set("X-Flow-Local-Rebase-Version", strconv.FormatInt(rebaseVersion, 10))
 	}
 	respondMutation(w, err, http.StatusOK, updated)
 }

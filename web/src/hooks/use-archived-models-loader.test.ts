@@ -42,7 +42,7 @@ describe("useArchivedModelsLoader", () => {
         archived: "true",
         limit: 50,
       }),
-      undefined,
+      expect.any(AbortSignal),
       undefined,
     );
 

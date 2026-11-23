@@ -1,5 +1,5 @@
 /* oxlint-disable react/only-export-components -- locale hooks and components share one provider contract. */
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { SelectControl } from '@/components/ui/select-control'
 
@@ -106,7 +106,10 @@ const attributeStates = new WeakMap<Element, Map<string, TextState>>()
 const attributes = ['aria-label', 'placeholder', 'title', 'data-placeholder', 'aria-roledescription', 'aria-description'] as const
 
 function LegacyUiTranslator({ locale, dictionaryReady }: { locale: AppLocale; dictionaryReady: boolean }) {
+  const translated = useRef(false)
   useLayoutEffect(() => {
+    if (locale === 'en-US' && !translated.current) return
+    if (locale === 'zh-CN') translated.current = true
     const translateTree = (root: ParentNode) => {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
       let node: Node | null

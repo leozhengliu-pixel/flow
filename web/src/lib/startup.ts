@@ -24,6 +24,7 @@ export interface StartupInput {
   requestedWorkspaceKey: string
   isRoot: boolean
   projection?: BootstrapProjection
+  skipSpeculative?: boolean
 }
 
 export const bootstrapRequestKey = (viewerId: string, workspaceKey: string, projection?: string) => `${viewerId}:${workspaceKey}:${projection ?? 'full'}`
@@ -49,7 +50,7 @@ export function startStartup(deps: StartupDeps, input: StartupInput) {
   const workspaceKey = input.isRoot ? remembered?.workspaceKey : input.requestedWorkspaceKey === remembered?.workspaceKey ? remembered.workspaceKey : undefined
   const projection = input.isRoot ? undefined : input.projection
   let speculative: BootstrapRequest | undefined
-  if (remembered && workspaceKey) {
+  if (remembered && workspaceKey && !input.skipSpeculative) {
     speculative = createBootstrapRequest(
       bootstrapRequestKey(remembered.viewerId, workspaceKey, projection),
       signal => deps.fetchBootstrap(workspaceKey, projection, signal, true),
@@ -73,13 +74,15 @@ let early: { input: StartupInput; startup: ReturnType<typeof startStartup> } | u
 /** Starts the session, account and remembered-workspace requests before the first render (main.tsx). */
 export function beginStartup(deps: StartupDeps, input: StartupInput) {
   early = { input, startup: startStartup(deps, input) }
+  void early.startup.ready.catch(() => undefined)
+  return early.startup
 }
 
 /** The startup begun before the first render when it was begun for the same page; otherwise a new one. */
 export function takeStartup(deps: StartupDeps, input: StartupInput) {
   const begun = early
   early = undefined
-  if (begun && begun.input.requestedWorkspaceKey === input.requestedWorkspaceKey && begun.input.isRoot === input.isRoot && begun.input.projection === input.projection) return begun.startup
+  if (begun && begun.input.requestedWorkspaceKey === input.requestedWorkspaceKey && begun.input.isRoot === input.isRoot && begun.input.projection === input.projection && begun.input.skipSpeculative === input.skipSpeculative) return begun.startup
   if (begun) {
     begun.startup.speculative?.controller.abort()
     begun.startup.speculative?.release()

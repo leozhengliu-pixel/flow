@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { Suspense, useState, type ReactNode } from 'react'
 import { NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { UserAvatar } from '@/components/ui/user-avatar'
@@ -10,7 +10,7 @@ import { Command } from 'cmdk'
 import { LabelCommandItems, REMOVE_ALL_LABELS } from '@/components/command/label-command-items'
 import { ChevronLeft, ChevronRight, Command as CommandIcon, X } from 'lucide-react'
 import type { MyIssuesRowData } from './my-issues-list'
-import { AgentChatPanel } from '@/components/agent/agent-chat-panel'
+import { AgentChatPanel } from '@/lib/route-pages'
 import { AgentPointerIcon } from '@/components/agent/agent-icons'
 import styles from './my-issues-bulk-action-bar.module.css'
 import { PersonHover } from '@/components/property/person-info'
@@ -60,7 +60,7 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
   const [labelQuery, setLabelQuery] = useState('')
   const [labelGroup, setLabelGroup] = useState<{ id: string; name: string }>()
   const [agentIssues, setAgentIssues] = useState<MyIssuesRowData[]>([])
-  const [agentOpen, setAgentOpen] = useState(false)
+  const [agentOpen, setAgentOpen] = useState<boolean>()
   const [seenSelectionCount, setSeenSelectionCount] = useState(selectedIssues.length)
   if (seenSelectionCount !== selectedIssues.length) {
     setSeenSelectionCount(selectedIssues.length)
@@ -98,6 +98,8 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
           : availableActions.map(action => <Command.Item key={action.id} value={action.label} keywords={translatedKeywords([action.label], t)} className={styles.commandItem} onSelect={() => { const options = actionOptions?.(action.id); if (options?.length) setPendingAction(action.id); else { onAction(action.id, selectedIssues); setOpen(false) } }}><span>{action.label}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</Command.Item>)}</Command.List>
       </Command>
     </Dialog.Content></Dialog.Portal></Dialog.Root>
-    <AgentChatPanel issues={agentIssues} onClose={()=>{setAgentOpen(false);setAgentIssues([])}} open={agentOpen}/>
+    {agentOpen !== undefined && <Suspense fallback={null}>
+      <AgentChatPanel issues={agentIssues} onClose={()=>{setAgentOpen(false);setAgentIssues([])}} open={agentOpen}/>
+    </Suspense>}
   </>
 }

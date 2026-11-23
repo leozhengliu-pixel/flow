@@ -25,6 +25,7 @@ type IssueMutationScope struct {
 	IncludeFamily bool
 	NewParentID   string
 	Payload       any
+	RebaseVersion *int64 // Optional version advanced directly from the supplied base, including on replay.
 }
 
 // UpdateIssueRecord is a bounded entity transaction. The callback may update
@@ -160,14 +161,21 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		normalizeIssueRecord(&original)
 		result = original
+		receipt := issueMutationReceipt{issueID: id}
+		if scope.RebaseVersion != nil {
+			*scope.RebaseVersion = 0
+		}
 		if mutationKey != "" {
-			appliedID, found, err := readChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey)
+			applied, found, err := readChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey)
 			if err != nil {
 				return err
 			}
 			if found {
-				if appliedID != id {
+				if applied.issueID != id {
 					return ErrIssueQuery
+				}
+				if scope.RebaseVersion != nil {
+					*scope.RebaseVersion = applied.rebaseVersion
 				}
 				return ErrNoMutation
 			}
@@ -436,7 +444,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			if errors.Is(err, ErrNoMutation) {
 				result = original
 				if mutationKey != "" {
-					if receiptErr := writeChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey, id); receiptErr != nil {
+					if receiptErr := writeChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey, receipt); receiptErr != nil {
 						return receiptErr
 					}
 					if commitErr := tx.Commit(); commitErr != nil {
@@ -562,12 +570,18 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		realtime = enrichRealtimePayload(payload, result, event.Type)
 		if mutationKey != "" {
-			if err := writeChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey, id); err != nil {
+			if scope.RebaseVersion != nil && expected != nil && *expected == original.Version {
+				receipt.rebaseVersion = result.Version
+			}
+			if err := writeChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey, receipt); err != nil {
 				return err
 			}
 		}
 		if err := tx.Commit(); err != nil {
 			return err
+		}
+		if scope.RebaseVersion != nil {
+			*scope.RebaseVersion = receipt.rebaseVersion
 		}
 		if publication != nil {
 			if err := publication.Install(); err != nil {
