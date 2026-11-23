@@ -261,7 +261,10 @@ cmd_start() {
   local topology="$1" flag="$2" replicas=1
   local feature_env=()
   case "$flag" in
-    on|off) feature_env=(FLOW_RECORD_HYDRATION=on FLOW_RECORD_JOURNAL=on FLOW_SYNC_V2=on FLOW_RECORD_SPOOL_MAX_BYTES=268435456 "FLOW_BOUNDED_METADATA=$flag") ;;
+    on|off)
+      feature_env=(FLOW_RECORD_HYDRATION=on FLOW_RECORD_JOURNAL=on FLOW_SYNC_V2=on
+        FLOW_RECORD_SPOOL_MAX_BYTES=268435456 FLOW_WORKSPACE_TUTORIAL=off "FLOW_BOUNDED_METADATA=$flag")
+      ;;
     default) ;;
     *) die "flag must be default, on or off" ;;
   esac
@@ -291,7 +294,7 @@ cmd_start() {
     mkdir -p "$RUN/uploads"
     # shellcheck disable=SC2046
     env $(db_env "$topology" run) $redis_env $(model_env) \
-      FLOW_HTTP_ADDR="127.0.0.1:$port" FLOW_APP_URL="http://127.0.0.1:$port" FLOW_STORAGE_LOCAL_PATH="$RUN/uploads" FLOW_WORKSPACE_TUTORIAL=off \
+      FLOW_HTTP_ADDR="127.0.0.1:$port" FLOW_APP_URL="http://127.0.0.1:$port" FLOW_STORAGE_LOCAL_PATH="$RUN/uploads" \
       ${feature_env[@]+"${feature_env[@]}"} FLOW_LOADRIG_METRICS_ADDR="127.0.0.1:$mport" \
       GOMAXPROCS="${GOMAXPROCS_REPLICA:-4}" GOMEMLIMIT="${GOMEMLIMIT_REPLICA-1536MiB}" ${EXTRA_ENV:-} \
       "$BIN/flow-server" >"$RUN/replica-$index.log" 2>&1 &
