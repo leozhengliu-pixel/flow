@@ -153,7 +153,7 @@ func (s *SQLiteStore) refreshWorkspaceCopy(ctx context.Context, workspace string
 	}
 	data, stamp, err := s.loadWorkspaceStamped(ctx, workspace)
 	if err != nil {
-		return err
+		return preWriteDatabaseError(err)
 	}
 	s.mu.Lock()
 	s.workspaces[workspace] = data
@@ -171,7 +171,7 @@ func (s *SQLiteStore) refreshWorkspaceCopyLocked(ctx context.Context, workspace 
 	}
 	data, stamp, err := s.loadWorkspaceStamped(ctx, workspace)
 	if err != nil {
-		return err
+		return preWriteDatabaseError(err)
 	}
 	s.workspaces[workspace] = data
 	s.setCopyRevisionLocked(workspace, stamp)

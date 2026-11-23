@@ -145,7 +145,7 @@ func apiErrorEnvelope(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		writer := &apiErrorWriter{ResponseWriter: w}
+		writer := &apiErrorWriter{ResponseWriter: w, request: r}
 		defer writer.finish(r)
 		next.ServeHTTP(writer, r)
 	})
@@ -155,6 +155,7 @@ const apiErrorBufferLimit = 256 << 10
 
 type apiErrorWriter struct {
 	http.ResponseWriter
+	request   *http.Request
 	status    int
 	buffering bool
 	overflow  bool
@@ -162,6 +163,19 @@ type apiErrorWriter struct {
 }
 
 func (w *apiErrorWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func apiErrorRequest(w http.ResponseWriter) *http.Request {
+	for {
+		if envelope, ok := w.(*apiErrorWriter); ok {
+			return envelope.request
+		}
+		wrapped, ok := w.(interface{ Unwrap() http.ResponseWriter })
+		if !ok {
+			return nil
+		}
+		w = wrapped.Unwrap()
+	}
+}
 
 func (w *apiErrorWriter) WriteHeader(status int) {
 	if status >= 100 && status < 200 {

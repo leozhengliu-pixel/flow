@@ -403,10 +403,13 @@ func (s *server) logSyncChangesFailureClass(r *http.Request, access store.EventA
 // error keeps its own Retry-After, every other failure is the same 503 with a
 // short one (a sync client re-polls).
 func writeSyncChangesUnavailable(w http.ResponseWriter, r *http.Request, err error) {
-	if writeRetryableBusy(w, r, err) {
+	retryAfter, busy := retryableBusy(err)
+	slog.WarnContext(r.Context(), "sync changes unavailable", "request_id", serverRequestIDFrom(r.Context()),
+		"cause", requestErrorCode(err), "denied", errors.Is(err, store.ErrAuthForbidden), "stale", errors.Is(err, errRealtimeProjectionStale), "budget", errors.Is(err, store.ErrEventSourceBudget))
+	if busy {
+		(&metadataReadGate{}).busy(w, retryAfter)
 		return
 	}
-	slog.WarnContext(r.Context(), "sync changes unavailable", "request_id", requestIDFrom(r.Context()), "error_type", fmt.Sprintf("%T", err), "denied", errors.Is(err, store.ErrAuthForbidden), "stale", errors.Is(err, errRealtimeProjectionStale), "budget", errors.Is(err, store.ErrEventSourceBudget), "deadline", errors.Is(err, context.DeadlineExceeded), "error", err.Error())
 	w.Header().Set("Retry-After", "2")
 	writeError(w, http.StatusServiceUnavailable, "Changes are temporarily unavailable")
 }
