@@ -76,7 +76,7 @@ func (s *server) createPortfolioDocument(w http.ResponseWriter, r *http.Request)
 
 func (s *server) deletePortfolioDocument(w http.ResponseWriter, r *http.Request) {
 	if !s.store.BoundedMetadataEnabled() {
-		s.deleteDocument(w, r)
+		s.deleteLegacyDocument(w, r)
 		return
 	}
 	id := r.PathValue("id")

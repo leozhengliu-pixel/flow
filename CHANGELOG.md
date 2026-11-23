@@ -12,6 +12,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Bounded metadata writes return a retryable 503 when concurrent work exhausts their budget or database lock retries. Saved-view authorization returns the same response when it cannot read permissions under contention.
 - Bounded project edits select the affected reminders, progress inputs and linked documents.
 - Document creation and deletion use selected records for project links, audit and trash.
+- MCP document deletion uses the same bounded writer as HTTP deletion, with the same private-team and API-key permissions.
 - Bounded replicas create, edit and delete saved views using selected records and resolve public view links without loading the full workspace.
 - With bounded metadata enabled, both issue delete URLs use selected issue, content and metadata records. Deleted issues retain their trash links and can be restored through the existing trash endpoint.
 - Bounded workspace search filters and sorts projects and documents using catalog summaries and reads text after visibility checks. PostgreSQL and SQLite batch trigram lookups across collections. SDK and MCP document search reuse indexed candidates and normalized text.
@@ -24,6 +25,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Incremental metadata reloads reuse the revision stamp already read in the same SQL snapshot.
 - Realtime source builders skip projection when their source revision changed while waiting. Requests waiting for that same revision share the failed version check.
 - MySQL groups workspace-wide comment and activity reads using the existing resource-order index.
+- Bounded MySQL content hydration reports the same first malformed record as legacy hydration.
 - Bounded peer reloads reuse prepared metadata when the journal advances and the live SQL metadata revision and journal generation still match.
 - Realtime source and policy cache hits can finish while other keys are being built.
 - Sync changes retry with one complete transaction after two source-version races, with a cursor for the rest of the page.

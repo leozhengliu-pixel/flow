@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW215ColdConsumer = "server/loop_settings.go:getLoopConfig"
+const scaleP21SW215ColdConsumer = "server/oauth_authorized_applications.go:listAuthorizedApplications"
 
 func TestScaleP21SW215ColdReadOwnerOffIdentity(t *testing.T) {
 	repo := &SQLiteStore{}

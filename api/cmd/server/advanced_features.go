@@ -884,7 +884,7 @@ func (s *server) restoreDocumentRevision(w http.ResponseWriter, r *http.Request)
 	respondMutation(w, err, http.StatusOK, s.withDocumentVersions(r, updated))
 }
 
-func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
+func (s *server) deleteLegacyDocument(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	workspace, removedID := workspaceKey(r), id
 	directory := s.documentMemberDirectory(r)

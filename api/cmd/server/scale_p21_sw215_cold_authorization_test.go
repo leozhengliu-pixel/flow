@@ -20,6 +20,12 @@ import (
 	"flow/api/internal/store"
 )
 
+const (
+	scaleP21SW215ColdReadPath     = "/api/oauth/authorized-applications"
+	scaleP21SW215ColdReadPattern  = "GET " + scaleP21SW215ColdReadPath
+	scaleP21SW215ColdReadConsumer = "server/oauth_authorized_applications.go:listAuthorizedApplications"
+)
+
 func TestScaleP21SW215ColdAuthorizationUsesActualMuxWinner(t *testing.T) {
 	mux := http.NewServeMux()
 	for _, route := range scaleP21ColdRoutes {
@@ -33,18 +39,18 @@ func TestScaleP21SW215ColdAuthorizationUsesActualMuxWinner(t *testing.T) {
 		cold                  bool
 		status                int
 	}{
-		{http.MethodGet, "/api/loop-config", "GET /api/loop-config", true, http.StatusNoContent},
-		{http.MethodHead, "/api/loop-config", "GET /api/loop-config", true, http.StatusNoContent},
-		{http.MethodPost, "/api/loop-config", "", false, http.StatusMethodNotAllowed},
+		{http.MethodGet, scaleP21SW215ColdReadPath, scaleP21SW215ColdReadPattern, true, http.StatusNoContent},
+		{http.MethodHead, scaleP21SW215ColdReadPath, scaleP21SW215ColdReadPattern, true, http.StatusNoContent},
+		{http.MethodPost, scaleP21SW215ColdReadPath, "", false, http.StatusMethodNotAllowed},
 		{http.MethodPatch, "/api/drafts/plain", "PATCH /api/drafts/{id}", true, http.StatusNoContent},
 		{http.MethodPatch, "/api/drafts/a%2Fb", "PATCH /api/drafts/{id}", true, http.StatusNoContent},
 		{http.MethodPatch, "/api/drafts/sw215-hot", "PATCH /api/drafts/sw215-hot", false, http.StatusAccepted},
 		{http.MethodPatch, "/api/drafts/%73w215-hot", "PATCH /api/drafts/sw215-hot", false, http.StatusAccepted},
 		{http.MethodPatch, "/api/drafts//sw215-hot", "PATCH /api/drafts/sw215-hot", false, http.StatusTemporaryRedirect},
-		{http.MethodGet, "/api//loop-config", "GET /api/loop-config", true, http.StatusTemporaryRedirect},
+		{http.MethodGet, "/api//oauth/authorized-applications", scaleP21SW215ColdReadPattern, true, http.StatusTemporaryRedirect},
 		{http.MethodPatch, "/api/drafts/a/b", "", false, http.StatusNotFound},
-		{http.MethodGet, "/api/loop-config/child", "", false, http.StatusNotFound},
-		{http.MethodGet, "/api/workspace/loop-settings-extra", "", false, http.StatusNotFound},
+		{http.MethodGet, scaleP21SW215ColdReadPath + "/child", "", false, http.StatusNotFound},
+		{http.MethodGet, scaleP21SW215ColdReadPath + "-extra", "", false, http.StatusNotFound},
 	} {
 		t.Run(test.method+" "+test.path, func(t *testing.T) {
 			r := httptest.NewRequest(test.method, test.path, nil)
@@ -66,8 +72,8 @@ func TestScaleP21SW215ColdAuthorizationUsesActualMuxWinner(t *testing.T) {
 		})
 	}
 	// No closed complete route authority means no COLD admission.
-	r := httptest.NewRequest(http.MethodGet, "/api/loop-config", nil)
-	r.Pattern = "GET /api/loop-config"
+	r := httptest.NewRequest(http.MethodGet, scaleP21SW215ColdReadPath, nil)
+	r.Pattern = scaleP21SW215ColdReadPattern
 	if _, selected := scaleP21ColdAuthorizationRoute(r); selected {
 		t.Fatal("Request.Pattern alone certified a cold route")
 	}
@@ -88,10 +94,10 @@ func TestScaleP21SW215UnregisteredColdPagedAuthorizationReusesRequestView(t *tes
 			}
 			service := &server{store: view}
 			mux := http.NewServeMux()
-			mux.HandleFunc("POST /api/documents", func(http.ResponseWriter, *http.Request) {})
-			request := httptest.NewRequest(http.MethodPost, "/api/documents", nil)
+			mux.HandleFunc("POST /api/projects", func(http.ResponseWriter, *http.Request) {})
+			request := httptest.NewRequest(http.MethodPost, "/api/projects", nil)
 			request.Header.Set("X-Workspace-Key", workspace)
-			ctx, scope := store.WithColdScope(request.Context(), "POST /api/documents")
+			ctx, scope := store.WithColdScope(request.Context(), "POST /api/projects")
 			defer scope.Close()
 			ctx = context.WithValue(ctx, coldAuthorizationMuxKey{}, mux)
 			request = request.WithContext(ctx)
@@ -157,10 +163,10 @@ func TestScaleP21SW215UnregisteredColdPagedAuthorizationViewRace(t *testing.T) {
 			}
 			service := &server{store: view}
 			mux := http.NewServeMux()
-			mux.HandleFunc("POST /api/documents", func(http.ResponseWriter, *http.Request) {})
-			request := httptest.NewRequest(http.MethodPost, "/api/documents", nil)
+			mux.HandleFunc("POST /api/projects", func(http.ResponseWriter, *http.Request) {})
+			request := httptest.NewRequest(http.MethodPost, "/api/projects", nil)
 			request.Header.Set("X-Workspace-Key", workspace)
-			ctx, scope := store.WithColdScope(request.Context(), "POST /api/documents")
+			ctx, scope := store.WithColdScope(request.Context(), "POST /api/projects")
 			ctx = context.WithValue(ctx, coldAuthorizationMuxKey{}, mux)
 			request = request.WithContext(ctx)
 			t.Cleanup(scope.Close)
@@ -235,7 +241,7 @@ func TestScaleP21SW215ColdAuthorizationFullHTTPHandoff(t *testing.T) {
 					var handoff *pagedMetadataHandoff
 					var facade *store.SQLiteStore
 					var outputChecks int
-					mux.HandleFunc("GET /api/loop-config", func(w http.ResponseWriter, r *http.Request) {
+					mux.HandleFunc(scaleP21SW215ColdReadPattern, func(w http.ResponseWriter, r *http.Request) {
 						if source.BoundedMetadataEnabled() {
 							read, _ = r.Context().Value(coldAuthorizationReadKey{}).(*store.ColdMetadataRead)
 							scope, _ = r.Context().Value(requestResourceReadsKey{}).(*requestResourceReads)
@@ -247,18 +253,18 @@ func TestScaleP21SW215ColdAuthorizationFullHTTPHandoff(t *testing.T) {
 							if facade == source || facade.BoundedMetadataEnabled() || service.store != source {
 								t.Fatal("authorization substituted the server receiver")
 							}
-							service.withColdMetadataRequest(w, r, "server/loop_settings.go:getLoopConfig", "", func(borrowed *store.SQLiteStore, nested *http.Request) {
+							service.withColdMetadataRequest(w, r, scaleP21SW215ColdReadConsumer, "", func(borrowed *store.SQLiteStore, nested *http.Request) {
 								if borrowed != facade || nested.Context() != r.Context() {
 									t.Fatal("handler bridge did not borrow auth facade/context/slot")
 								}
-								service.getLoopConfig(w, nested)
+								service.listAuthorizedApplications(w, nested)
 							})
 						} else {
-							service.getLoopConfig(w, r)
+							service.listAuthorizedApplications(w, r)
 						}
 					})
 					handler := service.withColdMetadataRouteMux(mux, service.authenticate(mux))
-					request := httptest.NewRequest(http.MethodGet, "/api/loop-config", nil)
+					request := httptest.NewRequest(http.MethodGet, scaleP21SW215ColdReadPath, nil)
 					request.Header.Set("X-Workspace-Key", workspace)
 					origin, _ := url.Parse(f.host.URL)
 					for _, cookie := range f.admin.Jar.Cookies(origin) {
@@ -285,7 +291,7 @@ func TestScaleP21SW215ColdAuthorizationFullHTTPHandoff(t *testing.T) {
 							!scope.closed || handoff.data.Workspace.ID != "" || service.store != source {
 							t.Fatal("full HTTP differential or outer output cleanup changed", recorder.Body.String())
 						}
-						next, err := source.BeginColdMetadataRead(t.Context(), "server/loop_settings.go:getLoopConfig")
+						next, err := source.BeginColdMetadataRead(t.Context(), scaleP21SW215ColdReadConsumer)
 						if err != nil || next.Store() == nil || next.Store() == facade {
 							t.Fatal("HTTP output scope retained its replica slot", err)
 						}
@@ -307,16 +313,16 @@ func TestScaleP21SW215ColdAuthorizationEarlyRefusalIsLazy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			held, err := view.BeginColdMetadataRead(t.Context(), "server/loop_settings.go:getLoopConfig")
+			held, err := view.BeginColdMetadataRead(t.Context(), scaleP21SW215ColdReadConsumer)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer held.Close()
 			service := &server{store: view}
 			mux := http.NewServeMux()
-			mux.HandleFunc("GET /api/loop-config", func(http.ResponseWriter, *http.Request) { t.Error("unauthenticated handler ran") })
+			mux.HandleFunc(scaleP21SW215ColdReadPattern, func(http.ResponseWriter, *http.Request) { t.Error("unauthenticated handler ran") })
 			handler := service.withColdMetadataRouteMux(mux, service.authenticate(mux))
-			request := httptest.NewRequest(http.MethodGet, "/api/loop-config", nil)
+			request := httptest.NewRequest(http.MethodGet, scaleP21SW215ColdReadPath, nil)
 			request.Header.Set("X-Workspace-Key", f.data.Workspace.URLKey)
 			ctx, cancel := context.WithTimeout(request.Context(), 5*time.Second)
 			defer cancel()
@@ -357,7 +363,7 @@ func TestScaleP21SW215ColdAuthorizationHandoffThenFreshAccessor(t *testing.T) {
 				}
 				service := &server{store: source}
 				mux := http.NewServeMux()
-				mux.HandleFunc("GET /api/loop-config", func(w http.ResponseWriter, r *http.Request) {
+				mux.HandleFunc(scaleP21SW215ColdReadPattern, func(w http.ResponseWriter, r *http.Request) {
 					user := authUser(r)
 					first, handed := takePagedMetadata(r, workspace, user.ID)
 					if !handed || first.Workspace.Name != "before authorization" {
@@ -376,7 +382,7 @@ func TestScaleP21SW215ColdAuthorizationHandoffThenFreshAccessor(t *testing.T) {
 							t.Fatal(err)
 						}
 					}
-					service.withColdMetadataRequest(w, r, "server/loop_settings.go:getLoopConfig", "", func(borrowed *store.SQLiteStore, request *http.Request) {
+					service.withColdMetadataRequest(w, r, scaleP21SW215ColdReadConsumer, "", func(borrowed *store.SQLiteStore, request *http.Request) {
 						if err := borrowed.RefreshColdMetadataRead(request.Context(), workspace); err != nil {
 							t.Fatal(err)
 						}
@@ -387,7 +393,7 @@ func TestScaleP21SW215ColdAuthorizationHandoffThenFreshAccessor(t *testing.T) {
 						writeJSON(w, http.StatusOK, map[string]string{"first": first.Workspace.Name, "fresh": fresh.Workspace.Name})
 					})
 				})
-				request := httptest.NewRequest(http.MethodGet, "/api/loop-config", nil)
+				request := httptest.NewRequest(http.MethodGet, scaleP21SW215ColdReadPath, nil)
 				request.Header.Set("X-Workspace-Key", workspace)
 				origin, _ := url.Parse(f.host.URL)
 				for _, cookie := range f.admin.Jar.Cookies(origin) {
@@ -729,7 +735,7 @@ func scaleP21SW215AuthMatrixServe(t *testing.T, f scaleP21SW215AuthMatrixFixture
 	mux := http.NewServeMux()
 	var held *store.ColdMetadataRead
 	var scope *requestResourceReads
-	mux.HandleFunc("GET /api/loop-config", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(scaleP21SW215ColdReadPattern, func(w http.ResponseWriter, r *http.Request) {
 		if source.BoundedMetadataEnabled() {
 			held, _ = r.Context().Value(coldAuthorizationReadKey{}).(*store.ColdMetadataRead)
 			scope, _ = r.Context().Value(requestResourceReadsKey{}).(*requestResourceReads)
@@ -737,7 +743,7 @@ func scaleP21SW215AuthMatrixServe(t *testing.T, f scaleP21SW215AuthMatrixFixture
 				t.Fatal("real credentials lost lazy cold ownership before handler entry")
 			}
 		}
-		service.withColdMetadataRequest(w, r, "server/loop_settings.go:getLoopConfig", "", func(repo *store.SQLiteStore, request *http.Request) {
+		service.withColdMetadataRequest(w, r, scaleP21SW215ColdReadConsumer, "", func(repo *store.SQLiteStore, request *http.Request) {
 			first, handed := takePagedMetadata(request, workspaceKey(request), authUser(request).ID)
 			if !handed {
 				t.Fatal("real authentication did not hand off its exact viewer projection")
@@ -787,7 +793,7 @@ func scaleP21SW215AuthMatrixServe(t *testing.T, f scaleP21SW215AuthMatrixFixture
 			writeJSON(w, http.StatusOK, output)
 		})
 	})
-	request := httptest.NewRequest(http.MethodGet, "/api/loop-config", nil)
+	request := httptest.NewRequest(http.MethodGet, scaleP21SW215ColdReadPath, nil)
 	request.Header.Set("X-Workspace-Key", workspace)
 	if credential.session != "" {
 		request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: credential.session})

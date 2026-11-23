@@ -27,7 +27,7 @@
       "accessors": ["DeletePortfolioDocument"],
       "temperature": "hot",
       "temperatureReason": "Flag-on writes use the closed document delete profile.",
-      "callers": ["DELETE /api/documents/{id} (server/main.go)"]
+      "callers": ["DELETE /api/documents/{id} (server/main.go)", "server/server.deleteMCPDocument"]
     }
   }
 }

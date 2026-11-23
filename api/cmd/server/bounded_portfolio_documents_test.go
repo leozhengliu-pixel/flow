@@ -23,6 +23,35 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 	public, private, child := x.ids["teams"], x.ids["private-team"], x.ids["child-team"]
 	project, secondProject := x.fx.ids["child-project"], "portfolio-second-project"
 	docID, alias, previous := "portfolio-doc", "portfolio-current", "portfolio-previous"
+	privateDoc, childDoc := "portfolio-private-document", "portfolio-child-document"
+	type credential struct {
+		name      string
+		principal *sw530Principal
+		bearer    bool
+		teams     []string
+		status    int
+	}
+	var privateDeletes []credential
+	for _, principal := range []*sw530Principal{owner, admin} {
+		privateDeletes = append(privateDeletes,
+			credential{principal.name + "-session", principal, false, nil, 204},
+			credential{principal.name + "-unrestricted", principal, true, nil, 204},
+		)
+		for _, selected := range []struct {
+			name   string
+			teams  []string
+			status int
+		}{
+			{"selected-private", []string{private}, 204},
+			{"selected-public", []string{public}, 403},
+			{"selected-empty", []string{}, 403},
+		} {
+			keyPrincipal := *principal
+			keyPrincipal.name += "-" + selected.name
+			keyPrincipal.secret += "-" + selected.name
+			privateDeletes = append(privateDeletes, credential{keyPrincipal.name, &keyPrincipal, true, selected.teams, selected.status})
+		}
+	}
 	templateID := "portfolio-template"
 	at := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
 	body := func(fields map[string]any) string {
@@ -53,7 +82,19 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 			},
 			CreatedAt: at, UpdatedAt: at,
 		}
-		data.Documents = append(data.Documents, doc)
+		data.Documents = append(data.Documents, doc, domain.Document{
+			ID: privateDoc, Title: "Private team document", Content: "Private content", TeamIDs: []string{private},
+			Creator: owner.user, CreatedAt: at, UpdatedAt: at,
+			Permissions: []domain.DocumentPermission{
+				{ID: "portfolio-private-grant", DocumentID: privateDoc, SubjectType: "user", SubjectID: owner.user.ID, Role: "owner", CreatedAt: at, UpdatedAt: at},
+			},
+		}, domain.Document{
+			ID: childDoc, Title: "Child team document", Content: "Child content", TeamIDs: []string{child},
+			Creator: inherited.user, CreatedAt: at, UpdatedAt: at,
+			Permissions: []domain.DocumentPermission{
+				{ID: "portfolio-child-grant", DocumentID: childDoc, SubjectType: "user", SubjectID: inherited.user.ID, Role: "owner", CreatedAt: at, UpdatedAt: at},
+			},
+		})
 		for i := range data.Projects {
 			p := &data.Projects[i]
 			if p.ID == project || p.ID == secondProject {
@@ -85,6 +126,19 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 				data.APIKeys[i].TeamRestriction, data.APIKeys[i].TeamIDs = "selected", []string{public}
 			}
 		}
+		for _, c := range privateDeletes {
+			if c.teams == nil {
+				continue
+			}
+			i := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool { return key.CreatorID == c.principal.user.ID })
+			if i < 0 {
+				t.Fatalf("missing base key for %s", c.name)
+			}
+			key := data.APIKeys[i]
+			key.ID, key.SecretHash = "portfolio-key-"+c.name, secretHash(c.principal.secret)
+			key.TeamRestriction, key.TeamIDs = "selected", c.teams
+			data.APIKeys = append(data.APIKeys, key)
+		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -108,12 +162,13 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 	remove := func(principal *sw530Principal, bearer bool, ref string) sw530Request {
 		return sw530Request{pattern: "DELETE /api/documents/{id}", method: http.MethodDelete, path: "/api/documents/" + ref, principal: principal, bearer: bearer}
 	}
-	for _, tc := range []struct {
+	type testCase struct {
 		name    string
 		request sw530Request
 		status  int
 		check   func(*testing.T, sw530Outcome)
-	}{
+	}
+	cases := []testCase{
 		{"linked-template", create(inherited, false, body(map[string]any{
 			"templateId": templateID, "issueId": " " + childIssue.ID + " ",
 			"projectIds": []string{project, " " + secondProject + " ", project}, "subscriberIds": []string{admin.user.ID, admin.user.ID},
@@ -152,9 +207,38 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 		}},
 		{"previous-slug", remove(owner, false, previous), 403, nil},
 		{"inherited-viewer", remove(inherited, false, docID), 403, nil},
+		{"inherited-creator-session", remove(inherited, false, childDoc), 204, nil},
+		{"inherited-creator-unrestricted", remove(inherited, true, childDoc), 204, nil},
 		{"restricted-owner", remove(member, true, docID), 403, nil},
 		{"missing", remove(owner, false, "missing"), 403, nil},
-	} {
+	}
+	for _, c := range privateDeletes {
+		cases = append(cases, testCase{"private-" + c.name, remove(c.principal, c.bearer, privateDoc), c.status, nil})
+	}
+	cases = append(cases, testCase{
+		"mcp-delete-private", sw530Request{
+			pattern: "POST /mcp", method: http.MethodPost, path: "/mcp", principal: owner, bearer: true,
+			body: body(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{
+				"name": "delete_document", "arguments": map[string]any{"id": privateDoc},
+			}}),
+		}, http.StatusOK, func(t *testing.T, got sw530Outcome) {
+			var result struct {
+				Result struct {
+					StructuredContent struct {
+						Deleted         bool
+						ID              string
+						RestorableUntil string
+					}
+				}
+			}
+			if err := json.Unmarshal([]byte(got.Body), &result); err != nil ||
+				!result.Result.StructuredContent.Deleted || result.Result.StructuredContent.ID != privateDoc ||
+				result.Result.StructuredContent.RestorableUntil == "" {
+				t.Errorf("MCP did not return a restorable delete receipt: %s", got.Body)
+			}
+		},
+	})
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			slots, views := x.totalSlots, x.totalViews
 			got := x.outcomes(t, tc.request, []string{"legacy", "warm", "reloaded"})
@@ -181,7 +265,8 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 					tc.check(t, outcome)
 				}
 			}
-			if slots != x.totalSlots || views != x.totalViews || x.bounded.store.MetadataWorkUsedForTesting() != 0 {
+			// The MCP tool still reads its legacy projection for lookup and receipt.
+			if slots != x.totalSlots || tc.request.path != "/mcp" && views != x.totalViews || x.bounded.store.MetadataWorkUsedForTesting() != 0 {
 				t.Error("document route used the COLD lane or left metadata work admitted")
 			}
 		})

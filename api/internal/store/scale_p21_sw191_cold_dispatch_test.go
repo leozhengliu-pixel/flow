@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"sync"
 	"testing"
-	"time"
 
 	"flow/api/internal/domain"
 )
 
 const (
-	scaleP21SW191Read  = "server/loop_settings.go:getLoopConfig"
-	scaleP21SW191Write = "server/loop_settings.go:updateLoopSettings"
+	scaleP21SW191Read  = "server/oauth_authorized_applications.go:listAuthorizedApplications"
+	scaleP21SW191Write = "server/settings_features.go:createProjectStatus"
 )
 
 func TestScaleP21SW191ColdDispatchOffAndRegistration(t *testing.T) {
@@ -58,7 +58,9 @@ func TestScaleP21SW191ColdDispatchNestedAndPublication(t *testing.T) {
 	if !found {
 		t.Fatal("owned source missing")
 	}
-	stamp := time.Date(2026, time.November, 16, 5, 30, 0, 123, time.UTC)
+	const event = "project_status.created"
+	status := domain.ProjectStatus{ID: "sw191-project-status", Name: "New status", Type: "planned", Position: float64(len(expected.ProjectStatuses))}
+	containsStatus := func(data domain.Bootstrap) bool { return slices.Contains(data.ProjectStatuses, status) }
 	err := view.WithColdMetadataRead(t.Context(), scaleP21SW191Read, func(ctx context.Context, facade *SQLiteStore) error {
 		if facade == view || facade.BoundedMetadataEnabled() || facade.db != view.db || len(view.metadataResidency.coldSlot) != 1 {
 			t.Fatal("cold dispatch changed database ownership or admission")
@@ -76,27 +78,26 @@ func TestScaleP21SW191ColdDispatchNestedAndPublication(t *testing.T) {
 			return err
 		}
 		mutated := false
-		if err := facade.MutateWorkspace(ctx, workspace, "workspace_preferences.updated", "workspace", nil, func(*domain.Bootstrap) error {
+		if err := facade.MutateWorkspace(ctx, workspace, event, status.ID, nil, func(*domain.Bootstrap) error {
 			mutated = true
 			return nil
 		}); !errors.Is(err, ErrBoundedMetadataCoverage) || mutated {
 			t.Fatal("read-only cold facade accepted a write", err)
 		}
-		payload := map[string]any{"externalLoopTriggers": true}
-		return facade.WithColdMetadataMutation(ctx, scaleP21SW191Write, workspace, "workspace_preferences.updated", payload, func(ctx context.Context, nested *SQLiteStore) error {
+		payload := map[string]any{"name": status.Name}
+		return facade.WithColdMetadataMutation(ctx, scaleP21SW191Write, workspace, event, payload, func(ctx context.Context, nested *SQLiteStore) error {
 			if nested != facade || nested.coldWrite == nil || nested.writeMu.shared != &view.writeMu || len(view.metadataResidency.coldSlot) != 1 {
 				t.Fatal("nested cold writer lost its shared publication lifetime")
 			}
-			if err := nested.MutateWorkspace(ctx, workspace, "workspace_preferences.updated", "workspace", payload, func(data *domain.Bootstrap) error {
-				data.WorkspaceSettings.ExternalLoopTriggers = true
-				data.WorkspaceSettings.UpdatedAt = stamp
+			if err := nested.MutateWorkspace(ctx, workspace, event, status.ID, payload, func(data *domain.Bootstrap) error {
+				data.ProjectStatuses = append(data.ProjectStatuses, status)
 				return nil
 			}); err != nil {
 				return err
 			}
 			return nested.WithColdMetadataRead(ctx, scaleP21SW191Read, func(_ context.Context, borrowed *SQLiteStore) error {
 				current, found := borrowed.WorkspaceMetadata(workspace)
-				if borrowed != facade || !found || !current.WorkspaceSettings.ExternalLoopTriggers || !current.WorkspaceSettings.UpdatedAt.Equal(stamp) {
+				if borrowed != facade || !found || !containsStatus(current) {
 					t.Fatal("nested cold reader lost the committed postimage")
 				}
 				return nil
@@ -113,12 +114,12 @@ func TestScaleP21SW191ColdDispatchNestedAndPublication(t *testing.T) {
 		t.Fatal(err)
 	}
 	persisted, _ := f.WorkspaceMetadata(workspace)
-	if !persisted.WorkspaceSettings.ExternalLoopTriggers || !persisted.WorkspaceSettings.UpdatedAt.Equal(stamp) {
+	if !containsStatus(persisted) {
 		t.Fatal("cold dispatch failed to persist its postimage")
 	}
 	if err := view.WithColdMetadataRead(t.Context(), scaleP21SW191Read, func(_ context.Context, facade *SQLiteStore) error {
 		current, found := facade.WorkspaceMetadata(workspace)
-		if !found || !current.WorkspaceSettings.ExternalLoopTriggers || !current.WorkspaceSettings.UpdatedAt.Equal(stamp) {
+		if !found || !containsStatus(current) {
 			t.Fatal("parent installed generation missed the cold write")
 		}
 		return nil
