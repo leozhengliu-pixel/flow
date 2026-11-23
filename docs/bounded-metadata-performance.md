@@ -393,6 +393,148 @@ minutes 8-10. Both replicas stayed below the 3072 MiB target throughout
 the run. Fixed data scale and sample duration limit the scope of this
 measurement.
 
+### Acceptance on the development machine
+
+The November 22, 2026 sweep measured `ff838b93b` on this laptop with
+`mysql2`. Two replicas shared MySQL 8.4 (`1536m`) and real Redis 7.
+Each replica used `GOMEMLIMIT=3GiB` and `FLOW_METADATA_MEMORY_BYTES=3221225472`.
+Both flag states enabled record hydration, the record journal and sync v2.
+Peer sync and the catalog worker were off, and the Redis result tier stayed
+at its default of off. See the
+[load procedure](architecture/cold-route-migration.md#load-acceptance-on-this-machine).
+
+Each arm used the scale-1 fixture with 5,000 issues, 10 seconds of warmup,
+180 seconds of measurement, the default mix, 300 ms nominal think time,
+rotated reads and floor(VUs / 2) realtime streams. The local fake model
+received agent work every 20 seconds. The rig restored a fresh copy before
+each arm and flushed the dedicated Redis database after it.
+Each step rebuilt and regenerated the fixture from the same recipe to
+allow its binaries, seed and private Go cache to be deleted at step end.
+The fixture collection counts matched across steps. The private Go cache
+used 1.63 GiB after each build.
+The pre-run checks required one-minute host load below 12 and at least
+10 GiB free on `/`. All runs held `/tmp/flow-rig.lock`. A temporary
+wrapper parse error occurred after the completed 20-VU step was cleaned
+up. The sweep reacquired the lock and resumed from the four validated
+OFF reports at the same candidate revision.
+
+The error rate is (HTTP 5xx + network errors + timeouts) / all requests.
+Successful throughput counts HTTP 2xx and 3xx. Latency includes failed
+requests. Both OFF repeats had to stay at or below 0.5% errors and
+2,000 ms p95. At the highest stable step, both ON repeats had to meet
+those limits and their medians had to improve p95 by at least 20% and
+successful throughput by at least 10%.
+
+#### 10 VUs
+
+| VUs | Flag | Run | All / successful req/s | p50 / p95 / p99 ms | Errors | HTTP 503 causes | Timeouts |
+| ---: | --- | --- | ---: | ---: | ---: | --- | ---: |
+| 10 | Off | A | 14.34 / 14.18 | 62 / 1,557 / 2,984 | 0.426% | `sync-changes` 7, `projection-gate` 4 | 0 |
+| 10 | Off | B | 15.00 / 14.81 | 65 / 1,406 / 2,366 | 0.370% | `sync-changes` 7, `projection-gate` 3 | 0 |
+| 10 | On | A | 22.57 / 22.18 | 14 / 696 / 3,003 | 0.911% | `workspace-freshness` 32, `sync-changes` 5 | 0 |
+| 10 | On | B | 18.91 / 18.13 | 15 / 1,474 / 3,005 | 2.997% | `workspace-freshness` 94, `sync-changes` 4, `projection-gate` 4 | 0 |
+
+**Acceptance failed at 10 VUs.** Both OFF repeats met the stability
+limits. Both ON repeats met the p95 limit and exceeded the 0.5% error
+cap. The two-run medians met both improvement thresholds.
+
+| Metric | OFF median | ON median | Change |
+| --- | ---: | ---: | --- |
+| p95 latency | 1,481.11 ms | 1,085.01 ms | 26.74% lower |
+| Successful throughput | 14.50 req/s | 20.16 req/s | 39.07% higher |
+| Error rate | 0.398% | 1.954% | 1.556 percentage points higher |
+
+Across the two ON repeats, workspace freshness accounted for 126 of 139
+failures. Issue detail (`GET /api/issue-records/{id}`) returned 30 such 503s,
+and issue listing (`GET /api/issue-records`) returned 29 across session and
+API-key traffic. The remaining 13 failures were nine `sync-changes` and
+four `projection-gate` 503s. OFF had 14 `sync-changes` 503s from
+`GET /api/sync/changes` and seven `projection-gate` 503s from `GET /api/search`.
+
+All 4xx at 10 VUs were 403s. `PATCH /api/documents/{id}` returned 403 on
+40 of 42 attempts OFF and 70 of 85 ON. The other two OFF 403s came from
+`DELETE /api/views/{id}` (2/21 attempts).
+
+#### 20 VUs
+
+| VUs | Flag | Run | All / successful req/s | p50 / p95 / p99 ms | Errors | HTTP 503 causes | Timeouts |
+| ---: | --- | --- | ---: | ---: | ---: | --- | ---: |
+| 20 | Off | A | 22.49 / 22.07 | 212 / 1,962 / 3,002 | 1.136% | `sync-changes` 45, `projection-gate` 1 | 0 |
+| 20 | Off | B | 20.74 / 20.18 | 218 / 2,241 / 3,814 | 1.768% | `sync-changes` 48, `projection-gate` 10, `workspace-freshness` 8 | 0 |
+
+Both OFF repeats exceeded the error cap. Repeat B also exceeded
+2,000 ms p95. The sweep stopped climbing at 20 VUs, so **N was 10 VUs**.
+
+#### 100 VUs
+
+The secondary comparison used one 180-second run per flag. The first
+OFF setup stopped at replica startup with MySQL deadlock error 1213.
+The retry completed. ON then lost its MySQL connection with error 2013
+while creating its run database. Both failures occurred before the
+driver started. ON restarted with a regenerated scale-1 seed and fresh
+containers.
+
+| VUs | Flag | Run | All / successful req/s | p50 / p95 / p99 ms | Errors | HTTP 503 causes | Timeouts |
+| ---: | --- | --- | ---: | ---: | ---: | --- | ---: |
+| 100 | Off | A | 39.80 / 29.56 | 1,269 / 7,576 / 18,050 | 25.632% | `workspace-freshness` 1,644, `projection-gate` 171, `sync-changes` 21 | 0 |
+| 100 | On | A | 171.94 / 61.34 | 1 / 2,189 / 5,010 | 1.684% | `projection-gate` 326, `workspace-freshness` 131, `sync-changes` 53 | 0 |
+
+OFF recorded 1,836 failures, led by 1,644 workspace-freshness 503s.
+Issue detail and issue listing accounted for 394 and 371 of those,
+respectively. ON recorded 510 HTTP 503s, led by 326 `projection-gate`
+responses, including 75 on `PATCH /api/projects/{id}`. The remaining
+measured failures were 11 HTTP 500s during a loss of MySQL connectivity.
+
+OFF recorded seven HTTP 4xx, all 403s, four on document updates and
+three on sync changes. ON recorded 19,385 HTTP 4xx (62.641% of all
+requests). The 19,099 HTTP 401s included 4,697 on issue detail and 4,579
+on issue listing, with 610 of the latter using API keys. All 179 HTTP
+429s came from API-key issue listing. Document updates accounted for
+75 of the 107 HTTP 403s. Fast refusals contributed to the ON all-request
+throughput and latency figures. The driver also recorded 2,961 realtime
+stream drops or failures in that arm. Both replicas logged connection
+refusals on the MySQL port. The cause of the disconnect remains unverified.
+
+#### Replica logs
+
+The log checks covered both replicas after every run. There were no
+panics. All 11 measured HTTP 500s came from `on-100-a`, and their
+`internal error response` entries logged `invalid connection`.
+
+| Replica | Request ID | Route |
+| ---: | --- | --- |
+| 1 | `c7541b3919b23fae88dfa7b9a5f21a10` | `POST /api/issue-records/lr-issue-000818/comments` |
+| 1 | `aa53dc04479e0b8f7b096999a7da3ef1` | `POST /api/documents` |
+| 1 | `da16590bb71f552ae631a8506652a78e` | `PATCH /api/projects/project_1795390054561540000_avdmfj5bfy` |
+| 0 | `a15140df6c62a765da7ac19e9cbbd609` | `POST /api/api-keys` |
+| 0 | `42b7c754a4d9eb21ce5e3e12bec10a7a` | `DELETE /api/views/view_1795390475824092000_pgze02ezjj` |
+| 0 | `fc66268b6eabbda414840eda4b561aa0` | `POST /api/api-keys` |
+| 1 | `a40d7d879c5826bc78e26341fb25b167` | `POST /api/labels` |
+| 0 | `f01356bac73511f5ec8cd7fe31b974cf` | `POST /api/views` |
+| 0 | `d0661f69b0eca0a8ef4d09037efd9bd8` | `DELETE /api/documents/document_1795390477398264000_2mmk3tk4p6` |
+| 1 | `82011f98961d2d0994520d1099e5f798` | `PATCH /api/projects/lt-project-01023` |
+| 1 | `eafe3b84ed3fad8391642081356db97b` | `POST /api/api-keys` |
+
+Replica 1 also logged `internal error response` with `context canceled`
+for `7c30d234dd8f6318e1f5fb660635c1e7` on
+`PATCH /api/documents/document_1795390055944275000_wqgp7n8rvv`. The request
+started during warmup and fell outside the measured HTTP totals.
+
+| Run | Sampled peak RSS, MiB (replica 0 / 1) | Realtime drops or failures / connection attempts |
+| --- | ---: | ---: |
+| `off-10-a` | 977 / 836 | 0 / 5 |
+| `off-10-b` | 780 / 823 | 0 / 5 |
+| `on-10-a` | 747 / 688 | 0 / 5 |
+| `on-10-b` | 684 / 756 | 0 / 5 |
+| `off-20-a` | 1,209 / 1,094 | 0 / 10 |
+| `off-20-b` | 1,115 / 1,047 | 0 / 10 |
+| `off-100-a` | 1,910 / 1,642 | 0 / 50 |
+| `on-100-a` | 997 / 952 | 2,961 / 2,961 |
+
+All eight measured runs recorded zero HTTP transport errors and timeouts.
+The JSON and Markdown results, seed summaries, control logs and replica
+logs are in `~/.flow-local/live/loadrig-accept/reports/`.
+
 ## Search
 
 The lead's cache-off MySQL run `base-mysql2-1x-cache-off-a` used the
