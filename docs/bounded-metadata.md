@@ -393,17 +393,13 @@ ignored by a flag-off replica (flag-off never runs the checkpoint opener).
 the database flag-off and compares every table and API response with a run
 that stayed flag-off; it also checks the opposite direction.
 
-Turning the flag back **on** after a flag-off period needs the catalog to
-cover what was written meanwhile. Writes into collections the catalog never
-covered (for example the first loop, document or workflow written flag-off)
-make the next flag-on start refuse with "bounded metadata coverage is
-incomplete" until the catalog backfill has run again
-(`FLOW_METADATA_CATALOG=shadow` on the flag-off replicas).
-
-A flag-on start that finds any workspace without complete coverage stops the
-whole process (`recover resident workspace "<key>": ...`); no workspace is
-served. After startup, a workspace whose coverage check fails only fails its
-own requests.
+Switching back to the default settings repairs journal coverage and fills
+unfinished catalog checkpoints before admitting bounded reads. Startup serves
+the legacy path if preparation or admission fails. A restart retries
+preparation. With `FLOW_BOUNDED_METADATA=on` and automatic preparation
+explicitly disabled, startup requires the catalog and journal to be ready.
+After bounded admission, a workspace coverage failure affects only that
+workspace's requests.
 
 ## Pre-production check: the load rig
 
