@@ -211,6 +211,7 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	ctx = metadataLogicalUnpinnedContext(ctx)
 	actor, hasActor := actorFromContext(ctx)
 	actor = mutationInputActor(actor)
+	viewWrite, _ := ctx.Value(savedViewWriteKey{}).(*savedViewWrite)
 	refreshActor := hasActor
 	fields, fieldScoped := metadataFieldsFromContext(ctx)
 	if original, selected := metadataRecordScopeFromContext(ctx); selected && !projectRecordSelectionEnabled(ctx) {
@@ -388,8 +389,30 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			return err
 		}
 		exactSource := baseStamp == logicalSource.Stamp()
-		if s.coordinator != nil && !exactSource {
+		if !exactSource && (s.coordinator != nil || viewWrite != nil) {
 			return ErrConcurrentWrite
+		}
+		var viewInputs *ResourceRead
+		if viewWrite != nil {
+			if err := viewWrite.validateAccess(ctx, s, tx, workspace, workspaceID, actor.ID, baseStamp); err != nil {
+				return err
+			}
+			viewInputs = &ResourceRead{store: s}
+			defer viewInputs.Close()
+			// apply owns the generation throughout this attempt.
+			if err := logicalSource.Retain(); err != nil {
+				return err
+			}
+			viewInputs.source = logicalSource
+			scope, err = viewWrite.selectRecords(ctx, viewInputs, scope, actor.ID)
+			if err != nil {
+				return err
+			}
+			ctx = WithMetadataRecords(ctx, scope)
+			// This callback owns no issue/content inputs. Preserve the
+			// untouched SQL root with the existing streamed delta writer,
+			// including when the root is small but split collections are large.
+			streamedScoped = true
 		}
 		var candidate *metadataLogicalSource
 		if profileFactory != nil {
@@ -426,6 +449,12 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				return err
 			}
 			defer releaseInline()
+			if viewInputs != nil {
+				inputLimit, err = viewInputs.savedViewInputLimit(ctx, loadScope, inputLimit)
+				if err != nil {
+					return err
+				}
+			}
 			streamedScoped = streamedScoped || len(inlineFields) != 0
 			if prepared != nil && (!exactSource || !prepared.matches(ctx, logicalSource, loadScope, role, teams, activeActor)) {
 				prepared.before, prepared.next, prepared.validationBefore = domain.Bootstrap{}, domain.Bootstrap{}, domain.Bootstrap{}
@@ -596,6 +625,27 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			committed = domain.DomainEvent{ID: idgen.New("evt_"), Type: event, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
 			beforeImage := metadataAggregateImage{Source: eventSource, Selected: &before, Scope: scope}
 			afterImage := metadataAggregateImage{Source: callbackSource, Selected: &next, Scope: writeScope}
+			forkScope := writeScope
+			forkScope.Fields = append(slices.Clone(writeScope.Fields), inlineFields...)
+			fork := func() (*metadataLogicalSource, error) {
+				return callbackSource.Fork(ctx, before, next, forkScope, logicalSource.Stamp(), appendOrders)
+			}
+			var cascade *metadataLogicalSource
+			if viewWrite != nil && viewWrite.erase && len(scope.Read)+len(scope.Write) > MetadataRecordBatchMaxKeys {
+				// Resolve aggregate collisions against the whole logical
+				// postimage when the cascade exceeds a point overlay's limit.
+				cascade, err = fork()
+				if err != nil {
+					return err
+				}
+				defer func() {
+					if cascade != nil {
+						cascade.Release()
+					}
+				}()
+				beforeImage = metadataAggregateImage{Source: eventSource}
+				afterImage = metadataAggregateImage{Source: cascade}
+			}
 			eventPublication, err := s.prepareMetadataAggregatePublication(ctx, beforeImage, afterImage, aggregate, hooks && s.webhookConfigured(), payloadRaw, event)
 			if err != nil {
 				return err
@@ -672,11 +722,13 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			if err := scaleP16WriteChanges(writeCtx, tx, workspace, newIssueReferences(next), changes); err != nil {
 				return err
 			}
-			forkScope := writeScope
-			forkScope.Fields = append(slices.Clone(writeScope.Fields), inlineFields...)
-			candidate, err = callbackSource.Fork(ctx, before, next, forkScope, logicalSource.Stamp(), appendOrders)
-			if err != nil {
-				return err
+			if cascade != nil {
+				candidate, cascade = cascade, nil
+			} else {
+				candidate, err = fork()
+				if err != nil {
+					return err
+				}
 			}
 			merged, err := metadataLogicalMergedPostimage(ctx, candidate, changes)
 			candidate.Release()
@@ -798,14 +850,16 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		s.mu.Unlock()
 		return nil
 	}
-	if selection {
+	if selection && viewWrite == nil {
 		// The installed generation's resident image, taken before the lock:
 		// the selection and the fork read the IDs only of the records it
 		// stores at the selected ordinals (scale_p21_resident_record_ordinals.go).
 		ctx = s.withInstalledRecordOrdinals(ctx, workspace)
 	}
 	refresh := s.refreshConflictedLogicalMetadata(ctx, workspace)
-	if profileFactory != nil && integrationDeliveryStreamEvent(ctx) != "" {
+	if viewWrite != nil && s.coordinator == nil {
+		refresh = func(error) error { return s.reloadSavedViewSource(ctx, workspace) }
+	} else if profileFactory != nil && integrationDeliveryStreamEvent(ctx) != "" {
 		refresh = s.refreshIntegrationDeliveryConflict(ctx, workspace)
 	}
 	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
