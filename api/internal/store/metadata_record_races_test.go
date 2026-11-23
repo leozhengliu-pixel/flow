@@ -26,7 +26,7 @@ func raceStamp() string { return fmt.Sprintf("%d", time.Now().UnixNano()) }
 func raceProject(t *testing.T, repo *SQLiteStore, workspace string) string {
 	t.Helper()
 	id := "race_project_" + raceStamp()
-	err := repo.MutateWorkspace(t.Context(), workspace, "project.created", id, domain.ProjectMutationInput{}, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "project.created", id, domain.ProjectMutationInput{}, func(data *domain.Bootstrap) error {
 		if len(data.Projects) == 0 {
 			return errors.New("fixture has no project to copy")
 		}
@@ -46,10 +46,7 @@ func raceProject(t *testing.T, repo *SQLiteStore, workspace string) string {
 // storedProject reads a project as the database holds it.
 func storedProject(t *testing.T, repo *SQLiteStore, workspace, id string) domain.Project {
 	t.Helper()
-	data, err := repo.loadWorkspaceState(t.Context(), workspace)
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := storedState(t, repo, workspace)
 	index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == id })
 	if index < 0 {
 		t.Fatalf("project %s is missing", id)
@@ -129,7 +126,7 @@ func TestProjectEditAndIssueCreationOnTwoServersKeepBoth(t *testing.T) {
 			reloadPeers(t, first)
 			rename := func(repo *SQLiteStore, name string) func(callback func(*domain.Bootstrap) error) error {
 				return func(callback func(*domain.Bootstrap) error) error {
-					return repo.MutateWorkspace(t.Context(), workspace, "project.updated", projectID, map[string]string{"name": name}, callback)
+					return repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "project.updated", projectID, map[string]string{"name": name}, callback)
 				}
 			}
 			setName := func(name string) func(*domain.Bootstrap) error {
@@ -172,6 +169,9 @@ func TestProjectEditAndIssueCreationOnTwoServersKeepBoth(t *testing.T) {
 // Moving an issue to another team updates the inherited scope of its
 // document; a title edit another server committed on the document stays.
 func TestIssueTeamMoveKeepsADocumentEditFromAnotherServer(t *testing.T) {
+	// The legacy callback can change scope to an unregistered team. The
+	// bounded API uses its own authorized team-move writer.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second, workspace, template := racePair(t, pair)
@@ -181,14 +181,14 @@ func TestIssueTeamMoveKeepsADocumentEditFromAnotherServer(t *testing.T) {
 			team := issue.Team
 			team.ID, team.Name = "race_team_"+raceStamp(), "Race team"
 			documentID := "race_document_" + raceStamp()
-			if err := first.MutateWorkspace(t.Context(), workspace, "document.permissions_updated", documentID, nil, func(data *domain.Bootstrap) error {
+			if err := first.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "document.permissions_updated", documentID, nil, func(data *domain.Bootstrap) error {
 				data.Documents = append(data.Documents, domain.Document{ID: documentID, SlugID: documentID, Title: "Attached", Creator: data.Viewer, ProjectIDs: []string{}, TeamIDs: []string{}, IssueID: issue.ID, IssueTeamID: issue.Team.ID, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
 				return nil
 			}); err != nil {
 				t.Fatal(err)
 			}
 			reloadPeers(t, second)
-			if err := first.MutateWorkspace(t.Context(), workspace, "document.permissions_updated", documentID, nil, func(data *domain.Bootstrap) error {
+			if err := first.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "document.permissions_updated", documentID, nil, func(data *domain.Bootstrap) error {
 				index := slices.IndexFunc(data.Documents, func(document domain.Document) bool { return document.ID == documentID })
 				data.Documents[index].Title = "Edited on the first server"
 				return nil
@@ -208,10 +208,7 @@ func TestIssueTeamMoveKeepsADocumentEditFromAnotherServer(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			data, err := first.loadWorkspaceState(t.Context(), workspace)
-			if err != nil {
-				t.Fatal(err)
-			}
+			data := storedState(t, first, workspace)
 			index := slices.IndexFunc(data.Documents, func(document domain.Document) bool { return document.ID == documentID })
 			if index < 0 {
 				t.Fatal("document deleted")
@@ -227,7 +224,7 @@ func TestIssueTeamMoveKeepsADocumentEditFromAnotherServer(t *testing.T) {
 // subscription edits on an issue do) whose callback edits metadata.
 func scopedIssueWrite(t *testing.T, repo *SQLiteStore, workspace, issueID string, edit func(*domain.Bootstrap) error) {
 	t.Helper()
-	if err := repo.MutateWorkspace(WithIssueRecordMutations(t.Context(), issueID), workspace, "issue.releases_updated", issueID, nil, edit); err != nil {
+	if err := repo.MutateWorkspace(WithIssueRecordMutations(WithColdWork(t.Context(), "workspace fixture"), issueID), workspace, "issue.releases_updated", issueID, nil, edit); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -241,7 +238,7 @@ func TestReleaseIssuesAddedOnTwoServersAreBothKept(t *testing.T) {
 			a := createPeerIssue(t, first, workspace, "race-release-a-"+raceStamp(), template)
 			b := createPeerIssue(t, first, workspace, "race-release-b-"+raceStamp(), template)
 			releaseID := "race_release_" + raceStamp()
-			if err := first.MutateWorkspace(t.Context(), workspace, "release.reordered", releaseID, nil, func(data *domain.Bootstrap) error {
+			if err := first.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "release.reordered", releaseID, nil, func(data *domain.Bootstrap) error {
 				data.Releases = append(data.Releases, domain.Release{ID: releaseID, SlugID: releaseID, Name: "Race release", IssueIDs: []string{}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
 				return nil
 			}); err != nil {
@@ -260,10 +257,7 @@ func TestReleaseIssuesAddedOnTwoServersAreBothKept(t *testing.T) {
 			}
 			scopedIssueWrite(t, first, workspace, a.ID, add(a.ID))
 			scopedIssueWrite(t, second, workspace, b.ID, add(b.ID))
-			data, err := first.loadWorkspaceState(t.Context(), workspace)
-			if err != nil {
-				t.Fatal(err)
-			}
+			data := storedState(t, first, workspace)
 			index := slices.IndexFunc(data.Releases, func(release domain.Release) bool { return release.ID == releaseID })
 			if index < 0 {
 				t.Fatal("release deleted")
@@ -289,7 +283,7 @@ func TestSubscriptionWriteKeepsSubscriptionChangesFromAnotherServer(t *testing.T
 			}
 			kept, removed, added, ours := subscription("kept"), subscription("removed"), subscription("added"), subscription("ours")
 			edit := func(repo *SQLiteStore, change func([]domain.Subscription) []domain.Subscription) {
-				if err := repo.MutateWorkspace(t.Context(), workspace, "subscription.added", kept.ID, nil, func(data *domain.Bootstrap) error {
+				if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "subscription.added", kept.ID, nil, func(data *domain.Bootstrap) error {
 					data.Subscriptions = change(slices.Clone(data.Subscriptions))
 					return nil
 				}); err != nil {
@@ -306,10 +300,7 @@ func TestSubscriptionWriteKeepsSubscriptionChangesFromAnotherServer(t *testing.T
 				data.Subscriptions = append(slices.Clone(data.Subscriptions), ours)
 				return nil
 			})
-			data, err := first.loadWorkspaceState(t.Context(), workspace)
-			if err != nil {
-				t.Fatal(err)
-			}
+			data := storedState(t, first, workspace)
 			has := func(id string) bool {
 				return slices.ContainsFunc(data.Subscriptions, func(item domain.Subscription) bool { return item.ID == id })
 			}
@@ -327,8 +318,9 @@ func TestTriageCursorAdvancesOnceForEachServersIssue(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			first, second, workspace, template := racePair(t, pair)
 			responsibilityID := "race_triage_" + raceStamp()
-			if err := first.MutateWorkspace(t.Context(), workspace, "triage_responsibility.created", responsibilityID, nil, func(data *domain.Bootstrap) error {
+			if err := first.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "triage_responsibility.created", responsibilityID, nil, func(data *domain.Bootstrap) error {
 				data.TriageResponsibilities = append(data.TriageResponsibilities, domain.TriageResponsibility{ID: responsibilityID, TeamID: template.Team.ID, Name: "Race", Mode: "roundRobin", UserIDs: []string{"a", "b", "c", "d"}, Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
+				data.TriageRoutingRules = append(data.TriageRoutingRules, domain.TriageRoutingRule{ID: responsibilityID + "-rule", TeamID: template.Team.ID, ResponsibilityID: responsibilityID, Enabled: true})
 				return nil
 			}); err != nil {
 				t.Fatal(err)
@@ -337,7 +329,11 @@ func TestTriageCursorAdvancesOnceForEachServersIssue(t *testing.T) {
 			assignees := []string{}
 			var mu sync.Mutex
 			create := func(repo *SQLiteStore, id string) {
-				err := repo.MutateWorkspaceWithAggregate(WithIssueRecordMutations(t.Context()), workspace, "issue.created", map[string]any{}, func(data *domain.Bootstrap) (string, error) {
+				owner := &ResourceRead{store: repo}
+				defer owner.Close()
+				ctx := WithIssueRecordMutations(owner.metadataOutputContext(t.Context()))
+				input := domain.IssueCreateInput{TeamID: template.Team.ID}
+				err := repo.MutateWorkspaceWithAggregate(ctx, workspace, "issue.created", input, func(data *domain.Bootstrap) (string, error) {
 					index := slices.IndexFunc(data.TriageResponsibilities, func(item domain.TriageResponsibility) bool { return item.ID == responsibilityID })
 					if index < 0 {
 						return "", errors.New("responsibility missing")
@@ -361,11 +357,11 @@ func TestTriageCursorAdvancesOnceForEachServersIssue(t *testing.T) {
 			}
 			create(first, "race-triage-a-"+raceStamp())
 			create(second, "race-triage-b-"+raceStamp())
-			data, err := first.loadWorkspaceState(t.Context(), workspace)
-			if err != nil {
-				t.Fatal(err)
-			}
+			data := storedState(t, first, workspace)
 			index := slices.IndexFunc(data.TriageResponsibilities, func(item domain.TriageResponsibility) bool { return item.ID == responsibilityID })
+			if index < 0 {
+				t.Fatal("triage responsibility missing after the writes")
+			}
 			if cursor := data.TriageResponsibilities[index].Cursor; cursor != 2 {
 				t.Fatalf("triage cursor %d after two issues (assignees %v), want 2", cursor, assignees)
 			}
@@ -409,7 +405,7 @@ func TestConcurrentIssueAndProjectWritesOnTwoServers(t *testing.T) {
 					for round := range rounds {
 						issue := projectIssue(template, stored[(worker+round)%2])
 						issue.ID = fmt.Sprintf("race-concurrent-%d-%d-%s", worker, round, raceStamp())
-						err := repo.MutateWorkspaceWithAggregate(WithIssueRecordMutations(context.Background()), workspace, "issue.created", map[string]any{}, func(data *domain.Bootstrap) (string, error) {
+						err := repo.MutateWorkspaceWithAggregate(WithIssueRecordMutations(WithColdWork(context.Background(), "workspace fixture")), workspace, "issue.created", map[string]any{}, func(data *domain.Bootstrap) (string, error) {
 							created := issue
 							created.Identifier, created.Number, created.Version = "PEER-"+created.ID, data.NextIssueNumber, 1
 							created.ParentID, created.SubIssueIDs, created.ArchivedAt = nil, []string{}, nil
@@ -436,7 +432,7 @@ func TestConcurrentIssueAndProjectWritesOnTwoServers(t *testing.T) {
 						}
 						rename := fmt.Sprintf("Edited %d-%d", worker, round)
 						target := projects[(worker+round)%2]
-						if err := repo.MutateWorkspace(context.Background(), workspace, "project.updated", target, map[string]string{"name": rename}, func(data *domain.Bootstrap) error {
+						if err := repo.MutateWorkspace(WithColdWork(context.Background(), "workspace fixture"), workspace, "project.updated", target, map[string]string{"name": rename}, func(data *domain.Bootstrap) error {
 							index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == target })
 							if index < 0 {
 								return errors.New("project missing")

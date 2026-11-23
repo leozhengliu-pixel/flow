@@ -76,6 +76,8 @@ func TestScaleP04TeamsRetainLegacyInputs(t *testing.T) {
 }
 
 func TestScaleP04CallbacksOwnSnapshots(t *testing.T) {
+	// These callbacks compare against the installed legacy snapshot.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
 	repo := scaleP04Store(t)
 	fixture := repo.Bootstrap()

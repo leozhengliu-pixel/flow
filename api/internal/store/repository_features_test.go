@@ -156,7 +156,7 @@ func TestOAuthApplicationAndAPIKeyLookup(t *testing.T) {
 	}
 	defer repository.Close()
 	now := time.Now().UTC()
-	if err := repository.MutateWorkspace(context.Background(), "test-workspace", "test.oauth", "workspace", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(WithColdWork(context.Background(), "workspace fixture"), "test-workspace", "test.oauth", "workspace", nil, func(data *domain.Bootstrap) error {
 		data.OAuthApplications = append(data.OAuthApplications, domain.OAuthApplication{ID: "app-1", Name: "Workspace app", ClientID: "workspace-client", RedirectURIs: []string{"https://example.test/callback"}, CreatedAt: now})
 		data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "key-1", Name: "Automation", SecretHash: "secret-hash", CreatedAt: now})
 		return nil

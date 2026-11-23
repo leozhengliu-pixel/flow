@@ -41,7 +41,7 @@ func TestScaleP06ReplaySQLByteGuard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.MutateWorkspace(ctx, workspace, "workspace.updated", data.Workspace.ID, map[string]string{"body": strings.Repeat("\u754c", 2000)}, func(data *domain.Bootstrap) error { data.Workspace.Name = "P06 replay"; return nil }); err != nil {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "replay fixture"), workspace, "workspace.updated", data.Workspace.ID, map[string]string{"body": strings.Repeat("\u754c", 2000)}, func(data *domain.Bootstrap) error { data.Workspace.Name = "P06 replay"; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	old, err := repo.WorkspaceChanges(ctx, data.Workspace.ID, before, 1)

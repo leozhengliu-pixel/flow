@@ -190,7 +190,7 @@ func TestPulseSummaryRetriesAfterTransientProviderFailure(t *testing.T) {
 		t.Fatalf("summary within the backoff = %#v (calls %d)", summary, calls.Load())
 	}
 	// Once the retry time passed, the next open asks the provider again.
-	err := repo.MutateWorkspace(context.Background(), "test-workspace", "test.notification", "", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "test.notification", "", nil, func(data *domain.Bootstrap) error {
 		for index := range data.Notifications {
 			if data.Notifications[index].ID == id && data.Notifications[index].PulseSummary != nil {
 				past := time.Now().UTC().Add(-time.Minute)

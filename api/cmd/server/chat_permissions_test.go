@@ -61,12 +61,10 @@ type chatPermissionFixture struct {
 
 func newChatPermissionFixture(t *testing.T, provider string) *chatPermissionFixture {
 	t.Helper()
-	s, handler := chatTestServer(t)
+	s, mux := chatTestServer(t)
 	s.authDisabled = false
-	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/auth/login", s.login)
-	mux.Handle("/", handler)
-	handler = s.authenticate(mux)
+	handler := s.withColdMetadataRouteMux(mux, s.authenticate(mux))
 	f := &chatPermissionFixture{t: t, s: s, handler: handler, openIDs: map[string]string{}, userTenant: map[string]string{}, groups: map[string]string{}, botIn: map[string]bool{}, outsideRange: map[string]bool{}}
 	metadata, _ := s.store.WorkspaceMetadata("test-workspace")
 	f.workspaceID = metadata.Workspace.ID
@@ -83,7 +81,7 @@ func newChatPermissionFixture(t *testing.T, provider string) *chatPermissionFixt
 	}
 	f.privateTeam = "team_chat_private"
 	now := time.Now().UTC()
-	if err := s.store.MutateWorkspace(t.Context(), "test-workspace", "team.created", f.privateTeam, nil, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "team.created", f.privateTeam, nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: f.privateTeam, Name: "Vault", Key: "VLT", Color: "#000000", Private: true, CreatedAt: &now})
 		return nil
 	}); err != nil {
@@ -689,7 +687,7 @@ func testChatPrivateTeamBindingNeedsTeamOwnerAuthorization(t *testing.T, provide
 	}
 	f.refusal(f.lead, "POST", base+"/bindings", binding, 400, "chat_binding_authorization_required", "team")
 	f.addProjects(domain.Project{ID: "binding_foreign_project", Name: "Other team's project", TeamIDs: []string{f.publicTeam}})
-	if err := f.s.store.MutateWorkspace(t.Context(), "test-workspace", "template.created", "binding_foreign_template", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "template.created", "binding_foreign_template", nil, func(data *domain.Bootstrap) error {
 		data.IssueTemplates = append(data.IssueTemplates, domain.IssueTemplate{ID: "binding_foreign_template", Name: "Other team's template", TeamID: f.publicTeam})
 		return nil
 	}); err != nil {
@@ -843,7 +841,7 @@ func TestChatPrivateTeamBindingDeliversOnlyToTheGroupAndKeepsActorPermissions(t 
 	data := f.s.store.Bootstrap()
 	privateTeam := "team_workflow_private"
 	now := time.Now().UTC()
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "team.created", privateTeam, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "team.created", privateTeam, nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: privateTeam, Name: "Vault", Key: "VLW", Color: "#000000", Private: true, CreatedAt: &now})
 		return nil
 	}); err != nil {
@@ -908,7 +906,7 @@ func TestChatInitiativeUpdatesReachTheLeadTeamGroup(t *testing.T) {
 	if err := f.s.store.PutChatBinding(t.Context(), f.record.WorkspaceKey, binding); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "initiative.created", "initiative_chat", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "initiative.created", "initiative_chat", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: "team_initiative_private", Private: true})
 		data.Initiatives = append(data.Initiatives,
 			domain.Initiative{ID: "initiative_chat", Name: "Launch", SlugID: "launch-1", LeadTeamID: binding.TeamID, ContributingTeamIDs: []string{binding.TeamID}},

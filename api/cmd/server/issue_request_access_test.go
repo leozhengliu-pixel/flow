@@ -88,6 +88,8 @@ func TestRecentProjectUsesItsAuthorizedDirectoryRatherThanIssueQueryMetadata(t *
 	r = r.WithContext(context.WithValue(r.Context(), authUserContextKey{}, data.Viewer))
 	s := &server{store: repository}
 	w := httptest.NewRecorder()
+	r, closeRead := beginRequestResourceReads(r)
+	defer closeRead()
 	s.recordRecentResource(w, r)
 	if w.Code != 204 {
 		t.Fatalf("recent project rejected after policy-only query projection: %d %s", w.Code, w.Body.String())

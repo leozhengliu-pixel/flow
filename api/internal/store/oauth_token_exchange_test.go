@@ -31,7 +31,7 @@ func oauthExchangeFixture(t *testing.T) (*SQLiteStore, domain.OAuthRefreshGrant)
 	t.Cleanup(func() { repo.Close() })
 	data := repo.Bootstrap()
 	grant := domain.OAuthRefreshGrant{ClientID: "oauth-test", WorkspaceKey: data.Workspace.URLKey, UserID: data.Viewer.ID, AuthorizationID: "grant-test", Scopes: []string{"read"}, ExpiresAt: time.Now().UTC().Add(time.Hour)}
-	if err := repo.MutateWorkspace(t.Context(), grant.WorkspaceKey, "oauth_authorization.created", grant.AuthorizationID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), grant.WorkspaceKey, "oauth_authorization.created", grant.AuthorizationID, nil, func(next *domain.Bootstrap) error {
 		next.OAuthAuthorizations = append(next.OAuthAuthorizations, domain.OAuthAuthorization{ID: grant.AuthorizationID, ClientID: grant.ClientID, UserID: grant.UserID, Scopes: grant.Scopes})
 		return nil
 	}); err != nil {
@@ -202,7 +202,7 @@ func TestOAuthRefreshDoesNotHydrateIssuesOrDiscussions(t *testing.T) {
 func TestOAuthExchangeChecksCurrentAuthorizationAndApplicationPolicy(t *testing.T) {
 	repo, grant := oauthExchangeFixture(t)
 	key := domain.APIKey{ID: "policy-access"}
-	if err := repo.MutateWorkspace(t.Context(), grant.WorkspaceKey, "application_policy.updated", "policy", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), grant.WorkspaceKey, "application_policy.updated", "policy", nil, func(next *domain.Bootstrap) error {
 		next.WorkspaceSettings.ReviewThirdPartyApplications = true
 		if next.Settings == nil {
 			next.Settings = map[string]any{}
@@ -221,7 +221,7 @@ func TestOAuthExchangeChecksCurrentAuthorizationAndApplicationPolicy(t *testing.
 	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "old-refresh", grant.ClientID, "policy-refresh", key, nil, approved); !errors.Is(err, ErrAuthForbidden) {
 		t.Fatalf("policy denied exchange succeeded: %v", err)
 	}
-	if err := repo.MutateWorkspace(t.Context(), grant.WorkspaceKey, "oauth_authorization.revoked", grant.AuthorizationID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), grant.WorkspaceKey, "oauth_authorization.revoked", grant.AuthorizationID, nil, func(next *domain.Bootstrap) error {
 		for i := range next.OAuthAuthorizations {
 			if next.OAuthAuthorizations[i].ID == grant.AuthorizationID {
 				now := time.Now().UTC()
@@ -259,7 +259,7 @@ func TestOAuthExchangeAuthenticatesWithoutLookupTriggers(t *testing.T) {
 func TestOAuthExchangePrunesExpiredAccessTokens(t *testing.T) {
 	repo, grant := oauthExchangeFixture(t)
 	past, future := time.Now().UTC().Add(-time.Minute), time.Now().UTC().Add(time.Hour)
-	if err := repo.MutateWorkspace(t.Context(), grant.WorkspaceKey, "api_key.created", "seed", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), grant.WorkspaceKey, "api_key.created", "seed", nil, func(next *domain.Bootstrap) error {
 		next.APIKeys = append(next.APIKeys,
 			domain.APIKey{ID: "expired-oauth", SecretHash: "expired-hash", OAuthClientID: grant.ClientID, AuthorizationID: grant.AuthorizationID, ExpiresAt: &past},
 			domain.APIKey{ID: "personal-expired", SecretHash: "personal-hash", ExpiresAt: &past},

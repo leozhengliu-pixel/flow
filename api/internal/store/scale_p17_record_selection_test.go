@@ -12,6 +12,7 @@ import (
 )
 
 func TestScaleP17SelectedWritesPreserveOmittedRecordsAndOrder(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORD_VERIFY", "off")
 	repo, _ := scaleP04OwnedStore(t)
@@ -71,6 +72,7 @@ func TestScaleP17SelectedWritesPreserveOmittedRecordsAndOrder(t *testing.T) {
 }
 
 func TestScaleP17DirectoryBodyGrowthDoesNotIncreaseAllocations(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	repo, _ := scaleP04OwnedStore(t)
 	initial := repo.Bootstrap()
@@ -165,6 +167,7 @@ func TestScaleP17StaleReferencesAndAmbiguousRecordsKeepCanonicalInput(t *testing
 }
 
 func TestScaleP17CanonicalReadDoesNotDecodeOtherPayloads(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	repo, _ := scaleP04OwnedStore(t)
 	initial := repo.Bootstrap()

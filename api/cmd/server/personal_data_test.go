@@ -48,7 +48,7 @@ func newPersonalDataFixture(t *testing.T, repo *store.SQLiteStore, label string)
 		t.Fatal(err)
 	}
 	session := domain.AgentSession{ID: "agent_session_pd_" + suffix, UserID: user.ID, Title: "Pat's private chat", Messages: []domain.AgentMessage{{ID: "msg_" + suffix, Role: "user", Content: "Only Pat may read this"}}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
-	err := repo.MutateWorkspace(store.ContextWithActor(ctx, user), "test-workspace", "agent.session_created", session.ID, nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(ctx, user)), "test-workspace", "agent.session_created", session.ID, nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, session)
 		return nil
 	})

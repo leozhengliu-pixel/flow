@@ -62,7 +62,7 @@ func TestChatInitiativeBindingsConnectInitiativesWithoutALeadTeam(t *testing.T) 
 	sent := f.sentMessages()
 	base := "/api/integrations/" + provider + "/chat"
 	owner := f.member.user
-	if err := f.s.store.MutateWorkspace(t.Context(), "test-workspace", "initiative.created", "initiative_direct", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "initiative.created", "initiative_direct", nil, func(data *domain.Bootstrap) error {
 		data.Initiatives = append(data.Initiatives,
 			domain.Initiative{ID: "initiative_direct", Name: "Company launch", SlugID: "company-launch-1", Health: "atRisk", Owner: &owner, ContributingTeamIDs: []string{f.privateTeam, f.publicTeam}},
 			domain.Initiative{ID: "initiative_private_lead", Name: "Vault plan", SlugID: "vault-plan-1", Owner: &owner, LeadTeamID: f.privateTeam},
@@ -139,7 +139,7 @@ func TestChatInitiativeBindingsConnectInitiativesWithoutALeadTeam(t *testing.T) 
 		t.Fatalf("initiative card: %s", content)
 	}
 	// Once a private team leads it, nothing more is posted.
-	if err := f.s.store.MutateWorkspace(t.Context(), "test-workspace", "initiative.updated", "initiative_direct", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "initiative.updated", "initiative_direct", nil, func(data *domain.Bootstrap) error {
 		for index := range data.Initiatives {
 			if data.Initiatives[index].ID == "initiative_direct" {
 				data.Initiatives[index].LeadTeamID = f.privateTeam
@@ -156,7 +156,7 @@ func TestChatInitiativeBindingsConnectInitiativesWithoutALeadTeam(t *testing.T) 
 	// Back to workspace level, with a new owner: the binding follows its
 	// authorizer and stops.
 	newOwner := f.outsider.user
-	if err := f.s.store.MutateWorkspace(t.Context(), "test-workspace", "initiative.updated", "initiative_direct", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "initiative.updated", "initiative_direct", nil, func(data *domain.Bootstrap) error {
 		for index := range data.Initiatives {
 			if data.Initiatives[index].ID == "initiative_direct" {
 				data.Initiatives[index].LeadTeamID, data.Initiatives[index].Owner = "", &newOwner
@@ -219,7 +219,7 @@ func TestChatInitiativeTeamGroupCardsIncludeTheUpdateAndRespectProtection(t *tes
 		t.Fatal(err)
 	}
 	body := "Shipping the launch plan.\n" + strings.Repeat("x", 2300) + "not-in-preview"
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.initiative", "initiative_group", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "test.initiative", "initiative_group", nil, func(data *domain.Bootstrap) error {
 		data.Initiatives = append(data.Initiatives, domain.Initiative{ID: "initiative_group", Name: "Launch", LeadTeamID: f.binding.TeamID, Health: "offTrack"})
 		data.InitiativeUpdates["initiative_group"] = []domain.InitiativeUpdate{
 			{ID: "update_latest", Body: "Newer update", Health: "offTrack", CreatedAt: time.Now().Add(-time.Minute)},
@@ -239,7 +239,7 @@ func TestChatInitiativeTeamGroupCardsIncludeTheUpdateAndRespectProtection(t *tes
 	if !strings.Contains(content, "Shipping the launch plan.") || !strings.Contains(content, chatT(chatLanguageChinese, "health.onTrack")) || strings.Contains(content, "Newer update") || strings.Contains(content, "not-in-preview") {
 		t.Fatalf("wrong update or unbounded preview: %s", content)
 	}
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.protection", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "test.protection", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.HIPAACompliance = true
 		return nil
 	}); err != nil {

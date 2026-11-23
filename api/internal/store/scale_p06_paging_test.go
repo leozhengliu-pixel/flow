@@ -185,7 +185,7 @@ func TestScaleP06CollaborationPagesRestartOnCompaction(t *testing.T) {
 	for i := range 70 {
 		ids = append(ids, fmt.Sprintf("collab_p06_%03d", i))
 	}
-	err = repo.MutateWorkspace(ctx, data.Workspace.URLKey, "issue.updated", issue.ID, nil, func(d *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(ctx, "collaboration fixture"), data.Workspace.URLKey, "issue.updated", issue.ID, nil, func(d *domain.Bootstrap) error {
 		for i := range d.Issues {
 			if d.Issues[i].ID == issue.ID {
 				if d.Issues[i].DocumentContent == nil {
@@ -212,7 +212,7 @@ func TestScaleP06CollaborationPagesRestartOnCompaction(t *testing.T) {
 	if _, err := repo.ReadCollaborationRecoveryPage(ctx, data.Workspace.URLKey, doc, issue.ID, "", p.Cursor, 4096); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "issue.updated", issue.ID, nil, func(d *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "collaboration fixture"), data.Workspace.URLKey, "issue.updated", issue.ID, nil, func(d *domain.Bootstrap) error {
 		for i := range d.Issues {
 			if d.Issues[i].ID == issue.ID {
 				d.Issues[i].DocumentContent.ID = "new-generation"

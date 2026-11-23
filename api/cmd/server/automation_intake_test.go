@@ -19,7 +19,7 @@ func TestTriageRoundRobinRoutingPersists(t *testing.T) {
 	defer repository.Close()
 	bootstrap := repository.Bootstrap()
 	team := bootstrap.Teams[0]
-	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.triage_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.triage_setup", team.ID, nil, func(data *domain.Bootstrap) error {
 		data.TeamMembers = []domain.TeamMember{{TeamID: team.ID, UserID: data.Users[0].ID, Role: "owner", JoinedAt: time.Now().UTC()}, {TeamID: team.ID, UserID: data.Users[1].ID, Role: "member", JoinedAt: time.Now().UTC()}}
 		settings := teamSettings(data, team.ID)
 		settings.TriageEnabled = true
@@ -77,7 +77,7 @@ func TestScheduledWorkflowRunsOnceAcrossReplicas(t *testing.T) {
 	created := requestJSON[domain.WorkflowDefinition](t, handler, http.MethodPost, "/api/workflows", map[string]any{"name": "Daily reminder", "trigger": "schedule", "schedule": "0 9 * * *", "actions": []map[string]any{{"type": "notify", "config": map[string]string{}}}, "maxAttempts": 3}, http.StatusCreated)
 	key := repository.Bootstrap().Workspace.URLKey
 	past := time.Now().UTC().Add(-time.Minute)
-	if err := repository.MutateWorkspace(t.Context(), key, "test.workflow_due", created.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), key, "test.workflow_due", created.ID, nil, func(data *domain.Bootstrap) error {
 		data.WorkflowDefinitions[0].NextRunAt = &past
 		return nil
 	}); err != nil {
@@ -180,7 +180,7 @@ func TestTriageResponsibilityNotifiesAndAssigns(t *testing.T) {
 	}
 	notified := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Incoming", "teamId": team.ID, "stateId": backlog}, http.StatusCreated)
 	found := false
-	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.read", team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.read", team.ID, nil, func(data *domain.Bootstrap) error {
 		for _, notification := range data.Notifications {
 			if notification.IssueID == notified.ID && notification.RecipientID == other.ID && notification.Category == "triage" {
 				found = true

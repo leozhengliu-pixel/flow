@@ -30,7 +30,7 @@ func TestPulseTickCountsPerVisibilityInOneWrite(t *testing.T) {
 	private := authRequest[domain.Team](t, admin, "POST", host.URL+"/api/workspaces/"+key+"/teams", map[string]any{"name": "Private", "key": "PRV", "private": true}, "", http.StatusCreated)
 
 	now := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
-	err = repo.MutateWorkspace(t.Context(), key, "test.pulse", "", nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), key, "test.pulse", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule = "daily"
 		data.WorkspaceSettings.FeatureFlags["pulse"] = true
 		for id, settings := range data.TeamSettings {

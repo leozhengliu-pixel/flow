@@ -177,7 +177,7 @@ func TestApplyCustomerExclusionChangesKeepsOtherRequests(t *testing.T) {
 
 func mutateTestWorkspace(t *testing.T, repository *store.SQLiteStore, mutate func(*domain.Bootstrap)) error {
 	t.Helper()
-	return repository.Mutate(t.Context(), "test.fixture_updated", "fixture", nil, func(data *domain.Bootstrap) error {
+	return repository.Mutate(workspaceFixtureContext(t.Context()), "test.fixture_updated", "fixture", nil, func(data *domain.Bootstrap) error {
 		mutate(data)
 		return nil
 	})

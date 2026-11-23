@@ -27,7 +27,7 @@ func TestCycleCapacityOverrideMigration(t *testing.T) {
 		{ID: "cycle_zero", Capacity: 0},
 		{ID: "cycle_override", Capacity: 40, CapacityOverride: &kept},
 	}
-	if err := repo.MutateWorkspace(ctx, accessWorkspace, "test.seeded", "cycles", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), accessWorkspace, "test.seeded", "cycles", nil, func(next *domain.Bootstrap) error {
 		teamID := next.Teams[0].ID
 		settings := next.CycleSettings[teamID]
 		settings.Capacity = 9

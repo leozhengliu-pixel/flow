@@ -43,7 +43,7 @@ func TestScaleP19EnableWindowsAndCursorContract(t *testing.T) {
 		t.Run(driver, func(t *testing.T) {
 			f := scaleP03Fixture(t, repo)
 			workspace := f.data.Workspace.URLKey
-			err := repo.MutateWorkspace(t.Context(), workspace, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
+			err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.Projects = nil
 				data.Initiatives = nil
 				for i := range 205 {
@@ -228,7 +228,7 @@ func TestScaleP19EnableUpdateTransferAndLegacyBytes(t *testing.T) {
 			f := scaleP03Fixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			id := "p19-updates"
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.Projects = append(data.Projects, domain.Project{ID: id, Name: "Updates", TeamIDs: []string{data.Teams[0].ID}, Status: data.ProjectStatuses[0]})
 				for i := range 45 {
 					body := strings.Repeat("u", 2048)
@@ -333,7 +333,7 @@ func TestScaleP19EnablePermissionDifferential(t *testing.T) {
 			suffix := idgen.New("p19-")
 			private, child := suffix+"private", suffix+"child"
 			public := f.data.Teams[0].ID
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.Teams = append(data.Teams, domain.Team{ID: private, Key: suffix + "P", Private: true}, domain.Team{ID: child, Key: suffix + "C"})
 				data.TeamSettings[private] = domain.TeamSettings{TeamID: private, Access: "private"}
 				data.TeamSettings[child] = domain.TeamSettings{TeamID: child, ParentTeamID: private, Access: "public"}
@@ -353,7 +353,7 @@ func TestScaleP19EnablePermissionDifferential(t *testing.T) {
 			unrestricted := scaleP03Key(t, f, []string{"read"}, nil)
 			selected := scaleP03Key(t, f, []string{"read"}, []string{public})
 			empty := suffix + "empty"
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p19.key", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p19.key", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: suffix + "empty-key", Name: "Selected empty", CreatorID: f.data.Viewer.ID, SecretHash: secretHash(empty), Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}})
 				return nil
 			}); err != nil {

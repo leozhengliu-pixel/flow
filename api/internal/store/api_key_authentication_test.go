@@ -153,7 +153,7 @@ func TestAPIKeyUsageCoalescesTwentyConcurrentRequestsWithoutWorkspaceWrites(t *t
 	if changed := writes(); len(changed) != 1 || changed["workspace_metadata_records"] != 1 {
 		t.Fatalf("usage wrote unrelated rows or failed to coalesce: %v", changed)
 	}
-	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "test.after_usage", data.Workspace.ID, nil, func(next *domain.Bootstrap) error { return nil }); err != nil {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "verify write after key use"), data.Workspace.URLKey, "test.after_usage", data.Workspace.ID, nil, func(next *domain.Bootstrap) error { return nil }); err != nil {
 		t.Fatalf("usage changed SQLite BLOB affinity: %v", err)
 	}
 }
@@ -210,7 +210,8 @@ func TestPersonalAPIKeyAuthenticatesWithoutLookupTriggers(t *testing.T) {
 	dropAPIKeyLookupTriggers(t, repo)
 	data := repo.Bootstrap()
 	key := domain.APIKey{ID: "personal-cli-key", Name: "CLI", SecretHash: strings.Repeat("d", 64), CreatorID: data.Viewer.ID, Scopes: []string{"read", "write"}, CreatedAt: time.Now().UTC()}
-	if err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "api_key.created", key.ID, nil, func(next *domain.Bootstrap) error {
+	ctx := WithColdWork(t.Context(), "personal API key writes")
+	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "api_key.created", key.ID, nil, func(next *domain.Bootstrap) error {
 		next.APIKeys = append(next.APIKeys, key)
 		return nil
 	}); err != nil {
@@ -219,7 +220,7 @@ func TestPersonalAPIKeyAuthenticatesWithoutLookupTriggers(t *testing.T) {
 	if _, err := repo.AuthenticateAPIKeyRecord(t.Context(), "", key.SecretHash, nil); err != nil {
 		t.Fatalf("personal API key was not indexed: %v", err)
 	}
-	if err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "api_key.revoked", key.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "api_key.revoked", key.ID, nil, func(next *domain.Bootstrap) error {
 		next.APIKeys = slices.DeleteFunc(next.APIKeys, func(item domain.APIKey) bool { return item.ID == key.ID })
 		return nil
 	}); err != nil {

@@ -57,7 +57,7 @@ func TestMCPSearchDocumentsRanksAuthorizedFullTextMatches(t *testing.T) {
 		{ID: "doc-private", SlugID: "private-1", Title: "智能印控平台 UAT 准出标准（内部）", Content: "secret", TeamIDs: []string{"team-private-search"}, UpdatedAt: now},
 		{ID: "doc-archived", SlugID: "archived-1", Title: "智能印控平台 UAT 准出标准（旧）", Content: "旧版", TeamIDs: []string{team.ID}, ArchivedAt: &archived, UpdatedAt: now},
 	}
-	if err := repository.MutateWorkspace(ctx, actor.WorkspaceKey, "test.documents", "doc-plan", nil, func(next *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "test.documents", "doc-plan", nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, domain.Team{ID: "team-private-search", Name: "Private search", Key: "PSRCH", Private: true})
 		next.TeamSettings["team-private-search"] = domain.TeamSettings{TeamID: "team-private-search"}
 		author := next.Users[slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID != next.Viewer.ID })]

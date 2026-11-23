@@ -22,7 +22,7 @@ func releaseFilterFixture(t *testing.T) (*SQLiteStore, IssueRecordQuery) {
 	repo, q, _ := issuePointReadFixture(t)
 	q.Access = nil
 	released, later := releaseFilterT, releaseFilterT.Add(48*time.Hour)
-	if err := repo.MutateWorkspace(t.Context(), q.Workspace, "release.created", "", nil, func(d *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), q.Workspace, "release.created", "", nil, func(d *domain.Bootstrap) error {
 		d.Releases = append(d.Releases,
 			domain.Release{ID: "r1", SlugID: "r1", Name: "1.0", Status: "released", PipelineID: "p1", Stage: "Released", IssueIDs: []string{"issue_1", "issue_2"}, ReleasedAt: &released},
 			domain.Release{ID: "r2", SlugID: "r2", Name: "1.1", Status: "released", PipelineID: "p2", Stage: "Released", IssueIDs: []string{"issue_2"}, ReleasedAt: &later},
@@ -126,7 +126,7 @@ func TestReleaseIssueIndexLifecycleAndMigration(t *testing.T) {
 	repo, q := releaseFilterFixture(t)
 	has := IssueFilter{Field: "releasedAt", Operator: "isNotEmpty"}
 	// Releasing r3 indexes its date for its issues.
-	if err := repo.MutateWorkspace(t.Context(), q.Workspace, "release.updated", "r3", nil, func(d *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), q.Workspace, "release.updated", "r3", nil, func(d *domain.Bootstrap) error {
 		for i := range d.Releases {
 			if d.Releases[i].ID == "r3" {
 				now := releaseFilterT.Add(72 * time.Hour)
@@ -142,7 +142,7 @@ func TestReleaseIssueIndexLifecycleAndMigration(t *testing.T) {
 		t.Fatalf("release edit left a stale index: %v", got)
 	}
 	// Removing an issue from r1 and deleting r2 drops their rows.
-	if err := repo.MutateWorkspace(t.Context(), q.Workspace, "release.deleted", "r2", nil, func(d *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), q.Workspace, "release.deleted", "r2", nil, func(d *domain.Bootstrap) error {
 		d.Releases = slices.DeleteFunc(d.Releases, func(release domain.Release) bool { return release.ID == "r2" })
 		for i := range d.Releases {
 			if d.Releases[i].ID == "r1" {
@@ -157,7 +157,7 @@ func TestReleaseIssueIndexLifecycleAndMigration(t *testing.T) {
 		t.Fatalf("deleted release still indexed: %v", got)
 	}
 	// A failed mutation leaves the index untouched.
-	if err := repo.MutateWorkspace(t.Context(), q.Workspace, "release.updated", "", nil, func(d *domain.Bootstrap) error { d.Releases = nil; return errors.New("abort") }); err == nil {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), q.Workspace, "release.updated", "", nil, func(d *domain.Bootstrap) error { d.Releases = nil; return errors.New("abort") }); err == nil {
 		t.Fatal("failed mutation committed")
 	}
 	want := releaseFilterMatches(t, repo, q, has)

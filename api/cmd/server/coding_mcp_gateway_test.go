@@ -67,7 +67,7 @@ func TestApplicationPolicyAcceptsIntranetMCPOnlyWithOperatorTrust(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	if err := repo.MutateWorkspace(t.Context(), "test-workspace", "test", "settings", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test", "settings", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.MCPConnectorsEnabled = true
 		return nil
 	}); err != nil {

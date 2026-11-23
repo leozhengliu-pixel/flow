@@ -283,7 +283,7 @@ func TestScaleP16InvalidRecordKeysKeepBusinessErrors(t *testing.T) {
 				t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", mode)
 				ctx := store.ContextWithActor(t.Context(), fixture.Viewer)
 				ctx = projectRecordScope(ctx, "project", "edit", test.id, test.input)
-				err := db.repo.MutateWorkspace(ctx, db.key, "project.updated", test.id, test.input, func(data *domain.Bootstrap) error {
+				err := db.repo.MutateWorkspace(workspaceFixtureContext(ctx), db.key, "project.updated", test.id, test.input, func(data *domain.Bootstrap) error {
 					project, err := fullProjectByID(data, test.id)
 					if err != nil {
 						return err

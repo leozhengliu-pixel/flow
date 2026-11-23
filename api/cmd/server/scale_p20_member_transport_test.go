@@ -60,6 +60,10 @@ func TestScaleP20ThousandMemberTransport(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	// The synthetic import bypassed the app's journaled membership writer.
+	if _, err := db.repo.RepairRecordJournalPass(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	handler := db.handler(t, true)
 	read := func(path string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodGet, path, nil)

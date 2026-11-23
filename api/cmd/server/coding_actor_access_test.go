@@ -47,7 +47,7 @@ func newCodingActorFixture(t *testing.T, bounded bool) *codingActorFixture {
 	t.Helper()
 	f := &codingActorFixture{codingAccessFixture: newCodingAccessFixture(t)}
 	workspace := f.workspace.Workspace.URLKey
-	if err := f.s.store.MutateWorkspace(t.Context(), workspace, "coding_actor.seed", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "coding_actor.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: "coding-private", Name: "Hidden", Key: "HID", Private: true})
 		data.TeamSettings["coding-private"] = domain.TeamSettings{TeamID: "coding-private", Access: "private"}
 		return nil
@@ -59,7 +59,7 @@ func newCodingActorFixture(t *testing.T, bounded bool) *codingActorFixture {
 	}
 	f.privateIssue = requestJSON[domain.Issue](t, f.handler, http.MethodPost, "/api/issues", map[string]any{"title": "Secret rollout plan", "description": "private details", "teamId": "coding-private"}, http.StatusCreated)
 	f.publicIssue = requestJSON[domain.Issue](t, f.handler, http.MethodPost, "/api/issues", map[string]any{"title": "Flaky test", "teamId": f.workspace.Teams[0].ID}, http.StatusCreated)
-	if err := f.s.store.MutateWorkspace(t.Context(), workspace, "api_key.created", "key_scoped", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "api_key.created", "key_scoped", nil, func(data *domain.Bootstrap) error {
 		data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "key_scoped", SecretHash: secretHash(codingScopedKeySecret), CreatorID: "usr_admin", Scopes: []string{"read", "write"}, TeamRestriction: "selected", TeamIDs: []string{f.workspace.Teams[0].ID}, CreatedAt: time.Now().UTC()})
 		return nil
 	}); err != nil {

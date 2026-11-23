@@ -144,7 +144,7 @@ func TestChatGroupCardControlsRunAsClickerAndRedrawTheCard(t *testing.T) {
 	if err := f.s.store.PutChatBinding(t.Context(), f.record.WorkspaceKey, binding); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "user_settings.updated", f.identity.UserID, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "user_settings.updated", f.identity.UserID, nil, func(data *domain.Bootstrap) error {
 		settings := data.UserSettings[f.identity.UserID]
 		settings.UserID, settings.Language = f.identity.UserID, "zh-CN"
 		data.UserSettings[f.identity.UserID] = settings

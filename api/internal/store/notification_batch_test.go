@@ -20,7 +20,7 @@ func TestNotificationBatchMarkUnreadClearsReadAt(t *testing.T) {
 	workspace, viewer := data.Workspace.URLKey, data.Viewer.ID
 	now := time.Now().UTC()
 	readAt := now.Add(-time.Hour)
-	err = repo.MutateWorkspace(t.Context(), workspace, "test.notifications", "", nil, func(d *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "test.notifications", "", nil, func(d *domain.Bootstrap) error {
 		d.Notifications = append(d.Notifications,
 			domain.Notification{ID: "notification_read", RecipientID: viewer, Type: "issueComment", SourceType: "issue", SourceID: "issue_x", Actor: d.Viewer, ReadAt: &readAt, CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: readAt},
 			domain.Notification{ID: "notification_unread", RecipientID: viewer, Type: "issueComment", SourceType: "issue", SourceID: "issue_y", Actor: d.Viewer, CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Hour)},

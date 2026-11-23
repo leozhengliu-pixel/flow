@@ -92,7 +92,9 @@ func TestOAuthAppReconsentMergesScopesAndKeepsTeamAccess(t *testing.T) {
 		t.Fatalf("continue token scope = %q", third.Scope)
 	}
 	applicationBearerRequest(t, host, second.AccessToken, "GET", "/api/bootstrap", "", 401)
-	items, err := s.store.ListApplications(t.Context(), workspace)
+	ctx, closeRead := beginMetadataOutputReads(t.Context())
+	defer closeRead()
+	items, err := s.store.ListApplications(ctx, workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +126,7 @@ func TestOAuthAppRealtimePermission(t *testing.T) {
 	}
 	appConsent(t, host, admin, app, workspace, "read", map[string]any{"allPublicTeams": true})
 
-	err := s.store.MutateWorkspace(context.Background(), workspace, "test.app_webhook", "", nil, func(next *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(workspaceFixtureContext(context.Background()), workspace, "test.app_webhook", "", nil, func(next *domain.Bootstrap) error {
 		for index := range next.OAuthApplications {
 			if next.OAuthApplications[index].ClientID == app.ClientID {
 				next.OAuthApplications[index].WebhookEnabled = true
@@ -166,8 +168,16 @@ func TestOAuthAppRealtimePermission(t *testing.T) {
 	}
 
 	// Saving team access on the settings page keeps the consent.
-	items, _ := s.store.ListApplications(t.Context(), workspace)
+	ctx, release := beginMetadataOutputReads(t.Context())
+	defer release()
+	items, err := s.store.ListApplications(ctx, workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
 	index := slices.IndexFunc(items, func(item domain.ApplicationInstallation) bool { return item.ClientID == app.ClientID })
+	if index < 0 {
+		t.Fatal("authorized installation is missing")
+	}
 	saved := authRequest[struct {
 		Application domain.ApplicationInstallation `json:"application"`
 	}](t, admin, "PATCH", host.URL+"/api/application-installations/"+items[index].ID, map[string]any{"allPublicTeams": true, "teamIds": []string{}, "scopes": items[index].Scopes, "active": true, "withoutRealtime": true}, workspace, 200)

@@ -147,16 +147,17 @@ func TestOriginScopedRemovalDryRunAndOwnerProtection(t *testing.T) {
 
 func TestTeamMembershipChangesIncludeInheritedParentMemberships(t *testing.T) {
 	repository, data := originTestStore(t)
-	ctx := t.Context()
+	ctx := WithColdWork(t.Context(), "team membership fixture")
 	parentID, childID := data.Teams[0].ID, "team_origin_child"
 	if err := repository.MutateWorkspace(ctx, data.Workspace.URLKey, "team.created", childID, nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, domain.Team{ID: childID, Name: "Child", Key: "CHLD", Color: "#123456"})
-		settings := next.TeamSettings[childID]
-		settings.ParentTeamID = parentID
-		next.TeamSettings[childID] = settings
+		next.TeamSettings[childID] = domain.TeamSettings{TeamID: childID, ParentTeamID: parentID, Access: "public"}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+	if repository.Bootstrap().TeamSettings[childID].ParentTeamID != parentID {
+		t.Fatal("child's parent was not persisted")
 	}
 	user := originTestMember(t, repository, data, "Nested member")
 	result, err := repository.ChangeTeamMembership(ctx, TeamMembershipChangeRequest{WorkspaceID: data.Workspace.ID, TeamID: childID, UserID: user.ID, Member: true, Origin: domain.TeamMemberOriginSync})

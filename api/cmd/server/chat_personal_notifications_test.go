@@ -15,7 +15,7 @@ import (
 // preferences ask for, as notification creation does.
 func chatPersonalNotify(t *testing.T, f *chatWorkflowFixture, userID, id, category, issueID string) {
 	t.Helper()
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.chat_personal", id, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "test.chat_personal", id, nil, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		notification := domain.Notification{ID: id, RecipientID: userID, Category: category, Type: notificationType(category), IssueID: issueID, Actor: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		data.Notifications = append(data.Notifications, notification)
@@ -28,7 +28,7 @@ func chatPersonalNotify(t *testing.T, f *chatWorkflowFixture, userID, id, catego
 
 func chatPersonalPreferences(t *testing.T, f *chatWorkflowFixture, userID string, chat *domain.NotificationChannelPreferences) {
 	t.Helper()
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "notification_preferences.updated", userID, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "notification_preferences.updated", userID, nil, func(data *domain.Bootstrap) error {
 		preferences := defaultPreferences(userID)
 		preferences.Email.Enabled, preferences.Desktop.Enabled = false, false
 		mergeNotificationPreferences(&preferences, domain.NotificationPreferences{Chat: chat})
@@ -187,7 +187,7 @@ func TestChatPersonalNotificationsRespectAccessAndConnectionHealth(t *testing.T)
 		t.Fatal(err)
 	}
 	chatPersonalPreferences(t, f, member.User.ID, &domain.NotificationChannelPreferences{Enabled: true})
-	if err = f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "team.updated", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
+	if err = f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "team.updated", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Teams {
 			if data.Teams[index].ID == issue.Team.ID {
 				data.Teams[index].Private = true
@@ -210,7 +210,7 @@ func TestChatPersonalNotificationsRespectAccessAndConnectionHealth(t *testing.T)
 	}
 
 	// Leaving the workspace stops delivery, even of a public issue.
-	if err = f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "team.updated", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
+	if err = f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "team.updated", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Teams {
 			if data.Teams[index].ID == issue.Team.ID {
 				data.Teams[index].Private = false

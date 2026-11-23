@@ -55,7 +55,7 @@ func (f *chatWorkflowFixture) enableRequests(t *testing.T, requests *domain.Chat
 
 func (f *chatWorkflowFixture) useTriage(t *testing.T) {
 	t.Helper()
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.triage", f.binding.TeamID, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "test.triage", f.binding.TeamID, nil, func(data *domain.Bootstrap) error {
 		settings := data.TeamSettings[f.binding.TeamID]
 		settings.TeamID, settings.TriageEnabled = f.binding.TeamID, true
 		data.TeamSettings[f.binding.TeamID] = settings
@@ -338,7 +338,7 @@ func TestChatRequestRefusalsFlagOffAndPermission(t *testing.T) {
 	}
 	// Sensitive data protection keeps the group out: an explicit request is
 	// refused.
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.hipaa", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "test.hipaa", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.HIPAACompliance = true
 		return nil
 	}); err != nil {

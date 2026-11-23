@@ -13,18 +13,19 @@ func TestCommentActionsPreferenceMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Close()
+	ctx := WithColdWork(t.Context(), "comment actions migration")
 	data := repo.Bootstrap()
 	id := data.Viewer.ID
 	for _, explicit := range []*bool{nil, new(bool)} {
 		settings := data.UserSettings[id]
 		settings.SuggestedActionsOnComments = explicit
-		if err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.legacy", id, nil, func(d *domain.Bootstrap) error { d.UserSettings[id] = settings; return nil }); err != nil {
+		if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), data.Workspace.URLKey, "test.legacy", id, nil, func(d *domain.Bootstrap) error { d.UserSettings[id] = settings; return nil }); err != nil {
 			t.Fatal(err)
 		}
-		if err := repo.migrateCommentActions(t.Context()); err != nil {
+		if err := repo.migrateCommentActions(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := repo.migrateCommentActions(t.Context()); err != nil {
+		if err := repo.migrateCommentActions(ctx); err != nil {
 			t.Fatal(err)
 		}
 		got, _ := repo.WorkspaceMetadata(data.Workspace.URLKey)

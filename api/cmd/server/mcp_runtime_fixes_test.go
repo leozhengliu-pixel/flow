@@ -111,7 +111,7 @@ func TestMCPListCyclesAllAndIssueRelationshipProjections(t *testing.T) {
 func TestMCPIssueRelationshipsHidePrivateChildren(t *testing.T) {
 	f := newMCPContractFixture(t)
 	workspace := f.data.Workspace.URLKey
-	if err := f.repository.MutateWorkspace(t.Context(), workspace, "team.created", "private-team", nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "team.created", "private-team", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: "private-team", Name: "Private team", Key: "PRV", Private: true})
 		return nil
 	}); err != nil {
@@ -346,7 +346,7 @@ func TestMCPCountIssuesVisibilityMatchesQueryForNonAdmin(t *testing.T) {
 	}
 	actor := mcpActor{WorkspaceKey: f.data.Workspace.URLKey, User: f.data.Users[member], APIKey: domain.APIKey{Scopes: []string{"read", "write"}}}
 	private := domain.Team{ID: "count-private", Name: "Count private", Key: "CPR", Private: true}
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "team.created", private.ID, nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "team.created", private.ID, nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, private)
 		data.TeamSettings[private.ID] = domain.TeamSettings{TeamID: private.ID, Access: "private"}
 		return nil
@@ -402,7 +402,7 @@ func TestMCPCountIssuesVisibilityMatchesQueryForNonAdmin(t *testing.T) {
 	}
 
 	archived := time.Now().UTC()
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "team.archived", private.ID, nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "team.archived", private.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Teams {
 			if data.Teams[index].ID == private.ID {
 				data.Teams[index].ArchivedAt = &archived
@@ -440,7 +440,7 @@ func TestMCPCountIssuesVisibilityMatchesQueryForNonAdmin(t *testing.T) {
 func TestMCPCountIssuesCounterArchiveAndTrashParity(t *testing.T) {
 	f := newMCPContractFixture(t)
 	team := domain.Team{ID: "count-archive", Name: "Count archive", Key: "CAR"}
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "team.created", team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "team.created", team.ID, nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, team)
 		return nil
 	}); err != nil {

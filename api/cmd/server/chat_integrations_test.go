@@ -25,7 +25,7 @@ func (f chatTestTransport) RoundTrip(r *http.Request) (*http.Response, error) { 
 func chatTestResponse(status int, body string) *http.Response {
 	return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
 }
-func chatTestServer(t *testing.T) (*server, http.Handler) {
+func chatTestServer(t *testing.T) (*server, *http.ServeMux) {
 	t.Helper()
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("s", 32))))
 	repo, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "chat.db"))
@@ -379,7 +379,7 @@ func TestChatMembersCanBindWithoutManagingApplicationAndEnforcedSSOApplies(t *te
 	if response = request("GET", path, true); response.Code != 403 {
 		t.Fatalf("bearer key was elevated by ambient cookie: %d", response.Code)
 	}
-	if err = s.store.MutateWorkspace(t.Context(), record.WorkspaceKey, "identity_provider.updated", "required-idp", nil, func(data *domain.Bootstrap) error {
+	if err = s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), record.WorkspaceKey, "identity_provider.updated", "required-idp", nil, func(data *domain.Bootstrap) error {
 		data.IdentityProviders = append(data.IdentityProviders, domain.IdentityProvider{ID: "required-idp", Enabled: true, Enforced: true, Issuer: "https://sso.example.com"})
 		return nil
 	}); err != nil {

@@ -98,7 +98,7 @@ func TestMCPCustomerToolsCreateLogRequestAndDelete(t *testing.T) {
 
 func TestMCPCustomerToolsRespectManualEditsInApp(t *testing.T) {
 	f := newMCPContractFixture(t)
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.customer_settings", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.customer_settings", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.FeatureSettings.CustomerManualEdits = false
 		return nil
 	}); err != nil {

@@ -129,7 +129,7 @@ func TestCycleSettingsLegacyRowsUpgradeOnce(t *testing.T) {
 				t.Fatal(err)
 			}
 			legacy, explicit := created.Teams[0].ID, "team_explicit_cycles"
-			if err := repo.MutateWorkspace(t.Context(), key, "test.seeded", "", nil, func(next *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), key, "test.seeded", "", nil, func(next *domain.Bootstrap) error {
 				next.Teams = append(next.Teams, domain.Team{ID: explicit, Key: "EXP", Name: "Explicit"})
 				next.TeamSettings[explicit] = next.TeamSettings[legacy]
 				next.CycleSettings[legacy] = domain.CycleSettings{Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2}
@@ -205,7 +205,7 @@ func TestCycleSettingsExplicitZeroCapacityRowIsKept(t *testing.T) {
 			}
 			team := created.Teams[0].ID
 			want := domain.CycleSettings{Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2, Capacity: 0, AutoCreate: false}
-			if err := repo.MutateWorkspace(t.Context(), key, "test.seeded", "", nil, func(next *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), key, "test.seeded", "", nil, func(next *domain.Bootstrap) error {
 				next.CycleSettings[team] = want
 				next.Cycles = []domain.Cycle{}
 				return nil

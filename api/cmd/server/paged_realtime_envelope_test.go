@@ -23,7 +23,7 @@ func TestPagedRealtimeEnvelopesCarryAffectedIssueIDs(t *testing.T) {
 	issueID := repo.Bootstrap().Issues[0].ID
 	emit := func(eventType, aggregate string, payload any) {
 		t.Helper()
-		if err := repo.MutateWorkspace(t.Context(), "test-workspace", eventType, aggregate, payload, func(*domain.Bootstrap) error { return nil }); err != nil {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", eventType, aggregate, payload, func(*domain.Bootstrap) error { return nil }); err != nil {
 			t.Fatal(err)
 		}
 	}

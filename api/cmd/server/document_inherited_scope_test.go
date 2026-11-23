@@ -192,7 +192,7 @@ func TestDocumentInheritsPrivateTeamScopeFromItsLinks(t *testing.T) {
 	// A stored document from before inherited scopes keeps its access on its
 	// next unrelated edit.
 	var legacyID string
-	if err := repository.MutateWorkspace(t.Context(), workspace, "test.legacy_document", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "test.legacy_document", "", nil, func(data *domain.Bootstrap) error {
 		for index := range data.Documents {
 			if data.Documents[index].ID == moving.ID {
 				data.Documents[index].InheritedTeamIDs, data.Documents[index].IssueTeamID = nil, ""

@@ -48,7 +48,7 @@ func TestScaleP18ReadCosts(t *testing.T) {
 	for _, count := range []int{100, 1000} {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
 			repo, actor, ctx := scaleP18Fixture(t)
-			if err := repo.MutateWorkspace(ctx, actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
 				for i := range count {
 					data.Projects = append(data.Projects, domain.Project{ID: fmt.Sprintf("p18-project-%04d", i), Name: fmt.Sprintf("Project %04d", i), Description: strings.Repeat("body ", 1600), TeamIDs: []string{data.Teams[0].ID}, Resources: []domain.ProjectResource{{ID: "resource", Title: "Context"}}})
 				}

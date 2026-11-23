@@ -25,7 +25,7 @@ func TestExternalDatabaseSecretStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	ctx := context.Background()
+	ctx := WithColdWork(context.Background(), "data migrations")
 	const workspace = "secrets-integration"
 	_ = repo.DeleteWorkspace(ctx, workspace)
 	for _, statement := range []string{

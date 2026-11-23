@@ -266,7 +266,7 @@ func TestChatPendingConnectionAcceptsOnlyEncryptedChallenge(t *testing.T) {
 
 func TestChatCreateUsesCustomWorkflowActorAndStableCommandKey(t *testing.T) {
 	f := newChatWorkflowFixture(t)
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "team.settings_updated", f.binding.TeamID, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "team.settings_updated", f.binding.TeamID, nil, func(data *domain.Bootstrap) error {
 		data.States = append(data.States, domain.WorkflowState{ID: "state_chat_custom", TeamID: f.binding.TeamID, Name: "Ready", Type: "unstarted", Default: true})
 		settings := data.TeamSettings[f.binding.TeamID]
 		settings.DefaultStateID = "state_chat_custom"

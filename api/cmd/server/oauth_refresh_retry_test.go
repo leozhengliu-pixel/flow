@@ -22,7 +22,7 @@ func TestOAuthRefreshHTTPFailedAttemptCanRetry(t *testing.T) {
 	defer repo.Close()
 	data := repo.Bootstrap()
 	grant := domain.OAuthRefreshGrant{ClientID: "retry-client", WorkspaceKey: data.Workspace.URLKey, UserID: data.Viewer.ID, Scopes: []string{"read"}, AuthorizationID: "retry-grant", ExpiresAt: time.Now().UTC().Add(time.Hour)}
-	if err := repo.MutateWorkspace(t.Context(), grant.WorkspaceKey, "oauth_authorization.created", grant.AuthorizationID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), grant.WorkspaceKey, "oauth_authorization.created", grant.AuthorizationID, nil, func(next *domain.Bootstrap) error {
 		next.OAuthAuthorizations = append(next.OAuthAuthorizations, domain.OAuthAuthorization{ID: grant.AuthorizationID, ClientID: grant.ClientID, UserID: grant.UserID, Scopes: grant.Scopes})
 		return nil
 	}); err != nil {

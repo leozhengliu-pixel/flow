@@ -22,7 +22,7 @@ func TestScaleP15PermissionDifferential(t *testing.T) {
 			f := scaleP03Fixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			ctx := t.Context()
-			if err := repo.MutateWorkspace(ctx, workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
 				data.Teams = append(data.Teams, domain.Team{ID: "p15-public", Key: "P15O"}, domain.Team{ID: "p15-private", Key: "P15P", Private: true}, domain.Team{ID: "p15-child", Key: "P15C"})
 				data.TeamSettings["p15-public"] = domain.TeamSettings{TeamID: "p15-public", Access: "public"}
 				data.TeamSettings["p15-private"] = domain.TeamSettings{TeamID: "p15-private", Access: "private"}
@@ -47,19 +47,13 @@ func TestScaleP15PermissionDifferential(t *testing.T) {
 			unrestricted := scaleP03Key(t, f, []string{"read"}, nil)
 			selected := scaleP03Key(t, f, []string{"read"}, []string{"p15-public"})
 			empty := idgen.New("p15-empty-")
-			if err := repo.MutateWorkspace(ctx, workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "p15-empty", Name: "Selected empty", SecretHash: secretHash(empty), CreatorID: data.Viewer.ID, Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}})
-				settings, preferences := data.UserSettings[f.data.Viewer.ID], data.NotificationPreferences[f.data.Viewer.ID]
-				for _, user := range f.resources.users {
-					// Missing defaults get a fresh UpdatedAt on each legacy read.
-					// Persist a stable fixture rather than excluding response fields.
-					settings.UserID, preferences.UserID = user.ID, user.ID
-					data.UserSettings[user.ID], data.NotificationPreferences[user.ID] = settings, preferences
-				}
 				return nil
 			}); err != nil {
 				t.Fatal(err)
 			}
+			seedDifferentialPreferences(t, repo, workspace, f.resources.users)
 			other, err := repo.CreateWorkspace(store.ContextWithActor(ctx, f.data.Viewer), "P15 foreign", idgen.New("p15-other-"), "us")
 			if err != nil {
 				t.Fatal(err)
@@ -170,6 +164,8 @@ func TestScaleP15PermissionDifferential(t *testing.T) {
 }
 
 func TestScaleP15ReadSnapshotReleasedBeforeSocket(t *testing.T) {
+	// This exercises the legacy bootstrap serializer and SQL read snapshot.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("TMPDIR", t.TempDir())
 	for _, repo := range scaleP03ServerTestStores(t) {

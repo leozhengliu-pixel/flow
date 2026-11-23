@@ -19,7 +19,7 @@ import (
 func apiKeyScopeFixture(t *testing.T, repo *store.SQLiteStore) scaleP03PlatformFixture {
 	t.Helper()
 	f := scaleP03Fixture(t, repo)
-	err := repo.MutateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), f.data.Workspace.URLKey, "test.scope_fixture", "", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(t.Context(), f.data.Viewer)), f.data.Workspace.URLKey, "test.scope_fixture", "", nil, func(data *domain.Bootstrap) error {
 		public := domain.Team{ID: "scope-public", Key: "SCP", Name: "Public"}
 		private := domain.Team{ID: "scope-private", Key: "SCH", Name: "Private", Private: true}
 		data.Teams = append(data.Teams, public, private)
@@ -95,7 +95,7 @@ func apiKeyScopeCredential(t *testing.T, f scaleP03PlatformFixture, actor, restr
 		var app domain.ApplicationInstallation
 		err := scaleP03RetryWrite(t.Context(), func() error {
 			var err error
-			app, err = f.repository.InstallApplication(t.Context(), f.data.Workspace.URLKey, installation, "")
+			app, err = f.repository.InstallApplication(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, installation, "")
 			return err
 		})
 		if err != nil {
@@ -104,13 +104,15 @@ func apiKeyScopeCredential(t *testing.T, f scaleP03PlatformFixture, actor, restr
 		f.resources.appUsers = append(f.resources.appUsers, struct{ workspace, id string }{f.data.Workspace.URLKey, app.UserID})
 		key.SubjectUserID, key.OAuthClientID = app.UserID, app.ClientID
 	}
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.scope_key", key.ID, nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.scope_key", key.ID, nil, func(data *domain.Bootstrap) error {
 		data.APIKeys = append(data.APIKeys, key)
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	auth, err := f.repository.AuthenticateAPIKeyRecord(t.Context(), f.data.Workspace.URLKey, secretHash(secret), nil)
+	authCtx, finish := beginMetadataOutputReads(t.Context())
+	defer finish()
+	auth, err := f.repository.AuthenticateAPIKeyRecord(authCtx, f.data.Workspace.URLKey, secretHash(secret), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,13 +313,15 @@ func TestScaleP03APIKeyTeamScopeReferencesAndCounts(t *testing.T) {
 							}
 						})
 					}
-					user, err := repo.UserByID(t.Context(), key.SubjectID())
+					ctx, finish := beginMetadataOutputReads(t.Context())
+					defer finish()
+					user, err := repo.UserByID(ctx, key.SubjectID())
 					if err != nil {
 						t.Fatal(err)
 					}
 					actor := mcpActor{User: user, APIKey: key, WorkspaceKey: f.data.Workspace.URLKey}
 					for _, name := range []string{"list_projects", "list_initiatives", "list_documents", "list_issues", "count_issues", "list_notifications"} {
-						result, err := f.service.runFlowTool(t.Context(), actor, name, map[string]any{"limit": 100})
+						result, err := f.service.runFlowTool(ctx, actor, name, map[string]any{"limit": 100})
 						if err != nil {
 							t.Fatalf("%s: %v", name, err)
 						}
@@ -432,7 +436,7 @@ func TestScaleP03APIKeyTeamScopeWebhookReads(t *testing.T) {
 		t.Run(driver, func(t *testing.T) {
 			f := apiKeyScopeFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
-			if err := repo.MutateWorkspace(t.Context(), workspace, "test.scope_hooks", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "test.scope_hooks", "", nil, func(data *domain.Bootstrap) error {
 				data.Webhooks = append(data.Webhooks,
 					domain.Webhook{ID: "scope-hook", CreatorID: f.data.Viewer.ID, TeamRestriction: "selected", TeamIDs: []string{"scope-public"}},
 					domain.Webhook{ID: "scope-hidden-hook", CreatorID: f.data.Viewer.ID, TeamRestriction: "selected", TeamIDs: []string{"scope-private"}},

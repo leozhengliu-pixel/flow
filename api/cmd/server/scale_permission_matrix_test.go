@@ -140,7 +140,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 	guest, guestUser := scaleP01Join(t, owned, base, workspace, admin, "P01 guest", "guest", public.ID)
 	outsider, _ := scaleP01Join(t, owned, base, workspace, admin, "P01 outsider", "member", public.ID)
 	projectID, hiddenID, childID := "p01-shared-"+suffix, "p01-hidden-"+suffix, "p01-child-"+suffix
-	if err := repo.MutateWorkspace(store.ContextWithActor(t.Context(), data.Viewer), workspace, "test.p01_fixture", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(t.Context(), data.Viewer)), workspace, "test.p01_fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects,
 			domain.Project{ID: hiddenID, SlugID: "hidden-000000000001", Name: "P01 hidden", TeamIDs: []string{private.ID}},
 			domain.Project{ID: childID, SlugID: "child-000000000003", Name: "P01 inherited", TeamIDs: []string{child.ID}},

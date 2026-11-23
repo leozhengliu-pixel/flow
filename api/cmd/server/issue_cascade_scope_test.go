@@ -64,7 +64,7 @@ func runIssueCascadeScript(t *testing.T, forceFull bool) cascadeScriptResult {
 	defer repository.Close()
 	fixture := repository.Bootstrap()
 	// Scheduled Pulse summaries depend on request timing, not the mutation path under test.
-	if err := repository.MutateWorkspace(t.Context(), fixture.Workspace.URLKey, "test.pulse_disabled", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), fixture.Workspace.URLKey, "test.pulse_disabled", "", nil, func(data *domain.Bootstrap) error {
 		if data.WorkspaceSettings.FeatureFlags == nil {
 			data.WorkspaceSettings.FeatureFlags = map[string]bool{}
 		}

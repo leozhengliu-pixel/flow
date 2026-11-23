@@ -104,7 +104,7 @@ func TestChatInitiativeGroupsShowNamesToViewers(t *testing.T) {
 	f := newChatPermissionFixture(t, provider)
 	base := "/api/integrations/" + provider + "/chat/initiatives/"
 	owner := f.lead.user
-	if err := f.s.store.MutateWorkspace(t.Context(), "test-workspace", "initiative.created", "ig_open", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "initiative.created", "ig_open", nil, func(data *domain.Bootstrap) error {
 		data.Initiatives = append(data.Initiatives,
 			domain.Initiative{ID: "ig_open", Name: "Launch", SlugID: "launch-1", Owner: &owner},
 			domain.Initiative{ID: "ig_private", Name: "Vault plan", SlugID: "vault-plan-1", Owner: &owner, LeadTeamID: f.privateTeam},

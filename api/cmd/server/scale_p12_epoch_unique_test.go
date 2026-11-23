@@ -24,7 +24,7 @@ func TestScaleP12EpochTwoThousandCredentialContextsRemainReusable(t *testing.T) 
 			teams[i] = idgen.New("p12-epoch-team-")
 		}
 		keys := make([]domain.APIKey, 2000)
-		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p12.epoch_credentials", "", nil, func(data *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "scale_p12.epoch_credentials", "", nil, func(data *domain.Bootstrap) error {
 			for _, team := range teams {
 				data.Teams = append(data.Teams, domain.Team{ID: team, Key: "P12E"})
 				data.TeamSettings[team] = domain.TeamSettings{TeamID: team, Access: "public"}

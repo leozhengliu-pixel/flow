@@ -282,7 +282,7 @@ func (f *recurringFixture) generate(now time.Time) []domain.Issue {
 // mutate edits the fixture's workspace on the full path (test setup only).
 func (f *recurringFixture) mutate(edit func(data *domain.Bootstrap) error) {
 	f.t.Helper()
-	if err := f.repository.MutateWorkspace(f.t.Context(), f.key, "test.recurring", "recurring", nil, edit); err != nil {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(f.t.Context()), f.key, "test.recurring", "recurring", nil, edit); err != nil {
 		f.t.Fatal(err)
 	}
 }

@@ -353,7 +353,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 				return true
 			}
 			if !scaleP21SW225OwnedBranch(handler.Body.List[0], "",
-				`result == nil && internalRecordsEnabled("FLOW_INTERNAL_CHAT_RECORDS")`,
+				`result == nil && (s.store.BoundedMetadataEnabled() || internalRecordsEnabled("FLOW_INTERNAL_CHAT_RECORDS"))`,
 				"w.WriteHeader(http.StatusOK)") {
 				t.Error("consent-only branch changed; bootstrap reachability needs review")
 			}

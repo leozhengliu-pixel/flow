@@ -200,7 +200,7 @@ func TestChatCommentBackfillPostsMissedCommentsOnce(t *testing.T) {
 		comment := newMCPComment(f.s.store.Bootstrap().Viewer, marker, nil, nil)
 		comment.CreatedAt = root.SyncFrom.Add(time.Second)
 		// An event name no consumer reads, as MCP used to record.
-		if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "comment.create", comment.ID, nil, func(data *domain.Bootstrap) error {
+		if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "comment.create", comment.ID, nil, func(data *domain.Bootstrap) error {
 			data.Comments[issue.ID] = append(data.Comments[issue.ID], comment)
 			return nil
 		}); err != nil {
@@ -328,7 +328,7 @@ func TestChatProjectUpdateCardLifecycle(t *testing.T) {
 	}
 	viewer := f.s.store.Bootstrap().Viewer
 	projectID := "project_chat_update"
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.chat_project", projectID, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "test.chat_project", projectID, nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: projectID, SlugID: "chat-launch", Name: "发布计划", TeamIDs: []string{f.binding.TeamID}, Health: "onTrack", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
 		for index := range data.Users {
 			if data.Users[index].ID == viewer.ID {

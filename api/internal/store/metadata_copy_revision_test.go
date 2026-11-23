@@ -10,10 +10,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-// copyRevisionPair is two servers on one database with the coordinator, and a
-// workspace whose copy on the first is current.
+// copyRevisionPair is two legacy replicas on one database with a workspace
+// whose full-copy revision on the first replica is current.
 func copyRevisionPair(t *testing.T) (*SQLiteStore, *SQLiteStore, string) {
 	t.Helper()
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	pair := peerStoreSets(t)["sqlite"]
 	workspace, _ := peerWorkspace(t, pair[0])
 	for _, repo := range pair {

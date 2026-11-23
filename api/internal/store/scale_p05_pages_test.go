@@ -244,6 +244,7 @@ func TestScaleP05CatalogReadsFetchNoCanonicalBodies(t *testing.T) {
 }
 
 func TestScaleP05ShadowFlagWorkerStopAndRestart(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for _, mode := range []string{"", "shadow", "off", "on", "invalid"} {
 		t.Setenv("FLOW_METADATA_CATALOG", mode)
 		if got := metadataCatalogShadowEnabled(); got != (mode == "shadow") {

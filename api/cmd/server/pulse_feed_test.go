@@ -115,7 +115,7 @@ func pulseTestRepo(t *testing.T) *store.SQLiteStore {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { repo.Close() })
-	err = repo.MutateWorkspace(t.Context(), "test-workspace", "test.pulse", "", nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test.pulse", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.FeatureFlags["pulse"] = true
 		data.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule = "daily"
 		for id, settings := range data.TeamSettings {
@@ -136,7 +136,7 @@ var pulseTestAuthor = domain.User{ID: "usr_member", Name: "Test member", Display
 func addPulseUpdates(t *testing.T, repo *store.SQLiteStore, projectID string, updates ...domain.ProjectUpdate) {
 	t.Helper()
 	ctx := store.WithMetadataFields(t.Context(), "projectUpdates")
-	err := repo.MutateWorkspace(ctx, "test-workspace", "project.update_updated", projectID, nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(ctx), "test-workspace", "project.update_updated", projectID, nil, func(data *domain.Bootstrap) error {
 		for _, update := range updates {
 			update.ProjectID = projectID
 			if update.User.ID == "" {
@@ -236,7 +236,7 @@ func TestPulseFeedViewsFiltersSearchAndStableCursor(t *testing.T) {
 	requestJSON[map[string]string](t, handler, http.MethodGet, pulseFeedPath(url.Values{"viewId": {"missing"}}), nil, http.StatusNotFound)
 
 	// Archived projects drop out of every view.
-	err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "projects"), "test-workspace", "project.updated", "project_aut", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(store.WithMetadataFields(t.Context(), "projects")), "test-workspace", "project.updated", "project_aut", nil, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		data.Projects[0].ArchivedAt = &now
 		return nil
@@ -414,7 +414,7 @@ func TestProjectUpdatesRecordSnapshotsAndDiffs(t *testing.T) {
 	if first.Snapshot != nil || stored.ProjectUpdates["project_aut"][0].Snapshot == nil || stored.ProjectUpdates["project_aut"][0].Snapshot.Status != "In Progress" || first.Diff != nil {
 		t.Fatalf("first update snapshot=%#v stored=%#v diff=%#v", first.Snapshot, stored.ProjectUpdates["project_aut"][0].Snapshot, first.Diff)
 	}
-	err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "projects"), "test-workspace", "project.updated", "project_aut", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(store.WithMetadataFields(t.Context(), "projects")), "test-workspace", "project.updated", "project_aut", nil, func(data *domain.Bootstrap) error {
 		data.Projects[0].Status = domain.ProjectStatus{ID: "ps_completed", Name: "Completed", Type: "completed"}
 		data.Projects[0].Priority, data.Projects[0].PriorityLabel = 1, "Urgent"
 		return nil
@@ -499,7 +499,7 @@ func pulseSummaries(repo *store.SQLiteStore) map[string]domain.Notification {
 
 func setPulseTimezone(t *testing.T, repo *store.SQLiteStore, zones map[string]string) {
 	t.Helper()
-	err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "userSettings"), "test-workspace", "workspace.agent_guidance_updated", "", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(store.WithMetadataFields(t.Context(), "userSettings")), "test-workspace", "workspace.agent_guidance_updated", "", nil, func(data *domain.Bootstrap) error {
 		for userID, zone := range zones {
 			settings := data.UserSettings[userID]
 			settings.UserID, settings.Timezone = userID, zone
@@ -518,7 +518,7 @@ func TestPulseSummariesArriveAtSixLocalAcrossTimeZones(t *testing.T) {
 	setPulseTimezone(t, repo, map[string]string{"usr_admin": "Asia/Tokyo", "usr_member": "America/Los_Angeles"})
 	author := domain.User{ID: "usr_writer", Name: "Writer", DisplayName: "Writer"}
 	addPulseUpdates(t, repo, "project_aut", domain.ProjectUpdate{ID: "window_update", Body: "Shipped beta.", User: author, CreatedAt: time.Date(2026, 9, 13, 20, 0, 0, 0, time.UTC)})
-	err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "projects"), "test-workspace", "project.updated", "project_aut", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(store.WithMetadataFields(t.Context(), "projects")), "test-workspace", "project.updated", "project_aut", nil, func(data *domain.Bootstrap) error {
 		data.Projects[0].MemberIDs = []string{"usr_admin", "usr_member"}
 		return nil
 	})
@@ -874,7 +874,7 @@ func TestPulseFeedHidesPrivateTeamUpdates(t *testing.T) {
 	authRequest[domain.AuthSession](t, admin, "POST", host.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)
 	authRequest[domain.WorkspaceMember](t, admin, "PATCH", host.URL+"/api/workspaces/"+key+"/members/usr_member", map[string]string{"role": "member"}, "", http.StatusOK)
 	private := authRequest[domain.Team](t, admin, "POST", host.URL+"/api/workspaces/"+key+"/teams", map[string]any{"name": "Private", "key": "PRV", "private": true}, "", http.StatusCreated)
-	err := repo.MutateWorkspace(context.Background(), key, "test.pulse", "", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(context.Background()), key, "test.pulse", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: "project_private", Name: "Private project", TeamIDs: []string{private.ID}, MemberIDs: []string{"usr_member"}})
 		data.ProjectUpdates["project_private"] = []domain.ProjectUpdate{{ID: "secret", ProjectID: "project_private", Body: "Secret", User: domain.User{ID: "usr_admin"}, CreatedAt: time.Now().UTC()}}
 		return nil

@@ -18,9 +18,9 @@ func TestScaleActivateAIndexedReadsDefault(t *testing.T) {
 		}
 	})
 	if got := indexedReadsMode(); got != "off" {
-		t.Fatalf("unset FLOW_INDEXED_READS = %q, want off pending the load gate", got)
+		t.Fatalf("unset FLOW_INDEXED_READS = %q, want off", got)
 	}
-	for _, value := range []string{"", "off", "invalid"} {
+	for _, value := range []string{"off", "invalid"} {
 		t.Setenv("FLOW_INDEXED_READS", value)
 		if got := indexedReadsMode(); got != "off" {
 			t.Fatalf("FLOW_INDEXED_READS=%q = %q, want off", value, got)

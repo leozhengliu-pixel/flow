@@ -65,7 +65,7 @@ func TestMCPDeleteAndRestoreDocument(t *testing.T) {
 func TestMCPGetDocumentResolvesPreviousSlugs(t *testing.T) {
 	f := newMCPContractFixture(t)
 	created := mcpObject(t, f, "save_document", map[string]any{"title": "Renamed spec"})
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.previous_slug", created["id"].(string), nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.previous_slug", created["id"].(string), nil, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, created["id"].(string))
 		if err == nil {
 			document.PreviousSlugIDs = []string{"old-spec-abc123"}
@@ -86,7 +86,7 @@ func TestMCPDocumentHistoryAndRestoreVersion(t *testing.T) {
 	now := time.Now().UTC()
 	older, oldest := now.Add(-2*time.Hour), now.Add(-3*time.Hour)
 	big := strings.Repeat("x", mcpDocumentRevisionContentLimit+500)
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.revisions", id, nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.revisions", id, nil, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err

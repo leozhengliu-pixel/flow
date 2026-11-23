@@ -105,7 +105,7 @@ func runMutationScript(t *testing.T, forceFull bool) mutationScriptResult {
 	// reminders off, must archive.
 	seedReminder := func(id, kind string) {
 		t.Helper()
-		if err := repository.MutateWorkspace(context.Background(), fixture.Workspace.URLKey, "test.reminder_seeded", project.ID, nil, func(data *domain.Bootstrap) error {
+		if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), fixture.Workspace.URLKey, "test.reminder_seeded", project.ID, nil, func(data *domain.Bootstrap) error {
 			now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 			data.Notifications = append(data.Notifications, domain.Notification{ID: id, RecipientID: user.ID, Type: kind, SourceType: "project", SourceID: project.ID, ProjectID: project.ID, Actor: user, Category: "reminders", GroupKey: id, OccurrenceCount: 1, LatestActorIDs: []string{user.ID}, CreatedAt: now, UpdatedAt: now})
 			return nil
@@ -258,7 +258,7 @@ func TestScheduleMaintenanceSkipsNoOpWrites(t *testing.T) {
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	project := bootstrap.Projects[0]
 	requestJSON[map[string]any](t, handler, http.MethodPut, "/api/project-update-settings", map[string]any{"cadenceDays": 1}, http.StatusOK)
-	if err := repository.MutateWorkspace(context.Background(), bootstrap.Workspace.URLKey, "test.project_aged", project.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), bootstrap.Workspace.URLKey, "test.project_aged", project.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Projects {
 			if data.Projects[index].ID == project.ID {
 				data.Projects[index].CreatedAt = time.Now().UTC().Add(-72 * time.Hour)

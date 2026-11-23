@@ -44,7 +44,7 @@ func TestExternalSearchIndexesMatchEnglishWords(t *testing.T) {
 		t.Fatal(err)
 	}
 	project := domain.Project{ID: "english-project", Name: "Staging data plan", Description: "UAT audit", TeamIDs: []string{data.Teams[0].ID}, Status: domain.ProjectStatus{Type: "started"}}
-	if err := repo.MutateWorkspace(ctx, workspace, "search.integration", project.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "seed search fixture"), workspace, "search.integration", project.ID, nil, func(next *domain.Bootstrap) error {
 		next.Projects = append(next.Projects, project)
 		return nil
 	}); err != nil {

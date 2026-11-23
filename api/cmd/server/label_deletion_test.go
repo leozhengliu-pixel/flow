@@ -18,7 +18,7 @@ func TestLabelDeletionPreservesScopeAndMissingResourceResponses(t *testing.T) {
 	defer repo.Close()
 	data := repo.Bootstrap()
 	teamID := data.Teams[0].ID
-	if err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "label.created", "scoped-label", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "label.created", "scoped-label", nil, func(next *domain.Bootstrap) error {
 		next.Labels = append(next.Labels, domain.IssueLabel{ID: "scoped-label", Name: "Team label", Scope: teamID}, domain.IssueLabel{ID: "workspace-label", Name: "Workspace label", Scope: "Workspace", ResourceType: "project"})
 		next.LabelGroups = append(next.LabelGroups, domain.LabelGroup{ID: "private-group", Name: "Private group", Scope: teamID})
 		return nil

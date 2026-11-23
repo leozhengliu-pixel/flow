@@ -15,6 +15,7 @@ func TestTeamDefaultFavoritesMergeAndOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Close()
+	ctx := WithColdWork(t.Context(), "paged workspace metadata")
 	data := repo.Bootstrap()
 	team, issue := data.Teams[0], data.Issues[0]
 	var before []byte
@@ -24,7 +25,7 @@ func TestTeamDefaultFavoritesMergeAndOverride(t *testing.T) {
 	if err := repo.ReplaceTeamDefaultFavorites(t.Context(), data.Workspace.URLKey, team.ID, []domain.TeamDefaultFavorite{{ResourceType: "issue", ResourceID: issue.ID}, {ResourceType: "team", ResourceID: team.ID}}); err != nil {
 		t.Fatal(err)
 	}
-	metadata, err := repo.PagedWorkspaceMetadata(t.Context(), data.Workspace.URLKey, data.Viewer.ID)
+	metadata, err := repo.PagedWorkspaceMetadata(ctx, data.Workspace.URLKey, data.Viewer.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func TestTeamDefaultFavoritesMergeAndOverride(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Fatal("member override rewrote workspace JSON state")
 	}
-	metadata, err = repo.PagedWorkspaceMetadata(t.Context(), data.Workspace.URLKey, data.Viewer.ID)
+	metadata, err = repo.PagedWorkspaceMetadata(ctx, data.Workspace.URLKey, data.Viewer.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,13 +63,13 @@ func TestTeamDefaultFavoritesMergeAndOverride(t *testing.T) {
 	if err := repo.SetTeamDefaultFavoriteOverride(t.Context(), data.Workspace.URLKey, data.Viewer.ID, "issue", issue.ID, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "favorite.added", issue.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "favorite.added", issue.ID, nil, func(next *domain.Bootstrap) error {
 		next.Favorites = append(next.Favorites, domain.Favorite{ID: "personal-issue", UserID: data.Viewer.ID, ResourceType: "issue", ResourceID: issue.ID})
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	metadata, err = repo.PagedWorkspaceMetadata(t.Context(), data.Workspace.URLKey, data.Viewer.ID)
+	metadata, err = repo.PagedWorkspaceMetadata(ctx, data.Workspace.URLKey, data.Viewer.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

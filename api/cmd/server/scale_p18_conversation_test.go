@@ -12,10 +12,12 @@ import (
 )
 
 func TestScaleP18LargeAIContextKeepsCompatibility(t *testing.T) {
+	// Exercise the legacy writer and its record-scoped fallback independently.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repo, actor, ctx := scaleP18Fixture(t)
 	service := &server{store: repo}
 	long := strings.Repeat("x", 3<<20)
-	if err := repo.MutateWorkspace(ctx, actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
 		data.AIConversations = []domain.AIConversation{{ID: "p18-large", UserID: actor.User.ID, Context: map[string]any{"history": long}}, {ID: "p18-keep", UserID: actor.User.ID, Context: map[string]any{"keep": true}}}
 		return nil
 	}); err != nil {
@@ -36,10 +38,12 @@ func TestScaleP18LargeAIContextKeepsCompatibility(t *testing.T) {
 }
 
 func TestScaleP18ConversationSlugAndWorkerIDCompatibility(t *testing.T) {
+	// This compares the two legacy conversation readers directly.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repo, actor, ctx := scaleP18Fixture(t)
 	service := &server{store: repo}
 	deleted := time.Now().UTC()
-	if err := repo.MutateWorkspace(ctx, actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = []domain.AgentSession{
 			{ID: "p18-deleted", SlugID: "p18-live", UserID: actor.User.ID, DeletedAt: &deleted},
 			{ID: "p18-live", SlugID: "p18-shared", UserID: actor.User.ID, Messages: []domain.AgentMessage{{ID: "p18-message", Content: "Complete reply", Status: agentMessageStreaming}}},

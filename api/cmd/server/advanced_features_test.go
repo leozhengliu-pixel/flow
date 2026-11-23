@@ -29,7 +29,7 @@ func TestProjectUpdateReminderLifecycle(t *testing.T) {
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	project := bootstrap.Projects[0]
 	requestJSON[map[string]any](t, handler, http.MethodPut, "/api/project-update-settings", map[string]any{"cadenceDays": 1}, http.StatusOK)
-	if err := repository.MutateWorkspace(context.Background(), bootstrap.Workspace.URLKey, "test.project_aged", project.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(store.WithColdWork(context.Background(), "workspace fixture"), bootstrap.Workspace.URLKey, "test.project_aged", project.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Projects {
 			if data.Projects[index].ID == project.ID {
 				data.Projects[index].CreatedAt = time.Now().UTC().Add(-72 * time.Hour)

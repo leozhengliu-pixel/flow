@@ -42,7 +42,7 @@ func newScaleP12Fixture(t *testing.T, repo *store.SQLiteStore) scaleP12Fixture {
 	t.Helper()
 	f := scaleP12Fixture{scaleP03PlatformFixture: scaleP03Fixture(t, repo), private: idgen.New("p12-private-"), child: idgen.New("p12-child-")}
 	workspace := f.data.Workspace.URLKey
-	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p12.seeded", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p12.seeded", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: f.private, Key: "P12", Private: true}, domain.Team{ID: f.child, Key: "P12C"})
 		data.TeamSettings[f.private] = domain.TeamSettings{TeamID: f.private, Access: "private"}
 		data.TeamSettings[f.child] = domain.TeamSettings{TeamID: f.child, Access: "public", ParentTeamID: f.private}
@@ -73,7 +73,7 @@ func newScaleP12Fixture(t *testing.T, repo *store.SQLiteStore) scaleP12Fixture {
 	f.secret = create("Private issue", f.private, "")
 	f.descendant = create("Inherited grant", f.child, f.secret.ID)
 	authRequest[[]domain.IssuePermission](t, f.admin, http.MethodPut, f.host.URL+"/api/issues/"+f.secret.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": f.principals[3].user.ID, "role": "viewer"}}}, workspace, http.StatusOK)
-	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p12.references", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p12.references", "", nil, func(data *domain.Bootstrap) error {
 		for i := range data.Issues {
 			if data.Issues[i].ID != f.open.ID {
 				continue
@@ -250,7 +250,7 @@ func TestScaleP12TwoThousandUniqueACLsHaveBoundedFramesAndSourceSQL(t *testing.T
 			teams[i] = idgen.New("p12-acl-team-")
 		}
 		keys := make([]domain.APIKey, 2000)
-		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p12.acls", "", nil, func(data *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "scale_p12.acls", "", nil, func(data *domain.Bootstrap) error {
 			for _, id := range teams {
 				data.Teams = append(data.Teams, domain.Team{ID: id, Key: "ACL"})
 				data.TeamSettings[id] = domain.TeamSettings{TeamID: id, Access: "public"}
@@ -339,7 +339,7 @@ func TestScaleP12ConcurrentProjection(t *testing.T) {
 }
 
 func TestScaleP12FlagsAndFallback(t *testing.T) {
-	for value, want := range map[string]bool{"": false, "off": false, "shadow": false, "invalid": false, "on": true, "true": true, "1": true} {
+	for value, want := range map[string]bool{"": true, "off": false, "shadow": false, "invalid": false, "on": true, "true": true, "1": true} {
 		t.Setenv("FLOW_SYNC_V2", value)
 		if syncV2Enabled() != want {
 			t.Fatalf("flag %q", value)

@@ -70,6 +70,9 @@ func scaleP03TrackResources(t *testing.T, repo *store.SQLiteStore) *scaleP03Fixt
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
+		ctx = workspaceFixtureContext(ctx)
+		ctx, finish := beginMetadataOutputReads(ctx)
+		defer finish()
 		for _, app := range resources.appUsers {
 			if err := scaleP03RetryWrite(ctx, func() error { return repo.ErasePersonFromWorkspace(ctx, app.workspace, app.id) }); err != nil {
 				t.Errorf("clean up owned application membership: %v", err)
