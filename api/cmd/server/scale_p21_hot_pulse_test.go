@@ -155,9 +155,9 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 			cancel()
 			w = httptest.NewRecorder()
 			scaleP21CallWithOutputOwner(&server{store: source}, w, r.WithContext(ctx), (*server).postPulseSeen)
-			if w.Code < http.StatusBadRequest ||
+			if w.Code != http.StatusRequestTimeout || w.Header().Get("Retry-After") != "" ||
 				!reflect.DeepEqual(before, scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "userSettings", ID: f.data.Viewer.ID})) {
-				t.Fatalf("cancelled acknowledgement changed state: %d %s", w.Code, w.Body.String())
+				t.Fatalf("canceled acknowledgement returned %d or changed state", w.Code)
 			}
 			// A canceled request must leave the next acknowledgement usable.
 			if w := call(source, f.data.Viewer, nil, seen); w.Code != http.StatusOK {

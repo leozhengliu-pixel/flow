@@ -411,7 +411,7 @@ func TestScaleP21IssueUpdateFieldsDifferential(t *testing.T) {
 		{name: "selected-key-edit", user: owner, key: selected, code: 0, body: map[string]any{"title": "Key edit"}},
 		{name: "expected-version", user: owner, code: 0, body: map[string]any{"title": "Versioned", "expectedVersion": 1}},
 		{name: "expected-document-version-conflict", user: owner, code: http.StatusConflict, body: map[string]any{"description": "Stale", "expectedDocumentVersion": 7}},
-		{name: "cancelled", user: owner, stop: true, code: 0, body: map[string]any{"title": "Cancelled"}},
+		{name: "cancelled", user: owner, stop: true, code: http.StatusRequestTimeout, body: map[string]any{"title": "Cancelled"}},
 		{name: "missing-issue", user: owner, issue: "iu-missing-issue", code: http.StatusNotFound, body: map[string]any{"title": "Missing"}},
 		{name: "by-identifier", user: owner, issue: f.triage.Identifier, code: 0, body: map[string]any{"title": "By identifier"}},
 	})
@@ -495,7 +495,7 @@ func TestScaleP21IssueUpdateTeamMoveDifferential(t *testing.T) {
 		{name: "move-with-family-state", edit: subscribe, user: owner, code: http.StatusOK,
 			body: map[string]any{"teamId": "tm-parent", "stateId": "tmp-done"}},
 		{name: "move-the-child", user: owner, issue: f.visible.ID, code: http.StatusOK, body: map[string]any{"teamId": "tm-parent"}},
-		{name: "move-cancelled", user: owner, stop: true, code: 0, body: map[string]any{"teamId": "tm-parent"}},
+		{name: "move-cancelled", user: owner, stop: true, code: http.StatusRequestTimeout, body: map[string]any{"teamId": "tm-parent"}},
 	}
 	f.runCases(t, cases)
 	// The audience of a move: only subscribers who can open the issue in its

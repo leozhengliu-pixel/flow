@@ -234,6 +234,9 @@ func TestScaleP21SW87ProjectListDifferential(t *testing.T) {
 					if source.BoundedMetadataEnabled() && output.Code == http.StatusOK && output.held == 0 {
 						t.Fatal("bounded edge response was written without retaining its read")
 					}
+					if edge.cancelled && (output.Code != http.StatusRequestTimeout || output.Header().Get("Retry-After") != "") {
+						t.Fatalf("canceled project list returned %d, want a non-retryable timeout", output.Code)
+					}
 					if source.BoundedMetadataEnabled() && source.MetadataWorkUsedForTesting() != 0 {
 						t.Fatal("bounded edge response leaked work")
 					}

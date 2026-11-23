@@ -457,11 +457,7 @@ func (s *server) pulseRequestContext(w http.ResponseWriter, r *http.Request) (*s
 	if s.store.BoundedMetadataEnabled() {
 		read, found, err := s.store.BeginPulseRead(r.Context(), workspaceKey(r), false)
 		if err != nil {
-			if r.Context().Err() != nil {
-				respondMutation(w, err, http.StatusOK, nil)
-			} else {
-				issueRecordsError(w, err)
-			}
+			issueRequestAccessError(w, r, err)
 			return nil, nil, pulseViewer{}, false
 		}
 		if !found {
@@ -482,7 +478,7 @@ func (s *server) pulseRequestContext(w http.ResponseWriter, r *http.Request) (*s
 			if errors.Is(err, store.ErrAuthForbidden) {
 				writeError(w, http.StatusForbidden, "Guests cannot access Pulse")
 			} else {
-				issueRecordsError(w, err)
+				issueRequestAccessError(w, r, err)
 			}
 			return nil, nil, pulseViewer{}, false
 		}
@@ -502,7 +498,7 @@ func (s *server) pulseRequestContext(w http.ResponseWriter, r *http.Request) (*s
 		if errors.Is(err, store.ErrAuthForbidden) {
 			writeError(w, http.StatusForbidden, "Guests cannot access Pulse")
 		} else {
-			issueRecordsError(w, err)
+			issueRequestAccessError(w, r, err)
 		}
 		return nil, nil, pulseViewer{}, false
 	}
@@ -688,6 +684,10 @@ func (s *server) postPulseSeen(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		current = pulseLastSeen(&store.PulseFeedSnapshot{UserSettings: selection.Data.UserSettings}, viewer.ID)
+	}
+	if err := r.Context().Err(); err != nil {
+		issueRequestAccessError(w, r, err)
+		return
 	}
 	if current != nil && !at.After(*current) {
 		writeJSON(w, http.StatusOK, map[string]any{"lastSeenAt": current})

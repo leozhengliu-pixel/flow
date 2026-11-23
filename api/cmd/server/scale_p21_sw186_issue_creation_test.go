@@ -452,9 +452,12 @@ func TestScaleP21SW186IssueCreationDifferential(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{})
 			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
-			f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
+			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 				return scaleP21SW186Create(t, f, service, test.user, test.key, test.body, test.development, test.cancelled, scaleP21SW186CreateOptions{authorization: test.authorization, creationKey: test.creationKey})
 			})
+			if test.cancelled && (outcomes[0].Code != http.StatusRequestTimeout || len(outcomes[0].State.Events) != 0) {
+				t.Fatal("canceled creation must report a failure without publishing events")
+			}
 		})
 	}
 }
