@@ -13,6 +13,7 @@ import (
 
 const recordJournalIdentitySchemaVersion = 29
 const recordJournalSchemaVersion = 33
+const sqliteJournalContentKeysVersion = 34
 
 // Triggers capture keys, never canonical bodies. The transaction token is
 // connection-local on external databases. SQLite has one writer, so its
@@ -139,6 +140,9 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 		}
 	}
 	if s.dialect == "sqlite" {
+		if err := s.migrateSQLiteRecordJournalContentKeys(ctx); err != nil {
+			return err
+		}
 		if err := s.ensureSQLiteRecordJournalFlush(ctx); err != nil {
 			return err
 		}
@@ -194,6 +198,34 @@ func (s *SQLiteStore) recordJournalMigration(ctx context.Context) error {
 		_, err = s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?) ON CONFLICT(version) DO NOTHING`, recordJournalSchemaVersion, "authorization epochs ignore pulse delivery cursors", time.Now().UTC().Format(time.RFC3339Nano))
 	}
 	return err
+}
+
+func (s *SQLiteStore) migrateSQLiteRecordJournalContentKeys(ctx context.Context) error {
+	applied, err := s.migrationApplied(ctx, sqliteJournalContentKeysVersion)
+	if err != nil || applied {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, spec := range recordJournalTriggerSpecs("sqlite") {
+		if spec.table != "workspace_content_records" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `DROP TRIGGER IF EXISTS `+spec.name); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, sqliteRecordJournalTriggerSQL(spec, "AFTER")); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)`,
+		sqliteJournalContentKeysVersion, "SQLite journal content keys from legacy rows", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteStore) dropRecordJournalTriggers(ctx context.Context, installed bool) error {
@@ -413,6 +445,14 @@ func recordJournalTriggerSpecs(dialect string) []recordJournalTrigger {
 	return specs
 }
 
+func sqliteRecordJournalTriggerSQL(spec recordJournalTrigger, timing string) string {
+	when := ""
+	if spec.condition != "" {
+		when = " WHEN " + spec.condition
+	}
+	return `CREATE TRIGGER IF NOT EXISTS ` + spec.name + ` ` + timing + ` ` + spec.event + ` ON ` + spec.table + when + ` BEGIN ` + spec.body + ` END`
+}
+
 func (s *SQLiteStore) installRecordJournalTrigger(ctx context.Context, spec recordJournalTrigger) error {
 	timing := "AFTER"
 	if spec.table == "auth_users" && spec.event == "DELETE" {
@@ -421,11 +461,7 @@ func (s *SQLiteStore) installRecordJournalTrigger(ctx context.Context, spec reco
 	var query string
 	switch s.dialect {
 	case "sqlite":
-		when := ""
-		if spec.condition != "" {
-			when = " WHEN " + spec.condition
-		}
-		query = `CREATE TRIGGER IF NOT EXISTS ` + spec.name + ` ` + timing + ` ` + spec.event + ` ON ` + spec.table + when + ` BEGIN ` + spec.body + ` END`
+		query = sqliteRecordJournalTriggerSQL(spec, timing)
 	case "mysql":
 		var count int
 		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema=DATABASE() AND trigger_name=?`, spec.name).Scan(&count); err != nil || count > 0 {

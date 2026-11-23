@@ -87,6 +87,20 @@ func (s *SQLiteStore) prepareStartupMetadata(ctx context.Context) (bool, error) 
 	if err := s.boundedMetadataReadiness(ctx, &report); err != nil {
 		return false, err
 	}
+	// A replica running the previous release can still write while this
+	// replica prepares the catalog. Drain those captured keys before trying
+	// to admit the workspace. Admission checks coverage in its own snapshot.
+	if report.UncoveredWorkspaces > 0 && report.IncompleteCollections == 0 {
+		catchup, err := s.RepairRecordJournalPass(ctx)
+		if err != nil {
+			return false, err
+		}
+		journal.Repaired += catchup.Repaired
+		journal.Duration += catchup.Duration
+		if err := s.boundedMetadataReadiness(ctx, &report); err != nil {
+			return false, err
+		}
+	}
 	slog.Info("startup metadata preparation", "ready", report.Ready,
 		"workspaces_repaired", journal.Repaired, "workspaces_uncovered", report.UncoveredWorkspaces,
 		"collections_completed", catalog.Completed, "collections_incomplete", report.IncompleteCollections,

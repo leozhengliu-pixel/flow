@@ -1,0 +1,12 @@
+{
+  "source": "store/bounded_metadata_prepare.go",
+  "unmigrated": 0,
+  "consumers": {
+    "loadStartupMetadata": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Startup holds the database startup lock and has not published the store. It discards any seed or migration image before admitting the bounded representation from canonical SQL.",
+      "accessors": ["loadOrSeed", "workspaces"]
+    }
+  }
+}

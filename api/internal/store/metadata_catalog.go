@@ -43,12 +43,17 @@ type metadataCatalogRow struct {
 // large values without materializing them. Capture itself is bounded too:
 // an oversized title or relationship array becomes an explicit omission.
 func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, workspace string, key RecordKey, size int64) (metadataCatalogRow, error) {
-	row := metadataCatalogRow{key: key, bodyBytes: size}
 	pageBytes, err := integrationDeliveryCanonicalPageBytes(ctx, tx)
 	if err != nil {
-		return row, err
+		return metadataCatalogRow{}, err
 	}
 	r := &canonicalMetadataReader{ctx: ctx, tx: tx, workspace: workspace, key: key, size: size, pageBytes: pageBytes}
+	return projectCatalogRecord(ctx, r)
+}
+
+func projectCatalogRecord(ctx context.Context, r *canonicalMetadataReader) (metadataCatalogRow, error) {
+	key := r.key
+	row := metadataCatalogRow{key: key, bodyBytes: r.size}
 	hash := sha256.New()
 	number := metadataCatalogScalarNumber{}
 	source := io.TeeReader(r, io.MultiWriter(hash, &number))
@@ -122,6 +127,7 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 		id, _ := json.Marshal(key.ID)
 		summary["id"] = id
 	}
+	var err error
 	row.summary, err = json.Marshal(summary)
 	if err != nil {
 		return row, err
@@ -426,10 +432,12 @@ func (s *SQLiteStore) readMetadataCatalogPage(ctx context.Context, workspace str
 		scanned++
 		var row metadataCatalogRow
 		var omitted int
+		var summary []byte
 		row.key.Kind = q.Kind
-		if err := rows.Scan(&row.key.ID, &row.order, &row.version, &row.summary, &omitted, &row.created, &row.updated); err != nil {
+		if err := rows.Scan(&row.key.ID, &row.order, &row.version, &summary, &omitted, &row.created, &row.updated); err != nil {
 			return page, err
 		}
+		row.summary = summary
 		if journal && row.version == "0" {
 			return page, ErrRecordJournalCoverage
 		}

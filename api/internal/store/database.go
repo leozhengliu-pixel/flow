@@ -509,6 +509,15 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 				if err != nil {
 					return err
 				}
+				if !pending {
+					var hasLegacyRuns int
+					if err := s.db.QueryRowContext(ctx, `SELECT CASE WHEN EXISTS(
+						SELECT 1 FROM workspace_metadata_records WHERE field='loopRuns'
+					) THEN 1 ELSE 0 END`).Scan(&hasLegacyRuns); err != nil {
+						return err
+					}
+					pending = hasLegacyRuns != 0
+				}
 				if pending {
 					// Historical migrations can read the complete installed
 					// metadata copy. Admit bounded metadata after they run.

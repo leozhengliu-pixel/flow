@@ -125,6 +125,9 @@ func (s *SQLiteStore) completeMetadataCatalogCollection(ctx context.Context, wor
 		} else if progress.Complete {
 			return normalized, true, nil
 		}
+		if mode == catalogRepairOnly && err == nil {
+			continue
+		}
 		pause := time.Since(began) / 4
 		if gentle {
 			pause = metadataCatalogRevisitPause
