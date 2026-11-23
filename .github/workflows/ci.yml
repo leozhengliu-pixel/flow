@@ -690,6 +690,8 @@ jobs:
       - name: Measure main MySQL import writes
         working-directory: scale-p09-write-baseline/api
         env:
+          FLOW_BOUNDED_METADATA: 'off'
+          FLOW_RECORD_HYDRATION: 'off'
           FLOW_RECORD_JOURNAL: 'off'
           FLOW_TEST_WRITE_MYSQL_DSN: flow:flow@tcp(127.0.0.1:3306)/flow_write_prior?parseTime=true
         run: |
@@ -700,6 +702,8 @@ jobs:
       - name: Verify bounded MySQL import writes
         working-directory: api
         env:
+          FLOW_BOUNDED_METADATA: 'off'
+          FLOW_RECORD_HYDRATION: 'off'
           FLOW_RECORD_JOURNAL: 'off'
           FLOW_TEST_WRITE_MYSQL_DSN: flow:flow@tcp(127.0.0.1:3306)/flow_write_audit?parseTime=true
           FLOW_ASSERT_WRITE_BOUNDS: '1'
@@ -816,7 +820,18 @@ jobs:
         if: matrix.dialect == 'mysql'
         run: >-
           docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
-          "GRANT ALL ON \`flow\\_sw602\\_%\`.* TO 'flow'@'%';"
+          "GRANT ALL ON \`flow\\_sw602\\_%\`.* TO 'flow'@'%';
+          GRANT ALL ON \`flow\\_prepare\\_%\`.* TO 'flow'@'%';"
+
+      - name: Upgrade a previous-default database
+        if: matrix.package == './cmd/server' && matrix.shard == 1
+        working-directory: api
+        env:
+          FLOW_TEST_DATABASE_DRIVER: ${{ matrix.dialect }}
+          FLOW_TEST_DATABASE_URL: ${{ matrix.dialect == 'postgres' && 'postgres://flow:flow@127.0.0.1:5432/flow?sslmode=disable' || 'mysql://flow:flow@127.0.0.1:3306/flow' }}
+        run: |
+          go test -tags integration ./cmd/server -run '^TestDefaultMetadataUpgrade$' -count=1 -timeout 15m
+          go test -tags integration ./internal/store -run '^TestDefaultMetadataUpgradeResumesLegacyWrites$' -count=1 -timeout 15m
 
       - name: Scale differentials
         working-directory: api
