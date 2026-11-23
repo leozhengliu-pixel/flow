@@ -134,7 +134,14 @@ func (s *server) issueReadCredentialValid(ctx context.Context, r *http.Request) 
 		return nil
 	}
 	cookie, err := r.Cookie(sessionCookieName)
-	if err != nil || !s.store.SessionValid(ctx, cookie.Value, authUser(r).ID) {
+	if err != nil {
+		return store.ErrAuthForbidden
+	}
+	valid, err := s.store.SessionValid(ctx, cookie.Value, authUser(r).ID)
+	if err != nil {
+		return err // A failed session read is not a denial (database outages answer 503).
+	}
+	if !valid {
 		return store.ErrAuthForbidden
 	}
 	return nil
