@@ -336,6 +336,8 @@ server:
   # Any other non-secret FLOW_* or OTEL_* variable by name.
   env:
     FLOW_CODING_MAX_SESSIONS: "20"
+    # The default start prepares bounded metadata, the catalog and journal.
+    # FLOW_BOUNDED_METADATA: "off"          # Opt out of bounded metadata residency.
 
 # Defaults for objects Flow creates. They apply when the object is created
 # (a new workspace, a new team, a member's settings the first time they
