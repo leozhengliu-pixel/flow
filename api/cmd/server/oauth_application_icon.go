@@ -263,9 +263,10 @@ func (s *server) boundedOAuthAppIconAccess(ctx context.Context, name string, own
 			return true, nil
 		}
 		err := match.WithClientID(func(clientID string) error {
-			found, _ := s.store.VisitOAuthLogoInstallations(ctx, clientID, func(workspace string) bool {
+			found, err := s.store.VisitOAuthLogoInstallations(ctx, clientID, func(workspace string) bool {
 				return workspace != match.WorkspaceKey && s.activeWorkspaceMember(ctx, workspace, userID, false)
 			})
+			recordUploadVisibilityRefusal(ctx, err)
 			readable = found
 			return nil
 		})
@@ -286,8 +287,10 @@ func (s *server) activeWorkspaceMember(ctx context.Context, workspace, userID st
 	}
 	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspace)
 	if err != nil {
+		recordUploadVisibilityRefusal(ctx, err)
 		return false
 	}
 	role, status, err := s.store.WorkspaceRole(ctx, workspaceID, userID)
+	recordUploadVisibilityRefusal(ctx, err)
 	return err == nil && status == "active" && (!admin || workspaceAdminRole(role))
 }

@@ -26,7 +26,10 @@ func (s *SQLiteStore) issueQueryViewer(ctx context.Context, workspace, workspace
 			key := cache.SharedCacheKey(workspace, "viewer", version, workspaceID, userID, generation)
 			membership, err := sharedJSONResult(ctx, cache, key, func(ctx context.Context) (issueQueryMembership, error) {
 				role, status, err := s.WorkspaceRole(ctx, workspaceID, userID)
-				if err != nil || status != "active" {
+				if err != nil {
+					return issueQueryMembership{}, err
+				}
+				if status != "active" {
 					return issueQueryMembership{}, ErrAuthForbidden
 				}
 				return s.readIssueMemberships(ctx, workspaceID, userID, role)
@@ -38,7 +41,10 @@ func (s *SQLiteStore) issueQueryViewer(ctx context.Context, workspace, workspace
 		}
 	}
 	role, status, err := s.WorkspaceRole(ctx, workspaceID, userID)
-	if err != nil || status != "active" {
+	if err != nil {
+		return domain.User{}, issueQueryMembership{}, err
+	}
+	if status != "active" {
 		return domain.User{}, issueQueryMembership{}, ErrAuthForbidden
 	}
 	user, err := s.authUserByID(ctx, userID)

@@ -349,6 +349,9 @@ func (s *server) issueOAuthTokens(w http.ResponseWriter, r *http.Request) {
 		return validPKCE(r.Form.Get("code_verifier"), code.CodeChallenge)
 	}, applicationApproved)
 	if err != nil {
+		if writeOAuthStoreUnavailable(w, err) {
+			return
+		}
 		if errors.Is(err, store.ErrAuthForbidden) {
 			writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "Grant is invalid, expired, or revoked")
 		} else {
@@ -463,4 +466,12 @@ func writeOAuthError(w http.ResponseWriter, status int, code, description string
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": code, "error_description": description})
+}
+
+func writeOAuthStoreUnavailable(w http.ResponseWriter, err error) bool {
+	if !setRetryAfter(w, storeReadRetryAfter(err)) {
+		return false
+	}
+	writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", databaseUnavailableMessage)
+	return true
 }

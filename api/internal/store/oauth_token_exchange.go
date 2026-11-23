@@ -117,7 +117,10 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 				var raw []byte
 				var installation domain.ApplicationInstallation
 				if err := tx.QueryRowContext(ctx, `SELECT data FROM application_installations WHERE workspace_key=? AND user_id=?`+lock, workspace, grant.UserID).Scan(&raw); err != nil {
-					return ErrAuthForbidden
+					if errors.Is(err, sql.ErrNoRows) {
+						return ErrAuthForbidden
+					}
+					return err
 				}
 				if json.Unmarshal(raw, &installation) != nil || !installation.Active || slices.ContainsFunc(grant.Scopes, func(scope string) bool { return !slices.Contains(installation.Scopes, scope) }) {
 					return ErrAuthForbidden

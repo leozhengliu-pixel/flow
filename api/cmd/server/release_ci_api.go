@@ -48,12 +48,11 @@ func releaseAccessKeyActive(pipeline *domain.ReleasePipeline, now time.Time) boo
 }
 
 // releasePipelineKeyMatches accepts the current key, or a rotated key during its grace period.
-func releasePipelineKeyMatches(pipeline *domain.ReleasePipeline, secret string, now time.Time) bool {
-	hash := []byte(secretHash(secret))
-	if releaseAccessKeyActive(pipeline, now) && subtle.ConstantTimeCompare([]byte(pipeline.AccessKeyHash), hash) == 1 {
+func releasePipelineKeyMatches(pipeline *domain.ReleasePipeline, hash string, now time.Time) bool {
+	if releaseAccessKeyActive(pipeline, now) && subtle.ConstantTimeCompare([]byte(pipeline.AccessKeyHash), []byte(hash)) == 1 {
 		return true
 	}
-	return pipeline.PreviousAccessKeyHash != "" && pipeline.PreviousAccessKeyExpiresAt != nil && now.Before(*pipeline.PreviousAccessKeyExpiresAt) && subtle.ConstantTimeCompare([]byte(pipeline.PreviousAccessKeyHash), hash) == 1
+	return pipeline.PreviousAccessKeyHash != "" && pipeline.PreviousAccessKeyExpiresAt != nil && now.Before(*pipeline.PreviousAccessKeyExpiresAt) && subtle.ConstantTimeCompare([]byte(pipeline.PreviousAccessKeyHash), []byte(hash)) == 1
 }
 
 // releaseAccessKeySecret reads the key from "Authorization: Bearer <key>" or a
@@ -76,9 +75,18 @@ func (s *server) pipelineForAccessKey(ctx context.Context, secret, pipelineID st
 		return "", "", false, nil
 	}
 	now := time.Now().UTC()
+	hash := secretHash(secret)
+	bounded := s.store.BoundedMetadataEnabled()
+	if !bounded {
+		// The legacy typed snapshot preserves exact key values. Check SQL
+		// availability before trusting it for a credential decision.
+		if err := s.store.CheckDatabaseConnection(ctx); err != nil {
+			return "", "", false, err
+		}
+	}
 	for _, key := range s.store.WorkspaceKeys() {
-		if s.store.BoundedMetadataEnabled() {
-			id, ok, err := s.store.ReleasePipelineForKeyHash(ctx, key, secretHash(secret), pipelineID, now)
+		if bounded {
+			id, ok, err := s.store.ReleasePipelineForKeyHash(ctx, key, hash, pipelineID, now)
 			if s.skipUncoveredWorkspace("Release pipeline key lookup", key, err) {
 				continue
 			}
@@ -96,7 +104,7 @@ func (s *server) pipelineForAccessKey(ctx context.Context, secret, pipelineID st
 		}
 		for index := range data.ReleasePipelines {
 			pipeline := &data.ReleasePipelines[index]
-			if (pipelineID == "" || pipeline.ID == pipelineID) && releasePipelineKeyMatches(pipeline, secret, now) {
+			if (pipelineID == "" || pipeline.ID == pipelineID) && releasePipelineKeyMatches(pipeline, hash, now) {
 				return key, pipeline.ID, true, nil
 			}
 		}
@@ -329,7 +337,7 @@ func (s *server) authenticateReleaseCI(w http.ResponseWriter, r *http.Request) (
 	w.Header().Set("Cache-Control", "no-store")
 	workspace, pipelineID, ok, err := s.pipelineForAccessKey(r.Context(), releaseAccessKeySecret(r), r.PathValue("id"))
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
+		if !writeStoreReadUnavailable(w, err) && !errors.Is(err, context.Canceled) {
 			writeError(w, http.StatusServiceUnavailable, "release pipeline access check unavailable")
 		}
 		return "", "", false

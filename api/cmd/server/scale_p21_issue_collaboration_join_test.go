@@ -40,7 +40,7 @@ func issueCollabRun(t *testing.T, selected *store.SQLiteStore, f scaleP21M2Fixtu
 	}
 	client.userID = user.ID
 	client.checkIssue = func(id string) (domain.Issue, bool, bool, error) { return service.socketIssue(request, id) }
-	client.checkCredential = func() bool { return true }
+	client.checkCredential = func() (bool, error) { return true, nil }
 	drain := func() []string {
 		out := []string{}
 		for {

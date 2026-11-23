@@ -160,7 +160,7 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 				r := httptest.NewRequest(http.MethodGet, "/api/notifications/state", nil)
 				r.Header.Set("Authorization", "Bearer "+selected)
 				r.Header.Set("X-Workspace-Key", workspace)
-				user, key, _ := f.service.authenticateAPIKey(r)
+				user, key, _, _ := f.service.authenticateAPIKey(r)
 				if key == nil {
 					t.Fatal("fixture credential not authenticated")
 				}

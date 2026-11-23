@@ -52,7 +52,8 @@ type realtimeSocketClient struct {
 	// edit its description); checkCredential whether its session or API key
 	// is still valid.
 	checkIssue      func(issueID string) (issue domain.Issue, visible, canEdit bool, err error)
-	checkCredential func() bool
+	checkCredential func() (bool, error)
+	closeForRetry   func()
 	// credentialRevoked: the session or key was revoked; it joins nothing.
 	credentialRevoked bool
 	// documentAccess caches what this socket may do on each joined
@@ -310,7 +311,11 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 	client.checkIssue = func(issueID string) (domain.Issue, bool, bool, error) {
 		return s.socketIssue(r, issueID)
 	}
-	client.checkCredential = func() bool { return s.socketCredentialValid(r) }
+	client.checkCredential = func() (bool, error) { return s.socketCredentialValid(r) }
+	client.closeForRetry = sync.OnceFunc(func() {
+		_ = connection.Close(websocket.StatusTryAgainLater, databaseUnavailableMessage)
+		cancel()
+	})
 	s.realtime.mu.Unlock()
 	writerDone := make(chan struct{})
 	defer func() {
@@ -327,10 +332,13 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 			case <-ctx.Done():
 				return
 			case message := <-client.send:
-				if !s.socketMessageAllowed(client, message) {
+				if err := s.socketMessageAccessError(client, message); err != nil {
 					message.release(client)
 					if message.sent != nil {
-						message.sent <- store.ErrAuthForbidden
+						message.sent <- err
+					}
+					if client.retryForDatabase(err) {
+						return
 					}
 					continue
 				}
@@ -365,6 +373,9 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, errRealtimeBudget) {
 			break
 		}
+		if client.retryForDatabase(err) {
+			break
+		}
 		if err != nil {
 			sendSocketJSON(client, map[string]any{"type": "error", "message": publicErrorMessage(r.Context(), err)})
 		}
@@ -385,7 +396,14 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 	s.realtime.mu.Lock()
 	revoked := client.credentialRevoked
 	s.realtime.mu.Unlock()
-	if revoked || client.checkCredential != nil && !client.checkCredential() {
+	if !revoked && client.checkCredential != nil {
+		valid, err := client.checkCredential()
+		if databaseReadUnavailable(err) {
+			return err
+		}
+		revoked = !valid
+	}
+	if revoked {
 		sendSocketJSON(client, map[string]any{"type": "document.revoked", "documentId": command.DocumentID, "issueId": command.IssueID})
 		return nil
 	}

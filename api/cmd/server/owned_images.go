@@ -33,6 +33,9 @@ func (s *server) resolveOwnedImage(ctx context.Context, name string) (ownedImage
 	var owner *store.FileUpload
 	if upload, err := s.store.FileUploadByObject(ctx, name); err == nil {
 		owner = &upload
+	} else if databaseReadUnavailable(err) {
+		recordUploadVisibilityRefusal(ctx, err)
+		return ownedImage{}, false
 	}
 	if icon, ok := s.resolveOAuthAppIcon(name, owner); ok {
 		return ownedImage{name: name, contentType: icon.contentType, readable: func(ctx context.Context, userID string) bool {
@@ -57,6 +60,8 @@ func (s *server) ownedImageAccess(ctx context.Context, name, userID string, chec
 	var owner *store.FileUpload
 	if upload, err := s.store.FileUploadByObject(ctx, name); err == nil {
 		owner = &upload
+	} else if databaseReadUnavailable(err) {
+		return ownedImage{}, false, false, err
 	}
 	icon, found, readable, err := s.boundedOAuthAppIconAccess(ctx, name, owner, userID, checkPermission)
 	if err != nil {
@@ -80,9 +85,11 @@ func (s *server) workspaceLogoReadable(ctx context.Context, workspace, userID st
 	}
 	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspace)
 	if err != nil {
+		recordUploadVisibilityRefusal(ctx, err)
 		return false
 	}
 	role, status, err := s.store.WorkspaceRole(ctx, workspaceID, userID)
+	recordUploadVisibilityRefusal(ctx, err)
 	return err == nil && status == "active" && workspacePolicyAllows(ctx, workspace, role)
 }
 

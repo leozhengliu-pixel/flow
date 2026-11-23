@@ -38,6 +38,9 @@ func oauthInvalidScope(format string, args ...any) error {
 }
 
 func writeOAuthRequestError(w http.ResponseWriter, err error) {
+	if writeOAuthStoreUnavailable(w, err) {
+		return
+	}
 	var typed oauthRequestError
 	if errors.As(err, &typed) {
 		writeOAuthError(w, http.StatusBadRequest, typed.Code, typed.Description)
@@ -131,6 +134,9 @@ func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oaut
 	}
 	client, err := s.store.OAuthClient(r.Context(), request.ClientID)
 	if err != nil {
+		if storeReadRetryAfter(err) > 0 {
+			return client, nil, err
+		}
 		var ok bool
 		if client, ok = s.store.OAuthApplicationClient(request.ClientID); !ok {
 			// The reference app's wording for an unknown client_id.
@@ -262,6 +268,22 @@ func writeOAuthInvalidClient(w http.ResponseWriter, basic bool, description stri
 	writeOAuthError(w, http.StatusUnauthorized, "invalid_client", description)
 }
 
+func (s *server) checkOAuthClientSecret(w http.ResponseWriter, r *http.Request, id, secret string, basic bool, denial string) bool {
+	ok, err := s.store.CheckOAuthClientSecret(r.Context(), id, secret)
+	switch {
+	case writeOAuthStoreUnavailable(w, err):
+		return false
+	case err != nil:
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not check client credentials")
+		return false
+	case !ok:
+		writeOAuthInvalidClient(w, basic, denial)
+		return false
+	default:
+		return true
+	}
+}
+
 // oauthTokenClient authenticates the client of an authorization_code or
 // refresh_token request. A secret, when supplied, must belong to a registered
 // (confidential) application; public clients identify with client_id only.
@@ -277,9 +299,7 @@ func (s *server) oauthTokenClient(w http.ResponseWriter, r *http.Request) (oauth
 	}
 	client := oauthTokenClient{ID: id}
 	if secret != "" || basic {
-		confidential, ok := s.store.OAuthClientSecret(id, secret)
-		if !confidential || !ok {
-			writeOAuthInvalidClient(w, basic, "Client authentication failed")
+		if !s.checkOAuthClientSecret(w, r, id, secret, basic, "Client authentication failed") {
 			return oauthTokenClient{}, false
 		}
 		client.Authenticated = true
@@ -332,11 +352,8 @@ func (s *server) revokeOAuthToken(w http.ResponseWriter, r *http.Request) {
 			writeOAuthRequestError(w, err)
 			return
 		}
-		if secret != "" || basic {
-			if confidential, ok := s.store.OAuthClientSecret(id, secret); !confidential || !ok {
-				writeOAuthInvalidClient(w, basic, "Client authentication failed")
-				return
-			}
+		if (secret != "" || basic) && !s.checkOAuthClientSecret(w, r, id, secret, basic, "Client authentication failed") {
+			return
 		}
 		clientID = id
 	}
@@ -351,7 +368,10 @@ func (s *server) revokeOAuthToken(w http.ResponseWriter, r *http.Request) {
 		return true, s.store.RevokeOAuthRefreshToken(r.Context(), token)
 	}
 	revokeAccess := func() (bool, error) {
-		_, key, found := s.store.FindAPIKey(secretHash(token))
+		_, key, found, err := s.store.LookupAPIKey(r.Context(), secretHash(token))
+		if err != nil {
+			return false, err
+		}
 		if !found || key.OAuthClientID == "" {
 			// Personal API keys are managed in settings, not by OAuth clients.
 			return false, nil
@@ -372,7 +392,9 @@ func (s *server) revokeOAuthToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err != nil {
-			writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not revoke token")
+			if !writeOAuthStoreUnavailable(w, err) {
+				writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not revoke token")
+			}
 			return
 		}
 		if found {
@@ -397,8 +419,7 @@ func (s *server) introspectOAuthToken(w http.ResponseWriter, r *http.Request) {
 		writeOAuthRequestError(w, err)
 		return
 	}
-	if confidential, ok := s.store.OAuthClientSecret(id, secret); !confidential || !ok {
-		writeOAuthInvalidClient(w, basic, "Introspection requires a confidential client")
+	if !s.checkOAuthClientSecret(w, r, id, secret, basic, "Introspection requires a confidential client") {
 		return
 	}
 	token := strings.TrimSpace(r.Form.Get("token"))
@@ -408,7 +429,14 @@ func (s *server) introspectOAuthToken(w http.ResponseWriter, r *http.Request) {
 	}
 	inactive := map[string]any{"active": false}
 	if r.Form.Get("token_type_hint") != "refresh_token" {
-		if workspace, key, found := s.store.FindAPIKey(secretHash(token)); found && key.OAuthClientID == id {
+		workspace, key, found, err := s.store.LookupAPIKey(r.Context(), secretHash(token))
+		if err != nil {
+			if !writeOAuthStoreUnavailable(w, err) {
+				writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not introspect token")
+			}
+			return
+		}
+		if found && key.OAuthClientID == id {
 			actor := key.Actor
 			if actor == "" {
 				actor = "user"
@@ -426,7 +454,9 @@ func (s *server) introspectOAuthToken(w http.ResponseWriter, r *http.Request) {
 	}
 	state, found, err := s.store.OAuthRefreshToken(r.Context(), token)
 	if err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not introspect token")
+		if !writeOAuthStoreUnavailable(w, err) {
+			writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not introspect token")
+		}
 		return
 	}
 	if !found || !state.Active || state.Grant.ClientID != id {

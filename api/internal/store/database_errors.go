@@ -1,17 +1,36 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"io"
 	"net"
 	"strconv"
 	"syscall"
+	"testing"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"
 	"modernc.org/sqlite"
 )
+
+func (s *SQLiteStore) CheckDatabaseConnection(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}
+
+// CloseDatabasePoolForTesting simulates loss of SQL without shutting down
+// the store's workers or releasing installed workspace metadata.
+func (s *SQLiteStore) CloseDatabasePoolForTesting() error {
+	if !testing.Testing() {
+		return errors.New("closing the live database pool requires a test")
+	}
+	if s.db.snapshots != nil {
+		return errors.Join(s.db.snapshots.Close(), s.db.DB.Close())
+	}
+	return s.db.DB.Close()
+}
 
 // IsDatabaseError reports an error that came from the database or its driver
 // (a MySQL, Postgres or SQLite error, a lost connection, a finished
@@ -24,12 +43,11 @@ func IsDatabaseError(err error) bool {
 	}
 	var mysqlErr *mysql.MySQLError
 	var pgErr *pgconn.PgError
-	var pgConnectErr *pgconn.ConnectError
 	var sqliteErr *sqlite.Error
 	switch {
-	case errors.As(err, &mysqlErr), errors.As(err, &pgErr), errors.As(err, &pgConnectErr), errors.As(err, &sqliteErr):
+	case errors.As(err, &mysqlErr), errors.As(err, &pgErr), errors.As(err, &sqliteErr):
 		return true
-	case errors.Is(err, driver.ErrBadConn), errors.Is(err, mysql.ErrInvalidConn), errors.Is(err, sql.ErrConnDone), errors.Is(err, sql.ErrTxDone):
+	case IsDatabaseConnectionError(err), errors.Is(err, sql.ErrTxDone):
 		return true
 	}
 	return false
@@ -57,26 +75,60 @@ func IsDatabaseConnectionError(err error) bool {
 }
 
 func databaseConnectionCode(err error) string {
+	if err == nil {
+		return ""
+	}
 	var mysqlErr *mysql.MySQLError
 	var pgErr *pgconn.PgError
+	var pgConnectErr *pgconn.ConnectError
 	var networkErr *net.OpError
 	switch {
 	case errors.Is(err, driver.ErrBadConn):
 		return "bad_connection"
 	case errors.Is(err, mysql.ErrInvalidConn):
 		return "mysql_invalid_connection"
-	case errors.Is(err, sql.ErrConnDone):
+	case errors.Is(err, sql.ErrConnDone), errors.Is(err, pgconn.ErrConnClosed):
 		return "closed_connection"
-	case errors.As(err, &networkErr) && errors.Is(networkErr, syscall.ECONNREFUSED):
+	case errors.Is(err, syscall.ECONNREFUSED):
 		return "connection_refused"
-	case errors.As(err, &networkErr) && (errors.Is(networkErr, syscall.ECONNRESET) || errors.Is(networkErr, syscall.EPIPE)):
+	case errors.Is(err, syscall.ECONNRESET), errors.Is(err, syscall.EPIPE), errors.Is(err, io.EOF),
+		errors.As(err, &networkErr) && errors.Is(networkErr, io.ErrUnexpectedEOF):
 		return "connection_lost"
-	case errors.As(err, &mysqlErr) && mysqlErr.Number == 1040:
-		return "mysql_1040"
-	case errors.As(err, &pgErr) && (pgErr.Code == "53300" || pgErr.Code == "57P01"):
-		return "postgres_" + pgErr.Code
-	default:
+	case pgconn.Timeout(err), errors.As(err, &networkErr) && networkErr.Timeout():
+		return "connection_timeout"
+	case errors.As(err, &mysqlErr) && (mysqlErr.Number == 1040 || mysqlErr.Number == 2006 || mysqlErr.Number == 2013):
+		return "mysql_" + strconv.Itoa(int(mysqlErr.Number))
+	case errors.As(err, &pgErr):
+		switch pgErr.Code {
+		case "08000", "08001", "08003", "08004", "08006", "08007", "08P01", "53300", "57P01", "57P02", "57P03":
+			return "postgres_" + pgErr.Code
+		}
+		// ConnectError can wrap a server rejection such as invalid credentials.
 		return ""
+	case errors.As(err, &pgConnectErr):
+		return "postgres_connect"
+	case databasePoolClosed(err):
+		return "closed_connection"
+	}
+	return ""
+}
+
+// database/sql does not export the sentinel it returns after DB.Close.
+func databasePoolClosed(err error) bool {
+	switch err := err.(type) {
+	case nil:
+		return false
+	case interface{ Unwrap() []error }:
+		for _, cause := range err.Unwrap() {
+			if databasePoolClosed(cause) {
+				return true
+			}
+		}
+		return false
+	case interface{ Unwrap() error }:
+		return databasePoolClosed(err.Unwrap())
+	default:
+		return err.Error() == "sql: database is closed"
 	}
 }
 
@@ -88,7 +140,6 @@ func DatabaseErrorCode(err error) string {
 	}
 	var mysqlErr *mysql.MySQLError
 	var pgErr *pgconn.PgError
-	var pgConnectErr *pgconn.ConnectError
 	var sqliteErr *sqlite.Error
 	switch {
 	case errors.As(err, &mysqlErr):
@@ -103,8 +154,6 @@ func DatabaseErrorCode(err error) string {
 			return "postgres_" + pgErr.Code
 		}
 		return "postgres_error"
-	case errors.As(err, &pgConnectErr):
-		return "postgres_connect"
 	case errors.As(err, &sqliteErr):
 		return "sqlite_" + strconv.Itoa(sqliteErr.Code())
 	case errors.Is(err, sql.ErrTxDone):

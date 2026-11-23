@@ -819,10 +819,6 @@ func issueRecordsErrorFor(w http.ResponseWriter, r *http.Request, err error) {
 	if retryAfter == 0 {
 		retryAfter, _ = retryableBusy(err)
 	}
-	// Some mutations use this helper for post-commit projections.
-	if retryAfter == 0 && r != nil && (r.Method == http.MethodGet || r.Method == http.MethodHead) && store.IsDatabaseConnectionError(err) {
-		retryAfter = busyDeadlineRetryAfter
-	}
 	if r != nil {
 		level := slog.LevelError
 		if retryAfter > 0 {

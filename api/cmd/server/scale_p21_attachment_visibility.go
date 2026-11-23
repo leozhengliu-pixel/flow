@@ -24,9 +24,8 @@ type uploadVisibilityRefusal struct {
 	err error
 }
 
-// withUploadVisibilityRefusal lets serveUpload tell a bounded work refusal
-// (retry later) from "not visible". Only the bounded check records one, so
-// the original check never changes the answer.
+// withUploadVisibilityRefusal keeps retryable failures from boolean file
+// visibility checks distinct from genuine denials.
 func withUploadVisibilityRefusal(ctx context.Context) (context.Context, func() error) {
 	holder := &uploadVisibilityRefusal{}
 	return context.WithValue(ctx, uploadVisibilityRefusalKey{}, holder), func() error {
@@ -38,12 +37,12 @@ func withUploadVisibilityRefusal(ctx context.Context) (context.Context, func() e
 
 func recordUploadVisibilityRefusal(ctx context.Context, err error) {
 	holder, _ := ctx.Value(uploadVisibilityRefusalKey{}).(*uploadVisibilityRefusal)
-	if holder == nil || !errors.Is(err, store.ErrMetadataWorkBudget) && !errors.Is(err, store.ErrMetadataPageBudget) {
+	if holder == nil || !databaseReadUnavailable(err) && !errors.Is(err, store.ErrMetadataWorkBudget) && !errors.Is(err, store.ErrMetadataPageBudget) {
 		return
 	}
 	holder.mu.Lock()
 	defer holder.mu.Unlock()
-	if holder.err == nil {
+	if holder.err == nil || databaseReadUnavailable(err) {
 		holder.err = err
 	}
 }

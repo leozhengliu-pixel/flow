@@ -97,6 +97,7 @@ func (frame EventFrame) WriteSSE(w http.ResponseWriter, node string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := frame.Validate(ctx); err != nil {
+		writeRealtimeRetry(w, err)
 		return false
 	}
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(realtimeWriteTimeout))
@@ -819,6 +820,9 @@ func (s *server) writeSharedEventFrame(w http.ResponseWriter, r *http.Request, e
 	}
 	if err != nil {
 		frame.Close()
+		if writeRealtimeRetry(w, err) {
+			return true, false
+		}
 		slog.Warn("realtime projection stopped", "event_type", event.Type, "error_type", fmt.Sprintf("%T", err), "denied", errors.Is(err, store.ErrAuthForbidden), "stale", errors.Is(err, errRealtimeProjectionStale), "budget", errors.Is(err, store.ErrEventSourceBudget), "missing", errors.Is(err, sql.ErrNoRows))
 		var typed *json.UnmarshalTypeError
 		if errors.As(err, &typed) {

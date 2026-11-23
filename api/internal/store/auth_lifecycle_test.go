@@ -72,7 +72,7 @@ func TestAccountAuthenticationAndSessionLifecycle(t *testing.T) {
 	if err != nil || loadedSession.User.ID != user.ID {
 		t.Fatalf("session=%#v err=%v", loadedSession, err)
 	}
-	if !repository.EnforceSessionDuration(ctx, token, 30) {
+	if repository.EnforceSessionDuration(ctx, token, 30) != nil {
 		t.Fatal("valid session duration was rejected")
 	}
 	updated, err := repository.UpdateProfile(ctx, user.ID, "Updated Member", "updated.member", "https://example.test/avatar.png")

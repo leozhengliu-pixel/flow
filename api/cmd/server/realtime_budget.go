@@ -392,6 +392,7 @@ func (s *server) writeProjectedRealtime(w http.ResponseWriter, r *http.Request, 
 	defer release()
 	projected, visible, err := s.pagedRealtimeEvent(r, event)
 	if err != nil {
+		writeRealtimeRetry(w, err)
 		return false
 	}
 	if !visible {
@@ -418,6 +419,7 @@ func (s *server) replayBudgetedChanges(w http.ResponseWriter, r *http.Request, w
 	cursor := since
 	window, err := s.store.OpenRealtimeReplay(r.Context(), workspaceID, since)
 	if err != nil {
+		writeRealtimeRetry(w, err)
 		return cursor, false
 	}
 	for range (maxReplayPages*maxChangesLimit + 63) / 64 {
@@ -433,6 +435,7 @@ func (s *server) replayBudgetedChanges(w http.ResponseWriter, r *http.Request, w
 func (s *server) replayBudgetedRecord(w http.ResponseWriter, r *http.Request, workspaceID string, cursor int64) (int64, bool, bool) {
 	window, err := s.store.OpenRealtimeReplay(r.Context(), workspaceID, cursor)
 	if err != nil {
+		writeRealtimeRetry(w, err)
 		return cursor, false, false
 	}
 	return s.replayBudgetedPage(w, r, window, cursor)
@@ -449,6 +452,7 @@ func (s *server) replayBudgetedPage(w http.ResponseWriter, r *http.Request, wind
 	defer release()
 	page, err := s.store.ReadRealtimeReplayPage(r.Context(), window, cursor, 1<<20)
 	if err != nil {
+		writeRealtimeRetry(w, err)
 		return cursor, false, false
 	}
 	if page.ResyncRequired {
@@ -508,9 +512,9 @@ func subscriberBaseBytes(capacity int) int64 {
 
 // Authorize after dequeue as well: a revocation can leave older frames in
 // the send channel even after the socket has left the document.
-func (s *server) socketMessageAllowed(client *realtimeSocketClient, message realtimeSocketMessage) bool {
+func (s *server) socketMessageAccessError(client *realtimeSocketClient, message realtimeSocketMessage) error {
 	if message.documentID == "" {
-		return true
+		return nil
 	}
 	h := s.realtime
 	h.mu.Lock()
@@ -518,30 +522,52 @@ func (s *server) socketMessageAllowed(client *realtimeSocketClient, message real
 	issueID := client.issueDocuments[message.documentID]
 	revoked := client.credentialRevoked
 	h.mu.Unlock()
-	if !joined || revoked || client.checkCredential != nil && !client.checkCredential() {
-		return false
+	if !joined || revoked {
+		return store.ErrAuthForbidden
+	}
+	if client.checkCredential != nil {
+		valid, err := client.checkCredential()
+		if databaseReadUnavailable(err) {
+			return err
+		}
+		if !valid {
+			return store.ErrAuthForbidden
+		}
 	}
 	if issueID != "" && client.checkIssue != nil {
 		allowed, err := s.recheckIssueDocument(client, message.documentID, issueID)
 		if err != nil {
-			client.cancel()
+			if !databaseReadUnavailable(err) {
+				client.cancel()
+			}
+			return err
 		}
-		return allowed && err == nil
+		if !allowed {
+			return store.ErrAuthForbidden
+		}
+		return nil
 	}
 	if client.checkDocument != nil {
 		role, conflict, err := client.checkDocument(message.documentID)
 		if err != nil || conflict {
-			client.cancel()
-			return false
+			if !databaseReadUnavailable(err) {
+				client.cancel()
+			}
+			if err != nil {
+				return err
+			}
+			return store.ErrAuthForbidden
 		}
 		if role == "none" {
 			h.revokeDocument(client, message.documentID, "")
-			return false
+			return store.ErrAuthForbidden
 		}
 		h.setEditAccess(client, message.documentID, canEditDocument(role))
-		return h.joinedDocument(client, message.documentID)
+		if !h.joinedDocument(client, message.documentID) {
+			return store.ErrAuthForbidden
+		}
 	}
-	return true
+	return nil
 }
 
 var errRealtimeBudget = errors.New("realtime transport budget exceeded")

@@ -71,6 +71,7 @@ func (s *server) writeSyncJournalPage(w http.ResponseWriter, r *http.Request, jo
 	defer release()
 	access, err := s.resolveSyncAccess(r)
 	if err != nil {
+		writeRealtimeRetry(w, err)
 		return cursor, false, false
 	}
 	if state, ok := r.Context().Value(syncV2StreamKey{}).(*syncV2Stream); ok && state.workspaceID != access.WorkspaceID {
@@ -78,6 +79,7 @@ func (s *server) writeSyncJournalPage(w http.ResponseWriter, r *http.Request, jo
 	}
 	page, err := s.collectSyncChanges(r, access, journal, strconv.FormatInt(cursor, 10), maxChangesLimit)
 	if err != nil {
+		writeRealtimeRetry(w, err)
 		return cursor, false, false
 	}
 	if page.ResyncRequired {

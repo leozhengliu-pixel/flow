@@ -47,7 +47,8 @@ func (s *server) boundedRecordDecision(r *http.Request, workspace, userID, kind,
 			return false
 		}
 		if credential != nil {
-			user, current, selectedWorkspace := s.authenticateAPIKey(r)
+			user, current, selectedWorkspace, err := s.authenticateAPIKey(r)
+			noteAuthorizationBusy(r, err)
 			if current == nil || user.ID != userID || selectedWorkspace != workspace || !apiKeyAllowsRequest(r, *current) {
 				return false
 			}

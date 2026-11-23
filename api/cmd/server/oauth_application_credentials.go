@@ -84,7 +84,17 @@ func (s *server) issueClientCredentials(w http.ResponseWriter, r *http.Request, 
 		}
 		clientID, secret = basicID, basicSecret
 	}
-	workspace, found := s.store.OAuthApplicationHome(clientID)
+	if clientID == "" || secret == "" {
+		writeOAuthInvalidClient(w, false, "Invalid client credentials")
+		return
+	}
+	workspace, found, err := s.store.LookupOAuthApplicationHome(r.Context(), clientID)
+	if err != nil {
+		if !writeOAuthStoreUnavailable(w, err) {
+			writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not check client credentials")
+		}
+		return
+	}
 	if !found || workspaceKey(r) != "" && workspaceKey(r) != workspace {
 		writeOAuthError(w, 401, "invalid_client", "Invalid client credentials")
 		return
@@ -122,6 +132,7 @@ func (s *server) issueApplicationToken(w http.ResponseWriter, r *http.Request, w
 	key, err = s.store.IssueApplicationCredential(r.Context(), workspace, clientID, clientSecret, issuer, actor, scopes, key, applicationApproved)
 	if err != nil {
 		switch {
+		case writeOAuthStoreUnavailable(w, err):
 		case errors.Is(err, store.ErrOAuthGrantDisabled):
 			writeOAuthError(w, 400, "unauthorized_client", "Enable client credentials for this application")
 		case errors.Is(err, store.ErrOAuthTokenLimit):
@@ -139,7 +150,9 @@ func (s *server) issueApplicationToken(w http.ResponseWriter, r *http.Request, w
 		// only remembered encrypted: without FLOW_CONNECTOR_SECRET_KEY the
 		// token is returned once and a later copy mints a new one.
 		if err := s.store.SetApplicationDeveloperToken(r.Context(), workspace, clientID, key.ID, secret); err != nil && !errors.Is(err, store.ErrSecretKeyMissing) {
-			writeOAuthError(w, 500, "server_error", "Could not store developer token")
+			if !writeOAuthStoreUnavailable(w, err) {
+				writeOAuthError(w, 500, "server_error", "Could not store developer token")
+			}
 			return
 		}
 	}

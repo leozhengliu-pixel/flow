@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strings"
 )
 
 type residentOAuthIdentityRead uint8
@@ -16,6 +18,15 @@ const (
 // These trusted readers select scalars, even when the application's description
 // or manifest exceeds a detail page. Authorization stays with their callers.
 func (s *SQLiteStore) residentOAuthIdentityValue(workspace, ref string, mode residentOAuthIdentityRead) (string, bool, func()) {
+	value, found, release, _ := s.readOAuthIdentityValue(context.Background(), workspace, ref, mode)
+	return value, found, release
+}
+
+func (s *SQLiteStore) readOAuthIdentityValue(ctx context.Context, workspace, ref string, mode residentOAuthIdentityRead) (string, bool, func(), error) {
+	noop := func() {}
+	if strings.ContainsRune(ref, '\x00') {
+		return "", false, noop, nil
+	}
 	stringColumn := func(field string) string {
 		if s.dialect == "mysql" {
 			column := "JSON_EXTRACT(CONVERT(data USING utf8mb4), '$." + field + "')"
@@ -30,7 +41,7 @@ func (s *SQLiteStore) residentOAuthIdentityValue(workspace, ref string, mode res
 	}
 	if mode == residentOAuthApplicationSecret {
 		if workspace == "" {
-			return "", false, func() {}
+			return "", false, noop, nil
 		}
 		predicate = s.metadataRecordKeyEquals("record_key", "?")
 	}
@@ -49,30 +60,34 @@ func (s *SQLiteStore) residentOAuthIdentityValue(workspace, ref string, mode res
 	limit := MetadataRecordPageMaxBytes
 	for attempt := 0; attempt < 3; attempt++ {
 		if limit > (metadataWorkBytes-(1<<20))/3 {
-			return "", false, func() {}
+			return "", false, noop, ErrMetadataPageBudget
 		}
-		ctx, release, err := s.admitMetadataWork(context.Background(), max(2<<20, 3*limit+(1<<20)))
+		ctx, release, err := s.admitMetadataWork(ctx, max(2<<20, 3*limit+(1<<20)))
 		if err != nil {
-			return "", false, func() {}
+			return "", false, noop, err
 		}
 		var foundWorkspace string
 		var size int
 		var result sql.NullString
 		err = s.db.QueryRowContext(ctx, "SELECT workspace_key,"+length+",CASE WHEN "+length+"<=? THEN "+value+" ELSE NULL END FROM workspace_metadata_records WHERE "+where+" ORDER BY workspace_key,collection_order,record_key LIMIT 1", append([]any{limit}, args...)...).Scan(&foundWorkspace, &size, &result)
-		if err != nil || !s.HasWorkspace(foundWorkspace) {
+		if errors.Is(err, sql.ErrNoRows) || err == nil && !s.HasWorkspace(foundWorkspace) {
 			release()
-			return "", false, func() {}
+			return "", false, noop, nil
+		}
+		if err != nil {
+			release()
+			return "", false, noop, err
 		}
 		if result.Valid {
-			return result.String, true, release
+			return result.String, true, release, nil
 		}
 		release()
 		if size <= limit || size > s.maxStateBytes {
-			return "", false, func() {}
+			return "", false, noop, ErrMetadataPageBudget
 		}
 		// Preserve legal legacy scalar sizes. Reserve their larger work bound
 		// before fetching; a concurrent growth is checked again in SQL.
 		limit = size
 	}
-	return "", false, func() {}
+	return "", false, noop, ErrMetadataPageBudget
 }

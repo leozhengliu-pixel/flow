@@ -5792,9 +5792,16 @@ func (s *server) serveUpload(w http.ResponseWriter, r *http.Request) {
 	if !s.authDisabled {
 		user := authUser(r)
 		account, err := s.store.AccountForUser(r.Context(), user.ID)
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
 		ctx, refused := withUploadVisibilityRefusal(r.Context())
-		if err != nil || !s.attachmentVisible(ctx, account, user.ID, "/uploads/"+name) {
-			if err == nil && readLeafBusy(w, refused()) {
+		visible := err == nil && s.attachmentVisible(ctx, account, user.ID, "/uploads/"+name)
+		if writeStoreReadUnavailable(w, refused()) {
+			return
+		}
+		if !visible {
+			if readLeafBusy(w, refused()) {
 				return
 			}
 			http.NotFound(w, r)
@@ -5857,9 +5864,14 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 		}
 		data, access, err := s.store.IssueQueryAccess(ctx, membership.Workspace.URLKey, userID)
 		if err != nil {
+			recordUploadVisibilityRefusal(ctx, err)
 			continue
 		}
 		visible, err := s.store.IssueAttachmentVisible(ctx, attachmentIssueQuery(ctx, data.Workspace.URLKey, &access), url)
+		if databaseReadUnavailable(err) {
+			recordUploadVisibilityRefusal(ctx, err)
+			return false
+		}
 		if err == nil && visible {
 			return true
 		}
@@ -5868,6 +5880,7 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 		}
 		data, err = s.store.PagedWorkspaceMetadata(ctx, data.Workspace.URLKey, userID)
 		if err != nil {
+			recordUploadVisibilityRefusal(ctx, err)
 			continue
 		}
 		if key, ok := ctx.Value(apiKeyContextKey{}).(domain.APIKey); ok {

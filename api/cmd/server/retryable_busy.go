@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"flow/api/internal/coordination"
@@ -34,11 +35,18 @@ func retryableBusy(err error) (time.Duration, bool) {
 	return 0, false
 }
 
-// writeStoreBusy answers a store that was too busy to serve the request (a
-// full or timed-out COLD slot, a workspace lock another replica holds, a
-// metadata budget concurrent work held, or a database refusal) with
-// the shared 503 + Retry-After. Unclassified deadlines and permanent size
-// refusals keep the response their handler gives.
+const databaseUnavailableMessage = "Database is temporarily unavailable"
+
+func setRetryAfter(w http.ResponseWriter, delay time.Duration) bool {
+	if delay <= 0 {
+		return false
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(max(1, int(delay/time.Second))))
+	return true
+}
+
+// writeStoreBusy writes the shared 503 for a known transient store failure.
+// Connection loss can also happen after a write was sent.
 func writeStoreBusy(w http.ResponseWriter, err error) bool {
 	retryAfter := storeBusyRetryAfter(err)
 	if retryAfter == 0 {
@@ -49,6 +57,15 @@ func writeStoreBusy(w http.ResponseWriter, err error) bool {
 			slog.WarnContext(r.Context(), "workspace reload failed before mutation",
 				"request_id", serverRequestIDFrom(r.Context()), "cause", requestErrorCode(err))
 		}
+	}
+	if store.IsDatabaseConnectionError(err) {
+		if r := apiErrorRequest(w); r != nil && !errors.Is(err, store.ErrDatabaseUnavailable) {
+			slog.WarnContext(r.Context(), "database unavailable",
+				"request_id", serverRequestIDFrom(r.Context()), "cause", requestErrorCode(err))
+		}
+		setRetryAfter(w, retryAfter)
+		writeError(w, http.StatusServiceUnavailable, databaseUnavailableMessage)
+		return true
 	}
 	(&metadataReadGate{}).busy(w, retryAfter)
 	return true
@@ -62,8 +79,32 @@ func storeBusyRetryAfter(err error) time.Duration {
 		return workspaceLockBusyRetryAfter
 	case store.MetadataWorkContended(err), errors.Is(err, store.ErrRecordSpoolContended), errors.Is(err, store.ErrDatabaseWriteBusy), errors.Is(err, store.ErrDatabaseUnavailable):
 		return busyDeadlineRetryAfter
+	case store.IsDatabaseConnectionError(err):
+		return busyDeadlineRetryAfter
 	}
 	return 0
+}
+
+// storeReadRetryAfter also covers deadlines returned by credential and
+// realtime reads. A bare deadline on a general write is ambiguous.
+func storeReadRetryAfter(err error) time.Duration {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return busyDeadlineRetryAfter
+	}
+	return storeBusyRetryAfter(err)
+}
+
+func databaseReadUnavailable(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, store.ErrDatabaseUnavailable) || store.IsDatabaseConnectionError(err)
+}
+
+func writeStoreReadUnavailable(w http.ResponseWriter, err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		setRetryAfter(w, busyDeadlineRetryAfter)
+		writeError(w, http.StatusServiceUnavailable, databaseUnavailableMessage)
+		return true
+	}
+	return writeStoreBusy(w, err)
 }
 
 func isRetryableBusy(err error) bool {

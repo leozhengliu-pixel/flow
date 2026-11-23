@@ -67,7 +67,7 @@ func TestIssueQueryConnectionFailureRetryClassification(t *testing.T) {
 		{"read with lost connection", http.MethodGet, mysql.ErrInvalidConn, http.StatusServiceUnavailable},
 		{"read with refused dial", http.MethodGet, refused, http.StatusServiceUnavailable},
 		{"read at server connection limit", http.MethodGet, &mysql.MySQLError{Number: 1040}, http.StatusServiceUnavailable},
-		{"write with unknown outcome", http.MethodPatch, mysql.ErrInvalidConn, http.StatusInternalServerError},
+		{"write with unknown outcome", http.MethodPatch, mysql.ErrInvalidConn, http.StatusServiceUnavailable},
 		{"unattributed short read", http.MethodGet, io.ErrUnexpectedEOF, http.StatusInternalServerError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

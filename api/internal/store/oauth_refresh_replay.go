@@ -176,6 +176,23 @@ func (s *SQLiteStore) OAuthClientSecret(clientID, secret string) (confidential, 
 	return false, false
 }
 
+// CheckOAuthClientSecret rechecks a confidential client's current secret.
+func (s *SQLiteStore) CheckOAuthClientSecret(ctx context.Context, clientID, secret string) (bool, error) {
+	if clientID == "" || secret == "" {
+		return false, nil
+	}
+	if s.metadataResidency == nil {
+		if err := s.CheckDatabaseConnection(ctx); err != nil {
+			return false, err
+		}
+		_, matches := s.OAuthClientSecret(clientID, secret)
+		return matches, nil
+	}
+	stored, found, release, err := s.readOAuthIdentityValue(ctx, "", clientID, residentOAuthConfidentialSecret)
+	defer release()
+	return found && subtle.ConstantTimeCompare([]byte(secret), []byte(stored)) == 1, err
+}
+
 // revokeOAuthAccessFamily revokes every live access token of one refresh
 // chain. Other sessions of the same authorization keep working.
 func (s *SQLiteStore) revokeOAuthAccessFamily(ctx context.Context, workspace, family string) error {

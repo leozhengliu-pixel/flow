@@ -76,6 +76,10 @@ func scimBadRequest(scimType, detail string) error {
 }
 
 func writeSCIMRequestError(w http.ResponseWriter, err error) {
+	if setRetryAfter(w, storeReadRetryAfter(err)) {
+		writeSCIMError(w, http.StatusServiceUnavailable, "", databaseUnavailableMessage)
+		return
+	}
 	var requestErr *scimRequestError
 	if errors.As(err, &requestErr) {
 		writeSCIMError(w, requestErr.status, requestErr.scimType, requestErr.detail)
