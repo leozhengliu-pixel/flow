@@ -511,9 +511,10 @@ history) and restore the version from there if the body should come back.
 
 ### Bounded metadata
 
-`FLOW_BOUNDED_METADATA` is an opt-in memory optimisation with prerequisites,
-a rollout order and a rollback. Follow [Bounded metadata](bounded-metadata.md)
-before turning it on; do not run flag-on and flag-off replicas together.
+`FLOW_BOUNDED_METADATA` defaults to `on`. Startup repairs the record journal
+and completes the metadata catalog before bounded reads begin. Follow the
+[upgrade and rollback procedure](bounded-metadata-activation.md) when
+replacing replicas or reverting to legacy reads.
 
 ### Inherited document scope
 

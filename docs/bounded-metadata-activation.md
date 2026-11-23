@@ -42,6 +42,8 @@ Repair and backfill persist checkpoints as they progress. Later starts
 reuse completed checkpoints. If preparation or admission fails, automatic
 startup uses legacy reads and checks again on restart. The optional
 `server metadata-prepare` command reports remaining gaps and resumes repair.
+Run it before starting bounded replicas, or while the fleet is on legacy
+reads, because the command also revisits completed collections.
 
 During a rolling upgrade, leave remaining replicas running until their
 replacements are ready. Starting an older binary with its journal disabled
