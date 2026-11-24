@@ -134,6 +134,9 @@ type sw530Sweep struct {
 	// totalSlots and totalViews count the COLD slots and legacy views the
 	// bounded runs took.
 	totalSlots, totalViews int64
+	// The issue lifecycle differential drives handlers synchronously. The
+	// inventory sweep uses short deadlines so a stuck route cannot hide others.
+	requestContext context.Context
 }
 
 type sw530Divergence struct {
@@ -349,10 +352,8 @@ func sw530Setup(t *testing.T) *sw530Sweep {
 	uploads := t.TempDir()
 	newService := func(repo *store.SQLiteStore) http.Handler {
 		s := &server{store: repo, uploadPath: uploads}
-		// Routes only: no background workers write while requests are compared.
-		for _, started := range []interface{ Store(bool) }{&s.socketAccessSweepStarted, &s.workflowSchedulerStarted, &s.deliverySchedulerStarted, &s.loopReconcilerStarted, &s.agentRunReconcilerStarted, &s.agentLiveSweepStarted, &s.coordinationStarted} {
-			started.Store(true)
-		}
+		disableBackgroundWorkersForTest(s)
+		s.coordinationStarted.Store(true)
 		handler := newHandler(s)
 		repo.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 			x.mu.Lock()
@@ -536,9 +537,13 @@ func (x *sw530Sweep) call(handler http.Handler, method, path, body string, princ
 			r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: principal.token})
 		}
 	}
+	w := httptest.NewRecorder()
+	if x.requestContext != nil {
+		handler.ServeHTTP(w, r.WithContext(x.requestContext))
+		return w, false
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
 	defer cancel()
-	w := httptest.NewRecorder()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

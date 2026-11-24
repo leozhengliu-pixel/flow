@@ -111,15 +111,16 @@ func scaleP21SW422Run(t *testing.T, names ...string) {
 		}
 	}
 	type sw422Case struct {
-		name    string
-		prepare func(*testing.T)
-		peer    func(*testing.T)
-		ids     []string
-		code    int
+		name       string
+		prepare    func(*testing.T)
+		peer       func(*testing.T)
+		ids        []string
+		code       int
+		largeIndex bool
 	}
 	cases := []sw422Case{
-		{name: "add-to-many-issues", prepare: grow(64<<10, 300_000, false, 0), ids: []string{large}, code: http.StatusOK},
-		{name: "remove-from-many-issues", prepare: grow(64<<10, 300_000, true, 0), ids: []string{}, code: http.StatusOK},
+		{name: "add-to-many-issues", prepare: grow(64<<10, 300_000, false, 0), ids: []string{large}, code: http.StatusOK, largeIndex: true},
+		{name: "remove-from-many-issues", prepare: grow(64<<10, 300_000, true, 0), ids: []string{}, code: http.StatusOK, largeIndex: true},
 		{name: "add-large-description-7mib", prepare: grow(7<<20, 1000, false, 0), ids: []string{large, seed.id("add")}, code: http.StatusOK},
 		{name: "add-large-description-at-max", prepare: grow(10<<20, 1000, false, 0), ids: []string{large}, code: http.StatusOK},
 		{name: "remove-large-description-at-max", prepare: grow(10<<20, 1000, true, 0), ids: []string{seed.id("add")}, code: http.StatusOK},
@@ -135,13 +136,46 @@ func scaleP21SW422Run(t *testing.T, names ...string) {
 			t.Fatal("unknown SW422 case", name)
 		}
 	}
+	// The large-index cases each have their own fixture. Grow the index once;
+	// the usual full reset then restores only the link edited by a request.
+	if len(names) == 1 {
+		for _, test := range cases {
+			if test.name != names[0] || !test.largeIndex {
+				continue
+			}
+			f.reader.query(t, `SELECT 1 FROM workspace_states WHERE workspace_key=?`, workspace).Close()
+			t.Cleanup(func() {
+				// Delete this fixture's synthetic index in one statement.
+				// The ordinary workspace and account cleanup still runs.
+				statement := `DELETE FROM release_issue_filter_records WHERE workspace_key=? AND release_id=?`
+				if f.reader.config.Driver == "postgres" || f.reader.config.Driver == "postgresql" {
+					statement = scaleDB{driver: "postgres"}.rebind(statement)
+				}
+				if _, err := f.reader.reader.ExecContext(context.Background(), statement, workspace, large); err != nil {
+					t.Errorf("clean up large release index: %v", err)
+				}
+			})
+			test.prepare(t)
+			baseline, found := f.repository.BootstrapFor(workspace)
+			if !found {
+				t.Fatal("large release fixture missing")
+			}
+			var err error
+			if f.baseline, err = json.Marshal(baseline); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
 	for _, alias := range []bool{true, false} {
 		for _, test := range cases {
 			if !slices.Contains(names, test.name) {
 				continue
 			}
 			t.Run(fmt.Sprintf("%s/alias=%t", test.name, alias), func(t *testing.T) {
-				f.prepare = test.prepare
+				if !test.largeIndex || len(names) != 1 {
+					f.prepare = test.prepare
+				}
 				defer func() { f.prepare = nil }()
 				outcomes := f.sw200Differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 					if test.peer != nil {

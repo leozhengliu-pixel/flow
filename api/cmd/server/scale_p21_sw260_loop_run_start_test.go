@@ -95,10 +95,14 @@ func TestScaleP21SW260LoopRunStartDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
-	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
+	fixtureService := &server{store: repo, uploadPath: t.TempDir()}
+	// SW260 drives its own clock. A live reconciler can renew the queued
+	// runs' leases between a dispatch and the snapshot that checks it.
+	disableBackgroundWorkersForTest(fixtureService)
+	host := httptest.NewServer(newHandler(fixtureService))
+	t.Cleanup(host.Close)
+	f := scaleP03CreateFixture(t, repo, fixtureService, host)
 	workspace, public := f.data.Workspace.URLKey, f.data.Teams[0].ID
 	probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {

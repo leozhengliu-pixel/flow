@@ -70,7 +70,8 @@ func sharedCacheReplicas(t *testing.T, flag string, opTimeout time.Duration) (*m
 			t.Fatal(err)
 		}
 		repository.SetWorkspaceCoordinator(coordinator)
-		instance := &server{store: repository, uploadPath: uploads, coordinator: coordinator}
+		instance := &server{store: repository, uploadPath: uploads, coordinator: coordinator, coordinationContext: t.Context()}
+		disableBackgroundWorkersForTest(instance)
 		// Require requests to observe peer writes before any subscriber refresh.
 		instance.coordinationStarted.Store(true)
 		httpServer := httptest.NewServer(newHandler(instance))
@@ -218,6 +219,10 @@ func testSharedCacheDifferential(t *testing.T, flag string) {
 	syncPath := "/api/sync/changes?limit=2&after=" + after
 	authRequest[domain.Issue](t, admin, http.MethodPatch, second+"/api/issue-records/"+publicIssue.ID, map[string]any{"title": "Public sync beacon"}, "test-workspace", http.StatusOK)
 	authRequest[domain.Issue](t, admin, http.MethodPatch, first+"/api/issue-records/"+privateIssue.ID, map[string]any{"title": "Private sync beacon"}, "test-workspace", http.StatusOK)
+	page, err := replicas[0].store.ReadCommittedChanges(t.Context(), policy.Workspace.ID, after, 2, syncV2DeltaBytes)
+	if err != nil || len(page.Transactions) != 2 || !cacheableSyncPage(page) {
+		t.Fatalf("expected two cacheable issue edits, got %d transactions (err=%v)", len(page.Transactions), err)
+	}
 	refs := []string{first, second, reference}
 	if len(replicas) > 3 {
 		refs = append(refs, replicas[3].url)

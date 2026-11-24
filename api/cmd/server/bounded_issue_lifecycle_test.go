@@ -229,6 +229,9 @@ func issueDeleteDifferenceFields(kind, a, b string) string {
 func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 	t.Setenv("FLOW_API_RATE_LIMIT", "off")
 	x := sw530Setup(t)
+	// The 1,000-child fixture takes over 8s with race and coverage on CI.
+	// Wait for each request to finish before comparing or resetting its rows.
+	x.requestContext = t.Context()
 	seedIssueDelete(t, x)
 	owner, member, guest, inherited, suspended := x.principals[0], x.principals[2], x.principals[3], x.principals[4], x.principals[5]
 	children := []string{issueDeleteSibling, issueDeleteChild}
@@ -302,7 +305,11 @@ func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 		x.reset(t)
 	})
 	t.Run("large-family", func(t *testing.T) {
+		baseline := x.baseline
 		checkIssueDeleteLargeFamily(t, x, owner, children)
+		// The development aliases exercise the small fixture independently.
+		x.baseline = baseline
+		x.reset(t)
 	})
 	t.Run("development-alias", func(t *testing.T) {
 		viewer := x.legacy.store.DefaultViewer()
@@ -404,7 +411,6 @@ func checkIssueDeleteLargeFamily(t *testing.T, x *sw530Sweep, owner *sw530Princi
 		t.Fatal(err)
 	}
 	reloadIssueDeleteBaseline(t, x)
-	x.reset(t)
 	checkIssueDelete(t, x, issueDeleteRequest("issue-records", largeRoot, "", "", owner, false), 500)
 	checkIssueDelete(t, x, issueDeleteRequest("issues", issueDeleteRoot, "", "", owner, false), 204, children...)
 }

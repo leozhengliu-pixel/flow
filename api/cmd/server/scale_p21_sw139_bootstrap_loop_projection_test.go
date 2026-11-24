@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"runtime"
 	"strings"
@@ -333,7 +334,6 @@ func TestScaleP21SW139BootstrapLoopFailures(t *testing.T) {
 func TestScaleP21SW139BootstrapLoopTextScratchBound(t *testing.T) {
 	spaced, unspaced := []byte(strings.Repeat("Alpha ", 128)), []byte(strings.Repeat("Alpha_", 128))
 	measure := func(block []byte, repeats int) uint64 {
-		data := domain.Bootstrap{Loops: []domain.Loop{{ID: "bounded", Name: "Bounded text", Instructions: "marker"}}}
 		reader := func(ctx context.Context, marker string, visit func([]byte) error) error {
 			if marker != "marker" {
 				t.Fatal("body marker was replaced")
@@ -345,15 +345,22 @@ func TestScaleP21SW139BootstrapLoopTextScratchBound(t *testing.T) {
 			}
 			return ctx.Err()
 		}
-		runtime.GC()
-		var before, after runtime.MemStats
-		runtime.ReadMemStats(&before)
-		err := scaleP21SanitizeBootstrap(t.Context(), &data, reader)
-		runtime.ReadMemStats(&after)
-		if err != nil || data.Loops[0].Instructions != "marker" || data.Loops[0].Description == "" || utf8.RuneCountInString(data.Loops[0].Description) > 140 {
-			t.Fatal("bounded stream failed", err)
+		// As in SW136, unrelated goroutines can only add to TotalAlloc.
+		// Input-sized scratch appears in every sample.
+		least := uint64(math.MaxUint64)
+		for range 3 {
+			data := domain.Bootstrap{Loops: []domain.Loop{{ID: "bounded", Name: "Bounded text", Instructions: "marker"}}}
+			runtime.GC()
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			err := scaleP21SanitizeBootstrap(t.Context(), &data, reader)
+			runtime.ReadMemStats(&after)
+			if err != nil || data.Loops[0].Instructions != "marker" || data.Loops[0].Description == "" || utf8.RuneCountInString(data.Loops[0].Description) > 140 {
+				t.Fatal("bounded stream failed", err)
+			}
+			least = min(least, after.TotalAlloc-before.TotalAlloc)
 		}
-		return after.TotalAlloc - before.TotalAlloc
+		return least
 	}
 	// See TestScaleP21SW136LoopTextScratchBound: under -race the standard
 	// library's SHA-256 checkpoint (Digest.AppendBinary) allocates a short-lived

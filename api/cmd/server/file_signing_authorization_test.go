@@ -50,6 +50,7 @@ func runSignedFileScenario(t *testing.T, bounded bool) {
 		}
 	}
 	service := &server{store: serving, uploadPath: t.TempDir()}
+	disableBackgroundWorkersForTest(service)
 	host := httptest.NewServer(newHandler(service))
 	defer host.Close()
 	const workspace = "test-workspace"
@@ -297,4 +298,3 @@ func TestSignedFileStreamingMatchesBufferedWithPermission(t *testing.T) {
 		}
 	}
 }
-

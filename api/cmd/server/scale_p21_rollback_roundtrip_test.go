@@ -75,7 +75,8 @@ func rtOpen(t *testing.T, path string, bounded bool) *rtStack {
 	if repo.BoundedMetadataEnabled() != bounded {
 		t.Fatalf("bounded=%v store opened with bounded=%v", bounded, repo.BoundedMetadataEnabled())
 	}
-	svc := &server{store: repo, uploadPath: t.TempDir()}
+	svc := &server{store: repo, uploadPath: t.TempDir(), coordinationContext: t.Context()}
+	disableBackgroundWorkersForTest(svc)
 	// Loop runs queue for a worker (none claims them) instead of calling a model.
 	svc.agent.Enabled, svc.agent.WorkerSecret, svc.agent.Runtime = true, testWorkerSecret, appconfig.AgentRuntimeWorker
 	host := httptest.NewServer(newHandler(svc))
@@ -762,8 +763,6 @@ func rtScenario(t *testing.T, seed, name string, writeBounded, readBounded, comp
 	st := rtOpen(t, path, writeBounded)
 	run := &rtRun{t: t, st: st, labels: map[string]string{}}
 	rtWrites(run)
-	// Settle asynchronous loop and workflow work before the reopen.
-	rtSettle(run)
 	st.close()
 	if complete {
 		rtComplete(t, path)
@@ -773,24 +772,6 @@ func rtScenario(t *testing.T, seed, name string, writeBounded, readBounded, comp
 	reads := rtReads(run)
 	st.close()
 	return rtOutcome{name: name, log: run.log, failed: run.failed, reads: reads, dump: rtDump(t, path), labels: run.labels}
-}
-
-func rtSettle(r *rtRun) {
-	// Loop and workflow runs execute asynchronously; give them a moment to
-	// reach a terminal or idle state in every run alike.
-	for range 20 {
-		status, raw := r.do(r.st.admin, "", "GET", "/api/loops", nil)
-		if status != 200 || !strings.Contains(string(raw), `"running"`) {
-			break
-		}
-		select {
-		case <-r.t.Context().Done():
-			return
-		default:
-		}
-		rtSleep()
-	}
-	rtSleep()
 }
 
 func rtSeed(t *testing.T) string {

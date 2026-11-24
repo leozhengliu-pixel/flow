@@ -22,6 +22,17 @@ import (
 	"flow/api/internal/store"
 )
 
+// Request-only fixtures exercise handlers and their sinks without periodic
+// workers changing or contending for the same workspace state.
+func disableBackgroundWorkersForTest(s *server) {
+	s.socketAccessSweepStarted.Store(true)
+	s.workflowSchedulerStarted.Store(true)
+	s.deliverySchedulerStarted.Store(true)
+	s.loopReconcilerStarted.Store(true)
+	s.agentRunReconcilerStarted.Store(true)
+	s.agentLiveSweepStarted.Store(true)
+}
+
 func TestWorkspaceSettingsPersistence(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
