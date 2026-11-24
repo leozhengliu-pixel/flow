@@ -658,7 +658,7 @@ func (s *server) dispatchLoopTriggers(workspace string, event domain.DomainEvent
 			if sourceKey != "" && !loopSourceTrusted(data.WorkspaceSettings, loop, sourceKey) {
 				continue
 			}
-			trigger := loopTrigger{Kind: "event", EventType: event.Type, EntityType: resolved.EntityType, EntityID: resolved.EntityID, SourceKey: sourceKey, Label: reason.label(loopEventEntityName(data, resolved)), Reason: reason}
+			trigger := loopTrigger{Kind: "event", EventType: event.Type, ActorID: event.ActorID, EntityType: resolved.EntityType, EntityID: resolved.EntityID, SourceKey: sourceKey, Label: reason.label(loopEventEntityName(data, resolved)), Reason: reason}
 			if _, err := s.startLoopRun(workspace, loop.ID, trigger, ""); err != nil && !errors.Is(err, errConflict) && !errors.Is(err, errLoopUnavailable) {
 				log.Printf("Loop trigger workspace=%s loop=%s: %v", workspace, loop.ID, err)
 			}
@@ -695,7 +695,7 @@ func (s *server) dispatchLoopTriggers(workspace string, event domain.DomainEvent
 		if sourceKey != "" && !loopSourceTrusted(data.WorkspaceSettings, loop, sourceKey) {
 			continue
 		}
-		trigger := loopTrigger{Kind: "event", EventType: event.Type, EntityType: resolved.EntityType, EntityID: resolved.EntityID, SourceKey: sourceKey, Label: reason.label(loopEventEntityName(data, resolved)), Reason: reason}
+		trigger := loopTrigger{Kind: "event", EventType: event.Type, ActorID: event.ActorID, EntityType: resolved.EntityType, EntityID: resolved.EntityID, SourceKey: sourceKey, Label: reason.label(loopEventEntityName(data, resolved)), Reason: reason}
 		if _, err := s.startLoopRun(workspace, loop.ID, trigger, ""); err != nil && !errors.Is(err, errConflict) && !errors.Is(err, errLoopUnavailable) {
 			log.Printf("Loop trigger workspace=%s loop=%s: %v", workspace, loop.ID, err)
 		}

@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Loops can quote text from authorized Word attachments and inspect JPGs with an image-capable model. Unreadable files and unavailable image input are reported per attachment so the audit can continue.
 - The keyboard skip link moves focus to the page content even when the page is still loading.
 - API restarts no longer re-run the metadata search reconciliation when the previous run completed under the same indexing rules; the server starts serving without walking every project, document and initiative again or pruning an index that is already current. A rules change or an interrupted run still reconciles, resuming from its checkpoint.
 - New documents created from a team page or the command menu open at once; the workspace refresh that used to run first (a full issue bootstrap on large workspaces) now runs in the background.

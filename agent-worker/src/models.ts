@@ -35,7 +35,7 @@ export function createModel(config: ModelConfig, options: ModelFactoryOptions = 
 
 function openAIClient(config: ModelConfig, options: ModelFactoryOptions) {
   // Retries belong to the runner's policy (below), so they are visible to the worker and not doubled.
-  return new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL, maxRetries: 0, timeout: 300_000, ...(options.fetch ? { fetch: options.fetch } : {}) })
+  return new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL, maxRetries: 0, timeout: 300_000, logLevel: 'off', ...(options.fetch ? { fetch: options.fetch } : {}) })
 }
 
 /**
@@ -45,6 +45,29 @@ function openAIClient(config: ModelConfig, options: ModelFactoryOptions) {
 export function modelSettings(config: ModelConfig, sessionId: string): ModelSettings {
   // timeoutMs bounds one model call (a stalled stream otherwise hangs the run for as long as the provider does).
   return { retry, timeoutMs: 240_000, ...protocolSettings(config, sessionId) }
+}
+
+/** Inspect one Loop attachment without adding its bytes to the run's model history. */
+export async function inspectModelImage(model: Model, config: ModelConfig, sessionId: string, image: { data: string; mimeType: string }, prompt: string, signal?: AbortSignal): Promise<string> {
+  const timeout = AbortSignal.timeout(30_000)
+  const response = await model.getResponse({
+    input: [{
+      role: 'user',
+      content: [
+        { type: 'input_text', text: prompt },
+        { type: 'input_image', image: `data:${image.mimeType};base64,${image.data}` },
+      ],
+    }],
+    modelSettings: { ...protocolSettings(config, sessionId), maxTokens: 2048 },
+    tools: [],
+    handoffs: [],
+    outputType: 'text',
+    tracing: false,
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  })
+  return response.output.flatMap(item => item.type === 'message' && item.role === 'assistant'
+    ? item.content.flatMap(part => part.type === 'output_text' ? [part.text] : [])
+    : []).join('\n').trim().slice(0, 4000)
 }
 
 /**

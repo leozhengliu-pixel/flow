@@ -52,10 +52,12 @@ function flowSuspendedStore(runId: string): SuspendedStore {
 
 async function execute(run: AgentRun) {
   const payload = (run.payload ?? {}) as { prompt?: string; systemPrompt?: string }
+  const isLoop = run.kind === 'loop'
+  const errorDetail = (error: unknown) => isLoop ? '' : `: ${(error as Error).message}`
   const { token } = await client.token(run.id)
   // Reading the payload discovers the run's connector tools; a skipped selected connector comes back as a notice.
-  const details = await client.payload(run.id).catch(error => { log(`${run.id} payload failed: ${(error as Error).message}`); return undefined })
-  for (const notice of details?.notices ?? []) log(`${run.id} notice: ${notice}`)
+  const details = await client.payload(run.id).catch(error => { log(`${run.id} payload failed${errorDetail(error)}`); return undefined })
+  for (const notice of details?.notices ?? []) log(`${run.id} notice${isLoop ? '' : `: ${notice}`}`)
   // A chat reply (chat-run.ts): its conversation comes from Flow, and its activities write the reply on Flow.
   const chat = run.kind === 'chat' ? details?.chat : undefined
   if (run.kind === 'chat' && (run.payload as { chat?: unknown } | undefined)?.chat && !chat) {
@@ -66,7 +68,7 @@ async function execute(run: AgentRun) {
   const thread = run.kind === 'thread' || run.kind === 'delegation' ? details?.thread : undefined
   // A loop run (api/cmd/server/agent_worker_loop.go): Flow lists the loop's tools, runs each call through its gates
   // and records the run; the worker runs the model loop.
-  const loop = run.kind === 'loop' ? details?.loop : undefined
+  const loop = isLoop ? details?.loop : undefined
   if (loop && details?.failure) {
     await client.complete(run.id, 'failed', { error: details.failure.slice(0, 2000) }).catch(() => {})
     return
@@ -74,7 +76,7 @@ async function execute(run: AgentRun) {
   const flowRun = chat ?? thread ?? loop
   const conversation = flowRun ? chatConversation(details?.context?.messages ?? []) : undefined
   let session: FlowAgentSession | undefined
-  const onError = (error: unknown) => log(`${run.id} activity failed: ${(error as Error).message}`)
+  const onError = (error: unknown) => log(`${run.id} activity failed${errorDetail(error)}`)
   const poster: { push(activity: FlowActivity): void; drain(): Promise<void> } | undefined = chat
     ? new ChatActivityPoster(activity => client.activity(run.id, activity), {
       onError,
@@ -110,7 +112,7 @@ async function execute(run: AgentRun) {
       suspended: flowSuspendedStore(run.id),
     } : {}),
     // A loop run's calls run one at a time, as in-process, and finish_run ends it.
-    ...(loop ? { allTools: true, serialCalls: true, stopAtTools: ['finish_run'], elicitations: undefined } : {}),
+    ...(loop ? { allTools: true, serialCalls: true, stopAtTools: ['finish_run'], elicitations: undefined, inspectLoopAttachments: true } : {}),
     hostedWebSearch: Boolean(chat?.hostedWebSearch ?? thread?.hostedWebSearch),
   })
   sessions.set(run.id, session)
@@ -121,7 +123,7 @@ async function execute(run: AgentRun) {
       if (beat.cancel) { log(`${run.id} cancel requested (heartbeat)`); session.stop() }
     } catch (error) {
       // Lease lost (another worker has the run now): stop working on it.
-      log(`${run.id} heartbeat failed: ${(error as Error).message}`)
+      log(`${run.id} heartbeat failed${errorDetail(error)}`)
       session.stop()
     }
   }, 15_000)
@@ -133,7 +135,10 @@ async function execute(run: AgentRun) {
     log(`${run.id} start (attempt ${run.attempts}, session ${run.sessionId}${chat ? `, chat reply ${chat.messageId}` : thread || loop ? `, ${run.kind}` : ''}${flowRun?.resume ? ' resumed' : ''})`)
     const sink = (activity: FlowActivity) => {
       poster?.push(activity)
-      if (activity.type !== 'text.delta' && !(activity.type === 'thought' && activity.ephemeral)) log(`${run.id} ${formatActivity(activity, t0).trim()}`)
+      if (activity.type !== 'text.delta' && !(activity.type === 'thought' && activity.ephemeral)) {
+        // A Loop's tool results and final report can quote private attachments.
+        log(`${run.id} ${isLoop ? activity.type : formatActivity(activity, t0).trim()}`)
+      }
     }
     const outcome = flowRun?.resume ? await session.resumeWith(flowRun.resume.decisions, sink) : await session.send(conversation ? conversation.request : payload.prompt ?? '', sink, conversation?.input)
     await poster?.drain()
@@ -148,7 +153,7 @@ async function execute(run: AgentRun) {
     await client.complete(run.id, status, { usage: outcome.usage, ...(outcome.status === 'error' ? { error: outcome.body.slice(0, 2000) } : {}) })
     log(`${run.id} ${outcome.status} in ${Date.now() - t0} ms`)
   } catch (error) {
-    log(`${run.id} failed: ${(error as Error).message}`)
+    log(`${run.id} failed${errorDetail(error)}`)
     await poster?.drain()
     await client.complete(run.id, 'failed', { error: String(error).slice(0, 2000) }).catch(() => {})
   } finally {

@@ -46,6 +46,7 @@ var aiModelCallers = map[string]string{
 	"executeWebTool":                "agent tool calls",
 	"executeBuiltinApplication":     "agent applications",
 	"executeLoopRun":                "loop runs",
+	"inspectLoopAttachmentImage":    "loop runs",
 	"requestLoopIssueMatch":         "loop runs",
 	"describeLoopAsync":             "loop descriptions",
 	"requestLoopContract":           "loop output contracts",

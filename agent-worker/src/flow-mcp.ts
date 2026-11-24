@@ -1,4 +1,4 @@
-import { MCPServerStreamableHttp, type MCPToolFilterCallable } from '@openai/agents'
+import { MCPServerStreamableHttp, type CallToolResult, type MCPToolFilterCallable } from '@openai/agents'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash } from 'node:crypto'
 import type { FlowRunContext, TurnCall } from './context.js'
@@ -10,6 +10,10 @@ export const approvalMeta = 'flow/approval'
 export const approvedMeta = 'flow/approved'
 /** A run-token allowlist entry that admits the run's connector tools. */
 export const connectorAllowlist = 'external_*'
+const inspectImageMeta = 'flow/inspect-image'
+const imagePromptMeta = 'flow/image-prompt'
+
+type ImageInspector = (image: { data: string; mimeType: string }, prompt: string, signal?: AbortSignal) => Promise<string>
 
 /** Flow's own tools answer well within a minute. */
 export const flowToolTimeoutMs = 60_000
@@ -32,6 +36,8 @@ export type FlowMcpOptions = {
   serial?: boolean
   /** The Flow run the token belongs to: each call carries an Idempotency-Key under it (idempotencyKey). */
   runId?: string
+  /** The worker's model for inspecting Loop image attachments. */
+  inspectImage?: ImageInspector
 }
 
 /** A private `_meta` key that carries a call's Idempotency-Key from the meta resolver to the request; never sent. */
@@ -109,7 +115,7 @@ type CallArgs = Parameters<MCPServerStreamableHttp['callToolResult']>
 class FlowMcpServer extends MCPServerStreamableHttp {
   private queue: Promise<unknown> = Promise.resolve()
 
-  constructor(options: ConstructorParameters<typeof MCPServerStreamableHttp>[0], private readonly flow: { timeoutMs: number; connectorTimeoutMs: number; toolErrors?: ToolErrorFlags; onConnectorCall?: () => () => unknown; serial?: boolean }) {
+  constructor(options: ConstructorParameters<typeof MCPServerStreamableHttp>[0], private readonly flow: { timeoutMs: number; connectorTimeoutMs: number; toolErrors?: ToolErrorFlags; onConnectorCall?: () => () => unknown; serial?: boolean; inspectImage?: ImageInspector }) {
     super(options)
   }
 
@@ -124,7 +130,13 @@ class FlowMcpServer extends MCPServerStreamableHttp {
     const [name, input] = args
     // A chip question waits for the person on Flow (as long as a connector's question).
     if (waitingTools.has(name)) return this.callWithin(this.flow.connectorTimeoutMs, args)
-    if (!isConnectorTool(name)) return this.callWithin(this.flow.timeoutMs, args)
+    if (!isConnectorTool(name)) {
+      if (name === 'extract_images' && this.flow.inspectImage) {
+        const result = await this.callWithin(this.flow.timeoutMs, [name, input, { ...args[2], [inspectImageMeta]: true }, args[3]])
+        return inspectImageResult(result, this.flow.inspectImage, args[3]?.signal)
+      }
+      return this.callWithin(this.flow.timeoutMs, args)
+    }
     const ended = this.flow.onConnectorCall?.()
     try {
       const result = await this.callWithin(this.flow.connectorTimeoutMs, args)
@@ -155,6 +167,23 @@ class FlowMcpServer extends MCPServerStreamableHttp {
       clearTimeout(handle)
     }
   }
+}
+
+async function inspectImageResult(result: CallToolResult, inspect: ImageInspector, signal?: AbortSignal): Promise<CallToolResult> {
+  const image = result.content.find(item => item.type === 'image')
+  if (!image) return result
+  const prompt = result._meta?.[imagePromptMeta]
+  const receipt = result.content.find(item => item.type === 'text')
+  let text = typeof receipt?.text === 'string' ? receipt.text : '{"status":"unavailable","text":"Image input is unavailable for this file."}'
+  try {
+    if (!result.isError && typeof prompt === 'string' && typeof image.data === 'string' && typeof image.mimeType === 'string') {
+      const finding = await inspect({ data: image.data, mimeType: image.mimeType }, prompt, signal)
+      if (finding) text = JSON.stringify({ ...JSON.parse(text), status: 'read', text: finding })
+    }
+  } catch {
+    // Provider errors can echo inputs. Keep Flow's per-file fallback receipt.
+  }
+  return { content: [{ type: 'text', text }] }
 }
 
 /**
@@ -212,7 +241,7 @@ export function flowMcpServer(flowUrl: string, token: string, options: FlowMcpOp
       const change = (structuredContent as Record<string, unknown> | undefined)?.change
       return { isError: Boolean(isError), ...(change ? { change } : {}) }
     },
-  }, { ...limits, toolErrors: options.toolErrors, onConnectorCall: options.onConnectorCall, serial: options.serial })
+  }, { ...limits, toolErrors: options.toolErrors, onConnectorCall: options.onConnectorCall, serial: options.serial, inspectImage: options.inspectImage })
 }
 
 /**

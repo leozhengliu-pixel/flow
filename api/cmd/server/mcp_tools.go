@@ -42,7 +42,11 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 	started := time.Now()
 	result, err := s.runFlowTool(ctx, actor, name, args)
 	if err != nil {
-		slog.WarnContext(ctx, "flow tool failed", "tool", name, "workspace", actor.WorkspaceKey, "actor", actor.User.ID, "args", mcpArgumentSummary(args), "duration_ms", time.Since(started).Milliseconds(), "error", err.Error())
+		if loop, _ := ctx.Value(loopRunRequestKey{}).(bool); loop {
+			slog.WarnContext(ctx, "loop tool failed", "duration_ms", time.Since(started).Milliseconds())
+		} else {
+			slog.WarnContext(ctx, "flow tool failed", "tool", name, "workspace", actor.WorkspaceKey, "actor", actor.User.ID, "args", mcpArgumentSummary(args), "duration_ms", time.Since(started).Milliseconds(), "error", err.Error())
+		}
 	}
 	return result, publicToolError(ctx, name, err)
 }

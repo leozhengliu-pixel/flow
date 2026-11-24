@@ -500,7 +500,11 @@ func publicToolError(ctx context.Context, tool string, err error) error {
 		requestID = newRequestID()
 	}
 	tool = strings.TrimPrefix(tool, "mcp__flow.")
-	slog.ErrorContext(ctx, "flow tool internal error", "request_id", requestID, "tool", tool, "error", err.Error())
+	if loop, _ := ctx.Value(loopRunRequestKey{}).(bool); loop {
+		slog.ErrorContext(ctx, "loop tool internal error", "request_id", requestID)
+	} else {
+		slog.ErrorContext(ctx, "flow tool internal error", "request_id", requestID, "tool", tool, "error", err.Error())
+	}
 	return &toolInternalError{requestID: requestID, read: agentChangeToolAccess()[tool] == "read"}
 }
 
