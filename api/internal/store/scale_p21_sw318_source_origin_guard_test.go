@@ -42,7 +42,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// projection for its own run; never reaches request authorization.
 		"../../cmd/server/scale_p21_comment_action_writes.go":           "5765c0ab53a9346be3631aa48ab3d55c96204256e4ce63bdc5eb31db83983c39",
 		"../../cmd/server/scale_p21_general_bootstrap.go":               "4a4d2c67bc03934b0ab5306a249648e2101f2e22e5eab4bb48f920ac329bf94d",
-		"../../cmd/server/scale_p21_issue_bootstrap_stream.go":          "d51ae67d4011bf1fe2c515c6c852fa15ac54832144895bde9dfffca673bbd2bb",
+		"../../cmd/server/scale_p21_issue_bootstrap_stream.go":          "3a3083bf9dae00c0978985561a01b1ffc2d83055d93bd87e4376b6374219651b",
 		"../../cmd/server/scale_p21_issue_create_targets.go":            "4797fc2981774f90cbd94a0f00a835e5391e323bc28d5e067692b0b426172523",
 		"../../cmd/server/scale_p21_issue_record_authorization_read.go": "6026fba608d49f31c47ac07de86b8ea1f000f94b93a7f0758e0ee964303025d4",
 		"../../cmd/server/scale_p21_issue_update_targets.go":            "0aba87367470607dfcbc0ae7e48ec7c0e8402c7c5020991d85acc2c6af9594ee",
