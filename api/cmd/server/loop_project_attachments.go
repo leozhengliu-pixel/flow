@@ -83,12 +83,17 @@ func (lc *loopRunContext) lookupAttachment(ctx context.Context, actor mcpActor, 
 		if err != nil || !documentVisibleToViewer(lc.s, read.Data, *doc) {
 			return domain.Attachment{}, false
 		}
-		// As in get_document, workspace documents are shared, and a scoped
-		// document needs one of its own teams on the Loop's key.
-		if (len(doc.TeamIDs) != 0 || len(doc.InheritedTeamIDs) != 0) && !slices.ContainsFunc(doc.TeamIDs, func(teamID string) bool {
-			return slices.Contains(actor.APIKey.TeamIDs, teamID)
-		}) {
-			return domain.Attachment{}, false
+		// The document rule of get_document (mcpWorkspaceDataFrom): the key's
+		// team rule, except that workspace documents keep their workspace access.
+		workspaceDocument := len(doc.TeamIDs) == 0 && len(doc.InheritedTeamIDs) == 0
+		if apiKeyTeamRestrictionSelected(actor.APIKey) && !workspaceDocument {
+			allowed := make(map[string]bool, len(actor.APIKey.TeamIDs))
+			for _, id := range actor.APIKey.TeamIDs {
+				allowed[id] = true
+			}
+			if apiKeyDocumentOutOfTeams(actor.APIKey, allowed, apiKeyDocumentLinkScope(read.Data, allowed), *doc) {
+				return domain.Attachment{}, false
+			}
 		}
 		files = doc.Attachments
 	} else {

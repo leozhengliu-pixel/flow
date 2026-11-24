@@ -276,11 +276,14 @@ func TestLoopAttachmentReadRespectsScopeAndTriggeringUser(t *testing.T) {
 	invites := authRequest[[]domain.Invitation](t, admin, http.MethodPost, api.URL+"/api/workspaces/"+workspace+"/invitations", map[string]any{"emails": []string{user.Email}, "role": "member", "teamIds": []string{home.ID}}, "", http.StatusCreated)
 	authRequest[domain.WorkspaceMembership](t, member, http.MethodPost, api.URL+"/api/invitations/accept", map[string]string{"token": invites[0].Token}, "", http.StatusOK)
 
-	makeFile := func(team string) (string, domain.Attachment) {
+	makeFile := func(team string, projects ...string) (string, domain.Attachment) {
 		t.Helper()
 		input := map[string]any{"title": "Attachment ACL"}
 		if team != "" {
 			input["teamIds"] = []string{team}
+		}
+		if len(projects) > 0 {
+			input["projectIds"] = projects
 		}
 		doc := authRequest[domain.Document](t, admin, http.MethodPost, api.URL+"/api/documents", input, workspace, http.StatusCreated)
 		request := loopAttachmentUploadRequest(t, "/api/documents/"+doc.ID, "private.txt", []byte("Authorized evidence."))
@@ -304,6 +307,10 @@ func TestLoopAttachmentReadRespectsScopeAndTriggeringUser(t *testing.T) {
 	parent, file := makeFile("")
 	teamParent, teamFile := makeFile(home.ID)
 	outside, outsideFile := makeFile(other.ID)
+	// A document that only inherits its team from a project is outside a
+	// Loop's key, as get_document has it.
+	project := authRequest[domain.Project](t, admin, http.MethodPost, api.URL+"/api/projects", map[string]any{"name": "Inherited scope", "teamIds": []string{home.ID}}, workspace, http.StatusCreated)
+	inherited, inheritedFile := makeFile("", project.ID)
 	// Remove the workspace grant. The Loop owner can still read it, but the
 	// member who can use the team's Loop cannot open its private attachment.
 	authRequest[[]domain.DocumentPermission](t, admin, http.MethodPut, api.URL+"/api/documents/"+parent+"/permissions", map[string]any{"permissions": []any{}}, workspace, http.StatusOK)
@@ -327,6 +334,7 @@ func TestLoopAttachmentReadRespectsScopeAndTriggeringUser(t *testing.T) {
 		{name: "follow-up trigger", parent: parent, id: file.ID, manual: loop.OwnerID, reply: user.ID},
 		{name: "behavior editor", parent: parent, id: file.ID, manual: loop.OwnerID, editor: user.ID},
 		{name: "out of scope", parent: outside, id: outsideFile.ID, manual: loop.OwnerID},
+		{name: "inherited team only", parent: inherited, id: inheritedFile.ID, manual: loop.OwnerID},
 		{name: "different parent", parent: teamParent, id: file.ID, manual: loop.OwnerID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
