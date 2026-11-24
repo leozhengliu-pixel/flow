@@ -26,6 +26,10 @@
 .lp-project-timeline__minor > span { padding-left: 4px; }
 .lp-project-timeline__minor > span[data-emphasis] { color: var(--theme-text-secondary); }
 .lp-project-timeline__today-chip { background: var(--project-timeline-today); border-radius: 4px; color: var(--theme-background); font-size: 10px; font-weight: 500; line-height: 16px; padding: 0 4px; position: absolute; top: 28px; transform: translateX(-50%); white-space: nowrap; z-index: 1; }
+@media (--compact-layout) {
+  /* Keep the chip's rounded edges stable as ticks mount and unmount. A variable keeps the optimizer from folding this to 2D. */
+  .lp-project-timeline__today-chip { --timeline-chip-depth: 0px; transform: translate3d(-50%, 0, var(--timeline-chip-depth)); }
+}
 
 .lp-project-timeline__body { position: relative; user-select: none; }
 .lp-project-timeline__body[data-linking] { cursor: crosshair; }
