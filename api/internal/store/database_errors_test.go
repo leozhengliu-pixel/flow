@@ -64,10 +64,34 @@ func TestDatabaseConnectionErrors(t *testing.T) {
 
 func TestPostgresProtocolDisconnect(t *testing.T) {
 	for _, input := range []string{"", "partial"} {
-		reader := postgresProtocolReader{strings.NewReader(input)}
-		if _, err := io.ReadFull(reader, make([]byte, 8)); !IsDatabaseConnectionError(err) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func() {
+			peer, err := listener.Accept()
+			if err == nil {
+				_, _ = peer.Write([]byte(input))
+				_ = peer.Close()
+			}
+		}()
+		conn, err := net.Dial("tcp", listener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		transport := postgresTransport(conn)
+		if _, ok := transport.(postgresTCPConn); !ok {
+			t.Fatal("a TCP connection was not wrapped")
+		}
+		if _, err := io.ReadFull(transport, make([]byte, 8)); !IsDatabaseConnectionError(err) {
 			t.Fatal("PostgreSQL transport closed without a database connection error")
 		}
+		_ = transport.Close()
+		_ = listener.Close()
+	}
+	// A short read that is not a transport close keeps its meaning.
+	if _, err := io.ReadFull(strings.NewReader("partial"), make([]byte, 8)); IsDatabaseConnectionError(err) {
+		t.Fatal("an in-memory short read was classified as a connection failure")
 	}
 }
 
