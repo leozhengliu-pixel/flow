@@ -134,6 +134,11 @@ func TestScaleP21SW470MetadataSearchRepairKeepsApplicationText(t *testing.T) {
 			t.Fatal(err)
 		}
 		written()
+		// A start reconciles a field again only under changed rules (#238);
+		// the other source's run above completed under the current ones.
+		if _, err := f.db.ExecContext(ctx, `DELETE FROM metadata_search_index_rules WHERE workspace_key=?`, workspace); err != nil {
+			t.Fatal(err)
+		}
 		repair()
 		if count := written(); count != 2 {
 			t.Fatalf("bounded=%v: the first start wrote %d documents, want the stale and the missing one", source != f.SQLiteStore, count)
