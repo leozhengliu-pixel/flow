@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"math"
 	"math/rand"
 	"runtime"
 	"strings"
@@ -181,16 +182,24 @@ func TestScaleP21SW136LoopTextScratchBound(t *testing.T) {
 			return nil
 		}
 	}
+	// TotalAlloc is process-wide, so background goroutines left by earlier
+	// tests in the package can add a few KiB to one sample. Their allocations
+	// only ever add, while input-sized scratch appears in every sample, so the
+	// smallest of three samples keeps the bound exact.
 	measure := func(chunks func(func([]byte) error) error) uint64 {
-		runtime.GC()
-		var before, after runtime.MemStats
-		runtime.ReadMemStats(&before)
-		hash, description, err := scaleP21LoopText(t.Context(), "allocation bound", chunks)
-		runtime.ReadMemStats(&after)
-		if err != nil || len(hash) != 24 || utf8.RuneCountInString(description) > 140 {
-			t.Fatal("bounded fixture failed", hash, description, err)
+		least := uint64(math.MaxUint64)
+		for range 3 {
+			runtime.GC()
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			hash, description, err := scaleP21LoopText(t.Context(), "allocation bound", chunks)
+			runtime.ReadMemStats(&after)
+			if err != nil || len(hash) != 24 || utf8.RuneCountInString(description) > 140 {
+				t.Fatal("bounded fixture failed", hash, description, err)
+			}
+			least = min(least, after.TotalAlloc-before.TotalAlloc)
 		}
-		return after.TotalAlloc - before.TotalAlloc
+		return least
 	}
 	// Every whitespace run checkpoints the SHA-256 state through the standard
 	// library's Digest.AppendBinary, which pads with append(b, make(...)...).

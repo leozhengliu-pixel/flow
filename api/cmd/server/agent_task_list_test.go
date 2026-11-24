@@ -183,7 +183,7 @@ func TestAgentTaskListAuthorization(t *testing.T) {
 	}
 	for i, source := range []*store.SQLiteStore{repo, bounded} {
 		t.Run(fmt.Sprintf("bounded=%t", source.BoundedMetadataEnabled()), func(t *testing.T) {
-			service := &server{store: source, uploadPath: t.TempDir()}
+			service := &server{store: source, uploadPath: t.TempDir(), coordinationContext: t.Context(), deliverySchedulerInterval: time.Hour}
 			handler := newHandler(service)
 			check := func(name, wkey, query, bearer, session string, status int, ids ...string) {
 				t.Helper()
@@ -259,7 +259,7 @@ func TestAgentTaskListAuthorization(t *testing.T) {
 	}
 	for _, source := range []*store.SQLiteStore{repo, bounded} {
 		w := httptest.NewRecorder()
-		newHandler(&server{store: source, uploadPath: t.TempDir()}).ServeHTTP(w, agentTaskPollRequest(http.MethodGet, workspace, "", token, adminSession))
+		newHandler(&server{store: source, uploadPath: t.TempDir(), coordinationContext: t.Context(), deliverySchedulerInterval: time.Hour}).ServeHTTP(w, agentTaskPollRequest(http.MethodGet, workspace, "", token, adminSession))
 		if w.Code != http.StatusUnauthorized {
 			t.Errorf("bounded=%t: revoked bearer with a cookie got HTTP %d", source.BoundedMetadataEnabled(), w.Code)
 		}
@@ -272,7 +272,7 @@ func TestAgentTaskEmptyPollAllocation(t *testing.T) {
 	data := repo.Bootstrap()
 	workspace := data.Workspace.URLKey
 	_, token := agentTaskPollCredential(t, repo, workspace, data.Viewer.ID, "allocation", []string{data.Teams[0].ID})
-	handler := newHandler(&server{store: repo, uploadPath: t.TempDir()})
+	handler := newHandler(&server{store: repo, uploadPath: t.TempDir(), coordinationContext: t.Context(), deliverySchedulerInterval: time.Hour})
 	poll := func() {
 		t.Helper()
 		w := httptest.NewRecorder()

@@ -38,7 +38,7 @@ func TestLegacyBootstrapAndResourceShareProjectionBudget(t *testing.T) {
 	bootstrap := newMetadataReadGate(4, 4, 200*time.Millisecond, 0)
 	budget := newLegacyProjectionBudget(func(*http.Request) int64 { return 8 }, 10)
 	resource.projectionBudget = budget
-	handler := newHandler(&server{store: repo, uploadPath: t.TempDir(), projectionGate: resource, metadataGate: bootstrap})
+	handler := newHandler(&server{store: repo, uploadPath: t.TempDir(), projectionGate: resource, metadataGate: bootstrap, coordinationContext: t.Context(), deliverySchedulerInterval: time.Hour})
 	request := func(ctx context.Context, path string) *http.Request {
 		r := httptest.NewRequest(http.MethodGet, path, nil).WithContext(ctx)
 		r.Header.Set("X-Workspace-Key", workspace)
