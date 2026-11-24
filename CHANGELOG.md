@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- New documents created from a team page or the command menu open at once; the workspace refresh that used to run first (a full issue bootstrap on large workspaces) now runs in the background.
 - The OAuth authorization-code exchange no longer returns 429 when MCP clients have used up their address's request budget. MCP, OAuth, upload links and signed file links each keep their own unauthenticated budget and `Retry-After`.
 - Issue comments, personal API keys, and other workspace writes return HTTP 503 with `Retry-After` when their pre-write membership or role checks cannot reach the database.
 - Agent task polling checks only the listed sessions and their resource permissions. In legacy metadata mode, issue bootstrap and resource reads share a workspace projection budget.

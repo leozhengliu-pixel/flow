@@ -292,7 +292,9 @@ export async function createDocumentIn(ctx: DocumentActionContext, target: Docum
       ...(templateId ? { templateId } : {}),
     })
     if (target.type === 'initiative') await createInitiativeResource(target.id, { type: 'document', documentId: created.id })
-    await ctx.reload()
+    // Callers open the document right away (the page fetches one the loaded
+    // data does not hold yet); the workspace refresh runs behind it.
+    void ctx.reload().catch(() => undefined)
     return created
   } catch (error) {
     toast.error(message(error, ctx.t('Could not create document')))
