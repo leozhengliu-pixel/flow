@@ -4110,7 +4110,7 @@ func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "could not encode export")
 		return
 	}
-	s.writeStoredBootstrap(w, r, data, fields)
+	s.writeStoredBootstrap(w, r, data, bootstrapStreamScope{}, fields)
 }
 
 func formatExportTime(value *time.Time) string {
@@ -4159,26 +4159,41 @@ func (s *server) maintainAdvancedSchedulesAt(ctx context.Context, key string, cl
 	defaultCadence := intFromAny(settings["cadenceDays"])
 	leadReminders := boolFromAny(settings["reminders"])
 	missingNotifications := settings["missingNotifications"] == nil || boolFromAny(settings["missingNotifications"])
-	for _, project := range data.Projects {
+	const reminderBatchSize = 128
+	var reminderFlags map[string]store.ProjectUpdateReminderFlags
+	for index, project := range data.Projects {
 		cadence := projectScheduleDays(project, defaultCadence)
-		if cadence > 0 {
-			updates := data.ProjectUpdates[project.ID]
-			reference := project.CreatedAt
-			if len(updates) > 0 && updates[0].CreatedAt.After(reference) {
-				reference = updates[0].CreatedAt
+		if cadence <= 0 {
+			continue
+		}
+		reminder, cached := reminderFlags[project.ID]
+		if !cached {
+			ids := make([]string, 0, reminderBatchSize)
+			for next := index; next < len(data.Projects) && len(ids) < reminderBatchSize; next++ {
+				candidate := data.Projects[next]
+				if projectScheduleDays(candidate, defaultCadence) > 0 {
+					ids = append(ids, candidate.ID)
+				}
 			}
-			dueAt := projectNextUpdateDue(project, reference, cadence)
-			missing := now.After(dueAt)
-			dueSoon := leadReminders && !missing && now.After(dueAt.Add(-24*time.Hour))
-			latestOutdated := len(updates) > 0 && (updates[0].DueAt == nil || !updates[0].DueAt.Equal(dueAt) || updates[0].Missing != missing)
-			activeMissingReminder, activeDueReminder, err := s.store.ProjectReminderFlags(ctx, data.Workspace.URLKey, project.ID)
+			var err error
+			reminderFlags, err = s.store.ProjectReminderFlags(ctx, data.Workspace.URLKey, ids)
 			if err != nil {
 				return
 			}
-			if latestOutdated || (missing && (project.Health != "noUpdate" || (missingNotifications && !activeMissingReminder))) || (!missing && activeMissingReminder) || dueSoon != activeDueReminder {
-				needsMutation = true
-				break
-			}
+			reminder = reminderFlags[project.ID]
+		}
+		updates := data.ProjectUpdates[project.ID]
+		reference := project.CreatedAt
+		if len(updates) > 0 && updates[0].CreatedAt.After(reference) {
+			reference = updates[0].CreatedAt
+		}
+		dueAt := projectNextUpdateDue(project, reference, cadence)
+		missing := now.After(dueAt)
+		dueSoon := leadReminders && !missing && now.After(dueAt.Add(-24*time.Hour))
+		latestOutdated := len(updates) > 0 && (updates[0].DueAt == nil || !updates[0].DueAt.Equal(dueAt) || updates[0].Missing != missing)
+		if latestOutdated || (missing && (project.Health != "noUpdate" || (missingNotifications && !reminder.Missing))) || (!missing && reminder.Missing) || dueSoon != reminder.Due {
+			needsMutation = true
+			break
 		}
 	}
 	if releasePreflight != nil {

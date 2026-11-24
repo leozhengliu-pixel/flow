@@ -2043,15 +2043,15 @@ func filterBootstrapTeams(data *domain.Bootstrap, scope bootstrapTeamScope, gues
 	// A project can be shared by public and private teams. Keep the project
 	// shell when at least one team is visible, but redact hidden team bindings
 	// and all cross-team references from the projected payload.
+	visibleProjects := make(map[string]bool, len(data.Projects))
+	for _, project := range data.Projects {
+		visibleProjects[project.ID] = true
+	}
 	for index := range data.Projects {
 		data.Projects[index].TeamIDs = slices.DeleteFunc(data.Projects[index].TeamIDs, func(teamID string) bool { return !allowed[teamID] })
 		data.Projects[index].DependencyIDs = slices.DeleteFunc(data.Projects[index].DependencyIDs, func(projectID string) bool {
-			return !slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == projectID })
+			return !visibleProjects[projectID]
 		})
-	}
-	visibleProjects := map[string]bool{}
-	for _, project := range data.Projects {
-		visibleProjects[project.ID] = true
 	}
 	data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(suggestion domain.IssueSuggestion) bool {
 		if suggestion.SuggestedIssueID != "" && !visibleIssueIDs[suggestion.SuggestedIssueID] {

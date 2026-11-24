@@ -7,31 +7,47 @@ import (
 	"flow/api/internal/domain"
 )
 
-// Only retain the two reminder flags. Older project notifications used an empty
-// resource ID; include that bucket without loading issue notifications.
-func (s *SQLiteStore) ProjectReminderFlags(ctx context.Context, workspace, projectID string) (missing, due bool, err error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='notification' AND resource_id IN (?, '') AND status IN ('read','unread')`, workspace, projectID)
+type ProjectUpdateReminderFlags struct {
+	Missing bool
+	Due     bool
+}
+
+// ProjectReminderFlags reads a batch of scheduled projects at once. Older
+// project notifications used an empty resource ID, so also check that bucket.
+func (s *SQLiteStore) ProjectReminderFlags(ctx context.Context, workspace string, projectIDs []string) (map[string]ProjectUpdateReminderFlags, error) {
+	flags := make(map[string]ProjectUpdateReminderFlags, len(projectIDs))
+	if len(projectIDs) == 0 {
+		return flags, nil
+	}
+	for _, id := range projectIDs {
+		flags[id] = ProjectUpdateReminderFlags{}
+	}
+	resources := make([]string, 0, len(projectIDs)+1)
+	resources = append(resources, projectIDs...)
+	resources = append(resources, "")
+	clause, ids := bindList("resource_id", resources)
+	rows, err := s.db.QueryContext(ctx, `SELECT resource_id,data FROM workspace_content_records WHERE workspace_key=? AND kind='notification' AND `+clause+` AND status IN ('read','unread')`, append([]any{workspace}, ids...)...)
 	if err != nil {
-		return false, false, err
+		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
+		var resource string
 		var raw []byte
 		var item domain.Notification
-		if err := rows.Scan(&raw); err != nil {
-			return false, false, err
+		if err := rows.Scan(&resource, &raw); err != nil {
+			return nil, err
 		}
 		if err := json.Unmarshal(raw, &item); err != nil {
-			return false, false, err
+			return nil, err
 		}
-		if item.ProjectID != projectID || item.ArchivedAt != nil || item.DeletedAt != nil {
+		current, selected := flags[item.ProjectID]
+		if !selected || (resource != "" && resource != item.ProjectID) || item.ArchivedAt != nil || item.DeletedAt != nil {
 			continue
 		}
-		missing = missing || item.Type == "projectUpdateReminder"
-		due = due || item.Type == "projectUpdateDueReminder"
-		if missing && due {
-			return missing, due, nil
-		}
+		current.Missing = current.Missing || item.Type == "projectUpdateReminder"
+		current.Due = current.Due || item.Type == "projectUpdateDueReminder"
+		flags[item.ProjectID] = current
 	}
-	return missing, due, rows.Err()
+	return flags, rows.Err()
 }

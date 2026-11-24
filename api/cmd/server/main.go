@@ -1308,7 +1308,8 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if projectListBootstrapRequested(r) {
+	projectList := projectListBootstrapRequested(r)
+	if projectList {
 		r = captureBootstrapCredentialVisibility(r, data)
 		store.ProjectListBootstrapProjection(&data)
 	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
@@ -1337,7 +1338,11 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
 	}
-	s.writeStoredBootstrap(w, r, data)
+	scope := bootstrapStreamScope{projectList: projectList}
+	if !projectList {
+		scope.issueDetails = planningIssueDetails(r, data)
+	}
+	s.writeStoredBootstrap(w, r, data, scope)
 }
 
 func sanitizeBootstrap(data *domain.Bootstrap) {
@@ -1558,20 +1563,23 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	for index := range data.Issues {
 		data.Issues[index].Labels = slices.DeleteFunc(data.Issues[index].Labels, func(label domain.IssueLabel) bool { return !visibleLabel(label.ID) })
 	}
+	issueIDs := make(map[string]bool, len(data.Issues))
+	for _, issue := range data.Issues {
+		issueIDs[issue.ID] = true
+	}
 	visibleIssue := func(id string) bool {
-		if data.IssueCollectionPaged && len(data.Issues) == 0 {
-			return true
-		}
-		return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool { return item.ID == id })
+		return issueIDs[id] || (data.IssueCollectionPaged && len(data.Issues) == 0)
 	}
 	data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool {
 		return !visibleIssue(item.IssueID)
 	})
 	data.Cycles = slices.DeleteFunc(data.Cycles, func(item domain.Cycle) bool { return !allowed(item.TeamID) })
 	data.Projects = slices.DeleteFunc(data.Projects, func(item domain.Project) bool { return !slices.ContainsFunc(item.TeamIDs, allowed) })
-	visibleProject := func(id string) bool {
-		return slices.ContainsFunc(data.Projects, func(item domain.Project) bool { return item.ID == id })
+	projectIDs := make(map[string]bool, len(data.Projects))
+	for _, project := range data.Projects {
+		projectIDs[project.ID] = true
 	}
+	visibleProject := func(id string) bool { return projectIDs[id] }
 	data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool {
 		if item.SuggestedIssueID != "" && !visibleIssue(item.SuggestedIssueID) {
 			return true

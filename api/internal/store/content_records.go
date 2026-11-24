@@ -32,11 +32,37 @@ func (s *SQLiteStore) ResourceComment(ctx context.Context, workspace, resource, 
 }
 
 func (s *SQLiteStore) WalkContentRecords(ctx context.Context, workspace, kind string, visit func(string, json.RawMessage) error) error {
+	return s.WalkContentRecordsForResources(ctx, workspace, kind, nil, visit)
+}
+
+// WalkContentRecordsForResources keeps collection order over an already
+// authorized selection. A nil selection walks the original collection.
+func (s *SQLiteStore) WalkContentRecordsForResources(ctx context.Context, workspace, kind string, resources []string, visit func(string, json.RawMessage) error) error {
 	var reader metadataReader = s.db
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.workspace == workspace {
 		reader = snapshot.reader
 	}
-	rows, err := reader.QueryContext(ctx, `SELECT resource_id,data FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY resource_id,created_at,id`, workspace, kind)
+	if resources == nil {
+		return walkContentRecords(ctx, reader, workspace, kind, nil, visit)
+	}
+	const resourceBatch = 500
+	for batch := range slices.Chunk(resources, resourceBatch) {
+		if err := walkContentRecords(ctx, reader, workspace, kind, batch, visit); err != nil {
+			return err
+		}
+	}
+	return ctx.Err()
+}
+
+func walkContentRecords(ctx context.Context, reader metadataReader, workspace, kind string, resources []string, visit func(string, json.RawMessage) error) error {
+	query := `SELECT resource_id,data FROM workspace_content_records WHERE workspace_key=? AND kind=?`
+	args := []any{workspace, kind}
+	if resources != nil {
+		clause, ids := bindList("resource_id", resources)
+		query += " AND " + clause
+		args = append(args, ids...)
+	}
+	rows, err := reader.QueryContext(ctx, query+` ORDER BY resource_id,created_at,id`, args...)
 	if err != nil {
 		return err
 	}

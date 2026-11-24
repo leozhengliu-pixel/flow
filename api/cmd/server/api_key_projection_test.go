@@ -379,15 +379,25 @@ func TestScaleP03APIKeyTeamScopeReferencesAndCounts(t *testing.T) {
 								t.Error("notification paging lost an allowed record")
 							}
 						}
-						request := httptest.NewRequest(http.MethodGet, "/api/bootstrap", nil)
-						request.Header.Set("Authorization", "Bearer "+secret)
-						request.Header.Set("X-Workspace-Key", f.data.Workspace.URLKey)
-						request.Header.Set("X-Flow-Projection", "project-list")
-						response := httptest.NewRecorder()
-						f.host.Config.Handler.ServeHTTP(response, request)
-						var projected domain.Bootstrap
-						if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &projected) != nil || len(projected.Notifications) != want {
-							t.Error("project-list bootstrap changed notification access")
+						for _, projection := range []string{"project-list", "project-detail:scope-old-project", "initiative-detail"} {
+							request := httptest.NewRequest(http.MethodGet, "/api/bootstrap", nil)
+							request.Header.Set("Authorization", "Bearer "+secret)
+							request.Header.Set("X-Workspace-Key", f.data.Workspace.URLKey)
+							request.Header.Set("X-Flow-Projection", projection)
+							response := httptest.NewRecorder()
+							f.host.Config.Handler.ServeHTTP(response, request)
+							var projected domain.Bootstrap
+							if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &projected) != nil || len(projected.Notifications) != want {
+								t.Error("bootstrap projection changed notification access")
+							}
+							if spec.restricted {
+								for _, issue := range projected.Issues {
+									raw, _ := json.Marshal(issue)
+									if strings.Contains(string(raw), "scope-hidden-") {
+										t.Error("bootstrap projection leaks a hidden issue reference")
+									}
+								}
+							}
 						}
 					}
 					if !spec.empty {

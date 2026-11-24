@@ -7,8 +7,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -94,7 +96,7 @@ func writeBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stre
 		if stream != nil {
 			handled, err := stream(key, buffer, encoder)
 			if err != nil {
-				log.Printf("bootstrap stream field=%s: %v", key, err)
+				log.Printf("bootstrap stream field=%s: could not encode snapshot", key)
 				return
 			}
 			if handled {
@@ -116,7 +118,7 @@ func writeBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stre
 			_, err = buffer.Write(fields[key])
 		}
 		if err != nil {
-			log.Printf("bootstrap stream field=%s: %v", key, err)
+			log.Printf("bootstrap stream field=%s: could not encode snapshot", key)
 			return
 		}
 	}
@@ -164,11 +166,20 @@ func captureBootstrapCredentialVisibility(r *http.Request, data domain.Bootstrap
 	return r.WithContext(context.WithValue(r.Context(), bootstrapCredentialVisibilityKey{}, visible))
 }
 
-func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, data domain.Bootstrap, overrides ...map[string]json.RawMessage) {
+type bootstrapStreamScope struct {
+	projectList  bool
+	issueDetails map[string]bool
+}
+
+func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, data domain.Bootstrap, scope bootstrapStreamScope, overrides ...map[string]json.RawMessage) {
+	const maxScopedIDs = 500
+	projectList, detailScope := scope.projectList, scope.issueDetails
 	visible := map[string]bool{}
 	visibleIssues := map[string]bool{}
 	for _, issue := range data.Issues {
-		visible[issue.ID] = true
+		if detailScope == nil || detailScope[issue.ID] {
+			visible[issue.ID] = true
+		}
 		visibleIssues[issue.ID] = true
 	}
 	for _, document := range data.Documents {
@@ -179,6 +190,14 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 		for _, milestone := range project.Milestones {
 			visible[milestone.ID] = true
 		}
+	}
+	var contentIDs []string
+	if projectList || detailScope != nil {
+		contentIDs = make([]string, 0, len(visible))
+		for id := range visible {
+			contentIDs = append(contentIDs, id)
+		}
+		slices.Sort(contentIDs)
 	}
 	users := map[string]domain.User{}
 	for _, user := range data.Users {
@@ -251,16 +270,50 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 			}
 		}
 		if field == "issues" {
+			if len(data.Issues) == 0 {
+				buffer.WriteString("[]")
+				return true, nil
+			}
 			buffer.WriteByte('[')
 			count := 0
+			encode := func(issue domain.Issue) error {
+				if count > 0 {
+					buffer.WriteByte(',')
+				}
+				count++
+				return encodeBootstrapValue(r.Context(), buffer, encoder, issue)
+			}
 			outlines := map[string]int{}
+			query := store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Archived: "all"}
+			if detailScope != nil || projectList {
+				query.RestrictToIssueIDs = true
+			}
 			for index, issue := range data.Issues {
 				outlines[issue.ID] = index
+				if query.RestrictToIssueIDs && (detailScope == nil || detailScope[issue.ID]) {
+					query.IssueIDs = append(query.IssueIDs, issue.ID)
+				}
 			}
-			err := s.store.WalkIssueRecords(r.Context(), store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Archived: "all"}, func(issue domain.Issue) error {
+			nextOutline := 0
+			encodeOutlines := func(end int) error {
+				for ; nextOutline < end; nextOutline++ {
+					if err := encode(data.Issues[nextOutline]); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			writeBody := func(issue domain.Issue) error {
 				index, ok := outlines[issue.ID]
 				if !ok {
 					return nil
+				}
+				if detailScope != nil {
+					// The body queries and outlines have the same collection order.
+					if err := encodeOutlines(index); err != nil {
+						return err
+					}
+					nextOutline = index + 1
 				}
 				outline := data.Issues[index]
 				issue.Team = outline.Team
@@ -285,17 +338,23 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 				// The outline carries the decorated agent task state (issue records store it empty).
 				issue.AgentSessionState = outline.AgentSessionState
 				issue.IsSummary = false
-				if count > 0 {
-					buffer.WriteByte(',')
+				return encode(issue)
+			}
+			if query.RestrictToIssueIDs {
+				for batch := range slices.Chunk(query.IssueIDs, maxScopedIDs) {
+					batchQuery := query
+					batchQuery.IssueIDs = batch
+					if err := s.store.WalkBootstrapIssueBodies(r.Context(), batchQuery, writeBody); err != nil {
+						return true, err
+					}
 				}
-				if err := encodeBootstrapValue(r.Context(), buffer, encoder, issue); err != nil {
-					return err
-				}
-				count++
-				return nil
-			})
-			if err != nil {
+			} else if err := s.store.WalkBootstrapIssueBodies(r.Context(), query, writeBody); err != nil {
 				return true, err
+			}
+			if detailScope != nil {
+				if err := encodeOutlines(len(data.Issues)); err != nil {
+					return true, err
+				}
 			}
 			buffer.WriteByte(']')
 			return true, nil
@@ -324,7 +383,11 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 		resourceKey := ""
 		haveResource := false
 		count := 0
-		err := s.store.WalkContentRecords(r.Context(), data.Workspace.URLKey, kind, func(resource string, raw json.RawMessage) error {
+		var resources []string
+		if object {
+			resources = contentIDs
+		}
+		err := s.store.WalkContentRecordsForResources(r.Context(), data.Workspace.URLKey, kind, resources, func(resource string, raw json.RawMessage) error {
 			var value any
 			switch kind {
 			case "comment":
@@ -415,6 +478,39 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 		}
 		return true, nil
 	}, overrides...)
+}
+
+// Planning pages need the workspace issue directory for relationships and
+// counts, but only open the selected project's issue bodies and favorites.
+// Select them from the projection after all visibility filters have run.
+func planningIssueDetails(r *http.Request, data domain.Bootstrap) map[string]bool {
+	projection := r.Header.Get("X-Flow-Projection")
+	var projectID string
+	if encoded, ok := strings.CutPrefix(projection, "project-detail:"); ok {
+		ref, err := url.PathUnescape(encoded)
+		if err != nil || ref == "" {
+			return nil
+		}
+		if index := domain.IndexBySlugRef(data.Projects, ref, domain.ProjectSlugKey); index >= 0 {
+			projectID = data.Projects[index].ID
+		}
+	} else if projection != "initiative-detail" {
+		return nil
+	}
+	details := make(map[string]bool)
+	for _, favorite := range data.Favorites {
+		if favorite.ResourceType == "issue" && favorite.UserID == data.Viewer.ID {
+			details[favorite.ResourceID] = true
+		}
+	}
+	if projectID != "" {
+		for _, issue := range data.Issues {
+			if issue.Project != nil && issue.Project.ID == projectID {
+				details[issue.ID] = true
+			}
+		}
+	}
+	return details
 }
 
 func encodeBootstrapArray[T any](w io.Writer, encoder *json.Encoder, items []T, contexts ...context.Context) error {

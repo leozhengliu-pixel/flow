@@ -149,11 +149,6 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 		neededPipelines[release.PipelineID] = true
 	}
 	favoritePipelines := slices.DeleteFunc(slices.Clone(data.ReleasePipelines), func(item domain.ReleasePipeline) bool { return !neededPipelines[item.ID] })
-	for index := range data.Projects {
-		data.Projects[index] = ProjectListProjection(data.Projects[index])
-	}
-	data.Projects = []domain.Project{}
-	data.Issues = []domain.Issue{}
 	data.Comments = map[string][]domain.Comment{}
 	data.Activities = map[string][]domain.ActivityEvent{}
 	data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
