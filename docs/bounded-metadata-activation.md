@@ -1,10 +1,12 @@
 # Bounded metadata activation
 
-Bounded metadata is on by default. Startup enables the record journal,
-repairs its coverage, and completes the metadata catalog. Rehearse the
-upgrade and rollback on a restored copy. Record route status and latency,
-realtime lag and resyncs, database pool waits, background work, and RSS per
-replica. Keep a database backup from before the upgrade.
+MySQL and PostgreSQL enable bounded metadata, record hydration, the record
+journal, and Sync V2 by default. Startup repairs journal coverage and
+completes the metadata catalog. SQLite keeps these features off by default
+until a follow-up release. Rehearse the upgrade and rollback on a restored
+copy. Record route status and latency, realtime lag and resyncs, database
+pool waits, background work, and RSS per replica. Keep a database backup
+from before the upgrade.
 
 ## Prerequisites
 
@@ -36,9 +38,14 @@ replica. Keep a database backup from before the upgrade.
 
 ## Upgrade
 
-Remove old overrides for the settings you want to inherit. Explicit `off`
-values continue to apply. Startup uses the database's existing startup lock
-to serialize journal installation and catalog preparation across replicas.
+Remove old overrides for the settings you want to inherit. Explicit `on`
+and `off` values take precedence on every database. SQLite operators who
+have rehearsed the opt-in can set `FLOW_BOUNDED_METADATA`,
+`FLOW_RECORD_HYDRATION` and `FLOW_RECORD_JOURNAL` to `on`. Set `FLOW_SYNC_V2`
+to `on` to opt in to Sync V2 as well.
+
+Startup uses the database's existing startup lock to serialize journal
+installation and catalog preparation across replicas.
 Repair and backfill persist checkpoints as they progress. Later starts
 reuse completed checkpoints. If preparation or admission fails, automatic
 startup uses legacy reads and checks again on restart. The optional
@@ -66,8 +73,10 @@ binary.
 envelopes during rolling upgrades. Enable compact peer sync only in a
 separate fleet-wide switch. Stop catalog shadow workers before starting
 bounded replicas because a shadow revisit resets completed checkpoints.
-The browser local-store allowlist and shared Redis result tier also stay
-opt-in. The latter was slower in mixed-load measurements.
+The sync manifest and indexed reads remain opt-in, as in the accepted load
+profile. The browser local-store allowlist stays opt-in for the staged
+rollout. The shared Redis result tier remains opt-in because it was slower
+in mixed-load measurements. Shadow modes require explicit settings.
 
 ## Verify
 
@@ -147,7 +156,7 @@ recovery on the restarted replica before restoring traffic.
 | Setting | Rollback |
 | --- | --- |
 | `FLOW_RECORD_PEER_SYNC` | Switch every replica to `off` together. Keep the journal and prepared catalog. Reconnect realtime clients and verify that writes reach peers through the legacy reload path. |
-| `FLOW_BOUNDED_METADATA` | Set `off` on every replica and restart. Leave canonical records, catalog and journal tables in place. Unset the flag to use automatic preparation on a later upgrade. |
+| `FLOW_BOUNDED_METADATA` | Set `off` on every replica and restart. Leave canonical records, catalog and journal tables in place. On MySQL and PostgreSQL, unset the flag to return to automatic preparation. On SQLite, set it to `on` with its dependencies to opt back in. |
 | `FLOW_METADATA_CATALOG` | Set `off` to skip automatic preparation and keep existing catalog rows. `shadow` runs background preparation when bounded metadata is off. |
 | `FLOW_SYNC_V2` | Switch to `off` with the journal still on. Verify the legacy change feed and have clients refresh their snapshot before resuming with legacy cursors. |
 | `FLOW_SYNC_MANIFEST`, `FLOW_INDEXED_READS` | Set both to `off` to disable those endpoints and use compatibility reads. |

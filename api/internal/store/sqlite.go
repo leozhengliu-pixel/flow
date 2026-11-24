@@ -1644,6 +1644,7 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 }
 
 func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) (err error) {
+	ctx = s.ContextWithDatabaseFeatures(ctx)
 	if scope, scoped := metadataRecordScopeFromContext(ctx); scoped && (s.metadataResidency != nil || !projectRecordSelectionEnabled(ctx)) {
 		if err := validateMetadataRecordScope(scope); err != nil {
 			return err

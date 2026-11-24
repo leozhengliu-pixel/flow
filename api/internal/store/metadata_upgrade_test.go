@@ -32,9 +32,10 @@ func TestDefaultMetadataUpgradeUsesLegacyWhenAdmissionFails(t *testing.T) {
 	if err := old.Close(); err != nil {
 		t.Fatal(err)
 	}
-	for _, flag := range flags {
-		t.Setenv(flag, "")
+	for _, flag := range flags[:3] {
+		t.Setenv(flag, "on")
 	}
+	t.Setenv("FLOW_METADATA_CATALOG", "")
 	t.Setenv("FLOW_METADATA_SOURCE_BYTES", "1")
 	fallback := open()
 	t.Cleanup(func() { _ = fallback.Close() })
@@ -59,7 +60,7 @@ func TestDefaultMetadataUpgradeUsesLegacyWhenAdmissionFails(t *testing.T) {
 	upgraded := open()
 	defer upgraded.Close()
 	if !upgraded.BoundedMetadataEnabled() {
-		t.Fatal("default restart did not admit the prepared workspace")
+		t.Fatal("restart did not admit the prepared workspace")
 	}
 	data, ok = upgraded.BootstrapForContext(WithColdWork(t.Context(), "upgrade fixture"), workspace)
 	if !ok || !slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == projectID }) {
@@ -68,9 +69,9 @@ func TestDefaultMetadataUpgradeUsesLegacyWhenAdmissionFails(t *testing.T) {
 }
 
 func TestDefaultMetadataUpgradeReplacesSQLiteContentTriggers(t *testing.T) {
-	t.Setenv("FLOW_BOUNDED_METADATA", "")
-	t.Setenv("FLOW_RECORD_HYDRATION", "")
-	t.Setenv("FLOW_RECORD_JOURNAL", "")
+	t.Setenv("FLOW_BOUNDED_METADATA", "on")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_METADATA_CATALOG", "")
 	path := filepath.Join(t.TempDir(), "flow.db")
 	old, err := OpenSQLiteTestFixture(path)
@@ -176,12 +177,17 @@ func TestDefaultMetadataUpgradeResumesLegacyWrites(t *testing.T) {
 	for _, flag := range []string{"FLOW_BOUNDED_METADATA", "FLOW_RECORD_HYDRATION", "FLOW_RECORD_JOURNAL", "FLOW_METADATA_CATALOG"} {
 		t.Setenv(flag, "")
 	}
+	if normalizeDatabaseDriver(config.Driver) == "sqlite" {
+		t.Setenv("FLOW_BOUNDED_METADATA", "on")
+		t.Setenv("FLOW_RECORD_HYDRATION", "on")
+		t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	}
 	ceiling, _ := defaultMetadataMemory(1<<30, 16<<30, 0)
 	t.Setenv("FLOW_METADATA_MEMORY_BYTES", strconv.FormatInt(ceiling, 10))
 	upgraded := openPreparationDatabase(t, config)
 	t.Cleanup(func() { _ = upgraded.Close() })
 	if !upgraded.BoundedMetadataEnabled() {
-		t.Fatal("default startup fell back after an interrupted preparation")
+		t.Fatal("startup fell back after an interrupted preparation")
 	}
 	var report BoundedMetadataPreparation
 	if err := upgraded.boundedMetadataReadiness(t.Context(), &report); err != nil || !report.Ready {

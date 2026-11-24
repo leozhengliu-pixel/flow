@@ -339,14 +339,17 @@ func TestScaleP12ConcurrentProjection(t *testing.T) {
 }
 
 func TestScaleP12FlagsAndFallback(t *testing.T) {
-	for value, want := range map[string]bool{"": true, "off": false, "shadow": false, "invalid": false, "on": true, "true": true, "1": true} {
+	s := &server{}
+	for value, want := range map[string]bool{"": false, "off": false, "shadow": false, "invalid": false, "on": true, "true": true, "1": true} {
 		t.Setenv("FLOW_SYNC_V2", value)
-		if syncV2Enabled() != want {
+		if s.store.SyncV2Enabled() != want {
 			t.Fatalf("flag %q", value)
 		}
 	}
 	t.Setenv("FLOW_SYNC_V2", "off")
-	if syncV2SummaryRequest(scaleP12Request("workspace", domain.User{})) {
+	r := scaleP12Request("workspace", domain.User{})
+	r.Header.Set("X-Flow-Sync", "summary")
+	if s.negotiatedSummaryRequest(r) {
 		t.Fatal("summary negotiation bypassed rollback")
 	}
 	if strings.Contains(string(mustJSON(t, emptySyncTransaction("tx", "9007199254740993"))), `"seq":9007199254740993`) {

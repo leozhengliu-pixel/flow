@@ -44,8 +44,8 @@ func syncFlagEnabled(name string) bool {
 	}
 }
 
-func syncV2CapabilityAdvertised(journalReady, coreReady bool) bool {
-	return journalReady && coreReady && syncV2Enabled() && syncFlagEnabled("FLOW_SYNC_MANIFEST") && syncFlagEnabled("FLOW_INDEXED_READS")
+func (s *server) syncV2CapabilityAdvertised(journalReady, coreReady bool) bool {
+	return journalReady && coreReady && s.store.SyncV2Enabled() && syncFlagEnabled("FLOW_SYNC_MANIFEST") && syncFlagEnabled("FLOW_INDEXED_READS")
 }
 
 func syncReadRequest(r *http.Request) bool {
@@ -157,7 +157,7 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 		collectionsReady = collectionsReady && ready
 		result.Collections[kind] = syncManifestCollection{Ready: ready, Revision: status.Revision}
 	}
-	if collectionsReady && syncV2CapabilityAdvertised(journalReady && journalHead != "", len(core.Omitted) == 0) {
+	if collectionsReady && s.syncV2CapabilityAdvertised(journalReady && journalHead != "", len(core.Omitted) == 0) {
 		result.Head = journalHead
 		result.Capabilities = []string{"sync-v2"}
 	}

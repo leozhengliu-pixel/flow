@@ -43,7 +43,12 @@ func metadataPrepare(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	if !store.RecordJournalEnabled() && !strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")), "shadow") {
+	configuration, err := appconfig.Load()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if configuration.Database.RecordJournalMode() == "off" {
 		fmt.Fprintln(stderr, "metadata-prepare: set FLOW_RECORD_JOURNAL=on (as on the replicas) first; the repair and the catalog need the record journal")
 		return 2
 	}
@@ -51,11 +56,6 @@ func metadataPrepare(args []string, stdout, stderr io.Writer) int {
 	// the catalog pass itself rather than in a background worker.
 	_ = os.Setenv("FLOW_BOUNDED_METADATA", "off")
 	_ = os.Setenv("FLOW_METADATA_CATALOG", "off")
-	configuration, err := appconfig.Load()
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
-	}
 	repository, err := store.OpenDatabase(configuration.Database)
 	if err != nil {
 		fmt.Fprintln(stderr, err)

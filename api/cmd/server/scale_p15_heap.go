@@ -67,7 +67,7 @@ func boundHydratedLegacyDownloads(next http.Handler, estimates ...func(*http.Req
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		compatibility := r.Method == http.MethodGet && (r.URL.Path == "/api/bootstrap" || r.URL.Path == "/api/issue-records/bootstrap" ||
 			strings.HasPrefix(r.URL.Path, "/api/exports/") && strings.HasSuffix(r.URL.Path, "/download"))
-		if !store.RecordHydrationEnabled() || !compatibility {
+		if !compatibility || !store.RecordHydrationEnabled(r.Context()) {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -212,7 +212,7 @@ func (r *scaleP21SW23TeamPolicyReaderAt) ReadAt(p []byte, offset int64) (int, er
 // changes. Verify trigger dirty keys and canonical/sidecar coverage together
 // in the caller's snapshot before accepting residency.
 func (s *SQLiteStore) validateResidentBackfill(ctx context.Context, tx *sqlTx, workspace string) error {
-	if !s.db.journalReady.Load() || recordJournalMode() != "on" {
+	if !s.db.journalReady.Load() || !s.RecordJournalEnabled() {
 		return fmt.Errorf("%w: record journal is not authoritative", ErrBoundedMetadataCoverage)
 	}
 	if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {

@@ -21,7 +21,7 @@ var errRecordJournalTriggerPermission = errors.New("record journal trigger permi
 // connection-local on external databases. SQLite has one writer, so its
 // token row is set with the first write and cleared before commit.
 func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
-	mode := recordJournalMode()
+	mode := recordJournalMode(s.dialect)
 	legacyOnDenied := s.dialect == "mysql" && (mode == "shadow" || strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")) == "")
 	applied, err := s.migrationApplied(ctx, recordJournalSchemaVersion)
 	if err != nil {

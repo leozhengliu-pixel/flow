@@ -511,8 +511,9 @@ history) and restore the version from there if the body should come back.
 
 ### Bounded metadata
 
-`FLOW_BOUNDED_METADATA` defaults to `on`. Startup repairs the record journal
-and completes the metadata catalog before bounded reads begin. Follow the
+`FLOW_BOUNDED_METADATA` defaults to `on` on MySQL and PostgreSQL and `off`
+on SQLite. When enabled, startup repairs the record journal and completes
+the metadata catalog before bounded reads begin. Follow the
 [upgrade and rollback procedure](bounded-metadata-activation.md) when
 replacing replicas or reverting to legacy reads.
 

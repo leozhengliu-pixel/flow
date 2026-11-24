@@ -25,7 +25,7 @@ func WithProjectRecordSelection(ctx context.Context, selectScope ProjectRecordSe
 
 func projectRecordSelectionEnabled(ctx context.Context) bool {
 	_, ok := ctx.Value(projectRecordSelectionKey{}).(ProjectRecordSelector)
-	return ok && RecordHydrationEnabled() && !fullMutationsForced.Load() && !metadataRecordVerificationEnabled(ctx)
+	return ok && RecordHydrationEnabled(ctx) && !fullMutationsForced.Load() && !metadataRecordVerificationEnabled(ctx)
 }
 
 func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspace, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {

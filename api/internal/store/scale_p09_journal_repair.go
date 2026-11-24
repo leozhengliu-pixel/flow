@@ -15,7 +15,7 @@ import (
 // every batch has committed. P05's bounded catalog pass seeds untouched legacy
 // metadata versions; this method reconciles writes made during that pass.
 func (s *SQLiteStore) RepairRecordJournal(ctx context.Context, workspaceID string) (remaining bool, err error) {
-	if !s.db.journalReady.Load() || recordJournalMode() == "off" {
+	if !s.db.journalReady.Load() || recordJournalMode(s.dialect) == "off" {
 		return true, ErrRecordJournalUnavailable
 	}
 	var options *sql.TxOptions

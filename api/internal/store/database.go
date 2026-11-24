@@ -331,20 +331,14 @@ func (tx *sqlTx) noteNotificationRow(row contentRecordRow, previous []byte, exis
 }
 
 func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
-	bounded := boundedMetadataRequested()
+	driver := normalizeDatabaseDriver(config.Driver)
+	bounded := boundedMetadataRequested(driver)
 	if bounded {
-		if err := validateBoundedMetadataCoverage(); err != nil {
+		if err := validateBoundedMetadataCoverage(driver); err != nil {
 			return nil, err
 		}
 	}
 	prepare := metadataCatalogAutoEnabled(bounded)
-	driver := strings.ToLower(strings.TrimSpace(config.Driver))
-	if driver == "" {
-		driver = "sqlite"
-	}
-	if driver == "postgresql" {
-		driver = "postgres"
-	}
 	var sqlDriver, dsn, sqlitePath string
 	switch driver {
 	case "sqlite":
@@ -682,7 +676,7 @@ func (d *sqlDatabase) ExecContext(ctx context.Context, query string, args ...any
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return nil, errors.New("cannot write inside a workspace read snapshot")
 	}
-	if d.journalReady.Load() && recordJournalMode() != "off" && journalWriteStatement(query) {
+	if d.journalReady.Load() && recordJournalMode(d.dialect) != "off" && journalWriteStatement(query) {
 		tx, err := d.BeginTx(ctx, nil)
 		if err != nil {
 			return nil, err

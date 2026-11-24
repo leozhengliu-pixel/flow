@@ -245,7 +245,7 @@ func TestSchemaMigrationsAreVersionedAndIdempotent(t *testing.T) {
 	// initials colour, the integration OAuth tokens move (1025), the audit log table move (1030) and the repair of rows left under previous
 	// workspace keys (1040) and the creator owner grant on documents stored without one (1041)).
 	want := 47
-	if recordJournalMode() != "off" {
+	if recordJournalMode("sqlite") != "off" {
 		want++ // The SQLite content-key repair only runs with journal triggers.
 	}
 	if count != want {

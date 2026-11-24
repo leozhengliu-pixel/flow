@@ -28,7 +28,7 @@ type internalRequesterAuthorization struct {
 
 func (s *server) mutateInternalConversation(r *http.Request, input any, mutate func(*domain.Bootstrap) error) error {
 	ctx := r.Context()
-	scoped := internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") && store.RecordHydrationEnabled()
+	scoped := internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") && store.RecordHydrationEnabled(ctx)
 	if scoped {
 		ctx = store.WithMetadataRecords(ctx, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "aiConversations", ID: r.PathValue("id")}}})
 	}

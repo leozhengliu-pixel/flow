@@ -831,7 +831,7 @@ jobs:
           "GRANT ALL ON \`flow\\_sw602\\_%\`.* TO 'flow'@'%';
           GRANT ALL ON \`flow\\_prepare\\_%\`.* TO 'flow'@'%';"
 
-      - name: Upgrade a previous-default database
+      - name: Exercise MySQL and PostgreSQL defaults on a previous-release database
         if: matrix.package == './cmd/server' && matrix.shard == 1
         working-directory: api
         env:

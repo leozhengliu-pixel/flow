@@ -87,7 +87,7 @@ func pulseSummaryField(source *metadataLogicalSource, name string) metadataLogic
 // its original MutateWorkspace callback off mode. Input End values come from
 // pulseWindow and are UTC. No issue or existing content records are hydrated.
 func (s *SQLiteStore) CommitPulseSummaries(ctx context.Context, workspace string, candidates []PulseSummaryCandidate, prepare func(PulseSummaryDispatchInput) (PulseSummaryDispatch, error)) error {
-	if !s.BoundedMetadataEnabled() || !RecordHydrationEnabled() {
+	if !s.BoundedMetadataEnabled() || !recordHydrationEnabled(s.dialect) {
 		return ErrBoundedMetadataCoverage
 	}
 	if len(candidates) > PulseSummaryBatchMaxCandidates {

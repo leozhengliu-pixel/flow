@@ -259,10 +259,10 @@ config:
   appUrl: "http://flow.example.com"
   logLevel: info
   logFormat: json
-  # The server enables bounded metadata, hydration, the journal, and sync v2.
-  # Startup prepares the catalog. Use
-  # config.env to set explicit "off" values. See the upgrade and rollback
-  # steps in docs/bounded-metadata-activation.md before changing fleet flags.
+  # Bounded metadata, hydration, the journal, and Sync V2 default to "on"
+  # on MySQL and PostgreSQL and "off" on SQLite. Bounded startup prepares
+  # the catalog. Use config.env to override the defaults. See the upgrade and
+  # rollback steps in docs/bounded-metadata-activation.md before changing fleet flags.
   # Peer journal sync, the result cache, and local-store rollout are opt-in.
   env: {}
   # The YAML configuration file (docs/configuration.md, "Configuration file";

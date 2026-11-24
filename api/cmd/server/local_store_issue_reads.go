@@ -17,7 +17,7 @@ func (s *server) localStoreIssueAccess(w http.ResponseWriter, r *http.Request) (
 		writeSyncError(w, store.ErrAuthForbidden)
 		return store.EventAccess{}, false
 	}
-	if _, ready := s.syncV2Journal(); !ready || !localStoreAllowed(workspaceKey(r)) {
+	if _, ready := s.syncV2Journal(); !ready || !s.localStoreAllowed(workspaceKey(r)) {
 		http.NotFound(w, r)
 		return store.EventAccess{}, false
 	}

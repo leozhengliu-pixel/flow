@@ -336,7 +336,7 @@ server:
   # Any other non-secret FLOW_* or OTEL_* variable by name.
   env:
     FLOW_CODING_MAX_SESSIONS: "20"
-    # The default start prepares bounded metadata, the catalog and journal.
+    # MySQL and PostgreSQL prepare bounded metadata by default. SQLite stays off.
     # FLOW_BOUNDED_METADATA: "off"          # Opt out of bounded metadata residency.
 
 # Defaults for objects Flow creates. They apply when the object is created
@@ -658,17 +658,17 @@ automatically at startup for all three drivers.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `FLOW_BOUNDED_METADATA` | `on` | Uses bounded metadata residency with hydration, journal coverage, and a complete catalog. Set `off` to use legacy reads and writes. |
-| `FLOW_RECORD_HYDRATION` | `on` | Loads selected metadata records for scoped reads and writes. |
-| `FLOW_RECORD_JOURNAL` | `on` | Captures record changes and authorization epochs. Default starts without MySQL trigger authority fall back to legacy metadata and sync. Set `off` consistently across replicas because it removes database triggers. |
+| `FLOW_BOUNDED_METADATA` | `on` on MySQL and PostgreSQL, `off` on SQLite | Uses bounded metadata residency with hydration, journal coverage, and a complete catalog. Set `off` to use legacy reads and writes. |
+| `FLOW_RECORD_HYDRATION` | `on` on MySQL and PostgreSQL, `off` on SQLite | Loads selected metadata records for scoped reads and writes. |
+| `FLOW_RECORD_JOURNAL` | `on` on MySQL and PostgreSQL, `off` on SQLite | Captures record changes and authorization epochs. Default starts without MySQL trigger authority fall back to legacy metadata and sync. Set `off` consistently across replicas because it removes database triggers. |
 | `FLOW_METADATA_CATALOG` | Automatic with bounded metadata | Completes journal repair and missing catalog checkpoints at startup. `off` skips this work. `shadow` explicitly starts a backfill worker with bounded metadata off. |
-| `FLOW_SYNC_V2` | `on` | Enables negotiated sync v2 when the journal covers the workspace. |
+| `FLOW_SYNC_V2` | `on` on MySQL and PostgreSQL, `off` on SQLite | Enables negotiated sync v2 when the journal covers the workspace. |
 | `FLOW_SYNC_MANIFEST` | `off` | Opt-in sync capability manifests. The accepted bounded load profile leaves this off. |
 | `FLOW_INDEXED_READS` | `off` | Opt-in permission-bound indexed reads when coverage is ready. The accepted bounded load profile leaves this off. |
 | `FLOW_RECORD_PEER_SYNC` | `off` | Uses the existing Redis event envelopes. Compact journal peer sync changes the cross-replica protocol and requires a fleet-wide switch. |
-| `VITE_LOCAL_STORE`, `FLOW_LOCAL_STORE_WORKSPACES` | Disabled, empty allowlist | Browser local storage is a staged rollout. The build and a workspace allowlist must both opt in. |
+| `FLOW_LOCAL_STORE` | `on` | The browser uses its local issue store when the server advertises support. Set `off` on every API replica to opt out. |
 | Shadow modes | `off` | Comparison and catalog revisit workers run only when explicitly selected. |
-| `FLOW_METADATA_MEMORY_BYTES` | 70% of available RAM, with a 1 GiB floor where it fits | Uses the smaller of the cgroup limit and physical RAM, caps the target at 80% of available RAM, and honors a lower `GOMEMLIMIT`. A 1 GiB container uses about 819 MiB and a 2 GiB container uses about 1.4 GiB. See [all tier overrides](bounded-metadata.md#tuning). |
+| `FLOW_METADATA_MEMORY_BYTES` | 70% of available RAM, with a 1 GiB floor where it fits | Uses the smaller of the cgroup limit and physical RAM, caps the target at 80% of available RAM, and honors a lower `GOMEMLIMIT`. A 1 GiB container uses about 819 MiB and a 2 GiB container uses about 1.4 GiB. With bounded metadata off, issue bootstrap and resource reads share half the target for workspace projections. See [all tier overrides](bounded-metadata.md#tuning). |
 
 See the [upgrade and rollback runbook](bounded-metadata-activation.md).
 

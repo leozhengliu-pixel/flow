@@ -38,7 +38,7 @@ type RecordJournalRepairGap struct {
 const recordJournalRepairBatches = 1 << 14
 
 func (s *SQLiteStore) recordJournalRepairable() bool {
-	return s.db.journalReady.Load() && recordJournalMode() != "off"
+	return s.db.journalReady.Load() && recordJournalMode(s.dialect) != "off"
 }
 
 // RepairRecordJournalPass runs RepairRecordJournal over every workspace that

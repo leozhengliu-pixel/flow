@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -32,11 +33,24 @@ func metadataUpgradeServer(t *testing.T, repo *store.SQLiteStore) *server {
 }
 
 func TestDefaultMetadataUpgrade(t *testing.T) {
+	testMetadataUpgrade(t, false)
+}
+
+func TestSQLiteMetadataOptInUpgrade(t *testing.T) {
+	if driver := os.Getenv("FLOW_TEST_DATABASE_DRIVER"); driver != "" && driver != "sqlite" {
+		t.Skip("SQLite opt-in check")
+	}
+	testMetadataUpgrade(t, true)
+}
+
+func testMetadataUpgrade(t *testing.T, optIn bool) {
+	t.Helper()
 	for _, flag := range metadataUpgradeFlags {
 		t.Setenv(flag, "off")
 	}
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("s", 32))))
 	config := metadataPrepareDatabase(t)
+	wantPrepared := config.Driver != "sqlite" || optIn
 	config.FixtureProfile, config.FixturePassword = "test", "test-password"
 	old, err := store.OpenDatabase(config)
 	if err != nil {
@@ -152,11 +166,16 @@ func TestDefaultMetadataUpgrade(t *testing.T) {
 	}
 	old = nil
 	for _, flag := range metadataUpgradeFlags {
-		t.Setenv(flag, "")
+		unsetScaleActivateAEnv(t, flag)
+	}
+	if optIn {
+		for _, flag := range []string{"FLOW_BOUNDED_METADATA", "FLOW_RECORD_HYDRATION", "FLOW_RECORD_JOURNAL", "FLOW_SYNC_V2"} {
+			t.Setenv(flag, "on")
+		}
 	}
 
-	// The first replica prepares the original database. The second must
-	// reuse the completed checkpoints while admitting its own resident state.
+	// The first replica prepares the original database when enabled. The
+	// second must reuse completed checkpoints while admitting its own state.
 	type opened struct {
 		repo *store.SQLiteStore
 		err  error
@@ -186,17 +205,21 @@ func TestDefaultMetadataUpgrade(t *testing.T) {
 		t.FailNow()
 	}
 	for _, repo := range replicas {
-		if !repo.BoundedMetadataEnabled() || !repo.RecordJournalReady() {
-			t.Fatal("default startup did not admit the prepared database")
+		if repo.BoundedMetadataEnabled() != wantPrepared || repo.RecordJournalReady() != wantPrepared {
+			t.Fatal("startup chose the wrong metadata or journal mode")
 		}
-		catalogs, err := repo.MetadataCatalogCompleteness(t.Context())
-		if err != nil || len(catalogs) == 0 {
-			t.Fatalf("catalog incomplete after default startup: %v", err)
-		}
-		for _, catalog := range catalogs {
-			if catalog.Incomplete != 0 {
-				t.Errorf("catalog has %d incomplete collections after default startup", catalog.Incomplete)
+		if wantPrepared {
+			catalogs, err := repo.MetadataCatalogCompleteness(t.Context())
+			if err != nil || len(catalogs) == 0 {
+				t.Fatalf("catalog incomplete after startup: %v", err)
 			}
+			for _, catalog := range catalogs {
+				if catalog.Incomplete != 0 {
+					t.Errorf("catalog has %d incomplete collections after startup", catalog.Incomplete)
+				}
+			}
+		} else if status, err := repo.MetadataCatalogStatus(t.Context(), sweep.workspace, "projects"); err != nil || status.Complete {
+			t.Fatalf("SQLite defaults unexpectedly prepared the catalog: %v", err)
 		}
 		after := handler(repo)
 		for i, path := range paths {
@@ -207,7 +230,11 @@ func TestDefaultMetadataUpgrade(t *testing.T) {
 			}
 		}
 		call(after, http.MethodGet, "/api/sync/manifest", "", http.StatusNotFound)
-		call(after, http.MethodGet, "/api/sync/changes?after=0", "", http.StatusOK)
+		syncStatus := http.StatusNotFound
+		if wantPrepared {
+			syncStatus = http.StatusOK
+		}
+		call(after, http.MethodGet, "/api/sync/changes?after=0", "", syncStatus)
 	}
 
 	// The surviving data is writable through the same APIs and a second

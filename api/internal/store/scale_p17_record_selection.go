@@ -50,7 +50,7 @@ func verifyDocumentRecords(mode string) bool {
 
 func prepareDocumentRecordMutation(ctx context.Context, stored domain.Bootstrap, event string, payload any, mutate func(*domain.Bootstrap) (string, error)) (context.Context, func(*domain.Bootstrap) (string, error), bool) {
 	requirements, ok := ctx.Value(documentRecordSelectionKey{}).(documentRecordSelection)
-	if !ok || !RecordHydrationEnabled() || fullMutationsForced.Load() {
+	if !ok || !RecordHydrationEnabled(ctx) || fullMutationsForced.Load() {
 		return ctx, mutate, false
 	}
 	scope, ok := requirements.selectScope(stored, event, payload)
@@ -90,7 +90,7 @@ func prepareDocumentRecordMutation(ctx context.Context, stored domain.Bootstrap,
 		candidate, _, _ := runVerifiedCallback(data, payload, auditCollectorFrom(ctx), nil, apply)
 		legacy, err, panicked := runVerifiedCallback(&full, payload, auditCollectorFrom(ctx), nil, mutate)
 		comparison := documentRecordComparisons.Add(1)
-		if path := compareMutationCallbacks(candidate, legacy, protected); path != "" {
+		if path := compareMutationCallbacks(ctx, candidate, legacy, protected); path != "" {
 			documentRecordDifferences.Add(1)
 			slog.Error("document record verification mismatch; using canonical callback", "event", event, "field", path, "comparison", comparison)
 			if testing.Testing() {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -37,15 +36,6 @@ func metadataRecordPointMutation(ctx context.Context, event string, payload any)
 		userSettingsRecordMutation(event, payload) || standaloneFavoriteMutation(event, payload) || UsesIssueRecordMutations(ctx)
 }
 
-// RecordHydrationEnabled reports whether handlers can declare record inputs.
-func RecordHydrationEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_RECORD_HYDRATION"))) {
-	case "", "1", "true", "on":
-		return true
-	}
-	return false
-}
-
 // WithMetadataRecords does not authorize a read or mutation. The existing
 // callback authorization still runs, using the declared policy inputs.
 // Fixed-input point mutations reject these scopes until their requirements
@@ -58,7 +48,7 @@ func WithMetadataRecords(ctx context.Context, scope MetadataRecordScope) context
 }
 
 func metadataRecordScopeFromContext(ctx context.Context) (MetadataRecordScope, bool) {
-	if !RecordHydrationEnabled() || fullMutationsForced.Load() {
+	if !RecordHydrationEnabled(ctx) || fullMutationsForced.Load() {
 		return MetadataRecordScope{}, false
 	}
 	scope, ok := ctx.Value(metadataRecordScopeKey{}).(MetadataRecordScope)

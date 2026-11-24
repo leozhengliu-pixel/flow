@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -95,27 +94,28 @@ func (tx *sqlTx) resetRecordJournalParticipant() {
 	}
 }
 
-func recordJournalMode() string {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL"))) {
-	case "off", "0", "false":
-		return "off"
-	case "", "on":
-		return "on"
-	case "shadow":
-		return "shadow"
+func recordJournalMode(driver string) string {
+	switch mode := metadataFeatureSetting("FLOW_RECORD_JOURNAL", driver); mode {
+	case "on", "shadow":
+		return mode
 	default:
 		return "off"
 	}
 }
 
+// RecordJournalMode reports the configured mode before any SQL initialization.
+func (c DatabaseConfig) RecordJournalMode() string { return recordJournalMode(c.Driver) }
+
 // RecordJournalEnabled excludes shadow mode, which captures changes without
 // making the journal authoritative for serving.
-func RecordJournalEnabled() bool { return recordJournalMode() == "on" }
+func (s *SQLiteStore) RecordJournalEnabled() bool {
+	return recordJournalMode(s.databaseDriver()) == "on"
+}
 
 // RecordJournalReady reports local capture readiness without querying SQL.
 // Consumers still check each workspace's writer coverage before applying changes.
 func (s *SQLiteStore) RecordJournalReady() bool {
-	return s != nil && s.db != nil && recordJournalMode() != "off" && s.db.journalReady.Load()
+	return s != nil && s.db != nil && recordJournalMode(s.dialect) != "off" && s.db.journalReady.Load()
 }
 
 func journalWriteStatement(query string) bool {
@@ -160,7 +160,7 @@ func journalWriteStatement(query string) bool {
 }
 
 func (tx *sqlTx) beginRecordJournal(ctx context.Context) error {
-	if tx.journalToken != "" || tx.numbering || tx.database == nil || !tx.database.journalReady.Load() || recordJournalMode() == "off" {
+	if tx.journalToken != "" || tx.numbering || tx.database == nil || !tx.database.journalReady.Load() || recordJournalMode(tx.dialect) == "off" {
 		return nil
 	}
 	prefix := "rjt"
@@ -712,7 +712,7 @@ func checkRecordJournalCoverage(ctx context.Context, reader metadataRowReader, w
 }
 
 func (s *SQLiteStore) committedMetadataRecordVersion(ctx context.Context, reader metadataRowReader, workspace string, item *MetadataRecord) error {
-	if recordJournalMode() != "on" || !s.db.journalReady.Load() {
+	if recordJournalMode(s.dialect) != "on" || !s.db.journalReady.Load() {
 		return nil
 	}
 	if err := checkRecordJournalCoverage(ctx, reader, workspace); err != nil {
@@ -742,7 +742,7 @@ func (s *SQLiteStore) committedMetadataRecordVersion(ctx context.Context, reader
 // one bounded invalidation. P11/P12 must authorize/redact this trusted stream.
 func (s *SQLiteStore) ReadCommittedChanges(ctx context.Context, workspaceID, after string, limit, maxBytes int) (CommittedPage, error) {
 	page := CommittedPage{Next: after, Head: "0", Transactions: []CommittedChange{}}
-	if !s.db.journalReady.Load() || recordJournalMode() == "off" {
+	if !s.db.journalReady.Load() || recordJournalMode(s.dialect) == "off" {
 		return page, ErrRecordJournalUnavailable
 	}
 	since := int64(0)
@@ -922,7 +922,7 @@ func (s *SQLiteStore) PruneRecordJournal(ctx context.Context, workspaceID string
 }
 
 func (s *SQLiteStore) pruneRecordJournalRetention(ctx context.Context, before time.Time) error {
-	if !s.db.journalReady.Load() || recordJournalMode() == "off" {
+	if !s.db.journalReady.Load() || recordJournalMode(s.dialect) == "off" {
 		return nil
 	}
 	var workspaceID string

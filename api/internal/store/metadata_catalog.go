@@ -392,7 +392,7 @@ func (s *SQLiteStore) readMetadataCatalogPage(ctx context.Context, workspace str
 	defer tx.Rollback()
 	var phase int
 	var omissions int64
-	journal := recordJournalMode() == "on" && s.db.journalReady.Load()
+	journal := s.RecordJournalEnabled() && s.db.journalReady.Load()
 	if journal {
 		if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
 			return page, err

@@ -75,7 +75,7 @@ func (s *SQLiteStore) readScopedMetadataWithOrigin(ctx context.Context, workspac
 }
 
 func (s *SQLiteStore) readScopedMetadataResult(ctx context.Context, workspace string, scope MetadataRecordScope, origin *metadataLogicalOrigin) (domain.Bootstrap, error) {
-	if !RecordHydrationEnabled() {
+	if !recordHydrationEnabled(s.dialect) {
 		return domain.Bootstrap{}, ErrBoundedMetadataCoverage
 	}
 	if read, handled, err := installedMetadataReadFromContext(ctx, s, workspace); handled {
@@ -205,9 +205,10 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 }
 
 func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, workspace, event string, payload any, scope MetadataRecordScope, mutate func(*domain.Bootstrap) (string, error), profileFactory metadataOrdinalProfileFactory) error {
-	if !RecordHydrationEnabled() {
+	if !recordHydrationEnabled(s.dialect) {
 		return ErrBoundedMetadataCoverage
 	}
+	ctx = s.ContextWithDatabaseFeatures(ctx)
 	ctx = trackMetadataWorkDemand(metadataLogicalUnpinnedContext(ctx))
 	actor, hasActor := actorFromContext(ctx)
 	actor = mutationInputActor(actor)

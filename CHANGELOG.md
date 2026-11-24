@@ -7,7 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-- **Default change.** Bounded metadata, record hydration, the record journal, and sync v2 now default to on. Startup repairs journal coverage and completes the metadata catalog. Default starts on MySQL without trigger authority keep serving legacy metadata and realtime. Explicit `off` values still opt out. See the [upgrade and rollback runbook](docs/bounded-metadata-activation.md).
+- **Default change.** Bounded metadata, record hydration, the record journal, and Sync V2 now default to `on` on MySQL and PostgreSQL. Startup repairs journal coverage and completes the metadata catalog. SQLite keeps these features `off` by default until a follow-up release. Explicit settings apply on every database. Default starts on MySQL without trigger authority serve legacy metadata and realtime. See the [upgrade and rollback runbook](docs/bounded-metadata-activation.md).
 - Realtime projections wait briefly for shared memory during bursts, so viewers can receive updates as capacity frees up.
 - Loops can quote text from authorized Word attachments and inspect JPGs with an image-capable model. Unreadable files and unavailable image input are reported per attachment so the audit can continue.
 - The keyboard skip link moves focus to the page content even when the page is still loading.
@@ -159,10 +159,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Bounded attachment backfill preserves typed issue identities and checkpoint behavior. Search repair preflights key and cursor bytes; installed identity handles retain physical and logical workspace keys separately. Policy recovery preserves folded settings aliases and rejects unsupported split core layouts.
 - Bounded startup and erasure scans process admitted records atomically, retained read handles cover result lifetimes, and policy recovery preserves canonical ordering and SQLite byte identities. New source-parity witnesses retain compatibility gaps as activation blockers.
 - Bounded metadata readers can stream selected raw collections from detached or caller-owned snapshots with explicit work budgets. Scoped reads preserve exact workspace-key identity. Application inputs, chat team checks, workspace purge identity and Loop worker inputs avoid unrelated metadata. Legacy source differences remain activation blockers.
-- Activation browser checks can isolate P20 scratch servers, caches and screenshots per run. Scale flag defaults are unchanged.
+- Activation browser checks can isolate P20 scratch servers, caches and screenshots per run.
 - Bounded metadata migrations use transaction-local read dependencies for label edits and team restoration, and native bounded readers for team records, SCIM and exports. Startup backfills process records within explicit budgets. Compatibility gaps remain activation blockers.
 - Realtime epoch batching retains its legacy fallback when the record journal store is uninitialized.
-- SQLite journal commits use indexed lookups for a single metadata record and its event, retaining the bounded generic path for other transactions. Scale activation defaults remain unchanged after the 300/800-user load gates failed.
+- SQLite journal commits use indexed lookups for a single metadata record and its event, retaining the bounded generic path for other transactions. The earlier 300- and 800-user load gates failed.
 - Bounded metadata checks now keep legacy aggregate-event compatibility gaps as activation blockers. Additional native scalar readers and startup migrations avoid unrelated bodies, and permission-policy reads project required fields before transfer.
 - Bounded metadata writers can append declared records in canonical order without loading existing collections. More notification, OAuth, identity-provider and Agent helpers use bounded inputs; session ownership checks read SQL scalars.
 - Bounded metadata consumer migrations retain deferred audit attribution and actor directory updates. Settings consumers can select individual properties, and authentication-provider policy checks return SQL decisions without loading provider bodies.
