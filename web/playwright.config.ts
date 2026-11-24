@@ -50,6 +50,9 @@ export default defineConfig({
   testDir: './e2e',
   testIgnore: standaloneSpecs,
   timeout: 30_000,
+  // CI serves the app from the Vite dev server: every page.goto refetches about
+  // 1,100 modules, which takes 4-5 s on a loaded hosted runner before any data.
+  expect: { timeout: process.env.CI ? 10_000 : 5_000 },
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 2 : 0,
