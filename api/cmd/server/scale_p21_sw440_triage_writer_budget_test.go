@@ -205,42 +205,76 @@ func scaleP21SW440Check(t *testing.T, legacy scaleP21IssueUpdateOutcome, started
 // realtime and the installed image. Team auto-moves append to and merge into
 // the moved issues' history.
 func TestScaleP21SW440ThousandIssueTriageGenerationDifferential(t *testing.T) {
+	scaleP21SW440Run(t, "suggest", nil, false)
+}
+
+func TestScaleP21SW440ThousandIssueTriageAutoActionsDifferential(t *testing.T) {
+	scaleP21SW440Run(t, "auto-actions", func(settings *domain.TriageIntelligenceSettings) {
+		settings.AssigneeAction, settings.ProjectAction, settings.LabelAction = "auto", "auto", "auto"
+		settings.DuplicateAction, settings.RelatedAction = "auto", "auto"
+	}, false)
+}
+
+func TestScaleP21SW440ThousandIssueTriageTeamAutoMoveDifferential(t *testing.T) {
+	scaleP21SW440Run(t, "team-auto-move", func(settings *domain.TriageIntelligenceSettings) {
+		settings.TeamAction, settings.LabelAction = "auto", "auto"
+	}, true)
+}
+
+func scaleP21SW440Run(t *testing.T, name string, actions func(*domain.TriageIntelligenceSettings), moved bool) {
+	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f, ids := scaleP21SW440Setup(t, scaleP21SW440Size(t))
-	for _, test := range []struct {
-		name        string
-		setup       func(*testing.T)
-		auto, moved bool
-	}{
-		{name: "suggest"},
-		{name: "auto-actions", setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
-			settings.AssigneeAction, settings.ProjectAction, settings.LabelAction = "auto", "auto", "auto"
-			settings.DuplicateAction, settings.RelatedAction = "auto", "auto"
-		}), auto: true},
-		{name: "team-auto-move", setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
-			settings.TeamAction, settings.LabelAction = "auto", "auto"
-		}), auto: true, moved: true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{setup: test.setup, issue: f.triage.ID})
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
-			started := time.Now().UTC()
-			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
-				if service.store.BoundedMetadataEnabled() && service.store.MetadataWorkUsedForTesting() != 0 {
-					t.Fatal("the bounded run does not start from an empty work budget")
-				}
-				service.store.MetadataWorkPeakForTesting()
-				w := f.sw440Generate(t, ids)(service)
-				if service.store.BoundedMetadataEnabled() {
-					t.Logf("bounded peak work %.1f MB", float64(service.store.MetadataWorkPeakForTesting())/(1<<20))
-				}
-				return w
-			})
-			scaleP21SW440Check(t, outcomes[0], started, f.private, test.auto, test.moved)
+	t.Run(name, func(t *testing.T) {
+		var setup func(*testing.T)
+		if actions != nil {
+			setup = scaleP21SW400Actions(f, actions)
+		}
+		// Seed the teams and action settings once. Each mode restores the
+		// same complete preimage plus the side tables outside Bootstrap.
+		f.prepare(scaleP21IssueUpdateCase{setup: setup, issue: f.triage.ID})(t)
+		// The seed advances the sequence past the bulk issue numbers so
+		// later team moves can assign identifiers without collisions.
+		f.sequence = f.currentSequence(t)
+		workspace := f.data.Workspace.URLKey
+		full, ok := f.repository.BootstrapFor(workspace)
+		if !ok {
+			t.Fatal("workspace missing")
+		}
+		var err error
+		if f.baseline, err = json.Marshal(full); err != nil {
+			t.Fatal(err)
+		}
+		f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+			f.resetSequenceAndAliases(t)
+			f.exec(t, `DELETE FROM document_collaboration_updates WHERE workspace_key=?`, workspace)
+		}
+		defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+		oracle, err := store.OpenDatabase(f.reader.config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = oracle.Close() })
+		f.reloadOracle = oracle
+		started := time.Now().UTC()
+		outcomes := f.differential(t, name, func(service *server) *httptest.ResponseRecorder {
+			bounded := service.store.BoundedMetadataEnabled()
+			if bounded && service.store.MetadataWorkUsedForTesting() != 0 {
+				t.Fatal("the bounded run does not start from an empty work budget")
+			}
+			service.store.MetadataWorkPeakForTesting()
+			began := time.Now()
+			w := f.sw440Generate(t, ids)(service)
+			t.Logf("bounded=%t generation took %s", bounded, time.Since(began))
+			if bounded {
+				t.Logf("bounded peak work %.1f MB", float64(service.store.MetadataWorkPeakForTesting())/(1<<20))
+			}
+			return w
 		})
-	}
+		scaleP21SW440Check(t, outcomes[0], started, f.private, actions != nil, moved)
+	})
 }
 
 // scaleP21SW441Moved is a bulk issue the team auto-move moves: its group's

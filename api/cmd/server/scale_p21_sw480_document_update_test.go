@@ -175,16 +175,8 @@ func scaleP21SW480Normalize(t *testing.T, value any, fields map[string]json.RawM
 			ids[favorite.ID] = fmt.Sprintf("<generated-favorite:%d>", index)
 		}
 	}
-	raw, err := json.Marshal(value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var result any
-	if err := decoder.Decode(&result); err != nil {
-		t.Fatal(err)
-	}
+	// SW59 already decoded the outcome into owned JSON values with UseNumber.
+	// Normalize those values in place, including the multi-MiB bodies.
 	var normalize func(any, string) any
 	normalize = func(value any, key string) any {
 		switch value := value.(type) {
@@ -208,7 +200,7 @@ func scaleP21SW480Normalize(t *testing.T, value any, fields map[string]json.RawM
 		}
 		return value
 	}
-	return normalize(result, "")
+	return normalize(value, "")
 }
 
 // scaleP21SW480Path names the first differing JSON path of two normalized
@@ -268,18 +260,34 @@ func TestScaleP21SW480WeekendDigestTime(t *testing.T) {
 }
 
 func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
-	scaleP21SW480DocumentUpdate(t, 0)
+	scaleP21SW480DocumentUpdate(t, "updates")
 }
 
-func TestScaleP21SW480DocumentUpdateDifferentialPart2(t *testing.T) {
-	scaleP21SW480DocumentUpdate(t, 1)
+func TestScaleP21SW480DocumentUpdateCollaborationDifferential(t *testing.T) {
+	scaleP21SW480DocumentUpdate(t, "collaboration")
+}
+
+func TestScaleP21SW480DocumentUpdateHistoryDifferential(t *testing.T) {
+	scaleP21SW480DocumentUpdate(t, "history")
+}
+
+func TestScaleP21SW480DocumentUpdatePeerDifferential(t *testing.T) {
+	scaleP21SW480DocumentUpdate(t, "peer")
+}
+
+func TestScaleP21SW480DocumentUpdateLargePeerMergeDifferential(t *testing.T) {
+	scaleP21SW480DocumentUpdate(t, "peer-large-merge")
+}
+
+func TestScaleP21SW480DocumentUpdateLargePeerMergeLimitedDifferential(t *testing.T) {
+	scaleP21SW480DocumentUpdate(t, "peer-large-merge-limited")
 }
 
 func TestScaleP21SW480DocumentUpdatePermissionDifferential(t *testing.T) {
-	scaleP21SW480DocumentUpdate(t, 2)
+	scaleP21SW480DocumentUpdate(t, "permissions")
 }
 
-func scaleP21SW480DocumentUpdate(t *testing.T, part int) {
+func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
@@ -292,11 +300,14 @@ func scaleP21SW480DocumentUpdate(t *testing.T, part int) {
 	}
 	t.Cleanup(func() { _ = repo.Close() })
 	f := scaleP21M2Setup(t, repo)
-	peer, err := store.OpenDatabase(config)
-	if err != nil {
-		t.Fatal(err)
+	var peer *store.SQLiteStore
+	if strings.HasPrefix(group, "peer") {
+		peer, err = store.OpenDatabase(config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = peer.Close() })
 	}
-	t.Cleanup(func() { _ = peer.Close() })
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw480-")
 	reader := &scaleP04Database{config: config, key: workspace, workspaceID: f.data.Workspace.ID}
 	t.Cleanup(func() {
@@ -371,59 +382,83 @@ func scaleP21SW480DocumentUpdate(t *testing.T, part int) {
 			existing[revision.ID] = true
 		}
 	}
-	tests := []struct {
+	type documentCase struct {
 		name, ref string
 		body      map[string]any
-	}{
-		{"title-and-baseline", documentID, map[string]any{"title": "Renamed document"}},
-		{"markdown-generation", documentID, map[string]any{"content": "Replacement Markdown"}},
-		{"rich-content", documentID, map[string]any{"contentData": mentioningDocument("New rich body", f.principals[2].user.ID)}},
-		{"favorite-from-nil", documentID, map[string]any{"favorite": true}},
-		{"no-op", documentID, map[string]any{}},
-		{"version-conflict", documentID, map[string]any{"title": "Rejected", "expectedVersion": 6}},
-		{"stale-content-version", documentID, map[string]any{"contentState": mentioningCollaborationState(f.principals[2].user.ID), "expectedContentVersion": 99}},
-		{"accepted-content-state", documentID, map[string]any{"contentState": mentioningCollaborationState(f.principals[2].user.ID), "expectedContentVersion": 0}},
-		{"project-links", documentID, map[string]any{"projectIds": []string{newProject}}},
-		{"subscriber-change", documentID, map[string]any{"subscriberIds": []string{f.principals[3].user.ID}}},
-		{"old-slug", prefix + "old", map[string]any{"title": "Edited through old slug"}},
-		{"missing", prefix + "missing", map[string]any{"title": "Missing"}},
-		{"compaction", documentID, map[string]any{"content": "Compacted body", "contentState": compactedState, "expectedContentVersion": 0, "documentUpdateIds": []string{prefix + "prune"}}},
-		{"compaction-stale", documentID, map[string]any{"content": "Independent stale-base body", "contentState": formerState, "expectedContentVersion": 0, "documentUpdateIds": []string{prefix + "prune"}}},
-		{"former-retained-rich", documentID, map[string]any{"contentData": mentioningDocument("Retained former mention", formerID)}},
-		{"former-retained-state", documentID, map[string]any{"contentState": formerState, "expectedContentVersion": 0}},
-		{"former-retained-queued", documentID, map[string]any{"contentData": mentioningDocument("Queued former mention", formerID)}},
-		{"former-invalid-before-rich-retained", documentID, map[string]any{"contentData": mentioningDocument("Retained rich legacy evidence", formerID)}},
-		{"former-reject-new-rich", documentID, map[string]any{"contentData": mentioningDocument("Rejected former mention", formerID)}},
-		{"former-reject-new-state", documentID, map[string]any{"contentState": formerState, "expectedContentVersion": 0, "documentUpdateIds": []string{prefix + "prune"}}},
-		{"former-reject-after-compaction", documentID, map[string]any{"contentState": compactedState, "expectedContentVersion": 0, "documentUpdateIds": []string{prefix + "prune"}, "contentData": mentioningDocument("Rejected after accepted base", formerID)}},
-		{"former-reject-deleted-history", documentID, map[string]any{"contentState": formerState, "expectedContentVersion": 0}},
-		{"former-remove-mention", documentID, map[string]any{"contentData": map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph"}}}}},
-		{"offloaded-history", documentID, map[string]any{"title": "Preserve offloaded history"}},
-		{"offloaded-history-summary", documentID, map[string]any{"title": "Summary response after edit"}},
-		{"large-current-and-history", documentID, map[string]any{"title": "Large current body retained"}},
-		{"large-current-content-edit", documentID, map[string]any{"content": strings.Repeat("y", 4<<20)}},
-		{"icon-color", documentID, map[string]any{"icon": "rocket", "color": "#ff0000"}},
-		{"archive", documentID, map[string]any{"archived": true}},
-		{"unarchive", documentID, map[string]any{"archived": false}},
-		{"trashed", prefix + "trashed", map[string]any{"title": "Trashed"}},
-		{"team-move", documentID, map[string]any{"teamIds": []string{privateTeam}}},
-		{"issue-link", documentID, map[string]any{"issueId": issue.ID}},
-		{"issue-link-invalid", documentID, map[string]any{"issueId": prefix + "no-issue"}},
-		{"project-invalid", documentID, map[string]any{"projectIds": []string{prefix + "no-project"}}},
-		{"projects-with-existing-issue", documentID, map[string]any{"projectIds": []string{newProject, oldProject}}},
-		{"unlink-all", documentID, map[string]any{"projectIds": []string{}, "issueId": ""}},
-		{"subscriber-invalid", documentID, map[string]any{"subscriberIds": []string{prefix + "nobody"}}},
-		{"favorite-remove", documentID, map[string]any{"favorite": false}},
-		{"slug-over-earlier-old-slug", "original-" + prefix + "0123456789ab", map[string]any{"title": "Slug wins"}},
-		{"id-over-earlier-old-slug", documentID, map[string]any{"title": "ID wins"}},
-		{"duplicate-first", documentID, map[string]any{"title": "First duplicate edited"}},
-		{"duplicate-later-slug", prefix + "duplicate-slug", map[string]any{"title": "Later duplicate edited"}},
-		{"expected-version-match", documentID, map[string]any{"title": "Matching version", "expectedVersion": 7}},
-		{"peer-merge", documentID, map[string]any{"title": "After peer"}},
-		{"peer-unrelated-records", documentID, map[string]any{"title": "After peer"}},
-		{"peer-conflict-retry", documentID, map[string]any{"title": "After peer"}},
-		{"peer-large-merge", documentID, map[string]any{"title": "After peer"}},
-		{"peer-large-merge-limited", documentID, map[string]any{"title": "After peer"}},
+	}
+	var tests []documentCase
+	var largeBody, editedBody, olderBody, oldestBody string
+	if group == "history" || strings.HasPrefix(group, "peer-large-merge") {
+		largeBody = strings.Repeat("x", 4<<20)
+		olderBody = strings.Repeat("old body <>& ", 8192)
+		oldestBody = strings.Repeat("oldest text ", 8192)
+	}
+	switch group {
+	case "updates":
+		tests = []documentCase{
+			{"title-and-baseline", documentID, map[string]any{"title": "Renamed document"}},
+			{"markdown-generation", documentID, map[string]any{"content": "Replacement Markdown"}},
+			{"rich-content", documentID, map[string]any{"contentData": mentioningDocument("New rich body", f.principals[2].user.ID)}},
+			{"favorite-from-nil", documentID, map[string]any{"favorite": true}},
+			{"no-op", documentID, map[string]any{}},
+			{"version-conflict", documentID, map[string]any{"title": "Rejected", "expectedVersion": 6}},
+			{"project-links", documentID, map[string]any{"projectIds": []string{newProject}}},
+			{"subscriber-change", documentID, map[string]any{"subscriberIds": []string{f.principals[3].user.ID}}},
+			{"old-slug", prefix + "old", map[string]any{"title": "Edited through old slug"}},
+			{"missing", prefix + "missing", map[string]any{"title": "Missing"}},
+			{"icon-color", documentID, map[string]any{"icon": "rocket", "color": "#ff0000"}},
+			{"archive", documentID, map[string]any{"archived": true}},
+			{"unarchive", documentID, map[string]any{"archived": false}},
+			{"trashed", prefix + "trashed", map[string]any{"title": "Trashed"}},
+			{"team-move", documentID, map[string]any{"teamIds": []string{privateTeam}}},
+			{"issue-link", documentID, map[string]any{"issueId": issue.ID}},
+			{"issue-link-invalid", documentID, map[string]any{"issueId": prefix + "no-issue"}},
+			{"project-invalid", documentID, map[string]any{"projectIds": []string{prefix + "no-project"}}},
+			{"projects-with-existing-issue", documentID, map[string]any{"projectIds": []string{newProject, oldProject}}},
+			{"unlink-all", documentID, map[string]any{"projectIds": []string{}, "issueId": ""}},
+			{"subscriber-invalid", documentID, map[string]any{"subscriberIds": []string{prefix + "nobody"}}},
+			{"favorite-remove", documentID, map[string]any{"favorite": false}},
+			{"slug-over-earlier-old-slug", "original-" + prefix + "0123456789ab", map[string]any{"title": "Slug wins"}},
+			{"id-over-earlier-old-slug", documentID, map[string]any{"title": "ID wins"}},
+			{"duplicate-first", documentID, map[string]any{"title": "First duplicate edited"}},
+			{"duplicate-later-slug", prefix + "duplicate-slug", map[string]any{"title": "Later duplicate edited"}},
+			{"expected-version-match", documentID, map[string]any{"title": "Matching version", "expectedVersion": 7}},
+		}
+	case "collaboration":
+		tests = []documentCase{
+			{"stale-content-version", documentID, map[string]any{"contentState": mentioningCollaborationState(f.principals[2].user.ID), "expectedContentVersion": 99}},
+			{"accepted-content-state", documentID, map[string]any{"contentState": mentioningCollaborationState(f.principals[2].user.ID), "expectedContentVersion": 0}},
+			{"compaction", documentID, map[string]any{"content": "Compacted body", "contentState": compactedState, "expectedContentVersion": 0, "documentUpdateIds": []string{prefix + "prune"}}},
+			{"compaction-stale", documentID, map[string]any{"content": "Independent stale-base body", "contentState": formerState, "expectedContentVersion": 0, "documentUpdateIds": []string{prefix + "prune"}}},
+			{"former-retained-rich", documentID, map[string]any{"contentData": mentioningDocument("Retained former mention", formerID)}},
+			{"former-retained-state", documentID, map[string]any{"contentState": formerState, "expectedContentVersion": 0}},
+			{"former-retained-queued", documentID, map[string]any{"contentData": mentioningDocument("Queued former mention", formerID)}},
+			{"former-invalid-before-rich-retained", documentID, map[string]any{"contentData": mentioningDocument("Retained rich legacy evidence", formerID)}},
+			{"former-reject-new-rich", documentID, map[string]any{"contentData": mentioningDocument("Rejected former mention", formerID)}},
+			{"former-reject-new-state", documentID, map[string]any{"contentState": formerState, "expectedContentVersion": 0, "documentUpdateIds": []string{prefix + "prune"}}},
+			{"former-reject-after-compaction", documentID, map[string]any{"contentState": compactedState, "expectedContentVersion": 0, "documentUpdateIds": []string{prefix + "prune"}, "contentData": mentioningDocument("Rejected after accepted base", formerID)}},
+			{"former-reject-deleted-history", documentID, map[string]any{"contentState": formerState, "expectedContentVersion": 0}},
+			{"former-remove-mention", documentID, map[string]any{"contentData": map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph"}}}}},
+		}
+	case "history":
+		editedBody = strings.Repeat("y", 4<<20)
+		tests = []documentCase{
+			{"offloaded-history", documentID, map[string]any{"title": "Preserve offloaded history"}},
+			{"offloaded-history-summary", documentID, map[string]any{"title": "Summary response after edit"}},
+			{"large-current-and-history", documentID, map[string]any{"title": "Large current body retained"}},
+			{"large-current-content-edit", documentID, map[string]any{"content": editedBody}},
+		}
+	case "peer":
+		tests = []documentCase{
+			{"peer-merge", documentID, map[string]any{"title": "After peer"}},
+			{"peer-unrelated-records", documentID, map[string]any{"title": "After peer"}},
+			{"peer-conflict-retry", documentID, map[string]any{"title": "After peer"}},
+		}
+	case "peer-large-merge", "peer-large-merge-limited":
+		tests = []documentCase{{group, documentID, map[string]any{"title": "After peer"}}}
+	case "permissions":
+	default:
+		t.Fatal("unknown SW480 case group", group)
 	}
 	formerSuspended := false
 	run := func(t *testing.T, testName, ref string, body map[string]any, principal domain.User, credential *domain.APIKey) {
@@ -491,12 +526,12 @@ func scaleP21SW480DocumentUpdate(t *testing.T, part int) {
 					data.Documents = append(data.Documents, duplicate)
 				case "offloaded-history", "offloaded-history-summary", "large-current-and-history", "large-current-content-edit", "peer-large-merge", "peer-large-merge-limited":
 					if testName == "large-current-and-history" || testName == "large-current-content-edit" || strings.HasPrefix(testName, "peer-large-merge") {
-						document.Content = strings.Repeat("x", 4<<20)
+						document.Content = largeBody
 					}
 					document.Revisions = []domain.DocumentRevision{
 						{ID: prefix + "latest", DocumentID: documentID, Title: document.Title, Content: document.Content, ContentState: document.ContentState, ContentData: document.ContentData, Author: baseline.Viewer, CreatedAt: clock, StartedAt: &clock},
-						{ID: prefix + "older", DocumentID: documentID, Title: "Offloaded old body", Content: strings.Repeat("old body <>& ", 8192), Author: baseline.Viewer, CreatedAt: clock.Add(-time.Hour)},
-						{ID: prefix + "oldest", DocumentID: documentID, Title: "Oldest body", Content: strings.Repeat("oldest text ", 8192), Author: baseline.Viewer, CreatedAt: clock.Add(-2 * time.Hour)},
+						{ID: prefix + "older", DocumentID: documentID, Title: "Offloaded old body", Content: olderBody, Author: baseline.Viewer, CreatedAt: clock.Add(-time.Hour)},
+						{ID: prefix + "oldest", DocumentID: documentID, Title: "Oldest body", Content: oldestBody, Author: baseline.Viewer, CreatedAt: clock.Add(-2 * time.Hour)},
 					}
 				}
 				return nil
@@ -530,22 +565,18 @@ func scaleP21SW480DocumentUpdate(t *testing.T, part int) {
 					t.Fatal(err)
 				}
 			}
-			if strings.HasPrefix(testName, "peer-") {
-				// A server's copy is exact at its stored revision once
-				// loaded, and the peer's commit then provably moves the
-				// stored revision past it. A reset on a copy a previous peer
-				// race left at an unknown revision stays unknown: load it
-				// (a current copy is kept).
-				if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if strings.HasSuffix(mode, "reloaded") {
+			reloaded := strings.HasSuffix(mode, "reloaded")
+			peerCase := strings.HasPrefix(testName, "peer-")
+			if reloaded {
 				// Force a real SQL decode (with its load normalization) in
 				// both reloaded modes, whoever wrote the reset last.
 				if err := repo.ForgetInstalledMetadataRevisionForTesting(workspace); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if reloaded || peerCase {
+				// The peer must advance the revision past an exact installed
+				// copy. Load it if an earlier peer race left its stamp unknown.
 				if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 					t.Fatal(err)
 				}
@@ -557,7 +588,7 @@ func scaleP21SW480DocumentUpdate(t *testing.T, part int) {
 				}
 				source = f.probe
 			}
-			if strings.HasPrefix(testName, "peer-") {
+			if peerCase {
 				// Another server edits the same document and linked project
 				// rows after both sources installed their images. Both
 				// writers start stale; peer-merge touches other members,
@@ -697,7 +728,7 @@ func scaleP21SW480DocumentUpdate(t *testing.T, part int) {
 			// an unknown revision; the bounded writer's installed image is
 			// compared with the SQL reload instead (below).
 			installed := fields
-			if strings.HasPrefix(testName, "peer-") {
+			if peerCase {
 				installed = nil
 			}
 			got.Response, err = json.Marshal(map[string]any{
@@ -788,13 +819,13 @@ func scaleP21SW480DocumentUpdate(t *testing.T, part int) {
 			if len(updates) != wantUpdates {
 				t.Fatal("document save pruned the wrong collaboration updates", testName, len(updates), wantUpdates)
 			}
-			if testName == "large-current-content-edit" && (canonical.Content != strings.Repeat("y", 4<<20) || len(canonical.Revisions) == 0) {
+			if testName == "large-current-content-edit" && (canonical.Content != editedBody || len(canonical.Revisions) == 0) {
 				t.Fatal("large current content edit lost its body or revision")
 			}
-			if strings.HasPrefix(testName, "peer-") && (canonical.Icon != "peer-icon" || canonical.Title != "After peer") {
+			if peerCase && (canonical.Icon != "peer-icon" || canonical.Title != "After peer") {
 				t.Fatal("peer edit and retried update did not both persist", canonical.Icon, canonical.Title)
 			}
-			if strings.HasPrefix(testName, "peer-") && source.BoundedMetadataEnabled() {
+			if peerCase && source.BoundedMetadataEnabled() {
 				if testName == "peer-unrelated-records" && !bytes.Contains(fields["projects"], []byte("Peer renamed unrelated")) {
 					t.Fatal("installed image lost the peer's unrelated record")
 				}
@@ -810,7 +841,7 @@ func scaleP21SW480DocumentUpdate(t *testing.T, part int) {
 				if !bytes.Contains(canonicalRaw, []byte(`"_offloaded"`)) {
 					t.Fatal("offloaded history fixture never exercised stored references")
 				}
-				if testName == "large-current-and-history" && canonical.Content != strings.Repeat("x", 4<<20) {
+				if testName == "large-current-and-history" && canonical.Content != largeBody {
 					t.Fatal("large current body was truncated")
 				}
 				if testName == "offloaded-history-summary" {
@@ -850,11 +881,9 @@ func scaleP21SW480DocumentUpdate(t *testing.T, part int) {
 			t.Logf("document case=%s mode=%s SQL=%d status=%d", testName, mode, statements, response.Code)
 		}
 	}
-	if part < 2 {
-		for index, test := range tests {
-			if index%2 == part {
-				t.Run(test.name, func(t *testing.T) { run(t, test.name, test.ref, test.body, baseline.Viewer, nil) })
-			}
+	if group != "permissions" {
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) { run(t, test.name, test.ref, test.body, baseline.Viewer, nil) })
 		}
 		return
 	}

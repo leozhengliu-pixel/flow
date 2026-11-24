@@ -55,12 +55,17 @@ func scaleP21TeamMoveSetup(t *testing.T) scaleP21TeamMoveFixture {
 	t.Helper()
 	triage := scaleP21TriageWriterSetup(t)
 	f := scaleP21TeamMoveFixture{scaleP21TriageWriterFixture: &triage}
+	f.sequence = f.currentSequence(t)
+	return f
+}
+
+func (f scaleP21TeamMoveFixture) currentSequence(t *testing.T) int64 {
+	t.Helper()
 	rows := f.rows(t, `SELECT last_number FROM issue_number_sequences WHERE workspace_key=?`, f.data.Workspace.URLKey)
 	if len(rows) != 1 {
 		t.Fatal("issue sequence missing")
 	}
-	f.sequence = scaleP21TeamMoveInt(t, rows[0][0])
-	return f
+	return scaleP21TeamMoveInt(t, rows[0][0])
 }
 
 func scaleP21TeamMoveInt(t *testing.T, value any) int64 {
@@ -96,6 +101,13 @@ func (f scaleP21TeamMoveFixture) exec(t *testing.T, query string, args ...any) {
 	}
 }
 
+func (f scaleP21TeamMoveFixture) resetSequenceAndAliases(t *testing.T) {
+	t.Helper()
+	workspace := f.data.Workspace.URLKey
+	f.exec(t, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, f.sequence, workspace)
+	f.exec(t, `DELETE FROM issue_identifier_aliases WHERE workspace_key=?`, workspace)
+}
+
 // prepare seeds the move targets after each reset: four teams (a parent, a
 // sub-team inheriting its workflow, a team without settings or matching
 // labels, a triage team), their states, same-named labels in live,
@@ -105,8 +117,7 @@ func (f scaleP21TeamMoveFixture) exec(t *testing.T, query string, args ...any) {
 func (f scaleP21TeamMoveFixture) prepare(opts scaleP21TeamMoveOptions) func(*testing.T) {
 	return func(t *testing.T) {
 		repo, workspace := f.repository, f.data.Workspace.URLKey
-		f.exec(t, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, f.sequence, workspace)
-		f.exec(t, `DELETE FROM issue_identifier_aliases WHERE workspace_key=?`, workspace)
+		f.resetSequenceAndAliases(t)
 		at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		archived := at.Add(time.Hour)
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.team_move_seed", "", nil, func(data *domain.Bootstrap) error {

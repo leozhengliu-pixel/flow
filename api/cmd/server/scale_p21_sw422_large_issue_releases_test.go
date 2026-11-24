@@ -31,177 +31,179 @@ func scaleP21SW422Run(t *testing.T, names ...string) {
 	issue := f.triage.ID
 	workspace := f.data.Workspace.URLKey
 	large := seed.id("large")
-	// peer rewrites the large release row directly, as a writer in another
-	// process would, after both copies were installed.
-	peer := func(edit func(*domain.Release)) func(*testing.T) {
-		return func(t *testing.T) {
-			rows := f.rows(t, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='releases' AND record_key='`+large+`'`, workspace)
-			if len(rows) != 1 {
-				t.Fatal("large release row missing")
-			}
-			var release domain.Release
-			if err := json.Unmarshal([]byte(rows[0][0].(string)), &release); err != nil {
-				t.Fatal(err)
-			}
-			edit(&release)
-			raw, err := json.Marshal(release)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_ = f.rows(t, `SELECT 1 FROM workspace_states WHERE workspace_key=?`, workspace)
-			statement := `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='releases' AND record_key=?`
-			if f.reader.config.Driver == "postgres" || f.reader.config.Driver == "postgresql" {
-				statement = scaleDB{driver: "postgres"}.rebind(statement)
-			}
-			if _, err := f.reader.reader.ExecContext(context.Background(), statement, raw, workspace, large); err != nil {
-				t.Fatal(err)
-			}
+	largeRow := func(t *testing.T, edit func(*domain.Release)) []byte {
+		t.Helper()
+		rows := f.rows(t, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='releases' AND record_key='`+large+`'`, workspace)
+		if len(rows) != 1 {
+			t.Fatal("large release row missing")
 		}
+		var release domain.Release
+		if err := json.Unmarshal([]byte(rows[0][0].(string)), &release); err != nil {
+			t.Fatal(err)
+		}
+		edit(&release)
+		raw, err := json.Marshal(release)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
 	}
-	var growPlain func(description, count int, linked bool, raw int, plain bool) func(*testing.T)
-	// grow sets the large release's description and links count issues
-	// over several transactions: the release issue index takes one row per
-	// linked issue, so a release with very many issues grew in steps.
-	grow := func(description, count int, linked bool, raw int) func(*testing.T) {
-		return growPlain(description, count, linked, raw, false)
+	writeLarge := func(t *testing.T, raw []byte) {
+		t.Helper()
+		scaleP21SW201Exec(t, f.reader, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='releases' AND record_key=?`, raw, workspace, large)
 	}
-	growPlain = func(description, count int, linked bool, raw int, plain bool) func(*testing.T) {
-		return func(t *testing.T) {
-			const step = 50_000
-			for done := 0; ; done += step {
-				upto := min(done+step, count)
-				if err := f.repository.MutateWorkspace(t.Context(), workspace, "scale_p21.sw422_grow", "", nil, func(data *domain.Bootstrap) error {
-					for index := range data.Releases {
-						if data.Releases[index].ID != large {
-							continue
-						}
-						release := &data.Releases[index]
-						if done == 0 {
-							release.Description = scaleP21SW421Body("legal release notes", description)
-							if plain {
-								release.Description = strings.Repeat("plain release notes ", description/20)
-							}
-							release.PipelineID, release.Stage = seed.id("open"), "Open"
-						}
-						for number := done; number < upto; number++ {
-							release.IssueIDs = append(release.IssueIDs, fmt.Sprintf("sw422-linked-%07d", number))
-						}
-						if linked && upto >= count {
-							release.IssueIDs = append(release.IssueIDs, issue)
-						}
-					}
-					return nil
-				}); err != nil {
-					t.Fatal(err)
-				}
-				if upto >= count {
-					break
-				}
-			}
-			if raw > 0 {
-				// Above what the literal writer accepts in one
-				// transaction: an earlier write path left it.
-				peer(func(release *domain.Release) {
-					release.Description = scaleP21SW421Body("legal release notes", raw)
-				})(t)
-				if err := f.repository.ReloadWorkspace(t.Context(), workspace); err != nil {
-					t.Fatal(err)
-				}
+	// The peer rewrites the row after both copies were installed.
+	peer := func(edit func(*domain.Release)) func(*testing.T) {
+		return func(t *testing.T) { writeLarge(t, largeRow(t, edit)) }
+	}
+	editLarge := func(data *domain.Bootstrap, edit func(*domain.Release)) {
+		for index := range data.Releases {
+			if data.Releases[index].ID == large {
+				edit(&data.Releases[index])
+				return
 			}
 		}
 	}
 	type sw422Case struct {
-		name       string
-		prepare    func(*testing.T)
-		peer       func(*testing.T)
-		ids        []string
-		code       int
-		largeIndex bool
+		name                    string
+		description, links, raw int
+		linked, plain           bool
+		peer                    func(*testing.T)
+		ids                     []string
+		code                    int
 	}
 	cases := []sw422Case{
-		{name: "add-to-many-issues", prepare: grow(64<<10, 300_000, false, 0), ids: []string{large}, code: http.StatusOK, largeIndex: true},
-		{name: "remove-from-many-issues", prepare: grow(64<<10, 300_000, true, 0), ids: []string{}, code: http.StatusOK, largeIndex: true},
-		{name: "add-large-description-7mib", prepare: grow(7<<20, 1000, false, 0), ids: []string{large, seed.id("add")}, code: http.StatusOK},
-		{name: "add-large-description-at-max", prepare: grow(10<<20, 1000, false, 0), ids: []string{large}, code: http.StatusOK},
-		{name: "remove-large-description-at-max", prepare: grow(10<<20, 1000, true, 0), ids: []string{seed.id("add")}, code: http.StatusOK},
-		{name: "add-plain-description-14mb", prepare: growPlain(14_000_000, 1000, false, 0, true), ids: []string{large}, code: http.StatusOK},
-		{name: "add-large-description-over", prepare: grow(64<<10, 1000, false, 13<<20), ids: []string{large}},
-		{name: "peer-added-issue", prepare: grow(4<<20, 50_000, false, 0), ids: []string{large}, code: http.StatusOK,
+		{name: "add-to-many-issues", description: 64 << 10, links: 300_000, ids: []string{large}, code: http.StatusOK},
+		{name: "remove-from-many-issues", description: 64 << 10, links: 300_000, linked: true, ids: []string{}, code: http.StatusOK},
+		{name: "add-large-description-7mib", description: 7 << 20, links: 1000, ids: []string{large, seed.id("add")}, code: http.StatusOK},
+		{name: "add-large-description-at-max", description: 10 << 20, links: 1000, ids: []string{large}, code: http.StatusOK},
+		{name: "remove-large-description-at-max", description: 10 << 20, links: 1000, linked: true, ids: []string{seed.id("add")}, code: http.StatusOK},
+		{name: "add-plain-description-14mb", description: 14_000_000, links: 1000, plain: true, ids: []string{large}, code: http.StatusOK},
+		{name: "add-large-description-over", description: 64 << 10, links: 1000, raw: 13 << 20, ids: []string{large}},
+		{name: "peer-added-issue", description: 4 << 20, links: 50_000, ids: []string{large}, code: http.StatusOK,
 			peer: peer(func(release *domain.Release) { release.IssueIDs = append(release.IssueIDs, "sw422-peer-issue") })},
-		{name: "peer-renamed", prepare: grow(4<<20, 1000, false, 0), ids: []string{large}, code: http.StatusOK,
+		{name: "peer-renamed", description: 4 << 20, links: 1000, ids: []string{large}, code: http.StatusOK,
 			peer: peer(func(release *domain.Release) { release.Name = "Peer renamed release" })},
 	}
 	for _, name := range names {
-		if !slices.ContainsFunc(cases, func(test sw422Case) bool { return test.name == name }) {
+		index := slices.IndexFunc(cases, func(test sw422Case) bool { return test.name == name })
+		if index < 0 {
 			t.Fatal("unknown SW422 case", name)
 		}
-	}
-	// The large-index cases each have their own fixture. Grow the index once;
-	// the usual full reset then restores only the link edited by a request.
-	if len(names) == 1 {
-		for _, test := range cases {
-			if test.name != names[0] || !test.largeIndex {
-				continue
+		test := cases[index]
+		t.Run(name, func(t *testing.T) {
+			var description string
+			if test.plain {
+				description = strings.Repeat("plain release notes ", test.description/20)
+			} else {
+				description = scaleP21SW421Body("legal release notes", test.description)
 			}
-			f.reader.query(t, `SELECT 1 FROM workspace_states WHERE workspace_key=?`, workspace).Close()
-			t.Cleanup(func() {
-				// Delete this fixture's synthetic index in one statement.
-				// The ordinary workspace and account cleanup still runs.
-				statement := `DELETE FROM release_issue_filter_records WHERE workspace_key=? AND release_id=?`
-				if f.reader.config.Driver == "postgres" || f.reader.config.Driver == "postgresql" {
-					statement = scaleDB{driver: "postgres"}.rebind(statement)
-				}
-				if _, err := f.reader.reader.ExecContext(context.Background(), statement, workspace, large); err != nil {
-					t.Errorf("clean up large release index: %v", err)
-				}
-			})
-			test.prepare(t)
-			baseline, found := f.repository.BootstrapFor(workspace)
-			if !found {
-				t.Fatal("large release fixture missing")
+			links := make([]string, test.links)
+			for number := range links {
+				links[number] = fmt.Sprintf("sw422-linked-%07d", number)
 			}
-			var err error
-			if f.baseline, err = json.Marshal(baseline); err != nil {
-				t.Fatal(err)
+			if test.linked {
+				links = append(links, issue)
 			}
-			break
-		}
-	}
-	for _, alias := range []bool{true, false} {
-		for _, test := range cases {
-			if !slices.Contains(names, test.name) {
-				continue
+			describe := func(release *domain.Release) {
+				release.Description, release.PipelineID, release.Stage = description, seed.id("open"), "Open"
 			}
-			t.Run(fmt.Sprintf("%s/alias=%t", test.name, alias), func(t *testing.T) {
-				if !test.largeIndex || len(names) != 1 {
-					f.prepare = test.prepare
-				}
-				defer func() { f.prepare = nil }()
-				outcomes := f.sw200Differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
-					if test.peer != nil {
-						test.peer(t)
+			baseline := f.baseline
+			defer func() {
+				f.baseline, f.editBaseline, f.prepare = baseline, nil, nil
+			}()
+			const step = 50_000
+			if test.links > step {
+				// Grow the large index in batches once. Subsequent resets
+				// restore only the link changed by the request.
+				f.reader.query(t, `SELECT 1 FROM workspace_states WHERE workspace_key=?`, workspace).Close()
+				t.Cleanup(func() {
+					statement := `DELETE FROM release_issue_filter_records WHERE workspace_key=? AND release_id=?`
+					if f.reader.config.Driver == "postgres" || f.reader.config.Driver == "postgresql" {
+						statement = scaleDB{driver: "postgres"}.rebind(statement)
 					}
-					service.authDisabled = !alias
-					stopPeak := scaleP21SW421Peak(service.store)
-					w := scaleP21SW200Request(t, &f, service, owner, nil, issue, test.ids, alias, false)
-					t.Logf("%s alias=%t bounded=%t status=%d peak_work=%d", test.name, alias, service.store.BoundedMetadataEnabled(), w.Code, stopPeak())
-					return w
+					if _, err := f.reader.reader.ExecContext(context.Background(), statement, workspace, large); err != nil {
+						t.Errorf("clean up large release index: %v", err)
+					}
 				})
-				got := outcomes[0]
-				if test.code != 0 && got.Code != test.code {
-					t.Fatalf("legacy status=%d want=%d body=%.300s", got.Code, test.code, got.Body)
+				for start := 0; start < test.links; start += step {
+					end := min(start+step, test.links)
+					if end == test.links {
+						end = len(links)
+					}
+					if err := f.repository.MutateWorkspace(t.Context(), workspace, "scale_p21.sw422_grow", "", nil, func(data *domain.Bootstrap) error {
+						editLarge(data, func(release *domain.Release) {
+							describe(release)
+							release.IssueIDs = append(release.IssueIDs, links[start:end]...)
+						})
+						return nil
+					}); err != nil {
+						t.Fatal(err)
+					}
 				}
-				if test.code == 0 && got.Code < http.StatusInternalServerError {
-					t.Fatalf("legacy accepted the over-limit release: status=%d body=%.300s", got.Code, got.Body)
+				grown, found := f.repository.BootstrapFor(workspace)
+				if !found {
+					t.Fatal("large release fixture missing")
 				}
-				t.Logf("%s alias=%t legacy status=%d body=%.200s", test.name, alias, got.Code, got.Body)
-			})
-		}
+				var err error
+				if f.baseline, err = json.Marshal(grown); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				// Reuse the description and links in every mode and route.
+				// One reset writes the preimage with the case inputs already
+				// installed instead of writing the base and growing it again.
+				f.editBaseline = func(data *domain.Bootstrap) {
+					editLarge(data, func(release *domain.Release) {
+						describe(release)
+						release.IssueIDs = slices.Clone(links)
+					})
+				}
+			}
+			if test.raw > 0 {
+				// The literal writer cannot seed the oversized row. Keep
+				// the earlier-write fixture and reuse its exact SQL bytes.
+				var raw []byte
+				f.prepare = func(t *testing.T) {
+					if raw == nil {
+						raw = largeRow(t, func(release *domain.Release) {
+							release.Description = scaleP21SW421Body("legal release notes", test.raw)
+						})
+					}
+					writeLarge(t, raw)
+					if err := f.repository.ReloadWorkspace(t.Context(), workspace); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			for _, alias := range []bool{true, false} {
+				t.Run(fmt.Sprintf("alias=%t", alias), func(t *testing.T) {
+					outcomes := f.sw200Differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
+						if test.peer != nil {
+							test.peer(t)
+						}
+						service.authDisabled = !alias
+						stopPeak := scaleP21SW421Peak(service.store)
+						w := scaleP21SW200Request(t, &f, service, owner, nil, issue, test.ids, alias, false)
+						t.Logf("%s alias=%t bounded=%t status=%d peak_work=%d", test.name, alias, service.store.BoundedMetadataEnabled(), w.Code, stopPeak())
+						return w
+					})
+					got := outcomes[0]
+					if test.code != 0 && got.Code != test.code {
+						t.Fatalf("legacy status=%d want=%d body=%.300s", got.Code, test.code, got.Body)
+					}
+					if test.code == 0 && got.Code < http.StatusInternalServerError {
+						t.Fatalf("legacy accepted the over-limit release: status=%d body=%.300s", got.Code, got.Body)
+					}
+					t.Logf("%s alias=%t legacy status=%d body=%.200s", test.name, alias, got.Code, got.Body)
+				})
+			}
+		})
 	}
 }
 
-// The cases run in four top-level tests so the CI shards spread them: on
-// PostgreSQL and MySQL all of them took over 24 minutes in one test.
+// Separate the large indexes and description sizes so CI can shard them.
+// Each fixture still exercises both routes in all three store modes.
 func TestScaleP21SW422LargeIssueReleasesDifferential(t *testing.T) {
 	scaleP21SW422Run(t, "add-to-many-issues")
 }
@@ -211,8 +213,23 @@ func TestScaleP21SW422LargeIssueReleasesRemoveDifferential(t *testing.T) {
 }
 
 func TestScaleP21SW422LargeIssueReleasesDescriptionDifferential(t *testing.T) {
-	scaleP21SW422Run(t, "add-large-description-7mib", "add-large-description-at-max", "remove-large-description-at-max",
-		"add-plain-description-14mb", "add-large-description-over")
+	scaleP21SW422Run(t, "add-large-description-7mib")
+}
+
+func TestScaleP21SW422LargeIssueReleasesDescriptionAtMaxDifferential(t *testing.T) {
+	scaleP21SW422Run(t, "add-large-description-at-max")
+}
+
+func TestScaleP21SW422LargeIssueReleasesRemoveDescriptionAtMaxDifferential(t *testing.T) {
+	scaleP21SW422Run(t, "remove-large-description-at-max")
+}
+
+func TestScaleP21SW422LargeIssueReleasesPlainDescriptionDifferential(t *testing.T) {
+	scaleP21SW422Run(t, "add-plain-description-14mb")
+}
+
+func TestScaleP21SW422LargeIssueReleasesOverLimitDescriptionDifferential(t *testing.T) {
+	scaleP21SW422Run(t, "add-large-description-over")
 }
 
 func TestScaleP21SW422LargeIssueReleasesPeerDifferential(t *testing.T) {

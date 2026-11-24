@@ -22,6 +22,8 @@ type scaleP21TriageWriterFixture struct {
 	scaleP21TriageFixture
 	reader   *scaleP04Database
 	baseline []byte
+	// editBaseline adds read-only case inputs to the owned reset image.
+	editBaseline func(*domain.Bootstrap)
 	// prepare runs after each reset, before publications are captured.
 	prepare func(*testing.T)
 }
@@ -92,6 +94,9 @@ func (f *scaleP21TriageWriterFixture) reset(t *testing.T, source string) *server
 	var data domain.Bootstrap
 	if err := json.Unmarshal(f.baseline, &data); err != nil {
 		t.Fatal(err)
+	}
+	if f.editBaseline != nil {
+		f.editBaseline(&data)
 	}
 	for _, view := range []*store.SQLiteStore{repo, f.probe} {
 		view.SetWebhookSink(nil)
@@ -166,8 +171,13 @@ func (f *scaleP21TriageWriterFixture) state(t *testing.T) scaleP21TriageState {
 		Content:     f.rows(t, `SELECT kind,resource_id,created_at,data FROM workspace_content_records WHERE workspace_key=? ORDER BY kind,resource_id,created_at,data`, workspace),
 		Suggestions: f.rows(t, `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='issueSuggestions' ORDER BY collection_order,record_key`, workspace),
 		Projects:    f.rows(t, `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='projects' ORDER BY collection_order,record_key`, workspace),
-		Events:      f.rows(t, `SELECT id,event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY created_at,id`, f.data.Workspace.ID),
+		Events:      f.events(t),
 	}
+}
+
+func (f *scaleP21TriageWriterFixture) events(t *testing.T) [][]any {
+	t.Helper()
+	return f.rows(t, `SELECT id,event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY created_at,id`, f.data.Workspace.ID)
 }
 
 // run executes one writer call against source and records the response,
@@ -189,7 +199,7 @@ func (f *scaleP21TriageWriterFixture) run(t *testing.T, source string, call func
 		}))
 	})
 	prior := map[any]bool{}
-	for _, event := range f.state(t).Events {
+	for _, event := range f.events(t) {
 		prior[event[0]] = true
 	}
 	started := time.Now().UTC()

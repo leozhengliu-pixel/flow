@@ -49,7 +49,8 @@ type scaleP21IssueUpdateOutcome struct {
 
 type scaleP21IssueUpdateFixture struct {
 	scaleP21TeamMoveFixture
-	former domain.User
+	former       domain.User
+	reloadOracle *store.SQLiteStore
 }
 
 type scaleP21IssueUpdateCase struct {
@@ -189,7 +190,7 @@ func (f scaleP21IssueUpdateFixture) run(t *testing.T, source string, call func(*
 	// commit hook publishes notification.created through its own sink.
 	f.repository.SetRealtimeSink(realtime)
 	prior := map[any]bool{}
-	for _, event := range f.state(t).Events {
+	for _, event := range f.events(t) {
 		prior[event[0]] = true
 	}
 	if w := call(service); w != nil {
@@ -211,19 +212,41 @@ func (f scaleP21IssueUpdateFixture) run(t *testing.T, source string, call func(*
 			service.store.WorkspaceMetadataDecodes(), service.store.MetadataWorkUsedForTesting())
 	}
 	got.Installed = f.installed(t, service.store)
-	reloaded, err := store.OpenDatabase(f.reader.config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got.Reloaded = f.installed(t, reloaded)
-	if err := reloaded.Close(); err != nil {
-		t.Fatal(err)
-	}
+	got.Reloaded = f.reloaded(t)
 	nul := strings.NewReplacer(`\u0000`, "")
 	if installed, reloaded := nul.Replace(string(got.Installed)), nul.Replace(string(got.Reloaded)); installed != reloaded {
 		t.Fatalf("%s: installed image differs from the SQL reload: %s", source, scaleP21M2Diff(installed, reloaded))
 	}
 	return got, started
+}
+
+func (f scaleP21IssueUpdateFixture) reloaded(t *testing.T) json.RawMessage {
+	t.Helper()
+	if oracle := f.reloadOracle; oracle != nil {
+		// Reuse the connection and force an actual SQL decode for every
+		// comparison, including when the last request made no changes.
+		workspace := f.data.Workspace.URLKey
+		decodes := oracle.WorkspaceMetadataDecodes()
+		if err := oracle.ForgetInstalledMetadataRevisionForTesting(workspace); err != nil {
+			t.Fatal(err)
+		}
+		if err := oracle.ReloadWorkspace(t.Context(), workspace); err != nil {
+			t.Fatal(err)
+		}
+		if oracle.WorkspaceMetadataDecodes() <= decodes {
+			t.Fatal("issue update oracle did not reload from SQL")
+		}
+		return f.installed(t, oracle)
+	}
+	reloaded, err := store.OpenDatabase(f.reader.config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := f.installed(t, reloaded)
+	if err := reloaded.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return result
 }
 
 func scaleP21IssueUpdateNormalize(t *testing.T, value any, started time.Time) string {
