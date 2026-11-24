@@ -872,10 +872,17 @@ func (s *SQLiteStore) WorkspaceRole(ctx context.Context, workspaceID, userID str
 	return role, status, err
 }
 
+// mutationWorkspaceRole reads the actor's role before a write. A database
+// outage or deadline is returned as ErrDatabaseUnavailable (503 with
+// Retry-After); every other failure, including a canceled request, keeps the
+// previous answer of no access.
 func (s *SQLiteStore) mutationWorkspaceRole(ctx context.Context, workspaceID, userID string) (string, error) {
 	role, status, err := s.WorkspaceRole(ctx, workspaceID, userID)
 	if err != nil {
-		return "", PreWriteDatabaseError(err)
+		if err := PreWriteDatabaseError(err); errors.Is(err, ErrDatabaseUnavailable) {
+			return "", err
+		}
+		return "", ErrAuthForbidden
 	}
 	if status != "active" {
 		return "", ErrAuthForbidden
@@ -1214,22 +1221,32 @@ func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]do
 	return result, nil
 }
 
+// actorTeamIDs lists the teams a user belongs to from the membership records
+// (one indexed read), for a mutation's authorization callback. The lookup is
+// best effort: an unreadable row is skipped and an ordinary read failure gives
+// no teams, so team-based access fails closed. A database outage or deadline
+// is returned so the caller answers 503 instead of denying.
 func (s *SQLiteStore) actorTeamIDs(ctx context.Context, workspaceID, userID string) ([]string, error) {
+	unavailable := func(err error) error {
+		if err := PreWriteDatabaseError(err); errors.Is(err, ErrDatabaseUnavailable) {
+			return err
+		}
+		return nil
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT team_id FROM team_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID)
 	if err != nil {
-		return nil, err
+		return nil, unavailable(err)
 	}
 	defer rows.Close()
 	teams := []string{}
 	for rows.Next() {
 		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
+		if rows.Scan(&id) == nil {
+			teams = append(teams, id)
 		}
-		teams = append(teams, id)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, unavailable(err)
 	}
 	return teams, nil
 }

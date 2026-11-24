@@ -25,7 +25,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"issue_query.go":                  "6ca65a3c10ae72d0b57c0b72b369de83ae40e64afaa15214afd6b441f068e843",
 		// The result cache only checks for a borrowed snapshot to bypass Redis.
 		"shared_result_cache.go":                      "a8b3776efb34fe28b10957fe5e9e29f064bf2965809262760d29bfa07351afb3",
-		"auth.go":                                     "0daf3b77d6ef1afc17f71d2498c9c4850cc41f93a49b0e1d76fea89e86a3f1c4",
+		"auth.go":                                     "8885286880f1b86ba2bae24c0989b8ac1ca09166fcd3adc1a7341a0968933277",
 		"team_default_favorites.go":                   "8ba62b09173955d3f412bba9820ba6292e3ee06fec852571c691e5a62e49e657",
 		"scale_p15_snapshot_buffers.go":               "55e0d8d461ffd547d4d4fd9329cf9fda23259a0fef08da7e6ba42a0d51c88f7f",
 		"snapshot_clone.go":                           "eed939fd6798a8ade89c9f80a12040f1f5e285dc212e521ad2c38e04fcbc6063",
