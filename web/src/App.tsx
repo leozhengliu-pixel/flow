@@ -5935,7 +5935,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
       ) : (
       <Suspense
         fallback={
-          <main className="main-panel">
+          <main className="main-panel" aria-busy="true">
             <SkeletonRows />
           </main>
         }
