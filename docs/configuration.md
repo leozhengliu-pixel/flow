@@ -1451,7 +1451,7 @@ budgets apply per client address rather than to the proxy (see
 | `FLOW_API_RATE_LIMIT` | on | `off` disables API rate limiting. |
 | `FLOW_API_RATE_LIMIT_API_KEY_REQUESTS` / `_COMPLEXITY` | `2500` / `3000000` | Hourly budgets per user for personal API keys. |
 | `FLOW_API_RATE_LIMIT_OAUTH_REQUESTS` / `_COMPLEXITY` | `5000` / `2000000` | Hourly budgets per user (or app user) and OAuth application. |
-| `FLOW_API_RATE_LIMIT_UNAUTHENTICATED_REQUESTS` / `_COMPLEXITY` | `600` / `100000` | Hourly budgets per client address. |
+| `FLOW_API_RATE_LIMIT_UNAUTHENTICATED_REQUESTS` / `_COMPLEXITY` | `600` / `100000` | Hourly budgets per client address and public route class: MCP (`/mcp`), OAuth (`/oauth/*`, `/api/oauth/token`), upload links and signed file links each keep their own bucket, so MCP retries before a client holds a token never use up the OAuth exchange that issues it. Behind a proxy, set `FLOW_TRUST_PROXY_HEADERS` and `FLOW_TRUSTED_PROXIES` so each client gets its own address. |
 | `FLOW_API_RATE_LIMIT_SESSION_REQUESTS` / `_COMPLEXITY` | `0` / `0` | Hourly budgets for browser sessions; `0` means unlimited. |
 | `FLOW_API_RATE_LIMIT_AGENT_RUN_REQUESTS` | `1200` | Hourly `/mcp` request budget per agent run (worker run tokens); `0` means unlimited. |
 | `FLOW_API_RATE_LIMIT_AGENT_WORKSPACE_REQUESTS` | `36000` | Hourly `/mcp` request budget shared by all agent runs of a workspace; `0` means unlimited. |

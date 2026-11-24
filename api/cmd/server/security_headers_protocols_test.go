@@ -299,10 +299,21 @@ func TestSecuritySurfaceRateLimitedProtocols(t *testing.T) {
 		if response.Header.Get("Retry-After") == "" || !strings.HasPrefix(response.Header.Get("Content-Type"), "application/json") {
 			t.Errorf("429 headers: %v", response.Header)
 		}
-		response, _ = e.post("/mcp", jsonHeader(), `{"jsonrpc":"2.0","id":1,"method":"ping"}`)
-		e.expect("mcp over budget", response, http.StatusTooManyRequests, kindAPI)
 		response, _ = e.post("/oauth/token", formHeader(), "grant_type=client_credentials")
 		e.expect("oauth token over budget", response, http.StatusTooManyRequests, kindAPI)
+		// MCP keeps its own address budget, so the OAuth exchange that issues
+		// its token is never spent by MCP retries (and the reverse).
+		response = nil
+		for attempt := 0; attempt < 6 && (response == nil || response.StatusCode != http.StatusTooManyRequests); attempt++ {
+			response, _ = e.post("/mcp", jsonHeader(), `{"jsonrpc":"2.0","id":1,"method":"ping"}`)
+			if attempt == 0 && response.StatusCode == http.StatusTooManyRequests {
+				t.Error("MCP was limited by the OAuth budget")
+			}
+		}
+		e.expect("mcp over budget", response, http.StatusTooManyRequests, kindAPI)
+		if response.Header.Get("Retry-After") == "" {
+			t.Errorf("mcp 429 headers: %v", response.Header)
+		}
 		// Invalid bearer tokens spend the same budget; the 429 for them is an ordinary API response too.
 		response, _ = e.do(surfaceRequest{path: "/api/viewer", header: http.Header{"Authorization": {"Bearer flow_api_invalid"}}})
 		if response.StatusCode != http.StatusTooManyRequests && response.StatusCode != http.StatusUnauthorized {
