@@ -22,10 +22,10 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
 		"scale_p21_workflow_run_write.go": "a1fba71672d01fae78447673c322c1d868ca26e39bbc3482969c0c6bb22a5994",
 		"issue_records.go":                "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
-		"issue_query.go":                  "6ca65a3c10ae72d0b57c0b72b369de83ae40e64afaa15214afd6b441f068e843",
+		"issue_query.go":                  "20b9295bc53e079c4579fda1a66349d93b261e9495ff102b1c36095e1acbed72",
 		// Bootstrap bodies reuse the outline's snapshot only for the same
 		// database and workspace; the IDs come from the authorized outline.
-		"issue_scan.go": "9b63608832b1056a60f36705a4bbb2762d0a60d454b41acf5f959447e4c8b970",
+		"issue_scan.go": "dd147c46e1bad9c304a87f9968b4944171159f97463b741d523d74dc9940d7ba",
 		// The result cache only checks for a borrowed snapshot to bypass Redis.
 		"shared_result_cache.go":                      "a8b3776efb34fe28b10957fe5e9e29f064bf2965809262760d29bfa07351afb3",
 		"auth.go":                                     "ebf4155c13b06f088ef0cd452d12112b5a032c4411a8955a89bac54273895f44",
@@ -34,14 +34,14 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"snapshot_clone.go":                           "eed939fd6798a8ade89c9f80a12040f1f5e285dc212e521ad2c38e04fcbc6063",
 		"../../cmd/server/advanced_features.go":       "cf26c25b133fe761ff8ec08bebd3b2d0417b6733356d6f676f76c391fde148e7",
 		"../../cmd/server/loop_settings.go":           "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
-		"../../cmd/server/main.go":                    "1b0ff91c7868fcf670de985b425a5a2365fd91a2cf72f6180a26ad3fb5ff0e2a",
+		"../../cmd/server/main.go":                    "a5aa78c0b971ff38a99574b6e2e36e462525fadbae8fe56b728731a563764788",
 		"../../cmd/server/notification_state.go":      "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
 		"../../cmd/server/personal_data.go":           "d30dbae86ef9e448e685808c4292cdcf76c719cfc68f9aa1023f7dd15e100c40",
 		"../../cmd/server/scale_p21_cold_dispatch.go": "78f6979c7b6492f603c4b1a452786f590b800139ea08d371bc3bc8054ba3e597",
 		// Background comment-action generator: borrows the issue bootstrap
 		// projection for its own run; never reaches request authorization.
 		"../../cmd/server/scale_p21_comment_action_writes.go":           "5765c0ab53a9346be3631aa48ab3d55c96204256e4ce63bdc5eb31db83983c39",
-		"../../cmd/server/scale_p21_general_bootstrap.go":               "4a4d2c67bc03934b0ab5306a249648e2101f2e22e5eab4bb48f920ac329bf94d",
+		"../../cmd/server/scale_p21_general_bootstrap.go":               "4cdd4223e122d14a7a22f6d1208871e1c50e57d1a4f9a44c685cf72df23a2873",
 		"../../cmd/server/scale_p21_issue_bootstrap_stream.go":          "3a3083bf9dae00c0978985561a01b1ffc2d83055d93bd87e4376b6374219651b",
 		"../../cmd/server/scale_p21_issue_create_targets.go":            "4797fc2981774f90cbd94a0f00a835e5391e323bc28d5e067692b0b426172523",
 		"../../cmd/server/scale_p21_issue_record_authorization_read.go": "6026fba608d49f31c47ac07de86b8ea1f000f94b93a7f0758e0ee964303025d4",
@@ -50,7 +50,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/settings_features.go":                         "f2867b72c1f9b5611f57a4b8033cd362865754b1757d7866600ecb95fc0e84e6",
 		"authz_epoch.go":                                                "ce59afa33d8daca93d0901d13d86a0f7bb5f140cc479efc38395ab568173e9c4",
 		"content_records.go":                                            "dfe65333af9a9b755f6d25077b8b931dadba3559fae2e3cefaa1069144c4a25e",
-		"database.go":                                                   "66c9f8b9fcf452d11179e040e3889ffa459e5f5d8a5fc557e39fb638a856f9dd",
+		"database.go":                                                   "91a9d8f4827c925e2f6ee20144970dfd86ba395f016328672476421ef68bf12c",
 		"issue_access_metadata.go":                                      "e94330023938805faa4db03459377c9807c5bcb467182e4919a756924fd5ae74",
 		"metadata_decode.go":                                            "5adae579c52e8e88289d7db9496437952cbcd15a4b257069127828fa99516341",
 		"metadata_delta.go":                                             "a79e58b9c65fd49c020acf27493596a9ce1546378d3a4ffa5548ccc9e81b7b0b",

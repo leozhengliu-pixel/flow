@@ -358,7 +358,8 @@ func sw530Setup(t *testing.T) *sw530Sweep {
 	f := fx.f
 	uploads := t.TempDir()
 	newService := func(repo *store.SQLiteStore) http.Handler {
-		s := &server{store: repo, uploadPath: uploads, authLimiter: newAuthRateLimiter()}
+		limiter := newAuthRateLimiter()
+		s := &server{store: repo, uploadPath: uploads, authLimiter: limiter}
 		disableBackgroundWorkersForTest(s)
 		s.coordinationStarted.Store(true)
 		handler := newHandler(s)

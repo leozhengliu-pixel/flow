@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"flow/api/internal/domain"
@@ -173,6 +174,15 @@ func TestDefaultMetadataUpgradeResumesLegacyWrites(t *testing.T) {
 	if err := checkRecordJournalCoverage(t.Context(), old.db, workspace); !errors.Is(err, ErrRecordJournalCoverage) {
 		t.Fatalf("legacy changes from interrupted preparation must leave a coverage gap: %v", err)
 	}
+	// Previous releases have a completed search checkpoint with no rules
+	// marker. Startup must reconcile it before treating the index as current.
+	if _, err := old.db.ExecContext(t.Context(), `DELETE FROM metadata_search_index_rules WHERE workspace_key=? AND field='projects'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	const searchID = "upgrade-project-002"
+	if _, err := old.db.ExecContext(t.Context(), `UPDATE metadata_search_documents SET content='stale' WHERE workspace_key=? AND field='projects' AND record_key=?`, workspace, searchID); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, flag := range []string{"FLOW_BOUNDED_METADATA", "FLOW_RECORD_HYDRATION", "FLOW_RECORD_JOURNAL", "FLOW_METADATA_CATALOG"} {
 		t.Setenv(flag, "")
@@ -192,6 +202,15 @@ func TestDefaultMetadataUpgradeResumesLegacyWrites(t *testing.T) {
 	var report BoundedMetadataPreparation
 	if err := upgraded.boundedMetadataReadiness(t.Context(), &report); err != nil || !report.Ready {
 		t.Fatalf("incomplete journal or catalog after restart: %v", err)
+	}
+	var searchContent, searchRules string
+	if err := upgraded.db.QueryRowContext(t.Context(), `SELECT d.content,r.rules FROM metadata_search_documents d
+		JOIN metadata_search_index_rules r ON r.workspace_key=d.workspace_key AND r.field=d.field
+		WHERE d.workspace_key=? AND d.field='projects' AND d.record_key=?`, workspace, searchID).Scan(&searchContent, &searchRules); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(searchContent, "Before upgrade") || searchRules != upgraded.metadataSearchRules() {
+		t.Fatal("startup did not reconcile the index before recording the current search rules")
 	}
 	var summary []byte
 	if err := upgraded.db.QueryRowContext(t.Context(), `SELECT summary FROM metadata_catalog WHERE workspace_key=? AND field='projects' AND record_key=?`, workspace, updatedID).Scan(&summary); err != nil {
