@@ -1,4 +1,4 @@
-import { compareLocalStoreSeq, createLocalIssueView, decimal, lazyLocalKinds, localKinds, localRowFingerprint, localStoreEnabled, LocalStoreReset, markLocalStoreDisabled, LOCAL_STORE_DISABLED, LOCAL_STORE_HEADER, type LocalChange, type LocalKind, type LocalRow, type LocalStoreAuthority } from './local-store-model'
+import { compareLocalStoreSeq, createLocalIssueView, decimal, lazyLocalKinds, localKinds, localRowFingerprint, localStoreEnabled, localStoreEraseReason, LocalStoreReset, markLocalStoreDisabled, markLocalStoreErase, LOCAL_STORE_DISABLED, LOCAL_STORE_HEADER, type LocalChange, type LocalKind, type LocalRow, type LocalStoreAuthority, type LocalStoreEraseReason } from './local-store-model'
 import { registerSessionCacheClearer } from './session-cache-registry'
 import { selectSlicesToEvict, type LocalSlice, type LocalSliceEntry, type LocalSliceKind } from './local-store-slice-model'
 import type { OutboxEdit, OutboxOutcome } from './local-store-outbox-model'
@@ -82,9 +82,10 @@ function indexMatches(name: string, viewerId?: string, workspaceKey?: string) {
   return (!viewerId || name.startsWith(`${prefix}${encodeURIComponent(viewerId)}:`)) && (!workspaceKey || readIndex(name)?.workspaceKey === workspaceKey)
 }
 
-function deleteStore(name: string): Promise<boolean> {
+function deleteStore(name: string, reason: LocalStoreEraseReason): Promise<boolean> {
   const pending = deletes.get(name)
   if (pending) return pending
+  markLocalStoreErase(reason)
   const index = readIndex(name)
   if (index) {
     try { localStorage.setItem(indexPrefix + name, JSON.stringify({ ...index, deleting: true })) }
@@ -94,7 +95,10 @@ function deleteStore(name: string): Promise<boolean> {
   const deleting = new Promise<boolean>(resolve => {
     // A blocked request already waits for versionchange handlers to close
     // their connections. Retrying here would queue more deletes behind it.
-    const timer = setTimeout(() => resolve(false), deletionWaitMs)
+    const timer = setTimeout(() => {
+      markLocalStoreErase('idb-blocked')
+      resolve(false)
+    }, deletionWaitMs)
     const finish = (deleted: boolean) => {
       clearTimeout(timer)
       deletes.delete(name)
@@ -111,8 +115,12 @@ function deleteStore(name: string): Promise<boolean> {
         } catch { /* Ignore storage refusal. */ }
         finish(true)
       }
-      request.onerror = () => finish(false)
-    } catch {
+      request.onerror = () => {
+        markLocalStoreErase(localStoreEraseReason(request.error))
+        finish(false)
+      }
+    } catch (error) {
+      markLocalStoreErase(localStoreEraseReason(error))
       clearTimeout(timer)
       queueMicrotask(() => finish(false))
     }
@@ -123,10 +131,10 @@ function deleteStore(name: string): Promise<boolean> {
   return deleting
 }
 
-export function clearLocalStores(viewerId?: string, workspaceKey?: string) {
+export function clearLocalStores(reason: LocalStoreEraseReason, viewerId?: string, workspaceKey?: string) {
   generation++
   const matches = [...indexedNames()].filter(name => indexMatches(name, viewerId, workspaceKey))
-  return Promise.all(matches.map(deleteStore))
+  return Promise.all(matches.map(name => deleteStore(name, reason)))
 }
 
 export function clearUnlistedLocalStores(viewerId: string, workspaces: readonly { id: string; urlKey: string }[]) {
@@ -135,7 +143,7 @@ export function clearUnlistedLocalStores(viewerId: string, workspaces: readonly 
   const names = [...indexedNames()].filter(name => !allowed.has(name) || allowed.get(name) !== readIndex(name)?.workspaceKey)
   if (names.length) {
     generation++
-    return Promise.all(names.map(deleteStore)).then(() => undefined)
+    return Promise.all(names.map(name => deleteStore(name, 'authority-changed'))).then(() => undefined)
   }
   return Promise.resolve()
 }
@@ -208,7 +216,7 @@ async function evictClosedWorkspace(name: string) {
     if (!db) return false
     const pending = await db.pendingEdits().finally(() => db.close())
     if (!pending || pending.length || workspaceIsOpen(name)) return false
-    return deleteStore(name)
+    return deleteStore(name, 'workspace-evicted')
   }
   try {
     if (navigator.locks) return await navigator.locks.request(openPrefix + name, { ifAvailable: true }, lock => lock ? evict() : false)
@@ -260,7 +268,7 @@ export async function retainLocalStoreAuthority(scope: LocalStoreAuthority, work
   })
   if (!obsolete.length) return generation
   const checkpoint = ++generation
-  const removed = await Promise.all(obsolete.map(deleteStore))
+  const removed = await Promise.all(obsolete.map(name => deleteStore(name, 'authority-changed')))
   if (checkpoint === generation && removed.every(Boolean)) return checkpoint
   return undefined
 }
@@ -269,15 +277,19 @@ export function initializeLocalStore() {
   // Remove the retired startup snapshot index before asking IndexedDB to
   // delete the data. An older tab can delay deletion by holding it open.
   try { localStorage.removeItem('flow:local-snapshot') } catch { /* Storage can be unavailable. */ }
-  try { indexedDB.deleteDatabase('flow-local-snapshot') } catch { /* Storage can be unavailable. */ }
-  for (const name of indexedNames()) if (readIndex(name)?.deleting) void deleteStore(name)
+  try {
+    indexedDB.deleteDatabase('flow-local-snapshot').onsuccess = event => {
+      if ((event as IDBVersionChangeEvent).oldVersion > 0) markLocalStoreErase('retired-snapshot')
+    }
+  } catch { /* Storage can be unavailable. */ }
+  for (const name of indexedNames()) if (readIndex(name)?.deleting) void deleteStore(name, 'deletion-retry')
 }
 
 function wipeLocalStores() {
-  const indexed = clearLocalStores()
+  const indexed = clearLocalStores('kill-switch')
   // Enumeration also removes databases whose index was lost independently of IndexedDB.
   const unlisted = typeof indexedDB !== 'undefined' && typeof indexedDB.databases === 'function'
-    ? indexedDB.databases().then(rows => Promise.all(rows.flatMap(row => row.name?.startsWith(prefix) ? [deleteStore(row.name)] : []))).catch(() => undefined)
+    ? indexedDB.databases().then(rows => Promise.all(rows.flatMap(row => row.name?.startsWith(prefix) ? [deleteStore(row.name, 'kill-switch')] : []))).catch(() => undefined)
     : undefined
   return Promise.all([indexed, unlisted])
 }
@@ -285,6 +297,7 @@ function wipeLocalStores() {
 function applyLocalStoreDisable() {
   if (!localStoreEnabled()) return
   markLocalStoreDisabled()
+  markLocalStoreErase('kill-switch')
   const clearing = wipeLocalStores()
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(disabledKey))
   return clearing
@@ -307,7 +320,7 @@ export function onLocalStoreDisabled(callback: () => void) {
 export function invalidateLocalStoreResponse(url: string, response: Response, workspaceKey: string) {
   const { status } = response
   const clearing = response.headers?.get(LOCAL_STORE_HEADER) === LOCAL_STORE_DISABLED ? disableLocalStore() : undefined
-  if (status === 401) return (clearing ?? clearLocalStores()).then(() => {
+  if (status === 401) return (clearing ?? clearLocalStores('session-ended')).then(() => {
     if (typeof window === 'undefined') return
     try { localStorage.setItem(sessionEndKey, crypto.randomUUID()) } catch { /* Other tabs also recheck authority. */ }
     const channel = openSessionChannel()
@@ -327,7 +340,7 @@ export function invalidateLocalStoreResponse(url: string, response: Response, wo
   if (workspaceKey && (status === 403 || status === 404) && (workspaceRead || localRecordRead)) {
     // Let the workspace render its refusal even when a browser is still
     // closing other IndexedDB connections. The index is invalid immediately.
-    void clearLocalStores(undefined, workspaceKey)
+    void clearLocalStores('access-revoked', undefined, workspaceKey)
   }
 }
 
@@ -346,14 +359,19 @@ export function onLocalStoreSessionEnd(callback: () => void) {
   }
 }
 
-registerSessionCacheClearer((viewerId, workspaceKey) => { if (localStoreEnabled()) void clearLocalStores(viewerId, workspaceKey) })
+registerSessionCacheClearer((viewerId, workspaceKey) => {
+  if (localStoreEnabled()) void clearLocalStores(workspaceKey ? 'authority-changed' : 'session-ended', viewerId, workspaceKey)
+})
 
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', event => {
     if (event.key === disabledKey && event.newValue) { void applyLocalStoreDisable(); return }
     if (event.key !== null && !event.key.startsWith(indexPrefix + prefix)) return
     if (event.oldValue || event.key === null) generation++
-    for (const store of connections) if (!store.valid) store.close()
+    for (const store of connections) if (!store.valid) {
+      markLocalStoreErase('authority-changed')
+      store.close()
+    }
   })
   window.addEventListener('pagehide', () => {
     // A departing document may still be in the back/forward cache. Release
@@ -389,7 +407,14 @@ export class LocalStoreDB {
     this.token = token
     this.db = db
     connections.add(this)
-    db.onversionchange = db.onclose = () => this.close()
+    db.onversionchange = event => {
+      markLocalStoreErase(event.newVersion === null ? 'authority-changed' : 'schema-mismatch')
+      this.close()
+    }
+    db.onclose = () => {
+      markLocalStoreErase('idb-closed')
+      this.close()
+    }
   }
 
   static async open(scope: LocalStoreAuthority, workspaceKey: string, started: number, forOutbox = false): Promise<LocalStoreDB | undefined> {
@@ -398,12 +423,18 @@ export class LocalStoreDB {
     if (networkOnly.has(name) && !forOutbox) return undefined
     let index = readIndex(name)
     if (index?.deleting) {
-      if (!await deleteStore(name)) return undefined
+      if (!await deleteStore(name, 'deletion-retry')) return undefined
       index = undefined
     }
-    if (started !== generation) return undefined
+    if (started !== generation) {
+      markLocalStoreErase('authority-changed')
+      return undefined
+    }
     try {
-      if (index && (index.workspaceKey !== workspaceKey || index.authzEpoch !== scope.authzEpoch)) return undefined
+      if (index && (index.workspaceKey !== workspaceKey || index.authzEpoch !== scope.authzEpoch)) {
+        markLocalStoreErase('authority-changed')
+        return undefined
+      }
       if (!index) {
         index = { workspaceKey, authzEpoch: scope.authzEpoch, token: crypto.randomUUID() }
         localStorage.setItem(indexPrefix + name, JSON.stringify(index))
@@ -413,24 +444,38 @@ export class LocalStoreDB {
         const request = indexedDB.open(name, schema)
         let settled = false
         const finish = (value: LocalStoreDB | undefined) => { settled = true; clearTimeout(timer); resolve(value) }
-        const timer = setTimeout(() => finish(undefined), 2000)
+        const blocked = () => {
+          markLocalStoreErase('idb-blocked')
+          finish(undefined)
+        }
+        const timer = setTimeout(blocked, 2000)
         const stillValid = () => {
           const latest = readIndex(name)
           return !settled && latest?.token === token && !latest.deleting && started === generation
         }
-        request.onupgradeneeded = () => {
-          if (stillValid()) upgrade(request.result)
-          else request.transaction?.abort()
+        request.onupgradeneeded = event => {
+          if (stillValid()) {
+            // The browser can evict IndexedDB without removing its head hint.
+            if (event.oldVersion === 0 && readHeadHint(name, token) !== undefined) markLocalStoreErase('idb-missing')
+            upgrade(request.result)
+          } else request.transaction?.abort()
         }
         request.onerror = () => { clearTimeout(timer); if (!settled) reject(request.error) }
-        request.onblocked = () => finish(undefined)
+        request.onblocked = blocked
         request.onsuccess = () => {
-          if (!stillValid()) { request.result.close(); finish(undefined); return }
+          if (!stillValid()) {
+            if (!settled) markLocalStoreErase('authority-changed')
+            request.result.close()
+            finish(undefined)
+            return
+          }
           finish(new LocalStoreDB(name, token, request.result))
         }
       })
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'VersionError') void deleteStore(name)
+      const reason = localStoreEraseReason(error)
+      if (reason === 'schema-mismatch') void deleteStore(name, reason)
+      else markLocalStoreErase(reason)
       return undefined
     }
   }
@@ -473,8 +518,8 @@ export class LocalStoreDB {
     this.db.close()
   }
 
-  discard() {
-    const deleted = this.valid ? deleteStore(this.name) : deletes.get(this.name)
+  discard(reason: LocalStoreEraseReason) {
+    const deleted = this.valid ? deleteStore(this.name, reason) : deletes.get(this.name)
     this.close()
     return deleted ?? Promise.resolve(false)
   }
@@ -483,18 +528,34 @@ export class LocalStoreDB {
     return new Promise<T | undefined>((resolve, reject) => {
       if (!this.valid) { resolve(undefined); return }
       // Only the outbox needs stronger durability than a recoverable mirror.
-      const tx = this.db.transaction(stores, mode, mode === 'readwrite' ? { durability: stores.includes(outbox) ? 'strict' : 'relaxed' } : undefined)
+      let tx: IDBTransaction
+      try {
+        tx = this.db.transaction(stores, mode, mode === 'readwrite' ? { durability: stores.includes(outbox) ? 'strict' : 'relaxed' } : undefined)
+      } catch (error) {
+        markLocalStoreErase(localStoreEraseReason(error))
+        reject(error)
+        return
+      }
       this.transactions.add(tx)
       let value: T | undefined
+      let failed = false
       tx.oncomplete = () => {
         this.transactions.delete(tx)
         resolve(this.valid ? value : undefined)
       }
       tx.onabort = () => {
         this.transactions.delete(tx)
-        reject(tx.error ?? new DOMException('Local store transaction aborted', 'AbortError'))
+        if (failed) return
+        const error = tx.error ?? new DOMException('Local store transaction aborted', 'AbortError')
+        if (!this.closed || tx.error) markLocalStoreErase(localStoreEraseReason(error))
+        reject(error)
       }
-      const fail = (error: unknown) => { tx.abort(); reject(error) }
+      const fail = (error: unknown) => {
+        failed = true
+        markLocalStoreErase(localStoreEraseReason(error))
+        try { tx.abort() } catch { /* The transaction may already be inactive. */ }
+        reject(error)
+      }
       // All requests are enqueued synchronously or in a request callback.
       // Awaiting between statements makes WebKit transactions inactive.
       try { work(tx, next => { value = next }, fail) }
@@ -504,10 +565,11 @@ export class LocalStoreDB {
 
   readMeta() { return this.read<LocalMeta>(metaStore, metaKey) }
 
-  invalidateReadModel(expected: LocalMeta) {
+  invalidateReadModel(expected: LocalMeta, reason: LocalStoreEraseReason) {
     const readStores = [...localKinds, ...lazyLocalKinds, ...['issue', ...lazyLocalKinds].map(kind => `_partial_${kind}`)]
     return this.update(readStores, (tx, current) => {
       if (current?.baseline !== expected.baseline || current.head !== expected.head) return
+      markLocalStoreErase(reason)
       for (const store of readStores) tx.objectStore(store).clear()
       tx.objectStore(metaStore).delete(directoryKey)
       return { ...current, baseline: crypto.randomUUID(), resume: undefined, sliceBytes: 0, bytes: 0, fullCollections: [] }
@@ -542,9 +604,9 @@ export class LocalStoreDB {
           meta.put(order, outboxOrder)
           meta.put({ ...checkpoint, outboxBytes: bytes }, metaKey)
           rows.add({ ...edit, input: { ...edit.input, expectedVersion }, order })
-          for (const row of existing) {
-            if (row.outcome && row.createdAt < edit.createdAt - 60 * 60_000) rows.delete(row.id)
-          }
+          const expired = existing.filter(row => row.outcome && row.createdAt < edit.createdAt - 60 * 60_000)
+          if (expired.length) markLocalStoreErase('receipt-expired')
+          for (const row of expired) rows.delete(row.id)
           result(true)
         } catch (error) { fail(error) }
       }
@@ -597,6 +659,7 @@ export class LocalStoreDB {
           }
           rows.put({ ...current, input: { expectedVersion }, bytes: 0, outcome })
           meta.put({ ...checkpoint, outboxBytes: Math.max(0, (checkpoint.outboxBytes ?? 0) - current.bytes) }, metaKey)
+          if (!outcome.ok) markLocalStoreErase(outcome.status === 409 ? 'write-receipt-conflict' : 'write-rejected')
           result(true)
         } catch (error) { fail(error) }
       }
@@ -606,10 +669,15 @@ export class LocalStoreDB {
   clearSettledEdits(before: number) {
     return this.transaction([outbox], 'readwrite', tx => {
       const read = tx.objectStore(outbox).openCursor()
+      let pruned = false
       read.onsuccess = () => {
         const row = read.result
         if (!row) return
-        if (row.value.outcome && row.value.createdAt < before) row.delete()
+        if (row.value.outcome && row.value.createdAt < before) {
+          if (!pruned) markLocalStoreErase('receipt-expired')
+          pruned = true
+          row.delete()
+        }
         row.continue()
       }
     })
@@ -653,6 +721,7 @@ export class LocalStoreDB {
       const others = entries.filter(entry => entry.kind !== slice.kind || entry.key !== slice.key)
       const partialBytes = others.reduce((sum, entry) => sum + entry.bytes, 0)
       const evicted = selectSlicesToEvict(others, eagerBytes + partialBytes + slice.bytes - budget)
+      if (evicted.length) markLocalStoreErase('slice-evicted')
       for (const entry of evicted) tx.objectStore(`_partial_${entry.kind}`).delete(entry.key)
       tx.objectStore(`_partial_${slice.kind}`).put(slice)
       const sliceBytes = partialBytes + slice.bytes - evicted.reduce((sum, entry) => sum + entry.bytes, 0)
@@ -673,6 +742,7 @@ export class LocalStoreDB {
         const slice = row.result as LocalSliceEntry | undefined
         if (!checkpoint?.resume || !slice || !this.valid) return
         try {
+          markLocalStoreErase('slice-revoked')
           rows.delete(key)
           metadata.put({ ...checkpoint, sliceBytes: Math.max(0, (checkpoint.sliceBytes ?? 0) - slice.bytes) }, metaKey)
         } catch (error) { fail(error) }
@@ -683,6 +753,7 @@ export class LocalStoreDB {
   evictSlices(bytes: number, kind?: LocalSliceKind) {
     return this.updateSlices((tx, meta, entries) => {
       const evicted = selectSlicesToEvict(kind ? entries.filter(entry => entry.kind === kind) : entries, bytes)
+      if (evicted.length) markLocalStoreErase('slice-evicted')
       for (const entry of evicted) tx.objectStore(`_partial_${entry.kind}`).delete(entry.key)
       const freed = evicted.reduce((sum, entry) => sum + entry.bytes, 0)
       const sliceBytes = entries.reduce((sum, entry) => sum + entry.bytes, 0) - freed
@@ -763,10 +834,11 @@ export class LocalStoreDB {
   }
 
   async disableForSession() {
+    markLocalStoreErase('quota')
     networkOnly.add(this.name)
     // Keep durable edits available to the sync owner during network-only use.
     const pending = await this.pendingEdits().catch(() => undefined)
-    if (pending?.length === 0) await this.discard()
+    if (pending?.length === 0) await this.discard('quota')
   }
 
   private async retryAfterQuota<T>(write: () => Promise<T>) {
@@ -829,7 +901,7 @@ export class LocalStoreDB {
             if (!data || data.viewer.id !== meta.viewerId || data.workspace.id !== meta.workspaceId ||
                 data.workspace.urlKey !== meta.workspaceKey || count > meta.resume.issueCount ||
                 batch.length < limit && count !== meta.resume.issueCount) {
-              fail(new LocalStoreReset('Issue baseline is incomplete'))
+              fail(new LocalStoreReset('baseline-incomplete', 'Issue baseline is incomplete'))
               return
             }
             try {
@@ -888,6 +960,7 @@ export class LocalStoreDB {
       if (previous?.resume && !meta.resume) return
       if (meta.bytes > budget) return
       if (meta.bytes + (previous?.sliceBytes ?? 0) + (previous?.outboxBytes ?? 0) > budget) throw new DOMException('Local store budget exceeded', 'QuotaExceededError')
+      if (previous?.bytes) markLocalStoreErase('baseline-replaced')
       for (const kind of localKinds) {
         const store = tx.objectStore(kind)
         store.clear()
@@ -904,6 +977,7 @@ export class LocalStoreDB {
     const touched = [...new Set(writes.map(change => change.kind))]
     return this.update(touched, (tx, current) => {
       if (current?.baseline !== meta.baseline || current.head !== meta.head || current.authzEpoch !== meta.authzEpoch) return
+      if (writes.some(change => !change.row)) markLocalStoreErase('journal-removal')
       for (const { kind, id, row } of writes) {
         const store = tx.objectStore(kind)
         if (row) store.put(row)
@@ -924,12 +998,13 @@ export class LocalStoreDB {
         let { bytes } = current
         let { issueCount, issueFingerprint } = current.resume
         const commit = () => {
-          if (bytes > budget) { fail(new LocalStoreReset('Issue store exceeds budget')); return }
+          if (bytes > budget) { fail(new LocalStoreReset('quota', 'Issue store exceeds budget')); return }
           if (bytes + (current.sliceBytes ?? 0) + (current.outboxBytes ?? 0) > budget) {
             fail(new DOMException('Local store budget exceeded', 'QuotaExceededError'))
             return
           }
           try {
+            if (writes.some(change => !change.row)) markLocalStoreErase('journal-removal')
             for (const { id, row } of writes) {
               if (row) issues.put(row)
               else issues.delete(id)

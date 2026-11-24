@@ -191,6 +191,7 @@ test('resumes a retained workspace with a byte-bounded catch-up and resets an ex
     })
     await warm.goto(path, { waitUntil: 'domcontentloaded' })
     await expect.poll(() => warm.evaluate(() => performance.getEntriesByName('flow:local-store:resync').length)).toBe(1)
+    expect(await warm.evaluate(() => performance.getEntriesByName('flow:local-store:erase:journal-resync', 'mark').length)).toBe(1)
     await expect(warm.getByText('Offline latest edit', { exact: true })).toBeVisible()
     await expect.poll(() => readLocalRow(warm, id)).toMatchObject({ title: 'Offline latest edit' })
     expect(await readLocalRow(warm, 'workspace', '_meta')).toHaveProperty('resume')

@@ -6,7 +6,7 @@ import { clearUnlistedLocalStores, isLocalStoreQuotaError, LocalStoreDB, localSt
 import { readRememberedWorkspace } from './navigation-cache'
 import {
   LOCAL_STORE_HEADER, LOCAL_STORE_ISSUE_CAPABILITY, LOCAL_STORE_PULSE_CURSOR, LocalStoreRefreshRequired, LocalStoreReset, decimal,
-  localKinds, localRowBytes, localRowFingerprint, localStoreAuthority, localStoreBuildId, localStoreEnabled, planLocalChanges,
+  localKinds, localRowBytes, localRowFingerprint, localStoreAuthority, localStoreBuildId, localStoreEnabled, localStoreEraseReason, markLocalStoreErase, planLocalChanges,
   projectLocalCollection, projectLocalIssueRecord, type LocalChange, type LocalRow, type LocalStoreAuthority,
 } from './local-store-model'
 import { modelChanges, modelRecordPage, type SyncWireRecord } from './scale-p13-wire'
@@ -54,7 +54,7 @@ function endpoint(scope: Scope, route: string, args: Record<string, string>, sig
 
 function readCheckpoint(value: Partial<Checkpoint>) {
   if (typeof value.revision !== 'string' || !/^\d+:\d+$/.test(value.revision) || !decimal(value.eventCursor)) {
-    throw new LocalStoreReset('Missing issue checkpoint')
+    throw new LocalStoreReset('journal-invalid', 'Missing issue checkpoint')
   }
   return { revision: value.revision, eventCursor: value.eventCursor }
 }
@@ -63,10 +63,14 @@ export async function readLocalIssueManifest(scope: Scope, counts: boolean, sign
   const { url, init } = endpoint(scope, 'manifest', counts ? { counts: '1' } : {}, signal)
   const manifest = await requestRetryingBusy<Partial<Checkpoint> & { schema?: number; capabilities?: string[]; issueCount?: number }>(url, init)
   const authority = localStoreAuthority(manifest)
-  if (manifest.schema !== 2 || !manifest.capabilities?.includes(LOCAL_STORE_ISSUE_CAPABILITY) || !authority ||
-      authority.workspaceId !== scope.workspaceId || authority.viewerId !== scope.viewerId ||
-      counts && (!Number.isSafeInteger(manifest.issueCount) || manifest.issueCount! < 0)) {
-    throw new LocalStoreReset('Issue manifest unavailable')
+  if (manifest.schema !== 2 || !manifest.capabilities?.includes(LOCAL_STORE_ISSUE_CAPABILITY)) {
+    throw new LocalStoreReset('schema-mismatch', 'Issue manifest schema unavailable')
+  }
+  if (!authority || authority.workspaceId !== scope.workspaceId || authority.viewerId !== scope.viewerId) {
+    throw new LocalStoreReset('authority-changed', 'Issue manifest authority changed')
+  }
+  if (counts && (!Number.isSafeInteger(manifest.issueCount) || manifest.issueCount! < 0)) {
+    throw new LocalStoreReset('journal-invalid', 'Missing issue count')
   }
   return { ...authority, ...readCheckpoint(manifest), issueCount: manifest.issueCount, outbox: manifest.capabilities.includes('local-store-outbox-v1') }
 }
@@ -74,17 +78,18 @@ export async function readLocalIssueManifest(scope: Scope, counts: boolean, sign
 export async function readLocalIssueChanges(scope: Scope, authority: LocalStoreAuthority, signal?: AbortSignal): Promise<JournalPage> {
   const { url, init } = endpoint(scope, 'changes', { after: authority.head, authzEpoch: authority.authzEpoch }, signal)
   const wire = await requestRetryingBusy<SyncChanges & Checkpoint>(url, init)
-  if (!Array.isArray(wire?.transactions)) throw new LocalStoreReset('Invalid issue changes')
-  if (wire.resyncRequired || wire.authzEpoch !== authority.authzEpoch) throw new LocalStoreRefreshRequired('Issue authority or retention changed')
+  if (!Array.isArray(wire?.transactions)) throw new LocalStoreReset('journal-invalid', 'Invalid issue changes')
+  if (wire.authzEpoch !== authority.authzEpoch) throw new LocalStoreRefreshRequired('authority-changed', 'Issue authority changed')
+  if (wire.resyncRequired) throw new LocalStoreRefreshRequired('journal-resync', 'Issue retention changed')
   return { ...modelChanges(wire), ...readCheckpoint(wire) }
 }
 
 function planIssueChanges(page: JournalPage, meta: LocalMeta) {
   const writes = planLocalChanges(page, meta.head, meta.authzEpoch, true)
   if (!meta.resume || writes.some(change => change.kind !== 'issue')) {
-    throw new LocalStoreRefreshRequired('Workspace directory changed')
+    throw new LocalStoreRefreshRequired('directory-changed', 'Workspace directory changed')
   }
-  if (page.next === meta.head && page.revision !== meta.resume.revision) throw new LocalStoreRefreshRequired('Issue revision changed outside the journal')
+  if (page.next === meta.head && page.revision !== meta.resume.revision) throw new LocalStoreRefreshRequired('directory-changed', 'Issue revision changed outside the journal')
   return writes
 }
 
@@ -100,20 +105,21 @@ async function loadIssues(scope: Scope, manifest: IssueManifest, signal?: AbortS
       items: SyncWireRecord[]
       authzEpoch: string; revision: string; hasMore: boolean; next: string
     }>(url, init)
-    if (!Array.isArray(wire.items) || wire.authzEpoch !== manifest.authzEpoch || wire.revision !== manifest.revision) throw new LocalStoreReset('Issue bootstrap changed while paging')
+    if (wire.authzEpoch !== manifest.authzEpoch) throw new LocalStoreReset('authority-changed', 'Issue bootstrap authority changed while paging')
+    if (!Array.isArray(wire.items) || wire.revision !== manifest.revision) throw new LocalStoreReset('checkpoint-changed', 'Issue bootstrap changed while paging')
     const page = modelRecordPage(wire)
     for (const { key, value, version, completeness } of page.items) {
-      if (key.kind !== 'issue' || rows.has(key.id) || !value || completeness !== 'summary') throw new LocalStoreReset('Invalid issue bootstrap page')
+      if (key.kind !== 'issue' || rows.has(key.id) || !value || completeness !== 'summary') throw new LocalStoreReset('invalid-record', 'Invalid issue bootstrap page')
       const row = projectLocalIssueRecord(key.id, value, manifest.head, version)
       rows.set(key.id, row)
       bytes += localRowBytes(row)
     }
-    if (bytes > LOCAL_STORE_BUDGET) throw new LocalStoreReset('Issue bootstrap exceeds budget')
+    if (bytes > LOCAL_STORE_BUDGET) throw new LocalStoreReset('quota', 'Issue bootstrap exceeds budget')
     if (!page.hasMore) return rows
-    if (!page.next || page.next === cursor) throw new LocalStoreReset('Issue bootstrap did not advance')
+    if (!page.next || page.next === cursor) throw new LocalStoreReset('journal-invalid', 'Issue bootstrap did not advance')
     cursor = page.next
   }
-  throw new LocalStoreReset('Issue bootstrap exceeded page limit')
+  throw new LocalStoreReset('quota', 'Issue bootstrap exceeded page limit')
 }
 
 async function renderWorkspace(db: LocalStoreDB, checkpoint: LocalMeta, seeded = false) {
@@ -132,7 +138,7 @@ async function loadDirectory(scope: Scope, signal?: AbortSignal) {
   const data = await fetchPagedBootstrap(scope.workspaceKey, undefined, signal, true)
   const authority = localStoreBootstrap(data)?.authority
   if (!authority || authority.viewerId !== scope.viewerId || authority.workspaceId !== scope.workspaceId) {
-    throw new LocalStoreRefreshRequired('Directory authority changed')
+    throw new LocalStoreRefreshRequired('authority-changed', 'Directory authority changed')
   }
   return { directory: listDirectory(data), authority }
 }
@@ -144,19 +150,19 @@ async function seedWorkspace(scope: Scope, started: number, signal?: AbortSignal
   ])
   signal?.throwIfAborted()
   if (authority.authzEpoch !== manifest.authzEpoch || authority.head !== manifest.head) {
-    throw new LocalStoreRefreshRequired('Directory checkpoint changed')
+    throw new LocalStoreRefreshRequired('checkpoint-changed', 'Directory checkpoint changed')
   }
   // Complete the browser's initial preference write before paging and
   // presenting a baseline that the write would immediately invalidate.
   const { saveBrowserTimeZone } = await import('@/hooks/use-browser-timezone')
   const settings = await saveBrowserTimeZone(scope.workspaceKey, scope.viewerId, directory.userSettings[scope.viewerId]?.timezone)?.catch(() => undefined)
-  if (settings) throw new LocalStoreRefreshRequired('Browser timezone saved during bootstrap')
+  if (settings) throw new LocalStoreRefreshRequired('checkpoint-changed', 'Browser timezone saved during bootstrap')
   signal?.throwIfAborted()
   const current = await retainLocalStoreAuthority(manifest, scope.workspaceKey, started)
   if (current === undefined) return undefined
   const issues = await loadIssues(scope, manifest, signal)
   const page = await readLocalIssueChanges(scope, manifest, signal)
-  if (page.next !== manifest.head || page.revision !== manifest.revision) throw new LocalStoreRefreshRequired('Workspace changed during bootstrap')
+  if (page.next !== manifest.head || page.revision !== manifest.revision) throw new LocalStoreRefreshRequired('checkpoint-changed', 'Workspace changed during bootstrap')
   const db = await LocalStoreDB.open(manifest, scope.workspaceKey, current)
   if (!db) return undefined
   try {
@@ -172,7 +178,10 @@ async function seedWorkspace(scope: Scope, started: number, signal?: AbortSignal
         bytes += fingerprint.bytes
       } else bytes += localRowBytes(row)
     }
-    if (bytes > LOCAL_STORE_BUDGET) return undefined
+    if (bytes > LOCAL_STORE_BUDGET) {
+      markLocalStoreErase('quota')
+      return undefined
+    }
     const now = Date.now()
     const previous = await db.readMeta()
     const metadata = {
@@ -210,7 +219,7 @@ export async function catchUpLocalIssues(db: LocalStoreDB, meta: LocalMeta, sign
     signal?.throwIfAborted()
     const metadataRevision = (revision: string) => BigInt(revision.split(':')[0])
     if (metadataRevision(page.revision) - metadataRevision(meta.resume!.revision) !== pulseWrites) {
-      throw new LocalStoreRefreshRequired('Workspace directory changed')
+      throw new LocalStoreRefreshRequired('directory-changed', 'Workspace directory changed')
     }
     const changes = [...writes.values()]
     if (!changes.length && page.next === meta.head && page.revision === meta.resume?.revision && page.eventCursor === meta.resume.eventCursor) {
@@ -228,13 +237,13 @@ export async function catchUpLocalIssues(db: LocalStoreDB, meta: LocalMeta, sign
       }, budget)
     } catch (error) {
       if (!isLocalStoreQuotaError(error)) throw error
-      throw new LocalStoreReset('Unable to write the local issue store after eviction')
+      throw new LocalStoreReset('quota', 'Unable to write the local issue store after eviction')
     }
     if (committed) db.rememberHead(committed)
     if (committed && changes.length) performance.measure('flow:local-store:delta-write', { start: started })
     return committed ? { checkpoint: committed, changes } : undefined
   }
-  throw new LocalStoreRefreshRequired('Issue catch-up exceeded page limit')
+  throw new LocalStoreRefreshRequired('quota', 'Issue catch-up exceeded page limit')
 }
 
 async function resumeWorkspace(scope: Scope, signal?: AbortSignal) {
@@ -250,7 +259,11 @@ async function resumeWorkspace(scope: Scope, signal?: AbortSignal) {
       signal?.throwIfAborted()
       const startup = await db.readIssueStartup()
       baseline = startup?.meta
-      if (baseline?.resume?.schema !== 2) break
+      if (!baseline?.resume) break
+      if (baseline.resume.schema !== 2) {
+        markLocalStoreErase('schema-mismatch')
+        return undefined
+      }
       const reused = attempt === 0 && hint?.head === baseline.head && hint.authzEpoch === baseline.authzEpoch ? firstPage?.then(page => {
         if ('error' in page) throw page.error
         return page
@@ -260,17 +273,18 @@ async function resumeWorkspace(scope: Scope, signal?: AbortSignal) {
         ? workspaceView(db, baseline, startup.view) : await renderWorkspace(db, caughtUp.checkpoint))
       if (restored) return restored
     }
+    if (baseline?.resume && !signal?.aborted) markLocalStoreErase('checkpoint-changed')
   } catch (error) {
     if (signal?.aborted || error instanceof ApiError && [401, 404].includes(error.status)) throw error
     if (error instanceof LocalStoreReset || isLocalStoreQuotaError(error)) {
       // A new manifest decides whether to replace the baseline or revoke the
       // database. The outbox belongs to the authorization, not the baseline.
-      if (baseline && db.valid) await db.invalidateReadModel(baseline)
+      if (baseline && db.valid) await db.invalidateReadModel(baseline, localStoreEraseReason(error))
       performance.mark('flow:local-store:resync')
     } else if (error instanceof ApiError && [400, 403].includes(error.status)) {
-      await db.discard()
+      await db.discard(error.status === 403 ? 'access-revoked' : 'journal-invalid')
       performance.mark('flow:local-store:resync')
-    }
+    } else markLocalStoreErase('network-fallback')
   } finally { db.close() }
 }
 
@@ -331,7 +345,11 @@ export function localStoreCursor(checkpoint?: LocalMeta) {
 
 export async function loadLocalWorkspace(account: AccountBootstrap | null, workspaceKey: string, signal?: AbortSignal) {
   const workspace = account?.workspaces.find(item => item.workspace.urlKey === workspaceKey)?.workspace
-  if (!account || !workspace || typeof indexedDB === 'undefined') return undefined
+  if (!account || !workspace) return undefined
+  if (typeof indexedDB === 'undefined') {
+    markLocalStoreErase('idb-error')
+    return undefined
+  }
   const scope = { viewerId: account.viewer.id, workspaceId: workspace.id, workspaceKey }
   const early = startupResume
   startupResume = undefined
@@ -351,11 +369,18 @@ export async function loadLocalWorkspace(account: AccountBootstrap | null, works
     return restored
   }
   for (let attempt = 0; attempt < 3; attempt++) {
-    try { return await seedWorkspace(scope, localStoreGeneration(), signal) }
+    try {
+      const seeded = await seedWorkspace(scope, localStoreGeneration(), signal)
+      if (!seeded) markLocalStoreErase('network-fallback')
+      return seeded
+    }
     catch (error) {
       if (signal?.aborted || error instanceof ApiError && error.status === 401) throw error
       // An intervening write can invalidate a page without revoking access.
-      if (!(error instanceof LocalStoreRefreshRequired || error instanceof ApiError && error.status === 409)) return undefined
+      if (!(error instanceof LocalStoreRefreshRequired || error instanceof ApiError && error.status === 409) || attempt === 2) {
+        markLocalStoreErase(error instanceof LocalStoreReset ? error.reason : 'network-fallback')
+        return undefined
+      }
     }
   }
 }

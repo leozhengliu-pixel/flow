@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applyLocalIssueView, compareLocalStoreSeq, createLocalIssueView, issueFromLocalRow, LOCAL_STORE_PULSE_CURSOR, LocalStoreReset, localStoreAuthority, localStoreBuildId, localStoreEnabled, planLocalChanges, projectLocalCollection, projectLocalIssueRecord } from './local-store-model'
+import { applyLocalIssueView, compareLocalStoreSeq, createLocalIssueView, issueFromLocalRow, LOCAL_STORE_PULSE_CURSOR, LocalStoreReset, localStoreAuthority, localStoreBuildId, localStoreEnabled, localStoreEraseReason, markLocalStoreErase, planLocalChanges, projectLocalCollection, projectLocalIssueRecord } from './local-store-model'
 import type { BootstrapData, SyncChanges } from '@/types/flow'
 
 const after = '9007199254740993'
@@ -78,6 +78,31 @@ describe('local store inputs', () => {
     ]) {
       expect(() => planLocalChanges(invalid, after, epoch)).toThrow(LocalStoreReset)
     }
+  })
+
+  it('distinguishes epoch changes from invalidated collections and expired cursors', () => {
+    const reason = (value: SyncChanges) => {
+      try { planLocalChanges(value, after, epoch, true) }
+      catch (error) { return localStoreEraseReason(error) }
+    }
+    expect(reason({ ...page, authzEpoch: 'revoked', resyncRequired: true })).toBe('authority-changed')
+    expect(reason({ ...page, resyncRequired: true })).toBe('journal-resync')
+    expect(reason({ ...page, transactions: [{ ...page.transactions[0], invalidations: ['issues'] }] })).toBe('journal-invalidated')
+  })
+
+  it('keeps a bounded diagnostic mark with a fixed code independent of error text', () => {
+    const mark = vi.fn()
+    const clearMarks = vi.fn()
+    vi.stubGlobal('performance', { mark, clearMarks })
+    try {
+      markLocalStoreErase(localStoreEraseReason(new DOMException('Record contents', 'TransactionInactiveError')))
+      markLocalStoreErase(localStoreEraseReason(new Error('Unexpected record contents')))
+      expect(mark.mock.calls).toEqual([
+        ['flow:local-store:erase:idb-inactive'],
+        ['flow:local-store:erase:idb-error'],
+      ])
+      expect(clearMarks.mock.calls).toEqual(mark.mock.calls)
+    } finally { vi.unstubAllGlobals() }
   })
 
   it('replays issue edits alongside a Pulse delivery cursor without discarding the issue list', () => {

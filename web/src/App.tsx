@@ -513,7 +513,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
   }));
   useLayoutEffect(() => localStoreShadow.listen(), [localStoreShadow]);
   useEffect(() => onLocalStoreSessionEnd(() => {
-    void clearLocalStores();
+    void clearLocalStores('session-ended');
     if (!sessionViewerRef.current) return;
     sessionViewerRef.current = undefined;
     clearNavigationCache();

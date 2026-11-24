@@ -295,3 +295,80 @@ func TestLocalStoreIssueChangesIgnorePulseCursor(t *testing.T) {
 		})
 	}
 }
+
+func TestLocalStoreIssueChangesIgnoreNotificationSideEffects(t *testing.T) {
+	enableLocalStoreShadowTest(t)
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	for driver, repo := range scaleP03ServerTestStores(t) {
+		t.Run(driver, func(t *testing.T) {
+			fixture := scaleP03Fixture(t, repo)
+			workspace, team := fixture.data.Workspace.URLKey, fixture.data.Teams[0].ID
+			editor, user := scaleP03Join(t, fixture, "Editor", "local-store-editor@example.test", "member", team)
+			issue := authRequest[domain.Issue](t, fixture.admin, http.MethodPost, fixture.host.URL+"/api/issue-records",
+				map[string]string{"title": "Owner's issue", "teamId": team}, workspace, http.StatusCreated)
+			principal := scaleP12Principal{user: user}
+			r := principal.request(workspace)
+			access, err := fixture.service.resolveSyncAccess(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			head, err := repo.RecordJournalHead(t.Context(), access.WorkspaceID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			updated := authRequest[domain.Issue](t, editor, http.MethodPatch, fixture.host.URL+"/api/issue-records/"+issue.ID,
+				map[string]string{"title": "Member's edit"}, workspace, http.StatusOK)
+			raw, err := repo.ReadCommittedChanges(t.Context(), access.WorkspaceID, head, 100, syncV2DeltaBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(raw.Transactions) != 1 {
+				t.Fatalf("expected one journal transaction for the edit, got %d", len(raw.Transactions))
+			}
+			kinds := map[string]bool{}
+			for _, record := range raw.Transactions[0].Records {
+				kinds[record.Key.Kind] = true
+			}
+			if !kinds["issues"] || !kinds["notifications"] || !kinds["notificationDeliveries"] {
+				t.Fatalf("edit fixture must write an issue and send the owner a notification: %v", kinds)
+			}
+
+			current, err := fixture.service.resolveSyncAccess(principal.request(workspace))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if current.AuthzEpoch != access.AuthzEpoch || current.SourceVersion().Metadata != access.SourceVersion().Metadata {
+				t.Fatal("notification side effects must leave directory authority and revision unchanged")
+			}
+			query := r.URL.Query()
+			query.Set("surface", "local-store")
+			query.Set("mode", "issues")
+			query.Set("workspaceId", access.WorkspaceID)
+			query.Set("authzEpoch", access.AuthzEpoch)
+			query.Set("after", head)
+			r.URL.Path, r.URL.RawQuery = "/api/sync/changes", query.Encode()
+			r.Header.Set(localStoreHeader, user.ID)
+			bounded, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, service := range []*server{fixture.service, {store: bounded}} {
+				w := httptest.NewRecorder()
+				service.syncChanges(w, r)
+				var delta localStoreIssueDelta
+				if err := json.Unmarshal(w.Body.Bytes(), &delta); w.Code != http.StatusOK || err != nil ||
+					delta.ResyncRequired || delta.Next != raw.Next || delta.Revision != localStoreIssueRevision(current) || len(delta.Transactions) != 1 {
+					t.Fatalf("expected the edit delta at the new checkpoint (bounded=%t): %d %s", service.store.BoundedMetadataEnabled(), w.Code, w.Body.String())
+				}
+				tx := delta.Transactions[0]
+				if len(tx.Invalidations) != 0 || len(tx.Removals) != 0 || len(tx.Upserts) != 1 || tx.Upserts[0].Key.ID != issue.ID {
+					t.Fatalf("expected just the visible issue upsert: %+v", tx)
+				}
+				var summary domain.Issue
+				if err := json.Unmarshal(tx.Upserts[0].Data, &summary); err != nil || summary.Title != updated.Title || summary.Version != updated.Version {
+					t.Fatalf("projected title or version differed from the edit: %v", err)
+				}
+			}
+		})
+	}
+}

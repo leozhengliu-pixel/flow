@@ -205,5 +205,10 @@ func (s *server) projectLocalStoreChange(r *http.Request, access store.EventAcce
 }
 
 func localStoreIgnoresIssueKind(kind string) bool {
+	// The issue baseline contains neither the inbox nor its delivery queue.
+	// A single issue edit can write both, without changing the directory.
+	if kind == "notifications" || kind == "notificationDeliveries" {
+		return true
+	}
 	return kind != "userSettings" && kind != "settings" && localStoreIgnoresKind(kind)
 }

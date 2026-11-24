@@ -49,10 +49,10 @@ function createLocalOutbox(scope: LocalStoreScope, changed: () => void, rejected
   const authorized = async (signal: AbortSignal) => {
     if (!valid()) throw new ApiError('Sync authorization changed', 403)
     const manifest = await readLocalIssueManifest(scope, false, signal).catch(async error => {
-      if (!signal.aborted && valid() && error instanceof ApiError && error.status === 404) await clearLocalStores(viewerId, workspaceKey)
+      if (!signal.aborted && valid() && error instanceof ApiError && error.status === 404) await clearLocalStores('access-revoked', viewerId, workspaceKey)
       throw error
     })
-    if (valid() && manifest.authzEpoch !== initial?.authzEpoch) await clearLocalStores(viewerId, workspaceKey)
+    if (valid() && manifest.authzEpoch !== initial?.authzEpoch) await clearLocalStores('authority-changed', viewerId, workspaceKey)
     if (!valid()) throw new ApiError('Sync authorization changed', 403)
     eligible = manifest.outbox
     return eligible

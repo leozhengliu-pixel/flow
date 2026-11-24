@@ -36,12 +36,12 @@ async function loadSlice<T>(scope: LocalSliceScope, kind: LocalSliceKind, key: s
     if ('error' in authorized) {
       const error: unknown = authorized.error
       if (error instanceof ApiError && error.status === 401) throw error
-      if (error instanceof ApiError && [403, 404].includes(error.status)) await db.discard()
+      if (error instanceof ApiError && [403, 404].includes(error.status)) await db.discard('access-revoked')
       return load()
     }
     const stamp = localSliceStamp(authorized.value)
     if (hint.authzEpoch !== stamp.authzEpoch || stored && stored.meta.authzEpoch !== stamp.authzEpoch) {
-      await db.discard()
+      await db.discard('authority-changed')
       return load()
     }
     if (!stored || !db.valid) return load()
@@ -63,9 +63,11 @@ async function loadSlice<T>(scope: LocalSliceScope, kind: LocalSliceKind, key: s
         await db.removeSlice(kind, key).catch(() => undefined)
         try {
           const current = await readLocalIssueManifest(scope, false, signal)
-          if (current.authzEpoch !== stamp.authzEpoch) await db.discard()
+          if (current.authzEpoch !== stamp.authzEpoch) await db.discard('authority-changed')
         } catch (cause) {
-          if (cause instanceof ApiError && [401, 403, 404].includes(cause.status)) await db.discard()
+          if (cause instanceof ApiError && [401, 403, 404].includes(cause.status)) {
+            await db.discard(cause.status === 401 ? 'session-ended' : 'access-revoked')
+          }
         }
       }
       throw error
