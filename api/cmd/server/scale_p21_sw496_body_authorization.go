@@ -98,7 +98,7 @@ func (s *server) boundedProjectMutationAllowed(r *http.Request, access store.Acc
 		if err != nil || known {
 			return known, err
 		}
-		return s.formerMemberOutsideWrite(r.Context(), workspace, id), nil
+		return s.formerMemberOutsideWrite(r.Context(), workspace, id)
 	}
 	if input.LeadID != nil && *input.LeadID != "" {
 		if known, err := knownPerson(*input.LeadID); err != nil || !known {

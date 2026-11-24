@@ -174,8 +174,11 @@ func (s *server) codingEnvironmentAccess(w http.ResponseWriter, r *http.Request)
 		request.admin = true
 		return request, true
 	}
-	role, _, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, request.user.ID)
-	if err != nil || role == "" || strings.EqualFold(role, "guest") {
+	role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, request.user.ID)
+	if writeAuthCheckFailure(w, err) {
+		return codingEnvironmentRequest{}, false
+	}
+	if err != nil || status != "active" || role == "" || strings.EqualFold(role, "guest") {
 		writeError(w, http.StatusForbidden, "Guests cannot use coding environments")
 		return codingEnvironmentRequest{}, false
 	}

@@ -634,7 +634,10 @@ func (s *server) upsertGitAutomation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result domain.GitAutomationState
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "git_automation.upserted", input.ID, input, func(data *domain.Bootstrap) error {
 		if !teamSettingsWriteAllowed(data, input.TeamID, teamRoles, role) {
 			return store.ErrAuthForbidden
@@ -669,7 +672,10 @@ func (s *server) upsertGitAutomation(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, result)
 }
 func (s *server) deleteGitAutomation(w http.ResponseWriter, r *http.Request) {
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "git_automation.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
 		if existing := slices.IndexFunc(data.GitAutomationStates, func(v domain.GitAutomationState) bool { return v.ID == r.PathValue("id") }); existing >= 0 && !teamSettingsWriteAllowed(data, data.GitAutomationStates[existing].TeamID, teamRoles, role) {
 			return store.ErrAuthForbidden
@@ -693,7 +699,10 @@ func (s *server) upsertTargetBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result domain.TargetBranch
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "target_branch.upserted", input.ID, input, func(data *domain.Bootstrap) error {
 		if !teamSettingsWriteAllowed(data, input.TeamID, teamRoles, role) {
 			return store.ErrAuthForbidden
@@ -745,7 +754,10 @@ func (s *server) upsertTargetBranch(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, result)
 }
 func (s *server) deleteTargetBranch(w http.ResponseWriter, r *http.Request) {
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "target_branch.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
 		if existing := slices.IndexFunc(data.TargetBranches, func(v domain.TargetBranch) bool { return v.ID == r.PathValue("id") }); existing >= 0 && !teamSettingsWriteAllowed(data, data.TargetBranches[existing].TeamID, teamRoles, role) {
 			return store.ErrAuthForbidden

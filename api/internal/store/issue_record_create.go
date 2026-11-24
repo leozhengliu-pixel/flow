@@ -85,9 +85,9 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		metadata.Viewer = actor
 		originalRole := metadata.ViewerRole
 		if _, ok := actorFromContext(ctx); ok {
-			role, status, err := s.WorkspaceRole(ctx, metadata.Workspace.ID, actor.ID)
-			if err != nil || status != "active" {
-				return ErrAuthForbidden
+			role, err := s.mutationWorkspaceRole(ctx, metadata.Workspace.ID, actor.ID)
+			if err != nil {
+				return err
 			}
 			metadata.ViewerRole = role
 		}

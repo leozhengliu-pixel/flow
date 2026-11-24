@@ -216,11 +216,11 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 			access := &DocumentRead{owner: attempt.owner}
 			if err := access.documentProjectionRows(ctx, []string{"role", "status"},
 				`FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, data.Workspace.ID, actor.ID); err != nil {
-				return err
+				return PreWriteDatabaseError(err)
 			}
-			role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, actor.ID)
-			if err != nil || status != "active" {
-				return ErrAuthForbidden
+			role, err := s.mutationWorkspaceRole(ctx, data.Workspace.ID, actor.ID)
+			if err != nil {
+				return err
 			}
 			data.ViewerRole = role
 		}

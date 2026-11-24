@@ -792,41 +792,67 @@ func (s *server) eraseMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target, err := s.store.UserByID(r.Context(), userID)
+	if writeAuthCheckFailure(w, err) {
+		return
+	}
 	if err != nil || target.App || target.Deleted {
 		writeError(w, http.StatusNotFound, "member not found")
 		return
 	}
 	member, err := s.store.HasWorkspaceMembership(r.Context(), workspaceID, userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
 		return
 	}
-	if erased, _ := s.store.ErasedFromWorkspace(r.Context(), workspaceID, userID); erased {
+	erased, err := s.store.ErasedFromWorkspace(r.Context(), workspaceID, userID)
+	if writeAuthCheckFailure(w, err) {
+		return
+	}
+	if erased {
 		writeError(w, http.StatusNotFound, "member not found")
 		return
 	}
-	formerRead, _ := s.store.BeginFormerMembersRead(r.Context(), key)
-	var former map[string]bool
-	if formerRead != nil {
-		defer formerRead.Close()
-		former = formerRead.Members()
-	}
-	if !member && !former[userID] {
-		writeError(w, http.StatusNotFound, "member not found")
-		return
+	if !member {
+		former, err := s.store.BeginFormerMembersRead(r.Context(), key)
+		if former != nil {
+			defer former.Close()
+		}
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
+		if former == nil || !former.Members()[userID] {
+			writeError(w, http.StatusNotFound, "member not found")
+			return
+		}
 	}
 	if s.refuseSCIMManagedMember(w, r, workspaceID, userID) {
 		return
 	}
 	if member {
-		role, status, _ := s.store.WorkspaceRole(r.Context(), workspaceID, userID)
-		actorRole, _, _ := s.store.WorkspaceRole(r.Context(), workspaceID, actor.ID)
+		role, status, err := s.store.WorkspaceRole(r.Context(), workspaceID, userID)
+		if err != nil {
+			respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
+			return
+		}
+		actorRole, actorStatus, err := s.store.WorkspaceRole(r.Context(), workspaceID, actor.ID)
+		if err != nil {
+			respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
+			return
+		}
+		if actorStatus != "active" {
+			respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+			return
+		}
 		if role == "owner" && actorRole != "owner" {
 			writeError(w, http.StatusForbidden, "Only an owner can erase another owner")
 			return
 		}
 		if workspaceAdminRole(role) && status == "active" {
-			if sole, err := s.store.SoleAdminWorkspaces(r.Context(), userID); err == nil && slices.Contains(sole, key) {
+			sole, err := s.store.SoleAdminWorkspaces(r.Context(), userID)
+			if writeAuthCheckFailure(w, err) {
+				return
+			}
+			if slices.Contains(sole, key) {
 				writeError(w, http.StatusConflict, store.ErrLastAdmin.Error())
 				return
 			}
@@ -838,7 +864,7 @@ func (s *server) eraseMember(w http.ResponseWriter, r *http.Request) {
 	}
 	other, err := s.store.OtherWorkspaceMemberships(r.Context(), workspaceID, userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
 		return
 	}
 	scope := "workspace"

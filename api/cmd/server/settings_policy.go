@@ -155,30 +155,36 @@ func effectiveTeamRole(data *domain.Bootstrap, teamID string, directRoles map[st
 // team memberships (team id → role; see effectiveTeamRole for inheritance) for
 // handlers that enforce role checks inside a workspace mutation, where the
 // store lock is already held. Local AUTH_DISABLED fixtures act as an admin.
-func (s *server) requestWorkspaceRole(r *http.Request) (string, map[string]string) {
+func (s *server) requestWorkspaceRole(w http.ResponseWriter, r *http.Request) (string, map[string]string, bool) {
 	teamRoles := map[string]string{}
 	if s.authDisabled {
-		return "admin", teamRoles
+		return "admin", teamRoles, true
 	}
 	userID := authUser(r).ID
 	data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
 	if !ok {
-		return "", teamRoles
+		respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+		return "", nil, false
 	}
 	role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+	if writeAuthCheckFailure(w, err) {
+		return "", nil, false
+	}
 	if err != nil || status != "active" {
-		return "", teamRoles
+		respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+		return "", nil, false
 	}
 	members, err := s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
 	if err != nil {
-		return role, teamRoles
+		respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
+		return "", nil, false
 	}
 	for _, member := range members {
 		if member.UserID == userID {
 			teamRoles[member.TeamID] = member.Role
 		}
 	}
-	return role, teamRoles
+	return role, teamRoles, true
 }
 
 // releasePipelineAdministrable's canAdministerPipeline: workspace

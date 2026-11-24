@@ -52,14 +52,8 @@ func writeStoreBusy(w http.ResponseWriter, err error) bool {
 	if retryAfter == 0 {
 		return false
 	}
-	if errors.Is(err, store.ErrDatabaseUnavailable) {
+	if errors.Is(err, store.ErrDatabaseUnavailable) || store.IsDatabaseConnectionError(err) {
 		if r := apiErrorRequest(w); r != nil {
-			slog.WarnContext(r.Context(), "workspace reload failed before mutation",
-				"request_id", serverRequestIDFrom(r.Context()), "cause", requestErrorCode(err))
-		}
-	}
-	if store.IsDatabaseConnectionError(err) {
-		if r := apiErrorRequest(w); r != nil && !errors.Is(err, store.ErrDatabaseUnavailable) {
 			slog.WarnContext(r.Context(), "database unavailable",
 				"request_id", serverRequestIDFrom(r.Context()), "cause", requestErrorCode(err))
 		}

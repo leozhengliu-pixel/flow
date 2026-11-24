@@ -78,7 +78,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			metadata.Viewer = actor
 			role, status, err := s.WorkspaceRole(ctx, metadata.Workspace.ID, actor.ID)
 			if err != nil {
-				return domain.Bootstrap{}, err
+				return domain.Bootstrap{}, PreWriteDatabaseError(err)
 			}
 			if mutationKey != "" && status != "active" {
 				return domain.Bootstrap{}, ErrAuthForbidden

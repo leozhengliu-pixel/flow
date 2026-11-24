@@ -36,9 +36,7 @@ const (
 // metadataBudgetBytes reads a byte budget from the environment: a positive
 // whole number of bytes. Unset, invalid, zero or negative values use the
 // default. The budgets grow with the number of workspaces a replica holds
-// (docs/bounded-metadata.md, Tuning). The disk budget is read on every spool
-// append, so an unset variable returns before parsing (a failed parse
-// allocates its error).
+// (docs/bounded-metadata.md, Tuning).
 func metadataBudgetBytes(name string, fallback int64) int64 {
 	raw := strings.TrimSpace(os.Getenv(name))
 	if raw == "" {

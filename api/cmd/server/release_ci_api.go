@@ -147,7 +147,10 @@ func (s *server) rotateReleasePipelineAccessKey(w http.ResponseWriter, r *http.R
 	}
 	id := r.PathValue("id")
 	var result releasePipelineAccessKey
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.access_key_rotated", id, input, func(data *domain.Bootstrap) error {
 		pipeline := releasePipelineByID(data, id)
 		if pipeline == nil {
@@ -184,7 +187,10 @@ func (s *server) revokeReleasePipelineAccessKey(w http.ResponseWriter, r *http.R
 	}
 	id := r.PathValue("id")
 	var updated domain.ReleasePipeline
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.access_key_revoked", id, map[string]bool{"immediate": immediate}, func(data *domain.Bootstrap) error {
 		pipeline := releasePipelineByID(data, id)
 		if pipeline == nil {

@@ -77,7 +77,9 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusForbidden, "You don't have permission to perform this action")
+		if !writeAuthCheckFailure(w, err) {
+			writeError(w, http.StatusForbidden, "You don't have permission to perform this action")
+		}
 		return
 	}
 	workspace := data.Workspace.URLKey

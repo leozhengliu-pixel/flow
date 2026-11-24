@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -32,6 +33,8 @@ func TestDatabaseConnectionErrors(t *testing.T) {
 		{"mysql pooled connection", mysql.ErrInvalidConn, "mysql_invalid_connection"},
 		{"mysql connection limit", &mysql.MySQLError{Number: 1040}, "mysql_1040"},
 		{"pooled EOF", io.EOF, "connection_lost"},
+		{"transport short read", &net.OpError{Op: "read", Err: io.ErrUnexpectedEOF}, "connection_lost"},
+		{"unattributed short read", io.ErrUnexpectedEOF, ""},
 		{"refused", &net.OpError{Op: "dial", Err: syscall.ECONNREFUSED}, "connection_refused"},
 		{"postgres closed", pgconn.ErrConnClosed, "closed_connection"},
 		{"postgres connect", &pgconn.ConnectError{}, "postgres_connect"},
@@ -56,5 +59,33 @@ func TestDatabaseConnectionErrors(t *testing.T) {
 				t.Fatal("connection error was not recognized as a database error")
 			}
 		})
+	}
+}
+
+func TestPostgresProtocolDisconnect(t *testing.T) {
+	for _, input := range []string{"", "partial"} {
+		reader := postgresProtocolReader{strings.NewReader(input)}
+		if _, err := io.ReadFull(reader, make([]byte, 8)); !IsDatabaseConnectionError(err) {
+			t.Fatal("PostgreSQL transport closed without a database connection error")
+		}
+	}
+}
+
+func TestPreWriteDatabaseError(t *testing.T) {
+	for _, tc := range []struct {
+		err       error
+		retryable bool
+	}{
+		{mysql.ErrInvalidConn, true},
+		{context.DeadlineExceeded, true},
+		{context.Canceled, false},
+		{ErrAuthForbidden, false},
+		{sql.ErrNoRows, false},
+		{nil, false},
+	} {
+		got := PreWriteDatabaseError(tc.err)
+		if !errors.Is(got, tc.err) || errors.Is(got, ErrDatabaseUnavailable) != tc.retryable {
+			t.Errorf("pre-write classification for %v did not preserve the cause and retryability", tc.err)
+		}
 	}
 }

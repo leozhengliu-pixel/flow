@@ -22,7 +22,7 @@ func TestScaleP21SW184ThousandIssueBatchDifferential(t *testing.T) {
 	f.runBatchCases(t, []scaleP21IssueBatchCase{
 		{name: "1000-description-growth", user: f.data.Viewer, ids: ids, update: map[string]any{"description": strings.Repeat("description <>& ", 128)}, code: http.StatusOK},
 		{name: "1000-one-archived-rolls-back", setup: scaleP21IssueBatchArchive(f, ids[len(ids)-1]), user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusBadRequest},
-		{name: "1000-cancelled", user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, stop: true},
+		{name: "1000-cancelled", user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, stop: true, code: http.StatusRequestTimeout},
 	})
 }
 

@@ -51,7 +51,7 @@
         "server/server.updateWorkspace",
         "server/server.uploadWorkspaceLogo",
         "server/server.deleteWorkspaceLogo",
-        "server/server.workspaceData",
+        "server/server.workspaceDataWithError",
         "server/server.getSharedView",
         "server/server.purgeWorkspace",
         "store/SQLiteStore.Bootstrap",

@@ -2,8 +2,40 @@ package store
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 )
+
+func TestLogicalBuilderKeepsDiskBudgetForItsLifetime(t *testing.T) {
+	before := metadataLogicalDiskUsed.Load()
+	t.Setenv("FLOW_METADATA_SOURCE_DISK_BYTES", strconv.FormatInt(before+16, 10))
+	builder, err := newMetadataLogicalBuilder(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer builder.Close()
+
+	t.Setenv("FLOW_METADATA_SOURCE_DISK_BYTES", strconv.FormatInt(before+8, 10))
+	if err := builder.write(make([]byte, 16)); err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.write([]byte{0}); !errors.Is(err, ErrMetadataWorkBudget) {
+		t.Fatal("append beyond the builder's disk budget must fail")
+	}
+	builder.Close()
+
+	next, err := newMetadataLogicalBuilder(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer next.Close()
+	if err := next.write(make([]byte, 16)); !errors.Is(err, ErrMetadataWorkBudget) {
+		t.Fatal("the next builder must use the new disk budget")
+	}
+	if got := metadataLogicalDiskUsed.Load(); got != before {
+		t.Fatalf("builder left %d bytes charged", got-before)
+	}
+}
 
 func TestScaleP21LogicalScratchContention(t *testing.T) {
 	t.Setenv("FLOW_METADATA_SOURCE_DISK_BYTES", "1024")

@@ -649,7 +649,11 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 	teamID := r.PathValue("id")
 	var persistedTeamMembers []domain.TeamMember
 	if current, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r)); ok {
-		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), current.Workspace.ID)
+		var err error
+		persistedTeamMembers, err = s.store.ListTeamMembers(r.Context(), current.Workspace.ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
 	}
 	var updated domain.TeamSettings
 	ctx := store.WithTeamIssueCascade(r.Context(), func(data *domain.Bootstrap) []string {

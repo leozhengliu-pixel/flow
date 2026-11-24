@@ -83,9 +83,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		if actor, ok := actorFromContext(ctx); ok {
 			actor = mutationInputActor(actor)
 			data.Viewer = actor
-			role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, actor.ID)
-			if err != nil || status != "active" {
-				return ErrAuthForbidden
+			role, err := s.mutationWorkspaceRole(ctx, data.Workspace.ID, actor.ID)
+			if err != nil {
+				return err
 			}
 			data.ViewerRole = role
 		}

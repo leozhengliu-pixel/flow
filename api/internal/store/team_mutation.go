@@ -146,8 +146,12 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		snap := snapshotTeamMutation(eventType, mutationAggregateID(ctx), &next)
 		originalViewerRole, originalViewer := next.ViewerRole, next.Viewer
 		if actor, ok := actorFromContext(ctx); ok {
+			role, err := s.mutationWorkspaceRole(ctx, next.Workspace.ID, actor.ID)
+			if err != nil && !errors.Is(err, ErrAuthForbidden) {
+				return err
+			}
 			next.Viewer = actor
-			if role, status, roleErr := s.WorkspaceRole(ctx, next.Workspace.ID, actor.ID); roleErr == nil && status == "active" {
+			if err == nil {
 				next.ViewerRole = role
 			}
 			if index := slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID == actor.ID }); index >= 0 {

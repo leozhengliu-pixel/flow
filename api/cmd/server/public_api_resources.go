@@ -54,6 +54,9 @@ func (s *server) publicMetadata(w http.ResponseWriter, r *http.Request) (domain.
 		data, err = s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
 	}
 	if err != nil {
+		if writeStoreReadUnavailable(w, err) {
+			return data, false
+		}
 		if errors.Is(err, store.ErrAuthForbidden) {
 			writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
 		} else {

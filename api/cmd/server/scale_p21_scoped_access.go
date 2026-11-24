@@ -8,11 +8,16 @@ import (
 	"flow/api/internal/store"
 )
 
-// workspaceDataScoped keeps the exact legacy accessor when residency is off.
-// Bounded callers check ok before using data; errors never become empty state.
+// workspaceDataScoped uses the legacy projection when residency is off.
+// Callers check ok before using data, so read errors never become empty state.
 func (s *server) workspaceDataScoped(w http.ResponseWriter, r *http.Request, scope store.MetadataRecordScope) (domain.Bootstrap, bool) {
 	if !s.store.BoundedMetadataEnabled() {
-		return s.workspaceData(r), true
+		data, err := s.workspaceDataWithError(r)
+		if err != nil {
+			respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
+			return domain.Bootstrap{}, false
+		}
+		return data, true
 	}
 	var data domain.Bootstrap
 	var err error

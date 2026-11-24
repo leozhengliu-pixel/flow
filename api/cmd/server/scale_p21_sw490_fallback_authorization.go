@@ -165,6 +165,7 @@ func (s *server) boundedFallbackAuthorization(r *http.Request, workspace, userID
 			return false, true
 		}
 		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		noteAuthorizationBusy(r, err)
 		return err == nil && status == "active", true
 	}
 	if _, cold := scaleP21ColdAuthorizationRoute(r); cold {

@@ -55,11 +55,17 @@ func (s *server) requestIssueQueryAccess(r *http.Request) (domain.Bootstrap, sto
 // A canceled access check must stop the request with an explicit failure.
 // The query error writer otherwise leaves a disconnected read unanswered.
 func issueRequestAccessError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, context.Canceled) {
-		writeError(w, http.StatusRequestTimeout, "Request canceled")
-		return
+	if !writeRequestCanceled(w, err) {
+		issueRecordsErrorFor(w, r, err)
 	}
-	issueRecordsErrorFor(w, r, err)
+}
+
+func writeRequestCanceled(w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, context.Canceled) {
+		return false
+	}
+	writeError(w, http.StatusRequestTimeout, "Request canceled")
+	return true
 }
 
 func boundedIssueAuthorizationRequest(r *http.Request) bool {

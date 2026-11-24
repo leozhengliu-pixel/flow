@@ -18,10 +18,10 @@
         "server/server.auditChatTenant"
       ]
     },
-    "chatBindingAuthorizerValid": {
+    "checkChatBindingAuthorizer": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Identity-only scoped read preserves legacy workspace-only accessor; existing live TeamRole owner check unchanged, storage errors refuse authorization. TestScaleP21M2IdentityDifferential compares admin/private outsider/member/guest/inherited principals and credential forms.",
+      "reason": "The identity-only scoped read supplies the live TeamRole owner check. Binding writes propagate storage errors and delivery checks refuse authorization. TestScaleP21M2IdentityDifferential compares admin, private outsider, member, guest and inherited principals.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

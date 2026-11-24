@@ -30,14 +30,17 @@ func TestScaleP21SW16FormerMemberRequestMatrix(t *testing.T) {
 				request := f.request(user, key, nil)
 				for _, phase := range []string{"queued", "replayed"} {
 					for _, ref := range []string{target.ID, target.ID + "-old-alias", target.ID + "\x00", ""} {
-						previous := old.formerMemberOutsideWrite(request.Context(), f.data.Workspace.URLKey, ref)
-						next := bounded.formerMemberOutsideWrite(request.Context(), f.data.Workspace.URLKey, ref)
+						previous, oldErr := old.formerMemberOutsideWrite(request.Context(), f.data.Workspace.URLKey, ref)
+						next, nextErr := bounded.formerMemberOutsideWrite(request.Context(), f.data.Workspace.URLKey, ref)
+						if oldErr != nil || nextErr != nil {
+							t.Fatal("could not read the former-member directory")
+						}
 						if previous != (ref == target.ID && want) || next != previous {
 							t.Fatalf("%s former-member request changed: target=%q old=%t bounded=%t", phase, ref, previous, next)
 						}
 					}
 					for _, source := range []*server{old, bounded} {
-						if source.formerMemberOutsideWrite(request.Context(), f.data.Workspace.URLKey+"-foreign", target.ID) {
+						if found, err := source.formerMemberOutsideWrite(request.Context(), f.data.Workspace.URLKey+"-foreign", target.ID); err != nil || found {
 							t.Fatal("former-member refusal crossed a workspace binding")
 						}
 					}

@@ -300,7 +300,9 @@ func (s *server) chatSession(w http.ResponseWriter, r *http.Request, admin bool)
 	}
 	data, err := s.chatSettingsMetadata(r)
 	if err != nil {
-		writeChatError(w, 403, "Workspace access required")
+		if errors.Is(err, errNotFound) || !writeAuthCheckFailure(w, err) {
+			writeChatError(w, 403, "Workspace access required")
+		}
 		return data, false
 	}
 	if !s.authDisabled {
@@ -314,6 +316,9 @@ func (s *server) chatSession(w http.ResponseWriter, r *http.Request, admin bool)
 			return data, false
 		}
 		user, err := s.store.AuthenticateSession(r.Context(), cookie.Value)
+		if writeAuthCheckFailure(w, err) {
+			return data, false
+		}
 		if err != nil || user.ID != data.Viewer.ID {
 			writeChatError(w, 401, "Interactive sign-in required")
 			return data, false
@@ -326,7 +331,9 @@ func (s *server) chatSession(w http.ResponseWriter, r *http.Request, admin bool)
 		data.IdentityProviders = policy.IdentityProviders
 		auth, err := s.store.SessionAuthentication(r.Context(), cookie.Value)
 		if err != nil {
-			writeChatError(w, 503, "Could not verify session authentication")
+			if !writeAuthCheckFailure(w, err) {
+				writeChatError(w, 401, "Interactive sign-in required")
+			}
 			return data, false
 		}
 		if !allowedAuthenticationMethod(data, data.ViewerRole, auth) || (data.WorkspaceSettings.RequireTwoFactor && auth.MFAVerifiedAt == nil) {
@@ -357,7 +364,7 @@ func (s *server) chatSettings(w http.ResponseWriter, r *http.Request) {
 func (s *server) writeChatSettings(w http.ResponseWriter, r *http.Request, data domain.Bootstrap) {
 	w.Header().Set("Cache-Control", "no-store")
 	canManage := s.applicationPolicyAdmin(r, data)
-	manageable := s.chatManageableTeamIDs(r, data)
+	manageable, _ := s.chatManageableTeamIDs(r, data)
 	result := map[string]any{"connection": nil, "identity": nil, "bindings": []domain.ChatBinding{}, "bindableTeamIds": []string{}, "credentialsConfigured": false, "webhookURL": "", "canManage": canManage, "permissions": s.chatPermissions(r, data, domain.ChatIntegrationRecord{}, false, canManage, manageable)}
 	record, err := s.store.ChatIntegration(r.Context(), workspaceKey(r), r.PathValue("provider"))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {

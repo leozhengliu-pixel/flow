@@ -137,9 +137,9 @@ func (s *SQLiteStore) changeTeamMembership(ctx context.Context, request TeamMemb
 	if !ok || !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
 		return result, ErrAuthForbidden
 	}
-	workspaceRole, status, err := s.WorkspaceRole(ctx, workspaceID, userID)
-	if err != nil || status != "active" {
-		return result, ErrAuthForbidden
+	workspaceRole, err := s.mutationWorkspaceRole(ctx, workspaceID, userID)
+	if err != nil {
+		return result, err
 	}
 	// Serialize local writers, while row locks below coordinate separate
 	// application instances on databases that support SELECT ... FOR UPDATE.

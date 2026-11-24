@@ -706,8 +706,7 @@ func scaleP21SW270Counts(names ...string) map[string]int {
 // TestScaleP21SW270WorkspaceDataHotBoundaries closes server.workspaceData:
 // every HOT caller reaches it only with the flag off, and each remaining
 // caller is COLD in the inventory and unreachable from any HOT consumer with
-// the flag on. workspaceData itself is unchanged, so flag-off routes are
-// byte-identical.
+// the flag on. The scoped adapter uses the same projection with error handling.
 func TestScaleP21SW270WorkspaceDataHotBoundaries(t *testing.T) {
 	graph := scaleP21SW270Load(t, ".")
 	inventory := scaleP21SW270Inventory(t)
@@ -719,13 +718,17 @@ func TestScaleP21SW270WorkspaceDataHotBoundaries(t *testing.T) {
 			"listCommentActions", "connectorForRequest", "filterSuggestions", "documentWorkspaceData*2",
 			"getNotificationPreferences", "acknowledgeDesktopNotifications", "listProjectRelations",
 			"listInitiativeRelations", "listDocumentDrafts", "documentContentHistory", "updatePresence",
-			"listPresence", "workspaceDataScoped", "listWorkspaceLabels", "listTeamLabels", "getTeamSettings",
+			"listPresence", "listWorkspaceLabels", "listTeamLabels", "getTeamSettings",
 		),
-		// The HOT GET/HEAD permission list answers from its retained bounded
-		// read (listIssuePermissionsBounded); only the COLD permission writes
-		// still reach findIssueForPermissions with the flag on.
-		relay: scaleP21SW270Counts("findIssueForPermissions"),
-		cold:  scaleP21SW270WorkspaceDataCold(),
+		cold: scaleP21SW270WorkspaceDataCold(),
+	})
+	graph.verifyClosure(t, inventory, scaleP21SW270Closure{
+		wrapper: "server.workspaceDataWithError",
+		hot:     scaleP21SW270Counts("workspaceDataScoped"),
+		cold:    scaleP21SW270Counts("developerTokenApplication", "createExport", "updateReview", "submitReview", "commentOnReview", "resolveReviewThread"),
+		// The closure above checks workspaceData. HOT permission lists
+		// dispatch to the retained reader before findIssueForPermissions.
+		relay: scaleP21SW270Counts("workspaceData", "findIssueForPermissions"),
 	})
 }
 
@@ -779,7 +782,7 @@ func TestScaleP21SW272SnapshotReservationHotBoundaries(t *testing.T) {
 
 func scaleP21SW270WorkspaceDataCold() map[string]int {
 	return scaleP21SW270Counts(
-		"listWebhooks", "manageableWebhook", "listWebhookFailures", "testWebhook", "createExport",
+		"listWebhooks", "manageableWebhook", "listWebhookFailures", "testWebhook",
 		"checkAgentMentions", "listAgentSessions", "getAgentSession", "listAgentSkillsHTTP",
 		"applyAgentMessageChangesLocked", "resolveAgentElicitation", "resolveAgentApproval", "runAgentSession",
 		"stopAgentSession", "runAgentSessionOnWorker", "listAgentFeedback", "listImports", "getImport",
@@ -798,12 +801,11 @@ func scaleP21SW270WorkspaceDataCold() map[string]int {
 		"previewMigration", "inviteMigrationUsers*2", "executeMigration", "rollbackMigration",
 		"downloadMigrationBundle", "updateNotificationPreferences", "listNotificationDeliveries",
 		"retryNotificationDelivery", "listWorkflowStates", "listIssueTemplates",
-		"exportOAuthApplicationManifest", "developerTokenApplication",
+		"exportOAuthApplicationManifest",
 		"workspaceOAuthApplication", "getApplicationWebhookSecret", "listOAuthApplicationInstalls",
 		"listReleaseNotes", "releaseHistory", "listAgentActivities", "listAIConversations",
 		"finishPasskeyRegistration", "listReleases", "getRelease", "listReleasePipelines", "getReleasePipeline",
-		"syncReviewFromCodeHost", "listReviews", "getReview", "updateReview*2", "submitReview",
-		"commentOnReview", "resolveReviewThread", "listWorkspaceIssueTemplates",
+		"syncReviewFromCodeHost", "listReviews", "getReview", "listWorkspaceIssueTemplates",
 		"coldWorkspaceData", "listIntegrations",
 		"disconnectIntegrationConnection", "disconnectIntegration",
 	)

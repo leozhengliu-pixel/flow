@@ -322,11 +322,20 @@ func writeTeamMemberError(w http.ResponseWriter, err error, kept *domain.TeamMem
 // REST, MCP), enforcing the owner-role rule, and audits it.
 func (s *server) changeTeamMember(r *http.Request, workspace, workspaceID string, request store.TeamMembershipChangeRequest) (store.TeamMembershipChangeResult, error) {
 	actorID := authUser(r).ID
-	workspaceRole, _, _ := s.store.WorkspaceRole(r.Context(), workspaceID, actorID)
-	actorTeamRole, _ := s.store.TeamRole(r.Context(), workspaceID, request.TeamID, actorID)
+	workspaceRole, status, err := s.store.WorkspaceRole(r.Context(), workspaceID, actorID)
+	if err != nil && !errors.Is(err, store.ErrAuthForbidden) {
+		return store.TeamMembershipChangeResult{}, store.PreWriteDatabaseError(err)
+	}
+	if !s.authDisabled && status != "active" {
+		return store.TeamMembershipChangeResult{}, store.ErrAuthForbidden
+	}
+	actorTeamRole, err := s.store.TeamRole(r.Context(), workspaceID, request.TeamID, actorID)
+	if err != nil && !errors.Is(err, store.ErrAuthForbidden) {
+		return store.TeamMembershipChangeResult{}, store.PreWriteDatabaseError(err)
+	}
 	target, isMember, err := s.store.TeamMembership(r.Context(), workspaceID, request.TeamID, request.UserID)
 	if err != nil {
-		return store.TeamMembershipChangeResult{}, fmt.Errorf("could not verify team membership: %w", err)
+		return store.TeamMembershipChangeResult{}, store.PreWriteDatabaseError(err)
 	}
 	currentRole := ""
 	if isMember {
@@ -350,7 +359,7 @@ func (s *server) changeTeamMember(r *http.Request, workspace, workspaceID string
 		if len(planned.Changes) > 0 {
 			last, err := s.store.LeavingLastActiveTeam(r.Context(), workspaceID, request.TeamID, actorID)
 			if err != nil {
-				return store.TeamMembershipChangeResult{}, fmt.Errorf("could not verify team membership: %w", err)
+				return store.TeamMembershipChangeResult{}, store.PreWriteDatabaseError(err)
 			}
 			if last {
 				return store.TeamMembershipChangeResult{}, errLastActiveTeam
@@ -673,12 +682,12 @@ func (s *server) syncTeamMemberships(w http.ResponseWriter, r *http.Request) {
 	workspace := workspaceKey(r)
 	members, err := s.store.ListMembers(r.Context(), data.Workspace.ID)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace members")
+		respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
 		return
 	}
 	current, err := s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load team members")
+		respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
 		return
 	}
 	result := domain.TeamMemberSyncResult{DryRun: input.DryRun, Added: []domain.TeamMemberChange{}, Removed: []domain.TeamMemberChange{}, Kept: []domain.TeamMemberKept{}, Skipped: []domain.TeamMemberKept{}}

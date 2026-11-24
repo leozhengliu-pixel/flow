@@ -77,12 +77,10 @@ func (s *SQLiteStore) mutateResidentRecords(ctx context.Context, workspace, even
 		}
 		role, teams := "", []string(nil)
 		if hasActor {
-			var status string
-			role, status, err = s.WorkspaceRole(ctx, workspaceID, actor.ID)
-			if err != nil || status != "active" {
-				return ErrAuthForbidden
+			role, teams, err = s.mutationActorAccess(ctx, workspaceID, actor.ID)
+			if err != nil {
+				return err
 			}
-			teams = s.actorTeamIDs(ctx, workspaceID, actor.ID)
 		}
 		tx, err := s.db.BeginTx(ctx, s.recordTxOptions())
 		if err != nil {

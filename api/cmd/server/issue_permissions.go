@@ -84,19 +84,24 @@ func inheritedTeamOwner(data domain.Bootstrap, teamID, userID string) bool {
 	return false
 }
 
-func (s *server) findIssueForPermissions(r *http.Request) (*domain.Bootstrap, *domain.Issue, bool) {
+func (s *server) findIssueForPermissions(w http.ResponseWriter, r *http.Request) (*domain.Bootstrap, *domain.Issue, bool) {
 	var data domain.Bootstrap
 	if s.store.BoundedMetadataEnabled() && boundedIssuePermissionReadRequest(r) {
 		if read, ok := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); ok && read != nil {
 			data = read.Data
 		}
 	} else {
-		data = s.workspaceData(r)
+		var err error
+		data, err = s.workspaceDataWithError(r)
+		if writeAuthCheckFailure(w, err) {
+			return nil, nil, false
+		}
 	}
 	id := r.PathValue("id")
 	index := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == id })
 	if index < 0 {
-		return &data, nil, false
+		writeError(w, http.StatusNotFound, "issue not found")
+		return nil, nil, false
 	}
 	return &data, &data.Issues[index], true
 }
@@ -106,8 +111,11 @@ func (s *server) listIssuePermissions(w http.ResponseWriter, r *http.Request) {
 		s.listIssuePermissionsBounded(w, r)
 		return
 	}
-	data, issue, ok := s.findIssueForPermissions(r)
-	if !ok || issueRole(s, *data, *issue) == "none" {
+	data, issue, ok := s.findIssueForPermissions(w, r)
+	if !ok {
+		return
+	}
+	if issueRole(s, *data, *issue) == "none" {
 		writeError(w, http.StatusNotFound, "issue not found")
 		return
 	}
@@ -180,9 +188,8 @@ func (s *server) replaceIssuePermissions(w http.ResponseWriter, r *http.Request)
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	data, issue, ok := s.findIssueForPermissions(r)
+	data, issue, ok := s.findIssueForPermissions(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "issue not found")
 		return
 	}
 	if issueRole(s, *data, *issue) != "owner" {
@@ -244,9 +251,8 @@ func (s *server) updateIssuePermission(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	data, issue, ok := s.findIssueForPermissions(r)
+	data, issue, ok := s.findIssueForPermissions(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "issue not found")
 		return
 	}
 	if issueRole(s, *data, *issue) != "owner" {
@@ -282,9 +288,8 @@ func (s *server) updateIssuePermission(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteIssuePermission(w http.ResponseWriter, r *http.Request) {
-	data, issue, ok := s.findIssueForPermissions(r)
+	data, issue, ok := s.findIssueForPermissions(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "issue not found")
 		return
 	}
 	if issueRole(s, *data, *issue) != "owner" {

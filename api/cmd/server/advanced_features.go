@@ -3926,9 +3926,15 @@ func (s *server) createExport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "format must be json or csv")
 		return
 	}
-	if input.IncludePrivate && !s.authDisabled && !workspaceAdminRole(s.workspaceData(r).ViewerRole) {
-		writeError(w, http.StatusForbidden, "Only workspace admins can export private data")
-		return
+	if input.IncludePrivate && !s.authDisabled {
+		data, err := s.workspaceDataWithError(r)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
+		if err != nil || !workspaceAdminRole(data.ViewerRole) {
+			writeError(w, http.StatusForbidden, "Only workspace admins can export private data")
+			return
+		}
 	}
 	var created domain.ExportJob
 	key := workspaceKey(r)

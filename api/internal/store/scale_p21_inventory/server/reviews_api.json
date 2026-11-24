@@ -8,7 +8,7 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
-        "workspaceData"
+        "workspaceDataWithError"
       ],
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
@@ -46,7 +46,7 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
-        "workspaceData"
+        "workspaceDataWithError"
       ],
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
@@ -60,7 +60,7 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
-        "workspaceData"
+        "workspaceDataWithError"
       ],
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
@@ -74,7 +74,7 @@
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
-        "workspaceData"
+        "workspaceDataWithError"
       ],
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",

@@ -57,12 +57,13 @@ func IsDatabaseError(err error) bool {
 // from committing. Callers can retry the entire operation.
 var ErrDatabaseWriteBusy = errors.New("database write is busy")
 
-// ErrDatabaseUnavailable marks a connection failure in a pre-write read.
-// Only the caller that knows the write has not started should wrap it.
+// ErrDatabaseUnavailable marks a connection failure or deadline in a
+// pre-write read. Only callers that know the write has not started wrap it.
 var ErrDatabaseUnavailable = errors.New("database temporarily unavailable")
 
-func preWriteDatabaseError(err error) error {
-	if !IsDatabaseConnectionError(err) {
+// PreWriteDatabaseError marks retryable SQL read errors before a write starts.
+func PreWriteDatabaseError(err error) error {
+	if errors.Is(err, ErrDatabaseUnavailable) || (!errors.Is(err, context.DeadlineExceeded) && !IsDatabaseConnectionError(err)) {
 		return err
 	}
 	return errors.Join(ErrDatabaseUnavailable, err)

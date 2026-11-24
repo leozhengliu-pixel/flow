@@ -362,9 +362,8 @@ func (s *SQLiteStore) RevokeOAuthAuthorizationRecords(ctx context.Context, works
 		// admins can revoke any member's (the reference app: "Owners and admins can
 		// revoke this connection at any time in Settings") and app installs.
 		if authorization.UserID != userID {
-			var role, status string
-			if err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, current.Workspace.ID, userID).Scan(&role, &status); err != nil || status != "active" || !isWorkspaceAdminRole(role) {
-				return current, ErrAuthForbidden
+			if err := activeWorkspaceAdminTx(ctx, tx, "", current.Workspace.ID, userID); err != nil {
+				return current, err
 			}
 		}
 		now := time.Now().UTC()

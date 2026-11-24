@@ -75,9 +75,12 @@ func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspac
 		originalRole := next.ViewerRole
 		if actor, ok := actorFromContext(ctx); ok {
 			next.Viewer = actor
-			if role, status, err := s.WorkspaceRole(ctx, stored.Workspace.ID, actor.ID); err == nil && status == "active" {
-				next.ViewerRole = role
-				next.ViewerTeamIDs = s.actorTeamIDs(ctx, stored.Workspace.ID, actor.ID)
+			role, teams, err := s.mutationActorAccess(ctx, stored.Workspace.ID, actor.ID)
+			if err != nil && !errors.Is(err, ErrAuthForbidden) {
+				return err
+			}
+			if err == nil {
+				next.ViewerRole, next.ViewerTeamIDs = role, teams
 			}
 			if i := slices.IndexFunc(next.Users, func(u domain.User) bool { return u.ID == actor.ID }); i >= 0 {
 				next.Users[i] = actor

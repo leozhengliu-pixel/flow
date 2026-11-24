@@ -333,9 +333,11 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		}
 		role, teams, activeActor := "", []string(nil), false
 		if hasActor {
-			if currentRole, status, roleErr := s.WorkspaceRole(ctx, workspaceID, actor.ID); roleErr == nil && status == "active" {
-				role, teams, activeActor = currentRole, s.actorTeamIDs(ctx, workspaceID, actor.ID), true
+			role, teams, err = s.mutationActorAccess(ctx, workspaceID, actor.ID)
+			if err != nil && (event == "api_key.created" || !errors.Is(err, ErrAuthForbidden)) {
+				return err
 			}
+			activeActor = err == nil
 		}
 		hooks, err := s.logicalWebhookNeeded(ctx, logicalSource, workspace)
 		if err != nil {
@@ -865,7 +867,11 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
 		var prepared *residentScopedProjectEdit
 		if selection && event == "project.updated" && len(metadataAppendKinds(ctx)) == 0 && ctx.Value(metadataTimestampOperationKey{}) == nil {
-			prepared = s.prepareResidentScopedProject(ctx, workspace, scope, actor, hasActor, refreshActor, callback)
+			var err error
+			prepared, err = s.prepareResidentScopedProject(ctx, workspace, scope, actor, hasActor, refreshActor, callback)
+			if err != nil {
+				return err
+			}
 			if prepared != nil {
 				defer prepared.close()
 				ctx = withResidentRecordOrdinals(ctx, prepared.image)

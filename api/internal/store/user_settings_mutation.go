@@ -69,8 +69,10 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 		actor, hasActor := actorFromContext(ctx)
 		role := ""
 		if hasActor {
-			if value, status, err := s.WorkspaceRole(ctx, current.Workspace.ID, actor.ID); err == nil && status == "active" {
-				role = value
+			var err error
+			role, err = s.mutationWorkspaceRole(ctx, current.Workspace.ID, actor.ID)
+			if err != nil && !errors.Is(err, ErrAuthForbidden) {
+				return err
 			}
 		}
 		tx, err := s.db.BeginTx(ctx, nil)

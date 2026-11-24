@@ -23,7 +23,8 @@ func scaleP21SW101Literal(ctx context.Context, repository *SQLiteStore, workspac
 	if err != nil || status != "active" {
 		return scaleP21SW101Outcome{}
 	}
-	return scaleP21SW101Outcome{Role: role, Teams: repository.actorTeamIDs(ctx, workspaceID, userID), Applied: true}
+	teams, _ := repository.actorTeamIDs(ctx, workspaceID, userID)
+	return scaleP21SW101Outcome{Role: role, Teams: teams, Applied: true}
 }
 
 func scaleP21SW101Compare(t *testing.T, ctx context.Context, legacy, bounded *SQLiteStore, workspaceID, userID string) {

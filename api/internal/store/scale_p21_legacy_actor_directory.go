@@ -3,10 +3,11 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 )
 
-// boundedLegacyActorDirectory preserves the full writer's best-effort role
-// and direct-team lookups. Its caller owns retained values through callback use.
+// boundedLegacyActorDirectory resolves the full writer's role and direct
+// teams. Its caller owns retained values through callback use.
 func (s *SQLiteStore) boundedLegacyActorDirectory(ctx context.Context, workspaceID, userID string, owner *ResourceRead) (string, []string, bool, error) {
 	if s == nil || !s.BoundedMetadataEnabled() || owner == nil || owner.store != s {
 		return "", nil, false, ErrBoundedMetadataCoverage
@@ -31,6 +32,9 @@ func (s *SQLiteStore) boundedLegacyActorDirectory(ctx context.Context, workspace
 		"<=? THEN role ELSE NULL END,CASE WHEN "+length+
 		"<=? THEN status ELSE NULL END FROM workspace_memberships WHERE workspace_id=? AND user_id=?",
 		limit, limit, workspaceID, userID).Scan(&size, &role, &status)
+	if err := PreWriteDatabaseError(err); errors.Is(err, ErrDatabaseUnavailable) {
+		return "", nil, false, err
+	}
 	if err := ctx.Err(); err != nil {
 		return "", nil, false, err
 	}
@@ -58,6 +62,9 @@ func (s *SQLiteStore) boundedLegacyActorDirectory(ctx context.Context, workspace
 		"<=? THEN team_id ELSE NULL END FROM team_memberships WHERE workspace_id=? AND user_id=?",
 		limit, workspaceID, userID)
 	if err != nil {
+		if err := PreWriteDatabaseError(err); errors.Is(err, ErrDatabaseUnavailable) {
+			return "", nil, false, err
+		}
 		if ctx.Err() != nil {
 			return "", nil, false, ctx.Err()
 		}
@@ -85,8 +92,11 @@ func (s *SQLiteStore) boundedLegacyActorDirectory(ctx context.Context, workspace
 		}
 		result = append(result, id.String)
 	}
-	if err := ctx.Err(); err != nil {
+	if err := PreWriteDatabaseError(rows.Err()); errors.Is(err, ErrDatabaseUnavailable) {
 		return "", nil, false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return "", nil, false, PreWriteDatabaseError(err)
 	}
 	if rows.Err() != nil {
 		return role.String, nil, true, nil

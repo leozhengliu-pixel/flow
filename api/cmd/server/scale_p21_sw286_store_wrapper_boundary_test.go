@@ -1081,6 +1081,7 @@ var scaleP21SW286Unrouted = map[string]string{
 // passes them and judges their callers instead.
 var scaleP21SW286Relays = map[string]string{
 	"server/server.workspaceData":             "server compatibility wrapper: every HOT caller dispatches to an owned reader first (SW270 on the compat-wrappers branch)",
+	"server/server.workspaceDataWithError":    "server compatibility projection: SW270 pins the workspaceData relay and the scoped adapter's flag-off call",
 	"server/server.findIssueForPermissions":   "permission helper shared by the GET list and the COLD permission writers",
 	"server/server.issueRecordsBootstrapData": "literal bootstrap helper: the HTTP route returns through issueRecordsBootstrapBounded first and chat is pinned by SW225",
 	"server/server.publicMetadata":            "public API metadata helper: its other callers are COLD public API routes",

@@ -1865,12 +1865,17 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		originalViewerRole := next.ViewerRole
 		if actor, ok := actorFromContext(ctx); ok {
 			next.Viewer = actor
-			if role, status, roleErr := s.WorkspaceRole(ctx, next.Workspace.ID, actor.ID); roleErr == nil && status == "active" {
+			role, teams, err := s.mutationActorAccess(ctx, next.Workspace.ID, actor.ID)
+			// Account-wide writes can visit workspaces the actor has left.
+			// Personal key creation requires an active workspace role.
+			if err != nil && (eventType == "api_key.created" || !errors.Is(err, ErrAuthForbidden)) {
+				return err
+			}
+			if err == nil {
 				// The canonical snapshot does not carry a viewer-specific role.
 				// Populate it only while authorization-aware callbacks execute,
 				// then restore the snapshot value before persistence.
-				next.ViewerRole = role
-				next.ViewerTeamIDs = s.actorTeamIDs(ctx, next.Workspace.ID, actor.ID)
+				next.ViewerRole, next.ViewerTeamIDs = role, teams
 			}
 			if fieldScoped && !slices.Contains(fields, "users") {
 				// Users are not part of this mutation's snapshot.

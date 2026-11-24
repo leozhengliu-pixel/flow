@@ -224,9 +224,10 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		actorRole := ""
 		var actorTeams []string
 		if hasActor {
-			if role, status, roleErr := s.WorkspaceRole(ctx, current.Workspace.ID, actor.ID); roleErr == nil && status == "active" {
-				actorRole = role
-				actorTeams = s.actorTeamIDs(ctx, current.Workspace.ID, actor.ID)
+			var err error
+			actorRole, actorTeams, err = s.mutationActorAccess(ctx, current.Workspace.ID, actor.ID)
+			if err != nil && !errors.Is(err, ErrAuthForbidden) {
+				return err
 			}
 		}
 		// Team moves see the current memberships; the snapshot's copies are

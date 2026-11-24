@@ -176,8 +176,11 @@ func applicationTokenBody(secret string, key domain.APIKey, expiresIn int) publi
 // developerTokenApplication finds the application of a developer token
 // request; only workspace admins may create or copy developer tokens.
 func (s *server) developerTokenApplication(w http.ResponseWriter, r *http.Request) (*domain.Bootstrap, domain.OAuthApplication, bool) {
-	data := s.workspaceData(r)
-	if !workspaceAdminRole(data.ViewerRole) {
+	data, err := s.workspaceDataWithError(r)
+	if writeAuthCheckFailure(w, err) {
+		return nil, domain.OAuthApplication{}, false
+	}
+	if err != nil || !workspaceAdminRole(data.ViewerRole) {
 		writeError(w, 403, "Workspace admin access required")
 		return nil, domain.OAuthApplication{}, false
 	}

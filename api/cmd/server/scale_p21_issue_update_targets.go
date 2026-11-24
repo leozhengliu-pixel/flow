@@ -99,8 +99,9 @@ func (s *server) boundedIssueUpdateTargets(w http.ResponseWriter, r *http.Reques
 			return forbid("Cycle is outside your teams")
 		}
 	}
-	if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(ctx, workspace, *input.AssigneeID) {
-		return forbid("Assignee is outside this workspace")
+	if !s.authorizeIssueAssignee(w, r, workspace, metadata.Users, input.AssigneeID) {
+		release()
+		return domain.Bootstrap{}, nil, false
 	}
 	return metadata, release, true
 }
@@ -143,7 +144,13 @@ func (s *server) boundedIssueUpdatePresence(w http.ResponseWriter, r *http.Reque
 			issueRecordsError(w, err)
 			return false
 		}
-		if !present && (check.kind != "users" || !s.formerMemberOutsideWrite(r.Context(), workspace, *check.id)) {
+		if check.kind == "users" {
+			if !present && !s.authorizeIssueAssignee(w, r, workspace, nil, check.id) {
+				return false
+			}
+			continue
+		}
+		if !present {
 			writeError(w, http.StatusForbidden, check.message)
 			return false
 		}

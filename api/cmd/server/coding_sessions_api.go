@@ -110,6 +110,9 @@ func (s *server) codingViewerFor(w http.ResponseWriter, r *http.Request) (coding
 	if !s.authDisabled {
 		viewer.user = authUser(r)
 		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, viewer.user.ID)
+		if writeAuthCheckFailure(w, err) {
+			return codingViewer{}, false
+		}
 		if err != nil || status != "active" {
 			writeError(w, http.StatusForbidden, "Workspace access required")
 			return codingViewer{}, false

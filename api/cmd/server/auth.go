@@ -203,7 +203,7 @@ func writeAuthCheckFailure(w http.ResponseWriter, err error) bool {
 	case err == nil, errors.Is(err, store.ErrAuthInvalid), errors.Is(err, store.ErrAuthExpired),
 		errors.Is(err, store.ErrAuthForbidden), errors.Is(err, sql.ErrNoRows):
 		return false
-	case writeStoreReadUnavailable(w, err):
+	case writeRequestCanceled(w, err), writeStoreReadUnavailable(w, err):
 		return true
 	default:
 		writeError(w, http.StatusInternalServerError, internalErrorMessage)
@@ -813,6 +813,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *server) authorizeResourceRequest(w http.ResponseWriter, r *http.Request, workspace, userID string) bool {
+	if writeRequestCanceled(w, r.Context().Err()) {
+		return false
+	}
 	// AUTH_DISABLED previously skipped authorizeWorkspaceRequest entirely, so
 	// team-scoped resourceAllowed checks must not block local/dev fixtures.
 	if s.authDisabled || s.resourceAllowed(r, workspace, userID) {
@@ -1518,6 +1521,11 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	pipelineMutationAllowed := func(input releasePipelineInput) bool {
 		return input.TeamIDs == nil || !slices.ContainsFunc(*input.TeamIDs, func(id string) bool { return strings.TrimSpace(id) != "" && !teamAllowed(strings.TrimSpace(id)) })
 	}
+	knownPerson := func(id string) bool {
+		known, err := s.workspacePersonKnown(r.Context(), workspace, data.Users, id)
+		noteAuthorizationBusy(r, err)
+		return known
+	}
 	mutationAllowed := func(input domain.IssueUpdateInput) bool {
 		if input.TeamID != nil && *input.TeamID != "" && !teamAllowed(*input.TeamID) {
 			return false
@@ -1528,7 +1536,7 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		if input.CycleID != nil && *input.CycleID != "" && !slices.ContainsFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == *input.CycleID }) {
 			return false
 		}
-		if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(data.Users, func(item domain.User) bool { return item.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(r.Context(), workspace, *input.AssigneeID) {
+		if input.AssigneeID != nil && *input.AssigneeID != "" && !knownPerson(*input.AssigneeID) {
 			return false
 		}
 		if input.ParentID != nil && *input.ParentID != "" && !issueAllowed(*input.ParentID) {
@@ -1542,9 +1550,6 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		}
 		// The viewer's directory leaves removed people out; the write decides
 		// whether naming one keeps a reference (allowed) or adds one (400).
-		knownPerson := func(id string) bool {
-			return slices.ContainsFunc(data.Users, func(item domain.User) bool { return item.ID == id }) || s.formerMemberOutsideWrite(r.Context(), workspace, id)
-		}
 		if input.LeadID != nil && *input.LeadID != "" && !knownPerson(*input.LeadID) {
 			return false
 		}
@@ -2367,8 +2372,11 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if strings.EqualFold(input.Role, "owner") && !s.authDisabled {
-		role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
-		if !workspaceAdminRole(role) {
+		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
+		if err != nil || status != "active" || !workspaceAdminRole(role) {
 			writeError(w, http.StatusForbidden, "Only workspace owners and admins can invite owners")
 			return
 		}
@@ -2379,7 +2387,12 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 	input.TeamIDs = uniqueStrings(input.TeamIDs)
 	if !s.authDisabled {
-		if team, denied := s.inviteTeamDenied(r, data, input.TeamIDs); denied {
+		team, denied, err := s.inviteTeamDenied(r, data, input.TeamIDs)
+		if err != nil {
+			respondMutation(w, store.PreWriteDatabaseError(err), http.StatusCreated, nil)
+			return
+		}
+		if denied {
 			writeError(w, http.StatusForbidden, fmt.Sprintf("You can't add people to %s", team.Name))
 			return
 		}
@@ -2449,14 +2462,20 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 // team directly: workspace admins may use any team, private ones included; anyone else needs the team's member
 // management permission, which also requires being on a private team. A team that does not exist is left to the
 // store, which refuses it as an invalid team.
-func (s *server) inviteTeamDenied(r *http.Request, data domain.Bootstrap, teamIDs []string) (domain.Team, bool) {
+func (s *server) inviteTeamDenied(r *http.Request, data domain.Bootstrap, teamIDs []string) (domain.Team, bool, error) {
 	if len(teamIDs) == 0 {
-		return domain.Team{}, false
+		return domain.Team{}, false, nil
 	}
 	actorID := authUser(r).ID
-	role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, actorID)
+	role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, actorID)
+	if err != nil {
+		return domain.Team{}, false, err
+	}
+	if status != "active" {
+		return domain.Team{}, false, store.ErrAuthForbidden
+	}
 	if workspaceAdminRole(role) {
-		return domain.Team{}, false
+		return domain.Team{}, false, nil
 	}
 	for _, teamID := range teamIDs {
 		index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID })
@@ -2465,12 +2484,15 @@ func (s *server) inviteTeamDenied(r *http.Request, data domain.Bootstrap, teamID
 		}
 		team := data.Teams[index]
 		settings := data.TeamSettings[teamID]
-		teamRole, _ := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, actorID)
+		teamRole, err := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, actorID)
+		if err != nil && !errors.Is(err, store.ErrAuthForbidden) {
+			return domain.Team{}, false, err
+		}
 		if team.Private && teamRole == "" || !teamOperationAllowed(settings, settings.MemberPermission, teamRole, role) {
-			return team, true
+			return team, true, nil
 		}
 	}
-	return domain.Team{}, false
+	return domain.Team{}, false, nil
 }
 
 func (s *server) invitationPreview(w http.ResponseWriter, r *http.Request) {
@@ -2651,6 +2673,30 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 	if (input.Role != "" || input.DisplayName != "" || input.Email != "") && s.refuseSCIMManagedMember(w, r, data.Workspace.ID, userID) {
 		return
 	}
+	var roleBefore string
+	var currentIdentity domain.User
+	if !s.authDisabled {
+		if input.Role != "" {
+			var err error
+			roleBefore, _, err = s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+			if err != nil {
+				respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
+				return
+			}
+		}
+		if input.DisplayName != "" || input.Email != "" {
+			members, err := s.store.ListMembers(r.Context(), data.Workspace.ID)
+			if writeAuthCheckFailure(w, err) {
+				return
+			}
+			index := slices.IndexFunc(members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
+			if index < 0 {
+				writeError(w, http.StatusNotFound, "member not found")
+				return
+			}
+			currentIdentity = members[index].User
+		}
+	}
 	// A username is the workspace handle kept in the member's account settings,
 	// validated like a self-service change; the account name stays as it is.
 	username := ""
@@ -2663,7 +2709,7 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 		// Members an identity provider provisioned may not be in the workspace's user list until they sign in.
 		member, memberErr := s.store.HasWorkspaceMembership(r.Context(), data.Workspace.ID, userID)
 		if memberErr != nil {
-			writeError(w, http.StatusInternalServerError, memberErr.Error())
+			respondMutation(w, store.PreWriteDatabaseError(memberErr), http.StatusOK, nil)
 			return
 		}
 		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.username_updated", userID, map[string]string{"username": username}, func(workspace *domain.Bootstrap) error {
@@ -2756,7 +2802,6 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Role != "" {
-		roleBefore, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
 		if err := s.store.UpdateMemberRole(r.Context(), data.Workspace.ID, userID, input.Role); err != nil {
 			respondMutation(w, err, http.StatusOK, nil)
 			return
@@ -2765,27 +2810,17 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 			s.recordAudit(r.Context(), r.PathValue("workspaceKey"), newAuditEntry(requestActor(s, r), "role_changed", "workspace_member", userID, map[string]any{"userId": userID, "roleBefore": roleBefore, "roleAfter": input.Role}))
 		}
 	}
-	if input.DisplayName != "" || input.Username != "" || input.Email != "" {
-		members, _ := s.store.ListMembers(r.Context(), data.Workspace.ID)
-		index := slices.IndexFunc(members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
-		if index < 0 {
-			writeError(w, http.StatusNotFound, "member not found")
-			return
-		}
-		current := members[index].User
-		displayName, username, email := input.DisplayName, input.Username, input.Email
+	if input.DisplayName != "" || input.Email != "" {
+		displayName, email := input.DisplayName, input.Email
 		if displayName == "" {
-			displayName = current.DisplayName
-		}
-		if username == "" {
-			username = current.Name
+			displayName = currentIdentity.DisplayName
 		}
 		if email == "" {
-			email = current.Email
+			email = currentIdentity.Email
 		}
 		// The current identity again leaves the account as it is.
-		if strings.TrimSpace(displayName) != current.DisplayName || strings.TrimSpace(username) != current.Name || !strings.EqualFold(strings.TrimSpace(email), current.Email) {
-			if _, err := s.store.UpdateMemberIdentity(r.Context(), userID, displayName, username, email); err != nil {
+		if strings.TrimSpace(displayName) != currentIdentity.DisplayName || !strings.EqualFold(strings.TrimSpace(email), currentIdentity.Email) {
+			if _, err := s.store.UpdateMemberIdentity(r.Context(), userID, displayName, currentIdentity.Name, email); err != nil {
 				respondMutation(w, err, http.StatusOK, nil)
 				return
 			}

@@ -50,15 +50,20 @@ func outageResponse[T any](t *testing.T, handler http.Handler, q outageRequest, 
 
 func assertDatabaseOutage(t *testing.T, w *httptest.ResponseRecorder) {
 	t.Helper()
+	assertRetryableOutage(t, w)
+	if !strings.Contains(w.Body.String(), databaseUnavailableMessage) {
+		t.Fatal("response did not report a database outage")
+	}
+}
+
+func assertRetryableOutage(t *testing.T, w *httptest.ResponseRecorder) {
+	t.Helper()
 	retry, _ := strconv.Atoi(w.Header().Get("Retry-After"))
 	if w.Code != http.StatusServiceUnavailable || retry <= 0 {
 		t.Fatalf("got status %d and Retry-After=%d, want retryable 503", w.Code, retry)
 	}
 	if w.Header().Get("Set-Cookie") != "" || w.Header().Get("WWW-Authenticate") != "" {
 		t.Fatal("database outage changed the cookie or challenged the credential")
-	}
-	if !strings.Contains(w.Body.String(), databaseUnavailableMessage) {
-		t.Fatal("response did not report a database outage")
 	}
 }
 

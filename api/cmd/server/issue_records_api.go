@@ -307,8 +307,7 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "Team is outside your workspace access")
 		return
 	}
-	if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(r.Context(), query.Workspace, *input.AssigneeID) {
-		writeError(w, 403, "Assignee is outside this workspace")
+	if !s.authorizeIssueAssignee(w, r, query.Workspace, metadata.Users, input.AssigneeID) {
 		return
 	}
 	if input.ProjectID != nil && *input.ProjectID != "" && !slices.ContainsFunc(metadata.Projects, func(project domain.Project) bool { return project.ID == *input.ProjectID }) {
@@ -526,8 +525,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 403, "Cycle is outside your teams")
 			return
 		}
-		if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(r.Context(), query.Workspace, *input.AssigneeID) {
-			writeError(w, 403, "Assignee is outside this workspace")
+		if !s.authorizeIssueAssignee(w, r, query.Workspace, metadata.Users, input.AssigneeID) {
 			return
 		}
 	}
@@ -796,6 +794,21 @@ const issueEditForbiddenMessage = "You can view this issue but don't have permis
 
 func issueRecordsError(w http.ResponseWriter, err error) {
 	issueRecordsErrorFor(w, nil, err)
+}
+
+func (s *server) authorizeIssueAssignee(w http.ResponseWriter, r *http.Request, workspace string, users []domain.User, assignee *string) bool {
+	if assignee == nil || *assignee == "" {
+		return true
+	}
+	known, err := s.workspacePersonKnown(r.Context(), workspace, users, *assignee)
+	if err != nil {
+		issueRequestAccessError(w, r, err)
+		return false
+	}
+	if !known {
+		writeError(w, http.StatusForbidden, "Assignee is outside this workspace")
+	}
+	return known
 }
 
 // issueRecordsErrorFor classifies retryable errors and logs the cause without

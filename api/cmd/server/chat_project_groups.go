@@ -59,7 +59,10 @@ func (s *server) listChatProjectGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	project := data.Projects[index]
-	manageable := s.chatManageableTeamIDs(r, data)
+	manageable, err := s.chatManageableTeamIDs(r, data)
+	if writeAuthCheckFailure(w, err) {
+		return
+	}
 	canManage := slices.ContainsFunc(project.TeamIDs, func(id string) bool { return slices.Contains(manageable, id) })
 	groups := []chatProjectGroup{}
 	provider := r.PathValue("provider")

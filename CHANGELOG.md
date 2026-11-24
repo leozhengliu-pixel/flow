@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Issue comments, personal API keys, and other workspace writes return HTTP 503 with `Retry-After` when their pre-write membership or role checks cannot reach the database.
 - Canceled issue creates and edits, project lists, and Pulse acknowledgements return a JSON error instead of an empty success.
 - Database connection failures return HTTP 503 with `Retry-After`, including during credential checks and writes. Session cookies are preserved during an outage. Open realtime streams signal clients to reconnect.
 - Bounded replicas read issue details, history, lists and groups from a current SQL snapshot when the route only needs issue records and policy. Workspace reloads keep using journal deltas after concurrent writes invalidate two install attempts.

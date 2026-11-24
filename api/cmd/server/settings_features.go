@@ -1930,6 +1930,9 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 	snapshot := data.IntegrationConnections[index]
 	if !s.authDisabled {
 		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, snapshot.ConnectedBy)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
 		if err != nil || status != "active" || !workspaceAdminRole(role) {
 			writeError(w, http.StatusForbidden, "Integration administrator no longer has workspace access")
 			return

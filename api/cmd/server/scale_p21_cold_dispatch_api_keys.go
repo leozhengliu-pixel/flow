@@ -166,7 +166,7 @@ func (s *server) createAPIKeyWithStore(w http.ResponseWriter, r *http.Request, r
 	if repo.BoundedMetadataEnabled() {
 		exists, err := repo.APIKeyNameExists(r.Context(), workspaceKey(r), actor.ID, input.Name, "")
 		if err != nil {
-			respondMutation(w, err, http.StatusCreated, nil)
+			respondMutation(w, store.PreWriteDatabaseError(err), http.StatusCreated, nil)
 			return
 		}
 		if exists {

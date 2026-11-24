@@ -377,9 +377,15 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 	}
 	application := func(name, method, target, body string, user domain.User, secret string) step {
 		return func(t *testing.T, s *server, out *trace) {
-			record(out, name, sw450Do(s, method, target, body, workspace, user, secret))
-			// The application webhook reconcile a create starts.
-			sw430Quiet(t, s, workspace, "")
+			w := sw450Do(s, method, target, body, workspace, user, secret)
+			record(out, name, w)
+			stamp := secret
+			if w.Code == http.StatusUnauthorized {
+				stamp = ""
+			}
+			// Let both the webhook reconcile and any accepted bearer use settle
+			// before comparing the installed image with SQL.
+			sw430Quiet(t, s, workspace, stamp)
 		}
 	}
 	installPlain := func(t *testing.T) {

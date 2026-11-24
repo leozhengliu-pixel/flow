@@ -20,7 +20,6 @@ import (
 	"flow/api/internal/objectstore"
 
 	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
 
@@ -396,7 +395,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		}
 		defer startup.release()
 	}
-	db, err := sql.Open(sqlDriver, dsn)
+	db, err := openDatabasePool(sqlDriver, dsn)
 	if err != nil {
 		return nil, err
 	}

@@ -151,7 +151,11 @@ func (s *SQLiteStore) installApplicationTx(ctx context.Context, tx *sqlTx, lock 
 // activeWorkspaceAdminTx requires userID to be an active workspace admin.
 func activeWorkspaceAdminTx(ctx context.Context, tx *sqlTx, lock, workspaceID, userID string) error {
 	var role, status string
-	if err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`+lock, workspaceID, userID).Scan(&role, &status); err != nil || status != "active" || !isWorkspaceAdminRole(role) {
+	err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`+lock, workspaceID, userID).Scan(&role, &status)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return PreWriteDatabaseError(err)
+	}
+	if err != nil || status != "active" || !isWorkspaceAdminRole(role) {
 		return ErrAuthForbidden
 	}
 	return nil

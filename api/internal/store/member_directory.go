@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -206,7 +207,7 @@ func readFormerMembers(ctx context.Context, q metadataReader, workspaceID string
 		return former, err
 	}
 	hasMemberships := rows.Next()
-	if err := rows.Close(); err != nil {
+	if err := errors.Join(rows.Close(), rows.Err()); err != nil {
 		return former, err
 	}
 	if !hasMemberships {
@@ -249,11 +250,11 @@ func (s *SQLiteStore) loadMemberAccess(ctx context.Context, data *domain.Bootstr
 	}
 	members, err := s.ListMembers(ctx, data.Workspace.ID)
 	if err != nil {
-		return err
+		return PreWriteDatabaseError(err)
 	}
 	teamMembers, err := s.ListTeamMembers(ctx, data.Workspace.ID)
 	if err != nil {
-		return err
+		return PreWriteDatabaseError(err)
 	}
 	data.Members, data.TeamMembers = members, teamMembers
 	return nil

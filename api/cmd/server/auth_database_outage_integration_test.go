@@ -36,25 +36,34 @@ func TestExternalDatabaseAuthOutage(t *testing.T) {
 
 func startAuthOutageDatabase(t *testing.T, dialect string) (store.DatabaseConfig, func()) {
 	t.Helper()
-	const database, password = "flow_outage", "disposable-test-password"
-	image, port, sqlDriver := "postgres:17", "5432", "pgx"
-	env := []string{"-e", "POSTGRES_DB=" + database, "-e", "POSTGRES_PASSWORD=" + password}
+	config, id := startOutageDatabase(t, dialect, "flow-codex-db-outage-"+dialect)
+	return config, func() { runOutageDocker(t, "stop", "--time", "1", id) }
+}
+
+func runOutageDocker(t *testing.T, args ...string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	raw, err := exec.CommandContext(ctx, "docker", args...).Output()
+	if err != nil {
+		t.Fatalf("Docker %s failed: %v", args[0], err)
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+const outageDatabaseName = "flow_outage"
+const outageDatabasePassword = "disposable-test-password"
+
+func startOutageDatabase(t *testing.T, dialect, name string) (store.DatabaseConfig, string) {
+	t.Helper()
+	image, port := "postgres:17", "5432"
+	env := []string{"-e", "POSTGRES_DB=" + outageDatabaseName, "-e", "POSTGRES_PASSWORD=" + outageDatabasePassword}
 	if dialect == "mysql" {
-		image, port, sqlDriver = "mysql:8.4", "3306", "mysql"
-		env = []string{"-e", "MYSQL_DATABASE=" + database, "-e", "MYSQL_ROOT_PASSWORD=" + password, "-e", "MYSQL_ROOT_HOST=%"}
+		image, port = "mysql:8.4", "3306"
+		env = []string{"-e", "MYSQL_DATABASE=" + outageDatabaseName, "-e", "MYSQL_ROOT_PASSWORD=" + outageDatabasePassword, "-e", "MYSQL_ROOT_HOST=%"}
 	}
-	docker := func(args ...string) string {
-		t.Helper()
-		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-		defer cancel()
-		raw, err := exec.CommandContext(ctx, "docker", args...).Output()
-		if err != nil {
-			t.Fatalf("Docker %s failed: %v", args[0], err)
-		}
-		return strings.TrimSpace(string(raw))
-	}
-	args := []string{"run", "-d", "--pull=never", "--name", "flow-codex-db-outage-" + dialect, "-p", "127.0.0.1::" + port}
-	id := docker(append(append(args, env...), image)...)
+	args := []string{"run", "-d", "--pull=never", "--name", name, "-p", "127.0.0.1::" + port}
+	id := runOutageDocker(t, append(append(args, env...), image)...)
 	if _, err := hex.DecodeString(id); err != nil || len(id) != 64 {
 		t.Fatal("Docker did not return a container ID")
 	}
@@ -65,26 +74,37 @@ func startAuthOutageDatabase(t *testing.T, dialect string) (store.DatabaseConfig
 			t.Errorf("could not remove test container: %v", err)
 		}
 	})
-	address := docker("port", id, port+"/tcp")
+	config := outageDatabaseConfig(t, dialect, id)
+	waitForOutageDatabase(t, openOutageVerificationDB(t, config))
+	return config, id
+}
+
+func outageDatabaseConfig(t *testing.T, dialect, id string) store.DatabaseConfig {
+	t.Helper()
+	port := "5432"
+	if dialect == "mysql" {
+		port = "3306"
+	}
+	address := runOutageDocker(t, "port", id, port+"/tcp")
 	if host, _, err := net.SplitHostPort(address); err != nil || host != "127.0.0.1" {
 		t.Fatal("test database has no loopback port")
 	}
 	var dsn string
 	if dialect == "mysql" {
 		config := mysql.NewConfig()
-		config.User, config.Passwd, config.Net, config.Addr, config.DBName = "root", password, "tcp", address, database
+		config.User, config.Passwd, config.Net, config.Addr, config.DBName = "root", outageDatabasePassword, "tcp", address, outageDatabaseName
 		config.Timeout = 2 * time.Second
+		config.ReadTimeout, config.WriteTimeout = 5*time.Second, 5*time.Second
 		dsn = config.FormatDSN()
 	} else {
-		dsn = (&url.URL{Scheme: "postgres", User: url.UserPassword("postgres", password),
-			Host: address, Path: database, RawQuery: "sslmode=disable&connect_timeout=2"}).String()
+		dsn = (&url.URL{Scheme: "postgres", User: url.UserPassword("postgres", outageDatabasePassword),
+			Host: address, Path: outageDatabaseName, RawQuery: "sslmode=disable&connect_timeout=2"}).String()
 	}
+	return store.DatabaseConfig{Driver: dialect, URL: dsn, MaxOpenConns: 4}
+}
 
-	db, err := sql.Open(sqlDriver, dsn)
-	if err != nil {
-		t.Fatal("could not configure test database")
-	}
-	defer db.Close()
+func waitForOutageDatabase(t *testing.T, db *sql.DB) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 	defer cancel()
 	for db.PingContext(ctx) != nil {
@@ -93,8 +113,5 @@ func startAuthOutageDatabase(t *testing.T, dialect string) (store.DatabaseConfig
 			t.Fatal("test database did not become ready")
 		case <-time.After(250 * time.Millisecond):
 		}
-	}
-	return store.DatabaseConfig{Driver: dialect, URL: dsn, MaxOpenConns: 4}, func() {
-		docker("stop", "--time", "1", id)
 	}
 }

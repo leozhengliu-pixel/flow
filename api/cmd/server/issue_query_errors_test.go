@@ -95,7 +95,7 @@ func TestIssueQueryConnectionFailureRetryClassification(t *testing.T) {
 		if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "2" {
 			t.Fatal("a recognized pre-write failure must be retryable")
 		}
-		if text := logs.String(); !strings.Contains(text, "workspace reload failed before mutation") || strings.Contains(text, privateValue) {
+		if text := logs.String(); !strings.Contains(text, "database unavailable") || strings.Contains(text, privateValue) {
 			t.Fatal("the refused reload did not log a redacted failure")
 		}
 	})

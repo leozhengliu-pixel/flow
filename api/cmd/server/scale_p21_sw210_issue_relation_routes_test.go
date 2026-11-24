@@ -56,12 +56,12 @@ func scaleP21SW210Request(t *testing.T, f *scaleP21TriageWriterFixture, service 
 		r.SetPathValue("id", resolved)
 	}
 	w := httptest.NewRecorder()
-	if !service.authDisabled && !service.resourceAllowedLegacy(r, f.data.Workspace.URLKey, actor.ID) {
-		writeError(w, http.StatusForbidden, "forbidden")
-	} else if alias {
-		service.issueRecordAlias(service.createRelation)(w, r)
-	} else {
-		service.createRelation(w, r)
+	if service.authorizeResourceRequest(w, r, f.data.Workspace.URLKey, actor.ID) {
+		if alias {
+			service.issueRecordAlias(service.createRelation)(w, r)
+		} else {
+			service.createRelation(w, r)
+		}
 	}
 	t.Logf("relation bounded=%t alias=%t SQL=%d peak_work_at_SQL=%d", service.store.BoundedMetadataEnabled(), alias, statements.Load(), peakWork.Load())
 	for index, query := range queries {
@@ -156,6 +156,9 @@ func TestScaleP21SW210IssueRelationRoutesDifferential(t *testing.T) {
 					})
 					if outcomes[0].Code == http.StatusCreated || len(outcomes[0].State.Events) != 0 {
 						t.Fatal("refused relation wrote an event")
+					}
+					if test.cancelled && outcomes[0].Code != http.StatusRequestTimeout {
+						t.Fatalf("cancelled relation returned status %d, want 408", outcomes[0].Code)
 					}
 				})
 			}

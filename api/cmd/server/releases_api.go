@@ -335,7 +335,10 @@ func sameIDs(expected, actual []string) bool {
 
 func (s *server) deleteReleasePipeline(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.deleted", id, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == id })
 		if index < 0 {

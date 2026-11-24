@@ -511,7 +511,9 @@ func (s *server) cancelLoopRun(w http.ResponseWriter, r *http.Request) {
 	id, runID := r.PathValue("id"), r.PathValue("runId")
 	data, err := s.loopViewerData(r)
 	if err != nil {
-		writeError(w, http.StatusForbidden, "workspace access denied")
+		if errors.Is(err, errNotFound) || !writeAuthCheckFailure(w, err) {
+			writeError(w, http.StatusForbidden, "workspace access denied")
+		}
 		return
 	}
 	workspace := data.Workspace.URLKey
@@ -632,12 +634,16 @@ func (s *server) loopViewerData(r *http.Request) (domain.Bootstrap, error) {
 	}
 	data.Viewer = authUser(r)
 	role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, data.Viewer.ID)
-	if err != nil || status != "active" {
+	if err != nil {
+		return data, err
+	}
+	if status != "active" {
 		return data, store.ErrAuthForbidden
 	}
 	data.ViewerRole = role
-	if members, err := s.store.ListTeamMembers(r.Context(), data.Workspace.ID); err == nil {
-		data.TeamMembers = members
+	data.TeamMembers, err = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+	if err != nil {
+		return data, err
 	}
 	return data, nil
 }

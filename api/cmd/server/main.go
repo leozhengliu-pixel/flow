@@ -1865,14 +1865,21 @@ func (s *server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) uploadWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("workspaceKey")
-	data, ok := s.store.BootstrapFor(key)
+	read := s.store.WorkspaceSettingsMetadata
+	if s.store.BoundedMetadataEnabled() {
+		read = s.store.BootstrapFor
+	}
+	data, ok := read(key)
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
 	if !s.authDisabled {
-		role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
-		if !workspaceAdminRole(role) {
+		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
+		if err != nil || status != "active" || !workspaceAdminRole(role) {
 			writeError(w, http.StatusForbidden, "admin access required")
 			return
 		}
@@ -2032,14 +2039,21 @@ func validateWorkspaceLogoSVG(payload []byte) error {
 
 func (s *server) deleteWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("workspaceKey")
-	data, ok := s.store.BootstrapFor(key)
+	read := s.store.WorkspaceSettingsMetadata
+	if s.store.BoundedMetadataEnabled() {
+		read = s.store.BootstrapFor
+	}
+	data, ok := read(key)
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
 	if !s.authDisabled {
-		role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
-		if !workspaceAdminRole(role) {
+		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
+		if err != nil || status != "active" || !workspaceAdminRole(role) {
 			writeError(w, http.StatusForbidden, "admin access required")
 			return
 		}
@@ -2084,7 +2098,11 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	var persistedTeamMembers []domain.TeamMember
 	if data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey); ok {
-		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+		var err error
+		persistedTeamMembers, err = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
 	}
 	var developmentCreatorID string
 	now := time.Now().UTC()
@@ -2226,7 +2244,11 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	var persistedTeamMembers []domain.TeamMember
 	if data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey); ok {
-		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+		var err error
+		persistedTeamMembers, err = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
 	}
 	var updated domain.Team
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.updated", teamID, input, func(data *domain.Bootstrap) error {
@@ -2619,35 +2641,40 @@ func workspaceKey(r *http.Request) string {
 }
 
 func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
+	data, _ := s.workspaceDataWithError(r)
+	return data
+}
+
+func (s *server) workspaceDataWithError(r *http.Request) (domain.Bootstrap, error) {
 	if metadataReadRequest(r) || r.URL.Path == "/api/views" || strings.HasPrefix(r.URL.Path, "/api/views/") {
 		if !s.authDisabled {
 			data, handedOff := takePagedMetadata(r, workspaceKey(r), authUser(r).ID)
+			var err error
 			if !handedOff {
-				// Bounded with the other projections; this caller cannot answer 503, so it waits.
+				// Share the projection limit with callers that still wait for a slot.
 				if !acquireProjectionWaiting(r) {
-					// The client left while waiting: nothing reads the answer.
-					return domain.Bootstrap{}
+					return domain.Bootstrap{}, r.Context().Err()
 				}
-				data, _ = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
+				data, err = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
 			}
 			filterBootstrapForAPIKey(&data, r)
-			return data
+			return data, err
 		}
 		data, _ := s.store.WorkspaceMetadata(workspaceKey(r))
 		data.ViewerRole = "admin"
-		return data
+		return data, nil
 	}
 	if data, ok := r.Context().Value(issueRecordAuthorizationContext{}).(domain.Bootstrap); ok {
-		return data
+		return data, nil
 	}
 	if pagedRealtimeRequest(r) {
-		data, _, _ := s.pagedRealtimeMetadata(r)
-		return data
+		data, _, err := s.pagedRealtimeMetadata(r)
+		return data, err
 	}
 	if !s.authDisabled {
-		data, _, _ := s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
+		data, _, err := s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
 		filterBootstrapForAPIKey(&data, r)
-		return data
+		return data, err
 	}
 	data, _ := s.store.BootstrapFor(workspaceKey(r))
 	// Development mode emulates the seeded owner account. Keep the role on
@@ -2655,7 +2682,7 @@ func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
 	// admin-only security controls (including API-key scopes) behave the same
 	// in the local stack.
 	data.ViewerRole = "admin"
-	return data
+	return data, nil
 }
 
 func (s *server) updateProjectDisplayDefault(w http.ResponseWriter, r *http.Request) {
@@ -3348,6 +3375,9 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 			ok = err == nil
 		} else {
 			projected, ok, err = s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
+		}
+		if writeAuthCheckFailure(w, err) {
+			return
 		}
 		if err != nil || !ok || len(projected.Teams) == 0 {
 			writeError(w, http.StatusForbidden, "Join a team before creating an issue")
@@ -5115,6 +5145,9 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
+	if writeRequestCanceled(w, r.Context().Err()) {
+		return
+	}
 	var input domain.BatchIssueUpdateInput
 	if !decodeStrictJSON(w, r, &input) {
 		return
@@ -5499,6 +5532,9 @@ func (s *server) toggleIssueReaction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) createRelation(w http.ResponseWriter, r *http.Request) {
+	if writeRequestCanceled(w, r.Context().Err()) {
+		return
+	}
 	var input domain.RelationCreateInput
 	if !decodeJSON(w, r, &input) || !validRelation(input.Type) {
 		writeError(w, http.StatusBadRequest, "invalid relation")

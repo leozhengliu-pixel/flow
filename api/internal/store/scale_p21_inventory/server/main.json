@@ -969,16 +969,35 @@
         "POST /api/workspaces/{workspaceKey}/logo (server/main.go:493)"
       ]
     },
-    "workspaceData": {
+    "workspaceDataWithError": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Closed by caller reachability, literal body unchanged (flag-off byte-identical). SW270 type-checks this package and pins the complete direct/indirect callset: no function-value, route or package-level capture; 17 HOT callers (18 references) reach it only flag-off (then-branch of !BoundedMetadataEnabled, else-branch of BoundedMetadataEnabled, or after a terminating BoundedMetadataEnabled dispatch, including serveDocumentRecordList's flag-on true return); findIssueForPermissions is reached with the flag on only by COLD permission writes because the HOT GET/HEAD list now answers from its retained bounded read (listIssuePermissionsBounded; SW274 GET/HEAD differential with a no-statement-inside-wrapper probe); the 113 remaining callers are COLD in this inventory and a flag-on reverse walk from each meets no HOT-classified consumer except through the pinned AI-run worker handoff and in-process agent-route dispatch boundaries.",
+      "reason": "SW270 pins the compatibility wrapper's access and the scoped adapter's flag-off call. The scoped adapter preserves errors from legacy projections before authorizing writes.",
       "accessors": [
-        "Bootstrap",
         "BootstrapFor",
         "BootstrapForUser",
         "PagedWorkspaceMetadata",
         "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "callers": [
+        "server/server.workspaceData",
+        "server/server.workspaceDataScoped",
+        "server/server.findIssueForPermissions",
+        "server/server.developerTokenApplication",
+        "server/server.createExport",
+        "server/server.updateReview",
+        "server/server.submitReview",
+        "server/server.commentOnReview",
+        "server/server.resolveReviewThread"
+      ]
+    },
+    "workspaceData": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Closed by caller reachability. SW270 pins the complete direct and indirect callset. HOT consumers reach it only with the flag off. COLD callers remain unreachable from HOT consumers with the flag on outside the pinned AI-run worker handoff and in-process agent-route dispatch boundaries.",
+      "accessors": [
+        "workspaceDataWithError"
       ],
       "temperature": "hot",
       "temperatureReason": "Reachable from GET /api/realtime/presence",
@@ -988,7 +1007,6 @@
         "server/server.listWebhookFailures",
         "server/server.testWebhook",
         "server/server.listDocuments",
-        "server/server.createExport",
         "server/server.checkAgentMentions",
         "server/server.listAgentSessions",
         "server/server.getAgentSession",
@@ -1054,7 +1072,6 @@
         "server/server.gitlabConnectionSnapshot",
         "server/server.listOAuthAppFailures",
         "server/server.listOAuthSyncGroupRequests",
-        "server/server.findIssueForPermissions",
         "server/server.listJiraLinks",
         "server/server.listJiraRemoteProjects",
         "server/server.listJiraRemoteStatuses",
@@ -1078,7 +1095,6 @@
         "server/server.listIssueTemplates",
         "server/server.listTeamLabels",
         "server/server.exportOAuthApplicationManifest",
-        "server/server.developerTokenApplication",
         "server/server.workspaceOAuthApplication",
         "server/server.getApplicationWebhookSecret",
         "server/server.listOAuthApplicationInstalls",
@@ -1100,11 +1116,6 @@
         "server/server.syncReviewFromCodeHost",
         "server/server.listReviews",
         "server/server.getReview",
-        "server/server.updateReview",
-        "server/server.submitReview",
-        "server/server.commentOnReview",
-        "server/server.resolveReviewThread",
-        "server/server.workspaceDataScoped",
         "server/server.listWorkspaceLabels",
         "server/server.listWorkspaceIssueTemplates",
         "server/server.listAPIKeys",

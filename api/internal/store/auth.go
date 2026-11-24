@@ -872,6 +872,26 @@ func (s *SQLiteStore) WorkspaceRole(ctx context.Context, workspaceID, userID str
 	return role, status, err
 }
 
+func (s *SQLiteStore) mutationWorkspaceRole(ctx context.Context, workspaceID, userID string) (string, error) {
+	role, status, err := s.WorkspaceRole(ctx, workspaceID, userID)
+	if err != nil {
+		return "", PreWriteDatabaseError(err)
+	}
+	if status != "active" {
+		return "", ErrAuthForbidden
+	}
+	return role, nil
+}
+
+func (s *SQLiteStore) mutationActorAccess(ctx context.Context, workspaceID, userID string) (string, []string, error) {
+	role, err := s.mutationWorkspaceRole(ctx, workspaceID, userID)
+	if err != nil {
+		return "", nil, err
+	}
+	teams, err := s.actorTeamIDs(ctx, workspaceID, userID)
+	return role, teams, PreWriteDatabaseError(err)
+}
+
 func (s *SQLiteStore) TeamRole(ctx context.Context, workspaceID, teamID, userID string) (string, error) {
 	// Workspace owners/admins can administer every team. Team owners are also
 	// inherited by descendants.
@@ -964,9 +984,8 @@ func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey
 	if !ok {
 		return ErrAuthForbidden
 	}
-	_, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, userID)
-	if err != nil || status != "active" {
-		return ErrAuthForbidden
+	if _, err := s.mutationWorkspaceRole(ctx, data.Workspace.ID, userID); err != nil {
+		return err
 	}
 	// The current workspace again leaves the account state as it is.
 	var current string
@@ -974,7 +993,7 @@ func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey
 		return nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, userID, workspaceKey, now)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, userID, workspaceKey, now)
 	return err
 }
 
@@ -1018,14 +1037,20 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 	if !isWorkspaceAdminRole(role) {
 		data.AuditLog = []domain.AuditLogEntry{}
 	}
-	data.Members, _ = s.ListMembers(ctx, data.Workspace.ID)
+	data.Members, err = s.ListMembers(ctx, data.Workspace.ID)
+	if err != nil {
+		return domain.Bootstrap{}, false, err
+	}
 	if !data.WorkspaceSettings.SCIMEnabled {
 		// Turning SCIM provisioning off hands every member back to admins.
 		for index := range data.Members {
 			data.Members[index].ManagedBy = ""
 		}
 	}
-	data.TeamMembers, _ = s.ListTeamMembers(ctx, data.Workspace.ID)
+	data.TeamMembers, err = s.ListTeamMembers(ctx, data.Workspace.ID)
+	if err != nil {
+		return domain.Bootstrap{}, false, err
+	}
 	data.DepartedMembers = nil
 	if isWorkspaceAdminRole(role) {
 		data.Invitations, _ = s.ListInvitations(ctx, data.Workspace.ID)
@@ -1189,26 +1214,24 @@ func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]do
 	return result, nil
 }
 
-// actorTeamIDs lists the teams a user belongs to from the membership records
-// (one indexed read), for a mutation's authorization callback. A failed read
-// gives no teams, so team-based access fails closed.
-func (s *SQLiteStore) actorTeamIDs(ctx context.Context, workspaceID, userID string) []string {
+func (s *SQLiteStore) actorTeamIDs(ctx context.Context, workspaceID, userID string) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT team_id FROM team_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer rows.Close()
 	teams := []string{}
 	for rows.Next() {
 		var id string
-		if rows.Scan(&id) == nil {
-			teams = append(teams, id)
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
 		}
+		teams = append(teams, id)
 	}
-	if rows.Err() != nil {
-		return nil
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
-	return teams
+	return teams, nil
 }
 
 func (s *SQLiteStore) ListTeamMembers(ctx context.Context, workspaceID string) ([]domain.TeamMember, error) {
@@ -1435,8 +1458,12 @@ func (s *SQLiteStore) UpdateMemberRole(ctx context.Context, workspaceID, userID,
 		return fmt.Errorf("invalid role")
 	}
 	var current string
-	if err := s.db.QueryRowContext(ctx, `SELECT role FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&current); err != nil {
+	err := s.db.QueryRowContext(ctx, `SELECT role FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrAuthForbidden
+	}
+	if err != nil {
+		return PreWriteDatabaseError(err)
 	}
 	if strings.EqualFold(current, role) {
 		return nil
@@ -1506,16 +1533,16 @@ func (s *SQLiteStore) RemoveMember(ctx context.Context, workspaceID, userID stri
 }
 
 func (s *SQLiteStore) ensureAdminRemains(ctx context.Context, workspaceID, userID string) error {
-	var role, status string
-	if err := s.db.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&role, &status); err != nil {
-		return ErrAuthForbidden
+	role, status, err := s.WorkspaceRole(ctx, workspaceID, userID)
+	if err != nil {
+		return PreWriteDatabaseError(err)
 	}
 	if !isWorkspaceAdminRole(role) || status != "active" {
 		return nil
 	}
 	var count int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_memberships WHERE workspace_id=? AND role IN ('admin','owner') AND status='active'`, workspaceID).Scan(&count); err != nil {
-		return err
+		return PreWriteDatabaseError(err)
 	}
 	if count <= 1 {
 		return ErrLastAdmin

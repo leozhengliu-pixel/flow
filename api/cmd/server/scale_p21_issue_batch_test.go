@@ -203,7 +203,7 @@ func TestScaleP21IssueBatchDifferential(t *testing.T) {
 		{name: "move-selected-key", user: owner, key: selected, ids: pair, update: map[string]any{"teamId": "tm-parent"}, code: http.StatusForbidden},
 		{name: "move-with-sla", setup: sla, edit: subscribe, user: owner, ids: pair, update: map[string]any{"teamId": "tm-parent", "priority": 2}, code: http.StatusOK},
 		{name: "missing-issue-rolls-back", user: owner, ids: []string{f.triage.ID, "ib-missing"}, update: map[string]any{"priority": 1}, code: 0},
-		{name: "cancelled", user: owner, ids: pair, update: map[string]any{"priority": 1}, stop: true, code: 0},
+		{name: "cancelled", user: owner, ids: pair, update: map[string]any{"priority": 1}, stop: true, code: http.StatusRequestTimeout},
 	})
 }
 

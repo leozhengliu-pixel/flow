@@ -185,7 +185,8 @@ func TestScaleP21SW19ChatBindablePolicyDifferential(t *testing.T) {
 		view.Viewer, view.ViewerRole = member, "member"
 		queued := f.request(member, nil, nil)
 		queued.SetPathValue("provider", "lark")
-		if !slices.Contains(legacy.chatManageableTeamIDs(queued, view), f.public) {
+		manageable, err := legacy.chatManageableTeamIDs(queued, view)
+		if err != nil || !slices.Contains(manageable, f.public) {
 			t.Fatal("revocation fixture does not own public team")
 		}
 		if err := repo.SetTeamMembership(t.Context(), view.Workspace.ID, f.public, member.ID, "member", false); err != nil {

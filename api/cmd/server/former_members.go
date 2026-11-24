@@ -37,15 +37,22 @@ func formerMember(data *domain.Bootstrap, id string) bool {
 // against the viewer's directory (which leaves removed people out), whether
 // id names a former member: the check lets it through so the write refuses it
 // with errFormerMember instead of a 403 that reads as a permission problem.
-func (s *server) formerMemberOutsideWrite(ctx context.Context, workspace, id string) bool {
+func (s *server) formerMemberOutsideWrite(ctx context.Context, workspace, id string) (bool, error) {
 	if id == "" {
-		return false
+		return false, nil
 	}
 	read, err := s.store.BeginFormerMembersRead(ctx, workspace)
 	if read != nil {
 		defer read.Close()
 	}
-	return err == nil && read != nil && read.Members()[id]
+	return err == nil && read != nil && read.Members()[id], err
+}
+
+func (s *server) workspacePersonKnown(ctx context.Context, workspace string, users []domain.User, id string) (bool, error) {
+	if slices.ContainsFunc(users, func(user domain.User) bool { return user.ID == id }) {
+		return true, nil
+	}
+	return s.formerMemberOutsideWrite(ctx, workspace, id)
 }
 
 // errFormerMemberMention is the 400 a write gets for content that newly

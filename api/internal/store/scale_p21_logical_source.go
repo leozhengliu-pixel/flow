@@ -144,6 +144,7 @@ type metadataLogicalBuilder struct {
 	ctx         context.Context
 	source      *metadataLogicalSource
 	storage     *metadataLogicalStorage
+	diskLimit   int64
 	offset      int64
 	active      int
 	count       uint64
@@ -182,7 +183,7 @@ func newMetadataLogicalBuilderIn(ctx context.Context, group *metadataLogicalSpoo
 	}
 	t := reflect.TypeFor[domain.Bootstrap]()
 	source := &metadataLogicalSource{refs: 1, fields: make([]metadataLogicalNode, t.NumField()), stores: []*metadataLogicalStorage{storage}}
-	return &metadataLogicalBuilder{ctx: ctx, source: source, storage: storage, active: -1}, nil
+	return &metadataLogicalBuilder{ctx: ctx, source: source, storage: storage, diskLimit: metadataLogicalDiskCap(), active: -1}, nil
 }
 
 func reserveMetadataLogicalBytes(used *atomic.Int64, size, limit int64) bool {
@@ -475,9 +476,8 @@ func (b *metadataLogicalBuilder) write(data []byte) error {
 	if int64(len(data)) > metadataLogicalDiskBytes-b.offset {
 		return ErrMetadataWorkBudget
 	}
-	limit := metadataLogicalDiskCap()
-	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, int64(len(data)), limit) {
-		if metadataLogicalDiskContended(b.storage.diskDemand, int64(len(data)), limit) {
+	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, int64(len(data)), b.diskLimit) {
+		if metadataLogicalDiskContended(b.storage.diskDemand, int64(len(data)), b.diskLimit) {
 			// Disk pressure will not wake a waiter on the memory work budget.
 			return ErrRecordSpoolContended
 		}

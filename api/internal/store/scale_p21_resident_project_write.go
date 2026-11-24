@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"slices"
 
@@ -38,13 +39,13 @@ func (p *residentScopedProjectEdit) matches(ctx context.Context, source *metadat
 // Prepare the same selected callback inputs as the scoped writer. The
 // writer still validates the current generation and actor under its lock
 // and rebases the changed rows through its existing canonical writer.
-func (s *SQLiteStore) prepareResidentScopedProject(ctx context.Context, workspace string, scope MetadataRecordScope, actor domain.User, hasActor, refreshActor bool, callback func(*domain.Bootstrap) (string, error)) *residentScopedProjectEdit {
+func (s *SQLiteStore) prepareResidentScopedProject(ctx context.Context, workspace string, scope MetadataRecordScope, actor domain.User, hasActor, refreshActor bool, callback func(*domain.Bootstrap) (string, error)) (*residentScopedProjectEdit, error) {
 	if residentWritesOff.Load() || coldDecodeCacheBudget() <= 0 {
-		return nil
+		return nil, nil
 	}
 	source, err := s.retainMetadataLogicalSource(ctx, workspace)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	keep := false
 	defer func() {
@@ -53,39 +54,40 @@ func (s *SQLiteStore) prepareResidentScopedProject(ctx context.Context, workspac
 		}
 	}()
 	if source.behind.Load() || source.Stamp().revision < 0 {
-		return nil
+		return nil, nil
 	}
 	image, ok, err := s.metadataResidency.residentImage(ctx, workspace, source)
 	if err != nil || !ok {
-		return nil
+		return nil, nil
 	}
 	actorState := scopedMetadataActor{actor: mutationInputActor(actor), hasActor: hasActor, refreshActor: refreshActor}
 	if hasActor {
-		if role, status, err := s.WorkspaceRole(ctx, source.Stamp().workspaceID, actor.ID); err == nil && status == "active" {
-			actorState.role, actorState.active = role, true
-			actorState.teams = s.actorTeamIDs(ctx, source.Stamp().workspaceID, actor.ID)
+		actorState.role, actorState.teams, err = s.mutationActorAccess(ctx, source.Stamp().workspaceID, actor.ID)
+		if err != nil && !errors.Is(err, ErrAuthForbidden) {
+			return nil, err
 		}
+		actorState.active = err == nil
 	}
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	defer tx.Rollback()
 	if current, err := s.residentStampCurrent(ctx, tx, workspace, source); err != nil || !current {
-		return nil
+		return nil, nil
 	}
 	loadScope, inlineFields, inputLimit, releaseInline, err := s.prepareScopedInlineSelection(ctx, tx, workspace, source, scope)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	defer releaseInline()
 	if len(inlineFields) != 0 {
-		return nil
+		return nil, nil
 	}
 	ctx = withResidentRecordOrdinals(ctx, image)
 	before, err := source.selectMetadata(ctx, loadScope, inputLimit, image)
 	if err != nil || before.Workspace.ID != source.Stamp().workspaceID || !scopedSelectionDirectoryKept(before, actor, hasActor && refreshActor) {
-		return nil
+		return nil, nil
 	}
 	result := &residentScopedProjectEdit{
 		source: source, image: image, scope: loadScope, actor: actorState,
@@ -94,10 +96,10 @@ func (s *SQLiteStore) prepareResidentScopedProject(ctx context.Context, workspac
 	usedLookup := false
 	result.aggregate, result.callbackErr = s.runScopedMetadataCallback(ctx, tx, workspace, &result.next, &result.validationBefore, actorState, true, callback, &usedLookup)
 	if usedLookup || ctx.Err() != nil {
-		return nil
+		return nil, nil
 	}
 	keep = true
-	return result
+	return result, nil
 }
 
 type scopedMetadataActor struct {
