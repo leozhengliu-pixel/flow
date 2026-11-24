@@ -410,7 +410,7 @@ export function setTeamMembership(
     jsonRequest("PUT", { member, role }),
   );
 }
-export type BootstrapProjection = 'project-list' | 'issue-detail'
+export type BootstrapProjection = 'project-list' | 'issue-detail' | 'initiative-detail' | `project-detail:${string}`
 
 export function fetchSyncManifest(workspaceKey: string, signal?: AbortSignal, quiet?: boolean, surface?: 'projects-page' | 'initiatives-page'): Promise<import('@/types/flow').SyncManifest> {
   return request<import('@/types/flow').SyncManifest>(`/api/sync/manifest${surface ? `?surface=${surface}` : ''}`, { headers: { 'X-Workspace-Key': workspaceKey }, signal, quiet }).then(modelManifest)

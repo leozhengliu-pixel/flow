@@ -1,6 +1,16 @@
 import type { BootstrapProjection } from '@/lib/api'
+import type { AppRoute } from '@/lib/app-routes'
 import type { BootstrapData } from '@/types/flow'
 import { workspaceBootstrapPhase } from '@/lib/navigation-cache'
+
+export function planningBootstrapProjection(route: AppRoute): BootstrapProjection | undefined {
+  if (import.meta.env.VITE_PAGED_ISSUES === 'true') return undefined
+  if (route.kind === 'initiative') return 'initiative-detail'
+  if (route.kind === 'project' || route.kind === 'project-saved-view') {
+    return `project-detail:${encodeURIComponent(route.projectSlugId)}`
+  }
+  return undefined
+}
 
 /** Identifies one bootstrap request: viewer, workspace and the projection that was asked for ('full' when none). */
 export function bootstrapRequestKey(viewerId: string, workspaceKey: string, projection?: BootstrapProjection): string {
@@ -13,18 +23,27 @@ type CurrentWorkspace = {
   viewer: Pick<BootstrapData['viewer'], 'id'>
 }
 
+function isPlanningProjection(projection?: string): projection is 'initiative-detail' | `project-detail:${string}` {
+  return projection === 'initiative-detail' || /^project-detail:[^:]+$/.test(projection ?? '')
+}
+
+function completedWorkspaceScope(viewerId: string, workspaceKey: string, loadedRequestKey?: string) {
+  const prefix = `${viewerId}:${workspaceKey}:`
+  if (!loadedRequestKey?.startsWith(prefix)) return undefined
+  const scope = loadedRequestKey.slice(prefix.length)
+  return scope === 'full' || isPlanningProjection(scope) ? scope : undefined
+}
+
+export function loadedPlanningDirectory(viewerId?: string, workspaceKey?: string, loadedRequestKey?: string): boolean {
+  return Boolean(viewerId && workspaceKey && isPlanningProjection(completedWorkspaceScope(viewerId, workspaceKey, loadedRequestKey)))
+}
+
 /**
- * An issue opened from an already-loaded workspace has its own detail and
- * history endpoints. Replacing the workspace snapshot with the issue-detail
- * projection would discard project detail data needed when the user returns.
- *
- * Only a snapshot that a completed *full* bootstrap produced qualifies:
- * `loadedRequestKey` is the key of the last bootstrap that finished. A snapshot
- * hydrated from the navigation cache (no finished request yet) is unverified, and
- * the project-list projection empties states, projects and templates the issue
- * page needs, so neither may stand in for the issue-detail bootstrap.
+ * Issue detail and history load separately. Retaining a confirmed workspace
+ * directory keeps planning data available for Back. A full directory also
+ * satisfies planning routes without another bootstrap.
  */
-export function canReuseWorkspaceForIssueDetail({
+export function canReuseWorkspaceBootstrap({
   current,
   requestedWorkspaceKey,
   viewerId,
@@ -37,22 +56,15 @@ export function canReuseWorkspaceForIssueDetail({
   projection?: BootstrapProjection
   loadedRequestKey?: string
 }): boolean {
-  return Boolean(
-    projection === 'issue-detail' &&
-      current &&
-      requestedWorkspaceKey &&
-      viewerId &&
-      !current.resourceDetailsOmitted &&
-      current.workspace.urlKey === requestedWorkspaceKey &&
-      current.viewer.id === viewerId &&
-      loadedRequestKey === bootstrapRequestKey(viewerId, requestedWorkspaceKey),
-  )
+  if (!current || !requestedWorkspaceKey || !viewerId || current.resourceDetailsOmitted ||
+      current.workspace.urlKey !== requestedWorkspaceKey || current.viewer.id !== viewerId) return false
+  const scope = completedWorkspaceScope(viewerId, requestedWorkspaceKey, loadedRequestKey)
+  return projection === 'issue-detail' ? scope !== undefined : isPlanningProjection(projection) && scope === 'full'
 }
 
 /**
  * What the workspace bootstrap effect does for the current route:
- * - 'reuse': keep the loaded full snapshot (the issue page reads its own record); the loaded
- *   request key is left alone, so returning to the page the snapshot was loaded for is a 'skip'.
+ * - 'reuse': keep a confirmed workspace directory and its loaded request key.
  * - 'skip': the snapshot already satisfies this request.
  * - 'fetch': load (or share the in-flight load of) the requested projection.
  */
@@ -71,7 +83,7 @@ export function bootstrapNavigationDecision({
   loadedRequestKey?: string
   inFlightKey?: string | null
 }): 'reuse' | 'skip' | 'fetch' {
-  if (canReuseWorkspaceForIssueDetail({ current, requestedWorkspaceKey, viewerId, projection, loadedRequestKey })) return 'reuse'
+  if (canReuseWorkspaceBootstrap({ current, requestedWorkspaceKey, viewerId, projection, loadedRequestKey })) return 'reuse'
   const requestKey = bootstrapRequestKey(viewerId, requestedWorkspaceKey, projection)
   return workspaceBootstrapPhase(current?.workspace.urlKey, requestedWorkspaceKey, inFlightKey, requestKey) === 'skip' && loadedRequestKey === requestKey
     ? 'skip'
@@ -79,9 +91,8 @@ export function bootstrapNavigationDecision({
 }
 
 /**
- * The projection a realtime resync should fetch. While an issue is open on top of a reused full
- * snapshot, refetching the issue-detail projection would overwrite the project and document
- * details the snapshot holds, and the page the user returns to would never reload them.
+ * A realtime resync preserves the scope of a reused directory, so returning
+ * to the page that loaded it still has the data it needs.
  */
 export function bootstrapRefreshProjection({
   routeProjection,
@@ -94,5 +105,8 @@ export function bootstrapRefreshProjection({
   viewerId: string
   workspaceKey: string
 }): BootstrapProjection | undefined {
-  return routeProjection === 'issue-detail' && loadedRequestKey === bootstrapRequestKey(viewerId, workspaceKey) ? undefined : routeProjection
+  const scope = completedWorkspaceScope(viewerId, workspaceKey, loadedRequestKey)
+  if (scope === 'full' && (routeProjection === 'issue-detail' || isPlanningProjection(routeProjection))) return undefined
+  if (routeProjection === 'issue-detail' && isPlanningProjection(scope)) return scope
+  return routeProjection
 }

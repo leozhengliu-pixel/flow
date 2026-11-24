@@ -26,8 +26,17 @@ async function seedProjects(request: APIRequestContext, workspaceKey: string) {
 
 async function openTimeline(page: Page, workspaceKey: string, { grouping = 'No grouping', zoom = 'quarter' } = {}) {
   const display = { grouping, groupOrder: 'asc', layout: 'timeline', onlyLeadTeamProjects: false, ordering: 'Name', orderingDirection: 'asc', properties: ['Priority', 'Status', 'Health', 'Lead'], showClosed: 'All', showEmptyGroups: false, subGrouping: 'No grouping', timelineZoom: zoom }
-  await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [`flow:projects:view:${workspaceKey}:workspace:all`, JSON.stringify(display)])
-  await page.goto(`/${workspaceKey}/projects/all`)
+  const path = `/${workspaceKey}/projects/all`
+  const preference = [`flow:projects:view:${workspaceKey}:workspace:all`, JSON.stringify(display)]
+  if (page.url().endsWith(path)) {
+    await page.evaluate(([key, value]) => localStorage.setItem(key, value), preference)
+    await page.reload({ waitUntil: 'commit' })
+  } else {
+    await page.addInitScript(([key, value]) => {
+      if (!localStorage.getItem(key)) localStorage.setItem(key, value)
+    }, preference)
+    await page.goto(path, { waitUntil: 'commit' })
+  }
   const timeline = page.getByRole('region', { name: 'Project timeline', exact: true })
   await expect(timeline.locator('.lp-project-timeline__bar')).toHaveCount(3, { timeout: 30_000 })
   return timeline
@@ -126,10 +135,24 @@ test('draws the names column down the pane and fades the today line', async ({ p
   const backdrop = (await timeline.locator('.lp-project-timeline__names-backdrop').boundingBox())!
   expect(backdrop.width).toBe(NAMES_COLUMN)
   expect(backdrop.y + backdrop.height).toBeCloseTo(scroller.y + scroller.height, 0)
-  await expect(timeline.locator('.lp-project-timeline__names-backdrop')).toHaveCSS('background-color', 'lch(5.52 0.4 272)')
+  // Normalize authored values in the same engine. WebKit serializes some LCH
+  // components and alphas at full floating-point precision.
+  const colors = await page.evaluate(() => {
+    const sample = document.createElement('div')
+    sample.style.backgroundColor = 'lch(5.52 0.4 272)'
+    sample.style.color = 'lch(11.74 2.22 272.7)'
+    sample.style.borderTopColor = 'lch(27.12 1.48 272)'
+    sample.style.boxShadow = '0 .5px 1px 1px lch(0 0 0 / .3)'
+    document.body.append(sample)
+    const style = getComputedStyle(sample)
+    const values = { backdrop: style.backgroundColor, bar: style.color, border: style.borderTopColor, shadow: style.boxShadow }
+    sample.remove()
+    return values
+  })
+  await expect(timeline.locator('.lp-project-timeline__names-backdrop')).toHaveCSS('background-color', colors.backdrop)
   const bar = timeline.locator('.lp-project-timeline__bar > button').first()
-  await expect(bar).toHaveCSS('background-image', /lch\(11\.74 2\.22 272\.7\)/)
-  await expect(bar).toHaveCSS('border-top-color', 'lch(27.12 1.48 272)')
-  await expect(bar).toHaveCSS('box-shadow', /0\.3\)? 0px 0\.5px 1px 1px/)
+  await expect.poll(() => bar.evaluate(element => getComputedStyle(element).backgroundImage)).toContain(colors.bar)
+  await expect(bar).toHaveCSS('border-top-color', colors.border)
+  await expect(bar).toHaveCSS('box-shadow', colors.shadow)
   await expect(timeline.locator('.lp-project-timeline__today-line')).toHaveCSS('background-image', /linear-gradient/)
 })

@@ -225,7 +225,7 @@ export function ProjectsDataView({
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const showGroupHeaders = grouping !== 'No grouping'
-  const listEntries = useMemo<ProjectListEntry[]>(() => groups.flatMap(group => {
+  const listEntries = useMemo<ProjectListEntry[]>(() => layout !== 'list' ? [] : groups.flatMap(group => {
     const isCollapsed = showGroupHeaders && collapsed.includes(group.id)
     const entries: ProjectListEntry[] = showGroupHeaders ? [{ key: `group:${group.id}`, kind: 'group', group, collapsed: isCollapsed }] : []
     if (isCollapsed) return entries
@@ -238,7 +238,7 @@ export function ProjectsDataView({
       entries.push(...group.projects.map(project => ({ key: `project:${group.id}:${project.id}`, kind: 'project' as const, project })))
     }
     return entries
-  }), [collapsed, groups, showGroupHeaders])
+  }), [collapsed, groups, layout, showGroupHeaders])
 
   const toggleSelection = (id: string, range = false) => {
     const next = selectedIds.includes(id) ? selectedIds.filter(item => item !== id) : range ? [...new Set([...selectedIds, id])] : [...selectedIds, id]

@@ -396,7 +396,7 @@ import { isTeamPagesRoute } from '@/components/team/team-pages-routes'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
 import { mergeAgentSession, mergeAgentSessions } from '@/lib/agent-session-merge'
-import { bootstrapNavigationDecision, bootstrapRefreshProjection, bootstrapRequestKey } from '@/lib/bootstrap-navigation'
+import { bootstrapNavigationDecision, bootstrapRefreshProjection, bootstrapRequestKey, loadedPlanningDirectory, planningBootstrapProjection } from '@/lib/bootstrap-navigation'
 import { teamWorkflowStateOfType } from '@/lib/team-workflow'
 import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-secondary-page'
 import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
@@ -800,7 +800,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
     "workspaceSlug" in route ? route.workspaceSlug : "";
   const loadedWorkspaceKey = data?.workspace.urlKey;
   const projectListProjection = isProjectListRoute(route);
-  const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined;
+  const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : planningBootstrapProjection(route);
   const syncSurface = resourceSyncSurface(route) ?? scaleP19Surface(route.kind);
   const localIssueRoute = localStoreRoute(route);
   const fetchRouteBootstrap = useCallback(async (workspaceKey: string, projection?: import('@/lib/api').BootstrapProjection, signal?: AbortSignal, quiet?: boolean) => {
@@ -1144,7 +1144,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
     if (bootstrapProjection === 'issue-detail' && checkpoint?.viewerId === account.viewer.id &&
         checkpoint.workspaceKey === requestedWorkspaceKey && dataRef.current?.workspace.id === requestedWorkspace.id &&
         loadedBootstrapRequestKey.current === `${bootstrapRequestKey(account.viewer.id, requestedWorkspaceKey)}:local-store`) return;
-    // 'reuse' leaves loadedBootstrapRequestKey on the page the snapshot was loaded for, so going back there is a 'skip'.
+    // Reuse keeps the loaded request key so Back can keep the same directory.
     if (requestKey !== baseRequestKey && dataRef.current?.workspace.urlKey === requestedWorkspaceKey && dataRef.current.viewer.id === account.viewer.id && loadedBootstrapRequestKey.current === requestKey) return;
     if (requestKey === baseRequestKey && !(dataRef.current?.sync && dataRef.current.sync.surface !== syncSurface) && bootstrapNavigationDecision({
       current: dataRef.current,
@@ -1604,7 +1604,8 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
       setData(current => {
         if (current?.workspace.urlKey !== detailWorkspaceKey || current.viewer.id !== viewerId || !syncScopeMatches(current, syncClient)) return current;
         let issues: Issue[];
-        if (localCheckpointRef.current?.workspaceKey === detailWorkspaceKey && !current.issueCollectionPaged) {
+        if (!current.issueCollectionPaged && (localCheckpointRef.current?.workspaceKey === detailWorkspaceKey ||
+          loadedPlanningDirectory(viewerId, detailWorkspaceKey, loadedBootstrapRequestKey.current))) {
           const index = current.issues.findIndex(row => row.id === issue.id);
           issues = index < 0 ? [...current.issues, issue] : current.issues.map((row, i) =>
             i === index && (row.version ?? 0) <= (issue.version ?? 0) ? issue : row);
@@ -1631,7 +1632,8 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
   const historyNavigationKey = historyLocalWorkspaceId && historyIssueId ? `${historyViewerId}:${historyLocalWorkspaceId}:${historyIssueId}` : '';
   const historyLocation = historyNavigationKey ? location : undefined;
   const historyUnverified = Boolean(historyLocation && (verifiedHistory?.location !== historyLocation || verifiedHistory.key !== historyNavigationKey));
-  const useNetworkHistory = Boolean(!historyLocalWorkspaceId && (data?.issueCollectionPaged || localCheckpointRef.current) && !historyIssueSummary && !historyLoaded);
+  const useNetworkHistory = Boolean(!historyLocalWorkspaceId && !historyIssueSummary && !historyLoaded &&
+    (data?.issueCollectionPaged || localCheckpointRef.current || loadedPlanningDirectory(historyViewerId, historyWorkspaceKey, loadedBootstrapRequestKey.current)));
   const relatedIssueKey=JSON.stringify([selectedIssue?.parentId,...(selectedIssue?.subIssueIds ?? [])].filter(Boolean));
   useEffect(() => {
     if (!historyViewerId || !historyWorkspaceKey || !historyIssueId || historyWorkspaceKey !== detailWorkspaceKey || detailAccessPending === detailWorkspaceKey ||

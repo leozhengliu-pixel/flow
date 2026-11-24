@@ -4,6 +4,7 @@ import { projectHasUpdates } from '@/lib/project-has-updates'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { Check, ChevronDown, ChevronRight, Copy, Edit3, Link2, MoreHorizontal, Paperclip, PanelRightClose, PanelRightOpen, Plus, Send, Star, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTimelineViewport } from '@/hooks/use-timeline-viewport'
 import type { Editor } from '@tiptap/react'
 import { EntityInlineComments, EntityResolvedCommentsPanel, type InlineCommentEntity } from '@/components/detail/entity-inline-comments'
 import { useEntityInlineComments, useResolvedInlineThreadCount } from '@/components/detail/entity-inline-comments-state'
@@ -409,24 +410,77 @@ export function InitiativeActivity(props: Props & { display: { updates: boolean;
   </ActivityPage>
 }
 
+const ROADMAP_ROW_HEIGHT = 48
+const ROADMAP_PRIORITY_VALUES = ['none', 'urgent', 'high', 'medium', 'low']
+const ROADMAP_PRIORITIES: ProjectPropertyOption[] = ['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, index) => ({ label, shortcut: String(index), value: ROADMAP_PRIORITY_VALUES[index] }))
+
 function InitiativeRoadmap({ initiatives, initiative, projects, projectUpdates, projectStatuses, users, viewer, onOpenProject, onUpdateProject, onCreateProjectUpdate, onUpdateProjectUpdate, onDeleteProjectUpdate, onCommentProjectUpdate, onReactProjectUpdate, healthFilter, properties, query, zoom, onZoom }: Props & { healthFilter?: Project['health']; properties: { health: boolean; priority: boolean; lead: boolean }; query: string; zoom: TimelineZoom; onZoom: (zoom: TimelineZoom) => void }) {
   const { locale, t } = useI18n()
   const root = useRef<HTMLDivElement>(null)
+  const { viewport } = useTimelineViewport(root)
   const [updatesProjectId, setUpdatesProjectId] = useState<string>()
-  const [roadmapDrag, setRoadmapDrag] = useState<{ id: string; startX: number; start: Date; target: Date }>()
+  const [focusedId, setFocusedId] = useState<string>()
+  const [draggedId, setDraggedId] = useState<string>()
+  const roadmapDrag = useRef<{ id: string; startX: number; start: Date; target: Date }>(undefined)
   const roadmapDragged = useRef(false)
-  const today = useCurrentTime()
-  const start = new Date(today.getFullYear(), today.getMonth() - 11, 1)
-  const months = Array.from({ length: 24 }, (_, index) => new Date(start.getFullYear(), start.getMonth() + index, 1))
-  const ticks: Date[] = []
-  const timelineEnd = new Date(start.getFullYear(), start.getMonth() + months.length, 1)
-  for (let date = new Date(start); date < timelineEnd; date = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 14)) ticks.push(date)
-  const effectiveProjects = initiativeProjectIds(initiative, initiatives)
-  const linked = projects.filter(project => effectiveProjects.has(project.id) && (!healthFilter || project.health === healthFilter) && `${project.name} ${project.summary}`.toLowerCase().includes(query.trim().toLowerCase()))
+  const dragFrame = useRef(0)
+  const dragDelta = useRef(0)
+  useEffect(() => () => cancelAnimationFrame(dragFrame.current), [])
+  const today = useCurrentTime(15 * 60_000)
+  const year = today.getFullYear()
+  const month = today.getMonth()
+  const start = useMemo(() => new Date(year, month - 11, 1), [year, month])
+  const todayKey = new Date(year, month, today.getDate()).getTime()
+  const todayLabel = useMemo(() => new Date(todayKey).toLocaleDateString(locale, { month: 'short', day: 'numeric' }).toUpperCase(), [todayKey, locale])
+  const months = useMemo(() => {
+    const format = new Intl.DateTimeFormat(locale, { month: 'short' })
+    return Array.from({ length: 24 }, (_, index) => {
+      const date = new Date(start.getFullYear(), start.getMonth() + index, 1)
+      return { label: format.format(date), year: date.getMonth() === 0 ? date.getFullYear() : undefined }
+    })
+  }, [start, locale])
+  const effectiveProjects = useMemo(() => initiativeProjectIds(initiative, initiatives), [initiative, initiatives])
+  const { linked, indexById } = useMemo(() => {
+    const search = query.trim().toLowerCase()
+    const linked = projects.filter(project => effectiveProjects.has(project.id) && (!healthFilter || project.health === healthFilter) && (!search || `${project.name} ${project.summary}`.toLowerCase().includes(search)))
+    return { linked, indexById: new Map(linked.map((project, index) => [project.id, index])) }
+  }, [effectiveProjects, healthFilter, projects, query])
   const monthWidth = ({ Year: 82, Quarter: 132, Month: 240, Week: 520 } as const)[zoom]
-  const statusOptions = projectStatuses.map<ProjectPropertyOption>((status, index) => ({ color: status.color, label: status.name, shortcut: String(index + 1), statusType: status.type, value: status.name }))
-  const priorityOptions: ProjectPropertyOption[] = ['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, index) => ({ label, shortcut: String(index), value: ['none', 'urgent', 'high', 'medium', 'low'][index] }))
-  const leadOptions: ProjectPropertyOption[] = [{ label: 'No lead', shortcut: '0', value: '' }, ...users.filter(user => user.active).map(user => ({ avatarUrl: user.avatarUrl, group: 'Users from the project team', keywords: `${user.name} ${user.email}`, label: user.displayName || user.name, value: user.id }))]
+  const { positions, rightmostBar } = useMemo(() => {
+    const positions: ReturnType<typeof roadmapPosition>[] = []
+    let rightmostBar = 0
+    for (const project of linked) {
+      const position = roadmapPosition(project, start, monthWidth)
+      positions.push(position)
+      rightmostBar = Math.max(rightmostBar, position.left + position.width)
+    }
+    return { positions, rightmostBar }
+  }, [linked, start, monthWidth])
+  const ticks = useMemo(() => {
+    const output = []
+    const end = new Date(start.getFullYear(), start.getMonth() + months.length, 1)
+    for (let date = start; date < end; date = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 14)) {
+      output.push({ key: +date, label: date.getDate(), left: 315 + ((+date - +start) / 86400000 / 30.44) * monthWidth })
+    }
+    return output
+  }, [start, months.length, monthWidth])
+  const left = viewport.left - 256
+  const right = viewport.left + viewport.width + 512
+  const visibleTicks = ticks.filter(tick => tick.left >= left && tick.left <= right)
+  const first = Math.max(0, Math.floor((viewport.top - 256) / ROADMAP_ROW_HEIGHT))
+  const end = Math.min(linked.length, Math.ceil((viewport.top + viewport.height + 512) / ROADMAP_ROW_HEIGHT))
+  const visibleRows = Array.from({ length: Math.max(0, end - first) }, (_, index) => first + index)
+  const focusedRow = focusedId === undefined ? undefined : indexById.get(focusedId)
+  const pinnedRows = new Set([draggedId === undefined ? undefined : indexById.get(draggedId)])
+  if (focusedRow !== undefined) {
+    for (const offset of [-1, 0, 1]) pinnedRows.add(focusedRow + offset)
+  }
+  for (const index of pinnedRows) {
+    if (index !== undefined && index >= 0 && index < linked.length && (index < first || index >= end)) visibleRows.push(index)
+  }
+  visibleRows.sort((a, b) => a - b)
+  const statusOptions = useMemo(() => projectStatuses.map<ProjectPropertyOption>((status, index) => ({ color: status.color, label: status.name, shortcut: String(index + 1), statusType: status.type, value: status.name })), [projectStatuses])
+  const leadOptions = useMemo<ProjectPropertyOption[]>(() => [{ label: 'No lead', shortcut: '0', value: '' }, ...users.filter(user => user.active).map(user => ({ avatarUrl: user.avatarUrl, group: 'Users from the project team', keywords: `${user.name} ${user.email}`, label: user.displayName || user.name, value: user.id }))], [users])
   const todayOffset = (today.getFullYear() - start.getFullYear()) * 12 + today.getMonth() - start.getMonth() + (today.getDate() - 1) / 31
   const centerToday = useCallback(() => { const element = root.current; if (element) element.scrollTo({ left: Math.max(0, 315 + todayOffset * monthWidth - element.clientWidth / 2), behavior: 'smooth' }) }, [monthWidth, todayOffset])
   useEffect(() => { const frame = requestAnimationFrame(centerToday); return () => cancelAnimationFrame(frame) }, [centerToday])
@@ -435,7 +489,100 @@ function InitiativeRoadmap({ initiatives, initiative, projects, projectUpdates, 
     if (property === 'priority') return onUpdateProject(project.id, { priority: ({ none: 0, urgent: 1, high: 2, medium: 3, low: 4 } as Record<string, number>)[value] ?? 0 })
     return onUpdateProject(project.id, { leadId: value })
   }
-  return <><div className="li-roadmap" ref={root} style={{ '--li-month-width': `${monthWidth}px`, '--li-month-count': months.length, '--li-today-left': `${315 + todayOffset * monthWidth}px` } as React.CSSProperties}><div className="li-roadmap-canvas"><div className="li-roadmap-top"><div className="li-roadmap-rail"/><div className="li-roadmap-months">{months.map(date => <span key={date.toISOString()}>{date.toLocaleDateString(locale, { month: 'short' })}{date.getMonth() === 0 && <small>{date.getFullYear()}</small>}</span>)}</div><div className="li-roadmap-ticks">{ticks.map(date => <span key={date.toISOString()} style={{ left: `${315 + ((+date - +start) / 86400000 / 30.44) * monthWidth}px` }}>{date.getDate()}</span>)}</div><button aria-label="Center the timeline on today’s date" onClick={centerToday} type="button">Today</button><ZoomMenu onZoom={onZoom} zoom={zoom}/></div><div className="li-roadmap-grid">{ticks.map(date => <i key={date.toISOString()} style={{ left: `${315 + ((+date - +start) / 86400000 / 30.44) * monthWidth}px` }}/>)}</div>{linked.length ? <div className="li-roadmap-projects">{linked.map(project => <div className="li-roadmap-row" key={project.id}><div className="li-roadmap-project-cell"><ViewIconPicker color={project.color} icon={normalizeProjectIcon(project.icon)} onChange={visual => void onUpdateProject(project.id, visual)} triggerClassName="li-roadmap-project-icon"/><button aria-label={`Open ${project.name}`} className="li-roadmap-project-name" onClick={() => onOpenProject(project)} type="button"><strong data-i18n-ignore>{project.name}</strong></button><div className="li-roadmap-metadata"><button aria-label={projectUpdates[project.id]?.length ? `Open updates for ${project.name}` : 'There are no updates for this project'} className={`li-roadmap-property ${properties.health ? '' : 'is-hidden'}`} onClick={() => setUpdatesProjectId(project.id)} type="button"><i className={`li-update-health is-${projectUpdates[project.id]?.length ? project.health : 'noUpdate'}`}/></button><ProjectPropertyPicker buttonClassName="li-roadmap-property" label={`Change ${project.name} status`} onChange={value => void updateProperty(project, 'status', value)} options={statusOptions} property="status" value={project.status.name}><ProjectStatusGlyph color={project.status.color} name={project.status.name} progress={project.progress} type={project.status.type}/></ProjectPropertyPicker><ProjectPropertyPicker buttonClassName={`li-roadmap-property ${properties.priority ? '' : 'is-hidden'}`} label={`${project.priorityLabel} Priority`} onChange={value => void updateProperty(project, 'priority', value)} options={priorityOptions} property="priority" value={['none', 'urgent', 'high', 'medium', 'low'][project.priority] ?? 'none'}><PriorityIcon priority={project.priority} size={15}/></ProjectPropertyPicker><ProjectPropertyPicker buttonClassName={`li-roadmap-property ${properties.lead ? '' : 'is-hidden'}`} label={project.lead?.displayName || project.lead?.name || 'No lead'} onChange={value => void updateProperty(project, 'lead', value)} options={leadOptions} property="lead" value={project.lead?.id ?? ''}>{project.lead ? <Avatar id={project.lead.id} name={project.lead.displayName || project.lead.name}/> : <NoAssigneeIcon size={15}/>}</ProjectPropertyPicker></div></div><div aria-label={t('{name} timeline bar').replace('{name}', () => project.name)} className="li-roadmap-bar" data-dragging={roadmapDrag?.id === project.id || undefined} onClick={() => { if (!roadmapDragged.current) onOpenProject(project); roadmapDragged.current = false }} onKeyDown={event => { if (!['ArrowLeft','ArrowRight'].includes(event.key)) return; event.preventDefault(); const days = event.key === 'ArrowLeft' ? -1 : 1; const projectStart = project.startDate ? new Date(`${project.startDate}T00:00:00`) : new Date(); const projectTarget = project.targetDate ? new Date(`${project.targetDate}T00:00:00`) : new Date(projectStart.getFullYear(), projectStart.getMonth() + 2, projectStart.getDate()); projectStart.setDate(projectStart.getDate() + days); projectTarget.setDate(projectTarget.getDate() + days); void onUpdateProject(project.id, { startDate: isoRoadmapDate(projectStart), targetDate: isoRoadmapDate(projectTarget) }) }} onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); roadmapDragged.current = false; const projectStart = project.startDate ? new Date(`${project.startDate}T00:00:00`) : new Date(); const projectTarget = project.targetDate ? new Date(`${project.targetDate}T00:00:00`) : new Date(projectStart.getFullYear(), projectStart.getMonth() + 2, projectStart.getDate()); setRoadmapDrag({ id: project.id, startX: event.clientX, start: projectStart, target: projectTarget }) }} onPointerMove={event => { if (roadmapDrag?.id !== project.id) return; const delta = event.clientX - roadmapDrag.startX; if (Math.abs(delta) > 3) roadmapDragged.current = true; event.currentTarget.style.transform = `translateX(${delta}px)` }} onPointerCancel={event => { if (roadmapDrag?.id !== project.id) return; event.currentTarget.style.removeProperty('transform'); setRoadmapDrag(undefined); roadmapDragged.current = false }} onPointerUp={event => { if (roadmapDrag?.id !== project.id) return; const days = Math.round((event.clientX - roadmapDrag.startX) / monthWidth * 30.44); const nextStart = new Date(roadmapDrag.start); const nextTarget = new Date(roadmapDrag.target); nextStart.setDate(nextStart.getDate() + days); nextTarget.setDate(nextTarget.getDate() + days); event.currentTarget.style.removeProperty('transform'); setRoadmapDrag(undefined); if (days) void onUpdateProject(project.id, { startDate: isoRoadmapDate(nextStart), targetDate: isoRoadmapDate(nextTarget) }) }} role="button" style={roadmapPosition(project, start, monthWidth)} tabIndex={0}><span data-i18n-ignore>{project.name}</span>{!projectUpdates[project.id]?.length && <i/>}</div></div>)}</div> : <div className="li-roadmap-empty">No projects match this view</div>}<div className="li-today-line"><span>{today.toLocaleDateString(locale, { month: 'short', day: 'numeric' }).toUpperCase()}</span></div></div></div>{updatesProjectId && projects.find(project => project.id === updatesProjectId) && <ProjectUpdatesPreview onClose={() => setUpdatesProjectId(undefined)} onComment={onCommentProjectUpdate} onCreate={onCreateProjectUpdate} onDelete={onDeleteProjectUpdate} onOpenProject={project => { setUpdatesProjectId(undefined); onOpenProject(project) }} onReact={onReactProjectUpdate} onUpdate={onUpdateProjectUpdate} project={projects.find(project => project.id === updatesProjectId)!} updates={projectUpdates[updatesProjectId] ?? []} viewer={viewer}/>}</>
+  const shiftDates = (id: string, dates: { start: Date; target: Date }, days: number) => {
+    const nextStart = new Date(dates.start)
+    const nextTarget = new Date(dates.target)
+    nextStart.setDate(nextStart.getDate() + days)
+    nextTarget.setDate(nextTarget.getDate() + days)
+    void onUpdateProject(id, { startDate: isoRoadmapDate(nextStart), targetDate: isoRoadmapDate(nextTarget) })
+  }
+  const clearDrag = (element: HTMLElement) => {
+    cancelAnimationFrame(dragFrame.current)
+    dragFrame.current = 0
+    element.style.removeProperty('transform')
+    roadmapDrag.current = undefined
+    setDraggedId(undefined)
+  }
+  const updatesProject = updatesProjectId ? projects.find(project => project.id === updatesProjectId) : undefined
+  return <>
+    <div className="li-roadmap" ref={root} style={{ '--li-month-width': `${monthWidth}px`, '--li-month-count': months.length, '--li-today-left': `${315 + todayOffset * monthWidth}px` } as React.CSSProperties}>
+      <div className="li-roadmap-canvas">
+        {rightmostBar > 315 + months.length * monthWidth && <div aria-hidden="true" style={{ position: 'absolute', left: rightmostBar - 1, width: 1, height: 1 }}/>}
+        <div className="li-roadmap-top">
+          <div className="li-roadmap-rail"/>
+          <div className="li-roadmap-months">{months.map(({ label, year }, index) => {
+            const x = 315 + index * monthWidth
+            return x + monthWidth >= left && x <= right && <span key={index} style={{ gridColumn: index + 1 }}>{label}{year !== undefined && <small>{year}</small>}</span>
+          })}</div>
+          <div className="li-roadmap-ticks">{visibleTicks.map(tick => <span key={tick.key} style={{ left: tick.left }}>{tick.label}</span>)}</div>
+          <button aria-label="Center the timeline on today’s date" onClick={centerToday} type="button">Today</button><ZoomMenu onZoom={onZoom} zoom={zoom}/>
+        </div>
+        <div className="li-roadmap-grid">{visibleTicks.map(tick => <i key={tick.key} style={{ left: tick.left }}/>)}</div>
+        {linked.length ? <div className="li-roadmap-projects" style={{ height: 12 + linked.length * ROADMAP_ROW_HEIGHT }}>
+          {visibleRows.map(index => {
+            const project = linked[index]
+            const hasUpdates = Boolean(projectUpdates[project.id]?.length)
+            const pin = (event: React.SyntheticEvent) => { if (event.currentTarget.contains(event.target as Node)) setFocusedId(project.id) }
+            return <div className="li-roadmap-row" key={project.id} onFocus={pin} onPointerDownCapture={pin} style={{ position: 'absolute', inset: `${12 + index * ROADMAP_ROW_HEIGHT}px 0 auto` }}>
+              <div className="li-roadmap-project-cell">
+                <ViewIconPicker color={project.color} icon={normalizeProjectIcon(project.icon)} onChange={visual => void onUpdateProject(project.id, visual)} triggerClassName="li-roadmap-project-icon"/>
+                <button aria-label={`Open ${project.name}`} className="li-roadmap-project-name" onClick={() => onOpenProject(project)} type="button"><strong data-i18n-ignore>{project.name}</strong></button>
+                <div className="li-roadmap-metadata">
+                  <button aria-label={hasUpdates ? `Open updates for ${project.name}` : 'There are no updates for this project'} className={`li-roadmap-property ${properties.health ? '' : 'is-hidden'}`} onClick={() => setUpdatesProjectId(project.id)} type="button"><i className={`li-update-health is-${hasUpdates ? project.health : 'noUpdate'}`}/></button>
+                  <ProjectPropertyPicker buttonClassName="li-roadmap-property" label={`Change ${project.name} status`} onChange={value => void updateProperty(project, 'status', value)} options={statusOptions} property="status" value={project.status.name}><ProjectStatusGlyph color={project.status.color} name={project.status.name} progress={project.progress} type={project.status.type}/></ProjectPropertyPicker>
+                  <ProjectPropertyPicker buttonClassName={`li-roadmap-property ${properties.priority ? '' : 'is-hidden'}`} label={`${project.priorityLabel} Priority`} onChange={value => void updateProperty(project, 'priority', value)} options={ROADMAP_PRIORITIES} property="priority" value={ROADMAP_PRIORITY_VALUES[project.priority] ?? 'none'}><PriorityIcon priority={project.priority} size={15}/></ProjectPropertyPicker>
+                  <ProjectPropertyPicker buttonClassName={`li-roadmap-property ${properties.lead ? '' : 'is-hidden'}`} label={project.lead?.displayName || project.lead?.name || 'No lead'} onChange={value => void updateProperty(project, 'lead', value)} options={leadOptions} property="lead" value={project.lead?.id ?? ''}>{project.lead ? <Avatar id={project.lead.id} name={project.lead.displayName || project.lead.name}/> : <NoAssigneeIcon size={15}/>}</ProjectPropertyPicker>
+                </div>
+              </div>
+              <div aria-label={t('{name} timeline bar').replace('{name}', () => project.name)} className="li-roadmap-bar" data-dragging={draggedId === project.id || undefined}
+                onClick={() => { if (!roadmapDragged.current) onOpenProject(project); roadmapDragged.current = false }}
+                onKeyDown={event => {
+                  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+                  event.preventDefault()
+                  shiftDates(project.id, roadmapDates(project), event.key === 'ArrowLeft' ? -1 : 1)
+                }}
+                onPointerDown={event => {
+                  event.preventDefault()
+                  event.currentTarget.setPointerCapture(event.pointerId)
+                  roadmapDragged.current = false
+                  roadmapDrag.current = { id: project.id, startX: event.clientX, ...roadmapDates(project) }
+                  setDraggedId(project.id)
+                }}
+                onPointerMove={event => {
+                  const drag = roadmapDrag.current
+                  if (drag?.id !== project.id) return
+                  dragDelta.current = event.clientX - drag.startX
+                  if (Math.abs(dragDelta.current) > 3) roadmapDragged.current = true
+                  if (dragFrame.current) return
+                  const element = event.currentTarget
+                  dragFrame.current = requestAnimationFrame(() => {
+                    dragFrame.current = 0
+                    element.style.transform = `translateX(${dragDelta.current}px)`
+                  })
+                }}
+                onPointerCancel={event => {
+                  if (roadmapDrag.current?.id !== project.id) return
+                  clearDrag(event.currentTarget)
+                  roadmapDragged.current = false
+                }}
+                onPointerUp={event => {
+                  const drag = roadmapDrag.current
+                  if (drag?.id !== project.id) return
+                  const days = Math.round((event.clientX - drag.startX) / monthWidth * 30.44)
+                  clearDrag(event.currentTarget)
+                  if (days) shiftDates(project.id, drag, days)
+                }}
+                role="button" style={positions[index]} tabIndex={0}>
+                <span data-i18n-ignore>{project.name}</span>{!hasUpdates && <i/>}
+              </div>
+            </div>
+          })}
+        </div> : <div className="li-roadmap-empty">No projects match this view</div>}
+        <div className="li-today-line"><span>{todayLabel}</span></div>
+      </div>
+    </div>
+    {updatesProject && <ProjectUpdatesPreview onClose={() => setUpdatesProjectId(undefined)} onComment={onCommentProjectUpdate} onCreate={onCreateProjectUpdate} onDelete={onDeleteProjectUpdate} onOpenProject={project => { setUpdatesProjectId(undefined); onOpenProject(project) }} onReact={onReactProjectUpdate} onUpdate={onUpdateProjectUpdate} project={updatesProject} updates={projectUpdates[updatesProject.id] ?? []} viewer={viewer}/>}
+  </>
 }
 
 function InitiativeNewView(props: Props & { onCancel: () => void; onSave: (view: InitiativeViewDraft) => Promise<void> }) {
@@ -543,7 +690,16 @@ export function EditableArea({ value, placeholder, label, onCommit, selectionAct
 /** The initiative description: selecting text offers "Ask agent" and "Create issue from selection", as in an issue description. */
 export function InitiativeDescriptionField({ initiative, workspace, data, onComment, ...field }: { initiative: Pick<Initiative, 'id' | 'name' | 'slugId'>; workspace: string; data?: BootstrapData; value: string; placeholder?: string; label: string; onCommit: (value: string) => void; editorRef?: (editor: Editor | null) => void; /** "Comment" on the selection toolbar: starts an inline comment thread. */ onComment?: DescriptionSelectionActions['onComment'] }) { const { actions, panels } = useEntityDescriptionSelectionActions({ entity: { kind: 'initiative', id: initiative.id, name: initiative.name, href: initiativePath(workspace, initiative) }, data, onComment }); return <><EditableArea {...field} selectionActions={actions}/>{panels}</>} 
 function healthLabel(value: Project['health']) { return ({ onTrack: 'On track', atRisk: 'At risk', offTrack: 'Off track', noUpdate: 'No updates' } as const)[value] }
-function roadmapPosition(project: Project, origin: Date, monthWidth: number) { const start = project.startDate ? new Date(`${project.startDate}T00:00:00`) : new Date(); const target = project.targetDate ? new Date(`${project.targetDate}T00:00:00`) : new Date(start.getFullYear(), start.getMonth() + 2, start.getDate()); const days = (date: Date) => (+date - +origin) / 86400000; return { left: `${315 + Math.max(0, days(start) / 30.44 * monthWidth)}px`, width: `${Math.max(90, (days(target) - days(start)) / 30.44 * monthWidth)}px` } }
+function roadmapDates(project: Project) {
+  const start = project.startDate ? new Date(`${project.startDate}T00:00:00`) : new Date()
+  const target = project.targetDate ? new Date(`${project.targetDate}T00:00:00`) : new Date(start.getFullYear(), start.getMonth() + 2, start.getDate())
+  return { start, target }
+}
+function roadmapPosition(project: Project, origin: Date, monthWidth: number) {
+  const { start, target } = roadmapDates(project)
+  const pixels = (date: Date) => (+date - +origin) / 86400000 / 30.44 * monthWidth
+  return { left: 315 + Math.max(0, pixels(start)), width: Math.max(90, pixels(target) - pixels(start)) }
+}
 function isoRoadmapDate(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function projectDraftMutation(draft: NewProjectDraft, projects: Project[], statuses: ProjectStatus[]): ProjectCreateInput { return { templateId: draft.templateId, color: draft.color, description: draft.description, icon: draft.icon, leadId: draft.leadId, memberIds: draft.memberIds, labelIds: draft.labelIds, dependencyIds: draft.dependencyIds, dependencyRelations: draft.dependencyRelations, milestones: draft.milestones, milestoneDetails: draft.milestoneDetails, name: draft.name, priority: Math.max(0, ['No priority', 'Urgent', 'High', 'Medium', 'Low'].indexOf(draft.priority)), startDate: draft.startDate, startDateResolution: draft.startDateResolution, statusId: statuses.find(status => status.name === draft.status)?.id ?? projects.find(project => project.status.name === draft.status)?.status.id, summary: draft.summary, targetDate: draft.targetDate, targetDateResolution: draft.targetDateResolution, teamIds: draft.teamIds } }
 function useStoredBoolean(key: string, fallback: boolean) { const [value, setValue] = useState(() => localStorage.getItem(key) === null ? fallback : localStorage.getItem(key) === 'true'); const update = (next: boolean | ((current: boolean) => boolean)) => setValue(current => { const resolved = typeof next === 'function' ? next(current) : next; localStorage.setItem(key, String(resolved)); return resolved }); return [value, update] as const }

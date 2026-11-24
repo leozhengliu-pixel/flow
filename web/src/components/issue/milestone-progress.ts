@@ -14,6 +14,25 @@ export function milestoneIssueProgress(issues: MilestoneIssue[], projectId: stri
   return scoped.length ? Math.round(done / scoped.length * 100) : 0
 }
 
+export function indexMilestoneIssueProgress(issues: readonly MilestoneIssue[]) {
+  const byProject = new Map<string, Map<string, { done: number; total: number }>>()
+  for (const issue of issues) {
+    const projectId = issue.project?.id
+    const milestoneId = issue.projectMilestoneId
+    if (!projectId || !milestoneId || issue.archivedAt) continue
+    let milestones = byProject.get(projectId)
+    if (!milestones) byProject.set(projectId, milestones = new Map())
+    let entry = milestones.get(milestoneId)
+    if (!entry) milestones.set(milestoneId, entry = { done: 0, total: 0 })
+    entry.total++
+    if (issue.state.type === 'completed' || issue.state.type === 'canceled') entry.done++
+  }
+  return (projectId: string, milestoneId: string) => {
+    const entry = byProject.get(projectId)?.get(milestoneId)
+    return entry ? Math.round(entry.done / entry.total * 100) : 0
+  }
+}
+
 export function currentProjectMilestone<T extends { id: string }>(milestones: T[] | undefined, progressFor: (id: string) => number) {
   const items = milestones ?? []
   return items.find(item => progressFor(item.id) < 100) ?? items[0]

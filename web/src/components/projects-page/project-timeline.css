@@ -80,7 +80,7 @@
 .lp-project-timeline__add-dates:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-inset); }
 .lp-project-timeline__ghost { background: var(--project-timeline-bar-bg); border: .5px dashed var(--project-timeline-bar-border); border-radius: 6px; height: 24px; position: absolute; top: 6px; }
 
-.lp-project-timeline__links { left: var(--timeline-label-width); overflow: visible; pointer-events: none; position: absolute; top: 0; z-index: 1; }
+.lp-project-timeline__links { left: var(--timeline-label-width); overflow: hidden; pointer-events: none; position: absolute; top: 0; z-index: 1; }
 .lp-project-timeline__link { fill: none; stroke: var(--project-timeline-dependency); stroke-width: 1.25; }
 .lp-project-timeline__link.is-active { stroke: var(--project-timeline-dependency-active); stroke-width: 1.75; }
 .lp-project-timeline__link.is-conflict { stroke: var(--project-timeline-dependency-conflict); }

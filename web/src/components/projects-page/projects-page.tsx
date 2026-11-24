@@ -6,7 +6,7 @@ import type { BootstrapData, Customer, Initiative, Invitation, Issue, IssueLabel
 import { customerRowDataFor, isCustomerNumberComparison, matchesCustomerNumberValues, matchesCustomerValues, projectCustomerRowData } from '@/components/issue-explorer/customer-filter'
 import { customerFilterOptions } from '@/components/issue-explorer/issue-explorer-model'
 import type { ProjectCustomerFilterChoice } from './project-customer-filter'
-import { currentProjectMilestone, milestoneIssueProgress } from '@/components/issue/milestone-progress'
+import { currentProjectMilestone, indexMilestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
 import { NewProjectDialog, type NewProjectDraft, type NewProjectMilestoneDraft } from './new-project-dialog'
 import { projectPeopleChoices } from './project-people'
@@ -321,10 +321,14 @@ export function ProjectsPage({
   }), [initiatives, projectLabelGroups, projectLabels, teams])
   const blockedByIds = useMemo(() => {
     const map = new Map<string, string[]>()
-    for (const edge of projectDependencyEdges(projectCollection, currentProjectRelations)) map.set(edge.blockedId, [...(map.get(edge.blockedId) ?? []), edge.blockerId])
+    for (const edge of projectDependencyEdges(projectCollection, currentProjectRelations)) {
+      const blockers = map.get(edge.blockedId)
+      if (blockers) blockers.push(edge.blockerId)
+      else map.set(edge.blockedId, [edge.blockerId])
+    }
     return map
   }, [projectCollection, currentProjectRelations])
-  const milestoneProgress = useMemo(() => milestoneProgressIndex(issues), [issues])
+  const milestoneProgress = useMemo(() => indexMilestoneIssueProgress(issues), [issues])
   // Customers known to the page: the bootstrap's plus those the project directory returned.
   const customerSource = useMemo(() => {
     if (!customerData) return undefined
@@ -337,13 +341,18 @@ export function ProjectsPage({
     for (const issue of issues) if (issue.project?.id) map.set(issue.project.id, (map.get(issue.project.id) ?? new Set()).add(issue.id))
     return map
   }, [issues])
+  const dateLocale = rowDateLocale()
+  const dateFormats = useMemo(() => ({
+    month: new Intl.DateTimeFormat(dateLocale, { month: 'short', year: 'numeric' }),
+    day: new Intl.DateTimeFormat(dateLocale, { month: 'short', day: 'numeric' }),
+  }), [dateLocale])
   const items = useMemo(() => scopedProjects.map(project => ({
-    ...toPageItem(project, projectHref?.(project), itemIndexes, projectUpdates[project.id]?.[0], issues),
+    ...toPageItem(project, projectHref?.(project), itemIndexes, projectUpdates[project.id]?.[0], milestoneProgress, dateFormats),
     ...(projectWindow.enabled && projectWindow.metadata?.latestUpdates?.[project.id] ? { updatedAt: projectWindow.metadata.latestUpdates[project.id] } : {}),
     ...(customerSource ? projectCustomerFields(projectDirectoryCustomers.summaries[project.id] ? summaryRowData(projectDirectoryCustomers.summaries[project.id], customerSource) : projectCustomerRowData(project.id, issueIdsByProject.get(project.id) ?? new Set(), customerSource)) : {}),
     milestones: (project.milestones ?? []).map(milestone => ({ id: milestone.id, name: milestone.name, targetDate: milestone.targetDate, progress: milestoneProgress(project.id, milestone.id) })),
     blockedByIds: blockedByIds.get(project.id),
-  })), [blockedByIds, customerSource, projectDirectoryCustomers.summaries, issueIdsByProject, itemIndexes, issues, milestoneProgress, projectHref, projectUpdates, scopedProjects, projectWindow.enabled, projectWindow.metadata])
+  })), [blockedByIds, customerSource, dateFormats, projectDirectoryCustomers.summaries, issueIdsByProject, itemIndexes, milestoneProgress, projectHref, projectUpdates, scopedProjects, projectWindow.enabled, projectWindow.metadata])
   // With the project-list projection the app store holds no projects, so the directory page
   // (pagedProjects) must absorb timeline edits itself or bars snap back until the next fetch.
   const syncPagedProject = useCallback((project: Project) => setPagedProjects(current => current.map(item => item.id === project.id ? project : item)), [])
@@ -806,10 +815,11 @@ export function ProjectsPage({
 
 type ProjectPageIndexes = { teams: Map<string, Team>; initiatives: Map<string, string>; labels: Map<string, IssueLabel>; labelGroups: LabelGroup[] }
 
-function toPageItem(project: Project, href: string | undefined, indexes: ProjectPageIndexes, latestUpdate?: ProjectUpdate, issues: Issue[] = []): ProjectPageItem {
+function toPageItem(project: Project, href: string | undefined, indexes: ProjectPageIndexes, latestUpdate: ProjectUpdate | undefined, milestoneProgress: ReturnType<typeof indexMilestoneIssueProgress>, dates: { day: Intl.DateTimeFormat; month: Intl.DateTimeFormat }): ProjectPageItem {
   const projectLabels = (project.labelIds ?? []).map(id => indexes.labels.get(id)).filter((label): label is IssueLabel => Boolean(label))
   const labelsByGroup = Object.fromEntries(indexes.labelGroups.map(group => [group.id, projectLabels.filter(label => label.groupId === group.id).map(label => ({ id: label.id, name: label.name, color: label.color }))]))
-  const milestone = currentProjectMilestone(project.milestones, id => milestoneIssueProgress(issues, project.id, id))
+  const progressFor = (id: string) => milestoneProgress(project.id, id)
+  const milestone = currentProjectMilestone(project.milestones, progressFor)
   return {
     color: project.color,
     health: ({ onTrack: 'on-track', atRisk: 'at-risk', offTrack: 'off-track', noUpdate: 'no-update' } as const)[project.health],
@@ -820,8 +830,8 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     issueCount: project.issueCount,
     lead: project.lead ? { avatarUrl: project.lead.avatarUrl, color: avatarColor(project.lead.id), id: project.lead.id, name: project.lead.displayName } : undefined,
     milestone: milestone?.name,
-    milestoneDate: milestone?.targetDate ? formatDay(milestone.targetDate) : undefined,
-    milestoneProgress: milestone ? milestoneIssueProgress(issues, project.id, milestone.id) : undefined,
+    milestoneDate: formatProjectRowDate(milestone?.targetDate, dates.day),
+    milestoneProgress: milestone ? progressFor(milestone.id) : undefined,
     rawMilestoneDate: milestone?.targetDate,
     name: project.name,
     priority: ({ 0: 'none', 1: 'urgent', 2: 'high', 3: 'medium', 4: 'low' } as const)[project.priority as 0 | 1 | 2 | 3 | 4] ?? 'none',
@@ -831,7 +841,7 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     statusId: project.status.id,
     statusType: project.status.type,
     statusColor: project.status.color,
-    startDate: project.startDate ? formatMonth(project.startDate) : undefined,
+    startDate: formatProjectRowDate(project.startDate, dates.month),
     summary: project.summary || descriptionPreview(project.description),
     team: project.teamIds[0] ? indexes.teams.get(project.teamIds[0]) : undefined,
     // Flow records a project's lead (primary) team as the first of its teams.
@@ -843,7 +853,7 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     teamIds: project.teamIds,
     rawStartDate: project.startDate,
     rawTargetDate: project.targetDate,
-    targetDate: project.targetDate ? formatMonth(project.targetDate) : undefined,
+    targetDate: formatProjectRowDate(project.targetDate, dates.month),
     createdAt: project.createdAt,
     updatedAt: latestUpdate?.createdAt ?? project.updatedAt,
   }
@@ -905,35 +915,20 @@ function rowDateLocale() {
   return typeof document !== 'undefined' && document.documentElement.dataset.locale === 'zh-CN' ? 'zh-CN' : 'en'
 }
 
-function formatMonth(value: string) {
+function formatProjectRowDate(value: string | undefined, formatter: Intl.DateTimeFormat) {
+  if (!value) return undefined
   const date = new Date(`${value}T00:00:00`)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(rowDateLocale(), { month: 'short', year: 'numeric' }).format(date)
+  return formatter.format(date)
 }
 
-function formatDay(value: string) {
-  const date = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(rowDateLocale(), { month: 'short', day: 'numeric' }).format(date)
-}
-
-function uniqueStatuses(items: ProjectStatus[]) { return items.filter((item, index) => items.findIndex(candidate => candidate.id === item.id) === index) }
-
-/** Issue-based milestone progress, indexed once instead of scanning every issue per milestone. */
-function milestoneProgressIndex(issues: Issue[]) {
-  const counts = new Map<string, { done: number; total: number }>()
-  for (const issue of issues) {
-    if (!issue.project?.id || !issue.projectMilestoneId || issue.archivedAt) continue
-    const key = `${issue.project.id}:${issue.projectMilestoneId}`
-    const entry = counts.get(key) ?? { done: 0, total: 0 }
-    entry.total += 1
-    if (issue.state.type === 'completed' || issue.state.type === 'canceled') entry.done += 1
-    counts.set(key, entry)
-  }
-  return (projectId: string, milestoneId: string) => {
-    const entry = counts.get(`${projectId}:${milestoneId}`)
-    return entry?.total ? Math.round(entry.done / entry.total * 100) : 0
-  }
+function uniqueStatuses(items: ProjectStatus[]) {
+  const seen = new Set<string>()
+  return items.filter(item => {
+    if (seen.has(item.id)) return false
+    seen.add(item.id)
+    return true
+  })
 }
 
 function parseProjectDisplayDefault(value: Record<string, unknown> | undefined): ProjectsDisplaySettings | undefined {

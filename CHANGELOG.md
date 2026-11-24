@@ -923,6 +923,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Match initiative overview spacing, property pills, header controls and latest update cards on phones without changing desktop layout.
 
 ### Fixed
+- Keep project and initiative timelines responsive in large workspaces by rendering the visible rows and dates. Planning pages also reuse progress totals and read issue details and activity only for the projects and favorites that need them.
 - Keep the document owner button's hover padding out of phone metadata column sizing, so the editor-to-time gap stays consistent.
 - Shrink phone document parent breadcrumbs and their separator together, preserving the title's natural share of the header.
 - Let phone chat titles use the available header space while keeping adjacent favorite and options controls inside the viewport.
