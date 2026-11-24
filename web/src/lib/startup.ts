@@ -71,7 +71,7 @@ export function startStartup(deps: StartupDeps, input: StartupInput) {
 
 let early: { input: StartupInput; startup: ReturnType<typeof startStartup> } | undefined
 
-/** Starts the session, account and remembered-workspace requests before the first render (main.tsx). */
+/** Starts the session, account and remembered-workspace requests before the first render. */
 export function beginStartup(deps: StartupDeps, input: StartupInput) {
   early = { input, startup: startStartup(deps, input) }
   void early.startup.ready.catch(() => undefined)

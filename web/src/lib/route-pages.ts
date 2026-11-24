@@ -82,6 +82,7 @@ export const DocumentPage = lazyPage(
 export const WorkspaceSecondaryPage = lazyPage(
   () => import("@/components/workspace/workspace-secondary-page"),
   "WorkspaceSecondaryPage",
+  { mountPreloaded: true },
 );
 export const AnalyticsDashboardPage = lazyPage(
   () => import("@/components/analytics/analytics-dashboard-page"),
@@ -110,10 +111,12 @@ export const ProjectDetailPage = lazyPage(
 export const MyIssuesPage = lazyPage(
   () => import("@/components/my-issues"),
   "MyIssuesPage",
+  { mountPreloaded: true },
 );
 export const IssueExplorerPage = lazyPage(
   () => import("@/components/issue-explorer"),
   "IssueExplorerPage",
+  { mountPreloaded: true },
 );
 export const ViewsPage = lazyPage(
   () => import("@/components/views-page/views-page"),
@@ -166,6 +169,7 @@ export const LoopsPage = lazyPage(
 export const DetailPane = lazyPage(
   () => import("@/components/detail/detail-pane"),
   "DetailPane",
+  { mountPreloaded: true },
 );
 export const CommandMenu = lazyPage(
   () => import("@/components/command/command-menu"),

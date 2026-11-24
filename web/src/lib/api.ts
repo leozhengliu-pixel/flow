@@ -212,9 +212,6 @@ export async function logoutAccount(): Promise<void> {
   await clearLocalStores();
   const { ClientStorage } = await import("@/lib/client-storage");
   ClientStorage.clearAllNonAuthData();
-  // The local workspace snapshots: unreadable already (their localStorage index is gone), deleted here.
-  const { clearLocalSnapshots } = await import("@/lib/local-snapshot");
-  void clearLocalSnapshots();
 }
 export function forgotPassword(
   email: string,

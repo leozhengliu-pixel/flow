@@ -16,8 +16,8 @@ for (const fallback of [false, true]) {
       const conflictText = fallback ? '\u4e8b\u9879\u5df2\u5728\u53e6\u4e00\u4e2a\u4f1a\u8bdd\u4e2d\u4fee\u6539' : 'Issue changed in another session'
       const editTitle = (tab: Page) => tab.getByRole('textbox', { name: fallback ? '\u4e8b\u9879\u6807\u9898' : 'Issue title', exact: true })
       expect((await request.patch('/api/account/settings', { headers, data: { language: locale, pulseSchedule: 'never', timezone: 'UTC' } })).ok()).toBe(true)
-      const { teams: [team], states } = await (await request.get('/api/bootstrap', { headers })).json() as {
-        teams: { id: string; key: string }[]; states: { teamId?: string; id: string; type: string }[]
+      const { workspace, teams: [team], states } = await (await request.get('/api/bootstrap', { headers })).json() as {
+        workspace: { id: string }; teams: { id: string; key: string }[]; states: { teamId?: string; id: string; type: string }[]
       }
       const state = states.find(state => state.teamId === team.id && state.type === 'unstarted') ?? states.find(state => !state.teamId && state.type === 'unstarted')
       expect(state).toBeDefined()
@@ -33,12 +33,32 @@ for (const fallback of [false, true]) {
       let conflict = false
       let rejectNext = false
       const attempts: string[] = []
+      const deletedStores: string[] = []
+      const refusals: { path: string; status: number; code?: string }[] = []
+      context.on('response', async response => {
+        if (response.status() !== 403 && response.status() !== 404) return
+        const { pathname: path } = new URL(response.url())
+        if (!path.startsWith('/api/')) return
+        const payload = await response.json().catch(() => undefined)
+        refusals.push({ path, status: response.status(), code: payload?.code })
+      })
+      await context.exposeBinding('fixtureStoreDeletion', (_, stack: string) => { deletedStores.push(stack) })
+      await context.addInitScript(() => {
+        const original = IDBFactory.prototype.deleteDatabase
+        IDBFactory.prototype.deleteDatabase = function (name) {
+          if (name.startsWith('flow-ls:')) {
+            const fixture = window as Window & { fixtureStoreDeletion(stack: string): Promise<void> }
+            void fixture.fixtureStoreDeletion(new Error().stack ?? '')
+          }
+          return original.call(this, name)
+        }
+      })
       await interruptIssueWrites(context, url, (source, mutationId) => {
         attempts.push(mutationId)
         if (rejectNext) return conflict ? 'send' : 'disconnect'
         if (!applied) {
           ownerRequest = source === page
-          return 'lose-response'
+          return fallback ? 'timeout-response' : 'lose-response'
         }
         return allowReplay ? 'send' : 'disconnect'
       }, status => {
@@ -54,14 +74,17 @@ for (const fallback of [false, true]) {
         const Original = EventSource
         let count = 0
         class ObservedEventSource extends Original {
-          private readonly workspaceStream: boolean
+          private counted: boolean
           constructor(url: string | URL, options?: EventSourceInit) {
             super(url, options)
-            this.workspaceStream = new URL(url, location.href).pathname === '/api/realtime/events'
-            if (this.workspaceStream) document.documentElement.dataset.fixtureStreams = String(++count)
+            this.counted = new URL(url, location.href).pathname === '/api/realtime/events'
+            if (this.counted) document.documentElement.dataset.fixtureStreams = String(++count)
           }
           close() {
-            if (this.workspaceStream && this.readyState !== Original.CLOSED) document.documentElement.dataset.fixtureStreams = String(--count)
+            if (this.counted) {
+              this.counted = false
+              document.documentElement.dataset.fixtureStreams = String(--count)
+            }
             super.close()
           }
         }
@@ -98,12 +121,17 @@ for (const fallback of [false, true]) {
       expect(ownerRequest).toBe(true)
       const mutationId = attempts[0]
       expect(mutationId).toMatch(/^[0-9a-f-]{36}$/)
-      await expect.poll(() => readLocalRow(follower, mutationId, '_outbox')).toMatchObject({ id: mutationId, input: { title: edited } })
+      await expect.poll(async () => {
+        const row = await readLocalRow(follower, mutationId, '_outbox', workspace.id)
+        if (row) return { state: 'queued', row }
+        const checkpoint = await readLocalRow(follower, 'workspace', '_meta', workspace.id)
+        return { state: checkpoint ? 'missing-outbox-row' : 'missing-checkpoint' }
+      }).toMatchObject({ state: 'queued', row: { id: mutationId, input: { title: edited } } })
       await expect(follower).toHaveURL(/\/retried-from-the-other-owner$/)
       const queued = 'Second edit from the same tab after the lost reply'
-      await editIssueTitle(title, queued)
-      const pendingCount = () => follower.evaluate(async () => {
-        const { name } = (await indexedDB.databases()).find(db => db.name?.startsWith('flow-ls:')) ?? {}
+      const pendingCount = () => follower.evaluate(async workspaceId => {
+        const { name } = (await indexedDB.databases()).find(db =>
+          db.name?.startsWith('flow-ls:') && db.name.endsWith(`:${encodeURIComponent(workspaceId)}`)) ?? {}
         if (!name) return 0
         return new Promise<number>((resolve, reject) => {
           const open = indexedDB.open(name)
@@ -115,9 +143,30 @@ for (const fallback of [false, true]) {
             open.result.close()
           }
         })
-      })
-      await expect.poll(pendingCount).toBe(2)
-      const readCheckpoint = async () => await readLocalRow(follower, 'workspace', '_meta') as unknown as {
+      }, workspace.id)
+      // In development Vite reloads the document when its socket reconnects.
+      // The production run disconnects the browser; dev uses the failed writes above.
+      const production = Boolean(process.env.FLOW_LOCAL_STORE_WEB_DIST)
+      if (production) await context.setOffline(true)
+      try {
+        await editIssueTitle(title, queued)
+        await expect.poll(pendingCount).toBe(2)
+        await expect(follower.getByText(queued, { exact: true }).first()).toBeVisible()
+        await expect(follower.locator('.flow-startup[role="alert"]')).toHaveCount(0)
+      } catch (error) {
+        console.log('Offline editor state', await follower.evaluate(() => ({
+          path: location.pathname,
+          online: navigator.onLine,
+          editorMounted: Boolean(document.querySelector('.title-editor[contenteditable="true"]')),
+          heading: document.querySelector('main h1, main h2')?.textContent,
+          preview: Boolean(document.querySelector('.issue-loading-preview')),
+          resets: performance.getEntriesByName('flow:local-store:reset').length,
+        })).catch(() => undefined))
+        throw error
+      } finally {
+        if (production) await context.setOffline(false)
+      }
+      const readCheckpoint = async () => await readLocalRow(follower, 'workspace', '_meta', workspace.id) as unknown as {
         baseline: string; authzEpoch: string
       }
       const checkpoint = await readCheckpoint()
@@ -152,7 +201,13 @@ for (const fallback of [false, true]) {
       await expect.poll(async () => (await (await request.get(url, { headers })).json()).version).toBe(version + 2)
       expect(new Set(attempts).size).toBe(2)
       expect(attempts).not.toContain('')
-      await expect.poll(() => readLocalRow(follower, mutationId, '_outbox')).toMatchObject({ outcome: { ok: true } })
+      const receiptIds = [...new Set(attempts)]
+      await expect.poll(async () => Promise.all(receiptIds.map(id => readLocalRow(follower, id, '_outbox', workspace.id))),
+        { message: 'Both edits retain a successful receipt after owner promotion and baseline replacement' },
+      ).toMatchObject(receiptIds.map(id => ({ id, outcome: { ok: true } }))).catch(error => {
+        console.log('Browser requested local database deletion', { deletedStores, refusals })
+        throw error
+      })
       await reloadDocument(follower)
       await expect(follower.getByText(queued, { exact: true })).toBeVisible()
       await expect(follower.locator('html')).toHaveAttribute('lang', fallback ? 'zh-CN' : 'en')

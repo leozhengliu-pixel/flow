@@ -46,8 +46,8 @@ export interface ChannelLike {
 export interface LocksLike {
   request(
     name: string,
-    options: { signal?: AbortSignal },
-    callback: () => Promise<void> | void,
+    options: { signal?: AbortSignal; ifAvailable?: boolean },
+    callback: (lock: Lock | null) => Promise<void> | void,
   ): Promise<unknown>
 }
 
@@ -229,22 +229,34 @@ class SharedRealtime {
   private electWithLocks() {
     const abort = new AbortController()
     this.lockAbort = abort
+    const locks = this.env.locks!
+    const hold = (useStartupCursor: boolean) => {
+      if (this.disposed) return
+      return new Promise<void>(resolve => {
+        this.releaseLock = resolve
+        this.becomeLeader(useStartupCursor)
+      })
+    }
+    const queue = () => locks.request(this.name, { signal: abort.signal }, () => hold(false))
     const fallback = () => {
       if (!this.disposed && !abort.signal.aborted && !this.heartbeat && !this.releaseLease) this.electWithoutLocks()
     }
     try {
-      void this.env.locks!.request(this.name, { signal: abort.signal }, () => {
+      // The startup cursor matches the view this tab just loaded. A later
+      // disk cursor might belong to a different tab that already closed.
+      const election = this.options.localStore ? locks.request(this.name, { ifAvailable: true }, async lock => {
         if (this.disposed) return
-        return new Promise<void>(resolve => {
-          this.releaseLock = resolve
-          this.becomeLeader()
-        })
-      }).catch(fallback)
+        if (lock) return hold(true)
+        this.options.onRole?.('follower')
+        await queue()
+      }) : queue()
+      void election.catch(fallback)
     } catch { fallback() }
   }
 
   private electWithoutLocks() {
     if (!this.options.localStore) { this.electWithHeartbeat(); return }
+    this.options.onRole?.('follower')
     this.releaseLease = holdRealtimeLease(this.name, this.tabId, owned => {
       if (owned) this.becomeLeader()
       else this.stepDown()
@@ -276,7 +288,7 @@ class SharedRealtime {
     this.claimTimer = undefined
   }
 
-  private becomeLeader() {
+  private becomeLeader(useStartupCursor = false) {
     if (this.disposed || this.role === 'leader') return
     this.role = 'leader'
     this.cancelClaim()
@@ -284,7 +296,7 @@ class SharedRealtime {
     this.options.onStatus(false)
     this.post({ k: 'status', from: this.tabId, connected: false })
     this.retry = 0
-    if (this.options.localStore) {
+    if (this.options.localStore && (!useStartupCursor || !this.initialSince)) {
       const generation = ++this.generation
       this.pending = []
       void this.options.localStore.cursor().catch(() => undefined).then(cursor => {

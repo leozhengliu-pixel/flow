@@ -54,13 +54,13 @@ serves versioned worker scripts and pages because browser request routing
 cannot intercept worker update fetches. No checked-in worker or shared build
 output is edited.
 
-## Local workspace snapshot
+## Local issue store
 
-`local-snapshot.spec.ts` checks the repeat-visit paint from the local snapshot
-with sign-in on: content shows while the session, account and bootstrap
-requests are held, fresh data replaces it, writes wait for the fresh bootstrap,
-a refused bootstrap drops the cached view, logout deletes the snapshot, and a
-different viewer signing in on the same browser never sees it.
+`local-store-upgrade.spec.ts` verifies that startup deletes the retired
+workspace snapshot while session confirmation is pending. It also checks that
+a write made during a cached workspace switch waits for the network bootstrap.
+The local-store Playwright matrix covers account switching, scoped access,
+revocation, session expiry, and operator opt-out.
 
 ## Hardware Passkeys
 

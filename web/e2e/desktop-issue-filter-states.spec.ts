@@ -95,7 +95,7 @@ for (const viewport of sizes) for (const colorScheme of ['dark', 'light'] as con
       expect(issue.ok()).toBeTruthy()
       // The auth-disabled server always rehydrates its fixed local identity.
       // Supply only that person's display text as a browser fixture.
-      await page.route(/\/api\/(?:bootstrap|issue-records\/bootstrap)(?:\?|$)/, async route => {
+      await page.route(/\/api\/(?:bootstrap|issue-records\/bootstrap|sync\/records)(?:\?|$)/, async route => {
         if (route.request().headers()['x-workspace-key'] !== workspaceKey) return route.continue()
         const response = await route.fetch()
         const bootstrap = await response.json()

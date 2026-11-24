@@ -19,6 +19,8 @@ type localStoreIssueDelta struct {
 	localStoreIssueCheckpoint
 }
 
+const localStorePulseCursor = "pulseDeliveryCursors"
+
 func (s *server) localStoreIssueCheckpoint(r *http.Request, access store.EventAccess) (localStoreIssueCheckpoint, error) {
 	cursor, err := s.store.WorkspaceChangeHead(r.Context(), workspaceKey(r))
 	return localStoreIssueCheckpoint{localStoreIssueRevision(access), strconv.FormatInt(cursor, 10)}, err
@@ -144,13 +146,18 @@ func (s *server) readLocalStoreIssueChanges(r *http.Request, journal committedCh
 func (s *server) projectLocalStoreChange(r *http.Request, access store.EventAccess, change store.CommittedChange) (syncV2Transaction, error) {
 	tx := emptySyncTransaction(change.TxID, change.Seq)
 	for _, kind := range change.Invalidations {
-		if !localStoreIgnoresKind(kind) {
+		if !localStoreIgnoresIssueKind(kind) {
 			tx.Invalidations = append(tx.Invalidations, kind)
 		}
 	}
+	pulseCursor := false
 	ids := make([]string, 0, min(len(change.Records), store.MetadataRecordBatchMaxKeys))
 	for _, record := range change.Records {
-		if localStoreIgnoresKind(record.Key.Kind) {
+		if record.Key.Kind == "settings" && record.Key.ID == localStorePulseCursor {
+			pulseCursor = true
+			continue
+		}
+		if localStoreIgnoresIssueKind(record.Key.Kind) {
 			continue
 		}
 		if record.Key.Kind != localStoreIssueKind || record.Deleted || len(ids) == cap(ids) {
@@ -158,7 +165,14 @@ func (s *server) projectLocalStoreChange(r *http.Request, access store.EventAcce
 		}
 		ids = append(ids, record.Key.ID)
 	}
-	if len(ids) == 0 || len(tx.Invalidations) > 0 {
+	if len(tx.Invalidations) > 0 {
+		return tx, nil
+	}
+	if pulseCursor {
+		// The cursor advances the metadata revision but isn't part of the directory.
+		tx.Invalidations = append(tx.Invalidations, localStorePulseCursor)
+	}
+	if len(ids) == 0 {
 		return tx, nil
 	}
 	page, err := s.readLocalStoreIssues(r, access, store.IssueRecordQuery{
@@ -188,4 +202,8 @@ func (s *server) projectLocalStoreChange(r *http.Request, access store.EventAcce
 		}
 	}
 	return tx, nil
+}
+
+func localStoreIgnoresIssueKind(kind string) bool {
+	return kind != "userSettings" && kind != "settings" && localStoreIgnoresKind(kind)
 }

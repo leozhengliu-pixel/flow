@@ -171,7 +171,6 @@ import {
   carryNavigationHydration,
   clearNavigationCache,
   hydrateWorkspaceNavigation,
-  isNavigationHydrated,
   navigationCacheGeneration,
   readNavigationCache,
   writeRecoveredNavigationCache,
@@ -180,7 +179,6 @@ import {
   rememberWorkspace,
   withoutSnapshotIssues,
 } from "@/lib/navigation-cache";
-import { clearLocalSnapshots, createLocalSnapshotSaver, discardStartupSnapshot, localSnapshotGeneration, startupSnapshot } from '@/lib/local-snapshot';
 import { holdSnapshotWrites, rejectSnapshotWrites, releaseSnapshotWrites } from '@/lib/snapshot-write-gate';
 import { rememberChatPlatform } from '@/lib/chat-platform';
 import { rememberTrashRetention } from '@/lib/trash-retention';
@@ -394,7 +392,7 @@ import { ActiveTeamProvider } from '@/lib/active-team'
 import { TeamPagesLayout } from '@/components/team/team-pages-layout'
 import { isTeamPagesRoute } from '@/components/team/team-pages-routes'
 import { searchResultLink } from '@/lib/search-result-link'
-import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
+import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck, retainLocalIssueDetail } from '@/lib/issue-detail-cache'
 import { mergeAgentSession, mergeAgentSessions } from '@/lib/agent-session-merge'
 import { bootstrapNavigationDecision, bootstrapRefreshProjection, bootstrapRequestKey, loadedPlanningDirectory, planningBootstrapProjection } from '@/lib/bootstrap-navigation'
 import { teamWorkflowStateOfType } from '@/lib/team-workflow'
@@ -412,7 +410,7 @@ const recipientInbox = inboxUnread as typeof inboxUnread & {
 };
 
 const ReleaseEditorDialog = lazy(() => import('@/components/releases/release-editor-dialog').then(module => ({default:module.ReleaseEditorDialog})))
-const IssueLoadingPreview = lazy(() => import('@/components/issue/issue-loading-preview').then(module => ({default:module.IssueLoadingPreview})))
+const IssueLoadingPreview = lazy(() => import('@/components/detail/detail-pane').then(module => ({default:module.IssueLoadingPreview})))
 
 function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
   const location = useLocation(),
@@ -421,18 +419,8 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
       () => parseAppRoute(location.pathname, location.search),
       [location.pathname, location.search],
     );
-  // A repeat visit paints from the local snapshot main.tsx read before the first render: the last confirmed
-  // session, account and workspace of this device's viewer. The session, account and bootstrap requests still
-  // run; they confirm the snapshot or replace it (see `unconfirmed` below).
-  const [startupView] = useState(() => {
-    const snapshot = startupSnapshot();
-    const cached = snapshot && hydrateWorkspaceNavigation({ current: null, cached: snapshot.data, requestedWorkspaceKey: snapshot.workspaceKey, viewerId: snapshot.viewerId });
-    if (!snapshot || !cached) return undefined;
-    holdSnapshotWrites(snapshot.workspaceKey);
-    rememberChatPlatform(snapshot.account);
-    rememberTrashRetention(snapshot.data);
-    return { snapshot, data: cached };
-  });
+  const openIssueIdentifier = useRef<string | undefined>(undefined);
+  openIssueIdentifier.current = route.kind === 'issue' ? route.identifier : undefined;
   const candidate = prepared?.current;
   const localStartup = candidate?.valid() && localStoreRoute(route) && 'workspaceSlug' in route && route.workspaceSlug === candidate.checkpoint.workspaceKey ? candidate : undefined;
   const startedFromStore = useRef(Boolean(localStartup));
@@ -447,10 +435,10 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
     const fallback = window.setTimeout(start, 250);
     return () => { cancelAnimationFrame(committed); cancelAnimationFrame(painted); clearTimeout(fallback); };
   }, []);
-  const [account, setAccount] = useState<AccountBootstrap | null>(localStartup?.account ?? startupView?.snapshot.account ?? null),
-    [baseData, setData] = useState<BootstrapData | null>(localStartup?.data ?? startupView?.data ?? null),
+  const [account, setAccount] = useState<AccountBootstrap | null>(localStartup?.account ?? null),
+    [baseData, setData] = useState<BootstrapData | null>(localStartup?.data ?? null),
     [error, setError] = useState(false);
-  const [session, setSession] = useState<AuthSession | null>(localStartup?.session ?? startupView?.snapshot.session ?? null);
+  const [session, setSession] = useState<AuthSession | null>(localStartup?.session ?? null);
   const [pendingEdits, setPendingEdits] = useState<LocalOutboxView>();
   const pendingScope = pendingEdits?.scope;
   const visibleEdits = pendingEdits && pendingScope && pendingScope.viewerId === session?.user.id && pendingScope.viewerId === baseData?.viewer.id &&
@@ -470,9 +458,9 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
   sessionViewerRef.current=session?.user.id;
   const dataRef=useRef(baseData);
   dataRef.current=baseData;
-  // The workspace on screen came from a cached snapshot that no bootstrap has confirmed yet. Until one does,
-  // its writes wait (snapshot-write-gate), realtime stays off and nothing is written back to the caches.
-  const [unconfirmed, setUnconfirmedState] = useState<{ viewerId: string; workspaceKey: string } | null>(startupView ? { viewerId: startupView.snapshot.viewerId, workspaceKey: startupView.snapshot.workspaceKey } : null);
+  // In-app workspace navigation can show cached metadata while its bootstrap is pending.
+  // Hold writes and realtime until that bootstrap confirms the workspace.
+  const [unconfirmed, setUnconfirmedState] = useState<{ viewerId: string; workspaceKey: string } | null>(null);
   const unconfirmedRef = useRef(unconfirmed);
   const setUnconfirmed = useCallback((value: { viewerId: string; workspaceKey: string } | null) => {
     unconfirmedRef.current = value;
@@ -486,12 +474,6 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
   }, [setUnconfirmed]);
   const showsUnconfirmed = (viewerId: string, workspaceKey: string) => unconfirmedRef.current?.viewerId === viewerId && unconfirmedRef.current.workspaceKey === workspaceKey;
   const snapshotUnconfirmed = Boolean(unconfirmed && data && data.workspace.urlKey === unconfirmed.workspaceKey && data.viewer.id === unconfirmed.viewerId);
-  // The session and account on screen came from the snapshot; /api/auth/session and /api/account/bootstrap have not answered.
-  const [provisionalSession, setProvisionalSession] = useState(Boolean(startupView));
-  const provisionalSessionRef = useRef(provisionalSession);
-  provisionalSessionRef.current = provisionalSession;
-  // The root page was sent to the snapshot account's last workspace before the real account answered.
-  const provisionalRootTarget = useRef('');
   useEffect(() => {
     if (snapshotUnconfirmed) { holdSnapshotWrites(unconfirmed!.workspaceKey); return; }
     if (unconfirmed) {
@@ -523,8 +505,11 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
     setBootstrapRetry(value => value + 1);
   }, (meta, update) => {
     if (localCheckpointRef.current?.baseline !== meta.baseline || sessionViewerRef.current !== meta.viewerId) return;
-    setData(current => current?.viewer.id === meta.viewerId && current.workspace.id === meta.workspaceId && localCheckpointRef.current?.baseline === meta.baseline
-      ? deriveResourceCounts({ ...current, issues: 'issues' in update ? update.issues : applyLocalIssueView(current.issues, update.changes) }) : current);
+    setData(current => {
+      if (current?.viewer.id !== meta.viewerId || current.workspace.id !== meta.workspaceId || localCheckpointRef.current?.baseline !== meta.baseline) return current;
+      const issues = 'issues' in update ? update.issues : applyLocalIssueView(current.issues, update.changes);
+      return deriveResourceCounts({ ...current, issues: retainLocalIssueDetail(current.issues, issues, openIssueIdentifier.current) });
+    });
   }));
   useLayoutEffect(() => localStoreShadow.listen(), [localStoreShadow]);
   useEffect(() => onLocalStoreSessionEnd(() => {
@@ -716,14 +701,12 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
   const bootstrapRequest = useRef<BootstrapRequest | null>(null);
   useEffect(() => () => bootstrapRequest.current?.controller.abort(), []);
   const loadedBootstrapRequestKey = useRef(localStartup ? `${bootstrapRequestKey(localStartup.checkpoint.viewerId, localStartup.checkpoint.workspaceKey)}:local-store` : '');
-  // The bootstrap that last confirmed the workspace, and the cache-clear generation it was applied in.
-  const snapshotConfirmedAt = useRef<{ key: string; generation: number }>({ key: '', generation: -1 });
   // A streamed bootstrap can be cut short (a queued request, a transient
   // disconnect). Retry before replacing the cache-backed page with an error.
   const bootstrapFailures = useRef<{ key: string; count: number }>({ key: '', count: 0 });
   const [bootstrapRetry, setBootstrapRetry] = useState(0);
   const initialIssueRef = useRef<{key:string;viewerId:string;issue:Issue} | null>(null);
-  const [authReady, setAuthReady] = useState(Boolean(localStartup || startupView));
+  const [authReady, setAuthReady] = useState(Boolean(localStartup));
   // The session and account requests could not reach the server; startup keeps retrying (startupRetryRef retries now).
   const [startupUnreachable, setStartupUnreachable] = useState(false);
   const startupRetryRef = useRef<(() => void) | undefined>(undefined);
@@ -840,10 +823,9 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
       if (target.closest('a[href*="/issue/"], .flow-inbox-row, [data-issue-row-id]')) void DetailPane.preload().catch(() => undefined);
       if (target.closest('a[href*="/project/"], .lp-project-row, .lp-project-card')) void ProjectDetailPage.preload().catch(() => undefined);
     };
-    if (renderedStartup && retainedIssues && preloadOnIdle) void DetailPane.preload().catch(() => undefined);
     const idle = typeof window.requestIdleCallback === 'function' && typeof window.cancelIdleCallback === 'function';
     let timer: number | undefined;
-    if (preloadOnIdle) timer = idle ? window.requestIdleCallback(warmDetails, { timeout: 1500 }) : window.setTimeout(warmDetails, 500);
+    if (renderedStartup && preloadOnIdle) timer = idle ? window.requestIdleCallback(warmDetails, { timeout: 1500 }) : window.setTimeout(warmDetails, 500);
     document.addEventListener('pointerover', onIntent, { passive: true });
     document.addEventListener('focusin', onIntent);
     return () => {
@@ -872,6 +854,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
       setError(true);
     }
   };
+  const startupRequest = useRef<ReturnType<typeof takeStartup> | undefined>(undefined);
   useEffect(() => {
     if (prepared) prepared.current = undefined;
     if (startedFromStore.current && dataRef.current) {
@@ -880,15 +863,18 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
       localStoreShadow.confirm(dataRef.current);
       return;
     }
-    const startup = takeStartup(
-      { fetchSession: fetchAuthSession, fetchAccount: fetchAccountBootstrap, fetchBootstrap: fetchRouteBootstrap },
-      { requestedWorkspaceKey: requestedWorkspaceKey ?? "", isRoot: route.kind === "root", projection: bootstrapProjection, skipSpeculative: localIssueRoute || undefined },
-    );
-    if (startup.speculative) {
-      startup.speculative.key = syncBootstrapRequestKey(startup.speculative.key, syncSurface);
-      bootstrapRequest.current = startup.speculative;
+    if (!startupRequest.current) {
+      startupRequest.current = takeStartup(
+        { fetchSession: fetchAuthSession, fetchAccount: fetchAccountBootstrap, fetchBootstrap: fetchRouteBootstrap },
+        { requestedWorkspaceKey: requestedWorkspaceKey ?? "", isRoot: route.kind === "root", projection: bootstrapProjection, skipSpeculative: localIssueRoute || undefined },
+      );
+      const speculative = startupRequest.current.speculative;
+      if (speculative) {
+        speculative.key = syncBootstrapRequestKey(speculative.key, syncSurface);
+        bootstrapRequest.current = speculative;
+      }
     }
-    const cached = startupView?.snapshot;
+    const startup = startupRequest.current;
     let stopped = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let attempts = 0;
@@ -899,29 +885,6 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
           ? await authorizedPreload(nextAccount, requestedWorkspaceKey) : undefined;
         if (stopped) return;
         setStartupUnreachable(false);
-        if (cached && authenticated.user.id !== cached.viewerId) {
-          // Someone else is signed in now: nothing of the snapshot's viewer may stay on screen or on this device.
-          clearNavigationCache(cached.viewerId);
-          if (bootstrapRequest.current?.key.startsWith(`${cached.viewerId}:`)) { bootstrapRequest.current.controller.abort(); bootstrapRequest.current = null; }
-          loadedBootstrapRequestKey.current = '';
-          setData(current => current?.viewer.id === cached.viewerId ? null : current);
-        } else if (cached) {
-          // As for any cached snapshot: the inbox shows the server's rows even if the bootstrap never finishes.
-          void fetchAllInboxNotifications()
-            .then(notifications => setData(current => current?.workspace.urlKey === cached.workspaceKey && current.viewer.id === cached.viewerId && current.viewer.id === sessionViewerRef.current
-              ? { ...current, notifications }
-              : current))
-            .catch(() => undefined);
-        }
-        const rootTarget = provisionalRootTarget.current;
-        provisionalRootTarget.current = '';
-        if (rootTarget) {
-          // The root page went to the snapshot account's last workspace. If the account now names another one and
-          // the page is still in the first, go where the root page would have gone.
-          const next = nextAccount.workspaces.find(item => item.workspace.urlKey === nextAccount.lastWorkspaceKey)?.workspace ?? nextAccount.workspaces[0]?.workspace;
-          const shown = decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0] ?? '');
-          if (next?.urlKey !== rootTarget && shown === rootTarget) navigateTo(next ? `/${encodeURIComponent(next.urlKey)}` : workspaceOnboardingPath(), { replace: true });
-        }
         setSession(authenticated);
         setAccount(nextAccount);
         if (resumed && window.location.pathname === location.pathname && window.location.search === location.search && resumed.consume()) {
@@ -937,8 +900,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
       })
       .catch((error: unknown) => {
         if (isConnectivityError(error)) {
-          // The server is unreachable: that says nothing about the session. A painted snapshot stays on screen
-          // (its writes stay held), otherwise the can't-connect state shows; either way startup is tried again.
+          // A failed connection leaves the session unknown. Show the connection error and retry startup.
           if (stopped) return;
           setStartupUnreachable(true);
           const retry = () => { clearTimeout(retryTimer); retryTimer = undefined; settle(Promise.all([fetchAuthSession(), fetchAccountBootstrap()]).then(([session, account]) => ({ session, account }))); };
@@ -949,16 +911,12 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
         setStartupUnreachable(false);
         setSession(null);
         setAccount(null);
-        // A snapshot painted ahead of the session goes with it.
-        if (cached) setData(null);
         clearNavigationCache();
         finish();
       });
     const finish = () => {
       startupRetryRef.current = undefined;
       setAuthReady(true);
-      setProvisionalSession(false);
-      discardStartupSnapshot();
     };
     settle(startup.ready);
     return () => { stopped = true; clearTimeout(retryTimer); };
@@ -1112,7 +1070,6 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
         account.workspaces.find(
           (item) => item.workspace.urlKey === account.lastWorkspaceKey,
         )?.workspace ?? account.workspaces[0]?.workspace;
-      if (provisionalSessionRef.current && next) provisionalRootTarget.current = next.urlKey;
       navigateTo(
         next
           ? `/${encodeURIComponent(next.urlKey)}`
@@ -1159,7 +1116,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
     if (loadedWorkspaceKey !== requestedWorkspaceKey || loadedBootstrapRequestKey.current && loadedBootstrapRequestKey.current !== requestKey) {
       // The local-store journal must confirm access before any retained issues enter the UI.
       const waitForAuthority = localIssueRoute || localStoreEnabled() && hasLocalStore(account.viewer.id, requestedWorkspace.id);
-      const cachedNavigation = waitForAuthority || syncV2Enabled() && syncSurface ? undefined : readNavigationCache(account.viewer.id, requestedWorkspaceKey);
+      const cachedNavigation = waitForAuthority || !localStoreEnabled() || syncV2Enabled() && syncSurface ? undefined : readNavigationCache(account.viewer.id, requestedWorkspaceKey);
       if (loadedWorkspaceKey !== requestedWorkspaceKey && cachedNavigation?.viewer.id === account.viewer.id && cachedNavigation.workspace.urlKey === requestedWorkspaceKey) {
         // The workspace is shown from its cached snapshot until this bootstrap confirms it.
         holdSnapshotWrites(requestedWorkspaceKey);
@@ -1202,7 +1159,6 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
         bootstrapFailures.current = { key: '', count: 0 };
         rememberWorkspace(account.viewer.id, requestedWorkspaceKey);
         loadedBootstrapRequestKey.current=requestKey;
-        snapshotConfirmedAt.current = { key: requestKey, generation: localSnapshotGeneration() };
         const checkpoint = localStoreLoadedWorkspace(next)?.checkpoint;
         const restored = localStoreCursor(checkpoint);
         localCheckpointRef.current = restored;
@@ -1216,7 +1172,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
           const withPreview=!next.sync && !restored && preview?.viewerId===account.viewer.id && preview?.key.startsWith(`${requestedWorkspaceKey}:`) && !preview.issue.isSummary
             ? {...merged,issues:mergeIssueRecords(merged.issues,[preview.issue])}
             : merged;
-          if (!withPreview.sync && !restored) writeNavigationCacheWhenIdle(account.viewer.id, requestedWorkspaceKey, withPreview);
+          if (localStoreEnabled() && !withPreview.sync && !restored) writeNavigationCacheWhenIdle(account.viewer.id, requestedWorkspaceKey, withPreview);
           return withPreview;
         });
         if (replacesSnapshot) confirmSnapshot(requestedWorkspaceKey);
@@ -1232,14 +1188,11 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
         };
         // A definite refusal is not transient; only retry a cancelled/partial
         // stream. Exhausting the retries surfaces the usual error state.
-        if (error instanceof ApiError && error.status >= 400 && error.status < 500 && !(error.status === 429 && showsUnconfirmed(account.viewer.id, requestedWorkspaceKey))) {
-          if ([403, 404].includes(error.status)) void clearLocalSnapshots(account.viewer.id, requestedWorkspaceKey);
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500 && !isConnectivityError(error) && !(error.status === 429 && showsUnconfirmed(account.viewer.id, requestedWorkspaceKey))) {
           // A cached view the server refused is dropped with every cache of the workspace, never kept on screen.
           if (showsUnconfirmed(account.viewer.id, requestedWorkspaceKey)) {
             clearNavigationCache(account.viewer.id, requestedWorkspaceKey);
             dropUnconfirmed();
-            // While the session itself is unconfirmed, its answer decides what follows (sign-in for an expired one).
-            if (provisionalSessionRef.current) return;
           }
           if (syncV2Enabled() && [401, 403].includes(error.status)) {
             clearNavigationCache(account.viewer.id, requestedWorkspaceKey);
@@ -2096,32 +2049,6 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
     if (realtime.connected && localBaselineCursor === undefined) localStoreShadow.schedule(data?.viewer.id, data?.workspace.urlKey);
   }, [data?.viewer.id, data?.workspace.urlKey, localBaselineCursor, localStoreShadow, realtime.connected]);
   useDesktopNotifications(data);
-  // The next visit paints from what this one last showed: the confirmed workspace is saved after its bootstrap
-  // and then at most every 30 seconds while it changes (and when the page is hidden). Only a workspace a full
-  // bootstrap confirmed for the signed-in viewer qualifies, and none after a cache clear until the next one.
-  const sessionRef = useRef(session);
-  sessionRef.current = session;
-  const accountRef = useRef(account);
-  accountRef.current = account;
-  const [snapshotSaver] = useState(() => createLocalSnapshotSaver(() => {
-    const current = dataRef.current, viewer = sessionRef.current, owner = accountRef.current;
-    if (!current || !viewer || !owner || provisionalSessionRef.current || current.sync || localCheckpointRef.current || isNavigationHydrated(current)) return undefined;
-    if (showsUnconfirmed(current.viewer.id, current.workspace.urlKey)) return undefined;
-    const confirmed = snapshotConfirmedAt.current;
-    if (confirmed.key !== loadedBootstrapRequestKey.current || confirmed.key !== bootstrapRequestKey(current.viewer.id, current.workspace.urlKey) || confirmed.generation !== localSnapshotGeneration()) return undefined;
-    return { session: viewer, account: owner, data: current };
-  }));
-  useEffect(() => { if (data && !snapshotUnconfirmed && !provisionalSession) snapshotSaver.schedule(data.viewer.id, data.workspace.urlKey); }, [data, snapshotUnconfirmed, provisionalSession, snapshotSaver]);
-  useEffect(() => {
-    const hidden = () => { if (document.visibilityState === 'hidden') snapshotSaver.flush(); };
-    document.addEventListener('visibilitychange', hidden);
-    window.addEventListener('pagehide', snapshotSaver.flush);
-    return () => {
-      document.removeEventListener('visibilitychange', hidden);
-      window.removeEventListener('pagehide', snapshotSaver.flush);
-      snapshotSaver.cancel();
-    };
-  }, [snapshotSaver]);
   useEffect(() => {
     if (!syncClient || !realtime.connected) return;
     let active = true;

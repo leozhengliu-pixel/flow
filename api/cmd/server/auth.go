@@ -106,13 +106,16 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			if !s.authorizeWorkspaceRequest(w, r, viewer) {
 				return
 			}
-			s.stampLocalStoreBootstrap(w, r, workspaceKey(r))
+			s.stampLocalStoreResponse(w, r, workspaceKey(r))
 			releaseColdWriteProjection(r)
 			recordFileSigningPrincipal(r.Context(), viewer, nil, workspaceKey(r))
 			next.ServeHTTP(w, r)
 			return
 		}
 		if publicAuthPath(r.URL.Path) {
+			if r.URL.Path == "/api/auth/session" {
+				s.stampLocalStoreResponse(w, r, "")
+			}
 			next.ServeHTTP(w, r.WithContext(s.withAuditRequest(r, domain.User{}, nil)))
 			return
 		}
@@ -179,7 +182,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 		if !s.authorizeWorkspaceRequest(w, r, user) {
 			return
 		}
-		s.stampLocalStoreBootstrap(w, r, workspaceKey(r))
+		s.stampLocalStoreResponse(w, r, workspaceKey(r))
 		releaseColdWriteProjection(r)
 		recordFileSigningPrincipal(r.Context(), user, apiKey, apiWorkspace)
 		next.ServeHTTP(w, r)

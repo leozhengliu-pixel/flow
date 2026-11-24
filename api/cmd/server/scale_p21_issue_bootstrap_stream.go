@@ -139,6 +139,9 @@ func (s *server) openIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.Re
 	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
 		return nil, err
 	}
+	if s.authDisabled && r.Header.Get(localStoreHeader) == localStoreShadowCapability {
+		materializeDevelopmentMembers(&data)
+	}
 	if err := scaleP21SanitizeBootstrap(r.Context(), &data, read.StreamString); err != nil {
 		return nil, err
 	}

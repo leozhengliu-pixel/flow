@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeBootstrap, makeIssue, viewer } from '@/test/fixtures'
 import type { ActivityEvent, Comment, Issue } from '@/types/flow'
-import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from './issue-detail-cache'
+import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck, retainLocalIssueDetail } from './issue-detail-cache'
 
 const comment: Comment = { id: 'comment', version: 1, body: 'Loaded discussion', reactions: {}, createdAt: '2026-09-10T00:00:00Z', user: viewer }
 const activity: ActivityEvent = { id: 'activity', type: 'issue.updated', createdAt: '2026-09-10T00:00:00Z', actor: viewer, metadata: {} }
@@ -30,6 +30,21 @@ describe('bounded issue detail cache', () => {
     const refreshed = mergeIssueRecords([merged], [fullIssue({ version: 6, description: 'Authoritative body' })])[0]
     expect(refreshed.description).toBe('Authoritative body')
     expect(refreshed.needsDetailRefresh).toBeFalsy()
+  })
+
+  it('preserves only the open detail in an authorized local issue commit', () => {
+    const open = fullIssue({ identifier: 'TEAM-1', previousIdentifiers: ['OLD-1'] })
+    const closed = fullIssue({ id: 'closed', identifier: 'TEAM-2' })
+    const rows = [summary({ version: 6, title: 'New title' }), summary({ id: closed.id })]
+    const scope = [open, closed]
+    const retained = retainLocalIssueDetail(scope, rows, 'old-1')
+    expect(retained[0]).toMatchObject({ title: 'New title', description: 'Editable body', isSummary: false, needsDetailRefresh: true })
+    expect(retained[1]).toBe(rows[1])
+    const moved = [summary({ team: { ...open.team, id: 'destination' } })]
+    expect(retainLocalIssueDetail(scope, moved, 'TEAM-1')).toBe(moved)
+    const removed = [rows[1]]
+    expect(retainLocalIssueDetail(scope, removed, 'TEAM-1')).toBe(removed)
+    expect(retainLocalIssueDetail(scope, rows)).toBe(rows)
   })
 
   it('deduplicates repeated IDs and keeps at most 2000 records', () => {

@@ -1,17 +1,76 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
+
+func TestLocalStoreIssueReadSeparatesSourceRaceFromRevocation(t *testing.T) {
+	enableLocalStoreShadowTest(t)
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	for driver, repo := range scaleP03ServerTestStores(t) {
+		t.Run(driver, func(t *testing.T) {
+			f := scaleP21M2Setup(t, repo)
+			workspace := f.data.Workspace.URLKey
+			member := f.principals[2].user
+			r := f.literalRequest(member, nil, nil)
+			access, err := f.service.resolveSyncAccess(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			query := r.URL.Query()
+			query.Set("authzEpoch", access.AuthzEpoch)
+			query.Set("after", "0")
+			r.URL.RawQuery = query.Encode()
+			page := store.CommittedPage{
+				Next: "1", Head: "1", AuthzEpoch: access.AuthzEpoch,
+				Transactions: []store.CommittedChange{{TxID: "projected", Seq: "1", Invalidations: []string{"issues"}}},
+			}
+			reads := 0
+			journal := scaleP12JournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
+				reads++
+				if reads == 1 {
+					authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
+						map[string]string{"title": "Created while projecting the journal", "teamId": f.public}, workspace, http.StatusCreated)
+					version, epoch, err := repo.RealtimeSourceVersionAndEpoch(r.Context(), workspace)
+					if err != nil || version == access.SourceVersion() || epoch != access.AuthzEpoch {
+						t.Fatalf("expected a new source version in the same epoch, got %v %q %v from %v %q", version, epoch, err, access.SourceVersion(), access.AuthzEpoch)
+					}
+				}
+				return page, nil
+			})
+			w := httptest.NewRecorder()
+			f.service.localStoreIssueChanges(w, r, journal, access.WorkspaceID)
+			var delta localStoreIssueDelta
+			if err := json.Unmarshal(w.Body.Bytes(), &delta); w.Code != http.StatusOK || err != nil ||
+				reads != 2 || delta.AuthzEpoch != access.AuthzEpoch || delta.ResyncRequired || delta.Next != page.Next || len(delta.Transactions) != 1 {
+				t.Fatalf("a concurrent issue write must retry with the same authority: %d (%d reads) %s", w.Code, reads, w.Body.String())
+			}
+			journal = scaleP12JournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
+				if err := repo.SetTeamMembership(t.Context(), access.WorkspaceID, f.public, member.ID, "member", false); err != nil {
+					t.Fatal(err)
+				}
+				return page, nil
+			})
+			w = httptest.NewRecorder()
+			f.service.localStoreIssueChanges(w, r, journal, access.WorkspaceID)
+			if w.Code != http.StatusForbidden || strings.Contains(w.Body.String(), "transactions") {
+				t.Fatalf("an in-flight revocation must not disclose the projected page: %d %s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
 
 func TestLocalStoreIssueReadsDifferential(t *testing.T) {
 	enableLocalStoreShadowTest(t)
@@ -19,8 +78,6 @@ func TestLocalStoreIssueReadsDifferential(t *testing.T) {
 		t.Run(driver, func(t *testing.T) {
 			fixture := newScaleP12Fixture(t, repo)
 			workspace, team := fixture.data.Workspace.URLKey, fixture.data.Teams[0].ID
-			t.Setenv("FLOW_LOCAL_STORE_WORKSPACES", workspace)
-			t.Setenv("FLOW_LOCAL_STORE_RESUME_WORKSPACES", workspace)
 			label := authRequest[domain.IssueLabel](t, fixture.admin, http.MethodPost, fixture.host.URL+"/api/labels", map[string]string{"name": "Summary label", "color": "#676f88"}, workspace, http.StatusCreated)
 			created := authRequest[domain.Issue](t, fixture.admin, http.MethodPost, fixture.host.URL+"/api/issue-records", map[string]any{
 				"teamId": team, "title": "Issue with label", "description": "Body is loaded separately", "labelIds": []string{label.ID},
@@ -163,6 +220,76 @@ func TestLocalStoreIssueReadsDifferential(t *testing.T) {
 				}
 				if !moved.ResyncRequired && (len(moved.Transactions) == 0 || len(moved.Transactions[0].Invalidations) == 0) {
 					t.Fatal("moving out of scope could leave an old visible issue in the store")
+				}
+			}
+		})
+	}
+}
+
+func TestLocalStoreIssueChangesIgnorePulseCursor(t *testing.T) {
+	enableLocalStoreShadowTest(t)
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	for driver, repo := range scaleP03ServerTestStores(t) {
+		t.Run(driver, func(t *testing.T) {
+			fixture := scaleP03Fixture(t, repo)
+			workspace := fixture.data.Workspace.URLKey
+			principal := scaleP12Principal{user: fixture.data.Viewer}
+			issue := authRequest[domain.Issue](t, fixture.admin, http.MethodPost, fixture.host.URL+"/api/issue-records", map[string]string{
+				"title": "Open issue", "teamId": fixture.data.Teams[0].ID,
+			}, workspace, http.StatusCreated)
+			authRequest[domain.UserSettings](t, fixture.admin, http.MethodPatch, fixture.host.URL+"/api/account/settings",
+				map[string]string{"pulseSchedule": "daily"}, workspace, http.StatusOK)
+			bounded, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, service := range []*server{fixture.service, {store: bounded}} {
+				r := principal.request(workspace)
+				access, err := service.resolveSyncAccess(r)
+				if err != nil {
+					t.Fatal(err)
+				}
+				head, err := repo.RecordJournalHead(t.Context(), access.WorkspaceID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				end := time.Date(2026, time.November, 23+i, 6, 0, 0, 0, time.UTC)
+				if service.store.BoundedMetadataEnabled() {
+					err = service.store.CommitPulseSummaries(t.Context(), workspace, []store.PulseSummaryCandidate{{
+						UserID: principal.user.ID, Schedule: "daily", End: end,
+					}}, scaleP21PulseDispatch)
+				} else {
+					err = scaleP21PulseLegacyWrite(t.Context(), repo, workspace, []pulseDue{{
+						user: principal.user, schedule: "daily", end: end,
+					}}, end.Add(time.Hour))
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				authRequest[domain.Issue](t, fixture.admin, http.MethodPatch, fixture.host.URL+"/api/issue-records/"+issue.ID, map[string]string{"title": "Edited after Pulse " + strconv.Itoa(i)}, workspace, http.StatusOK)
+				query := r.URL.Query()
+				query.Set("surface", "local-store")
+				query.Set("mode", "issues")
+				query.Set("workspaceId", access.WorkspaceID)
+				query.Set("authzEpoch", access.AuthzEpoch)
+				query.Set("after", head)
+				r.URL.Path, r.URL.RawQuery = "/api/sync/changes", query.Encode()
+				r.Header.Set(localStoreHeader, principal.user.ID)
+				w := httptest.NewRecorder()
+				service.syncChanges(w, r)
+				var delta localStoreIssueDelta
+				if err := json.Unmarshal(w.Body.Bytes(), &delta); w.Code != http.StatusOK || err != nil ||
+					delta.AuthzEpoch != access.AuthzEpoch || delta.ResyncRequired || len(delta.Transactions) != 2 {
+					t.Fatalf("expected the pulse cursor and issue edit (bounded=%t, epoch=%s): %d %s", service.store.BoundedMetadataEnabled(), access.AuthzEpoch, w.Code, w.Body.String())
+				}
+				if !reflect.DeepEqual(delta.Transactions[0].Invalidations, []string{localStorePulseCursor}) ||
+					len(delta.Transactions[0].Upserts) != 0 || len(delta.Transactions[1].Upserts) != 1 ||
+					delta.Transactions[1].Upserts[0].Key.ID != issue.ID {
+					t.Fatalf("unrelated cursor changed the issue replay: %+v", delta.Transactions)
+				}
+				current, err := service.resolveSyncAccess(r)
+				if err != nil || delta.Revision != localStoreIssueRevision(current) || current.SourceVersion().Metadata != access.SourceVersion().Metadata+1 {
+					t.Fatalf("expected one metadata revision: from %v, got %q (%v)", access.SourceVersion(), delta.Revision, err)
 				}
 			}
 		})

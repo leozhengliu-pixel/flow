@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
 import { bootstrap, preferences } from './review-findings-fixture'
+import { issuePath } from '../src/lib/app-routes'
 
 // Match the phone gate's native scale so Chromium lays out half-pixel borders.
 const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
@@ -9,8 +10,12 @@ test.use({ deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent, laun
 for (const width of [375, 390]) for (const theme of ['Dark', 'Light'] as const) for (const locale of ['en-US', 'zh-CN']) {
   test(`labels use the shared phone row geometry ${width} ${theme} ${locale}`, async ({ page, request, workspaceKey }) => {
     await page.setViewportSize({ width, height: width === 375 ? 667 : 844 })
-    await preferences(request, workspaceKey, theme, locale)
+    // Avoid a first-visit settings write while the picker is opening.
+    const timezone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)
     const headers = { 'X-Workspace-Key': workspaceKey }
+    expect((await request.patch('/api/account/settings', {
+      headers, data: { interfaceTheme: theme, language: locale, pulseWelcomeDismissed: true, timezone, pulseSchedule: 'never' },
+    })).ok()).toBe(true)
     const data = await bootstrap(request, workspaceKey)
     if (!data.labels.some(label => label.name === 'Bug')) {
       const labelResponse = await request.post('/api/labels', { headers, data: { name: 'Bug', color: '#eb5757' } })
@@ -19,7 +24,7 @@ for (const width of [375, 390]) for (const theme of ['Dark', 'Light'] as const) 
     const issueResponse = await request.post('/api/issues', { headers, data: { title: '中文 Label picker', teamId: data.teams[0].id, stateId: data.states.find(state => state.type === 'unstarted')!.id } })
     expect(issueResponse.status()).toBe(201)
     const issue = await issueResponse.json()
-    await page.goto(`/${workspaceKey}/issue/${issue.identifier}`)
+    await page.goto(issuePath(workspaceKey, issue))
     const trigger = page.locator('.labels-picker .label-project-trigger:visible').first()
     await trigger.click()
     const menu = page.locator('.phone-menu-surface.property-command-labels')

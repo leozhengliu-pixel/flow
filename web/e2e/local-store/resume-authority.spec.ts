@@ -3,6 +3,7 @@ import { localStoreOwnerName } from '../../src/lib/local-store-notice'
 import { readLocalRow, signIn, test } from './fixture'
 
 test.use({ workspaceNamePrefix: 'Resume-authority' })
+test.skip(process.env.FLOW_LOCAL_STORE_REAL_AUTH !== '1', 'Requires real browser sessions')
 
 const changes = (response: Response) => new URL(response.url()).pathname === '/api/sync/changes' && response.url().includes('mode=issues')
 const resumeCount = (page: Page) => page.evaluate(() => performance.getEntriesByName('flow:local-store:resume').length)

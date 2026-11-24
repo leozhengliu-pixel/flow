@@ -10,13 +10,18 @@ import (
 	"flow/api/internal/idgen"
 )
 
-const recordJournalSchemaVersion = 29
+const recordJournalIdentitySchemaVersion = 29
+const recordJournalSchemaVersion = 33
 
 // Triggers capture keys, never canonical bodies. The transaction token is
 // connection-local on external databases. SQLite has one writer, so its
 // token row is set with the first write and cleared before commit.
 func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	applied, err := s.migrationApplied(ctx, recordJournalSchemaVersion)
+	if err != nil {
+		return err
+	}
+	identityApplied, err := s.migrationApplied(ctx, recordJournalIdentitySchemaVersion)
 	if err != nil {
 		return err
 	}
@@ -67,7 +72,7 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	if err := s.applyMigrationStatements(ctx, statements); err != nil {
 		return fmt.Errorf("record journal schema: %w", err)
 	}
-	if !applied && s.dialect != "sqlite" {
+	if !identityApplied && s.dialect != "sqlite" {
 		if err := s.widenRecordJournalKeys(ctx); err != nil {
 			return err
 		}
@@ -150,7 +155,7 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 			return err
 		}
 	}
-	if !applied {
+	if !identityApplied {
 		// One marker per legacy workspace prevents claiming historical
 		// coverage. New/old replica writes are captured by the triggers above.
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO record_journal_event_pending(tx_id,event_id,workspace_id) SELECT '',MIN(id),workspace_id FROM domain_events WHERE workspace_id IS NOT NULL AND workspace_id<>'' GROUP BY workspace_id ON CONFLICT(event_id) DO NOTHING`); err != nil {
@@ -173,7 +178,10 @@ func (s *SQLiteStore) recordJournalMigration(ctx context.Context) error {
 		_, err = s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?) ON CONFLICT(version) DO NOTHING`, 28, "bounded SQLite journal transaction input", time.Now().UTC().Format(time.RFC3339Nano))
 	}
 	if err == nil {
-		_, err = s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?) ON CONFLICT(version) DO NOTHING`, recordJournalSchemaVersion, "record journal identity comparisons across MySQL collations", time.Now().UTC().Format(time.RFC3339Nano))
+		_, err = s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?) ON CONFLICT(version) DO NOTHING`, recordJournalIdentitySchemaVersion, "record journal identity comparisons across MySQL collations", time.Now().UTC().Format(time.RFC3339Nano))
+	}
+	if err == nil {
+		_, err = s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?) ON CONFLICT(version) DO NOTHING`, recordJournalSchemaVersion, "authorization epochs ignore pulse delivery cursors", time.Now().UTC().Format(time.RFC3339Nano))
 	}
 	return err
 }
@@ -347,7 +355,13 @@ func recordJournalTriggerSpecs(dialect string) []recordJournalTrigger {
 					// Changes to policy-bearing records conservatively revoke
 					// cached contexts. Other records do not advance the epoch.
 					condition := row + `.field IN ('teams','teamSettings','documents','projects','initiatives','apiKeys','oauthApplications','oauthAuthorizations','users','workspaceSettings','settings')`
+					pulseCursor := func(row string) string {
+						field := recordJournalIdentitySQL(dialect, row+".field")
+						key := recordJournalIdentitySQL(dialect, row+".record_key")
+						return `(` + field + `='settings' AND ` + key + `='pulseDeliveryCursors')`
+					}
 					if event == "UPDATE" {
+						condition += ` AND NOT (` + pulseCursor("NEW") + ` AND ` + pulseCursor("OLD") + `)`
 						without := func(row, field string) string { return `json_remove(` + row + `.data,'$.` + field + `')` }
 						if dialect == "postgres" {
 							without = func(row, field string) string {
@@ -360,6 +374,8 @@ func recordJournalTriggerSpecs(dialect string) []recordJournalTrigger {
 						}
 						condition += ` AND (` + row + `.field NOT IN ('apiKeys','oauthAuthorizations') OR ` + without("NEW", "lastUsedAt") + `<>` + without("OLD", "lastUsedAt") + `)`
 						condition += ` AND (` + row + `.field<>'teamSettings' OR ` + without("NEW", "timezone") + `<>` + without("OLD", "timezone") + `)`
+					} else {
+						condition += ` AND NOT ` + pulseCursor(row)
 					}
 					if dialect == "sqlite" {
 						spec.body += `INSERT INTO workspace_authz_epochs(workspace_id,epoch) SELECT ` + workspaceID(workspace) + `,1 WHERE ` + condition + ` ON CONFLICT(workspace_id) DO UPDATE SET epoch=workspace_authz_epochs.epoch+1;`

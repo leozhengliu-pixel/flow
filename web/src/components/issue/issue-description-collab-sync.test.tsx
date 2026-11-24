@@ -31,11 +31,11 @@ class Socket {
 
 const collab = { workspaceKey: 'test', issueId: 'issue-1', documentId: 'document-1', documentVersion: 1, viewer, onPersist: async () => {} }
 
-async function mountPair(value: string) {
+async function mountPair(value: string, state?: string) {
   const editors: Array<Editor | null> = [null, null]
   render(<>
-    <IssueDescriptionEditor value={value} editorRef={editor => { editors[0] = editor }} collaboration={collab}/>
-    <IssueDescriptionEditor value={value} editorRef={editor => { editors[1] = editor }} collaboration={collab}/>
+    <IssueDescriptionEditor value={value} state={state} editorRef={editor => { editors[0] = editor }} collaboration={collab}/>
+    <IssueDescriptionEditor value={value} state={state} editorRef={editor => { editors[1] = editor }} collaboration={collab}/>
   </>)
   await waitFor(() => expect(editors.every(Boolean)).toBe(true))
   await waitFor(() => expect(Socket.instances).toHaveLength(2))
@@ -94,6 +94,22 @@ describe('collaborative description: rewrites appended to a local text edit', ()
     expect(first.getMarkdown()).toContain('$$\nx+y^3\n$$')
     expect(second.getJSON()).toEqual(first.getJSON())
     expect(errors).toEqual([])
+  })
+
+  it('seeds legacy Markdown through the same schema in both tabs', async () => {
+    const [first, second] = await mountPair('## Heading\n\n[Link](https://flow.test) and **bold**')
+    expect(first.getJSON().content?.slice(0, 2)).toMatchObject([
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Heading' }] },
+      { type: 'paragraph', content: [{ text: 'Link', marks: [{ type: 'link', attrs: { href: 'https://flow.test' } }] }, { text: ' and ' }, { text: 'bold', marks: [{ type: 'bold' }] }] },
+    ])
+    expect(second.getJSON()).toEqual(first.getJSON())
+  })
+
+  it('seeds the saved JSON in both tabs when its Markdown projection differs', async () => {
+    const state = JSON.stringify({ type: 'doc', content: [{ type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'Saved document' }] }] })
+    const [first, second] = await mountPair('Markdown projection', state)
+    expect(first.getJSON().content?.[0]).toMatchObject({ type: 'heading', attrs: { level: 3 }, content: [{ text: 'Saved document' }] })
+    expect(second.getJSON()).toEqual(first.getJSON())
   })
 
   it('pastes a URL into a new empty paragraph: the link paste rule runs, nothing is lost, and both editors converge', async () => {

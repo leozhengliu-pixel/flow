@@ -319,6 +319,34 @@ func TestScaleP09AuthorizationWriters(t *testing.T) {
 	}
 }
 
+func TestScaleP09PulseCursorKeepsAuthorization(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := scaleP09Database(t)
+	workspace, id := f.data.Workspace.URLKey, f.data.Workspace.ID
+	epoch, err := f.AuthzEpoch(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []string{
+		`INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'settings','pulseDeliveryCursors',0,'{}')`,
+		`UPDATE workspace_metadata_records SET data='{"user":"2026-11-23T06:00:00Z"}' WHERE workspace_key=? AND field='settings' AND record_key='pulseDeliveryCursors'`,
+		`DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='settings' AND record_key='pulseDeliveryCursors'`,
+	} {
+		head := scaleP09Head(t, f)
+		if _, err := f.db.ExecContext(t.Context(), query, workspace); err != nil {
+			t.Fatal(err)
+		}
+		page, err := f.ReadCommittedChanges(t.Context(), id, head, 100, 4096)
+		if err != nil || page.AuthzEpoch != epoch || len(page.Transactions) != 1 {
+			t.Fatalf("cursor changed authorization or was not journaled: %+v %v", page, err)
+		}
+		records := page.Transactions[0].Records
+		if len(records) != 1 || records[0].Key != (RecordKey{Kind: "settings", ID: "pulseDeliveryCursors"}) {
+			t.Fatalf("unexpected cursor records: %+v", records)
+		}
+	}
+}
+
 func TestScaleP09BoundedTransactions(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)

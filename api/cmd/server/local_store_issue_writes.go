@@ -18,7 +18,7 @@ func (s *server) localStoreIssueWriteContext(w http.ResponseWriter, r *http.Requ
 	if key == "" {
 		return ctx, true
 	}
-	if _, ready := s.syncV2Journal(); !ready || !localStoreIssueResumeAllowed(workspace) {
+	if _, ready := s.syncV2Journal(); !ready || !localStoreAllowed(workspace) {
 		http.NotFound(w, r)
 		return ctx, false
 	}

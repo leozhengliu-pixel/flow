@@ -20,12 +20,12 @@ export class ApiError<T = unknown> extends Error {
 }
 
 /**
- * The server could not be reached (or a gateway in front of it answered for it): fetch's network TypeError and
- * 502/503/504. Not a refusal: nothing about the session or access follows from it.
+ * An interrupted request says nothing about the session or access: fetch's
+ * network TypeError and the timeout or gateway responses below.
  */
 export function isConnectivityError(error: unknown): boolean {
   if (error instanceof SnapshotUnconfirmedError) return false
-  if (error instanceof ApiError) return error.status === 502 || error.status === 503 || error.status === 504
+  if (error instanceof ApiError) return [408, 502, 503, 504].includes(error.status)
   return error instanceof TypeError
 }
 
@@ -97,7 +97,7 @@ export function apiFetch(url: string, { quiet, onResponse, ...init }: ApiRequest
   const gate = snapshotWriteGate(init.method, url, headers.get('X-Workspace-Key'))
   const fetchResponse = () => send(url, init, headers, quiet, workspaceKey).then(response => {
     onResponse?.(response)
-    const clearing = !response.ok && invalidateLocalStoreResponse(url, response.status, headers.get('X-Workspace-Key') ?? '')
+    const clearing = invalidateLocalStoreResponse(url, response, headers.get('X-Workspace-Key') ?? '')
     if (clearing) return clearing.then(() => response)
     return response
   })

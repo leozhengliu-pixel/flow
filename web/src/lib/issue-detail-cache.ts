@@ -79,6 +79,19 @@ export function mergeIssueRecords(current: Issue[], incoming: Issue[], limit = 2
   return boundedBrowserCacheEnabled() ? boundIssueDetails(issues) : issues
 }
 
+/** Keep the authorized editor mounted when the journal publishes a list summary. */
+export function retainLocalIssueDetail(current: Issue[], next: Issue[], identifier?: string): Issue[] {
+  if (!identifier) return next
+  const key = identifier.toUpperCase()
+  const open = current.find(issue => !issue.isSummary && (issue.identifier.toUpperCase() === key ||
+    issue.previousIdentifiers?.some(previous => previous.toUpperCase() === key)))
+  if (!open) return next
+  const index = next.findIndex(issue => issue.id === open.id)
+  const summary = next[index]
+  if (!summary?.isSummary || summary.team.id !== open.team.id) return next
+  return next.with(index, mergeIssueRecords([open], [summary], 1)[0])
+}
+
 export function mergeWorkspaceDirectory(current: BootstrapData | null, next: BootstrapData, visibleIds?: ReadonlySet<string>): BootstrapData {
   if (!current || current.workspace.id !== next.workspace.id || current.viewer.id !== next.viewer.id || !next.issueCollectionPaged) return next
   // Chats the app already read whole keep their messages over the summaries a bootstrap sends.

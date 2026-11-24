@@ -36,9 +36,10 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       expect(projectResponse.status()).toBe(201)
       const project = await projectResponse.json()
       await openSubscribed(page, `/${workspaceKey}/project/${project.slugId}`)
-      await expect(page.locator('main')).toContainText('P13 project')
+      const projectPage = page.locator('main.project-detail-page')
+      await expect(projectPage).toContainText('P13 project')
       expect((await request.patch(`/api/projects/${project.id}`, { headers, data: { name: 'P13 project updated' } })).ok()).toBe(true)
-      await expect(page.locator('main')).toContainText('P13 project updated')
+      await expect(projectPage).toContainText('P13 project updated')
       if (viewport.width < 500) {
         const details = page.locator('.project-detail-page__toolbar-button[aria-pressed="true"]').last()
         await details.click()

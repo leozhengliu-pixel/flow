@@ -1,4 +1,4 @@
-import { compareLocalStoreSeq, createLocalIssueView, decimal, lazyLocalKinds, localKinds, localRowFingerprint, localStoreEnabled, LocalStoreReset, type LocalChange, type LocalKind, type LocalRow, type LocalStoreAuthority } from './local-store-model'
+import { compareLocalStoreSeq, createLocalIssueView, decimal, lazyLocalKinds, localKinds, localRowFingerprint, localStoreEnabled, LocalStoreReset, markLocalStoreDisabled, LOCAL_STORE_DISABLED, LOCAL_STORE_HEADER, type LocalChange, type LocalKind, type LocalRow, type LocalStoreAuthority } from './local-store-model'
 import { registerSessionCacheClearer } from './session-cache-registry'
 import { selectSlicesToEvict, type LocalSlice, type LocalSliceEntry, type LocalSliceKind } from './local-store-slice-model'
 import type { OutboxEdit, OutboxOutcome } from './local-store-outbox-model'
@@ -9,6 +9,7 @@ const prefix = 'flow-ls:'
 const indexPrefix = 'flow:local-store:'
 const headPrefix = `${indexPrefix}head:`
 const sessionEndKey = `${indexPrefix}session-ended`
+const disabledKey = `${indexPrefix}disabled`
 const sessionChannelName = 'flow:local-store:session-ended'
 const openPrefix = `${indexPrefix}open:`
 const openLeaseMs = 120_000
@@ -231,6 +232,7 @@ export function retainedLocalWorkspaceId(viewerId: string, workspaceKey: string)
 }
 
 export function retainedLocalAuthority(viewerId: string, workspaceId: string, workspaceKey: string) {
+  if (!localStoreEnabled()) return undefined
   const index = readIndex(databaseName(viewerId, workspaceId))
   if (index && !index.deleting && index.workspaceKey === workspaceKey) return index
 }
@@ -250,7 +252,7 @@ export function retainedLocalHead(viewerId: string, workspaceId: string, workspa
 }
 
 export async function retainLocalStoreAuthority(scope: LocalStoreAuthority, workspaceKey: string, observedGeneration: number) {
-  if (observedGeneration !== generation) return undefined
+  if (!localStoreEnabled() || observedGeneration !== generation) return undefined
   const current = databaseName(scope.viewerId, scope.workspaceId)
   const obsolete = [...indexedNames()].filter(name => {
     const index = readIndex(name)
@@ -264,21 +266,48 @@ export async function retainLocalStoreAuthority(scope: LocalStoreAuthority, work
 }
 
 export function initializeLocalStore() {
-  if (localStoreEnabled()) {
-    for (const name of indexedNames()) if (readIndex(name)?.deleting) void deleteStore(name)
-    return
-  }
-  // The index covers older engines. Enumeration also removes databases whose
-  // index was lost independently of IndexedDB.
-  void clearLocalStores()
-  if (typeof indexedDB !== 'undefined' && typeof indexedDB.databases === 'function') {
-    void indexedDB.databases().then(rows => Promise.all(rows.flatMap(row => row.name?.startsWith(prefix) ? [deleteStore(row.name)] : []))).catch(() => undefined)
-  }
+  // Remove the retired startup snapshot index before asking IndexedDB to
+  // delete the data. An older tab can delay deletion by holding it open.
+  try { localStorage.removeItem('flow:local-snapshot') } catch { /* Storage can be unavailable. */ }
+  try { indexedDB.deleteDatabase('flow-local-snapshot') } catch { /* Storage can be unavailable. */ }
+  for (const name of indexedNames()) if (readIndex(name)?.deleting) void deleteStore(name)
 }
 
-export function invalidateLocalStoreResponse(url: string, status: number, workspaceKey: string) {
+function wipeLocalStores() {
+  const indexed = clearLocalStores()
+  // Enumeration also removes databases whose index was lost independently of IndexedDB.
+  const unlisted = typeof indexedDB !== 'undefined' && typeof indexedDB.databases === 'function'
+    ? indexedDB.databases().then(rows => Promise.all(rows.flatMap(row => row.name?.startsWith(prefix) ? [deleteStore(row.name)] : []))).catch(() => undefined)
+    : undefined
+  return Promise.all([indexed, unlisted])
+}
+
+function applyLocalStoreDisable() {
   if (!localStoreEnabled()) return
-  if (status === 401) return clearLocalStores().then(() => {
+  markLocalStoreDisabled()
+  const clearing = wipeLocalStores()
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(disabledKey))
+  return clearing
+}
+
+function disableLocalStore() {
+  const clearing = applyLocalStoreDisable()
+  if (clearing) {
+    // This is a notification, not a setting. A fresh page checks the server again.
+    try { localStorage.setItem(disabledKey, crypto.randomUUID()) } catch { /* The index is unavailable too. */ }
+  }
+  return clearing
+}
+
+export function onLocalStoreDisabled(callback: () => void) {
+  window.addEventListener(disabledKey, callback)
+  return () => window.removeEventListener(disabledKey, callback)
+}
+
+export function invalidateLocalStoreResponse(url: string, response: Response, workspaceKey: string) {
+  const { status } = response
+  const clearing = response.headers?.get(LOCAL_STORE_HEADER) === LOCAL_STORE_DISABLED ? disableLocalStore() : undefined
+  if (status === 401) return (clearing ?? clearLocalStores()).then(() => {
     if (typeof window === 'undefined') return
     try { localStorage.setItem(sessionEndKey, crypto.randomUUID()) } catch { /* Other tabs also recheck authority. */ }
     const channel = openSessionChannel()
@@ -286,6 +315,7 @@ export function invalidateLocalStoreResponse(url: string, status: number, worksp
     channel?.close()
     window.dispatchEvent(new Event(sessionEndKey))
   })
+  if (!localStoreEnabled()) return clearing
   // An unavailable issue capability on a cold start permits the shadow to
   // continue. Only an existing issue baseline or a definite refusal purges it.
   if (status === 404 && /^\/api\/sync\/manifest\?/.test(url)) {
@@ -302,7 +332,6 @@ export function invalidateLocalStoreResponse(url: string, status: number, worksp
 }
 
 export function onLocalStoreSessionEnd(callback: () => void) {
-  if (!localStoreEnabled()) return
   const storage = (event: StorageEvent) => { if (event.key === sessionEndKey && event.newValue) callback() }
   const channel = openSessionChannel()
   const message = (event: MessageEvent) => { if (event.data?.type === 'session-ended') callback() }
@@ -321,6 +350,7 @@ registerSessionCacheClearer((viewerId, workspaceKey) => { if (localStoreEnabled(
 
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', event => {
+    if (event.key === disabledKey && event.newValue) { void applyLocalStoreDisable(); return }
     if (event.key !== null && !event.key.startsWith(indexPrefix + prefix)) return
     if (event.oldValue || event.key === null) generation++
     for (const store of connections) if (!store.valid) store.close()
@@ -363,6 +393,7 @@ export class LocalStoreDB {
   }
 
   static async open(scope: LocalStoreAuthority, workspaceKey: string, started: number, forOutbox = false): Promise<LocalStoreDB | undefined> {
+    if (!localStoreEnabled()) return undefined
     const name = databaseName(scope.viewerId, scope.workspaceId)
     if (networkOnly.has(name) && !forOutbox) return undefined
     let index = readIndex(name)

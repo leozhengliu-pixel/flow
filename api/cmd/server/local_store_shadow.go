@@ -12,6 +12,7 @@ import (
 )
 
 const localStoreHeader = "X-Flow-Local-Store"
+const localStoreDisabledValue = "disabled"
 const localStoreShadowCapability = "local-store-shadow-v1"
 const localStoreIssueCapability = "local-store-issues-v1"
 
@@ -22,17 +23,17 @@ type localStoreStamp struct {
 	Head        string `json:"head"`
 }
 
+func localStoreDisabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_LOCAL_STORE"))) {
+	case "off", "0", "false":
+		return true
+	default:
+		return false
+	}
+}
+
 func localStoreAllowed(workspace string) bool {
-	return workspace != "" && syncV2Enabled() && syncFlagEnabled("FLOW_SYNC_MANIFEST") && syncFlagEnabled("FLOW_INDEXED_READS") &&
-		localStoreWorkspaceListed("FLOW_LOCAL_STORE_WORKSPACES", workspace)
-}
-
-func localStoreWorkspaceListed(setting, workspace string) bool {
-	return slices.ContainsFunc(strings.Split(os.Getenv(setting), ","), func(key string) bool { return strings.TrimSpace(key) == workspace })
-}
-
-func localStoreIssueResumeAllowed(workspace string) bool {
-	return localStoreAllowed(workspace) && localStoreWorkspaceListed("FLOW_LOCAL_STORE_RESUME_WORKSPACES", workspace)
+	return workspace != "" && !localStoreDisabled() && syncV2Enabled() && syncFlagEnabled("FLOW_SYNC_MANIFEST") && syncFlagEnabled("FLOW_INDEXED_READS")
 }
 
 func localStoreBrowserViewer(r *http.Request) string {
@@ -62,9 +63,16 @@ func (s *server) localStoreAuthority(r *http.Request, workspace string) (localSt
 	return localStoreStamp{ViewerID: viewer, WorkspaceID: access.WorkspaceID, AuthzEpoch: access.AuthzEpoch, Head: head}, true
 }
 
-func (s *server) stampLocalStoreBootstrap(w http.ResponseWriter, r *http.Request, workspace string) {
+func (s *server) stampLocalStoreResponse(w http.ResponseWriter, r *http.Request, workspace string) {
+	requested := r.Header.Get(localStoreHeader)
+	if (requested != "" || r.URL.Path == "/api/auth/session" ||
+		strings.HasPrefix(r.URL.Path, "/api/sync/") && r.URL.Query().Get("surface") == "local-store") && localStoreDisabled() {
+		w.Header().Set("Cache-Control", "private, no-store")
+		w.Header().Set(localStoreHeader, localStoreDisabledValue)
+		return
+	}
 	if r.Method != http.MethodGet || r.URL.Path != "/api/bootstrap" && r.URL.Path != "/api/issue-records/bootstrap" ||
-		r.Header.Get(localStoreHeader) != localStoreShadowCapability || r.Header.Get("X-Flow-Projection") != "" {
+		requested != localStoreShadowCapability || r.Header.Get("X-Flow-Projection") != "" {
 		return
 	}
 	stamp, ok := s.localStoreAuthority(r, workspace)
@@ -78,7 +86,7 @@ func (s *server) stampLocalStoreBootstrap(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// The opt-in shadow manifest reports authority and the journal cursor. The
+// The shadow manifest reports authority and the journal cursor. The
 // general manifest still advertises only the collections it can page.
 func (s *server) localStoreManifest(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("mode") == "issues" {
@@ -117,10 +125,6 @@ func (s *server) localStoreChanges(w http.ResponseWriter, r *http.Request) bool 
 	}
 	w.Header().Set("Cache-Control", "private, no-store")
 	if r.URL.Query().Get("mode") == "issues" {
-		if !localStoreIssueResumeAllowed(workspaceKey(r)) {
-			http.NotFound(w, r)
-			return true
-		}
 		s.localStoreIssueChanges(w, r, journal, workspaceID)
 	} else {
 		s.syncChangesWithJournal(w, r, localStoreShadowJournal{committedChangeReader: journal, workspaceID: workspaceID})

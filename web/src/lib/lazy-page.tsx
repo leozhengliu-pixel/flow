@@ -5,6 +5,7 @@ import { reloadForStaleChunk } from './stale-chunk-reload'
 export function lazyPage<Module, Name extends keyof Module>(
   loader: () => Promise<Module>,
   exportName: Name,
+  options?: { mountPreloaded: boolean },
 ): Module[Name] extends ComponentType<infer Props> ? ComponentType<Props> & { preload: () => Promise<void> } : never {
   let pending: Promise<{ default: ComponentType<any> }> | undefined
   const load = () => pending ??= (async () => {
@@ -19,7 +20,7 @@ export function lazyPage<Module, Name extends keyof Module>(
     reloadForStaleChunk(error)
     throw error
   })
-  if (!(import.meta.env.VITE_LOCAL_STORE === 'true' && import.meta.env.VITE_SYNC_V2 === 'true')) {
+  if (!options?.mountPreloaded) {
     return Object.assign(lazy(load), { preload: () => load().then(() => undefined) }) as never
   }
   let ready: ComponentType<any> | undefined

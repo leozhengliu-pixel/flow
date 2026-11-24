@@ -1,18 +1,13 @@
 # Local-first sync: plan
 
-Status: proposal (no code yet). Owner: web client. Builds on the repeat-visit snapshot paint and the app-shell
-service worker (`web/src/lib/local-snapshot.ts`, `web/public/sw.js`).
+Status: the issue store is enabled by default when the server advertises its
+sync capability. The protocol below describes the design and rollout gates.
 
 ## Goal
 
-Open the app from local state: the first frame of every repeat visit renders from data on the device, the main
-thread makes no data request before that frame, and the server is asked only for what changed since the device
-last synced. Large collections (issue history, comments, archived and old items) are loaded lazily and partially,
-so a large workspace does not need a large download or a large heap.
-
-Today (after the snapshot paint landed) a repeat visit paints from one per-workspace JSON blob, then downloads the
-whole bootstrap again and replaces the blob. That removes the blank screen, but the bytes on the wire, the parse
-cost and the server's projection cost are the same as a cold start, and the blob caps out at 8 MB.
+Open eligible issue views from local data after confirming the viewer and workspace authority. On repeat visits,
+the server sends changes since the last sync. Large collections (issue history, comments, archived and old items)
+are loaded lazily and partially, so a large workspace does not need a large download or a large heap.
 
 Non-goals: offline editing for long periods, peer-to-peer sync, changing the server's permission model.
 
@@ -25,7 +20,7 @@ Non-goals: offline editing for long periods, peer-to-peer sync, changing the ser
 | Sync v2 | manifest (`schema`, `viewerId`, `authzEpoch`, `head`, `collections`), `GET /api/sync/records`, `POST /api/sync/batch`, `GET /api/sync/changes` (behind `VITE_SYNC_V2`) | per-entity record transport |
 | Realtime | SSE stream, one leader tab per origin/workspace/viewer rebroadcasting (`shared-realtime.ts`) | live deltas |
 | Bounded metadata (P21) | server never materialises a whole workspace per request; projections behind a read gate that answers 503 + `Retry-After` | the reason partial bootstrap must exist |
-| Snapshot paint | one JSON blob per viewer+workspace in IndexedDB, keyed by schema and build, cleared through `session-cache-registry` | replaced by the store below in phase 3 |
+| Snapshot paint | one JSON blob per viewer+workspace in IndexedDB, retired when the store became the default | the entry removes the old database and its index on upgrade |
 
 ## Storage layout
 
@@ -74,7 +69,7 @@ Versioning:
 - `_meta.schema` is the client storage schema. A bump runs an `onupgradeneeded` migration when it is additive
   (new store, new index) and drops the database when it is not (shape change of an existing store). Dropping is
   always safe: the fallback is a full bootstrap.
-- The wire schema is the manifest's `schema`; an unknown value means full bootstrap with the legacy endpoints.
+- The wire schema is the manifest's `schema`. An unknown value uses the network loaders.
 - `build` is kept for diagnostics only once the store is versioned; the blob snapshot's "any new build discards it"
   rule goes away in phase 3.
 
@@ -154,8 +149,13 @@ Versioning:
 
 ## Rollout
 
-Behind `VITE_LOCAL_STORE` (client) and the existing sync-v2 server flags, per workspace with a server-side
-allowlist. Each phase ships only when its gate holds for a week on the allowlist.
+The issue store negotiates capabilities with the server in every workspace.
+A cold issue list reads the workspace directory from `/api/issue-records/bootstrap`,
+pages authorized issue summaries, then checks the journal checkpoint before
+committing the data locally. Repeat visits confirm authority before rendering
+retained issues. The same startup entry serves development and production
+builds. Routes that need complete collections and explicitly paged issue
+builds use their existing network loaders.
 
 | Phase | Scope | Gate |
 | --- | --- | --- |
@@ -166,7 +166,19 @@ allowlist. Each phase ships only when its gate holds for a week on the allowlist
 | 4 | Lazy collections: comments, history, archived issues from `_partial` slices | first issue-detail open < 150 ms from the store; eviction keeps origin usage under budget |
 | 5 | Web Locks sync owner, BroadcastChannel fan-out, persisted outbox | one SSE per viewer+workspace across tabs; no lost writes across reloads in the e2e matrix |
 
-Kill switch at every phase: the flag off deletes the databases on next start and returns to the current path.
+Set `FLOW_LOCAL_STORE=off` on all replicas to disable the store. The session
+and local-store responses signal the client to remove the origin's store
+databases, notify other tabs and read from the network.
+
+For timing verification on a shared machine, compare production builds in the
+same browser run. Set `FLOW_LOCAL_STORE_SPEC=timing.spec.ts` and run
+`playwright test -c playwright.local-store.config.ts --workers=1 --retries=0`.
+Point `FLOW_E2E_API_BIN` and `FLOW_LOCAL_STORE_WEB_DIST` at the candidate
+and `FLOW_LOCAL_STORE_BASELINE_API_BIN` and `FLOW_LOCAL_STORE_BASELINE_WEB_DIST`
+at the store-off baseline. The spec alternates measurement order across five
+rounds, prints both builds' samples, medians and p75s, and checks each engine.
+The candidate median may be at most 10% above the baseline median and must
+meet the design limit in at least one round.
 
 ## Risks
 

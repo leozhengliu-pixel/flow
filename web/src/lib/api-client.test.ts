@@ -76,7 +76,7 @@ describe('requestRetryingBusy', () => {
 describe('isConnectivityError', () => {
   it('names an unreachable server or gateway, never a refusal or a held write', () => {
     expect(isConnectivityError(new TypeError('Failed to fetch'))).toBe(true)
-    for (const status of [502, 503, 504]) expect(isConnectivityError(new ApiError('down', status))).toBe(true)
+    for (const status of [408, 502, 503, 504]) expect(isConnectivityError(new ApiError('down', status))).toBe(true)
     for (const status of [400, 401, 403, 404, 409, 429, 500]) expect(isConnectivityError(new ApiError('no', status))).toBe(false)
     expect(isConnectivityError(new SnapshotUnconfirmedError())).toBe(false)
     expect(isConnectivityError(new DOMException('Aborted', 'AbortError'))).toBe(false)
