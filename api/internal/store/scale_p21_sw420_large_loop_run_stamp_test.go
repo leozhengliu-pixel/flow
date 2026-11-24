@@ -100,6 +100,23 @@ func scaleP21SW420PeerLoop(t *testing.T, f scaleP09Fixture, workspace, id string
 }
 
 func TestScaleP21SW420LargeLoopRunStampDifferential(t *testing.T) {
+	scaleP21SW420LargeLoopRunStamps(t, 0)
+}
+
+func TestScaleP21SW420LargeLoopRunStampDifferentialPart2(t *testing.T) {
+	scaleP21SW420LargeLoopRunStamps(t, 1)
+}
+
+func TestScaleP21SW420LargeLoopRunStampDifferentialPart3(t *testing.T) {
+	scaleP21SW420LargeLoopRunStamps(t, 2)
+}
+
+func TestScaleP21SW420LargeLoopRunStampDifferentialPart4(t *testing.T) {
+	scaleP21SW420LargeLoopRunStamps(t, 3)
+}
+
+func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int) {
+	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -248,7 +265,10 @@ func TestScaleP21SW420LargeLoopRunStampDifferential(t *testing.T) {
 		}
 		return string(raw)
 	}
-	for _, spec := range cases {
+	for index, spec := range cases {
+		if index%4 != part {
+			continue
+		}
 		for _, reload := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/reload=%t", spec.name, reload), func(t *testing.T) {
 				var want string

@@ -323,6 +323,15 @@ func TestScaleP21SW441ThousandIssueTriageConflictingWrite(t *testing.T) {
 // every row, the installed image and the sinks equal a run that did nothing.
 // Just above the peak it succeeds and equals legacy.
 func TestScaleP21SW442ThousandIssueTriageBudgetCeiling(t *testing.T) {
+	scaleP21SW442BudgetCeiling(t, "warm")
+}
+
+func TestScaleP21SW442ThousandIssueTriageReloadedBudgetCeiling(t *testing.T) {
+	scaleP21SW442BudgetCeiling(t, "reloaded")
+}
+
+func scaleP21SW442BudgetCeiling(t *testing.T, source string) {
+	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -334,38 +343,36 @@ func TestScaleP21SW442ThousandIssueTriageBudgetCeiling(t *testing.T) {
 	generate := f.sw440Generate(t, ids)
 	legacy, started := f.run(t, "legacy", generate)
 	expected := scaleP21IssueUpdateNormalize(t, legacy, started)
-	for _, source := range []string{"warm", "reloaded"} {
-		peak := 0
+	peak := 0
+	got, started := f.run(t, source, func(service *server) *httptest.ResponseRecorder {
+		service.store.MetadataWorkPeakForTesting()
+		w := generate(service)
+		peak = service.store.MetadataWorkPeakForTesting()
+		return w
+	})
+	if normalized := scaleP21IssueUpdateNormalize(t, got, started); normalized != expected {
+		t.Fatalf("%s changed: %s", source, scaleP21M2Diff(expected, normalized))
+	}
+	t.Logf("%s: bounded peak work %.1f MB of %d MB", source, float64(peak)/(1<<20), 256)
+	idle, idleStarted := f.run(t, source, func(*server) *httptest.ResponseRecorder { return nil })
+	for _, limit := range []int{peak - 64<<10, peak + 64<<10} {
 		got, started := f.run(t, source, func(service *server) *httptest.ResponseRecorder {
-			service.store.MetadataWorkPeakForTesting()
-			w := generate(service)
-			peak = service.store.MetadataWorkPeakForTesting()
-			return w
+			restore := service.store.SetMetadataWorkLimitForTesting(limit)
+			defer restore()
+			return generate(service)
 		})
-		if normalized := scaleP21IssueUpdateNormalize(t, got, started); normalized != expected {
-			t.Fatalf("%s changed: %s", source, scaleP21M2Diff(expected, normalized))
+		if limit > peak {
+			if normalized := scaleP21IssueUpdateNormalize(t, got, started); normalized != expected {
+				t.Fatalf("%s at %d bytes changed: %s", source, limit, scaleP21M2Diff(expected, normalized))
+			}
+			continue
 		}
-		t.Logf("%s: bounded peak work %.1f MB of %d MB", source, float64(peak)/(1<<20), 256)
-		idle, idleStarted := f.run(t, source, func(*server) *httptest.ResponseRecorder { return nil })
-		for _, limit := range []int{peak - 64<<10, peak + 64<<10} {
-			got, started := f.run(t, source, func(service *server) *httptest.ResponseRecorder {
-				restore := service.store.SetMetadataWorkLimitForTesting(limit)
-				defer restore()
-				return generate(service)
-			})
-			if limit > peak {
-				if normalized := scaleP21IssueUpdateNormalize(t, got, started); normalized != expected {
-					t.Fatalf("%s at %d bytes changed: %s", source, limit, scaleP21M2Diff(expected, normalized))
-				}
-				continue
-			}
-			if got.Code != http.StatusInternalServerError || !strings.Contains(string(got.Body), store.ErrMetadataWorkBudget.Error()) {
-				t.Fatalf("%s below the peak: %d %s", source, got.Code, got.Body)
-			}
-			got.Code, got.Body = 0, nil
-			if want, normalized := scaleP21IssueUpdateNormalize(t, idle, idleStarted), scaleP21IssueUpdateNormalize(t, got, started); normalized != want {
-				t.Fatalf("%s below the peak published or wrote: %s", source, scaleP21M2Diff(want, normalized))
-			}
+		if got.Code != http.StatusInternalServerError || !strings.Contains(string(got.Body), store.ErrMetadataWorkBudget.Error()) {
+			t.Fatalf("%s below the peak: %d %s", source, got.Code, got.Body)
+		}
+		got.Code, got.Body = 0, nil
+		if want, normalized := scaleP21IssueUpdateNormalize(t, idle, idleStarted), scaleP21IssueUpdateNormalize(t, got, started); normalized != want {
+			t.Fatalf("%s below the peak published or wrote: %s", source, scaleP21M2Diff(want, normalized))
 		}
 	}
 }

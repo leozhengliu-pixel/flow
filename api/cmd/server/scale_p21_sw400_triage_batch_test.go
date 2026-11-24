@@ -172,10 +172,13 @@ func scaleP21SW400Actions(f scaleP21IssueUpdateFixture, edit func(*domain.Triage
 	}
 }
 
-// The four cases run in two top-level tests so the CI shards spread them:
-// on MySQL all four took 20 minutes in one test.
+// Shard the priority cases separately. Move and transform share a shard.
 func TestScaleP21SW400ThousandIssueBatchTriageDifferential(t *testing.T) {
-	scaleP21SW400Run(t, "priority-suggest", "priority-auto")
+	scaleP21SW400Run(t, "priority-suggest")
+}
+
+func TestScaleP21SW400ThousandIssueBatchTriageAutoDifferential(t *testing.T) {
+	scaleP21SW400Run(t, "priority-auto")
 }
 
 func TestScaleP21SW400ThousandIssueBatchTriageMoveDifferential(t *testing.T) {

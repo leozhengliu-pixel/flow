@@ -274,6 +274,15 @@ func scaleP21SW461Seed(t *testing.T, f *scaleP21IssueUpdateFixture, ids []string
 // logs its peak work under an unlimited budget (the ceiling measurement), with
 // FLOW_SW461_MEASURE=budget its status under the 256 MB budget.
 func TestScaleP21SW461TriageSuggestionListReorderDifferential(t *testing.T) {
+	scaleP21SW461Reorder(t, false)
+}
+
+func TestScaleP21SW461TriageSuggestionListReorderBulkDifferential(t *testing.T) {
+	scaleP21SW461Reorder(t, true)
+}
+
+func scaleP21SW461Reorder(t *testing.T, bulk bool) {
+	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -281,60 +290,62 @@ func TestScaleP21SW461TriageSuggestionListReorderDifferential(t *testing.T) {
 	existing := scaleP21SW461Existing(t)
 	scaleP21SW461Seed(t, &f, ids, existing)
 	measure := os.Getenv("FLOW_SW461_MEASURE") != ""
-	for _, scope := range [][]string{ids[:1], ids} {
-		t.Run(fmt.Sprintf("scope-%d", len(scope)), func(t *testing.T) {
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID})
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
-			generate := f.sw440Generate(t, scope)
-			peak := 0
-			call := func(service *server) *httptest.ResponseRecorder {
-				if !service.store.BoundedMetadataEnabled() {
-					return generate(service)
-				}
-				if measure && os.Getenv("FLOW_SW461_MEASURE") != "budget" {
-					restore := service.store.SetMetadataWorkLimitForTesting(1 << 40)
-					defer restore()
-				}
-				service.store.MetadataWorkPeakForTesting()
-				w := generate(service)
-				peak = max(peak, service.store.MetadataWorkPeakForTesting())
-				return w
-			}
-			noPeer := func(*testing.T) {}
-			if measure {
-				got, _ := f.sw460Run(t, "warm", noPeer, call, true)
-				t.Logf("%d existing suggestions, %d scoped issues: status %d, bounded peak work %.1f MB", existing, len(scope), got.Code, float64(peak)/(1<<20))
-				return
-			}
-			outcomes := f.sw460Differential(t, []string{"legacy", "warm", "reloaded"}, noPeer, call, true)
-			t.Logf("%d existing suggestions, %d scoped issues: bounded peak work %.1f MB of 256 MB", existing, len(scope), float64(peak)/(1<<20))
-			legacy := outcomes[0]
-			if legacy.Code != http.StatusOK || len(legacy.State.Events) != 1 {
-				t.Fatalf("legacy status %d with %d events: %.300s", legacy.Code, len(legacy.State.Events), legacy.Body)
-			}
-			// Legacy renumbered the existing rows, which followed the
-			// dismissed suggestions of every tenth bulk issue.
-			dismissed := (len(ids) + 9) / 10
-			moved, renumbered := false, 0
-			for index, row := range legacy.State.Suggestions {
-				key := row[0].(string)
-				if key == "sw461-dismissed-0000" && index > existing {
-					moved = true
-				}
-				if strings.HasPrefix(key, "sw461-existing-") {
-					var order int
-					fmt.Sscan(fmt.Sprint(row[1]), &order)
-					number, _ := strconv.Atoi(strings.TrimPrefix(key, "sw461-existing-"))
-					if order != dismissed+number {
-						renumbered++
-					}
-				}
-			}
-			if !moved || existing > 0 && renumbered != existing {
-				t.Fatalf("legacy kept the dismissed suggestion in place (%t) or did not renumber the existing rows (%d of %d)", moved, renumbered, existing)
-			}
-		})
+	scope := ids[:1]
+	if bulk {
+		scope = ids
 	}
+	t.Run(fmt.Sprintf("scope-%d", len(scope)), func(t *testing.T) {
+		f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID})
+		defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+		generate := f.sw440Generate(t, scope)
+		peak := 0
+		call := func(service *server) *httptest.ResponseRecorder {
+			if !service.store.BoundedMetadataEnabled() {
+				return generate(service)
+			}
+			if measure && os.Getenv("FLOW_SW461_MEASURE") != "budget" {
+				restore := service.store.SetMetadataWorkLimitForTesting(1 << 40)
+				defer restore()
+			}
+			service.store.MetadataWorkPeakForTesting()
+			w := generate(service)
+			peak = max(peak, service.store.MetadataWorkPeakForTesting())
+			return w
+		}
+		noPeer := func(*testing.T) {}
+		if measure {
+			got, _ := f.sw460Run(t, "warm", noPeer, call, true)
+			t.Logf("%d existing suggestions, %d scoped issues: status %d, bounded peak work %.1f MB", existing, len(scope), got.Code, float64(peak)/(1<<20))
+			return
+		}
+		outcomes := f.sw460Differential(t, []string{"legacy", "warm", "reloaded"}, noPeer, call, true)
+		t.Logf("%d existing suggestions, %d scoped issues: bounded peak work %.1f MB of 256 MB", existing, len(scope), float64(peak)/(1<<20))
+		legacy := outcomes[0]
+		if legacy.Code != http.StatusOK || len(legacy.State.Events) != 1 {
+			t.Fatalf("legacy status %d with %d events: %.300s", legacy.Code, len(legacy.State.Events), legacy.Body)
+		}
+		// Legacy renumbered the existing rows, which followed the
+		// dismissed suggestions of every tenth bulk issue.
+		dismissed := (len(ids) + 9) / 10
+		moved, renumbered := false, 0
+		for index, row := range legacy.State.Suggestions {
+			key := row[0].(string)
+			if key == "sw461-dismissed-0000" && index > existing {
+				moved = true
+			}
+			if strings.HasPrefix(key, "sw461-existing-") {
+				var order int
+				fmt.Sscan(fmt.Sprint(row[1]), &order)
+				number, _ := strconv.Atoi(strings.TrimPrefix(key, "sw461-existing-"))
+				if order != dismissed+number {
+					renumbered++
+				}
+			}
+		}
+		if !moved || existing > 0 && renumbered != existing {
+			t.Fatalf("legacy kept the dismissed suggestion in place (%t) or did not renumber the existing rows (%d of %d)", moved, renumbered, existing)
+		}
+	})
 }
 
 // After this server installed its image, another server adds a suggestion in

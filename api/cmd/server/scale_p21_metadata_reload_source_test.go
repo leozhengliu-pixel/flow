@@ -23,19 +23,21 @@ func scaleP21SW201Exec(t *testing.T, database *scaleP04Database, query string, a
 	}
 }
 
-func scaleP21SW201ReloadSource(t *testing.T, database *scaleP04Database, source *store.SQLiteStore) {
+func scaleP21SW201ReloadSource(t *testing.T, database *scaleP04Database, sources ...*store.SQLiteStore) {
 	t.Helper()
 	// Exact installed copies skip reload. Advance only this fixture's
 	// metadata revision so both modes exercise their actual SQL loader.
 	scaleP21SW201Exec(t, database, `UPDATE workspace_cache_revisions SET revision=revision+1 WHERE workspace_key=? AND kind='metadata'`, database.key)
-	decodes := source.WorkspaceMetadataDecodes()
-	if err := source.ReloadWorkspace(t.Context(), database.key); err != nil {
-		t.Fatal("workflow SQL source reload", err)
-	}
-	if !source.BoundedMetadataEnabled() && source.WorkspaceMetadataDecodes() <= decodes {
-		t.Fatal("literal workflow SQL-loaded source did not decode")
-	}
-	if source.BoundedMetadataEnabled() && source.WorkspaceMetadataDecodes() != decodes {
-		t.Fatal("bounded workflow SQL-loaded source used full hydration")
+	for _, source := range sources {
+		decodes := source.WorkspaceMetadataDecodes()
+		if err := source.ReloadWorkspace(t.Context(), database.key); err != nil {
+			t.Fatal("workflow SQL source reload", err)
+		}
+		if !source.BoundedMetadataEnabled() && source.WorkspaceMetadataDecodes() <= decodes {
+			t.Fatal("literal workflow SQL-loaded source did not decode")
+		}
+		if source.BoundedMetadataEnabled() && source.WorkspaceMetadataDecodes() != decodes {
+			t.Fatal("bounded workflow SQL-loaded source used full hydration")
+		}
 	}
 }

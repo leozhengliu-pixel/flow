@@ -278,9 +278,8 @@ jobs:
   # The API suite is split so no single runner carries it all: cmd/server and
   # internal/store are sharded by measured test time (scripts/ci/go-test-timings.json;
   # see scripts/ci/go-test-shard.sh), and every other package runs in one job. Pushes
-  # to main (and manual runs) test with the race detector: over 8.4 hours of
-  # cmd/server and 5.5 hours of internal/store test time (run 44222295379), 20 and
-  # 14 shards. Pull requests test without it, in far fewer shards
+  # to main (and manual runs) test with the race detector. Pull requests test
+  # without it, in fewer shards
   # (scripts/ci/go-test-shards.json). Tests listed in scripts/ci/known-failing-tests.txt
   # for a mode are left out of its shards and run, never blocking, in "Known failing
   # (tracked)". Each job writes its own coverage profile; api-coverage merges them
@@ -519,7 +518,7 @@ jobs:
 
   # Merge the shards' per-test durations (of the tests that passed) into one
   # file. The shard assignment reads scripts/ci/go-test-timings.json;
-  # scripts/ci/update-go-test-timings.sh downloads this artifact from successful
+  # scripts/ci/update-go-test-timings.sh downloads this artifact from completed
   # main runs for the scheduled refresh PR, or from the run IDs it is given (a
   # red run measures what it ran). The file holds race-detector times: refresh it
   # from main or manual runs, not from pull requests (those run without the race

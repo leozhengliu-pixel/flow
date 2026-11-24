@@ -13,6 +13,15 @@ import (
 // SW495: favorite and subscription references of every resource kind,
 // including application credentials whose missing scopes empty a kind.
 func TestScaleP21SW495ReferenceAuthorizationDifferential(t *testing.T) {
+	scaleP21SW495ReferenceAuthorization(t, 0)
+}
+
+func TestScaleP21SW495ReferenceAuthorizationDifferentialPart2(t *testing.T) {
+	scaleP21SW495ReferenceAuthorization(t, 1)
+}
+
+func scaleP21SW495ReferenceAuthorization(t *testing.T, part int) {
+	t.Helper()
 	fx := scaleP21SW491Setup(t, func(fx *scaleP21SW491Fixture, data *domain.Bootstrap) {
 		p := fx.prefix
 		archived := fx.archived
@@ -105,7 +114,7 @@ func TestScaleP21SW495ReferenceAuthorizationDifferential(t *testing.T) {
 		scaleP21SW491Row{"kind-case", http.MethodPut, "PUT /api/favorites/{type}/{id}", "/api/favorites/%20Project%20/" + fx.ids["pub-project"], ""},
 		scaleP21SW491Row{"escaped-id", http.MethodPut, "PUT /api/favorites/{type}/{id}", "/api/favorites/project/" + esc(fx.ids["pub-project"]+"/x"), ""},
 	)
-	fx.run(t, "SW495", rows, []scaleP21SW491Control{
+	fx.runPart(t, "SW495", rows, []scaleP21SW491Control{
 		{"favorite-team-" + fx.public + "/member-private-outsider/session", true},
 		{"favorite-team-" + fx.privateTeam + "/member-private-outsider/session", false},
 		{"favorite-label-" + p + "label-private/member-private-outsider/session", false},
@@ -129,5 +138,5 @@ func TestScaleP21SW495ReferenceAuthorizationDifferential(t *testing.T) {
 		{"favorite-label-" + p + "label-public/member-private-outsider/selected-empty", false},
 		{"favorite-release-" + p + "rel-linked-public/member-private-outsider/selected-set", true},
 		{"favorite-release-" + p + "rel-linked-unscoped/member-private-outsider/selected-set", false},
-	})
+	}, part, 2)
 }

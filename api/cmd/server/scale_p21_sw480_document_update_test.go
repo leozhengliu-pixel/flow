@@ -268,6 +268,19 @@ func TestScaleP21SW480WeekendDigestTime(t *testing.T) {
 }
 
 func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
+	scaleP21SW480DocumentUpdate(t, 0)
+}
+
+func TestScaleP21SW480DocumentUpdateDifferentialPart2(t *testing.T) {
+	scaleP21SW480DocumentUpdate(t, 1)
+}
+
+func TestScaleP21SW480DocumentUpdatePermissionDifferential(t *testing.T) {
+	scaleP21SW480DocumentUpdate(t, 2)
+}
+
+func scaleP21SW480DocumentUpdate(t *testing.T, part int) {
+	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -837,8 +850,13 @@ func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
 			t.Logf("document case=%s mode=%s SQL=%d status=%d", testName, mode, statements, response.Code)
 		}
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) { run(t, test.name, test.ref, test.body, baseline.Viewer, nil) })
+	if part < 2 {
+		for index, test := range tests {
+			if index%2 == part {
+				t.Run(test.name, func(t *testing.T) { run(t, test.name, test.ref, test.body, baseline.Viewer, nil) })
+			}
+		}
+		return
 	}
 	f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 		run(t, "permission-matrix", documentID, map[string]any{"title": "Permission matrix edit"}, user, key)

@@ -615,12 +615,53 @@ func scaleP21SW296Cases() []scaleP21SW296Case {
 }
 
 func TestScaleP21SW296LargeRowWriteDifferential(t *testing.T) {
+	scaleP21SW296LargeRowWrites(t, 0)
+}
+
+func TestScaleP21SW296LargeRowWriteDifferentialPart2(t *testing.T) {
+	scaleP21SW296LargeRowWrites(t, 1)
+}
+
+func TestScaleP21SW296LargeRowWriteDifferentialPart3(t *testing.T) {
+	scaleP21SW296LargeRowWrites(t, 2)
+}
+
+func TestScaleP21SW296LargeRowWriteDifferentialPart4(t *testing.T) {
+	scaleP21SW296LargeRowWrites(t, 3)
+}
+
+func TestScaleP21SW296LargeRowWriteDifferentialPart5(t *testing.T) {
+	scaleP21SW296LargeRowWrites(t, 4)
+}
+
+func TestScaleP21SW296LargeRowWriteDifferentialReleaseAdd(t *testing.T) {
+	scaleP21SW296LargeRowWrites(t, 5)
+}
+
+func TestScaleP21SW296LargeRowWriteDifferentialReleaseRemove(t *testing.T) {
+	scaleP21SW296LargeRowWrites(t, 6)
+}
+
+func scaleP21SW296LargeRowWrites(t *testing.T, part int) {
+	t.Helper()
 	f, view := scaleP21SW78Fixture(t)
 	f.db.SetMaxOpenConns(4)
 	if metadataWorkBytes != 256<<20 || f.db.maxTransactionBytes != scaleP21SW296Tx {
 		t.Fatal("SW296 sizes assume the production work and transaction budgets", f.db.maxTransactionBytes)
 	}
-	for _, test := range scaleP21SW296Cases() {
+	for index, test := range scaleP21SW296Cases() {
+		shard := index % 5
+		// The 300,000-link fixtures each seed and write a large release
+		// twice. Keep them apart from the other large-row tests.
+		switch test.name {
+		case "release-add-issue-many-ids":
+			shard = 5
+		case "release-removed":
+			shard = 6
+		}
+		if shard != part {
+			continue
+		}
 		for _, reload := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/reload=%t", test.name, reload), func(t *testing.T) {
 				scaleP21SW296Run(t, f, view, test, reload)

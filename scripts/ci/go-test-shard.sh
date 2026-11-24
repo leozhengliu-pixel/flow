@@ -19,11 +19,9 @@
 # package ({"./cmd/server": {"TestName": 1.23, ...}}; GO_TEST_TIMINGS points at
 # another file). The tests listed there are packed greedily, longest first, each
 # onto the shard with the least predicted time so far (ties go to the lowest
-# shard; names break ties between equal times). Every entry of the file takes part
-# in the packing, whether or not the test still exists, so adding, removing or
-# renaming a test that is not listed moves no listed test; only a new timings file
-# does. Each test counts for at least 50 ms so thousands of near-instant tests
-# still spread out instead of piling onto one shard.
+# shard; names break ties between equal times). Only runnable tests take part
+# in the packing. Each test counts for at least 50 ms so thousands of near-instant
+# tests still spread out instead of piling onto one shard.
 #
 # A test missing from the file (new since the last refresh) goes to the shard
 # given by a hash of its name, which depends on that name alone. Without timings
@@ -66,7 +64,7 @@ trap 'rm -rf "$work"' EXIT
 full_tests() {
   local package=$1
   # shellcheck disable=SC2086
-  go test ${GO_TEST_LIST_FLAGS:-} -list '^(Test|Fuzz|Example)' "$package" |
+  go test ${GO_TEST_LIST_FLAGS:-} -count=1 -list '^(Test|Fuzz|Example)' "$package" |
     grep -E '^(Test|Fuzz|Example)[A-Za-z0-9_]*$' |
     LC_ALL=C sort -u
 }
@@ -148,15 +146,10 @@ load_weights() {
   key=$(timings_key "$package")
   jq -r --arg key "$key" '(.[$key] // {}) | to_entries[] | "\(.key) \(.value * 1000 | round)"' "$timings_file" |
     LC_ALL=C sort -k2,2nr -k1,1 > "$work/weights"
-  # The scope's known failures run in their own job, so they take no part in the
-  # packing: a long known-failing test packed alone would leave its shard empty
-  # once it is left out (2026-11-18: race store shard 4/14 ran no test).
-  if [ -n "${SHARD_SCOPE:-}" ]; then
-    known_tests "$package" "$SHARD_SCOPE" > "$work/weights-skip"
-    if [ -s "$work/weights-skip" ]; then
-      awk 'NR == FNR { skip[$1]; next } !($1 in skip)' "$work/weights-skip" "$work/weights" > "$work/weights-kept"
-      mv "$work/weights-kept" "$work/weights"
-    fi
+  # A removed, renamed, filtered or known-failing test cannot reserve a shard.
+  if [ -s "$work/all" ]; then
+    awk 'NR == FNR { active[$1]; next } $1 in active' "$work/all" "$work/weights" > "$work/weights-kept"
+    mv "$work/weights-kept" "$work/weights"
   fi
 }
 
@@ -226,8 +219,9 @@ case $command in
     [ "$#" -eq 4 ] || usage
     package=$2 index=$3 total=$4
     validate_shard "$index" "$total"
+    all_tests "$package" > "$work/all"
     load_weights "$package"
-    all_tests "$package" | assign "$total" | names_of "$index" > "$work/names"
+    assign "$total" < "$work/all" | names_of "$index" > "$work/names"
     if [ ! -s "$work/names" ]; then
       echo "shard $index/$total of $package has no tests" >&2
       exit 1
@@ -247,8 +241,9 @@ case $command in
     [ "$#" -eq 3 ] || usage
     package=$2 total=$3
     validate_shard 1 "$total"
+    all_tests "$package" > "$work/all"
     load_weights "$package"
-    all_tests "$package" | assign "$total" > "$work/assigned"
+    assign "$total" < "$work/all" > "$work/assigned"
     if [ ! -s "$work/assigned" ]; then
       echo "$package has no tests" >&2
       exit 1
@@ -279,8 +274,8 @@ case $command in
     package=$2 total=$3
     validate_shard 1 "$total"
     check_baseline
-    load_weights "$package"
     all_tests "$package" > "$work/all"
+    load_weights "$package"
     if [ ! -s "$work/all" ]; then
       echo "$package has no tests" >&2
       exit 1
@@ -296,8 +291,7 @@ case $command in
     echo "known failing: $(wc -l < "$work/listed" | tr -d ' ') tests of $package listed; scope ${SHARD_SCOPE:-none} leaves out $( [ -n "${SHARD_SCOPE:-}" ] && known_tests "$package" "$SHARD_SCOPE" | wc -l | tr -d ' ' || echo 0)"
     if [ -s "$work/weights" ]; then
       listed=$(wc -l < "$work/weights" | tr -d ' ')
-      stale=$(awk 'NR == FNR { have[$1]; next } !($1 in have)' "$work/full" "$work/weights" | wc -l | tr -d ' ')
-      echo "timings: $listed tests listed for $package, $stale of them no longer exist"
+      echo "timings: $listed runnable tests listed for $package"
     else
       echo "timings: none for $package, assigning by name hash"
     fi
@@ -317,7 +311,7 @@ case $command in
       # `go test -list` applies the pattern the same way -run does.
       if [ -n "${CHECK_PATTERNS:-}" ]; then
         # shellcheck disable=SC2086
-        go test ${GO_TEST_LIST_FLAGS:-} -list "$regex" "$package" |
+        go test ${GO_TEST_LIST_FLAGS:-} -count=1 -list "$regex" "$package" |
           grep -E '^(Test|Fuzz|Example)[A-Za-z0-9_]*$' | LC_ALL=C sort > "$work/selected-$index"
         if ! diff -u "$work/shard-$index" "$work/selected-$index" > /dev/null; then
           echo "shard $index pattern selects a different set than the shard list" >&2

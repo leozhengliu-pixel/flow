@@ -219,20 +219,20 @@ func (fx *scaleP21SW491Fixture) runPart(t *testing.T, label string, rows []scale
 			t.Setenv("FLOW_RECORD_ACCESS", []string{"off", "shadow", "on"}[index%3])
 			for _, phase := range []string{"warm", "reloaded"} {
 				t.Run(phase, func(t *testing.T) {
+					// The mux leaves below are read-only. Give each row and
+					// phase its own source image, then reuse that preimage
+					// across the principal and credential combinations.
+					if phase == "reloaded" {
+						scaleP21SW201ReloadSource(t, f.reader, repo, f.probe)
+					} else if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+						t.Fatal(err)
+					}
 					for _, who := range fx.principals {
 						for _, credential := range fx.credentials {
 							t.Run(who.name+"/"+credential.name, func(t *testing.T) {
 								var want outcome
 								beforeSQL := 0
 								for _, source := range []*store.SQLiteStore{repo, f.probe} {
-									if source.BoundedMetadataEnabled() {
-										if err := source.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
-											t.Fatal(err)
-										}
-									}
-									if phase == "reloaded" {
-										scaleP21SW201ReloadSource(t, f.reader, source)
-									}
 									build := func() (*http.Request, func(), *projectionHold) {
 										request := f.literalRequest(who.user, credential.key, nil)
 										parsed, err := url.Parse(item.path)
