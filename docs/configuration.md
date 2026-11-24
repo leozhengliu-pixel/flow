@@ -660,7 +660,7 @@ automatically at startup for all three drivers.
 | --- | --- | --- |
 | `FLOW_BOUNDED_METADATA` | `on` | Uses bounded metadata residency with hydration, journal coverage, and a complete catalog. Set `off` to use legacy reads and writes. |
 | `FLOW_RECORD_HYDRATION` | `on` | Loads selected metadata records for scoped reads and writes. |
-| `FLOW_RECORD_JOURNAL` | `on` | Captures record changes and authorization epochs. Set `off` consistently across replicas because it removes database triggers. |
+| `FLOW_RECORD_JOURNAL` | `on` | Captures record changes and authorization epochs. Default starts without MySQL trigger authority fall back to legacy metadata and sync. Set `off` consistently across replicas because it removes database triggers. |
 | `FLOW_METADATA_CATALOG` | Automatic with bounded metadata | Completes journal repair and missing catalog checkpoints at startup. `off` skips this work. `shadow` explicitly starts a backfill worker with bounded metadata off. |
 | `FLOW_SYNC_V2` | `on` | Enables negotiated sync v2 when the journal covers the workspace. |
 | `FLOW_SYNC_MANIFEST` | `off` | Opt-in sync capability manifests. The accepted bounded load profile leaves this off. |

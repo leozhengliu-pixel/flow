@@ -2,8 +2,8 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -15,10 +15,14 @@ const recordJournalIdentitySchemaVersion = 29
 const recordJournalSchemaVersion = 33
 const sqliteJournalContentKeysVersion = 34
 
+var errRecordJournalTriggerPermission = errors.New("record journal trigger permission denied")
+
 // Triggers capture keys, never canonical bodies. The transaction token is
 // connection-local on external databases. SQLite has one writer, so its
 // token row is set with the first write and cleared before commit.
 func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
+	mode := recordJournalMode()
+	legacyOnDenied := s.dialect == "mysql" && (mode == "shadow" || strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")) == "")
 	applied, err := s.migrationApplied(ctx, recordJournalSchemaVersion)
 	if err != nil {
 		return err
@@ -86,7 +90,7 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	}
 	// Off removes canonical-table triggers. Disable authority before DDL so
 	// enabled peers fail closed until the next bounded repair completes.
-	if recordJournalMode() == "off" {
+	if mode == "off" {
 		if _, err := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET enabled=0 WHERE id=1`); err != nil {
 			return err
 		}
@@ -107,6 +111,9 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 		}
 		enabled = 0
 		if err := s.dropRecordJournalTriggers(ctx, capturing != 0); err != nil {
+			if legacyOnDenied && isMySQLSearchPermissionError(err) {
+				return errRecordJournalTriggerPermission
+			}
 			return err
 		}
 	}
@@ -123,18 +130,13 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	}
 	for index, spec := range recordJournalTriggerSpecs(s.dialect) {
 		if err := s.installRecordJournalTrigger(ctx, spec); err != nil {
-			// Restricted MySQL accounts may lack CREATE TRIGGER. Existing
-			// business writes still work on automatic or shadow starts.
-			// ResolveAccess keeps its live-policy compatibility path.
-			if s.dialect == "mysql" && isMySQLSearchPermissionError(err) &&
-				(recordJournalMode() == "shadow" || strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")) == "") {
+			if legacyOnDenied && isMySQLSearchPermissionError(err) {
 				if capturing == 0 && index == 0 {
 					if _, resetErr := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET capturing=0 WHERE id=1`); resetErr != nil {
 						return resetErr
 					}
 				}
-				slog.Warn("record journal unavailable: trigger permission required")
-				return nil
+				return errRecordJournalTriggerPermission
 			}
 			return fmt.Errorf("record journal trigger %s: %w", spec.name, err)
 		}

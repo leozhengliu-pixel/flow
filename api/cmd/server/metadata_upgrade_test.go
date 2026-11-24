@@ -13,15 +13,28 @@ import (
 	"flow/api/internal/store"
 )
 
+var metadataUpgradeFlags = []string{
+	"FLOW_BOUNDED_METADATA", "FLOW_RECORD_HYDRATION", "FLOW_RECORD_JOURNAL", "FLOW_METADATA_CATALOG",
+	"FLOW_SYNC_V2", "FLOW_SYNC_MANIFEST", "FLOW_INDEXED_READS", "FLOW_RECORD_PEER_SYNC",
+}
+
+func metadataUpgradeServer(t *testing.T, repo *store.SQLiteStore) *server {
+	t.Helper()
+	s := &server{store: repo, uploadPath: t.TempDir()}
+	s.socketAccessSweepStarted.Store(true)
+	s.workflowSchedulerStarted.Store(true)
+	s.deliverySchedulerStarted.Store(true)
+	s.loopReconcilerStarted.Store(true)
+	s.agentRunReconcilerStarted.Store(true)
+	s.agentLiveSweepStarted.Store(true)
+	s.coordinationStarted.Store(true)
+	return s
+}
+
 func TestDefaultMetadataUpgrade(t *testing.T) {
-	flags := []string{
-		"FLOW_BOUNDED_METADATA", "FLOW_RECORD_HYDRATION", "FLOW_RECORD_JOURNAL", "FLOW_METADATA_CATALOG",
-		"FLOW_SYNC_V2", "FLOW_SYNC_MANIFEST", "FLOW_INDEXED_READS",
-	}
-	for _, flag := range flags {
+	for _, flag := range metadataUpgradeFlags {
 		t.Setenv(flag, "off")
 	}
-	t.Setenv("FLOW_RECORD_PEER_SYNC", "off")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("s", 32))))
 	config := metadataPrepareDatabase(t)
 	config.FixtureProfile, config.FixturePassword = "test", "test-password"
@@ -45,15 +58,7 @@ func TestDefaultMetadataUpgrade(t *testing.T) {
 	sweep := &sw530Sweep{workspace: fixture.Workspace.URLKey}
 	owner := &sw530Principal{name: "owner", token: token}
 	handler := func(repo *store.SQLiteStore) http.Handler {
-		s := &server{store: repo, uploadPath: t.TempDir()}
-		s.socketAccessSweepStarted.Store(true)
-		s.workflowSchedulerStarted.Store(true)
-		s.deliverySchedulerStarted.Store(true)
-		s.loopReconcilerStarted.Store(true)
-		s.agentRunReconcilerStarted.Store(true)
-		s.agentLiveSweepStarted.Store(true)
-		s.coordinationStarted.Store(true)
-		return newHandler(s)
+		return newHandler(metadataUpgradeServer(t, repo))
 	}
 	before := handler(old)
 	call := func(h http.Handler, method, path, body string, want int) *httptest.ResponseRecorder {
@@ -146,10 +151,9 @@ func TestDefaultMetadataUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	old = nil
-	for _, flag := range flags {
+	for _, flag := range metadataUpgradeFlags {
 		t.Setenv(flag, "")
 	}
-	t.Setenv("FLOW_RECORD_PEER_SYNC", "")
 
 	// The first replica prepares the original database. The second must
 	// reuse the completed checkpoints while admitting its own resident state.
@@ -245,7 +249,7 @@ func TestDefaultMetadataUpgrade(t *testing.T) {
 		}
 	}
 	replicas = nil
-	for _, flag := range flags {
+	for _, flag := range metadataUpgradeFlags {
 		t.Setenv(flag, "off")
 	}
 	rolledBack, err := store.OpenDatabase(config)

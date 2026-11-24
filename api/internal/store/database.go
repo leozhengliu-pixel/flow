@@ -484,7 +484,18 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureSCIMSchema", s.ensureSCIMSchema},
 		{"ensureWorkspaceMetadataRecords", s.ensureWorkspaceMetadataRecords},
 		{"ensureMetadataCatalog", s.ensureMetadataCatalog},
-		{"ensureRecordJournal", s.ensureRecordJournal},
+		{"ensureRecordJournal", func(ctx context.Context) error {
+			err := s.ensureRecordJournal(ctx)
+			if !errors.Is(err, errRecordJournalTriggerPermission) {
+				return err
+			}
+			// Journal readiness stays false for this replica. Skip bounded
+			// admission and use the existing metadata and realtime paths.
+			bounded, prepare = false, false
+			s.db.boundedCatalog.Store(false)
+			slog.Warn("MySQL record journal trigger permission denied. Using legacy metadata and sync")
+			return nil
+		}},
 		{"ensureApplicationAgents", s.ensureApplicationAgents},
 		{"ensureAuditStreamSecrets", s.ensureAuditStreamSecrets},
 		{"ensureAuditEvents", s.ensureAuditEvents},

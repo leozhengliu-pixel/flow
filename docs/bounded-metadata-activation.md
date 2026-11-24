@@ -46,6 +46,15 @@ startup uses legacy reads and checks again on restart. The optional
 Run it before starting bounded replicas, or while the fleet is on legacy
 reads, because the command also revisits completed collections.
 
+On external MySQL, a default startup that lacks permission to install
+journal triggers logs `MySQL record journal trigger permission denied. Using legacy metadata and sync`
+once. The replica serves legacy metadata and realtime, and Sync V2 returns
+404 so clients can fall back. This covers a missing `TRIGGER` grant and
+MySQL error 1419 when binary logging requires additional authority.
+Startup retries trigger installation and completes journal and catalog
+repair after the DBA authorizes trigger creation. An explicit
+`FLOW_RECORD_JOURNAL=on` still requires trigger installation to succeed.
+
 During a rolling upgrade, leave remaining replicas running until their
 replacements are ready. The journal triggers capture their writes, and
 bounded replicas repair pending journal and catalog entries when reloading.

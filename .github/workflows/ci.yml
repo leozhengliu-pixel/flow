@@ -797,6 +797,7 @@ jobs:
           MYSQL_PASSWORD: flow
           MYSQL_DATABASE: flow
           MYSQL_ROOT_PASSWORD: root
+          MYSQL_ROOT_HOST: '%'
         ports: ['3306:3306']
         options: >-
           --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
@@ -807,6 +808,13 @@ jobs:
         with:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
+
+      - name: Upgrade with restricted MySQL trigger permissions
+        if: matrix.dialect == 'mysql' && matrix.package == './cmd/server' && matrix.shard == 1
+        working-directory: api
+        env:
+          FLOW_TEST_MYSQL_ADMIN_URL: mysql://root:root@127.0.0.1:3306/flow
+        run: go test -tags integration ./cmd/server -run '^TestDefaultMetadataUpgradeWithRestrictedMySQL$' -count=1 -timeout 15m
 
       - name: Permit triggers in the isolated MySQL service
         if: matrix.dialect == 'mysql'
