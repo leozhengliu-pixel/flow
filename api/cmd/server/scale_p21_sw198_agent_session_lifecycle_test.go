@@ -431,73 +431,99 @@ func TestScaleP21SW198SessionLifecycleConcurrentCAS(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP21IssueUpdateSetup(t)
+	t.Run("warm-source", func(t *testing.T) {
+		scaleP21SW198ConcurrentCAS(t, f, false, false)
+	})
+	t.Run("reloaded-source", func(t *testing.T) {
+		scaleP21SW198ConcurrentCAS(t, f, true, false)
+	})
+	t.Run("stale-reloaded-source", func(t *testing.T) {
+		scaleP21SW198ConcurrentCAS(t, f, true, true)
+	})
+}
+
+func scaleP21SW198ConcurrentCAS(t *testing.T, f scaleP21IssueUpdateFixture, reload, advanceRevision bool) {
+	t.Helper()
 	owner := f.data.Viewer
+	workspace := f.data.Workspace.URLKey
 	var saved domain.AgentMessage
 	var sessionID string
-	for _, reload := range []bool{false, true} {
-		f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
-			saved, sessionID = scaleP21SW198Seed(t, f, owner, "worker", "native")
-			if reload {
-				scaleP21SW198ReloadSource(t, f, f.repository)
-			}
+	f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+		saved, sessionID = scaleP21SW198Seed(t, f, owner, "worker", "native")
+		if reload {
+			scaleP21SW198ReloadSource(t, f, f.repository)
+			return
 		}
-		var expected string
-		for index, source := range []string{"legacy", "warm"} {
-			got, started := f.run(t, source, func(service *server) *httptest.ResponseRecorder {
-				if reload && service.store.BoundedMetadataEnabled() {
-					scaleP21SW198ReloadSource(t, f, service.store)
-				}
-				reply := &workerChatReply{
-					s: service, owner: owner,
-					run:  store.AgentRun{WorkspaceKey: f.data.Workspace.URLKey, SessionID: sessionID, ID: "sw198-run"},
-					info: workerChatRunInfo{MessageID: saved.ID},
-				}
-				results := make(chan error, 2)
-				start := make(chan struct{})
-				for range 2 {
-					draft, err := cloneAgentMessage(saved)
-					if err != nil {
-						t.Fatal(err)
-					}
-					draft.Content, draft.Parts[0].Text = "one winning update", "one winning update"
-					go func(message domain.AgentMessage) {
-						<-start
-						results <- reply.save(t.Context(), saved, &workerChatDraft{c: reply, message: message})
-					}(draft)
-				}
-				close(start)
-				accepted, stale := 0, 0
-				for range 2 {
-					switch err := <-results; {
-					case err == nil:
-						accepted++
-					case errors.Is(err, errWorkerChatStale):
-						stale++
-					default:
-						t.Fatal("concurrent session save changed error", err)
-					}
-				}
-				if accepted != 1 || stale != 1 {
-					t.Fatal("session CAS accepted multiple saves", accepted, stale)
-				}
-				w := httptest.NewRecorder()
-				if err := json.NewEncoder(w).Encode(scaleP21SW198StateFor(t, f, service.store)); err != nil {
-					t.Fatal(err)
-				}
-				return w
-			})
-			if len(got.State.Events) != 1 {
-				t.Fatal("concurrent CAS published multiple mutations", len(got.State.Events))
-			}
-			normalized := scaleP21IssueUpdateNormalize(t, got, started)
-			if index == 0 {
-				expected = normalized
-			} else if normalized != expected {
-				t.Fatalf("concurrent session CAS reload=%t differs: %s", reload, scaleP21M2Diff(expected, normalized))
-			}
+		// This fixture keeps native offload markers that the SQL image
+		// removes. Capture it as a warm preimage with an unknown revision.
+		if err := f.repository.ForgetInstalledMetadataRevisionForTesting(workspace); err != nil {
+			t.Fatal(err)
 		}
 	}
-	f.scaleP21TriageWriterFixture.prepare = nil
+	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	var expected string
+	for index, source := range []string{"legacy", "warm"} {
+		got, started := f.run(t, source, func(service *server) *httptest.ResponseRecorder {
+			if reload && service.store.BoundedMetadataEnabled() {
+				scaleP21SW198ReloadSource(t, f, service.store)
+			}
+			if advanceRevision {
+				f.exec(t, `UPDATE workspace_cache_revisions SET revision=revision+1 WHERE workspace_key=? AND kind='metadata'`, workspace)
+			}
+			reply := &workerChatReply{
+				s: service, owner: owner,
+				run:  store.AgentRun{WorkspaceKey: workspace, SessionID: sessionID, ID: "sw198-run"},
+				info: workerChatRunInfo{MessageID: saved.ID},
+			}
+			results := make(chan error, 2)
+			start := make(chan struct{})
+			for range 2 {
+				draft, err := cloneAgentMessage(saved)
+				if err != nil {
+					t.Fatal(err)
+				}
+				draft.Content, draft.Parts[0].Text = "one winning update", "one winning update"
+				go func(message domain.AgentMessage) {
+					<-start
+					results <- reply.save(t.Context(), saved, &workerChatDraft{c: reply, message: message})
+				}(draft)
+			}
+			close(start)
+			accepted, stale := 0, 0
+			for range 2 {
+				switch err := <-results; {
+				case err == nil:
+					accepted++
+				case errors.Is(err, errWorkerChatStale):
+					stale++
+				default:
+					t.Fatalf("concurrent session save changed error: %T", err)
+				}
+			}
+			if accepted != 1 || stale != 1 {
+				t.Fatal("session CAS accepted multiple saves", accepted, stale)
+			}
+			if advanceRevision && !service.store.BoundedMetadataEnabled() {
+				// A bounded commit over a stale revision installs the SQL
+				// image. Load that image in the literal arm as its oracle.
+				scaleP21SW198ReloadSource(t, f, service.store)
+			}
+			w := httptest.NewRecorder()
+			if err := json.NewEncoder(w).Encode(scaleP21SW198StateFor(t, f, service.store)); err != nil {
+				t.Fatal(err)
+			}
+			return w
+		})
+		if len(got.State.Events) != 1 {
+			t.Fatal("concurrent CAS published multiple mutations", len(got.State.Events))
+		}
+		normalized := scaleP21IssueUpdateNormalize(t, got, started)
+		if index == 0 {
+			expected = normalized
+		} else if normalized != expected {
+			t.Fatalf("concurrent session CAS differs between legacy and bounded writers: %s", scaleP21M2Diff(expected, normalized))
+		}
+	}
 }
 
 func TestScaleP21SW198SessionLifecycleRevokedMembership(t *testing.T) {
