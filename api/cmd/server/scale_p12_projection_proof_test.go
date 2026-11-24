@@ -23,7 +23,7 @@ func TestScaleP12QueuedProofSurvivesBodyWritesAndRejectsGrantChanges(t *testing.
 		if err != nil {
 			t.Fatal(err)
 		}
-		frame, err := ProjectEvent(source, access)
+		frame, err := ProjectEvent(t.Context(), source, access)
 		if err != nil || !frame.Visible() {
 			t.Fatalf("frame %v", err)
 		}

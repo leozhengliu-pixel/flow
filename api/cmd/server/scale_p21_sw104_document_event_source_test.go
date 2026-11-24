@@ -351,7 +351,7 @@ func TestScaleP21SW104DocumentEventSourceDifferential(t *testing.T) {
 						if err != nil {
 							t.Fatal("resolve event access", i, err)
 						}
-						frame, err := ProjectEvent(sources[i], access)
+						frame, err := ProjectEvent(t.Context(), sources[i], access)
 						if err != nil {
 							t.Fatal("project source", i, err)
 						}

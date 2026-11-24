@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -331,11 +332,13 @@ func (s *server) BuildEventSource(ctx context.Context, workspace string, event d
 
 // ProjectEvent performs no reads. Its access must be resolved for the current
 // delivery batch and validated again before the frame is written.
-func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, error) {
+func ProjectEvent(ctx context.Context, source *EventSource, access store.EventAccess) (EventFrame, error) {
 	if source == nil || source.version != access.SourceVersion() || source.version.WorkspaceID != access.WorkspaceID || source.authzEpoch != "" && source.authzEpoch != access.AuthzEpoch {
 		return EventFrame{}, store.ErrAuthForbidden
 	}
-	// Cache waiters retain principal scratch; only the builder reserves encoding.
+	if source.budget == nil {
+		return source.projectEvent(access, 0, 0)
+	}
 	work := int64(4 << 10)
 	if source.policy != nil {
 		work += int64(source.policy.Bytes())
@@ -343,15 +346,38 @@ func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, er
 			work += int64(source.policy.Bytes() * 2)
 		}
 	}
-	if source.budget != nil && !source.budget.acquire(work) {
-		return EventFrame{}, store.ErrEventSourceBudget
+	waitCtx, cancel := context.WithTimeout(ctx, realtimeWriteTimeout)
+	defer cancel()
+	reserved := work
+	for {
+		if reserved > source.budget.limit {
+			return EventFrame{}, store.ErrEventSourceBudget
+		}
+		if err := source.budget.wait(waitCtx, reserved); err != nil {
+			if err := ctx.Err(); err != nil {
+				return EventFrame{}, err
+			}
+			return EventFrame{}, store.ErrEventSourceBudget
+		}
+		frame, err := source.projectEvent(access, work, reserved)
+		shortfall, retry := err.(projectionBudgetShortfall)
+		if !retry {
+			return frame, err
+		}
+		// The attempt released its scratch before retrying. Waiting with
+		// scratch held could leave the shared encoder without room to run.
+		reserved = max(reserved, int64(shortfall))
 	}
-	var once sync.Once
-	release := func() { once.Do(func() { source.budget.release(work) }) }
-	keep := false
+}
+
+type projectionBudgetShortfall int64
+
+func (projectionBudgetShortfall) Error() string { return store.ErrEventSourceBudget.Error() }
+
+func (source *EventSource) projectEvent(access store.EventAccess, work, reserved int64) (EventFrame, error) {
 	defer func() {
-		if !keep {
-			release()
+		if reserved != 0 {
+			source.budget.release(reserved)
 		}
 	}()
 	query, err := access.RealtimeQuery()
@@ -367,7 +393,6 @@ func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, er
 	}
 	event := source.event
 	var projected domain.RealtimeEvent
-	visible := false
 	var buildErr error
 	key := ""
 	if source.issues != nil {
@@ -507,16 +532,18 @@ func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, er
 	var raw json.RawMessage
 	encode := func() (json.RawMessage, error) {
 		if source.budget != nil {
-			encodingWork := int64(source.bytes*4 + 16<<10)
-			if encodingWork > source.budget.limit {
+			total := work + int64(source.bytes*4+16<<10)
+			if total > source.budget.limit {
 				return nil, store.ErrEventSourceBudget
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			if err := source.budget.wait(ctx, encodingWork); err != nil {
-				return nil, store.ErrEventSourceBudget
+			// A cache builder never waits for budget while the viewers
+			// waiting on its result still hold principal scratch.
+			if extra := total - reserved; extra > 0 {
+				if !source.budget.acquire(extra) {
+					return nil, projectionBudgetShortfall(total)
+				}
+				reserved += extra
 			}
-			defer source.budget.release(encodingWork)
 		}
 		raw := build()
 		return raw, buildErr
@@ -529,18 +556,17 @@ func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, er
 	if buildErr != nil {
 		return EventFrame{}, buildErr
 	}
-	visible = len(raw) > 0
-	release()
-	release = func() {}
+	visible := len(raw) > 0
+	var release func()
 	if visible && source.budget != nil {
 		lease := domain.RealtimeEvent{ID: event.ID, Type: "sync.frame", Payload: raw}
-		if !source.budget.retainEvent(lease) {
-			return EventFrame{}, store.ErrEventSourceBudget
+		if needed := source.budget.retainEventWithReservation(lease, reserved); needed != 0 {
+			return EventFrame{}, projectionBudgetShortfall(needed)
 		}
+		reserved = 0
 		var closed sync.Once
 		release = func() { closed.Do(func() { source.budget.releaseEvent(eventKey(lease)) }) }
 	}
-	keep = true
 	validate := access.Validate
 	if source.owner != nil {
 		validate = func(ctx context.Context) error { return source.owner.validateEventProjection(ctx, source, access) }
@@ -736,13 +762,26 @@ func (s *server) sharedEventFrameOnce(r *http.Request, event domain.RealtimeEven
 	if s.store.RealtimeEpochsReady() {
 		authority.epoch = access.AuthzEpoch
 	}
+	var frame EventFrame
 	source, err := s.eventSourceForAuthority(r.Context(), workspaceKey(r), event, authority)
-	if errors.Is(err, store.ErrEventSourceBudget) && s.negotiatedSummaryRequest(r) {
-		raw, encodeErr := json.Marshal(anonymousRealtimeEvent(event))
+	if err == nil {
+		frame, err = ProjectEvent(r.Context(), source, access)
+	}
+	summaryRequest := s.negotiatedSummaryRequest(r)
+	if errors.Is(err, store.ErrEventSourceBudget) && (summaryRequest || source != nil) {
+		fallback := anonymousRealtimeEvent(event)
+		if !summaryRequest {
+			// Keep the last delivered cursor until the client has resynced.
+			fallback = domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: event.CreatedAt}
+		}
+		raw, encodeErr := json.Marshal(fallback)
 		if encodeErr != nil {
 			return EventFrame{}, true, encodeErr
 		}
-		frame, encodeErr := summarizeEventFrame(EventFrame{encoded: raw, id: event.ID, visible: true}, access.AuthzEpoch)
+		frame = EventFrame{encoded: raw, id: fallback.ID, visible: true, noCursor: !summaryRequest}
+		if summaryRequest {
+			frame, encodeErr = summarizeEventFrame(frame, access.AuthzEpoch)
+		}
 		frame.validate = access.Validate
 		if encodeErr == nil {
 			encodeErr = access.Validate(r.Context())
@@ -755,11 +794,7 @@ func (s *server) sharedEventFrameOnce(r *http.Request, event domain.RealtimeEven
 	if err != nil {
 		return EventFrame{}, true, err
 	}
-	frame, err := ProjectEvent(source, access)
-	if err != nil {
-		return EventFrame{}, true, err
-	}
-	if s.negotiatedSummaryRequest(r) && event.Type != "agent_task.replied" && event.Type != "workspace.resync_required" && event.Type != "connected" {
+	if summaryRequest && event.Type != "agent_task.replied" && event.Type != "workspace.resync_required" && event.Type != "connected" {
 		summary, summaryErr := summarizeEventFrame(frame, access.AuthzEpoch)
 		if summaryErr != nil {
 			frame.Close()

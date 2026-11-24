@@ -60,8 +60,14 @@ func eventKey(event domain.RealtimeEvent) realtimeEventKey {
 	return realtimeEventKey{event.ID, event.Type, unsafe.Pointer(unsafe.SliceData(event.Payload)), cap(event.Payload)}
 }
 func (b *realtimeBudget) retainEvent(event domain.RealtimeEvent) bool {
+	return b.retainEventWithReservation(event, 0) == 0
+}
+
+// retainEventWithReservation transfers an owned work reservation to the frame.
+// On failure it leaves the reservation intact and returns the required bytes.
+func (b *realtimeBudget) retainEventWithReservation(event domain.RealtimeEvent, reserved int64) int64 {
 	if b == nil {
-		return true
+		return 0
 	}
 	b.eventsMu.Lock()
 	defer b.eventsMu.Unlock()
@@ -71,8 +77,9 @@ func (b *realtimeBudget) retainEvent(event domain.RealtimeEvent) bool {
 	if entry == nil {
 		size += int64(realtimeEventBytes(event)) + 512
 	}
-	if !b.acquire(size) {
-		return false
+	delta := size - reserved
+	if delta > 0 && !b.acquire(delta) {
+		return size
 	}
 	if entry == nil {
 		if b.events == nil {
@@ -82,7 +89,10 @@ func (b *realtimeBudget) retainEvent(event domain.RealtimeEvent) bool {
 		b.events[key] = entry
 	}
 	entry.refs++
-	return true
+	if delta < 0 {
+		b.release(-delta)
+	}
+	return 0
 }
 func (b *realtimeBudget) releaseEvent(key realtimeEventKey) {
 	if b == nil {

@@ -195,7 +195,7 @@ func TestScaleP12SourceFramesAreImmutableAndRevocationIsFresh(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		frame, err := ProjectEvent(source, access)
+		frame, err := ProjectEvent(t.Context(), source, access)
 		if err != nil || !frame.Visible() {
 			t.Fatalf("initial frame: %v", err)
 		}
@@ -235,7 +235,7 @@ func TestScaleP12SourceFramesAreImmutableAndRevocationIsFresh(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := ProjectEvent(source, foreign); err == nil {
+		if _, err := ProjectEvent(t.Context(), source, foreign); err == nil {
 			t.Fatal("source crossed workspace boundary")
 		}
 	}
@@ -290,7 +290,7 @@ func TestScaleP12TwoThousandUniqueACLsHaveBoundedFramesAndSourceSQL(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			frame, err := ProjectEvent(source, access)
+			frame, err := ProjectEvent(t.Context(), source, access)
 			if err != nil || !frame.Visible() {
 				t.Fatalf("unique ACL projection visible=%v err=%v", frame.Visible(), err)
 			}
@@ -322,7 +322,7 @@ func TestScaleP12ConcurrentProjection(t *testing.T) {
 		for range 16 {
 			workers.Go(func() {
 				for range 20 {
-					frame, err := ProjectEvent(source, access)
+					frame, err := ProjectEvent(t.Context(), source, access)
 					if err != nil {
 						t.Error(err)
 						return

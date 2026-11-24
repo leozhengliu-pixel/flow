@@ -570,7 +570,7 @@ func (s *server) projectCommittedChange(r *http.Request, access store.EventAcces
 		if err != nil {
 			return tx, err
 		}
-		frame, err := ProjectEvent(source, access)
+		frame, err := ProjectEvent(r.Context(), source, access)
 		if err != nil {
 			return tx, err
 		}
@@ -696,7 +696,7 @@ func (s *server) projectCommittedMetadata(r *http.Request, access store.EventAcc
 	if source.recordVersion == "" || source.recordVersion != record.Version || source.documentMissing {
 		return syncV2Upsert{}, false, errEventSourceUnsupported
 	}
-	frame, err := ProjectEvent(source, access)
+	frame, err := ProjectEvent(r.Context(), source, access)
 	if err != nil {
 		return syncV2Upsert{}, false, err
 	}
