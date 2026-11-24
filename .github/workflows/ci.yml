@@ -257,20 +257,80 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  e2e-performance:
+    name: Browser E2E performance
+    # Start after static checks free a hosted runner.
+    needs: [api-static]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Use project npm version
+        run: npm install --global npm@10.9.2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build browser test API
+        working-directory: api
+        run: go build -o "$RUNNER_TEMP/flow-e2e-api" ./cmd/server
+
+      - name: Build the web app and run performance tests
+        env:
+          FLOW_E2E_API_LOG: ${{ runner.temp }}/flow-e2e-api.log
+          FLOW_E2E_API_BIN: ${{ runner.temp }}/flow-e2e-api
+          FLOW_E2E_DATABASE_PATH: ${{ runner.temp }}/flow-e2e-performance.db
+          FLOW_STORAGE_LOCAL_PATH: ${{ runner.temp }}/flow-e2e-performance-uploads
+        run: npm run test:e2e:performance
+
+      - name: Upload API log and Playwright output
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-performance
+          path: |
+            ${{ runner.temp }}/flow-e2e-api.log
+            web/playwright-report-performance
+            web/test-results-performance
+          if-no-files-found: ignore
+          retention-days: 7
+
   e2e:
     name: Browser E2E
-    needs: [e2e-shard]
+    needs: [e2e-shard, e2e-performance]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
-      - name: Require every browser shard to pass
+      - name: Require every browser job to pass
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
           echo "Results: $RESULTS"
           for result in $RESULTS; do
             if [ "$result" != success ]; then
-              echo "A browser shard did not succeed." >&2
+              echo "A browser job did not succeed." >&2
               exit 1
             fi
           done

@@ -24,6 +24,7 @@
     "test:coverage:workflows": "vitest run --coverage --config vitest.workflows.config.ts",
     "test:coverage:all": "vitest run --coverage --config vitest.all.config.ts",
     "test:e2e": "playwright test",
+    "test:e2e:performance": "npm run build && playwright test -c playwright.performance.config.ts",
     "test:e2e:security": "playwright test -c playwright.security.config.ts",
     "test:e2e:realtime": "playwright test -c playwright.realtime.config.ts",
     "lint": "npm run typecheck && oxlint --deny-warnings && npm run check:pickers && npm run check:design-tokens && npm run check:ui-foundations && npm run check:functional-controls && npm run check:motion",
