@@ -16,9 +16,10 @@ replica. Keep a database backup from before the upgrade.
   locks on every replica. Use the same `FLOW_REDIS_PREFIX` for the fleet and
   an environment-specific prefix. SQLite is for single-replica deployments.
   See [Redis coordination](configuration.md#redis-coordination-and-cluster-mode).
-- On MySQL 8.4, ensure the migration role can create the journal triggers.
-  With binary logging enabled, have the DBA verify `TRIGGER` privileges and
-  `log_bin_trust_function_creators` before the change. Keep the existing
+- The bundled MySQL configurations allow the migration role to create the
+  journal triggers. On external MySQL 8.4 with binary logging enabled, have
+  the DBA verify `TRIGGER` privileges and `log_bin_trust_function_creators`
+  before the change. Keep the existing
   collation and binlog durability settings. Check `max_allowed_packet`
   against the largest metadata statements in the rehearsal. Allow room for
   redo, binlogs and temporary data.

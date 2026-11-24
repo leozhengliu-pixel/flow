@@ -168,6 +168,8 @@ services:
   mysql:
     image: mysql:8.4
     profiles: ["mysql"]
+    # Allow the application migration role to create journal triggers.
+    command: ["--log-bin-trust-function-creators=1"]
     environment:
       MYSQL_USER: ${MYSQL_USER:-flow}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-flow}
