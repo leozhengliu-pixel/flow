@@ -17,7 +17,10 @@ for (const width of [1440, 390]) {
       test.setTimeout(180_000)
       const headers = { 'X-Workspace-Key': workspaceKey }
       const language = width === 1440 ? 'en-US' : 'zh-CN'
-      expect((await request.patch('/api/account/settings', { headers, data: { language, interfaceTheme: width === 1440 ? 'Dark' : 'Light' } })).ok()).toBe(true)
+      const timezone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)
+      expect((await request.patch('/api/account/settings', { headers, data: {
+        language, interfaceTheme: width === 1440 ? 'Dark' : 'Light', timezone, pulseSchedule: 'never',
+      } })).ok()).toBe(true)
       expect((await request.patch('/api/account/profile', { headers, data: { displayName: '王明', username: 'p20-viewer' } })).ok()).toBe(true)
       let core = await (await request.get('/api/bootstrap', { headers })).json()
       expect((await request.patch(`/api/workspaces/${workspaceKey}/members/${core.viewer.id}`, { headers, data: { displayName: '王明', email: `p20-${workspaceKey}@example.test` } })).ok()).toBe(true)
@@ -39,12 +42,16 @@ for (const width of [1440, 390]) {
         for (const entry of pages) {
           await entry.page.bringToFront()
           await entry.page.goto(`${entry.url}/${workspaceKey}/${path}`)
-          const crop = await prepare?.(entry.page)
           await entry.page.setViewportSize({ width, height: height + 1 })
           await entry.page.setViewportSize({ width, height })
+          const crop = await prepare?.(entry.page)
           await entry.page.evaluate(() => document.fonts.ready)
           await entry.page.evaluate(() => Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().endTime !== Infinity).map(animation => animation.finished.catch(() => undefined))))
-          await crop?.evaluate(element => element.scrollTo(0, 0))
+          await crop?.evaluate(element => {
+            element.scrollTo(0, 0)
+            // The mobile version picker can scroll its clipped panel when focused.
+            element.querySelector('.document-history-panel')?.scrollTo(0, 0)
+          })
           await entry.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
           expect(await entry.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
           const metrics = await entry.page.evaluate(() => Object.fromEntries(['.workspace-avatar', '.document-subscribers', '.document-subscribers__document', '.document-subscribers__search', '.document-subscribers__row', '.document-history-title', '.document-history-shell-panel', '.document-history-panel', '.document-history-main', '.document-history-scroll', '.document-history-pill'].map(selector => {
@@ -75,7 +82,12 @@ for (const width of [1440, 390]) {
           await expect(page.locator('.document-page')).toContainText('The saved current body.')
           await page.locator('.document-edited').click()
           const owner = page.getByRole('button', { name: /^(Change owner|更改所有者)$/ })
-          await owner.hover(); await owner.focus(); await owner.press('Enter')
+          if (width < 500) await owner.tap()
+          else {
+            await owner.hover()
+            await owner.focus()
+            await owner.press('Enter')
+          }
           const search = page.getByRole('textbox', { name: /Change owner|更改所有者/ })
           await search.fill(creatorName)
           await expect(page.getByRole('option').filter({ hasText: creatorName })).toBeVisible()

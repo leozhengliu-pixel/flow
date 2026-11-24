@@ -14,6 +14,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - The OAuth authorization-code exchange no longer returns 429 when MCP clients have used up their address's request budget. MCP, OAuth, upload links and signed file links each keep their own unauthenticated budget and `Retry-After`.
 - Issue comments, personal API keys, and other workspace writes return HTTP 503 with `Retry-After` when their pre-write membership or role checks cannot reach the database.
 - Agent task polling checks only the listed sessions and their resource permissions. In legacy metadata mode, issue bootstrap and resource reads share a workspace projection budget.
+- **Default change.** Flow's web client uses the local issue store in all workspaces when the server supports sync v2. First visits load issue summaries and workspace metadata. Repeat visits catch up from the journal. Operators can set `FLOW_LOCAL_STORE=off` to clear retained issue data and use network reads.
+- The web client removes its retired workspace snapshot database on startup and uses a single entry in development and production.
 - Canceled issue creates and edits, project lists, and Pulse acknowledgements return a JSON error instead of an empty success.
 - Database connection failures return HTTP 503 with `Retry-After`, including during credential checks and writes. Session cookies are preserved during an outage. Open realtime streams signal clients to reconnect.
 - Bounded replicas read issue details, history, lists and groups from a current SQL snapshot when the route only needs issue records and policy. Workspace reloads keep using journal deltas after concurrent writes invalidate two install attempts.

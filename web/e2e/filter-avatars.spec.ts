@@ -33,7 +33,7 @@ for (const viewport of sizes) for (const colorScheme of ['dark', 'light'] as con
       expect((await request.post(`/api/workspaces/${workspaceKey}/teams`, { headers, data: { name: '平台工程与开发体验 Platform Engineering and Developer Experience', key: 'LONG', icon: 'Cube', color: '#f59e0b' } })).ok()).toBeTruthy()
       expect((await request.post('/api/issues', { headers, data: { title: 'Avatar identity review', teamId: team.id, stateId: 'state_todo', assigneeId: bootstrap.viewer.id } })).ok()).toBeTruthy()
       await page.route('**/test-avatars/uploaded.svg', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#167d93"/><circle cx="16" cy="12" r="6" fill="#fff"/><path d="M5 32v-4a11 11 0 0 1 22 0v4" fill="#fff"/></svg>' }))
-      await page.route(/\/api\/(?:bootstrap|issue-records\/bootstrap)(?:\?|$)/, async route => {
+      await page.route(/\/api\/(?:bootstrap|issue-records\/bootstrap|sync\/records)(?:\?|$)/, async route => {
         if (route.request().headers()['x-workspace-key'] !== workspaceKey) return route.continue()
         const response = await route.fetch(), data = await response.json()
         const visit = (value: unknown) => {

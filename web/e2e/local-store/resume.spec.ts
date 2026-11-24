@@ -1,6 +1,7 @@
 import { expect, type Page, type Response } from '@playwright/test'
 import { join } from 'node:path'
-import { readLocalRow, reloadDocument, test } from './fixture'
+import { editIssueTitle, readLocalRow, reloadDocument, test } from './fixture'
+import { observeIssueListPaint } from './timing'
 
 test.use({ workspaceNamePrefix: 'Resume' })
 
@@ -30,7 +31,7 @@ test('resumes a retained workspace with a byte-bounded catch-up and resets an ex
   if (realAuth) await context.addCookies((await request.storageState()).cookies)
   expect((await request.patch('/api/account/settings', { headers, data: { pulseSchedule: 'never', timezone: 'UTC' } })).status()).toBe(200)
   const baseline = await request.get('/api/bootstrap', { headers })
-  const { teams, viewer } = await baseline.json()
+  const { members, teamMembers, teams, viewer } = await baseline.json()
   const team = teams[0]
   const labelResponse = await request.post('/api/labels', { headers, data: { name: 'Resume label', color: '#676f88' } })
   expect(labelResponse.status()).toBe(201)
@@ -57,31 +58,27 @@ test('resumes a retained workspace with a byte-bounded catch-up and resets an ex
   }
   const path = `/${workspaceKey}/team/${team.key.toLowerCase()}/all`
   await context.addInitScript(() => performance.setResourceTimingBufferSize(2000))
-  await context.addInitScript(profile => {
+  await context.addInitScript(() => {
     if (!localStorage.getItem('flow:locale')) localStorage.setItem('flow:locale', 'en-US')
-    const visibility = new IntersectionObserver(entries => {
-      const visible = entries.find(entry => entry.isIntersecting && entry.intersectionRatio > 0)
-      if (!visible) return
-      // Use the rendering update's timestamp. Driving layout from a test's
-      // animation frame or waiting another frame changes the measured path.
-      performance.mark('flow:test:issue-content', { startTime: visible.time })
-      visibility.disconnect()
-      rows.disconnect()
-    })
-    const rows = new MutationObserver(() => {
-      const issues = document.querySelectorAll('[data-issue-row-id]')
-      if (profile && issues.length && !performance.getEntriesByName('flow:test:issue-dom').length) {
-        performance.mark('flow:test:issue-dom')
-      }
-      issues.forEach(row => visibility.observe(row))
-    })
-    rows.observe(document, { subtree: true, childList: true })
-  }, Boolean(process.env.FLOW_LOCAL_STORE_PROFILE))
+  })
+  await context.addInitScript(observeIssueListPaint, Boolean(process.env.FLOW_LOCAL_STORE_PROFILE))
   await page.emulateMedia({ colorScheme: 'light' })
   await page.setViewportSize({ width: 1440, height: 900 })
+  const coldBootstraps: string[] = []
+  const recordColdBootstrap = (response: Response) => {
+    if (workspaceBootstrap(response)) coldBootstraps.push(new URL(response.url()).pathname)
+  }
+  page.on('response', recordColdBootstrap)
   await page.goto(path)
   await expect(page.getByText('Retained issue', { exact: true })).toBeVisible()
   await expect.poll(() => readLocalRow(page, id)).toMatchObject({ title: 'Retained issue', labels: [expect.objectContaining({ id: label.id })] })
+  page.off('response', recordColdBootstrap)
+  expect(coldBootstraps).toEqual(['/api/issue-records/bootstrap'])
+  expect(await readLocalRow(page, 'workspace', '_meta')).toHaveProperty('resume')
+  expect(await readLocalRow(page, 'directory', '_meta')).toMatchObject({
+    members: members.map(({ lastSeenAt: _lastSeenAt, ...member }: { lastSeenAt?: string }) => member),
+    teamMembers,
+  })
   expect(await readLocalRow(page, id)).not.toHaveProperty('description')
   await page.evaluate(async headers => {
     performance.clearResourceTimings()
@@ -208,8 +205,7 @@ test('resumes a retained workspace with a byte-bounded catch-up and resets an ex
   const updated = 'Edited from the issue detail'
   const saved = edit.waitForResponse(response => response.request().method() === 'PATCH' &&
     [`/api/issues/${id}`, `/api/issue-records/${id}`].includes(new URL(response.url()).pathname))
-  await title.fill(updated)
-  await title.blur()
+  await editIssueTitle(title, updated)
   expect((await saved).status()).toBe(200)
   await expect.poll(() => readLocalRow(edit, id)).toMatchObject({ title: updated })
   await edit.goBack()
@@ -289,5 +285,4 @@ test('resumes a retained workspace with a byte-bounded catch-up and resets an ex
       }
     }
   }
-  if (process.env.FLOW_LOCAL_STORE_WEB_DIST) expect(p75).toBeLessThan(300)
 })

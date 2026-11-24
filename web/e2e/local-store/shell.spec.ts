@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test'
 import { createServer, request as httpRequest } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { test as workspace } from './fixture'
+import { reloadDocument, test as workspace } from './fixture'
 
 const test = workspace.extend<{ shellOrigin: { url: string; disconnect: () => Promise<void> } }>({
   shellOrigin: async ({ baseURL }, provide) => {
@@ -55,7 +55,7 @@ test('activates the production app-shell worker alongside the local store', asyn
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.state)).toBe('activated')
   const checksumCount = () => page.evaluate(() => performance.getEntriesByName('flow:local-store:checksum-match').length)
   await expect.poll(checksumCount, { timeout: 15_000 }).toBeGreaterThan(0)
-  await page.reload()
+  await reloadDocument(page)
   await expect(page.getByText(title, { exact: true })).toBeVisible()
   await expect.poll(checksumCount, { timeout: 15_000 }).toBeGreaterThan(0)
   await expect.poll(() => page.evaluate(async () => !!await (await caches.open('flow-shell-v2')).match('/__flow-app-shell'))).toBe(true)

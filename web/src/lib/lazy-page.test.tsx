@@ -13,6 +13,15 @@ describe('lazyPage preloading', () => {
     expect(loader).toHaveBeenCalledTimes(1)
   })
 
+  it('mounts an already preloaded local store page without suspending', async () => {
+    const loader = vi.fn(async () => ({ Page: () => <h1>Issue list</h1> }))
+    const Page = lazyPage(loader, 'Page', { mountPreloaded: true })
+    await Page.preload()
+    render(<Suspense fallback="Loading"><Page/></Suspense>)
+    expect(screen.getByRole('heading', { name: 'Issue list' })).toBeInTheDocument()
+    expect(loader).toHaveBeenCalledTimes(1)
+  })
+
   it('allows navigation to retry after a failed speculative load', async () => {
     const loader = vi.fn<() => Promise<{ Page: () => React.ReactElement }>>().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ Page: () => <h1>Recovered</h1> })
     const Page = lazyPage(loader, 'Page')

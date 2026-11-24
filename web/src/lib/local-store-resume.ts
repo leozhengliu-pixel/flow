@@ -1,13 +1,12 @@
 import type { AccountBootstrap, AuthSession, BootstrapData, SyncChanges } from '@/types/flow'
 import type { AppRoute } from './app-routes'
 import { ApiError, requestRetryingBusy } from './api-client'
-import { localSnapshotBuild } from './local-snapshot'
 import { localStoreBootstrap } from './local-store-bootstrap'
 import { clearUnlistedLocalStores, isLocalStoreQuotaError, LocalStoreDB, localStoreGeneration, retainedLocalAuthority, retainedLocalHead, retainedLocalWorkspaceId, retainLocalStoreAuthority, LOCAL_STORE_BUDGET, type LocalCollections, type LocalMeta, type LocalResume } from './local-store-db'
 import { readRememberedWorkspace } from './navigation-cache'
 import {
-  LOCAL_STORE_HEADER, LOCAL_STORE_ISSUE_CAPABILITY, LocalStoreRefreshRequired, LocalStoreReset, decimal,
-  localKinds, localRowBytes, localRowFingerprint, localStoreAuthority, localStoreEnabled, planLocalChanges,
+  LOCAL_STORE_HEADER, LOCAL_STORE_ISSUE_CAPABILITY, LOCAL_STORE_PULSE_CURSOR, LocalStoreRefreshRequired, LocalStoreReset, decimal,
+  localKinds, localRowBytes, localRowFingerprint, localStoreAuthority, localStoreBuildId, localStoreEnabled, planLocalChanges,
   projectLocalCollection, projectLocalIssueRecord, type LocalChange, type LocalRow, type LocalStoreAuthority,
 } from './local-store-model'
 import { modelChanges, modelRecordPage, type SyncWireRecord } from './scale-p13-wire'
@@ -80,9 +79,9 @@ export async function readLocalIssueChanges(scope: Scope, authority: LocalStoreA
   return { ...modelChanges(wire), ...readCheckpoint(wire) }
 }
 
-export function planIssueChanges(page: JournalPage, meta: LocalMeta) {
+function planIssueChanges(page: JournalPage, meta: LocalMeta) {
   const writes = planLocalChanges(page, meta.head, meta.authzEpoch, true)
-  if (!meta.resume || page.revision.split(':')[0] !== meta.resume.revision.split(':')[0] || writes.some(change => change.kind !== 'issue')) {
+  if (!meta.resume || writes.some(change => change.kind !== 'issue')) {
     throw new LocalStoreRefreshRequired('Workspace directory changed')
   }
   if (page.next === meta.head && page.revision !== meta.resume.revision) throw new LocalStoreRefreshRequired('Issue revision changed outside the journal')
@@ -128,22 +127,34 @@ function workspaceView(db: LocalStoreDB, checkpoint: LocalMeta, view: Awaited<Re
   return data
 }
 
-async function loadDirectory(scope: Scope, manifest: IssueManifest, signal?: AbortSignal) {
-  const { fetchBootstrap } = await import('./api')
-  const data = await fetchBootstrap(scope.workspaceKey, undefined, signal, true)
+async function loadDirectory(scope: Scope, signal?: AbortSignal) {
+  const { fetchPagedBootstrap } = await import('./api')
+  const data = await fetchPagedBootstrap(scope.workspaceKey, undefined, signal, true)
   const authority = localStoreBootstrap(data)?.authority
-  if (!authority || authority.viewerId !== scope.viewerId || authority.workspaceId !== scope.workspaceId || authority.authzEpoch !== manifest.authzEpoch) {
+  if (!authority || authority.viewerId !== scope.viewerId || authority.workspaceId !== scope.workspaceId) {
     throw new LocalStoreRefreshRequired('Directory authority changed')
   }
-  return listDirectory(data)
+  return { directory: listDirectory(data), authority }
 }
 
 async function seedWorkspace(scope: Scope, started: number, signal?: AbortSignal) {
-  const manifest = await readLocalIssueManifest(scope, false, signal)
+  const [manifest, { directory, authority }] = await Promise.all([
+    readLocalIssueManifest(scope, false, signal),
+    loadDirectory(scope, signal),
+  ])
+  signal?.throwIfAborted()
+  if (authority.authzEpoch !== manifest.authzEpoch || authority.head !== manifest.head) {
+    throw new LocalStoreRefreshRequired('Directory checkpoint changed')
+  }
+  // Complete the browser's initial preference write before paging and
+  // presenting a baseline that the write would immediately invalidate.
+  const { saveBrowserTimeZone } = await import('@/hooks/use-browser-timezone')
+  const settings = await saveBrowserTimeZone(scope.workspaceKey, scope.viewerId, directory.userSettings[scope.viewerId]?.timezone)?.catch(() => undefined)
+  if (settings) throw new LocalStoreRefreshRequired('Browser timezone saved during bootstrap')
   signal?.throwIfAborted()
   const current = await retainLocalStoreAuthority(manifest, scope.workspaceKey, started)
   if (current === undefined) return undefined
-  const [directory, issues] = await Promise.all([loadDirectory(scope, manifest, signal), loadIssues(scope, manifest, signal)])
+  const issues = await loadIssues(scope, manifest, signal)
   const page = await readLocalIssueChanges(scope, manifest, signal)
   if (page.next !== manifest.head || page.revision !== manifest.revision) throw new LocalStoreRefreshRequired('Workspace changed during bootstrap')
   const db = await LocalStoreDB.open(manifest, scope.workspaceKey, current)
@@ -165,7 +176,7 @@ async function seedWorkspace(scope: Scope, started: number, signal?: AbortSignal
     const now = Date.now()
     const previous = await db.readMeta()
     const metadata = {
-      build: localSnapshotBuild(), baseline: crypto.randomUUID(), workspaceKey: scope.workspaceKey,
+      build: localStoreBuildId(), baseline: crypto.randomUUID(), workspaceKey: scope.workspaceKey,
       bootstrapAt: now, lastAccessAt: now, fullCollections: ['issue' as const], bytes,
       resume: { schema: 2 as const, revision: page.revision, eventCursor: page.eventCursor, issueCount: issues.size, issueFingerprint },
     }
@@ -184,15 +195,23 @@ async function seedWorkspace(scope: Scope, started: number, signal?: AbortSignal
 export async function catchUpLocalIssues(db: LocalStoreDB, meta: LocalMeta, signal?: AbortSignal, budget = LOCAL_STORE_BUDGET, firstPage?: Promise<JournalPage | undefined>) {
   const writes = new Map<string, LocalChange>()
   let checkpoint = meta
+  let pulseWrites = 0n
   for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
     const prefetched = pageNumber === 0 ? await firstPage : undefined
     const page = prefetched ?? await readLocalIssueChanges(meta, checkpoint, signal)
     const delta = planIssueChanges(page, checkpoint)
+    for (const { invalidations } of page.transactions) {
+      if (invalidations.includes(LOCAL_STORE_PULSE_CURSOR)) pulseWrites++
+    }
     for (const change of delta) writes.set(change.id, change)
     const stamp = { revision: page.revision, eventCursor: page.eventCursor }
     checkpoint = { ...checkpoint, head: page.next, resume: { ...meta.resume!, ...stamp } }
     if (page.hasMore) continue
     signal?.throwIfAborted()
+    const metadataRevision = (revision: string) => BigInt(revision.split(':')[0])
+    if (metadataRevision(page.revision) - metadataRevision(meta.resume!.revision) !== pulseWrites) {
+      throw new LocalStoreRefreshRequired('Workspace directory changed')
+    }
     const changes = [...writes.values()]
     if (!changes.length && page.next === meta.head && page.revision === meta.resume?.revision && page.eventCursor === meta.resume.eventCursor) {
       db.rememberHead(meta)

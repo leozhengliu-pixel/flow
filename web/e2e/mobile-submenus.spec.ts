@@ -59,6 +59,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       const response = await request.post('/api/issues', { headers, data: { title: 'Phone row submenu', teamId: team.id } })
       expect(response.status()).toBe(201)
       const issue = await response.json() as Issue
+      const issuePaths = [`/api/issues/${issue.id}`, `/api/issue-records/${issue.id}`]
+      const waitForIssueUpdate = () => page.waitForResponse(response =>
+        response.request().method() === 'PATCH' && issuePaths.includes(new URL(response.url()).pathname))
       const other = await request.post(`/api/workspaces/${workspaceKey}/teams`, { headers, data: { name: 'Phone destination', key: 'DST' } })
       expect(other.status()).toBe(201)
       const destination = await other.json() as { id: string }
@@ -71,7 +74,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await shot(page, 'issue-labels', viewport.width)
       // The row menu's Labels level is the labels picker: its rows are options with a checkbox.
       const choice = labels.getByRole('option', { name: 'Bug', exact: true })
-      const labelMutation = page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().includes(`/api/issues/${issue.id}`))
+      const labelMutation = waitForIssueUpdate()
       await choice.tap()
       expect((await labelMutation).ok()).toBe(true)
       await expect(choice).toHaveAttribute('aria-checked', 'true')
@@ -92,7 +95,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await teams.getByRole('textbox', { name: 'Move to team…', exact: true }).fill('DST')
       await expect(teams.getByRole('menuitem')).toHaveCount(1)
       await shot(page, 'issue-move-team', viewport.width)
-      const mutation = page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().includes(`/api/issues/${issue.id}`))
+      const mutation = waitForIssueUpdate()
       await teams.getByRole('menuitem', { name: 'Phone destination DST', exact: true }).tap()
       expect((await mutation).ok()).toBe(true)
       const saved = await (await request.get(`/api/issue-records/${issue.id}`, { headers })).json() as Issue

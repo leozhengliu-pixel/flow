@@ -248,6 +248,9 @@ func (s *server) issueRecordsBootstrapData(w http.ResponseWriter, r *http.Reques
 		issueRecordsErrorFor(w, r, err)
 		return data, false
 	}
+	if s.authDisabled && r.Header.Get(localStoreHeader) == localStoreShadowCapability {
+		materializeDevelopmentMembers(&data)
+	}
 	sanitizeBootstrap(&data)
 	s.applyCalendarAway(r.Context(), &data)
 	s.hideUnreadableLoops(r, &data)

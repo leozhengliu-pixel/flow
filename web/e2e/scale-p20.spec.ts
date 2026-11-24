@@ -1,10 +1,12 @@
 import { expect, type Locator, type Page } from '@playwright/test'
 import { test } from './scale-p20-fixture'
 
+const artifacts = process.env.FLOW_SCALE_P20_ARTIFACTS ?? '/tmp/codex-scale-p20-enable'
+
 async function capture(page: Page, name: string, crop?: Locator) {
   await page.evaluate(() => document.fonts.ready)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  const options = { path: `/tmp/codex-scale-p20-enable/shots/${name}.png`, animations: 'disabled', scale: 'css' } as const
+  const options = { path: `${artifacts}/shots/${name}.png`, animations: 'disabled', scale: 'css' } as const
   if (crop) await crop.screenshot(options)
   else await page.screenshot(options)
 }
@@ -13,6 +15,7 @@ async function capture(page: Page, name: string, crop?: Locator) {
 async function syncReads(page: Page) {
   await page.addInitScript(() => {
     const streams: WireStream[] = []
+    let replayUnavailable = false
     class WireStream {
       onopen: ((event: Event) => void) | null = null
       onerror: ((event: Event) => void) | null = null
@@ -20,13 +23,29 @@ async function syncReads(page: Page) {
       readyState = 0
       constructor(readonly url: string) {
         streams.push(this)
-        setTimeout(() => { if (this.readyState !== 2) { this.readyState = 1; this.onopen?.(new Event('open')) } }, 0)
+        setTimeout(() => {
+          if (this.readyState === 2) return
+          this.readyState = 1
+          this.onopen?.(new Event('open'))
+          // An older replica cannot replay the cursor from the previous stream.
+          if (replayUnavailable && this.onmessage) {
+            replayUnavailable = false
+            const event = { id: 'resync_fixture', type: 'workspace.resync_required', createdAt: new Date().toISOString() }
+            this.onmessage(new MessageEvent('message', { data: JSON.stringify(event) }))
+          }
+        }, 0)
       }
       addEventListener() {}
       close() { this.readyState = 2 }
     }
     Object.defineProperty(window, 'EventSource', { value: WireStream, configurable: true })
-    Object.assign(window, { scaleP20Disconnect: () => { for (const stream of streams) stream.onerror?.(new Event('error')) } })
+    Object.assign(window, {
+      scaleP20StreamOpen: () => streams.some(stream => stream.readyState === 1),
+      scaleP20Disconnect: () => {
+        replayUnavailable = true
+        for (const stream of streams) stream.onerror?.(new Event('error'))
+      },
+    })
   })
 }
 
@@ -38,7 +57,11 @@ for (const flags of [false, true]) {
         test.setTimeout(90_000)
         const headers = { 'X-Workspace-Key': workspaceKey }
         const suffix = `${flags ? 'on' : 'off'}-${width}`
-        expect((await request.patch('/api/account/settings', { headers, data: { language: width < 500 ? 'zh-CN' : 'en-US', interfaceTheme: width < 500 ? 'Light' : 'Dark' } })).ok()).toBe(true)
+        const timezone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)
+        expect((await request.patch('/api/account/settings', { headers, data: {
+          language: width < 500 ? 'zh-CN' : 'en-US', interfaceTheme: width < 500 ? 'Light' : 'Dark',
+          timezone, pulseSchedule: 'never',
+        } })).ok()).toBe(true)
         let core = await (await request.get('/api/bootstrap', { headers })).json()
         const profile = await request.patch('/api/account/profile', { headers, data: { displayName: width < 500 ? '王明' : 'Alexandra Montgomery', username: 'p20-viewer' } })
         expect(profile.ok(), await profile.text()).toBe(true)
@@ -69,13 +92,20 @@ for (const flags of [false, true]) {
         await title.press('Tab')
         await expect.poll(async () => (await (await request.get(`/api/documents/${doc.id}`, { headers })).json()).title).toBe('P20 renamed document')
         expect((await (await request.get(`/api/documents/${doc.id}`, { headers })).json()).content).toBe('P20 current body survives metadata edits.')
+        // Use the saved document's revision for the picker checks. The
+        // rename invalidates the resource window used by the previous page.
+        await page.reload()
+        await expect(title).toHaveValue('P20 renamed document')
         await capture(page, `document-${suffix}`)
 
         await page.locator('.document-edited').click()
         const owner = page.getByRole('button', { name: /^(Change owner|更改所有者)$/ })
-        await owner.hover()
-        await owner.focus()
-        await owner.press('Enter')
+        if (width < 500) await owner.tap()
+        else {
+          await owner.hover()
+          await owner.focus()
+          await owner.press('Enter')
+        }
         const ownerSearch = page.getByRole('textbox', { name: /Change owner|更改所有者/ })
         const creatorName = doc.creator.displayName || doc.creator.name
         await ownerSearch.fill(creatorName)
@@ -83,15 +113,18 @@ for (const flags of [false, true]) {
         await capture(page, `owner-${suffix}`, ownerSearch.locator('xpath=ancestor::*[@role="dialog"][1]'))
         await page.keyboard.press('Escape')
         await page.keyboard.press('Escape')
+        await expect(ownerSearch).toBeHidden()
 
         const subscribers = page.getByRole('button', { name: /^(Change document subscribers|更改文档订阅者)$/ })
-        await subscribers.hover()
-        await subscribers.focus()
-        await subscribers.press('Enter')
-        const subscriber = page.locator('.document-subscribers__row').first()
+        if (width < 500) await subscribers.tap()
+        else {
+          await subscribers.hover()
+          await subscribers.focus()
+          await subscribers.press('Enter')
+        }
+        const subscriber = page.getByRole('checkbox', { name: creatorName, exact: true })
         await expect(subscriber).toBeVisible()
-        const subscriberName = (await subscriber.getAttribute('aria-label'))!
-        await page.locator('.document-subscribers__filter').fill(subscriberName)
+        await page.locator('.document-subscribers__filter').fill(creatorName)
         await expect(subscriber).toBeVisible()
         await page.locator('.document-subscribers__filter').fill('')
         if (await subscriber.getAttribute('aria-checked') !== 'true') await subscriber.click()
@@ -169,31 +202,34 @@ for (const flags of [false, true]) {
 
       if (flags) test('a queued save response cannot revive a document after sync recovery', async ({ page, request, workspaceKey }) => {
         const headers = { 'X-Workspace-Key': workspaceKey }
+        const timezone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)
+        expect((await request.patch('/api/account/settings', { headers, data: { timezone, pulseSchedule: 'never' } })).ok()).toBe(true)
         const core = await (await request.get('/api/bootstrap', { headers })).json()
         const created = await request.post('/api/documents', { headers, data: { title: 'Queued save', content: 'Body kept in trash', teamIds: [core.teams[0].id] } })
         expect(created.status()).toBe(201)
         const doc = await created.json()
         await syncReads(page)
-        let oldReplica = false
-        await page.route('**/api/sync/changes**', route => oldReplica ? route.fulfill({ status: 501, json: {} }) : route.fallback())
-        let ready!: () => void, release!: () => void, delivered!: () => void
-        const sent = new Promise<void>(resolve => { ready = resolve })
+        await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
+        await expect(page.locator('.document-page')).toContainText('Body kept in trash', { timeout: 15_000 })
+        await expect.poll(() => page.evaluate(() =>
+          (window as unknown as { scaleP20StreamOpen: () => boolean }).scaleP20StreamOpen(),
+        )).toBe(true)
+        let ready!: (status: number) => void, release!: () => void, delivered!: () => void
+        const sent = new Promise<number>(resolve => { ready = resolve })
         const held = new Promise<void>(resolve => { release = resolve })
         const completed = new Promise<void>(resolve => { delivered = resolve })
         await page.route(url => url.pathname === `/api/documents/${doc.id}`, async route => {
           if (route.request().method() !== 'PATCH') return route.continue()
           const response = await route.fetch()
-          ready()
+          ready(response.status())
           await held
           try { await route.fulfill({ response }) } finally { delivered() }
         })
-        await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
-        await expect(page.locator('.document-page')).toContainText('Body kept in trash', { timeout: 15_000 })
         await page.locator('.document-title').fill('Queued response')
         await page.locator('.document-title').press('Tab')
-        await sent
         try {
-          oldReplica = true
+          expect(await sent).toBe(200)
+          await page.route('**/api/sync/changes**', route => route.fulfill({ status: 501, json: {} }))
           expect((await request.delete(`/api/documents/${doc.id}`, { headers })).ok()).toBe(true)
           await page.evaluate(() => (window as unknown as { scaleP20Disconnect: () => void }).scaleP20Disconnect())
           await expect(page.locator('.document-page.is-deleted')).toBeVisible({ timeout: 15000 })

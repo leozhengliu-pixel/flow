@@ -18,8 +18,6 @@ func TestLocalStoreIssueWriteReplay(t *testing.T) {
 		t.Run(driver, func(t *testing.T) {
 			f := scaleP03Fixture(t, repo)
 			workspace := f.data.Workspace.URLKey
-			t.Setenv("FLOW_LOCAL_STORE_WORKSPACES", workspace)
-			t.Setenv("FLOW_LOCAL_STORE_RESUME_WORKSPACES", workspace)
 			origin, _ := url.Parse(f.host.URL)
 			created := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]string{
 				"teamId": f.data.Teams[0].ID, "title": "Browser receipt fixture",

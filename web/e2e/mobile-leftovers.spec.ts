@@ -24,16 +24,27 @@ for (const width of [375, 390, 1440]) for (const theme of ['Dark', 'Light'] as c
     const parent = await createIssue(longName)
     const child = await createIssue('中文 Launch', { parentId: parent.id, labelIds: [data.labels[0].id] })
     let withSession = false
+    const addSession = (issue: Record<string, unknown>) => {
+      if (!withSession || issue.id !== child.id) return
+      issue.delegate = { ...data.viewer, id: 'fixture-agent', name: '中 文', displayName: '中 文', app: true }
+      issue.agentSessionState = 'error'
+    }
     // Live replay must not replace the scripted session with the stored issue.
     await page.route('**/api/realtime/events?**', route => route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' }))
     await page.route(/\/api\/(?:issue-records(?:\/bootstrap)?|bootstrap)(?:\?|$)/, async route => {
       const response = await route.fetch()
       const body = await response.json()
-      if (withSession) for (const issue of [...(body.items ?? []), ...(body.descendants ?? []), ...(body.issues ?? [])]) {
-        if (issue.id === child.id) {
-          issue.delegate = { ...data.viewer, id: 'fixture-agent', name: '中 文', displayName: '中 文', app: true }
-          issue.agentSessionState = 'error'
-        }
+      for (const issue of [...(body.items ?? []), ...(body.descendants ?? []), ...(body.issues ?? [])]) addSession(issue)
+      await route.fulfill({ response, json: body })
+    })
+    await page.route(url => url.searchParams.get('surface') === 'local-store' &&
+      (url.pathname === '/api/sync/records' || url.pathname === '/api/sync/changes'), async route => {
+      const response = await route.fetch()
+      if (!withSession || !response.ok()) { await route.fulfill({ response }); return }
+      const body = await response.json()
+      for (const record of body.items ?? body.transactions?.flatMap(({ upserts }: { upserts: unknown[] }) => upserts) ?? []) {
+        const issue = record.data ?? record.value
+        if (issue) addSession(issue)
       }
       await route.fulfill({ response, json: body })
     })
@@ -90,7 +101,7 @@ for (const width of [375, 390, 1440]) for (const theme of ['Dark', 'Light'] as c
     await expect(title).toHaveValue(longName)
     await shot('project', title)
 
-    for (const route of ['my-issues/assigned', `team/${team.key}/all`]) {
+    for (const route of ['my-issues/assigned', `team/${team.key.toLowerCase()}/all`]) {
       await page.goto(`/${workspaceKey}/${route}`)
       const row = page.locator(`[data-issue-row-id="${child.id}"]`)
       await expect(row).toBeVisible()

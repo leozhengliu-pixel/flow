@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applyLocalIssueView, compareLocalStoreSeq, createLocalIssueView, issueFromLocalRow, LocalStoreReset, localStoreAuthority, localStoreEnabled, planLocalChanges, projectLocalCollection, projectLocalIssueRecord } from './local-store-model'
+import { applyLocalIssueView, compareLocalStoreSeq, createLocalIssueView, issueFromLocalRow, LOCAL_STORE_PULSE_CURSOR, LocalStoreReset, localStoreAuthority, localStoreBuildId, localStoreEnabled, planLocalChanges, projectLocalCollection, projectLocalIssueRecord } from './local-store-model'
 import type { BootstrapData, SyncChanges } from '@/types/flow'
 
 const after = '9007199254740993'
@@ -15,17 +15,23 @@ const page: SyncChanges = {
 }
 
 describe('local store inputs', () => {
-  it('requires both client switches and the exact authority fields', () => {
-    vi.stubEnv('VITE_LOCAL_STORE', 'true')
+  it('defaults to the local store and requires the exact authority fields', () => {
     vi.stubEnv('VITE_SYNC_V2', 'false')
-    expect(localStoreEnabled()).toBe(false)
-    vi.stubEnv('VITE_SYNC_V2', 'true')
     expect(localStoreEnabled()).toBe(true)
     const scope = { viewerId: 'viewer', workspaceId: 'workspace', authzEpoch: epoch, head: next }
     expect(localStoreAuthority(scope)).toEqual(scope)
     expect(localStoreAuthority({ ...scope, head: 17 })).toBeUndefined()
     expect(localStoreAuthority({ ...scope, authzEpoch: '' })).toBeUndefined()
     vi.unstubAllEnvs()
+  })
+
+  it('records the entry build without the origin or query string', () => {
+    const entry = document.createElement('script')
+    entry.type = 'module'
+    entry.src = '/assets/flow-build.js?v=1'
+    document.head.append(entry)
+    try { expect(localStoreBuildId()).toBe('/assets/flow-build.js') }
+    finally { entry.remove() }
   })
 
   it('projects only active issue summaries and builds the lookup keys without retaining bodies or grants', () => {
@@ -72,6 +78,20 @@ describe('local store inputs', () => {
     ]) {
       expect(() => planLocalChanges(invalid, after, epoch)).toThrow(LocalStoreReset)
     }
+  })
+
+  it('replays issue edits alongside a Pulse delivery cursor without discarding the issue list', () => {
+    const upserts = page.transactions[0].upserts.map(upsert => ({
+      ...upsert,
+      value: { ...upsert.value, isSummary: true, state: { id: 'open' } },
+    }))
+    const update = { ...page.transactions[0], upserts, removals: [], invalidations: [LOCAL_STORE_PULSE_CURSOR] }
+    const delta = { ...page, transactions: [update] }
+    expect(planLocalChanges(delta, after, epoch, true)).toMatchObject([
+      { kind: 'issue', id: 'a', row: { id: 'a', _seq: next, _v: next, title: 'New title', teamId: 'team' } },
+    ])
+    expect(() => planLocalChanges(delta, after, epoch)).toThrow(LocalStoreReset)
+    expect(() => planLocalChanges({ ...page, transactions: [{ ...update, invalidations: [...update.invalidations, 'settings'] }] }, after, epoch, true)).toThrow(LocalStoreReset)
   })
 
   it('shares only equal references and replaces rows after their batch commits', () => {

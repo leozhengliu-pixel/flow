@@ -63,7 +63,6 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, s
     const scope = viewerId && localWorkspaceId ? { viewerId, workspaceKey, workspaceId: localWorkspaceId } : undefined
     const outbox = scope && connectLocalOutbox(scope,
       () => journalRef.current?.(scope.viewerId, scope.workspaceKey), error => errorRef.current?.(error), view => pendingRef.current?.(view))
-    if (scope) ownerRef.current?.(scope.viewerId, workspaceKey, false)
     const clientId = realtimeClientId()
     let disposed = false
     let timer: number | undefined

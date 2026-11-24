@@ -9,7 +9,7 @@ for (const theme of ['light', 'dark'] as const) {
     }, theme)
     const errors: string[] = []
     page.on('pageerror', error => errors.push(error.message))
-    const gates = ['/src/main.tsx', '/api/auth/session', '/api/account/bootstrap', '/api/bootstrap'].map(path => {
+    const gates = ['/src/local-store-entry.ts', '/api/auth/session', '/api/account/bootstrap', '/api/bootstrap'].map(path => {
       let release!: () => void
       let arrived!: () => void
       const wait = new Promise<void>(resolve => { release = resolve })
@@ -32,7 +32,9 @@ for (const theme of ['light', 'dark'] as const) {
         await expect(loader).toHaveAttribute('role', 'status')
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
         await expect(page.locator('.auth-brand')).toHaveCount(0)
-        const geometry = await loader.evaluate(element => {
+        // React can replace the inline shell while a startup request is held.
+        const geometry = await page.evaluate(() => {
+          const element = document.querySelector('.flow-startup')!
           const rail = element.querySelector('.flow-startup__rail')!.getBoundingClientRect()
           const card = element.querySelector('.flow-startup__card')!.getBoundingClientRect()
           const mark = element.querySelector('.flow-startup__mark')!.getBoundingClientRect()
@@ -65,7 +67,7 @@ for (const theme of ['light', 'dark'] as const) {
 }
 
 test('draws the startup shell before JavaScript starts', async ({ page }) => {
-  await page.route(url => url.pathname === '/src/main.tsx', route => route.abort())
+  await page.route(url => url.pathname === '/src/local-store-entry.ts', route => route.abort())
   await page.goto('/join')
   await expect(page.locator('.flow-startup')).toBeVisible()
   await expect(page.locator('.flow-startup__mark')).toBeVisible()

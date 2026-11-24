@@ -1,6 +1,14 @@
 import { expect, type Page } from '@playwright/test'
 import { join } from 'node:path'
-import { readLocalRow, reloadDocument, test } from './fixture'
+import { editIssueTitle, readLocalRow, reloadDocument, test } from './fixture'
+
+test.use({ serviceWorkers: 'block' })
+
+test.beforeEach(async ({ page }) => {
+  // Exercise the shadow-only protocol used by servers without issue resume.
+  await page.route(url => url.pathname === '/api/sync/manifest' && url.searchParams.get('mode') === 'issues',
+    route => route.fulfill({ status: 404 }))
+})
 
 async function measureEntries(page: Page, kind: string) {
   return page.evaluate(kind => performance.getEntriesByName(`flow:local-store:${kind}`).map(entry => entry.duration), kind)
@@ -93,15 +101,15 @@ test('checks bootstrap parity, delta cost, divergence and cleanup in IndexedDB',
 
   // Without the resume capability the existing loader still seeds the shadow
   // and confirms edits after a restart.
-  await page.reload()
+  await reloadDocument(page)
   await expect.poll(() => readLocalRow(page, id)).toMatchObject({ title: `Journal change ${batches}` })
 
   const editedTitle = 'Title edited in this tab'
   await page.getByText(`Journal change ${batches}`, { exact: true }).click()
-  const editor = page.getByLabel('Issue title', { exact: true })
-  const saved = page.waitForResponse(response => response.request().method() === 'PATCH' && new URL(response.url()).pathname === `/api/issues/${id}`, { timeout: 10_000 })
-  await editor.fill(editedTitle)
-  await editor.blur()
+  const editor = page.getByRole('textbox', { name: 'Issue title', exact: true })
+  const saved = page.waitForResponse(response => response.request().method() === 'PATCH' &&
+    [`/api/issues/${id}`, `/api/issue-records/${id}`].includes(new URL(response.url()).pathname), { timeout: 10_000 })
+  await editIssueTitle(editor, editedTitle)
   expect((await saved).status()).toBe(200)
   await expect.poll(() => readLocalRow(page, id)).toMatchObject({ title: editedTitle })
   await page.goBack()
@@ -141,18 +149,6 @@ test('checks bootstrap parity, delta cost, divergence and cleanup in IndexedDB',
   const { id: labelId } = await label.json()
   await page.evaluate(() => window.dispatchEvent(new Event('online')))
   await expect.poll(() => readLocalRow(page, labelId, 'label')).toMatchObject({ name: 'Journal label', _v: null })
-
-  // Turning the flag off at the same origin deletes the database on restart.
-  await page.route('**/src/lib/local-store-model.ts*', async route => {
-    const response = await route.fetch()
-    const source = await response.text()
-    const disabled = source.replace(/("VITE_LOCAL_STORE"\s*:\s*)"true"/, '$1"false"')
-    expect(disabled).not.toBe(source)
-    await route.fulfill({ response, body: disabled })
-  })
-  await page.reload()
-  await expect(page.getByText(editedTitle, { exact: true })).toBeVisible()
-  await expect.poll(() => readLocalRow(page, id)).toBeUndefined()
 })
 
 test.describe('storage errors', () => {
@@ -192,11 +188,13 @@ test.describe('storage errors', () => {
     await reloadDocument(page)
     await expect(page.getByText(title, { exact: true })).toBeVisible()
     await expect.poll(() => readLocalRow(page, id)).toMatchObject({ title })
+    await expect.poll(async () => (await measureEntries(page, 'checksum-match')).length).toBeGreaterThan(0)
     await page.evaluate(() => sessionStorage.setItem('fixture-deny-write', 'true'))
-    await reloadDocument(page)
-    await expect(page.getByText(title, { exact: true })).toBeVisible()
+    const updated = 'Network fallback after quota failure'
+    expect((await request.patch(`/api/issues/${id}`, { headers, data: { title: updated } })).ok()).toBe(true)
     await expect.poll(() => page.evaluate(() => performance.getEntriesByName('fixture:quota-exceeded').length)).toBeGreaterThan(0)
     await expect.poll(() => page.evaluate(async () => (await indexedDB.databases()).some(db => db.name?.startsWith('flow-ls:')))).toBe(false)
+    await expect(page.getByText(updated, { exact: true })).toBeVisible()
   })
 })
 
@@ -211,6 +209,7 @@ test.describe('server count checks', () => {
     const { id } = await (await request.post('/api/issues', { headers, data: { teamId: teams[0].id, title: 'Baseline issue' } })).json()
     await page.goto(`/${workspaceKey}/team/${teams[0].key.toLowerCase()}/all`)
     await expect.poll(() => readLocalRow(page, id)).toMatchObject({ title: 'Baseline issue' })
+    await expect.poll(async () => (await measureEntries(page, 'checksum-match')).length).toBeGreaterThan(0)
     await page.route(/\/api\/sync\/changes\?surface=local-store/, async route => {
       const response = await route.fetch()
       const data = await response.json()

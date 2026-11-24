@@ -2874,6 +2874,21 @@ that one oversized record can be returned to ensure forward progress. Follow
 `nextCursor` rather than assuming every page contains the requested row count.
 Cursor checkpoints do not serialize workspace snapshots into localStorage.
 
+The web client uses the local issue store by default when the server has
+`FLOW_SYNC_V2`, `FLOW_SYNC_MANIFEST`, `FLOW_INDEXED_READS` and
+`FLOW_RECORD_JOURNAL` on. Every workspace is eligible, subject to the signed-in
+viewer's access. The previous workspace allowlists are ignored.
+
+Set `FLOW_LOCAL_STORE=off` on every API replica to opt out of the local store.
+Open tabs learn about the change when they next check session or local-store
+authority. Flow clears retained local-store databases at that origin and
+reads from the API. The wipe also discards edits still waiting in the local
+outbox. Reload after re-enabling to build a fresh store. See
+[Local-first sync](architecture/local-first-sync.md).
+
+Upgrading the web client removes the retired startup snapshot database and
+its index. The operator opt-out uses network reads through the same web build.
+
 Issue context accepts independent `commentsCursor` and `activitiesCursor`
 parameters. Omit a cursor to start from the latest page; use the corresponding
 cursor in the response for older history, or `-` to skip an exhausted stream.

@@ -1,11 +1,12 @@
 import { expect } from '@playwright/test'
+import { randomUUID } from 'node:crypto'
 import { createFixtureWorkspace } from '../workspace-fixture'
 import { readLocalRow, test } from './fixture'
 
 test.use({ workspaceNamePrefix: 'Partials-budget' })
 
 test('evicts history across workspaces before exceeding the origin budget', async ({ page, context, request, workspaceKey }, info) => {
-  const otherKey = workspaceKey.replace(/-budget$/, '-other')
+  const otherKey = `browser-${randomUUID()}`
   const other = await createFixtureWorkspace(request, 'Other workspace', otherKey)
   expect(other.urlKey).toBe(otherKey)
   const seed = async (key: string, text: string) => {

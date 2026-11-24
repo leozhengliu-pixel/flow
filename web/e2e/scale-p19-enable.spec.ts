@@ -55,7 +55,8 @@ for (const enabled of [false, true]) for (const viewport of [{ width: 1440, heig
       page.on('pageerror', error => failures.push(error.message))
       await page.goto(`/${workspaceKey}/projects/all`)
       const first = page.getByRole('row', { name: '项目', exact: true })
-      await expect(first).toBeVisible()
+      // This fixture starts a cold Vite server for each flag and viewport pair.
+      await expect(first).toBeVisible({ timeout: 30_000 })
       if (viewport.width > 1000) await expect(page.locator('.sidebar-section-teams')).toContainText(fixture.team.name)
       if (enabled) {
         await expect(page.locator('.scale-p19-project-pager')).toContainText('/ 8')

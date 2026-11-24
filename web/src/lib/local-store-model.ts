@@ -1,11 +1,26 @@
 import type { BootstrapData, Issue, SyncChanges } from '@/types/flow'
 
 export const LOCAL_STORE_HEADER = 'X-Flow-Local-Store'
+export const LOCAL_STORE_DISABLED = 'disabled'
 export const LOCAL_STORE_CAPABILITY = 'local-store-shadow-v1'
 export const LOCAL_STORE_ISSUE_CAPABILITY = 'local-store-issues-v1'
+export const LOCAL_STORE_PULSE_CURSOR = 'pulseDeliveryCursors'
+
+let serverDisabled = false
 
 export function localStoreEnabled() {
-  return import.meta.env.VITE_LOCAL_STORE === 'true' && import.meta.env.VITE_SYNC_V2 === 'true'
+  return !serverDisabled
+}
+
+/** Record which build wrote the store for diagnostics. */
+export function localStoreBuildId() {
+  const entry = typeof document === 'undefined' ? undefined : document.querySelector<HTMLScriptElement>('script[type="module"][src]')?.src
+  const url = entry || import.meta.url
+  try { return new URL(url).pathname } catch { return url }
+}
+
+export function markLocalStoreDisabled() {
+  serverDisabled = true
 }
 
 export interface LocalStoreAuthority {
@@ -210,7 +225,9 @@ export function planLocalChanges(page: SyncChanges, after: string, epoch: string
   for (const transaction of page.transactions) {
     if (!decimal(transaction.seq) || compareLocalStoreSeq(transaction.seq, seq) <= 0 || compareLocalStoreSeq(transaction.seq, page.next) > 0 ||
         !transaction.txId) throw new LocalStoreReset('Invalid journal transaction')
-    if (transaction.invalidations.length) throw new LocalStoreRefreshRequired('Journal invalidated a collection')
+    if (transaction.invalidations.some(kind => !issueLists || kind !== LOCAL_STORE_PULSE_CURSOR)) {
+      throw new LocalStoreRefreshRequired('Journal invalidated a collection')
+    }
     seq = transaction.seq
     for (const { key, version, value, completeness } of transaction.upserts) {
       const kind = wireKinds.get(key.kind)

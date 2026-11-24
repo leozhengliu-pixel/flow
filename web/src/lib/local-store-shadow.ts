@@ -1,12 +1,11 @@
 import type { BootstrapData, Issue, SyncChanges } from '@/types/flow'
 import { fetchBootstrap, fetchPagedBootstrap } from './api'
-import { ApiError, requestRetryingBusy } from './api-client'
-import { localSnapshotBuild } from './local-snapshot'
+import { ApiError, isConnectivityError, requestRetryingBusy } from './api-client'
 import { localStoreBootstrap } from './local-store-bootstrap'
-import { clearLocalStores, hasLocalStore, isLocalStoreQuotaError, LOCAL_STORE_BUDGET, localStorageBudget, localStoreGeneration, LocalStoreDB, recordLocalStoreVisit, retainedLocalAuthority, retainLocalStoreAuthority, type LocalCollections, type LocalMeta } from './local-store-db'
+import { clearLocalStores, hasLocalStore, isLocalStoreQuotaError, LOCAL_STORE_BUDGET, localStorageBudget, localStoreGeneration, LocalStoreDB, onLocalStoreDisabled, recordLocalStoreVisit, retainedLocalAuthority, retainLocalStoreAuthority, type LocalCollections, type LocalMeta } from './local-store-db'
 import {
   LOCAL_STORE_HEADER, LOCAL_STORE_CAPABILITY, LocalStoreRefreshRequired, LocalStoreReset, compareLocalStoreSeq, localChecksum, localKinds, localRowBytes, localRowFingerprint,
-  localStoreAuthority, localStoreEnabled, planLocalChanges, projectLocalCollection, type LocalChange, type LocalStoreAuthority,
+  localStoreAuthority, localStoreBuildId, localStoreEnabled, planLocalChanges, projectLocalCollection, type LocalChange, type LocalStoreAuthority,
 } from './local-store-model'
 import { modelChanges } from './scale-p13-wire'
 import { catchUpLocalIssues, localStoreLoadedWorkspace, readLocalIssueChanges, readLocalIssueManifest } from './local-store-resume'
@@ -105,10 +104,11 @@ class ShadowRun {
     this.db = db
     db.shareSliceReads()
     this.notices = openLocalStoreNotices(checkpoint, notice => {
-      if (notice.type !== 'commit' || this.owner !== false) return
+      if (notice.type !== 'commit' || this.owner === true) return
       this.commit = notice
       this.schedule()
     })
+    if (this.owner === false) this.schedule()
     recordLocalStoreVisit()
     try {
       // Verify new baselines on idle. Large repeat visits verify on the timer.
@@ -194,7 +194,7 @@ class ShadowRun {
       this.meta = await db.writeWithinBudget(bytes - (previous?.bytes ?? 0), available => {
         signal.throwIfAborted()
         return db.seed({ ...authority, head: page.next }, {
-          build: localSnapshotBuild(), workspaceKey: this.workspaceKey, baseline: crypto.randomUUID(),
+          build: localStoreBuildId(), workspaceKey: this.workspaceKey, baseline: crypto.randomUUID(),
           bootstrapAt: now, lastAccessAt: now, fullCollections: [], bytes,
         }, this.rows, previous, undefined, available)
       }, this.budget)
@@ -242,7 +242,7 @@ class ShadowRun {
     this.owner = owned
     if (!owned) this.reader?.abort()
     // The first stream starts from the checkpoint that startup just verified.
-    if (previous !== undefined) this.schedule()
+    if (previous !== undefined || !owned && this.db) this.schedule()
   }
 
   private fetchBaseline(signal: AbortSignal) {
@@ -276,7 +276,7 @@ class ShadowRun {
         return
       }
       if (this.meta.resume) {
-        if (this.owner === false) {
+        if (this.owner !== true) {
           const { db, meta } = this
           // The owner can be suspended when a follower reconnects or regains focus.
           if (verifyAuthority) await this.verifyIssueAuthority(meta)
@@ -357,7 +357,7 @@ class ShadowRun {
       if (keep && this.db?.valid && manifest.authzEpoch === meta.authzEpoch) await this.db.invalidateReadModel(meta)
     } catch (error) {
       if (error instanceof ApiError) status = error.status
-      if (error instanceof TypeError || status === 409 || status === 429 || status === 502 || status === 503 || status === 504) return
+      if (isConnectivityError(error) || status === 409 || status === 429) return
     }
     if (signal.aborted) return
     measure('reset')
@@ -578,7 +578,7 @@ class ShadowRun {
 
   private fail(error: unknown) {
     if (this.controller.signal.aborted) return
-    if (error instanceof ApiError && [429, 502, 503, 504].includes(error.status) || error instanceof TypeError) {
+    if (isConnectivityError(error) || error instanceof ApiError && error.status === 429) {
       if (this.meta) return // Keep the previous committed cursor and retry on the next wakeup.
     }
     if (this.meta?.resume) {
@@ -628,9 +628,19 @@ export function createLocalStoreShadow(onReset?: ResumeReset, onCommit?: ResumeC
     listen() {
       if (!localStoreEnabled()) return
       window.addEventListener('online', onOnline)
-      return () => window.removeEventListener('online', onOnline)
+      const unlisten = onLocalStoreDisabled(() => {
+        const current = run
+        current?.stop()
+        ready = run = undefined
+        if (current) onReset?.(current.viewerId, current.workspaceKey)
+      })
+      return () => {
+        window.removeEventListener('online', onOnline)
+        unlisten()
+      }
     },
     confirm(data: BootstrapData) {
+      if (!localStoreEnabled()) return
       const restored = localStoreLoadedWorkspace(data)
       if (restored) {
         run?.stop()

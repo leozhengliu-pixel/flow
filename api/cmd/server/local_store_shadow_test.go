@@ -19,6 +19,7 @@ func enableLocalStoreShadowTest(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
 	t.Setenv("FLOW_SYNC_MANIFEST", "on")
 	t.Setenv("FLOW_INDEXED_READS", "on")
+	t.Setenv("FLOW_LOCAL_STORE", "")
 }
 
 func TestLocalStoreShadowAuthority(t *testing.T) {
@@ -26,7 +27,6 @@ func TestLocalStoreShadowAuthority(t *testing.T) {
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
 		workspace := f.data.Workspace.URLKey
-		t.Setenv("FLOW_LOCAL_STORE_WORKSPACES", workspace+"-other,"+workspace)
 		bounded, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 		if err != nil {
 			t.Fatal(err)
@@ -38,7 +38,7 @@ func TestLocalStoreShadowAuthority(t *testing.T) {
 			r.URL.Path = "/api/bootstrap"
 			r.Header.Set(localStoreHeader, localStoreShadowCapability)
 			w := httptest.NewRecorder()
-			service.stampLocalStoreBootstrap(w, r, workspace)
+			service.stampLocalStoreResponse(w, r, workspace)
 			var stamp localStoreStamp
 			if err := json.Unmarshal([]byte(w.Header().Get(localStoreHeader)), &stamp); err != nil || stamp.ViewerID != member.user.ID || stamp.WorkspaceID != f.data.Workspace.ID || stamp.AuthzEpoch == "" || stamp.Head == "" {
 				t.Fatalf("invalid shadow stamp: %+v %v", stamp, err)
@@ -65,7 +65,7 @@ func TestLocalStoreShadowAuthority(t *testing.T) {
 				r.URL.Path = "/api/bootstrap"
 				r.Header.Set(localStoreHeader, localStoreShadowCapability)
 				w := httptest.NewRecorder()
-				service.stampLocalStoreBootstrap(w, r, workspace)
+				service.stampLocalStoreResponse(w, r, workspace)
 				if w.Header().Get(localStoreHeader) != "" {
 					t.Fatal("issued a stamp to a revoked viewer or team-scoped key")
 				}
@@ -82,13 +82,23 @@ func TestLocalStoreShadowAuthority(t *testing.T) {
 		r := f.principals[2].request(workspace)
 		r.URL.Path = "/api/bootstrap"
 		r.Header.Set(localStoreHeader, localStoreShadowCapability)
-		t.Setenv("FLOW_LOCAL_STORE_WORKSPACES", workspace+"-other")
-		w := httptest.NewRecorder()
-		f.service.setChangeCursor(w, r, workspace)
-		f.service.stampLocalStoreBootstrap(w, r, workspace)
-		if w.Header().Get(localStoreHeader) != "" || w.Header().Get(changeCursorHeader) == "" {
-			t.Fatal("disabled shadow changed the legacy cursor or issued a stamp")
-		}
+		t.Run("disabled", func(t *testing.T) {
+			t.Setenv("FLOW_LOCAL_STORE", "off")
+			w := httptest.NewRecorder()
+			f.service.setChangeCursor(w, r, workspace)
+			f.service.stampLocalStoreResponse(w, r, workspace)
+			if w.Header().Get(localStoreHeader) != localStoreDisabledValue || w.Header().Get(changeCursorHeader) == "" {
+				t.Fatal("disabled store changed the legacy cursor or did not advertise the opt-out")
+			}
+			r.URL.Path = "/api/sync/manifest"
+			r.URL.RawQuery = "surface=local-store&mode=issues"
+			r.Header.Set(localStoreHeader, f.principals[2].user.ID)
+			w = httptest.NewRecorder()
+			f.service.syncManifest(w, r)
+			if w.Code != http.StatusNotFound {
+				t.Fatalf("disabled issue manifest returned %d", w.Code)
+			}
+		})
 	}
 }
 
@@ -98,7 +108,6 @@ func TestLocalStoreShadowChangesDifferential(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newScaleP12Fixture(t, repo)
 			workspace := f.data.Workspace.URLKey
-			t.Setenv("FLOW_LOCAL_STORE_WORKSPACES", workspace)
 			issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issues", map[string]string{"teamId": f.data.Teams[0].ID, "title": "Plain issue"}, workspace, http.StatusCreated)
 			member, guest := f.principals[2], f.principals[3]
 			stamp, ok := f.service.localStoreAuthority(member.request(workspace), workspace)

@@ -55,20 +55,24 @@ test('never displays a retained history or archive page after team access is rev
   await page.close()
 
   expect((await request.put(`/api/workspaces/${workspaceKey}/teams/${team.id}/members/${member.id}`, { headers, data: { member: false } })).ok()).toBe(true)
-  const reopened = await context.newPage()
-  await reopened.addInitScript(titles => {
+  await context.addInitScript(titles => {
+    localStorage.setItem('flow:locale', 'en-US')
     new MutationObserver(records => {
-      for (const record of records) if ([...record.addedNodes].some(node => titles.some(title => node.textContent?.includes(title)))) {
-        document.documentElement.dataset.privateSlicePainted = 'true'
+      for (const record of records) {
+        const nodes = record.type === 'characterData' ? [record.target] : Array.from(record.addedNodes)
+        if (nodes.some(node => titles.some(title => node.textContent?.includes(title)))) {
+          document.documentElement.dataset.privateSlicePainted = 'true'
+        }
       }
-    }).observe(document, { subtree: true, childList: true })
-  }, [body, archived.title])
-  for (const path of [issuePath, `${teamPath}/archive/issues`]) {
-    const response = reopened.waitForResponse(response => response.url().includes('/api/bootstrap') || response.url().includes('/api/issue-records/bootstrap'))
-    await reopened.goto(path, { waitUntil: 'domcontentloaded' })
-    await response
+    }).observe(document, { subtree: true, childList: true, characterData: true })
+  }, [issue.title, body, archived.title])
+  for (const [path, denial] of [[issuePath, 'Issue not found'], [`${teamPath}/archive/issues`, 'Team not found']]) {
+    const reopened = await context.newPage()
+    await reopened.goto(path, { waitUntil: 'commit' })
+    await expect(reopened.getByText(denial, { exact: true })).toBeVisible()
     await expect.poll(() => readLocalRow(reopened, historyKey, '_partial_activity')).toBeUndefined()
     await expect.poll(() => readLocalRow(reopened, archiveKey, '_partial_issue')).toBeUndefined()
     await expect(reopened.locator('html')).not.toHaveAttribute('data-private-slice-painted', 'true')
+    await reopened.close()
   }
 })

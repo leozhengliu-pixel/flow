@@ -16,13 +16,14 @@ class Stream implements StreamLike {
 class Locks implements LocksLike {
   private held = new Set<string>()
   private queues = new Map<string, Array<() => void>>()
-  request(name: string, options: { signal?: AbortSignal }, callback: () => void | Promise<void>) {
+  request(name: string, options: { signal?: AbortSignal; ifAvailable?: boolean }, callback: (lock: Lock | null) => void | Promise<void>) {
     return new Promise<void>((resolve, reject) => {
       const run = async () => {
         this.held.add(name)
-        try { await callback() } finally { this.held.delete(name); this.queues.get(name)?.shift()?.(); resolve() }
+        try { await callback({ name, mode: 'exclusive' }) } finally { this.held.delete(name); this.queues.get(name)?.shift()?.(); resolve() }
       }
       if (!this.held.has(name)) { void run(); return }
+      if (options.ifAvailable) { resolve(callback(null)); return }
       const queue = this.queues.get(name) ?? []
       const entry = () => void run()
       queue.push(entry)

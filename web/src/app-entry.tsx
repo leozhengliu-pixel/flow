@@ -1,12 +1,13 @@
 import { StrictMode } from 'react'
+import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import './styles/tokens.css'
 import './styles/foundations.css'
+import App from './App'
 import './styles/pill-overrides.css'
 import './styles/micro-audit-overrides.css'
 import './components/ui/tooltip.css'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
-import App from './App'
 import { I18nProvider } from './i18n/i18n'
 import { prepareInitialLocale } from './i18n/locale'
 import { renderMermaidPreview } from './components/issue/editor/mermaid-preview'
@@ -27,9 +28,9 @@ import './components/ui/menu-highlight.css'
 import { RouteError } from './components/layout/route-error'
 import type { LocalStartup } from './lib/local-store-resume'
 
-export async function mountApp(startupSnapshotRead: Promise<unknown>, prepared?: LocalStartup) {
+export async function mountApp(prepared?: LocalStartup) {
   window.__flowMermaidPreview = renderMermaidPreview
-  await Promise.all([prepareInitialLocale(), startupSnapshotRead])
+  await prepareInitialLocale()
   const initial = prepared?.consume() ? { current: prepared } : undefined
   const router = createBrowserRouter([{ path: '*', element: (
     <LightboxEditorProvider>
@@ -40,11 +41,16 @@ export async function mountApp(startupSnapshotRead: Promise<unknown>, prepared?:
       <DueDateDialogHost />
     </LightboxEditorProvider>
   ), errorElement: <RouteError /> }])
-  createRoot(document.getElementById('root')!).render(
+  const root = createRoot(document.getElementById('root')!)
+  const render = () => root.render(
     <StrictMode>
       <FlowMotionProvider><I18nProvider>
         <RouterProvider router={router} />
       </I18nProvider></FlowMotionProvider>
     </StrictMode>,
   )
+  // The retained view and its route are already prepared. Commit the initial
+  // frame before starting work for the rest of the workspace.
+  if (initial) flushSync(render)
+  else render()
 }

@@ -1,7 +1,8 @@
 import { expect, type Page } from '@playwright/test'
-import { readLocalRow, signIn, test } from './fixture'
+import { readLocalRow, reloadDocument, signIn, test } from './fixture'
 
 test.use({ workspaceNamePrefix: 'Authority' })
+test.skip(process.env.FLOW_LOCAL_STORE_REAL_AUTH !== '1', 'Requires real browser sessions')
 
 function databases(page: Page) {
   return page.evaluate(async () => (await indexedDB.databases()).filter(db => db.name?.startsWith('flow-ls:')).length)
@@ -40,6 +41,11 @@ test('purges revoked team, workspace and session access and excludes team-restri
   const scoped = await request.post('/api/api-keys', { headers, data: { name: 'Scoped read fixture', scopes: ['read'], teamIds: [teams[0].id] } })
   expect(scoped.status()).toBe(201)
   const { secret } = await scoped.json()
+  await page.route(url => url.pathname === '/api/sync/manifest' && url.searchParams.get('mode') === 'issues', async route => {
+    const response = await route.fetch({ headers: { ...route.request().headers(), Authorization: `Bearer ${secret}` } })
+    expect(response.status()).toBe(403)
+    await route.fulfill({ response })
+  })
   await page.route('**/api/bootstrap', async route => {
     const response = await route.fetch({ headers: { ...route.request().headers(), Authorization: `Bearer ${secret}` } })
     expect(response.status()).toBe(200)
@@ -52,18 +58,18 @@ test('purges revoked team, workspace and session access and excludes team-restri
   // Explicitly confirm the scoped bootstrap made no durable grant in this origin.
   expect((await scopedBootstrap).ok()).toBe(true)
   expect(await databases(page)).toBe(0)
-  await page.unroute('**/api/bootstrap')
-  await page.reload()
+  await page.unrouteAll()
+  await reloadDocument(page)
   await expect(page.getByText(title, { exact: true })).toBeVisible()
   await expect.poll(() => readLocalRow(page, privateIssue.id)).toMatchObject({ title: privateTitle })
 
   const openIssue = async () => {
     const detail = await context.newPage()
-    const manifest = detail.waitForResponse(response => new URL(response.url()).searchParams.get('surface') === 'local-store' &&
-      new URL(response.url()).pathname === '/api/sync/manifest')
+    const authority = detail.waitForResponse(response => new URL(response.url()).searchParams.get('surface') === 'local-store' &&
+      ['/api/sync/manifest', '/api/sync/changes'].includes(new URL(response.url()).pathname))
     await detail.goto(`/${workspaceKey}/issue/${publicIssue.identifier}/visible-before-revocation`)
     await expect(detail.getByText(title, { exact: true }).first()).toBeVisible()
-    expect((await manifest).status()).toBe(200)
+    expect((await authority).status()).toBe(200)
     return detail
   }
   const setTeamMember = async (allowed: boolean) => {
@@ -102,7 +108,7 @@ test('purges revoked team, workspace and session access and excludes team-restri
   expect(removed.ok()).toBe(true)
   await reopened.evaluate(() => window.dispatchEvent(new Event('online')))
   await expect.poll(() => databases(reopened)).toBe(0)
-  await reopened.reload()
+  await reloadDocument(reopened)
   await expect(reopened.getByText(title, { exact: true })).toHaveCount(0)
   expect(await databases(reopened)).toBe(0)
   await reopened.close()
@@ -113,9 +119,10 @@ test('purges revoked team, workspace and session access and excludes team-restri
   await expect(ownerPage.getByText(title, { exact: true })).toBeVisible()
   await expect.poll(() => readLocalRow(ownerPage, publicIssue.id)).toMatchObject({ title })
   await context.clearCookies()
-  const unauthorized = ownerPage.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/session' && response.status() === 401)
-  await ownerPage.reload()
-  await unauthorized
+  await Promise.all([
+    ownerPage.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/session' && response.status() === 401),
+    reloadDocument(ownerPage),
+  ])
   await expect(ownerPage.getByText(title, { exact: true })).toHaveCount(0)
   await expect.poll(() => databases(ownerPage)).toBe(0)
 })

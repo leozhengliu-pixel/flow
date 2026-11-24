@@ -1,6 +1,7 @@
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 import { test } from './workspace-fixture'
 import { bootstrap, preferences } from './review-findings-fixture'
+import { issuePath } from '../src/lib/app-routes'
 
 // A label group row (it opens a submenu of the group's labels) keeps its icon, name and submenu marker on one line in
 // every labels picker, desktop and phone: a long Chinese group name ellipsizes instead of wrapping under the icon.
@@ -16,7 +17,7 @@ async function seed(request: APIRequestContext, workspaceKey: string) {
   expect((await request.post('/api/labels', { headers, data: { name: '新手入门', color: '#4cb782' } })).status()).toBe(201)
   const response = await request.post('/api/issues', { headers, data: { title: '标签分组', teamId: data.teams[0].id, stateId: data.states.find(state => state.type === 'unstarted')!.id } })
   expect(response.status()).toBe(201)
-  return await response.json() as { identifier: string }
+  return await response.json() as { identifier: string; title: string }
 }
 
 async function settle(menu: Locator) {
@@ -91,7 +92,9 @@ test.describe('desktop menus', () => {
     expect((await request.post('/api/issues', { headers, data: { title: '标签分组 2', teamId: data.teams[0].id, stateId: data.states.find(state => state.type === 'unstarted')!.id, labelIds: [defect.id] } })).status()).toBe(201)
 
     // ⌘K → Add labels: the group is one row (checkbox track, icon at 40px, name at 64px) that opens its own step.
-    await page.goto(`/${workspaceKey}/issue/${issue.identifier}`)
+    await page.goto(issuePath(workspaceKey, issue))
+    await expect(page.locator('.labels-picker .label-project-trigger:visible').first()).toBeVisible()
+    await page.locator('.sidebar').click({ position: { x: 4, y: 50 } })
     await page.keyboard.press('ControlOrMeta+k')
     await page.locator('[cmdk-input]').fill('labels')
     await page.locator('[cmdk-item]').filter({ hasText: '添加标签' }).first().click()

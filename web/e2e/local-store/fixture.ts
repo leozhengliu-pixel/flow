@@ -17,7 +17,7 @@ export async function editIssueTitle(title: Locator, value: string) {
   await title.blur()
 }
 
-type WriteDecision = 'send' | 'disconnect' | 'lose-response'
+type WriteDecision = 'send' | 'disconnect' | 'lose-response' | 'timeout-response'
 
 export async function interruptIssueWrites(
   context: BrowserContext,
@@ -28,7 +28,7 @@ export async function interruptIssueWrites(
   await context.exposeBinding('fixtureIssueWrite', ({ page }, id: string) => decide(page, id))
   await context.exposeBinding('fixtureIssueResponse', (_, status: number) => committed(status))
   // Simulate transport loss around the real fetch, including a committed write
-  // whose response never reaches the client.
+  // whose response is lost or replaced with a timeout.
   await context.addInitScript(path => {
     const fixture = window as Window & {
       fixtureIssueWrite(id: string): Promise<WriteDecision>
@@ -41,9 +41,10 @@ export async function interruptIssueWrites(
       const decision = await fixture.fixtureIssueWrite(id)
       if (decision === 'disconnect') throw new TypeError('Fixture connection dropped')
       const response = await fetch(input, init)
-      if (decision === 'lose-response') {
+      if (decision === 'lose-response' || decision === 'timeout-response') {
         await response.arrayBuffer()
         await fixture.fixtureIssueResponse(response.status)
+        if (decision === 'timeout-response') return new Response(null, { status: 408 })
         throw new TypeError('Fixture response lost')
       }
       return response
@@ -90,9 +91,6 @@ export async function signIn(request: APIRequestContext, role: 'owner' | 'member
 }
 
 export const test = workspace.extend({
-  workspaceURLKey: async ({ workspaceNamePrefix }, provide, info) => {
-    await provide(`browser-local-store-${info.project.name}-${workspaceNamePrefix.toLowerCase()}`)
-  },
   request: async ({ request }, provide) => {
     if (process.env.FLOW_LOCAL_STORE_REAL_AUTH === '1') await signIn(request)
     await provide(request)

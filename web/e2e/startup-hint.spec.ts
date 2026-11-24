@@ -53,7 +53,7 @@ for (const width of [1440, 390, 375]) {
 test('keeps the hint clock paused until the entry finishes', async ({ page, workspaceKey }) => {
   let release!: () => void
   const pending = new Promise<void>(resolve => { release = resolve })
-  await page.route('**/src/main.tsx', async route => {
+  await page.route('**/src/local-store-entry.ts', async route => {
     await pending
     await route.continue()
   })

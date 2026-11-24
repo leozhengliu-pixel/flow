@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { parseAppRoute } from './app-routes'
-import { clientNavigationTarget, pagesForRoute, preloadInitialRoute } from './route-preload'
+import { clientNavigationTarget, pagesForRoute, preloadRoute } from './route-preload'
 import * as pages from './route-pages'
 
 describe('route preloading', () => {
@@ -31,23 +31,12 @@ describe('route preloading', () => {
     const a = document.createElement('a'); a.href = '/acme/issues/all'; a.target = '_blank'
     expect(clientNavigationTarget(a, new URL('http://localhost/acme/projects/all'))).toBeUndefined()
   })
-  it('starts the current URL\'s page chunks at startup without waiting for data', () => {
+  it('preloads only the page for the requested route', async () => {
     const preload = vi.spyOn(pages.IssueExplorerPage, 'preload').mockResolvedValue()
     const other = vi.spyOn(pages.ProjectsPage, 'preload').mockResolvedValue()
-    preloadInitialRoute({ pathname: '/acme/team/ENG/all', search: '' })
+    await preloadRoute('/acme/team/ENG/all')
     expect(preload).toHaveBeenCalledTimes(1)
     expect(other).not.toHaveBeenCalled()
     preload.mockRestore(); other.mockRestore()
-  })
-  it('swallows a failed startup preload', async () => {
-    const preload = vi.spyOn(pages.IssueExplorerPage, 'preload').mockRejectedValue(new Error('offline'))
-    const unhandled = vi.fn()
-    process.on('unhandledRejection', unhandled)
-    expect(() => preloadInitialRoute({ pathname: '/acme/issues/all', search: '' })).not.toThrow()
-    await new Promise(resolve => setTimeout(resolve, 10))
-    process.off('unhandledRejection', unhandled)
-    expect(preload).toHaveBeenCalledTimes(1)
-    expect(unhandled).not.toHaveBeenCalled()
-    preload.mockRestore()
   })
 })

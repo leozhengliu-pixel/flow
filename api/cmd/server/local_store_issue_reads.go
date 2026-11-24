@@ -17,7 +17,7 @@ func (s *server) localStoreIssueAccess(w http.ResponseWriter, r *http.Request) (
 		writeSyncError(w, store.ErrAuthForbidden)
 		return store.EventAccess{}, false
 	}
-	if _, ready := s.syncV2Journal(); !ready || !localStoreIssueResumeAllowed(workspaceKey(r)) {
+	if _, ready := s.syncV2Journal(); !ready || !localStoreAllowed(workspaceKey(r)) {
 		http.NotFound(w, r)
 		return store.EventAccess{}, false
 	}
@@ -40,7 +40,8 @@ func localStoreIssueRevision(access store.EventAccess) string {
 }
 
 func (s *server) validateLocalStoreIssueRead(r *http.Request, access store.EventAccess) error {
-	err := s.store.ValidateEventAccess(r.Context(), access)
+	err := s.syncChangesProjectionError(r, access, s.store.ValidateEventAccess(r.Context(), access))
+	// A same-epoch write can invalidate the projection without revoking access.
 	if err != nil && s.syncChangesRaced(r, access, err) {
 		return store.ErrMetadataCursor
 	}
