@@ -193,7 +193,11 @@ test.describe('scale-p19 bounded navigation and control states', () => {
     test.setTimeout(process.env.FLOW_SCALE_P19_HEAP_SNAPSHOTS === 'true' ? 300_000 : 180_000)
     const fixture = await directory(page, request, workspaceKey)
     await page.goto(`/${workspaceKey}/projects/all`)
-    await expect(page.getByRole('row', { name: '项目', exact: true })).toBeVisible()
+    // The fixture's Vite server transforms the project-window modules on the
+    // first request. Wait for that request before giving the first row its
+    // normal render budget.
+    await expect.poll(() => fixture.calls.length, { timeout: 30_000 }).toBeGreaterThan(0)
+    await expect(page.getByRole('row', { name: '项目', exact: true })).toBeVisible({ timeout: 30_000 })
     const pager = page.locator('.scale-p19-project-pager')
     const previous = pager.locator('button').first(), next = pager.locator('button').last()
     await expect(previous).toBeDisabled()
