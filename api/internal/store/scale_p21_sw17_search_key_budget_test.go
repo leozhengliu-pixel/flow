@@ -150,6 +150,10 @@ func TestScaleP21SW17SearchKeyBoundDifferential(t *testing.T) {
 				if _, err := f.db.ExecContext(t.Context(), `UPDATE metadata_search_migration_checkpoints SET last_record_key=?,completed=? WHERE workspace_key=? AND field='projects'`, last, complete, workspace); err != nil {
 					t.Fatal(err)
 				}
+				// A completed checkpoint is reconciled again only under changed rules.
+				if _, err := f.db.ExecContext(t.Context(), `DELETE FROM metadata_search_index_rules WHERE workspace_key=?`, workspace); err != nil {
+					t.Fatal(err)
+				}
 				statements := 0
 				ctx := WithSQLStatementObserver(t.Context(), func(string) { statements++ })
 				if err := source.migrateMetadataSearchIndex(ctx); err != nil {
@@ -226,6 +230,11 @@ func TestScaleP21SW17SearchKeyBoundBudget(t *testing.T) {
 		})
 	}
 	probe.metadataResidency.work.limit = metadataWorkBytes
+	// The legacy run above completed under the current rules; recover the
+	// bounded repair as a reconciliation required by changed rules.
+	if _, err := f.db.ExecContext(t.Context(), `DELETE FROM metadata_search_index_rules WHERE workspace_key=?`, workspace); err != nil {
+		t.Fatal(err)
+	}
 	if err := probe.migrateMetadataSearchIndex(context.Background()); err != nil {
 		t.Fatal("legal SQLite raw key did not recover with sufficient work budget", err)
 	}

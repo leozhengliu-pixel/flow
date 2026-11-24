@@ -653,6 +653,10 @@ func TestMetadataSearchRepairReconcilesCompletedAndResumesCheckpoint(t *testing.
 	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET completed=1,last_record_key='repair-project' WHERE workspace_key=? AND field='projects'`, data.Workspace.URLKey); err != nil {
 		t.Fatal(err)
 	}
+	// The completed migration ran under other rules, so it is reconciled again.
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_index_rules SET rules='previous-rules' WHERE workspace_key=? AND field='projects'`, data.Workspace.URLKey); err != nil {
+		t.Fatal(err)
+	}
 	if err := repo.migrateMetadataSearchIndex(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -677,6 +681,111 @@ func TestMetadataSearchRepairReconcilesCompletedAndResumesCheckpoint(t *testing.
 	var count int
 	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "repair-tail").Scan(&count); err != nil || count != 1 {
 		t.Fatalf("checkpoint retry did not restore row: %d %v", count, err)
+	}
+}
+
+// A restart after a completed reconciliation under the same rules must not
+// walk the field again (issue #238); records written in between are indexed
+// by their own transactions. Changed rules and interrupted runs still repair.
+func TestMetadataSearchRestartSkipsCompletedReconciliation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "restart.db")
+	repo, err := OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	workspace := repo.Bootstrap().Workspace.URLKey
+	insertSearchMetadata(t, repo, workspace, "projects", "restart-project", domain.Project{ID: "restart-project", Name: "Restart content"})
+	checkpoint := func(repo *SQLiteStore) (string, int) {
+		t.Helper()
+		var last string
+		var complete int
+		if err := repo.db.QueryRowContext(ctx, `SELECT last_record_key,completed FROM metadata_search_migration_checkpoints WHERE workspace_key=? AND field='projects'`, workspace).Scan(&last, &complete); err != nil {
+			t.Fatal(err)
+		}
+		return last, complete
+	}
+	content := func(repo *SQLiteStore) string {
+		t.Helper()
+		var value string
+		if err := repo.db.QueryRowContext(ctx, `SELECT content FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key='restart-project'`, workspace).Scan(&value); err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	if _, complete := checkpoint(repo); complete != 1 {
+		t.Fatal("the first open did not complete the reconciliation")
+	}
+	completedAt, _ := checkpoint(repo)
+	// A marker the reconciliation would overwrite, and an orphan its prune
+	// would delete, prove whether either ran.
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_documents SET content='untouched marker' WHERE workspace_key=? AND field='projects' AND record_key='restart-project'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.db.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) VALUES(?,'projects','restart-orphan','orphan marker')`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	orphans := func(repo *SQLiteStore) int {
+		t.Helper()
+		var count int
+		if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key='restart-orphan'`, workspace).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	repo.Close()
+
+	repo, err = OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last, complete := checkpoint(repo); complete != 1 || last != completedAt {
+		t.Fatalf("a restart reset the completed checkpoint: last=%q completed=%d", last, complete)
+	}
+	if got := content(repo); got != "untouched marker" {
+		t.Fatal("a restart walked a field that had completed under the same rules")
+	}
+	if orphans(repo) != 1 {
+		t.Fatal("a restart ran the orphan prune on a field that had completed under the same rules")
+	}
+
+	// Changed rules: the next start reconciles the field once more.
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_index_rules SET rules='previous-rules' WHERE workspace_key=? AND field='projects'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	repo.Close()
+	repo, err = OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := content(repo); !strings.Contains(got, "Restart content") {
+		t.Fatalf("changed rules did not reconcile the field: %q", got)
+	}
+	if orphans(repo) != 0 {
+		t.Fatal("the reconciliation under new rules kept an orphaned index row")
+	}
+	if _, complete := checkpoint(repo); complete != 1 {
+		t.Fatal("the reconciliation under new rules did not complete")
+	}
+
+	// An interrupted run resumes from its key and completes.
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_documents SET content='untouched marker' WHERE workspace_key=? AND field='projects' AND record_key='restart-project'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET completed=0,last_record_key='' WHERE workspace_key=? AND field='projects'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	repo.Close()
+	repo, err = OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	if got := content(repo); !strings.Contains(got, "Restart content") {
+		t.Fatalf("an interrupted reconciliation did not resume: %q", got)
+	}
+	if _, complete := checkpoint(repo); complete != 1 {
+		t.Fatal("the resumed reconciliation did not complete")
 	}
 }
 

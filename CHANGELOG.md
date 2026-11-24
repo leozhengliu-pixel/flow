@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- API restarts no longer re-run the metadata search reconciliation when the previous run completed under the same indexing rules; the server starts serving without walking every project, document and initiative again or pruning an index that is already current. A rules change or an interrupted run still reconciles, resuming from its checkpoint.
 - New documents created from a team page or the command menu open at once; the workspace refresh that used to run first (a full issue bootstrap on large workspaces) now runs in the background.
 - The OAuth authorization-code exchange no longer returns 429 when MCP clients have used up their address's request budget. MCP, OAuth, upload links and signed file links each keep their own unauthenticated budget and `Retry-After`.
 - Issue comments, personal API keys, and other workspace writes return HTTP 503 with `Retry-After` when their pre-write membership or role checks cannot reach the database.

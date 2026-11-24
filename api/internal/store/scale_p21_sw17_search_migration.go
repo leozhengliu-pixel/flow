@@ -118,6 +118,11 @@ func (s *SQLiteStore) sw17SearchFieldBounded(ctx context.Context, workspace, fie
 		last, releaseCheckpoint = "", func() {}
 	}
 	defer func() { releaseCheckpoint() }()
+	if current, err := s.metadataSearchFieldCurrent(ctx, workspace, field, complete); err != nil {
+		return err
+	} else if current {
+		return nil
+	}
 	if complete != 0 {
 		if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET last_record_key='',completed=0 WHERE workspace_key=? AND field=?`, workspace, field); err != nil {
 			return err
@@ -168,6 +173,9 @@ func (s *SQLiteStore) sw17SearchFieldBounded(ctx context.Context, workspace, fie
 		return err
 	}
 	if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET completed=1 WHERE workspace_key=? AND field=?`, workspace, field); err != nil {
+		return err
+	}
+	if err := s.recordMetadataSearchRules(ctx, workspace, field); err != nil {
 		return err
 	}
 	insert := `INSERT INTO metadata_search_migrations(workspace_key,field) VALUES(?,?) ON CONFLICT DO NOTHING`

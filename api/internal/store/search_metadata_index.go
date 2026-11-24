@@ -99,10 +99,15 @@ func (s *SQLiteStore) ensureMetadataSearchIndex(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS metadata_search_migrations(workspace_key VARCHAR(191) NOT NULL,field VARCHAR(191) NOT NULL,PRIMARY KEY(workspace_key,field))`); err != nil {
 		return err
 	}
-	// Checkpoints make the legacy index repair resumable.  The completed bit is
-	// deliberately reset on the next startup so an already-migrated database is
-	// reconciled again (repairing stale rows, not just missing rows).
+	// Checkpoints make the legacy index repair resumable. A completed field is
+	// reconciled again (repairing stale rows, not just missing rows) only when
+	// the rules that decide a document's content changed since it completed.
 	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS metadata_search_migration_checkpoints(workspace_key VARCHAR(191) NOT NULL,field VARCHAR(191) NOT NULL,last_record_key VARCHAR(191) NOT NULL DEFAULT '',completed INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(workspace_key,field))`); err != nil {
+		return err
+	}
+	// The rules a completed reconciliation used (metadataSearchRules). A start
+	// with the same rules skips the field instead of walking it again.
+	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS metadata_search_index_rules(workspace_key VARCHAR(191) NOT NULL,field VARCHAR(191) NOT NULL,rules VARCHAR(64) NOT NULL,PRIMARY KEY(workspace_key,field))`); err != nil {
 		return err
 	}
 	fields := `('projects','documents','initiatives','users','customers','releases','savedViews')`
@@ -330,7 +335,13 @@ func (s *SQLiteStore) migrateMetadataSearchIndex(ctx context.Context) error {
 				}
 				last = ""
 			}
+			if current, err := s.metadataSearchFieldCurrent(ctx, workspace, kind.field, complete); err != nil {
+				return err
+			} else if current {
+				continue
+			}
 			if complete != 0 {
+				// Completed under other rules: reconcile every record again.
 				last = ""
 				if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET last_record_key='',completed=0 WHERE workspace_key=? AND field=?`, workspace, kind.field); err != nil {
 					return err
@@ -371,6 +382,9 @@ func (s *SQLiteStore) migrateMetadataSearchIndex(ctx context.Context) error {
 				return err
 			}
 			if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET completed=1 WHERE workspace_key=? AND field=?`, workspace, kind.field); err != nil {
+				return err
+			}
+			if err := s.recordMetadataSearchRules(ctx, workspace, kind.field); err != nil {
 				return err
 			}
 			migrationInsert := `INSERT INTO metadata_search_migrations(workspace_key,field) VALUES(?,?) ON CONFLICT DO NOTHING`

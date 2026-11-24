@@ -159,6 +159,7 @@ var workspacePurgeTables = []workspacePurgeTable{
 	{"metadata_catalog", "workspace_key", false},
 	{"metadata_search_documents", "workspace_key", false},
 	{"metadata_search_migration_checkpoints", "workspace_key", false},
+	{"metadata_search_index_rules", "workspace_key", false},
 	{"metadata_search_migrations", "workspace_key", false},
 	{"metadata_blob_migrations", "workspace_key", false},
 	{"metadata_blobs", "workspace_key", false},

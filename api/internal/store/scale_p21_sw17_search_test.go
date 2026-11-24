@@ -74,6 +74,10 @@ func TestScaleP21SW17NativeSearchRepairDifferential(t *testing.T) {
 			if _, err := f.db.ExecContext(t.Context(), `UPDATE metadata_search_migration_checkpoints SET completed=?,last_record_key='' WHERE workspace_key=?`, completed, workspace); err != nil {
 				t.Fatal(err)
 			}
+			// A completed checkpoint is reconciled again only under changed rules.
+			if _, err := f.db.ExecContext(t.Context(), `DELETE FROM metadata_search_index_rules WHERE workspace_key=?`, workspace); err != nil {
+				t.Fatal(err)
+			}
 			repair()
 			var mismatches, total, retainedNeedle int
 			if source.dialect == "mysql" {
