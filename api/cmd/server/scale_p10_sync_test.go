@@ -29,6 +29,25 @@ func TestScaleP10ManifestAndUnreadyRoutes(t *testing.T) {
 			if got := read("/api/sync/manifest"); got.Code != http.StatusNotFound {
 				t.Fatal("disabled manifest is not an old-server-compatible 404", got.Code)
 			}
+			for _, path := range []string{
+				"/api/sync/manifest?surface=local-store",
+				"/api/sync/manifest?surface=local-store&mode=issues",
+			} {
+				got := read(path)
+				if got.Code != http.StatusOK {
+					t.Fatalf("unsupported local-store probe returned %d", got.Code)
+				}
+				var response struct {
+					Schema       int      `json:"schema"`
+					Capabilities []string `json:"capabilities"`
+				}
+				if err := json.Unmarshal(got.Body.Bytes(), &response); err != nil {
+					t.Fatalf("unsupported local-store probe returned invalid JSON: %v", err)
+				}
+				if response.Schema != 2 || len(response.Capabilities) != 0 {
+					t.Fatalf("unsupported local-store probe advertised capabilities: %+v", response)
+				}
+			}
 			if !f.service.notificationStateReadRequest(httptest.NewRequest(http.MethodGet, "/api/notifications/state", nil)) {
 				state, missing := read("/api/notifications/state"), read("/api/notifications/p10-missing")
 				if state.Code != missing.Code || !bytes.Equal(state.Body.Bytes(), missing.Body.Bytes()) {
