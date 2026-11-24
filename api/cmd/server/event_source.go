@@ -696,7 +696,10 @@ func (cache *eventSourceCache) loadMiss(key string, flight *eventSourceFlight, b
 }
 
 func (s *server) sharedEventFrame(r *http.Request, event domain.RealtimeEvent) (EventFrame, bool, error) {
-	if syncV2Enabled() && !s.authDisabled && s.store.RealtimeEpochsReady() {
+	if s.authDisabled || !s.syncV2RealtimeEnabled() {
+		return EventFrame{}, false, nil
+	}
+	if s.store.RealtimeEpochsReady() {
 		ctx, err := s.store.LiveEventContext(r.Context())
 		if err != nil {
 			return EventFrame{}, true, err
@@ -721,9 +724,6 @@ func (s *server) sharedEventFrame(r *http.Request, event domain.RealtimeEvent) (
 }
 
 func (s *server) sharedEventFrameOnce(r *http.Request, event domain.RealtimeEvent) (EventFrame, bool, error) {
-	if !syncV2Enabled() || s.authDisabled {
-		return EventFrame{}, false, nil
-	}
 	if domain.RoutineCredentialEvent(event.Type) {
 		return EventFrame{}, true, nil
 	}

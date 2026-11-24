@@ -156,7 +156,8 @@ func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged
 		}
 		s := metadataUpgradeServer(t, repo)
 		_, syncReady := s.syncV2Journal()
-		if repo.RecordJournalReady() != wantReady || repo.BoundedMetadataEnabled() != wantReady || syncReady != wantReady {
+		if repo.RecordJournalReady() != wantReady || repo.BoundedMetadataEnabled() != wantReady ||
+			syncReady != wantReady || s.syncV2RealtimeEnabled() != wantReady {
 			t.Fatalf("journal, bounded metadata and Sync V2 must all have readiness %t", wantReady)
 		}
 		handler = newHandler(s)

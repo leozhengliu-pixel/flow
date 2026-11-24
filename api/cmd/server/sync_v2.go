@@ -25,6 +25,14 @@ func syncV2Enabled() bool {
 	return strings.TrimSpace(os.Getenv("FLOW_SYNC_V2")) == "" || syncFlagEnabled("FLOW_SYNC_V2")
 }
 
+func (s *server) syncV2RealtimeEnabled() bool {
+	if strings.TrimSpace(os.Getenv("FLOW_SYNC_V2")) == "" {
+		// Default starts without capture keep the legacy realtime path.
+		return store.RecordJournalEnabled() && s.store.RealtimeEpochsReady()
+	}
+	return syncFlagEnabled("FLOW_SYNC_V2")
+}
+
 type committedChangeReader interface {
 	ReadCommittedChanges(ctx context.Context, workspaceID, after string, limit, maxBytes int) (store.CommittedPage, error)
 }
