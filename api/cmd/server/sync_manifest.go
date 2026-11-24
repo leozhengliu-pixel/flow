@@ -92,12 +92,19 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 	if s.scaleP20Manifest(w, r) {
 		return
 	}
-	if !syncFlagEnabled("FLOW_SYNC_MANIFEST") {
-		writeError(w, http.StatusNotFound, "not found")
+	if r.URL.Query().Get("surface") == "local-store" {
+		if !syncFlagEnabled("FLOW_SYNC_MANIFEST") {
+			writeSyncJSON(w, struct {
+				Schema       int      `json:"schema"`
+				Capabilities []string `json:"capabilities"`
+			}{Schema: 2, Capabilities: []string{}}, 4096)
+			return
+		}
+		s.localStoreManifest(w, r)
 		return
 	}
-	if r.URL.Query().Get("surface") == "local-store" {
-		s.localStoreManifest(w, r)
+	if !syncFlagEnabled("FLOW_SYNC_MANIFEST") {
+		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
 	if r.URL.Query().Has("surface") {
