@@ -46,9 +46,14 @@ func TestPulseTickCountsPerVisibilityInOneWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, err := repo.ViewerVisibilityKeys(t.Context(), key)
-	if err != nil || keys["usr_admin"] == keys["usr_member"] {
-		t.Fatalf("visibility keys = %v (%v), want admin and member apart", keys, err)
+	visibility, err := repo.BeginViewerVisibilityKeysRead(t.Context(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	distinct := visibility.Keys["usr_admin"] != visibility.Keys["usr_member"]
+	visibility.Close()
+	if !distinct {
+		t.Fatal("admin and member share a visibility group")
 	}
 	events := func() int {
 		count := 0

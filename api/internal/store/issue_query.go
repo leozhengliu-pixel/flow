@@ -106,9 +106,12 @@ func ArchivedTeamIDs(data domain.Bootstrap) []string {
 }
 
 func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, userID string) (domain.Bootstrap, error) {
-	if coldCapable(ctx) {
+	snapshot, pinned := ctx.Value(workspaceReadKey{}).(workspaceRead)
+	pinned = pinned && snapshot.database == s.db && (workspace == "" || workspace == snapshot.workspace)
+	if !pinned && coldCapable(ctx) {
 		// A COLD request's projection is the legacy one, from the legacy
 		// view of the installed workspace (scale_p21_default_cold.go).
+		// An owned point read already supplied its policy and transaction.
 		if view, release, handled := s.coldProjectionView(ctx, "PagedWorkspaceMetadata", workspace); handled {
 			defer release()
 			if view == nil {

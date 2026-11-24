@@ -25,6 +25,9 @@ func TestMetadataEventHandlerFullPathParity(t *testing.T) {
 			name = "full"
 		}
 		t.Run(name, func(t *testing.T) {
+			if full {
+				t.Setenv("FLOW_BOUNDED_METADATA", "off")
+			}
 			restore := store.ForceFullMutationsForTesting(full)
 			defer restore()
 			t.Run("feedback", TestAgentMessageAndSessionFeedback)

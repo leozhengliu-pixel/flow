@@ -291,6 +291,7 @@ func TestScaleP11ReloadWaitReturnsTimeoutAndSharedError(t *testing.T) {
 }
 
 func TestScaleP11OldWriterAndTombstoneFallback(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 1)
@@ -339,6 +340,7 @@ func TestScaleP11FlagDefaultsToOff(t *testing.T) {
 }
 
 func TestScaleP11LargeCollectionKeepsExactFallback(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 0)

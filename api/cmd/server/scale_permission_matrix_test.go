@@ -174,7 +174,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 		if spec.name == "selected-empty" {
 			// Creation rejects this state; persisted keys can reach it after
 			// their selected teams disappear. It must remain deny-all.
-			if err := repo.MutateWorkspace(t.Context(), workspace, "api_key.updated", key.Key.ID, nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "api_key.updated", key.Key.ID, nil, func(data *domain.Bootstrap) error {
 				for i := range data.APIKeys {
 					if data.APIKeys[i].ID == key.Key.ID {
 						data.APIKeys[i].TeamIDs = []string{}
@@ -292,7 +292,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 		t.Fatal("inherited project not visible before revocation")
 	}
 	head := authRequest[changesResponse](t, member, "GET", base+"/api/realtime/changes?since=0", nil, workspace, http.StatusOK).Head
-	if err := repo.MutateWorkspace(store.ContextWithActor(t.Context(), data.Viewer), workspace, "project.updated", childID, map[string]string{"name": "queued change"}, func(data *domain.Bootstrap) error { return nil }); err != nil {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(t.Context(), data.Viewer)), workspace, "project.updated", childID, map[string]string{"name": "queued change"}, func(data *domain.Bootstrap) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	authRequest[any](t, admin, "DELETE", base+"/api/teams/"+private.ID+"/members/"+memberUser.ID, nil, workspace, http.StatusOK)

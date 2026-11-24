@@ -58,6 +58,7 @@ func TestPreferenceLifecycleNeverHydratesIssueOrDiscussionCollections(t *testing
 	if _, err := db.Exec(`UPDATE workspace_content_records SET data=? WHERE kind IN ('comment','activity')`, []byte("invalid-discussion-json")); err != nil {
 		t.Fatal(err)
 	}
+	repairFixtureJournal(t, repo)
 	folder := authRequest[domain.FavoriteFolder](t, admin, "POST", host.URL+"/api/favorite-folders", map[string]string{"name": "Planning"}, "test-workspace", 201)
 	authRequest[any](t, member, "PATCH", host.URL+"/api/favorite-folders/"+folder.ID, map[string]string{"name": "Forbidden"}, "test-workspace", 404)
 	authRequest[any](t, member, "DELETE", host.URL+"/api/favorite-folders/"+folder.ID, nil, "test-workspace", 404)

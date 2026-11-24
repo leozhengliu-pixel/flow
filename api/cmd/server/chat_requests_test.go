@@ -632,7 +632,9 @@ func TestChatAskRejectionAndReopeningReplyInRequestThread(t *testing.T) {
 		requestJSON[domain.Ask](t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			r.SetPathValue("id", ask.ID)
 			r.Header.Set("X-Workspace-Key", f.record.WorkspaceKey)
-			f.s.decideAsk(w, r)
+			r, finish := beginRequestResourceReads(r)
+			defer finish()
+			f.s.decideAsk(w, r.WithContext(workspaceFixtureContext(r.Context())))
 		}), http.MethodPost, "/api/asks/"+ask.ID+"/decision", map[string]string{"decision": decision, "note": note}, http.StatusOK)
 		if err := f.s.queueCommittedChatEvents(t.Context(), f.record.WorkspaceKey); err != nil {
 			t.Fatal(err)

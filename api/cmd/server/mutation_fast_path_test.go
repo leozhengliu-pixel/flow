@@ -68,6 +68,10 @@ type mutationScriptResult struct {
 
 func runMutationScript(t *testing.T, forceFull bool) mutationScriptResult {
 	t.Helper()
+	// This oracle forces the legacy full-workspace dispatch.
+	if forceFull {
+		t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	}
 	restore := store.ForceFullMutationsForTesting(forceFull)
 	defer restore()
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))

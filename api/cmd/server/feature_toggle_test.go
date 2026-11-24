@@ -67,6 +67,7 @@ func TestPulseToggleNeverLoadsIssueBodies(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	repairFixtureJournal(t, repo)
 	for _, enabled := range []bool{false, true} {
 		value := authRequest[domain.WorkspaceSettings](t, client, "PATCH", host.URL+"/api/workspace/preferences", map[string]any{"featureFlags": map[string]bool{"pulse": enabled}}, "test-workspace", 200)
 		if value.FeatureFlags["pulse"] != enabled {

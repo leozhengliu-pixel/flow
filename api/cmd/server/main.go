@@ -332,7 +332,7 @@ func main() {
 	go s.runCoding(store.WithColdWork(shutdownSignal, "coding"))
 	go s.runApplicationAgentWorker(store.WithColdWork(shutdownSignal, "application-agent-worker"))
 	go s.runRecurringIssueScheduler(shutdownSignal)
-	go s.runReviewImportScheduler(store.WithColdWork(shutdownSignal, "review-import-scheduler"))
+	go s.runReviewImportScheduler(shutdownSignal)
 	go s.runPersonalConnectionScheduler(shutdownSignal)
 	go s.runStorageMaintenance(store.WithColdWork(shutdownSignal, "storage-maintenance"), applicationConfig.Retention.DomainEvents)
 	go s.resealStoredSecrets(shutdownSignal)
@@ -5711,7 +5711,8 @@ func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
 		title = parsed.Host
 	}
 	var attachment domain.Attachment
-	err = s.store.MutateWorkspace(s.issueAttachmentContext(r.Context()), workspaceKey(r), "issue.link_created", id, input, func(data *domain.Bootstrap) error {
+	ctx := store.WithIssueRecordMutations(s.issueAttachmentContext(r.Context()), id)
+	err = s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.link_created", id, input, func(data *domain.Bootstrap) error {
 		issue, issueErr := issueByID(data, id)
 		if issueErr != nil {
 			return issueErr

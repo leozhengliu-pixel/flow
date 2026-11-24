@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type chatAuthorizedBindingInput struct {
@@ -752,7 +753,7 @@ func testChatPrivateTeamBindingNeedsTeamOwnerAuthorization(t *testing.T, provide
 		if role, _ := f.s.store.TeamRole(t.Context(), f.workspaceID, f.privateTeam, actor.user.ID); role != "" {
 			t.Fatalf("binding granted %s team role %q", actor.user.Email, role)
 		}
-		visible, err := f.s.store.PagedWorkspaceMetadata(t.Context(), "test-workspace", actor.user.ID)
+		visible, err := f.s.store.PagedWorkspaceMetadata(store.WithColdWork(t.Context(), "chat permission fixture"), "test-workspace", actor.user.ID)
 		if err != nil {
 			t.Fatal(err)
 		}

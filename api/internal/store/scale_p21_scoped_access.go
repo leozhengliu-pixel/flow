@@ -698,7 +698,19 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				// not rewrite canonical rows, as on the legacy delta path.
 				return metadataScopeResolver(ctx) != nil && !metadataRecordSelected(writeScope, change.field, change.key, true)
 			})
-			for _, change := range changes {
+			for index := range changes {
+				change := &changes[index]
+				if event == "notification_preferences.updated" && change.field == "notificationPreferences" && change.key == aggregate && !change.drop && !change.insert {
+					// The installed view may synthesize defaults for a new
+					// member. An absent row is the first write, not a delete race.
+					stored, err := lockMetadataRecords(ctx, tx, workspace, change.field, []string{change.key})
+					if err != nil {
+						return err
+					}
+					if _, ok := stored[change.key]; !ok {
+						change.insert, change.base = true, nil
+					}
+				}
 				field, _, typed := metadataRecordType(change.field)
 				isMap := typed && reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type.Kind() == reflect.Map || change.field == "workspaceSettings"
 				actorInsert := refreshActor && change.field == "users" && change.key == actor.ID

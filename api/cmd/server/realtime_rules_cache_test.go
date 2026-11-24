@@ -16,6 +16,7 @@ import (
 // write that changes the projects installs a new copy, and the next event
 // builds a new index from it.
 func TestPulseRulesAreSharedPerWorkspaceCopy(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off") // Only the legacy realtime path shares this index.
 	repo := pulseTestRepo(t)
 	hub := newRealtimeHub()
 	snapshot, _ := repo.PulseSources("test-workspace")

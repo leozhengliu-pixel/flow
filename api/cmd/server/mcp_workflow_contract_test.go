@@ -286,6 +286,8 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 
 func TestMCPUploadOwnershipRetryExpiryAndConcurrency(t *testing.T) {
 	repo, actor, ctx := newMCPToolTestContext(t)
+	ctx, closeReads := beginMetadataOutputReads(ctx)
+	defer closeReads()
 	s := &server{store: repo, uploadPath: t.TempDir()}
 	data := repo.Bootstrap()
 	body := "upload content"
@@ -388,6 +390,8 @@ func TestMCPScopedReviewAndLabelIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := &server{store: repo}
+	ctx, finish := beginMetadataOutputReads(workspaceFixtureContext(ctx))
+	defer finish()
 	visible, err := s.mcpWorkspaceData(ctx, actor)
 	if err != nil {
 		t.Fatal(err)

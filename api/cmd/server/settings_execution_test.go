@@ -279,7 +279,7 @@ func TestMCPConnectorDiscoveryExecutionAndRevocation(t *testing.T) {
 			s := server{store: repo, authDisabled: true}
 			s.agent.ToolsEnabled = true
 			s.agent.WriteTools = true
-			err = repo.MutateWorkspace(t.Context(), "test-workspace", "application_policy.updated", "connector", nil, func(data *domain.Bootstrap) error {
+			err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "application_policy.updated", "connector", nil, func(data *domain.Bootstrap) error {
 				data.WorkspaceSettings.MCPConnectorsEnabled = true
 				data.WorkspaceSettings.AllowedMCPConnectors = "approved"
 				setApplicationPolicies(data, []applicationPolicy{{ID: "connector", Kind: "mcp", Name: "Local fixture", URL: upstream.URL, Status: "approved", OwnerID: data.Viewer.ID}})
@@ -299,7 +299,7 @@ func TestMCPConnectorDiscoveryExecutionAndRevocation(t *testing.T) {
 			if err != nil || !strings.Contains(string(result), "found") {
 				t.Fatalf("execution: %s %v", result, err)
 			}
-			err = repo.MutateWorkspace(t.Context(), "test-workspace", "application_policy.updated", "connector", nil, func(data *domain.Bootstrap) error { data.WorkspaceSettings.SetMCPConnectors(false); return nil })
+			err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "application_policy.updated", "connector", nil, func(data *domain.Bootstrap) error { data.WorkspaceSettings.SetMCPConnectors(false); return nil })
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -347,7 +347,7 @@ func TestPulseScheduleCreatesOneSummaryWithoutReplacingHistory(t *testing.T) {
 	now := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
 	before := repo.Bootstrap()
 	userID := before.Viewer.ID
-	err = repo.MutateWorkspace(t.Context(), "test-workspace", "test.pulse", userID, nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test.pulse", userID, nil, func(data *domain.Bootstrap) error {
 		for id, settings := range data.UserSettings {
 			settings.PulseSchedule = "never"
 			data.UserSettings[id] = settings

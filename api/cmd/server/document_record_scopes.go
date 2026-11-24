@@ -129,6 +129,10 @@ func (s *server) documentAuthorizationMetadata(r *http.Request, workspace, userI
 		if len(parts) > 2 {
 			request.Ref = parts[2]
 		}
+		if len(parts) == 3 && r.Method == http.MethodPatch {
+			request.AuthorizationOnly = true
+			request.Trash = false
+		}
 		if r.Method == http.MethodPatch {
 			var input documentInput
 			if peekRequestJSON(r, &input) && input.ProjectIDs != nil {

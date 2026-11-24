@@ -325,8 +325,9 @@ func TestChatIdentityBindingRequiresOwnerSessionAndCurrentTenant(t *testing.T) {
 }
 
 func TestChatMembersCanBindWithoutManagingApplicationAndEnforcedSSOApplies(t *testing.T) {
-	s, handler := chatTestServer(t)
+	s, mux := chatTestServer(t)
 	s.authDisabled = false
+	handler := s.withColdMetadataRouteMux(mux, mux)
 	session, token, err := s.store.LoginExternal(t.Context(), "chat-member@example.test", "Chat member", "", true)
 	if err != nil {
 		t.Fatal(err)

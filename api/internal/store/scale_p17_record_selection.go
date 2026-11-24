@@ -211,7 +211,10 @@ func (s *SQLiteStore) projectDocumentRecordMetadata(ctx context.Context, workspa
 		return domain.Bootstrap{}, err
 	}
 	projected, ok, err := s.projectBootstrapForUser(ctx, data, userID)
-	if err != nil || !ok {
+	if err != nil {
+		return domain.Bootstrap{}, err
+	}
+	if !ok {
 		return domain.Bootstrap{}, ErrAuthForbidden
 	}
 	after, err := s.ResolveAccess(ctx, workspace, userID, key)

@@ -414,7 +414,7 @@ func (s *server) chatDMInterruptSavedReply(l *chatDMReplyLease, dm chatDMRequest
 		}
 		s.stopAgentRun(p.Workspace, p.SessionID)
 		mutationCtx := withAgentReplyFields(store.ContextWithActor(ctx, domain.User{ID: p.UserID}))
-		return s.store.MutateWorkspace(mutationCtx, p.Workspace, "agent.message_completed", p.SessionID, nil, func(data *domain.Bootstrap) error {
+		mutate := func(data *domain.Bootstrap) error {
 			for index := range data.AgentSessions {
 				session := &data.AgentSessions[index]
 				if session.ID != p.SessionID || session.UserID != p.UserID {
@@ -427,7 +427,12 @@ func (s *server) chatDMInterruptSavedReply(l *chatDMReplyLease, dm chatDMRequest
 				}
 			}
 			return store.ErrNoMutation
-		})
+		}
+		scope := store.AgentSessionLifecycleScope{
+			ID: p.SessionID, OwnerID: &p.UserID, MessageID: &p.MessageID,
+			AppendActivities: true, StreamingMessages: true,
+		}
+		return s.store.MutateAgentSessionLifecycle(mutationCtx, p.Workspace, "agent.message_completed", p.SessionID, scope, mutate)
 	})
 	if errors.Is(err, store.ErrNoMutation) {
 		return nil

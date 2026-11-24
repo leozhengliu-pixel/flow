@@ -19,23 +19,29 @@ import (
 // fresh process (legacy and bounded) must agree, and the cycle maintenance
 // tick creates cycles only when autoCreate is on.
 
-func cycleSettingsPersistRun(t *testing.T, bounded bool, input map[string]any, want domain.CycleSettings, wantCycles bool) {
+func openCycleSettingsStore(t *testing.T, path string, bounded bool) *store.SQLiteStore {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "flow.db")
+	if bounded {
+		t.Setenv("FLOW_BOUNDED_METADATA", "on")
+	} else {
+		t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	}
 	repo, err := store.OpenSQLite(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer repo.Close()
-	reader := repo
-	if bounded {
-		view, err := repo.BoundedMetadataViewForTesting(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		reader = view
+	t.Cleanup(func() { repo.Close() })
+	if repo.BoundedMetadataEnabled() != bounded {
+		t.Fatal("store did not start in the requested metadata mode")
 	}
-	service := &server{store: reader, authDisabled: true, uploadPath: t.TempDir()}
+	return repo
+}
+
+func cycleSettingsPersistRun(t *testing.T, bounded bool, input map[string]any, want domain.CycleSettings, wantCycles bool) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "flow.db")
+	repo := openCycleSettingsStore(t, path, bounded)
+	service := &server{store: repo, authDisabled: true, uploadPath: t.TempDir()}
 	handler := newHandler(service)
 	created := requestJSON[domain.Bootstrap](t, handler, "POST", "/api/workspaces", map[string]any{"name": "Cycles", "urlKey": "cycles-persist", "region": "us", "tutorial": false}, http.StatusCreated)
 	const key = "cycles-persist"
@@ -53,29 +59,21 @@ func cycleSettingsPersistRun(t *testing.T, bounded bool, input map[string]any, w
 			t.Fatalf("%s has %d cycles, want cycles=%t", label, len(data.Cycles), wantCycles)
 		}
 	}
-	warm, _ := reader.BootstrapFor(key)
+	warm, _ := repo.BootstrapFor(key)
 	check("warm", warm)
 	service.maintainCycleSchedule(t.Context(), key)
-	warm, _ = reader.BootstrapFor(key)
+	warm, _ = repo.BootstrapFor(key)
 	check("warm after maintenance", warm)
+	if err := repo.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, reload := range []string{"legacy", "bounded"} {
-		fresh, err := store.OpenSQLite(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		freshReader := fresh
-		if reload == "bounded" {
-			view, err := fresh.BoundedMetadataViewForTesting(t.Context())
-			if err != nil {
-				t.Fatal(err)
-			}
-			freshReader = view
-		}
-		data, _ := freshReader.BootstrapFor(key)
+		fresh := openCycleSettingsStore(t, path, reload == "bounded")
+		data, _ := fresh.BootstrapFor(key)
 		check("reload "+reload, data)
-		(&server{store: freshReader, authDisabled: true, uploadPath: t.TempDir()}).maintainCycleSchedule(t.Context(), key)
-		data, _ = freshReader.BootstrapFor(key)
+		(&server{store: fresh, authDisabled: true, uploadPath: t.TempDir()}).maintainCycleSchedule(t.Context(), key)
+		data, _ = fresh.BootstrapFor(key)
 		check("reload "+reload+" after maintenance", data)
 		fresh.Close()
 	}
@@ -119,10 +117,7 @@ func TestCycleSettingsLegacyRowsUpgradeOnce(t *testing.T) {
 	for _, bounded := range []bool{false, true} {
 		t.Run(map[bool]string{false: "off", true: "on"}[bounded], func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "flow.db")
-			repo, err := store.OpenSQLite(path)
-			if err != nil {
-				t.Fatal(err)
-			}
+			repo := openCycleSettingsStore(t, path, false)
 			const key = "cycles-legacy"
 			created, err := repo.CreateWorkspace(t.Context(), "Legacy", key, "us")
 			if err != nil {
@@ -162,18 +157,9 @@ func TestCycleSettingsLegacyRowsUpgradeOnce(t *testing.T) {
 			db.Close()
 
 			for _, reopen := range []string{"first open", "second open"} {
-				fresh, err := store.OpenSQLite(path)
-				if err != nil {
-					t.Fatal(err)
-				}
-				var reader = fresh
-				if bounded {
-					if reader, err = fresh.BoundedMetadataViewForTesting(t.Context()); err != nil {
-						t.Fatal(err)
-					}
-				}
-				(&server{store: reader, authDisabled: true, uploadPath: t.TempDir()}).maintainCycleSchedule(t.Context(), key)
-				data, _ := reader.BootstrapFor(key)
+				fresh := openCycleSettingsStore(t, path, bounded)
+				(&server{store: fresh, authDisabled: true, uploadPath: t.TempDir()}).maintainCycleSchedule(t.Context(), key)
+				data, _ := fresh.BootstrapFor(key)
 				if got := data.CycleSettings[legacy]; !got.AutoCreate || !got.AutoMigrate || got.Capacity != 4 {
 					t.Fatalf("%s: legacy settings = %+v", reopen, got)
 				}
@@ -194,10 +180,7 @@ func TestCycleSettingsExplicitZeroCapacityRowIsKept(t *testing.T) {
 	for _, bounded := range []bool{false, true} {
 		t.Run(map[bool]string{false: "off", true: "on"}[bounded], func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "flow.db")
-			repo, err := store.OpenSQLite(path)
-			if err != nil {
-				t.Fatal(err)
-			}
+			repo := openCycleSettingsStore(t, path, false)
 			const key = "cycles-explicit"
 			created, err := repo.CreateWorkspace(t.Context(), "Explicit", key, "us")
 			if err != nil {
@@ -219,19 +202,9 @@ func TestCycleSettingsExplicitZeroCapacityRowIsKept(t *testing.T) {
 			}
 			db.Exec(`DELETE FROM schema_migrations WHERE version=1013`)
 			db.Close()
-			fresh, err := store.OpenSQLite(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer fresh.Close()
-			reader := fresh
-			if bounded {
-				if reader, err = fresh.BoundedMetadataViewForTesting(t.Context()); err != nil {
-					t.Fatal(err)
-				}
-			}
-			(&server{store: reader, authDisabled: true, uploadPath: t.TempDir()}).maintainCycleSchedule(t.Context(), key)
-			data, _ := reader.BootstrapFor(key)
+			fresh := openCycleSettingsStore(t, path, bounded)
+			(&server{store: fresh, authDisabled: true, uploadPath: t.TempDir()}).maintainCycleSchedule(t.Context(), key)
+			data, _ := fresh.BootstrapFor(key)
 			if data.CycleSettings[team] != want || len(data.Cycles) != 0 {
 				t.Fatalf("settings = %+v cycles = %d, want %+v and none", data.CycleSettings[team], len(data.Cycles), want)
 			}

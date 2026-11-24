@@ -21,7 +21,7 @@ func TestChatBindingTemplatesFollowTemplateReach(t *testing.T) {
 	f.authorizeTenant(provider)
 	f.addGroup("oc_internal")
 	base := "/api/integrations/" + provider + "/chat"
-	if err := f.s.store.MutateWorkspace(t.Context(), "test-workspace", "template.created", "chat_tpl_private_child", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "template.created", "chat_tpl_private_child", nil, func(data *domain.Bootstrap) error {
 		data.IssueTemplates = append(data.IssueTemplates,
 			domain.IssueTemplate{ID: "chat_tpl_private_child", Name: "Private follow-up", TeamID: f.publicTeam, Scope: "team", LabelIDs: []string{}, SubIssues: []domain.TemplateSubIssue{{ID: "chat_sub", Title: "Vault work", TeamID: f.privateTeam}}},
 			domain.IssueTemplate{ID: "chat_tpl_public", Name: "Public", TeamID: f.publicTeam, Scope: "team", LabelIDs: []string{}},

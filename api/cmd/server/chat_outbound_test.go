@@ -70,14 +70,9 @@ func (f *chatWorkflowFixture) mcpTool(t *testing.T, name string, args map[string
 	t.Helper()
 	viewer := f.s.store.Bootstrap().Viewer
 	actor := mcpActor{WorkspaceKey: f.record.WorkspaceKey, User: viewer, APIKey: domain.APIKey{Scopes: []string{"read", "write"}}}
-	data, err := f.s.mcpWorkspaceData(t.Context(), actor)
-	if err == nil {
-		err = f.s.hydrateMCPIssueArguments(t.Context(), actor, &data, args)
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err := f.s.callFlowWriteTool(t.Context(), actor, data, name, args)
+	ctx, closeReads := beginMetadataOutputReads(t.Context())
+	defer closeReads()
+	result, err := f.s.callFlowTool(ctx, actor, name, args)
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
@@ -346,7 +341,9 @@ func TestChatProjectUpdateCardLifecycle(t *testing.T) {
 				r.SetPathValue(key, value)
 			}
 			r.Header.Set("X-Workspace-Key", f.record.WorkspaceKey)
-			serve(w, r)
+			r, finish := beginRequestResourceReads(r)
+			defer finish()
+			serve(w, r.WithContext(workspaceFixtureContext(r.Context())))
 		})
 	}
 	body := "本周完成：\n\n- **支付** 接入\n- 文档 marker-5521"
@@ -391,6 +388,8 @@ func TestChatProjectUpdateCardLifecycle(t *testing.T) {
 // name and show the team's own state names.
 func TestChatIssueCardLanguageAndPeople(t *testing.T) {
 	f := newChatWorkflowFixture(t)
+	ctx, closeReads := beginMetadataOutputReads(t.Context())
+	defer closeReads()
 	issue := f.s.store.Bootstrap().Issues[0]
 	issue.Priority = 1
 	issue.Assignee = &domain.User{ID: "user_8f3a", Name: "user_8f3a", DisplayName: "李雷", Email: "lei@example.com"}
@@ -403,7 +402,7 @@ func TestChatIssueCardLanguageAndPeople(t *testing.T) {
 	} {
 		binding := f.binding
 		binding.Language = tc.language
-		card, _, err := f.s.chatIssueCard(t.Context(), f.record, binding, issue, "language_"+tc.language, "", "")
+		card, _, err := f.s.chatIssueCard(ctx, f.record, binding, issue, "language_"+tc.language, "", "")
 		if err != nil {
 			t.Fatal(err)
 		}

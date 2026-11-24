@@ -229,7 +229,9 @@ func TestMCPListDocumentCommentsCarriesInlineAnchors(t *testing.T) {
 	actor := mcpActor{WorkspaceKey: f.data.Workspace.URLKey, User: f.data.Viewer}
 	comment := func(input map[string]any) string {
 		t.Helper()
-		result, err := f.service.invokeMCPRoute(t.Context(), actor, http.MethodPost, "/api/documents/"+id+"/comments", map[string]string{"id": id}, input, f.service.createDocumentComment)
+		ctx, closeReads := beginMetadataOutputReads(workspaceFixtureContext(t.Context()))
+		defer closeReads()
+		result, err := f.service.invokeMCPRoute(ctx, actor, http.MethodPost, "/api/documents/"+id+"/comments", map[string]string{"id": id}, input, f.service.createDocumentComment)
 		if err != nil {
 			t.Fatal(err)
 		}

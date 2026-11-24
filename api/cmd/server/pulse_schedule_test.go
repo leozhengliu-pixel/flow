@@ -386,7 +386,7 @@ func TestInitiativeProjectUpdatesSubscription(t *testing.T) {
 
 func addPulseInitiativeUpdate(t *testing.T, repo *store.SQLiteStore, initiativeID string, at time.Time) {
 	t.Helper()
-	err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "initiativeUpdates"), "test-workspace", "initiative.update_updated", initiativeID, nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(store.WithMetadataFields(t.Context(), "initiativeUpdates")), "test-workspace", "initiative.update_updated", initiativeID, nil, func(data *domain.Bootstrap) error {
 		data.InitiativeUpdates[initiativeID] = append([]domain.InitiativeUpdate{{ID: "initiative_update_" + initiativeID, InitiativeID: initiativeID, Body: "Initiative", Health: "onTrack", CreatedAt: at, User: domain.User{ID: "usr_writer", Name: "Writer"}, Comments: []domain.Comment{}, Reactions: map[string][]string{}}}, data.InitiativeUpdates[initiativeID]...)
 		return nil
 	})

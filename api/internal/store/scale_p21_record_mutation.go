@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"slices"
 	"strings"
@@ -144,11 +145,14 @@ func (s *SQLiteStore) mutateResidentRecords(ctx context.Context, workspace, even
 		if err := tx.Commit(); err != nil {
 			return err
 		}
-		// This write changed no policy collection. Leave its immutable policy
-		// copy installed; native details continue to use canonical SQL.
 		s.mu.Lock()
 		s.forgetCopyRevisionLocked(workspace)
 		s.mu.Unlock()
+		// Issue writers consult the installed project record for milestone
+		// validation. Publish the committed children before those writers run.
+		if err := s.reloadResidentWorkspace(ctx, workspace); err != nil {
+			slog.Warn("bounded metadata: committed record refresh deferred")
+		}
 		return nil
 	}
 	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {

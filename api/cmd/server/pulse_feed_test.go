@@ -361,7 +361,7 @@ func TestPulseFeedRespectsFeatureFlagAndPagedBootstrapOmitsUpdates(t *testing.T)
 		t.Fatalf("project updates = %#v", updates)
 	}
 	requestJSON[map[string]string](t, handler, http.MethodGet, "/api/projects/missing/updates", nil, http.StatusNotFound)
-	err := repo.MutateWorkspace(t.Context(), "test-workspace", "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.FeatureFlags["pulse"] = false
 		return nil
 	})

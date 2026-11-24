@@ -256,6 +256,9 @@ func TestScaleP03FlagAndNarrowRoutes(t *testing.T) {
 }
 
 func TestScaleP03RequestAuthorizationMatchesLegacyDuringRevocation(t *testing.T) {
+	// This compares the legacy projection's handoff with record access.
+	// The bounded point authorization instead checks access at the read.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, repo := range scaleP03ServerTestStores(t) {
 		for _, mode := range []string{"off", "on"} {
 			t.Run(name+"/"+mode, func(t *testing.T) {

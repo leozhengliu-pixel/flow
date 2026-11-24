@@ -1204,6 +1204,9 @@ func normalize(data *domain.Bootstrap) {
 		}
 		if settings.Access == "" {
 			settings.Access = "public"
+			if team.Private {
+				settings.Access = "private"
+			}
 		}
 		if settings.MembershipRestriction == "" {
 			settings.MembershipRestriction = "open"

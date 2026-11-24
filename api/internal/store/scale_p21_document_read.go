@@ -25,6 +25,8 @@ type DocumentReadRequest struct {
 	Suffix             bool
 	ReadOnly           bool
 	ProjectionFallback bool
+	// AuthorizationOnly omits the body and history for a PATCH preflight.
+	AuthorizationOnly bool
 	// SkipProjects leaves out the reciprocal project closure (the projects
 	// that list the document as a resource): a caller that never reads
 	// Data.Projects does not pay a scan of every project of the workspace.
@@ -206,18 +208,18 @@ func (s *SQLiteStore) BeginDocumentRead(ctx context.Context, workspace, userID s
 						if documentReadRank(header.Interface().(domain.Document), request) == 0 {
 							return nil
 						}
-						value, err := owner.node(snapshot, candidate, request.ReadOnly)
+						value, err := read.loadDocumentRecord(snapshot, -1, candidate, request)
 						if err == nil {
-							read.Data.Documents = append(read.Data.Documents, value.Interface().(domain.Document))
+							read.Data.Documents = append(read.Data.Documents, value)
 						}
 						return err
 					})
 				})
 			} else {
-				var value reflect.Value
-				value, err = owner.residentRecord(snapshot, "documents", choice.ordinal, choice.node, request.ReadOnly)
+				var value domain.Document
+				value, err = read.loadDocumentRecord(snapshot, choice.ordinal, choice.node, request)
 				if err == nil {
-					read.Data.Documents = []domain.Document{value.Interface().(domain.Document)}
+					read.Data.Documents = []domain.Document{value}
 				}
 			}
 			if err != nil {
@@ -277,6 +279,57 @@ func (s *SQLiteStore) BeginDocumentRead(ctx context.Context, workspace, userID s
 		return nil, err
 	}
 	return read, nil
+}
+
+func (r *DocumentRead) loadDocumentRecord(ctx context.Context, ordinal int, node metadataLogicalNode, request DocumentReadRequest) (domain.Document, error) {
+	if request.AuthorizationOnly {
+		value, err := r.owner.projectNode(ctx, node,
+			"ID", "SlugID", "PreviousSlugIDs", "Creator", "TeamIDs",
+			"InheritedTeamIDs", "IssueTeamID", "ProjectIDs", "IssueID", "Permissions")
+		if err != nil {
+			return domain.Document{}, err
+		}
+		return value.Interface().(domain.Document), nil
+	}
+	if node.cost <= (metadataWorkBytes-(128<<10))/8 {
+		value, err := r.owner.residentRecord(ctx, "documents", ordinal, node, request.ReadOnly)
+		if err != nil {
+			return domain.Document{}, err
+		}
+		return value.Interface().(domain.Document), nil
+	}
+
+	// Rich document bodies have many small logical frames. Charge decoded
+	// values and their scratch first, then preflight actual JSON encoding work.
+	const scratch = 1 << 20
+	if node.cost > (metadataWorkBytes-scratch)/2 {
+		return domain.Document{}, ErrMetadataWorkBudget
+	}
+	decodeWork := node.cost*2 + scratch
+	if err := r.owner.reserve(ctx, decodeWork); err != nil {
+		return domain.Document{}, err
+	}
+	var value reflect.Value
+	var err error
+	if request.ReadOnly {
+		value, err = node.WireValue(ctx, int(node.cost))
+	} else {
+		value, err = node.Value(ctx, int(node.cost))
+	}
+	if err != nil {
+		return domain.Document{}, err
+	}
+	encodeWork, err := metadataAggregatePayloadEncodingWork(ctx, value, 0)
+	if err != nil {
+		return domain.Document{}, err
+	}
+	if uint64(encodeWork) > metadataWorkBytes-decodeWork {
+		return domain.Document{}, ErrMetadataWorkBudget
+	}
+	if err := r.owner.reserve(ctx, uint64(encodeWork)); err != nil {
+		return domain.Document{}, err
+	}
+	return value.Interface().(domain.Document), nil
 }
 
 // Preflight the columns actually transferred by the legacy live projector in
