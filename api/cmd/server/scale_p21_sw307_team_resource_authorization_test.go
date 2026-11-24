@@ -248,9 +248,9 @@ func TestScaleP21SW307AuthorizationCancellationAndBoundaries(t *testing.T) {
 				t.Fatal("team resource helper captured another authorization predicate", path)
 			}
 		}
-		for _, method := range []string{http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodOptions} {
+		for _, method := range []string{http.MethodPatch, http.MethodDelete, http.MethodOptions} {
 			if _, selected := scaleP21SW307TeamResourceAuthorizationRequest(httptest.NewRequest(method, "/api/teams/x/resources", nil)); selected {
-				t.Fatal("team resource helper captured a writer", method)
+				t.Fatal("team resource helper captured an unregistered method", method)
 			}
 		}
 	}

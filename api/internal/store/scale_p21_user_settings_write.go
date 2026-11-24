@@ -39,8 +39,7 @@ func (s *SQLiteStore) MutateUserSettings(ctx context.Context, workspace, aggrega
 // mutateBoundedUserSettingsRecord is mutateUserSettingsRecord for a bounded
 // store. The literal writer starts the member's entry from its stored row
 // (as stored, without the load's defaults) or else from the installed entry,
-// writes only that record (rebased onto the row, skipped when the row
-// vanished under an installed entry), records the event without previous
+// writes only that record (rebased onto the row if it exists), records the event without previous
 // values and installs the written entry as written. Here the installed entry
 // comes from the installed logical source, the same transaction runs under
 // the bounded writers' lock and stamp protocol, and the installed source is

@@ -51,6 +51,23 @@ func (s *server) replaceDocumentPermissions(w http.ResponseWriter, r *http.Reque
 	}
 	id := r.PathValue("id")
 	viewerData := s.documentWorkspaceData(r)
+	if s.authDisabled && s.store.BoundedMetadataEnabled() {
+		// The bounded document projection omits the users directory in development mode.
+		var scope store.MetadataRecordScope
+		for _, permission := range input.Permissions {
+			if strings.EqualFold(strings.TrimSpace(permission.SubjectType), "user") && strings.TrimSpace(permission.SubjectID) != "" {
+				scope.Read = append(scope.Read, store.RecordKey{Kind: "users", ID: strings.TrimSpace(permission.SubjectID)})
+			}
+		}
+		if len(scope.Read) > 0 {
+			data, _, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), scope)
+			if err != nil {
+				respondMutation(w, err, http.StatusOK, nil)
+				return
+			}
+			viewerData.Users = data.Users
+		}
+	}
 	var updated []domain.DocumentPermission
 	changed := false
 	directory := s.documentMemberDirectory(r)

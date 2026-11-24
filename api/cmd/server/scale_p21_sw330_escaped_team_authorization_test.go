@@ -265,6 +265,10 @@ func TestScaleP21SW330EscapedTeamFamilyBoundary(t *testing.T) {
 		{http.MethodPost, "/api/teams/a%2Fresources/members/sync"},
 		{http.MethodGet, "/api/teams/a%2Fb/resources"},
 		{http.MethodHead, "/api/teams/%2Fb/resources"},
+		{http.MethodPost, "/api/teams/a%2Fb/resources"},
+		{http.MethodPost, "/api/teams/a%2Fb/resource-sections"},
+		{http.MethodPatch, "/api/teams/a%2Fb/resources/item%2Fname"},
+		{http.MethodDelete, "/api/teams/a%2Fb/resource-sections/item%2Fname"},
 	} {
 		request := httptest.NewRequest(row.method, row.path, nil)
 		_, member := scaleP21SW315TeamMembershipAuthorizationRequest(request)
@@ -276,7 +280,7 @@ func TestScaleP21SW330EscapedTeamFamilyBoundary(t *testing.T) {
 	for _, row := range []struct{ method, path string }{
 		{http.MethodGet, "/api%2Fteams/a/members"},
 		{http.MethodGet, "/api/teams/a%2Fb/members/user"},
-		{http.MethodPost, "/api/teams/a%2Fb/resources"},
+		{http.MethodPost, "/api/teams/a%2Fb/resources/item"},
 		{http.MethodPost, "/api/teams/a%2Fb/members/user"},
 		{http.MethodGet, "/api/teams/a%2Fb/resources/extra"},
 		{http.MethodGet, "/api/teams//members"},

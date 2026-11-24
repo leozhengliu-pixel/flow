@@ -207,6 +207,11 @@ func (s *server) purgeExpiredTrash(ctx context.Context, key string, now time.Tim
 			documentIDs, _ := trashedDocumentOwners(current.Trash, inBatch)
 			return store.MutationScope{Resources: documentIDs}
 		}})
+		var closeOutputs func()
+		if s.store.BoundedMetadataEnabled() {
+			scope, closeOutputs = beginIndependentMetadataOutputReads(scope)
+			scope = store.ContextWithAdvancedScheduleMaintenance(scope, now, trashRetention)
+		}
 		var collaborationIDs, loopIDs, uploads []string
 		removed := 0
 		err := s.store.MutateWorkspace(scope, key, "schedules.maintained", "advanced_schedules", nil, func(next *domain.Bootstrap) error {
@@ -224,6 +229,9 @@ func (s *server) purgeExpiredTrash(ctx context.Context, key string, now time.Tim
 			collaborationIDs, loopIDs, uploads = documentCollaborationIDs, loops, files
 			return nil
 		})
+		if closeOutputs != nil {
+			closeOutputs()
+		}
 		if err != nil {
 			return purged, err
 		}

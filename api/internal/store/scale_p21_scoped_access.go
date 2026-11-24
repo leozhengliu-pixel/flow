@@ -700,7 +700,9 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			})
 			for index := range changes {
 				change := &changes[index]
-				if event == "notification_preferences.updated" && change.field == "notificationPreferences" && change.key == aggregate && !change.drop && !change.insert {
+				defaultedSettings := event == "notification_preferences.updated" && change.field == "notificationPreferences" ||
+					event == "user_settings.scim_profile" && change.field == "userSettings"
+				if defaultedSettings && change.key == aggregate && !change.drop && !change.insert {
 					// The installed view may synthesize defaults for a new
 					// member. An absent row is the first write, not a delete race.
 					stored, err := lockMetadataRecords(ctx, tx, workspace, change.field, []string{change.key})
