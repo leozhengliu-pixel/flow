@@ -53,7 +53,7 @@ func TestRealtimeIssueTemplateEventsFollowTemplateTeams(t *testing.T) {
 	fixture := newRealtimePolicyFixture(t)
 	key := "test-workspace"
 	write := func(id string, template domain.IssueTemplate) {
-		if err := fixture.repo.MutateWorkspace(context.Background(), key, "issue_template.created", id, map[string]any{"name": "input"}, func(data *domain.Bootstrap) error {
+		if err := fixture.repo.MutateWorkspace(workspaceFixtureContext(context.Background()), key, "issue_template.created", id, map[string]any{"name": "input"}, func(data *domain.Bootstrap) error {
 			data.IssueTemplates = append(data.IssueTemplates, template)
 			return nil
 		}); err != nil {

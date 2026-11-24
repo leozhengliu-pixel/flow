@@ -50,7 +50,7 @@ func TestStaleSettingsSweepIsBoundedAndIdempotent(t *testing.T) {
 	team := data.Teams[0]
 	now := time.Now().UTC()
 	old := now.AddDate(0, -2, 0)
-	err = repo.MutateWorkspace(t.Context(), "test-workspace", "settings.test_data", "team", nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "settings.test_data", "team", nil, func(data *domain.Bootstrap) error {
 		data.States = append(data.States, domain.WorkflowState{ID: "settings-canceled", TeamID: team.ID, Name: "Canceled", Type: "canceled"})
 		settings := data.TeamSettings[team.ID]
 		settings.AutoCloseStale = true

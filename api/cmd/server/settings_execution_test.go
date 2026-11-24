@@ -26,7 +26,7 @@ func TestOAuthRequiresAdminApprovalAndRevokesExistingToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	if err := repo.MutateWorkspace(t.Context(), "test-workspace", "workspace_preferences.updated", "workspace", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "workspace_preferences.updated", "workspace", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.ReviewThirdPartyApplications = true
 		return nil
 	}); err != nil {
@@ -71,7 +71,7 @@ func TestOAuthRequiresAdminApprovalAndRevokesExistingToken(t *testing.T) {
 		t.Fatalf("revoked app still accepted: %d", response.StatusCode)
 	}
 	postOAuthForm[map[string]any](t, app.URL+"/oauth/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tokens.RefreshToken}, "client_id": {registered.ClientID}}, 400)
-	if err := repo.MutateWorkspace(t.Context(), "test-workspace", "workspace_preferences.updated", "workspace", nil, func(data *domain.Bootstrap) error { data.WorkspaceSettings.RequireTwoFactor = true; return nil }); err != nil {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "workspace_preferences.updated", "workspace", nil, func(data *domain.Bootstrap) error { data.WorkspaceSettings.RequireTwoFactor = true; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	blocked := authRequest[map[string]string](t, client, "POST", app.URL+"/api/oauth/authorization-request", input, "", 403)
@@ -194,7 +194,7 @@ func TestUnauthorizedApprovalAttemptDoesNotConsumePendingDecision(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	err = repo.MutateWorkspace(t.Context(), "test-workspace", "agent.session_created", "session", nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "agent.session_created", "session", nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, domain.AgentSession{ID: "session", UserID: data.Viewer.ID})
 		return nil
 	})

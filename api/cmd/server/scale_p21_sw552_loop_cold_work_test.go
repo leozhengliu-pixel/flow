@@ -24,6 +24,7 @@ import (
 // GET /api/loops/{id}/runs (this harness disables authentication; bounded
 // metadata needs record hydration on, as production activation requires).
 func TestScaleP21SW552LoopRunColdToolWrite(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	provider := &fakeLoopProvider{}
 	upstream := httptest.NewServer(http.HandlerFunc(provider.serve))

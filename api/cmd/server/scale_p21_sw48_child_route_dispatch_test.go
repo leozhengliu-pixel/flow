@@ -30,6 +30,7 @@ func TestScaleP21SW48ChildRouteDispatch(t *testing.T) {
 		"PATCH /api/issue-records/{id}/comments/{commentId}":               true,
 		"DELETE /api/issue-records/{id}/comments/{commentId}":              true,
 		"POST /api/issue-records/{id}/comments/{commentId}/reactions":      true,
+		"POST /api/issue-records/{id}/comment-actions/{actionId}":          true,
 		"POST /api/issue-records/{id}/relations":                           true,
 		"DELETE /api/issue-records/{id}/relations/{relationId}":            true,
 		"POST /api/issue-records/{id}/attachments":                         true,
@@ -41,6 +42,7 @@ func TestScaleP21SW48ChildRouteDispatch(t *testing.T) {
 		"{id}", "issue_native", "{commentId}", "comment_native",
 		"{relationId}", "relation_native", "{attachmentId}", "attachment_native",
 		"{permissionId}", "permission_native", "{suggestionId}", "suggestion_native",
+		"{actionId}", "action_native",
 	)
 	mutations := http.NewServeMux()
 	for pattern := range expected {

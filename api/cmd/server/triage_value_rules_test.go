@@ -132,7 +132,7 @@ func TestTriageIntelligenceValueRulesDecideShowAutoHide(t *testing.T) {
 		if backlog < 0 {
 			t.Fatal("test workspace has no backlog state")
 		}
-		if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.triage_rules_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+		if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.triage_rules_setup", team.ID, nil, func(data *domain.Bootstrap) error {
 			settings := teamSettings(data, team.ID)
 			settings.TriageEnabled = true
 			data.TeamSettings[team.ID] = settings

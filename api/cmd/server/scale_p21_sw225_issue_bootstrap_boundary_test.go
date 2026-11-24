@@ -159,7 +159,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 		"chatAuthorizedMutation/server.processChatThreadReply":                1,
 		"chatAuthorizedMutation/server.chatCreateFromMessage":                 1,
 		"chatAuthorizedMutation/server.chatFileRequest":                       1,
-		"chatAuthorizedMutation/server.chatLinkPreviewFor":                    2,
+		"chatAuthorizedMutation/server.chatLinkPreviewFor":                    1,
 		"chatAuthorizedMutation/server.chatExecuteAction":                     4,
 		"chatAuthorizedMutation/server.chatAuthorizedBootstrapHeaders":        1,
 		"chatAuthorizedMutation/server.chatAuthorizedWorkflowHeaders":         1,
@@ -169,6 +169,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 		"chatAuthorizedPointRead/server.chatSendUpdateForm":                   1,
 		"chatAuthorizedPointRead/server.chatDMComment":                        1,
 		"chatAuthorizedPointRead/server.chatDMLinkPreview":                    1,
+		"chatAuthorizedPointRead/server.chatLinkPreviewFor":                   1,
 		"chatAuthorizedPointRead/server.processChatThreadReply":               1,
 		"chatAuthorizedPointRead/server.processChatMessageResult":             1,
 		"chatAuthorizedPointRead/server.chatMessageIntakeExists":              1,
@@ -325,6 +326,21 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 		"return s.chatAuthorizedMutation(context.WithValue(ctx, chatPointReadKey{}, true), workspace, userID, http.MethodGet, path, nil, result)") {
 		t.Error("point adapter lost its bounded point marker")
 	}
+	preview := require("chatLinkPreviewFor")
+	const previewKind = "if s.store.BoundedMetadataEnabled() {\n\tctx = context.WithValue(ctx, chatBootstrapHeadersKey{}, chatPreviewMetadata)\n}"
+	hasPreviewKind := false
+	for i, stmt := range preview.Body.List {
+		if scaleP21SW225Node(stmt) == previewKind && i+1 < len(preview.Body.List) {
+			next, ok := preview.Body.List[i+1].(*ast.IfStmt)
+			hasPreviewKind = ok && next.Init == nil && next.Else == nil &&
+				scaleP21SW225Node(next.Cond) == `s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata) != nil` &&
+				scaleP21SW225Statements(next.Body, `return neutral, "", nil`)
+			break
+		}
+	}
+	if !hasPreviewKind {
+		t.Error("chat preview lost its owned kind before entering the gateway")
+	}
 	gateway := require("chatAuthorizedMutation")
 	bootstrapCases, pointGuards := 0, 0
 	ast.Inspect(gateway.Body, func(node ast.Node) bool {
@@ -389,7 +405,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 	}
 	chat := require("chatBootstrapHeaders")
 	if !scaleP21SW225Statements(chat.Body,
-		"if kind != chatDMHeaders && kind != chatWorkflowHeaders {\n\treturn store.ErrBoundedMetadataCoverage\n}",
+		"if kind != chatDMHeaders && kind != chatWorkflowHeaders && kind != chatPreviewMetadata {\n\treturn store.ErrBoundedMetadataCoverage\n}",
 		"read, ok := s.beginIssueRecordsBootstrapRead(w, r)",
 		"if !ok {\n\treturn nil\n}") {
 		t.Error("chat owned entry lost its closed kind or shared owned reader")
