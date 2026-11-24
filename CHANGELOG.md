@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- The OAuth authorization-code exchange no longer returns 429 when MCP clients have used up their address's request budget. MCP, OAuth, upload links and signed file links each keep their own unauthenticated budget and `Retry-After`.
 - Canceled issue creates and edits, project lists, and Pulse acknowledgements return a JSON error instead of an empty success.
 - Database connection failures return HTTP 503 with `Retry-After`, including during credential checks and writes. Session cookies are preserved during an outage. Open realtime streams signal clients to reconnect.
 - Bounded replicas read issue details, history, lists and groups from a current SQL snapshot when the route only needs issue records and policy. Workspace reloads keep using journal deltas after concurrent writes invalidate two install attempts.

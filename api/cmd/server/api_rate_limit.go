@@ -226,10 +226,11 @@ func subjectForVerifiedKey(key domain.APIKey, userID string) apiRateSubject {
 // subjectForPublicRequest covers routes that authenticate inside the handler
 // (MCP, OAuth, upload tokens, signed file links). A token's prefix proves
 // nothing, so ingress never picks an authenticated budget from it: every
-// request spends its address's unauthenticated budget. The one exception is
-// a bearer token on /mcp, which the MCP handler verifies right away: it
-// spends the verified key's budget (limitVerifiedKey) or, for a token it
-// rejects, the address's unauthenticated budget (limitInvalidRunToken).
+// request spends its address's unauthenticated budget for that route class
+// (publicRateRoute). The one exception is a bearer token on /mcp, which the
+// MCP handler verifies right away: it spends the verified key's budget
+// (limitVerifiedKey) or, for a token it rejects, the address's MCP budget
+// (limitInvalidRunToken).
 func subjectForPublicRequest(r *http.Request) (apiRateSubject, bool) {
 	if !publicAPIRateLimitedPath(r.URL.Path) {
 		return apiRateSubject{}, false
@@ -239,7 +240,32 @@ func subjectForPublicRequest(r *http.Request) (apiRateSubject, bool) {
 			return apiRateSubject{}, false
 		}
 	}
-	return apiRateSubject{Category: apiRateUnauthenticated, Key: "ip:" + authClientAddress(r)}, true
+	return publicAddressSubject(r), true
+}
+
+// publicAddressSubject is the unauthenticated budget of the caller address for
+// the request's route class. MCP clients retry /mcp until they hold a token, so
+// sharing one bucket per address let those retries exhaust the OAuth exchange
+// that issues the token. Behind a proxy whose forwarded address Flow does not
+// trust, every caller shares the proxy address, which made that collision
+// global. Each class keeps the full unauthenticated budget and reports its own
+// Retry-After; replicas share the buckets through the limiter backend.
+func publicAddressSubject(r *http.Request) apiRateSubject {
+	return apiRateSubject{Category: apiRateUnauthenticated, Key: "ip:" + publicRateRoute(r.URL.Path) + ":" + authClientAddress(r)}
+}
+
+func publicRateRoute(path string) string {
+	switch {
+	case path == "/mcp" || path == "/mcp/readonly":
+		return "mcp"
+	case strings.HasPrefix(path, "/oauth/") || path == "/api/oauth/token":
+		return "oauth"
+	case strings.HasPrefix(path, "/api/files/signed/"):
+		return "signed"
+	case strings.HasPrefix(path, "/api/mcp/uploads/") || strings.HasPrefix(path, "/api/files/uploads/"):
+		return "upload"
+	}
+	return "other"
 }
 
 // Public routes that integrations call without a session. Browser sign-in
@@ -499,14 +525,14 @@ func (s *server) limitVerifiedKey(w http.ResponseWriter, r *http.Request, key do
 	return limiter.check(r.Context(), r, subject).write(w)
 }
 
-// limitInvalidRunToken spends the caller address's unauthenticated budget on a rejected run token, so tokens cannot
-// be probed at full speed. It reports false after writing a 429.
+// limitInvalidRunToken spends the caller address's unauthenticated budget for the route (the MCP budget on /mcp) on a
+// rejected run token, so tokens cannot be probed at full speed. It reports false after writing a 429.
 func (s *server) limitInvalidRunToken(w http.ResponseWriter, r *http.Request) bool {
 	if s.authDisabled {
 		return true
 	}
 	limiter := s.apiRateLimits()
-	subject := apiRateSubject{Category: apiRateUnauthenticated, Key: "ip:" + authClientAddress(r)}
+	subject := publicAddressSubject(r)
 	if limiter.exempt(subject) {
 		return true
 	}
