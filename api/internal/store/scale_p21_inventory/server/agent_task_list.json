@@ -1,0 +1,12 @@
+{
+  "source": "server/agent_task_list.go",
+  "unmigrated": 0,
+  "consumers": {
+    "listApplicationAgentTasks": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Explicit bindings skip metadata identity reads. The default uses only WorkspaceSettingsMetadata or an owned installed workspace identity. Empty app lists need no resource projection. Task filtering uses scoped issue reads or selected project and document headers. TestAgentTaskListAuthorization and the existing installed default-source tests cover both metadata modes.",
+      "accessors": ["BeginInstalledWorkspaceIdentityRead"]
+    }
+  }
+}

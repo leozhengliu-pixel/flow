@@ -24,14 +24,18 @@ import (
 type metadataReadGate struct {
 	slots chan struct{}
 	wait  time.Duration
+	// Legacy resource reads and issue bootstrap share their workspace-copy budget.
+	projectionBudget *legacyProjectionBudget
 	// write bounds how long a response may take to reach the client, so a
 	// stalled reader cannot hold a slot and its projection indefinitely.
-	write    time.Duration
-	maxQueue int64
-	queued   atomic.Int64
+	write          time.Duration
+	maxQueue       int64
+	queued, active atomic.Int64
 	// Totals for logs and tests.
 	served, rejected, cancelled atomic.Int64
 }
+
+var observeLoadRigGates = func(bootstrap, resource *metadataReadGate) {}
 
 func newMetadataReadGate(concurrency, maxQueue int, wait, write time.Duration) *metadataReadGate {
 	return &metadataReadGate{slots: make(chan struct{}, max(1, concurrency)), wait: wait, write: write, maxQueue: int64(max(0, maxQueue))}
@@ -93,11 +97,11 @@ func (g *metadataReadGate) admit(r *http.Request, name string, bounded bool) (ga
 	case <-expired:
 		g.queued.Add(-1)
 		g.rejected.Add(1)
-		log.Printf("%s gate: gave up after %s (%d slots busy, %d waiting) path=%s", name, g.wait, cap(g.slots), g.queued.Load(), r.URL.Path)
+		log.Printf("%s gate: gave up after %s (%d slots busy, %d waiting)", name, g.wait, cap(g.slots), g.queued.Load())
 		return gateBusy, 5 * time.Second
 	}
 	if waited := time.Since(started); waited > time.Second {
-		log.Printf("%s gate: waited %s (%d waiting) path=%s", name, waited.Round(time.Millisecond), g.queued.Load(), r.URL.Path)
+		log.Printf("%s gate: waited %s (%d waiting)", name, waited.Round(time.Millisecond), g.queued.Load())
 	}
 	return gateAdmitted, 0
 }
@@ -114,12 +118,24 @@ func (g *metadataReadGate) wrap(next http.Handler) http.Handler {
 			return
 		}
 		defer func() { <-g.slots }()
-		waited := time.Since(started)
-		w.Header().Add("Server-Timing", fmt.Sprintf("queue;dur=%.2f", float64(waited.Microseconds())/1000))
 		if r.Context().Err() != nil {
 			g.cancelled.Add(1)
 			return
 		}
+		free, retryAfter, ok := g.reserveProjection(r, started, true)
+		if !ok {
+			if retryAfter > 0 {
+				g.busy(w, retryAfter)
+			}
+			return
+		}
+		if free != nil {
+			defer free()
+		}
+		g.active.Add(1)
+		defer g.active.Add(-1)
+		waited := time.Since(started)
+		w.Header().Add("Server-Timing", fmt.Sprintf("queue;dur=%.2f", float64(waited.Microseconds())/1000))
 		if g.write > 0 {
 			controller := http.NewResponseController(w)
 			_ = controller.SetWriteDeadline(time.Now().Add(g.write))

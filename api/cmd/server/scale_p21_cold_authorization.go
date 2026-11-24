@@ -43,15 +43,7 @@ func (s *server) withColdMetadataRouteMux(mux *http.ServeMux, next http.Handler)
 			// Retry-After answers work unchanged.
 			gate := s.coldGate()
 			hold := &projectionHold{gate: gate}
-			defer func() {
-				hold.mu.Lock()
-				held := hold.held
-				hold.held = false
-				hold.mu.Unlock()
-				if held {
-					<-gate.slots
-				}
-			}()
+			defer hold.release()
 			ctx = context.WithValue(ctx, projectionHoldKey{}, hold)
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))

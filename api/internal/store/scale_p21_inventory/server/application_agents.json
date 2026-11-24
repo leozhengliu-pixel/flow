@@ -23,7 +23,6 @@
       "callers": [
         "server/server.builtinRunRequest",
         "server/server.authorizedAgentTask",
-        "server/server.listApplicationAgentTasks",
         "server/server.deliverApplicationTask",
         "server/server.builtinApplicationContext"
       ]
@@ -56,14 +55,6 @@
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
         "server/server.deliverApplicationTask"
-      ]
-    },
-    "listApplicationAgentTasks": {
-      "owner": "P18",
-      "status": "reviewed",
-      "reason": "Empty-bound default selection retains the exact installed logical URLKey with an independent identity handle held through native listing, per-task authorization and response encoding. Off mode retains WorkspaceMetadata, and explicit bindings are unchanged. TestScaleP21SW24InstalledDefaultTaskSourceDifferential compares literal pre-SW20 lists and authorization on each SAME installed source across warm/full, resident and reloaded states, physical-NUL/default/explicit bindings, missing tasks, read/edit and includeArchived modes. Existing task permission differential remains required. ApplicationDefaultSourceHold still proves the independent warm owner versus cold resident loader mismatch; no source normalization, loader or complete endpoint readiness is certified.",
-      "accessors": [
-        "WorkspaceMetadata"
       ]
     },
     "listApplicationInstallations": {

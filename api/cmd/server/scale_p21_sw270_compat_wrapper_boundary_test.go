@@ -766,16 +766,15 @@ func TestScaleP21SW271MCPWorkspaceDataHotBoundaries(t *testing.T) {
 }
 
 // TestScaleP21SW272SnapshotReservationHotBoundaries closes
-// server.hydratedLegacySnapshotReservation by its own bounded branch: its one
-// reference is the admission estimator of signedFileURLs, and the store
-// estimator, which takes the store lock and walks the hydrated graph, runs
-// only with the flag off.
+// server.hydratedLegacySnapshotReservation by its own bounded branch. Both
+// download admission and the shared legacy projection budget use it. Only
+// flag-off requests reach the store estimator that walks the workspace.
 func TestScaleP21SW272SnapshotReservationHotBoundaries(t *testing.T) {
 	graph := scaleP21SW270Load(t, ".")
 	inventory := scaleP21SW270Inventory(t)
 	graph.verifyClosure(t, inventory, scaleP21SW270Closure{
 		wrapper: "server.hydratedLegacySnapshotReservation",
-		values:  scaleP21SW270Counts("signedFileURLs"),
+		values:  map[string]int{"server.signedFileURLs": 1, "newHandler": 1},
 		bounded: map[string]int{"WorkspaceReadSnapshotReservation": 1},
 	})
 }

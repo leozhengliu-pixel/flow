@@ -283,6 +283,7 @@ func main() {
 	repository.SetWorkspaceKeyObjects(codingHarnessKeyObjects{objects: objects})
 
 	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
+	observeLoadRigGates(s.metadataGate, s.projectionGate)
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -387,6 +388,12 @@ func newHandler(s *server) http.Handler {
 	}
 	if s.projectionGate == nil {
 		s.projectionGate = projectionGateFromEnv()
+	}
+	if s.store != nil && !s.store.BoundedMetadataEnabled() {
+		if s.projectionGate.projectionBudget == nil {
+			s.projectionGate.projectionBudget = newLegacyProjectionBudget(s.hydratedLegacySnapshotReservation, legacyProjectionBudgetBytes())
+		}
+		s.metadataGate.projectionBudget = s.projectionGate.projectionBudget
 	}
 	if s.importSlots == nil {
 		s.importSlots = make(chan struct{}, 2)

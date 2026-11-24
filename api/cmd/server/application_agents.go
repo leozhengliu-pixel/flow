@@ -221,14 +221,17 @@ func (s *server) authorizedAgentTask(r *http.Request, id string, editing bool) (
 	if err != nil {
 		return task, data, errNotFound
 	}
-	if data.Viewer.App && task.AppUserID != data.Viewer.ID {
-		return task, data, errNotFound
-	}
-	if task.CodingSessionID != "" && data.ViewerRole == "guest" && task.CreatorID != data.Viewer.ID {
-		// Guests see only their own coding sessions, whatever the anchor.
+	if !agentTaskVisibleToViewer(task, data.Viewer, data.ViewerRole) {
 		return task, data, errNotFound
 	}
 	return task, data, nil
+}
+
+func agentTaskVisibleToViewer(task domain.AgentTask, viewer domain.User, role string) bool {
+	// An app sees only its own tasks. Guests see only their own coding
+	// sessions, whatever the anchor.
+	return (!viewer.App || task.AppUserID == viewer.ID) &&
+		(task.CodingSessionID == "" || role != "guest" || task.CreatorID == viewer.ID)
 }
 
 func (s *server) applicationTaskContext(r *http.Request, task domain.AgentTask, editing bool) (domain.Bootstrap, error) {
@@ -346,68 +349,6 @@ func (s *server) applicationTaskContext(r *http.Request, task domain.AgentTask, 
 		return data, nil
 	}
 	return data, errNotFound
-}
-
-func (s *server) listApplicationAgentTasks(w http.ResponseWriter, r *http.Request) {
-	actor := requestActor(s, r)
-	issueID := r.URL.Query().Get("issueId")
-	resourceType := r.URL.Query().Get("resourceType")
-	if resourceType == "" {
-		resourceType = "issue"
-	}
-	if r.URL.Query().Get("resourceId") != "" {
-		issueID = r.URL.Query().Get("resourceId")
-	}
-	if issueID == "" && !actor.App {
-		writeError(w, 400, "issueId is required")
-		return
-	}
-	if issueID != "" {
-		if _, err := s.applicationTaskContext(r, domain.AgentTask{ResourceType: resourceType, ResourceID: issueID, IssueID: issueID}, false); err != nil {
-			writeError(w, 404, "Issue not found")
-			return
-		}
-	}
-	appID := ""
-	if actor.App {
-		appID = actor.ID
-	}
-	workspace := workspaceKey(r)
-	if workspace == "" {
-		if !s.store.BoundedMetadataEnabled() {
-			metadata, _ := s.store.WorkspaceMetadata("")
-			workspace = metadata.Workspace.URLKey
-		} else {
-			read, found, err := s.store.BeginInstalledWorkspaceIdentityRead(r.Context(), "")
-			if err != nil {
-				respondMutation(w, err, 200, nil)
-				return
-			}
-			if found {
-				defer read.Close()
-				workspace = read.Identity.URLKey
-			}
-		}
-	}
-	// Archived sessions are not part of the resource's activity; MCP's
-	// list_agent_sessions asks for them with includeArchived=true.
-	list := s.store.ListAgentTasks
-	if r.URL.Query().Get("includeArchived") == "true" {
-		list = s.store.ListAgentTasksIncludingArchived
-	}
-	tasks, err := list(r.Context(), workspace, issueID, appID)
-	if err != nil {
-		respondMutation(w, err, 200, nil)
-		return
-	}
-	visible := []domain.AgentTask{}
-	for _, task := range tasks {
-		if _, _, err := s.authorizedAgentTask(r, task.ID, false); err == nil {
-			task.DeriveTimedState(time.Now())
-			visible = append(visible, task)
-		}
-	}
-	writeJSON(w, 200, visible)
 }
 
 func (s *server) getApplicationAgentTask(w http.ResponseWriter, r *http.Request) {

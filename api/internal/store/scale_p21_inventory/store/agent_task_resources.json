@@ -1,0 +1,18 @@
+{
+  "source": "store/agent_task_resources.go",
+  "unmigrated": 0,
+  "consumers": {
+    "legacyAgentTaskResource": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Reads resident team policy and only matching project and document permission headers under the store lock. Reached only with bounded metadata off.",
+      "accessors": ["workspaces"]
+    },
+    "readInstalledAgentTaskResource": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Owns the installed source and bounded header work through the authorization callback. Reads live principal policy and validates it before delivery. TestAgentTaskListAuthorization compares the actual collection route with both representations.",
+      "accessors": ["BeginInstalledMetadataRead"]
+    }
+  }
+}

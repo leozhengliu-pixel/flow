@@ -24,7 +24,6 @@
         "server/server.startAgentSessionTitle",
         "server/server.applicationConsentTeams",
         "server/server.authorizedAgentTask",
-        "server/server.listApplicationAgentTasks",
         "server/server.executeBuiltinApplication",
         "server/server.createInvitation",
         "server/server.invitationPreview",

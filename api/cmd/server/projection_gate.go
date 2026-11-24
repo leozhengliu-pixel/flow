@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/store"
+	"golang.org/x/sync/semaphore"
 )
 
 // The projection gate bounds the resource requests that build the viewer's
@@ -18,11 +19,10 @@ import (
 // bound, a burst of project or document reads on a busy server piles up one
 // projection per waiting request until the replica runs out of memory.
 //
-// It is a separate metadataReadGate instance from the bootstrap's, with its
-// own settings, so page loads and resource reads never starve each other. The
-// slot is taken lazily, right before the first projection a request builds,
-// and held until the request ends (the handler keeps reading the projection);
-// a request that builds none never waits. Reads (GET, HEAD) are refused with
+// Legacy issue bootstrap and resource reads keep separate concurrency gates
+// and share the byte budget below. A resource slot is taken lazily, right
+// before the first projection, and held until the request ends.
+// A request that builds none never waits. Reads (GET, HEAD) are refused with
 // 503 + Retry-After when the queue is full or after the wait, and the web
 // client retries them; writes wait for a slot (or until their client leaves),
 // since a write is not retried.
@@ -34,6 +34,22 @@ func projectionGateFromEnv() *metadataReadGate {
 	return newMetadataReadGate(envInt("FLOW_RESOURCE_READ_CONCURRENCY", 6), envInt("FLOW_RESOURCE_READ_QUEUE_LIMIT", 128), envDuration("FLOW_RESOURCE_READ_QUEUE_TIMEOUT", 15*time.Second), 0)
 }
 
+type legacyProjectionBudget struct {
+	estimate func(*http.Request) int64
+	bytes    int64
+	used     *semaphore.Weighted
+}
+
+func newLegacyProjectionBudget(estimate func(*http.Request) int64, bytes int64) *legacyProjectionBudget {
+	return &legacyProjectionBudget{estimate: estimate, bytes: bytes, used: semaphore.NewWeighted(bytes)}
+}
+
+func legacyProjectionBudgetBytes() int64 {
+	// Follow the configured metadata memory ceiling so large hosts keep their
+	// concurrency. A snapshot larger than the budget can only run alone.
+	return max(1, store.LegacyProjectionBudgetBytes())
+}
+
 type projectionHoldKey struct{}
 
 // projectionHold is one request's claim on the projection gate.
@@ -41,6 +57,7 @@ type projectionHold struct {
 	gate *metadataReadGate
 	mu   sync.Mutex
 	held bool
+	free func()
 	// retryAfter is set when a projection or authorization read is refused.
 	retryAfter time.Duration
 }
@@ -53,15 +70,7 @@ func (g *metadataReadGate) holdProjections(next http.Handler) http.Handler {
 		// Released even when the handler panics (an aborted streamed
 		// response does): a slot that is never returned would leave the
 		// gate full and every later read answered 503.
-		defer func() {
-			hold.mu.Lock()
-			held := hold.held
-			hold.held = false
-			hold.mu.Unlock()
-			if held {
-				<-g.slots
-			}
-		}()
+		defer hold.release()
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), projectionHoldKey{}, hold)))
 	})
 }
@@ -91,13 +100,21 @@ func releaseProjection(r *http.Request) {
 	if !ok || hold == nil || hold.gate == nil {
 		return
 	}
+	hold.release()
+}
+
+func (hold *projectionHold) release() {
 	hold.mu.Lock()
+	defer hold.mu.Unlock()
 	if !hold.held {
-		hold.mu.Unlock()
 		return
 	}
 	hold.held = false
-	hold.mu.Unlock()
+	if hold.free != nil {
+		hold.free()
+		hold.free = nil
+	}
+	hold.gate.active.Add(-1)
 	<-hold.gate.slots
 }
 
@@ -123,16 +140,54 @@ func acquireProjectionSlot(r *http.Request, bounded bool) bool {
 	if hold.retryAfter > 0 && bounded {
 		return false
 	}
+	started := time.Now()
 	admission, retryAfter := hold.gate.admit(r, "resource read", bounded)
 	switch admission {
 	case gateAdmitted:
+		free, retryAfter, ok := hold.gate.reserveProjection(r, started, bounded)
+		if !ok {
+			<-hold.gate.slots
+			hold.retryAfter = retryAfter
+			return false
+		}
+		hold.free = free
 		hold.held = true
+		hold.gate.active.Add(1)
 		hold.gate.served.Add(1)
 		return true
 	case gateBusy:
 		hold.retryAfter = retryAfter
 	}
 	return false
+}
+
+func (g *metadataReadGate) reserveProjection(r *http.Request, started time.Time, bounded bool) (func(), time.Duration, bool) {
+	budget := g.projectionBudget
+	if budget == nil {
+		return nil, 0, true
+	}
+	ctx := r.Context()
+	if bounded {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, started.Add(g.wait))
+		defer cancel()
+	}
+	bytes := min(budget.bytes, max(1, budget.estimate(r)))
+	if ctx.Err() == nil {
+		acquired := budget.used.TryAcquire(bytes)
+		if !acquired && (!bounded || g.maxQueue > 0) {
+			acquired = budget.used.Acquire(ctx, bytes) == nil
+		}
+		if acquired {
+			return func() { budget.used.Release(bytes) }, 0, true
+		}
+	}
+	if r.Context().Err() != nil {
+		g.cancelled.Add(1)
+		return nil, 0, false
+	}
+	g.rejected.Add(1)
+	return nil, 5 * time.Second, false
 }
 
 func registeredColdRoute(r *http.Request) bool {

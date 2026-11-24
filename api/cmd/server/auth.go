@@ -1231,6 +1231,11 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	if r.URL.Path == "/api/bootstrap" {
 		return true
 	}
+	// The collection has no resource in its path. Workspace membership and
+	// credential scope were checked above; the list checks each task's anchor.
+	if r.URL.Path == "/api/agent-tasks" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+		return true
+	}
 	if r.URL.Path == "/api/sync/changes" {
 		return true
 	}

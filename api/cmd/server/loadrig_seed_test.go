@@ -24,6 +24,7 @@ package main
 //
 // It writes FLOW_LOADRIG_OUT/fixture.json (0600: session tokens and API key
 // secrets) and FLOW_LOADRIG_OUT/seed.json (timings and sizes, no secrets).
+// FLOW_LOADRIG_AGENT_POLLS=1 also writes poll.json (0600) for the two pollers.
 
 import (
 	"cmp"
@@ -129,6 +130,17 @@ func TestLoadRigSeed(t *testing.T) {
 	teamIDs := []string{}
 	for _, team := range fixture.Teams {
 		teamIDs = append(teamIDs, team.ID)
+	}
+	pollFixture := map[string]string{}
+	var pollApp domain.ApplicationInstallation
+	if os.Getenv("FLOW_LOADRIG_AGENT_POLLS") == "1" {
+		for _, kind := range []string{"empty", "active"} {
+			app, secret := agentTaskPollCredential(t, repo, ws, adminID.ID, "loadrig-"+kind, teamIDs[:1])
+			pollFixture[kind] = secret
+			if kind == "active" {
+				pollApp = app
+			}
+		}
 	}
 	fixture.Admin.TeamIDs = teamIDs
 
@@ -338,8 +350,13 @@ func TestLoadRigSeed(t *testing.T) {
 	for _, identity := range fixture.Identities {
 		identityIDs = append(identityIDs, identity.ID)
 	}
+	documents := 78
+	if pollApp.UserID != "" {
+		documents = 1050
+	}
 	spec := store.SyntheticMetadata{
-		Projects: 2321, ProjectBytes: 12000, Trash: 210, TrashBytes: 41000, Documents: 78, DocumentBytes: 64000, Conversations: 400, ConversationBytes: 2000,
+		Projects: 2321, ProjectBytes: 12000, Trash: 210, TrashBytes: 41000,
+		Documents: documents, DocumentBytes: 64000, Conversations: 400, ConversationBytes: 2000,
 		CountScale: scale, BodyScale: 1, TeamIDs: teamIDs, UserIDs: identityIDs, Notifications: len(identityIDs) * 2, Relations: true,
 	}
 	if writer == "bounded" {
@@ -370,11 +387,42 @@ func TestLoadRigSeed(t *testing.T) {
 		}
 	})
 	completeCatalog("catalog-" + writer)
-	for i := range int(math.Ceil(78 * scale)) {
+	syntheticDocuments := int(math.Ceil(float64(spec.Documents) * scale))
+	for i := range syntheticDocuments {
 		fixture.Documents = append(fixture.Documents, loadRigRef{ID: fmt.Sprintf("lt-doc-%04d", i), TeamID: teamIDs[i%len(teamIDs)]})
 	}
 	for i := 0; i < int(math.Ceil(2321*scale)); i += max(1, int(2321*scale)/200) {
 		fixture.Projects = append(fixture.Projects, loadRigRef{ID: fmt.Sprintf("lt-project-%05d", i), TeamID: teamIDs[i%len(teamIDs)]})
+	}
+	if pollApp.UserID != "" {
+		ref := func(kind string) string {
+			switch kind {
+			case "issue":
+				for _, issue := range fixture.Issues {
+					if issue.TeamID == teamIDs[0] {
+						return issue.ID
+					}
+				}
+			case "project":
+				return fixture.Projects[0].ID
+			case "document":
+				return fixture.Documents[0].ID
+			}
+			return ""
+		}
+		for _, kind := range []string{"issue", "project", "document"} {
+			task := domain.AgentTask{ID: "loadrig-poll-" + kind, WorkspaceKey: ws, AppUserID: pollApp.UserID, CreatorID: adminID.ID,
+				ResourceType: kind, ResourceID: ref(kind), TeamID: teamIDs[0], Prompt: "Synthetic task"}
+			if kind == "issue" {
+				task.IssueID = task.ResourceID
+			}
+			if _, err := repo.CreateAgentInitiatedTask(ctx, task); err != nil {
+				t.Fatal("could not create poll task")
+			}
+		}
+		if err := loadRigWriteJSON(filepath.Join(out, "poll.json"), pollFixture, 0o600); err != nil {
+			t.Fatal("could not write poll fixture")
+		}
 	}
 	if err := repo.ExtendLoadRigSessions(ctx, identityIDs, 30*24*time.Hour); err != nil {
 		note("extend sessions: %v", err)
@@ -406,7 +454,7 @@ func TestLoadRigSeed(t *testing.T) {
 	report["totalSeconds"] = total
 	report["counts"] = map[string]any{"teams": len(fixture.Teams), "members": len(fixture.Identities), "issues": issueCount, "httpEdits": httpEdits,
 		"labels": len(fixture.LabelIDs), "views": len(fixture.ViewIDs), "apiProjects": scaled(20), "apiDocuments": scaled(12), "loops": len(fixture.LoopIDs),
-		"apiKeys": len(fixture.APIKeys), "syntheticProjects": int(math.Ceil(2321 * scale)), "syntheticDocuments": int(math.Ceil(78 * scale)),
+		"apiKeys": len(fixture.APIKeys), "syntheticProjects": int(math.Ceil(2321 * scale)), "syntheticDocuments": syntheticDocuments,
 		"trash": int(math.Ceil(210 * scale)), "conversations": int(math.Ceil(400 * scale)), "notifications": int(math.Ceil(float64(spec.Notifications) * scale))}
 	report["problems"] = problems
 	fixture.Seed = map[string]any{"scale": scale, "issues": issueCount, "writer": writer}
