@@ -125,7 +125,7 @@ const issueListFields = (
 
 export function projectLocalIssueRecord(id: string, value: Record<string, unknown>, seq: string, version: string): LocalRow {
   if (!id || value.id !== id || value.isSummary !== true || !decimal(version) || typeof value.title !== 'string' || !value.team || !value.state) {
-    throw new LocalStoreReset('Invalid issue list record')
+    throw new LocalStoreReset('invalid-record', 'Invalid issue list record')
   }
   const row = project('issue', id, value, seq, version)
   for (const field of issueListFields) if (Object.hasOwn(value, field)) row[field] = value[field]
@@ -211,34 +211,73 @@ export function applyLocalIssueView(issues: Issue[], changes: readonly LocalChan
   return next
 }
 
-export class LocalStoreReset extends Error {}
+export type LocalStoreEraseReason =
+  | 'access-revoked' | 'authority-changed' | 'session-ended' | 'kill-switch'
+  | 'schema-mismatch' | 'invalid-record' | 'journal-invalid' | 'journal-invalidated' | 'journal-resync'
+  | 'directory-changed' | 'checkpoint-changed' | 'baseline-incomplete' | 'baseline-replaced'
+  | 'quota' | 'idb-error' | 'idb-inactive' | 'idb-clone' | 'idb-abort' | 'idb-closed' | 'idb-blocked' | 'idb-missing'
+  | 'workspace-evicted' | 'slice-evicted' | 'slice-revoked' | 'journal-removal'
+  | 'write-receipt-conflict' | 'write-rejected' | 'receipt-expired' | 'deletion-retry' | 'retired-snapshot'
+  | 'network-fallback'
+
+export function markLocalStoreErase(reason: LocalStoreEraseReason) {
+  if (typeof performance === 'undefined' || typeof performance.mark !== 'function') return
+  const name = `flow:local-store:erase:${reason}`
+  // Keep the latest occurrence of each code on long-lived pages.
+  performance.clearMarks?.(name)
+  performance.mark(name)
+}
+
+export class LocalStoreReset extends Error {
+  readonly reason: LocalStoreEraseReason
+
+  constructor(reason: LocalStoreEraseReason, message: string) {
+    super(message)
+    this.reason = reason
+  }
+}
 export class LocalStoreRefreshRequired extends LocalStoreReset {}
+
+export function localStoreEraseReason(error: unknown): LocalStoreEraseReason {
+  if (error instanceof LocalStoreReset) return error.reason
+  if (error instanceof DOMException) {
+    switch (error.name) {
+      case 'VersionError': return 'schema-mismatch'
+      case 'QuotaExceededError': return 'quota'
+      case 'TransactionInactiveError': return 'idb-inactive'
+      case 'DataCloneError': return 'idb-clone'
+      case 'AbortError': return 'idb-abort'
+    }
+  }
+  return 'idb-error'
+}
 
 /** HTTP next is the scanned cursor. Invisible transactions need no record writes. */
 export function planLocalChanges(page: SyncChanges, after: string, epoch: string, issueLists = false): LocalChange[] {
-  if (page.authzEpoch !== epoch || page.resyncRequired) throw new LocalStoreRefreshRequired('Journal baseline changed')
+  if (page.authzEpoch !== epoch) throw new LocalStoreRefreshRequired('authority-changed', 'Journal authority changed')
+  if (page.resyncRequired) throw new LocalStoreRefreshRequired('journal-resync', 'Journal baseline changed')
   if (!decimal(page.next) || !decimal(page.head) ||
       compareLocalStoreSeq(page.next, after) < 0 || compareLocalStoreSeq(page.next, page.head) > 0 ||
-      (page.hasMore ? page.next === after : page.next !== page.head)) throw new LocalStoreReset('Invalid journal cursor')
+      (page.hasMore ? page.next === after : page.next !== page.head)) throw new LocalStoreReset('journal-invalid', 'Invalid journal cursor')
   const writes: LocalChange[] = []
   let seq = after
   for (const transaction of page.transactions) {
     if (!decimal(transaction.seq) || compareLocalStoreSeq(transaction.seq, seq) <= 0 || compareLocalStoreSeq(transaction.seq, page.next) > 0 ||
-        !transaction.txId) throw new LocalStoreReset('Invalid journal transaction')
+        !transaction.txId) throw new LocalStoreReset('journal-invalid', 'Invalid journal transaction')
     if (transaction.invalidations.some(kind => !issueLists || kind !== LOCAL_STORE_PULSE_CURSOR)) {
-      throw new LocalStoreRefreshRequired('Journal invalidated a collection')
+      throw new LocalStoreRefreshRequired('journal-invalidated', 'Journal invalidated a collection')
     }
     seq = transaction.seq
     for (const { key, version, value, completeness } of transaction.upserts) {
       const kind = wireKinds.get(key.kind)
-      if (!kind || !decimal(version) || !key.id || value?.id !== key.id || !['summary', 'detail'].includes(completeness)) throw new LocalStoreReset('Journal record is unsupported')
+      if (!kind || !decimal(version) || !key.id || value?.id !== key.id || !['summary', 'detail'].includes(completeness)) throw new LocalStoreReset('invalid-record', 'Journal record is unsupported')
       const row = kind === 'issue' && value.archivedAt ? undefined :
         issueLists && kind === 'issue' ? projectLocalIssueRecord(key.id, value, seq, version) : project(kind, key.id, value, seq, version)
       writes.push({ kind, id: key.id, row })
     }
     for (const { key, version } of transaction.removals) {
       const kind = wireKinds.get(key.kind)
-      if (!kind || !decimal(version) || !key.id) throw new LocalStoreReset('Journal removal is unsupported')
+      if (!kind || !decimal(version) || !key.id) throw new LocalStoreReset('invalid-record', 'Journal removal is unsupported')
       writes.push({ kind, id: key.id })
     }
   }

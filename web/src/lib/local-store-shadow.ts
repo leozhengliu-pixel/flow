@@ -5,7 +5,8 @@ import { localStoreBootstrap } from './local-store-bootstrap'
 import { clearLocalStores, hasLocalStore, isLocalStoreQuotaError, LOCAL_STORE_BUDGET, localStorageBudget, localStoreGeneration, LocalStoreDB, onLocalStoreDisabled, recordLocalStoreVisit, retainedLocalAuthority, retainLocalStoreAuthority, type LocalCollections, type LocalMeta } from './local-store-db'
 import {
   LOCAL_STORE_HEADER, LOCAL_STORE_CAPABILITY, LocalStoreRefreshRequired, LocalStoreReset, compareLocalStoreSeq, localChecksum, localKinds, localRowBytes, localRowFingerprint,
-  localStoreAuthority, localStoreBuildId, localStoreEnabled, planLocalChanges, projectLocalCollection, type LocalChange, type LocalStoreAuthority,
+  localStoreAuthority, localStoreBuildId, localStoreEnabled, localStoreEraseReason, markLocalStoreErase, planLocalChanges, projectLocalCollection,
+  type LocalChange, type LocalStoreAuthority, type LocalStoreEraseReason,
 } from './local-store-model'
 import { modelChanges } from './scale-p13-wire'
 import { catchUpLocalIssues, localStoreLoadedWorkspace, readLocalIssueChanges, readLocalIssueManifest } from './local-store-resume'
@@ -97,7 +98,7 @@ class ShadowRun {
     if (this.controller.signal.aborted) { db?.close(); return }
     if (!db) {
       const retained = hasLocalStore(checkpoint.viewerId, checkpoint.workspaceId)
-      this.stop()
+      this.stop('network-fallback')
       this.onReset?.(this.viewerId, this.workspaceKey, undefined, retained)
       return
     }
@@ -117,7 +118,7 @@ class ShadowRun {
     }
     catch (error) {
       if (error instanceof LocalStoreReset && !this.controller.signal.aborted) {
-        await this.recheckBaselineAuthority(checkpoint)
+        await this.recheckBaselineAuthority(checkpoint, error.reason)
       } else this.fail(error)
       return
     }
@@ -137,8 +138,12 @@ class ShadowRun {
     const { signal } = this.controller
     let data = initial
     for (let attempt = 0; attempt < 3; attempt++) {
+      if (signal.aborted) return
       const capture = localStoreBootstrap(data)
-      if (!capture || data.viewer.id !== this.viewerId || signal.aborted) break
+      if (!capture || data.viewer.id !== this.viewerId) {
+        this.stop('authority-changed')
+        return
+      }
       try {
         await this.seedBootstrap(data, capture)
         return
@@ -150,7 +155,7 @@ class ShadowRun {
           this.fail(error)
           return
         }
-        await clearLocalStores(this.viewerId, this.workspaceKey)
+        await clearLocalStores(error.reason, this.viewerId, this.workspaceKey)
         try {
           data = await this.fetchBaseline(signal)
         } catch (error) {
@@ -159,7 +164,6 @@ class ShadowRun {
         }
       }
     }
-    this.stop()
   }
 
   private async seedBootstrap(data: BootstrapData, capture: NonNullable<ReturnType<typeof localStoreBootstrap>>) {
@@ -171,22 +175,25 @@ class ShadowRun {
     let bytes = 0
     for (const kind of localKinds) {
       await idle()
-      if (signal.aborted || generation !== localStoreGeneration()) { this.stop(); return }
+      if (signal.aborted) return
+      if (generation !== localStoreGeneration()) { this.stop('authority-changed'); return }
       const rows = projectLocalCollection(data, kind, authority.head)
       this.rows.set(kind, rows)
       for (const row of rows.values()) bytes += localRowBytes(row)
-      if (bytes > this.budget) { this.stop(); return }
+      if (bytes > this.budget) { this.stop('quota'); return }
     }
     const db = await LocalStoreDB.open(authority, this.workspaceKey, generation)
-    if (!db || signal.aborted) { db?.close(); this.stop(); return }
+    if (signal.aborted) { db?.close(); return }
+    if (!db) { this.stop('network-fallback'); return }
     try {
       const previous = await db.readMeta()
       // The stamp predates the bootstrap. Catch up before committing the
       // baseline, and leave a concurrent tab's newer checkpoint intact.
       const page = await this.changes(authority)
       const writes = this.plan(page, authority.head, authority.authzEpoch)
-      if (page.hasMore) throw new LocalStoreReset('Bootstrap changed during the read')
-      if (signal.aborted || generation !== localStoreGeneration()) { this.stop(); return }
+      if (page.hasMore) throw new LocalStoreReset('checkpoint-changed', 'Bootstrap changed during the read')
+      if (signal.aborted) return
+      if (generation !== localStoreGeneration()) { this.stop('authority-changed'); return }
       bytes = sizeAfter(this.rows, writes, bytes)
       applyToMemory(this.rows, writes)
       this.db = db
@@ -201,7 +208,8 @@ class ShadowRun {
     } finally {
       if (this.db !== db) db.close()
     }
-    if (!this.meta || signal.aborted) { this.stop(); return }
+    if (signal.aborted) return
+    if (!this.meta) { this.stop('checkpoint-changed'); return }
     recordLocalStoreVisit()
     await this.check(this.meta)
     this.watch()
@@ -255,7 +263,7 @@ class ShadowRun {
     return requestRetryingBusy<SyncChanges>(`/api/sync/changes?${params}`, {
       headers: { 'X-Workspace-Key': this.workspaceKey, [LOCAL_STORE_HEADER]: this.viewerId }, signal: this.controller.signal, quiet: true,
     }).then(page => {
-      if (!Array.isArray(page?.transactions)) throw new LocalStoreReset('Invalid local store journal page')
+      if (!Array.isArray(page?.transactions)) throw new LocalStoreReset('journal-invalid', 'Invalid local store journal page')
       return modelChanges(page)
     })
   }
@@ -293,22 +301,22 @@ class ShadowRun {
           if (this.controller.signal.aborted) return
           let start = performance.now()
           const bytes = sizeAfter(this.rows, writes, meta.bytes)
-          if (bytes > this.budget) throw new LocalStoreReset('Local store exceeded its budget')
+          if (bytes > this.budget) throw new LocalStoreReset('quota', 'Local store exceeded its budget')
           const db = this.db
           const committed = await db.writeWithinBudget(bytes - meta.bytes, available => {
             this.controller.signal.throwIfAborted()
-            if (bytes > available) throw new LocalStoreReset('Local store exceeded its budget')
+            if (bytes > available) throw new LocalStoreReset('quota', 'Local store exceeded its budget')
             start = performance.now()
             return db.apply(meta, page.next, bytes, writes)
           }, this.budget)
-          if (!committed) { this.stop(); return }
+          if (!committed) { this.stop('checkpoint-changed'); return }
           this.meta = meta = committed
           if (writes.length) measure('delta-write', start)
           applyToMemory(this.rows, writes)
           updated ||= writes.length > 0
         }
         if (!page.hasMore) break
-        if (pageIndex === 99) throw new LocalStoreReset('Local store catch-up exceeded its page budget')
+        if (pageIndex === 99) throw new LocalStoreReset('quota', 'Local store catch-up exceeded its page budget')
         await idle()
       }
       const due = Date.now() >= this.nextManifestAt
@@ -317,26 +325,27 @@ class ShadowRun {
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       if (this.meta?.resume && error instanceof LocalStoreReset) {
-        await this.recheckBaselineAuthority(this.meta)
+        await this.recheckBaselineAuthority(this.meta, error.reason)
         return
       }
       if (this.meta?.resume && isLocalStoreQuotaError(error)) {
         if (!this.controller.signal.aborted) {
           measure('reset')
-          this.stop()
+          this.stop('quota')
           this.onReset?.(this.viewerId, this.workspaceKey, undefined, true)
         }
       } else if (this.meta?.resume && error instanceof ApiError && [400, 401, 403, 404].includes(error.status)) {
         if (!this.controller.signal.aborted) {
           measure('reset')
-          this.db?.discard()
-          this.stop()
+          const reason = error.status === 401 ? 'session-ended' : error.status === 400 ? 'journal-invalid' : 'access-revoked'
+          void this.db?.discard(reason)
+          this.stop(reason)
           this.onReset?.(this.viewerId, this.workspaceKey, error.status)
         }
       } else if (error instanceof ApiError && error.status === 409) {
         // A busy workspace can change while the server projects the page.
         // Keep the committed cursor and let the next event or timer retry.
-      } else if (error instanceof LocalStoreRefreshRequired) await this.refreshBaseline()
+      } else if (error instanceof LocalStoreRefreshRequired) await this.refreshBaseline(error.reason)
       else this.fail(error)
     }
     finally {
@@ -345,29 +354,31 @@ class ShadowRun {
     }
   }
 
-  private async recheckBaselineAuthority(meta: LocalMeta) {
+  private async recheckBaselineAuthority(meta: LocalMeta, reason: LocalStoreEraseReason) {
     const { signal } = this.controller
     let keep = false
     let status: number | undefined
+    let discardReason: LocalStoreEraseReason = 'authority-changed'
     try {
       const manifest = await readLocalIssueManifest(meta, false, signal)
       const retained = retainedLocalAuthority(meta.viewerId, meta.workspaceId, meta.workspaceKey)
       // A browser can close this connection while the database and outbox remain authorized.
       keep = retained?.authzEpoch === manifest.authzEpoch
-      if (keep && this.db?.valid && manifest.authzEpoch === meta.authzEpoch) await this.db.invalidateReadModel(meta)
+      if (keep && this.db?.valid && manifest.authzEpoch === meta.authzEpoch) await this.db.invalidateReadModel(meta, reason)
     } catch (error) {
       if (error instanceof ApiError) status = error.status
       if (isConnectivityError(error) || status === 409 || status === 429) return
+      discardReason = status === 401 ? 'session-ended' : status === 403 || status === 404 ? 'access-revoked' : localStoreEraseReason(error)
     }
     if (signal.aborted) return
     measure('reset')
-    if (!keep) void this.db?.discard()
-    this.stop()
+    if (!keep) void this.db?.discard(discardReason)
+    this.stop(keep ? reason : discardReason)
     this.onReset?.(this.viewerId, this.workspaceKey, status, keep)
   }
 
   private async drainIssues(db: LocalStoreDB, meta: LocalMeta) {
-    if (!db.valid) throw new LocalStoreReset('Local store was removed')
+    if (!db.valid) throw new LocalStoreReset('idb-closed', 'Local store was removed')
     const reader = this.reader = new AbortController()
     this.budget = await localStorageBudget()
     reader.signal.throwIfAborted()
@@ -386,7 +397,7 @@ class ShadowRun {
     } else {
       // Another tab may have applied the same journal page while we read it.
       const latest = await db.readMeta()
-      if (!latest || latest.baseline !== meta.baseline) throw new LocalStoreReset('Local store baseline changed')
+      if (!latest || latest.baseline !== meta.baseline) throw new LocalStoreReset('checkpoint-changed', 'Local store baseline changed')
       const snapshot = await db.readIssueWorkspace(latest)
       if (snapshot && db.valid && !this.controller.signal.aborted) {
         this.meta = latest
@@ -402,7 +413,7 @@ class ShadowRun {
   }
 
   private async readOwnerCommit(db: LocalStoreDB, previous: LocalMeta) {
-    if (!db.valid) throw new LocalStoreReset('Local store was removed')
+    if (!db.valid) throw new LocalStoreReset('idb-closed', 'Local store was removed')
     const notice = this.commit
     this.commit = undefined
     if (notice?.from === previous.head && notice.baseline === previous.baseline && Array.isArray(notice.ids) && notice.ids.length) {
@@ -414,7 +425,7 @@ class ShadowRun {
       }
     }
     const latest = await db.readMeta()
-    if (!latest?.resume || latest.baseline !== previous.baseline) throw new LocalStoreReset('Local store baseline changed')
+    if (!latest?.resume || latest.baseline !== previous.baseline) throw new LocalStoreReset('checkpoint-changed', 'Local store baseline changed')
     if (latest.head === previous.head) { this.meta = latest; return }
     const view = await db.readIssueWorkspace(latest)
     if (view && db.valid && !this.controller.signal.aborted) {
@@ -432,12 +443,13 @@ class ShadowRun {
       if (!page.hasMore) return
       head = page.next
     }
-    throw new LocalStoreReset('Retained authority could not catch up')
+    throw new LocalStoreReset('quota', 'Retained authority could not catch up')
   }
 
   private async verifyRetainedAuthority() {
     const workspaceId = this.retainedWorkspaceId
-    if (!workspaceId || !hasLocalStore(this.viewerId, workspaceId)) { this.stop(); return }
+    if (!workspaceId) { this.stop(); return }
+    if (!hasLocalStore(this.viewerId, workspaceId)) { this.stop('authority-changed'); return }
     const { signal } = this.controller
     const generation = localStoreGeneration()
     const db = await LocalStoreDB.openRetained(this.viewerId, workspaceId, this.workspaceKey, generation)
@@ -453,27 +465,29 @@ class ShadowRun {
       if (scope?.viewerId === this.viewerId && scope.workspaceId === workspaceId) {
         await retainLocalStoreAuthority(scope, this.workspaceKey, generation)
       } else {
-        await clearLocalStores(this.viewerId, this.workspaceKey)
+        await clearLocalStores('authority-changed', this.viewerId, this.workspaceKey)
       }
     } catch (error) {
       if (signal.aborted) return
       if (error instanceof LocalStoreReset && db?.valid) {
         try {
           const manifest = await readLocalIssueManifest({ viewerId: this.viewerId, workspaceId, workspaceKey: this.workspaceKey }, false, signal)
-          if (meta?.authzEpoch === manifest.authzEpoch) await db.invalidateReadModel(meta)
+          if (meta?.authzEpoch === manifest.authzEpoch) await db.invalidateReadModel(meta, error.reason)
           else await retainLocalStoreAuthority(manifest, this.workspaceKey, generation)
         } catch (cause) {
-          if (!signal.aborted && cause instanceof ApiError && [401, 403, 404].includes(cause.status)) await db.discard()
+          if (!signal.aborted && cause instanceof ApiError && [401, 403, 404].includes(cause.status)) {
+            await db.discard(cause.status === 401 ? 'session-ended' : 'access-revoked')
+          }
         }
       } else if (error instanceof ApiError && [403, 404].includes(error.status)) {
-        this.stop()
+        this.stop('access-revoked')
         this.onReset?.(this.viewerId, this.workspaceKey, error.status)
       }
     } finally { db?.close() }
-    if (!hasLocalStore(this.viewerId, workspaceId)) this.stop()
+    if (!signal.aborted && !hasLocalStore(this.viewerId, workspaceId)) this.stop('authority-changed')
   }
 
-  private async refreshBaseline() {
+  private async refreshBaseline(reason: LocalStoreEraseReason) {
     const { signal } = this.controller
     if (signal.aborted) return
     measure('reset')
@@ -482,7 +496,7 @@ class ShadowRun {
     this.db?.close()
     this.db = undefined
     this.meta = undefined
-    await clearLocalStores(this.viewerId, this.workspaceKey)
+    await clearLocalStores(reason, this.viewerId, this.workspaceKey)
     if (signal.aborted) return
     try {
       await this.seed(await this.fetchBaseline(signal))
@@ -494,11 +508,11 @@ class ShadowRun {
     this.nextManifestAt = Date.now() + reconcileInterval
     if (meta.resume) {
       const manifest = await readLocalIssueManifest(meta, true, signal)
-      if (manifest.authzEpoch !== meta.authzEpoch) throw new LocalStoreReset('Issue authorization changed')
+      if (manifest.authzEpoch !== meta.authzEpoch) throw new LocalStoreReset('authority-changed', 'Issue authorization changed')
       if (manifest.head !== meta.head) { this.queued = true; return }
       if (manifest.revision !== meta.resume.revision || manifest.issueCount !== meta.resume.issueCount) {
         measure('count-mismatch')
-        throw new LocalStoreReset('Local active issue count differs from the manifest')
+        throw new LocalStoreReset('baseline-incomplete', 'Local active issue count differs from the manifest')
       }
       measure('count-match')
       this.nextManifestAt = Date.now() + manifestInterval
@@ -506,9 +520,9 @@ class ShadowRun {
     }
     const scope = await readAuthority(this.workspaceKey, signal)
     if (!scope || scope.viewerId !== this.viewerId || scope.workspaceId !== meta.workspaceId || scope.authzEpoch !== meta.authzEpoch) {
-      throw new LocalStoreReset('Local store permission changed')
+      throw new LocalStoreReset('authority-changed', 'Local store permission changed')
     }
-    if (compareLocalStoreSeq(scope.head, meta.head) < 0) throw new LocalStoreReset('Local store journal rewound')
+    if (compareLocalStoreSeq(scope.head, meta.head) < 0) throw new LocalStoreReset('journal-resync', 'Local store journal rewound')
     if (scope.head !== meta.head) { this.queued = true; return }
 
     // There are no counts for these projections in the manifest yet. In the
@@ -516,7 +530,7 @@ class ShadowRun {
     const data = await this.fetchBaseline(signal)
     const capture = localStoreBootstrap(data)
     if (!capture || capture.authority.authzEpoch !== meta.authzEpoch || capture.authority.viewerId !== meta.viewerId ||
-        capture.authority.workspaceId !== meta.workspaceId) throw new LocalStoreReset('Local store authority changed')
+        capture.authority.workspaceId !== meta.workspaceId) throw new LocalStoreReset('authority-changed', 'Local store authority changed')
     const current = await this.changes(meta)
     this.plan(current, meta.head, meta.authzEpoch)
     if (current.head !== meta.head || capture.authority.head !== meta.head || this.pagedIssues !== !!data.issueCollectionPaged) return
@@ -526,7 +540,7 @@ class ShadowRun {
       const expected = projectLocalCollection(data, kind, meta.head).size
       if (expected !== this.rows.get(kind)!.size) {
         measure('count-mismatch')
-        throw new LocalStoreReset('Local store count differs from bootstrap')
+        throw new LocalStoreReset('baseline-incomplete', 'Local store count differs from bootstrap')
       }
     }
     measure('count-match')
@@ -553,7 +567,7 @@ class ShadowRun {
     if (actual?.baseline !== meta.baseline || actual.head !== meta.head || !db.valid) return
     const mismatch = count !== meta.resume?.issueCount || checksum !== meta.resume?.issueFingerprint
     measure(mismatch ? 'checksum-mismatch' : 'checksum-match')
-    if (mismatch) throw new LocalStoreReset('Local store checksum mismatch')
+    if (mismatch) throw new LocalStoreReset('baseline-incomplete', 'Local store checksum mismatch')
   }
 
   private async check(meta: LocalMeta) {
@@ -573,7 +587,7 @@ class ShadowRun {
     const actual = await db.readMeta()
     if (actual?.baseline !== meta.baseline || actual.head !== meta.head || !db.valid) return
     measure(mismatch ? 'checksum-mismatch' : 'checksum-match')
-    if (mismatch) throw new LocalStoreReset('Local store checksum mismatch')
+    if (mismatch) throw new LocalStoreReset('baseline-incomplete', 'Local store checksum mismatch')
   }
 
   private fail(error: unknown) {
@@ -581,18 +595,20 @@ class ShadowRun {
     if (isConnectivityError(error) || error instanceof ApiError && error.status === 429) {
       if (this.meta) return // Keep the previous committed cursor and retry on the next wakeup.
     }
+    const reason = error instanceof ApiError ? 'network-fallback' : localStoreEraseReason(error)
     if (this.meta?.resume) {
-      void this.recheckBaselineAuthority(this.meta)
+      void this.recheckBaselineAuthority(this.meta, reason)
       return
     }
     measure('reset')
     if (import.meta.env.DEV) console.debug('Local store shadow stopped', error instanceof Error ? error.message : '')
-    if (this.db) this.db.discard()
-    else if (error instanceof LocalStoreReset) void clearLocalStores(this.viewerId, this.workspaceKey)
-    this.stop()
+    if (this.db) void this.db.discard(reason)
+    else if (error instanceof LocalStoreReset) void clearLocalStores(reason, this.viewerId, this.workspaceKey)
+    this.stop(reason)
   }
 
-  stop() {
+  stop(reason?: LocalStoreEraseReason) {
+    if (reason) markLocalStoreErase(reason)
     this.controller.abort()
     this.reader?.abort()
     this.notices?.close()

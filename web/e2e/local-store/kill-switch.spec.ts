@@ -33,6 +33,7 @@ test('operator opt-out deletes retained databases and uses network reads', async
   expect((await session).headers()['x-flow-local-store']).toBe('disabled')
   expect((await bootstrap).ok()).toBe(true)
   await expect(page.getByText(title, { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => performance.getEntriesByName('flow:local-store:erase:kill-switch', 'mark').length)).toBe(1)
   await expect.poll(() => page.evaluate(name => localStorage.getItem(`flow:local-store:${name}`), name)).toBeNull()
   expect(await page.evaluate(name => new Promise<boolean>((resolve, reject) => {
     const open = indexedDB.open(name)
@@ -81,5 +82,6 @@ test('a running tab broadcasts the server opt-out to other tabs', async ({ page,
   for (const tab of [page, other]) {
     await expect(tab.getByText(title, { exact: true })).toBeVisible()
     await expect.poll(() => readLocalRow(tab, id)).toBeUndefined()
+    expect(await tab.evaluate(() => performance.getEntriesByName('flow:local-store:erase:kill-switch', 'mark').length)).toBe(1)
   }
 })

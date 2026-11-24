@@ -209,7 +209,7 @@ export async function logoutAccount(): Promise<void> {
   // Last edits go out as the current viewer, within a short bound; the rest is dropped when the session caches clear.
   await flushBeforeSessionEnd();
   await request("/api/auth/logout", { method: "POST" });
-  await clearLocalStores();
+  await clearLocalStores('session-ended');
   const { ClientStorage } = await import("@/lib/client-storage");
   ClientStorage.clearAllNonAuthData();
 }

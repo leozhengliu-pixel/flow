@@ -16,7 +16,7 @@ export function captureLocalStoreBootstrap(headers: Record<string, string>, proj
         const current = await retainLocalStoreAuthority(authority, data.workspace.urlKey, generation)
         if (current !== undefined) confirmed.set(data, { authority, generation: current })
       } else if (generation === localStoreGeneration()) {
-        await clearLocalStores(undefined, headers['X-Workspace-Key'])
+        await clearLocalStores('authority-changed', undefined, headers['X-Workspace-Key'])
       }
       return data
     },
