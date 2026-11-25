@@ -1249,8 +1249,9 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	if r.URL.Path == "/api/agent-tasks" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
 		return true
 	}
-	// So does the detail of an issue-anchored task (or coding session): its
-	// handler checks the task and its issue with scoped reads.
+	// So do the detail of an issue-anchored task (or coding session) and the
+	// activities posted to it: their handlers check the task and its issue
+	// with scoped reads.
 	if allowed, handled := s.legacyAgentTaskDetailAuthorization(r, workspace); handled {
 		return allowed
 	}

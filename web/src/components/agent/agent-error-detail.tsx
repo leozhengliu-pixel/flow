@@ -25,11 +25,19 @@ export const AGENT_ERROR_MESSAGES: Record<AgentErrorKind, string> = {
 /** A saved agent session whose replies could not be read for now (the server was busy or unreachable); not an agent failure. */
 export const AGENT_REPLIES_UNAVAILABLE = "Couldn't load the agent's replies right now. Try again in a moment."
 
+/** A person's follow-up (a reply, a choice or an approval) that did not reach the server; the agent did nothing wrong. */
+export const AGENT_FOLLOW_UP_NOT_SENT = "Couldn't send your follow-up."
+
+/** A person's request to retry a failed reply that did not reach the server. */
+export const AGENT_RETRY_NOT_SENT = "Couldn't ask the agent to try again."
+
 /** Notices the app words itself about a chat it could not read or follow: shown as they are (translated), never as a provider error. */
 export const AGENT_APP_NOTICES: ReadonlySet<string> = new Set([
   "Couldn't load this chat.",
   'This chat is no longer available.',
   AGENT_REPLIES_UNAVAILABLE,
+  AGENT_FOLLOW_UP_NOT_SENT,
+  AGENT_RETRY_NOT_SENT,
 ])
 
 /** Classifies raw error text: "Flow Agent provider returned status 429: …", "Flow Agent provider stopped responding"… */
@@ -78,15 +86,19 @@ export function ErrorDetails({ className, detail }: { className?: string; detail
   )
 }
 
-/** An agent chat error: the translated message, with the raw provider text under "Details". */
-export function AgentErrorDetail({ className, error, onRetry }: { className?: string; error: string; onRetry?: () => void }) {
+/**
+ * An agent chat error: the translated message, with the raw provider text under "Details". detail replaces that raw
+ * text (an app notice has none of its own); retryLabel, already translated, names what the action does.
+ */
+export function AgentErrorDetail({ className, error, detail: rawDetail, onRetry, retryLabel }: { className?: string; error: string; detail?: string; onRetry?: () => void; retryLabel?: string }) {
   const { locale, t } = useI18n()
-  const { message, detail } = describeAgentError(error, t, locale)
+  const described = describeAgentError(error, t, locale)
+  const detail = rawDetail ?? described.detail
   return (
     <span className={`${styles.error}${className ? ` ${className}` : ''}`}>
-      <span data-i18n-ignore>{message}</span>
+      <span data-i18n-ignore>{described.message}</span>
       {detail && <ErrorDetails detail={detail}/>}
-      {onRetry && <button className={styles.retry} onClick={onRetry} type="button"><RotateCw size={12}/>{t('Retry')}</button>}
+      {onRetry && <button className={styles.retry} onClick={onRetry} type="button"><RotateCw size={12}/>{retryLabel ?? t('Retry')}</button>}
     </span>
   )
 }
