@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"strconv"
+	"strings"
 )
 
 func readAuthzEpoch(ctx context.Context, reader metadataRowReader, workspaceID string) (string, error) {
@@ -32,6 +33,40 @@ func (s *SQLiteStore) AuthzEpoch(ctx context.Context, workspaceID string) (strin
 	}
 	ctx = context.WithValue(ctx, workspaceReadKey{}, workspaceRead{})
 	return readAuthzEpoch(ctx, s.db, workspaceID)
+}
+
+// SessionAccessEpoch returns the current SQLite epoch if only credentials
+// have changed since access was resolved. It is empty for credential-backed
+// access, which always requires the full epoch.
+func (s *SQLiteStore) SessionAccessEpoch(ctx context.Context, access AccessContext) string {
+	if access.checkBinding(s) != nil || access.policy.key != nil {
+		return ""
+	}
+	return s.sessionPolicyEpoch(ctx, access.WorkspaceID, access.AuthzEpoch)
+}
+
+func (s *SQLiteStore) sessionPolicyEpoch(ctx context.Context, workspaceID, authzEpoch string) string {
+	if s.dialect != "sqlite" || !s.db.journalReady.Load() {
+		return ""
+	}
+	previousGeneration, value, ok := strings.Cut(authzEpoch, ":")
+	previous, err := strconv.ParseInt(value, 10, 64)
+	if !ok || err != nil || previous < 0 {
+		return ""
+	}
+	if snapshot, held := ctx.Value(workspaceReadKey{}).(workspaceRead); held && snapshot.database == s.db {
+		return ""
+	}
+	var generation string
+	var epoch, policyEpoch, capturedEpoch int64
+	err = s.db.QueryRowContext(ctx, `SELECT m.generation,COALESCE(a.epoch,0),COALESCE(a.policy_epoch,0),COALESCE(a.captured_epoch,0)
+		FROM workspace_states w CROSS JOIN record_journal_mode m
+		LEFT JOIN workspace_authz_epochs a ON a.workspace_id=w.workspace_id
+		WHERE w.workspace_id=? AND m.id=1 AND m.enabled=1`, workspaceID).Scan(&generation, &epoch, &policyEpoch, &capturedEpoch)
+	if err != nil || generation != previousGeneration || capturedEpoch != epoch || policyEpoch > previous || previous > epoch {
+		return ""
+	}
+	return generation + ":" + strconv.FormatInt(epoch, 10)
 }
 
 func (s *SQLiteStore) accessStampAndEpoch(ctx context.Context, workspace string) (copyStamp, string, error) {

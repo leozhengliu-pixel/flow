@@ -70,6 +70,9 @@ type sqlDatabase struct {
 	// connections for read-only transactions (scale_p21_sqlite_snapshot_pool.go);
 	// nil uses the main pool.
 	snapshots *sql.DB
+	// sqliteReads serves standalone queries without waiting for the sole
+	// writer or taking a connection needed by a retained snapshot.
+	sqliteReads *sql.DB
 	// commitHooks lets tests pause a transaction around its commit
 	// (change_cursor_test.go); nil in production.
 	commitHooks         atomic.Pointer[commitHooks]
@@ -533,8 +536,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	for _, stage := range stages {
 		began := time.Now()
 		if err := stage.run(context.Background()); err != nil {
-			s.stopLifecycle()
-			db.Close()
+			_ = s.Close()
 			return nil, err
 		}
 		if elapsed := time.Since(began); elapsed >= 50*time.Millisecond {
@@ -663,7 +665,7 @@ func (d *sqlDatabase) QueryContext(ctx context.Context, query string, args ...an
 		return snapshot.reader.QueryContext(ctx, query, args...)
 	}
 	observeSQLStatement(ctx, query)
-	return d.DB.QueryContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
+	return d.queryPool(query).QueryContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
 func (d *sqlDatabase) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
@@ -671,7 +673,18 @@ func (d *sqlDatabase) QueryRowContext(ctx context.Context, query string, args ..
 		return snapshot.reader.QueryRowContext(ctx, query, args...)
 	}
 	observeSQLStatement(ctx, query)
-	return d.DB.QueryRowContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
+	return d.queryPool(query).QueryRowContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
+}
+
+func (d *sqlDatabase) queryPool(query string) *sql.DB {
+	if d.sqliteReads != nil {
+		const verb = "SELECT"
+		query = strings.TrimSpace(query)
+		if len(query) > len(verb) && strings.EqualFold(query[:len(verb)], verb) && strings.ContainsRune(" \t\r\n", rune(query[len(verb)])) {
+			return d.sqliteReads
+		}
+	}
+	return d.DB
 }
 
 // claimTxOptions is the isolation for lease/claim transactions that select

@@ -371,6 +371,9 @@ func (s *SQLiteStore) BeginSharedSavedViewRead(ctx context.Context, workspace, t
 }
 
 func (s *SQLiteStore) reloadSavedViewSource(ctx context.Context, workspace string) error {
+	if s.dialect == "sqlite" {
+		return s.ReloadWorkspace(ctx, workspace)
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	return s.reloadResidentWorkspace(ctx, workspace)

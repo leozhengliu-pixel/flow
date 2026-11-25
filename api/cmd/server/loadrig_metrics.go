@@ -67,6 +67,12 @@ func init() {
 		log.Printf("load rig: metrics listener: %v", err)
 		return
 	}
+	if rate, _ := strconv.Atoi(os.Getenv("FLOW_LOADRIG_MUTEX_PROFILE_FRACTION")); rate > 0 {
+		runtime.SetMutexProfileFraction(rate)
+	}
+	if rate, _ := strconv.Atoi(os.Getenv("FLOW_LOADRIG_BLOCK_PROFILE_RATE")); rate > 0 {
+		runtime.SetBlockProfileRate(rate)
+	}
 	diagnoseWorkspaceRefusal = loadRigWorkspaceRefusal
 	observeLoadRigGates = func(bootstrap, resource *metadataReadGate) {
 		loadRigGates.Store(&[2]*metadataReadGate{bootstrap, resource})

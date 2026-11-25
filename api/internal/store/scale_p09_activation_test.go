@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"flow/api/internal/domain"
 )
 
 func TestScaleP09SmallCommitUsesOneStatement(t *testing.T) {
@@ -196,6 +198,177 @@ func TestScaleP09TimezoneKeepsEpochAndAccessChangesRevoke(t *testing.T) {
 	current, err = f.AuthzEpoch(t.Context(), workspaceID)
 	if err != nil || current == epoch {
 		t.Fatalf("access change did not revoke the epoch: %s -> %s %v", epoch, current, err)
+	}
+}
+
+func TestScaleP09SQLiteBodyEditsKeepAuthorization(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := scaleP09Database(t)
+	if f.dialect != "sqlite" {
+		t.Skip("SQLite trigger migration")
+	}
+	ctx := t.Context()
+	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
+	// Recreate the pre-upgrade trigger while the journal is already enabled.
+	for _, spec := range recordJournalTriggerSpecs("sqlite") {
+		if !strings.Contains(spec.body, "workspace_authz_epochs") {
+			continue
+		}
+		if _, err := f.db.ExecContext(ctx, `DROP TRIGGER `+spec.name); err != nil {
+			t.Fatal(err)
+		}
+		if spec.table == "workspace_metadata_records" && spec.event == "UPDATE" {
+			spec.body = `UPDATE workspace_authz_epochs SET epoch=epoch+1 WHERE workspace_id=(SELECT workspace_id FROM workspace_states WHERE workspace_key=NEW.workspace_key);`
+			if err := f.installRecordJournalTrigger(ctx, spec); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for _, column := range []string{"policy_epoch", "captured_epoch"} {
+		if _, err := f.db.ExecContext(ctx, `ALTER TABLE workspace_authz_epochs DROP COLUMN `+column); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := f.db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version=?`, sqliteRecordJournalPolicyEpochVersion); err != nil {
+		t.Fatal(err)
+	}
+	headBeforeUpgrade := scaleP09Head(t, f)
+	epochBeforeUpgrade, err := f.AuthzEpoch(ctx, workspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.ensureRecordJournal(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if epoch, err := f.AuthzEpoch(ctx, workspaceID); err != nil || epoch != epochBeforeUpgrade || scaleP09Head(t, f) != headBeforeUpgrade {
+		t.Fatalf("migration changed journal authority: epoch=%q err=%v", epoch, err)
+	}
+	for _, test := range []struct {
+		field, initial, edit, revoke string
+	}{
+		{"projects", `{"id":"record","summary":"before","teamIds":["public"]}`, `{"id":"record","summary":"after","teamIds":["public"]}`, `{"id":"record","summary":"after","teamIds":["private"]}`},
+		{"documents", `{"id":"record","title":"before","slugId":"before-suffix","creator":{"id":"owner"}}`, `{"id":"record","title":"after","slugId":"after-suffix","previousSlugIds":["before-suffix"],"creator":{"id":"owner"}}`, `{"id":"record","title":"after","slugId":"after-suffix","previousSlugIds":["before-suffix"],"creator":{"id":"owner"},"permissions":[{"subjectType":"user","subjectId":"owner","role":"owner"}]}`},
+	} {
+		if _, err := f.db.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,'record',0,?)`, workspace, test.field, test.initial); err != nil {
+			t.Fatal(err)
+		}
+		epoch, err := f.AuthzEpoch(ctx, workspaceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for index, raw := range []string{test.edit, test.revoke} {
+			head := scaleP09Head(t, f)
+			if _, err := f.db.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field=? AND record_key='record'`, raw, workspace, test.field); err != nil {
+				t.Fatal(err)
+			}
+			page, err := f.ReadCommittedChanges(ctx, workspaceID, head, 100, 4096)
+			if err != nil || (page.AuthzEpoch != epoch) != (index == 1) || len(page.Transactions) != 1 {
+				t.Fatalf("%s edit %d: epoch=%q page=%+v err=%v", test.field, index, epoch, page, err)
+			}
+			records := page.Transactions[0].Records
+			if len(records) != 1 || records[0].Key != (RecordKey{Kind: test.field, ID: "record"}) {
+				t.Fatalf("unexpected %s records: %+v", test.field, records)
+			}
+		}
+	}
+}
+
+func TestScaleP09SQLitePolicyEpochKeepsSessionAcrossCredentialWrites(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := scaleP09Database(t)
+	if f.dialect != "sqlite" {
+		t.Skip("SQLite policy epoch")
+	}
+	ctx := t.Context()
+	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
+	principal := f.data.Viewer.ID
+	session, err := f.ResolveAccess(ctx, workspace, principal, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential, err := f.ResolveAccess(ctx, workspace, principal, &domain.APIKey{ID: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := scaleP09Head(t, f)
+	if _, err := f.db.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data)
+		VALUES(?,'apiKeys','new',0,'{"id":"new"}')`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	after, err := f.ReadCommittedChanges(ctx, workspaceID, before, 100, 4096)
+	if err != nil || after.AuthzEpoch == session.AuthzEpoch || len(after.Transactions) != 1 {
+		t.Fatalf("credential write was not captured with a new epoch: %+v %v", after, err)
+	}
+	if f.SessionAccessEpoch(ctx, session) != after.AuthzEpoch || f.SessionAccessEpoch(ctx, credential) != "" ||
+		!errors.Is(f.ValidateAccess(ctx, credential), ErrAuthForbidden) {
+		t.Fatal("credential changes did not distinguish session and API-key access")
+	}
+	if _, err := f.db.ExecContext(ctx, `UPDATE workspace_memberships SET status='suspended' WHERE workspace_id=? AND user_id=?`, workspaceID, principal); err != nil {
+		t.Fatal(err)
+	}
+	if f.SessionAccessEpoch(ctx, session) != "" {
+		t.Fatal("membership revocation did not invalidate the old session projection")
+	}
+	if _, err := f.db.ExecContext(ctx, `UPDATE workspace_memberships SET status='active' WHERE workspace_id=? AND user_id=?`, workspaceID, principal); err != nil {
+		t.Fatal(err)
+	}
+	session, err = f.ResolveAccess(ctx, workspace, principal, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.ExecContext(ctx, `UPDATE workspace_authz_epochs SET epoch=epoch+1 WHERE workspace_id=?`, workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if f.SessionAccessEpoch(ctx, session) != "" {
+		t.Fatal("an unclassified epoch advance was accepted")
+	}
+	if _, err := f.db.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='apiKeys' AND record_key='new'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	if f.SessionAccessEpoch(ctx, session) != "" {
+		t.Fatal("a credential write hid an earlier unclassified epoch advance")
+	}
+}
+
+func TestScaleP09SQLitePolicyEpochChecksExistingCollectionRows(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := scaleP09Database(t)
+	if f.dialect != "sqlite" {
+		t.Skip("SQLite policy epoch")
+	}
+	ctx := t.Context()
+	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
+	for _, test := range []struct {
+		field, id string
+		wantBump  bool
+	}{
+		{field: "oauthAuthorizations"},
+		{field: "projects", id: "existing-project", wantBump: true},
+	} {
+		root := "$." + test.field
+		shape := "$." + metadataCollectionsKey + "." + test.field
+		if _, err := f.db.ExecContext(ctx, `UPDATE workspace_states SET data=CAST(json_set(json_remove(CAST(data AS TEXT),?),?,json('[]')) AS BLOB)
+			WHERE workspace_key=?`, shape, root, workspace); err != nil {
+			t.Fatal(err)
+		}
+		if test.id != "" {
+			if _, err := f.db.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data)
+				VALUES(?,?,?,0,json_object('id',?))`, workspace, test.field, test.id, test.id); err != nil {
+				t.Fatal(err)
+			}
+		}
+		before, err := f.AuthzEpoch(ctx, workspaceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.db.ExecContext(ctx, `UPDATE workspace_states SET data=CAST(json_set(CAST(data AS TEXT),?,'array') AS BLOB)
+			WHERE workspace_key=?`, shape, workspace); err != nil {
+			t.Fatal(err)
+		}
+		after, err := f.AuthzEpoch(ctx, workspaceID)
+		if err != nil || (after != before) != test.wantBump {
+			t.Fatalf("%s shape change: epoch %q -> %q, want advance=%t, err=%v", test.field, before, after, test.wantBump, err)
+		}
 	}
 }
 

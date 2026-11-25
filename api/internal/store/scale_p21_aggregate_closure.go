@@ -221,6 +221,9 @@ func metadataAggregateFind(ctx context.Context, node metadataAggregateNode, id s
 				return nil, err
 			}
 		}
+		if stored, ok := node.(metadataAggregateStoredNode); ok && !stored.value.generic && len(plan.fields) > 1 {
+			return metadataAggregateFindStoredFields(ctx, stored.value, plan.fields, id)
+		}
 		for _, index := range plan.fields {
 			child, err := metadataAggregateChild(ctx, node, kind.Field(index).Name)
 			if err != nil {
@@ -285,10 +288,40 @@ func metadataAggregateFind(ctx context.Context, node metadataAggregateNode, id s
 	return found, err
 }
 
+// Struct fields appear in declaration order in the spool. After the outer
+// ID check, walk that order once instead of rereading the preceding headers
+// for each field that can contain an ID.
+func metadataAggregateFindStoredFields(ctx context.Context, node metadataLogicalNode, fields []int, id string) (metadataAggregateNode, error) {
+	var found metadataAggregateNode
+	index := 0
+	err := node.Children(ctx, func(_ reflect.Value, child metadataLogicalNode) error {
+		current := index
+		index++
+		if current != fields[0] {
+			return nil
+		}
+		var err error
+		found, err = metadataAggregateFind(ctx, metadataAggregateStoredNode{child}, id)
+		if err != nil {
+			return err
+		}
+		fields = fields[1:]
+		if found != nil || len(fields) == 0 {
+			return errMetadataAggregateStop
+		}
+		return nil
+	})
+	if errors.Is(err, errMetadataAggregateStop) {
+		err = nil
+	}
+	return found, err
+}
+
 func (image metadataAggregateImage) visit(ctx context.Context, visit func(string, metadataAggregateNode) error) error {
 	if image.Source == nil {
 		return ErrBoundedMetadataCoverage
 	}
+	points := metadataRecordFields(image.Scope)
 	return image.Source.VisitFields(ctx, func(name string, stored metadataLogicalNode) error {
 		if name == "-" || slices.Contains(image.ExcludedFields, name) {
 			return nil
@@ -300,7 +333,7 @@ func (image metadataAggregateImage) visit(ctx context.Context, visit func(string
 				selected := reflect.ValueOf(image.Selected).Elem().Field(field.index)
 				if name == "workspace" || name == "viewer" || name == "viewerRole" || slices.Contains(image.Scope.Fields, name) {
 					node = metadataAggregateNativeNode{selected}
-				} else if slices.Contains(metadataRecordFields(image.Scope), name) {
+				} else if slices.Contains(points, name) {
 					node = metadataAggregateOverlayNode{base: node, selected: selected, field: name, scope: image.Scope}
 				}
 			}

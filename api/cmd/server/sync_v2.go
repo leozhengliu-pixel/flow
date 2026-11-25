@@ -261,7 +261,12 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 				break
 			}
 		}
-		if !s.syncChangesRaced(r, access, err) {
+		if attempt == syncChangesAttempts || !s.syncChangesRaced(r, access, err) {
+			var ok bool
+			result, ok = s.syncChangesResyncAfterPolicyRace(r, access, journal, after, err)
+			if ok {
+				break
+			}
 			if attempt > 1 {
 				slog.WarnContext(r.Context(), "sync changes projected again", "request_id", requestIDFrom(r.Context()), "attempts", attempt)
 			}
@@ -288,19 +293,41 @@ func (s *server) syncChangesResyncAfterRace(r *http.Request, access store.EventA
 	if !s.syncChangesResetAllowed(r, access, err) {
 		return syncV2ChangesResponse{}, false
 	}
-	page, readErr := journal.ReadCommittedChanges(r.Context(), access.WorkspaceID, after, 1, syncV2DeltaBytes)
+	return s.syncChangesResetPage(r.Context(), access, journal, after, true)
+}
+
+func (s *server) syncChangesResyncAfterPolicyRace(r *http.Request, access store.EventAccess, journal committedChangeReader, after string, err error) (syncV2ChangesResponse, bool) {
+	if !errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, errRealtimeProjectionStale) && !errors.Is(err, store.ErrResourceAccessChanged) {
+		return syncV2ChangesResponse{}, false
+	}
+	ctx, err := s.store.LiveEventContext(r.Context())
+	if err != nil {
+		return syncV2ChangesResponse{}, false
+	}
+	current, err := s.store.RefreshEventResetAccess(ctx, access)
+	if err != nil {
+		return syncV2ChangesResponse{}, false
+	}
+	return s.syncChangesResetPage(ctx, current, journal, after, false)
+}
+
+func (s *server) syncChangesResetPage(ctx context.Context, access store.EventAccess, journal committedChangeReader, after string, allowCredentialChurn bool) (syncV2ChangesResponse, bool) {
+	page, readErr := journal.ReadCommittedChanges(ctx, access.WorkspaceID, after, 1, syncV2DeltaBytes)
 	// A concurrent writer can leave a short journal coverage gap even after
 	// the head and authorization epoch are committed. The reset discards the
 	// projected page and asks the client to rebuild from that authenticated
 	// head, so a coverage error is safe to absorb; other read failures are not.
-	if page.Head == "" || page.AuthzEpoch == "" || page.AuthzEpoch != access.AuthzEpoch ||
+	if page.Head == "" || page.AuthzEpoch == "" || access.CheckCredential() != nil ||
 		readErr != nil && !errors.Is(readErr, store.ErrRecordJournalCoverage) {
+		return syncV2ChangesResponse{}, false
+	}
+	if page.AuthzEpoch != access.AuthzEpoch && (!allowCredentialChurn || s.store.SessionAccessEpoch(ctx, access.AccessContext) != page.AuthzEpoch) {
 		return syncV2ChangesResponse{}, false
 	}
 	return syncV2ChangesResponse{
 		Next:           after,
 		Head:           page.Head,
-		AuthzEpoch:     access.AuthzEpoch,
+		AuthzEpoch:     page.AuthzEpoch,
 		Transactions:   []syncV2Transaction{},
 		HasMore:        false,
 		ResyncRequired: true,
@@ -323,7 +350,7 @@ func (s *server) syncChangesResetAllowed(r *http.Request, access store.EventAcce
 		return false
 	}
 	authority, liveErr := s.readSyncAuthority(ctx, workspaceKey(r))
-	return liveErr == nil && authority.epoch == access.AuthzEpoch
+	return liveErr == nil && s.syncChangesEpochCurrent(ctx, access, authority.epoch)
 }
 
 // syncChangesAttempts bounds how often one changes read is projected again
@@ -332,9 +359,8 @@ const syncChangesAttempts = 3
 
 // syncChangesRaced reports that a page failed only because the workspace's
 // source version moved while it was projected (any issue or metadata write):
-// the principal's credential and authorization epoch are unchanged. The page
-// is then projected again from fresh access, which is what the client's retry
-// would read; a revoke or epoch change still fails the read as before.
+// the principal's authorization is unchanged. The page is then projected
+// again from fresh access, which is what the client's retry would read.
 func (s *server) syncChangesRaced(r *http.Request, access store.EventAccess, err error) bool {
 	if !errors.Is(err, errRealtimeProjectionStale) && !errors.Is(err, store.ErrResourceAccessChanged) || r.Context().Err() != nil || access.CheckCredential() != nil {
 		return false
@@ -347,7 +373,7 @@ func (s *server) syncChangesRaced(r *http.Request, access store.EventAccess, err
 	// realtime delivery cohort intentionally shares a short authority read,
 	// which can otherwise return the pre-race value and suppress a safe retry.
 	authority, err := s.readSyncAuthority(ctx, workspaceKey(r))
-	return err == nil && authority.version != access.SourceVersion() && authority.epoch == access.AuthzEpoch
+	return err == nil && authority.version != access.SourceVersion() && s.syncChangesEpochCurrent(ctx, access, authority.epoch)
 }
 
 // syncChangesProjectionError distinguishes a source moving underneath a
@@ -365,10 +391,14 @@ func (s *server) syncChangesProjectionError(r *http.Request, access store.EventA
 		return err
 	}
 	authority, liveErr := s.readSyncAuthority(ctx, workspaceKey(r))
-	if liveErr == nil && authority.version != access.SourceVersion() && authority.epoch == access.AuthzEpoch {
+	if liveErr == nil && authority.version != access.SourceVersion() && s.syncChangesEpochCurrent(ctx, access, authority.epoch) {
 		return errors.Join(err, errRealtimeProjectionStale)
 	}
 	return err
+}
+
+func (s *server) syncChangesEpochCurrent(ctx context.Context, access store.EventAccess, epoch string) bool {
+	return epoch == access.AuthzEpoch || epoch != "" && s.store.SessionAccessEpoch(ctx, access.AccessContext) == epoch
 }
 
 func (s *server) readSyncAuthority(ctx context.Context, workspace string) (eventAuthority, error) {

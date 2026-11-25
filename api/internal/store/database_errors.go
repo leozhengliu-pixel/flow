@@ -26,10 +26,7 @@ func (s *SQLiteStore) CloseDatabasePoolForTesting() error {
 	if !testing.Testing() {
 		return errors.New("closing the live database pool requires a test")
 	}
-	if s.db.snapshots != nil {
-		return errors.Join(s.db.snapshots.Close(), s.db.DB.Close())
-	}
-	return s.db.DB.Close()
+	return s.db.closePools()
 }
 
 // IsDatabaseError reports an error that came from the database or its driver

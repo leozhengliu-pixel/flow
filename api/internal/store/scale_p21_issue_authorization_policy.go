@@ -185,7 +185,7 @@ func (r *IssueWriteAuthorizationRead) loadPolicy(ctx context.Context, userID str
 			if err != nil {
 				return err
 			}
-			if current != epoch {
+			if current != epoch && (key != nil || s.sessionPolicyEpoch(ctx, stamp.workspaceID, epoch) == "") {
 				return errors.Join(ErrAuthForbidden, ErrResourceAccessChanged)
 			}
 		}

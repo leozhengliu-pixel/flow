@@ -42,7 +42,9 @@ func newScaleP12Fixture(t *testing.T, repo *store.SQLiteStore) scaleP12Fixture {
 	t.Helper()
 	f := scaleP12Fixture{scaleP03PlatformFixture: scaleP03Fixture(t, repo), private: idgen.New("p12-private-"), child: idgen.New("p12-child-")}
 	workspace := f.data.Workspace.URLKey
-	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p12.seeded", "", nil, func(data *domain.Bootstrap) error {
+	// The fixture writes several collections at once, including on a bounded store.
+	seed := store.WithColdWork(t.Context(), "p12-fixture")
+	if err := repo.MutateWorkspace(seed, workspace, "scale_p12.seeded", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: f.private, Key: "P12", Private: true}, domain.Team{ID: f.child, Key: "P12C"})
 		data.TeamSettings[f.private] = domain.TeamSettings{TeamID: f.private, Access: "private"}
 		data.TeamSettings[f.child] = domain.TeamSettings{TeamID: f.child, Access: "public", ParentTeamID: f.private}
@@ -73,7 +75,7 @@ func newScaleP12Fixture(t *testing.T, repo *store.SQLiteStore) scaleP12Fixture {
 	f.secret = create("Private issue", f.private, "")
 	f.descendant = create("Inherited grant", f.child, f.secret.ID)
 	authRequest[[]domain.IssuePermission](t, f.admin, http.MethodPut, f.host.URL+"/api/issues/"+f.secret.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": f.principals[3].user.ID, "role": "viewer"}}}, workspace, http.StatusOK)
-	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p12.references", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(seed, workspace, "scale_p12.references", "", nil, func(data *domain.Bootstrap) error {
 		for i := range data.Issues {
 			if data.Issues[i].ID != f.open.ID {
 				continue
