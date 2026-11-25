@@ -2681,6 +2681,9 @@ func (s *server) workspaceDataWithError(r *http.Request) (domain.Bootstrap, erro
 		return data, nil
 	}
 	if data, ok := r.Context().Value(issueRecordAuthorizationContext{}).(domain.Bootstrap); ok {
+		if complete, scoped := r.Context().Value(issueRecordCompleteProjectionKey{}).(*issueRecordCompleteProjection); scoped {
+			return s.completeIssueRecordProjection(r, complete, data)
+		}
 		return data, nil
 	}
 	if pagedRealtimeRequest(r) {

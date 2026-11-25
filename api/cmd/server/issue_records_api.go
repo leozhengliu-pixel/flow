@@ -512,7 +512,21 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 			// write (request_metadata.go); otherwise build it.
 			var handedOff bool
 			if metadata, handedOff = takeIssueWriteMetadata(r, query.Workspace, authUser(r).ID); !handedOff {
-				metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+				// The checks below read the viewer policy and the project and
+				// cycle the input names (issue #244).
+				var projectIDs, cycleIDs []string
+				if input.ProjectID != nil && *input.ProjectID != "" {
+					projectIDs = []string{*input.ProjectID}
+				}
+				if input.CycleID != nil && *input.CycleID != "" {
+					cycleIDs = []string{*input.CycleID}
+				}
+				metadata, err = s.store.LegacyIssueWriteAuthorization(r.Context(), query.Workspace, authUser(r).ID, projectIDs, cycleIDs)
+				if errors.Is(err, store.ErrLegacyIssueAuthorizationUnscoped) {
+					if err = acquireIssueAuthorizationProjection(r); err == nil {
+						metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+					}
+				}
 			}
 			if err != nil {
 				issueRecordsErrorFor(w, r, err)

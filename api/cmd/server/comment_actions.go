@@ -46,6 +46,10 @@ func (s *server) startCommentActions(r *http.Request, issueID string, comment do
 	var data domain.Bootstrap
 	if read, bounded := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); bounded {
 		data = read.Data
+	} else if authorized, handedOff := r.Context().Value(issueRecordAuthorizationContext{}).(domain.Bootstrap); handedOff {
+		// The issue authorization's projection holds the viewer policy and
+		// issue rows read below, also when it was scoped to the issue.
+		data = authorized
 	} else {
 		data = s.workspaceData(r)
 	}
