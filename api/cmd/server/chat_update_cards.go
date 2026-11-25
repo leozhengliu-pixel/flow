@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"slices"
 	"strconv"
@@ -171,8 +172,10 @@ func (c chatMarkdownContext) block(node map[string]any, indent string) string {
 	case "bulletList", "orderedList", "taskList":
 		start := 1
 		if attrs, _ := node["attrs"].(map[string]any); attrs != nil {
-			if value, ok := attrs["start"].(float64); ok && value >= 1 {
-				start = int(value)
+			if value, ok := attrs["start"].(float64); ok {
+				if parsed, valid := chatOrderedListStart(value); valid {
+					start = parsed
+				}
 			} else if value, ok := attrs["start"].(int); ok && value >= 1 {
 				start = value
 			}
@@ -260,6 +263,23 @@ func (c chatMarkdownContext) block(node map[string]any, indent string) string {
 		return strings.Join(inner, "\n")
 	}
 	return ""
+}
+
+func chatOrderedListStart(value float64) (int, bool) {
+	if value < 1 || math.IsInf(value, 0) || value != math.Trunc(value) {
+		return 0, false
+	}
+	maxInt := int(^uint(0) >> 1)
+	if strconv.IntSize == 32 {
+		if value > float64(maxInt) {
+			return 0, false
+		}
+	} else if value >= float64(maxInt) {
+		// float64(maxInt) rounds to 1<<63 on 64-bit systems. Keep that
+		// value out of the conversion because it is one past max int.
+		return 0, false
+	}
+	return int(value), true
 }
 
 func (c chatMarkdownContext) inline(nodes []any) string {
