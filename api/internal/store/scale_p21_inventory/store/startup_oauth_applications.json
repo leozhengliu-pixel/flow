@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_startup_oauth_applications.go",
+  "source": "store/startup_oauth_applications.go",
   "unmigrated": 0,
   "consumers": {
     "installedOAuthApplications": {

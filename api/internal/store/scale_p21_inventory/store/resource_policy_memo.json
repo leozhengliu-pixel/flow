@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_resource_policy_memo.go",
+  "source": "store/resource_policy_memo.go",
   "unmigrated": 0,
   "consumers": {
     "installed": {

@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_scoped_access.go",
+  "source": "store/scoped_access.go",
   "unmigrated": 0,
   "consumers": {
     "mutateWorkspaceScopedWithAggregate": {

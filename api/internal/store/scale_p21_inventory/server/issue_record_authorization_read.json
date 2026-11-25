@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_issue_record_authorization_read.go",
+  "source": "server/issue_record_authorization_read.go",
   "unmigrated": 0,
   "consumers": {
     "boundedIssueRecordAuthorizationMetadata": {
@@ -29,7 +29,7 @@
       ],
       "temperature": "hot",
       "temperatureReason": "PATCH and batch issue route authorization destination validation.",
-      "callers": ["server/scale_p21_issue_record_authorization_read.go:boundedIssueRecordAuthorizationMetadata"]
+      "callers": ["server/issue_record_authorization_read.go:boundedIssueRecordAuthorizationMetadata"]
     }
   }
 }

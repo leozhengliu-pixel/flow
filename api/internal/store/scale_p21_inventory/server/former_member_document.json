@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_sw520_former_member_document.go",
+  "source": "server/former_member_document.go",
   "unmigrated": 0,
   "consumers": {
     "beginFormerMemberDocumentContent": {

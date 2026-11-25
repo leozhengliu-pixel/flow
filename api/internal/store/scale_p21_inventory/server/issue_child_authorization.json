@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_issue_child_authorization.go",
+  "source": "server/issue_child_authorization.go",
   "unmigrated": 0,
   "consumers": {
     "boundedIssueWriteAuthorizationMetadata": {

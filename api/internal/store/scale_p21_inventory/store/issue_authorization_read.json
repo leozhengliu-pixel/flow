@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_issue_authorization_read.go",
+  "source": "store/issue_authorization_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginIssueWriteAuthorizationRead": {

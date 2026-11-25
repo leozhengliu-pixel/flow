@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_oauth_applications_read.go",
+  "source": "store/oauth_applications_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginOAuthApplicationsRead": {
@@ -12,7 +12,7 @@
       "temperature": "hot",
       "temperatureReason": "Backs the HOT OAuth application settings reads.",
       "callers": [
-        "server/scale_p21_oauth_applications_list.go:withOAuthApplicationsBounded"
+        "server/oauth_applications_list.go:withOAuthApplicationsBounded"
       ]
     }
   }

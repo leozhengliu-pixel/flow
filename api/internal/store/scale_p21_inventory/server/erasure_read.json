@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_sw25_erasure_read.go",
+  "source": "server/erasure_read.go",
   "unmigrated": 0,
   "consumers": {
     "eraseMemberWorkspaceID": {

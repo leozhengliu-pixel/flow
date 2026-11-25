@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw20_installed_viewer.go",
+  "source": "store/installed_viewer.go",
   "unmigrated": 0,
   "consumers": {
     "BeginInstalledViewerRead": {

@@ -69,7 +69,7 @@ func TestScaleP21SW504WorkflowWriterKernelBoundary(t *testing.T) {
 		// Integration delivery is the only caller that supplies an ordinal factory.
 		"metadata_ordinal_profile.go:mutateMetadataOrdinalProfile",
 		// The public scoped adapter supplies the declared record scope and no factory.
-		"scale_p21_scoped_access.go:MutateWorkspaceScopedWithAggregate",
+		"scoped_access.go:MutateWorkspaceScopedWithAggregate",
 	}) {
 		t.Fatal("shared scoped kernel gained a caller; recertify its profiles", callers["mutateWorkspaceScopedWithAggregate"])
 	}

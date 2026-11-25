@@ -201,7 +201,7 @@ func TestScaleP21SW265AttachmentVisibilityBoundary(t *testing.T) {
 	}
 	// The bounded check and its predicates reach no hydrating accessor; its
 	// only metadata reads are the owned store primitive and indexed issue SQL.
-	file := pkg.files["scale_p21_attachment_visibility.go"]
+	file := pkg.files["attachment_visibility.go"]
 	if file == nil {
 		t.Fatal("missing bounded upload visibility file")
 	}
@@ -235,7 +235,7 @@ func TestScaleP21SW265AttachmentVisibilityBoundary(t *testing.T) {
 	for _, name := range []string{"boundedAttachmentVisible", "boundedWorkspaceAttachmentVisible", "projectedAttachmentVisible", "projectedAttachmentFamiliesName"} {
 		refs := pkg.references(name)
 		for _, ref := range refs {
-			if ref.File != "scale_p21_attachment_visibility.go" && !(name == "boundedAttachmentVisible" && ref.File == "main.go" && ref.Function == "attachmentVisible") {
+			if ref.File != "attachment_visibility.go" && !(name == "boundedAttachmentVisible" && ref.File == "main.go" && ref.Function == "attachmentVisible") {
 				t.Fatalf("bounded upload visibility helper %s escaped: %+v", name, refs)
 			}
 		}

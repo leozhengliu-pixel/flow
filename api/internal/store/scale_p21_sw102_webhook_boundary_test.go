@@ -208,7 +208,7 @@ func TestScaleP21SW102WebhookNeededLegacyBoundary(t *testing.T) {
 			t.Errorf("%s: %v", site, err)
 		}
 	}
-	enabled := functions["scale_p21_scoped_access.go:BoundedMetadataEnabled"]
+	enabled := functions["scoped_access.go:BoundedMetadataEnabled"]
 	if enabled == nil || enabled.Body == nil || len(enabled.Body.List) != 1 ||
 		scaleP21SW102Text(enabled.Body.List[0]) != "return s.metadataResidency != nil" {
 		t.Fatal("bounded-mode representation no longer matches residency dispatch")

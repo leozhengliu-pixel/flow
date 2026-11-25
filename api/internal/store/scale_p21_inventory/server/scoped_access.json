@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_scoped_access.go",
+  "source": "server/scoped_access.go",
   "unmigrated": 0,
   "consumers": {
     "workspaceDataScoped": {

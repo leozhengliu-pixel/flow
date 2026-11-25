@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_attachment_visibility_read.go",
+  "source": "store/attachment_visibility_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginAttachmentVisibilityRead": {

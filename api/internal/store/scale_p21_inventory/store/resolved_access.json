@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_resolved_access.go",
+  "source": "store/resolved_access.go",
   "unmigrated": 0,
   "consumers": {
     "MutateWorkspaceResolved": {

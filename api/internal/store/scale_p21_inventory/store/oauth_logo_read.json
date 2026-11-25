@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_oauth_logo_read.go",
+  "source": "store/oauth_logo_read.go",
   "unmigrated": 0,
   "consumers": {
     "VisitOAuthApplicationLogos": {

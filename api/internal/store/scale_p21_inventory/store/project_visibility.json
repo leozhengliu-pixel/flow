@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_project_visibility.go",
+  "source": "store/project_visibility.go",
   "unmigrated": 0,
   "consumers": {
     "BeginProjectVisibilityRead": {

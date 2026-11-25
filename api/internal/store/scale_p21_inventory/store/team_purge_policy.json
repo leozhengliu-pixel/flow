@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw20_team_purge_policy.go",
+  "source": "store/team_purge_policy.go",
   "unmigrated": 0,
   "consumers": {
     "BeginExpiredTeamPolicyRead": {

@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_attachment_visibility.go",
+  "source": "server/attachment_visibility.go",
   "unmigrated": 0,
   "consumers": {
     "boundedWorkspaceAttachmentVisible": {

@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_project_visibility.go",
+  "source": "server/project_visibility.go",
   "unmigrated": 0,
   "consumers": {
     "boundedProjectVisible": {

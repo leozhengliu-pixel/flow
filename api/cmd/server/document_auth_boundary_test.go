@@ -281,7 +281,7 @@ func TestScaleP21SW282DocumentAuthorizationWrapperBoundaries(t *testing.T) {
 	want := map[string][]string{
 		"SelectedDocumentMetadata": {
 			"cmd/server/document_record_scopes.go server.documentAuthorizationMetadata call off",
-			"cmd/server/scale_p16_record_authorization.go server.projectRecordAuthorizationMetadata call off",
+			"cmd/server/record_authorization.go server.projectRecordAuthorizationMetadata call off",
 			"cmd/server/scale_p20_resource_reads.go server.scaleP20DocumentMetadata call off",
 			"internal/store/scale_p21_document_read.go SQLiteStore.BeginDocumentRead call off",
 		},

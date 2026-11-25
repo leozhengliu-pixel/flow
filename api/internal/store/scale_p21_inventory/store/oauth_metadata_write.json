@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_oauth_metadata_write.go",
+  "source": "store/oauth_metadata_write.go",
   "unmigrated": 0,
   "consumers": {
     "boundedOAuthMetadataTransaction": {

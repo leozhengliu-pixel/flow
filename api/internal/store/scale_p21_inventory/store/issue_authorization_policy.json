@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_issue_authorization_policy.go",
+  "source": "store/issue_authorization_policy.go",
   "unmigrated": 0,
   "consumers": {
     "CurrentCommentActionSettings": {
