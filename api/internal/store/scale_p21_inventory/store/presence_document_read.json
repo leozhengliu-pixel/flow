@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_presence_document_read.go",
+  "source": "store/presence_document_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginPresenceDocumentRead": {

@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_event_policy_source.go",
+  "source": "store/event_policy_source.go",
   "unmigrated": 0,
   "consumers": {
     "readBoundedEventPolicySource": {

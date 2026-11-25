@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_realtime_record_header.go",
+  "source": "store/realtime_record_header.go",
   "unmigrated": 0,
   "consumers": {
     "BeginRealtimeRecordRead": {

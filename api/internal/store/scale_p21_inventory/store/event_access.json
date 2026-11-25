@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p12_event_access.go",
+  "source": "store/event_access.go",
   "unmigrated": 0,
   "consumers": {
     "ReadEventPolicySource": {
