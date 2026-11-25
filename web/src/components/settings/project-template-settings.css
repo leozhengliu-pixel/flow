@@ -49,11 +49,11 @@
 html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 
 .pt-card-group{display:flex;flex-direction:column;gap:16px}
-.pt-card{box-sizing:border-box;padding:8px 0 12px;border:.5px solid var(--pt-border);border-radius:10px;background:var(--pt-surface);box-shadow:var(--pt-shadow)}
+.pt-card{box-sizing:border-box;padding:8px 0 12px;border:.5px solid var(--pt-card-border);border-radius:10px;background:var(--pt-surface);box-shadow:var(--pt-shadow)}
 .pt-card-body{padding:8px 6px}
 .pt-card-head{display:flex;flex-direction:column;gap:6px;margin:0 12px}
 .pt-identity{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
-.pt-identity .pt-icon-trigger{box-sizing:border-box;width:28px;height:28px;display:grid;place-items:center;padding:0;border:0;border-radius:4px;background:color-mix(in srgb,var(--pt-icon-tile) var(--pt-icon-alpha),transparent);box-shadow:none}
+.pt-identity .pt-icon-trigger{box-sizing:border-box;width:28px;height:28px;display:grid;place-items:center;padding:0;border:0;border-radius:4px;background:lch(from var(--pt-icon-tile) l c h / var(--pt-icon-a));box-shadow:none}
 .pt-identity .pt-icon-trigger svg{width:16px;height:16px;flex:none}
 .pt-identity input,.pt-summary input,.pt-issue-title-field input,.pt-milestone-name input{display:block;box-sizing:border-box;width:100%;margin:0;padding:0;border:0;outline:0;background:transparent;font-family:inherit}
 .pt-project-name{height:32px;font-variation-settings:"opsz" 32;font-feature-settings:"calt";text-rendering:optimizelegibility;color:var(--pt-text);font-size:24px;font-weight:600;line-height:32px;letter-spacing:-.16px}
@@ -78,7 +78,7 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 .pt-pill--team{gap:6px;padding-left:4px;color:var(--pt-text-2)}
 .pt-pill--team>span:not([class]){color:var(--pt-text)}
 .pt-pill--team>svg{color:var(--pt-pill-fg)}
-.pt-pill--composer{background:var(--pt-section-bg);color:var(--pt-composer-fg)}
+.pt-pill--composer{background:var(--pt-composer-pill-bg);color:var(--pt-composer-fg)}
 .pt-pill--composer.is-set>span:not([class]){color:var(--pt-text-2)}
 .pt-label-dot{box-sizing:border-box;display:inline-block;width:9px!important;height:9px!important;margin:0 2.5px;border-radius:50%}
 .pt-label-dot--menu{margin:0 3.5px}
@@ -126,22 +126,23 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 /* Composers */
 .pt-composer-header{box-sizing:border-box;height:44px;padding:6px 11px 6px 14px}
 .pt-composer-header>span{box-sizing:border-box;height:32px;display:flex;align-items:center;padding:6px;color:var(--pt-composer-title);font-size:13px;font-weight:450;line-height:normal}
-.pt-milestone-composer .pt-composer-body{display:flex;flex-direction:column;gap:16px;padding:0 20px 10.8px}
-.pt-milestone-name{box-sizing:border-box;height:43.33px;display:flex;align-items:center;gap:8px}
+.pt-milestone-composer .pt-composer-body{display:flex;flex-direction:column;gap:16px;padding:0 20px 11.67px}
+.pt-milestone-fields{display:flex;flex-direction:column;gap:4px}
+.pt-milestone-name{box-sizing:border-box;height:22.33px;display:flex;align-items:center;gap:8px;padding-top:5px}
 .pt-milestone-name input,.pt-issue-title-field input{height:17.33px;color:var(--pt-text);font-size:13px;font-weight:600;line-height:17.33px;letter-spacing:-.0867px}
 .pt-milestone-description{min-height:80px;--mention-field-min-height:80px}
 .pt-milestone-description .mention-text-field .issue-description-root .description-editor{min-height:37.5px;box-sizing:border-box;padding:6px 0 12px 24px;color:var(--pt-section-fg);font-size:13px;font-weight:450;line-height:19.5px;letter-spacing:-.0867px}
 .pt-issue-description .mention-text-field .issue-description-root .description-editor{min-height:37.5px;box-sizing:border-box;padding:6px 0 12px;color:var(--pt-section-fg);font-size:13px;font-weight:450;line-height:19.5px;letter-spacing:-.0867px}
 .pt-milestone-description .mention-text-field,.pt-issue-description .mention-text-field{color:var(--pt-section-fg)}
 .pt-composer-actions{height:24px;display:flex;align-items:center;justify-content:flex-end;gap:12px}
-.pt-issue-composer .pt-composer-body{display:flex;flex-direction:column;gap:24px;padding:0 12px 12px}
+.pt-issue-composer .pt-composer-body{display:flex;flex-direction:column;gap:24px;padding:0 20px 12px}
 .pt-issue-title-field{padding-top:5px}
 .pt-issue-description{min-height:100px;--mention-field-min-height:100px}
-.pt-composer-toolbar{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 8px}
-.pt-composer-pills{display:flex;flex-wrap:wrap;gap:6px;padding-right:43.2px} /* reserves the reference's trailing (empty) property slot */
+.pt-composer-toolbar{display:flex;flex-direction:column;align-items:stretch;gap:12px}
+.pt-composer-pills{display:flex;flex-wrap:wrap;gap:6px}
 .pt-composer-end{min-height:28px;flex:1 1 auto;display:flex;align-items:center;gap:8px}
 .pt-composer-submit{display:flex;align-items:center;gap:8px;margin-left:auto}
-.pt-attach{position:relative;box-sizing:border-box;width:28px;height:28px;flex:none;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:var(--pt-section-bg);color:var(--pt-section-fg)}
+.pt-attach{position:relative;box-sizing:border-box;width:28px;height:28px;flex:none;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:var(--pt-composer-pill-bg);color:var(--pt-section-fg)}
 .pt-attach::after{content:"";position:absolute;inset:0;border-radius:9999px;box-shadow:var(--pt-ring);pointer-events:none}
 .pt-attach svg{width:14px;height:14px;color:var(--pt-section-icon)}
 .pt-create-more{display:flex;align-items:center;gap:6px;color:var(--pt-text);font-size:12px;font-weight:450;line-height:normal;cursor:default}
