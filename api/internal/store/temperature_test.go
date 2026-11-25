@@ -16,7 +16,7 @@ func scaleP21TemperatureFiles(t *testing.T, files ...metadataConsumerFile) fstes
 		if err != nil {
 			t.Fatal(err)
 		}
-		name := "scale_p21_inventory/" + strings.TrimSuffix(file.Source, ".go") + ".json"
+		name := "metadata_inventory/" + strings.TrimSuffix(file.Source, ".go") + ".json"
 		result[name] = &fstest.MapFile{Data: raw}
 	}
 	return result
@@ -28,7 +28,7 @@ func TestScaleP21TemperatureMissingDefaultsHot(t *testing.T) {
 		Source: "store/example.go", Unmigrated: 1,
 		Consumers: map[string]metadataConsumerReview{"read": review},
 	})
-	raw := string(files["scale_p21_inventory/store/example.json"].Data)
+	raw := string(files["metadata_inventory/store/example.json"].Data)
 	if strings.Contains(raw, `"temperature"`) {
 		t.Fatal("fixture does not exercise missing temperature")
 	}
@@ -83,7 +83,7 @@ func TestScaleP21TemperatureRejectsMalformed(t *testing.T) {
 		{"nonarray-callers", `{"source":"store/example.go","unmigrated":1,"consumers":{"read":{"owner":"P21","status":"unmigrated","accessors":["WorkspaceMetadata"],"callers":"route"}}}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			files := fstest.MapFS{"scale_p21_inventory/store/example.json": {Data: []byte(test.raw)}}
+			files := fstest.MapFS{"metadata_inventory/store/example.json": {Data: []byte(test.raw)}}
 			if _, err := readMetadataConsumerInventory(files); err == nil {
 				t.Fatal("malformed temperature registration was accepted")
 			}

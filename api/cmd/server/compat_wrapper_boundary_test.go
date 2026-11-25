@@ -471,7 +471,7 @@ type scaleP21SW270Review struct {
 
 func scaleP21SW270Inventory(t *testing.T) map[string]scaleP21SW270Review {
 	t.Helper()
-	paths, err := filepath.Glob("../../internal/store/scale_p21_inventory/server/*.json")
+	paths, err := filepath.Glob("../../internal/store/metadata_inventory/server/*.json")
 	if err != nil || len(paths) == 0 {
 		t.Fatalf("server inventory missing: %v", err)
 	}

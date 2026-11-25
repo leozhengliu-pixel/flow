@@ -878,7 +878,7 @@ func scaleP21SW292Inventory(t *testing.T) map[string]scaleP21SW292Review {
 	t.Helper()
 	result := map[string]scaleP21SW292Review{}
 	for _, pkg := range []string{"server", "store"} {
-		paths, err := filepath.Glob(filepath.Join(scaleP21SW292Root, "../../internal/store/scale_p21_inventory", pkg, "*.json"))
+		paths, err := filepath.Glob(filepath.Join(scaleP21SW292Root, "../../internal/store/metadata_inventory", pkg, "*.json"))
 		if err != nil || len(paths) == 0 {
 			t.Fatalf("%s inventory missing: %v", pkg, err)
 		}

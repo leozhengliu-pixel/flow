@@ -12,7 +12,7 @@ import (
 // Each source file owns its registration file. Parallel migrations never edit
 // a shared consumer list or a repository-wide expected count.
 //
-//go:embed scale_p21_inventory/*/*.json
+//go:embed metadata_inventory/*/*.json
 var metadataConsumerFiles embed.FS
 
 type metadataConsumerReview struct {
@@ -43,7 +43,7 @@ var metadataConsumerReviews = sync.OnceValues(func() (metadataConsumerInventory,
 
 func readMetadataConsumerInventory(files fs.FS) (metadataConsumerInventory, error) {
 	result := metadataConsumerInventory{Files: map[string]metadataConsumerFile{}, Consumers: map[string]metadataConsumerReview{}}
-	paths, err := fs.Glob(files, "scale_p21_inventory/*/*.json")
+	paths, err := fs.Glob(files, "metadata_inventory/*/*.json")
 	if err != nil {
 		return result, err
 	}
@@ -59,7 +59,7 @@ func readMetadataConsumerInventory(files fs.FS) (metadataConsumerInventory, erro
 		if err := json.Unmarshal(raw, &file); err != nil {
 			return result, fmt.Errorf("%s: %w", path, err)
 		}
-		expected := strings.TrimSuffix(strings.TrimPrefix(path, "scale_p21_inventory/"), ".json") + ".go"
+		expected := strings.TrimSuffix(strings.TrimPrefix(path, "metadata_inventory/"), ".json") + ".go"
 		if file.Source != expected || file.Unmigrated < 0 {
 			return result, fmt.Errorf("%s: source or count does not match its file", path)
 		}

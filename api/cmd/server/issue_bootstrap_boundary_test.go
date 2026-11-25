@@ -127,7 +127,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 		"chat_group_requests.json": "executeChatGroupRequest",
 		"chat_unfurl.json":         "chatLinkPreviewFor",
 	} {
-		raw, err := os.ReadFile("../../internal/store/scale_p21_inventory/server/" + file)
+		raw, err := os.ReadFile("../../internal/store/metadata_inventory/server/" + file)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -64,7 +64,7 @@ func TestScaleP21InventoryPartitionRejectsInvalidReviews(t *testing.T) {
 			}
 			test.edit(&file)
 			encoded, _ = json.Marshal(file)
-			files := fstest.MapFS{"scale_p21_inventory/server/example.json": {Data: encoded}}
+			files := fstest.MapFS{"metadata_inventory/server/example.json": {Data: encoded}}
 			if _, err := readMetadataConsumerInventory(files); err == nil {
 				t.Fatal("invalid partition was accepted")
 			}
