@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"flow/api/internal/coordination"
@@ -57,10 +58,21 @@ func TestSyncChangesUnavailableCarriesRetryAfter(t *testing.T) {
 }
 
 func TestWriteSyncErrorMapsBusy(t *testing.T) {
+	logs := captureServerLogs(t)
 	w := httptest.NewRecorder()
-	writeSyncError(w, fmt.Errorf("x: %w", store.ErrColdMetadataBusy))
+	writeSyncError(w, fmt.Errorf("synthetic credential record: %w", store.ErrColdMetadataBusy))
 	if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "5" {
 		t.Fatalf("%d %q", w.Code, w.Header().Get("Retry-After"))
+	}
+	w = httptest.NewRecorder()
+	writeSyncError(w, fmt.Errorf("synthetic credential record: %w", mysqlDataTooLong()))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected database error status %d", w.Code)
+	}
+	logged := logs.String()
+	if strings.Contains(logged, "synthetic credential record") || strings.Contains(logged, "Data too long") ||
+		!strings.Contains(logged, "cause=cold_slot_busy") || !strings.Contains(logged, "cause=mysql_1406") {
+		t.Fatal("sync logs must record only safe cause codes")
 	}
 }
 

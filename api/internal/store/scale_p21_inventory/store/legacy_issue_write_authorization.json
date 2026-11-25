@@ -1,0 +1,14 @@
+{
+  "source": "store/legacy_issue_write_authorization.go",
+  "unmigrated": 0,
+  "consumers": {
+    "LegacyIssueWriteAuthorization": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Legacy-only owned copy of one issue write's policy inputs from the matching installed workspace or read snapshot: workspace, settings, teams, team settings, the viewer's settings and only the named projects and cycles, then the viewer projection of PagedWorkspaceMetadata. Bounded, resident-skeleton and COLD stores refuse with ErrLegacyIssueAuthorizationUnscoped and the caller takes the gated complete projection.",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

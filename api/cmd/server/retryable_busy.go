@@ -110,6 +110,7 @@ func requestErrorCode(err error) string {
 	if code := store.DatabaseErrorCode(err); code != "" {
 		return code
 	}
+	var handlerErr *internalHandlerError
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return "deadline"
@@ -127,6 +128,8 @@ func requestErrorCode(err error) string {
 		return "scratch_busy"
 	case errors.Is(err, io.ErrUnexpectedEOF):
 		return "unexpected_eof"
+	case errors.As(err, &handlerErr):
+		return "internal_handler"
 	default:
 		return "unknown"
 	}

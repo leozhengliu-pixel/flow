@@ -33,6 +33,21 @@ const (
 	metadataSourceReloadHeadroom = 16 << 20
 )
 
+// boundedMetadataSize sums nonnegative sizes or counts without exceeding limit.
+func boundedMetadataSize(limit int, parts ...int) (int, error) {
+	if limit < 0 {
+		return 0, ErrMetadataWorkBudget
+	}
+	total := 0
+	for _, part := range parts {
+		if part < 0 || part > limit-total {
+			return 0, ErrMetadataWorkBudget
+		}
+		total += part
+	}
+	return total, nil
+}
+
 // metadataBudgetBytes reads a byte budget from the environment: a positive
 // whole number of bytes. Unset, invalid, zero or negative values use the
 // default. The budgets grow with the number of workspaces a replica holds
@@ -72,7 +87,13 @@ func (r *metadataResidency) metadataWorkspacePolicyLimit() int {
 
 const metadataMiB = 1 << 20
 
-func ceilMiB(bytes int64) int64 { return (bytes + metadataMiB - 1) / metadataMiB }
+func ceilMiB(bytes int64) int64 {
+	whole := bytes / metadataMiB
+	if bytes%metadataMiB > 0 {
+		whole++
+	}
+	return whole
+}
 
 // Fields are classified explicitly. Adding a Bootstrap field requires a
 // residency decision, even if it is derived or stored in a different table.

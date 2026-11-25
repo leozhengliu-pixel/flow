@@ -212,9 +212,8 @@ func assertNoDatabaseText(t *testing.T, where, text string) {
 	}
 }
 
-// A real driver error on the REST, MCP and built-in agent write paths: the
-// client and the model see a generic message and the request id, the log
-// line has the driver text and the same id.
+// A real driver error on the REST, MCP and built-in agent write paths still
+// gives the client and model a generic message and their request ID.
 func TestDatabaseFailureOnEveryWritePathIsGeneric(t *testing.T) {
 	f := newDatabaseFailureFixture(t)
 	logs := captureServerLogs(t)
@@ -241,6 +240,7 @@ func TestDatabaseFailureOnEveryWritePathIsGeneric(t *testing.T) {
 	})
 
 	t.Run("mcp", func(t *testing.T) {
+		offset := len(logs.String())
 		rpc, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": "save_issue", "arguments": map[string]any{"title": "Refused by the database", "team": team}}})
 		request, _ := http.NewRequest(http.MethodPost, f.host.URL+"/mcp", bytes.NewReader(rpc))
 		request.Header.Set("Authorization", "Bearer "+f.secret)
@@ -260,14 +260,24 @@ func TestDatabaseFailureOnEveryWritePathIsGeneric(t *testing.T) {
 		if !strings.Contains(text, "could not be saved") || !strings.Contains(text, "mcp-failure-request") {
 			t.Fatalf("MCP tool error = %q", text)
 		}
-		if logged := logs.String(); !strings.Contains(logged, "request_id=mcp-failure-request") || !strings.Contains(logged, "Data too long") {
-			t.Fatalf("log lacks the MCP failure:\n%s", logged)
+		logged := logs.String()[offset:]
+		if !strings.Contains(logged, "flow tool failed") || !strings.Contains(logged, "flow tool internal error") {
+			t.Fatal("MCP failure did not reach both log sites")
+		}
+		if !strings.Contains(logged, "cause=internal_handler") && !strings.Contains(logged, "cause=sqlite_") {
+			t.Fatal("MCP failure log lacks a safe cause code")
+		}
+		for _, forbidden := range []string{"mcp-failure-request", "Refused by the database", databaseFailureText, f.secret} {
+			if strings.Contains(logged, forbidden) {
+				t.Fatal("MCP log includes a request or database value")
+			}
 		}
 	})
 
 	t.Run("agent", func(t *testing.T) {
 		ctx := context.WithValue(context.Background(), authUserContextKey{}, f.data.Viewer)
 		ctx = context.WithValue(ctx, requestIDKey{}, "agent-failure-request")
+		ctx = context.WithValue(ctx, requestLoggerKey{}, slog.With("request_id", "server-generated-agent-id"))
 		ctx = store.ContextWithActor(ctx, f.data.Viewer)
 		request := httptest.NewRequest(http.MethodPost, "/api/agent?workspace="+f.data.Workspace.URLKey, nil).WithContext(ctx)
 		args, _ := json.Marshal(map[string]any{"title": "Refused by the database", "team": team})
@@ -281,8 +291,8 @@ func TestDatabaseFailureOnEveryWritePathIsGeneric(t *testing.T) {
 				t.Fatalf("agent tool error = %q", text)
 			}
 		}
-		if logged := logs.String(); !strings.Contains(logged, "request_id=agent-failure-request") {
-			t.Fatalf("log lacks the agent failure:\n%s", logged)
+		if logged := logs.String(); !strings.Contains(logged, "request_id=server-generated-agent-id") || strings.Contains(logged, "request_id=agent-failure-request") {
+			t.Fatal("agent failure did not log the server-generated ID")
 		}
 	})
 
@@ -310,6 +320,22 @@ func TestPublicToolErrorKeepsCallerMessages(t *testing.T) {
 	id := strings.TrimSuffix(strings.TrimPrefix(detached[strings.Index(detached, "request id "):], "request id "), "). Try again later.")
 	if id == "" || !strings.Contains(logs.String(), "request_id="+id) {
 		t.Fatalf("detached error %q not logged with its id:\n%s", detached, logs.String())
+	}
+}
+
+func TestPublicLoopToolErrorLogsServerRequestID(t *testing.T) {
+	logs := captureServerLogs(t)
+	ctx := context.WithValue(t.Context(), loopRunRequestKey{}, true)
+	ctx = context.WithValue(ctx, requestIDKey{}, "client-supplied-id")
+	ctx = context.WithValue(ctx, requestLoggerKey{}, slog.With("request_id", "server-generated-id"))
+	err := publicToolError(ctx, "request-tool-name", mysqlDataTooLong())
+	if err == nil || !strings.Contains(err.Error(), "client-supplied-id") {
+		t.Fatal("expected the original client-facing request ID")
+	}
+	logged := logs.String()
+	if !strings.Contains(logged, "request_id=server-generated-id") ||
+		strings.Contains(logged, "client-supplied-id") || strings.Contains(logged, "request-tool-name") || strings.Contains(logged, "Data too long") {
+		t.Fatal("loop error log did not use only the server-generated ID")
 	}
 }
 

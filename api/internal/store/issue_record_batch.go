@@ -85,7 +85,7 @@ func (s *SQLiteStore) writeIssueRecordBatch(ctx context.Context, tx *sqlTx, work
 			// reader; the compatibility fallback has no transfer allowance.
 			return nil, ErrBoundedMetadataCoverage
 		}
-		payloads := make(map[string][]byte, len(previous)+len(missing))
+		payloads := make(map[string][]byte)
 		for id, raw := range previous {
 			payloads[id] = raw
 		}

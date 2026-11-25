@@ -7,7 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-- With bounded metadata enabled on SQLite, standalone reads can run alongside writes and aggregate lookups do less spool I/O. Sync V2 can return an empty reset after a concurrent resource change. OAuth token exchanges preserve the authorization proof for concurrent issue bootstrap and issue writes by session users.
+- Fix completed Agent replies failing to load with "The workspace is busy loading for other people" while the workspace is under load. Reading an issue's Agent session (in the comment thread and through the `get_agent_session` MCP tool) in legacy metadata mode checks the session and its issue with scoped reads instead of waiting for a whole-workspace projection. If a reply still cannot be loaded for a moment, the thread says so and offers Retry instead of reporting that the agent ran into an error.
+- Metadata errors and the affected API logs omit credential and request values. Metadata writes and seed batches check allocation sizes before reserving memory.
+- Fix API memory exhaustion when commenting on or editing issues in workspaces with many projects. Single-issue writes in legacy metadata mode authorize against the viewer's policy and the records the request names instead of copying the whole workspace, snapshots share project progress histories instead of copying them, and the remaining full-workspace authorization reads wait for the shared projection budget.
+- Reduce memory used by legacy comment-action reads and avoid duplicate workspace projections for drafts, recurring issues, bulk issue moves, settings lists, resource preferences, the feed, reviews, and search suggestions.
+- With bounded metadata, team settings, team membership and team resource requests no longer fail with 403 "This resource is outside your teams" when an unrelated write (such as API key usage tracking) lands mid-request. Flow checks access again, and still refuses members removed from the team, demoted admins and revoked keys.
+- CI runs long triage, loop, workflow and large-row comparisons on separate shards and gives large fixture purges their own deadline.
 - Realtime projections wait briefly for shared memory during bursts, so viewers can receive updates as capacity frees up.
 - Loops can quote text from authorized Word attachments and inspect JPGs with an image-capable model. Unreadable files and unavailable image input are reported per attachment so the audit can continue.
 - The keyboard skip link moves focus to the page content even when the page is still loading.

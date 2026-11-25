@@ -94,7 +94,11 @@ func legacySessionStoredForm(ctx context.Context, owner *ResourceRead, tx *sqlTx
 			if err != nil {
 				return err
 			}
-			wrapper := make([]byte, 0, len(raw)+len(idRaw)+32)
+			size, err := boundedMetadataSize(metadataWorkBytes, len(raw), len(idRaw), 32)
+			if err != nil {
+				return err
+			}
+			wrapper := make([]byte, 0, size)
 			wrapper = append(wrapper, `{"id":`...)
 			wrapper = append(wrapper, idRaw...)
 			wrapper = append(wrapper, `,"messages":[`...)

@@ -86,6 +86,31 @@ func conflictedMetadataKeys(err error) ([]metadataRecordKey, bool) {
 	return nil, false
 }
 
+// JSON errors can quote record values. Keep the cause available to errors.As
+// without putting any record data in the message.
+type metadataRecordJSONError struct {
+	message string
+	cause   error
+}
+
+func (err *metadataRecordJSONError) Error() string { return err.message }
+func (err *metadataRecordJSONError) Unwrap() error { return err.cause }
+
+func unmarshalMetadataRecord(raw []byte, dst any) error {
+	if err := json.Unmarshal(raw, dst); err != nil {
+		return &metadataRecordJSONError{message: "invalid metadata record", cause: err}
+	}
+	return nil
+}
+
+func marshalMetadataRecord(value any) ([]byte, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, &metadataRecordJSONError{message: "could not encode metadata record", cause: err}
+	}
+	return raw, nil
+}
+
 // mergeMetadataRecord applies ours' change to a record (from base, the copy
 // it was made on) to theirs, the record as stored now. loaded is theirs as a
 // load presents it (see normalizedMetadataRecord): a field counts as changed
@@ -100,7 +125,7 @@ func mergeMetadataRecord(base, ours, theirs, loaded []byte) ([]byte, bool, error
 		raw    []byte
 		fields *map[string]json.RawMessage
 	}{{base, &baseFields}, {ours, &ourFields}, {theirs, &theirFields}, {loaded, &loadedFields}} {
-		if err := json.Unmarshal(part.raw, part.fields); err != nil {
+		if err := unmarshalMetadataRecord(part.raw, part.fields); err != nil {
 			return nil, false, err
 		}
 	}
@@ -142,7 +167,7 @@ func mergeMetadataRecord(base, ours, theirs, loaded []byte) ([]byte, bool, error
 		}
 		setMember(merged, name, value)
 	}
-	encoded, err := json.Marshal(merged)
+	encoded, err := marshalMetadataRecord(merged)
 	return encoded, conflict, err
 }
 
@@ -314,9 +339,9 @@ func normalizedMetadataRecord(field metadataField, key string, record reflect.Va
 	normalize(&probe)
 	collection := newMetadataCollection(field, reflect.ValueOf(&probe).Elem().Field(field.index))
 	if normalized, ok := collection.record(key); ok {
-		return json.Marshal(normalized.Interface())
+		return marshalMetadataRecord(normalized.Interface())
 	}
-	return json.Marshal(record.Interface())
+	return marshalMetadataRecord(record.Interface())
 }
 
 func setMember(fields map[string]json.RawMessage, name string, value json.RawMessage) {
@@ -582,7 +607,7 @@ func sameContainer(a, b reflect.Value) bool {
 // record does not persist (json:"-") are taken from keep when it is valid.
 func decodeMetadataRecord(kind reflect.Type, raw []byte, keep reflect.Value) (reflect.Value, error) {
 	value := reflect.New(kind)
-	if err := json.Unmarshal(raw, value.Interface()); err != nil {
+	if err := unmarshalMetadataRecord(raw, value.Interface()); err != nil {
 		return reflect.Value{}, err
 	}
 	value = value.Elem()
@@ -720,7 +745,7 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 			tx.rebasedMetadata[recordKey] = true
 			old, _ := previous.record(key)
 			mine, _ := next.record(key)
-			base, err := json.Marshal(old.Interface())
+			base, err := marshalMetadataRecord(old.Interface())
 			if err != nil {
 				return nil, false, err
 			}
@@ -748,7 +773,7 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 				replacedAfter = true
 				continue
 			}
-			ours, err := json.Marshal(mine.Interface())
+			ours, err := marshalMetadataRecord(mine.Interface())
 			if err != nil {
 				return nil, false, err
 			}
@@ -936,10 +961,10 @@ func rebaseUpdateRecords(ctx context.Context, tx *sqlTx, workspace string, refs 
 			continue
 		}
 		var update metadataUpdate
-		if err := json.Unmarshal(row, &update); err != nil {
+		if err := unmarshalMetadataRecord(row, &update); err != nil {
 			return result, err
 		}
-		base, err := json.Marshal(old.Interface())
+		base, err := marshalMetadataRecord(old.Interface())
 		if err != nil {
 			return result, err
 		}
@@ -948,16 +973,16 @@ func rebaseUpdateRecords(ctx context.Context, tx *sqlTx, workspace string, refs 
 		}
 		storedValue, err := decodeMetadataRecord(kind, update.Item, old)
 		if err != nil {
-			return result, fmt.Errorf("rebase %s record %s: %w", field.name, key, err)
+			return result, fmt.Errorf("rebase %s record: %w", field.name, err)
 		}
-		theirs, err := json.Marshal(storedValue.Interface())
+		theirs, err := marshalMetadataRecord(storedValue.Interface())
 		if err != nil {
 			return result, err
 		}
 		if refs.equalDisplayData(refs.canonicalDisplayData(theirs), base) {
 			continue
 		}
-		ours, err := json.Marshal(mine.Interface())
+		ours, err := marshalMetadataRecord(mine.Interface())
 		if err != nil {
 			return result, err
 		}
@@ -1028,9 +1053,9 @@ func mergeWithStoredRecord(refs issueReferences, field metadataField, kind refle
 	}
 	storedValue, err := decodeMetadataRecord(kind, resolved, reflect.Value{})
 	if err != nil {
-		return storedMerge{}, fmt.Errorf("rebase %s record %s: %w", field.name, key, err)
+		return storedMerge{}, fmt.Errorf("rebase %s record: %w", field.name, err)
 	}
-	theirs, err := json.Marshal(storedValue.Interface())
+	theirs, err := marshalMetadataRecord(storedValue.Interface())
 	if err != nil {
 		return storedMerge{}, err
 	}

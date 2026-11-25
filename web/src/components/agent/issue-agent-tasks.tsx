@@ -10,7 +10,8 @@ import { AGENT_TASK_ACTIVITY_EVENT, archiveApplicationTask, deleteApplicationAct
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import { AgentAnswerText, AgentChoicePills } from './agent-answer'
-import { AgentErrorDetail } from './agent-error-detail'
+import { AGENT_REPLIES_UNAVAILABLE, AgentErrorDetail } from './agent-error-detail'
+import { isConnectivityError } from '@/lib/api-client'
 import { agentApprovalChoices, agentApprovalMarkdown } from './agent-approval-model'
 import { AgentCommentGlyph } from './agent-comment-glyph'
 import { agentThreadItems, agentThreadReactions, agentWorkingPhase } from './agent-thread-items'
@@ -126,6 +127,8 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
   const [error, setError] = useState('')
   const [session, setSession] = useState(task)
   const [loadRevision, setLoadRevision] = useState(0)
+  // The session's replies could not be read for now (the server was busy or unreachable).
+  const [loadUnavailable, setLoadUnavailable] = useState(false)
   const [archived, setArchived] = useState(false)
   const cursor = useRef({ key: '', after: '' })
   const agent = data.users.find(user => user.id === task.appUserId)
@@ -158,10 +161,16 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
         cursor.current = { key, after }
         setSession(result.session)
         setActivities(previous => [...new Map([...(reset ? [] : previous), ...next].map(activity => [activity.id, activity])).values()])
-        setError('')
+        setError(''); setLoadUnavailable(false)
       }
     }
-    void load().catch(error => { if (!abort.signal.aborted) setError(error instanceof Error ? error.message : String(error)) })
+    void load().catch(error => {
+      if (abort.signal.aborted) return
+      // A busy or unreachable server (still 503 after the client's retries) says nothing about the agent: the reply
+      // is saved, only reading it failed. Say so and offer to read it again instead of "The agent ran into an error."
+      if (isConnectivityError(error)) setLoadUnavailable(true)
+      else setError(error instanceof Error ? error.message : String(error))
+    })
     return () => abort.abort()
   }, [data.workspace.urlKey, task.id, task.version, loadRevision])
   const submit = async (type: 'prompt' | 'canceled' | 'retry', body = reply, approve?: boolean) => {
@@ -322,6 +331,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
         </div>
       </>}
     </div>
+    {loadUnavailable && !error && <div className="issue-agent-thread-error" role="alert" data-state="unavailable"><AgentErrorDetail error={AGENT_REPLIES_UNAVAILABLE} onRetry={() => setLoadRevision(value => value + 1)}/></div>}
     {error && <div className="issue-agent-thread-error" role="alert"><AgentErrorDetail error={error} onRetry={() => setLoadRevision(value => value + 1)}/></div>}
   </section>
 }

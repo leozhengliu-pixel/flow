@@ -31,12 +31,12 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"auth.go":                                     "ebf4155c13b06f088ef0cd452d12112b5a032c4411a8955a89bac54273895f44",
 		"team_default_favorites.go":                   "8ba62b09173955d3f412bba9820ba6292e3ee06fec852571c691e5a62e49e657",
 		"scale_p15_snapshot_buffers.go":               "55e0d8d461ffd547d4d4fd9329cf9fda23259a0fef08da7e6ba42a0d51c88f7f",
-		"snapshot_clone.go":                           "eed939fd6798a8ade89c9f80a12040f1f5e285dc212e521ad2c38e04fcbc6063",
+		"snapshot_clone.go":                           "4a6d61a5291c12c71aa737f952c137a51d5dbd5ccbdf72fbce5af5fed755b166",
 		"../../cmd/server/advanced_features.go":       "cf26c25b133fe761ff8ec08bebd3b2d0417b6733356d6f676f76c391fde148e7",
 		"../../cmd/server/loop_settings.go":           "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
-		"../../cmd/server/main.go":                    "1b0ff91c7868fcf670de985b425a5a2365fd91a2cf72f6180a26ad3fb5ff0e2a",
+		"../../cmd/server/main.go":                    "675fd1b3b139101f792fb499bbc5de2e67649deacaaeeb50fcd09b7b4bc27284",
 		"../../cmd/server/notification_state.go":      "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
-		"../../cmd/server/personal_data.go":           "d30dbae86ef9e448e685808c4292cdcf76c719cfc68f9aa1023f7dd15e100c40",
+		"../../cmd/server/personal_data.go":           "ac5b80d21fc3f3edc717e140729d0b59b9e245ae5d68597c388336856cc0bb01",
 		"../../cmd/server/scale_p21_cold_dispatch.go": "78f6979c7b6492f603c4b1a452786f590b800139ea08d371bc3bc8054ba3e597",
 		// Background comment-action generator: borrows the issue bootstrap
 		// projection for its own run; never reaches request authorization.
@@ -48,11 +48,11 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/scale_p21_issue_update_targets.go":            "0aba87367470607dfcbc0ae7e48ec7c0e8402c7c5020991d85acc2c6af9594ee",
 		"../../cmd/server/scale_p21_triage_suggestions.go":              "ce4dc87da131244726aadae31d61b8a7fe9cd5760d05b895013aa8ac88fc2002",
 		"../../cmd/server/settings_features.go":                         "f2867b72c1f9b5611f57a4b8033cd362865754b1757d7866600ecb95fc0e84e6",
-		"authz_epoch.go":                                                "0868e8de8665c3e2717cd8169ee67e17ab469987a2829ddbf04751798c3b74c3",
-		"content_records.go":                                            "dfe65333af9a9b755f6d25077b8b931dadba3559fae2e3cefaa1069144c4a25e",
-		"database.go":                                                   "10e982fd74f95b8d6ecc028bed5c1fcc94cbf197399a6057a67d94e552b181cb",
+		"authz_epoch.go":                                                "ce59afa33d8daca93d0901d13d86a0f7bb5f140cc479efc38395ab568173e9c4",
+		"content_records.go":                                            "b128e7aa3a74c4dcf0167ccbef6f316757c3ddc02645a89a12becee369fcdff2",
+		"database.go":                                                   "66c9f8b9fcf452d11179e040e3889ffa459e5f5d8a5fc557e39fb638a856f9dd",
 		"issue_access_metadata.go":                                      "e94330023938805faa4db03459377c9807c5bcb467182e4919a756924fd5ae74",
-		"metadata_decode.go":                                            "ce3352e177e4b1ed19c6822a04ddc9d1b715fa81d83d4905d1041c1a4ce2fc45",
+		"metadata_decode.go":                                            "54ddefe9f0e9b60a2a2f92b49470622a31dc6ad9039ef44798953929c8838fef",
 		"metadata_delta.go":                                             "a79e58b9c65fd49c020acf27493596a9ce1546378d3a4ffa5548ccc9e81b7b0b",
 		"metadata_copy_revision.go":                                     "f41b31e55f638beb5ba7fd37adc66cc39f31e5602cf94d5987ad930e205f1ba5",
 		"metadata_mutation.go":                                          "b7589f199a137fbec8cf28d63b4558bc9712e148cd3c67eae2a9984174c21293",
@@ -72,7 +72,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_application_task_context_read.go":                    "71df6cdfc0fe46f2d149fb90d125eea56515b10c711633e4dab1f464f555f8da",
 		"scale_p21_bootstrap_content_walk.go":                           "b795207a7c8db00fb91479dcb795a6112f6678a5b9213216eac1254936f5ccd0",
 		"scale_p21_bootstrap_issue_walk.go":                             "12f6b78490e7b638a4f9190763fc8988c2202a2f733b025fd31863e489a93a3c",
-		"scale_p21_bootstrap_projection_read.go":                        "2f3a7f0955fa03c089526e1ad3a04b47c4557ddb762039e93a5fb9fe9fe07687",
+		"scale_p21_bootstrap_projection_read.go":                        "27a82fd14f7ba9244cbe70fe286bfd1fc5b4de3f2d6d711cbb56df078912ee5b",
 		"scale_p21_collaboration_document_read.go":                      "d4839174c25808b899839955839d6cd2d9e4a74b5ac76d1158c8a0fb1fb8fae8",
 		"scale_p21_collection_snapshot.go":                              "e8d843ee5626ba45c1aa11009ddf1e6860289895367d581fd8552309dbaec1fa",
 		"scale_p21_cycle_schedule_write.go":                             "e0effd9f9d6594ddce8b87b32036805a059702a6af22a597c256fbf72862dc5a",
@@ -83,7 +83,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_document_read.go":                                    "dbb5f22aa06b5d6cb2d90ca0646fb4e4dceea1df2e96acf54724cdf9038d5a9f",
 		"scale_p21_general_bootstrap_read.go":                           "d7a45918ea4ec4fdfad5bab2614ea5135cd2dbdc50db14db27c47eb873adb32d",
 		"scale_p21_installed_resource_point_read.go":                    "9ea5e51dc1e426ffe0a3fda73a001acfef726c1b07798498f79fee5ab3b16e9e",
-		"scale_p21_issue_authorization_policy.go":                       "3238dc8b7e24574e2bc30855ad567a068215e5101b7b1a2d9ea6fc9159b3d060",
+		"scale_p21_issue_authorization_policy.go":                       "3b1db13512c208deb9b7c7c650e50cb15e926835c5151fc2e841d85313416d21",
 		"scale_p21_issue_authorization_rows.go":                         "0b5289e704257da9833d2e335efe53dacafc5cf2ee0b071cb65ed994b3b1d564",
 		"scale_p21_issue_facet_read.go":                                 "61147a9c92d8306b9d4dcdcb6c32272d0bb202c1b64b71a0c8de71792b302069",
 		"scale_p21_legacy_discussion_write.go":                          "fb168bbffcffd0d3c616ed2aa0a42c50c036bfe58fd272a1d53758aecdd22f1b",
@@ -100,8 +100,8 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_resource_read.go":                                    "5ca09910f1c137dfd89587667b24c63996fb802783b8e5e6a6f50a0b6a7e9d5c",
 		"scale_p21_sw16_former_members.go":                              "b9cc69d0ce8e48f062ab38f6bf9d617baaa2c47aa9ff89dc1f9bc78f72f5e716",
 		"scale_p21_sw21_sync_requests.go":                               "813f93f5de089ba2a7ebdc0985ee9d434adf1494fd49068afda17fad6d1c8295",
-		"scale_p21_sw307_team_resource_read.go":                         "e91a2ec9e65996dc2e2ca07c7ebfb8e618bf3274c29679cd0fda488f6bb675c8",
-		"scale_p21_team_member_request.go":                              "0360800099462666455efdb0d7b09147467ad20fa5d2dce88a6d20aee0e25c5d",
+		"scale_p21_sw307_team_resource_read.go":                         "c7600edbc7ef258ec5e983cd510812facb4ca9533a6e0125edcc41783fc10bc8",
+		"scale_p21_team_member_request.go":                              "131cbc4c25f0dc1a5c3d222f9427e21fb350efcf62880559a6310af2e11fc7ac",
 		"scale_p21_triage_suggestion_read.go":                           "83681e09dfbf29ea6c4888607bac7d7e97a37605bd1f7ef904f1f6941e65477f",
 		// Issue deletion borrows its own write transaction for policy and issue headers.
 		"bounded_issue_lifecycle.go": "9d33443fd44941047790c547c61d5a1c1925ad8dd8af0e32bfd778f790aa395a",
@@ -115,6 +115,12 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/oauth_authorized_applications.go": "8a0e9bec2c8ea317de40e3e4872b8587a6930369391d9e70fa7b895c38c94e9a",
 		// The issue read owns a SQL transaction and the policy it uses.
 		"issue_read_snapshot.go": "13cae7fbe50f86fd6f36302adfeb909a0277ea3af6a0b03c3330b974d27c3414",
+		// Borrows policy from the same database and workspace, then returns
+		// an owned copy of the viewer and team settings required by the route.
+		"legacy_comment_action_read.go": "894774ef15c193373601031cd2b5aa670334b39d0bbec90754a9c91a3c722372",
+		// Borrows one issue write's policy inputs from the same database and
+		// workspace and returns an owned copy of only the named records.
+		"legacy_issue_write_authorization.go": "d41b19518097270d1a0e4dd7adcbcd23afb033ebbffc203843d2860147f88223",
 	}
 	want := map[string]int{
 		"authz_epoch.go:AuthzEpoch:clear":                                             1,

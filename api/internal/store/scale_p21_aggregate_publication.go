@@ -288,11 +288,10 @@ func metadataAggregateOwnedDiff(ctx context.Context, admit boundedcrdt.Admission
 	// Only a shallow map is added: 512 bytes per entry covers the Swiss-map
 	// directory, two table generations, control bytes and string/interface
 	// slots, plus a 1 KiB empty-map/stack allowance.
-	release, err := metadataAggregateShallowMapAdmission(admit, len(oldMap))
+	diff, release, err := newMetadataAggregateShallowMap(admit, len(oldMap), 0)
 	if err != nil {
 		return nil, nil, err
 	}
-	diff := make(map[string]any, len(oldMap))
 	for key, value := range oldMap {
 		if err := ctx.Err(); err != nil {
 			release()
@@ -342,13 +341,11 @@ func metadataAggregateRealtimeFields(ctx context.Context, admit boundedcrdt.Admi
 		}
 	}
 	base, object := input.(map[string]any)
-	size := len(base) + 2
-	releaseMap, err := metadataAggregateShallowMapAdmission(admit, size)
+	fields, releaseMap, err := newMetadataAggregateShallowMap(admit, len(base), 2)
 	if err != nil {
 		return nil, nil, err
 	}
 	release = func() { releaseMap(); releasePayload() }
-	fields = make(map[string]any, size)
 	if object {
 		for key, value := range base {
 			fields[key] = value
@@ -385,11 +382,16 @@ func metadataAggregatePartialPayloadObject(ctx context.Context, admit boundedcrd
 	return fields, release, nil
 }
 
-func metadataAggregateShallowMapAdmission(admit boundedcrdt.Admission, entries int) (func(), error) {
-	if entries < 0 || uint64(entries) > (metadataWorkBytes-1024)/512 {
-		return nil, ErrMetadataWorkBudget
+func newMetadataAggregateShallowMap(admit boundedcrdt.Admission, entries, extra int) (map[string]any, func(), error) {
+	size, err := boundedMetadataSize((metadataWorkBytes-1024)/512, entries, extra)
+	if err != nil {
+		return nil, nil, err
 	}
-	return admit(uint64(entries)*512 + 1024)
+	release, err := admit(uint64(size)*512 + 1024)
+	if err != nil {
+		return nil, nil, err
+	}
+	return make(map[string]any, size), release, nil
 }
 
 // The streamer's typed frame has a depth bound of 128. RawMessage can legally

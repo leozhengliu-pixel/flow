@@ -161,6 +161,10 @@ func (s *server) createTeamRecurringIssue(w http.ResponseWriter, r *http.Request
 	}
 	teamID := r.PathValue("id")
 	if !s.authDisabled {
+		if !s.store.BoundedMetadataEnabled() && !acquireProjectionWaiting(r) {
+			writeRequestCanceled(w, r.Context().Err())
+			return
+		}
 		metadata, err := s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
 		if err != nil {
 			issueRecordsError(w, err)

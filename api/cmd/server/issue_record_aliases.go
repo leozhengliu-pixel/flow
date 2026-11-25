@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"flow/api/internal/domain"
@@ -14,6 +15,8 @@ import (
 )
 
 type issueRecordAuthorizationContext struct{}
+
+var errIssueAuthorizationProjectionRefused = errors.New("issue authorization projection refused")
 
 func issueRecordQueryOnly(r *http.Request) bool {
 	if pagedRealtimeRequest(r) {
@@ -77,8 +80,33 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 	if err != nil {
 		return metadata, err
 	}
+	commentActionRead := false
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		_, commentActionRead = scaleP21EscapedRouteParts(r, "/api/issue-records/{id}/comment-actions")
+	}
+	scoped := false
 	if !s.authDisabled {
-		metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+		if commentActionRead {
+			metadata, err = s.store.LegacyIssueViewerPolicy(r.Context(), query.Workspace, authUser(r).ID)
+		} else {
+			if projectIDs, cycleIDs, single := legacyIssueWriteScope(r); single {
+				// A single-issue write is authorized against the viewer's
+				// policy and the records its body names (issue #244).
+				metadata, err = s.store.LegacyIssueWriteAuthorization(r.Context(), query.Workspace, authUser(r).ID, projectIDs, cycleIDs)
+				scoped = err == nil
+				if errors.Is(err, store.ErrLegacyIssueAuthorizationUnscoped) {
+					err = nil
+				}
+			}
+			if !scoped && err == nil {
+				// The complete projection copies the whole workspace
+				// metadata: it is charged to the shared projection budget.
+				if err = acquireIssueAuthorizationProjection(r); err != nil {
+					return metadata, err
+				}
+				metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+			}
+		}
 		if err != nil {
 			return metadata, err
 		}
@@ -90,6 +118,116 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 		}
 		filterBootstrapForAPIKey(&metadata, r)
 	}
+	data, err := s.issueRecordAuthorizationRows(r, metadata, query, commentActionRead)
+	if err == nil && scoped {
+		// A handler that reads the viewer's whole projection
+		// (workspaceData) still gets it, built when first read.
+		*r = *r.WithContext(context.WithValue(r.Context(), issueRecordCompleteProjectionKey{}, &issueRecordCompleteProjection{workspace: query.Workspace, path: r.URL.Path}))
+	}
+	return data, err
+}
+
+// legacyIssueWriteScope reports a write to one existing issue whose
+// authorization needs only the viewer's policy, plus the projects and cycles
+// its body names. Batch writes, release edits (which check the release
+// directory) and bodies that select further issues keep the complete
+// projection under the projection gate.
+func legacyIssueWriteScope(r *http.Request) (projectIDs, cycleIDs []string, ok bool) {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || completeIssueWriteReads.Load() {
+		return nil, nil, false
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) < 3 || parts[0] != "api" || parts[1] != "issue-records" || parts[2] == "" || parts[2] == "batch" || parts[2] == "visibility" {
+		return nil, nil, false
+	}
+	if len(parts) == 4 && parts[3] == "releases" {
+		return nil, nil, false
+	}
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		var input map[string]json.RawMessage
+		if peekRequestJSON(r, &input) {
+			if _, selects := input["issueIds"]; selects {
+				return nil, nil, false
+			}
+			var id string
+			if json.Unmarshal(input["projectId"], &id) == nil && id != "" {
+				projectIDs = append(projectIDs, id)
+			}
+			id = ""
+			if json.Unmarshal(input["cycleId"], &id) == nil && id != "" {
+				cycleIDs = append(cycleIDs, id)
+			}
+		}
+	}
+	return projectIDs, cycleIDs, true
+}
+
+// completeIssueWriteReads restores the complete reads single-issue writes
+// made before issue #244 (authorization, the issue update's checks and the
+// triage switch), for the differential that compares both paths. Production
+// never sets it.
+var completeIssueWriteReads atomic.Bool
+
+// acquireIssueAuthorizationProjection takes the request's projection slot
+// before an issue authorization builds the complete projection. Reads are
+// refused when the gate is full; writes wait for a slot or for the client to
+// leave.
+func acquireIssueAuthorizationProjection(r *http.Request) error {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		if acquireProjection(r) {
+			return nil
+		}
+		if err := r.Context().Err(); err != nil {
+			return err
+		}
+		return errIssueAuthorizationProjectionRefused
+	}
+	if acquireProjectionWaiting(r) {
+		return nil
+	}
+	if err := r.Context().Err(); err != nil {
+		return err
+	}
+	return context.Canceled
+}
+
+// issueRecordCompleteProjectionKey marks a request whose issue authorization
+// was scoped. The handoff (issueRecordAuthorizationContext) then holds the
+// scoped projection, and workspaceData builds the projection the handler read
+// before: the viewer's complete projection with the authorized issue rows.
+type issueRecordCompleteProjectionKey struct{}
+
+type issueRecordCompleteProjection struct {
+	workspace, path string
+	once            sync.Once
+	data            domain.Bootstrap
+	err             error
+}
+
+func (s *server) completeIssueRecordProjection(r *http.Request, complete *issueRecordCompleteProjection, scoped domain.Bootstrap) (domain.Bootstrap, error) {
+	complete.once.Do(func() {
+		if complete.err = acquireIssueAuthorizationProjection(r); complete.err != nil {
+			return
+		}
+		data, err := s.store.PagedWorkspaceMetadata(r.Context(), complete.workspace, authUser(r).ID)
+		if err != nil {
+			complete.err = err
+			return
+		}
+		filterBootstrapForAPIKey(&data, r)
+		data.Issues = scoped.Issues
+		parts := strings.Split(strings.Trim(complete.path, "/"), "/")
+		if len(parts) > 4 && parts[3] == "comments" {
+			if comments, ok := scoped.Comments[parts[2]]; ok {
+				data.Comments[parts[2]] = comments
+			}
+		}
+		complete.data = data
+	})
+	return complete.data, complete.err
+}
+
+func (s *server) issueRecordAuthorizationRows(r *http.Request, metadata domain.Bootstrap, query store.IssueRecordQuery, commentActionRead bool) (domain.Bootstrap, error) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	ids := []string{}
 	if len(parts) > 2 {
@@ -104,6 +242,7 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 			}
 		}
 	}
+	pathIDs := len(ids)
 	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 		var input map[string]json.RawMessage
 		if peekRequestJSON(r, &input) {
@@ -123,6 +262,15 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 	query.Archived = "all"
 	if len(ids) > 1000 {
 		return metadata, store.ErrIssueQuery
+	}
+	// The legacy release filter clones the workspace metadata, and a JSON
+	// body can expand the issue selection beyond the path. Keep those query
+	// semantics under the shared projection budget.
+	if commentActionRead && (len(query.ReleaseIDs) != 0 || len(ids) > pathIDs) && !acquireProjection(r) {
+		if err := r.Context().Err(); err != nil {
+			return metadata, err
+		}
+		return metadata, errIssueAuthorizationProjectionRefused
 	}
 	query.Limit = 500
 	query.Cursor = ""
@@ -220,7 +368,9 @@ func (s *server) issueRecordAlias(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data, err := s.issueRecordAuthorizationData(r)
 		if err != nil {
-			issueRecordsError(w, err)
+			if !errors.Is(err, errIssueAuthorizationProjectionRefused) || !writeProjectionRefusal(w, r) {
+				issueRecordsError(w, err)
+			}
 			return
 		}
 		ids := []string{}

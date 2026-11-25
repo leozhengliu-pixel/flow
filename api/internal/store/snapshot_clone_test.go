@@ -107,6 +107,15 @@ func assertNoSharedReferences(t *testing.T, path string, original, clone reflect
 		if original.IsNil() || original.Len() == 0 {
 			return
 		}
+		if original.Type() == progressHistoryType {
+			// Progress histories are immutable values shared between clones
+			// (snapshot_clone.go). The clone must clip its capacity so an
+			// append through it reallocates instead of writing the source.
+			if clone.Cap() != clone.Len() {
+				t.Fatalf("%s: shared progress history keeps spare capacity %d > %d", path, clone.Cap(), clone.Len())
+			}
+			return
+		}
 		if original.Pointer() == clone.Pointer() {
 			t.Fatalf("%s: slice shared", path)
 		}

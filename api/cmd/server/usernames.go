@@ -114,8 +114,7 @@ func workspaceUsernames(users []domain.User, settings map[string]domain.UserSett
 // bootstrapUsers lists every user visible in a bootstrap, directory users
 // first so derived usernames stay stable regardless of membership decoration.
 func bootstrapUsers(data *domain.Bootstrap) []domain.User {
-	users := make([]domain.User, 0, len(data.Users)+len(data.Members)+1)
-	users = append(users, data.Users...)
+	users := append([]domain.User{}, data.Users...)
 	for _, member := range data.Members {
 		users = append(users, member.User)
 	}

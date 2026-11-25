@@ -2244,26 +2244,8 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 	}
 	if event != nil && event.Type == "pulse.summary_scheduled" {
 		// One tick can add a summary for every member: write them in batches.
-		rows := make([]contentRecordRow, 0, len(notifications)+len(deliveries))
-		for _, notification := range notifications {
-			row, err := contentRecordRowFor(workspaceKey, "notification", notification.IssueID, notification)
-			if err != nil {
-				return err
-			}
-			rows = append(rows, row)
-		}
-		for _, delivery := range deliveries {
-			row, err := contentRecordRowFor(workspaceKey, "delivery", "", delivery)
-			if err != nil {
-				return err
-			}
-			rows = append(rows, row)
-		}
-		if err := writeContentRecordRows(ctx, tx, rows); err != nil {
+		if err := writePulseSummaryRows(ctx, tx, workspaceKey, notifications, deliveries); err != nil {
 			return err
-		}
-		for _, row := range rows {
-			tx.noteNotificationRow(row, nil, false)
 		}
 		notifications, deliveries = nil, nil
 	}

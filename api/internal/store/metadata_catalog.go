@@ -109,7 +109,7 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 			if err := ctx.Err(); err != nil {
 				return row, err
 			}
-			return row, fmt.Errorf("metadata %s/%s: invalid canonical JSON", key.Kind, key.ID)
+			return row, fmt.Errorf("metadata %s: invalid canonical JSON", metadataRecordLabel(key.Kind, key.ID))
 		}
 	}
 	r.boundedCapture = false
@@ -132,7 +132,7 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 		ArchivedAt *time.Time `json:"archivedAt"`
 	}
 	if err := json.Unmarshal(row.summary, &dates); err != nil {
-		return row, fmt.Errorf("metadata %s/%s: invalid canonical timestamps", key.Kind, key.ID)
+		return row, fmt.Errorf("metadata %s: invalid canonical timestamps", metadataRecordLabel(key.Kind, key.ID))
 	}
 	row.created = dates.CreatedAt.UTC().Format(issueRecordTimestamp)
 	row.updated = dates.UpdatedAt.UTC().Format(issueRecordTimestamp)
@@ -557,4 +557,16 @@ func metadataCatalogPageStatement(workspace string, q PageRequest, query Project
 		version = `COALESCE((SELECT v.version FROM record_versions v WHERE v.workspace_key=metadata_catalog.workspace_key AND v.field=metadata_catalog.field AND v.record_key=metadata_catalog.record_key AND v.deleted=0),0)`
 	}
 	return `SELECT record_key,collection_order,` + version + `,summary,omitted,created_at,updated_at FROM metadata_catalog WHERE ` + where + ` ORDER BY ` + order + ` LIMIT 129`, args, nil
+}
+
+// metadataRecordLabel names a stored record in operator-facing errors: the
+// collection and record ID, so a repair pass can point at the broken row,
+// except for collections that hold credentials, whose IDs never reach logs.
+func metadataRecordLabel(kind, id string) string {
+	switch kind {
+	case "apiKeys", "passkeys", "passkeyRegistrationChallenges", "oauthApplications", "oauthAuthorizations",
+		"webhooks", "integrationConnections", "identityProviders", "invitations", "workspaceInviteLink", "pushSubscriptions":
+		return kind
+	}
+	return kind + "/" + id
 }

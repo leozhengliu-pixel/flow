@@ -59,24 +59,20 @@ func (s *server) invokeMCPRoute(ctx context.Context, actor mcpActor, method, pat
 	return mcpHandlerResult(response)
 }
 
-// internalHandlerError is a 500 from a REST handler a tool ran in process
-// (outside the error envelope, so its body still has the raw error). Its text
-// is for the log only; publicToolError replaces it.
-type internalHandlerError struct{ message string }
+// internalHandlerError marks a 500 from a REST handler run in process.
+// Its body can contain backend details, so the tool keeps only the type.
+type internalHandlerError struct{}
 
-func (e *internalHandlerError) Error() string { return e.message }
+func (*internalHandlerError) Error() string { return internalErrorMessage }
 
 func mcpHandlerResult(response *httptest.ResponseRecorder) (any, error) {
+	if response.Code == http.StatusInternalServerError {
+		return nil, &internalHandlerError{}
+	}
 	if response.Code >= 400 {
 		var object map[string]any
 		_ = json.Unmarshal(response.Body.Bytes(), &object)
 		message, ok := object["error"].(string)
-		if response.Code == http.StatusInternalServerError {
-			if !ok {
-				message = strings.TrimSpace(response.Body.String())
-			}
-			return nil, &internalHandlerError{message: message}
-		}
 		if ok {
 			return nil, fmt.Errorf("%s", message)
 		}

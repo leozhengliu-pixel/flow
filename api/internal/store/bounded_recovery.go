@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -1058,33 +1059,34 @@ func (s *SQLiteStore) installResidentPolicySource(workspace string, data domain.
 	if len(sources) > 1 {
 		return ErrMetadataRecordQuery
 	}
-	s.metadataResidency.mu.Lock()
-	costs := make(map[string]int, len(s.metadataResidency.policy)+1)
-	for key, value := range s.metadataResidency.policy {
-		costs[key] = value
-	}
-	s.metadataResidency.mu.Unlock()
-	costs[workspace] = cost
-	if err := s.metadataResidency.replacePolicyCosts(costs); err != nil {
+	s.mu.Lock()
+	residency := s.metadataResidency
+	residency.mu.Lock()
+	total, err := boundedMetadataSize(residency.policyLimit, residency.policyBytes-residency.policy[workspace], cost)
+	if err != nil {
+		residency.mu.Unlock()
+		s.mu.Unlock()
 		return err
 	}
-	s.mu.Lock()
+	if residency.policy == nil {
+		residency.policy = map[string]int{}
+	}
+	residency.policy[workspace], residency.policyBytes = cost, total
 	s.workspaces[workspace] = data
 	if last {
 		s.lastWorkspaceKey = workspace
 	}
 	s.forgetCopyRevisionLocked(workspace)
-	s.metadataResidency.mu.Lock()
-	s.metadataResidency.stamps[workspace], s.metadataResidency.applied[workspace] = stamp, head
+	residency.stamps[workspace], residency.applied[workspace] = stamp, head
 	var previous *metadataLogicalSource
 	if len(sources) == 1 {
-		if s.metadataResidency.logical == nil {
-			s.metadataResidency.logical = map[string]*metadataLogicalSource{}
+		if residency.logical == nil {
+			residency.logical = map[string]*metadataLogicalSource{}
 		}
-		previous = s.metadataResidency.logical[workspace]
-		s.metadataResidency.logical[workspace] = sources[0]
+		previous = residency.logical[workspace]
+		residency.logical[workspace] = sources[0]
 	}
-	s.metadataResidency.mu.Unlock()
+	residency.mu.Unlock()
 	s.mu.Unlock()
 	if previous != nil {
 		previous.Release()
@@ -1115,10 +1117,15 @@ func residentJournalGeneration(ctx context.Context, tx *sqlTx) (string, error) {
 // than after recovering hundreds of workspaces.
 func checkMetadataSourceBudget(workspaces int64) error {
 	limit := metadataLogicalDescriptorCap()
+	if workspaces < 0 || workspaces > (math.MaxInt64-metadataSourceReloadHeadroom)/metadataLogicalDescriptorBytes {
+		return fmt.Errorf("%w: workspace count exceeds the supported FLOW_METADATA_SOURCE_BYTES range", ErrMetadataWorkBudget)
+	}
 	need := workspaces*metadataLogicalDescriptorBytes + metadataSourceReloadHeadroom
-	if available := limit - metadataLogicalDescriptorsUsed.Load(); need > available {
+	used := metadataLogicalDescriptorsUsed.Load()
+	if need > limit-used {
+		recommended := need + min(used, math.MaxInt64-need)
 		return fmt.Errorf("%w: %d workspaces need %d MiB of installed workspace sources (%d KiB each plus %d MiB for reloads), over FLOW_METADATA_SOURCE_BYTES (%d MiB); set FLOW_METADATA_SOURCE_BYTES to at least %d",
-			ErrMetadataWorkBudget, workspaces, ceilMiB(need), metadataLogicalDescriptorBytes>>10, metadataSourceReloadHeadroom/metadataMiB, ceilMiB(limit), need+(limit-available))
+			ErrMetadataWorkBudget, workspaces, ceilMiB(need), metadataLogicalDescriptorBytes>>10, metadataSourceReloadHeadroom/metadataMiB, ceilMiB(limit), recommended)
 	}
 	return nil
 }
