@@ -1873,6 +1873,11 @@ func (u *coldLabelUses) unchanged(ctx context.Context, tx *sqlTx, installed *met
 			}
 			return nil
 		})
+		if errors.Is(err, ErrMetadataWorkBudget) || errors.Is(err, errMetadataWorkContended) {
+			// A full work budget only means the previous uses stay unknown; the
+			// publication still patches, without treating label counts as unchanged.
+			return false, nil
+		}
 		if err != nil || count != len(order) {
 			return false, err
 		}
