@@ -5721,9 +5721,6 @@ func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	respondMutation(w, err, http.StatusCreated, attachment)
-	if err == nil {
-		s.queueLinkFavicon(r.Context(), workspaceKey(r), id, attachment.ID, parsed)
-	}
 }
 
 func (s *server) createIssueReminder(w http.ResponseWriter, r *http.Request) {
@@ -5859,8 +5856,7 @@ func (s *server) serveUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ctx, refused := withUploadVisibilityRefusal(r.Context())
-		// A link's favicon is a site's public artwork: any signed-in user may read it, so everyone who can see the link can.
-		visible := err == nil && ((user.ID != "" && isLinkFaviconObject(name)) || s.attachmentVisible(ctx, account, user.ID, "/uploads/"+name))
+		visible := err == nil && s.attachmentVisible(ctx, account, user.ID, "/uploads/"+name)
 		if writeStoreReadUnavailable(w, refused()) {
 			return
 		}
