@@ -66,8 +66,16 @@ func TestScaleP21SW551ColdLimitAndHotIsolation(t *testing.T) {
 			current := holders.Add(1)
 			for seen := maxHolders.Load(); current > seen && !maxHolders.CompareAndSwap(seen, current); seen = maxHolders.Load() {
 			}
-			if len(s.projectionGate.slots) != 0 {
-				hotHeldCold.Add(1)
+			// This request must not hold a HOT slot itself. HOT requests sent
+			// alongside may hold theirs at the same moment, so the gate's
+			// occupancy is not the measure.
+			if hold, _ := r.Context().Value(projectionHoldKey{}).(*projectionHold); hold != nil {
+				hold.mu.Lock()
+				heldHot := hold.held && hold.gate == s.projectionGate
+				hold.mu.Unlock()
+				if heldHot {
+					hotHeldCold.Add(1)
+				}
 			}
 			time.Sleep(40 * time.Millisecond)
 			holders.Add(-1)
