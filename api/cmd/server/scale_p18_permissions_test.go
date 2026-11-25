@@ -20,7 +20,7 @@ func TestScaleP18MCPHTTPVisibility(t *testing.T) {
 		f := scaleP03Fixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		public, private, child := "p18-public", "p18-private", "p18-child"
-		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
 			data.Teams = append(data.Teams, domain.Team{ID: public, Key: "P18", Name: "Public"}, domain.Team{ID: private, Key: "P18P", Name: "Private", Private: true}, domain.Team{ID: child, Key: "P18C", Name: "Child"})
 			data.TeamSettings[private] = domain.TeamSettings{TeamID: private, Access: "private"}
 			data.TeamSettings[child] = domain.TeamSettings{TeamID: child, ParentTeamID: private, Access: "public"}
@@ -62,7 +62,7 @@ func TestScaleP18MCPHTTPVisibility(t *testing.T) {
 							key.TeamIDs = []string{public}
 						}
 					}
-					if err := repo.MutateWorkspace(t.Context(), workspace, "api_key.created", key.ID, nil, func(data *domain.Bootstrap) error {
+					if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "api_key.created", key.ID, nil, func(data *domain.Bootstrap) error {
 						data.APIKeys = append(data.APIKeys, key)
 						return nil
 					}); err != nil {

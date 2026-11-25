@@ -270,7 +270,7 @@ func newReviewImportServer(t *testing.T, fake *fakeImportHost, config map[string
 	for key, value := range config {
 		connection.Config[key] = value
 	}
-	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "review.import_fixture", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "review.import_fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.IntegrationConnections = append(data.IntegrationConnections, connection)
 		return nil
 	}); err != nil {

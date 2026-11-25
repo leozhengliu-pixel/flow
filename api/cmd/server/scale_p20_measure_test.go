@@ -23,7 +23,7 @@ func TestScaleP20TransferMeasurement(t *testing.T) {
 	db := newScaleP04Database(t)
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("p", 32))))
 	ctx := store.ContextWithActor(context.Background(), db.users[0])
-	if err := db.repo.MutateWorkspace(ctx, db.key, "p20.fixture", "", nil, func(data *domain.Bootstrap) error {
+	if err := db.repo.MutateWorkspace(workspaceFixtureContext(ctx), db.key, "p20.fixture", "", nil, func(data *domain.Bootstrap) error {
 		at := time.Now().UTC().Truncate(time.Second)
 		for i := range 1000 {
 			doc := domain.Document{ID: fmt.Sprintf("p20-doc-%d", i), SlugID: fmt.Sprintf("p20-slug-%d", i), Title: fmt.Sprintf("P20 document %d", i), Content: strings.Repeat("x", 8192), Creator: data.Viewer, TeamIDs: []string{data.Teams[0].ID}, CreatedAt: at, UpdatedAt: at}

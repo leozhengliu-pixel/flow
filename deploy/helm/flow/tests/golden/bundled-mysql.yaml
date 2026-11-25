@@ -321,6 +321,7 @@ spec:
       containers:
         - name: mysql
           image: "mysql:8.4"
+          args: ["--log-bin-trust-function-creators=1"]
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

@@ -39,8 +39,7 @@ func (s *SQLiteStore) MutateUserSettings(ctx context.Context, workspace, aggrega
 // mutateBoundedUserSettingsRecord is mutateUserSettingsRecord for a bounded
 // store. The literal writer starts the member's entry from its stored row
 // (as stored, without the load's defaults) or else from the installed entry,
-// writes only that record (rebased onto the row, skipped when the row
-// vanished under an installed entry), records the event without previous
+// writes only that record (rebased onto the row if it exists), records the event without previous
 // values and installs the written entry as written. Here the installed entry
 // comes from the installed logical source, the same transaction runs under
 // the bounded writers' lock and stamp protocol, and the installed source is
@@ -130,8 +129,9 @@ func (s *SQLiteStore) mutateBoundedUserSettingsRecord(ctx context.Context, works
 		for key, value := range current.UserSettings {
 			next.UserSettings[key] = value
 		}
-		// Another instance may have written this member's settings; start
-		// from the stored record.
+		// Installed defaults aren't stored records. Use the locked row as
+		// the merge base when one exists and allow the first settings write.
+		storedAggregate := false
 		if aggregate != "" {
 			var raw []byte
 			err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='userSettings' AND record_key=?`+lock, workspace, aggregate).Scan(&raw)
@@ -144,6 +144,7 @@ func (s *SQLiteStore) mutateBoundedUserSettingsRecord(ctx context.Context, works
 					return err
 				}
 				next.UserSettings[aggregate] = stored
+				storedAggregate = true
 			}
 		}
 		before := map[string]domain.UserSettings{}
@@ -184,7 +185,8 @@ func (s *SQLiteStore) mutateBoundedUserSettingsRecord(ctx context.Context, works
 				return err
 			}
 			var base []byte
-			if existed {
+			stored := existed && (key != aggregate || storedAggregate)
+			if stored {
 				if base, err = json.Marshal(previous); err != nil {
 					return err
 				}
@@ -208,7 +210,7 @@ func (s *SQLiteStore) mutateBoundedUserSettingsRecord(ctx context.Context, works
 			if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'userSettings',?,0,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, workspace, key, raw); err != nil {
 				return err
 			}
-			if !existed {
+			if !stored {
 				if err := ensureOAuthMetadataShape(ctx, tx, workspace, "userSettings", "map", lock); err != nil {
 					return err
 				}

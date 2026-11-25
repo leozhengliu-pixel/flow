@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"maps"
 	"net/http"
 	"net/url"
@@ -42,38 +41,25 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 	started := time.Now()
 	result, err := s.runFlowTool(ctx, actor, name, args)
 	if err != nil {
+		logger := requestLoggerFrom(ctx)
 		if loop, _ := ctx.Value(loopRunRequestKey{}).(bool); loop {
-			slog.WarnContext(ctx, "loop tool failed", "duration_ms", time.Since(started).Milliseconds())
+			logger.WarnContext(ctx, "loop tool failed", "duration_ms", time.Since(started).Milliseconds())
 		} else {
-			slog.WarnContext(ctx, "flow tool failed", "tool", name, "workspace", actor.WorkspaceKey, "actor", actor.User.ID, "args", mcpArgumentSummary(args), "duration_ms", time.Since(started).Milliseconds(), "error", err.Error())
+			logger.WarnContext(ctx, "flow tool failed", "duration_ms", time.Since(started).Milliseconds(), "cause", requestErrorCode(err))
 		}
 	}
 	return result, publicToolError(ctx, name, err)
 }
 
-// mcpArgumentSummary lists the argument names with short, single-line values
-// so failures can be diagnosed without logging whole documents.
-func mcpArgumentSummary(args map[string]any) string {
-	keys := make([]string, 0, len(args))
-	for key := range args {
-		if !strings.HasPrefix(key, "__") {
-			keys = append(keys, key)
-		}
-	}
-	slices.Sort(keys)
-	parts := make([]string, 0, len(keys))
-	for _, key := range keys {
-		raw, _ := json.Marshal(args[key])
-		value := strings.Join(strings.Fields(string(raw)), " ")
-		if len(value) > 120 {
-			value = value[:117] + "..."
-		}
-		parts = append(parts, key+"="+value)
-	}
-	return strings.Join(parts, " ")
-}
-
 func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
+	// Tools also run outside HTTP routing, including in background agent
+	// work. Compatibility tools must be allowed to borrow a COLD view.
+	ctx = store.WithColdWork(ctx, "flow tool")
+	if s.store.BoundedMetadataEnabled() {
+		var finish func()
+		ctx, finish = beginMetadataOutputReads(ctx)
+		defer finish()
+	}
 	if internalRecordsEnabled(internalToolRecordFamily(name)) {
 		var err error
 		if actor.APIKey.ID != "" && actor.APIKey.SecretHash != "" {

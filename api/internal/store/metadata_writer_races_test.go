@@ -25,6 +25,9 @@ import (
 // committed since.
 func staleMetadataWrite(t *testing.T, repo *SQLiteStore, workspace string, edit func(*domain.Bootstrap)) error {
 	t.Helper()
+	if repo.BoundedMetadataEnabled() {
+		t.Fatal("stale installed-copy writes exercise the legacy writer")
+	}
 	repo.writeMu.Lock()
 	defer repo.writeMu.Unlock()
 	before, ok := repo.storedWorkspace(workspace)
@@ -43,14 +46,14 @@ func staleMetadataWrite(t *testing.T, repo *SQLiteStore, workspace string, edit 
 
 func metadataEdit(t *testing.T, repo *SQLiteStore, workspace, event, id string, edit func(*domain.Bootstrap) error) {
 	t.Helper()
-	if err := repo.MutateWorkspace(t.Context(), workspace, event, id, nil, edit); err != nil {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, event, id, nil, edit); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func storedState(t *testing.T, repo *SQLiteStore, workspace string) domain.Bootstrap {
 	t.Helper()
-	data, err := repo.loadWorkspaceState(t.Context(), workspace)
+	data, err := repo.coldReceiver().loadWorkspaceState(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,6 +64,7 @@ func storedState(t *testing.T, repo *SQLiteStore, workspace string) domain.Boots
 // all kept: updates are merged per update, comments by id and reactions key
 // by key.
 func TestProjectUpdateCommentsAndReactionsFromTwoServersAreKept(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second, workspace, _ := racePair(t, pair)
@@ -123,6 +127,7 @@ func TestProjectUpdateCommentsAndReactionsFromTwoServersAreKept(t *testing.T) {
 // An import job's progress written on one server survives another server's
 // edit of the job from an older copy, and the job keeps its input rows.
 func TestImportJobProgressFromAnotherServerIsKept(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second, workspace, _ := racePair(t, pair)
@@ -169,6 +174,7 @@ func TestImportJobProgressFromAnotherServerIsKept(t *testing.T) {
 // A project field both servers changed is not overwritten silently: the
 // write from the older copy fails with ErrConcurrentWrite.
 func TestStaleWriteOfAFieldAnotherServerChangedConflicts(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second, workspace, _ := racePair(t, pair)
@@ -199,6 +205,7 @@ func TestStaleWriteOfAFieldAnotherServerChangedConflicts(t *testing.T) {
 // Two servers adding different keys to one nested map (a team's chat
 // notification switches) keep both.
 func TestNestedMapKeysAddedOnTwoServersAreBothKept(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second, workspace, template := racePair(t, pair)
@@ -233,6 +240,7 @@ func TestNestedMapKeysAddedOnTwoServersAreBothKept(t *testing.T) {
 // A team rename loads the team, another server's unlocked write changes the
 // team's color, then the rename writes: both changes are kept.
 func TestTeamRenameKeepsAColorChangedMeanwhile(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second, workspace, template := racePair(t, pair)
@@ -240,7 +248,7 @@ func TestTeamRenameKeepsAColorChangedMeanwhile(t *testing.T) {
 			color := "#" + raceStamp()[len(raceStamp())-6:]
 			newName := "Renamed " + raceStamp()
 			run := func(callback func(*domain.Bootstrap) error) error {
-				return second.MutateWorkspace(t.Context(), workspace, "team.updated", teamID, map[string]string{"name": newName}, callback)
+				return second.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "team.updated", teamID, map[string]string{"name": newName}, callback)
 			}
 			release, wait := pausedMutation(t, run, func(data *domain.Bootstrap) error {
 				index := domain.TeamIndex(data, teamID)
@@ -302,9 +310,10 @@ func TestMigrationRerunsInsteadOfOverwritingAnotherServersValue(t *testing.T) {
 	}
 }
 
-// An issue write whose metadata change conflicts with another server's
-// reruns its callback on the stored record instead of keeping its own value.
+// The legacy issue writer retries a callback that edits a stale attached
+// document. Bounded team moves update inherited scope from the current rows.
 func TestIssueRecordWriteRerunsOnAMetadataConflict(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second, workspace, template := racePair(t, pair)
@@ -326,6 +335,9 @@ func TestIssueRecordWriteRerunsOnAMetadataConflict(t *testing.T) {
 			if _, err := second.UpdateIssueRecord(t.Context(), workspace, issue.ID, nil, IssueMutationScope{}, func(data *domain.Bootstrap, moved *domain.Issue) error {
 				moved.Team = team
 				index := slices.IndexFunc(data.Documents, func(document domain.Document) bool { return document.ID == documentID })
+				if index < 0 {
+					return errors.New("attached document missing")
+				}
 				seen = append(seen, data.Documents[index].IssueTeamID)
 				data.Documents[index].IssueTeamID = team.ID
 				data.Documents[index].InheritedTeamIDs = []string{team.ID}
@@ -353,7 +365,7 @@ func TestFullMutationProgressCountsIssuesCreatedOnAnotherServer(t *testing.T) {
 			project := storedProject(t, first, workspace, projectID)
 			moving := createPeerIssue(t, first, workspace, "race-full-progress-"+raceStamp(), projectIssue(template, project))
 			reloadPeers(t, first, second)
-			stored, _ := first.storedWorkspace(workspace)
+			stored, _ := first.WorkspaceMetadata(workspace)
 			completed := slices.IndexFunc(stored.States, func(state domain.WorkflowState) bool {
 				return state.Type == "completed" && (state.TeamID == "" || state.TeamID == moving.Team.ID)
 			})
@@ -362,7 +374,7 @@ func TestFullMutationProgressCountsIssuesCreatedOnAnotherServer(t *testing.T) {
 			}
 			state := stored.States[completed]
 			var calls atomic.Int32
-			err := first.MutateWorkspace(t.Context(), workspace, "issue.updated", moving.ID, map[string]string{"stateId": state.ID}, func(data *domain.Bootstrap) error {
+			err := first.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "issue.updated", moving.ID, map[string]string{"stateId": state.ID}, func(data *domain.Bootstrap) error {
 				// Another server's issue creation commits after this attempt
 				// loaded the issues.
 				createPeerIssue(t, second, workspace, "race-full-other-"+raceStamp(), projectIssue(template, project))

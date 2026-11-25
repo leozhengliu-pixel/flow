@@ -12,6 +12,8 @@ import (
 type reloadCancelTestKey struct{}
 
 func TestWorkspaceMutationReloadCanceledAtCommit(t *testing.T) {
+	// This injects cancellation at the legacy writer's pre-mutation reload.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for dialect, pair := range peerStoreSets(t) {
 		t.Run(dialect, func(t *testing.T) {
 			writer := pair[1]

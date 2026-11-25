@@ -194,7 +194,7 @@ func TestPagedRealtimeDocumentEventsFollowDocumentAccess(t *testing.T) {
 	repo := pulseTestRepo(t)
 	now := time.Now().UTC()
 	admin := domain.User{ID: "usr_admin", Name: "Test admin"}
-	err := repo.MutateWorkspace(t.Context(), "test-workspace", "test.documents", "", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test.documents", "", nil, func(data *domain.Bootstrap) error {
 		data.Documents = append(data.Documents,
 			domain.Document{ID: "doc_shared", SlugID: "shared-0123456789ab", Title: "Shared", Creator: admin, CreatedAt: now, UpdatedAt: now, Permissions: []domain.DocumentPermission{{ID: "p1", DocumentID: "doc_shared", SubjectType: "user", SubjectID: admin.ID, Role: "owner"}, {ID: "p2", DocumentID: "doc_shared", SubjectType: "workspace", Role: "editor"}}},
 			domain.Document{ID: "doc_private", SlugID: "private-0123456789ab", Title: "Private", Creator: admin, CreatedAt: now, UpdatedAt: now, Permissions: []domain.DocumentPermission{{ID: "p3", DocumentID: "doc_private", SubjectType: "user", SubjectID: admin.ID, Role: "owner"}}})

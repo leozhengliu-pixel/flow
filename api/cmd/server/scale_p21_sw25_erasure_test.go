@@ -127,6 +127,7 @@ func TestScaleP21SW25ErasureLegacySuccessAndRemainingWriter(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	logs := captureServerLogs(t)
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := scaleP21M2Setup(t, repo)
 		target := f.principals[2].user
@@ -142,9 +143,14 @@ func TestScaleP21SW25ErasureLegacySuccessAndRemainingWriter(t *testing.T) {
 		}
 		before := scaleP21M3Fingerprint(t, repo, workspace, "users")
 		bounded := httptest.NewRecorder()
+		offset := len(logs.String())
 		(&server{store: probe}).eraseMember(bounded, request())
-		if bounded.Code != http.StatusInternalServerError || !strings.Contains(bounded.Body.String(), "no migrated point writer") {
+		if bounded.Code != http.StatusInternalServerError || !strings.Contains(bounded.Body.String(), internalErrorMessage) {
 			t.Fatal("independent downstream erasure blocker changed", bounded.Code, bounded.Body.String())
+		}
+		logged := logs.String()[offset:]
+		if !strings.Contains(logged, "cause=metadata_coverage") || strings.Contains(logged, target.ID) || strings.Contains(logged, workspace) {
+			t.Fatal("erasure failure log must report the coverage refusal without identifiers")
 		}
 		if before != scaleP21M3Fingerprint(t, repo, workspace, "users") {
 			t.Fatal("unported bounded erasure changed users before refusing")

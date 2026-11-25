@@ -41,21 +41,21 @@ func largeEventDocument(t *testing.T, repository *SQLiteStore, content string) (
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	webhookID, documentID := "large-event-webhook-"+suffix, "large-event-document-"+suffix
 	repository.SetWebhookSink(func(string, domain.DomainEvent) {})
-	if err := repository.MutateWorkspace(ctx, workspace, "webhook.created", webhookID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "webhook.created", webhookID, nil, func(data *domain.Bootstrap) error {
 		data.Webhooks = append(data.Webhooks, domain.Webhook{ID: webhookID, Name: "Large values", URL: "https://hooks.example.test/large", Enabled: true, ResourceTypes: []string{"Document"}})
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	if err := repository.MutateWorkspace(ctx, workspace, "document.created", documentID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "document.created", documentID, nil, func(data *domain.Bootstrap) error {
 		data.Documents = append([]domain.Document{{ID: documentID, SlugID: documentID, Title: "Large", Content: content, Creator: data.Viewer, ProjectIDs: []string{}, TeamIDs: []string{}, SubscriberIDs: []string{}, Revisions: []domain.DocumentRevision{}, CreatedAt: now, UpdatedAt: now}}, data.Documents...)
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
 	cleanup = func(repository *SQLiteStore) {
-		_ = repository.MutateWorkspace(ctx, workspace, "test.cleanup", documentID, nil, func(data *domain.Bootstrap) error {
+		_ = repository.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "test.cleanup", documentID, nil, func(data *domain.Bootstrap) error {
 			data.Documents = slices.DeleteFunc(data.Documents, func(item domain.Document) bool { return item.ID == documentID })
 			data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == webhookID })
 			return nil
@@ -66,7 +66,7 @@ func largeEventDocument(t *testing.T, repository *SQLiteStore, content string) (
 }
 
 func largeEventEditDocument(repository *SQLiteStore, workspace, documentID, content string) error {
-	return repository.MutateWorkspace(context.Background(), workspace, "document.updated", documentID, map[string]any{"content": content}, func(data *domain.Bootstrap) error {
+	return repository.MutateWorkspace(WithColdWork(context.Background(), "workspace fixture"), workspace, "document.updated", documentID, map[string]any{"content": content}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == documentID })
 		if index < 0 {
 			return fmt.Errorf("document %s not found", documentID)

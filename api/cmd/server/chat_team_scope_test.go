@@ -154,7 +154,7 @@ func TestChatBindingSkipReasonsBoundedAndLegacy(t *testing.T) {
 		issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": secretTitle, "teamId": f.public}, workspace, http.StatusCreated)
 		otherTeam := idgen.New("chat-scope-other-")
 		parent := idgen.New("chat-scope-parent-")
-		if err := repo.MutateWorkspace(t.Context(), workspace, "chat_scope.seed", "", nil, func(data *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "chat_scope.seed", "", nil, func(data *domain.Bootstrap) error {
 			data.Teams = append(data.Teams, domain.Team{ID: otherTeam, Key: otherTeam}, domain.Team{ID: parent, Key: parent, Private: true})
 			return nil
 		}); err != nil {
@@ -196,7 +196,7 @@ func TestChatBindingSkipReasonsBoundedAndLegacy(t *testing.T) {
 			{name: "other-team", settings: domain.TeamSettings{Access: "private"}, otherTeam: true, blocked: domain.ChatBindingBlockedTeamPrivate},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				if err := repo.MutateWorkspace(t.Context(), workspace, "chat_scope.variant", "", nil, func(data *domain.Bootstrap) error {
+				if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "chat_scope.variant", "", nil, func(data *domain.Bootstrap) error {
 					data.WorkspaceSettings.HIPAACompliance = test.hipaa
 					for index := range data.Teams {
 						if data.Teams[index].ID == f.public {
@@ -315,7 +315,7 @@ func TestChatBindingSettingsShowBlockedReason(t *testing.T) {
 	base := "/api/integrations/" + provider + "/chat"
 	setTeam := func(settings domain.TeamSettings) {
 		t.Helper()
-		if err := f.s.store.MutateWorkspace(t.Context(), "test-workspace", "team.updated", f.publicTeam, nil, func(data *domain.Bootstrap) error {
+		if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "team.updated", f.publicTeam, nil, func(data *domain.Bootstrap) error {
 			current := data.TeamSettings[f.publicTeam]
 			current.Access, current.MembershipRestriction = settings.Access, settings.MembershipRestriction
 			data.TeamSettings[f.publicTeam] = current

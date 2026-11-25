@@ -82,7 +82,7 @@ type hydrationSnapshotReuse struct {
 // around a compatibility GET whose returned values cannot outlive the handler.
 // Recycled buffers are cleared; no entity or permission projection is cached.
 func BeginHydratedSnapshotReuse(ctx context.Context) (context.Context, func()) {
-	if !RecordHydrationEnabled() || ctx.Value(hydrationSnapshotReuseKey{}) != nil {
+	if !RecordHydrationEnabled(ctx) || ctx.Value(hydrationSnapshotReuseKey{}) != nil {
 		return ctx, func() {}
 	}
 	lease := &hydrationSnapshotReuse{}
@@ -105,7 +105,7 @@ func BeginHydratedSnapshotReuse(ctx context.Context) (context.Context, func()) {
 func CloneHydratedReadSnapshot(ctx context.Context, data domain.Bootstrap) domain.Bootstrap {
 	lease, _ := ctx.Value(hydrationSnapshotReuseKey{}).(*hydrationSnapshotReuse)
 	_, scoped := ctx.Value(metadataRecordScopeKey{}).(MetadataRecordScope)
-	if !RecordHydrationEnabled() || lease == nil || scoped {
+	if lease == nil || scoped || !RecordHydrationEnabled(ctx) {
 		return cloneBootstrap(data)
 	}
 	lease.mu.Lock()

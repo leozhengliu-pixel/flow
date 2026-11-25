@@ -214,7 +214,7 @@ func TestScaleP15BCanonicalStreamFallbackAndCleanup(t *testing.T) {
 	for i := range description {
 		description[i] = byte('a' + i/(32<<10))
 	}
-	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p15b.seed", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p15b.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: "p15b-stream", Description: string(description)})
 		return nil
 	}); err != nil {

@@ -263,6 +263,7 @@ func TestProjectTemplateIssueTeamFallback(t *testing.T) {
 }
 
 func TestCreateProjectFromTemplateCreatesIssuesOnFullMutationPath(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	restore := store.ForceFullMutationsForTesting(true)
 	defer restore()
 	TestCreateProjectFromTemplateCreatesIssuesAndDependencies(t)

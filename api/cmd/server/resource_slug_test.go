@@ -75,7 +75,7 @@ func TestProjectAndInitiativeSlugsAreUniqueAndRenameStable(t *testing.T) {
 	}
 
 	// A legacy name-only slug (kept by the migration) still resolves.
-	if err := repository.MutateWorkspace(context.Background(), "test-workspace", "test.seeded", second.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "test.seeded", second.ID, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Projects, func(item domain.Project) bool { return item.ID == second.ID })
 		data.Projects[index].PreviousSlugIDs = []string{"legacy-export"}
 		return nil

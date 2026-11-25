@@ -213,7 +213,7 @@ func TestAgentLiveReplyInterruptedByRestart(t *testing.T) {
 	}}
 	session.Messages = []domain.AgentMessage{{ID: "agent_message_question", Role: "user", Content: "hello", CreatedAt: stamp}, streaming}
 	ctx := store.ContextWithActor(context.Background(), viewer)
-	if err := repository.MutateWorkspace(ctx, "test-workspace", "agent.session_created", session.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), "test-workspace", "agent.session_created", session.ID, nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, session)
 		return nil
 	}); err != nil {

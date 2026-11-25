@@ -100,7 +100,7 @@ func TestMCPProjectInitiativeAndReleasePropertyRoundTrips(t *testing.T) {
 	}
 	milestone := call("save_milestone", map[string]any{"project": project["id"], "name": "Milestone", "description": "Scope", "targetDate": "2026-12-15"})
 	call("save_milestone", map[string]any{"project": project["id"], "id": milestone["id"], "name": "Renamed", "targetDate": nil})
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.pipeline", "", nil, func(d *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.pipeline", "", nil, func(d *domain.Bootstrap) error {
 		d.ReleasePipelines = []domain.ReleasePipeline{{ID: "risk-pipeline", Name: "Pipeline", Type: "scheduled", Stages: []string{"Planned", "Shipping"}, StageStatuses: map[string]string{"Planned": "planned", "Shipping": "inProgress"}}}
 		return nil
 	}); err != nil {

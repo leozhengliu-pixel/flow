@@ -67,7 +67,7 @@ func scaleP11NewFixture(t *testing.T, records int) scaleP11Fixture {
 	})
 	if records > 0 {
 		body := strings.Repeat("p11 canonical body ", 512)
-		if err := writer.MutateWorkspace(ctx, workspace, "test.p11_seed", "", nil, func(data *domain.Bootstrap) error {
+		if err := writer.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "test.p11_seed", "", nil, func(data *domain.Bootstrap) error {
 			for i := range records {
 				data.Projects = append(data.Projects, domain.Project{ID: fmt.Sprintf("p11-project-%d", i), Name: "P11 project", Description: body})
 			}
@@ -103,6 +103,8 @@ func scaleP11NewFixture(t *testing.T, records int) scaleP11Fixture {
 // Only the receiving replica's work is measured. Writer cost and fixture setup
 // are excluded; the canonical body bytes and measurement method stay fixed.
 func TestScaleP11PeerAllocation(t *testing.T) {
+	// Measure the original in-memory peer projection's incremental application.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for _, mode := range []string{"off", "shadow", "on"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_PEER_SYNC", mode)
@@ -114,7 +116,7 @@ func TestScaleP11PeerAllocation(t *testing.T) {
 			for i := range 5 {
 				var event domain.RealtimeEvent
 				f.writer.SetRealtimeSink(func(_ string, e domain.RealtimeEvent) { event = e })
-				if err := f.writer.MutateWorkspace(store.ContextWithActor(t.Context(), f.owner), f.workspace, "project.updated", "p11-project-0", map[string]string{"name": fmt.Sprint(i)}, func(data *domain.Bootstrap) error {
+				if err := f.writer.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(t.Context(), f.owner)), f.workspace, "project.updated", "p11-project-0", map[string]string{"name": fmt.Sprint(i)}, func(data *domain.Bootstrap) error {
 					data.Projects[0].Name = fmt.Sprint(i)
 					return nil
 				}); err != nil {
@@ -167,7 +169,7 @@ func scaleP11Rename(t *testing.T, f scaleP11Fixture, name string) domain.Realtim
 	t.Helper()
 	var event domain.RealtimeEvent
 	f.writer.SetRealtimeSink(func(_ string, e domain.RealtimeEvent) { event = e })
-	if err := f.writer.MutateWorkspace(store.ContextWithActor(t.Context(), f.owner), f.workspace, "project.updated", "p11-project-0", map[string]string{"name": name}, func(data *domain.Bootstrap) error {
+	if err := f.writer.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(t.Context(), f.owner)), f.workspace, "project.updated", "p11-project-0", map[string]string{"name": name}, func(data *domain.Bootstrap) error {
 		data.Projects[0].Name = name
 		return nil
 	}); err != nil {
@@ -289,6 +291,7 @@ func TestScaleP11ReloadWaitReturnsTimeoutAndSharedError(t *testing.T) {
 }
 
 func TestScaleP11OldWriterAndTombstoneFallback(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 1)
@@ -298,7 +301,7 @@ func TestScaleP11OldWriterAndTombstoneFallback(t *testing.T) {
 	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleP11Name(t, f) != "old writer" {
 		t.Fatalf("old writer was skipped: %v", err)
 	}
-	if err := f.writer.MutateWorkspace(t.Context(), f.workspace, "project.deleted", "p11-project-0", nil, func(data *domain.Bootstrap) error {
+	if err := f.writer.MutateWorkspace(workspaceFixtureContext(t.Context()), f.workspace, "project.deleted", "p11-project-0", nil, func(data *domain.Bootstrap) error {
 		data.Projects = slices.DeleteFunc(data.Projects, func(p domain.Project) bool { return p.ID == "p11-project-0" })
 		return nil
 	}); err != nil {
@@ -337,11 +340,12 @@ func TestScaleP11FlagDefaultsToOff(t *testing.T) {
 }
 
 func TestScaleP11LargeCollectionKeepsExactFallback(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 0)
 	count := (1<<20)/int(reflect.TypeFor[domain.Project]().Size()) + 1
-	if err := f.writer.MutateWorkspace(t.Context(), f.workspace, "test.p11_large", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.writer.MutateWorkspace(workspaceFixtureContext(t.Context()), f.workspace, "test.p11_large", "", nil, func(data *domain.Bootstrap) error {
 		for i := range count {
 			data.Projects = append(data.Projects, domain.Project{ID: fmt.Sprintf("p11-project-%d", i), Name: "before", Description: "small body"})
 		}
@@ -384,7 +388,7 @@ func TestScaleP11RoutineCredentialEventsStaySilent(t *testing.T) {
 	f.service.realtime.followPeerReplay(f.workspace, f.service.remoteEvents.consumer(f.workspace).eventCursor)
 	channel, stop := f.service.realtime.subscribe(f.workspace)
 	defer stop()
-	if err := f.writer.MutateWorkspace(t.Context(), f.workspace, "api_key.used", "p11-key", nil, func(*domain.Bootstrap) error { return nil }); err != nil {
+	if err := f.writer.MutateWorkspace(workspaceFixtureContext(t.Context()), f.workspace, "api_key.used", "p11-key", nil, func(*domain.Bootstrap) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	head, err := f.writer.WorkspaceChangeHead(t.Context(), f.workspace)

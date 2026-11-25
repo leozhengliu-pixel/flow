@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // notify records a notification for userID with the deliveries its
 // preferences ask for, as notification creation does.
 func chatPersonalNotify(t *testing.T, f *chatWorkflowFixture, userID, id, category, issueID string) {
 	t.Helper()
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.chat_personal", id, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "test.chat_personal", id, nil, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		notification := domain.Notification{ID: id, RecipientID: userID, Category: category, Type: notificationType(category), IssueID: issueID, Actor: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		data.Notifications = append(data.Notifications, notification)
@@ -28,7 +29,8 @@ func chatPersonalNotify(t *testing.T, f *chatWorkflowFixture, userID, id, catego
 
 func chatPersonalPreferences(t *testing.T, f *chatWorkflowFixture, userID string, chat *domain.NotificationChannelPreferences) {
 	t.Helper()
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "notification_preferences.updated", userID, nil, func(data *domain.Bootstrap) error {
+	scope := store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "notificationPreferences", ID: userID}}}
+	if err := f.s.store.MutateWorkspaceScoped(t.Context(), f.record.WorkspaceKey, "notification_preferences.updated", userID, nil, scope, func(data *domain.Bootstrap) error {
 		preferences := defaultPreferences(userID)
 		preferences.Email.Enabled, preferences.Desktop.Enabled = false, false
 		mergeNotificationPreferences(&preferences, domain.NotificationPreferences{Chat: chat})
@@ -39,6 +41,13 @@ func chatPersonalPreferences(t *testing.T, f *chatWorkflowFixture, userID string
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+	if chat != nil && chat.Enabled {
+		scope := store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "notificationPreferences", ID: userID}}}
+		data, ok, err := f.s.store.WorkspaceMetadataScoped(t.Context(), f.record.WorkspaceKey, scope)
+		if preferences := data.NotificationPreferences[userID]; err != nil || !ok || preferences.Chat == nil || !preferences.Chat.Enabled {
+			t.Fatal("chat preferences were not installed")
+		}
 	}
 }
 
@@ -187,7 +196,7 @@ func TestChatPersonalNotificationsRespectAccessAndConnectionHealth(t *testing.T)
 		t.Fatal(err)
 	}
 	chatPersonalPreferences(t, f, member.User.ID, &domain.NotificationChannelPreferences{Enabled: true})
-	if err = f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "team.updated", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
+	if err = f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "team.updated", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Teams {
 			if data.Teams[index].ID == issue.Team.ID {
 				data.Teams[index].Private = true
@@ -206,11 +215,12 @@ func TestChatPersonalNotificationsRespectAccessAndConnectionHealth(t *testing.T)
 	chatPersonalNotify(t, f, member.User.ID, "notification_private", "subscriptions", issue.ID)
 	chatPersonalRun(t, f)
 	if delivery, _ := chatPersonalDelivery(t, f, "notification_private"); delivery.Status != "failed" || delivery.Error != "chat_recipient_no_access" || len(f.sent) != 0 {
-		t.Fatalf("private issue disclosed: %+v %#v", delivery, f.sent)
+		t.Fatalf("private issue delivery has terminal status=%t access denial=%t with %d sent messages",
+			delivery.Status == "failed", delivery.Error == "chat_recipient_no_access", len(f.sent))
 	}
 
 	// Leaving the workspace stops delivery, even of a public issue.
-	if err = f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "team.updated", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
+	if err = f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "team.updated", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Teams {
 			if data.Teams[index].ID == issue.Team.ID {
 				data.Teams[index].Private = false

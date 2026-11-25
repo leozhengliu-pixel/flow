@@ -66,7 +66,7 @@ func TestRemoteMCPOAuthDiscoveryPKCERefreshAndScope(t *testing.T) {
 	s := &server{store: repo, authDisabled: true, allowedOrigin: "http://127.0.0.1:5173"}
 	handler := newHandler(s)
 	data := repo.Bootstrap()
-	if err := repo.MutateWorkspace(t.Context(), "test-workspace", "application_policy.updated", "remote", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "application_policy.updated", "remote", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.MCPConnectorsEnabled = true
 		setApplicationPolicies(data, []applicationPolicy{{ID: "remote", URL: base + "/mcp", Kind: "mcp", Name: "Remote", Status: "approved", OwnerID: data.Viewer.ID}})
 		return nil
@@ -146,7 +146,7 @@ func TestElicitationInvalidResponsePreservesPendingForm(t *testing.T) {
 	}
 	defer repo.Close()
 	viewer := repo.Bootstrap().Viewer
-	if err = repo.MutateWorkspace(t.Context(), "test-workspace", "agent.session_created", "session", nil, func(data *domain.Bootstrap) error {
+	if err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "agent.session_created", "session", nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, domain.AgentSession{ID: "session", UserID: viewer.ID})
 		return nil
 	}); err != nil {
@@ -175,7 +175,7 @@ func TestElicitationRoundTripWaitsForTheOwningUserAndOmitsAnswersFromParts(t *te
 	}
 	defer repo.Close()
 	data := repo.Bootstrap()
-	if err = repo.MutateWorkspace(t.Context(), "test-workspace", "agent.session_created", "elicitation-session", nil, func(data *domain.Bootstrap) error {
+	if err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "agent.session_created", "elicitation-session", nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, domain.AgentSession{ID: "elicitation-session", UserID: data.Viewer.ID})
 		return nil
 	}); err != nil {

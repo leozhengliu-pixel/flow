@@ -42,6 +42,23 @@ func scaleP06PresenceRequest(t *testing.T, client *http.Client, base, workspace 
 	return response.StatusCode, body
 }
 
+func equalSingleRealtimeFrame(left, right string) bool {
+	if left == right {
+		return true
+	}
+	// The shared encoder and the legacy writer order JSON keys differently.
+	// Compare the entire payload and keep the event ID and SSE framing exact.
+	leftHeader, leftData, leftOK := strings.Cut(left, "\ndata: ")
+	rightHeader, rightData, rightOK := strings.Cut(right, "\ndata: ")
+	if !leftOK || !rightOK || leftHeader != rightHeader {
+		return false
+	}
+	leftData, leftOK = strings.CutSuffix(leftData, "\n\n")
+	rightData, rightOK = strings.CutSuffix(rightData, "\n\n")
+	return leftOK && rightOK && json.Valid([]byte(leftData)) && json.Valid([]byte(rightData)) &&
+		sw530CanonicalJSON([]byte(leftData)) == sw530CanonicalJSON([]byte(rightData))
+}
+
 func TestScaleP06QueuedAndReplayPermissionDifferential(t *testing.T) {
 	f := newRealtimePolicyFixture(t)
 	project := authRequest[domain.Project](t, f.admin, "POST", f.host.URL+"/api/projects", map[string]any{"name": "Queued private project", "teamIds": []string{f.private.ID}}, "test-workspace", 201)
@@ -68,7 +85,7 @@ func TestScaleP06QueuedAndReplayPermissionDifferential(t *testing.T) {
 		if !f.srv.writeRealtimeBatch(got, request, subscriber, []domain.RealtimeEvent{queued}, false, 0) {
 			t.Fatal("budgeted batch failed")
 		}
-		if got.Body.String() != want.Body.String() || strings.Contains(got.Body.String(), "hidden-input-secret") || strings.Contains(got.Body.String(), "hidden-actor-secret") {
+		if !equalSingleRealtimeFrame(got.Body.String(), want.Body.String()) || strings.Contains(got.Body.String(), "hidden-input-secret") || strings.Contains(got.Body.String(), "hidden-actor-secret") {
 			t.Fatal("queue changed permission projection or exposed hidden fields")
 		}
 		stop()
@@ -77,7 +94,7 @@ func TestScaleP06QueuedAndReplayPermissionDifferential(t *testing.T) {
 		replay, stopReplay := f.srv.realtime.subscribeTransport("test-workspace", "p06_replay_cursor", false)
 		replayed := <-replay.channel
 		got = httptest.NewRecorder()
-		if !f.srv.writeRealtimeBatch(got, request, replay, []domain.RealtimeEvent{replayed}, false, 0) || got.Body.String() != want.Body.String() {
+		if !f.srv.writeRealtimeBatch(got, request, replay, []domain.RealtimeEvent{replayed}, false, 0) || !equalSingleRealtimeFrame(got.Body.String(), want.Body.String()) {
 			t.Fatal("replay reused pre-revocation permissions")
 		}
 		stopReplay()
@@ -186,7 +203,7 @@ func TestScaleP06PresencePermissionDifferential(t *testing.T) {
 			Secret string        `json:"secret"`
 		}](t, f.admin, "POST", base+"/api/api-keys", map[string]any{"name": "Presence " + policy.name, "scopes": []string{"read", "write"}, "teamRestriction": policy.restriction, "teamIds": teams}, workspace, 201)
 		if policy.restriction == "selected" && len(policy.teams) == 0 {
-			if err := f.repo.MutateWorkspace(t.Context(), workspace, "api_key.updated", key.Key.ID, nil, func(data *domain.Bootstrap) error {
+			if err := f.repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "api_key.updated", key.Key.ID, nil, func(data *domain.Bootstrap) error {
 				for i := range data.APIKeys {
 					if data.APIKeys[i].ID == key.Key.ID {
 						data.APIKeys[i].TeamIDs = []string{}

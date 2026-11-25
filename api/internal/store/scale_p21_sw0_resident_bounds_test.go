@@ -15,6 +15,7 @@ import (
 func scaleP21SW0ResidentBoundsFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, *sqlTx) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_JOURNAL", "off") // Raw SQLite BLOB identifiers predate journal capture.
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	f := scaleP09Database(t)
 	f.db.SetMaxOpenConns(1)

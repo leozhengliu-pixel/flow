@@ -47,7 +47,7 @@ func seedLegacyDocuments(t *testing.T, repo *SQLiteStore) accessFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.MutateWorkspace(ctx, accessWorkspace, "document.created", "doc_team_owner", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), accessWorkspace, "document.created", "doc_team_owner", nil, func(next *domain.Bootstrap) error {
 		next.Documents = append(next.Documents,
 			document("doc_team_owner", []string{fixture.team}, []domain.DocumentPermission{owner("doc_team_owner")}),
 			document("doc_team_viewer", []string{fixture.team}, []domain.DocumentPermission{owner("doc_team_viewer"), teamViewer}),
@@ -242,6 +242,7 @@ func recordsEqual(a, b map[string][]byte) bool {
 }
 
 func TestDocumentDefaultAccessMigrationDropsSharedMetadataCache(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off") // The shared metadata cache serves legacy replicas.
 	path := filepath.Join(t.TempDir(), "flow.db")
 	server := miniredis.RunT(t)
 	connect := func() *coordination.Redis {

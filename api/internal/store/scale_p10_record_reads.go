@@ -314,7 +314,9 @@ func (s *SQLiteStore) readAccessRecords(ctx context.Context, access AccessContex
 	for _, key := range keys {
 		item := MetadataRecord{Key: key}
 		var omitted int
-		err := s.db.QueryRowContext(ctx, `SELECT version,summary,omitted FROM metadata_catalog WHERE workspace_key=? AND field=? AND record_key=?`, access.policy.workspace, key.Kind, key.ID).Scan(&item.Version, &item.Data, &omitted)
+		var summary []byte
+		err := s.db.QueryRowContext(ctx, `SELECT version,summary,omitted FROM metadata_catalog WHERE workspace_key=? AND field=? AND record_key=?`, access.policy.workspace, key.Kind, key.ID).Scan(&item.Version, &summary, &omitted)
+		item.Data = summary
 		if errors.Is(err, sql.ErrNoRows) {
 			item = MetadataRecord{Key: key, Missing: true}
 		} else if err != nil {

@@ -68,7 +68,7 @@ func TestScaleP01ReadProjectionBaseline(t *testing.T) {
 				return user
 			}
 			owner, member := register("P01 owner"), register("P01 member")
-			ctx := ContextWithActor(t.Context(), owner)
+			ctx := WithColdWork(ContextWithActor(t.Context(), owner), "paged metadata projection")
 			key := idgen.New("p01-projection-")
 			data, err := repo.CreateWorkspaceWith(ctx, "P01 projection", key, "us", func(data *domain.Bootstrap) error {
 				data.Projects = append(data.Projects,

@@ -35,7 +35,7 @@ func TestLoopContractSaveRegression(t *testing.T) {
 	loop := domain.Loop{ID: "loop_save", Name: "Summary", Instructions: "Reply with a summary."}
 	hash := loopContractHashOf(loop)
 	person := &domain.LoopOutputContract{Source: loopContractPerson, InstructionsHash: "older", Outputs: []domain.LoopContractOutput{{Kind: "document", Operation: loopOpAppend, Target: domain.LoopContractTarget{Mode: "existing", DocumentID: "chosen_document"}}}}
-	if err := repo.MutateWorkspace(t.Context(), key, "loop.created", loop.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), key, "loop.created", loop.ID, nil, func(data *domain.Bootstrap) error {
 		data.Loops = append(data.Loops, loop)
 		for i := 0; i < 4; i++ {
 			version := domain.LoopVersion{ID: fmt.Sprintf("version_save_%d", i), LoopID: loop.ID, Definition: domain.LoopDefinition{Name: loop.Name, Instructions: loop.Instructions}}

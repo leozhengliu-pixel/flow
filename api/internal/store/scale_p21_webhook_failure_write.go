@@ -271,7 +271,7 @@ func (w *webhookFailureWriteWork) plan(tx *sqlTx, workspace string, source *meta
 // The server retains its literal MutateWorkspace callback off mode. Membership
 // selection, retention, append and event insertion share one root-locked tx.
 func (s *SQLiteStore) RecordWebhookDeliveryFailure(ctx context.Context, workspace string, failure domain.WebhookFailureEvent, httpStatus int) error {
-	if !s.BoundedMetadataEnabled() || !RecordHydrationEnabled() {
+	if !s.BoundedMetadataEnabled() || !recordHydrationEnabled(s.dialect) {
 		return ErrBoundedMetadataCoverage
 	}
 	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)

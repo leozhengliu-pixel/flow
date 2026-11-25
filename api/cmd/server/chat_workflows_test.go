@@ -201,6 +201,8 @@ func (f *chatWorkflowFixture) callback(t *testing.T, envelope any, timestamp tim
 		r.Header.Set("X-Lark-Signature", larkevent.Signature(stamp, "nonce_test", f.credentials.EncryptKey, string(body)))
 	}
 	w := httptest.NewRecorder()
+	r, finish := beginRequestResourceReads(r)
+	defer finish()
 	f.s.handleChatWebhook(w, r)
 	return w
 }
@@ -266,7 +268,7 @@ func TestChatPendingConnectionAcceptsOnlyEncryptedChallenge(t *testing.T) {
 
 func TestChatCreateUsesCustomWorkflowActorAndStableCommandKey(t *testing.T) {
 	f := newChatWorkflowFixture(t)
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "team.settings_updated", f.binding.TeamID, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "team.settings_updated", f.binding.TeamID, nil, func(data *domain.Bootstrap) error {
 		data.States = append(data.States, domain.WorkflowState{ID: "state_chat_custom", TeamID: f.binding.TeamID, Name: "Ready", Type: "unstarted", Default: true})
 		settings := data.TeamSettings[f.binding.TeamID]
 		settings.DefaultStateID = "state_chat_custom"
@@ -381,7 +383,9 @@ func TestChatPrivateUpdateFormPreservesConcurrentWebChanges(t *testing.T) {
 	f := newChatWorkflowFixture(t)
 	data := f.s.store.Bootstrap()
 	issue := data.Issues[0]
-	_, actions, err := f.s.chatIssueCard(t.Context(), f.record, f.binding, issue, "shared_card", "om_shared", "")
+	cardCtx, closeReads := beginMetadataOutputReads(t.Context())
+	defer closeReads()
+	_, actions, err := f.s.chatIssueCard(cardCtx, f.record, f.binding, issue, "shared_card", "om_shared", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -547,7 +551,9 @@ func TestChatSharedCardNeverGrantsViewerEditPermission(t *testing.T) {
 		t.Fatal(err)
 	}
 	issue := data.Issues[0]
-	_, actions, err := f.s.chatIssueCard(t.Context(), f.record, f.binding, issue, "viewer_card", "om_shared_viewer", "")
+	ctx, closeReads := beginMetadataOutputReads(t.Context())
+	defer closeReads()
+	_, actions, err := f.s.chatIssueCard(ctx, f.record, f.binding, issue, "viewer_card", "om_shared_viewer", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,8 +566,10 @@ func TestChatSharedCardNeverGrantsViewerEditPermission(t *testing.T) {
 	if _, err := f.s.store.GetChatAction(t.Context(), f.record.WorkspaceKey, f.record.ConnectionID, personalID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("viewer received an edit form: %v", err)
 	}
-	if len(f.sent) != 1 || f.sent[0]["msg_type"] != "text" || !strings.Contains(f.sent[0]["content"].(string), chatT(chatLanguageChinese, "action_forbidden")) {
-		t.Fatalf("viewer denial not private: %#v", f.sent)
+	if len(f.sent) != 1 || f.sent[0]["receive_id"] != viewer.OpenID || f.sent[0]["msg_type"] != "text" ||
+		(!strings.Contains(f.sent[0]["content"].(string), chatT(chatLanguageEnglish, "action_forbidden")) &&
+			!strings.Contains(f.sent[0]["content"].(string), chatT(chatLanguageChinese, "action_forbidden"))) {
+		t.Fatal("viewer did not receive a private permission denial")
 	}
 }
 

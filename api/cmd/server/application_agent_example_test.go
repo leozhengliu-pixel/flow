@@ -47,7 +47,9 @@ func TestDeveloperAgentExampleCompletesDelegatedIssue(t *testing.T) {
 	deadline := time.Now().Add(15 * time.Second)
 	var installation domain.ApplicationInstallation
 	for time.Now().Before(deadline) {
-		items, err := s.store.ListApplications(t.Context(), data.Workspace.URLKey)
+		ctx, finish := beginMetadataOutputReads(t.Context())
+		items, err := s.store.ListApplications(ctx, data.Workspace.URLKey)
+		finish()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -153,7 +155,12 @@ func TestDeveloperAgentExampleStreamsClarifiesContinuesAndStops(t *testing.T) {
 	}
 	var installation domain.ApplicationInstallation
 	wait(func() bool {
-		apps, _ := s.store.ListApplications(t.Context(), data.Workspace.URLKey)
+		ctx, finish := beginMetadataOutputReads(t.Context())
+		defer finish()
+		apps, err := s.store.ListApplications(ctx, data.Workspace.URLKey)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(apps) == 1 {
 			installation = apps[0]
 			return true

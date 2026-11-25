@@ -169,7 +169,7 @@ func (s *SQLiteStore) sw17SearchFieldBounded(ctx context.Context, workspace, fie
 			return err
 		}
 	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM metadata_search_documents WHERE workspace_key=? AND field=? AND NOT EXISTS (SELECT 1 FROM workspace_metadata_records m WHERE m.workspace_key=metadata_search_documents.workspace_key AND m.field=metadata_search_documents.field AND m.record_key=metadata_search_documents.record_key)`, workspace, field); err != nil {
+	if err := s.pruneMetadataSearchDocuments(ctx, workspace, field); err != nil {
 		return err
 	}
 	if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET completed=1 WHERE workspace_key=? AND field=?`, workspace, field); err != nil {

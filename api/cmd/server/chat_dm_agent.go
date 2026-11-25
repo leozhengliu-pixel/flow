@@ -731,6 +731,14 @@ func (s *server) chatDMAgentCall(ctx context.Context, dm chatDMRequest, method, 
 	if handler == nil || r.URL.RawQuery != "" {
 		return errors.New("unsupported chat operation")
 	}
+	if s.store.BoundedMetadataEnabled() {
+		ctx, cold := store.WithColdScope(r.Context(), "chat agent")
+		defer cold.Close()
+		r = r.WithContext(ctx)
+		var release func()
+		r, release = beginRequestResourceReads(r)
+		defer release()
+	}
 	if !s.authorizeWorkspaceRequest(w, r, user) {
 		return nil
 	}

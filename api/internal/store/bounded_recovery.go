@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -212,7 +213,7 @@ func (r *scaleP21SW23TeamPolicyReaderAt) ReadAt(p []byte, offset int64) (int, er
 // changes. Verify trigger dirty keys and canonical/sidecar coverage together
 // in the caller's snapshot before accepting residency.
 func (s *SQLiteStore) validateResidentBackfill(ctx context.Context, tx *sqlTx, workspace string) error {
-	if !s.db.journalReady.Load() || recordJournalMode() != "on" {
+	if !s.db.journalReady.Load() || !s.RecordJournalEnabled() {
 		return fmt.Errorf("%w: record journal is not authoritative", ErrBoundedMetadataCoverage)
 	}
 	if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
@@ -810,16 +811,24 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 			break
 		}
 		for _, key := range keys {
-			data, stamp, cost, err := s.readResidentWorkspace(ctx, tx, key)
-			if err != nil {
-				return fmt.Errorf("recover resident workspace %q: %w", key, err)
-			}
+			var data domain.Bootstrap
+			var stamp copyStamp
+			var cost int
 			if buildLogical {
+				stamp, err = readMetadataStamp(ctx, tx, key)
+				if err != nil {
+					return err
+				}
 				var source *metadataLogicalSource
 				current, currentErr := s.retainMetadataLogicalSource(ctx, key)
 				if currentErr == nil && current.Stamp() == stamp {
 					source = current
-					data, cost, err = s.metadataLogicalPolicy(ctx, source)
+					if s.metadataResidency.requireCoverage {
+						err = s.validateResidentBackfill(ctx, tx, key)
+					}
+					if err == nil {
+						data, cost, err = s.metadataLogicalPolicy(ctx, source)
+					}
 				} else {
 					if current != nil {
 						current.Release()
@@ -830,11 +839,16 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 					if source != nil {
 						source.Release()
 					}
-					return fmt.Errorf("recover logical workspace %q: %w", key, err)
+					return fmt.Errorf("recover logical workspace: %w", err)
 				}
 				sources[key] = source
 				if state := s.coldPublishReloadState(ctx, tx, key, source); state != nil {
 					states[key] = state
+				}
+			} else {
+				data, stamp, cost, err = s.readResidentWorkspace(ctx, tx, key)
+				if err != nil {
+					return fmt.Errorf("recover resident workspace: %w", err)
 				}
 			}
 			if cost > s.metadataResidency.policyLimit-total {
@@ -1058,33 +1072,34 @@ func (s *SQLiteStore) installResidentPolicySource(workspace string, data domain.
 	if len(sources) > 1 {
 		return ErrMetadataRecordQuery
 	}
-	s.metadataResidency.mu.Lock()
-	costs := make(map[string]int, len(s.metadataResidency.policy)+1)
-	for key, value := range s.metadataResidency.policy {
-		costs[key] = value
-	}
-	s.metadataResidency.mu.Unlock()
-	costs[workspace] = cost
-	if err := s.metadataResidency.replacePolicyCosts(costs); err != nil {
+	s.mu.Lock()
+	residency := s.metadataResidency
+	residency.mu.Lock()
+	total, err := boundedMetadataSize(residency.policyLimit, residency.policyBytes-residency.policy[workspace], cost)
+	if err != nil {
+		residency.mu.Unlock()
+		s.mu.Unlock()
 		return err
 	}
-	s.mu.Lock()
+	if residency.policy == nil {
+		residency.policy = map[string]int{}
+	}
+	residency.policy[workspace], residency.policyBytes = cost, total
 	s.workspaces[workspace] = data
 	if last {
 		s.lastWorkspaceKey = workspace
 	}
 	s.forgetCopyRevisionLocked(workspace)
-	s.metadataResidency.mu.Lock()
-	s.metadataResidency.stamps[workspace], s.metadataResidency.applied[workspace] = stamp, head
+	residency.stamps[workspace], residency.applied[workspace] = stamp, head
 	var previous *metadataLogicalSource
 	if len(sources) == 1 {
-		if s.metadataResidency.logical == nil {
-			s.metadataResidency.logical = map[string]*metadataLogicalSource{}
+		if residency.logical == nil {
+			residency.logical = map[string]*metadataLogicalSource{}
 		}
-		previous = s.metadataResidency.logical[workspace]
-		s.metadataResidency.logical[workspace] = sources[0]
+		previous = residency.logical[workspace]
+		residency.logical[workspace] = sources[0]
 	}
-	s.metadataResidency.mu.Unlock()
+	residency.mu.Unlock()
 	s.mu.Unlock()
 	if previous != nil {
 		previous.Release()
@@ -1115,10 +1130,15 @@ func residentJournalGeneration(ctx context.Context, tx *sqlTx) (string, error) {
 // than after recovering hundreds of workspaces.
 func checkMetadataSourceBudget(workspaces int64) error {
 	limit := metadataLogicalDescriptorCap()
+	if workspaces < 0 || workspaces > (math.MaxInt64-metadataSourceReloadHeadroom)/metadataLogicalDescriptorBytes {
+		return fmt.Errorf("%w: workspace count exceeds the supported FLOW_METADATA_SOURCE_BYTES range", ErrMetadataWorkBudget)
+	}
 	need := workspaces*metadataLogicalDescriptorBytes + metadataSourceReloadHeadroom
-	if available := limit - metadataLogicalDescriptorsUsed.Load(); need > available {
+	used := metadataLogicalDescriptorsUsed.Load()
+	if need > limit-used {
+		recommended := need + min(used, math.MaxInt64-need)
 		return fmt.Errorf("%w: %d workspaces need %d MiB of installed workspace sources (%d KiB each plus %d MiB for reloads), over FLOW_METADATA_SOURCE_BYTES (%d MiB); set FLOW_METADATA_SOURCE_BYTES to at least %d",
-			ErrMetadataWorkBudget, workspaces, ceilMiB(need), metadataLogicalDescriptorBytes>>10, metadataSourceReloadHeadroom/metadataMiB, ceilMiB(limit), need+(limit-available))
+			ErrMetadataWorkBudget, workspaces, ceilMiB(need), metadataLogicalDescriptorBytes>>10, metadataSourceReloadHeadroom/metadataMiB, ceilMiB(limit), recommended)
 	}
 	return nil
 }

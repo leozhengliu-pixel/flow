@@ -713,6 +713,7 @@ func TestScaleP21SW27RawLogicalRecoveryLegalLargeRecord(t *testing.T) {
 
 func TestScaleP21SW27RawLogicalRecoveryPhysicalOrder(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	f := scaleP09Database(t)
 	if f.dialect != "sqlite" {

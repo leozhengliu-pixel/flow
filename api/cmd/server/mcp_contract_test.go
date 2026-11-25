@@ -40,7 +40,7 @@ func newMCPContractFixture(t testing.TB) *mcpContractFixture {
 	}
 	t.Cleanup(func() { repository.Close() })
 	f := &mcpContractFixture{repository: repository, data: repository.Bootstrap(), secret: "mcp-contract-local-only"}
-	if err := repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "api_key.created", "contract-key", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "api_key.created", "contract-key", nil, func(data *domain.Bootstrap) error {
 		data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "contract-key", SecretHash: secretHash(f.secret), CreatorID: data.Viewer.ID, Scopes: []string{"read", "write"}, CreatedAt: time.Now().UTC()})
 		return nil
 	}); err != nil {

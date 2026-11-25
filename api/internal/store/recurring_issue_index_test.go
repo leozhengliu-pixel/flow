@@ -53,7 +53,7 @@ func TestRecurringIssueIDsUseTheAttributeIndex(t *testing.T) {
 	key := repo.Bootstrap().Workspace.URLKey
 	late, early := time.Date(2026, 10, 9, 0, 1, 0, 0, time.UTC), time.Date(2026, 10, 2, 0, 1, 0, 0, time.UTC)
 	var lateID, earlyID string
-	if err := repo.MutateWorkspace(t.Context(), key, "test.recurring", "recurring", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), key, "test.recurring", "recurring", nil, func(data *domain.Bootstrap) error {
 		data.Issues[0].Recurrence, data.Issues[0].NextOccurrenceAt = "weekly", &late
 		data.Issues[1].Recurrence, data.Issues[1].NextOccurrenceAt = "daily", &early
 		lateID, earlyID = data.Issues[0].ID, data.Issues[1].ID
@@ -71,7 +71,7 @@ func TestRecurringIssueIDsUseTheAttributeIndex(t *testing.T) {
 	}
 	// An archived schedule never takes a slot of the due window.
 	archivedAt := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
-	if err := repo.MutateWorkspace(t.Context(), key, "test.recurring", "recurring", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), key, "test.recurring", "recurring", nil, func(data *domain.Bootstrap) error {
 		data.Issues[1].ArchivedAt = &archivedAt
 		return nil
 	}); err != nil {
@@ -93,7 +93,7 @@ func TestRecurrenceInstanceAttribute(t *testing.T) {
 	defer repo.Close()
 	key := repo.Bootstrap().Workspace.URLKey
 	var id string
-	if err := repo.MutateWorkspace(t.Context(), key, "test.recurring", "recurring", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), key, "test.recurring", "recurring", nil, func(data *domain.Bootstrap) error {
 		data.Issues[0].RecurrenceSeriesID, data.Issues[0].RecurrenceOccurrence = "issue_series", "2026-10-10"
 		id = data.Issues[0].ID
 		return nil

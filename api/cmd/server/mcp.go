@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"maps"
 	"math"
 	"net/http"
@@ -466,8 +465,7 @@ func (s *server) writeMCPError(w http.ResponseWriter, id any, code int, message 
 }
 
 // toolInternalError replaces a database or driver error in a tool result: the
-// MCP client or agent model gets a generic sentence with the request id, the
-// log has the error.
+// client gets a generic sentence with its request ID.
 type toolInternalError struct {
 	requestID string
 	read      bool
@@ -483,10 +481,8 @@ func (e *toolInternalError) Error() string {
 // publicToolError is the error a tool call reports to an MCP client or an
 // agent model. Tool errors are written for the caller ("issue not found",
 // "title is required"), except database, driver and object-storage errors
-// (isInternalError): their text names tables, columns, SQL states, buckets
-// and paths, so they are logged with the request id and
-// replaced, as is a 500 from a REST handler the tool ran in process. A call
-// outside an HTTP request gets a fresh id for the log line.
+// (isInternalError) and 500s from REST handlers run in process. Those
+// errors are logged with a safe cause code and a server-generated ID.
 func publicToolError(ctx context.Context, tool string, err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return errNotFound
@@ -495,16 +491,19 @@ func publicToolError(ctx context.Context, tool string, err error) error {
 	if err == nil || !isInternalError(err) && !errors.As(err, &handlerErr) {
 		return err
 	}
+	logger := requestLoggerFrom(ctx)
 	requestID := requestIDFrom(ctx)
 	if requestID == "" {
-		requestID = newRequestID()
+		id := newRequestID()
+		logger = logger.With("request_id", id)
+		requestID = id
+	}
+	if loop, _ := ctx.Value(loopRunRequestKey{}).(bool); loop {
+		logger.ErrorContext(ctx, "loop tool internal error")
+	} else {
+		logger.ErrorContext(ctx, "flow tool internal error", "cause", requestErrorCode(err))
 	}
 	tool = strings.TrimPrefix(tool, "mcp__flow.")
-	if loop, _ := ctx.Value(loopRunRequestKey{}).(bool); loop {
-		slog.ErrorContext(ctx, "loop tool internal error", "request_id", requestID)
-	} else {
-		slog.ErrorContext(ctx, "flow tool internal error", "request_id", requestID, "tool", tool, "error", err.Error())
-	}
 	return &toolInternalError{requestID: requestID, read: agentChangeToolAccess()[tool] == "read"}
 }
 

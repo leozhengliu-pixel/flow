@@ -9,6 +9,7 @@ import (
 )
 
 func TestWorkspaceReadKeepsOutlineAndBodiesConsistent(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "snapshot.db"))
 	if err != nil {
 		t.Fatal(err)

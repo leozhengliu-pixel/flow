@@ -33,7 +33,7 @@ func TestApplicationUninstallRevokesAndRemoves(t *testing.T) {
 	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues?workspace=test-workspace", map[string]any{"title": "For the app", "teamId": seed.Teams[0].ID}, http.StatusCreated)
 	delegated := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issue-records/"+issue.ID+"?workspace=test-workspace", map[string]any{"delegateId": installed.UserID}, http.StatusOK)
 	now := time.Now().UTC()
-	err := s.store.MutateWorkspace(context.Background(), "test-workspace", "test.oauth_grant", "", nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "test.oauth_grant", "", nil, func(data *domain.Bootstrap) error {
 		data.OAuthAuthorizations = append(data.OAuthAuthorizations, domain.OAuthAuthorization{ID: "grant_uninstall", ClientID: app.ClientID, ClientName: app.Name, UserID: seed.Viewer.ID, Scopes: []string{"read"}, CreatedAt: now})
 		return nil
 	})

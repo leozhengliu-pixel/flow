@@ -607,6 +607,42 @@ func (s *server) listBoundedResourceConnection(w http.ResponseWriter, r *http.Re
 		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header (API keys and OAuth tokens select it automatically)")
 		return
 	}
+	for attempt := 0; ; attempt++ {
+		err := s.tryBoundedResourceConnection(w, r, workspace, kind)
+		if err == nil || r.Context().Err() != nil {
+			return
+		}
+		if !errors.Is(err, store.ErrResourceAccessChanged) {
+			publicResourceDirectoryError(w, err)
+			return
+		}
+		if attempt == 2 {
+			publicResourceDirectoryError(w, store.ErrMetadataWorkBudget)
+			return
+		}
+		// A usage timestamp can advance the workspace revision during
+		// authentication or encoding. Retry from a fresh projection, but
+		// first check that the key and its effective scope still allow the read.
+		if prior, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			user, key, currentWorkspace, err := s.apiKeyForRequest(r)
+			if err != nil {
+				if !writeAuthCheckFailure(w, err) {
+					publicResourceDirectoryError(w, store.ErrAuthForbidden)
+				}
+				return
+			}
+			if key == nil || key.ID != prior.ID || user.ID != authUser(r).ID || currentWorkspace != workspace {
+				publicResourceDirectoryError(w, store.ErrAuthForbidden)
+				return
+			}
+			r = r.WithContext(context.WithValue(r.Context(), apiKeyContextKey{}, *key))
+		}
+	}
+}
+
+// An error from this attempt means no response has been sent and its read
+// and spool have been released. A consumed projection handoff is single-use.
+func (s *server) tryBoundedResourceConnection(w http.ResponseWriter, r *http.Request, workspace, kind string) error {
 	ctx := r.Context()
 	if s.authDisabled {
 		ctx = context.WithoutCancel(ctx)
@@ -625,24 +661,23 @@ func (s *server) listBoundedResourceConnection(w http.ResponseWriter, r *http.Re
 			if retryAfter, refused := projectionRefused(r); refused {
 				writeProjectionBusy(w, retryAfter)
 			}
-			return
+			return nil
 		}
 	}
 	read, err := s.store.BeginResourceDirectoryRead(ctx, workspace, userID, key, kind, handed)
 	if err != nil {
 		if s.authDisabled && errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, store.ErrResourceAccessChanged) {
 			writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "workspace not found")
-			return
+			return nil
 		}
-		publicResourceDirectoryError(w, err)
-		return
+		return err
 	}
 	defer read.Close()
 	if !s.authDisabled {
 		filterBootstrapForAPIKey(&read.Data, r)
 		if err := s.filterPreferenceIssueTeams(r, &read.Data); err != nil {
 			issueRecordsError(w, err)
-			return
+			return nil
 		}
 	}
 	teams := visibleTeamSet(read.Data)
@@ -687,8 +722,7 @@ func (s *server) listBoundedResourceConnection(w http.ResponseWriter, r *http.Re
 			names[strings.Clone(value.Project.ID)] = strings.Clone(value.Project.Name)
 			return nil
 		}); err != nil {
-			publicResourceDirectoryError(w, err)
-			return
+			return err
 		}
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("query"))
@@ -746,7 +780,7 @@ func (s *server) listBoundedResourceConnection(w http.ResponseWriter, r *http.Re
 		}
 		if err != nil {
 			writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not search documents")
-			return
+			return nil
 		}
 	}
 	orderings := []string{"createdAt", "updatedAt"}
@@ -756,7 +790,7 @@ func (s *server) listBoundedResourceConnection(w http.ResponseWriter, r *http.Re
 	args, err := parsePageArgs(r, orderings...)
 	if err != nil {
 		writePageArgsError(w, err)
-		return
+		return nil
 	}
 	fields := resourceConnectionFields(kind, teams, names)
 	filter, err := parseResourceFilter(r.URL.Query().Get("filter"))
@@ -765,11 +799,10 @@ func (s *server) listBoundedResourceConnection(w http.ResponseWriter, r *http.Re
 	}
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, err.Error())
-		return
+		return nil
 	}
 	if err := read.Reserve(ctx, uint64(args.Size)*512+128<<10); err != nil {
-		publicResourceDirectoryError(w, err)
-		return
+		return err
 	}
 	winners := make([]resourceConnectionSelection, 0, args.Size+1)
 	defer func() {
@@ -852,8 +885,7 @@ func (s *server) listBoundedResourceConnection(w http.ResponseWriter, r *http.Re
 		err = read.Visit(ctx, func(value *store.ResourceDirectoryValue) error { return selectValue(value, "", nil) })
 	}
 	if err != nil {
-		publicResourceDirectoryError(w, err)
-		return
+		return err
 	}
 	from := start
 	if args.Backward {
@@ -864,7 +896,7 @@ func (s *server) listBoundedResourceConnection(w http.ResponseWriter, r *http.Re
 		first, last := winners[0].key.cursor(args.OrderBy), winners[len(winners)-1].key.cursor(args.OrderBy)
 		info.StartCursor, info.EndCursor = &first, &last
 	}
-	s.writeResourceConnection(w, r.WithContext(ctx), read, kind, winners, info)
+	return s.writeResourceConnection(w, r.WithContext(ctx), read, kind, winners, info)
 }
 
 func resourceConnectionItem(kind string, value *store.ResourceDirectoryValue, order string) (any, pageKey) {
@@ -887,18 +919,18 @@ func resourceConnectionItem(kind string, value *store.ResourceDirectoryValue, or
 	}
 }
 
-func (s *server) writeResourceConnection(w http.ResponseWriter, r *http.Request, read *store.ResourceDirectoryRead, kind string, winners []resourceConnectionSelection, info pageInfo) {
+func (s *server) writeResourceConnection(w http.ResponseWriter, r *http.Request, read *store.ResourceDirectoryRead, kind string, winners []resourceConnectionSelection, info pageInfo) error {
 	release, err := legacyStreamLease(r.Context(), 256<<10)
 	if err != nil {
-		publicResourceDirectoryError(w, err)
-		return
+		return err
 	}
 	defer release()
 	file, _ := newLegacySpool()
 	defer removeLegacySpool(file)
+	// Even without a file, defer sending the status until the buffer starts
+	// writing so an invalidated snapshot can still be discarded.
 	spool := &legacyResponseSpool{ResponseWriter: w, ctx: r.Context(), file: file}
 	spool.Header().Set("Content-Type", "application/json; charset=utf-8")
-	spool.WriteHeader(http.StatusOK)
 	encodingContext := hydratedSigningContext(r.Context(), spool)
 	buffer := bufio.NewWriterSize(spool, 32<<10)
 	err = func() error {
@@ -945,19 +977,19 @@ func (s *server) writeResourceConnection(w http.ResponseWriter, r *http.Request,
 		winners[index].release()
 		winners[index] = resourceConnectionSelection{}
 	}
-	releaseHydratedProducer(r.Context())
 	if err != nil || spool.err != nil || r.Context().Err() != nil {
 		if !spool.passthrough && r.Context().Err() == nil {
-			publicResourceDirectoryError(w, errors.Join(err, spool.err))
-			return
+			return errors.Join(err, spool.err)
 		}
 		panic(http.ErrAbortHandler)
 	}
+	releaseHydratedProducer(r.Context())
 	if !spool.passthrough && file != nil {
 		if err := sendLegacySpool(r.Context(), w, spool.status, file); err != nil {
 			panic(http.ErrAbortHandler)
 		}
 	}
+	return nil
 }
 
 func resourceConnectionFields(kind string, teams map[string]domain.Team, names map[string]string) filterFields {

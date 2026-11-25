@@ -43,12 +43,17 @@ type metadataCatalogRow struct {
 // large values without materializing them. Capture itself is bounded too:
 // an oversized title or relationship array becomes an explicit omission.
 func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, workspace string, key RecordKey, size int64) (metadataCatalogRow, error) {
-	row := metadataCatalogRow{key: key, bodyBytes: size}
 	pageBytes, err := integrationDeliveryCanonicalPageBytes(ctx, tx)
 	if err != nil {
-		return row, err
+		return metadataCatalogRow{}, err
 	}
 	r := &canonicalMetadataReader{ctx: ctx, tx: tx, workspace: workspace, key: key, size: size, pageBytes: pageBytes}
+	return projectCatalogRecord(ctx, r)
+}
+
+func projectCatalogRecord(ctx context.Context, r *canonicalMetadataReader) (metadataCatalogRow, error) {
+	key := r.key
+	row := metadataCatalogRow{key: key, bodyBytes: r.size}
 	hash := sha256.New()
 	number := metadataCatalogScalarNumber{}
 	source := io.TeeReader(r, io.MultiWriter(hash, &number))
@@ -109,7 +114,7 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 			if err := ctx.Err(); err != nil {
 				return row, err
 			}
-			return row, fmt.Errorf("metadata %s/%s: invalid canonical JSON", key.Kind, key.ID)
+			return row, fmt.Errorf("metadata %s: invalid canonical JSON", metadataRecordLabel(key.Kind, key.ID))
 		}
 	}
 	r.boundedCapture = false
@@ -122,6 +127,7 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 		id, _ := json.Marshal(key.ID)
 		summary["id"] = id
 	}
+	var err error
 	row.summary, err = json.Marshal(summary)
 	if err != nil {
 		return row, err
@@ -132,7 +138,7 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 		ArchivedAt *time.Time `json:"archivedAt"`
 	}
 	if err := json.Unmarshal(row.summary, &dates); err != nil {
-		return row, fmt.Errorf("metadata %s/%s: invalid canonical timestamps", key.Kind, key.ID)
+		return row, fmt.Errorf("metadata %s: invalid canonical timestamps", metadataRecordLabel(key.Kind, key.ID))
 	}
 	row.created = dates.CreatedAt.UTC().Format(issueRecordTimestamp)
 	row.updated = dates.UpdatedAt.UTC().Format(issueRecordTimestamp)
@@ -386,7 +392,7 @@ func (s *SQLiteStore) readMetadataCatalogPage(ctx context.Context, workspace str
 	defer tx.Rollback()
 	var phase int
 	var omissions int64
-	journal := recordJournalMode() == "on" && s.db.journalReady.Load()
+	journal := s.RecordJournalEnabled() && s.db.journalReady.Load()
 	if journal {
 		if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
 			return page, err
@@ -426,10 +432,12 @@ func (s *SQLiteStore) readMetadataCatalogPage(ctx context.Context, workspace str
 		scanned++
 		var row metadataCatalogRow
 		var omitted int
+		var summary []byte
 		row.key.Kind = q.Kind
-		if err := rows.Scan(&row.key.ID, &row.order, &row.version, &row.summary, &omitted, &row.created, &row.updated); err != nil {
+		if err := rows.Scan(&row.key.ID, &row.order, &row.version, &summary, &omitted, &row.created, &row.updated); err != nil {
 			return page, err
 		}
+		row.summary = summary
 		if journal && row.version == "0" {
 			return page, ErrRecordJournalCoverage
 		}
@@ -557,4 +565,16 @@ func metadataCatalogPageStatement(workspace string, q PageRequest, query Project
 		version = `COALESCE((SELECT v.version FROM record_versions v WHERE v.workspace_key=metadata_catalog.workspace_key AND v.field=metadata_catalog.field AND v.record_key=metadata_catalog.record_key AND v.deleted=0),0)`
 	}
 	return `SELECT record_key,collection_order,` + version + `,summary,omitted,created_at,updated_at FROM metadata_catalog WHERE ` + where + ` ORDER BY ` + order + ` LIMIT 129`, args, nil
+}
+
+// metadataRecordLabel names a stored record in operator-facing errors: the
+// collection and record ID, so a repair pass can point at the broken row,
+// except for collections that hold credentials, whose IDs never reach logs.
+func metadataRecordLabel(kind, id string) string {
+	switch kind {
+	case "apiKeys", "passkeys", "passkeyRegistrationChallenges", "oauthApplications", "oauthAuthorizations",
+		"webhooks", "integrationConnections", "identityProviders", "invitations", "workspaceInviteLink", "pushSubscriptions":
+		return kind
+	}
+	return kind + "/" + id
 }

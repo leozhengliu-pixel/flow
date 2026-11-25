@@ -382,7 +382,7 @@ func TestGitLabMemberPersonalAccessToken(t *testing.T) {
 	}
 	// The admin points the connection at another host: the link no longer
 	// applies there.
-	if err := f.repo.MutateWorkspace(t.Context(), "test-workspace", "test.move_gitlab", f.conn, nil, func(data *domain.Bootstrap) error {
+	if err := f.repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test.move_gitlab", f.conn, nil, func(data *domain.Bootstrap) error {
 		for index := range data.IntegrationConnections {
 			if data.IntegrationConnections[index].ID == f.conn {
 				data.IntegrationConnections[index].Config["host"] = "https://gitlab.other.example"
@@ -415,7 +415,7 @@ func TestGitLabMemberPersonalAccessToken(t *testing.T) {
 func (f *memberAccountsFixture) addReview() domain.CodeReview {
 	f.t.Helper()
 	var review domain.CodeReview
-	if err := f.repo.MutateWorkspace(f.t.Context(), "test-workspace", "test.review", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.repo.MutateWorkspace(workspaceFixtureContext(f.t.Context()), "test-workspace", "test.review", "", nil, func(data *domain.Bootstrap) error {
 		review = data.Reviews[0]
 		review.ID, review.SlugID, review.Provider, review.RepositoryOwner, review.RepositoryName, review.Number, review.Status = "review_member", "gitlab-3", "gitlab", "acme", "app", 3, "open"
 		review.URL, review.Draft = f.gitlab.URL+"/acme/app/-/merge_requests/3", false

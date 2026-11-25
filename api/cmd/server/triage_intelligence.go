@@ -220,7 +220,13 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 	if err != nil {
 		return nil, err
 	}
-	metadata, ok := s.store.WorkspaceMetadata(workspace)
+	// The feature switch and the triage test (isTriageIssue: team settings,
+	// with the team's states as their default) read only these fields; the
+	// whole workspace is not copied after every issue edit (issue #244).
+	metadata, ok := s.store.WorkspaceMetadataFields(workspace, "workspaceSettings", "teamSettings", "states")
+	if completeIssueWriteReads.Load() {
+		metadata, ok = s.store.WorkspaceMetadata(workspace)
+	}
 	if !ok || !triageIntelligenceEnabled(metadata.WorkspaceSettings) {
 		return nil, store.ErrNoMutation
 	}

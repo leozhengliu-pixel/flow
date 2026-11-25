@@ -10,6 +10,7 @@ import (
 )
 
 func TestMetadataOperationsDoNotExhaustTheRetryBudget(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second, workspace, _ := racePair(t, pair)
@@ -42,6 +43,7 @@ func TestMetadataOperationsDoNotExhaustTheRetryBudget(t *testing.T) {
 }
 
 func TestMetadataMembershipOperationsMergeADeletedMapKey(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second, workspace, _ := racePair(t, pair)
@@ -106,6 +108,7 @@ func TestMetadataOperationAndScalarBoundaries(t *testing.T) {
 }
 
 func TestMetadataCounterOperationsUnderSustainedContention(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second, workspace, _ := racePair(t, pair)

@@ -50,6 +50,16 @@ func (s *SQLiteStore) dataMigrations() []struct {
 	}
 }
 
+func (s *SQLiteStore) dataMigrationsPending(ctx context.Context) (bool, error) {
+	for _, migration := range s.dataMigrations() {
+		applied, err := s.migrationApplied(ctx, migration.version)
+		if err != nil || !applied {
+			return !applied, err
+		}
+	}
+	return false, nil
+}
+
 func (s *SQLiteStore) runDataMigrations(ctx context.Context) error {
 	for _, migration := range s.dataMigrations() {
 		applied, err := s.migrationApplied(ctx, migration.version)

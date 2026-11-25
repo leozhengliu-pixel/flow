@@ -46,13 +46,18 @@ func scaleP09Database(t *testing.T) scaleP09Fixture {
 	}
 	workspace := ""
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
 		if workspace != "" {
-			if err := repo.DeleteWorkspace(ctx, workspace); err != nil {
+			// Large fixtures, including 300,000 release links, purge many
+			// batches under -race. Give account cleanup its own deadline.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			err := repo.DeleteWorkspace(ctx, workspace)
+			cancel()
+			if err != nil {
 				t.Errorf("clean up owned workspace: %v", err)
 			}
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
 		if err := repo.EraseAccount(ctx, user.ID); err != nil {
 			t.Errorf("clean up owned account: %v", err)
 		}
@@ -395,9 +400,9 @@ func TestScaleP09OffRestoresLegacyWrites(t *testing.T) {
 	if _, err := f.ReadCommittedChanges(t.Context(), f.data.Workspace.ID, after, 100, 4096); !errors.Is(err, ErrRecordJournalUnavailable) {
 		t.Fatalf("disabled journal served changes: %v", err)
 	}
-	for input, want := range map[string]string{"": "off", "unknown": "off", "on": "on", "shadow": "shadow", "off": "off"} {
+	for input, want := range map[string]string{"unknown": "off", "on": "on", "shadow": "shadow", "off": "off"} {
 		t.Setenv("FLOW_RECORD_JOURNAL", input)
-		if got := recordJournalMode(); got != want {
+		if got := recordJournalMode(f.dialect); got != want {
 			t.Fatalf("mode %q = %q, want %q", input, got, want)
 		}
 	}

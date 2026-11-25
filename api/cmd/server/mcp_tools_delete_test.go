@@ -22,7 +22,9 @@ func (f *mcpContractFixture) restoreFromTrash(t *testing.T, resourceType, resour
 	}
 	entry := f.repository.Bootstrap().Trash[index]
 	actor := mcpActor{WorkspaceKey: f.data.Workspace.URLKey, User: f.data.Viewer, APIKey: domain.APIKey{Scopes: []string{"read", "write"}}}
-	if _, err := f.service.invokeMCPRoute(t.Context(), actor, http.MethodPost, "/api/trash/"+entry.ID+"/restore", map[string]string{"id": entry.ID}, nil, f.service.restoreTrashEntry); err != nil {
+	ctx, closeReads := beginMetadataOutputReads(workspaceFixtureContext(t.Context()))
+	defer closeReads()
+	if _, err := f.service.invokeMCPRoute(ctx, actor, http.MethodPost, "/api/trash/"+entry.ID+"/restore", map[string]string{"id": entry.ID}, nil, f.service.restoreTrashEntry); err != nil {
 		t.Fatalf("restore %s: %v", resourceType, err)
 	}
 }
@@ -53,7 +55,9 @@ func TestMCPDeleteProjectMovesItToTrashWithItsCounts(t *testing.T) {
 	}
 
 	actor := mcpActor{WorkspaceKey: f.data.Workspace.URLKey, User: f.data.Viewer, APIKey: domain.APIKey{Scopes: []string{"read", "write"}}}
-	previewed, err := f.service.flowDeletePreview(t.Context(), actor, "mcp__flow.delete_project", map[string]any{"id": "QA fix – Retired project"})
+	ctx, closeReads := beginMetadataOutputReads(workspaceFixtureContext(t.Context()))
+	defer closeReads()
+	previewed, err := f.service.flowDeletePreview(ctx, actor, "mcp__flow.delete_project", map[string]any{"id": "QA fix – Retired project"})
 	var preview map[string]any
 	if cloneErr := jsonClone(previewed, &preview); cloneErr != nil {
 		t.Fatal(cloneErr)

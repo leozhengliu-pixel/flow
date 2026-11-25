@@ -6,8 +6,6 @@ import (
 	"context"
 	"os"
 	"testing"
-
-	"flow/api/internal/domain"
 )
 
 func TestExternalDatabaseWorkspaceRoundTrip(t *testing.T) {
@@ -28,10 +26,9 @@ func TestExternalDatabaseWorkspaceRoundTrip(t *testing.T) {
 	if created.Workspace.URLKey != workspaceKey || len(created.Teams) != 1 || len(created.Issues) != 0 {
 		t.Fatalf("unexpected workspace: %#v", created)
 	}
-	if err := repository.MutateWorkspace(context.Background(), workspaceKey, "integration.updated", created.Workspace.ID, nil, func(data *domain.Bootstrap) error {
-		data.Workspace.Name = "Persisted Integration Workspace"
-		return nil
-	}); err != nil {
+	workspace := created.Workspace
+	workspace.Name = "Persisted Integration Workspace"
+	if _, err := repository.UpdateWorkspace(context.Background(), workspaceKey, workspace); err != nil {
 		t.Fatal(err)
 	}
 	if err := repository.Close(); err != nil {

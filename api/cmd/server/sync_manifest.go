@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -44,8 +43,8 @@ func syncFlagEnabled(name string) bool {
 	}
 }
 
-func syncV2CapabilityAdvertised(journalReady, coreReady bool) bool {
-	return journalReady && coreReady && syncV2Enabled() && syncFlagEnabled("FLOW_SYNC_MANIFEST") && syncFlagEnabled("FLOW_INDEXED_READS")
+func (s *server) syncV2CapabilityAdvertised(journalReady, coreReady bool) bool {
+	return journalReady && coreReady && s.store.SyncV2Enabled() && syncFlagEnabled("FLOW_SYNC_MANIFEST") && syncFlagEnabled("FLOW_INDEXED_READS")
 }
 
 func syncReadRequest(r *http.Request) bool {
@@ -157,7 +156,7 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 		collectionsReady = collectionsReady && ready
 		result.Collections[kind] = syncManifestCollection{Ready: ready, Revision: status.Revision}
 	}
-	if collectionsReady && syncV2CapabilityAdvertised(journalReady && journalHead != "", len(core.Omitted) == 0) {
+	if collectionsReady && s.syncV2CapabilityAdvertised(journalReady && journalHead != "", len(core.Omitted) == 0) {
 		result.Head = journalHead
 		result.Capabilities = []string{"sync-v2"}
 	}
@@ -192,12 +191,10 @@ func writeSyncError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "Sync cursor changed; reload the manifest")
 	case isRetryableBusy(err):
 		retryAfter, _ := retryableBusy(err)
-		slog.Warn("sync records busy", "error", err)
+		slog.Warn("sync records busy", "cause", requestErrorCode(err))
 		(&metadataReadGate{}).busy(w, retryAfter)
 	default:
-		// The response stays generic; the cause (an unready collection, a
-		// coverage gap or a database error) is logged for diagnosis.
-		slog.Warn("sync records unavailable", "error", err, "error_type", fmt.Sprintf("%T", err))
+		slog.Warn("sync records unavailable", "cause", requestErrorCode(err))
 		writeError(w, http.StatusServiceUnavailable, "Sync records are not ready; use the legacy read endpoint")
 	}
 }

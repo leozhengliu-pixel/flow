@@ -24,7 +24,7 @@ func TestPagedWorkspaceMetadataKeepsIssueLinkedCustomerRequests(t *testing.T) {
 	}
 	issueID := data.Issues[0].ID
 	now := time.Now().UTC()
-	err = repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.customer_requests", "", nil, func(d *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), data.Workspace.URLKey, "test.customer_requests", "", nil, func(d *domain.Bootstrap) error {
 		d.Customers = append(d.Customers, domain.Customer{ID: "customer_paged", Name: "Paged Co", Status: "active", Domains: []string{}, CreatedAt: now, UpdatedAt: now})
 		d.CustomerRequests = append(d.CustomerRequests,
 			domain.CustomerRequest{ID: "customer_request_issue", CustomerID: "customer_paged", Body: "on an issue", IssueID: issueID, Attachments: []domain.Attachment{}, CreatedAt: now, UpdatedAt: now},
@@ -36,7 +36,7 @@ func TestPagedWorkspaceMetadataKeepsIssueLinkedCustomerRequests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	metadata, err := repo.PagedWorkspaceMetadata(t.Context(), data.Workspace.URLKey, data.Viewer.ID)
+	metadata, err := repo.PagedWorkspaceMetadata(WithColdWork(t.Context(), "paged metadata projection"), data.Workspace.URLKey, data.Viewer.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,7 +17,7 @@ func TestChatDomainReplayRetainsUnacknowledgedEventsAcrossRestart(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
+	ctx := WithColdWork(t.Context(), "chat replay fixture")
 	workspace := "test-workspace"
 	if err := repository.InitializeChatDomainCursor(ctx, workspace); err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestChatDomainReplayReportsRetentionGap(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
-	ctx := context.Background()
+	ctx := WithColdWork(t.Context(), "chat retention fixture")
 	if err := repository.InitializeChatDomainCursor(ctx, "test-workspace"); err != nil {
 		t.Fatal(err)
 	}
@@ -164,6 +164,8 @@ func TestChatSnapshotsSurviveInterruptedDisplayMetadataSync(t *testing.T) {
 }
 
 func TestChatSnapshotFlagFollowsIntegrationWritesWithoutPerMutationQueries(t *testing.T) {
+	// This cache belongs to the legacy webhook snapshot policy.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "chat-snapshot-flag.db"))
 	if err != nil {
 		t.Fatal(err)

@@ -1451,6 +1451,8 @@ func (s *server) runAgentToolCall(r *http.Request, data domain.Bootstrap, call d
 	ctx := context.WithValue(r.Context(), authUserContextKey{}, data.Viewer)
 	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, workspaceKey(r))
 	ctx = store.ContextWithActor(ctx, data.Viewer)
+	ctx, finish := beginMetadataOutputReads(store.WithColdWork(ctx, "agent tool"))
+	defer finish()
 	// The agent's writes are made on the server, not by the tab that asked (it applies nothing itself): their realtime
 	// events go to that tab too. With the asking tab's client id it dropped them as its own echo, so the document a
 	// reply had just created was missing from that tab and the reply's link to it opened an empty page.

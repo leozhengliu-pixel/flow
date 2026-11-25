@@ -102,31 +102,31 @@ func TestScaleP04VerificationPreservesFieldsAndIdentities(t *testing.T) {
 		}}
 	}
 	first, second := makeResult(), makeResult()
-	if path := compareMutationCallbacks(first, second, protected); path != "" {
+	if path := compareMutationCallbacks(t.Context(), first, second, protected); path != "" {
 		t.Fatalf("new clocks/ids did not normalize: %s", path)
 	}
 	second.Data.Comments["issue"][1].Body = "changed"
-	if compareMutationCallbacks(first, second, protected) == "" {
+	if compareMutationCallbacks(t.Context(), first, second, protected) == "" {
 		t.Fatal("changed body was ignored")
 	}
 	second = makeResult()
 	second.Data.Settings["existing"] = idgen.Stamp()
-	if compareMutationCallbacks(first, second, protected) == "" {
+	if compareMutationCallbacks(t.Context(), first, second, protected) == "" {
 		t.Fatal("existing identifier was normalized away")
 	}
 	second = makeResult()
 	second.Data.Comments["issue"] = second.Data.Comments["issue"][:1]
-	if compareMutationCallbacks(first, second, protected) == "" {
+	if compareMutationCallbacks(t.Context(), first, second, protected) == "" {
 		t.Fatal("record cardinality was ignored")
 	}
 	second = makeResult()
 	second.ErrorType, second.Error = "error", "changed error"
-	if compareMutationCallbacks(first, second, protected) == "" {
+	if compareMutationCallbacks(t.Context(), first, second, protected) == "" {
 		t.Fatal("callback error was ignored")
 	}
 	second = makeResult()
 	second.Audit = []domain.AuditLogEntry{{ID: "extra", Action: "extra"}}
-	if compareMutationCallbacks(first, second, protected) == "" {
+	if compareMutationCallbacks(t.Context(), first, second, protected) == "" {
 		t.Fatal("audit intent was ignored")
 	}
 }

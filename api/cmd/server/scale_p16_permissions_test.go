@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"reflect"
+	"slices"
 	"testing"
 
 	"flow/api/internal/domain"
@@ -23,7 +25,7 @@ func scaleP16PermissionMatrix(t *testing.T, mutations bool) {
 			f := scaleP03Fixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			ctx := t.Context()
-			if err := repo.MutateWorkspace(ctx, workspace, "scale_p16.seed", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p16.seed", "", nil, func(data *domain.Bootstrap) error {
 				data.Teams = append(data.Teams, domain.Team{ID: "p16-open", Key: "P16O"}, domain.Team{ID: "p16-private", Key: "P16P", Private: true}, domain.Team{ID: "p16-child", Key: "P16C"})
 				data.TeamSettings["p16-private"] = domain.TeamSettings{TeamID: "p16-private", Access: "private"}
 				data.TeamSettings["p16-child"] = domain.TeamSettings{TeamID: "p16-child", ParentTeamID: "p16-private", Access: "public"}
@@ -32,9 +34,9 @@ func scaleP16PermissionMatrix(t *testing.T, mutations bool) {
 					domain.Project{ID: "p16-secret-project", SlugID: "collision-012345abcdef", Name: "Secret", TeamIDs: []string{"p16-private"}},
 					domain.Project{ID: "p16-child-project", Name: "Inherited", TeamIDs: []string{"p16-child"}})
 				data.Initiatives = append(data.Initiatives,
-					domain.Initiative{ID: "p16-public-initiative", Name: "Public", PreviousSlugIDs: []string{"p16-old-initiative", "collision-abcdef012345"}, ProjectIDs: []string{"p16-public-project"}, LeadTeamID: "p16-open"},
-					domain.Initiative{ID: "p16-secret-initiative", SlugID: "collision-abcdef012345", Name: "Secret", ProjectIDs: []string{"p16-secret-project"}, LeadTeamID: "p16-private"},
-					domain.Initiative{ID: "p16-child-initiative", Name: "Inherited", ProjectIDs: []string{"p16-child-project"}, LeadTeamID: "p16-child"})
+					domain.Initiative{ID: "p16-public-initiative", Name: "Public", Creator: f.data.Viewer, PreviousSlugIDs: []string{"p16-old-initiative", "collision-abcdef012345"}, ProjectIDs: []string{"p16-public-project"}, LeadTeamID: "p16-open"},
+					domain.Initiative{ID: "p16-secret-initiative", SlugID: "collision-abcdef012345", Name: "Secret", Creator: f.data.Viewer, ProjectIDs: []string{"p16-secret-project"}, LeadTeamID: "p16-private"},
+					domain.Initiative{ID: "p16-child-initiative", Name: "Inherited", Creator: f.data.Viewer, ProjectIDs: []string{"p16-child-project"}, LeadTeamID: "p16-child"})
 				return nil
 			}); err != nil {
 				t.Fatal(err)
@@ -51,7 +53,7 @@ func scaleP16PermissionMatrix(t *testing.T, mutations bool) {
 			unrestricted := scaleP03Key(t, f, []string{"read", "write"}, nil)
 			selected := scaleP03Key(t, f, []string{"read", "write"}, []string{"p16-open"})
 			empty := idgen.New("p16-empty-")
-			if err := repo.MutateWorkspace(ctx, workspace, "scale_p16.seed", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p16.seed", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: idgen.New("p16-key-"), Name: "Selected empty", SecretHash: secretHash(empty), CreatorID: data.Viewer.ID, Scopes: []string{"read", "write"}, TeamRestriction: "selected", TeamIDs: []string{}})
 				return nil
 			}); err != nil {
@@ -72,11 +74,11 @@ func scaleP16PermissionMatrix(t *testing.T, mutations bool) {
 				{"key-unrestricted", unrestricted, nil}, {"key-selected-set", selected, nil}, {"key-selected-empty", empty, nil},
 			} {
 				t.Run(principal.name, func(t *testing.T) {
-					for _, key := range []string{workspace, other.Workspace.URLKey} {
-						for _, path := range []string{"projects/p16-public-project", "projects/p16-old-slug", "projects/collision-012345abcdef", "projects/p16-secret-project", "projects/p16-child-project", "initiatives/p16-public-initiative", "initiatives/p16-old-initiative", "initiatives/collision-abcdef012345", "initiatives/p16-secret-initiative", "initiatives/p16-child-initiative"} {
+					for workspaceIndex, key := range []string{workspace, other.Workspace.URLKey} {
+						for routeIndex, path := range []string{"projects/p16-public-project", "projects/p16-old-slug", "projects/collision-012345abcdef", "projects/p16-secret-project", "projects/p16-child-project", "initiatives/p16-public-initiative", "initiatives/p16-old-initiative", "initiatives/collision-abcdef012345", "initiatives/p16-secret-initiative", "initiatives/p16-child-initiative"} {
 							var oldStatus int
 							var old any
-							var oldEffects string
+							var oldEffects map[string]string
 							for _, mode := range []string{"off", "on"} {
 								t.Setenv("FLOW_RECORD_HYDRATION", "on")
 								t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", mode)
@@ -117,14 +119,20 @@ func scaleP16PermissionMatrix(t *testing.T, mutations bool) {
 									value = scaleP04Normalize(raw)
 									if mode == "off" {
 										oldEffects = effects
-									} else if oldEffects != effects {
-										t.Fatalf("%s workspace=%s: committed state, audit, events or webhooks differ", path, key)
+									} else if !maps.Equal(oldEffects, effects) {
+										var changed []string
+										for _, name := range slices.Sorted(maps.Keys(effects)) {
+											if oldEffects[name] != effects[name] {
+												changed = append(changed, name)
+											}
+										}
+										t.Fatalf("route %d workspace %d: effects differ in %v (status %d -> %d)", routeIndex, workspaceIndex, changed, oldStatus, response.StatusCode)
 									}
 								}
 								if mode == "off" {
 									oldStatus, old = response.StatusCode, value
 								} else if oldStatus != response.StatusCode || !reflect.DeepEqual(old, value) {
-									t.Fatalf("%s workspace=%s: old status=%d new=%d, response differs=%t", path, key, oldStatus, response.StatusCode, !reflect.DeepEqual(old, value))
+									t.Fatalf("route %d workspace %d: status %d -> %d, response differs=%t", routeIndex, workspaceIndex, oldStatus, response.StatusCode, !reflect.DeepEqual(old, value))
 								}
 							}
 						}

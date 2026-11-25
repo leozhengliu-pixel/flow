@@ -169,7 +169,7 @@ func TestScaleP10LegacyConnectionsAndTokens(t *testing.T) {
 		t.Run(driver, func(t *testing.T) {
 			f := scaleP03Fixture(t, repo)
 			workspace := f.data.Workspace.URLKey
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p10.fixture", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p10.fixture", "", nil, func(data *domain.Bootstrap) error {
 				for i := range 4 {
 					data.Projects = append(data.Projects, domain.Project{ID: fmt.Sprintf("p10-%d", i), Name: fmt.Sprintf("P10 %d", i), TeamIDs: []string{data.Teams[0].ID}, PreviousSlugIDs: []string{fmt.Sprintf("old-p10-%d", i)}})
 				}

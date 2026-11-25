@@ -19,14 +19,14 @@ const bootstrapIssuePayloadBatchBytes = 256 << 10
 // The bootstrap owner supplies admitted raw reference inputs and keeps this
 // matching SQL snapshot open through every synchronous row callback.
 func (s *SQLiteStore) walkBoundedBootstrapIssueRecords(ctx context.Context, q IssueRecordQuery, visit func(domain.Issue) error) error {
-	return s.walkBoundedBootstrapIssueRows(ctx, q, false, visit)
+	return s.walkBoundedBootstrapIssueRows(ctx, q, false, false, visit)
 }
 
 func (s *SQLiteStore) walkBoundedBootstrapIssueOutlines(ctx context.Context, workspace string, visit func(domain.Issue) error) error {
-	return s.walkBoundedBootstrapIssueRows(ctx, IssueRecordQuery{Workspace: workspace}, true, visit)
+	return s.walkBoundedBootstrapIssueRows(ctx, IssueRecordQuery{Workspace: workspace}, true, false, visit)
 }
 
-func (s *SQLiteStore) walkBoundedBootstrapIssueRows(ctx context.Context, q IssueRecordQuery, outline bool, visit func(domain.Issue) error) error {
+func (s *SQLiteStore) walkBoundedBootstrapIssueRows(ctx context.Context, q IssueRecordQuery, outline, standalone bool, visit func(domain.Issue) error) error {
 	if s == nil || !s.BoundedMetadataEnabled() || visit == nil {
 		return ErrBoundedMetadataCoverage
 	}
@@ -52,9 +52,28 @@ func (s *SQLiteStore) walkBoundedBootstrapIssueRows(ctx context.Context, q Issue
 		}
 		prefix, prefixArgs = issueAccessCTE(q)
 	}
-	snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead)
-	if !ok || snapshot.database != s.db || snapshot.workspace != q.Workspace || snapshot.reader == nil ||
-		snapshot.reader.database != s.db || snapshot.reader.dialect != s.dialect {
+	snapshot, borrowed := ctx.Value(workspaceReadKey{}).(workspaceRead)
+	tx := snapshot.reader
+	if borrowed {
+		if snapshot.database != s.db || snapshot.workspace != q.Workspace || tx == nil ||
+			tx.database != s.db || tx.dialect != s.dialect {
+			return ErrBoundedMetadataCoverage
+		}
+	} else if standalone {
+		// The filtered list owns its snapshot and loads only the display
+		// references used by each batch.
+		tx, err = s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if _, err := readMetadataStamp(ctx, tx, q.Workspace); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrAuthForbidden
+			}
+			return err
+		}
+	} else {
 		return ErrBoundedMetadataCoverage
 	}
 	workspace, body := q.Workspace, "i.data"
@@ -63,13 +82,12 @@ func (s *SQLiteStore) walkBoundedBootstrapIssueRows(ctx context.Context, q Issue
 		workspace = snapshot.metadata.Workspace.URLKey
 		where, args = "i.workspace_key=?", []any{workspace}
 		body = "COALESCE(i.list_data,i.data)"
-	} else {
+	} else if borrowed {
 		if err := reserveBootstrapIssueReferences(ctx, cursor, snapshot.metadata); err != nil {
 			return err
 		}
 		refs = newIssueReferences(snapshot.metadata)
 	}
-	tx := snapshot.reader
 	length := cursor.byteLength
 	var maxID int64
 	if err := tx.QueryRowContext(ctx, prefix+"SELECT COALESCE(MAX("+length("i.id")+"),0) FROM issue_records i WHERE "+where,
@@ -120,7 +138,7 @@ func (s *SQLiteStore) walkBoundedBootstrapIssueRows(ctx context.Context, q Issue
 				size += headers[end].size
 				end++
 			}
-			if err := s.visitBootstrapIssueWalkBatch(ctx, tx, workspace, headers[start:end], size, refs, outline, visit); err != nil {
+			if err := s.visitBootstrapIssueWalkBatch(ctx, tx, workspace, headers[start:end], size, refs, outline, !borrowed, visit); err != nil {
 				return err
 			}
 			start = end
@@ -184,7 +202,7 @@ func bootstrapIssueWalkHeaders(ctx context.Context, tx *sqlTx, query string, arg
 	return headers, nil
 }
 
-func (s *SQLiteStore) visitBootstrapIssueWalkBatch(ctx context.Context, tx *sqlTx, workspace string, headers []legacyIssueScanHeader, size int64, refs issueReferences, outline bool, visit func(domain.Issue) error) error {
+func (s *SQLiteStore) visitBootstrapIssueWalkBatch(ctx context.Context, tx *sqlTx, workspace string, headers []legacyIssueScanHeader, size int64, refs issueReferences, outline, loadReferences bool, visit func(domain.Issue) error) error {
 	if len(headers) == 0 || len(headers) > bootstrapIssuePayloadBatchRows || size < 0 ||
 		len(headers) > 1 && size > bootstrapIssuePayloadBatchBytes {
 		return ErrMetadataWorkBudget
@@ -248,11 +266,48 @@ func (s *SQLiteStore) visitBootstrapIssueWalkBatch(ctx context.Context, tx *sqlT
 	if len(bodies) != len(headers) {
 		return io.ErrUnexpectedEOF
 	}
+	if loadReferences {
+		return s.visitIssueScanBatch(ctx, tx, workspace, bodies, visit)
+	}
 	for index, raw := range bodies {
 		err := s.visitBootstrapIssueWalkRow(ctx, raw, refs, outline, visit)
 		clear(raw)
 		bodies[index] = nil
 		if err != nil {
+			return err
+		}
+	}
+	return ctx.Err()
+}
+
+func (s *SQLiteStore) visitIssueScanBatch(ctx context.Context, tx *sqlTx, workspace string, bodies [][]byte, visit func(domain.Issue) error) error {
+	owner := &ResourceRead{store: s}
+	defer owner.Close()
+	issueBytes := uint64(reflect.TypeFor[domain.Issue]().Size())
+	if err := owner.reserve(ctx, uint64(len(bodies))*issueBytes+4096); err != nil {
+		return err
+	}
+	issues := make([]domain.Issue, 0, len(bodies))
+	for _, raw := range bodies {
+		if err := s.visitBootstrapIssueWalkRow(ctx, raw, issueReferences{}, false, func(issue domain.Issue) error {
+			cost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(issue), 0)
+			if err != nil {
+				return err
+			}
+			if err := owner.reserve(ctx, cost); err != nil {
+				return err
+			}
+			issues = append(issues, issue)
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	if err := s.resolveIssueCandidateReferencesInSnapshot(ctx, tx, workspace, owner, issues); err != nil {
+		return err
+	}
+	for _, issue := range issues {
+		if err := visit(issue); err != nil {
 			return err
 		}
 	}

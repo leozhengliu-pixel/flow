@@ -126,7 +126,7 @@ func TestIssueRecordsBootstrapOmitsOrgLeafTeams(t *testing.T) {
 	}
 	defer repository.Close()
 	data := repository.Bootstrap()
-	err = repository.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.org_leaf_bootstrap", "team_hr_leaf", nil, func(next *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "test.org_leaf_bootstrap", "team_hr_leaf", nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, domain.Team{ID: "team_hr_leaf", Name: "智造生产节点", Key: "X988G", ExternalSource: "hr:org:node:00013902", Private: true})
 		next.TeamSettings["team_hr_leaf"] = domain.TeamSettings{TeamID: "team_hr_leaf"}
 		next.States = append(next.States, domain.WorkflowState{ID: "node-todo", TeamID: "team_hr_leaf", Name: "Todo", Type: "unstarted"})

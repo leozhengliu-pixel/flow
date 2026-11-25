@@ -53,7 +53,7 @@ func testFavoriteTabsHTTPRoundTrip(t *testing.T, repo *store.SQLiteStore) {
 	const workspace = "test-workspace"
 	data := repo.Bootstrap()
 	pipelineID := fmt.Sprintf("favorite-tab-pipeline-%d", time.Now().UnixNano())
-	if err := repo.MutateWorkspace(ctx, workspace, "test.favorite_tabs", "", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "test.favorite_tabs", "", nil, func(next *domain.Bootstrap) error {
 		next.ReleasePipelines = append(next.ReleasePipelines, domain.ReleasePipeline{ID: pipelineID, SlugID: pipelineID, Name: "Favorite tabs", TeamIDs: []string{data.Teams[0].ID}, Type: "scheduled"})
 		return nil
 	}); err != nil {

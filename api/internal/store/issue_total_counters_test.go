@@ -104,7 +104,7 @@ func TestIssueTotalHidesArchivedTeams(t *testing.T) {
 	archivedTeam := domain.Team{ID: "team_archived_window", Name: "Gone", Key: "GON"}
 	now := time.Now().UTC()
 	archivedTeam.ArchivedAt = &now
-	if err := repository.MutateWorkspace(ctx, key, "team.archived", archivedTeam.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), key, "team.archived", archivedTeam.ID, nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, archivedTeam)
 		return nil
 	}); err != nil {

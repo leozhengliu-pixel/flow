@@ -60,6 +60,7 @@ func TestDocumentReadsAvoidIssueHydration(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	repairFixtureJournal(t, repo)
 	if _, ok := repo.BootstrapForContext(t.Context(), key); ok {
 		t.Fatal("poisoned fixture did not block full hydration")
 	}

@@ -162,7 +162,7 @@ func (s *metadataLogicalStorage) append(data []byte) error {
 	if s.closed {
 		return errMetadataLogicalClosed
 	}
-	if len(s.pending)+len(data) > metadataLogicalWriteBytes {
+	if len(data) > metadataLogicalWriteBytes-len(s.pending) {
 		if err := s.flushLocked(); err != nil {
 			return err
 		}
@@ -183,8 +183,13 @@ func (s *metadataLogicalStorage) append(data []byte) error {
 	}
 	// The buffer grows with the spool up to its bound: most spools hold one
 	// small record.
-	if need := len(s.pending) + len(data); need > cap(s.pending) {
-		grown := make([]byte, len(s.pending), min(max(need, 2*cap(s.pending), 512), metadataLogicalWriteBytes))
+	need, err := boundedMetadataSize(metadataLogicalWriteBytes, len(s.pending), len(data))
+	if err != nil {
+		return err
+	}
+	if need > cap(s.pending) {
+		capacity := max(need, 2*min(cap(s.pending), metadataLogicalWriteBytes/2), 512)
+		grown := make([]byte, len(s.pending), capacity)
 		copy(grown, s.pending)
 		s.pending = grown
 	}

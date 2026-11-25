@@ -18,16 +18,16 @@ func TestScaleP21ActivationGuardAcceptsColdConsumers(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "")
-	if err := validateBoundedMetadataCoverage(); err != nil {
+	if err := validateBoundedMetadataCoverage("sqlite"); err != nil {
 		t.Fatalf("activation refused: %v", err)
 	}
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "shadow")
-	if err := validateBoundedMetadataCoverage(); !errors.Is(err, ErrBoundedMetadataCoverage) {
+	if err := validateBoundedMetadataCoverage("sqlite"); !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatalf("peer shadow accepted: %v", err)
 	}
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	if err := validateBoundedMetadataCoverage(); !errors.Is(err, ErrBoundedMetadataCoverage) {
+	if err := validateBoundedMetadataCoverage("sqlite"); !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatalf("journal off accepted: %v", err)
 	}
 }

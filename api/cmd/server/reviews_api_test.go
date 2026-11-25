@@ -17,7 +17,7 @@ func TestReviewLifecycleAndCodeConnections(t *testing.T) {
 	defer repository.Close()
 	// This lifecycle case exercises local reviews; provider HTTP behavior has
 	// separate tests with a real local upstream server.
-	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "review.local_fixture", "", nil, func(data *domain.Bootstrap) error { data.Reviews[0].Provider = ""; return nil }); err != nil {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "review.local_fixture", "", nil, func(data *domain.Bootstrap) error { data.Reviews[0].Provider = ""; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
@@ -145,7 +145,7 @@ func TestReviewCommentRepliesAndThreadResolution(t *testing.T) {
 	// Review summaries accept replies in the overview conversation.
 	// The sample review points at a code host nobody connected; approving it
 	// there needs the member's own account. A Flow-only review needs none.
-	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "test.review", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test.review", "", nil, func(data *domain.Bootstrap) error {
 		data.Reviews[reviewIndex(*data, review.ID)].Provider = ""
 		return nil
 	}); err != nil {

@@ -22,7 +22,8 @@ func TestWorkspaceInitialsColorMigration(t *testing.T) {
 			t.Fatal(err)
 		}
 		key := repo.Bootstrap().Workspace.URLKey
-		if err := repo.MutateWorkspace(WithMetadataFields(t.Context(), "workspace"), key, "test.legacy", "", nil, func(data *domain.Bootstrap) error {
+		ctx := WithColdWork(t.Context(), "workspace color fixture")
+		if err := repo.MutateWorkspace(WithMetadataFields(ctx, "workspace"), key, "test.legacy", "", nil, func(data *domain.Bootstrap) error {
 			data.Workspace.Color = tc.stored
 			return nil
 		}); err != nil && tc.stored != "" {

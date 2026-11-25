@@ -89,9 +89,11 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 		if next.UserSettings == nil {
 			next.UserSettings = map[string]domain.UserSettings{}
 		}
-		// Another instance may have written this user's settings; start from
-		// the stored record.
-		if id := mutationAggregateID(ctx); id != "" {
+		// Installed defaults are not a stored merge base. Read the locked row
+		// if it exists, and otherwise allow the user's first settings write.
+		id := mutationAggregateID(ctx)
+		storedAggregate := false
+		if id != "" {
 			var raw []byte
 			err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='userSettings' AND record_key=?`+lock, workspace, id).Scan(&raw)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -103,6 +105,7 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 					return err
 				}
 				next.UserSettings[id] = stored
+				storedAggregate = true
 			}
 		}
 		before := maps.Clone(next.UserSettings)
@@ -145,7 +148,8 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 			// Settings other than the actor's come from this server's copy:
 			// apply only this change onto the stored record.
 			var base []byte
-			if existed {
+			stored := existed && (key != id || storedAggregate)
+			if stored {
 				if base, err = json.Marshal(previous); err != nil {
 					return err
 				}
@@ -168,7 +172,7 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 			if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'userSettings',?,0,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, workspace, key, raw); err != nil {
 				return err
 			}
-			if _, existed := before[key]; !existed {
+			if !stored {
 				if err := ensureOAuthMetadataShape(ctx, tx, workspace, "userSettings", "map", lock); err != nil {
 					return err
 				}

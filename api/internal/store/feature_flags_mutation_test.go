@@ -21,7 +21,7 @@ func TestFeatureFlagsUseOnlySettingsRows(t *testing.T) {
 	key := data.Workspace.URLKey
 	writes := auditWrites(t, repo)
 	for _, enabled := range []bool{false, true, false} {
-		err := repo.MutateWorkspace(t.Context(), key, "workspace_preferences.updated", "workspace", map[string]any{"featureFlags": map[string]bool{"pulse": enabled}}, func(next *domain.Bootstrap) error {
+		err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), key, "workspace_preferences.updated", "workspace", map[string]any{"featureFlags": map[string]bool{"pulse": enabled}}, func(next *domain.Bootstrap) error {
 			if len(next.Issues)+len(next.Projects)+len(next.Users)+len(next.Documents)+len(next.Comments)+len(next.Activities) != 0 {
 				t.Fatal("toggle received unrelated workspace collections")
 			}
@@ -38,7 +38,7 @@ func TestFeatureFlagsUseOnlySettingsRows(t *testing.T) {
 		}
 	}
 	failure := errors.New("validation failed")
-	err = repo.MutateWorkspace(t.Context(), key, "workspace_preferences.updated", "workspace", map[string]any{"featureFlags": map[string]bool{"pulse": true}}, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), key, "workspace_preferences.updated", "workspace", map[string]any{"featureFlags": map[string]bool{"pulse": true}}, func(next *domain.Bootstrap) error {
 		next.WorkspaceSettings.FeatureFlags["pulse"] = true
 		return failure
 	})

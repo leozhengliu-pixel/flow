@@ -47,6 +47,7 @@ func cacheWindowWorkspace(t *testing.T, writer *SQLiteStore) (string, domain.Iss
 }
 
 func TestHotCacheRevisionForWritesWithoutIssueChanges(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			writer, reader := pair[0], pair[1]
@@ -119,6 +120,7 @@ func TestHotCacheRevisionForWritesWithoutIssueChanges(t *testing.T) {
 }
 
 func TestHotCacheMetadataRevisionForUsageAndMigration(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			writer, reader := pair[0], pair[1]

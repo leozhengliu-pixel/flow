@@ -24,7 +24,7 @@ func TestCapSearchTextCountsCharacters(t *testing.T) {
 }
 
 func TestSearchIndexCapAppliesToIssuesAndDocuments(t *testing.T) {
-	ctx := context.Background()
+	ctx := WithColdWork(context.Background(), "search cap fixture")
 	path := filepath.Join(t.TempDir(), "flow.db")
 	open := func(limit int) *SQLiteStore {
 		t.Helper()

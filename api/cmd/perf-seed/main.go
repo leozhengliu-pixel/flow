@@ -121,7 +121,7 @@ func main() {
 	for index := range worlds {
 		world := &worlds[index]
 		if err := seedMetadata(ctx, s, world); err != nil {
-			log.Fatalf("seed workspace %s: %v", world.key, err)
+			log.Fatalf("seed workspace %s failed (database code: %s)", world.key, store.DatabaseErrorCode(err))
 		}
 		began := time.Now()
 		if err := seedIssues(ctx, s, world); err != nil {
@@ -642,6 +642,15 @@ func mysqlDSN(raw string) (string, error) {
 	return fmt.Sprintf("%s@tcp(%s)/%s?%s", credentials, parsed.Host, strings.TrimPrefix(parsed.Path, "/"), query.Encode()), nil
 }
 
+const seedContentBatchSize = 400
+
+func seedContentBatchArgs(rows [][]any, columns int) ([]any, error) {
+	if len(rows) > seedContentBatchSize || columns < 1 || columns > 11 {
+		return nil, store.ErrTransactionWriteBudget
+	}
+	return make([]any, 0, len(rows)*columns), nil
+}
+
 // seedContent writes comments, activity history, field history and inbox
 // notifications directly into the content table. The rows match what the
 // server writes (the same JSON shapes and index columns), so reads exercise
@@ -659,14 +668,17 @@ func seedContent(ctx context.Context, db *sql.DB, driver string, world *seedWorl
 		suffix = " ON DUPLICATE KEY UPDATE created_at=VALUES(created_at),data=VALUES(data),owner_id=VALUES(owner_id),parent_id=VALUES(parent_id),status=VALUES(status),next_attempt_at=VALUES(next_attempt_at),record_version=VALUES(record_version)"
 	}
 	const tuple = "(?,?,?,?,?,?,?,?,?,?,?)"
-	batch := 400
+	const batch = seedContentBatchSize
 	insert := func(rows [][]any) error {
 		if len(rows) == 0 {
 			return nil
 		}
 		var builder strings.Builder
 		builder.WriteString(quote)
-		args := make([]any, 0, len(rows)*11)
+		args, err := seedContentBatchArgs(rows, 11)
+		if err != nil {
+			return err
+		}
 		for i, row := range rows {
 			if i > 0 {
 				builder.WriteString(",")
@@ -675,7 +687,7 @@ func seedContent(ctx context.Context, db *sql.DB, driver string, world *seedWorl
 			args = append(args, row...)
 		}
 		builder.WriteString(suffix)
-		_, err := db.ExecContext(ctx, builder.String(), args...)
+		_, err = db.ExecContext(ctx, builder.String(), args...)
 		return err
 	}
 	rows := make([][]any, 0, batch)
@@ -686,7 +698,10 @@ func seedContent(ctx context.Context, db *sql.DB, driver string, world *seedWorl
 		}
 		var builder strings.Builder
 		builder.WriteString("INSERT INTO issue_activity_cycles(workspace_key,activity_id,cycle_id,issue_id) VALUES ")
-		args := make([]any, 0, len(cycleRows)*4)
+		args, err := seedContentBatchArgs(cycleRows, 4)
+		if err != nil {
+			return err
+		}
 		for i, row := range cycleRows {
 			if i > 0 {
 				builder.WriteString(",")
@@ -699,7 +714,7 @@ func seedContent(ctx context.Context, db *sql.DB, driver string, world *seedWorl
 		} else {
 			builder.WriteString(" ON CONFLICT DO NOTHING")
 		}
-		_, err := db.ExecContext(ctx, builder.String(), args...)
+		_, err = db.ExecContext(ctx, builder.String(), args...)
 		cycleRows = cycleRows[:0]
 		return err
 	}
@@ -794,7 +809,7 @@ func seedNotifications(ctx context.Context, db *sql.DB, driver string, world *se
 		return nil
 	}
 	const total = 5000
-	const batch = 400
+	const batch = seedContentBatchSize
 	quote := "INSERT INTO workspace_content_records(workspace_key,kind,resource_id,id,created_at,data,owner_id,parent_id,status,next_attempt_at,record_version) VALUES "
 	suffix := " ON CONFLICT(workspace_key,kind,resource_id,id) DO UPDATE SET created_at=excluded.created_at,data=excluded.data,owner_id=excluded.owner_id,parent_id=excluded.parent_id,status=excluded.status,next_attempt_at=excluded.next_attempt_at,record_version=excluded.record_version"
 	if driver == "mysql" {
@@ -807,7 +822,10 @@ func seedNotifications(ctx context.Context, db *sql.DB, driver string, world *se
 		}
 		var builder strings.Builder
 		builder.WriteString(quote)
-		args := make([]any, 0, len(rows)*11)
+		args, err := seedContentBatchArgs(rows, 11)
+		if err != nil {
+			return err
+		}
 		for i, row := range rows {
 			if i > 0 {
 				builder.WriteString(",")
@@ -816,7 +834,7 @@ func seedNotifications(ctx context.Context, db *sql.DB, driver string, world *se
 			args = append(args, row...)
 		}
 		builder.WriteString(suffix)
-		_, err := db.ExecContext(ctx, builder.String(), args...)
+		_, err = db.ExecContext(ctx, builder.String(), args...)
 		rows = rows[:0]
 		return err
 	}

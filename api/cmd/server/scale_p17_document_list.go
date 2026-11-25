@@ -18,7 +18,7 @@ func (s *server) serveDocumentRecordList(w http.ResponseWriter, r *http.Request)
 		s.serveBoundedDocumentDirectoryList(w, r)
 		return true
 	}
-	if documentRecordMode("FLOW_DOCUMENT_RECORDS") != "on" {
+	if documentRecordMode(r.Context(), "FLOW_DOCUMENT_RECORDS") != "on" {
 		return false
 	}
 	// The authorization handoff contains policy only for the list route.

@@ -55,6 +55,10 @@ type cascadeScriptResult struct {
 
 func runIssueCascadeScript(t *testing.T, forceFull bool) cascadeScriptResult {
 	t.Helper()
+	if forceFull {
+		// Forcing the literal writer is an explicit legacy configuration.
+		t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	}
 	restore := store.ForceFullMutationsForTesting(forceFull)
 	defer restore()
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
@@ -64,7 +68,7 @@ func runIssueCascadeScript(t *testing.T, forceFull bool) cascadeScriptResult {
 	defer repository.Close()
 	fixture := repository.Bootstrap()
 	// Scheduled Pulse summaries depend on request timing, not the mutation path under test.
-	if err := repository.MutateWorkspace(t.Context(), fixture.Workspace.URLKey, "test.pulse_disabled", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), fixture.Workspace.URLKey, "test.pulse_disabled", "", nil, func(data *domain.Bootstrap) error {
 		if data.WorkspaceSettings.FeatureFlags == nil {
 			data.WorkspaceSettings.FeatureFlags = map[string]bool{}
 		}
@@ -166,10 +170,17 @@ func runIssueCascadeScript(t *testing.T, forceFull bool) cascadeScriptResult {
 	inCycle := newIssue("In cycle", map[string]any{"cycleId": current.ID, "stateId": startedState})
 	expireCurrentCycle(t, repository, workspace, team.ID)
 	api.maintainCycleSchedule(context.Background(), workspace)
-	_, upcoming := cycles()
-	check(len(upcoming) > 0 && issueByID(inCycle).CycleID != nil && *issueByID(inCycle).CycleID == upcoming[0].ID, "scheduled completion did not migrate the open issue")
-	if len(upcoming) > 0 {
+	active, upcoming := cycles()
+	switch {
+	case active.ID == current.ID:
+		t.Fatalf("maintenance left the expired cycle current (full path=%t)", forceFull)
+	case active.ID != "":
+		check(issueByID(inCycle).CycleID != nil && *issueByID(inCycle).CycleID == active.ID, "scheduled completion did not migrate the open issue to the current cycle")
+	case len(upcoming) > 0:
+		check(issueByID(inCycle).CycleID != nil && *issueByID(inCycle).CycleID == upcoming[0].ID, "scheduled completion did not migrate the open issue to the upcoming cycle")
 		call(http.MethodPost, "/api/cycles/"+upcoming[0].ID+"/start", nil, http.StatusOK)
+	default:
+		t.Fatal("maintenance left the team without another cycle")
 	}
 	api.maintainCycleSchedule(context.Background(), workspace)
 	call(http.MethodPatch, "/api/teams/"+team.ID+"/cycle-settings", map[string]any{"capacity": 12}, http.StatusOK)

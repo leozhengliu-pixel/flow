@@ -18,7 +18,7 @@ func TestRemovedIntegrationsCannotConnectOrExecute(t *testing.T) {
 	}
 	defer repository.Close()
 	removed := []string{"codex", "cursor", "zapier", "notion", "intercom", "sentry", "google-calendar", "google"}
-	err = repository.MutateWorkspace(context.Background(), "test-workspace", "integration.fixture", "legacy", nil, func(data *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "integration.fixture", "legacy", nil, func(data *domain.Bootstrap) error {
 		for _, provider := range removed {
 			data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: provider, Provider: provider, Status: "connected"})
 		}

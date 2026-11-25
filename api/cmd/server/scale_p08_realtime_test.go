@@ -74,7 +74,7 @@ func TestScaleP08AuthDisabledRealtimeRetainsViewer(t *testing.T) {
 	viewer, data := scaleP08OwnedWorkspace(t, repository)
 	now := time.Now().UTC()
 	notificationID := fmt.Sprintf("scale-p08-notification-%d", now.UnixNano())
-	if err := repository.MutateWorkspace(t.Context(), data.Workspace.URLKey, "scale_p08.fixture", notificationID, nil, func(next *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "scale_p08.fixture", notificationID, nil, func(next *domain.Bootstrap) error {
 		next.Notifications = append(next.Notifications, domain.Notification{ID: notificationID, RecipientID: viewer.ID, Type: "issueReminder", Actor: viewer, CreatedAt: now, UpdatedAt: now})
 		return nil
 	}); err != nil {

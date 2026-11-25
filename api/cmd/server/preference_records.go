@@ -105,9 +105,17 @@ func (s *server) preferenceMetadata(r *http.Request) (domain.Bootstrap, error) {
 		data.ViewerRole = "admin"
 		return data, s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID)
 	}
-	data, err := s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
-	if err != nil {
-		return data, err
+	var data domain.Bootstrap
+	var handedOff bool
+	if !s.store.BoundedMetadataEnabled() && (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/api/resource-preferences" {
+		data, handedOff = takePagedMetadata(r, key, authUser(r).ID)
+	}
+	if !handedOff {
+		var err error
+		data, err = s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
+		if err != nil {
+			return data, err
+		}
 	}
 	filterBootstrapForAPIKey(&data, r)
 	return data, nil

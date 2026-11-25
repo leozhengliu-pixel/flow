@@ -43,9 +43,12 @@ func metadataPrepare(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL"))) {
-	case "on", "shadow":
-	default:
+	configuration, err := appconfig.Load()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if configuration.Database.RecordJournalMode() == "off" {
 		fmt.Fprintln(stderr, "metadata-prepare: set FLOW_RECORD_JOURNAL=on (as on the replicas) first; the repair and the catalog need the record journal")
 		return 2
 	}
@@ -53,11 +56,6 @@ func metadataPrepare(args []string, stdout, stderr io.Writer) int {
 	// the catalog pass itself rather than in a background worker.
 	_ = os.Setenv("FLOW_BOUNDED_METADATA", "off")
 	_ = os.Setenv("FLOW_METADATA_CATALOG", "off")
-	configuration, err := appconfig.Load()
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
-	}
 	repository, err := store.OpenDatabase(configuration.Database)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -66,7 +64,12 @@ func metadataPrepare(args []string, stdout, stderr io.Writer) int {
 	defer repository.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	report, err := repository.PrepareBoundedMetadata(ctx)
+	var report store.BoundedMetadataPreparation
+	err = repository.WithStartupLock(ctx, "metadata preparation", func(ctx context.Context) error {
+		var err error
+		report, err = repository.PrepareBoundedMetadata(ctx)
+		return err
+	})
 	encoder := json.NewEncoder(stdout)
 	encoder.SetIndent("", "  ")
 	_ = encoder.Encode(report)

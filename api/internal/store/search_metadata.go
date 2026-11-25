@@ -474,7 +474,7 @@ func (s *SQLiteStore) beginMetadataSearch(ctx context.Context, q *SearchMetadata
 	// TeamIDs also looks at the unprojected singular teamId field. Keep
 	// that predicate on canonical JSON even for types that store teamIds.
 	useCatalog := len(q.Scope.TeamIDs) == 0 &&
-		(q.Types["project"] || q.Types["document"]) && recordJournalMode() == "on" && s.RecordJournalReady()
+		(q.Types["project"] || q.Types["document"]) && s.RecordJournalEnabled() && s.RecordJournalReady()
 	if !batchHits && !useCatalog {
 		return ctx, nil, nil
 	}

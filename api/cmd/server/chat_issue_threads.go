@@ -137,7 +137,7 @@ func (s *server) chatSendInIssueThread(ctx context.Context, record domain.ChatIn
 }
 
 func chatMergeBody(base, extra map[string]any) map[string]any {
-	result := make(map[string]any, len(base)+len(extra))
+	result := make(map[string]any)
 	for key, value := range base {
 		result[key] = value
 	}

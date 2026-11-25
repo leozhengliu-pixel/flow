@@ -26,6 +26,8 @@ type structClonePlan struct {
 
 var structClonePlans sync.Map
 
+var progressHistoryType = reflect.TypeFor[[]domain.ProjectProgressHistoryPoint]()
+
 func structPlanFor(t reflect.Type) *structClonePlan {
 	if cached, ok := structClonePlans.Load(t); ok {
 		return cached.(*structClonePlan)
@@ -85,6 +87,16 @@ func cloneSnapshotValue(value reflect.Value) reflect.Value {
 	case reflect.Slice:
 		if value.IsNil() {
 			return reflect.Zero(value.Type())
+		}
+		if value.Type() == progressHistoryType {
+			// Project progress histories are immutable values: every writer
+			// builds a new series and replaces the field (project_progress.go),
+			// none writes an element. Clones share the backing array. The
+			// capacity is clipped, so an append through any copy reallocates
+			// instead of writing into the shared array. A deep copy of every
+			// project's five histories was hundreds of MiB per snapshot in a
+			// large workspace (issue #244).
+			return value.Slice3(0, value.Len(), value.Len())
 		}
 		copy := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
 		reflect.Copy(copy, value)

@@ -215,6 +215,14 @@ func writeAuthCheckFailure(w http.ResponseWriter, err error) bool {
 }
 
 func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKey, string, error) {
+	user, key, workspace, err := s.apiKeyForRequest(r)
+	if err == nil {
+		_ = s.store.RecordAPIKeyUse(r.Context(), workspace, key.ID, key.AuthorizationID)
+	}
+	return user, key, workspace, err
+}
+
+func (s *server) apiKeyForRequest(r *http.Request) (domain.User, *domain.APIKey, string, error) {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
 		return domain.User{}, nil, "", store.ErrAuthInvalid
@@ -227,7 +235,6 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 	if !apiKeyAllowsRequest(r, auth.Key) {
 		return domain.User{}, nil, "", store.ErrAuthForbidden
 	}
-	_ = s.store.RecordAPIKeyUse(r.Context(), auth.Workspace.URLKey, auth.Key.ID, auth.Key.AuthorizationID)
 	return auth.User, &auth.Key, auth.Workspace.URLKey, nil
 }
 
@@ -1215,7 +1222,10 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		noteAuthorizationBusy(r, err)
 		return err == nil && status == "active" && role != "guest"
 	}
-	if r.URL.Path == "/api/workspace/preferences" {
+	legacyListRead := (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
+		(r.URL.Path == "/api/reviews" || r.URL.Path == "/api/search/filter-suggestions")
+	if r.URL.Path == "/api/workspace/preferences" || !s.store.BoundedMetadataEnabled() && (draftRecordWriteRequest(r) || legacyListRead) {
+		// The handlers decide resource visibility from their own projection.
 		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
 		if !ok {
 			return false
@@ -1238,6 +1248,11 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	// credential scope were checked above; the list checks each task's anchor.
 	if r.URL.Path == "/api/agent-tasks" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
 		return true
+	}
+	// So does the detail of an issue-anchored task (or coding session): its
+	// handler checks the task and its issue with scoped reads.
+	if allowed, handled := s.legacyAgentTaskDetailAuthorization(r, workspace); handled {
+		return allowed
 	}
 	if r.URL.Path == "/api/sync/changes" {
 		return true
@@ -1322,12 +1337,18 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	var data domain.Bootstrap
 	var ok bool
 	var err error
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if selected, readErr, handled := s.projectRecordAuthorizationMetadata(r, workspace, userID); handled {
 		data, err, ok = selected, readErr, readErr == nil
 	} else if selected, readErr, handled := s.documentAuthorizationMetadata(r, workspace, userID); handled {
 		data, err, ok = selected, readErr, readErr == nil
 	} else if isIssueRecordsRequest(r) {
 		data, err = s.issueRecordAuthorizationData(r)
+		ok = err == nil
+	} else if !s.store.BoundedMetadataEnabled() && r.Method == http.MethodPost && len(parts) == 4 && parts[1] == "teams" && parts[3] == "recurring-issues" {
+		// Creation validates its targets after decoding. Authorization here
+		// needs only the viewer's team settings access.
+		data, err = s.store.LegacyIssueViewerPolicy(r.Context(), workspace, userID)
 		ok = err == nil
 	} else {
 		// With bounded metadata, the reviewed readers decide every shape that
@@ -1353,7 +1374,6 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		noteAuthorizationBusy(r, err)
 		return false
 	}
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	documentCommentWrite := len(parts) >= 5 && parts[1] == "documents" && parts[3] == "comments" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete)
 	if r.Method == http.MethodPatch && len(parts) == 3 && parts[1] == "documents" && s.store.BoundedMetadataEnabled() {
 		// The update handler refuses an edit this viewer cannot make before it

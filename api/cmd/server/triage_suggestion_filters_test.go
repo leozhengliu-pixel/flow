@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -41,7 +40,7 @@ func newTriageFilterFixture(t *testing.T) triageFilterFixture {
 	if backlog < 0 {
 		t.Fatal("no backlog state")
 	}
-	if err := repo.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.triage_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.triage_setup", team.ID, nil, func(data *domain.Bootstrap) error {
 		settings := teamSettings(data, team.ID)
 		settings.TriageEnabled = true
 		data.TeamSettings[team.ID] = settings
@@ -79,7 +78,7 @@ func newTriageFilterFixture(t *testing.T) triageFilterFixture {
 		}
 		return item
 	}
-	if err := repo.MutateWorkspace(store.WithIssueRecordMutations(t.Context(), issue.ID), bootstrap.Workspace.URLKey, "test.suggestions", issue.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.suggestions", issue.ID, nil, func(data *domain.Bootstrap) error {
 		target, err := issueByID(data, issue.ID)
 		if err != nil {
 			return err
@@ -255,7 +254,7 @@ func TestBuiltinFlowAgentIsInstalledAtStartupWhenEnabled(t *testing.T) {
 	s := &server{store: repo, authDisabled: true, uploadPath: t.TempDir()}
 	s.agent.Enabled = true
 	for range 2 {
-		s.ensureBuiltinApplications(context.Background())
+		s.ensureBuiltinApplications(store.WithColdWork(t.Context(), "startup"))
 	}
 	data := repo.Bootstrap()
 	agents := slices.DeleteFunc(slices.Clone(data.Users), func(user domain.User) bool { return !user.BuiltinAgent })
@@ -269,8 +268,12 @@ func TestBuiltinFlowAgentIsInstalledAtStartupWhenEnabled(t *testing.T) {
 		t.Fatalf("create with the Flow agent as assignee: %+v", issue)
 	}
 	s.agent.Enabled = false
-	s.ensureBuiltinApplications(context.Background())
-	if user, err := repo.UserByID(t.Context(), agents[0].ID); err != nil || user.Active {
+	s.ensureBuiltinApplications(store.WithColdWork(t.Context(), "startup"))
+	ctx := store.WithMetadataOutputOwner(t.Context(), func(close func()) bool {
+		t.Cleanup(close)
+		return true
+	})
+	if user, err := repo.UserByID(ctx, agents[0].ID); err != nil || user.Active {
 		t.Fatalf("disabled agent still active: %+v %v", user, err)
 	}
 }

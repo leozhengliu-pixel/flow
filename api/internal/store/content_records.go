@@ -398,8 +398,10 @@ func contentRecordRowFor[T any](workspace, kind, resource string, item T) (conte
 	return buildContentRecordRow(workspace, kind, resource, raw)
 }
 
+const contentRecordWriteBatchSize = 200
+
 func writeContentRecordRows(ctx context.Context, tx *sqlTx, rows []contentRecordRow) error {
-	const chunk = 200
+	const chunk = contentRecordWriteBatchSize
 	type actorKey struct{ workspace, issue, user string }
 	actors := map[actorKey]string{}
 	actorOrder := []actorKey{}
@@ -462,6 +464,47 @@ func writeContentRecordRows(ctx context.Context, tx *sqlTx, rows []contentRecord
 		}
 	}
 	return nil
+}
+
+// A scheduled batch has no comment, activity or issue actor side effects.
+// Keep only one SQL batch of encoded rows live while this transaction writes.
+func writePulseSummaryRows(ctx context.Context, tx *sqlTx, workspace string, notifications []domain.Notification, deliveries []domain.NotificationDelivery) error {
+	if len(notifications) == 0 && len(deliveries) == 0 {
+		return nil
+	}
+	rows := make([]contentRecordRow, 0, contentRecordWriteBatchSize)
+	flush := func() error {
+		if err := writeContentRecordRows(ctx, tx, rows); err != nil {
+			return err
+		}
+		for _, row := range rows {
+			tx.noteNotificationRow(row, nil, false)
+		}
+		clear(rows)
+		rows = rows[:0]
+		return nil
+	}
+	add := func(row contentRecordRow, err error) error {
+		if err != nil {
+			return err
+		}
+		rows = append(rows, row)
+		if len(rows) == contentRecordWriteBatchSize {
+			return flush()
+		}
+		return nil
+	}
+	for _, notification := range notifications {
+		if err := add(contentRecordRowFor(workspace, "notification", notification.IssueID, notification)); err != nil {
+			return err
+		}
+	}
+	for _, delivery := range deliveries {
+		if err := add(contentRecordRowFor(workspace, "delivery", "", delivery)); err != nil {
+			return err
+		}
+	}
+	return flush()
 }
 
 func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind string, items map[string][]T, metadata domain.Bootstrap, scopes ...[]string) error {

@@ -15,6 +15,7 @@ import (
 )
 
 func TestScaleP11OffPreservesLegacyCoordination(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for _, test := range []struct {
 		name, peerMode, journalAtOpen, journalMode string
 	}{
@@ -22,9 +23,9 @@ func TestScaleP11OffPreservesLegacyCoordination(t *testing.T) {
 		{"unset", "", "on", "on"},
 		{"unknown", "unknown", "on", "on"},
 		{"off", "off", "on", "on"},
-		{"shadow-journal-unset", "shadow", "", ""},
+		{"shadow-journal-disabled-at-open", "shadow", "off", ""},
 		{"shadow-journal-off", "shadow", "off", "off"},
-		{"on-journal-unset", "on", "", ""},
+		{"on-journal-disabled-at-open", "on", "off", ""},
 		{"on-journal-off", "on", "off", "off"},
 		{"shadow-journal-not-ready", "shadow", "off", "on"},
 		{"on-journal-not-ready", "on", "off", "on"},
@@ -105,6 +106,7 @@ func TestScaleP11OffPreservesLegacyCoordination(t *testing.T) {
 }
 
 func TestScaleP11LegacyFreshnessChecksSQLBeforeReload(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 
@@ -138,7 +140,7 @@ func TestScaleP11LegacyFreshnessChecksSQLBeforeReload(t *testing.T) {
 		f.service.workspaceVersions.record(f.workspace, 1)
 		writer := &server{store: f.writer, coordinator: f.service.coordinator, realtime: newRealtimeHub()}
 		f.writer.SetRealtimeSink(writer.publishRealtime)
-		if err := f.writer.MutateWorkspace(t.Context(), f.workspace, "project.updated", "p11-project-0", map[string]string{"name": "legacy reload"}, func(data *domain.Bootstrap) error {
+		if err := f.writer.MutateWorkspace(workspaceFixtureContext(t.Context()), f.workspace, "project.updated", "p11-project-0", map[string]string{"name": "legacy reload"}, func(data *domain.Bootstrap) error {
 			data.Projects[0].Name = "legacy reload"
 			return nil
 		}); err != nil {

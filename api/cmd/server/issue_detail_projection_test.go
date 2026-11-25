@@ -18,7 +18,7 @@ func TestIssueDetailBootstrapOmitsUnrelatedBodiesWithoutChangingStoredData(t *te
 	defer repo.Close()
 	data := repo.Bootstrap()
 	body := strings.Repeat("project-private-body ", 50000)
-	if err = repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "project.updated", data.Projects[0].ID, nil, func(data *domain.Bootstrap) error { data.Projects[0].Description = body; return nil }); err != nil {
+	if err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "project.updated", data.Projects[0].ID, nil, func(data *domain.Bootstrap) error { data.Projects[0].Description = body; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	handler := newHandler(&server{store: repo, authDisabled: true, uploadPath: t.TempDir()})

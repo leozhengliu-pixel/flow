@@ -33,6 +33,21 @@ const (
 	metadataSourceReloadHeadroom = 16 << 20
 )
 
+// boundedMetadataSize sums nonnegative sizes or counts without exceeding limit.
+func boundedMetadataSize(limit int, parts ...int) (int, error) {
+	if limit < 0 {
+		return 0, ErrMetadataWorkBudget
+	}
+	total := 0
+	for _, part := range parts {
+		if part < 0 || part > limit-total {
+			return 0, ErrMetadataWorkBudget
+		}
+		total += part
+	}
+	return total, nil
+}
+
 // metadataBudgetBytes reads a byte budget from the environment: a positive
 // whole number of bytes. Unset, invalid, zero or negative values use the
 // default. The budgets grow with the number of workspaces a replica holds
@@ -72,7 +87,13 @@ func (r *metadataResidency) metadataWorkspacePolicyLimit() int {
 
 const metadataMiB = 1 << 20
 
-func ceilMiB(bytes int64) int64 { return (bytes + metadataMiB - 1) / metadataMiB }
+func ceilMiB(bytes int64) int64 {
+	whole := bytes / metadataMiB
+	if bytes%metadataMiB > 0 {
+		whole++
+	}
+	return whole
+}
 
 // Fields are classified explicitly. Adding a Bootstrap field requires a
 // residency decision, even if it is derived or stored in a different table.
@@ -92,15 +113,22 @@ var metadataResidencyFields = sync.OnceValue(func() map[string]string {
 	return fields
 })
 
-func boundedMetadataRequested() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_BOUNDED_METADATA"))) {
-	case "1", "true", "on":
-		return true
+func boundedMetadataRequested(driver string) bool {
+	const setting = "FLOW_BOUNDED_METADATA"
+	if !metadataFeatureEnabled(setting, driver) {
+		return false
 	}
-	return false
+	// A manual opt-in still goes through the startup guard. Implicit
+	// activation leaves explicitly disabled dependencies and shadows alone.
+	return strings.TrimSpace(os.Getenv(setting)) != "" ||
+		recordHydrationEnabled(driver) && recordJournalMode(driver) == "on" && !boundedMetadataShadowIncompatible()
 }
 
-func validateBoundedMetadataCoverage() error {
+func boundedMetadataShadowIncompatible() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_PEER_SYNC")), "shadow") || metadataCatalogShadowEnabled()
+}
+
+func validateBoundedMetadataCoverage(driver string) error {
 	if _, err := metadataConsumerReviews(); err != nil {
 		return fmt.Errorf("%w: %w", ErrBoundedMetadataCoverage, err)
 	}
@@ -124,11 +152,11 @@ func validateBoundedMetadataCoverage() error {
 	if err := boundedcrdt.CheckRuntime(); err != nil {
 		return fmt.Errorf("%w: %w", ErrBoundedMetadataCoverage, err)
 	}
-	if !RecordHydrationEnabled() || recordJournalMode() != "on" {
+	if !recordHydrationEnabled(driver) || recordJournalMode(driver) != "on" {
 		return fmt.Errorf("%w: record hydration and the record journal must both be on", ErrBoundedMetadataCoverage)
 	}
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_PEER_SYNC")), "shadow") {
-		return fmt.Errorf("%w: complete-snapshot peer shadow requires bounded metadata off", ErrBoundedMetadataCoverage)
+	if boundedMetadataShadowIncompatible() {
+		return fmt.Errorf("%w: peer sync and catalog shadow modes require bounded metadata off", ErrBoundedMetadataCoverage)
 	}
 	return nil
 }

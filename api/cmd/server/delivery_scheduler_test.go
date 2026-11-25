@@ -21,7 +21,7 @@ func TestDeliverySchedulerProcessesDueEmailAndHonorsBackoff(t *testing.T) {
 	bootstrap := repository.Bootstrap()
 	now := time.Now().UTC()
 	due, future, pending := now.Add(-time.Minute), now.Add(time.Hour), "delivery_pending"
-	err = repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.delivery_scheduler", "deliveries", nil, func(data *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.delivery_scheduler", "deliveries", nil, func(data *domain.Bootstrap) error {
 		data.NotificationDeliveries = []domain.NotificationDelivery{
 			{ID: "delivery_due", RecipientID: data.Viewer.ID, Channel: "email", Status: "failed", NextAttemptAt: &due, CreatedAt: now, UpdatedAt: now},
 			{ID: "delivery_future", RecipientID: data.Viewer.ID, Channel: "email", Status: "failed", NextAttemptAt: &future, CreatedAt: now, UpdatedAt: now},

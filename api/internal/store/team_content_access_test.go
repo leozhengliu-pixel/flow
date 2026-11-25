@@ -123,6 +123,15 @@ func TestMemberOutsidePrivateTeamSeesNeitherRowNorContent(t *testing.T) {
 	}
 }
 
+func TestNormalizePreservesPrivateTeamWithoutSettings(t *testing.T) {
+	data := privateTeamFixture("member", false)
+	delete(data.TeamSettings, "private")
+	normalize(&data)
+	if teamVisibleToUser(data, "private", "viewer", "member") || TeamContentVisible(data, "private", "viewer", "member") {
+		t.Fatal("normalization exposed a private team to a non-member")
+	}
+}
+
 func TestTeamContentVisibleSplitsAdminRowsFromContent(t *testing.T) {
 	for _, tc := range []struct {
 		role   string

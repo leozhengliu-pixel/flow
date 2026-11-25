@@ -1428,6 +1428,7 @@ func TestScaleP21SW292WriteChainHotBoundaries(t *testing.T) {
 	graph := scaleP21SW292Load(t)
 	inventory := scaleP21SW292Inventory(t)
 	graph.verifyPins(t)
+	checkHotMutationDispatches(t, graph, inventory)
 	stop := map[string]bool{}
 	for consumer, allowance := range scaleP21SW292Allowed {
 		if graph.funcs[consumer] == nil {

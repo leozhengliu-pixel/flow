@@ -18,7 +18,7 @@ func TestFullMutationKeepsRecordsCommittedOnAnotherServer(t *testing.T) {
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second := pair[0], pair[1]
-			ctx := t.Context()
+			ctx := WithColdWork(scaleP21ResourceOutputContext(t), "full callback")
 			workspace, template := peerWorkspace(t, second)
 			stamp := time.Now().UnixNano()
 			updated := createPeerIssue(t, second, workspace, fmt.Sprintf("peer-update-%d", stamp), template)
@@ -104,7 +104,7 @@ func TestFullMutationRetriesWhenItsRecordChangedOnAnotherServer(t *testing.T) {
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second := pair[0], pair[1]
-			ctx := t.Context()
+			ctx := WithColdWork(scaleP21ResourceOutputContext(t), "full callback")
 			workspace, template := peerWorkspace(t, second)
 			target := createPeerIssue(t, second, workspace, fmt.Sprintf("peer-contended-%d", time.Now().UnixNano()), template)
 			release, wait := pausedMutation(t, func(callback func(*domain.Bootstrap) error) error {

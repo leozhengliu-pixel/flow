@@ -250,9 +250,17 @@ func TestSCIMEnterpriseExtensionAndProfile(t *testing.T) {
 	if created["title"] != "Staff Engineer" || created["timezone"] != "Europe/Berlin" || enterprise["employeeNumber"] != "E-42" || enterprise["manager"].(map[string]any)["value"] != "mgr-1" || len(created["schemas"].([]any)) != 2 {
 		t.Fatalf("created = %v", created)
 	}
-	data, _ := f.repository.BootstrapFor("test-workspace")
-	if settings := data.UserSettings[id]; settings.JobTitle != "Staff Engineer" || settings.Timezone != "Europe/Berlin" {
-		t.Fatalf("profile settings = %+v", settings)
+	readSettings := func() domain.UserSettings {
+		t.Helper()
+		scope := store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "userSettings", ID: id}}}
+		data, ok, err := f.repository.WorkspaceMetadataScoped(t.Context(), "test-workspace", scope)
+		if err != nil || !ok {
+			t.Fatalf("read profile settings: found=%v, err=%v", ok, err)
+		}
+		return data.UserSettings[id]
+	}
+	if settings := readSettings(); settings.JobTitle != "Staff Engineer" || settings.Timezone != "Europe/Berlin" {
+		t.Fatal("SCIM profile settings were not applied")
 	}
 	// Microsoft Entra ID shapes: filtered multi-valued paths, extension paths, manager as a bare id.
 	patched := f.call(t, http.MethodPatch, "/scim/v2/test-workspace/Users/"+id, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[
@@ -281,9 +289,8 @@ func TestSCIMEnterpriseExtensionAndProfile(t *testing.T) {
 	if byDepartment["totalResults"] != float64(1) {
 		t.Fatalf("extension filter = %v", byDepartment)
 	}
-	data, _ = f.repository.BootstrapFor("test-workspace")
-	if data.UserSettings[id].JobTitle != "Principal Engineer" {
-		t.Fatalf("job title = %q", data.UserSettings[id].JobTitle)
+	if readSettings().JobTitle != "Principal Engineer" {
+		t.Fatal("SCIM job title was not updated")
 	}
 	// PUT replaces the profile.
 	put := f.call(t, http.MethodPut, "/scim/v2/test-workspace/Users/"+id, `{"userName":"ent@example.test","externalId":"ent-1"}`, http.StatusOK)

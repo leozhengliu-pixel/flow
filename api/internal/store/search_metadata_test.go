@@ -83,7 +83,7 @@ func TestMetadataSearchUpdatesWithoutDatabaseTriggers(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	ctx := context.Background()
+	ctx := WithColdWork(context.Background(), "search fixture")
 	data := repo.Bootstrap()
 	for _, name := range []string{"metadata_records_search_insert", "metadata_records_search_update", "metadata_records_search_delete"} {
 		if _, err := repo.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS `+name); err != nil {
@@ -378,7 +378,7 @@ func TestMetadataSearchProjectionDifferential(t *testing.T) {
 	insertSearchMetadata(t, legacy, workspace, "savedViews", "team", domain.SavedView{
 		ID: "team", Name: "Zephyr team view", Scope: "team", TeamID: public,
 	})
-	report, err := legacy.metadataCatalogPass(ctx, false)
+	report, err := legacy.metadataCatalogPass(ctx, catalogRevisit)
 	if err != nil || len(report.Skipped) != 0 {
 		t.Fatalf("catalog preparation: %v, skipped: %v", err, report.Skipped)
 	}

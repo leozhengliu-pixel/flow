@@ -197,7 +197,7 @@ func TestAgentReplyOutcomeInterruptedBySweeper(t *testing.T) {
 	session := domain.AgentSession{ID: "agent_session_gone", SlugID: "gone-1", UserID: viewer.ID, Title: "Gone", Location: "page", IssueIDs: []string{}, SkillIDs: []string{}, CreatedAt: stamp, UpdatedAt: stamp}
 	streaming := domain.AgentMessage{ID: "agent_message_gone", Role: "assistant", Content: "Half", CreatedAt: stamp, Status: agentMessageStreaming, UpdatedAt: &stamp, Parts: []domain.AgentMessagePart{{ID: "text", Type: "text", Text: "Half", Status: "running"}}}
 	session.Messages = []domain.AgentMessage{{ID: "agent_message_ask", Role: "user", Content: "hello", CreatedAt: stamp}, streaming}
-	if err := repository.MutateWorkspace(store.ContextWithActor(context.Background(), viewer), "test-workspace", "agent.session_created", session.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(context.Background(), viewer)), "test-workspace", "agent.session_created", session.ID, nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, session)
 		return nil
 	}); err != nil {

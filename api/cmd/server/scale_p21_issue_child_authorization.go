@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -65,6 +66,8 @@ func boundedIssueChildWriteRequest(r *http.Request) bool {
 		}
 	case 5:
 		switch parts[3] {
+		case "comment-actions":
+			return r.Method == http.MethodPost
 		case "comments":
 			return r.Method == http.MethodPatch || r.Method == http.MethodDelete
 		case "relations":
@@ -134,6 +137,14 @@ func (s *server) boundedIssueWriteAuthorizationMetadata(r *http.Request) (domain
 		}
 	}
 	read, err := s.store.BeginIssueWriteAuthorizationRead(r.Context(), userID, credential, request)
+	// A concurrent resolution may publish a new generation while the
+	// second request reads the issue. Recheck against live authorization
+	// before the writer handles the already-resolved action.
+	if len(parts) == 5 && parts[3] == "comment-actions" {
+		for attempt := 0; attempt < 2 && errors.Is(err, store.ErrResourceAccessChanged); attempt++ {
+			read, err = s.store.BeginIssueWriteAuthorizationRead(r.Context(), userID, credential, request)
+		}
+	}
 	if err != nil {
 		return domain.Bootstrap{}, true, err
 	}

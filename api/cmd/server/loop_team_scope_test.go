@@ -18,7 +18,7 @@ func TestLoopRunsStayInTheirTeams(t *testing.T) {
 	home := data.Teams[0]
 	other := domain.Team{ID: "team_other", Key: "OTH", Name: "Other"}
 	now := time.Now().UTC()
-	if err := repository.MutateWorkspace(ctx, actor.WorkspaceKey, "test.teams", other.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "test.teams", other.ID, nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, other)
 		return nil
 	}); err != nil {

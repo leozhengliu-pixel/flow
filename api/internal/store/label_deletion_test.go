@@ -36,7 +36,7 @@ func removeTestLabel(id string) func(*domain.Bootstrap) error {
 func addDeletionLabel(t testing.TB, repo *SQLiteStore, resource string) domain.IssueLabel {
 	t.Helper()
 	label := domain.IssueLabel{ID: "delete_target", Name: "Unused label", ResourceType: resource, Scope: "Workspace"}
-	if err := repo.MutateWorkspace(context.Background(), "test-workspace", "label.created", label.ID, nil, func(data *domain.Bootstrap) error { data.Labels = append(data.Labels, label); return nil }); err != nil {
+	if err := repo.MutateWorkspace(WithColdWork(context.Background(), "workspace fixture"), "test-workspace", "label.created", label.ID, nil, func(data *domain.Bootstrap) error { data.Labels = append(data.Labels, label); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	return label
@@ -102,7 +102,7 @@ func TestLabelDeletionUpdatesOnlyAssociatedEntitiesAndPersists(t *testing.T) {
 	project := data.Projects[0]
 	project.ID = "associated-project"
 	project.LabelIDs = []string{label.ID, "keep"}
-	if err := repo.MutateWorkspace(t.Context(), "test-workspace", "project.updated", project.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), "test-workspace", "project.updated", project.ID, nil, func(next *domain.Bootstrap) error {
 		next.Projects = append(next.Projects, project)
 		next.Favorites = append(next.Favorites, domain.Favorite{ID: "label-favorite", ResourceType: "label", ResourceID: label.ID})
 		return nil
@@ -153,7 +153,7 @@ func TestLabelDeletionRollbackLeavesAllRowsAndCacheUntouched(t *testing.T) {
 	data := repo.Bootstrap()
 	project := data.Projects[0]
 	project.LabelIDs = []string{label.ID}
-	if err := repo.MutateWorkspace(t.Context(), "test-workspace", "project.updated", project.ID, nil, func(next *domain.Bootstrap) error { next.Projects[0] = project; return nil }); err != nil {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), "test-workspace", "project.updated", project.ID, nil, func(next *domain.Bootstrap) error { next.Projects[0] = project; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	validation := errors.New("injected cascade failure")

@@ -15,7 +15,7 @@ func TestLoopContractMutationUsesFreshNarrowRecords(t *testing.T) {
 	}
 	defer repo.Close()
 	key := repo.Bootstrap().Workspace.URLKey
-	if err := repo.MutateWorkspace(t.Context(), key, "loop.created", "loop_contract", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), key, "loop.created", "loop_contract", nil, func(data *domain.Bootstrap) error {
 		data.Loops = append(data.Loops, domain.Loop{ID: "loop_contract", Instructions: "cached instructions"})
 		data.LoopVersions = append(data.LoopVersions,
 			domain.LoopVersion{ID: "version_contract", LoopID: "loop_contract"},
@@ -41,7 +41,7 @@ func TestLoopContractMutationUsesFreshNarrowRecords(t *testing.T) {
 		data.LoopVersions[0].OutputContract = data.Loops[0].OutputContract
 		return nil
 	}
-	ctx, trace := startMutationTrace(t.Context())
+	ctx, trace := startMutationTrace(WithColdWork(t.Context(), "loop contract"))
 	if err := repo.dispatchMutation(withMutationAggregateID(ctx, "loop_contract"), key, "loop.output_contract", nil, func(data *domain.Bootstrap) (string, error) {
 		return "loop_contract", mutate(data)
 	}); err != nil {
@@ -58,7 +58,7 @@ func TestLoopContractMutationUsesFreshNarrowRecords(t *testing.T) {
 	if err := repo.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM domain_events`).Scan(&eventsBefore); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.MutateWorkspace(t.Context(), key, "loop.output_contract", "loop_contract", nil, mutate); err != nil {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), key, "loop.output_contract", "loop_contract", nil, mutate); err != nil {
 		t.Fatal(err)
 	}
 	if changed := writes(); len(changed) != 0 {

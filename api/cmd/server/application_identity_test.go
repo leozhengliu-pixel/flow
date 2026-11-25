@@ -76,7 +76,9 @@ func TestOAuthApplicationEditUpdatesItsAgentIdentity(t *testing.T) {
 				t.Fatalf("installation = %+v", installation)
 			}
 		}
-		installation, err := s.store.ApplicationByUser(t.Context(), appUser)
+		ctx, closeRead := beginMetadataOutputReads(t.Context())
+		defer closeRead()
+		installation, err := s.store.ApplicationByUser(ctx, appUser)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,14 +87,17 @@ func TestOAuthApplicationEditUpdatesItsAgentIdentity(t *testing.T) {
 	checkAll()
 
 	// An app user left stale by an earlier edit is repaired at startup.
-	if _, err := s.store.InstallApplication(t.Context(), workspace, func() domain.ApplicationInstallation {
-		installation, _ := s.store.ApplicationByUser(t.Context(), appUser)
-		installation.Name, installation.AvatarURL, installation.InstalledBy = "Stale agent", oldIcon, data.Viewer.ID
-		return installation
-	}(), ""); err != nil {
+	ctx, closeRead := beginMetadataOutputReads(t.Context())
+	defer closeRead()
+	installation, err := s.store.ApplicationByUser(ctx, appUser)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.SyncAllApplicationIdentities(t.Context()); err != nil {
+	installation.Name, installation.AvatarURL, installation.InstalledBy = "Stale agent", oldIcon, data.Viewer.ID
+	if _, err := s.store.InstallApplication(workspaceFixtureContext(t.Context()), workspace, installation, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.SyncAllApplicationIdentities(store.WithColdWork(t.Context(), "startup")); err != nil {
 		t.Fatal(err)
 	}
 	checkAll()

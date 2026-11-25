@@ -343,7 +343,7 @@ func TestSCIMTeamMembershipChangesAreAuditedWithTheConnection(t *testing.T) {
 	handler, repository := enterpriseTestServer(t)
 	seed, _ := repository.BootstrapFor("test-workspace")
 	teamID := seed.Teams[0].ID
-	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "scim.test.configured", "workspace", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "scim.test.configured", "workspace", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.SCIMTeamGroupMapping = map[string]string{teamID: "engineering"}
 		data.WorkspaceSettings.SCIMDefaultRole = "member"
 		return nil

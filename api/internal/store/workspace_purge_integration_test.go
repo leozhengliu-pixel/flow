@@ -119,6 +119,9 @@ func TestExternalDatabaseWorkspacePurge(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index, table := range workspacePurgeTables {
+		if table.table == "domain_event_sequencing" {
+			continue
+		}
 		for ownerIndex, owner := range []WorkspacePurgeTarget{target, other} {
 			value := owner.Key
 			if table.byID {
@@ -134,6 +137,13 @@ func TestExternalDatabaseWorkspacePurge(t *testing.T) {
 			if err != nil {
 				t.Fatalf("insert into %s: %v", table.table, err)
 			}
+		}
+	}
+	// Journal capture of the domain_events inserts can drain the sequence
+	// queue. Seed pending rows after all of those transactions commit.
+	for _, owner := range []WorkspacePurgeTarget{target, other} {
+		if _, err := repo.db.ExecContext(ctx, `INSERT INTO domain_event_sequencing(workspace_id,event_id,created_ms) VALUES(?,?,0)`, owner.ID, "purge-pending"); err != nil {
+			t.Fatal(err)
 		}
 	}
 	count := func(table, column, value string) int {

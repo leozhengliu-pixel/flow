@@ -13,7 +13,7 @@ func TestScaleP19SummaryInputsPreserveCanonicalBodies(t *testing.T) {
 		t.Run(driver, func(t *testing.T) {
 			workspace := repo.data.Workspace.URLKey
 			body := strings.Repeat("p19-body", 64<<10)
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.Projects = append(data.Projects, domain.Project{ID: "p19-project", Name: "Summary", Description: body, TeamIDs: []string{data.Teams[0].ID}})
 				data.Initiatives = append(data.Initiatives, domain.Initiative{ID: "p19-initiative", ProjectIDs: []string{"p19-project"}, Description: body, Creator: data.Viewer})
 				data.ProjectUpdates["p19-project"] = []domain.ProjectUpdate{{ID: "update", ProjectID: "p19-project", Body: body, User: data.Viewer}}
@@ -22,7 +22,7 @@ func TestScaleP19SummaryInputsPreserveCanonicalBodies(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, unfiltered := range []bool{false, true} {
-				data, err := repo.ScaleP19Metadata(t.Context(), workspace, repo.data.Viewer.ID, unfiltered)
+				data, err := repo.ScaleP19Metadata(scaleP21ResourceOutputContext(t), workspace, repo.data.Viewer.ID, unfiltered)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -44,7 +44,7 @@ func TestScaleP19SummaryInputsPreserveCanonicalBodies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			project, err := repo.AuthorizedProjectRecord(t.Context(), access, "p19-project")
+			project, err := repo.AuthorizedProjectRecord(scaleP21ResourceOutputContext(t), access, "p19-project")
 			if err != nil || project.Description != body {
 				t.Fatal("summary read modified canonical detail", err)
 			}

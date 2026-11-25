@@ -88,12 +88,12 @@ func TestScaleP15SnapshotBuffersConcurrentLifetimes(t *testing.T) {
 	readers.Wait()
 }
 
-func TestScaleP15SnapshotReuseDefaultsOff(t *testing.T) {
-	t.Setenv("FLOW_RECORD_HYDRATION", "")
+func TestScaleP15SnapshotReuseExplicitOff(t *testing.T) {
+	t.Setenv("FLOW_RECORD_HYDRATION", "off")
 	ctx, release := BeginHydratedSnapshotReuse(t.Context())
 	defer release()
 	if ctx.Value(hydrationSnapshotReuseKey{}) != nil {
-		t.Fatal("default-off reads acquired reusable snapshot storage")
+		t.Fatal("flag-off reads acquired reusable snapshot storage")
 	}
 }
 

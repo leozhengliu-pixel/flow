@@ -8,12 +8,51 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"flow/api/internal/domain"
 )
 
 const teamMemberRequestMaxWork = 64 << 20
+
+// teamAccessReadHookForTesting runs in a team access read after the caller's
+// access context was resolved and before the read validates it again.
+var teamAccessReadHookForTesting atomic.Pointer[func()]
+
+// SetTeamAccessReadHookForTesting sets (nil clears) the team access read hook.
+func SetTeamAccessReadHookForTesting(hook func()) {
+	if hook == nil {
+		teamAccessReadHookForTesting.Store(nil)
+		return
+	}
+	teamAccessReadHookForTesting.Store(&hook)
+}
+
+func teamAccessReadHook() {
+	if hook := teamAccessReadHookForTesting.Load(); hook != nil {
+		(*hook)()
+	}
+}
+
+// validateTeamAccess is ValidateAccess for a team access read. Any write to
+// the workspace (API-key usage, loop run bookkeeping, a scheduler) can move
+// the authorization epoch, or without the record journal the revision bound
+// into the policy digest, while the read runs. That retires the resolved
+// context, not the viewer's permission, so it answers ErrResourceAccessChanged
+// (still ErrAuthForbidden) and the caller resolves access again. The fresh
+// context refuses a real revocation; a context bound to another store,
+// workspace, principal or credential stays plain ErrAuthForbidden.
+func (s *SQLiteStore) validateTeamAccess(ctx context.Context, access AccessContext) error {
+	if err := access.checkBinding(s); err != nil {
+		return err
+	}
+	err := s.ValidateAccess(ctx, access)
+	if errors.Is(err, ErrAuthForbidden) && !errors.Is(err, ErrResourceAccessChanged) {
+		return errors.Join(ErrAuthForbidden, ErrResourceAccessChanged)
+	}
+	return err
+}
 
 // TeamMemberRequestRead owns the small membership-handler input through response
 // encoding. Team contains only ID/Key; Data contains workspace identity and,
@@ -90,9 +129,10 @@ func (s *SQLiteStore) BeginTeamMemberRequestRead(ctx context.Context, workspace,
 		if workspace != access.policy.workspace {
 			return nil, false, ErrAuthForbidden
 		}
-		if err := s.ValidateAccess(ctx, *access); err != nil {
+		if err := s.validateTeamAccess(ctx, *access); err != nil {
 			return nil, false, err
 		}
+		teamAccessReadHook()
 	}
 	snapshot, snapshotted := ctx.Value(workspaceReadKey{}).(workspaceRead)
 	explicitSnapshot := access != nil && snapshotted && snapshot.database == s.db && (workspace == "" || snapshot.workspace == workspace)
@@ -160,7 +200,7 @@ func (s *SQLiteStore) BeginTeamMemberRequestRead(ctx context.Context, workspace,
 	}
 	if index < 0 {
 		if access != nil {
-			if err := s.ValidateAccess(ctx, *access); err != nil {
+			if err := s.validateTeamAccess(ctx, *access); err != nil {
 				return nil, true, err
 			}
 		}
@@ -201,7 +241,7 @@ func (s *SQLiteStore) BeginTeamMemberRequestRead(ctx context.Context, workspace,
 		}
 	}
 	if access != nil {
-		if err := s.ValidateAccess(ctx, *access); err != nil {
+		if err := s.validateTeamAccess(ctx, *access); err != nil {
 			return nil, true, err
 		}
 	}

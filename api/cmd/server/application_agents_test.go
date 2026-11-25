@@ -287,7 +287,9 @@ func TestApplicationOAuthHTTPConsentAndPKCE(t *testing.T) {
 	tokens := postOAuthForm[struct {
 		AccessToken string `json:"access_token"`
 	}](t, host.URL+"/oauth/token", url.Values{"grant_type": {"authorization_code"}, "code": {redirect.Query().Get("code")}, "client_id": {registered.ClientID}, "redirect_uri": {registered.RedirectURIs[0]}, "code_verifier": {verifier}}, 200)
-	auth, err := repo.AuthenticateAPIKeyRecord(t.Context(), data.Workspace.URLKey, secretHash(tokens.AccessToken), nil)
+	ctx, closeRead := beginMetadataOutputReads(t.Context())
+	defer closeRead()
+	auth, err := repo.AuthenticateAPIKeyRecord(ctx, data.Workspace.URLKey, secretHash(tokens.AccessToken), nil)
 	if err != nil || !auth.User.App || auth.User.ID == data.Viewer.ID || auth.Key.TeamRestriction != "selected" || len(auth.Key.TeamIDs) != 1 {
 		t.Fatalf("application authorization lost identity or scope: %v", err)
 	}
