@@ -1,21 +1,29 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"encoding/base64"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
+
+	"flow/api/internal/domain"
+	"flow/api/internal/store"
 
 	"golang.org/x/net/html"
 )
 
-// A link attached to an issue shows its site's favicon, like the design reference. The icon is fetched once, when the
-// link is created, through the SSRF-safe outbound client (public addresses only, a few redirects, http or https), and
-// kept on the attachment as a small data URL so it needs no stored object of its own. Nothing from the request is logged.
+// A link attached to an issue shows its site's favicon, like the design reference. Once a link has been created (so a
+// refused request never reaches the network) the icon is fetched in the background through the SSRF-safe outbound
+// client (public addresses only, a few redirects, http or https), stored once in the upload storage under its content
+// hash, and set on the attachment with an ordinary workspace mutation. Nothing from the request is logged.
 
 const (
 	linkFaviconTimeout       = 5 * time.Second
@@ -23,6 +31,7 @@ const (
 	linkFaviconMaxIconBytes  = 24 << 10
 	linkFaviconMaxRedirects  = 3
 	linkFaviconMaxCandidates = 4
+	linkFaviconMaxJobs       = 4
 	linkFaviconUserAgent     = "Mozilla/5.0 (compatible; FlowFaviconFetcher/1.0)"
 )
 
@@ -40,15 +49,15 @@ var linkFaviconHTTPClient = func() *http.Client {
 	return client
 }
 
-// linkFaviconDataURL returns the favicon of the page's site as a data URL, or "" when the site has none that is a small
-// PNG, JPEG, GIF, WebP or ICO image.
-func linkFaviconDataURL(ctx context.Context, page *url.URL) string {
+// linkFaviconBytes returns the favicon of the page's site and its media type, or nothing when the site has none that
+// is a small PNG, JPEG, GIF, WebP or ICO image.
+func linkFaviconBytes(ctx context.Context, page *url.URL) ([]byte, string) {
 	if page == nil || (page.Scheme != "http" && page.Scheme != "https") || page.Host == "" || page.User != nil {
-		return ""
+		return nil, ""
 	}
 	host := strings.TrimPrefix(strings.ToLower(page.Hostname()), "www.")
 	if linkFaviconSkipHosts[host] || strings.HasSuffix(host, ".slack.com") {
-		return ""
+		return nil, ""
 	}
 	ctx, cancel := context.WithTimeout(ctx, linkFaviconTimeout)
 	defer cancel()
@@ -58,11 +67,11 @@ func linkFaviconDataURL(ctx context.Context, page *url.URL) string {
 		candidates = candidates[:linkFaviconMaxCandidates]
 	}
 	for _, candidate := range candidates {
-		if icon := fetchLinkFavicon(ctx, client, candidate); icon != "" {
-			return icon
+		if icon, contentType := fetchLinkFavicon(ctx, client, candidate); len(icon) > 0 {
+			return icon, contentType
 		}
 	}
-	return ""
+	return nil, ""
 }
 
 // linkFaviconCandidates lists the icon URLs to try: the page's own <link rel="icon"> first, then /favicon.ico.
@@ -145,29 +154,114 @@ func linkRelIsIcon(rel string) bool {
 	return false
 }
 
-func fetchLinkFavicon(ctx context.Context, client *http.Client, icon *url.URL) string {
+func fetchLinkFavicon(ctx context.Context, client *http.Client, icon *url.URL) ([]byte, string) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, icon.String(), nil)
 	if err != nil {
-		return ""
+		return nil, ""
 	}
 	req.Header.Set("User-Agent", linkFaviconUserAgent)
 	req.Header.Set("Accept", "image/*")
 	resp, err := client.Do(req)
 	if err != nil {
-		return ""
+		return nil, ""
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return ""
+		return nil, ""
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, linkFaviconMaxIconBytes+1))
 	if err != nil || len(body) == 0 || len(body) > linkFaviconMaxIconBytes {
-		return ""
+		return nil, ""
 	}
 	// The bytes decide the type, not the header: an SVG or an HTML error page is never kept.
-	switch contentType := http.DetectContentType(body); contentType {
-	case "image/png", "image/jpeg", "image/gif", "image/webp", "image/x-icon":
-		return "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(body)
+	contentType := http.DetectContentType(body)
+	if _, ok := linkFaviconExtensions[contentType]; !ok {
+		return nil, ""
 	}
-	return ""
+	return body, contentType
+}
+
+var linkFaviconExtensions = map[string]string{"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/x-icon": "ico"}
+
+// linkFaviconObject names an icon in the upload storage: linkicon_<sha-256 of the bytes>.<extension>.
+var linkFaviconObject = regexp.MustCompile(`^linkicon_[0-9a-f]{64}\.(png|jpg|gif|webp|ico)$`)
+
+// A favicon is public artwork of a site, not workspace content, so any signed-in user may read one (see serveUpload).
+func isLinkFaviconObject(name string) bool { return linkFaviconObject.MatchString(name) }
+
+// storeLinkFavicon keeps the icon once under its content hash and returns the path /uploads serves it from.
+func (s *server) storeLinkFavicon(ctx context.Context, icon []byte, contentType string) string {
+	sum := sha256.Sum256(icon)
+	name := "linkicon_" + hex.EncodeToString(sum[:]) + "." + linkFaviconExtensions[contentType]
+	storage, err := s.storage()
+	if err != nil {
+		return ""
+	}
+	if existing, _, _, err := storage.Open(ctx, name); err == nil {
+		_ = existing.Close()
+		return "/uploads/" + name
+	}
+	if _, err := storage.Put(ctx, name, bytes.NewReader(icon), contentType); err != nil {
+		return ""
+	}
+	return "/uploads/" + name
+}
+
+var (
+	linkFaviconSlots  = make(chan struct{}, linkFaviconMaxJobs)
+	linkFaviconActive sync.Map
+)
+
+// queueLinkFavicon fetches the favicon of a link that was just created and, if the attachment still exists and has no
+// icon, sets one. It never delays the request that created the link: the work runs detached from the request (keeping
+// its values, not its cancellation), within a small global limit, and is skipped when the same host is already being
+// fetched or every slot is busy.
+func (s *server) queueLinkFavicon(request context.Context, workspace, issueID, attachmentID string, page *url.URL) {
+	if page == nil || issueID == "" || attachmentID == "" {
+		return
+	}
+	host := strings.ToLower(page.Host)
+	if _, busy := linkFaviconActive.LoadOrStore(host, struct{}{}); busy {
+		return
+	}
+	select {
+	case linkFaviconSlots <- struct{}{}:
+	default:
+		linkFaviconActive.Delete(host)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(request), linkFaviconTimeout)
+	go func() {
+		defer func() { <-linkFaviconSlots; linkFaviconActive.Delete(host); cancel() }()
+		s.setLinkFavicon(ctx, workspace, issueID, attachmentID, page)
+	}()
+}
+
+func (s *server) setLinkFavicon(ctx context.Context, workspace, issueID, attachmentID string, page *url.URL) {
+	icon, contentType := linkFaviconBytes(ctx, page)
+	if len(icon) == 0 {
+		return
+	}
+	path := s.storeLinkFavicon(ctx, icon, contentType)
+	if path == "" {
+		return
+	}
+	mutation := store.WithIssueRecordMutations(s.issueAttachmentContext(ctx), issueID)
+	_ = s.store.MutateWorkspace(mutation, workspace, "attachment.updated", issueID, linkAttachmentInput{IconURL: &path}, func(data *domain.Bootstrap) error {
+		target, err := issueByID(data, issueID)
+		if err != nil {
+			return store.ErrNoMutation
+		}
+		for index := range target.Attachments {
+			if target.Attachments[index].ID != attachmentID {
+				continue
+			}
+			if target.Attachments[index].IconURL != "" {
+				return store.ErrNoMutation
+			}
+			target.Attachments[index].IconURL = path
+			return nil
+		}
+		return store.ErrNoMutation
+	})
 }

@@ -143,11 +143,6 @@ func (s *server) saveLinkAttachment(ctx context.Context, r *http.Request, worksp
 	if r != nil && input.IconURL == nil && existing < 0 {
 		defaultIcon = s.defaultApplicationIcon(r)
 	}
-	if defaultIcon == "" && input.IconURL == nil && existing < 0 {
-		if page, err := url.Parse(input.URL); err == nil {
-			defaultIcon = linkFaviconDataURL(ctx, page)
-		}
-	}
 	var saved domain.Attachment
 	created := false
 	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(s.issueAttachmentUpsertContext(ctx), issue.ID), workspace, eventType, issue.ID, input, func(data *domain.Bootstrap) error {
@@ -174,6 +169,11 @@ func (s *server) saveLinkAttachment(ctx context.Context, r *http.Request, worksp
 		saved, created = attachment, true
 		return nil
 	})
+	if err == nil && created && input.IconURL == nil && saved.IconURL == "" {
+		if page, parseErr := url.Parse(input.URL); parseErr == nil {
+			s.queueLinkFavicon(ctx, workspace, issue.ID, saved.ID, page)
+		}
+	}
 	return saved, created, err
 }
 
