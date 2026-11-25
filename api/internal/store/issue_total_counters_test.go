@@ -291,6 +291,9 @@ func TestIssueRecordTotalMatchesCountSQL(t *testing.T) {
 		"Sort": true, "Direction": true, "Cursor": true, "Limit": true,
 		"IncludeTotal": true, "Summary": true, "IncludeDescription": true,
 		"Reverse": true, "Cursors": true,
+		// Says where AllowedTeamIDs came from for document reads of an event
+		// page; no issue record predicate reads it.
+		"AllowedTeamsAppKey": true,
 	}
 	typ := reflect.TypeOf(IssueRecordQuery{})
 	for i := 0; i < typ.NumField(); i++ {

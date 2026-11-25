@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_resource_relation_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginResourceRelationRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Reuses one proven ResourceDirectoryRead owner and compact project/initiative policy graph from the original relation handlers' fresh installed generation, ignoring earlier native metadata handoffs while preserving the caller SQL reader. The private installed-source override retains old pinned workspace/team SQL authority independently of current installed rows, without a second connection. After existing caller credential filtering, streams native project relation endpoints and admits complete matching rows with both-endpoint visibility; development retains raw dangling/empty endpoints. Initiative selection preserves the already projected/key-filtered relation slice, including guest survivors after initiative rows are cleared. Literal IDs, native occurrence order, duplicate/empty IDs, complete milestone/type/time/sort fields and nil/empty shapes stay exact; source/policy/selection/encoding admission lives through response output. Four Tier A tests pass persistent SQLite twice and race for native NUL/custom-zone values, retained/fresh generations, quotas/cancellation/missing/concurrent reads, body10x stable work and real MaxOpenConns1 SQL snapshot differential against BootstrapForUser after external workspace/team revocation. Tier B actual-handler table passes2624 byte-exact comparisons including guest/dev/key/source/sort/page cases. No full-hydration fallback or capacity claim.",
+      "accessors": ["BeginResourceDirectoryRead"],
+      "temperature": "hot",
+      "temperatureReason": "Project and initiative view relation lists.",
+      "callers": ["server/server.listProjectRelations", "server/server.listInitiativeRelations"]
+    }
+  }
+}

@@ -96,8 +96,42 @@ html:root body .property-command-surface .property-command-option-background {
 html:root body .property-command-surface .property-command-options [role=option]:hover .property-command-option-background,
 html:root body .property-command-surface .property-command-options [role=option][aria-selected=true] .property-command-option-background,
 html:root body .property-command-surface .property-command-label-group-option:hover .property-command-option-background,
-html:root body .property-command-surface .property-command-label-group-option[aria-expanded=true] .property-command-option-background {
+html:root body .property-command-surface .property-command-label-group-option[aria-expanded=true] .property-command-option-background,
+html:root body .property-command-label-submenu .property-command-options [role=option]:is(:hover, [aria-selected=true]) .property-command-option-background {
   background: var(--pk-hover);
+}
+/* A label group's labels (measured): the 9px colour dot and the name in the strong ink. */
+html:root body .property-command-label-submenu .property-command-options [role=option] { color: var(--pk-text); }
+html:root body .property-command-label-submenu .property-command-options .option-dot { width: 9px; height: 9px; flex-basis: 9px; }
+html:root body .property-command-label-submenu .property-command-options .property-command-label { color: var(--pk-text-strong); }
+html:root body .property-command-label-submenu[data-phone-submenu]:not(#_) .property-command-options { padding: 6px; }
+/* A label group's labels on a phone (measured): a 46px search field row (6px in, a 40px field with 12px corners, the group's name as
+   its placeholder) above the labels; the dot sits 12px into each 46px row, the name at 36px and the current label's tick 12px from the end. */
+html:root body .property-command-label-submenu[data-phone-submenu]:not(#_) .property-command-search {
+  position: static;
+  width: auto;
+  height: 46px;
+  box-sizing: border-box;
+  padding: 6px 6px 0;
+  clip-path: none;
+  overflow: visible;
+  border: 0;
+}
+html:root body .property-command-label-submenu[data-phone-submenu]:not(#_) .property-command-search input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 40px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--pk-text);
+  font: 400 13px/normal var(--font);
+}
+html:root body .property-command-label-submenu[data-phone-submenu]:not(#_) .property-command-search input::placeholder { color: var(--pk-faint); }
+/* A label group's labels on a phone: the row background is the only highlight (no second full-width band). */
+html:root body .property-command-label-submenu[data-phone-submenu]:not(#_) .property-command-options [role=option]::before {
+  background: transparent;
 }
 html:root body .property-command-surface .property-command-icon {
   width: 16px;
@@ -127,6 +161,10 @@ html:root body .property-command-surface .property-command-group {
   padding: 8px 14px;
   color: var(--pk-muted);
   font: 500 12px/normal var(--font);
+}
+/* Label picker headings are blocks like the reference's (measured): the text line starts 8px down (a centred flex line sits 7.75px down). */
+html:root body .property-command-surface.property-command-labels .property-command-options > .property-command-group {
+  display: block;
 }
 /* The reference's label list starts with its heading at the top edge of the list (no 6px lead-in above "Frequently used" / "Workspace labels"). */
 html:root body .property-command-surface.property-command-labels:not(.phone-menu-surface) .property-command-options:has(> .property-command-group:first-child) {
@@ -1110,10 +1148,12 @@ html:root body .bottom-agent > button:not(#_):is(:hover, :focus-visible, [aria-e
   .property-command-surface.issue-labels-menu .property-command-options [role=option][aria-checked=true] .property-command-checkbox {
     visibility: visible;
   }
+  /* A ticked box is the filled check (a selected label, or a group with a selected label). */
   .property-command-surface.issue-labels-menu .property-command-options [role=option][aria-checked=true] .property-command-checkbox {
     border: 0;
-    background: transparent;
+    background: var(--pk-check-on);
     box-shadow: none;
+    color: var(--pk-check-mark);
   }
   .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-icon { grid-column: 2; }
   .property-command-surface.issue-labels-menu .option-dot { width: 9px; height: 9px; flex-basis: 9px; }

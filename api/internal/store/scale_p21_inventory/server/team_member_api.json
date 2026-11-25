@@ -1,0 +1,57 @@
+{
+  "source": "server/team_member_api.go",
+  "unmigrated": 1,
+  "consumers": {
+    "recordTeamMemberAudit": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.acceptInvitation",
+        "server/server.removeMember",
+        "server/server.createTeam",
+        "server/server.removeSCIMMember",
+        "server/server.changeTeamMember",
+        "server/server.syncTeamMemberships",
+        "server/server.syncSCIMGroupTeam"
+      ]
+    },
+    "teamForMemberRequest": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded reads use the shared ordered TeamMemberRequestRead for only Workspace.ID, Team ID/Key and development GET membership rows, preserving exact-ID-before-first-EqualFold-key precedence and native source strings. Existing teamVisibleToUser policy, active principal/credential binding and trailing authority validation retain admin private settings visibility, guest/direct/inherited boundaries, retired/archive/external exclusions and selected-empty/inferred/application keys. A matching one-shot authorization handoff retains literal publicMetadata key/preference projection and precedence; off mode still invokes publicMetadata unchanged. Owners register with the outer request or return an explicit local closer, and all four direct callers retain them through response encoding. HotTeamMemberRequest differentials pass twice on persistent SQLite across 220 principal/key/reference cases, real app grants, four caller responses, source/default/missing/error boundaries, development wire rows, unknown revision, parent snapshots, handoff one-shot use and zero complete metadata decodes. This reviews only the direct team/member input; the unchanged recordTeamMemberAudit writer, general publicMetadata adapter and cold source loader remain separate blockers.",
+      "accessors": [
+        "Bootstrap",
+        "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.listTeamMemberships",
+        "server/server.putTeamMembership",
+        "server/server.deleteTeamMembership",
+        "server/server.syncTeamMemberships"
+      ]
+    },
+    "teamMemberNames": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode uses the shared independently admitted MemberDirectoryRead over the exact installed logical source: only User ID/Name/DisplayName/Email and Team ID/Name/Key. Staged membership overlays preserve complete ListMembers success/error behavior, including unrelated malformed app installation fallback and global installed OAuth ClientID/name precedence. Literal WorkspaceMetadataFields plus ListMembers dispatch remains exact off mode. Name owners register with the authenticated outer response; bounded direct put/delete/sync establish a nested-safe local response scope. recordTeamMemberAudit continues decorating the original changes slice before its best-effort writer, preserving first-snapshot nonempty UserName through subsequent delete/sync decoration and HTTP encoding. Unscoped current audit callers consume no decorated strings after their audit boundary and close locally. Store/server HotMemberDirectory tests cover the trusted principal/key matrix, display/audit metadata differentials, native scalars, invalid app all-or-none fallback, large ignored bodies, explicit budgets, and request-owned response encoding. This helper review does not certify the separate unchanged audit writer or publicMetadata authorization path.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.recordTeamMemberAudit",
+        "server/server.deleteTeamMembership",
+        "server/server.syncTeamMemberships"
+      ]
+    }
+  }
+}

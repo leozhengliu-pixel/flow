@@ -127,6 +127,17 @@ function PipelineSettingsForm({ data, pipeline, onCancel, onSaved, onChanged }: 
   const templateTimer = useRef<number>(undefined)
   const templateDraft = useRef(pipeline.releaseNotesTemplate ?? '')
   useResetOnChange([pipeline.name], () => setName(pipeline.name))
+  // The stages and the template follow the server's copy (a page painted from a cached workspace snapshot shows the
+  // confirmed one) unless an edit of the viewer is waiting to be saved or is being saved.
+  useResetOnChange([JSON.stringify([pipeline.stages, pipeline.stageStatuses, pipeline.stageColors, pipeline.frozenStages])], () => {
+    if (stageTimer.current !== undefined) return
+    const fresh = stagesFromPipeline(pipeline)
+    const same = fresh.length === stages.length && fresh.every((stage, index) => stage.name === stages[index].name && stage.status === stages[index].status && stage.color === stages[index].color && stage.frozen === stages[index].frozen)
+    if (!same) setStages(fresh)
+  })
+  useEffect(() => {
+    if (templateTimer.current === undefined) templateDraft.current = pipeline.releaseNotesTemplate ?? ''
+  }, [pipeline.releaseNotesTemplate])
   useEffect(() => () => { window.clearTimeout(stageTimer.current); window.clearTimeout(templateTimer.current) }, [])
   const reload = onChanged ?? (async () => {})
   // The reference app autosaves every pipeline setting; there is no Save button.
@@ -150,9 +161,10 @@ function PipelineSettingsForm({ data, pipeline, onCancel, onSaved, onChanged }: 
   const changeStages = (next: StageDraft[]) => {
     setStages(next)
     window.clearTimeout(stageTimer.current)
-    stageTimer.current = window.setTimeout(() => {
+    const handle: number = stageTimer.current = window.setTimeout(() => {
       const sent = new Map(next.map(stage => [stage.key, stage.name]))
       void save(stageMutation(next)).then(updated => {
+        if (stageTimer.current === handle) stageTimer.current = undefined
         if (!updated) { setStages(stagesFromPipeline(pipeline)); return }
         // Saved names become the originals the next rename is measured from.
         setStages(current => current.map(stage => sent.has(stage.key) ? { ...stage, originalName: sent.get(stage.key) } : stage))
@@ -165,7 +177,7 @@ function PipelineSettingsForm({ data, pipeline, onCancel, onSaved, onChanged }: 
     if (value === templateDraft.current) return
     templateDraft.current = value
     window.clearTimeout(templateTimer.current)
-    templateTimer.current = window.setTimeout(() => { void save({ releaseNotesTemplate: value }) }, 600)
+    const handle: number = templateTimer.current = window.setTimeout(() => { void save({ releaseNotesTemplate: value }).finally(() => { if (templateTimer.current === handle) templateTimer.current = undefined }) }, 600)
   }
   const releaseCountByStage = useMemo(() => {
     const counts: Record<string, number> = {}

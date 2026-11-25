@@ -22,10 +22,14 @@ export const AGENT_ERROR_MESSAGES: Record<AgentErrorKind, string> = {
   generic: 'The agent ran into an error.',
 }
 
+/** A saved agent session whose replies could not be read for now (the server was busy or unreachable); not an agent failure. */
+export const AGENT_REPLIES_UNAVAILABLE = "Couldn't load the agent's replies right now. Try again in a moment."
+
 /** Notices the app words itself about a chat it could not read or follow: shown as they are (translated), never as a provider error. */
 export const AGENT_APP_NOTICES: ReadonlySet<string> = new Set([
   "Couldn't load this chat.",
   'This chat is no longer available.',
+  AGENT_REPLIES_UNAVAILABLE,
 ])
 
 /** Classifies raw error text: "Flow Agent provider returned status 429: …", "Flow Agent provider stopped responding"… */

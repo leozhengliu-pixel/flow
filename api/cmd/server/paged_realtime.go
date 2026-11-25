@@ -55,17 +55,72 @@ func (s *server) pagedPresenceFor(r *http.Request, data domain.Bootstrap, query 
 			data.Issues = append(data.Issues, domain.Issue{ID: id})
 		}
 	}
-	values = slices.DeleteFunc(slices.Clone(values), func(item domain.Presence) bool {
-		if item.DocumentID == "" {
-			return false
+	if s.store.BoundedMetadataEnabled() {
+		var readErr error
+		values = slices.DeleteFunc(slices.Clone(values), func(item domain.Presence) bool {
+			if item.DocumentID == "" || readErr != nil {
+				return false
+			}
+			read, found, err := s.store.BeginPresenceDocumentRead(r.Context(), workspaceKey(r), item.DocumentID)
+			if err != nil {
+				readErr = err
+				return true
+			}
+			if !found {
+				return true
+			}
+			defer read.Close()
+			return !read.Found || documentRole(s, data, read.Document) == "none" || apiKeyDocumentOutsideScope(r, data, read.Document)
+		})
+		if readErr != nil {
+			return nil, readErr
 		}
-		document, ok := s.store.DocumentByID(workspaceKey(r), item.DocumentID)
-		return !ok || documentRole(s, data, document) == "none"
-	})
+	} else {
+		values = slices.DeleteFunc(slices.Clone(values), func(item domain.Presence) bool {
+			if item.DocumentID == "" {
+				return false
+			}
+			document, ok := s.store.DocumentByID(workspaceKey(r), item.DocumentID)
+			return !ok || documentRole(s, data, document) == "none" || apiKeyDocumentOutsideScope(r, data, document)
+		})
+	}
 	return filterPresenceForViewer(data, values), nil
 }
 
 func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent) (domain.RealtimeEvent, bool, error) {
+	frame, handled, err := s.sharedEventFrame(r, event)
+	if handled {
+		defer frame.Close()
+		if err != nil || !frame.Visible() {
+			return event, false, err
+		}
+		projected, err := frame.Event()
+		return projected, err == nil, err
+	}
+	projected, visible, err := s.legacyPagedRealtimeEvent(r, event)
+	if err != nil || !visible || !s.negotiatedSummaryRequest(r) || ephemeralRealtimeEvent(event.Type) {
+		return projected, visible, err
+	}
+	access, err := s.resolveSyncAccess(r)
+	if err != nil {
+		return event, false, err
+	}
+	raw, err := json.Marshal(projected)
+	if err != nil {
+		return event, false, err
+	}
+	frame, err = summarizeEventFrame(EventFrame{encoded: raw, id: event.ID, visible: true}, access.AuthzEpoch)
+	if err != nil {
+		return event, false, err
+	}
+	if err = access.Validate(r.Context()); err != nil {
+		return event, false, err
+	}
+	projected, err = frame.Event()
+	return projected, err == nil, err
+}
+
+func (s *server) legacyPagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent) (domain.RealtimeEvent, bool, error) {
 	// Older nodes or replay buffers may still send credential telemetry. Reject
 	// it before any workspace permission/directory projection is attempted.
 	if domain.RoutineCredentialEvent(event.Type) {
@@ -81,6 +136,10 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		}
 		if json.Unmarshal(event.Payload, &payload) != nil || payload.TaskID == "" {
 			return event, false, nil
+		}
+		if s.store.BoundedMetadataEnabled() {
+			visible, err := s.boundedAgentTaskRealtimeVisible(r, payload.TaskID)
+			return event, visible, err
 		}
 		return event, s.agentTaskRealtimeVisible(r, payload.TaskID), nil
 	}
@@ -191,12 +250,23 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		// Document and other permission changes carry subject lists the viewer may
 		// not see: send the bare signal, clients reload the affected metadata. A
 		// viewer who cannot open the document (any more) is not told which one.
-		if strings.HasPrefix(event.Type, "document.") && !s.documentPresenceAllowed(r, event.AggregateID) {
+		if s.store.BoundedMetadataEnabled() && strings.HasPrefix(event.Type, "document.") {
+			allowed, err := s.boundedLegacyDocumentPresenceAllowed(r, event.AggregateID)
+			if err != nil {
+				return event, false, err
+			}
+			if !allowed {
+				return anonymousRealtimeEvent(event), true, nil
+			}
+		} else if strings.HasPrefix(event.Type, "document.") && !s.documentPresenceAllowed(r, event.AggregateID) {
 			return anonymousRealtimeEvent(event), true, nil
 		}
 		return bareRealtimeEvent(event, nil), true, nil
 	}
 	if strings.HasPrefix(event.Type, "document.") && event.AggregateID != "" {
+		if s.store.BoundedMetadataEnabled() {
+			return s.boundedPagedDocumentEvent(r, data, event)
+		}
 		projected, visible := s.pagedDocumentEvent(r, data, event)
 		return projected, visible, nil
 	}
@@ -233,8 +303,8 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		event.Payload, _ = json.Marshal(payload)
 		return event, true, nil
 	}
-	if projected, visible, decided := s.pagedPulseSourceEvent(r, data, event); decided {
-		return projected, visible, nil
+	if projected, visible, decided, err := s.pagedPulseSourceEvent(r, data, event); decided {
+		return projected, visible, err
 	}
 	if strings.HasPrefix(event.Type, "project.") || strings.HasPrefix(event.Type, "project_update.") || strings.HasPrefix(event.Type, "initiative.") || strings.HasPrefix(event.Type, "initiative_update.") {
 		// A relation or update the Pulse sources do not index: as before, the
@@ -243,6 +313,9 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 	}
 	// Every other kind follows the read rule of the record it names
 	// (realtime_event_policy.go); its payload is never forwarded as it is.
+	if s.store.BoundedMetadataEnabled() {
+		return s.boundedPagedPolicyEvent(r, data, query, event)
+	}
 	projected, visible := s.pagedPolicyEvent(r, data, query, event)
 	return projected, visible, nil
 }
@@ -261,6 +334,11 @@ func (s *server) writePresenceResponse(w http.ResponseWriter, r *http.Request, p
 		var err error
 		presence, err = s.pagedPresence(r, presence)
 		if err != nil {
+			if s.store.BoundedMetadataEnabled() && (r.Context().Err() != nil || errors.Is(err, store.ErrMetadataWorkBudget) ||
+				errors.Is(err, store.ErrMetadataPageBudget) || errors.Is(err, store.ErrBoundedMetadataCoverage)) {
+				writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
+				return
+			}
 			issueRecordsError(w, err)
 			return
 		}

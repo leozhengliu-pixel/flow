@@ -518,15 +518,16 @@ func (s *SQLiteStore) ImportIssues(ctx context.Context, workspace string, issues
 		}
 		encoded[issue.ID] = raw
 	}
-	if _, ok := s.WorkspaceMetadata(workspace); !ok {
+	if _, ok, err := s.WorkspaceMetadataScoped(ctx, workspace, MetadataRecordScope{}); err != nil {
+		return err
+	} else if !ok {
 		return fmt.Errorf("workspace not found")
 	}
-	s.lockWorkspaceWrites()
-	defer s.unlockWorkspaceWrites()
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.lockWorkspaceWritesTx(ctx)
 	if err != nil {
 		return err
 	}
+	defer s.unlockWorkspaceWrites()
 	defer tx.Rollback()
 	ids := []string{}
 	seen := map[string]bool{}
@@ -644,7 +645,7 @@ func (s *SQLiteStore) migrateIssueSequences(ctx context.Context) error {
 			expression = `CAST(JSON_UNQUOTE(JSON_EXTRACT(CONVERT(data USING utf8mb4),'$.number')) AS UNSIGNED)`
 		}
 		if s.dialect == "postgres" {
-			expression = `CAST(convert_from(data,'UTF8')::jsonb->>'number' AS BIGINT)`
+			expression = `CAST(flow_utf8(data)::jsonb->>'number' AS BIGINT)`
 		}
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO issue_number_sequences(workspace_key,last_number) SELECT ?,COALESCE(MAX(`+expression+`),0) FROM issue_records WHERE workspace_key=? ON CONFLICT(workspace_key) DO UPDATE SET last_number=excluded.last_number`, workspace, workspace); err != nil {
 			return err
@@ -654,8 +655,10 @@ func (s *SQLiteStore) migrateIssueSequences(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) importIssueRecordBatch(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue, orders ...map[string]int) error {
-	if err := s.recordIssueFieldHistory(ctx, tx, workspace, issues, nil); err != nil {
-		return err
+	if prepared, _ := ctx.Value(legacyIssueHistoryPreparedKey{}).(bool); !prepared {
+		if err := s.recordIssueFieldHistory(ctx, tx, workspace, issues, nil); err != nil {
+			return err
+		}
 	}
 	insert, tuple, update := issueRecordInsert, issueRecordValuesSQL, issueRecordUpdate
 	if len(orders) > 0 {
@@ -668,15 +671,37 @@ func (s *SQLiteStore) importIssueRecordBatch(ctx context.Context, tx *sqlTx, wor
 		size := 0
 		var args []any
 		var tuples []string
+		var releases []func()
+		releaseBatch := func() {
+			for _, release := range releases {
+				release()
+			}
+			releases = nil
+		}
+		defer releaseBatch()
 		for end < len(issues) && end-start < 100 {
+			release, err := reserveIssueRecordEncoding(ctx, issueRecordWriteAdmission(ctx), issues[end], nil)
+			if err != nil {
+				if end > start && errors.Is(err, ErrMetadataWorkBudget) {
+					// Flush the admitted arguments before retrying this row.
+					// A legal large row need not fit beside 99 other encodings.
+					break
+				}
+				releaseBatch()
+				return err
+			}
 			values, err := s.issueRecordColumns(workspace, issues[end])
 			if err != nil {
+				release()
+				releaseBatch()
 				return err
 			}
 			raw := values[len(values)-1].([]byte)
 			if end > start && size+len(raw) > 4<<20 {
+				release()
 				break
 			}
+			releases = append(releases, release)
 			size += len(raw)
 			if len(orders) > 0 {
 				values = append(values, orders[0][issues[end].ID])
@@ -686,8 +711,10 @@ func (s *SQLiteStore) importIssueRecordBatch(ctx context.Context, tx *sqlTx, wor
 			end++
 		}
 		if _, err := tx.ExecContext(ctx, insert+strings.Join(tuples, ",")+update, args...); err != nil {
+			releaseBatch()
 			return err
 		}
+		releaseBatch()
 		start = end
 	}
 	return syncIssueIndexes(ctx, tx, workspace, issues)
@@ -714,6 +741,22 @@ func (s *SQLiteStore) issueCollectionCounts(ctx context.Context) (map[string]int
 // WorkspaceMetadata does not load the issue collection. Query endpoints must use
 // this projection instead of the compatibility full-bootstrap API.
 func (s *SQLiteStore) WorkspaceMetadata(workspace string) (domain.Bootstrap, bool) {
+	return s.WorkspaceMetadataForRead(context.Background(), workspace)
+}
+
+// WorkspaceMetadataForRead uses the caller's explicit snapshot-buffer lifetime.
+// Callers without one retain the ordinary owned-snapshot behavior.
+func (s *SQLiteStore) WorkspaceMetadataForRead(ctx context.Context, workspace string) (domain.Bootstrap, bool) {
+	if view, release, handled := s.coldProjectionView(ctx, "WorkspaceMetadata", workspace); handled {
+		defer release()
+		if view == nil {
+			return domain.Bootstrap{}, false
+		}
+		return view.WorkspaceMetadataForRead(ctx, view.lastWorkspaceKey)
+	}
+	if s.skeletalRead("WorkspaceMetadata") {
+		return domain.Bootstrap{}, false
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if workspace == "" {
@@ -730,7 +773,7 @@ func (s *SQLiteStore) WorkspaceMetadata(workspace string) (domain.Bootstrap, boo
 	data.Comments = nil
 	data.Notifications = nil
 	data.NotificationDeliveries = nil
-	clone := cloneBootstrap(data)
+	clone := CloneHydratedReadSnapshot(ctx, data)
 	clone.Issues = []domain.Issue{}
 	clone.Activities = map[string][]domain.ActivityEvent{}
 	clone.Comments = map[string][]domain.Comment{}

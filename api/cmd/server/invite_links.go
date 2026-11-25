@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -19,7 +19,11 @@ type inviteLinkPreview struct {
 }
 
 func (s *server) getWorkspaceInviteLink(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
+	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), r.PathValue("workspaceKey"), store.MetadataRecordScope{Fields: []string{"workspaceInviteLink"}, Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "inviteLinksEnabled"}}})
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -36,7 +40,11 @@ func (s *server) getWorkspaceInviteLink(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) createOrRotateWorkspaceInviteLink(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
+	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), r.PathValue("workspaceKey"), store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "inviteLinksEnabled"}}})
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -46,7 +54,7 @@ func (s *server) createOrRotateWorkspaceInviteLink(w http.ResponseWriter, r *htt
 		return
 	}
 	var created domain.WorkspaceInviteLink
-	err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_invite_link.rotated", "", nil, func(workspace *domain.Bootstrap) error {
+	err = s.store.MutateWorkspaceScoped(r.Context(), r.PathValue("workspaceKey"), "workspace_invite_link.rotated", "", nil, store.MetadataRecordScope{Fields: []string{"workspaceInviteLink"}, Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "inviteLinksEnabled"}}}, func(workspace *domain.Bootstrap) error {
 		if !workspace.WorkspaceSettings.InviteLinksEnabled {
 			return errInvalid
 		}
@@ -71,7 +79,7 @@ func (s *server) createOrRotateWorkspaceInviteLink(w http.ResponseWriter, r *htt
 }
 
 func (s *server) disableWorkspaceInviteLink(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_invite_link.disabled", "", nil, func(workspace *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), r.PathValue("workspaceKey"), "workspace_invite_link.disabled", "", nil, store.MetadataRecordScope{Fields: []string{"workspaceInviteLink"}}, func(workspace *domain.Bootstrap) error {
 		if workspace.WorkspaceInviteLink == nil {
 			return errNotFound
 		}
@@ -89,7 +97,7 @@ func (s *server) inviteLinkPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.LoadMissingWorkspaces(r.Context()); err != nil {
-		log.Printf("load workspaces created on other servers: %v", err)
+		slog.WarnContext(r.Context(), "load workspaces created on other servers", "cause", requestErrorCode(err))
 	}
 	for _, key := range s.store.WorkspaceKeys() {
 		data, ok := s.store.BootstrapFor(key)
@@ -148,7 +156,7 @@ func (s *server) joinOrganization(w http.ResponseWriter, r *http.Request) {
 	}
 	// A workspace created on another server a moment ago holds the link too.
 	if err := s.store.LoadMissingWorkspaces(r.Context()); err != nil {
-		log.Printf("load workspaces created on other servers: %v", err)
+		slog.WarnContext(r.Context(), "load workspaces created on other servers", "cause", requestErrorCode(err))
 	}
 	for _, key := range s.store.WorkspaceKeys() {
 		// An account whose personal data was erased from the workspace cannot
@@ -236,7 +244,10 @@ func (s *server) rotateSCIMToken(w http.ResponseWriter, r *http.Request) {
 	if !s.requireWorkspaceAdmin(w, r) {
 		return
 	}
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	tokenID := r.PathValue("id")
 	existing, err := s.store.ListSCIMTokens(r.Context(), data.Workspace.ID)
 	if err != nil {
@@ -265,7 +276,7 @@ func (s *server) rotateSCIMToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.store.RevokeSCIMToken(r.Context(), data.Workspace.ID, tokenID)
-	_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "scim.token_rotated", tokenID, nil, func(next *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "scim.token_rotated", tokenID, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "workspaceSettings", ID: "scimEnabled"}}}, func(next *domain.Bootstrap) error {
 		next.WorkspaceSettings.SCIMEnabled = true
 		appendAudit(next, "rotated", "scim_token", tokenID, map[string]any{"name": name, "replacementId": item.ID})
 		return nil
@@ -319,7 +330,7 @@ func (s *server) decideOAuthSyncGroupRequest(w http.ResponseWriter, r *http.Requ
 	}
 	requestID := r.PathValue("requestId")
 	var updated domain.OAuthSyncGroupRequest
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_sync_group."+input.Status, requestID, input, func(workspace *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "oauth_sync_group."+input.Status, requestID, input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "oauthSyncGroupRequests", ID: requestID}}}, func(workspace *domain.Bootstrap) error {
 		index := slices.IndexFunc(workspace.OAuthSyncGroupRequests, func(item domain.OAuthSyncGroupRequest) bool {
 			return item.ID == requestID && item.ApplicationID == r.PathValue("id")
 		})

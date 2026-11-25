@@ -1,0 +1,15 @@
+{
+  "source": "server/resource_access.go",
+  "unmigrated": 0,
+  "consumers": {
+    "requestResourceRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded P03 project/initiative detail requests use an owned ResourceRead, retain its native source and output allowance through the outer authenticated response, and release discarded retry readers before resolving the next principal. Direct terminal invocations release locally. The original flag-off ResourceReadMetadata branch and credential-bound handoff identity remain unchanged. TestScaleP21ResourceRequest checks blocked encoding, cancellation, panic, denial, retry, direct terminals, source/byte ownership, off context forwarding and warm/reloaded/canonical HTTP output.",
+      "accessors": ["BeginResourceRead"],
+      "temperature": "hot",
+      "temperatureReason": "Per-request project and initiative detail authorization and response handoff.",
+      "callers": ["server/server.resourceAllowed", "server/server.serveResourceRead", "server/server.shadowResourceAuthorization", "server/server.shadowResourceRecord"]
+    }
+  }
+}

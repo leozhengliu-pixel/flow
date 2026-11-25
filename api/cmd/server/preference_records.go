@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -50,6 +51,10 @@ func (s *server) preferenceReviewVisible(r *http.Request, id string) bool {
 	data, query, err := s.issueRecordsQuery(r)
 	if err != nil {
 		return false
+	}
+	if s.store.BoundedMetadataEnabled() {
+		visible, err := s.store.InstalledReviewReferenceVisible(r.Context(), data.Workspace.URLKey, id, query)
+		return err == nil && visible
 	}
 	// The general metadata projection omits reviews whose linked issues were
 	// not loaded. Resolve just these links through the indexed access query.
@@ -100,9 +105,17 @@ func (s *server) preferenceMetadata(r *http.Request) (domain.Bootstrap, error) {
 		data.ViewerRole = "admin"
 		return data, s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID)
 	}
-	data, err := s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
-	if err != nil {
-		return data, err
+	var data domain.Bootstrap
+	var handedOff bool
+	if !s.store.BoundedMetadataEnabled() && (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/api/resource-preferences" {
+		data, handedOff = takePagedMetadata(r, key, authUser(r).ID)
+	}
+	if !handedOff {
+		var err error
+		data, err = s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
+		if err != nil {
+			return data, err
+		}
 	}
 	filterBootstrapForAPIKey(&data, r)
 	return data, nil
@@ -141,21 +154,86 @@ func (s *server) filterPreferenceIssueTeams(r *http.Request, data *domain.Bootst
 			ids = append(ids, item.ResourceID)
 		}
 	}
+	for _, item := range data.Documents {
+		if item.IssueID != "" {
+			ids = append(ids, item.IssueID)
+		}
+	}
+	for _, item := range data.Notifications {
+		if item.IssueID != "" {
+			ids = append(ids, item.IssueID)
+		}
+	}
+	for _, item := range data.Reviews {
+		ids = append(ids, item.IssueIDs...)
+	}
+	for _, item := range data.Releases {
+		ids = append(ids, item.IssueIDs...)
+	}
+	for _, item := range data.CustomerRequests {
+		if item.IssueID != "" {
+			ids = append(ids, item.IssueID)
+		}
+	}
 	allowed := slices.Clone(key.TeamIDs)
 	if allowed == nil {
 		allowed = []string{}
 	}
-	visible, err := s.store.VisibleIssueRecordIDs(r.Context(), store.IssueRecordQuery{Workspace: data.Workspace.URLKey, AllowedTeamIDs: allowed}, ids)
-	if err != nil {
-		return err
+	visible := map[string]bool{}
+	if len(ids) > 0 {
+		_, access, err := s.store.IssueQueryAccess(r.Context(), data.Workspace.URLKey, credentialReadPrincipal(r.Context(), key))
+		if err != nil {
+			return err
+		}
+		visible, err = s.store.VisibleIssueRecordIDs(r.Context(), store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access, AllowedTeamIDs: allowed}, ids)
+		if err != nil {
+			return err
+		}
 	}
 	canRead := func(kind, id string) bool {
 		if kind == "issue" {
 			return visible[id]
 		}
-		return resourceExists(data, kind, id)
+		return credentialResourceExists(data, kind, id)
 	}
 	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return !canRead(item.ResourceType, item.ResourceID) })
 	data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool { return !canRead(item.ResourceType, item.ResourceID) })
+	for i := range data.Documents {
+		if data.Documents[i].IssueID != "" && !visible[data.Documents[i].IssueID] {
+			data.Documents[i].IssueID, data.Documents[i].IssueTeamID = "", ""
+		}
+	}
+	data.Notifications = slices.DeleteFunc(data.Notifications, func(item domain.Notification) bool {
+		if item.IssueID != "" {
+			return !visible[item.IssueID]
+		}
+		if item.ProjectID != "" {
+			return !canRead("project", item.ProjectID)
+		}
+		if item.ReviewID != "" {
+			return !canRead("review", item.ReviewID)
+		}
+		switch item.SourceType {
+		case "project", "initiative", "document", "cycle", "team":
+			return !canRead(item.SourceType, item.SourceID)
+		}
+		return false
+	})
+	data.NotificationDeliveries = slices.DeleteFunc(data.NotificationDeliveries, func(item domain.NotificationDelivery) bool {
+		return !slices.ContainsFunc(data.Notifications, func(notification domain.Notification) bool { return notification.ID == item.NotificationID })
+	})
+	data.Reviews = slices.DeleteFunc(data.Reviews, func(item domain.CodeReview) bool {
+		return len(item.IssueIDs) > 0 && !slices.ContainsFunc(item.IssueIDs, func(id string) bool { return visible[id] })
+	})
+	for i := range data.Reviews {
+		item := &data.Reviews[i]
+		item.IssueIDs = slices.DeleteFunc(item.IssueIDs, func(id string) bool { return !visible[id] })
+		item.IssueLinkTypes = maps.Clone(item.IssueLinkTypes)
+		maps.DeleteFunc(item.IssueLinkTypes, func(id, _ string) bool { return !visible[id] })
+	}
+	for i := range data.Releases {
+		data.Releases[i].IssueIDs = slices.DeleteFunc(data.Releases[i].IssueIDs, func(id string) bool { return !visible[id] })
+	}
+	data.CustomerRequests = slices.DeleteFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.IssueID != "" && !visible[item.IssueID] })
 	return nil
 }

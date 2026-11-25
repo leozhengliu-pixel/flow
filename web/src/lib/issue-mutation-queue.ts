@@ -1,4 +1,5 @@
 import { ApiError } from './api-client'
+import { endsSession, registerSessionCacheClearer, registerSessionFlusher } from '@/lib/session-cache-registry'
 import type { Issue, IssueUpdateInput } from '@/types/flow'
 
 /*
@@ -31,10 +32,24 @@ const tails = new Map<string, Promise<unknown>>()
 const lineages = new Map<string, Lineage>()
 const conflicts = new Map<string, Conflict>()
 const waiting = new Map<string, WaitingUpdate>()
+// Bumped when the session ends: a write still waiting behind an earlier one is never sent for the next viewer, and a
+// write that was already in flight does not record versions into the next viewer's lineages.
+let sessionEpoch = 0
+// Settles when this epoch's session ends, so a write waiting behind one that never finishes is rejected at once.
+let endCurrentSession!: () => void
+let currentSessionEnd = new Promise<void>(resolve => { endCurrentSession = resolve })
+
+function sessionEnded() {
+  return new ApiError('The session ended before the change was sent', 401)
+}
 
 function enqueue<T>(ids: string[], run: () => Promise<T>): Promise<T> {
   const previous = ids.flatMap(id => tails.get(id) ?? [])
-  const task = previous.length ? Promise.all(previous).then(run) : run()
+  const epoch = sessionEpoch
+  const guarded = () => epoch === sessionEpoch ? run() : Promise.reject(sessionEnded())
+  const task = previous.length
+    ? Promise.race([Promise.all(previous).then(guarded), currentSessionEnd.then(() => Promise.reject(sessionEnded()))])
+    : guarded()
   const tail: Promise<unknown> = task.then(() => undefined, () => undefined)
   for (const id of ids) tails.set(id, tail)
   void tail.then(() => {
@@ -98,9 +113,10 @@ function recordFailure(id: string, error: unknown) {
 /** Runs one write to an issue after the writes queued before it. */
 export function queueIssueWrite<T>(id: string, write: () => Promise<T>): Promise<T> {
   waiting.delete(id)
+  const epoch = sessionEpoch
   return enqueue([id], () => write().then(
-    result => { recordWrite(id, undefined, result); return result },
-    error => { recordFailure(id, error); throw error },
+    result => { if (epoch === sessionEpoch) recordWrite(id, undefined, result); return result },
+    error => { if (epoch === sessionEpoch) recordFailure(id, error); throw error },
   ))
 }
 
@@ -130,9 +146,10 @@ export function queueIssueUpdate(id: string, path: string, input: IssueUpdateInp
     // based on the same outdated issue, so it shares that conflict.
     if (conflict && body.expectedVersion !== undefined && body.expectedVersion < conflict.version) return Promise.reject(conflict.error)
     const expectedVersion = versionToSend(id, body.expectedVersion)
+    const epoch = sessionEpoch
     return send(expectedVersion === undefined ? body : { ...body, expectedVersion }).then(
-      result => { recordWrite(id, expectedVersion, result); return result },
-      error => { recordFailure(id, error); throw error },
+      result => { if (epoch === sessionEpoch) recordWrite(id, expectedVersion, result); return result },
+      error => { if (epoch === sessionEpoch) recordFailure(id, error); throw error },
     )
   })
   if (mustWait) waiting.set(id, { path, input: body, promise })
@@ -143,9 +160,10 @@ export function queueIssueUpdate(id: string, path: string, input: IssueUpdateInp
 export function queueIssuesWrite(ids: string[], write: () => Promise<Issue[]>): Promise<Issue[]> {
   const unique = [...new Set(ids)]
   for (const id of unique) waiting.delete(id)
+  const epoch = sessionEpoch
   return enqueue(unique, () => write().then(
-    issues => { for (const issue of issues ?? []) if (issue?.id) recordWrite(issue.id, undefined, issue); return issues },
-    error => { for (const id of unique) recordFailure(id, error); throw error },
+    issues => { if (epoch === sessionEpoch) for (const issue of issues ?? []) if (issue?.id) recordWrite(issue.id, undefined, issue); return issues },
+    error => { if (epoch === sessionEpoch) for (const id of unique) recordFailure(id, error); throw error },
   ))
 }
 
@@ -156,3 +174,15 @@ export function resetIssueMutationQueue() {
   conflicts.clear()
   waiting.clear()
 }
+
+registerSessionCacheClearer((_viewerId, workspaceKey) => {
+  if (!endsSession(workspaceKey)) return
+  sessionEpoch++
+  endCurrentSession()
+  currentSessionEnd = new Promise<void>(resolve => { endCurrentSession = resolve })
+  resetIssueMutationQueue()
+})
+
+registerSessionFlusher(async () => {
+  while (tails.size) await Promise.all([...tails.values()])
+})

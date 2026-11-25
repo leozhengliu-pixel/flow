@@ -39,6 +39,11 @@ type progressReader interface {
 // workflow state, team and estimate) from the indexed issue columns and the
 // sparse estimate attribute, without decoding issue documents.
 func projectProgressIssues(ctx context.Context, reader progressReader, workspace, projectID string, states map[string]domain.WorkflowState) ([]progressIssue, error) {
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		if err := work.admitIssues(ctx, reader, workspace, projectID); err != nil {
+			return nil, err
+		}
+	}
 	rows, err := reader.QueryContext(ctx, `SELECT i.id,i.created_at,i.state_id,i.state_type,i.team_id,COALESCE(a.value,'') FROM issue_records i LEFT JOIN issue_attribute_records a ON a.workspace_key=i.workspace_key AND a.issue_id=i.id AND a.field='estimate' WHERE i.workspace_key=? AND i.project_id=?`, workspace, projectID)
 	if err != nil {
 		return nil, err
@@ -67,7 +72,16 @@ func projectProgressIssues(ctx context.Context, reader progressReader, workspace
 		}
 		issues = append(issues, issue)
 	}
-	return issues, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		if err := work.currentStates(ctx, issues); err != nil {
+			return nil, err
+		}
+	}
+	return issues, nil
 }
 
 // progressActivities loads the state and estimate transitions of the given
@@ -76,6 +90,11 @@ func progressActivities(ctx context.Context, reader progressReader, workspace st
 	result := map[string][]domain.ActivityEvent{}
 	for start := 0; start < len(ids); start += 500 {
 		clause, args := bindList("resource_id", ids[start:min(start+500, len(ids))])
+		if work := issueProgressWorkFrom(ctx); work != nil {
+			if err := work.admitActivities(ctx, reader, workspace, clause, args); err != nil {
+				return nil, err
+			}
+		}
 		rows, err := reader.QueryContext(ctx, `SELECT resource_id,data FROM workspace_content_records WHERE workspace_key=? AND kind='activity' AND `+clause+` ORDER BY created_at,id`, append([]any{workspace}, args...)...)
 		if err != nil {
 			return nil, err
@@ -87,10 +106,11 @@ func progressActivities(ctx context.Context, reader progressReader, workspace st
 				rows.Close()
 				return nil, err
 			}
+			// Label deltas are stored as arrays (domain.ActivityMetadata).
 			var activity struct {
-				Type      string            `json:"type"`
-				CreatedAt time.Time         `json:"createdAt"`
-				Metadata  map[string]string `json:"metadata"`
+				Type      string                  `json:"type"`
+				CreatedAt time.Time               `json:"createdAt"`
+				Metadata  domain.ActivityMetadata `json:"metadata"`
 			}
 			if err := json.Unmarshal(raw, &activity); err != nil {
 				rows.Close()
@@ -113,6 +133,11 @@ func progressActivities(ctx context.Context, reader progressReader, workspace st
 		}
 		rows.Close()
 	}
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		if err := work.historicalStates(ctx, result); err != nil {
+			return nil, err
+		}
+	}
 	return result, nil
 }
 
@@ -122,6 +147,12 @@ func projectProgressStart(ctx context.Context, reader progressReader, workspace 
 	if project.StartDate != nil {
 		if date, err := time.Parse("2006-01-02", *project.StartDate); err == nil {
 			return date.UTC(), nil
+		}
+	}
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		if err := work.admitRows(ctx, reader, `FROM (SELECT MIN(created_at) AS first_created FROM issue_records WHERE workspace_key=? AND project_id=?) p21_progress_start`,
+			[]any{workspace, project.ID}, "first_created"); err != nil {
+			return time.Time{}, err
 		}
 	}
 	var earliest sql.NullString
@@ -305,6 +336,9 @@ func refreshIssueProjectProgress(ctx context.Context, reader progressReader, wor
 		return false, nil
 	}
 	states := progressStates(*data)
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		work.states = states
+	}
 	changed := false
 	for _, projectID := range sortedKeys(changes) {
 		index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == projectID })
@@ -328,6 +362,11 @@ func updateProjectProgress(ctx context.Context, reader progressReader, workspace
 	}
 	if start.IsZero() {
 		return clearProjectProgressHistories(project), nil
+	}
+	if work := issueProgressWorkFrom(ctx); work != nil {
+		if err := work.admitGrid(ctx, start, now); err != nil {
+			return false, err
+		}
 	}
 	grid := progressGrid(start, now)
 	last := grid[len(grid)-1]
@@ -364,6 +403,13 @@ func updateProjectProgress(ctx context.Context, reader progressReader, workspace
 // rebaseIssueMetadata). The caller holds s.writeMu and installs the returned
 // snapshot after the transaction commits; it is nil when nothing changed.
 func (s *SQLiteStore) persistIssueMetadata(ctx context.Context, tx *sqlTx, workspace string, before, after []domain.Issue, documents []domain.Document) (*domain.Bootstrap, error) {
+	if s.BoundedMetadataEnabled() {
+		// A bounded store reaches this only with the non-project hot inputs
+		// (UpdateIssueRecord sends project inputs and team moves to
+		// persistSelectedIssueMetadata). Its resident copy holds policy only,
+		// so a progress or document-scope change is refused, never skipped.
+		return nil, refuseBoundedHotIssueMetadata(before, after, documents)
+	}
 	stored, ok := s.workspaces[workspace]
 	if !ok {
 		return nil, nil
@@ -444,17 +490,51 @@ func (s *SQLiteStore) rebuildProgressTx(ctx context.Context, tx *sqlTx, workspac
 // from older builds would otherwise never show a progress graph. It runs after
 // the record migrations and reads one project's rows at a time, so memory stays
 // bounded by the largest project; later issue writes keep histories current.
+//
+// A bounded image holds no projects, so with bounded metadata on the pass
+// runs as COLD work: each workspace's projects are read from its legacy view
+// and a workspace with a project to backfill is written on a COLD facade.
 func (s *SQLiteStore) backfillAllProjectProgress(ctx context.Context) error {
+	if s.metadataResidency != nil && s.coldParent == nil {
+		ctx = WithColdWork(ctx, "project progress backfill")
+	}
 	for _, workspace := range s.WorkspaceKeys() {
+		if !s.projectProgressPending(ctx, workspace) {
+			continue
+		}
 		// Another server's issue write can change a project's progress
 		// meanwhile: rerun the backfill on the stored records.
 		if err := s.rerunBackgroundWrite(ctx, "project progress backfill", workspace, func() error {
-			return s.backfillWorkspaceProjectProgress(ctx, workspace)
+			return s.backfillWorkspaceProjectProgressWrite(ctx, workspace)
 		}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// projectProgressPending reports whether a project of the workspace has no
+// progress history yet. Bounded, the projects are read from the workspace's
+// legacy view.
+func (s *SQLiteStore) projectProgressPending(ctx context.Context, workspace string) bool {
+	if view, release, handled := s.coldAccessorView(ctx, "backfillAllProjectProgress", workspace, []string{"projects"}); handled {
+		defer release()
+		return view != nil && view.projectProgressPending(ctx, view.lastWorkspaceKey)
+	}
+	data, ok := s.storedWorkspace(workspace)
+	return ok && slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return len(project.ProgressHistory) == 0 })
+}
+
+// backfillWorkspaceProjectProgressWrite backfills one workspace. A bounded
+// store runs the literal legacy backfill on a COLD facade, which holds the
+// complete workspace, and publishes its result (coldLegacyWrite).
+func (s *SQLiteStore) backfillWorkspaceProjectProgressWrite(ctx context.Context, workspace string) error {
+	if s.metadataResidency == nil || s.coldParent != nil {
+		return s.backfillWorkspaceProjectProgress(ctx, workspace)
+	}
+	return s.coldLegacyWrite(ctx, workspace, func(ctx context.Context, facade *SQLiteStore) error {
+		return facade.backfillWorkspaceProjectProgress(ctx, workspace)
+	})
 }
 
 func (s *SQLiteStore) backfillWorkspaceProjectProgress(ctx context.Context, workspace string) error {

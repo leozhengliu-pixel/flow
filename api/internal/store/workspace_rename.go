@@ -44,13 +44,8 @@ import (
 // started before the rename) can write rows under it afterwards. Every rename
 // is recorded in workspace_key_renames, and the storage maintenance pass moves
 // rows found under a recorded previous key to the current one
-// (AdoptRenamedWorkspaceRows) for workspaceKeyAdoptWindow. Data migration 1040
-// does the same for renames made before this existed, finding previous keys in
-// the domain events.
-
-// workspaceKeyAdoptWindow is how long after a rename the maintenance pass
-// looks for rows written under the previous key.
-const workspaceKeyAdoptWindow = 7 * 24 * time.Hour
+// (AdoptRenamedWorkspaceRows) during its adoption window. Data migration 1040
+// handles older renames using previous keys from the domain events.
 
 // workspaceRenameSkipped lists tables with a workspace_key column that the
 // generic rename does not move, and why.
@@ -65,6 +60,12 @@ var workspaceRenameSkipped = map[string]string{
 // text people wrote keeps the links they wrote, and these tables do not store
 // a workspaceKey field.
 var workspaceRenameContentTables = map[string]bool{
+	"record_journal_coverage":        true,
+	"record_journal_dirty":           true,
+	"record_versions":                true,
+	"metadata_catalog":               true,
+	"metadata_catalog_relations":     true,
+	"metadata_catalog_collections":   true,
 	"workspace_content_records":      true,
 	"issue_records":                  true,
 	"issue_search_documents":         true,
@@ -441,7 +442,11 @@ func (s *SQLiteStore) rewriteWorkspaceKeyJSON(ctx context.Context, tx *sqlTx, ta
 		var set, match string
 		switch {
 		case s.dialect == "postgres" && column.binary:
-			set = `convert_to(replace(convert_from(` + name + `,'UTF8'),?,?),'UTF8')`
+			// A body may hold raw invalid UTF-8 (an opaque payload), which a
+			// UTF8 decode refuses. Replacing in the LATIN1 view is a byte
+			// replacement: exact for valid UTF-8, whose needle never starts
+			// inside a character, and lossless for every other byte.
+			set = `convert_to(replace(convert_from(` + name + `,'LATIN1'),convert_from(convert_to(?,'UTF8'),'LATIN1'),convert_from(convert_to(?,'UTF8'),'LATIN1')),'LATIN1')`
 			match = `position(convert_to(?,'UTF8') IN ` + name + `)>0`
 		case s.dialect == "postgres":
 			set, match = `replace(`+name+`,?,?)`, `strpos(`+name+`,?)>0`

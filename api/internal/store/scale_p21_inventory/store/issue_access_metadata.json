@@ -1,0 +1,14 @@
+{
+  "source": "store/issue_access_metadata.go",
+  "unmigrated": 0,
+  "consumers": {
+    "IssueAccessMetadata": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Copies only resident workspace settings and the team policy graph; request snapshots retain their existing precedence and authorization remains with the caller.",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

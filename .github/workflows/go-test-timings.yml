@@ -24,7 +24,7 @@ jobs:
         with:
           ref: main
 
-      - name: Refresh timings from successful main runs
+      - name: Refresh timings from completed main runs
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci/update-go-test-timings.sh
@@ -42,7 +42,8 @@ jobs:
             Co-Authored-By: Codex <noreply@openai.com>
           title: 'ci: refresh Go test timings'
           body: |
-            Refresh the shard weights with the median of the latest three successful main CI timing artifacts.
+            Refresh shard weights with the median of the latest three completed main CI timing artifacts.
+            Tests that did not finish keep their prior weights.
 
             Uses only GITHUB_TOKEN. Repository Actions settings must allow GitHub Actions to create pull requests.
             Token-created pull requests do not trigger CI automatically; a maintainer must trigger CI before merging.

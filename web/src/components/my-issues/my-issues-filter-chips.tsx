@@ -4,7 +4,7 @@ import { valueSummaryLabel } from '@/components/issue-explorer/advanced-filter'
 import { dateFilterValueLabel } from '@/components/issue-explorer/issue-date-filter'
 import { filterOperatorChoices, filterValues, type MyIssuesAppliedFilter, type MyIssuesFilterOperator } from './my-issues-filter-types'
 import type { MyIssuesFilterOption } from './my-issues-surface'
-import { OptionMark } from './my-issues-filter-menu'
+import { DateValueMark, OptionMark } from './my-issues-filter-menu'
 import { agentSessionFilterValue } from '@/lib/agent-members'
 
 export type ChipOption = MyIssuesFilterOption & { icon?: ReactNode; visualType?: 'person' | 'team' }
@@ -31,7 +31,10 @@ export function filterChipItem(filter: Pick<MyIssuesAppliedFilter, 'id' | 'field
     const base: MyIssuesFilterOption = option ?? { id: value.value, label: filter.field === 'dates' || filter.field === 'releases' ? dateFilterValueLabel(value.value) ?? value.valueLabel : value.valueLabel, color: value.color }
     const kind = base.kind ?? filter.field
     const visualType = kind === 'team' ? 'team' : base.id && ['assignee', 'creator', 'owner', 'subscribers', 'agent', 'projectLead', 'customerOwner'].includes(kind) ? 'person' : undefined
-    return { ...base, label: base.label || value.valueLabel, icon: <OptionMark field={filter.field} option={base}/>, visualType } as ChipOption
+    // A dates value shows its property's mark in the reference app's secondary chip ink.
+    const mark = <OptionMark field={filter.field} option={base}/>
+    const icon = filter.field === 'dates' ? <DateValueMark value={value.value} fallback={mark}/> : mark
+    return { ...base, label: base.label || value.valueLabel, icon, visualType } as ChipOption
   })
   const ids = values.map(value => value.id)
   return { id: filter.id, field: filter.field, fieldLabel: filter.fieldLabel, operator: filter.operator, operatorLabel: filter.operatorLabel, negativeOperatorLabel: filter.negativeOperatorLabel, values, operatorChoices: filterOperatorChoices(filter.field, ids, filter), valueSummary: values.length > 1 ? valueSummaryLabel(filter.field, values) : undefined }

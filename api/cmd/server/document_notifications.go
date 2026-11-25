@@ -12,6 +12,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 // Document notification types (the reference app's names). They are inbox
@@ -93,6 +94,10 @@ func documentNotificationText(kind, actor, detail string) string {
 type memberDirectory struct {
 	users map[string]domain.User
 	roles map[string]string
+	// teams are each member's team memberships, read from the membership
+	// records: a mutation callback's TeamMembers do not carry them, and its
+	// ViewerTeamIDs are the actor's own.
+	teams map[string][]string
 }
 
 // memberDirectoryTTL bounds how stale the cached member list may be.
@@ -114,19 +119,39 @@ func (s *server) documentMemberDirectory(r *http.Request) memberDirectory {
 // workspaceMemberDirectory is documentMemberDirectory outside a request (for
 // example the agent reply listener).
 func (s *server) workspaceMemberDirectory(ctx context.Context, workspace string) memberDirectory {
-	directory := memberDirectory{users: map[string]domain.User{}, roles: map[string]string{}}
+	directory := memberDirectory{users: map[string]domain.User{}, roles: map[string]string{}, teams: map[string][]string{}}
 	if s.authDisabled {
 		return directory
 	}
-	metadata, ok := s.store.WorkspaceMetadataFields(workspace, "workspace")
-	if !ok || metadata.Workspace.ID == "" {
+	workspaceID := ""
+	if !s.store.BoundedMetadataEnabled() {
+		metadata, ok := s.store.WorkspaceMetadataFields(workspace, "workspace")
+		if !ok {
+			return directory
+		}
+		workspaceID = metadata.Workspace.ID
+	} else {
+		// The original identity accessor ignores cancellation, including
+		// cache hits. Membership SQL below still uses the caller's context.
+		identity, found, err := s.store.BeginInstalledWorkspaceIdentityRead(context.WithoutCancel(ctx), workspace)
+		if err != nil || !found {
+			return directory
+		}
+		defer identity.Close()
+		workspaceID = identity.Identity.ID
+	}
+	if workspaceID == "" {
 		return directory
 	}
-	key := fmt.Sprintf("%p:%s", s.store, metadata.Workspace.ID)
+	key := fmt.Sprintf("%p:%s", s.store, workspaceID)
 	if cached, ok := memberDirectories.Load(key); ok && time.Since(cached.(cachedMemberDirectory).loadedAt) < memberDirectoryTTL {
 		return cached.(cachedMemberDirectory).directory
 	}
-	members, err := s.store.ListMembers(ctx, metadata.Workspace.ID)
+	members, err := s.store.ListMembers(ctx, workspaceID)
+	if err != nil {
+		return directory
+	}
+	teamMembers, err := s.store.ListTeamMembers(ctx, workspaceID)
 	if err != nil {
 		return directory
 	}
@@ -139,6 +164,11 @@ func (s *server) workspaceMemberDirectory(ctx context.Context, workspace string)
 		}
 		directory.users[member.User.ID] = member.User
 		directory.roles[member.User.ID] = member.Role
+	}
+	for _, member := range teamMembers {
+		if _, active := directory.users[member.UserID]; active {
+			directory.teams[member.UserID] = append(directory.teams[member.UserID], member.TeamID)
+		}
 	}
 	return directory
 }
@@ -162,6 +192,12 @@ func documentRoleFor(s *server, data *domain.Bootstrap, directory memberDirector
 	}
 	view := *data
 	view.Viewer = *user
+	// ViewerTeamIDs are the acting viewer's own memberships, read for the
+	// callback; anyone else is judged by their own memberships, never the
+	// actor's.
+	if userID != data.Viewer.ID {
+		view.ViewerTeamIDs = directory.teams[userID]
+	}
 	view.ViewerRole = directory.roles[userID]
 	if view.ViewerRole == "" {
 		for _, member := range data.Members {
@@ -171,7 +207,33 @@ func documentRoleFor(s *server, data *domain.Bootstrap, directory memberDirector
 			}
 		}
 	}
+	// Workspace admins read every document except those only in private teams
+	// that stay closed to them, as the bootstrap projection decides. A closed
+	// document is judged like a member's: by grants and team membership.
+	if workspaceAdminRole(view.ViewerRole) && documentAdminClosed(view, document) {
+		view.ViewerRole = "member"
+	}
 	return documentRole(s, view, document)
+}
+
+// documentAdminClosed reports whether one of the document's active teams
+// keeps its content from the viewer although they administer the workspace
+// (the projection's AdminClosed set).
+func documentAdminClosed(view domain.Bootstrap, document domain.Document) bool {
+	if len(document.TeamIDs) == 0 {
+		return false
+	}
+	view.TeamMembers = slices.Clone(view.TeamMembers)
+	for _, id := range view.ViewerTeamIDs {
+		view.TeamMembers = append(view.TeamMembers, domain.TeamMember{TeamID: id, UserID: view.Viewer.ID, Role: "member"})
+	}
+	return slices.ContainsFunc(document.TeamIDs, func(teamID string) bool {
+		index := slices.IndexFunc(view.Teams, func(team domain.Team) bool { return team.ID == teamID })
+		if index < 0 || view.Teams[index].ArchivedAt != nil {
+			return false
+		}
+		return !store.TeamContentVisible(view, teamID, view.Viewer.ID, view.ViewerRole)
+	})
 }
 
 type documentNotice struct {

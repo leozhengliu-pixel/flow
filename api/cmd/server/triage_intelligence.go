@@ -51,13 +51,6 @@ func triageIntelligenceWorkspaceEnabled(s *server, workspace string) bool {
 	return ok && triageIntelligenceEnabled(metadata.WorkspaceSettings)
 }
 
-func generateAndAppendIssueSuggestions(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
-	if !triageIntelligenceEnabled(data.WorkspaceSettings) || !isTriageIssue(data, issue) {
-		return
-	}
-	storeTriageSuggestions(data, issue, generateIssueSuggestions(data, issue, now), now, triageSourceHeuristic, "")
-}
-
 // storeTriageSuggestions replaces the issue's suggestions with generated ones.
 // Dismissed suggestions are retained and never re-suggested; "auto" actions
 // are applied immediately and recorded as accepted.
@@ -152,14 +145,25 @@ func syncIssueSuggestionTargets(data *domain.Bootstrap, issue *domain.Issue) boo
 // archived or deactivated, and rewrites only the affected issues (found from
 // the in-memory suggestion records) through the scoped issue-record path.
 func (s *server) pruneIssueSuggestionTargets(ctx context.Context, workspace string, stale func(domain.IssueSuggestion) bool) {
-	metadata, ok := s.store.WorkspaceMetadata(workspace)
-	if !ok {
-		return
-	}
-	ids := []string{}
-	for _, item := range metadata.IssueSuggestions {
-		if stale(item) && !slices.Contains(ids, item.IssueID) {
-			ids = append(ids, item.IssueID)
+	var ids []string
+	if s.store.BoundedMetadataEnabled() {
+		var ok bool
+		if ids, ok = s.staleIssueSuggestionIssues(ctx, workspace, stale); !ok {
+			return
+		}
+		owned, closeOwned := beginIndependentMetadataOutputReads(ctx)
+		defer closeOwned()
+		ctx = store.ContextWithIssueSuggestionWrite(owned, store.IssueSuggestionWrite{})
+	} else {
+		metadata, ok := s.store.WorkspaceMetadata(workspace)
+		if !ok {
+			return
+		}
+		ids = []string{}
+		for _, item := range metadata.IssueSuggestions {
+			if stale(item) && !slices.Contains(ids, item.IssueID) {
+				ids = append(ids, item.IssueID)
+			}
 		}
 	}
 	for start := 0; start < len(ids); start += 500 {
@@ -194,6 +198,9 @@ func (s *server) generateTriageIntelligenceForIssue(ctx context.Context, workspa
 }
 
 func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, workspace string, issueIDs []string) ([]domain.Issue, error) {
+	if s.store.BoundedMetadataEnabled() {
+		return s.generateTriageIntelligenceForIssuesBounded(ctx, workspace, issueIDs)
+	}
 	var updated domain.Issue
 	results := make([]domain.Issue, 0, len(issueIDs))
 	generated := false
@@ -213,7 +220,13 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 	if err != nil {
 		return nil, err
 	}
-	metadata, ok := s.store.WorkspaceMetadata(workspace)
+	// The feature switch and the triage test (isTriageIssue: team settings,
+	// with the team's states as their default) read only these fields; the
+	// whole workspace is not copied after every issue edit (issue #244).
+	metadata, ok := s.store.WorkspaceMetadataFields(workspace, "workspaceSettings", "teamSettings", "states")
+	if completeIssueWriteReads.Load() {
+		metadata, ok = s.store.WorkspaceMetadata(workspace)
+	}
 	if !ok || !triageIntelligenceEnabled(metadata.WorkspaceSettings) {
 		return nil, store.ErrNoMutation
 	}
@@ -250,7 +263,25 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 	if triageTeamAutoMove(metadata.WorkspaceSettings.FeatureSettings.TriageIntelligence) {
 		ctx = store.WithIssueRenumbering(ctx)
 	}
-	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, issueIDs...), workspace, "issue.suggestions_generated", "issue_suggestions_batch", nil, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, issueIDs...), workspace, "issue.suggestions_generated", "issue_suggestions_batch", nil, generateTriageMutation(issueIDs, candidateSets, &updated, &results, &generated))
+	if err == nil && !generated {
+		return nil, store.ErrNoMutation
+	}
+	return results, err
+}
+
+// generateTriageMutation stores heuristic suggestions for the scoped triage
+// issues, scoring each against its candidate issues.
+func generateTriageMutation(issueIDs []string, candidateSets map[string][]domain.Issue, updated *domain.Issue, results *[]domain.Issue, generated *bool) func(*domain.Bootstrap) error {
+	return func(data *domain.Bootstrap) error {
+		// A write that lost a race to another server runs the callback
+		// again: the results are those of the attempt that commits.
+		*updated, *results, *generated = domain.Issue{}, (*results)[:0], false
+		// Candidates are appended after the scoped issues for scoring only.
+		// They are search summaries, so even a candidate copy of another
+		// scoped issue must never be written back over its full row.
+		scoped := len(data.Issues)
+		index, cache := newTriageCandidateIndex(nil), newTriageGenerationCache(nil)
 		for _, issueID := range issueIDs {
 			issue, err := issueByID(data, issueID)
 			if err != nil {
@@ -264,30 +295,44 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 			if err != nil {
 				continue
 			}
-			generateAndAppendIssueSuggestions(data, issue, time.Now().UTC())
-			updated = *issue
-			results = append(results, updated)
-			generated = true
+			// Score candidates using the index and this generation's cached
+			// project and label tokens.
+			now := time.Now().UTC()
+			if triageIntelligenceEnabled(data.WorkspaceSettings) && isTriageIssue(data, issue) {
+				candidates := index.similarTriageIssues(data, issue)
+				storeTriageSuggestions(data, issue, generateIssueSuggestionsCached(data, issue, now, candidates, cache), now, triageSourceHeuristic, "")
+			}
+			*updated = *issue
+			*results = append(*results, *updated)
+			*generated = true
 		}
 		allowed := map[string]bool{}
 		for _, id := range issueIDs {
 			allowed[id] = true
 		}
-		data.Issues = slices.DeleteFunc(data.Issues, func(item domain.Issue) bool { return !allowed[item.ID] })
-		if !generated {
+		data.Issues = slices.DeleteFunc(data.Issues[:scoped], func(item domain.Issue) bool { return !allowed[item.ID] })
+		if !*generated {
 			return store.ErrNoMutation
 		}
 		return nil
-	})
-	if err == nil && !generated {
-		return nil, store.ErrNoMutation
 	}
-	return results, err
 }
 
 func (s *server) triageCandidateIssues(ctx context.Context, issue *domain.Issue, q store.IssueRecordQuery) ([]domain.Issue, error) {
 	if issue == nil || strings.TrimSpace(issue.Title) == "" {
 		return nil, nil
+	}
+	items := []domain.Issue{}
+	err := s.triageCandidateIssuesVisit(ctx, issue, q, func(candidate domain.Issue) error {
+		items = append(items, candidate)
+		return nil
+	})
+	return items, err
+}
+
+func (s *server) triageCandidateIssuesVisit(ctx context.Context, issue *domain.Issue, q store.IssueRecordQuery, visit func(domain.Issue) error) error {
+	if issue == nil || strings.TrimSpace(issue.Title) == "" {
+		return nil
 	}
 	q.Limit, q.Summary, q.Archived = maxTriageSuggestionCandidates, true, "false"
 	terms := []string{issue.Title}
@@ -299,14 +344,12 @@ func (s *server) triageCandidateIssues(ctx context.Context, issue *domain.Issue,
 			break
 		}
 	}
-	items := []domain.Issue{}
-	err := s.store.SearchIssueCandidateTerms(ctx, q, terms, nil, maxTriageSuggestionCandidates, func(candidate domain.Issue) error {
+	return s.store.SearchIssueCandidateTerms(ctx, q, terms, nil, maxTriageSuggestionCandidates, func(candidate domain.Issue) error {
 		if candidate.ID != issue.ID {
-			items = append(items, candidate)
+			return visit(candidate)
 		}
 		return nil
 	})
-	return items, err
 }
 
 func slicesDeleteIssueSuggestions(items []domain.IssueSuggestion, issueID, keepID string) []domain.IssueSuggestion {
@@ -321,8 +364,17 @@ func slicesDeleteIssueSuggestions(items []domain.IssueSuggestion, issueID, keepI
 }
 
 func generateIssueSuggestions(data *domain.Bootstrap, issue *domain.Issue, now time.Time) []domain.IssueSuggestion {
+	return generateIssueSuggestionsWithCandidates(data, issue, now, similarTriageIssues(data, issue))
+}
+
+func generateIssueSuggestionsWithCandidates(data *domain.Bootstrap, issue *domain.Issue, now time.Time, candidates []triageSuggestionCandidate) []domain.IssueSuggestion {
+	return generateIssueSuggestionsCached(data, issue, now, candidates, nil)
+}
+
+// generateIssueSuggestionsCached is generateIssueSuggestionsWithCandidates
+// with the project and label tokens of a generation computed once (cache).
+func generateIssueSuggestionsCached(data *domain.Bootstrap, issue *domain.Issue, now time.Time, candidates []triageSuggestionCandidate, cache *triageGenerationCache) []domain.IssueSuggestion {
 	settings := data.WorkspaceSettings.FeatureSettings.TriageIntelligence
-	candidates := similarTriageIssues(data, issue)
 	result := make([]domain.IssueSuggestion, 0, 7)
 	rank := 0
 	add := func(kind, target string, score float64, reasons []string) {
@@ -381,7 +433,7 @@ func generateIssueSuggestions(data *domain.Bootstrap, issue *domain.Issue, now t
 	}
 
 	if issue.Project == nil {
-		if projectID, score, reasons := inferProject(data, issue, candidates); projectID != "" {
+		if projectID, score, reasons := inferProjectCached(data, issue, candidates, cache); projectID != "" {
 			add("project", projectID, score, reasons)
 		}
 	}
@@ -390,7 +442,7 @@ func generateIssueSuggestions(data *domain.Bootstrap, issue *domain.Issue, now t
 			add("assignee", userID, score, reasons)
 		}
 	}
-	if labelID, score, reasons := inferLabel(data, issue, candidates); labelID != "" {
+	if labelID, score, reasons := inferLabelCached(data, issue, candidates, cache); labelID != "" {
 		add("label", labelID, score, reasons)
 	}
 	if teamID, score, reasons := inferTeam(data, issue, candidates); teamID != "" {
@@ -517,51 +569,88 @@ func similarTriageIssues(data *domain.Bootstrap, issue *domain.Issue) []triageSu
 	if issue == nil {
 		return nil
 	}
-	issueTitleTokens := triageTokens(issue.Title)
-	issueDescriptionTokens := triageTokens(truncateTriageText(issue.Description))
-	issueLabelIDs := make(map[string]bool, len(issue.Labels))
-	for _, label := range issue.Labels {
-		issueLabelIDs[label.ID] = true
-	}
+	score := triageIssueScorer(issue)
 	candidates := make([]triageSuggestionCandidate, 0, min(len(data.Issues), maxTriageSuggestionCandidates))
 	for index := range data.Issues {
-		candidate := &data.Issues[index]
-		if candidate.ID == issue.ID || candidate.ArchivedAt != nil || candidate.State.Type == "completed" || candidate.State.Type == "canceled" {
-			continue
-		}
 		if len(candidates) >= maxTriageSuggestionCandidates {
 			break
 		}
-		titleScore := triageSimilarity(issueTitleTokens, triageTokens(candidate.Title))
-		descriptionScore := triageSimilarity(issueDescriptionTokens, triageTokens(truncateTriageText(candidate.Description)))
-		score := titleScore*0.72 + descriptionScore*0.18
-		if candidate.Team.ID == issue.Team.ID {
-			score += 0.04
+		if candidate, ok := score(data.Issues[index]); ok {
+			candidates = append(candidates, candidate)
 		}
-		if issue.Project != nil && candidate.Project != nil && issue.Project.ID == candidate.Project.ID {
-			score += 0.05
-		}
-		for _, label := range candidate.Labels {
-			if issueLabelIDs[label.ID] {
-				score += 0.03
-				break
-			}
-		}
-		score = minFloat(1, score)
-		if score < 0.14 {
-			continue
-		}
-		candidates = append(candidates, triageSuggestionCandidate{
-			issue: *candidate, score: score, titleScore: titleScore, descriptionScore: descriptionScore,
-		})
 	}
+	sortTriageSuggestionCandidates(candidates)
+	return candidates
+}
+
+func triageIssueScorer(issue *domain.Issue) func(domain.Issue) (triageSuggestionCandidate, bool) {
+	s := newTriageIssueScore(issue)
+	return func(candidate domain.Issue) (triageSuggestionCandidate, bool) {
+		if !s.eligible(candidate) {
+			return triageSuggestionCandidate{}, false
+		}
+		titleScore := triageSimilarity(s.title, triageTokens(candidate.Title))
+		descriptionScore := triageSimilarity(s.description, triageTokens(truncateTriageText(candidate.Description)))
+		return s.finish(candidate, titleScore, descriptionScore)
+	}
+}
+
+// triageIssueScore scores candidates against one issue (triageIssueScorer);
+// the candidate index supplies the similarities from its token counts.
+type triageIssueScore struct {
+	issue              *domain.Issue
+	title, description map[string]bool
+	labels             map[string]bool
+}
+
+func newTriageIssueScore(issue *domain.Issue) triageIssueScore {
+	s := triageIssueScore{
+		issue:       issue,
+		title:       triageTokens(issue.Title),
+		description: triageTokens(truncateTriageText(issue.Description)),
+		labels:      make(map[string]bool, len(issue.Labels)),
+	}
+	for _, label := range issue.Labels {
+		s.labels[label.ID] = true
+	}
+	return s
+}
+
+func (s triageIssueScore) eligible(candidate domain.Issue) bool {
+	return candidate.ID != s.issue.ID && candidate.ArchivedAt == nil && candidate.State.Type != "completed" && candidate.State.Type != "canceled"
+}
+
+func (s triageIssueScore) finish(candidate domain.Issue, titleScore, descriptionScore float64) (triageSuggestionCandidate, bool) {
+	issue := s.issue
+	score := titleScore*0.72 + descriptionScore*0.18
+	if candidate.Team.ID == issue.Team.ID {
+		score += 0.04
+	}
+	if issue.Project != nil && candidate.Project != nil && issue.Project.ID == candidate.Project.ID {
+		score += 0.05
+	}
+	for _, label := range candidate.Labels {
+		if s.labels[label.ID] {
+			score += 0.03
+			break
+		}
+	}
+	score = minFloat(1, score)
+	if score < 0.14 {
+		return triageSuggestionCandidate{}, false
+	}
+	return triageSuggestionCandidate{
+		issue: candidate, score: score, titleScore: titleScore, descriptionScore: descriptionScore,
+	}, true
+}
+
+func sortTriageSuggestionCandidates(candidates []triageSuggestionCandidate) {
 	sort.SliceStable(candidates, func(i, j int) bool {
 		if candidates[i].score == candidates[j].score {
 			return candidates[i].issue.UpdatedAt.After(candidates[j].issue.UpdatedAt)
 		}
 		return candidates[i].score > candidates[j].score
 	})
-	return candidates
 }
 
 func previewIssueSuggestions(data *domain.Bootstrap, text, teamID string) []triageSuggestionPreview {
@@ -611,19 +700,69 @@ func previewIssueSuggestions(data *domain.Bootstrap, text, teamID string) []tria
 	return result
 }
 
+// triageScores is a score per suggestion target that remembers the order the
+// targets were first scored in. best breaks a tie toward the earliest of
+// them, a choice the former map iteration could also make, so equal scores
+// pick the same target on every run.
+type triageScores struct {
+	values map[string]float64
+	order  []string
+}
+
+func newTriageScores() *triageScores {
+	return &triageScores{values: map[string]float64{}}
+}
+
+func (s *triageScores) note(id string) {
+	if _, seen := s.values[id]; !seen {
+		s.order = append(s.order, id)
+	}
+}
+
+func (s *triageScores) add(id string, delta float64) {
+	s.note(id)
+	s.values[id] += delta
+}
+
+// raise sets id's score to score when that is higher.
+func (s *triageScores) raise(id string, score float64) {
+	if score > s.values[id] {
+		s.note(id)
+		s.values[id] = score
+	}
+}
+
+func (s *triageScores) best(keep func(string) bool) (string, float64) {
+	var bestID string
+	var bestScore float64
+	for _, id := range s.order {
+		if keep != nil && !keep(id) {
+			continue
+		}
+		if score := s.values[id]; score > bestScore {
+			bestID, bestScore = id, score
+		}
+	}
+	return bestID, bestScore
+}
+
 func inferProject(data *domain.Bootstrap, issue *domain.Issue, candidates []triageSuggestionCandidate) (string, float64, []string) {
+	return inferProjectCached(data, issue, candidates, nil)
+}
+
+func inferProjectCached(data *domain.Bootstrap, issue *domain.Issue, candidates []triageSuggestionCandidate, cache *triageGenerationCache) (string, float64, []string) {
 	if issue.Project != nil || len(data.Projects) == 0 {
 		return "", 0, nil
 	}
 	issueTokens := triageTokens(issue.Title, truncateTriageText(issue.Description), data.WorkspaceSettings.FeatureSettings.TriageIntelligence.WorkspaceGuidance)
-	scores := map[string]float64{}
+	scores := newTriageScores()
 	reasons := map[string][]string{}
 	for _, candidate := range candidates[:min(len(candidates), 12)] {
 		if candidate.issue.Project == nil {
 			continue
 		}
 		id := candidate.issue.Project.ID
-		scores[id] += candidate.score
+		scores.add(id, candidate.score)
 		reasons[id] = append(reasons[id], fmt.Sprintf("%s is linked to a closely related issue.", identifierOrTitle(&candidate.issue)))
 	}
 	for index := range data.Projects {
@@ -631,24 +770,16 @@ func inferProject(data *domain.Bootstrap, issue *domain.Issue, candidates []tria
 		if project.ArchivedAt != nil {
 			continue
 		}
-		score := triageSimilarity(issueTokens, triageTokens(project.Name, project.Summary, project.Description))
-		if score > scores[project.ID] {
-			scores[project.ID] = score
-		}
+		score := triageSimilarity(issueTokens, cache.tokens(cache.projectTokens(), project.ID, project.Name, project.Summary, project.Description))
+		scores.raise(project.ID, score)
 		if score >= 0.3 {
 			reasons[project.ID] = append(reasons[project.ID], "The project name and context overlap with this request.")
 		}
 		if project.Lead != nil && project.Lead.ID == issue.Creator.ID {
-			scores[project.ID] += 0.04
+			scores.add(project.ID, 0.04)
 		}
 	}
-	var bestID string
-	var bestScore float64
-	for id, score := range scores {
-		if score > bestScore {
-			bestID, bestScore = id, score
-		}
-	}
+	bestID, bestScore := scores.best(nil)
 	if bestScore < 0.22 {
 		return "", 0, nil
 	}
@@ -662,34 +793,25 @@ func inferAssignee(data *domain.Bootstrap, issue *domain.Issue, candidates []tri
 	if issue.Assignee != nil {
 		return "", 0, nil
 	}
-	scores := map[string]float64{}
+	scores := newTriageScores()
 	reasons := map[string][]string{}
 	for _, candidate := range candidates[:min(len(candidates), 12)] {
 		if candidate.issue.Assignee != nil {
 			id := candidate.issue.Assignee.ID
-			scores[id] += candidate.score
+			scores.add(id, candidate.score)
 			reasons[id] = append(reasons[id], fmt.Sprintf("Assigned to related issue %s.", identifierOrTitle(&candidate.issue)))
 		}
 	}
 	for index := range data.Projects {
 		project := &data.Projects[index]
 		if project.Lead != nil && project.Lead.ID != "" && project.ID == issueProjectID(issue) {
-			scores[project.Lead.ID] += 0.28
+			scores.add(project.Lead.ID, 0.28)
 			reasons[project.Lead.ID] = append(reasons[project.Lead.ID], "Leads the issue's project.")
 		}
 	}
 	// Conservative: creating the issue (or a related one) is not
 	// evidence of ownership, so creators get no assignee bonus.
-	var bestID string
-	var bestScore float64
-	for id, score := range scores {
-		if userByID(data, id) == nil {
-			continue
-		}
-		if score > bestScore {
-			bestID, bestScore = id, score
-		}
-	}
+	bestID, bestScore := scores.best(func(id string) bool { return userByID(data, id) != nil })
 	if bestID == "" || bestScore < 0.35 {
 		return "", 0, nil
 	}
@@ -697,15 +819,19 @@ func inferAssignee(data *domain.Bootstrap, issue *domain.Issue, candidates []tri
 }
 
 func inferLabel(data *domain.Bootstrap, issue *domain.Issue, candidates []triageSuggestionCandidate) (string, float64, []string) {
+	return inferLabelCached(data, issue, candidates, nil)
+}
+
+func inferLabelCached(data *domain.Bootstrap, issue *domain.Issue, candidates []triageSuggestionCandidate, cache *triageGenerationCache) (string, float64, []string) {
 	if len(issue.Labels) > 0 || len(data.Labels) == 0 {
 		return "", 0, nil
 	}
 	issueTokens := triageTokens(issue.Title, truncateTriageText(issue.Description), data.WorkspaceSettings.FeatureSettings.TriageIntelligence.WorkspaceGuidance)
-	scores := map[string]float64{}
+	scores := newTriageScores()
 	reasons := map[string][]string{}
 	for _, candidate := range candidates[:min(len(candidates), 12)] {
 		for _, label := range candidate.issue.Labels {
-			scores[label.ID] += candidate.score
+			scores.add(label.ID, candidate.score)
 			reasons[label.ID] = append(reasons[label.ID], fmt.Sprintf("Applied to related issue %s.", identifierOrTitle(&candidate.issue)))
 		}
 	}
@@ -714,21 +840,13 @@ func inferLabel(data *domain.Bootstrap, issue *domain.Issue, candidates []triage
 		if label.ArchivedAt != nil || (label.ResourceType != "" && label.ResourceType != "issue") {
 			continue
 		}
-		score := triageSimilarity(issueTokens, triageTokens(label.Name, label.Description))
-		if score > scores[label.ID] {
-			scores[label.ID] = score
-		}
+		score := triageSimilarity(issueTokens, cache.tokens(cache.labelTokens(), label.ID, label.Name, label.Description))
+		scores.raise(label.ID, score)
 		if score >= 0.35 {
 			reasons[label.ID] = append(reasons[label.ID], "The label name and description match the request.")
 		}
 	}
-	var bestID string
-	var bestScore float64
-	for id, score := range scores {
-		if score > bestScore {
-			bestID, bestScore = id, score
-		}
-	}
+	bestID, bestScore := scores.best(nil)
 	if bestID == "" || bestScore < 0.2 {
 		return "", 0, nil
 	}
@@ -736,14 +854,14 @@ func inferLabel(data *domain.Bootstrap, issue *domain.Issue, candidates []triage
 }
 
 func inferTeam(data *domain.Bootstrap, issue *domain.Issue, candidates []triageSuggestionCandidate) (string, float64, []string) {
-	scores := map[string]float64{}
+	scores := newTriageScores()
 	reasons := map[string][]string{}
 	for _, candidate := range candidates[:min(len(candidates), 12)] {
 		id := candidate.issue.Team.ID
 		if id == "" || id == issue.Team.ID {
 			continue
 		}
-		scores[id] += candidate.score
+		scores.add(id, candidate.score)
 		reasons[id] = append(reasons[id], fmt.Sprintf("%s belongs to this team.", identifierOrTitle(&candidate.issue)))
 	}
 	for index := range data.Projects {
@@ -753,21 +871,12 @@ func inferTeam(data *domain.Bootstrap, issue *domain.Issue, candidates []triageS
 		}
 		for _, teamID := range project.TeamIDs {
 			if teamID != issue.Team.ID {
-				scores[teamID] += 0.3
+				scores.add(teamID, 0.3)
 				reasons[teamID] = append(reasons[teamID], "The issue's project is owned by this team.")
 			}
 		}
 	}
-	var bestID string
-	var bestScore float64
-	for id, score := range scores {
-		if teamByID(data, id) == nil {
-			continue
-		}
-		if score > bestScore {
-			bestID, bestScore = id, score
-		}
-	}
+	bestID, bestScore := scores.best(func(id string) bool { return teamByID(data, id) != nil })
 	if bestID == "" || bestScore < 0.25 {
 		return "", 0, nil
 	}
@@ -1031,11 +1140,20 @@ func triageSimilarity(left, right map[string]bool) float64 {
 			intersection++
 		}
 	}
-	union := len(left) + len(right) - intersection
+	return triageSimilarityCount(intersection, len(left), len(right))
+}
+
+// triageSimilarityCount is triageSimilarity from the sizes of both token sets
+// and their intersection.
+func triageSimilarityCount(intersection, left, right int) float64 {
+	if left == 0 || right == 0 {
+		return 0
+	}
+	union := left + right - intersection
 	if union == 0 {
 		return 0
 	}
-	coverage := float64(intersection) / float64(min(len(left), len(right)))
+	coverage := float64(intersection) / float64(min(left, right))
 	jaccard := float64(intersection) / float64(union)
 	return coverage*0.72 + jaccard*0.28
 }
@@ -1054,6 +1172,10 @@ func (s *server) previewIssueSuggestions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	teamID := strings.TrimSpace(r.URL.Query().Get("teamId"))
+	if s.store.BoundedMetadataEnabled() {
+		s.previewIssueSuggestionsBounded(w, r, text, teamID)
+		return
+	}
 	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: authUser(r)}
 	if actor.User.ID == "" {
 		if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
@@ -1068,6 +1190,12 @@ func (s *server) previewIssueSuggestions(w http.ResponseWriter, r *http.Request)
 		issueRecordsError(w, err)
 		return
 	}
+	s.writeIssueSuggestionPreview(w, r, actor, data, text, teamID)
+}
+
+// writeIssueSuggestionPreview scores text against candidate issues and the
+// viewer's projected workspace.
+func (s *server) writeIssueSuggestionPreview(w http.ResponseWriter, r *http.Request, actor mcpActor, data domain.Bootstrap, text, teamID string) {
 	if teamID == "" && len(data.Teams) > 0 {
 		teamID = data.Teams[0].ID
 	}
@@ -1087,6 +1215,10 @@ func (s *server) previewIssueSuggestions(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *server) listIssueSuggestions(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.listIssueSuggestionsBounded(w, r)
+		return
+	}
 	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: authUser(r)}
 	if actor.User.ID == "" {
 		if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
@@ -1168,7 +1300,19 @@ func (s *server) refreshIssueSuggestions(w http.ResponseWriter, r *http.Request)
 		actor.APIKey = key
 	}
 	if actor.User.ID == "" {
-		if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
+		if s.store.BoundedMetadataEnabled() {
+			// Legacy WorkspaceMetadata ignores cancellation; the run service
+			// still receives the original request context and error ordering.
+			read, ok, err := s.store.BeginInstalledViewerRead(context.WithoutCancel(r.Context()), actor.WorkspaceKey)
+			if err != nil {
+				respondMutation(w, err, http.StatusOK, nil)
+				return
+			}
+			if ok {
+				defer read.Close()
+				actor.User = read.Viewer()
+			}
+		} else if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
 			actor.User = metadata.Viewer
 		}
 	}
@@ -1188,6 +1332,10 @@ func (s *server) dismissIssueSuggestion(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) updateIssueSuggestionState(w http.ResponseWriter, r *http.Request, accept bool) {
+	if s.store.BoundedMetadataEnabled() {
+		s.updateIssueSuggestionStateBounded(w, r, accept)
+		return
+	}
 	issueID := r.PathValue("id")
 	suggestionID := r.PathValue("suggestionId")
 	eventType := "issue.suggestion_dismissed"
@@ -1253,7 +1401,14 @@ func (s *server) updateIssueSuggestionState(w http.ResponseWriter, r *http.Reque
 	if targetID != "" {
 		scope = append(scope, targetID)
 	}
-	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, scope...), workspaceKey(r), eventType, suggestionID, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, scope...), workspaceKey(r), eventType, suggestionID, nil, issueSuggestionStateMutation(issueID, suggestionID, accept, &updated))
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// issueSuggestionStateMutation accepts or dismisses one active suggestion of
+// issueID, capturing the stored result in updated.
+func issueSuggestionStateMutation(issueID, suggestionID string, accept bool, updated *domain.IssueSuggestion) func(*domain.Bootstrap) error {
+	return func(data *domain.Bootstrap) error {
 		index := -1
 		for itemIndex := range data.IssueSuggestions {
 			item := &data.IssueSuggestions[itemIndex]
@@ -1294,12 +1449,11 @@ func (s *server) updateIssueSuggestionState(w http.ResponseWriter, r *http.Reque
 		}
 		suggestion.StateChangedAt = now
 		suggestion.UpdatedAt = now
-		updated = *suggestion
+		*updated = *suggestion
 		if syncIssueSuggestionTargets(data, issue) && !accept {
 			issue.UpdatedAt = now
 			issue.Version++
 		}
 		return nil
-	})
-	respondMutation(w, err, http.StatusOK, updated)
+	}
 }

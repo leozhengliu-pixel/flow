@@ -342,7 +342,7 @@ func (s *server) appendMCPDocumentEmbed(ctx context.Context, actor mcpActor, doc
 	if err != nil {
 		return err
 	}
-	if strings.Contains(document.Content, attachment.URL) {
+	if containsAttachmentURL(document.Content, attachment.URL) {
 		return nil
 	}
 	text := "\n\n" + block + "\n"
@@ -378,8 +378,7 @@ func mcpAttachmentResult(args map[string]any, attachment domain.Attachment, targ
 // attachmentMarkdownLink is an attachment as a Markdown image (images) or
 // link (everything else).
 func attachmentMarkdownLink(attachment domain.Attachment) string {
-	destination := strings.NewReplacer(" ", "%20", "(", "%28", ")", "%29", "<", "%3C", ">", "%3E").Replace(attachment.URL)
-	link := "[" + attachmentEmbedLabel(attachment.Title) + "](" + destination + ")"
+	link := "[" + attachmentEmbedLabel(attachment.Title) + "](" + encodeDirectiveURL(attachment.URL) + ")"
 	if attachmentEmbedKind(attachment) == "image" {
 		return "!" + link
 	}

@@ -181,6 +181,20 @@ type webhookEvent struct {
 	// noVersion1URL keeps `url` out of version 1 bodies of nested entity
 	// events, which never carried one.
 	noVersion1URL bool
+	metadataErr   error
+}
+
+type webhookDeliveryReadKey struct{}
+
+type webhookDeliveryReadOwner struct {
+	reads []*store.WebhookDeliveryRead
+}
+
+func (owner *webhookDeliveryReadOwner) Close() {
+	for _, read := range owner.reads {
+		read.Close()
+	}
+	owner.reads = nil
 }
 
 // classifyWebhookEvent maps a Flow domain event to the webhook resource type
@@ -423,19 +437,57 @@ func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent
 	}
 	// Runs synchronously after every mutation: check the (small) webhook list
 	// before reading anything else.
-	hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	ctx := context.Background()
+	var hooks domain.Bootstrap
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		owner := &webhookDeliveryReadOwner{}
+		defer owner.Close()
+		ctx = context.WithValue(ctx, webhookDeliveryReadKey{}, owner)
+		var closeOutputs func()
+		ctx, closeOutputs = beginMetadataOutputReads(ctx)
+		defer closeOutputs()
+		read, found, err := s.store.BeginWebhookDeliveryRead(ctx, workspace, true)
+		if err != nil {
+			log.Printf("Flow webhook routing workspace=%s: %v", workspace, err)
+			return
+		}
+		ok = found
+		if found {
+			owner.reads = append(owner.reads, read)
+			hooks = read.Data
+		}
+	} else {
+		hooks, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	}
 	if !ok || !slices.ContainsFunc(hooks.Webhooks, func(webhook domain.Webhook) bool {
 		return !webhook.AuditLog && webhook.Enabled && webhook.URL != "" && webhookMatches(webhook, webhookEvent{resource: resource, legacy: legacy})
 	}) {
 		return
 	}
-	ctx := context.Background()
 	classified := s.describeWebhookEvent(ctx, workspace, event, resource, action, legacy)
 	s.enqueueWebhookEvent(ctx, workspace, hooks.Webhooks, classified)
 	if event.Type == "project.milestones_reordered" {
 		if parent := snapshotEntity(event); parent != nil {
-			metadata, _ := s.store.WorkspaceMetadataFields(workspace, "users")
+			var metadata domain.Bootstrap
+			var read *store.WebhookDeliveryRead
+			if s.store.BoundedMetadataEnabled() {
+				var err error
+				read, ok, err = s.store.BeginWebhookDeliveryRead(ctx, workspace, false)
+				if err != nil {
+					log.Printf("Flow webhook milestone identity workspace=%s: %v", workspace, err)
+					return
+				}
+				if ok {
+					metadata = read.Data
+				}
+			} else {
+				metadata, _ = s.store.WorkspaceMetadataFields(workspace, "users")
+			}
 			root := s.appBaseURL() + "/" + url.PathEscape(metadata.Workspace.URLKey)
+			if read != nil {
+				read.Close()
+			}
 			if s.appBaseURL() == "" {
 				root = ""
 			}
@@ -449,8 +501,27 @@ func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent
 // enqueueWebhookEvent queues the event for every matching webhook and starts
 // the first attempts.
 func (s *server) enqueueWebhookEvent(ctx context.Context, workspace string, hooks []domain.Webhook, event webhookEvent) {
+	if event.metadataErr != nil {
+		log.Printf("Flow webhook event metadata workspace=%s: %v", workspace, event.metadataErr)
+		return
+	}
 	var full *domain.Bootstrap
-	metadata, _ := s.store.WorkspaceMetadataFields(workspace, "users")
+	var aggregate *store.WebhookAggregateRead
+	aggregateLoaded := false
+	var metadata domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginWebhookDeliveryRead(ctx, workspace, false)
+		if err != nil {
+			log.Printf("Flow webhook organization identity workspace=%s: %v", workspace, err)
+			return
+		}
+		if found {
+			defer read.Close()
+			metadata = read.Data
+		}
+	} else {
+		metadata, _ = s.store.WorkspaceMetadataFields(workspace, "users")
+	}
 	organizationID := metadata.Workspace.ID
 	for _, webhook := range hooks {
 		if webhook.AuditLog || !webhook.Enabled || webhook.URL == "" || !webhookMatches(webhook, event) {
@@ -464,11 +535,32 @@ func (s *server) enqueueWebhookEvent(ctx context.Context, workspace string, hook
 			if len(event.teamIDs) > 0 {
 				allowed = slices.ContainsFunc(event.teamIDs, func(id string) bool { return containsString(webhook.TeamIDs, id) })
 			} else {
-				if full == nil {
-					data, _ := s.store.WorkspaceMetadata(workspace)
-					full = &data
+				if s.store.BoundedMetadataEnabled() {
+					if !aggregateLoaded {
+						var err error
+						aggregate, _, err = s.store.BeginWebhookAggregateRead(ctx, workspace)
+						if err != nil {
+							log.Printf("Flow webhook team routing workspace=%s: %v", workspace, err)
+							return
+						}
+						aggregateLoaded = true
+						if aggregate != nil {
+							defer aggregate.Close()
+						}
+					}
+					var err error
+					allowed, err = boundedWebhookTeamAllowed(ctx, webhook, event.payload, aggregate, event.eventID)
+					if err != nil {
+						log.Printf("Flow webhook team routing workspace=%s: %v", workspace, err)
+						return
+					}
+				} else {
+					if full == nil {
+						data, _ := s.store.WorkspaceMetadata(workspace)
+						full = &data
+					}
+					allowed = webhookTeamAllowed(webhook, event.payload, *full, event.eventID)
 				}
-				allowed = webhookTeamAllowed(webhook, event.payload, *full, event.eventID)
 			}
 			if !allowed {
 				continue
@@ -484,6 +576,29 @@ func (s *server) enqueueWebhookEvent(ctx context.Context, workspace string, hook
 			EventType: webhookTypeName(event.resource), Action: event.action, Payload: body,
 		})
 	}
+}
+
+func boundedWebhookTeamAllowed(ctx context.Context, webhook domain.Webhook, payload json.RawMessage, read *store.WebhookAggregateRead, eventID string) (bool, error) {
+	if webhook.TeamRestriction != "selected" || len(webhook.TeamIDs) == 0 {
+		return true, nil
+	}
+	var value map[string]any
+	if json.Unmarshal(payload, &value) == nil {
+		if teamID, ok := value["teamId"].(string); ok {
+			return containsString(webhook.TeamIDs, teamID), nil
+		}
+		if teamIDs, ok := value["teamIds"].([]any); ok {
+			for _, value := range teamIDs {
+				if id, ok := value.(string); ok && containsString(webhook.TeamIDs, id) {
+					return true, nil
+				}
+			}
+		}
+	}
+	if read == nil || eventID == "" {
+		return false, nil
+	}
+	return read.TeamsAllowed(ctx, eventID, webhook.TeamIDs)
 }
 
 // queueWebhookDelivery fills the delivery from the webhook, stores it and
@@ -578,7 +693,31 @@ func (s *server) describeWebhookEvent(ctx context.Context, workspace string, eve
 	if result.createdAt.IsZero() {
 		result.createdAt = time.Now().UTC()
 	}
-	metadata, _ := s.store.WorkspaceMetadataFields(workspace, "users")
+	var metadata domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		owner, _ := ctx.Value(webhookDeliveryReadKey{}).(*webhookDeliveryReadOwner)
+		if owner == nil {
+			result.metadataErr = store.ErrBoundedMetadataCoverage
+			return result
+		}
+		read, found, err := s.store.BeginWebhookDeliveryRead(ctx, workspace, false)
+		if err != nil {
+			result.metadataErr = err
+			return result
+		}
+		if found {
+			fullSubject := strings.HasPrefix(event.Type, "workspace_member.") && resource == "users"
+			if err := read.LoadUsers(ctx, event.ActorID, event.AggregateID, fullSubject); err != nil {
+				read.Close()
+				result.metadataErr = err
+				return result
+			}
+			owner.reads = append(owner.reads, read)
+			metadata = read.Data
+		}
+	} else {
+		metadata, _ = s.store.WorkspaceMetadataFields(workspace, "users")
+	}
 	base := s.appBaseURL()
 	root := base + "/" + url.PathEscape(metadata.Workspace.URLKey)
 	result.actor = webhookActorFor(metadata.Users, event.ActorID, root)
@@ -764,7 +903,12 @@ func (s *server) describeWebhookEvent(ctx context.Context, workspace string, eve
 		result.payload = stripped
 		var childEntity map[string]any
 		if found && entity != nil {
-			childEntity, result.url = s.webhookChildEntity(ctx, workspace, event, resource, child, entity, root)
+			var err error
+			childEntity, result.url, err = s.webhookChildEntity(ctx, workspace, event, resource, child, entity, root)
+			if err != nil {
+				result.metadataErr = err
+				return result
+			}
 		}
 		if childEntity == nil {
 			result.version1Only = true
@@ -983,7 +1127,10 @@ func (s *server) runWebhookDelivery(ctx context.Context, id string, now time.Tim
 func (s *server) attemptWebhookDelivery(ctx context.Context, delivery domain.WebhookDelivery, now time.Time) (domain.WebhookDelivery, error) {
 	var webhook *domain.Webhook
 	if delivery.Kind != domain.WebhookDeliveryKindLifecycle {
-		hooks, _ := s.store.WorkspaceMetadataFields(delivery.WorkspaceKey, "webhooks")
+		hooks, _, err := s.store.WorkspaceMetadataFieldsScoped(ctx, delivery.WorkspaceKey, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "webhooks", ID: delivery.WebhookID}}}, "webhooks")
+		if err != nil {
+			return delivery, err
+		}
 		index := slices.IndexFunc(hooks.Webhooks, func(item domain.Webhook) bool { return item.ID == delivery.WebhookID })
 		if index < 0 || !hooks.Webhooks[index].Enabled && delivery.Kind != domain.WebhookDeliveryKindTest {
 			return s.store.CompleteWebhookDeliveryAttempt(ctx, delivery, store.WebhookDeliveryOutcome{Canceled: true, At: now})
@@ -1156,7 +1303,7 @@ func (s *server) recordWebhookHealth(workspace string, webhook domain.Webhook, d
 
 func (s *server) updateWebhookHealth(workspace, webhookID string, apply func(*domain.Webhook) bool) {
 	ctx := store.WithMetadataFields(context.Background(), "webhooks")
-	err := s.store.MutateWorkspace(ctx, workspace, "webhook.updated", webhookID, map[string]any{"health": true}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(ctx, workspace, "webhook.updated", webhookID, map[string]any{"health": true}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "webhooks", ID: webhookID}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == webhookID })
 		if index < 0 || !apply(&data.Webhooks[index]) {
 			return store.ErrNoMutation
@@ -1173,7 +1320,7 @@ func (s *server) updateWebhookHealth(workspace, webhookID string, apply func(*do
 func (s *server) disableFailingWebhook(workspace, webhookID string, now time.Time) {
 	scope := store.WithMutationScope(context.Background(), store.MutationScope{Resources: []string{webhookID}})
 	var disabled bool
-	err := s.store.MutateWorkspace(scope, workspace, "webhook.auto_disabled", webhookID, map[string]any{"reason": "deliveryFailures"}, func(data *domain.Bootstrap) error {
+	mutate := func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == webhookID })
 		if index < 0 || !data.Webhooks[index].Enabled {
 			return store.ErrNoMutation
@@ -1204,7 +1351,13 @@ func (s *server) disableFailingWebhook(workspace, webhookID string, now time.Tim
 		}
 		disabled = true
 		return nil
-	})
+	}
+	var err error
+	if s.store.BoundedMetadataEnabled() {
+		err = s.store.MutateFailingWebhookDisable(scope, workspace, webhookID, mutate)
+	} else {
+		err = s.store.MutateWorkspace(scope, workspace, "webhook.auto_disabled", webhookID, map[string]any{"reason": "deliveryFailures"}, mutate)
+	}
 	if err != nil {
 		log.Printf("Flow webhook disable workspace=%s id=%s: %v", workspace, webhookID, err)
 		return
@@ -1234,6 +1387,12 @@ func (s *server) recordWebhookFailure(workspace string, webhook domain.Webhook, 
 		HTTPStatus:      statusPtr,
 		ResponseOrError: truncateWebhookFailureText(responseOrError, 4096),
 		CreatedAt:       now,
+	}
+	if s.store.BoundedMetadataEnabled() {
+		if err := s.store.RecordWebhookDeliveryFailure(context.Background(), workspace, failure, httpStatus); err != nil {
+			log.Printf("Flow webhook failure persist id=%s: %v", webhook.ID, err)
+		}
+		return
 	}
 	if err := s.store.MutateWorkspace(context.Background(), workspace, "webhook.delivery_failed", webhook.ID, map[string]any{
 		"executionId": failure.ExecutionID,

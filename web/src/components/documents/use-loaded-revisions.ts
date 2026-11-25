@@ -1,22 +1,29 @@
+import { registerSessionCacheClearer } from '@/lib/session-cache-registry'
 import { useEffect, useMemo, useState } from 'react'
 
 import { fetchDocumentRevisions } from '@/lib/api'
 import type { DocumentRevision, FlowDocument } from '@/types/flow'
+import { resourceWindowEnabled } from '@/lib/resource-window-adapters'
+import { useResourceRevisions, type RevisionSelection } from './scale-p20-revisions'
 
 /** Loaded bodies of offloaded versions, by document and version id. A version's body never changes once it is offloaded. */
 const loadedBodies = new Map<string, DocumentRevision>()
+registerSessionCacheClearer(() => loadedBodies.clear())
 const bodyKey = (documentId: string, revisionId: string) => `${documentId}:${revisionId}`
 
 /**
  * The document with its older versions' bodies, for views that compare or show versions (history, author labels).
  * Workspace data carries older versions without their bodies (`_offloaded`); they are fetched once when `enabled`.
  */
-export function useLoadedRevisions<T extends Pick<FlowDocument, 'id' | 'revisions'>>(document: T, enabled: boolean): T {
+export function useLoadedRevisions<T extends Pick<FlowDocument, 'id' | 'revisions'>>(document: T, enabled: boolean, selection?: RevisionSelection): T {
+  const scoped = resourceWindowEnabled('documents') || resourceWindowEnabled('trash')
+  const windowed = useResourceRevisions(document, scoped && enabled, selection)
   const missing = useMemo(() => (document.revisions ?? []).filter(revision => revision._offloaded && !loadedBodies.has(bodyKey(document.id, revision.id))).map(revision => revision.id), [document])
   const [loads, setLoads] = useState(0)
   const pending = enabled && missing.length > 0
   const wanted = missing.join(',')
   useEffect(() => {
+    if (scoped) return
     if (!pending) return
     const controller = new AbortController()
     fetchDocumentRevisions(document.id, controller.signal).then(revisions => {
@@ -24,12 +31,13 @@ export function useLoadedRevisions<T extends Pick<FlowDocument, 'id' | 'revision
       setLoads(count => count + 1)
     }).catch(() => undefined)
     return () => controller.abort()
-  }, [pending, document.id, wanted])
+  }, [pending, document.id, wanted, scoped])
   return useMemo(() => {
+    if (scoped) return windowed
     const revisions = document.revisions ?? []
     if (!revisions.some(revision => revision._offloaded)) return document
     return { ...document, revisions: revisions.map(revision => (revision._offloaded && loadedBodies.get(bodyKey(document.id, revision.id))) || revision) }
     // `loads` re-reads the cache after a fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [document, loads])
+  }, [document, loads, scoped, windowed])
 }

@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_resource_directory_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginResourceDirectoryRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns exact installed, explicit caller-snapshot or already-projected handoff provenance for five public resource families without canonical target/actor refresh. Dynamically admitted compact policy/reference/count fields retain native occurrence ordinal tags through proven viewer/key transforms; real names/actors are restored before all downstream filters/search/sort and milestone derived names. Private index maps avoid per-candidate core scans; milestone headers stream without sibling rescans. Independent filter, full output and document search/scratch owners exclude unused histories before allocation, preserve nil/empty and complete output fields, and survive parent closure until their own encoder ends. Proven live SQL/application projection admission is reused, projected handoffs preflight only their live principal, and owned/borrowed snapshots retain trailing authority rules. Eight targeted reader tests passed persistent SQLite twice and race, covering sources/duplicates, excluded-body growth, mutable ownership, cancellation/budget release, pool-one snapshots, queued revocation, exact projected handoffs and trusted source generation retention with zero SQL. An operation-owned canonical policy memo is bound to store/workspace/stamp/epoch/SQL transaction; installed and event sources retain precedence, both live principals and fresh credential scopes remain mandatory, and retained memo work releases after the comparison. New tests inject installed/event replacement, credential mutation, persisted key revocation, principal suspension and epoch changes. Shared server table passed 4670 exact cases; spool/passthrough encoder lifecycle, signing fallback and canceled-dev proofs passed with zero full metadata decodes or retained work. Policy work stayed3694496B at8192/81920 body bytes; independent output work345280/2704576B. Same-fixture authenticated projects/documents/labels SQL fell from124 to76 bounded versus10 legacy, and development remains0/0: one canonical policy traversal and both actual principal queries are observed. Remaining canonical policy and live projection preflights are bounded by admitted directories and existing header pages, plus two scalar checks per page winner bounded by250. No latency/capacity improvement is claimed.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Owned source/policy/header/output primitive for the five public resource connections.",
+      "callers": ["server/server.listBoundedResourceConnection", "server/server.getIssueLabelRecord"]
+    }
+  }
+}

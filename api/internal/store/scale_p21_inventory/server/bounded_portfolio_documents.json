@@ -1,0 +1,33 @@
+{
+  "source": "server/bounded_portfolio_documents.go",
+  "unmigrated": 0,
+  "consumers": {
+    "updatePortfolioProject": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The flag-on route uses scoped project metadata or the closed portfolio image. The original handler is called only with the flag off. Archive suggestion cleanup runs as its own bounded write after the project commit.",
+      "accessors": ["MutateWorkspaceScoped", "UpdatePortfolioProject"],
+      "temperature": "hot",
+      "temperatureReason": "Project edits use selected callback inputs and retain legacy aggregate precedence.",
+      "callers": ["PATCH /api/projects/{id} (server/main.go)"]
+    },
+    "createPortfolioDocument": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Reuses the literal create callback and template access check. Reads the named template, issue, projects and subscribers, and commits the document, project resources and audit together.",
+      "accessors": ["CreatePortfolioDocument"],
+      "temperature": "hot",
+      "temperatureReason": "Flag-on writes use the closed document create profile.",
+      "callers": ["POST /api/documents (server/main.go)"]
+    },
+    "deletePortfolioDocument": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Reuses literal owner and trash handling for the selected document, reverse project resources, drafts, preferences and notifications. Realtime access invalidation and email dispatch run after commit.",
+      "accessors": ["DeletePortfolioDocument"],
+      "temperature": "hot",
+      "temperatureReason": "Flag-on writes use the closed document delete profile.",
+      "callers": ["DELETE /api/documents/{id} (server/main.go)", "server/server.deleteMCPDocument"]
+    }
+  }
+}

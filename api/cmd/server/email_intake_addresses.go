@@ -111,7 +111,18 @@ func validateEmailIntakeTemplate(data *domain.Bootstrap, teamID, templateID stri
 	if template.TeamID == "" {
 		return fmt.Errorf("%w: workspace templates are not available for email intake", errInvalid)
 	}
+	// The address's team owns the issues it creates: another team's
+	// template (or one narrowed to another team) would create issues there.
+	if !emailIntakeTemplateFits(template, teamID) {
+		return fmt.Errorf("%w: the template belongs to another team", errInvalid)
+	}
 	return nil
+}
+
+// emailIntakeTemplateFits reports whether a template may fill the issues an
+// intake address of teamID creates: a template of no team or of that team.
+func emailIntakeTemplateFits(template domain.IssueTemplate, teamID string) bool {
+	return (template.TeamID == "" || template.TeamID == teamID) && (template.VisibilityTeamID == "" || template.VisibilityTeamID == teamID)
 }
 
 func validateForwardingEmailAddress(data *domain.Bootstrap, id, value string) (string, error) {

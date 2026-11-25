@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Project and initiative update cards. A group that hears updates gets the
@@ -378,7 +379,43 @@ func (s *server) chatProjectUpdateLink(record domain.ChatIntegrationRecord, proj
 // replaces that card with a notice. A job queued before jobs named their
 // update shows the project's update posted at the event.
 func (s *server) chatSendProjectUpdate(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, job domain.ChatJob, payload chatNotificationJob) error {
-	data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "projects", "teams", "teamSettings", "workspaceSettings", "users")
+	var data domain.Bootstrap
+	var pulse *store.PulseRead
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		owner, found, err := s.store.BeginInstalledMetadataRead(ctx, record.WorkspaceKey)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("project metadata unavailable")
+		}
+		defer owner.Close()
+		ctx, err = owner.Context(ctx)
+		if err != nil {
+			return err
+		}
+		pulse, ok, err = s.store.BeginPulseRead(ctx, record.WorkspaceKey, false)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return chatInvalid("project metadata unavailable")
+		}
+		defer pulse.Close()
+		policy, found, err := s.store.BeginChatDisplayRead(ctx, record.WorkspaceKey, store.ChatDisplayRequest{Policy: true})
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("project metadata unavailable")
+		}
+		defer policy.Close()
+		data = policy.Data
+		data.Projects = pulse.Snapshot.Projects
+	} else {
+		data, ok = s.store.WorkspaceMetadataFields(record.WorkspaceKey, "projects", "teams", "teamSettings", "workspaceSettings", "users")
+	}
 	if !ok {
 		return chatInvalid("project metadata unavailable")
 	}
@@ -392,14 +429,25 @@ func (s *server) chatSendProjectUpdate(ctx context.Context, record domain.ChatIn
 	project := data.Projects[index]
 	language := chatGroupLanguage(record, binding)
 	var update *domain.ProjectUpdate
-	if feed, ok := s.store.PulseFeed(record.WorkspaceKey); ok {
-		for _, item := range feed.ProjectUpdates[project.ID] {
-			if payload.UpdateID != "" && item.ID != payload.UpdateID || payload.UpdateID == "" && !payload.EventAt.IsZero() && item.CreatedAt.After(payload.EventAt) {
-				continue
-			}
-			update = &item
-			break
+	var updates []domain.ProjectUpdate
+	if pulse != nil {
+		var ids []string
+		if payload.UpdateID != "" {
+			ids = []string{payload.UpdateID}
 		}
+		if err := pulse.LoadUpdates(ctx, "project", project.ID, ids); err != nil {
+			return err
+		}
+		updates = pulse.Snapshot.ProjectUpdates[project.ID]
+	} else if feed, ok := s.store.PulseFeed(record.WorkspaceKey); ok {
+		updates = feed.ProjectUpdates[project.ID]
+	}
+	for _, item := range updates {
+		if payload.UpdateID != "" && item.ID != payload.UpdateID || payload.UpdateID == "" && !payload.EventAt.IsZero() && item.CreatedAt.After(payload.EventAt) {
+			continue
+		}
+		update = &item
+		break
 	}
 	updateID := payload.UpdateID
 	if updateID == "" && update != nil {
@@ -434,6 +482,17 @@ func (s *server) chatSendProjectUpdate(ctx context.Context, record domain.ChatIn
 			return nil
 		}
 	}
+	if pulse != nil {
+		display, found, err := s.store.BeginChatDisplayRead(ctx, record.WorkspaceKey, store.ChatDisplayRequest{Directory: true, TeamID: binding.TeamID})
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("project metadata unavailable")
+		}
+		defer display.Close()
+		data.Users, data.TeamSettings = display.Data.Users, display.Data.TeamSettings
+	}
 	card := chatUpdateCard(chatUpdateCardInput{Language: language, Heading: "project_update", Name: project.Name, Link: s.chatProjectUpdateLink(record, project, update.ID), Origin: s.chatAppOrigin(), Zone: teamSettings(&data, binding.TeamID).Timezone, Directory: data.Users, Update: chatProjectPulseUpdate(*update)})
 	if thread != nil {
 		err := s.chatUpdateCard(ctx, record, thread.RootMessageID, card)
@@ -454,18 +513,24 @@ func (s *server) chatSendProjectUpdate(ctx context.Context, record domain.ChatIn
 // chatInitiativeUpdateCard draws the card of the initiative's update the
 // job names (or, for a job that names none, the one posted at the event).
 func (s *server) chatInitiativeUpdateCard(language string, record domain.ChatIntegrationRecord, data domain.Bootstrap, initiative domain.Initiative, link string, payload chatNotificationJob) map[string]any {
-	update := chatPulseUpdate{Health: initiative.Health}
+	var updates []domain.InitiativeUpdate
 	if feed, ok := s.store.PulseFeed(record.WorkspaceKey); ok {
-		for _, item := range feed.InitiativeUpdates[initiative.ID] {
-			if payload.UpdateID != "" && item.ID != payload.UpdateID || payload.UpdateID == "" && !payload.EventAt.IsZero() && item.CreatedAt.After(payload.EventAt) {
-				continue
-			}
-			update = chatInitiativePulseUpdate(item)
-			break
-		}
+		updates = feed.InitiativeUpdates[initiative.ID]
 		if len(data.Users) == 0 {
 			data.Users = feed.Users
 		}
+	}
+	return s.chatInitiativeUpdateCardFrom(language, data, initiative, link, payload, updates)
+}
+
+func (s *server) chatInitiativeUpdateCardFrom(language string, data domain.Bootstrap, initiative domain.Initiative, link string, payload chatNotificationJob, updates []domain.InitiativeUpdate) map[string]any {
+	update := chatPulseUpdate{Health: initiative.Health}
+	for _, item := range updates {
+		if payload.UpdateID != "" && item.ID != payload.UpdateID || payload.UpdateID == "" && !payload.EventAt.IsZero() && item.CreatedAt.After(payload.EventAt) {
+			continue
+		}
+		update = chatInitiativePulseUpdate(item)
+		break
 	}
 	if update.ID != "" {
 		link += "#update-" + url.PathEscape(update.ID)

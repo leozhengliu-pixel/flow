@@ -41,6 +41,37 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 	if err := json.Unmarshal(raw, &result.Key); err != nil {
 		return result, err
 	}
+	return s.checkLiveKeyRecord(ctx, result, workspace, hash, approved)
+}
+
+// APIKeyAuthenticationByID is AuthenticateAPIKeyRecord for a caller that holds
+// the key's identifier instead of its secret (a file link signed for the key):
+// the same live checks, including revocation, expiry, the owner's membership,
+// application and authorization state.
+func (s *SQLiteStore) APIKeyAuthenticationByID(ctx context.Context, workspace, keyID string, approved func(*domain.Bootstrap, string, []string) bool) (APIKeyAuthentication, error) {
+	result := APIKeyAuthentication{}
+	if workspace == "" || keyID == "" {
+		return result, ErrAuthForbidden
+	}
+	var raw []byte
+	err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='apiKeys' AND record_key=?`, workspace, keyID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return result, ErrAuthForbidden
+	}
+	if err != nil {
+		return result, err
+	}
+	if err := json.Unmarshal(raw, &result.Key); err != nil {
+		return result, err
+	}
+	if result.Key.ID != keyID || result.Key.SecretHash == "" {
+		return result, ErrAuthForbidden
+	}
+	return s.checkLiveKeyRecord(ctx, result, workspace, result.Key.SecretHash, approved)
+}
+
+func (s *SQLiteStore) checkLiveKeyRecord(ctx context.Context, result APIKeyAuthentication, workspace, hash string, approved func(*domain.Bootstrap, string, []string) bool) (APIKeyAuthentication, error) {
+	var raw []byte
 	key := result.Key
 	if key.GrantType == "" && key.AuthorizationID == "" && strings.HasPrefix(key.OAuthClientID, "flow_client_") {
 		return result, ErrAuthForbidden
@@ -57,7 +88,10 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 		return result, err
 	}
 	role, status, err := s.WorkspaceRole(ctx, result.Workspace.ID, key.SubjectID())
-	if err != nil || status != "active" {
+	if err != nil {
+		return result, err
+	}
+	if status != "active" {
 		return result, ErrAuthForbidden
 	}
 	result.Role = role
@@ -70,7 +104,10 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 	}
 	if result.User.App {
 		app, err := s.ApplicationByUser(ctx, result.User.ID)
-		if err != nil || !app.Active || app.WorkspaceKey != workspace || key.OAuthClientID != app.ClientID || !slices.Contains(app.Scopes, "read") {
+		if err != nil {
+			return result, err
+		}
+		if !app.Active || app.WorkspaceKey != workspace || key.OAuthClientID != app.ClientID || !slices.Contains(app.Scopes, "read") {
 			return result, ErrAuthForbidden
 		}
 		if key.Scopes == nil || slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(app.Scopes, scope) }) {
@@ -85,12 +122,18 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 		result.Key.TeamIDs = teams
 	}
 	if key.GrantType == "client_credentials" || key.GrantType == "developer_token" || strings.HasPrefix(key.OAuthClientID, "flow_client_") {
-		home, ok := s.OAuthApplicationHome(key.OAuthClientID)
+		home, ok, err := s.LookupOAuthApplicationHome(ctx, key.OAuthClientID)
+		if err != nil {
+			return result, err
+		}
 		if !ok {
 			return result, ErrAuthForbidden
 		}
 		client, err := s.workspaceOAuthApplication(ctx, home, key.OAuthClientID)
-		if err != nil || slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(client.Scopes, scope) }) {
+		if err != nil {
+			return result, err
+		}
+		if slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(client.Scopes, scope) }) {
 			return result, ErrAuthForbidden
 		}
 		if key.GrantType == "client_credentials" && (!client.SupportsClientCredentials || key.ClientSecretHash == "" || subtle.ConstantTimeCompare([]byte(key.ClientSecretHash), []byte(tokenHash(client.ClientSecret))) != 1) {
@@ -135,6 +178,11 @@ type apiKeyUse struct {
 func (s *SQLiteStore) RecordAPIKeyUse(ctx context.Context, workspace, keyID, authorizationID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if parent := s.coldParent; parent != nil {
+		// A COLD facade or legacy view records through the live store's
+		// queue: its throttle, its worker and its shutdown.
+		return parent.RecordAPIKeyUse(ctx, workspace, keyID, authorizationID)
 	}
 	s.apiKeyUseMu.Lock()
 	defer s.apiKeyUseMu.Unlock()
@@ -195,32 +243,33 @@ func (s *SQLiteStore) writeAPIKeyUse(ctx context.Context, use apiKeyUse) error {
 		return err
 	}
 	defer tx.Rollback()
-	expression := "CAST(json_set(data,'$.lastUsedAt',?) AS BLOB)"
-	if s.dialect == "mysql" {
-		expression = "JSON_SET(CONVERT(data USING utf8mb4),'$.lastUsedAt',?)"
-	}
-	if s.dialect == "postgres" {
-		expression = "convert_to(jsonb_set(convert_from(data,'UTF8')::jsonb,'{lastUsedAt}',to_jsonb(?::text))::text,'UTF8')"
-	}
-	for _, record := range []struct{ field, id string }{{"apiKeys", use.keyID}, {"oauthAuthorizations", use.authorizationID}} {
-		if record.id == "" {
-			continue
-		}
-		_, err := tx.ExecContext(ctx, "UPDATE workspace_metadata_records SET data="+expression+" WHERE workspace_key=? AND field=? AND record_key=? AND "+s.jsonText("data", "revokedAt")+" IS NULL AND ("+s.jsonText("data", "lastUsedAt")+" IS NULL OR "+s.jsonText("data", "lastUsedAt")+"<?)", use.at.Format(time.RFC3339Nano), use.workspace, record.field, record.id, use.at.Add(-time.Minute).Format(time.RFC3339Nano))
-		if err != nil {
-			return err
-		}
+	if err := s.writeAPIKeyUseRows(ctx, tx, use); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	s.dropMetadataCache(ctx, use.workspace)
+	if s.metadataResidency != nil {
+		// The bounded resident copy holds no credentials: the use is
+		// installed into the logical generation (scale_p21_write_chain.go),
+		// as apiKeyUseMirror patches the legacy copy.
+		return s.publishBoundedAPIKeyUse(ctx, use)
+	}
 	s.lockWorkspaceWrites()
 	defer s.unlockWorkspaceWrites()
 	data, ok := s.workspaces[use.workspace]
 	if !ok {
 		return nil
 	}
+	data = apiKeyUseMirror(data, use)
+	s.setWorkspaceLocked(use.workspace, data)
+	return nil
+}
+
+// apiKeyUseMirror stamps the use on the copy's key and grant, as the rows'
+// update does except for its once-a-minute predicate.
+func apiKeyUseMirror(data domain.Bootstrap, use apiKeyUse) domain.Bootstrap {
 	if index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool { return key.ID == use.keyID }); index >= 0 && data.APIKeys[index].RevokedAt == nil {
 		data.APIKeys = slices.Clone(data.APIKeys)
 		at := use.at
@@ -231,6 +280,25 @@ func (s *SQLiteStore) writeAPIKeyUse(ctx context.Context, use apiKeyUse) error {
 		at := use.at
 		data.OAuthAuthorizations[index].LastUsedAt = &at
 	}
-	s.setWorkspaceLocked(use.workspace, data)
+	return data
+}
+
+func (s *SQLiteStore) writeAPIKeyUseRows(ctx context.Context, tx *sqlTx, use apiKeyUse) error {
+	expression := "CAST(json_set(data,'$.lastUsedAt',?) AS BLOB)"
+	if s.dialect == "mysql" {
+		expression = "JSON_SET(CONVERT(data USING utf8mb4),'$.lastUsedAt',?)"
+	}
+	if s.dialect == "postgres" {
+		expression = "convert_to(jsonb_set(flow_utf8(data)::jsonb,'{lastUsedAt}',to_jsonb(?::text))::text,'UTF8')"
+	}
+	for _, record := range []struct{ field, id string }{{"apiKeys", use.keyID}, {"oauthAuthorizations", use.authorizationID}} {
+		if record.id == "" {
+			continue
+		}
+		_, err := tx.ExecContext(ctx, "UPDATE workspace_metadata_records SET data="+expression+" WHERE workspace_key=? AND field=? AND record_key=? AND "+s.jsonText("data", "revokedAt")+" IS NULL AND ("+s.jsonText("data", "lastUsedAt")+" IS NULL OR "+s.jsonText("data", "lastUsedAt")+"<?)", use.at.Format(time.RFC3339Nano), use.workspace, record.field, record.id, use.at.Add(-time.Minute).Format(time.RFC3339Nano))
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }

@@ -1214,40 +1214,44 @@ type Loop struct {
 	ID string `json:"id"`
 	// SlugID is the loop's URL slug, `<name-slug>-<12 hex>` (see LoopSlugID);
 	// it is derived whenever a loop is served, so it always follows the name.
-	SlugID                     string           `json:"slugId,omitempty"`
-	Name                       string           `json:"name"`
-	Description                string           `json:"description"`
-	Status                     string           `json:"status"` // draft | published; loops stored before drafts are published
-	TemplateID                 string           `json:"templateId,omitempty"`
-	SourcePrompt               string           `json:"sourcePrompt,omitempty"`
-	TeamID                     string           `json:"teamId,omitempty"`
-	Icon                       string           `json:"icon,omitempty"`
-	Color                      string           `json:"color,omitempty"`
-	Level                      string           `json:"level"`
-	TriggerType                string           `json:"triggerType"`
-	TriggerConfig              map[string]any   `json:"triggerConfig,omitempty"`
-	Instructions               string           `json:"instructions"`
-	InstructionsData           map[string]any   `json:"instructionsData,omitempty"`
-	ConnectorIDs               []string         `json:"connectorIds"`
-	TeamAccess                 string           `json:"teamAccess"`
-	AllowChangesOutsideTrigger bool             `json:"allowChangesOutsideTrigger"`
-	AllowExternalSync          bool             `json:"allowExternalSync"`
-	WebSearch                  bool             `json:"webSearch"`
-	CodeAccess                 string           `json:"codeAccess"` // disabled | read | readWrite
-	Enabled                    bool             `json:"enabled"`
-	OwnerID                    string           `json:"ownerId,omitempty"`
-	EditPolicy                 string           `json:"editPolicy,omitempty"` // "Who can edit": all (default) | teamOwners | owner
-	TrustedSourceKeys          []string         `json:"trustedSourceKeys,omitempty"`
-	Creator                    User             `json:"creator"`
-	LastRunAt                  *time.Time       `json:"lastRunAt,omitempty"`
-	NextRunAt                  *time.Time       `json:"nextRunAt,omitempty"`
-	RunCount30d                int              `json:"runCount30d"`
-	CreatedAt                  time.Time        `json:"createdAt"`
-	UpdatedAt                  time.Time        `json:"updatedAt"`
-	PublishedAt                *time.Time       `json:"publishedAt,omitempty"`
-	Attachments                []LoopAttachment `json:"attachments,omitempty"`
-	Version                    int              `json:"version,omitempty"`
-	VersionID                  string           `json:"versionId,omitempty"`
+	SlugID                     string         `json:"slugId,omitempty"`
+	Name                       string         `json:"name"`
+	Description                string         `json:"description"`
+	Status                     string         `json:"status"` // draft | published; loops stored before drafts are published
+	TemplateID                 string         `json:"templateId,omitempty"`
+	SourcePrompt               string         `json:"sourcePrompt,omitempty"`
+	TeamID                     string         `json:"teamId,omitempty"`
+	Icon                       string         `json:"icon,omitempty"`
+	Color                      string         `json:"color,omitempty"`
+	Level                      string         `json:"level"`
+	TriggerType                string         `json:"triggerType"`
+	TriggerConfig              map[string]any `json:"triggerConfig,omitempty"`
+	Instructions               string         `json:"instructions"`
+	InstructionsData           map[string]any `json:"instructionsData,omitempty"`
+	ConnectorIDs               []string       `json:"connectorIds"`
+	TeamAccess                 string         `json:"teamAccess"`
+	AllowChangesOutsideTrigger bool           `json:"allowChangesOutsideTrigger"`
+	AllowExternalSync          bool           `json:"allowExternalSync"`
+	WebSearch                  bool           `json:"webSearch"`
+	CodeAccess                 string         `json:"codeAccess"` // disabled | read | readWrite
+	Enabled                    bool           `json:"enabled"`
+	OwnerID                    string         `json:"ownerId,omitempty"`
+	// BehaviorEditorID is the person, neither the owner nor an admin, who last
+	// changed what the loop does; a run reads only what both they and the
+	// owner can read. An owner's or admin's save clears it.
+	BehaviorEditorID  string           `json:"behaviorEditorId,omitempty"`
+	EditPolicy        string           `json:"editPolicy,omitempty"` // "Who can edit": all (default) | teamOwners | owner
+	TrustedSourceKeys []string         `json:"trustedSourceKeys,omitempty"`
+	Creator           User             `json:"creator"`
+	LastRunAt         *time.Time       `json:"lastRunAt,omitempty"`
+	NextRunAt         *time.Time       `json:"nextRunAt,omitempty"`
+	RunCount30d       int              `json:"runCount30d"`
+	CreatedAt         time.Time        `json:"createdAt"`
+	UpdatedAt         time.Time        `json:"updatedAt"`
+	PublishedAt       *time.Time       `json:"publishedAt,omitempty"`
+	Attachments       []LoopAttachment `json:"attachments,omitempty"`
+	Version           int              `json:"version,omitempty"`
+	VersionID         string           `json:"versionId,omitempty"`
 	// ExpectedOutputs are what a successful run must produce: statusUpdate,
 	// issue, comment, document or change (any Flow change); ["none"] when a
 	// run may legitimately change nothing. Empty means inferred from the
@@ -2505,8 +2509,12 @@ type Draft struct {
 	Body        string         `json:"body"`
 	ContentData map[string]any `json:"contentData,omitempty"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	UpdatedAt   time.Time      `json:"updatedAt"`
+	// ClientKey is the key a composer generated for this draft; a create that
+	// repeats it (same user, type and resource) returns this draft instead of
+	// adding another. Empty for drafts created without one.
+	ClientKey string    `json:"clientKey,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // Favorite is one sidebar favorite. Tab names a specific page tab of the
@@ -2857,13 +2865,26 @@ type Comment struct {
 }
 
 type ActivityEvent struct {
-	ID        string            `json:"id"`
-	Type      string            `json:"type"`
-	CreatedAt time.Time         `json:"createdAt"`
-	Actor     User              `json:"actor"`
-	BotActor  *ActorBot         `json:"botActor,omitempty"`
-	Metadata  map[string]string `json:"metadata"`
+	ID        string           `json:"id"`
+	Type      string           `json:"type"`
+	CreatedAt time.Time        `json:"createdAt"`
+	UpdatedAt *time.Time       `json:"updatedAt,omitempty"`
+	Actor     User             `json:"actor"`
+	BotActor  *ActorBot        `json:"botActor,omitempty"`
+	Metadata  ActivityMetadata `json:"metadata"`
 }
+
+// ActivityHistorySnapshot is an internal mutation input used to merge the
+// latest activity for one issue without hydrating a workspace timeline.
+type ActivityHistorySnapshot struct {
+	Activity *ActivityEvent
+	Comment  *Comment
+}
+
+// ActivityHistoryLoader is installed only while an issue mutation holds its
+// record transaction. It is deliberately excluded from all API and snapshot
+// JSON; callers fetch only the issue whose activity is actually appended.
+type ActivityHistoryLoader func(string) (ActivityHistorySnapshot, error)
 
 // Notification is an Inbox aggregate. Source IDs retain a stable link to the
 // Issue collaboration record while the Issue itself remains the source of
@@ -2952,12 +2973,15 @@ type Bootstrap struct {
 	// ViewerTeamIDs are the acting viewer's teams read from the membership
 	// records while a mutation's authorization callback runs; the stored
 	// snapshot's TeamMembers can lag those records. Not serialized.
-	ViewerTeamIDs        []string  `json:"-"`
-	IssueCollectionPaged bool      `json:"issueCollectionPaged,omitempty"`
-	Workspace            Workspace `json:"workspace"`
-	Viewer               User      `json:"viewer"`
-	Users                []User    `json:"users"`
-	Teams                []Team    `json:"teams"`
+	ViewerTeamIDs         []string                 `json:"-"`
+	ActivityHistoryLoader ActivityHistoryLoader    `json:"-"`
+	ActivityHistoryHeads  map[string]ActivityEvent `json:"-"`
+	ActivityHistoryError  error                    `json:"-"`
+	IssueCollectionPaged  bool                     `json:"issueCollectionPaged,omitempty"`
+	Workspace             Workspace                `json:"workspace"`
+	Viewer                User                     `json:"viewer"`
+	Users                 []User                   `json:"users"`
+	Teams                 []Team                   `json:"teams"`
 	// TeamByID/TeamByKey/TeamChildren/LabelIndex are in-memory lookup tables
 	// rebuilt on load. They are not serialized.
 	TeamByID          map[string]int           `json:"-"`
@@ -3076,6 +3100,7 @@ type Bootstrap struct {
 	// CollaborationUpdates reads accepted, uncompacted updates through the
 	// write's reader, so mention checks preserve the live document too.
 	CollaborationUpdates func(documentID string) ([][]byte, error) `json:"-"`
+	CollaborationWork    func() CollaborationWork                  `json:"-"`
 
 	// TrashRetentionDays is set on bootstrap responses only: how long deleted
 	// items stay restorable (FLOW_TRASH_RETENTION_DAYS).

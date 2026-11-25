@@ -46,9 +46,21 @@ the deterministic CI gate. Keep private links and credentials out of env vars.
 `service-worker.spec.ts` checks asset caching, a byte-changed worker activating
 while the page remains open, removal of the old cache, the browser kill switch
 (`localStorage['flow:disable-sw'] = '1'`) and a deployed unregistering script
-being picked up by `registration.update()`. A local gateway serves versioned
-worker scripts because browser request routing cannot intercept worker update
-fetches. No checked-in worker or shared build output is edited.
+being picked up by `registration.update()`, and the app shell: navigations
+answered from the cached `index.html` (also offline), a new deploy's page used
+from the next load, a shell with a missing file never served, and API,
+sign-in/OAuth and file routes never answered by the worker. A local gateway
+serves versioned worker scripts and pages because browser request routing
+cannot intercept worker update fetches. No checked-in worker or shared build
+output is edited.
+
+## Local issue store
+
+`local-store-upgrade.spec.ts` verifies that startup deletes the retired
+workspace snapshot while session confirmation is pending. It also checks that
+a write made during a cached workspace switch waits for the network bootstrap.
+The local-store Playwright matrix covers account switching, scoped access,
+revocation, session expiry, and operator opt-out.
 
 ## Hardware Passkeys
 

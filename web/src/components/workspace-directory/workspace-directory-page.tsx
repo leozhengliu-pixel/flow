@@ -5,17 +5,18 @@ import { avatarInitials } from '@/lib/avatar-initials';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { personMatchesQuery, personSearchText, personUsername } from '@/lib/people';
 import { memberProfileHandle, memberProfilePath } from '@/lib/app-routes';
-import { compareDirectoryTeams, indexTeamPeople, matchesTeamDate, matchesTeamFilters, teamDateChoices, teamTimestamp, type TeamFilterField, type TeamOrdering } from './team-directory-model';
+import { compareDirectoryTeams, indexTeamPeople, matchesTeamDate, matchesTeamFilters, teamDateChoices, teamDirectoryRows, teamTimestamp, type TeamFilterField, type TeamOrdering } from './team-directory-model';
+import { TreeCurve } from '@/components/property/property-menu';
+import { DisclosureTriangle } from '@/components/ui/disclosure-triangle';
+import { FilledCheckIcon, PlusIcon, SidebarLeftIcon } from '@/components/ui/view-action-icons';
+import { FlowGlyph } from '@/components/ui/menu-glyphs';
 import { TeamDateFilterDialog, TeamFilterBar } from './team-directory-controls';
 import { useTeamDirectoryControls, type TeamColumn } from './use-team-directory-controls';
 import { AppLink } from '@/components/ui/app-link';
 import {
   ArrowDown,
   ArrowUp,
-  Check,
-  ChevronRight,
   Circle,
-  MoreHorizontal,
   Plus,
   Settings2,
   X,
@@ -152,6 +153,8 @@ export function WorkspaceDirectoryPage({
               ? t("New customer")
               : t("New team")
         }
+        createAriaLabel={kind === "teams" ? t("Create new team") : undefined}
+        createIcon={kind === "teams" ? <PlusIcon /> : undefined}
         createVariant="ghost"
         options={kind === "teams" ? <TeamsOptions onOpenSettings={onNavigateTeamsSettings} /> : undefined}
       />
@@ -207,6 +210,8 @@ function DirectoryHeader({
   title,
   count,
   createLabel,
+  createAriaLabel = createLabel,
+  createIcon = <Plus />,
   createVariant = "pill",
   onCreate,
   onOpenSidebar,
@@ -215,6 +220,9 @@ function DirectoryHeader({
   title: string;
   count?: number;
   createLabel: string;
+  /** The button's accessible name when it differs from its visible label (Teams: "Create new team"). */
+  createAriaLabel?: string;
+  createIcon?: ReactNode;
   createVariant?: "pill" | "ghost";
   onCreate?: () => void;
   onOpenSidebar: () => void;
@@ -228,9 +236,7 @@ function DirectoryHeader({
         aria-label="Open sidebar"
         data-sidebar-trigger onClick={onOpenSidebar}
       >
-        <span />
-        <span />
-        <span />
+        <SidebarLeftIcon />
       </button>}
       <h1>{title}</h1>
       {count !== undefined && <small>{count}</small>}
@@ -238,11 +244,11 @@ function DirectoryHeader({
       {onCreate && <button
         className={`workspace-directory__icon-button workspace-directory__create${createVariant === "ghost" ? " is-ghost" : ""}`}
         type="button"
-        aria-label={createLabel}
+        aria-label={createAriaLabel}
         title={createLabel}
         onClick={onCreate}
       >
-        <Plus />
+        {createIcon}
         <span>{createLabel}</span>
       </button>}
     </header>
@@ -258,7 +264,7 @@ function TeamsOptions({ onOpenSettings }: { onOpenSettings: () => void }) {
           type="button"
           aria-label="Teams options"
         >
-          <MoreHorizontal />
+          <FlowGlyph name="ellipsis" aria-hidden="true" />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -593,7 +599,8 @@ function TeamsDirectory({
   const {t, locale}=useI18n();
   const { filters, setFilters, preferences, setPreferences } = useTeamDirectoryControls(data.workspace.id, data.viewer.id);
   const hierarchy = useMemo(() => teamHierarchy(data.teams, data.teamSettings), [data.teams, data.teamSettings]);
-  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
+  const collapsedTeams = useMemo(() => new Set(preferences.collapsed), [preferences.collapsed]);
+  const toggleCollapsed = (teamId: string) => setPreferences(current => ({ ...current, collapsed: current.collapsed.includes(teamId) ? current.collapsed.filter(id => id !== teamId) : [...current.collapsed, teamId] }));
   const { descending, ordering } = preferences;
   const columns = new Set(preferences.columns);
   const [dateOpen, setDateOpen] = useState(false);
@@ -645,13 +652,21 @@ function TeamsDirectory({
     return metrics;
   }, [data.cycles, data.favorites, data.projects, data.subscriptions, data.teamMembers, data.teams, data.users, data.viewer.id]);
   const filtersActive = filters.advanced || ['members', 'owners', 'private', 'created'].some(field => filters[field as TeamFilterField].length);
-  const teams = useMemo(() => {
+  const searching = query.trim() !== "";
+  // A search matches a team by its own name or key, or by an ancestor's, so a matching parent keeps its sub-teams.
+  const teamRows = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    return data.teams
-      .filter(team => !needle || team.name.toLocaleLowerCase().includes(needle) || team.key.toLocaleLowerCase().includes(needle))
-      .filter(team => matchesTeamFilters(team, filters, people))
-      .sort((left, right) => compareDirectoryTeams(left, right, ordering, descending));
-  }, [data.teams, descending, filters, ordering, people, query]);
+    const textMatch = (team: Team) => team.name.toLocaleLowerCase().includes(needle) || team.key.toLocaleLowerCase().includes(needle);
+    return teamDirectoryRows(
+      data.teams,
+      hierarchy,
+      team => (!needle || textMatch(team) || (hierarchy.ancestors.get(team.id) ?? []).some(textMatch)) && matchesTeamFilters(team, filters, people),
+      (left, right) => compareDirectoryTeams(left, right, ordering, descending),
+      // While searching every match shows, so collapsing (and its arrow) is set aside.
+      needle ? undefined : collapsedTeams,
+    );
+  }, [collapsedTeams, data.teams, descending, filters, hierarchy, ordering, people, query]);
+  const teams = teamRows.filter(row => !row.context);
   const toggleColumn = (column: TeamColumn) =>
     setPreferences((current) => {
       const next = new Set(current.columns);
@@ -659,10 +674,6 @@ function TeamsDirectory({
       else next.add(column);
       return { ...current, columns: [...next] };
     });
-  const teamRows = useMemo(() => hierarchy.rows(teams, collapsedTeams), [hierarchy, teams, collapsedTeams]);
-  // Only reserve the expand-arrow slot when some team has sub-teams (the reference app
-  // aligns team icons under the Name header otherwise).
-  const anyTeamHasChildren = teamRows.some(row => row.hasChildren);
   const counts = useMemo(() => {
     const result = { members: new Map<string, number>(), owners: new Map<string, number>() };
     for (const team of data.teams) {
@@ -794,7 +805,7 @@ function TeamsDirectory({
         />
       ) : (
         <div
-          className={`workspace-directory__table workspace-teams-table${teams.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}
+          className={`workspace-directory__table workspace-teams-table${teamRows.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}
           style={
             { "--team-columns": teamColumns(columns) } as React.CSSProperties
           }
@@ -805,8 +816,9 @@ function TeamsDirectory({
               className={nameSorted ? "is-sorted" : undefined}
               type="button"
               onClick={() => {
+                // Like the reference app, the first click on the default order chooses A–Z; later clicks flip it.
                 setNameSortChosen(true);
-                if (ordering === "name") setDescending((value) => !value);
+                if (ordering === "name" && nameSorted) setDescending((value) => !value);
                 else { setOrdering("name"); setDescending(false); }
               }}
             >
@@ -821,7 +833,7 @@ function TeamsDirectory({
             {columns.has("projects") && <span>{t('Active projects')}</span>}
             {(['created', 'updated'] as const).map(field => columns.has(field) && <button key={field} aria-label={`Order by ${field === 'created' ? 'Created' : 'Updated'}`} className={ordering === field ? "is-sorted" : undefined} type="button" onClick={() => { if (ordering === field) setDescending(value => !value); else setOrdering(field); }}>{field === 'created' ? 'Created' : 'Updated'}{ordering === field && (descending ? <ArrowUp aria-hidden="true"/> : <ArrowDown aria-hidden="true"/>)}</button>)}
             <span />
-          </div>} items={teamRows} itemKey={row => row.team.id} render={({team, depth, hasChildren}) => {
+          </div>} items={teamRows} itemKey={row => row.team.id} render={({team, depth, hasChildren, context, through, branchBelow}) => {
             const metric = teamMetrics.get(team.id);
             const viewerMembership = metric?.viewerMember;
             const teamUsers = metric?.users ?? [];
@@ -832,23 +844,32 @@ function TeamsDirectory({
             return (
               <div
                 className="workspace-team-row"
+                data-context={context || undefined}
                 key={team.id}
                 role="link"
                 tabIndex={0}
+                style={{ "--team-depth": depth } as React.CSSProperties}
                 onClick={() => onOpen(team)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") onOpen(team);
                 }}
               >
-                <div className="workspace-team-identity" style={{paddingInlineStart: depth * 18}} title={hierarchy.path(team.id)}>
-                  {hasChildren ? <button className="workspace-team-expand" aria-label={`${collapsedTeams.has(team.id) ? 'Expand' : 'Collapse'} ${team.name}`} aria-expanded={!collapsedTeams.has(team.id)} onKeyDown={event => event.stopPropagation()} onClick={event => {event.stopPropagation(); setCollapsedTeams(current => {const next = new Set(current); if(next.has(team.id))next.delete(team.id);else next.add(team.id);return next;});}}><ChevronRight size={14} style={{transform: collapsedTeams.has(team.id) ? undefined : 'rotate(90deg)'}}/></button> : anyTeamHasChildren && <span className="workspace-team-expand-placeholder"/>}
-                  <TeamGlyph team={team} />
+                <div className="workspace-team-identity" title={hierarchy.path(team.id)}>
+                  {/* Tree guides: a level's line runs on while a later sibling follows, the row's own level ends in the curve. */}
+                  {through.filter(level => level < depth).map(level => <i key={level} className="workspace-team-tree-line" data-continues="" style={{ "--tree-level": level } as React.CSSProperties} aria-hidden="true"/>)}
+                  {depth > 0 && <>
+                    <i className="workspace-team-tree-line" data-continues={through.includes(depth) ? "" : undefined} style={{ "--tree-level": depth } as React.CSSProperties} aria-hidden="true"/>
+                    <TreeCurve className="workspace-team-tree-elbow" style={{ "--tree-level": depth } as React.CSSProperties}/>
+                  </>}
+                  {branchBelow && <i className="workspace-team-tree-line" data-branch="" style={{ "--tree-level": depth + 1 } as React.CSSProperties} aria-hidden="true"/>}
+                  <span className="workspace-team-glyph-slot"><TeamGlyph team={team} /></span>
                   <strong>{team.name}</strong>
                   {columns.has("id") && <small>{team.key}</small>}
+                  {hasChildren && !searching && <button type="button" className="workspace-team-expand" aria-label={t(collapsedTeams.has(team.id) ? "Expand team" : "Collapse team")} aria-expanded={!collapsedTeams.has(team.id)} onKeyDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); toggleCollapsed(team.id); }}><DisclosureTriangle open={!collapsedTeams.has(team.id)}/></button>}
                 </div>
                 <span className="workspace-team-description" title={description || undefined}>{description}</span>
                 {columns.has("membership") && (
-                  viewerMembership?<span className="workspace-team-joined" data-i18n-ignore><Check/>{locale === 'zh-CN' ? '已加入' : 'Joined'}</span>:<button className="workspace-team-joined" onClick={event=>{event.stopPropagation();void setTeamMembership(data.workspace.urlKey,team.id,data.viewer.id,true,'member').then(()=>onReload(team.id))}}>{t('Join')}</button>
+                  viewerMembership?<span className="workspace-team-joined" data-i18n-ignore><FilledCheckIcon/><span>{locale === 'zh-CN' ? '已加入' : 'Joined'}</span></span>:<button className="workspace-team-joined" onClick={event=>{event.stopPropagation();void setTeamMembership(data.workspace.urlKey,team.id,data.viewer.id,true,'member').then(()=>onReload(team.id))}}>{t('Join')}</button>
                 )}
                 {columns.has("owners") && (
                   <span className="workspace-team-owner">
@@ -932,7 +953,7 @@ function TeamRowMenu({
           aria-label="Open menu"
           onClick={(event) => event.stopPropagation()}
         >
-          <MoreHorizontal />
+          <FlowGlyph name="ellipsis" aria-hidden="true" />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -1094,30 +1115,22 @@ function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 function teamColumns(columns: Set<TeamColumn>) {
-  const widths: Record<Exclude<TeamColumn, "id">, string> = {
-    membership: "96px",
-    owners: "150px",
-    projects: "153px",
-    cycle: "90px",
-    created: "105px",
-    updated: "105px",
-    members: "126px",
+  const widths: Record<Exclude<TeamColumn, "id">, number> = {
+    membership: 96,
+    owners: 150,
+    projects: 126,
+    cycle: 90,
+    created: 105,
+    updated: 105,
+    members: 126,
   };
-  // The reference app splits the flexible space ~41/59 between Name and Description (x13 / x345 in a 1218px panel).
-  return `minmax(220px,327fr) minmax(0,463fr) ${(
-    [
-      "membership",
-      "owners",
-      "members",
-      "cycle",
-      "projects",
-      "created",
-      "updated",
-    ] as Exclude<TeamColumn, "id">[]
-  )
+  const fixed = (["membership", "owners", "members", "cycle", "projects", "created", "updated"] as Exclude<TeamColumn, "id">[])
     .filter((column) => columns.has(column))
-    .map((column) => widths[column])
-    .join(" ")} 22px`;
+    .map((column) => widths[column]);
+  // The reference app's Name column (6px gap included) keeps 246px for Description first, then grows to at most 326px;
+  // Description takes the rest.
+  const rest = fixed.reduce((sum, width) => sum + width, 28);
+  return `clamp(246px, calc(100% - ${rest + 246}px), 326px) minmax(0, 1fr) ${fixed.map(width => `${width}px`).join(" ")} 28px`;
 }
 
 function formatTeamDate(team: Team, field: 'created' | 'updated') {

@@ -137,7 +137,9 @@ func collaborationAccessScope(event domain.RealtimeEvent) (socketAccessScope, bo
 	case strings.HasPrefix(kind, "team.") || strings.HasPrefix(kind, "team_member.") || strings.HasPrefix(kind, "workspace_member."),
 		kind == "workspace.updated", kind == "workspace.settings_updated", kind == "workspace.deleted", kind == "workspace.resync_required",
 		kind == "user.updated", strings.HasPrefix(kind, "account."), strings.HasPrefix(kind, "api_key."), strings.HasPrefix(kind, "oauth"),
-		strings.HasPrefix(kind, "application."):
+		strings.HasPrefix(kind, "application."), strings.HasPrefix(kind, "identity_provider."), kind == "workspace_preferences.updated":
+		// Sign-in policy (SSO, second factor, methods) is held by the settings
+		// and the identity providers; sockets are held to it.
 		return socketAccessScope{all: true}, true
 	case kind == "issue.batch_updated", kind == "issues.deleted", kind == "issue.suggestion_accepted":
 		// Batch updates and accepted team suggestions can move issues to
@@ -304,7 +306,12 @@ func (s *server) runSocketAccessChecks(workspace string) {
 		}
 		// A peer's change may not be applied here yet when the check runs
 		// for another reason; read the committed state.
-		s.ensureCurrentWorkspace(context.Background(), workspace)
+		if err := s.ensureCurrentWorkspace(context.Background(), workspace); err != nil {
+			for _, item := range s.realtime.socketAccessWork(workspace, *scope) {
+				s.realtime.revokeSocketCredential(item.client)
+			}
+			continue
+		}
 		s.checkSocketAccess(workspace, *scope)
 	}
 }
@@ -323,13 +330,22 @@ type socketAccessWork struct {
 func (s *server) checkSocketAccess(workspace string, scope socketAccessScope) {
 	hub := s.realtime
 	for _, item := range hub.socketAccessWork(workspace, scope) {
-		if item.credential && item.client.checkCredential != nil && !item.client.checkCredential() {
-			hub.revokeSocketCredential(item.client)
-			continue
+		if item.credential {
+			valid, err := item.client.checkCredential()
+			if item.client.retryForDatabase(err) {
+				continue
+			}
+			if !valid {
+				hub.revokeSocketCredential(item.client)
+				continue
+			}
 		}
 		for _, target := range item.targets {
 			if target.issueID != "" {
-				_, _ = s.recheckIssueDocument(item.client, target.documentID, target.issueID)
+				_, err := s.recheckIssueDocument(item.client, target.documentID, target.issueID)
+				if item.client.retryForDatabase(err) {
+					break
+				}
 			} else {
 				hub.recheckStandaloneDocument(item.client, target.documentID)
 			}
@@ -347,7 +363,7 @@ func (h *realtimeHub) socketAccessWork(workspace string, scope socketAccessScope
 	defer hub.mu.Unlock()
 	for _, client := range hub.sockets[workspace] {
 		user := scope.users[client.userID]
-		item := socketAccessWork{client: client, credential: scope.all || user}
+		item := socketAccessWork{client: client, credential: (scope.all || user) && client.checkCredential != nil}
 		for documentID, issueID := range client.issueDocuments {
 			if _, joined := client.documents[documentID]; !joined {
 				continue
@@ -462,6 +478,9 @@ func (h *realtimeHub) recheckStandaloneDocument(client *realtimeSocketClient, co
 		return
 	}
 	role, conflict, err := client.checkDocument(collaborationID)
+	if client.retryForDatabase(err) {
+		return
+	}
 	if err != nil && !errors.Is(err, errNotFound) && !errors.Is(err, store.ErrAuthForbidden) || conflict {
 		return
 	}
@@ -480,6 +499,7 @@ func (h *realtimeHub) revokeDocument(client *realtimeSocketClient, documentID, i
 	delete(client.documents, documentID)
 	delete(client.issueDocuments, documentID)
 	delete(client.issueAccess, documentID)
+	client.releaseDocumentHeader(documentID)
 	delete(client.documentAccess, documentID)
 	h.mu.Unlock()
 	if !joined {
@@ -550,9 +570,9 @@ func (s *server) startSocketAccessSweep() {
 
 // socketCredentialValid reports whether the session or API key a socket
 // connected with is still valid for its user.
-func (s *server) socketCredentialValid(r *http.Request) bool {
+func (s *server) socketCredentialValid(r *http.Request) (bool, error) {
 	if s.authDisabled {
-		return true
+		return true, nil
 	}
 	user := authUser(r)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -560,11 +580,35 @@ func (s *server) socketCredentialValid(r *http.Request) bool {
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		header := strings.TrimSpace(r.Header.Get("Authorization"))
 		if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
-			return false
+			return false, nil
 		}
 		auth, err := s.store.AuthenticateAPIKeyRecord(ctx, workspaceKey(r), secretHash(strings.TrimSpace(header[len("Bearer "):])), applicationApproved)
-		return err == nil && auth.Key.ID == key.ID && auth.User.ID == user.ID
+		return err == nil && auth.Key.ID == key.ID && auth.User.ID == user.ID, err
 	}
 	cookie, err := r.Cookie(sessionCookieName)
-	return err == nil && s.store.SessionValid(ctx, cookie.Value, user.ID)
+	if err != nil {
+		return false, nil
+	}
+	if valid, err := s.store.SessionValid(ctx, cookie.Value, user.ID); !valid || err != nil {
+		return false, err
+	}
+	// A policy change (SSO enforced, second factor required, sign-in method
+	// withdrawn) closes the sockets a session no longer qualifies for.
+	workspace := workspaceKey(r)
+	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspace)
+	if err != nil {
+		return false, err
+	}
+	role, status, err := s.store.WorkspaceRole(ctx, workspaceID, user.ID)
+	if err != nil || status != "active" {
+		return false, err
+	}
+	data, found := s.store.WorkspaceSettingsMetadata(workspace)
+	if !found {
+		return false, nil
+	}
+	if failure := s.workspaceAuthenticationFailure(ctx, workspace, data, role, s.policyPrincipalFor(ctx, r), false); failure != nil {
+		return false, failure.cause
+	}
+	return true, nil
 }

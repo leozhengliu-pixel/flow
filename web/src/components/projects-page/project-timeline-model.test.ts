@@ -3,6 +3,8 @@ import {
   daysBetween,
   dependencyPath,
   dependencyRelationsWithBlocker,
+  desktopTimelineHeader,
+  indexTimelineDependencies,
   isDependencyConflict,
   normalizeTimelineZoom,
   parseTimelineDay,
@@ -16,6 +18,7 @@ import {
   timelineHeader,
   timelineMilestoneMarkers,
   timelineRange,
+  timelineWindowDependencies,
   timelineX,
   type TimelineRowBox,
 } from './project-timeline-model'
@@ -88,6 +91,29 @@ describe('timeline zoom scale', () => {
       for (let index = 1; index < tier.length; index += 1) expect(tier[index].x).toBeCloseTo(tier[index - 1].x + tier[index - 1].width)
     }
   })
+
+  it('jumps directly to a late week window without truncating or shifting the ticks', () => {
+    const today = day('2026-09-29')
+    const far = day('2071-01-01')
+    const range = timelineRange(Array.from({ length: 150_000 }, () => far), today, 'week')
+    const left = timelineX(range, day('2070-01-08'))
+    const visible = { left, right: left + 720 }
+    for (const header of [timelineHeader(range, visible), desktopTimelineHeader(range, 'en-US', visible)]) {
+      expect(header.minor[0]).toMatchObject({ key: '2070-01-08', x: left })
+      expect(header.minor).toHaveLength(21)
+      expect(header.major.length).toBeLessThanOrEqual(2)
+    }
+  })
+
+  it('preserves calendar-aligned weeks when jumping deep into a year view', () => {
+    const range = timelineRange([day('2031-01-01')], day('2024-01-01'), 'year')
+    const window = { left: timelineX(range, day('2029-07-03')), right: timelineX(range, day('2030-01-05')) }
+    const indexed = desktopTimelineHeader(range, 'zh-CN', window)
+    const original = desktopTimelineHeader(range, 'zh-CN')
+    expect(indexed.minor.length).toBeLessThan(30)
+    expect(indexed.minor).toEqual(original.minor.filter(tick => tick.x + tick.width > window.left && tick.x <= window.right))
+    expect(indexed.major).toEqual(original.major.filter(tick => tick.x + tick.width > window.left && tick.x <= window.right))
+  })
 })
 
 describe('project bars', () => {
@@ -149,6 +175,25 @@ describe('dependencies', () => {
     // Backwards links route with an elbow that still enters from the left.
     expect(paths[1].d).toBe(dependencyPath({ x: 100, y: 18 }, { x: 40, y: 90 }))
     expect(paths[1].d.endsWith('H40')).toBe(true)
+  })
+
+  it('keeps crossings with neither endpoint on-screen and replaces only the moved project box', () => {
+    const rows = new Map([
+      ['a', box(0, 10, 0, '2026-09-01', '2026-09-10')],
+      ['b', box(100, 30, 200, '2026-09-20', '2026-09-30')],
+      ['c', box(700, 30, 200, '2026-09-20', '2026-09-30')],
+    ])
+    const edges = [{ blockerId: 'a', blockedId: 'b' }, { blockerId: 'b', blockedId: 'c' }]
+    for (let i = 0; i < 2_000; i++) {
+      rows.set(`offscreen-${i}`, box(100, 10, 1_000 + i * 50, '2026-09-20', '2026-09-30'))
+      if (i) edges.push({ blockerId: `offscreen-${i - 1}`, blockedId: `offscreen-${i}` })
+    }
+    const index = indexTimelineDependencies(edges, rows)
+    const window = { left: 40, right: 80, top: 80, bottom: 120 }
+    expect(timelineWindowDependencies(index, window)).toEqual(timelineDependencyPaths(edges.slice(0, 1), rows))
+    const moved = box(10, 10, 200, '2026-09-04', '2026-09-14')
+    expect(timelineWindowDependencies(index, window, { id: 'b', box: moved })).toEqual([])
+    expect(timelineWindowDependencies(index, window)[0]?.to).toEqual({ x: 100, y: 200 })
   })
 
   it('normalises dependencyIds and relations into blocker → blocked edges', () => {

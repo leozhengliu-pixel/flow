@@ -1,0 +1,27 @@
+{
+  "source": "server/connector_oauth.go",
+  "unmigrated": 1,
+  "consumers": {
+    "connectorForRequest": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Selected representation gates the unchanged legacy workspaceData call; bounded mode projects workspaceSettings and settings/applicationPolicies with live authority and unchanged server credential filtering. Ownership, shared-admin and connector policy checks retained. TestScaleP21M2ConnectorDifferential compares the full principal/key matrix.",
+      "accessors": [
+        "Bootstrap",
+        "workspaceData"
+      ]
+    },
+    "finishConnectorOAuth": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "PagedWorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/connector-oauth/callback (api/cmd/server/main.go:711)"
+      ]
+    }
+  }
+}

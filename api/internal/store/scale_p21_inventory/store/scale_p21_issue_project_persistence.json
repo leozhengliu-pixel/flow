@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_issue_project_persistence.go",
+  "unmigrated": 0,
+  "consumers": {
+    "planIssueMetadataFields": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted physical-shape planning for selected issue project/document persistence. An independently admitted 2 MiB root cursor streams the existing transaction's root/manifest without fetching unrelated canonical bodies; true inline and split-array fields stay distinct, and unsupported mixed inline/canonical prefixes fail explicitly. TestScaleP21IssuePersistence compares literal and bounded physical root/manifest/rows plus installed native postimages across warm/fair reloaded split writes, duplicate inline transitions/no-write divergence, all project/document shape combinations, native time, a 3 MB peer rebase and unknown revision; business activity/notification/delivery/webhook previous-value/realtime/search effects match. Dynamic inline work, process/root-budget failure, cancellation during inline SQL, rollback, identity mismatch and mixed-shape guards release ownership. All ten tests passed persistent SQLite count2 and targeted race. This review covers the shape planner only: the whole UpdateIssueRecord callback closure, actual team moves/editor inputs and supported mixed/renamed-ID rebinding remain pending.",
+      "accessors": [
+        "metadataCollectionsInSnapshot"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Shared storage-shape planning for selected project/document issue persistence.",
+      "callers": [
+        "store/SQLiteStore.persistSelectedIssueMetadata"
+      ]
+    }
+  }
+}

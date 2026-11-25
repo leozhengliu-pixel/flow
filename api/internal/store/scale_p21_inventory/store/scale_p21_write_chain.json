@@ -1,0 +1,32 @@
+{
+  "source": "store/scale_p21_write_chain.go",
+  "unmigrated": 0,
+  "consumers": {
+    "refreshLogicalMetadataRecords": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded counterpart of refreshMetadataRecords behind refreshConflictedMetadata and RefreshMetadataRecord. It reads the resident map for membership only (an uninstalled workspace is skipped, as legacy), keeps the keys of the fields the legacy refresh handles (metadataRecordType) and hands them to the reviewed agent-session framer and generic logical retry adapter: stored rows replace the installed generation's first matching record, deleted rows drop it, the unknown stamp and the policy projection are installed together; no record enters the policy copy and nothing is decoded whole. TestScaleP21SW293ConflictRefreshDifferential and TestScaleP21SW293IssueUpdateConflictRetry compare it with the legacy refresh and the stored state; TestScaleP21SW292WriteChainHotBoundaries pins the dispatches.",
+      "accessors": [
+        "workspaces"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Conflict refresh of bounded HOT writers (PATCH /api/issue-records/{id} retries).",
+      "callers": [
+        "store/scale_p21_write_chain.go:refreshConflictedLogicalRecords"
+      ]
+    },
+    "publishBoundedAPIKeyUse": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded post-commit installation of API key telemetry. It reads the resident map for membership only, then under writeMu patches the installed logical generation natively: the first apiKeys and oauthAuthorizations records with the use's ids, unless revoked there, take the use time (the legacy patch of the resident copy, including inline duplicates and rows whose minute predicate skipped the SQL update); unknown stamp, no policy change, no decode, admitted work released. TestScaleP21SW293APIKeyUseDifferential compares legacy and bounded warm state, canonical rows and SQL-reloaded state; TestScaleP21SW292WriteChainHotBoundaries pins writeAPIKeyUse's dispatch.",
+      "accessors": [
+        "workspaces"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "API key usage worker fed by authenticate, MCP and public API key requests.",
+      "callers": [
+        "store/api_key_authentication.go:writeAPIKeyUse"
+      ]
+    }
+  }
+}

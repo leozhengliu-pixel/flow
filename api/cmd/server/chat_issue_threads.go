@@ -137,7 +137,7 @@ func (s *server) chatSendInIssueThread(ctx context.Context, record domain.ChatIn
 }
 
 func chatMergeBody(base, extra map[string]any) map[string]any {
-	result := make(map[string]any, len(base)+len(extra))
+	result := make(map[string]any)
 	for key, value := range base {
 		result[key] = value
 	}
@@ -182,6 +182,11 @@ func chatInteractive(card map[string]any) map[string]any {
 // posted back. A new comment on an issue without a thread starts one with the
 // issue's card.
 func (s *server) chatSyncIssueComments(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, issue domain.Issue, job domain.ChatJob, payload chatNotificationJob) error {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = beginMetadataOutputReads(ctx)
+		defer close()
+	}
 	thread, err := s.store.ChatThread(ctx, record.WorkspaceKey, record.ConnectionID, binding.ChatID, domain.ChatThreadResourceIssue, issue.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		if payload.Event != "" && payload.Event != "comment.created" {
@@ -215,7 +220,13 @@ func (s *server) chatSyncIssueComments(ctx context.Context, record domain.ChatIn
 	}
 	slices.SortStableFunc(comments, func(a, b domain.Comment) int { return a.CreatedAt.Compare(b.CreatedAt) })
 	language := chatGroupLanguage(record, binding)
-	users, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "users")
+	users, handled, err := s.chatCardMetadata(ctx, record.WorkspaceKey, store.ChatDisplayRequest{Directory: true}, false)
+	if err != nil {
+		return err
+	}
+	if !handled {
+		users, _ = s.store.WorkspaceMetadataFields(record.WorkspaceKey, "users")
+	}
 	sent, present := 0, map[string]bool{}
 	for _, comment := range comments {
 		present[comment.ID] = true
@@ -496,11 +507,11 @@ func (s *server) processChatThreadReply(ctx context.Context, record domain.ChatI
 	}
 	ctx = withChatIdentityAuthentication(ctx, identity)
 	var metadata domain.Bootstrap
-	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata); err != nil {
+	if err := s.chatAuthorizedWorkflowHeaders(ctx, record.WorkspaceKey, identity.UserID, &metadata); err != nil {
 		return s.chatMutationFailure(ctx, record, job, command.OpenID, err, "Your Flow workspace access has changed. Sign in to Flow and check your access.")
 	}
 	var issue domain.Issue
-	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(thread.ResourceID), nil, &issue); err != nil {
+	if err := s.chatAuthorizedPointRead(ctx, record.WorkspaceKey, identity.UserID, "/api/issue-records/"+url.PathEscape(thread.ResourceID), &issue); err != nil {
 		return s.chatMutationFailure(ctx, record, job, command.OpenID, err, "You no longer have access to this issue.")
 	}
 	if !chatIssueMatchesBinding(issue, binding) {

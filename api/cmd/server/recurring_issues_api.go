@@ -161,6 +161,10 @@ func (s *server) createTeamRecurringIssue(w http.ResponseWriter, r *http.Request
 	}
 	teamID := r.PathValue("id")
 	if !s.authDisabled {
+		if !s.store.BoundedMetadataEnabled() && !acquireProjectionWaiting(r) {
+			writeRequestCanceled(w, r.Context().Err())
+			return
+		}
 		metadata, err := s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
 		if err != nil {
 			issueRecordsError(w, err)
@@ -180,8 +184,7 @@ func (s *server) createTeamRecurringIssue(w http.ResponseWriter, r *http.Request
 			assignees = append(assignees, child.AssigneeID)
 		}
 		for _, assignee := range assignees {
-			if assignee != nil && *assignee != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *assignee }) && !s.formerMemberOutsideWrite(r.Context(), metadata.Workspace.URLKey, *assignee) {
-				writeError(w, http.StatusForbidden, "Assignee is outside this workspace")
+			if !s.authorizeIssueAssignee(w, r, metadata.Workspace.URLKey, metadata.Users, assignee) {
 				return
 			}
 		}

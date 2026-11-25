@@ -15,7 +15,9 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"flow/api/internal/domain"
 )
@@ -84,6 +86,31 @@ func conflictedMetadataKeys(err error) ([]metadataRecordKey, bool) {
 	return nil, false
 }
 
+// JSON errors can quote record values. Keep the cause available to errors.As
+// without putting any record data in the message.
+type metadataRecordJSONError struct {
+	message string
+	cause   error
+}
+
+func (err *metadataRecordJSONError) Error() string { return err.message }
+func (err *metadataRecordJSONError) Unwrap() error { return err.cause }
+
+func unmarshalMetadataRecord(raw []byte, dst any) error {
+	if err := json.Unmarshal(raw, dst); err != nil {
+		return &metadataRecordJSONError{message: "invalid metadata record", cause: err}
+	}
+	return nil
+}
+
+func marshalMetadataRecord(value any) ([]byte, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, &metadataRecordJSONError{message: "could not encode metadata record", cause: err}
+	}
+	return raw, nil
+}
+
 // mergeMetadataRecord applies ours' change to a record (from base, the copy
 // it was made on) to theirs, the record as stored now. loaded is theirs as a
 // load presents it (see normalizedMetadataRecord): a field counts as changed
@@ -98,7 +125,7 @@ func mergeMetadataRecord(base, ours, theirs, loaded []byte) ([]byte, bool, error
 		raw    []byte
 		fields *map[string]json.RawMessage
 	}{{base, &baseFields}, {ours, &ourFields}, {theirs, &theirFields}, {loaded, &loadedFields}} {
-		if err := json.Unmarshal(part.raw, part.fields); err != nil {
+		if err := unmarshalMetadataRecord(part.raw, part.fields); err != nil {
 			return nil, false, err
 		}
 	}
@@ -140,7 +167,7 @@ func mergeMetadataRecord(base, ours, theirs, loaded []byte) ([]byte, bool, error
 		}
 		setMember(merged, name, value)
 	}
-	encoded, err := json.Marshal(merged)
+	encoded, err := marshalMetadataRecord(merged)
 	return encoded, conflict, err
 }
 
@@ -312,9 +339,9 @@ func normalizedMetadataRecord(field metadataField, key string, record reflect.Va
 	normalize(&probe)
 	collection := newMetadataCollection(field, reflect.ValueOf(&probe).Elem().Field(field.index))
 	if normalized, ok := collection.record(key); ok {
-		return json.Marshal(normalized.Interface())
+		return marshalMetadataRecord(normalized.Interface())
 	}
-	return json.Marshal(record.Interface())
+	return marshalMetadataRecord(record.Interface())
 }
 
 func setMember(fields map[string]json.RawMessage, name string, value json.RawMessage) {
@@ -580,7 +607,7 @@ func sameContainer(a, b reflect.Value) bool {
 // record does not persist (json:"-") are taken from keep when it is valid.
 func decodeMetadataRecord(kind reflect.Type, raw []byte, keep reflect.Value) (reflect.Value, error) {
 	value := reflect.New(kind)
-	if err := json.Unmarshal(raw, value.Interface()); err != nil {
+	if err := unmarshalMetadataRecord(raw, value.Interface()); err != nil {
 		return reflect.Value{}, err
 	}
 	value = value.Elem()
@@ -689,6 +716,18 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 		if err != nil {
 			return nil, false, err
 		}
+		if len(stored) < len(keys) {
+			backed, err := metadataFieldRecordBacked(ctx, tx, workspace, name, beforeValue.Type())
+			if err != nil {
+				return nil, false, err
+			}
+			if !backed {
+				// The field is kept inline in the root document (an entry
+				// lacks a unique row key), so it has no rows: a missing row
+				// is not a deletion by another write.
+				continue
+			}
+		}
 		if refs == nil {
 			current := newIssueReferences(domain.Bootstrap{Users: after.Users})
 			refs = &current
@@ -706,7 +745,7 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 			tx.rebasedMetadata[recordKey] = true
 			old, _ := previous.record(key)
 			mine, _ := next.record(key)
-			base, err := json.Marshal(old.Interface())
+			base, err := marshalMetadataRecord(old.Interface())
 			if err != nil {
 				return nil, false, err
 			}
@@ -734,7 +773,7 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 				replacedAfter = true
 				continue
 			}
-			ours, err := json.Marshal(mine.Interface())
+			ours, err := marshalMetadataRecord(mine.Interface())
 			if err != nil {
 				return nil, false, err
 			}
@@ -771,6 +810,35 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 		return nil, false, &metadataConflictError{keys: conflicts}
 	}
 	return replaced, touched, nil
+}
+
+// metadataFieldRecordBacked reports whether the stored root lists field as
+// kept in one row per record of its kind: "updates" for update collections,
+// "array" for entity lists and "map" for other maps. splitWorkspaceMetadata
+// keeps a list inline when an entry lacks a unique short ID (and a map with
+// an over-long key); such a field has no record rows at all.
+func metadataFieldRecordBacked(ctx context.Context, tx *sqlTx, workspace, field string, kind reflect.Type) (bool, error) {
+	want := "map"
+	switch {
+	case updateMetadataField(field):
+		want = "updates"
+	case kind.Kind() == reflect.Slice:
+		want = "array"
+	}
+	var shape sql.NullString
+	path := (&SQLiteStore{dialect: tx.dialect}).jsonText("data", metadataCollectionsKey+"."+field)
+	if tx.dialect == "postgres" {
+		// The root may hold a raw payload with invalid UTF-8 (an inline
+		// delivery); parsing it as UTF8 would refuse every later write of
+		// the workspace. Only ASCII keys and shape names matter here, and
+		// LATIN1 decodes every byte, so such a root is still probed.
+		path = "(convert_from(data,'LATIN1')::jsonb #>> '{" + metadataCollectionsKey + "," + field + "}')"
+	}
+	err := tx.QueryRowContext(ctx, `SELECT `+path+` FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&shape)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return shape.String == want, err
 }
 
 // updateMetadataField reports a per-parent update collection (parent id ->
@@ -849,6 +917,16 @@ func rebaseUpdateRecords(ctx context.Context, tx *sqlTx, workspace string, refs 
 	if err != nil {
 		return result, err
 	}
+	if len(stored) < len(keys) {
+		backed, err := metadataFieldRecordBacked(ctx, tx, workspace, field.name, beforeValue.Type())
+		if err != nil {
+			return result, err
+		}
+		if !backed {
+			// Inline or stored per parent: no update has a row of its own.
+			return result, nil
+		}
+	}
 	if tx.rebasedMetadata == nil {
 		tx.rebasedMetadata = map[metadataRecordKey]bool{}
 	}
@@ -883,10 +961,10 @@ func rebaseUpdateRecords(ctx context.Context, tx *sqlTx, workspace string, refs 
 			continue
 		}
 		var update metadataUpdate
-		if err := json.Unmarshal(row, &update); err != nil {
+		if err := unmarshalMetadataRecord(row, &update); err != nil {
 			return result, err
 		}
-		base, err := json.Marshal(old.Interface())
+		base, err := marshalMetadataRecord(old.Interface())
 		if err != nil {
 			return result, err
 		}
@@ -895,16 +973,16 @@ func rebaseUpdateRecords(ctx context.Context, tx *sqlTx, workspace string, refs 
 		}
 		storedValue, err := decodeMetadataRecord(kind, update.Item, old)
 		if err != nil {
-			return result, fmt.Errorf("rebase %s record %s: %w", field.name, key, err)
+			return result, fmt.Errorf("rebase %s record: %w", field.name, err)
 		}
-		theirs, err := json.Marshal(storedValue.Interface())
+		theirs, err := marshalMetadataRecord(storedValue.Interface())
 		if err != nil {
 			return result, err
 		}
 		if refs.equalDisplayData(refs.canonicalDisplayData(theirs), base) {
 			continue
 		}
-		ours, err := json.Marshal(mine.Interface())
+		ours, err := marshalMetadataRecord(mine.Interface())
 		if err != nil {
 			return result, err
 		}
@@ -975,9 +1053,9 @@ func mergeWithStoredRecord(refs issueReferences, field metadataField, kind refle
 	}
 	storedValue, err := decodeMetadataRecord(kind, resolved, reflect.Value{})
 	if err != nil {
-		return storedMerge{}, fmt.Errorf("rebase %s record %s: %w", field.name, key, err)
+		return storedMerge{}, fmt.Errorf("rebase %s record: %w", field.name, err)
 	}
-	theirs, err := json.Marshal(storedValue.Interface())
+	theirs, err := marshalMetadataRecord(storedValue.Interface())
 	if err != nil {
 		return storedMerge{}, err
 	}
@@ -1042,6 +1120,14 @@ func metadataRecordType(name string) (metadataField, reflect.Type, bool) {
 func rebaseMetadataRecordWrite(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, name, key string, base, ours []byte) (result []byte, write bool, err error) {
 	field, kind, ok := metadataRecordType(name)
 	if !ok {
+		if updateMetadataField(name) {
+			// Updates without unique IDs are stored per parent or inline.
+			if inline, err := metadataFieldStoredInline(ctx, tx, tx.dialect, workspace, name); err != nil {
+				return nil, false, err
+			} else if inline {
+				return nil, false, ErrMetadataFieldInline
+			}
+		}
 		return ours, true, nil
 	}
 	stored, err := lockMetadataRecords(ctx, tx, workspace, name, []string{key})
@@ -1049,6 +1135,15 @@ func rebaseMetadataRecordWrite(ctx context.Context, tx *sqlTx, workspace string,
 		return nil, false, err
 	}
 	row, exists := stored[key]
+	if !exists {
+		// An inline field has no rows: neither a deletion nor a creation
+		// may be decided (or written) row by row.
+		if inline, err := metadataFieldStoredInline(ctx, tx, tx.dialect, workspace, name); err != nil {
+			return nil, false, err
+		} else if inline {
+			return nil, false, ErrMetadataFieldInline
+		}
+	}
 	conflict := &metadataConflictError{keys: []metadataRecordKey{{name, key}}}
 	switch {
 	case !exists && base != nil:
@@ -1089,6 +1184,10 @@ func rebaseMetadataRecordWrite(ctx context.Context, tx *sqlTx, workspace string,
 // the others and dropping deleted records (nil). Writers use it to keep the
 // copy they install equal to what a merge wrote.
 func setMetadataRecords(data *domain.Bootstrap, records map[metadataRecordKey][]byte) error {
+	return setMetadataRecordsDecoded(data, records, nil)
+}
+
+func setMetadataRecordsDecoded(data *domain.Bootstrap, records map[metadataRecordKey][]byte, decoded func(reflect.Value) error) error {
 	root := reflect.ValueOf(data).Elem()
 	for key, raw := range records {
 		field, kind, ok := metadataRecordType(key.field)
@@ -1109,6 +1208,11 @@ func setMetadataRecords(data *domain.Bootstrap, records map[metadataRecordKey][]
 		if err != nil {
 			return err
 		}
+		if decoded != nil {
+			if err := decoded(record); err != nil {
+				return err
+			}
+		}
 		keepImportInputs(key.field, record, old)
 		switch {
 		case value.Kind() == reflect.Map:
@@ -1125,23 +1229,65 @@ func setMetadataRecords(data *domain.Bootstrap, records map[metadataRecordKey][]
 // lockMetadataRecords reads (and on MySQL and PostgreSQL locks) the stored
 // rows of one field's records, in key order.
 func lockMetadataRecords(ctx context.Context, tx *sqlTx, workspace, field string, keys []string) (map[string][]byte, error) {
+	stored, aliases := storedMetadataRecordKeys(tx.dialect, keys)
+	if aliases == nil {
+		return lockStoredMetadataRecords(ctx, tx, workspace, field, keys)
+	}
+	rows, err := lockStoredMetadataRecords(ctx, tx, workspace, field, stored)
+	if err != nil {
+		return nil, err
+	}
+	// Answer under the caller's keys, as SQLite stores them.
+	result := make(map[string][]byte, len(keys))
+	for _, key := range keys {
+		storedKey, kept := aliases[key]
+		if !kept {
+			storedKey = key
+		}
+		if raw, found := rows[storedKey]; found && (kept || utf8.ValidString(key)) {
+			result[key] = raw
+		}
+	}
+	return result, nil
+}
+
+func lockStoredMetadataRecords(ctx context.Context, tx *sqlTx, workspace, field string, keys []string) (map[string][]byte, error) {
+	if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
+		return budget.lockRecords(ctx, tx, workspace, field, keys)
+	}
 	lock := ""
 	if tx.dialect != "sqlite" {
 		lock = " FOR UPDATE"
 	}
 	stored := make(map[string][]byte, len(keys))
+	columns := "record_key,data"
+	rememberOrder := tx.dialect == "sqlite" && tx.database != nil && tx.database.journalReady.Load() && len(keys) == 1
+	if rememberOrder {
+		columns += ",collection_order"
+		tx.journalOrder.valid = false
+	}
 	for start := 0; start < len(keys); start += 500 {
 		clause, args := bindList("record_key", keys[start:min(start+500, len(keys))])
-		rows, err := tx.QueryContext(ctx, `SELECT record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause+` ORDER BY record_key`+lock, append([]any{workspace, field}, args...)...)
+		rows, err := tx.QueryContext(ctx, `SELECT `+columns+` FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause+` ORDER BY record_key`+lock, append([]any{workspace, field}, args...)...)
 		if err != nil {
 			return nil, err
 		}
 		for rows.Next() {
 			var key string
 			var raw []byte
-			if err := rows.Scan(&key, &raw); err != nil {
+			var scanErr error
+			if rememberOrder {
+				var order int64
+				scanErr = rows.Scan(&key, &raw, &order)
+				if scanErr == nil {
+					tx.journalOrder = recordJournalOrder{workspace, field, key, order, true}
+				}
+			} else {
+				scanErr = rows.Scan(&key, &raw)
+			}
+			if scanErr != nil {
 				rows.Close()
-				return nil, err
+				return nil, scanErr
 			}
 			stored[key] = raw
 		}
@@ -1159,6 +1305,11 @@ func lockMetadataRecords(ctx context.Context, tx *sqlTx, workspace, field string
 // for a request that must act on what another server committed rather than
 // on a copy its peer event has not updated yet.
 func (s *SQLiteStore) RefreshMetadataRecord(ctx context.Context, workspace, field, key string) error {
+	if s.metadataResidency != nil {
+		// A bounded store refreshes the installed logical generation instead
+		// of patching its policy-only copy (scale_p21_write_chain.go).
+		return s.refreshConflictedLogicalRecords(ctx, workspace)(&metadataConflictError{keys: []metadataRecordKey{{field, key}}})
+	}
 	return s.refreshMetadataRecords(ctx, workspace, []metadataRecordKey{{field, key}})
 }
 
@@ -1264,6 +1415,22 @@ func mutationAttempts(ctx context.Context, attempts int, attempt func(context.Co
 	var err error
 	for number := 1; ; number++ {
 		err = attempt(ctx)
+		if databaseDeadlock(err) {
+			// The database rolled the attempt back to break a lock cycle
+			// with a concurrent writer: run it again, as after a lost race.
+			if number < attempts {
+				traceMark(ctx, "deadlock-retry")
+				if concurrentWriteBackoff(ctx, number) == nil {
+					continue
+				}
+			}
+			return fmt.Errorf("%w: %w", ErrDatabaseWriteBusy, err)
+		}
+		if databaseLockWait(err) {
+			// A server-side lock refusal exits the attempt through its
+			// rollback. The database has already waited for the lock.
+			return fmt.Errorf("%w: %w", ErrDatabaseWriteBusy, err)
+		}
 		if !errors.Is(err, ErrConcurrentWrite) || number >= attempts {
 			return err
 		}
@@ -1297,6 +1464,11 @@ func concurrentWriteBackoff(ctx context.Context, number int) error {
 // refreshConflictedMetadata is the refresh for mutationAttempts: it reloads
 // the records a metadata conflict names into the workspace's copy.
 func (s *SQLiteStore) refreshConflictedMetadata(ctx context.Context, workspace string) func(error) error {
+	if s.metadataResidency != nil {
+		// A bounded store refreshes the installed logical generation instead
+		// of patching its policy-only copy (scale_p21_write_chain.go).
+		return s.refreshConflictedLogicalRecords(ctx, workspace)
+	}
 	return func(err error) error {
 		if keys, ok := conflictedMetadataKeys(err); ok {
 			return s.refreshMetadataRecords(ctx, workspace, keys)
@@ -1336,4 +1508,51 @@ func (s *SQLiteStore) recordTxOptions() *sql.TxOptions {
 		return recordWriteTxOptions
 	}
 	return nil
+}
+
+// storedMetadataRecordKeys maps record keys to the keys PostgreSQL stores
+// them under. Its text holds no NUL: the row of an ID with NUL is written
+// (textArgs) and found under the ID without it, so lookups and deletions must
+// use that key. It refuses invalid UTF-8 (22021), so such a key (encoding/json
+// stores the ID with U+FFFD, kept inline) has no row and is left out. aliases
+// is nil when no key changes (and on other dialects, which store keys as
+// given); otherwise it maps each changed key to its stored key, or omits it
+// when it has none.
+func storedMetadataRecordKeys(dialect string, keys []string) ([]string, map[string]string) {
+	if dialect != "postgres" {
+		return keys, nil
+	}
+	var aliases map[string]string
+	var stored []string
+	seen := map[string]bool{}
+	for index, key := range keys {
+		valid, nul := utf8.ValidString(key), strings.IndexByte(key, 0) >= 0
+		if aliases == nil && valid && !nul {
+			continue
+		}
+		if aliases == nil {
+			aliases = map[string]string{}
+			stored = make([]string, 0, len(keys))
+			for _, earlier := range keys[:index] {
+				stored = append(stored, earlier)
+				seen[earlier] = true
+			}
+		}
+		storedKey := key
+		if valid && nul {
+			storedKey = StripNUL(key)
+			aliases[key] = storedKey
+		} else if !valid {
+			continue
+		}
+		if !seen[storedKey] {
+			seen[storedKey] = true
+			stored = append(stored, storedKey)
+		}
+	}
+	if aliases == nil {
+		return keys, nil
+	}
+	sort.Strings(stored)
+	return stored, aliases
 }

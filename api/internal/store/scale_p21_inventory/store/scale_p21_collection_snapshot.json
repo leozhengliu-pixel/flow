@@ -1,0 +1,18 @@
+{
+  "source": "store/scale_p21_collection_snapshot.go",
+  "unmigrated": 0,
+  "consumers": {
+    "MetadataCollectionsInSnapshot": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Public borrowed-snapshot constructor keeps eager validation before return and forwards the original kind selection unchanged to its common implementation. It requires a live 2 MiB parser allowance and an exact same-store transaction; SW0 snapshot tests cover eager malformed JSON errors, ownership, cancellation, aliases and retained method values.",
+      "accessors": ["metadataCollectionsInSnapshot"]
+    },
+    "metadataRootCursorInSnapshot": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Private root-only cursor defers validation solely to the typed recovery owner, which first detaches the root under logical disk quota and then performs complete validation before publication. It cannot expose a public unvalidated collection or release the caller's SQL/parser lifetime. SW27/SW33 cover exact recovery, malformed inputs, large roots and cancellation cleanup.",
+      "accessors": ["metadataCollectionsInSnapshot"]
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "source": "server/customer_settings.go",
+  "unmigrated": 4,
+  "consumers": {
+    "allowManualCustomerEdit": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Reads only complete workspaceSettings; original API-key bypass and manual-edit feature check unchanged. TestScaleP21M2PolicyDifferential compares all principal/key classes and oversized unrelated metadata.",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "createCustomerTaxonomy": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending exact installed logical taxonomy source and bounded creator: validates all active names, removes all archived same-name rows and computes global append position; canonical SQL changes accepted warm NUL duplicate semantics. TestScaleP21SW22CustomerTaxonomySourceHold proves the source mismatch; TestScaleP21SW22CustomerTaxonomyAtomicScopeHold proves legacy creation after 75 options versus scoped pre-callback rejection.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/customer-statuses (api/cmd/server/main.go:841)",
+        "POST /api/customer-tiers (api/cmd/server/main.go:844)"
+      ]
+    },
+    "deleteCustomerTaxonomy": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending exact logical taxonomy source plus atomic streamed customer reassignment writer. Deleting an active status/tier can rewrite arbitrarily many customers; complete scoped selection rejects legal >50-customer edits before callback. TestScaleP21SW22CustomerTaxonomyAtomicScopeHold verifies all 75 legacy customer effects across rename/archive/restore/delete.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/customer-statuses/{id} (api/cmd/server/main.go:843)",
+        "DELETE /api/customer-tiers/{id} (api/cmd/server/main.go:846)"
+      ]
+    },
+    "listCustomerTaxonomy": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending installed logical nonpolicy collection read with bounded response spool. workspaceData reads installed taxonomy including load defaults and accepted warm values; canonical SQL strips accepted NULs. TestScaleP21SW22CustomerTaxonomySourceHold verifies exact legacy values across admin/member/guest and session/unrestricted/selected-empty/selected-set credentials.",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/customer-taxonomy (api/cmd/server/main.go:840)"
+      ]
+    },
+    "updateCustomerTaxonomy": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending exact logical taxonomy source plus atomic streamed bulk customer writer. Rename/archive/restore scans every customer and can change >50 rows in one commit; do not truncate, split publication or reject previously legal operation through complete scoped fields. TestScaleP21SW22CustomerTaxonomyAtomicScopeHold proves 75-row legacy effects and pre-callback scoped rejection.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/customer-statuses/{id} (api/cmd/server/main.go:842)",
+        "PATCH /api/customer-tiers/{id} (api/cmd/server/main.go:845)"
+      ]
+    }
+  }
+}

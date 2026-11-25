@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_cycle_schedule_inputs.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginCycleScheduleRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned installed-source preflight projects only literal cycle schedule inputs while retaining occurrence order, nil/empty shapes, timestamps and framed opaque bodies. Flag-off retains WorkspaceMetadataFields. SW194 proves header and clone ownership/refusal independently of 32-byte versus 5 MiB bodies. SW182 actual ticker proof covers 52 warm/reloaded/default-workspace cases, 1001 scoped issues, raw >20000 fallback warm/reloaded, duplicate headers, 5.25 MiB unrelated bodies and cancellation/release. Final normal, persistent SQLite count2 and race pass; formerly clock-skipped large cases have separate final persistent count2/race PASS receipts with no skips.",
+      "accessors": ["BeginInstalledMetadataRead", "WorkspaceMetadataFields"],
+      "temperature": "hot",
+      "temperatureReason": "Cycle maintenance preflight runs before ordinary bootstrap output.",
+      "callers": ["server/notifications_workflow.go:maintainCycleSchedule"]
+    },
+    "mutateBoundedCycleSchedule": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Closed cycle-maintenance declaration reuses the shared scoped/full transaction executor and original callback, with captured clock, exact scope selection and ordinal/native overlays; no separate transaction loop or flag-off replacement. SW182 proves exact issue/content/metadata persistence, native cycles, history merge/delete/comment/grace behavior, aggregate precedence and publication across ordinary, duplicate, actual 1001 scoped, raw >20000 fallback and large-body cases plus refusal/rollback/recovery. SW194 clone/header ownership tests and the final normal, persistent SQLite count2 and race union pass, including explicit no-skip reruns of all three large cells after the stable-history fixture correction.",
+      "accessors": ["mutateBoundedScopedImage"],
+      "temperature": "hot",
+      "temperatureReason": "Cycle maintenance commits due transitions before ordinary bootstrap output.",
+      "callers": ["store/sqlite.go:dispatchMutation"]
+    }
+  }
+}

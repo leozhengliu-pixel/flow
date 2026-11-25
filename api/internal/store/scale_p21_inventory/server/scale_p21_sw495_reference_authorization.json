@@ -1,0 +1,32 @@
+{
+  "source": "server/scale_p21_sw495_reference_authorization.go",
+  "unmigrated": 0,
+  "consumers": {
+    "boundedDocumentReferenceAllowed": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "BeginDocumentRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Document favorite/subscription reference authorization.",
+      "callers": [
+        "server/scale_p21_sw495_reference_authorization.go:boundedReferencePredicate"
+      ],
+      "reason": "Reuses the reviewed document authorization reader (as the bounded document routes do) and applies the literal reference predicate: an exact ID or slug match with documentRole != none. SW495 compares open, team, private, slug and missing document references across every principal and credential."
+    },
+    "boundedSelectedDocument": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "BeginDocumentRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Document favorite/subscription reference authorization for a selected-team credential.",
+      "callers": [
+        "server/scale_p21_sw495_reference_authorization.go:boundedReferencePredicate"
+      ],
+      "reason": "Applies the literal key projection (teams, team settings and team members on the key's allow-list; the document team/inherited/closed-link filters of filterBootstrapForAPIKey and applyAPIKeyProjection) to the reviewed document read before the literal reference predicate. SW495 covers selected-empty and selected-set credentials."
+    }
+  }
+}

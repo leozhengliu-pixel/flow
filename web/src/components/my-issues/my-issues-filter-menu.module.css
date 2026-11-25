@@ -173,3 +173,11 @@
      the keyboard row painted underneath a different hovered row. */
   .valueList:has(.valueItem:hover) .valueItem[aria-selected="true"]:not(:hover)::before { background: transparent; }
 }
+
+/* A label of a group reads "Group › Label" like the reference: the group in the muted ink, a 5x9 marker 8px either side, the label in the strong ink. */
+.valueGroup{flex:0 1 auto;min-width:0;overflow:hidden;color:var(--pk-muted);text-overflow:ellipsis;white-space:nowrap}
+.valueGroupChevron{flex:none;color:var(--pk-faint)}
+.valueLabel.valueGroupLabel{flex:none;color:var(--pk-text-strong)}
+/* Label values: the reference's 9px colour dot, and the 14px box 1px further in (its 12px control sits at 16px). */
+.valueItem[data-label-value] .optionMark{width:9px;height:9px}
+.valueItem[data-label-value] .checkbox{position:relative;left:1px}

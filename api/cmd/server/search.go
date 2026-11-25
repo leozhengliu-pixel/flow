@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,10 +18,14 @@ import (
 func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
+	ctx, phase, finish := searchRequestTiming(ctx)
+	defer finish()
 	r = r.WithContext(ctx)
+	policyDone := phase("policy")
 	policy, scope, err := s.searchQuery(r)
+	policyDone()
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -40,6 +46,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	userID := policy.Viewer.ID
+	historyDone := phase("history")
 	if query != "" {
 		_ = s.store.RecordSearch(r.Context(), policy.Workspace.ID, userID, query)
 	}
@@ -48,14 +55,15 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	if query == "" {
 		recent, _ = s.store.RecentResources(r.Context(), policy.Workspace.ID, userID, 12)
 	}
+	historyDone()
 	terms := []string{}
 	if query != "" {
 		terms = append(terms, query)
 	}
 	candidateLimit := min(max(limit*4, 40), 200)
-	data, err := s.store.SearchMetadata(r.Context(), policy, store.SearchMetadataQuery{Scope: scope, Types: types, Terms: terms, Recent: recent, Limit: candidateLimit})
+	data, err := s.store.SearchMetadata(r.Context(), policy, searchMetadataQueryForRequest(r, scope, types, terms, recent, candidateLimit))
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
@@ -66,6 +74,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		results = buildSearchResultsLimited(data, query, types, candidateLimit, scope.Archived == "all", true)
 	}
 	if query != "" && types["issue"] {
+		issueDone := phase("issue")
 		scope.Text = ""
 		seen := map[string]bool{}
 		for _, result := range results {
@@ -73,9 +82,12 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 				seen[result.ID] = true
 			}
 		}
+		labelDone := phase("issue_labels")
 		labelIDs, labelErr := s.store.MatchingIssueSearchLabels(r.Context(), scope, query)
+		labelDone()
 		if labelErr != nil {
-			issueRecordsError(w, labelErr)
+			issueDone()
+			issueRecordsErrorFor(w, r, labelErr)
 			return
 		}
 		err := s.store.SearchIssueCandidates(r.Context(), scope, query, labelIDs, candidateLimit, func(issue domain.Issue) error {
@@ -87,8 +99,9 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 			results = append(results, scoreIssueSearchResult(issue, query))
 			return nil
 		})
+		issueDone()
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 	}
@@ -105,7 +118,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 			scope.Limit = 100
 			page, err := s.store.QueryIssueRecords(r.Context(), scope)
 			if err != nil {
-				issueRecordsError(w, err)
+				issueRecordsErrorFor(w, r, err)
 				return
 			}
 			data.Issues = page.Items
@@ -125,13 +138,38 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		results = results[:limit]
 	}
 	s.attachSearchResultLinks(r, results, data)
+	encodeDone := phase("encode")
 	writeJSON(w, http.StatusOK, domain.SearchResponse{Results: results, History: history, Recent: recent})
+	encodeDone()
+}
+
+func searchRequestTiming(ctx context.Context) (context.Context, func(string) func(), func()) {
+	if os.Getenv("FLOW_LOADRIG_SEARCH_TIMINGS") != "on" {
+		return ctx, func(string) func() { return func() {} }, func() {}
+	}
+	started := time.Now()
+	var phases []string
+	observe := func(name string, elapsed time.Duration) {
+		phases = append(phases, name+"="+strconv.FormatInt(elapsed.Microseconds(), 10))
+	}
+	return store.WithSearchMetadataTiming(ctx, observe), func(name string) func() {
+			start := time.Now()
+			return func() { observe(name, time.Since(start)) }
+		}, func() {
+			observe("handler", time.Since(started))
+			log.Printf("search timings us: %s request_id=%q", strings.Join(phases, " "), requestIDFrom(ctx))
+		}
+}
+
+func searchMetadataQueryForRequest(r *http.Request, scope store.IssueRecordQuery, types map[string]bool, terms []string, recent []domain.RecentResource, limit int) store.SearchMetadataQuery {
+	key, _ := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	return store.SearchMetadataQuery{Scope: scope, Types: types, Terms: terms, Recent: recent, Limit: limit, CredentialID: key.ID, SkipSharedCache: key.Actor == "app"}
 }
 
 func (s *server) clearSearchHistory(w http.ResponseWriter, r *http.Request) {
 	data, _, err := s.searchQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	userID := authUser(r).ID
@@ -161,14 +199,14 @@ func (s *server) recordRecentResource(w http.ResponseWriter, r *http.Request) {
 	input.Type, input.ID = strings.TrimSpace(input.Type), strings.TrimSpace(input.ID)
 	data, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	visible := false
 	if input.Type == "issue" {
 		ids, err := s.store.VisibleIssueRecordIDs(r.Context(), query, []string{input.ID})
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 		visible = ids[input.ID]
@@ -177,7 +215,7 @@ func (s *server) recordRecentResource(w http.ResponseWriter, r *http.Request) {
 		// projection intentionally contains only policy and team hierarchy.
 		data, err = s.preferenceMetadata(r)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 		visible = searchResourceVisible(data, input.Type, input.ID)

@@ -17,18 +17,41 @@ import (
 // Decode split metadata records directly into their typed destinations. Do not
 // rebuild a second giant JSON blob just to parse it again during startup/reload.
 func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace string, raw []byte, reader metadataReader) (domain.Bootstrap, error) {
-	s.metadataDecodes.Add(1)
 	var data domain.Bootstrap
-	if err := json.Unmarshal(raw, &data); err != nil {
+	scope, scoped := metadataRecordScopeFromContext(ctx)
+	if s.metadataResidency != nil && !scoped {
+		return data, fmt.Errorf("%w: unscoped workspace decode", ErrBoundedMetadataCoverage)
+	}
+	if s.metadataResidency == nil || !scoped {
+		s.metadataDecodes.Add(1)
+	}
+	budget := newMetadataHydrationBudget()
+	if scoped {
+		var err error
+		raw, err = scopedMetadataRoot(raw, scope)
+		if err != nil {
+			return data, err
+		}
+		if err := budget.consume(raw); err != nil {
+			return data, err
+		}
+	}
+	if err := unmarshalMetadataRecord(raw, &data); err != nil {
 		return data, err
 	}
 	var header struct {
 		Collections map[string]string `json:"_flowCollections"`
 	}
-	if err := json.Unmarshal(raw, &header); err != nil {
+	if err := unmarshalMetadataRecord(raw, &header); err != nil {
 		return data, err
 	}
 	if len(header.Collections) == 0 {
+		if scoped {
+			if err := validateMetadataRecordSelection(data, scope); err != nil {
+				return data, err
+			}
+			data = metadataRecordSnapshot(data, scope, metadataRecordFields(scope))
+		}
 		return data, nil
 	}
 	root := reflect.ValueOf(&data).Elem()
@@ -40,7 +63,13 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 			fields[tag] = root.Field(i)
 		}
 	}
-	recordRows, err := s.loadMetadataRecordRows(ctx, workspace, reader, header.Collections)
+	var recordRows []metadataCacheRow
+	var err error
+	if scoped {
+		recordRows, err = s.loadScopedMetadataRecordRows(ctx, workspace, reader, header.Collections, scope, &budget)
+	} else {
+		recordRows, err = s.loadMetadataRecordRows(ctx, workspace, reader, header.Collections)
+	}
 	if err != nil {
 		return data, err
 	}
@@ -74,7 +103,7 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 				if object == nil {
 					object = map[string]json.RawMessage{}
 					if len(target.Bytes()) > 0 {
-						if err := json.Unmarshal(target.Bytes(), &object); err != nil {
+						if err := unmarshalMetadataRecord(target.Bytes(), &object); err != nil {
 							return data, err
 						}
 					}
@@ -87,11 +116,11 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 				continue
 			}
 			if target.Kind() == reflect.Struct {
-				encoded, err := json.Marshal(map[string]json.RawMessage{key: value})
+				encoded, err := marshalMetadataRecord(map[string]json.RawMessage{key: value})
 				if err != nil {
 					return data, err
 				}
-				if err := json.Unmarshal(encoded, target.Addr().Interface()); err != nil {
+				if err := unmarshalMetadataRecord(encoded, target.Addr().Interface()); err != nil {
 					return data, err
 				}
 				continue
@@ -104,11 +133,11 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 				// (same as WorkspaceSettings). Merge each record into the
 				// pointed-to struct instead of treating the value as a full
 				// WorkspaceInviteLink document.
-				encoded, err := json.Marshal(map[string]json.RawMessage{key: value})
+				encoded, err := marshalMetadataRecord(map[string]json.RawMessage{key: value})
 				if err != nil {
 					return data, err
 				}
-				if err := json.Unmarshal(encoded, target.Interface()); err != nil {
+				if err := unmarshalMetadataRecord(encoded, target.Interface()); err != nil {
 					return data, err
 				}
 				continue
@@ -120,7 +149,7 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 				target.Set(reflect.MakeMap(target.Type()))
 			}
 			item := reflect.New(target.Type().Elem())
-			if err := json.Unmarshal(value, item.Interface()); err != nil {
+			if err := unmarshalMetadataRecord(value, item.Interface()); err != nil {
 				return data, err
 			}
 			target.SetMapIndex(reflect.ValueOf(key).Convert(target.Type().Key()), item.Elem())
@@ -132,7 +161,7 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 				target.Set(reflect.MakeMap(target.Type()))
 			}
 			var update metadataUpdate
-			if err := json.Unmarshal(value, &update); err != nil {
+			if err := unmarshalMetadataRecord(value, &update); err != nil {
 				return data, err
 			}
 			key := reflect.ValueOf(update.Parent).Convert(target.Type().Key())
@@ -142,7 +171,7 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 					items = reflect.MakeSlice(target.Type().Elem(), 0, 1)
 				}
 				item := reflect.New(items.Type().Elem())
-				if err := json.Unmarshal(update.Item, item.Interface()); err != nil {
+				if err := unmarshalMetadataRecord(update.Item, item.Interface()); err != nil {
 					return data, err
 				}
 				target.SetMapIndex(key, reflect.Append(items, item.Elem()))
@@ -154,20 +183,29 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 				}
 			}
 		default:
-			return data, fmt.Errorf("unknown collection shape %s", header.Collections[field])
+			return data, fmt.Errorf("unknown collection shape for %s", field)
 		}
 	}
 	for field, object := range rawObjects {
-		encoded, err := json.Marshal(object)
+		encoded, err := marshalMetadataRecord(object)
 		if err != nil {
 			return data, err
 		}
 		fields[field].SetBytes(encoded)
 	}
+	if scoped {
+		if err := validateMetadataRecordSelection(data, scope); err != nil {
+			return data, err
+		}
+		data = metadataRecordSnapshot(data, scope, metadataRecordFields(scope))
+	}
 	return data, nil
 }
 
 func (s *SQLiteStore) loadMetadataRecordRows(ctx context.Context, workspace string, reader metadataReader, collections map[string]string) ([]metadataCacheRow, error) {
+	if s.metadataResidency != nil {
+		return nil, fmt.Errorf("%w: unscoped metadata records for %q", ErrBoundedMetadataCoverage, workspace)
+	}
 	// The copy must be the metadata reader sees: the stamp is read through
 	// reader, before the rows (see metadataGenerationKey).
 	stamp, stamped := s.metadataStamp(ctx, reader, workspace)
@@ -251,7 +289,7 @@ func decodeArrayFields(fields map[string]reflect.Value, arrays map[string][]json
 			defer wait.Done()
 			for work := range next {
 				for index, raw := range work.items {
-					if err := json.Unmarshal(raw, work.target.Index(work.offset+index).Addr().Interface()); err != nil {
+					if err := unmarshalMetadataRecord(raw, work.target.Index(work.offset+index).Addr().Interface()); err != nil {
 						errs <- err
 						for range next {
 						}

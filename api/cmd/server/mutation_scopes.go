@@ -60,6 +60,7 @@ func releaseMutationScope(ctx context.Context, input releaseInput, match func(do
 // documentContentScope loads just a document's comment thread (comments are
 // content records owned by the document id; the route may use its slug).
 func documentContentScope(ctx context.Context, id string) context.Context {
+	ctx = documentRecordScope(ctx, id)
 	return store.WithMutationScope(ctx, store.MutationScope{Resolve: func(data domain.Bootstrap) store.MutationScope {
 		if document, err := documentByID(&data, id); err == nil {
 			return store.MutationScope{Resources: []string{document.ID}}
@@ -71,6 +72,11 @@ func documentContentScope(ctx context.Context, id string) context.Context {
 // projectIssueScope loads a project's issues (project deletion detaches them).
 func projectIssueScope(ctx context.Context, projectID string) context.Context {
 	return store.WithMutationScope(ctx, store.MutationScope{ProjectIssues: []string{projectID}})
+}
+
+// Project updates archive reminder notifications owned by their parent.
+func projectContentScope(ctx context.Context, resourceID string) context.Context {
+	return store.WithMutationScope(ctx, store.MutationScope{Resources: []string{resourceID}})
 }
 
 // projectTemplateScope loads the issues a project template names (template

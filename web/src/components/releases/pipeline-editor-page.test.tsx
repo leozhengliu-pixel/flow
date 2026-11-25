@@ -218,3 +218,16 @@ describe('access key state', () => {
     expect(accessKeyState({ accessKeyPrefix: 'p', accessKeyRevokedAt: '2026-10-09T23:00:00Z' }, now)).toBe('none')
   })
 })
+
+describe('pipeline settings painted from cached data', () => {
+  it('shows the stages the server confirms', () => {
+    const data = dataFor('admin')
+    const cached = pipelineFor([data.teams[0].id], { type: 'scheduled', stages: ['Planned', 'Beta', 'Released'], stageStatuses: { Planned: 'planned', Beta: 'inProgress', Released: 'released' } })
+    const view = renderEditor(data, cached, {}, '/workspace/settings/releases/pipelines/app')
+    expect(screen.getByText('Beta')).toBeInTheDocument()
+    const confirmed: ReleasePipeline = { ...cached, stages: ['Planned', 'Gamma', 'Released'], stageStatuses: { Planned: 'planned', Gamma: 'inProgress', Released: 'released' } }
+    view.rerender(<MemoryRouter initialEntries={['/workspace/settings/releases/pipelines/app']}><I18nProvider><PipelineEditorPage data={data} pipeline={confirmed} onCancel={vi.fn()} onSaved={vi.fn()} /></I18nProvider></MemoryRouter>)
+    expect(screen.getByText('Gamma')).toBeInTheDocument()
+    expect(screen.queryByText('Beta')).not.toBeInTheDocument()
+  })
+})

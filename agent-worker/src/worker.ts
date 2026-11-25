@@ -3,6 +3,7 @@ import {
   MaxTurnsExceededError,
   RunState,
   run,
+  setSensitiveDataLoggingEnabled,
   setTracingDisabled,
   type AgentInputItem,
   type MCPServer,
@@ -19,7 +20,7 @@ import { ConnectorElicitationWatcher, type ElicitationApi } from './connector-el
 import { flowMcpServer } from './flow-mcp.js'
 import { askUserTool, loadToolsTool, parseAskUser } from './host-tools.js'
 import { compactHistory, defaultCompaction } from './history.js'
-import { createModel, modelSettings, ObservedModel, type ModelCallRecord, type ModelFactoryOptions } from './models.js'
+import { createModel, inspectModelImage, modelSettings, ObservedModel, type ModelCallRecord, type ModelFactoryOptions } from './models.js'
 import { approvalKind, approvalPreview, isApprovalWord, type ApprovalKind } from './policy.js'
 import { FileSessionStore, type RepairableSession, type SuspendedStore } from './session-store.js'
 import { QuestionStreamer } from './question-stream.js'
@@ -30,6 +31,7 @@ import type { HeldCall } from './runtime-client.js'
 
 // Traces would go to api.openai.com with the provider key; the worker exports its own OTel spans instead.
 setTracingDisabled(true)
+setSensitiveDataLoggingEnabled(false)
 
 /**
  * Flow tools come from /mcp; the SDK has no approval hook for MCP tools, so the agent sets `needsApproval` on the
@@ -112,6 +114,7 @@ export type SessionOptions = {
   allTools?: boolean
   serialCalls?: boolean
   stopAtTools?: string[]
+  inspectLoopAttachments?: boolean
   /** Search the web with the provider's hosted search (hosted-search.ts), when the protocol has one. */
   hostedWebSearch?: boolean
 }
@@ -159,7 +162,10 @@ export class FlowAgentSession {
       this.elicitations = new ConnectorElicitationWatcher(options.elicitations, elicitation => this.sink?.({ type: 'connector.elicitation', at: Date.now(), elicitation }))
     }
     const watcher = this.elicitations
-    this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken, { toolErrors: this.toolErrors, onConnectorCall: watcher ? () => watcher.begin() : undefined, serial: options.serialCalls, runId: options.runId })]
+    this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken, {
+      toolErrors: this.toolErrors, onConnectorCall: watcher ? () => watcher.begin() : undefined, serial: options.serialCalls, runId: options.runId,
+      inspectImage: options.inspectLoopAttachments ? (image, prompt, signal) => inspectModelImage(baseModel, config, options.sessionId, image, prompt, signal) : undefined,
+    })]
     if (options.hostedWebSearch) this.hostedSearch = hostedWebSearchTool(config.protocol)
     this.agent = new FlowAgent({
       name: 'Flow Agent',

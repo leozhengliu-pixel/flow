@@ -105,7 +105,11 @@ func (s *server) getGitHubApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status.Configured, status.HostName, status.Slug, status.CanLinkAccount = host.Configured(), host.HostName(), host.Slug(), host.CanAuthorizeUsers()
-	workspace := s.workspaceData(r).Workspace.URLKey
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	workspace := data.Workspace.URLKey
 	installations, err := s.store.CodeHostInstallations(r.Context(), workspace, domain.CodeHostGitHub)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not read GitHub App installations")
@@ -203,7 +207,11 @@ func (s *server) startGitHubAppInstall(w http.ResponseWriter, r *http.Request) {
 	if !s.requireWorkspaceAdmin(w, r) {
 		return
 	}
-	state, err := s.signGitHubAppState(gitHubAppState{Workspace: s.workspaceData(r).Workspace.URLKey, User: authUser(r).ID, Purpose: "install"})
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	state, err := s.signGitHubAppState(gitHubAppState{Workspace: data.Workspace.URLKey, User: authUser(r).ID, Purpose: "install"})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not start the GitHub App installation")
 		return
@@ -230,7 +238,11 @@ func (s *server) startGitHubAppAuthorization(w http.ResponseWriter, r *http.Requ
 	}
 	// The member account flow (one-time state with PKCE), returning to the
 	// GitHub integration page.
-	state, challenge, err := s.newCodeHostLinkState(r.Context(), codeHostLinkState{UserID: user.ID, Workspace: s.workspaceData(r).Workspace.URLKey, CodeHost: domain.CodeHostGitHub, Method: domain.CodeHostAuthGitHubApp, ReturnTo: "integration"})
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	state, challenge, err := s.newCodeHostLinkState(r.Context(), codeHostLinkState{UserID: user.ID, Workspace: data.Workspace.URLKey, CodeHost: domain.CodeHostGitHub, Method: domain.CodeHostAuthGitHubApp, ReturnTo: "integration"})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not start GitHub authorization")
 		return
@@ -342,7 +354,11 @@ func (s *server) finishGitHubAppSetup(w http.ResponseWriter, r *http.Request) {
 // checkGitHubAppMember checks the state's user is an active member (admin
 // when required) of the state's workspace.
 func (s *server) checkGitHubAppMember(ctx context.Context, workspace, userID string, admin bool) error {
-	data, ok := s.store.WorkspaceMetadata(workspace)
+	read := s.store.WorkspaceMetadata
+	if s.store.BoundedMetadataEnabled() {
+		read = s.store.WorkspaceSettingsMetadata
+	}
+	data, ok := read(workspace)
 	if !ok || data.Workspace.URLKey != workspace {
 		return errors.New("The workspace no longer exists")
 	}
@@ -389,7 +405,11 @@ func (s *server) removeGitHubAppInstallation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	id := strings.TrimSpace(r.PathValue("id"))
-	workspace := s.workspaceData(r).Workspace.URLKey
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	workspace := data.Workspace.URLKey
 	installations, err := s.store.CodeHostInstallations(r.Context(), workspace, domain.CodeHostGitHub)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not read GitHub App installations")
@@ -456,7 +476,11 @@ func (s *server) listAvailableGitHubAppInstallations(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	linked, err := s.store.CodeHostInstallations(r.Context(), s.workspaceData(r).Workspace.URLKey, domain.CodeHostGitHub)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	linked, err := s.store.CodeHostInstallations(r.Context(), data.Workspace.URLKey, domain.CodeHostGitHub)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not read GitHub App installations")
 		return
@@ -497,7 +521,11 @@ func (s *server) linkExistingGitHubAppInstallation(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusBadGateway, "Could not read the GitHub App installation")
 		return
 	}
-	installation.WorkspaceKey = s.workspaceData(r).Workspace.URLKey
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	installation.WorkspaceKey = data.Workspace.URLKey
 	if err := s.store.UpsertCodeHostInstallation(r.Context(), installation); err != nil {
 		writeError(w, http.StatusInternalServerError, "Could not save the GitHub App installation")
 		return
@@ -613,7 +641,15 @@ var codeReviewGitHubEvents = []string{"pull_request", "pull_request_review", "pu
 
 func (s *server) applyGitHubAppWorkspaceEvent(ctx context.Context, workspace, githubEvent string, event codehost.WebhookEvent, body []byte) error {
 	reviewID := ""
-	if slices.Contains(codeReviewGitHubEvents, githubEvent) && !s.classicGitHubSync(workspace) {
+	classic := false
+	if slices.Contains(codeReviewGitHubEvents, githubEvent) {
+		var err error
+		classic, err = s.classicGitHubSync(ctx, workspace)
+		if err != nil {
+			return err
+		}
+	}
+	if slices.Contains(codeReviewGitHubEvents, githubEvent) && !classic {
 		var review externalCodeReviewEvent
 		if err := json.Unmarshal(body, &review); err != nil {
 			return err
@@ -644,15 +680,18 @@ func (s *server) applyGitHubAppWorkspaceEvent(ctx context.Context, workspace, gi
 // classicGitHubSync reports whether a classic GitHub connection with a
 // webhook secret already syncs this workspace's pull requests, in which case
 // the App's copy of the same events is not applied twice.
-func (s *server) classicGitHubSync(workspace string) bool {
+func (s *server) classicGitHubSync(ctx context.Context, workspace string) (bool, error) {
+	if s.store.BoundedMetadataEnabled() {
+		return s.store.ClassicGitHubSyncConfigured(ctx, workspace)
+	}
 	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok {
-		return false
+		return false, nil
 	}
 	return slices.ContainsFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
 		return item.Provider == domain.CodeHostGitHub && slices.Contains([]string{"configured", "connected"}, item.Status) &&
 			(strings.TrimSpace(item.Config["webhookSecret"]) != "" || strings.TrimSpace(item.Config["webhookSecretEnv"]) != "")
-	})
+	}), nil
 }
 
 // updateSessionPullRequests mirrors PR state changes (opened, reopened,

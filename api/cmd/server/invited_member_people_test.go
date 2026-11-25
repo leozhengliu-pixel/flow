@@ -29,6 +29,14 @@ func newAuthServerForStore(t *testing.T, repo *store.SQLiteStore) *httptest.Serv
 	return server
 }
 
+func newOwnedAuthServerForStore(t *testing.T, repo *store.SQLiteStore) (*httptest.Server, *http.Client, *scaleP04Database) {
+	t.Helper()
+	database := newScaleP04DatabaseForStore(t, repo, store.DatabaseConfig{}, false)
+	host := httptest.NewServer(database.handler(t, false))
+	t.Cleanup(host.Close)
+	return host, database.login(t, host.URL, database.users[0]), database
+}
+
 // A person who joined through an invitation is a workspace member at once,
 // before they change anything themselves: they can be made an issue's
 // assignee and subscriber or a project's lead and member, and their own
@@ -42,12 +50,11 @@ func TestInvitedMemberCanBeAssignedAndSubscribed(t *testing.T) {
 
 func testInvitedMemberCanBeAssignedAndSubscribed(t *testing.T, repo *store.SQLiteStore) {
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
-	server := newAuthServerForStore(t, repo)
+	server, admin, database := newOwnedAuthServerForStore(t, repo)
 	suffix := fmt.Sprint(time.Now().UnixNano())
-	admin := peerAdmin(t, server.URL)
 	team := authRequest[domain.Team](t, admin, http.MethodPost, server.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Invited People " + suffix, "key": "IP" + suffix[len(suffix)-4:]}, "", http.StatusCreated)
 	issue := authRequest[domain.Issue](t, admin, http.MethodPost, server.URL+"/api/issues", map[string]any{"title": "Before the invitation", "teamId": team.ID}, "test-workspace", http.StatusCreated)
-	member, person := joinByInvitation(t, server.URL, admin, "Invited Person", "invited-person-"+suffix+"@example.com", "member", team.ID)
+	member, person := database.join(t, server.URL, admin, "Invited Person", "member", team.ID)
 
 	subscribed := authRequest[domain.Issue](t, admin, http.MethodPatch, server.URL+"/api/issues/"+issue.ID, map[string]any{"subscriberIds": append(slices.Clone(issue.SubscriberIDs), person.ID)}, "test-workspace", http.StatusOK)
 	if !slices.Contains(subscribed.SubscriberIDs, person.ID) {
@@ -109,17 +116,16 @@ func TestIssueMoveNotifiesInvitedSubscribersWhoCanOpenIt(t *testing.T) {
 
 func testIssueMoveNotifiesInvitedSubscribers(t *testing.T, repo *store.SQLiteStore) {
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
-	server := newAuthServerForStore(t, repo)
+	server, admin, database := newOwnedAuthServerForStore(t, repo)
 	suffix := fmt.Sprint(time.Now().UnixNano())
 	key := func(prefix string) string { return prefix + suffix[len(suffix)-5:] }
-	admin := peerAdmin(t, server.URL)
 	base := server.URL + "/api/workspaces/test-workspace/teams"
 	home := authRequest[domain.Team](t, admin, http.MethodPost, base, map[string]any{"name": "Move Home " + suffix, "key": key("MH")}, "", http.StatusCreated)
 	private := authRequest[domain.Team](t, admin, http.MethodPost, base, map[string]any{"name": "Move Private " + suffix, "key": key("MV"), "private": true}, "", http.StatusCreated)
 	public := authRequest[domain.Team](t, admin, http.MethodPost, base, map[string]any{"name": "Move Public " + suffix, "key": key("MP")}, "", http.StatusCreated)
-	insiderClient, insider := joinByInvitation(t, server.URL, admin, "Move Insider", "move-insider-"+suffix+"@example.com", "member", home.ID, private.ID)
-	outsiderClient, outsider := joinByInvitation(t, server.URL, admin, "Move Outsider", "move-outsider-"+suffix+"@example.com", "member", home.ID)
-	guestClient, guest := joinByInvitation(t, server.URL, admin, "Move Guest", "move-guest-"+suffix+"@example.com", "guest", home.ID)
+	insiderClient, insider := database.join(t, server.URL, admin, "Move Insider", "member", home.ID, private.ID)
+	outsiderClient, outsider := database.join(t, server.URL, admin, "Move Outsider", "member", home.ID)
+	guestClient, guest := database.join(t, server.URL, admin, "Move Guest", "guest", home.ID)
 
 	issue := authRequest[domain.Issue](t, admin, http.MethodPost, server.URL+"/api/issues", map[string]any{"title": "Moving around", "teamId": home.ID}, "test-workspace", http.StatusCreated)
 	issue = authRequest[domain.Issue](t, admin, http.MethodPatch, server.URL+"/api/issues/"+issue.ID, map[string]any{"subscriberIds": []string{insider.ID, outsider.ID, guest.ID}}, "test-workspace", http.StatusOK)

@@ -1,0 +1,34 @@
+{
+  "source": "server/review_sync.go",
+  "unmigrated": 2,
+  "consumers": {
+    "syncReview": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/reviewImportRun.sync",
+        "server/server.syncReviewFromCodeHost",
+        "server/server.queueReviewSync"
+      ]
+    },
+    "syncReviewFromCodeHost": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/reviews/{id}/sync (server/main.go:750)"
+      ]
+    }
+  }
+}

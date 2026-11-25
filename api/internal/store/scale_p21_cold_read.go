@@ -1,0 +1,215 @@
+package store
+
+import (
+	"context"
+	"reflect"
+	"slices"
+	"sync"
+
+	"flow/api/internal/domain"
+)
+
+type coldMetadataReadKey struct{}
+
+type coldMetadataRead struct {
+	mu      sync.Mutex
+	owner   *metadataResidency
+	facade  *SQLiteStore
+	sources map[string]*metadataLogicalSource
+	// Earlier accessor outputs may still borrow their native generation.
+	retired []map[string]*metadataLogicalSource
+}
+
+// withColdMetadataRead lends a legacy read facade only for run's lifetime,
+// including projection and encoding. Writes require the explicit cold writer;
+// callbacks must not Close the facade or retain its graph. Cold work has no
+// HOT page/work ceiling; one replica-wide slot covers its graph and consumers.
+// Refresh is explicit until cold routing covers each old accessor. Existing
+// caller snapshot contexts remain intact.
+func (s *SQLiteStore) withColdMetadataRead(ctx context.Context, run func(context.Context, *SQLiteStore) error) error {
+	read, err := s.beginColdMetadataRead(ctx)
+	if err != nil {
+		return err
+	}
+	defer read.Close()
+	return run(read.Context(), read.Store())
+}
+
+func (s *SQLiteStore) decodeColdMetadataRead(ctx context.Context, sources map[string]*metadataLogicalSource) error {
+	if s.coldParent != nil && s.coldParent.metadataResidency != nil {
+		// Each workspace's owned copy of its decoded generation
+		// (scale_p21_cold_decode_cache.go).
+		r := s.coldParent.metadataResidency
+		for workspace, source := range sources {
+			data, err := r.decodeColdImage(ctx, workspace, source, nil)
+			if err != nil {
+				return err
+			}
+			s.workspaces[workspace] = data
+		}
+		return ctx.Err()
+	}
+	ctx = coldMetadataGenericDecodeContext(ctx, sources)
+	for workspace, source := range sources {
+		var data domain.Bootstrap
+		value := reflect.ValueOf(&data).Elem()
+		index := 0
+		err := source.VisitFields(ctx, func(_ string, node metadataLogicalNode) error {
+			// Value's cap is solely an integer representability check here.
+			// The cold slot, rather than HOT admission, owns the decoded graph.
+			decoded, err := node.Value(ctx, int(^uint(0)>>1))
+			if err != nil {
+				return err
+			}
+			value.Field(index).Set(decoded)
+			index++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		domain.RebuildTeamDirectory(&data)
+		s.workspaces[workspace] = data
+	}
+	return ctx.Err()
+}
+
+// noteColdFacadeRevisionsLocked records, for each workspace a facade decoded
+// from sources, the metadata revision its copy is exact at: the installed
+// generation's stamp, when the generation is exact (not behind a peer's
+// commit). A legacy writer on the facade then reloads the workspace from SQL
+// only when the stored metadata moved past that revision, as the live store's
+// writers do; with the revision unknown, every COLD legacy write under the
+// coordinator reloaded the complete workspace from SQL under the write lock.
+// refreshColdFullWriteLocked records the same stamp for the full writer.
+// The caller holds s.mu.
+func (s *SQLiteStore) noteColdFacadeRevisionsLocked(sources map[string]*metadataLogicalSource) {
+	for workspace, source := range sources {
+		if stamp := source.Stamp(); stamp.revision >= 0 && !source.behind.Load() {
+			s.setCopyRevisionLocked(workspace, stamp)
+		} else {
+			s.forgetCopyRevisionLocked(workspace)
+		}
+	}
+}
+
+// refreshColdMetadataRead replaces a facade's graph from the latest installed
+// parent generation while its callback still owns the cold slot. The complete
+// registry/default capture also preserves exact cross-workspace lookup and
+// missing-key behavior. Explicit SQL/read contexts are never cleared.
+func (s *SQLiteStore) refreshColdMetadataRead(ctx context.Context, workspace string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	parent := s.coldParent
+	read, ok := ctx.Value(coldMetadataReadKey{}).(*coldMetadataRead)
+	if parent == nil || !ok || read.owner != parent.metadataResidency {
+		return ErrBoundedMetadataCoverage
+	}
+	read.mu.Lock()
+	defer read.mu.Unlock()
+	if read.facade != s {
+		return errMetadataLogicalClosed
+	}
+	next, sources, err := parent.pinColdMetadataRead(ctx)
+	installed := false
+	defer func() {
+		if !installed {
+			for _, source := range sources {
+				source.Release()
+			}
+		}
+	}()
+	if err != nil {
+		return err
+	}
+	if err := next.decodeColdMetadataRead(ctx, sources); err != nil {
+		return err
+	}
+	// workspace remains an exact registry lookup; neither SQL collation nor
+	// a logical URLKey can turn a missing requested key into an installed one.
+	selected := workspace
+	if selected == "" {
+		selected = next.lastWorkspaceKey
+	}
+	if _, found := next.workspaces[selected]; found {
+		if _, pinned := sources[selected]; !pinned {
+			return ErrBoundedMetadataCoverage
+		}
+	}
+	s.mu.Lock()
+	s.workspaces, s.lastWorkspaceKey, s.viewer = next.workspaces, next.lastWorkspaceKey, next.viewer
+	s.noteColdFacadeRevisionsLocked(sources)
+	s.mu.Unlock()
+	previous := read.sources
+	read.sources = sources
+	read.retired = append(read.retired, previous)
+	installed = true
+	return nil
+}
+
+// Both registry identity and every logical generation are captured under the
+// same owner locks used by installation. A missing source fails closed rather
+// than substituting SQL's potentially normalized generation.
+func (s *SQLiteStore) pinColdMetadataRead(ctx context.Context) (*SQLiteStore, map[string]*metadataLogicalSource, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	r := s.metadataResidency
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	facade := s.newColdFacadeLocked(len(s.workspaces))
+	sources := make(map[string]*metadataLogicalSource, len(s.workspaces))
+	for workspace := range s.workspaces {
+		if err := ctx.Err(); err != nil {
+			return facade, sources, err
+		}
+		source := r.logical[workspace]
+		if source == nil {
+			return facade, sources, ErrBoundedMetadataCoverage
+		}
+		if err := source.Retain(); err != nil {
+			return facade, sources, err
+		}
+		sources[workspace] = source
+	}
+	return facade, sources, nil
+}
+
+// newColdFacadeLocked returns an empty legacy store sharing s's database and
+// services. The caller holds s.mu. Fresh locks, counters and caches belong to
+// the facade; service pointers are loaded explicitly, since copying
+// SQLiteStore would also copy live locks.
+func (s *SQLiteStore) newColdFacadeLocked(workspaces int) *SQLiteStore {
+	facade := &SQLiteStore{
+		db: s.db, dialect: s.dialect,
+		coldParent:         s,
+		workspaces:         make(map[string]domain.Bootstrap, workspaces),
+		lastWorkspaceKey:   s.lastWorkspaceKey,
+		viewer:             s.viewer,
+		coordinator:        s.coordinator,
+		fixtureProfile:     s.fixtureProfile,
+		fixturePassword:    s.fixturePassword,
+		maxStateBytes:      s.maxStateBytes,
+		lifecycle:          s.lifecycle,
+		startupLock:        s.startupLock,
+		startupLockTimeout: s.startupLockTimeout,
+	}
+	facade.agentRunWake.forward, facade.agentRunCancel.forward = &s.agentRunWake, &s.agentRunCancel
+	facade.realtimeSink.Store(s.realtimeSink.Load())
+	facade.webhookSink.Store(s.webhookSink.Load())
+	facade.accountSink.Store(s.accountSink.Load())
+	facade.agentReplies.Store(s.agentReplies.Load())
+	facade.keyObjects.Store(s.keyObjects.Load())
+	facade.changeLogMinRows.Store(s.changeLogMinRows.Load())
+	facade.viewer.AppScopes = slices.Clone(s.viewer.AppScopes)
+	facade.viewer.AppTeamIDs = slices.Clone(s.viewer.AppTeamIDs)
+	if s.viewer.OutOfOfficeUntil != nil {
+		stamp := *s.viewer.OutOfOfficeUntil
+		facade.viewer.OutOfOfficeUntil = &stamp
+	}
+	if s.viewer.Via != nil {
+		via := *s.viewer.Via
+		facade.viewer.Via = &via
+	}
+	return facade
+}

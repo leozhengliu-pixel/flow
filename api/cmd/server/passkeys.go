@@ -48,7 +48,7 @@ func passkeyPublic(item domain.Passkey) domain.Passkey {
 func (s *server) listPasskeys(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	items := []domain.Passkey{}
-	passkeys, _, ok := s.store.AccountCollections(workspaceKey(r), actor.ID)
+	passkeys, _, ok := s.accountCollections(r.Context(), workspaceKey(r), actor.ID, true)
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return

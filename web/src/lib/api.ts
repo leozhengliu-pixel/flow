@@ -1,6 +1,8 @@
 import { trackUserSettingsWrite } from './user-settings-overrides';
+import { flushBeforeSessionEnd } from "@/lib/session-cache-registry";
+import { captureLocalStoreBootstrap } from '@/lib/local-store-bootstrap'
+import { clearLocalStores } from '@/lib/local-store-db'
 import type {
-  AccountBootstrap,
   ThreadSubscription,
   ThreadSubscriptionState,
   AccountSessionInfo,
@@ -113,10 +115,12 @@ import type {
 } from "@/types/flow";
 import type { ApplicationInstallation } from "@/lib/application-agents";
 import { rememberTrashRetention } from "@/lib/trash-retention";
-import { rememberChatPlatform } from "@/lib/chat-platform";
+import { rememberChatPlatform } from "@/lib/chat-platform-cache";
 import { markSuspendedMembersInactive } from "@/lib/people";
+import { decodeBase64Url, encodeBase64Url } from "@/lib/webauthn";
 import { apiFetch, ApiError as PulseApiError, jsonRequest, request, requestRetryingBusy } from "@/lib/api-client";
 import { queueIssuesWrite, queueIssueUpdate, queueIssueWrite } from "@/lib/issue-mutation-queue";
+import { modelChanges, modelManifest, modelRecordBatch, modelRecordPage, wireRecordKind, type SyncWireRecord } from '@/lib/scale-p13-wire';
 
 export { ApiError, realtimeClientId } from "@/lib/api-client";
 import type {
@@ -153,17 +157,12 @@ import type {
   WorkflowRun,
 } from "@/types/flow";
 
-export function fetchAccountBootstrap(): Promise<AccountBootstrap> {
-  return request<AccountBootstrap>("/api/account/bootstrap").then(rememberChatPlatform);
-}
+export { fetchAccountBootstrap, fetchAuthSession } from './api-startup';
 export function setLastWorkspace(workspaceKey: string): Promise<void> {
   return request(
     "/api/account/last-workspace",
     jsonRequest("PUT", { workspaceKey }),
   );
-}
-export function fetchAuthSession(): Promise<AuthSession> {
-  return request("/api/auth/session");
 }
 export type AuthProviderConfig = {
   email: boolean;
@@ -207,7 +206,10 @@ export function loginAccount(
   return request("/api/auth/login", jsonRequest("POST", { email, password }));
 }
 export async function logoutAccount(): Promise<void> {
+  // Last edits go out as the current viewer, within a short bound; the rest is dropped when the session caches clear.
+  await flushBeforeSessionEnd();
   await request("/api/auth/logout", { method: "POST" });
+  await clearLocalStores('session-ended');
   const { ClientStorage } = await import("@/lib/client-storage");
   ClientStorage.clearAllNonAuthData();
 }
@@ -405,17 +407,42 @@ export function setTeamMembership(
     jsonRequest("PUT", { member, role }),
   );
 }
-export type BootstrapProjection = 'project-list' | 'issue-detail'
+export type BootstrapProjection = 'project-list' | 'issue-detail' | 'initiative-detail' | `project-detail:${string}`
+
+export function fetchSyncManifest(workspaceKey: string, signal?: AbortSignal, quiet?: boolean, surface?: 'projects-page' | 'initiatives-page'): Promise<import('@/types/flow').SyncManifest> {
+  return request<import('@/types/flow').SyncManifest>(`/api/sync/manifest${surface ? `?surface=${surface}` : ''}`, { headers: { 'X-Workspace-Key': workspaceKey }, signal, quiet }).then(modelManifest)
+}
+
+export function fetchSyncRecords(workspaceKey: string, query: import('@/types/flow').SyncPageRequest, signal?: AbortSignal): Promise<import('@/types/flow').SyncRecordPage> {
+  const params = new URLSearchParams({ kind: wireRecordKind(query.kind), limit: String(Math.max(1, Math.min(100, query.limit ?? 100))), maxBytes: String(Math.max(1, Math.min(256 * 1024, query.maxBytes ?? 256 * 1024))) })
+  if (query.cursor) params.set('cursor', query.cursor)
+  if (query.filter) params.set('filter', query.filter)
+  if (query.order) params.set('order', query.order)
+  return request<Omit<import('@/types/flow').SyncRecordPage, 'items'> & { items: SyncWireRecord[] }>(`/api/sync/records?${params}`, { headers: { 'X-Workspace-Key': workspaceKey }, signal }).then(modelRecordPage)
+}
+
+export function fetchSyncBatch(workspaceKey: string, keys: import('@/types/flow').RecordKey[], projection: 'summary' | 'detail', signal?: AbortSignal): Promise<import('@/types/flow').SyncRecordBatch> {
+  if (keys.length > 50) return Promise.reject(new Error('Record batch exceeds 50 keys'))
+  const init = jsonRequest('POST', { keys: keys.map(key => ({ ...key, kind: wireRecordKind(key.kind) })), projection })
+  if (new TextEncoder().encode(String(init.body)).byteLength > 256 * 1024) return Promise.reject(new Error('Record batch exceeds byte budget'))
+  return request<Omit<import('@/types/flow').SyncRecordBatch, 'items'> & { items: SyncWireRecord[] }>('/api/sync/batch', { ...init, headers: { 'X-Workspace-Key': workspaceKey, 'Content-Type': 'application/json' }, signal }).then(batch => modelRecordBatch(batch, projection))
+}
+
+export function fetchSyncChanges(workspaceKey: string, after: string, signal?: AbortSignal): Promise<import('@/types/flow').SyncChanges> {
+  const params = new URLSearchParams({ after, limit: '100', maxBytes: String(256 * 1024) })
+  return request<import('@/types/flow').SyncChanges>(`/api/sync/changes?${params}`, { headers: { 'X-Workspace-Key': workspaceKey }, signal }).then(modelChanges)
+}
 
 export function fetchBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
   if (projection === 'issue-detail' || import.meta.env.VITE_PAGED_ISSUES === 'true') return fetchPagedBootstrap(workspaceKey, projection, signal, quiet)
   const headers: Record<string, string> = {}
   if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
   if (projection) headers['X-Flow-Projection'] = projection
+  const shadow = captureLocalStoreBootstrap(headers, projection)
   return request<BootstrapData>(
     "/api/bootstrap",
-    { headers, signal, quiet },
-  ).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform);
+    { headers, signal, quiet, onResponse: shadow?.observe },
+  ).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform).then(data => shadow?.record(data) ?? data);
 }
 
 export function fetchPagedBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
@@ -423,7 +450,8 @@ export function fetchPagedBootstrap(workspaceKey?: string, projection?: Bootstra
   if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
   if (projection) headers['X-Flow-Projection'] = projection
   // The server bounds concurrent metadata loads and answers a crowd with 503 + Retry-After.
-  return requestRetryingBusy<BootstrapData>('/api/issue-records/bootstrap', {headers, signal, quiet}).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform)
+  const shadow = captureLocalStoreBootstrap(headers, projection)
+  return requestRetryingBusy<BootstrapData>('/api/issue-records/bootstrap', {headers, signal, quiet, onResponse: shadow?.observe}).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform).then(data => shadow?.record(data) ?? data)
 }
 export type IssueQueryInput = {
   q?: string;
@@ -488,9 +516,11 @@ export function fetchIssueRecord(id: string, signal?: AbortSignal, workspaceKey?
 }
 
 export type IssueHistoryPage = {comments: Comment[]; activities: BootstrapData['activities'][string]; commentsCursor?: string; activitiesCursor?: string}
-export function fetchIssueHistory(id: string, signal?: AbortSignal, cursors?: { commentsCursor?: string; activitiesCursor?: string }): Promise<IssueHistoryPage> {
+export function fetchIssueHistory(id: string, signal?: AbortSignal, cursors?: { commentsCursor?: string; activitiesCursor?: string }, workspaceKey?: string): Promise<IssueHistoryPage> {
   const query = cursors ? `?${new URLSearchParams({ commentsCursor: cursors.commentsCursor || '-', activitiesCursor: cursors.activitiesCursor || '-' })}` : ''
-  return request(`/api/issue-records/${encodeURIComponent(id)}/history${query}`, {signal})
+  return request(`/api/issue-records/${encodeURIComponent(id)}/history${query}`, {
+    signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}),
+  })
 }
 export function fetchIssueRelated(id: string, signal?: AbortSignal): Promise<Issue[]> {
   return request(`/api/issue-records/${encodeURIComponent(id)}/related`,{signal})
@@ -889,27 +919,76 @@ export function rotateAPIKey(id: string): Promise<{ key: APIKey; secret: string 
 export function fetchPasskeys(): Promise<Passkey[]> {
   return request("/api/account/passkeys");
 }
+/**
+ * Verifies the account's second factor with a registered passkey: the server
+ * stamps this session as freshly verified. Used for the workspace prompt and
+ * when a factor change asks for a recent verification.
+ */
+export async function verifyMfaWithPasskey(canceledMessage = "Verification was canceled"): Promise<void> {
+  const start = await request<{
+    challengeId: string;
+    options: { publicKey: PublicKeyCredentialRequestOptions & { challenge: string; allowCredentials?: { id: string; type: "public-key" }[] } };
+  }>("/api/account/mfa/start", { method: "POST" });
+  const source = start.options.publicKey;
+  const credential = (await navigator.credentials.get({
+    publicKey: {
+      ...source,
+      challenge: decodeBase64Url(String(source.challenge)),
+      allowCredentials: source.allowCredentials?.map((item) => ({ ...item, id: decodeBase64Url(String(item.id)) })),
+    },
+  })) as PublicKeyCredential | null;
+  if (!credential) throw new Error(canceledMessage);
+  const response = credential.response as AuthenticatorAssertionResponse;
+  await request(
+    "/api/account/mfa/finish",
+    jsonRequest("POST", {
+      challengeId: start.challengeId,
+      credential: {
+        id: credential.id,
+        type: credential.type,
+        rawId: encodeBase64Url(credential.rawId),
+        response: {
+          clientDataJSON: encodeBase64Url(response.clientDataJSON),
+          authenticatorData: encodeBase64Url(response.authenticatorData),
+          signature: encodeBase64Url(response.signature),
+          userHandle: response.userHandle ? encodeBase64Url(response.userHandle) : null,
+        },
+      },
+    }),
+  );
+}
+/** Changing a registered factor needs a recent verification: ask for it once, then retry. */
+async function withMfaReauth<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof PulseApiError && error.code === "mfa_reauth_required") {
+      await verifyMfaWithPasskey();
+      return run();
+    }
+    throw error;
+  }
+}
 export function beginPasskeyRegistration(): Promise<{
   registrationId: string;
   options: unknown;
 }> {
-  return request("/api/account/passkeys/register/start", { method: "POST" });
+  return withMfaReauth(() => request("/api/account/passkeys/register/start", { method: "POST" }));
 }
 export function finishPasskeyRegistration(input: {
   registrationId: string;
   name?: string;
   credential: unknown;
 }): Promise<Passkey> {
-  return request(
-    "/api/account/passkeys/register/finish",
-    jsonRequest("POST", input),
+  return withMfaReauth(() =>
+    request("/api/account/passkeys/register/finish", jsonRequest("POST", input)),
   );
 }
 export function updatePasskey(id: string, name: string): Promise<Passkey> {
   return request(`/api/account/passkeys/${id}`, jsonRequest("PATCH", { name }));
 }
 export function deletePasskey(id: string): Promise<void> {
-  return request(`/api/account/passkeys/${id}`, { method: "DELETE" });
+  return withMfaReauth(() => request(`/api/account/passkeys/${id}`, { method: "DELETE" }));
 }
 export function fetchCommitSigningKey(): Promise<CommitSigningKey | null> {
   return request("/api/account/signing-key");
@@ -1817,11 +1896,12 @@ export function updateDocument(
     documentUpdateIds?: string[];
   },
 ): Promise<FlowDocument> {
-  return request(`/api/documents/${id}`, jsonRequest("PATCH", input));
+  const summaries = import.meta.env.VITE_SYNC_V2 === 'true' && (import.meta.env.VITE_DOCUMENT_WINDOWS === 'true' || import.meta.env.VITE_TRASH_WINDOWS === 'true');
+  return request(`/api/documents/${id}${summaries ? '?history=summary' : ''}`, jsonRequest("PATCH", input));
 }
 /** One document by id, slug or an earlier slug; a deleted document comes back with `deletedAt`. */
-export function getDocument(id: string): Promise<FlowDocument> {
-  return request(`/api/documents/${encodeURIComponent(id)}`);
+export function getDocument(id: string, signal?: AbortSignal, workspaceKey?: string): Promise<FlowDocument> {
+  return request(`/api/documents/${encodeURIComponent(id)}`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) });
 }
 /** Restores a deleted document from "Recently deleted". */
 export function restoreDeletedDocument(id: string): Promise<FlowDocument> {
@@ -2170,6 +2250,8 @@ export function createDraft(input: {
   body?: string;
   contentData?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  /** Makes the create idempotent: the server returns (and updates) the viewer's draft of the same type and resource with this key. */
+  clientKey?: string;
 }): Promise<Draft> {
   return request("/api/drafts", jsonRequest("POST", input));
 }
@@ -2764,10 +2846,10 @@ export function updatePresence(
   issueId: string | undefined,
   route: string,
   active = true,
-): Promise<Presence[]> {
+): Promise<Presence[] | undefined> {
   return request(
     import.meta.env.VITE_PAGED_ISSUES === 'true' ? '/api/realtime/presence?issues=paged' : '/api/realtime/presence',
-    jsonRequest("POST", { clientId, issueId, route, active }),
+    { ...jsonRequest("POST", { clientId, issueId, route, active }), headers: { "Content-Type": "application/json", "X-Flow-Presence": "minimal" } },
   );
 }
 export function updateDocumentPresence(
@@ -2775,10 +2857,10 @@ export function updateDocumentPresence(
   documentId: string,
   route: string,
   active = true,
-): Promise<Presence[]> {
+): Promise<Presence[] | undefined> {
   return request(
     "/api/realtime/presence",
-    jsonRequest("POST", { clientId, documentId, route, active }),
+    { ...jsonRequest("POST", { clientId, documentId, route, active }), headers: { "Content-Type": "application/json", "X-Flow-Presence": "minimal" } },
   );
 }
 
@@ -4534,8 +4616,8 @@ export function fetchPulseCapabilities(signal?: AbortSignal): Promise<import("@/
   return request("/api/pulse/capabilities", { signal });
 }
 /** One project's updates, newest first, with comments and reactions (paged workspaces). */
-export function listProjectUpdates(projectId: string, signal?: AbortSignal): Promise<ProjectUpdate[]> {
-  return request(`/api/projects/${encodeURIComponent(projectId)}/updates`, { signal });
+export function listProjectUpdates(projectId: string, signal?: AbortSignal, workspaceKey?: string): Promise<ProjectUpdate[]> {
+  return request(`/api/projects/${encodeURIComponent(projectId)}/updates`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) });
 }
 /** One initiative's updates, newest first, with comments and reactions (paged workspaces). */
 export function listInitiativeUpdates(initiativeId: string, signal?: AbortSignal): Promise<InitiativeUpdate[]> {

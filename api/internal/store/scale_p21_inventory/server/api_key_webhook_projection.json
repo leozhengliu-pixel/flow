@@ -1,0 +1,18 @@
+{
+  "source": "server/api_key_webhook_projection.go",
+  "unmigrated": 1,
+  "consumers": {
+    "projectAPIKeyWebhookDelivery": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapForUser"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.getWebhookDelivery"
+      ]
+    }
+  }
+}

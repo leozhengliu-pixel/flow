@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_resource_policy_memo.go",
+  "unmigrated": 0,
+  "consumers": {
+    "installed": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Uses the same native policy projection as realtime only when the installed logical source has the exact certified SQL workspace/revision stamp. Retains source under store/residency locks, builds admitted policy outside locks, and transfers retained allowance to the same-store/workspace/transaction memo before releasing transient work. Unknown/stale/newer sources retain canonical recovery; handed resource data never substitutes for installed policy. Closed memos miss safely, principals and live authority remain checked on every resolution, and higher-priority event/current-copy sources remain first. SW137 normal, persistent SQLite twice and race cover 100 permission pairs, native/canonical source transitions, old slugs and hidden actors/references/counts, queued/replayed revocation, source/snapshot mismatch and closure, cancellation, concurrent independent memos and retention-quota refusal without leaked source/work. A 512-team policy retains 8396292 bytes despite tenfold ignored bodies; certified-source SQL50 versus50 legacy with zero canonical recovery queries.",
+      "accessors": ["resident-state"],
+      "temperature": "hot",
+      "temperatureReason": "Shared principal policy resolution in bounded resource reads.",
+      "callers": ["store/resource_access.go:ResolveAccess"]
+    }
+  }
+}

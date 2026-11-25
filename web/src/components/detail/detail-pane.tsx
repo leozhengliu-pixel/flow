@@ -44,7 +44,8 @@ import './issue-customer-needs.css'
 import { IssueProjectPicker } from '@/components/issue/issue-project-picker'
 import type { NewProjectDraft } from '@/components/projects-page/new-project-dialog'
 import { IssueAttachments, type AttachmentUploadState } from '@/components/issue/issue-attachments'
-import { descriptionImageSrcs } from '@/components/issue/editor/image-extension'
+import { attachmentInBody, descriptionImageSrcs } from '@/components/issue/editor/image-extension'
+import { encodeLegacyAttachmentDirectives } from '@/components/issue/editor/legacy-attachment-directives'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import { cycleDueDateOptions } from '@/components/issue/due-date-utils'
 import { useCurrentTimeMs } from '@/hooks/use-current-time'
@@ -87,6 +88,9 @@ import { useFlowHotkeys } from '@/components/ui/menu-shortcuts'
 import { issuePath } from '@/lib/app-routes'
 import { configuredIssueBranch } from '@/lib/issue-work-actions'
 import { issueEverythingMarkdown } from '@/components/issue/issue-options-model'
+
+// An open issue can fall back to the read-only preview while offline.
+export { IssueLoadingPreview } from '@/components/issue/issue-loading-preview'
 
 export function DetailPane({issue,data,comments,activities,historyLoading=false,historyError,onRetryHistory,highlightTarget,presence=[],workspacePresence,full=false,embedded=false,triageView=false,issueOptionsActions,onClose,onNavigateIssue,onNavigateRoot,returnPath,navigationTrail,navigationIssueIds,onUpdate,onIssueUpdated,onDelete,onCreateSubIssue,onCreateProject,onCreateProjectMilestone,onCreateLabel,onReactIssue,onComment,onEditComment,onDeleteComment,onReactComment,onResolveComment,onRelation,onDeleteRelation,onUpload,onDeleteAttachment,onIssueAccessLost}:{issue:Issue;data:BootstrapData;comments:Comment[];activities:ActivityEvent[];historyLoading?:boolean;historyError?:string;onRetryHistory?:()=>void;highlightTarget?:ActivityHighlightTarget;presence?:Presence[];workspacePresence?:Presence[];full?:boolean;embedded?:boolean;/** The reference app's triage issue view beside the triage list: compact header, single column. */triageView?:boolean;issueOptionsActions?:IssueOptionsActions;onClose:()=>void;onExpand?:()=>void;/** `sibling`: J / K stepped through the list (the list stays the origin); otherwise a link drilled into the issue. */onNavigateIssue?:(issue:Issue,options?:{sibling?:boolean})=>void;onNavigateRoot?:()=>void;returnPath?:string;/** The pages this issue was opened from, oldest first: the header's breadcrumb. */navigationTrail?:string[];navigationIssueIds?:string[];onUpdate:(input:IssueUpdateInput)=>Promise<void>;onIssueUpdated?:(issue:Issue)=>void;onDelete:()=>Promise<void>;onCreateSubIssue:(input:SubIssueInput)=>Promise<void>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateProjectMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onCreateLabel?:(name:string,groupId?:string)=>Promise<IssueLabel>;onReactIssue:(emoji:string)=>Promise<void>;onComment:(body:string,bodyData?:Record<string,unknown>,parentId?:string)=>Promise<void>;onEditComment:(id:string,body:string,bodyData?:Record<string,unknown>)=>Promise<void>;onDeleteComment:(id:string)=>Promise<void>;onReactComment:(id:string,emoji:string)=>Promise<void>;onResolveComment?:(id:string,resolved:boolean)=>Promise<void>;onRelation:(type:IssueRelationType,relatedIssueId:string)=>Promise<void>;onDeleteRelation:(relationId:string)=>Promise<void>;onUpload:(file:File, options?:{embed?:boolean})=>Promise<Attachment|void>;onDeleteAttachment:(attachmentId:string)=>Promise<void>;/** The viewer can no longer open the issue (found when its description editor lost access). */onIssueAccessLost?:(issueId:string)=>void}){
   const{t}=useI18n(),phoneLayout=usePhoneLayout(),[title,setTitle]=useState(issue.title),[subOpen,setSubOpen]=useState(false),[subEditorKey,setSubEditorKey]=useState(0),[linkOpen,setLinkOpen]=useState(false),[subCollapsed,setSubCollapsed]=useState(false),[subSelected,setSubSelected]=useState(new Set<string>()),[subDisplay,setSubDisplay]=useState<SubIssueDisplay>({ordering:'priority',direction:'asc',completed:'all',nested:true,properties:new Set(['status','labels','assignee'])}),[relationType,setRelationType]=useState<IssueRelationType|null>(null),[uploadState,setUploadState]=useState<AttachmentUploadState>()
@@ -140,9 +144,11 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const availableLabels=labelsForResource(data.labels,'issue',data.labelGroups).filter(label=>!label.scope||label.scope==='Workspace'||labelScopes.has(label.scope))
   const linkedDocuments=data.documents.filter(document=>document.issueId===issue.id&&!document.archivedAt)
   const linkedResources=issue.attachments.filter(attachment=>attachment.contentType==='text/uri-list')
-  const inlineImageSrcs=descriptionImageSrcs(issue.description,issue.descriptionState,issue.documentContent?.contentData)
+  // A Markdown-only body written before directive URLs were encoded: its raw attachment URLs become file cards again.
+  const descriptionMarkdown=encodeLegacyAttachmentDirectives(issue.description,issue.attachments)
+  const inlineImageSrcs=descriptionImageSrcs(descriptionMarkdown,issue.descriptionState,issue.documentContent?.contentData)
   const commentMediaSrcs=comments.reduce((srcs,comment)=>{for(const src of descriptionImageSrcs(comment.body,undefined,comment.bodyData))srcs.add(src);return srcs},new Set<string>())
-  const fileAttachments=issue.attachments.filter(attachment=>attachment.contentType!=='text/uri-list'&&!inlineImageSrcs.has(attachment.url)&&!commentMediaSrcs.has(attachment.url))
+  const fileAttachments=issue.attachments.filter(attachment=>attachment.contentType!=='text/uri-list'&&!attachmentInBody(inlineImageSrcs,attachment.url)&&!attachmentInBody(commentMediaSrcs,attachment.url))
   const [localCustomerRequests,setLocalCustomerRequests]=useState<import('@/types/flow').CustomerRequest[]>([])
   const customerRequests=data.customerRequests.filter(request=>request.issueId===issue.id)
   const linkedReviews=data.reviews.filter(review=>review.issueIds.includes(issue.id))
@@ -172,7 +178,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         {parentIssue&&<IssueParentContext parent={parentIssue} issues={data.issues} workspaceKey={data.workspace.urlKey} onOpen={()=>openIssue(parentIssue)}/>}
         {embedded&&triageActions&&<div className="issue-triage-embedded-actions"><span>{t('Triage')}</span>{triageActions}</div>}
         {!triageView&&<TriageIntelligenceSuggestions issue={issue} data={data} inTriage={inTriage} onIssueUpdated={onIssueUpdated}/>}
-        <PhoneSheetRecordProvider value={{ key: issue.identifier, title }}><fieldset disabled={Boolean(issue.archivedAt)} className="issue-property-fields"><div className="issue-mobile-properties" aria-label={t('Issue properties')}>
+        {(!desktopLayout || embedded || triageView) && <PhoneSheetRecordProvider value={{ key: issue.identifier, title }}><fieldset disabled={Boolean(issue.archivedAt)} className="issue-property-fields"><div className="issue-mobile-properties" aria-label={t('Issue properties')}>
           <StatusPicker value={issue.state} states={availableStates} triage={inTriage} onChange={stateId=>onUpdate({stateId})}/>
           <div className="issue-mobile-priority" data-empty={issue.priority===0}><PriorityPicker value={issue.priority} emptyTriggerLabel={t('Priority')} onChange={priority=>onUpdate({priority})}/></div>
           <div className="issue-mobile-assignee" data-empty={!issue.assignee&&!issue.delegate}><AssigneePicker value={issue.assignee} delegate={issue.delegate} emptyTriggerLabel="Assignee" allowAgents={agentsAvailable(data)} users={data.users} teamId={issue.team.id} hoverContext={{ member: issue.assignee ? data.members.find(item=>item.user.id===issue.assignee?.id) : undefined, online: Boolean(issue.assignee && (issue.assignee.id===data.viewer.id || peoplePresence.some(item=>item.user.id===issue.assignee?.id))), workspaceName: issue.team.name }} onChange={assigneeId=>onUpdate({assigneeId})} onDelegate={delegateId=>onUpdate({delegateId})}/></div>
@@ -184,7 +190,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
           <IssueRecurrenceProperty issue={issue} timeZone={data.teamSettings?.[issue.team.id]?.timezone} onUpdate={onUpdate}/>
           <IssueMobileRelations issue={issue} data={data} activities={activities} onOpenIssue={openIssue}/>
           {releasesEnabled&&data.releases.some(release=>release.issueIds.includes(issue.id))&&<IssueReleasePicker data={data} issue={issue}/>}
-        </div></fieldset></PhoneSheetRecordProvider>
+        </div></fieldset></PhoneSheetRecordProvider>}
         {triageView&&<TriageIntelligenceSuggestions issue={issue} data={data} inTriage={inTriage} onIssueUpdated={onIssueUpdated}/>}
         <IssueDescriptionEditor
           editorRef={editor=>{descriptionEditor.current=editor}}
@@ -197,7 +203,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
             if (!attachment?.url) throw new Error('Upload failed')
             return attachment.url
           }}
-          value={issue.description}
+          value={descriptionMarkdown}
           state={issue.documentContent?.contentData?JSON.stringify(issue.documentContent.contentData):issue.descriptionState}
           onBlur={()=>void flush()}
           collaboration={{
@@ -224,7 +230,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         <IssueAttachments attachments={[]} upload={uploadState} onRetry={upload} onDelete={onDeleteAttachment}/>
         {descriptionSelection.panels}
         {embedded&&phoneLayout&&subIssues.length===0?<div className="flow-inbox-detail__divider" aria-hidden="true" />:null}
-        <div className="activity-heading"><span>Activity</span><div><Button className="issue-subscribe-toggle" variant="ghost" size="sm" disabled={Boolean(issue.archivedAt)} onClick={()=>toggleSubscriber(data.viewer.id)}>{issue.subscriberIds.includes(data.viewer.id)?'Unsubscribe':'Subscribe'}</Button><IssueSubscriberPicker issue={issue} users={data.users} onToggle={toggleSubscriber}/></div></div>
+        <div className="activity-heading"><span>Activity</span><div><Button className="issue-subscribe-toggle" variant="ghost" size="sm" disabled={Boolean(issue.archivedAt)||issue.assignee?.id===data.viewer.id} title={issue.assignee?.id===data.viewer.id?t('Assignees are subscribed automatically'):undefined} onClick={()=>toggleSubscriber(data.viewer.id)}>{issue.subscriberIds.includes(data.viewer.id)?'Unsubscribe':'Subscribe'}</Button><IssueSubscriberPicker issue={issue} users={data.users} onToggle={toggleSubscriber}/></div></div>
         {historyLoading&&<div className="sr-only" role="status">{t('Loading activity...')}</div>}
         {historyError&&!historyLoading&&<div className="issue-history-state" role="alert"><span>{t('Could not load activity')}: {historyError}</span>{onRetryHistory&&<Button variant="ghost" size="sm" onClick={onRetryHistory}><RotateCw size={14}/>{t('Retry')}</Button>}</div>}
         {/* An issue made from a comment's selection is a sub-issue of this one, in its team and project. */}

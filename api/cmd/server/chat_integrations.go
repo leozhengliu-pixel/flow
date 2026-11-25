@@ -66,9 +66,6 @@ func chatBaseURL(provider string) string {
 func chatCredentialID(record domain.ChatIntegrationRecord) string {
 	return store.ChatCredentialID(record.ConnectionID)
 }
-func (s *server) chatIntegrationForProvider(ctx context.Context, workspace, provider string) (domain.ChatIntegrationRecord, error) {
-	return s.store.ChatIntegration(ctx, workspace, provider)
-}
 func (s *server) chatCredentials(ctx context.Context, record domain.ChatIntegrationRecord) (chatCredentials, error) {
 	var credential chatCredentials
 	raw, err := s.store.ReadConnectorSecret(ctx, chatCredentialID(record), false)
@@ -294,6 +291,11 @@ func (s *server) chatSettingsMetadata(r *http.Request) (domain.Bootstrap, error)
 		data.ViewerRole = "admin"
 		return data, nil
 	}
+	if !s.store.BoundedMetadataEnabled() && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+		if data, ok := takePagedMetadata(r, workspaceKey(r), authUser(r).ID); ok {
+			return data, nil
+		}
+	}
 	return s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
 }
 func (s *server) chatSession(w http.ResponseWriter, r *http.Request, admin bool) (domain.Bootstrap, bool) {
@@ -303,7 +305,9 @@ func (s *server) chatSession(w http.ResponseWriter, r *http.Request, admin bool)
 	}
 	data, err := s.chatSettingsMetadata(r)
 	if err != nil {
-		writeChatError(w, 403, "Workspace access required")
+		if errors.Is(err, errNotFound) || !writeAuthCheckFailure(w, err) {
+			writeChatError(w, 403, "Workspace access required")
+		}
 		return data, false
 	}
 	if !s.authDisabled {
@@ -317,6 +321,9 @@ func (s *server) chatSession(w http.ResponseWriter, r *http.Request, admin bool)
 			return data, false
 		}
 		user, err := s.store.AuthenticateSession(r.Context(), cookie.Value)
+		if writeAuthCheckFailure(w, err) {
+			return data, false
+		}
 		if err != nil || user.ID != data.Viewer.ID {
 			writeChatError(w, 401, "Interactive sign-in required")
 			return data, false
@@ -329,7 +336,9 @@ func (s *server) chatSession(w http.ResponseWriter, r *http.Request, admin bool)
 		data.IdentityProviders = policy.IdentityProviders
 		auth, err := s.store.SessionAuthentication(r.Context(), cookie.Value)
 		if err != nil {
-			writeChatError(w, 503, "Could not verify session authentication")
+			if !writeAuthCheckFailure(w, err) {
+				writeChatError(w, 401, "Interactive sign-in required")
+			}
 			return data, false
 		}
 		if !allowedAuthenticationMethod(data, data.ViewerRole, auth) || (data.WorkspaceSettings.RequireTwoFactor && auth.MFAVerifiedAt == nil) {
@@ -360,7 +369,7 @@ func (s *server) chatSettings(w http.ResponseWriter, r *http.Request) {
 func (s *server) writeChatSettings(w http.ResponseWriter, r *http.Request, data domain.Bootstrap) {
 	w.Header().Set("Cache-Control", "no-store")
 	canManage := s.applicationPolicyAdmin(r, data)
-	manageable := s.chatManageableTeamIDs(r, data)
+	manageable, _ := s.chatManageableTeamIDs(r, data)
 	result := map[string]any{"connection": nil, "identity": nil, "bindings": []domain.ChatBinding{}, "bindableTeamIds": []string{}, "credentialsConfigured": false, "webhookURL": "", "canManage": canManage, "permissions": s.chatPermissions(r, data, domain.ChatIntegrationRecord{}, false, canManage, manageable)}
 	record, err := s.store.ChatIntegration(r.Context(), workspaceKey(r), r.PathValue("provider"))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -412,8 +421,19 @@ func (s *server) writeChatSettings(w http.ResponseWriter, r *http.Request, data 
 					visible = append(visible, binding)
 				}
 			}
-			result["bindings"] = visible
-			result["bindableTeamIds"] = s.chatBindableTeamIDs(record.WorkspaceKey, manageable)
+			views, err := s.chatBindingViews(r.Context(), record.WorkspaceKey, visible)
+			if err != nil {
+				writeChatError(w, 500, "Could not read group bindings")
+				return
+			}
+			result["bindings"] = views
+			ids, policy, err := s.chatBindableTeamIDsRead(r.Context(), record.WorkspaceKey, manageable)
+			if err != nil {
+				writeChatError(w, 500, "Could not read chat integration")
+				return
+			}
+			defer policy.Close()
+			result["bindableTeamIds"] = ids
 		}
 		if canManage {
 			result["webhookURL"] = s.chatAppOrigin() + "/api/integrations/" + record.Provider + "/" + record.ConnectionID + "/chat/webhook"
@@ -436,6 +456,15 @@ func (s *server) writeChatSettings(w http.ResponseWriter, r *http.Request, data 
 // copies it. A private team is bindable by those who administer it; the
 // binding then records that authorization.
 func (s *server) chatBindableTeamIDs(workspace string, manageable []string) []string {
+	if s.store.BoundedMetadataEnabled() {
+		ids, policy, err := s.chatBindableTeamIDsRead(context.Background(), workspace, manageable)
+		if err != nil {
+			log.Printf("chat bindable team policy workspace=%s: %v", workspace, err)
+			return []string{}
+		}
+		defer policy.Close()
+		return ids
+	}
 	ids := []string{}
 	data, ok := s.store.WorkspaceMetadataFields(workspace, "teams", "teamSettings", "workspaceSettings")
 	if !ok {
@@ -457,8 +486,45 @@ func (s *server) chatBindableTeamIDs(workspace string, manageable []string) []st
 	return ids
 }
 
+func (s *server) chatBindableTeamIDsRead(ctx context.Context, workspace string, manageable []string) ([]string, *store.ChatTeamPolicyRead, error) {
+	if !s.store.BoundedMetadataEnabled() {
+		return s.chatBindableTeamIDs(workspace, manageable), nil, nil
+	}
+	policy, found, err := s.store.BeginChatTeamPolicyRead(ctx, workspace)
+	if err != nil || !found {
+		return []string{}, nil, err
+	}
+	data := policy.Metadata()
+	ids := []string{}
+	for _, team := range data.Teams {
+		if err := ctx.Err(); err != nil {
+			policy.Close()
+			return nil, nil, err
+		}
+		if !slices.Contains(manageable, team.ID) {
+			continue
+		}
+		_, private := chatTeamState(data, team.ID)
+		probe := domain.ChatBinding{TeamID: team.ID}
+		if private {
+			probe.Authorization = &domain.ChatBindingAuthorization{PrivateTeam: true}
+		}
+		if chatBindingScopePermitted(data, probe) {
+			ids = append(ids, team.ID)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		policy.Close()
+		return nil, nil, err
+	}
+	return ids, policy, nil
+}
+
 func (s *server) syncChatConnection(ctx context.Context, record domain.ChatIntegrationRecord, userID, status, testStatus, lastError string) error {
-	return s.store.MutateWorkspace(store.WithMetadataFields(ctx, "integrationConnections"), record.WorkspaceKey, "integration.updated", record.ConnectionID, nil, func(data *domain.Bootstrap) error {
+	return s.store.MutateWorkspaceAppending(store.WithMetadataFields(ctx, "integrationConnections"), record.WorkspaceKey, "integration.updated", record.ConnectionID, nil, store.MetadataAppendScope{
+		MetadataRecordScope: store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: record.ConnectionID}}},
+		AppendKinds:         []string{"integrationConnections"},
+	}, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		index := slices.IndexFunc(data.IntegrationConnections, func(c domain.IntegrationConnection) bool { return c.ID == record.ConnectionID })
 		if index < 0 {
@@ -527,7 +593,9 @@ func (s *server) recordChatDeliveryResultLocked(ctx context.Context, record doma
 		if current.WorkspaceKey != record.WorkspaceKey || !current.Connected {
 			return nil
 		}
-		return s.store.MutateWorkspace(store.WithMetadataFields(ctx, "integrationConnections"), record.WorkspaceKey, "integration.updated", record.ConnectionID, nil, func(data *domain.Bootstrap) error {
+		return s.store.MutateWorkspaceScoped(store.WithMetadataFields(ctx, "integrationConnections"), record.WorkspaceKey, "integration.updated", record.ConnectionID, nil, store.MetadataRecordScope{
+			Write: []store.RecordKey{{Kind: "integrationConnections", ID: record.ConnectionID}},
+		}, func(data *domain.Bootstrap) error {
 			for index := range data.IntegrationConnections {
 				item := &data.IntegrationConnections[index]
 				if item.ID != record.ConnectionID {

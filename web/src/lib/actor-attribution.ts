@@ -1,5 +1,6 @@
 import type { ActorBot } from "@/types/flow";
 import { asIs } from '@/lib/as-is'
+import { endsSession, registerSessionCacheClearer } from '@/lib/session-cache-registry'
 
 type ActorUser = { id?: string; displayName?: string; name?: string; avatarUrl?: string; app?: boolean } | null | undefined;
 
@@ -25,6 +26,10 @@ export function setLiveApplicationIdentities(users: readonly ApplicationUser[] |
   liveApplications = next;
   liveApplicationUsers = byUser;
 }
+
+registerSessionCacheClearer((_viewerId, workspaceKey) => {
+  if (endsSession(workspaceKey)) setLiveApplicationIdentities(null);
+});
 
 /** The record's user, with an application user's current name and logo. */
 export function liveActorUser<T extends ActorUser>(user: T): T {

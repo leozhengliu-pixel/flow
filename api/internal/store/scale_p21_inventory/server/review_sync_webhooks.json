@@ -1,0 +1,33 @@
+{
+  "source": "server/review_sync_webhooks.go",
+  "unmigrated": 2,
+  "consumers": {
+    "afterCodeReviewWebhook": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.codeWebhook",
+        "server/server.applyGitHubAppWorkspaceEvent"
+      ]
+    },
+    "applyGitHubReviewActivity": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.afterCodeReviewWebhook"
+      ]
+    }
+  }
+}

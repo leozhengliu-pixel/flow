@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_account_collection_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginAccountCollectionRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Retains the exact current installed logical generation and selects only the exact user-settings map key plus optional matching passkeys in native order. Complete selected values are admitted through an owned handle; settings-only callers never inspect passkey bodies. Trusted lookup does not add authorization. SW122 proves warm/reloaded native values, missing/default selection, cancellation/release, 10x excluded bodies, persistent SQLite twice and race; SW127 proves the containing settings adapter ownership.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared selected account settings reader.",
+      "callers": ["server/scale_p21_account_collection_settings.go:requestAccountSettings"]
+    }
+  }
+}

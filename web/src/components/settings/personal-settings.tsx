@@ -1,5 +1,6 @@
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useServerDraft } from "@/hooks/use-server-draft";
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { NotificationChevron, NotificationSlackGlyph } from './notification-glyphs';
@@ -36,6 +37,7 @@ import {
 } from "lucide-react";
 import * as Popover from "@radix-ui/react-popover";
 import { toast } from "@/lib/toast";
+import { registerSessionCacheClearer } from "@/lib/session-cache-registry";
 import { mcpConnectorsEnabled } from "@/lib/mcp-connectors";
 import { NotificationChannelSettings } from './notification-channel-settings';
 import { PersonalConnectorSettings } from './personal-connectors';
@@ -54,6 +56,7 @@ import {
   deleteAccount,
   deletePasskey,
   fetchAccountIdentities,
+  fetchAuthProviders,
   fetchAccountSessions,
   fetchCommitSigningKey,
   fetchPasskeys,
@@ -150,6 +153,8 @@ type PersonalTranslate = (source: string) => string;
 // even when a browser blocks sessionStorage. It is deleted as soon as the
 // detail page consumes it and is never sent back to the API.
 const pendingAPIKeySecrets = new Map<string, string>();
+// A secret nobody opened (the detail page never mounted) must not outlive the viewer: the next one in this tab could read it.
+registerSessionCacheClearer(() => pendingAPIKeySecrets.clear());
 
 // Personal settings are kept local until the shared catalog owns every key.
 // This avoids falling back to partially translated legacy DOM mutations.
@@ -618,6 +623,8 @@ export function PersonalSettings(props: Props) {
     (source) => (locale === "zh-CN" ? (PERSONAL_ZH[source] ?? translateToChinese(source)) : source),
     [locale],
   );
+  // Leaving the settings view drops a hand-off secret that was never shown.
+  useEffect(() => () => pendingAPIKeySecrets.clear(), []);
   let content: ReactNode;
   if (props.page === "preferences") content = <Preferences {...props} p={p} />;
   else if (props.page === "profile") content = <Profile {...props} p={p} />;
@@ -1054,11 +1061,11 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
   const desktop = useDesktopSettings();
   const current = data.userSettings[data.viewer.id];
   const viewerUsername = data.viewer.username || current?.username || data.viewer.name;
-  const [displayName, setDisplayName] = useState(data.viewer.displayName);
-  const [username, setUsername] = useState(
-    viewerUsername,
-  );
-  const [jobTitle, setJobTitle] = useState(current?.jobTitle || "");
+  // The profile follows the server's copy (a page painted from a cached workspace snapshot shows the confirmed one)
+  // until the viewer edits a field.
+  const [displayName, setDisplayName] = useServerDraft(data.viewer.displayName);
+  const [username, setUsername] = useServerDraft(viewerUsername);
+  const [jobTitle, setJobTitle] = useServerDraft(current?.jobTitle || "");
   const [busy, setBusy] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const dirty =
@@ -3796,6 +3803,19 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
   const [identities, setIdentities] = useState<
     Awaited<ReturnType<typeof fetchAccountIdentities>>
   >([]);
+  const [linkableProviders, setLinkableProviders] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  useEffect(() => {
+    // SAML signs in only; OIDC providers can be linked from here.
+    void fetchAuthProviders()
+      .then((config) =>
+        setLinkableProviders(
+          config.providers.filter((item) => item.id !== "saml"),
+        ),
+      )
+      .catch(() => setLinkableProviders([]));
+  }, []);
   useEffect(() => {
     void fetchAccountIdentities()
       .then(setIdentities)
@@ -3870,7 +3890,7 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
           </PersonalRow>
         </NavLink>
       </div>
-      {identities.length > 0 && (
+      {(identities.length > 0 || linkableProviders.length > 0) && (
         <PersonalSection
           title={p("Sign-in identities")}
           description={p(
@@ -3911,6 +3931,29 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
               </Action>
             </PersonalRow>
           ))}
+          {linkableProviders
+            .filter(
+              (provider) =>
+                !identities.some((item) => item.provider === provider.id),
+            )
+            .map((provider) => (
+              <PersonalRow
+                key={`link-${provider.id}`}
+                icon={<ShieldCheck />}
+                title={<span data-i18n-ignore>{provider.name}</span>}
+                description={p("Link this provider to sign in to your account with it")}
+              >
+                <Action
+                  onClick={() => {
+                    window.location.assign(
+                      `/api/account/identities/link/${encodeURIComponent(provider.id)}/start?workspace=${encodeURIComponent(data.workspace.urlKey)}`,
+                    );
+                  }}
+                >
+                  {p("Link")}
+                </Action>
+              </PersonalRow>
+            ))}
         </PersonalSection>
       )}
     </>

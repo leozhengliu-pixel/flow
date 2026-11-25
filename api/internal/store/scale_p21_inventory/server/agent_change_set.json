@@ -1,0 +1,34 @@
+{
+  "source": "server/agent_change_set.go",
+  "unmigrated": 2,
+  "consumers": {
+    "agentEntitySnapshot": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.beginAgentChange",
+        "server/server.finishAgentChange",
+        "server/server.applyAgentFieldChange"
+      ]
+    },
+    "applyAgentMessageChangesLocked": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.applyAgentMessageChanges"
+      ]
+    }
+  }
+}

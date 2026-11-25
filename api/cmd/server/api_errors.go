@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"flow/api/internal/publicapi"
 )
@@ -28,9 +29,6 @@ const (
 	apiErrorInternal             = "INTERNAL_ERROR"
 	apiErrorUnavailable          = "UNAVAILABLE"
 )
-
-// apiErrorTypes lists every documented category (docs/api.md, OpenAPI).
-var apiErrorTypes = []string{apiErrorInvalidInput, apiErrorAuthentication, apiErrorForbidden, apiErrorFeatureNotAccessible, apiErrorNotFound, apiErrorConflict, apiErrorRateLimited, apiErrorInternal, apiErrorUnavailable}
 
 // apiErrorBody is the documented error envelope. Every value is a string so
 // clients that decode errors into string maps keep working.
@@ -66,6 +64,9 @@ func apiErrorTypeFor(status int, message string) string {
 	return apiErrorType(status)
 }
 
+// workspaceLockBusyRetryAfter is the Retry-After of a busy distributed lock.
+const workspaceLockBusyRetryAfter = time.Second
+
 // internalErrorMessage is the only message a 500 response carries. The error
 // behind it (often database or driver text naming tables, columns and SQL
 // states) is logged with the request id instead.
@@ -79,12 +80,14 @@ func requestIDFrom(ctx context.Context) string {
 
 // writeErrorFor writes err's message with status: the message of a typed
 // request error (validation, conflict, permission) is written for the person
-// who sent the request. A database, driver or object-storage error never is
-// (isInternalError): it becomes a logged 500 with the generic message and the
-// request id.
+// who sent the request. Transient store errors get a retryable 503. Other
+// internal errors get a generic 500 and the request id.
 func writeErrorFor(w http.ResponseWriter, r *http.Request, status int, err error) {
+	if writeStoreBusy(w, err) {
+		return
+	}
 	if isInternalError(err) {
-		writeInternalError(w, r, err)
+		writeUnexpectedError(w, r, err)
 		return
 	}
 	writeError(w, status, err.Error())
@@ -101,8 +104,15 @@ func publicErrorMessage(ctx context.Context, err error) string {
 	return internalErrorMessage
 }
 
-// writeInternalError logs err with the request id and writes the generic 500.
+// writeInternalError serves transient store failures and logs unexpected errors.
 func writeInternalError(w http.ResponseWriter, r *http.Request, err error) {
+	if writeStoreBusy(w, err) {
+		return
+	}
+	writeUnexpectedError(w, r, err)
+}
+
+func writeUnexpectedError(w http.ResponseWriter, r *http.Request, err error) {
 	requestID := requestIDFrom(r.Context())
 	slog.ErrorContext(r.Context(), "internal error response", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "error", err.Error())
 	writeJSON(w, http.StatusInternalServerError, apiErrorBody{Error: internalErrorMessage, Code: apiErrorInternal, Type: apiErrorInternal, RequestID: requestID})
@@ -137,7 +147,7 @@ func apiErrorEnvelope(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		writer := &apiErrorWriter{ResponseWriter: w}
+		writer := &apiErrorWriter{ResponseWriter: w, request: r}
 		defer writer.finish(r)
 		next.ServeHTTP(writer, r)
 	})
@@ -147,6 +157,7 @@ const apiErrorBufferLimit = 256 << 10
 
 type apiErrorWriter struct {
 	http.ResponseWriter
+	request   *http.Request
 	status    int
 	buffering bool
 	overflow  bool
@@ -154,6 +165,19 @@ type apiErrorWriter struct {
 }
 
 func (w *apiErrorWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func apiErrorRequest(w http.ResponseWriter) *http.Request {
+	for {
+		if envelope, ok := w.(*apiErrorWriter); ok {
+			return envelope.request
+		}
+		wrapped, ok := w.(interface{ Unwrap() http.ResponseWriter })
+		if !ok {
+			return nil
+		}
+		w = wrapped.Unwrap()
+	}
+}
 
 func (w *apiErrorWriter) WriteHeader(status int) {
 	if status >= 100 && status < 200 {

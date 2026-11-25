@@ -13,13 +13,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"flow/api/internal/objectstore"
 
 	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
 
@@ -66,9 +66,27 @@ type sqlDatabase struct {
 	// searchMaxChars caps the text indexed per issue and per document; 0
 	// indexes everything.
 	searchMaxChars int
+	// snapshots, on SQLite with bounded metadata on, is a pool of separate
+	// connections for read-only transactions (scale_p21_sqlite_snapshot_pool.go);
+	// nil uses the main pool.
+	snapshots *sql.DB
 	// commitHooks lets tests pause a transaction around its commit
 	// (change_cursor_test.go); nil in production.
-	commitHooks atomic.Pointer[commitHooks]
+	commitHooks         atomic.Pointer[commitHooks]
+	journalReady        atomic.Bool
+	journalSQLFlush     *sql.Stmt
+	journalWrites       map[string]*sql.Stmt
+	journalCommitHook   atomic.Pointer[recordJournalCommitHook]
+	journalRollbackHook atomic.Pointer[recordJournalRollbackHook]
+	journalStop         context.CancelFunc
+	journalWorkers      sync.WaitGroup
+	// boundedCatalog: a bounded store serves this database, so the journal
+	// flush opens the catalog checkpoint of a collection a write starts
+	// (bounded_catalog_collections.go).
+	boundedCatalog atomic.Bool
+	// utf8Repair: PostgreSQL's flow_utf8 is the repair decoder, so a write
+	// of a raw invalid UTF-8 body needs no switch (postgres_utf8_decoder.go).
+	utf8Repair atomic.Bool
 }
 
 // commitHooks run inside sqlTx.Commit: beforeCommit once the transaction's
@@ -108,9 +126,27 @@ type sqlTx struct {
 	// numbering: this transaction assigns change-log cursors
 	// (sequenceWorkspaceBatch); commit hooks skip it.
 	numbering bool
+	// utf8Repair: this transaction switched PostgreSQL to the repair
+	// decoder (postgres_utf8_decoder.go).
+	utf8Repair bool
 	// audit: the mutation whose staged audit entries this transaction
 	// inserts when it commits (audit_events.go).
-	audit *auditCollector
+	audit                *auditCollector
+	journalToken         string
+	journalRepair        bool
+	journalBudget        *recordJournalBudgetState
+	journalFinal         bool
+	journalCounts        map[string]bool
+	journalOrder         recordJournalOrder
+	metadataCommitStamps map[string]*metadataCommitStamp
+	// Staged input must be consumed and deleted before its write commits.
+	metadataSQLStages      int
+	metadataSQLStageOwners map[string]*metadataSQLWriteStage
+	// metadataWrites counts statements that may change rows (writes,
+	// savepoint rollbacks, the transaction's end). Scoped metadata read
+	// windows (scale_p21_collection_snapshot.go) are valid only while it
+	// is unchanged.
+	metadataWrites uint64
 }
 
 // notificationSignal names a notification that is news to its recipient.
@@ -127,26 +163,47 @@ var ErrTransactionWriteBudget = errors.New("transaction write budget exceeded")
 // counters, cache revisions) come last, so a writer holds them only while it
 // commits.
 func (tx *sqlTx) Commit() error {
+	tx.metadataWrites++
 	if tx.writeErr != nil {
-		_ = tx.Tx.Rollback()
+		_ = tx.Rollback()
 		return tx.writeErr
 	}
+	lateJournal := tx.journalToken != "" && tx.dialect == "sqlite" && !tx.journalRepair && tx.database.journalCommitHook.Load() == nil && tx.hooks() == nil
+	if !lateJournal {
+		if err := tx.flushRecordJournal(); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
 	if err := tx.queueEventSequencing(); err != nil {
-		_ = tx.Tx.Rollback()
+		_ = tx.Rollback()
 		return err
 	}
 	hooks := tx.hooks()
 	if hooks != nil && hooks.beforeCommit != nil {
 		hooks.beforeCommit(tx)
 	}
+	if tx.writeErr != nil {
+		_ = tx.Rollback()
+		return tx.writeErr
+	}
 	// The audit chain head is a row every audited write of the workspace
 	// shares: it is locked late, just before the counters every writer shares.
-	if err := tx.flushAudit(); err != nil {
-		_ = tx.Tx.Rollback()
-		return err
+	deferredErr := tx.flushAudit()
+	if deferredErr == nil {
+		if lateJournal && tx.issueCounts != nil {
+			tx.journalCounts = tx.issueCounts.revisions
+		}
+		deferredErr = tx.flushIssueCounts()
 	}
-	if err := tx.flushIssueCounts(); err != nil {
-		_ = tx.Tx.Rollback()
+	if deferredErr != nil {
+		if err := tx.retryLegacyRecordJournalBudget(deferredErr); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	if err := tx.finishRecordJournalSavepoint(); err != nil {
+		_ = tx.Rollback()
 		return err
 	}
 	// A write following its copy's metadata revision reads it here, after
@@ -163,12 +220,44 @@ func (tx *sqlTx) Commit() error {
 			revisionErr = errors.New("workspace replaced")
 		}
 	}
+	for workspace, capture := range tx.metadataCommitStamps {
+		if capture.base != nil && tx.cacheRevisions[cacheRevisionKey{workspace, cacheKindMetadata}] {
+			capture.ownAdvance = 1
+		}
+	}
+	if lateJournal {
+		// SQLite has one writer. After audit/count work and the copy's stamp
+		// read, bounded maintenance can also flush queued cache revisions.
+		tx.journalFinal = true
+		if err := tx.flushRecordJournal(); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		if err := tx.finishRecordJournalSavepoint(); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
 	if err := tx.flushCacheRevisions(); err != nil {
-		_ = tx.Tx.Rollback()
+		_ = tx.Rollback()
 		if write != nil {
 			write.fail()
 		}
 		return err
+	}
+	if err := tx.readMetadataCommitStamps(); err != nil {
+		_ = tx.Rollback()
+		if write != nil {
+			write.fail()
+		}
+		return err
+	}
+	if tx.metadataSQLStages != 0 || len(tx.metadataSQLStageOwners) != 0 {
+		_ = tx.Rollback()
+		if write != nil {
+			write.fail()
+		}
+		return ErrMetadataSQLStageOpen
 	}
 	if err := tx.Tx.Commit(); err != nil {
 		if write != nil {
@@ -179,6 +268,9 @@ func (tx *sqlTx) Commit() error {
 	}
 	if write != nil {
 		write.observe(revision, revisionErr)
+	}
+	if tx.utf8Repair && tx.database != nil {
+		tx.database.utf8Repair.Store(true)
 	}
 	if tx.audit != nil {
 		tx.audit.pending = nil
@@ -196,6 +288,9 @@ func (tx *sqlTx) Commit() error {
 		}
 	}
 	tx.signals = nil
+	for _, capture := range tx.metadataCommitStamps {
+		capture.ready = true
+	}
 	return nil
 }
 
@@ -236,6 +331,12 @@ func (tx *sqlTx) noteNotificationRow(row contentRecordRow, previous []byte, exis
 }
 
 func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
+	bounded := boundedMetadataRequested()
+	if bounded {
+		if err := validateBoundedMetadataCoverage(); err != nil {
+			return nil, err
+		}
+	}
 	driver := strings.ToLower(strings.TrimSpace(config.Driver))
 	if driver == "" {
 		driver = "sqlite"
@@ -294,7 +395,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		}
 		defer startup.release()
 	}
-	db, err := sql.Open(sqlDriver, dsn)
+	db, err := openDatabasePool(sqlDriver, dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -350,6 +451,17 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		maxTransactionBytes = 32 << 20
 	}
 	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes, content: newContentOffload(config), searchMaxChars: max(config.SearchIndexMaxChars, 0)}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
+	if bounded {
+		applyMetadataMemoryPlan()
+		s.metadataResidency = newMetadataResidency()
+		s.db.boundedCatalog.Store(true)
+		if driver == "sqlite" {
+			if err := s.db.openSQLiteSnapshotPool(sqlDriver, dsn, sqlitePath, maxOpen); err != nil {
+				db.Close()
+				return nil, fmt.Errorf("configure sqlite: %w", err)
+			}
+		}
+	}
 	s.changeLogMinRows.Store(DefaultChangeLogMinRows)
 	notify := s.publishNotificationSignals
 	s.db.notified.Store(&notify)
@@ -369,6 +481,8 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureIssueStats", s.ensureIssueStats},
 		{"ensureSCIMSchema", s.ensureSCIMSchema},
 		{"ensureWorkspaceMetadataRecords", s.ensureWorkspaceMetadataRecords},
+		{"ensureMetadataCatalog", s.ensureMetadataCatalog},
+		{"ensureRecordJournal", s.ensureRecordJournal},
 		{"ensureApplicationAgents", s.ensureApplicationAgents},
 		{"ensureAuditStreamSecrets", s.ensureAuditStreamSecrets},
 		{"ensureAuditEvents", s.ensureAuditEvents},
@@ -430,6 +544,8 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	if total := time.Since(opened); total >= time.Second {
 		slog.Info("workspace store opened", "driver", driver, "total_ms", total.Milliseconds(), "stages", strings.Join(timings, " "))
 	}
+	s.startMetadataCatalog()
+	s.startRecordJournalMaintenance()
 	return s, nil
 }
 
@@ -523,6 +639,22 @@ func (d *sqlDatabase) ExecContext(ctx context.Context, query string, args ...any
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return nil, errors.New("cannot write inside a workspace read snapshot")
 	}
+	if d.journalReady.Load() && recordJournalMode() != "off" && journalWriteStatement(query) {
+		tx, err := d.BeginTx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		result, err := tx.ExecContext(ctx, query, args...)
+		if err != nil {
+			return result, err
+		}
+		return result, tx.Commit()
+	}
+	if _, err := d.admitRawUTF8(ctx, d.DB, false, args); err != nil {
+		return nil, err
+	}
+	observeSQLStatement(ctx, query)
 	return d.DB.ExecContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
@@ -530,6 +662,7 @@ func (d *sqlDatabase) QueryContext(ctx context.Context, query string, args ...an
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return snapshot.reader.QueryContext(ctx, query, args...)
 	}
+	observeSQLStatement(ctx, query)
 	return d.DB.QueryContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
@@ -537,6 +670,7 @@ func (d *sqlDatabase) QueryRowContext(ctx context.Context, query string, args ..
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return snapshot.reader.QueryRowContext(ctx, query, args...)
 	}
+	observeSQLStatement(ctx, query)
 	return d.DB.QueryRowContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
@@ -551,7 +685,11 @@ func (d *sqlDatabase) BeginTx(ctx context.Context, options *sql.TxOptions) (*sql
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return nil, errors.New("cannot start a transaction inside a workspace read snapshot")
 	}
-	tx, err := d.DB.BeginTx(ctx, options)
+	pool := d.DB
+	if d.snapshots != nil && options != nil && options.ReadOnly {
+		pool = d.snapshots
+	}
+	tx, err := pool.BeginTx(ctx, options)
 	if err != nil {
 		return nil, err
 	}
@@ -559,8 +697,25 @@ func (d *sqlDatabase) BeginTx(ctx context.Context, options *sql.TxOptions) (*sql
 }
 
 func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	tx.metadataWrites++
 	if tx.writeErr != nil {
 		return nil, tx.writeErr
+	}
+	stageStatement, err := metadataSQLStageStatementInContext(ctx, tx, query, args)
+	if err != nil {
+		return nil, err
+	}
+	if stageStatement != nil {
+		// Nested journal writes retain ordinary accounting. Only this exact
+		// checked staging statement consumes its previously admitted bill.
+		ctx = context.WithValue(ctx, metadataSQLStageStatementKey{}, nil)
+	}
+	tx.journalOrder.valid = false
+	if tx.database != nil && tx.database.journalReady.Load() && !tx.numbering && tx.journalToken == "" && journalWriteStatement(query) {
+		if err := tx.beginRecordJournal(ctx); err != nil {
+			tx.writeErr = err
+			return nil, err
+		}
 	}
 	bytes := len(query)
 	for _, arg := range args {
@@ -575,16 +730,43 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 			bytes += 16
 		}
 	}
-	if tx.maxTransactionBytes > 0 && bytes > tx.maxTransactionBytes-tx.writtenBytes {
-		tx.writeErr = fmt.Errorf("%w: maximum %d bytes; split the import into smaller batches", ErrTransactionWriteBudget, tx.maxTransactionBytes)
-		return nil, tx.writeErr
-	}
 	first := tx.writtenBytes == 0
-	tx.writtenBytes += bytes
-	if workspace, ok := metadataWriteWorkspace(query, args); ok {
-		tx.queueCacheRevision(workspace, cacheKindMetadata)
+	if stageStatement != nil {
+		stageStatement.recordSQLInput(tx, query, args)
+		bytes = 0
+		first = stageStatement.operation == metadataSQLStageInsert && stageStatement.stage.firstWrite
 	}
-	result, err := tx.Tx.ExecContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
+	if err := tx.admitStatementWriteBytes(bytes); err != nil {
+		return nil, err
+	}
+	if tx.journalToken == "" {
+		if workspace, ok := metadataWriteWorkspace(query, args); ok {
+			tx.queueCacheRevision(workspace, cacheKindMetadata)
+		}
+	}
+	if !tx.utf8Repair {
+		switched, err := tx.database.admitRawUTF8(ctx, tx.Tx, true, args)
+		if err != nil {
+			return nil, err
+		}
+		tx.utf8Repair = switched
+	}
+	observeSQLStatement(ctx, query)
+	var result sql.Result
+	if tx.journalToken != "" && tx.database.journalWrites[query] != nil {
+		statement := tx.Tx.StmtContext(ctx, tx.database.journalWrites[query])
+		result, err = statement.ExecContext(ctx, textArgs(tx.dialect, args)...)
+		_ = statement.Close()
+	} else {
+		result, err = tx.Tx.ExecContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
+	}
+	if err == nil && tx.journalToken != "" {
+		if workspace, ok := metadataWriteWorkspace(query, args); ok {
+			if affected, countErr := result.RowsAffected(); countErr != nil || affected > 0 {
+				tx.queueCacheRevision(workspace, cacheKindMetadata)
+			}
+		}
+	}
 	if first && tx.dialect == "sqlite" && sqliteBusy(err) {
 		// The transaction read first, and another connection to the file
 		// wrote meanwhile: SQLite cannot upgrade it to a write (it fails at
@@ -595,11 +777,30 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 	return result, err
 }
 
+// countMetadataWrite counts a query that is not a plain SELECT (for
+// example INSERT ... RETURNING) as a possible write.
+func (tx *sqlTx) countMetadataWrite(query string) {
+	query = strings.TrimSpace(query)
+	if len(query) < 7 || !strings.EqualFold(query[:7], "SELECT ") {
+		tx.metadataWrites++
+	}
+}
+
 func (tx *sqlTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	if tx.journalOrder.valid {
+		tx.journalOrder.valid = false
+	}
+	tx.countMetadataWrite(query)
+	observeSQLStatement(ctx, query)
 	return tx.Tx.QueryContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
 }
 
 func (tx *sqlTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	if tx.journalOrder.valid {
+		tx.journalOrder.valid = false
+	}
+	tx.countMetadataWrite(query)
+	observeSQLStatement(ctx, query)
 	return tx.Tx.QueryRowContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
 }
 

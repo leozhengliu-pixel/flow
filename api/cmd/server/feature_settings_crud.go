@@ -200,7 +200,11 @@ func (s *server) createReleasePipeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The reference app canCreateReleasePipeline: any non-guest workspace member.
-	if role, _ := s.requestWorkspaceRole(r); role != "member" && !workspaceAdminRole(role) {
+	role, _, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
+	if role != "member" && !workspaceAdminRole(role) {
 		writeError(w, http.StatusForbidden, "Guests cannot create release pipelines")
 		return
 	}
@@ -236,7 +240,10 @@ func (s *server) updateReleasePipeline(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.ReleasePipeline
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == id })
 		if index < 0 {

@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_sw23_agent_web_access.go",
+  "unmigrated": 0,
+  "consumers": {
+    "migrateWorkspaceAgentWebAccessBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Native migration selects four property rows and writes only changed web-access booleans through canonical row hooks under the root/write lock; it preserves root/shapes, map ordinals, UpdatedAt and no-event behavior. A complete resident candidate is checked before commit under the 192 MiB process policy cap with the existing row budget, then installed and startup/hot caches invalidated. TestScaleP21SW23AgentWebAccess differential, rollback and fresh-policy/capacity tests pass null/false/true/historical choices, over 50 settings and large ignored guidance, idempotence, precommit failure, stale peer state, cancellation/capacity recovery and unchanged canonical effects.",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    }
+  }
+}

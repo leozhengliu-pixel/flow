@@ -5,13 +5,15 @@ import { Flag, MessageCircle, MoreHorizontal, Paperclip, SmilePlus, Trash2, X } 
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from '@/lib/toast'
 import type { Editor } from '@tiptap/react'
-import { createDraft, deleteDraft, listProjectHistory, updateDraft, uploadProjectCommentAttachment } from '@/lib/api'
+import { listProjectHistory, uploadProjectCommentAttachment } from '@/lib/api'
+import { composerDraftAutosave, serverDraftId, wasDiscardedDraft } from '@/lib/draft-autosave'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { HealthGlyph } from './health-glyph'
 import { healthColor } from './health-color'
 import { AgentChatPanel } from '@/lib/route-pages'
 import { AgentWriteIcon } from '@/components/agent/agent-icons'
 import { useI18n } from '@/i18n/i18n'
-import { clearComposerDraft, readComposerDraft, writeComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
+import { clearComposerDraft, readComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
 import { Avatar } from '@/components/issue/issue-row'
 import { AttributedAction, ViaApp } from '@/components/ui/via-app'
 import { activityActor, attributedActorAvatar, attributedActorName, type ActivityActor } from '@/lib/actor-attribution'
@@ -46,8 +48,8 @@ import { FlowGlyph } from '@/components/ui/menu-glyphs'
 
 export function ProjectActivity({ activities, drafts = [], issueData, project, projectUpdates, viewer, viewerRole, users, threadSubscriptions, onCommentProject, onUpdateProjectComment, onDeleteProjectComment, onReactProjectComment, onResolveProjectComment, onProjectCommentThreadSubscription, onCreateIssue, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate, onUploadProjectUpdateAttachment, onDeleteProjectUpdateAttachment }: ProjectDetailProps) {
   const parentDrafts = useMemo(() => ({
-    comment: drafts.find(item => item.type === 'comment' && item.resourceId === project.id && (item.metadata?.resourceType ?? 'issue') === 'project') ?? readComposerDraft('comment', project.id),
-    project_update: drafts.find(item => item.type === 'project_update' && item.resourceId === project.id) ?? readComposerDraft('project_update', project.id),
+    comment: drafts.find(item => item.type === 'comment' && item.resourceId === project.id && (item.metadata?.resourceType ?? 'issue') === 'project' && !wasDiscardedDraft(serverDraftId(item))) ?? readComposerDraft('comment', project.id),
+    project_update: drafts.find(item => item.type === 'project_update' && item.resourceId === project.id && !wasDiscardedDraft(serverDraftId(item))) ?? readComposerDraft('project_update', project.id),
   }), [drafts, project.id])
   const initialDraft = parentDrafts.comment ?? parentDrafts.project_update
   const [composerMode, setComposerMode] = useState<'comment'|'update'>(() => initialDraft?.type === 'project_update' ? 'update' : 'comment')
@@ -60,7 +62,11 @@ export function ProjectActivity({ activities, drafts = [], issueData, project, p
   const fileRef = useRef<HTMLInputElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<ProjectUpdate>()
   const [editing, setEditing] = useState<ProjectUpdate>()
-  const draftIds = useRef<Partial<Record<ComposerDraftType, string>>>({ comment: parentDrafts.comment?.id ?? '', project_update: parentDrafts.project_update?.id ?? '' })
+  // One autosave per draft (the comment and the update), shared with any other mount of this project's composer.
+  const draftAutosaves = useMemo(() => ({
+    comment: composerDraftAutosave('comment', 'project', project.id, parentDrafts.comment),
+    project_update: composerDraftAutosave('project_update', 'project', project.id, parentDrafts.project_update),
+  }), [parentDrafts, project.id])
   // Replies live in the same project comment list (parentId) and render
   // inside their root comment's card thread, never as feed entries. Inline
   // threads on the description stay beside it (the reference app leaves them out of Activity).
@@ -156,20 +162,15 @@ export function ProjectActivity({ activities, drafts = [], issueData, project, p
   ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)), [feed, phone, propertyEvents])
 
   useEffect(() => {
-    if (!body.trim() || saving) return
-    const timer = window.setTimeout(() => {
-      const input = { type: draftType, resourceId: project.id, title: project.name, body: body.trim(), metadata: { resourceType: 'project', health, bodyData: composerMode === 'comment' ? commentData : undefined } }
-      const save = async () => {
-        if (!draftIds.current[draftType]) return createDraft(input)
-        try { return await updateDraft(draftIds.current[draftType]!, input) } catch { draftIds.current[draftType] = ''; return createDraft(input) }
-      }
-      void save().then(saved => {
-        draftIds.current[draftType] = saved.id
-        writeComposerDraft({ id: saved.id, type: draftType, resourceId: project.id, title: project.name, body: body.trim(), metadata: input.metadata, updatedAt: saved.updatedAt })
-      }).catch(() => undefined)
-    }, 350)
-    return () => window.clearTimeout(timer)
-  }, [body, commentData, composerMode, draftType, health, project.id, project.name, saving])
+    if (saving) return
+    const autosave = draftAutosaves[draftType]
+    if (!body.trim()) { autosave.cancelPending(); return }
+    // The autosave debounces, sends one request at a time and skips content the server already has.
+    autosave.schedule({ type: draftType, resourceId: project.id, title: project.name, body: body.trim(), metadata: { resourceType: 'project', health, bodyData: composerMode === 'comment' ? commentData : undefined } })
+  }, [body, commentData, composerMode, draftAutosaves, draftType, health, project.id, project.name, saving])
+  // Leaving the project saves what is still waiting for the autosave delay.
+  const draftAutosavesRef = useLatestRef(draftAutosaves)
+  useEffect(() => () => { draftAutosavesRef.current.comment.flush(); draftAutosavesRef.current.project_update.flush() }, [draftAutosavesRef, project.id])
 
   const switchComposerMode = (next: 'comment' | 'update') => {
     if (next === composerMode) return
@@ -185,30 +186,31 @@ export function ProjectActivity({ activities, drafts = [], issueData, project, p
   const submit = async () => {
     if (!body.trim() || saving || pendingUploads > 0) return
     setSaving(true)
+    const savedType = draftType
+    // The draft leaves with the post: deleted after any save it has in flight, or handed back if the post fails.
+    const sentDraft = draftAutosaves[savedType].detach()
     try {
       if (composerMode === 'comment') await onCommentProject(project.id, body.trim(), commentData)
       else {
         const update = await onCreateUpdate(project.id, { body: body.trim(), health })
         for (const file of files) await onUploadProjectUpdateAttachment(project.id, update.id, file)
       }
-      const savedType = draftType
-      const savedId = draftIds.current[savedType]
-      if (savedId && !savedId.startsWith('local:')) await deleteDraft(savedId).catch(() => undefined)
+      await sentDraft.discard()
       clearComposerDraft(savedType, project.id)
-      draftIds.current[savedType] = ''
       setBody('')
       setCommentData(undefined)
       setFiles([])
       setEditorKey(key => key + 1)
-    } catch (error) { toast.error('Could not post to project', { description: error instanceof Error ? error.message : undefined }) }
+    } catch (error) {
+      sentDraft.restore()
+      toast.error('Could not post to project', { description: error instanceof Error ? error.message : undefined })
+    }
     finally { setSaving(false) }
   }
 
   const cancel = () => {
-    const savedId = draftIds.current[draftType]
-    if (savedId && !savedId.startsWith('local:')) void deleteDraft(savedId).catch(() => undefined)
+    void draftAutosaves[draftType].discard()
     clearComposerDraft(draftType, project.id)
-    draftIds.current[draftType] = ''
     setBody('')
     setCommentData(undefined)
     setFiles([])

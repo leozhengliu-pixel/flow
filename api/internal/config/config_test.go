@@ -120,6 +120,32 @@ func TestWorkspaceTutorialConfig(t *testing.T) {
 	}
 }
 
+func TestRedisResultArtifactsOptIn(t *testing.T) {
+	t.Setenv("FLOW_REDIS_CACHE", "on")
+	t.Setenv("FLOW_REDIS_CACHE_VIEWER", "")
+	t.Setenv("FLOW_REDIS_CACHE_SYNC_PAGE", "")
+	loaded, err := Load()
+	if err != nil || loaded.Redis.Cache.Disabled || loaded.Redis.Cache.Viewer || loaded.Redis.Cache.SyncPage {
+		t.Fatalf("default Redis result artifacts: %+v, %v", loaded.Redis.Cache, err)
+	}
+	t.Setenv("FLOW_REDIS_CACHE_VIEWER", "true")
+	t.Setenv("FLOW_REDIS_CACHE_SYNC_PAGE", "1")
+	loaded, err = Load()
+	if err != nil || loaded.Redis.Cache.Disabled || !loaded.Redis.Cache.Viewer || !loaded.Redis.Cache.SyncPage {
+		t.Fatalf("opted-in Redis result artifacts: %+v, %v", loaded.Redis.Cache, err)
+	}
+}
+
+func TestRedisResultCacheOptIn(t *testing.T) {
+	for setting, disabled := range map[string]bool{"": true, "off": true, "0": true, "on": false, " TRUE ": false, "1": false} {
+		t.Setenv("FLOW_REDIS_CACHE", setting)
+		loaded, err := Load()
+		if err != nil || loaded.Redis.Cache.Disabled != disabled {
+			t.Fatalf("FLOW_REDIS_CACHE=%q: disabled=%v err=%v, want %v", setting, loaded.Redis.Cache.Disabled, err, disabled)
+		}
+	}
+}
+
 func TestAssetFallbackConfig(t *testing.T) {
 	t.Setenv("FLOW_ASSET_PREVIOUS_PATH", "/app/web-previous")
 	t.Setenv("FLOW_ASSET_SHARED_PATH", "/var/lib/flow-assets")

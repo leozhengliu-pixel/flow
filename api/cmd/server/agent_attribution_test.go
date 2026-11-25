@@ -152,6 +152,7 @@ func TestAgentChatToolCallsAttributeHistoryToFlowOnBehalfOfTheUser(t *testing.T)
 	// Issues: creation, field changes, sub-issues, relations and comments.
 	parent := f.issue(f.chat("save_issue", map[string]any{"team": team, "title": "QA fix – attribution parent"}))
 	f.assertAgent("issue creation", parent.BotActor, viewer, parent.Creator)
+	parent = ageIssueForActivityTest(t, f.s.store, f.data.Workspace.URLKey, parent)
 	f.chat("save_issue", map[string]any{"id": parent.ID, "priority": 1, "estimate": 3})
 	child := f.issue(f.chat("save_issue", map[string]any{"team": team, "title": "QA fix – attribution child", "parentId": parent.ID}))
 	f.assertAgent("sub-issue creation", child.BotActor, viewer, child.Creator)

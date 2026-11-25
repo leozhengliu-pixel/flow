@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,22 +17,31 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 const presenceTTL = 45 * time.Second
 
+func diagnoseRealtimeResync(reason string) {
+	if os.Getenv("FLOW_LOADRIG_DIAGNOSE_REALTIME") == "1" {
+		slog.Warn("loadrig realtime resync", "reason", reason)
+	}
+}
+
 type realtimeHub struct {
 	mu          sync.Mutex
+	budget      *realtimeBudget
 	nextID      uint64
 	subscribers map[string]map[uint64]*realtimeSubscriber
 	// history keeps a short per-workspace replay window for reconnecting SSE
 	// clients. It is intentionally bounded: clients that fall outside the
 	// window receive workspace.resync_required and fetch a fresh snapshot.
-	history      map[string][]domain.RealtimeEvent
-	historyBytes map[string]int
-	historyTotal int
-	presence     map[string]map[string]domain.Presence
-	sockets      map[string]map[uint64]*realtimeSocketClient
+	history        map[string][]domain.RealtimeEvent
+	historyBytes   map[string]int
+	historyTotal   int
+	presence       map[string]map[string]domain.Presence
+	sockets        map[string]map[uint64]*realtimeSocketClient
+	databaseHealth realtimeDatabaseHealth
 	// node tags this instance's stream ids when several instances share
 	// events (Redis coordination). Each instance has its own replay window, in
 	// its own arrival order, so a cursor from another instance cannot be
@@ -86,9 +98,11 @@ func (h *realtimeHub) presenceUnchanged(workspace string, presence []domain.Pres
 
 // realtimeSeqOrder is one workspace's delivery position in the change log.
 type realtimeSeqOrder struct {
-	last    int64
-	pending map[int64]domain.RealtimeEvent
-	timer   *time.Timer
+	last         int64
+	pending      map[int64]domain.RealtimeEvent
+	pendingBytes int64
+	timer        *time.Timer
+	peerReplay   bool
 }
 
 // realtimeReorderWait bounds how long a change waits for an earlier one still
@@ -98,7 +112,7 @@ type realtimeSeqOrder struct {
 const realtimeReorderWait = 200 * time.Millisecond
 
 func newRealtimeHub() *realtimeHub {
-	return &realtimeHub{subscribers: map[string]map[uint64]*realtimeSubscriber{}, history: map[string][]domain.RealtimeEvent{}, presence: map[string]map[string]domain.Presence{}, sockets: map[string]map[uint64]*realtimeSocketClient{}}
+	return &realtimeHub{budget: newRealtimeBudget(), subscribers: map[string]map[uint64]*realtimeSubscriber{}, history: map[string][]domain.RealtimeEvent{}, presence: map[string]map[string]domain.Presence{}, sockets: map[string]map[uint64]*realtimeSocketClient{}}
 }
 
 // realtimeSubscriberQueueBytes bounds what one stream may have waiting: a
@@ -108,57 +122,9 @@ func newRealtimeHub() *realtimeHub {
 // payloads.
 const realtimeSubscriberQueueBytes = 1 << 20
 
-// realtimeSubscriber is one stream's queue. sizes are the accounted sizes of
-// the events pushed, oldest first; the channel is FIFO, so the ones still
-// waiting are its last len(channel) entries.
-type realtimeSubscriber struct {
-	channel chan domain.RealtimeEvent
-	sizes   []int
-}
-
-func realtimeEventBytes(event domain.RealtimeEvent) int { return len(event.Payload) + 256 }
-
-// queued is the accounted size of the events the stream has not taken yet.
-func (s *realtimeSubscriber) queued() int {
-	waiting := min(len(s.channel), len(s.sizes))
-	s.sizes = s.sizes[len(s.sizes)-waiting:]
-	total := 0
-	for _, size := range s.sizes {
-		total += size
-	}
-	return total
-}
-
-func (s *realtimeSubscriber) push(event domain.RealtimeEvent) bool {
-	select {
-	case s.channel <- event:
-		s.sizes = append(s.sizes, realtimeEventBytes(event))
-		return true
-	default:
-		return false
-	}
-}
-
 func (h *realtimeHub) subscribe(workspace string) (<-chan domain.RealtimeEvent, func()) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.nextID++
-	id := h.nextID
-	if h.subscribers[workspace] == nil {
-		h.subscribers[workspace] = map[uint64]*realtimeSubscriber{}
-	}
-	channel := make(chan domain.RealtimeEvent, 64)
-	h.subscribers[workspace][id] = &realtimeSubscriber{channel: channel}
-	return channel, func() {
-		h.mu.Lock()
-		if subscribers := h.subscribers[workspace]; subscribers != nil {
-			delete(subscribers, id)
-			if len(subscribers) == 0 {
-				delete(h.subscribers, workspace)
-			}
-		}
-		h.mu.Unlock()
-	}
+	subscriber, stop := h.subscribeLockedMode(workspace, "", false)
+	return subscriber.channel, stop
 }
 
 // subscribeSince subscribes to live events and replays events published after
@@ -167,13 +133,15 @@ func (h *realtimeHub) subscribe(workspace string) (<-chan domain.RealtimeEvent, 
 // event. A missing cursor means the replay window has rolled over, so callers
 // can safely fall back to a full bootstrap.
 func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.RealtimeEvent, func()) {
+	subscriber, stop := h.subscribeLockedMode(workspace, sinceID, false)
+	return subscriber.channel, stop
+}
+
+func (h *realtimeHub) subscribeLockedMode(workspace, sinceID string, managed bool) (*realtimeSubscriber, func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.nextID++
 	id := h.nextID
-	if h.subscribers[workspace] == nil {
-		h.subscribers[workspace] = map[uint64]*realtimeSubscriber{}
-	}
 	history := h.history[workspace]
 	index := -1
 	if sinceID != "" {
@@ -194,19 +162,34 @@ func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.R
 	// Room for the whole replay plus the live headroom: the stream drains the
 	// channel only after this returns, so a buffer smaller than the replay
 	// window would turn every longer replay into a resync.
-	channel := make(chan domain.RealtimeEvent, 64+len(replay))
-	subscriber := &realtimeSubscriber{channel: channel}
+	capacity := 64 + len(replay)
+	base := subscriberBaseBytes(capacity)
+	if !h.budget.acquire(base) {
+		channel := make(chan domain.RealtimeEvent)
+		close(channel)
+		return &realtimeSubscriber{channel: channel, closed: true}, func() {}
+	}
+	channel := make(chan domain.RealtimeEvent, capacity)
+	subscriber := &realtimeSubscriber{channel: channel, budget: h.budget, base: base, managed: managed}
+	if h.subscribers[workspace] == nil {
+		h.subscribers[workspace] = map[uint64]*realtimeSubscriber{}
+	}
 	h.subscribers[workspace][id] = subscriber
 	if sinceID != "" && index < 0 {
-		subscriber.push(domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()})
-	}
-	// The replay comes from the bounded history; it is not held against the queue's byte limit.
-	for _, event := range replay {
-		if !domain.RoutineCredentialEvent(event.Type) {
-			subscriber.push(event)
+		marker := domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
+		if !subscriber.push(marker) {
+			subscriber.collapse(marker)
 		}
 	}
-	return channel, func() {
+	for _, event := range replay {
+		if !domain.RoutineCredentialEvent(event.Type) {
+			if !subscriber.push(event) {
+				subscriber.collapse(event)
+				break
+			}
+		}
+	}
+	return subscriber, func() {
 		h.mu.Lock()
 		if subscribers := h.subscribers[workspace]; subscribers != nil {
 			delete(subscribers, id)
@@ -214,6 +197,7 @@ func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.R
 				delete(h.subscribers, workspace)
 			}
 		}
+		subscriber.close()
 		h.mu.Unlock()
 	}
 }
@@ -260,15 +244,29 @@ func (h *realtimeHub) publishInOrderLocked(workspace string, event domain.Realti
 		h.order[workspace] = order
 	}
 	switch {
-	case order.last == 0 || event.Seq == order.last+1:
+	case order.last == 0 && !order.peerReplay || event.Seq == order.last+1:
 		order.last = event.Seq
 		h.deliverLocked(workspace, event)
 		h.releaseInOrderLocked(workspace, order, false)
 	case event.Seq <= order.last:
+		diagnoseRealtimeResync("late-sequence")
 		h.deliverLocked(workspace, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: event.CreatedAt})
 	default:
+		if previous, exists := order.pending[event.Seq]; exists {
+			size := int64(realtimeEventBytes(previous))
+			order.pendingBytes -= size
+			h.budget.release(size)
+		}
+		size := int64(realtimeEventBytes(event))
+		if !h.budget.acquire(size) {
+			delete(order.pending, event.Seq)
+			diagnoseRealtimeResync("reorder-budget")
+			h.deliverLocked(workspace, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: event.CreatedAt})
+			return
+		}
 		order.pending[event.Seq] = event
-		if order.timer == nil {
+		order.pendingBytes += size
+		if order.timer == nil && !order.peerReplay {
 			h.awaitGapLocked(workspace, order)
 		}
 	}
@@ -312,6 +310,9 @@ func (h *realtimeHub) releaseInOrderLocked(workspace string, order *realtimeSeqO
 			next = order.pending[lowest]
 		}
 		delete(order.pending, next.Seq)
+		size := int64(realtimeEventBytes(next))
+		order.pendingBytes -= size
+		h.budget.release(size)
 		order.last = next.Seq
 		h.deliverLocked(workspace, next)
 		progressed = true
@@ -320,15 +321,96 @@ func (h *realtimeHub) releaseInOrderLocked(workspace string, order *realtimeSeqO
 		order.timer.Stop()
 		order.timer = nil
 	}
-	if len(order.pending) > 0 && order.timer == nil {
+	if len(order.pending) > 0 && order.timer == nil && !order.peerReplay {
 		h.awaitGapLocked(workspace, order)
 	}
 }
 
-// resyncAll tells every workspace's subscribers, and every client resuming
-// from before now, to reload: events were lost (this instance missed peer
-// events while its Redis subscription was down). Waiting events go out first
-// and delivery order starts over, since the missed seqs never arrive.
+// In peer mode SQL replay decides when a gap is recoverable. The legacy
+// reorder timer is shorter than the SQL poll interval.
+func (h *realtimeHub) followPeerReplay(workspace string, cursor int64) {
+	if !h.ordered {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.order == nil {
+		h.order = map[string]*realtimeSeqOrder{}
+	}
+	order := h.order[workspace]
+	if order == nil {
+		h.order[workspace] = &realtimeSeqOrder{
+			last: cursor, pending: map[int64]domain.RealtimeEvent{}, peerReplay: true,
+		}
+		return
+	}
+	order.peerReplay = true
+	if order.timer != nil {
+		order.timer.Stop()
+		order.timer = nil
+	}
+	h.advancePeerReplayLocked(workspace, cursor)
+}
+
+// A restored or replaced workspace starts a new replay window. Its old
+// sequence numbers cannot certify delivery in the new generation.
+func (h *realtimeHub) resetPeerReplay(workspace string, cursor int64) {
+	if !h.ordered {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if order := h.order[workspace]; order != nil {
+		if order.timer != nil {
+			order.timer.Stop()
+			order.timer = nil
+		}
+		h.budget.release(order.pendingBytes)
+	}
+	if h.order == nil {
+		h.order = map[string]*realtimeSeqOrder{}
+	}
+	h.order[workspace] = &realtimeSeqOrder{last: cursor, pending: map[int64]domain.RealtimeEvent{}, peerReplay: true}
+	h.historyTotal -= h.historyBytes[workspace]
+	delete(h.history, workspace)
+	delete(h.historyBytes, workspace)
+}
+
+// Replay has classified these sequences as silent or unavailable. Deliver
+// any locally buffered events in this range before releasing later ones.
+func (h *realtimeHub) advancePeerReplay(workspace string, cursor int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.advancePeerReplayLocked(workspace, cursor)
+}
+
+func (h *realtimeHub) advancePeerReplayLocked(workspace string, cursor int64) {
+	order := h.order[workspace]
+	if order == nil || !order.peerReplay || cursor <= order.last {
+		return
+	}
+	var buffered []int64
+	for seq := range order.pending {
+		if seq <= cursor {
+			buffered = append(buffered, seq)
+		}
+	}
+	slices.Sort(buffered)
+	for _, seq := range buffered {
+		event := order.pending[seq]
+		delete(order.pending, seq)
+		size := int64(realtimeEventBytes(event))
+		order.pendingBytes -= size
+		h.budget.release(size)
+		h.deliverLocked(workspace, event)
+	}
+	order.last = cursor
+	h.releaseInOrderLocked(workspace, order, false)
+}
+
+// resyncAll asks active and reconnecting subscribers to reload after a Redis
+// disconnect. Legacy delivery flushes its pending events and starts over.
+// Peer replay retains its pending durable events for SQL to order.
 func (h *realtimeHub) resyncAll() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -340,6 +422,9 @@ func (h *realtimeHub) resyncAll() {
 		workspaces[workspace] = true
 	}
 	for workspace, order := range h.order {
+		if order.peerReplay {
+			continue // SQL will fill durable gaps after the reconnect.
+		}
 		for len(order.pending) > 0 {
 			h.releaseInOrderLocked(workspace, order, true)
 		}
@@ -351,6 +436,7 @@ func (h *realtimeHub) resyncAll() {
 	}
 	now := time.Now().UTC()
 	for workspace := range workspaces {
+		diagnoseRealtimeResync("redis-reconnect")
 		h.deliverLocked(workspace, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: now})
 	}
 }
@@ -358,6 +444,7 @@ func (h *realtimeHub) resyncAll() {
 // deliverLocked appends an event to the replay window and fans it out.
 func (h *realtimeHub) deliverLocked(workspace string, event domain.RealtimeEvent) {
 	if len(event.Payload) > 256<<10 {
+		diagnoseRealtimeResync("oversized-live")
 		event = domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", ClientID: event.ClientID, ActorID: event.ActorID, CreatedAt: event.CreatedAt}
 	}
 	history := append(h.history[workspace], event)
@@ -365,16 +452,16 @@ func (h *realtimeHub) deliverLocked(workspace string, event domain.RealtimeEvent
 		h.historyBytes = map[string]int{}
 	}
 	previousBytes := h.historyBytes[workspace]
-	bytes := previousBytes + len(event.Payload) + 256
+	bytes := previousBytes + realtimeEventBytes(event)
 	for len(history) > 256 || bytes > 8<<20 {
-		bytes -= len(history[0].Payload) + 256
+		bytes -= realtimeEventBytes(history[0])
 		history[0] = domain.RealtimeEvent{}
 		history = history[1:]
 	}
 	h.history[workspace] = history
 	h.historyBytes[workspace] = bytes
 	h.historyTotal += bytes - previousBytes
-	for h.historyTotal > 64<<20 {
+	for h.historyTotal > realtimeHistoryBytes {
 		oldest := ""
 		var date time.Time
 		for key, items := range h.history {
@@ -390,23 +477,13 @@ func (h *realtimeHub) deliverLocked(workspace string, event domain.RealtimeEvent
 		delete(h.history, oldest)
 		delete(h.historyBytes, oldest)
 	}
-	size := realtimeEventBytes(event)
 	for _, subscriber := range h.subscribers[workspace] {
 		// A stream behind by more than its byte budget (or by a full queue) skips the backlog and resyncs.
-		if (len(subscriber.channel) == 0 || subscriber.queued()+size <= realtimeSubscriberQueueBytes) && subscriber.push(event) {
+		if subscriber.push(event) {
 			continue
 		}
-	drain:
-		for {
-			// Never blocks: the stream may take the last one first.
-			select {
-			case <-subscriber.channel:
-			default:
-				break drain
-			}
-		}
-		subscriber.sizes = subscriber.sizes[:0]
-		subscriber.push(domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", CreatedAt: event.CreatedAt})
+		diagnoseRealtimeResync("subscriber-overflow")
+		subscriber.collapse(event)
 	}
 }
 
@@ -560,10 +637,21 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "Streaming is unavailable")
 		return
 	}
+	releaseInitial, err := acquireRealtimeWork(r.Context(), s.realtime.budget, 4<<20)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "Realtime is temporarily unavailable")
+		return
+	}
+	defer releaseInitial()
+	boundedWriter := &realtimeBudgetWriter{ResponseWriter: w, budget: s.realtime.budget}
+	defer boundedWriter.releaseFrames()
+	w = boundedWriter
 	workspace := workspaceKey(r)
 	metadata, _, err := s.pagedRealtimeMetadata(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		if !writeStoreReadUnavailable(w, err) {
+			issueRecordsError(w, err)
+		}
 		return
 	}
 	presence, err := s.snapshotPresence(r.Context(), workspace)
@@ -571,10 +659,6 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
 		return
 	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache, no-transform")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
 	since := strings.TrimSpace(r.Header.Get("Last-Event-ID"))
 	if since == "" {
 		since = strings.TrimSpace(r.URL.Query().Get("since"))
@@ -587,33 +671,77 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	since = s.realtime.localCursor(since)
 	// Read the head before subscribing: events committed in between are then
 	// delivered live too, so a client never skips one.
-	head, _ := s.store.WorkspaceChangeHead(r.Context(), workspace)
 	// A numeric cursor is a change-log seq: replay from the durable log, which
 	// outlives the in-memory ring (restarts, eviction). Subscribe first so
 	// nothing committed during the replay is missed; live copies at or below
 	// the replayed cursor are dropped as duplicates.
 	replaySeq, numeric := strconv.ParseInt(since, 10, 64)
 	durable := numeric == nil && replaySeq >= 0
-	var channel <-chan domain.RealtimeEvent
-	var unsubscribe func()
-	if durable {
-		channel, unsubscribe = s.realtime.subscribe(workspace)
+	negotiated := s.negotiatedSummaryRequest(r)
+	var head int64
+	if negotiated {
+		journalHead, err := s.store.RecordJournalHead(r.Context(), metadata.Workspace.ID)
+		if err != nil {
+			if !writeStoreReadUnavailable(w, err) {
+				writeError(w, http.StatusServiceUnavailable, "Realtime is temporarily unavailable")
+			}
+			return
+		}
+		head, err = strconv.ParseInt(journalHead, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "Realtime is temporarily unavailable")
+			return
+		}
+		cursor := head
+		if durable {
+			cursor = replaySeq
+		}
+		r = s.attachSyncStream(r, metadata.Workspace.ID, cursor)
+		w.Header().Set("X-Flow-Sync", "summary")
 	} else {
-		channel, unsubscribe = s.realtime.subscribeSince(workspace, since)
+		head, err = s.store.WorkspaceChangeHead(r.Context(), workspace)
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
 	}
+	subscriber, unsubscribe := s.realtime.subscribeTransport(workspace, since, durable)
+	if negotiated {
+		subscriber.setSyncV2QueueLimit()
+	}
+	channel := subscriber.channel
 	defer unsubscribe()
 	presence, err = s.pagedPresence(r, presence)
 	if err != nil {
-		issueRecordsError(w, err)
+		if !writeStoreReadUnavailable(w, err) {
+			issueRecordsError(w, err)
+		}
 		return
 	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
 	// cursor is the workspace's change-log head when the stream opened. A
 	// client advances its own cursor only from event.seq of events it applied.
-	initial, _ := json.Marshal(map[string]any{"presence": presence, "cursor": head})
+	initialPayload := map[string]any{"presence": presence, "cursor": head}
+	if negotiated {
+		initialPayload["cursor"] = strconv.FormatInt(head, 10)
+		initialPayload["schema"] = 2
+	}
+	initial, _ := json.Marshal(initialPayload)
 	if !writeSSE(w, domain.RealtimeEvent{ID: idgen.New("connected_"), Type: "connected", Payload: initial, CreatedAt: time.Now().UTC()}, "") {
 		return
 	}
-	flusher.Flush()
+	if !flushRealtime(w) {
+		return
+	}
+	presence, initial = nil, nil
+	releaseInitial()
+	if negotiated && since != "" && !durable {
+		writeSSE(w, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}, s.realtime.node)
+		flushRealtime(w)
+		return
+	}
 	if durable {
 		cursor, ok := s.replayChanges(w, r, metadata.Workspace.ID, replaySeq, flusher)
 		if !ok {
@@ -627,42 +755,32 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
-		case event := <-channel:
+		case event, open := <-channel:
+			if !open {
+				return
+			}
 			// Take what else is waiting: a presence roster superseded by a later one in the batch is skipped
 			// (each carries the whole roster), and the batch is flushed once.
 			batch := append(make([]domain.RealtimeEvent, 0, 8), event)
 		take:
 			for len(batch) < 64 {
 				select {
-				case next := <-channel:
+				case next, open := <-channel:
+					if !open {
+						break take
+					}
 					batch = append(batch, next)
 				default:
 					break take
 				}
 			}
-			wrote := false
-			for index, event := range batch {
-				if durable && event.Seq > 0 && event.Seq <= replaySeq {
-					continue
-				}
-				if event.Type == "presence.updated" && slices.ContainsFunc(batch[index+1:], func(later domain.RealtimeEvent) bool { return later.Type == "presence.updated" }) {
-					continue
-				}
-				projected, visible, err := s.pagedRealtimeEvent(r, event)
-				if err != nil {
-					return
-				}
-				if visible {
-					if !writeSSE(w, projected, s.realtime.node) {
-						return
-					}
-					wrote = true
-				}
-			}
-			if wrote {
-				flusher.Flush()
+			if !s.writeRealtimeBatch(w, r, subscriber, batch, durable, replaySeq) {
+				return
 			}
 		case <-ticker.C:
+			if writeRealtimeRetry(w, s.realtimeDatabaseError()) {
+				return
+			}
 			// One cleanup per workspace per interval on this server, not one per open stream (each read the
 			// whole roster from Redis).
 			if s.realtime.presenceCleanupDue(workspace, 15*time.Second) {
@@ -679,10 +797,13 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 			// which reconnects a stream that stops sending it (a proxy can keep
 			// a dead upstream's connection open). It has no id, so it never
 			// moves the resume cursor, and onmessage ignores it.
+			_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(realtimeWriteTimeout))
 			if _, err := fmt.Fprint(w, "event: keepalive\ndata: {}\n\n"); err != nil {
 				return
 			}
-			flusher.Flush()
+			if !flushRealtime(w) {
+				return
+			}
 		}
 	}
 }
@@ -696,7 +817,29 @@ func (s *server) documentPresenceAllowed(r *http.Request, documentID string) boo
 	if !ok {
 		return false
 	}
-	return documentRole(s, data, document) != "none"
+	return documentRole(s, data, document) != "none" && !apiKeyDocumentOutsideScope(r, data, document)
+}
+
+func (s *server) presenceDocumentPermission(r *http.Request, documentID string) (bool, error) {
+	if !s.store.BoundedMetadataEnabled() {
+		return s.documentPresenceAllowed(r, documentID), nil
+	}
+	data, _, err := s.pagedRealtimeMetadata(r)
+	if err != nil {
+		if contextErr := r.Context().Err(); contextErr != nil {
+			return false, contextErr
+		}
+		if !errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, store.ErrIssueQuery) {
+			return false, err
+		}
+		return false, nil
+	}
+	read, found, err := s.store.BeginPresenceDocumentRead(r.Context(), workspaceKey(r), documentID)
+	if err != nil || !found {
+		return false, err
+	}
+	defer read.Close()
+	return read.Found && documentRole(s, data, read.Document) != "none" && !apiKeyDocumentOutsideScope(r, data, read.Document), nil
 }
 
 func filterPresenceForViewer(data domain.Bootstrap, values []domain.Presence) []domain.Presence {
@@ -807,6 +950,14 @@ func realtimeEntityVisible(data domain.Bootstrap, event domain.RealtimeEvent) bo
 // id is "<event id>~<node>": clients resume with it, and only this instance
 // can resume it (see realtimeHub.node).
 func writeSSE(w http.ResponseWriter, event domain.RealtimeEvent, node string) bool {
+	controller := http.NewResponseController(w)
+	_ = controller.SetWriteDeadline(time.Now().Add(realtimeWriteTimeout))
+	if bounded, ok := w.(*realtimeBudgetWriter); ok {
+		if !bounded.budget.retainEvent(event) {
+			return false
+		}
+		bounded.frames = append(bounded.frames, eventKey(event))
+	}
 	id := event.ID
 	if node != "" && !strings.HasPrefix(id, "connected_") {
 		id += "~" + node
@@ -816,6 +967,9 @@ func writeSSE(w http.ResponseWriter, event domain.RealtimeEvent, node string) bo
 	// line of valid JSON goes the encoding way.
 	payload := event.Payload
 	if len(payload) == 0 || bytes.ContainsAny(payload, "\r\n") || !json.Valid(payload) {
+		if bounded, ok := w.(*realtimeBudgetWriter); ok && !bounded.reserveEncoding(int64(realtimeEventBytes(event)*2+1024)) {
+			return false
+		}
 		raw, err := json.Marshal(event)
 		if err != nil {
 			return false
@@ -826,6 +980,9 @@ func writeSSE(w http.ResponseWriter, event domain.RealtimeEvent, node string) bo
 	event.Payload = nil
 	head, err := json.Marshal(event)
 	if err != nil {
+		return false
+	}
+	if bounded, ok := w.(*realtimeBudgetWriter); ok && !bounded.reserveEncoding(int64(cap(head)+len(id)+256)) {
 		return false
 	}
 	for _, part := range [][]byte{[]byte("id: " + id + "\ndata: "), head[:len(head)-1], []byte(`,"payload":`), payload, []byte("}\n\n")} {
@@ -865,6 +1022,10 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Active != nil && !*input.Active {
+		if minimalPresenceRequest(r) {
+			s.touchMinimalPresence(w, r, domain.Presence{ClientID: input.ClientID}, false)
+			return
+		}
 		workspace := workspaceKey(r)
 		if s.coordinator != nil {
 			presence, err := s.coordinator.RemovePresence(r.Context(), workspace, input.ClientID, presenceTTL)
@@ -881,7 +1042,7 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.IssueID != "" {
 		visible := false
-		if pagedRealtimeRequest(r) {
+		if s.store.BoundedMetadataEnabled() || pagedRealtimeRequest(r) {
 			visible = s.pagedIssueVisible(r, input.IssueID)
 		} else {
 			data := s.workspaceData(r)
@@ -893,13 +1054,22 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if input.DocumentID != "" {
-		if !s.documentPresenceAllowed(r, input.DocumentID) {
+		allowed, err := s.presenceDocumentPermission(r, input.DocumentID)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
+			return
+		}
+		if !allowed {
 			writeError(w, http.StatusForbidden, "Document is outside your permissions")
 			return
 		}
 	}
 	workspace := workspaceKey(r)
 	actor := requestActor(s, r)
+	if minimalPresenceRequest(r) {
+		s.touchMinimalPresence(w, r, domain.Presence{ClientID: input.ClientID, User: actor, IssueID: input.IssueID, DocumentID: input.DocumentID, Route: input.Route, LastSeenAt: time.Now().UTC()}, true)
+		return
+	}
 	if s.coordinator != nil {
 		presence, err := s.coordinator.UpdatePresence(r.Context(), workspace, input.ClientID, domain.Presence{ClientID: input.ClientID, User: actor, IssueID: input.IssueID, DocumentID: input.DocumentID, Route: input.Route, LastSeenAt: time.Now().UTC()}, presenceTTL)
 		if err != nil {
@@ -925,7 +1095,7 @@ func (s *server) listPresence(w http.ResponseWriter, r *http.Request) {
 	route := strings.TrimSpace(r.URL.Query().Get("route"))
 	if issueID != "" {
 		visible := false
-		if pagedRealtimeRequest(r) {
+		if s.store.BoundedMetadataEnabled() || pagedRealtimeRequest(r) {
 			visible = s.pagedIssueVisible(r, issueID)
 		} else {
 			data := s.workspaceData(r)
@@ -937,7 +1107,12 @@ func (s *server) listPresence(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if documentID != "" {
-		if !s.documentPresenceAllowed(r, documentID) {
+		allowed, err := s.presenceDocumentPermission(r, documentID)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
+			return
+		}
+		if !allowed {
 			writeError(w, http.StatusForbidden, "Document is outside your permissions")
 			return
 		}

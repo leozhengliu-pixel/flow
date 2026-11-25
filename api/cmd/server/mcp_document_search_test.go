@@ -27,16 +27,16 @@ func TestDocumentSearchTermsSplitsKeywords(t *testing.T) {
 // Runs on MySQL's ngram index too: FLOW_MCP_TEST_DATABASE_DRIVER=mysql FLOW_MCP_TEST_DATABASE_URL=mysql://….
 func TestDocumentSnippetQuotesTheBestLineAndItsSection(t *testing.T) {
 	content := "# 测试计划\n\n## 背景\n本计划覆盖 SIT 与 UAT。\n\n## 4. UAT 准出标准\n1. 用例通过率不低于 95%；\n2. 无 P0 缺陷。"
-	snippet, section := documentSnippet(content, []string{"uat", "准出标准"})
+	snippet, section := documentSnippet(content, strings.ToLower(content), []string{"uat", "准出标准"})
 	if section != "4. UAT 准出标准" || !strings.HasPrefix(snippet, "## 4. UAT 准出标准 1. 用例通过率不低于 95%；") {
 		t.Fatalf("snippet %q in section %q", snippet, section)
 	}
-	long := strings.Repeat("前文", 100) + "关键词" + strings.Repeat("后文", 200)
-	snippet, section = documentSnippet(long, []string{"关键词"})
-	if section != "" || !strings.HasPrefix(snippet, "…"+strings.Repeat("前文", 30)+"关键词") || !strings.HasSuffix(snippet, "…") || len([]rune(snippet)) != 242 {
+	long := strings.Repeat("\u0130", 200) + "关键词" + strings.Repeat("后文", 200)
+	snippet, section = documentSnippet(long, strings.ToLower(long), []string{"关键词"})
+	if section != "" || !strings.HasPrefix(snippet, "…"+strings.Repeat("\u0130", 60)+"关键词") || !strings.HasSuffix(snippet, "…") || len([]rune(snippet)) != 242 {
 		t.Fatalf("long snippet %q", snippet)
 	}
-	if snippet, _ := documentSnippet("Only the title matched here.", []string{"absent"}); snippet != "Only the title matched here." {
+	if snippet, _ := documentSnippet("Only the title matched here.", "only the title matched here.", []string{"absent"}); snippet != "Only the title matched here." {
 		t.Fatalf("title-only snippet %q", snippet)
 	}
 }
@@ -123,6 +123,10 @@ func TestMCPSearchDocumentsRanksAuthorizedFullTextMatches(t *testing.T) {
 	}
 	if got := ids(search(map[string]any{"queries": []any{"UAT"}, "team": team.Key})); slices.Contains(got, "doc-english") || len(got) != 2 {
 		t.Fatalf("team filter = %v", got)
+	}
+	filtered := search(map[string]any{"queries": []any{"UAT", "???", "准出标准", "UAT"}, "project": project.ID})
+	if !slices.Equal(ids(filtered), []string{"doc-plan"}) || !slices.Equal(filtered[0]["matchedQueries"].([]string), []string{"UAT", "准出标准"}) {
+		t.Fatalf("merged project search = %v", filtered)
 	}
 	if got := ids(search(map[string]any{"queries": []any{"智能印控 UAT 准出标准"}, "includeArchived": true})); !slices.Contains(got, "doc-archived") || slices.Contains(got, "doc-private") {
 		t.Fatalf("includeArchived = %v", got)

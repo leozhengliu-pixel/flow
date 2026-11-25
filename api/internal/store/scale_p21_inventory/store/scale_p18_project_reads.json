@@ -1,0 +1,42 @@
+{
+  "source": "store/scale_p18_project_reads.go",
+  "unmigrated": 3,
+  "consumers": {
+    "InternalProjectFilterMetadata": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.internalProjectTool"
+      ]
+    },
+    "InternalProjectIDUnambiguous": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.internalProjectTool"
+      ]
+    },
+    "InternalProjectPage": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.internalProjectTool"
+      ]
+    }
+  }
+}

@@ -40,6 +40,7 @@ type IssueRecordQuery struct {
 	IssueIDs           []string
 	RestrictToIssueIDs bool
 	AllowedTeamIDs     []string // nil is unrestricted; empty is denied.
+	AllowedTeamsAppKey bool     // AllowedTeamIDs come from an application key (documents of its teams' issues and projects stay reachable).
 	Access             *IssueRecordAccess
 	Text               string
 	SearchText         string // Indexed title, identifier and description search.
@@ -105,6 +106,17 @@ func ArchivedTeamIDs(data domain.Bootstrap) []string {
 }
 
 func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, userID string) (domain.Bootstrap, error) {
+	if coldCapable(ctx) {
+		// A COLD request's projection is the legacy one, from the legacy
+		// view of the installed workspace (scale_p21_default_cold.go).
+		if view, release, handled := s.coldProjectionView(ctx, "PagedWorkspaceMetadata", workspace); handled {
+			defer release()
+			if view == nil {
+				return domain.Bootstrap{}, ErrAuthForbidden
+			}
+			return view.PagedWorkspaceMetadata(ctx, view.lastWorkspaceKey, userID)
+		}
+	}
 	_, data, ok := s.workspaceReadSource(ctx, workspace)
 	if !ok {
 		return data, ErrAuthForbidden
@@ -249,31 +261,12 @@ func (s *SQLiteStore) IssueQueryAccess(ctx context.Context, workspace, userID st
 	if !ok {
 		return data, IssueRecordAccess{}, ErrAuthForbidden
 	}
-	role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, userID)
-	if err != nil || status != "active" {
-		return data, IssueRecordAccess{}, ErrAuthForbidden
-	}
-	user, err := s.authUserByID(ctx, userID)
+	user, membership, err := s.issueQueryViewer(ctx, workspace, data.Workspace.ID, userID)
 	if err != nil {
 		return data, IssueRecordAccess{}, err
 	}
-	data.Viewer = user
-	data.ViewerRole = role
-	rows, err := s.db.QueryContext(ctx, `SELECT team_id,role FROM team_memberships WHERE workspace_id=? AND user_id=?`, data.Workspace.ID, userID)
-	if err != nil {
-		return data, IssueRecordAccess{}, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		member := domain.TeamMember{UserID: userID}
-		if err := rows.Scan(&member.TeamID, &member.Role); err != nil {
-			return data, IssueRecordAccess{}, err
-		}
-		data.TeamMembers = append(data.TeamMembers, member)
-	}
-	if err := rows.Err(); err != nil {
-		return data, IssueRecordAccess{}, err
-	}
+	role := membership.Role
+	data.Viewer, data.ViewerRole, data.TeamMembers = user, role, membership.Teams
 	visible := visibleIssueTeams(data, userID, role)
 	active := 0
 	for _, team := range data.Teams {
@@ -1345,6 +1338,9 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 	if _, _, err := issueRecordWhere(query); err != nil {
 		return nil, err
 	}
+	if issueRecordSQLSnapshot(ctx) {
+		return s.countIssueGroups(ctx, query)
+	}
 	// Both caches are keyed by the revision read before counting.
 	revision, err := s.issueCountRevision(ctx, query.Workspace)
 	if err != nil {
@@ -1358,18 +1354,20 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 	if groups, ok := s.issueGroupCounts.get(key, now); ok {
 		return groups, nil
 	}
-	counted := withoutRedundantIssueAccess(query)
-	var groups []IssueRecordGroup
-	if query.Nested {
-		groups, err = s.nestedIssueGroups(ctx, counted)
-	} else {
-		groups, err = s.flatIssueGroups(ctx, counted)
-	}
+	groups, err := s.countIssueGroups(ctx, query)
 	if err == nil {
 		s.issueGroupCounts.put(key, query.Workspace, groups, now)
 		s.cacheSetIssueGroups(ctx, cacheKey, groups)
 	}
 	return groups, err
+}
+
+func (s *SQLiteStore) countIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
+	query = withoutRedundantIssueAccess(query)
+	if query.Nested {
+		return s.nestedIssueGroups(ctx, query)
+	}
+	return s.flatIssueGroups(ctx, query)
 }
 
 // withoutRedundantIssueAccess drops a viewer's team restriction from a query

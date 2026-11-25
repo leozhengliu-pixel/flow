@@ -32,7 +32,7 @@ import { TeamOverviewPage } from './team-overview-page'
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: TestResizeObserver })
 
-function renderPage(view: "overview" | "documents" | "loops" | "members", overrides: Partial<BootstrapData> = {}, onReload = vi.fn().mockResolvedValue(undefined)) {
+function renderPage(view: "overview" | "documents" | "loops" | "members", overrides: Partial<BootstrapData> = {}, onReload = vi.fn().mockResolvedValue(undefined), onNavigate = vi.fn()) {
   const data = makeBootstrap({
     documents: [],
     favorites: [],
@@ -48,7 +48,7 @@ function renderPage(view: "overview" | "documents" | "loops" | "members", overri
     <I18nProvider><TooltipProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 480, itemHeight: 48 }}>
       <TeamOverviewPage
         data={data}
-        onNavigate={vi.fn()}
+        onNavigate={onNavigate}
         onOpenSidebar={vi.fn()}
         onReload={onReload}
         team={data.teams[0]}
@@ -88,6 +88,18 @@ describe('team overview', () => {
     expect(container.querySelector('.team-docs-header')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Create document' }));
     await waitFor(() => expect(api.createDocument).toHaveBeenCalledWith({ title: '', teamIds: ['team-1'] }));
+  });
+
+  it('opens a new team document without waiting for the team refresh', async () => {
+    // On large workspaces the refresh is a full issue bootstrap that can take
+    // seconds; the document page fetches a document the data does not hold yet.
+    const user = userEvent.setup(), onNavigate = vi.fn();
+    const onReload = vi.fn(() => new Promise<void>(() => {}));
+    api.createDocument.mockResolvedValue({ ...document, id: 'doc-new', slugId: 'untitled-1', title: '' });
+    renderPage('documents', {}, onReload, onNavigate);
+    await user.click(screen.getByRole('button', { name: 'Create document' }));
+    await waitFor(() => expect(onNavigate).toHaveBeenCalledWith(expect.stringContaining('untitled-1')));
+    expect(onReload).toHaveBeenCalled();
   });
 
   it('searches documents without replacing a filtered-empty state with onboarding', async () => {

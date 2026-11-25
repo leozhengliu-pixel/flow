@@ -24,7 +24,7 @@ const legacyWorkspaceColor = "#5E6AD2"
 func (s *SQLiteStore) migrateWorkspaceInitialsColor(ctx context.Context) error {
 	for _, key := range s.WorkspaceKeys() {
 		ctx := WithMetadataFields(WithoutIssueRecordMutations(ctx), "workspace")
-		if err := s.MutateWorkspace(ctx, key, "workspace.initials_color_migrated", "", nil, func(data *domain.Bootstrap) error {
+		if err := s.MutateWorkspaceScoped(ctx, key, "workspace.initials_color_migrated", "", nil, MetadataRecordScope{Fields: []string{"workspace"}}, func(data *domain.Bootstrap) error {
 			if !strings.EqualFold(strings.TrimSpace(data.Workspace.Color), legacyWorkspaceColor) {
 				return ErrNoMutation
 			}

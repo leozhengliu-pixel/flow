@@ -1,40 +1,51 @@
-import { expect, test } from '@playwright/test'
+import { expect, type Response } from '@playwright/test'
+import { test } from './workspace-fixture'
 
-const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
+test.setTimeout(90_000)
 
-test('renders the first project page and requests more only at the viewport end', async ({ page, request }, testInfo) => {
-  const workspaceKey = `project-pages-${testInfo.project.name}-${Date.now()}`
-  const created = await request.post(`${API}/api/workspaces`, {
-    data: { name: 'Project pagination', urlKey: workspaceKey, region: 'us' },
-  })
-  expect(created.status()).toBe(201)
-  const workspace = await created.json()
-  const team = workspace.teams[0]
-  const calls: string[] = []
-  await page.route('**/api/projects?*', async route => {
-    const url = new URL(route.request().url())
-    const offset = Number(url.searchParams.get('cursor') || 0)
-    calls.push(url.search)
-    const items = Array.from({ length: 100 }, (_, index) => {
-      const number = offset + index
-      return {
-        id: `project-${number}`, name: `Project ${String(number).padStart(4, '0')}`, slugId: `project-${number}`, summary: 'Paged project', description: '', icon: 'Project', color: '#6acddb',
-        priority: 0, position: number, priorityLabel: 'No priority', progress: 0.5, health: 'onTrack', status: { id: 'ps_progress', name: 'In Progress', type: 'started', color: '#e2b714', position: 2 },
-        memberIds: [], labelIds: [], teamIds: [team.id], dependencyIds: [], initiatives: [], customers: [], resources: [], milestones: [], comments: [], descriptionRevisions: [], updateCadence: 'none', issueCount: 0,
-        createdAt: '2026-09-15T00:00:00Z', updatedAt: '2026-09-15T00:00:00Z',
-      }
+function projectPage(response: Response) {
+  return response.request().method() === 'GET' && new URL(response.url()).pathname === '/api/projects'
+}
+
+test('renders the first project page and requests more only at the viewport end', async ({ page, request, workspaceKey }) => {
+  const headers = { 'X-Workspace-Key': workspaceKey }
+  const bootstrap = await request.get('/api/bootstrap?projection=project-list', { headers })
+  expect(bootstrap.ok()).toBeTruthy()
+  const { teams: [team] } = await bootstrap.json()
+  for (let index = 0; index < 110; index++) {
+    const response = await request.post('/api/projects', {
+      headers, data: { name: `Project ${String(index).padStart(4, '0')}`, teamIds: [team.id] },
     })
-    await route.fulfill({ json: { items, total: 4549, hasMore: true, nextCursor: String(offset + 100) } })
+    expect(response.status()).toBe(201)
+  }
+  let calls = 0
+  page.on('request', request => {
+    if (request.method() === 'GET' && new URL(request.url()).pathname === '/api/projects') calls++
   })
+  await page.addInitScript(key => {
+    localStorage.setItem(`flow:projects:view:${key}:workspace:all`, JSON.stringify({
+      grouping: 'No grouping', groupOrder: 'asc', layout: 'list', ordering: 'Name', orderingDirection: 'asc',
+      properties: ['Priority', 'Status', 'Health', 'Lead'], showClosed: 'All', showEmptyGroups: false,
+    }))
+  }, workspaceKey)
   const bootstrapRequest = page.waitForRequest(request => request.url().endsWith('/api/bootstrap') || request.url().endsWith('/api/issue-records/bootstrap'))
+  const firstPage = page.waitForResponse(projectPage)
   await page.goto(`/${workspaceKey}/projects/all`)
   expect((await bootstrapRequest).headers()['x-flow-projection']).toBe('project-list')
-  await expect(page.getByText('Project 0000', { exact: true })).toBeVisible()
-  await expect.poll(() => calls.length).toBe(1)
+  const { items: firstItems, nextCursor } = await (await firstPage).json() as { items: { name: string }[]; nextCursor?: string }
+  expect(firstItems).toHaveLength(100)
+  expect(nextCursor).toBeTruthy()
+  const firstVisible = firstItems.map(item => item.name).sort()[0]
+  await expect(page.getByText(firstVisible, { exact: true })).toBeVisible()
+  expect(calls).toBe(1)
   expect(await page.locator('.lp-project-row').count()).toBeLessThan(50)
   const scroller = page.locator('[data-virtual-columns] > div').nth(1)
+  const secondPage = page.waitForResponse(projectPage)
   await scroller.evaluate(element => { element.scrollTop = element.scrollHeight })
-  await expect.poll(() => calls.length).toBeGreaterThanOrEqual(2)
-  await expect(page.getByText('Project 0100', { exact: true })).toBeAttached()
+  const { items: lastItems } = await (await secondPage).json() as { items: { name: string }[] }
+  expect(lastItems).toHaveLength(10)
+  expect(calls).toBe(2)
+  await scroller.evaluate(element => { element.scrollTop = 0 })
+  await expect(page.getByText('Project 0000', { exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
 })

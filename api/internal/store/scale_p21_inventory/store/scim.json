@@ -1,0 +1,14 @@
+{
+  "source": "store/scim.go",
+  "unmigrated": 0,
+  "consumers": {
+    "MustWorkspaceID": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode reads only the installed workspace identity; off mode retains the legacy metadata reader and empty-key behavior.",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

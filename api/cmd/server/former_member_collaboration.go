@@ -57,6 +57,9 @@ func applyMentionUpdate(doc *ygo.Doc, update []byte) (err error) {
 }
 
 func refuseFormerMemberStateMentions(data *domain.Bootstrap, beforeData any, beforeState, afterState string, documentID string) error {
+	if data.CollaborationWork != nil {
+		return refuseBoundedFormerMemberStateMentions(data, beforeData, beforeState, afterState, documentID)
+	}
 	if afterState == "" || data.FormerMembers == nil || len(data.FormerMembers()) == 0 {
 		return nil
 	}
@@ -68,6 +71,9 @@ func refuseFormerMemberStateMentions(data *domain.Bootstrap, beforeData any, bef
 }
 
 func refuseFormerMemberRichMentions(data *domain.Bootstrap, beforeData any, beforeState string, after any, documentID string) error {
+	if data.CollaborationWork != nil {
+		return refuseBoundedFormerMemberRichMentions(data, beforeData, beforeState, after, documentID)
+	}
 	mentioned := []string{}
 	collectMentionIDs(after, &mentioned)
 	if len(mentioned) == 0 {
@@ -98,7 +104,14 @@ func refuseFormerMemberRichMentions(data *domain.Bootstrap, beforeData any, befo
 }
 
 func (s *server) refuseFormerMemberCollaborationUpdate(r *http.Request, client *realtimeSocketClient, documentID string, update []byte) error {
-	former, err := s.store.FormerMembers(r.Context(), client.workspace)
+	read, err := s.store.BeginFormerMembersRead(r.Context(), client.workspace)
+	if read != nil {
+		defer read.Close()
+	}
+	var former map[string]bool
+	if read != nil {
+		former = read.Members()
+	}
 	if err != nil || len(former) == 0 {
 		return err
 	}
@@ -116,6 +129,13 @@ func (s *server) refuseFormerMemberCollaborationUpdate(r *http.Request, client *
 		if issue.DocumentContent != nil {
 			state, content = issue.DocumentContent.ContentState, issue.DocumentContent.ContentData
 		}
+	} else if s.store.BoundedMetadataEnabled() {
+		read, err := s.beginFormerMemberDocumentContent(r, client.workspace, documentID)
+		if err != nil {
+			return err
+		}
+		defer read.Close()
+		state, content = read.Document.ContentState, read.Document.ContentData
 	} else {
 		workspace, err := s.socketWorkspaceMetadata(r, client.workspace)
 		if err != nil {

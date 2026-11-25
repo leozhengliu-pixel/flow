@@ -1,0 +1,20 @@
+{
+  "source": "server/recurring_issues_api.go",
+  "unmigrated": 1,
+  "consumers": {
+    "createTeamRecurringIssue": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate",
+        "PagedWorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Explicit recurring-series setup endpoint; the every-minute ticker uses createRecurringOccurrence, not this HTTP handler.",
+      "callers": [
+        "POST /api/teams/{id}/recurring-issues"
+      ]
+    }
+  }
+}

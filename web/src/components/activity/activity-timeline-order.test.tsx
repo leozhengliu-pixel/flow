@@ -48,11 +48,11 @@ describe('activity timeline order', () => {
     const rows = [...container.querySelectorAll('.timeline-item')].map(node => node.querySelector('[data-session]')?.getAttribute('data-session') ?? node.textContent)
     // The archived session's delegation (no card) stays; the shown session's delegation gives way to its card.
     expect(rows).toHaveLength(3)
-    expect(rows[0]).toContain('delegated the issue to Flow')
+    expect(rows[0]).toContain('delegated to Flow')
     expect(rows[1]).toBe('task-1')
     expect(rows[2]).toContain('Flow')
     expect(rows[2]).toContain('moved from Todo to In Progress')
-    expect(container.textContent?.match(/delegated the issue/g)).toHaveLength(1)
+    expect(container.textContent?.match(/delegated to/g)).toHaveLength(1)
   })
   it('matches a delegation row without a session id to a card by the same agent within a minute', () => {
     const events = [

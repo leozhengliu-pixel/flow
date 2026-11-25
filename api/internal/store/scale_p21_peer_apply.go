@@ -1,0 +1,154 @@
+package store
+
+import (
+	"context"
+	"encoding/json"
+	"reflect"
+	"strconv"
+)
+
+// A verified page can advance resident policy only if the installed logical
+// generation already represents the same metadata revision.
+func (s *SQLiteStore) applyResidentCommittedPage(ctx context.Context, workspaceID string, page CommittedPage) (string, error) {
+	next, err := strconv.ParseInt(page.Next, 10, 64)
+	if err != nil || next < 0 || page.Head != page.Next || page.HasMore || page.ResyncRequired || len(page.Transactions) > 100 {
+		return "", ErrPeerSnapshotRequired
+	}
+	ctx, release, err := s.admitMetadataWork(ctx, metadataPolicyBytes+2<<20)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	var workspace string
+	if err := tx.QueryRowContext(ctx, `SELECT workspace_key FROM workspace_states WHERE workspace_id=?`, workspaceID).Scan(&workspace); err != nil {
+		return "", err
+	}
+	head, err := residentJournalHead(ctx, tx, workspaceID)
+	if err != nil {
+		return "", err
+	}
+	if head != next {
+		return "", ErrPeerSnapshotRequired
+	}
+	stamp, err := readMetadataStamp(ctx, tx, workspace)
+	if err != nil {
+		return "", err
+	}
+	basis, after, known := s.residentStamp(workspace)
+	if !known || basis.workspaceID != workspaceID || after > next || !s.residentPeerSourceCurrent(workspace, stamp) {
+		return "", ErrPeerSnapshotRequired
+	}
+	if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
+		return "", err
+	}
+	if basis != stamp {
+		if err := verifyResidentCommittedTransactions(ctx, tx, workspaceID, after, next, page); err != nil {
+			return "", err
+		}
+	}
+	data, installed, cost, err := s.readResidentWorkspace(ctx, tx, workspace)
+	if err != nil {
+		return "", err
+	}
+	if installed != stamp {
+		return "", ErrPeerSnapshotRequired
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	// The policy and page were verified together. Before publishing them,
+	// check for a local install or a newer canonical snapshot or journal head.
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	if current, applied, ok := s.residentStamp(workspace); !ok || current != basis || applied != after || !s.residentPeerSourceCurrent(workspace, stamp) {
+		return "", ErrPeerSnapshotRequired
+	}
+	latest, latestHead, _, err := s.readResidentPublicationStamp(ctx, workspace, workspaceID)
+	if err != nil {
+		return "", err
+	}
+	if latest != stamp || latestHead != next {
+		return "", ErrPeerSnapshotRequired
+	}
+	if err := s.installResidentPolicy(workspace, data, stamp, next, cost); err != nil {
+		return "", err
+	}
+	return page.Next, nil
+}
+
+func (s *SQLiteStore) residentPeerSourceCurrent(workspace string, stamp copyStamp) bool {
+	r := s.metadataResidency
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	source := r.logical[workspace]
+	if source == nil {
+		return !r.requireCoverage // Policy-only storage probes.
+	}
+	return source.Stamp() == stamp && !source.behind.Load()
+}
+
+func (s *SQLiteStore) readResidentPublicationStamp(ctx context.Context, workspace, workspaceID string) (copyStamp, int64, string, error) {
+	var stamp copyStamp
+	var head int64
+	var generation string
+	err := s.db.QueryRowContext(ctx, `SELECT `+metadataStampColumns+`,COALESCE((SELECT MAX(head) FROM workspace_record_journal_heads WHERE workspace_id=?),0),
+		COALESCE((SELECT generation FROM record_journal_mode WHERE id=1 AND enabled=1 AND capturing=1),'')
+		FROM workspace_states WHERE workspace_key=?`, workspace, cacheKindMetadata, workspaceID, workspace).Scan(&stamp.workspaceID, &stamp.revision, &head, &generation)
+	return stamp, head, generation, err
+}
+
+func verifyResidentCommittedTransactions(ctx context.Context, tx *sqlTx, workspaceID string, after, next int64, page CommittedPage) error {
+	var pending int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM record_journal WHERE workspace_id=? AND seq IS NULL`, workspaceID).Scan(&pending); err != nil {
+		return err
+	}
+	if pending != 0 {
+		return ErrPeerSnapshotRequired
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id,seq,CASE WHEN running_bytes<=? THEN payload ELSE NULL END FROM (SELECT bounded.*,SUM(LENGTH(payload)+512) OVER (ORDER BY seq,id) AS running_bytes FROM (SELECT id,seq,payload FROM record_journal WHERE workspace_id=? AND seq>? AND seq<=? ORDER BY seq,id LIMIT 101) bounded) budgeted ORDER BY seq,id`, MetadataRecordPageMaxBytes, workspaceID, after, next)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	committed := map[string]CommittedChange{}
+	budget := newMetadataHydrationBudget()
+	for rows.Next() {
+		var id string
+		var seq int64
+		var raw []byte
+		if err := rows.Scan(&id, &seq, &raw); err != nil {
+			return err
+		}
+		if len(committed) == 100 || raw == nil {
+			return ErrPeerSnapshotRequired
+		}
+		if err := budget.consume(raw); err != nil {
+			return err
+		}
+		var change CommittedChange
+		if err := json.Unmarshal(raw, &change); err != nil {
+			return err
+		}
+		change.Seq = strconv.FormatInt(seq, 10)
+		committed[id] = change
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, change := range page.Transactions {
+		stored, ok := committed[change.TxID]
+		if !ok || !reflect.DeepEqual(stored, change) {
+			return ErrPeerSnapshotRequired
+		}
+		delete(committed, change.TxID)
+	}
+	if len(committed) != 0 {
+		return ErrPeerSnapshotRequired
+	}
+	return nil
+}

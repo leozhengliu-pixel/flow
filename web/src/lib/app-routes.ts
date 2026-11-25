@@ -475,6 +475,16 @@ function settingsAlias(rest: string[]): string[] | undefined {
   return undefined;
 }
 
+/** Routes whose workspace bootstrap is the project-list projection. */
+export function isProjectListRoute(route: AppRoute) {
+  return route.kind === 'projects'
+    || route.kind === 'team-projects'
+    || route.kind === 'projects-new-view'
+    || route.kind === 'projects-saved-view'
+    || route.kind === 'team-projects-new-view'
+    || route.kind === 'team-projects-saved-view'
+}
+
 export function parseAppRoute(pathname: string, search = ""): AppRoute {
   const segments = pathname
     .split("/")

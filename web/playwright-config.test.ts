@@ -17,6 +17,19 @@ it('keeps desktop specs in one project before browser sharding', async () => {
   expect(mobile.testIgnore).toContain('**/desktop-*.spec.ts')
 })
 
+it('runs the timeline performance spec only against a fresh production preview', async () => {
+  const { default: dev, timelinePerformanceSpec } = await import('./playwright.config')
+  const { default: performance } = await import('./playwright.performance.config')
+  for (const project of dev.projects!) {
+    expect(project.testIgnore).toContain(timelinePerformanceSpec)
+  }
+  expect(performance.testIgnore).not.toContain(timelinePerformanceSpec)
+  expect(performance.testMatch).toBe(timelinePerformanceSpec)
+  const servers = Array.isArray(performance.webServer) ? performance.webServer : [performance.webServer]
+  expect(servers.find(server => server?.url === performance.use?.baseURL)?.command).toContain('npm run preview')
+  for (const server of servers) expect(server?.reuseExistingServer).toBe(false)
+})
+
 it('retains the default browser API database path', async () => {
   vi.stubEnv('FLOW_E2E_DATABASE_PATH', undefined)
   expect((await apiServer()).env?.FLOW_E2E_DATABASE_PATH).toBe('/tmp/flow-e2e.db')

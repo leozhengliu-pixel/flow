@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_cold_dispatch.go",
+  "unmigrated": 0,
+  "consumers": {
+    "WithColdMetadataRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Exports the existing exact installed-source cold read lifetime to registered COLD consumers. Off forwards the literal receiver/context; bounded validates inventory temperature/reason, owns the legacy facade through callback output, and nested context calls reuse one cancellable replica slot. SW191 tests literal off identity, HOT/unknown refusal, native source equality, nested facade identity, cancellation and release; existing cold read tests prove complete source and encoding lifetime.",
+      "accessors": ["WithColdMetadataRead", "withColdMetadataRead"],
+      "temperature": "cold",
+      "temperatureReason": "Factory reachable only through registered COLD admission.",
+      "callers": ["server/scale_p21_cold_dispatch.go:withColdMetadataRequest"]
+    },
+    "WithColdMetadataMutation": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Exports the existing cold mutation-store publication lifetime, preserving the parent write mutex, precommit logical postimage and literal legacy dispatcher for supported metadata/loop/team writer families. The shared actual-dispatch guard rejects writes from a read facade and unintegrated issue/content/scoped families before callbacks or SQL publication. Nested facade calls share the admitted cold operation. SW191 tests real committed settings and parent logical visibility, read-only refusal, unsupported dispatch refusal, nested lifetime and release; existing cold writer suites prove rollback/audit/events.",
+      "accessors": ["WithColdMetadataMutation", "withColdMutationStore"],
+      "temperature": "cold",
+      "temperatureReason": "Writer factory admitted only for registered COLD consumers and integrated dispatch families.",
+      "callers": ["server/scale_p21_cold_dispatch.go:withColdMetadataRequest"]
+    }
+  }
+}

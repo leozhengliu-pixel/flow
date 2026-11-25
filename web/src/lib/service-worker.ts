@@ -1,11 +1,13 @@
 /**
- * Registers /sw.js, which caches content-hashed /assets/ files cache-first (see public/sw.js). Production only; set
+ * Registers /sw.js, which caches content-hashed /assets/ files cache-first and answers page navigations with the
+ * cached app shell while it revalidates it (see public/sw.js). Production only; set
  * localStorage['flow:disable-sw'] = '1' (or build with VITE_DISABLE_SW=1) to opt out, which also removes a worker
  * and caches that an earlier visit installed.
  */
 
 const DISABLE_KEY = 'flow:disable-sw'
-const CACHE_PREFIX = 'flow-assets-'
+// The worker's caches: hashed files and the app shell (any version).
+const CACHE_PATTERN = /^flow-(?:assets|shell)-/
 
 export function serviceWorkerEnabled(
   env: { PROD?: boolean; VITE_DISABLE_SW?: string } = import.meta.env,
@@ -24,12 +26,15 @@ async function removeServiceWorker() {
   await Promise.all(registrations.map(registration => registration.unregister()))
   if (typeof caches === 'undefined') return
   const keys = await caches.keys()
-  await Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX)).map(key => caches.delete(key)))
+  await Promise.all(keys.filter(key => CACHE_PATTERN.test(key)).map(key => caches.delete(key)))
 }
 
 export function registerServiceWorker() {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
   const enabled = serviceWorkerEnabled()
+  // A controlled navigation already triggers the browser's update check.
+  // Registering the same script again can overlap the next navigation.
+  if (enabled && navigator.serviceWorker.controller?.scriptURL === new URL('/sw.js', window.location.href).href) return
   // Registration waits for load so the worker never competes with the first paint.
   const run = () => {
     const task = enabled ? navigator.serviceWorker.register('/sw.js') : removeServiceWorker()

@@ -1,0 +1,33 @@
+{
+  "source": "server/coding_triggers_api.go",
+  "unmigrated": 2,
+  "consumers": {
+    "codingTriggerRequestContext": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.startIssueCodingSession",
+        "server/server.startReviewCodingSession"
+      ]
+    },
+    "startReviewCodingSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/reviews/{id}/coding-session (server/coding_triggers_api.go:25)"
+      ]
+    }
+  }
+}

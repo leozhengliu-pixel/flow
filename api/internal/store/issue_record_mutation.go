@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"time"
 
 	"flow/api/internal/domain"
@@ -24,14 +25,15 @@ type IssueMutationScope struct {
 	IncludeFamily bool
 	NewParentID   string
 	Payload       any
+	RebaseVersion *int64 // Optional version advanced directly from the supplied base, including on replay.
 }
 
 // UpdateIssueRecord is a bounded entity transaction. The callback may update
 // the target, its immediate family, and the supplied related IDs. Large graph
 // changes must be scheduled as batches rather than materialized in a request.
-// Its metadata changes other than to documents are discarded; data.Projects
-// and data.Trash are shared with the stored copy and must not be changed at
-// all (issueUpdateMetadata).
+// Its metadata changes other than to documents are discarded. With narrow
+// mutation inputs disabled, data.Projects and data.Trash share the stored
+// copy and must not be changed (issueUpdateMetadata).
 func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id string, expected *int64, scope IssueMutationScope, mutate func(*domain.Bootstrap, *domain.Issue) error) (domain.Issue, error) {
 	mutationKey := ChatMutationKey(ctx)
 	mutationActor := ""
@@ -42,31 +44,53 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		mutationActor = actor.ID
 	}
-	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspace)
+	webhookEnabled := false
+	if s.BoundedMetadataEnabled() {
+		if s.webhookConfigured() {
+			err := s.retryMetadataWriteWork(ctx, func(ctx context.Context, _ func()) error {
+				var err error
+				webhookEnabled, err = s.issueMetadataWebhookNeeded(ctx, workspace)
+				return err
+			})
+			if err != nil {
+				return domain.Issue{}, err
+			}
+		}
+	} else {
+		webhookEnabled = s.webhookConfigured() && s.webhookNeeded(ctx, workspace)
+	}
 	if len(scope.RelatedIDs) > 100 {
 		return domain.Issue{}, fmt.Errorf("too many related issues")
 	}
 	// Each attempt starts from the server's current copy of the metadata.
 	// It runs under writeMu, so the copy cannot change meanwhile.
+	fields := issueRecordCallbackFields(scope.Payload)
+	var storedMetadata domain.Bootstrap
 	loadMetadata := func() (domain.Bootstrap, error) {
 		stored, ok := s.storedWorkspace(workspace)
 		if !ok {
 			return domain.Bootstrap{}, sql.ErrNoRows
 		}
-		metadata := issueUpdateMetadata(stored)
+		storedMetadata = stored
+		metadata := issueUpdateMetadata(stored, fields...)
 		if actor, ok := actorFromContext(ctx); ok {
+			actor = mutationInputActor(actor)
 			metadata.Viewer = actor
 			role, status, err := s.WorkspaceRole(ctx, metadata.Workspace.ID, actor.ID)
 			if err != nil {
-				return domain.Bootstrap{}, err
+				return domain.Bootstrap{}, PreWriteDatabaseError(err)
 			}
 			if mutationKey != "" && status != "active" {
 				return domain.Bootstrap{}, ErrAuthForbidden
 			}
 			metadata.ViewerRole = role
 		}
-		if err := s.loadMemberAccess(ctx, &metadata); err != nil {
-			return domain.Bootstrap{}, err
+		if !s.BoundedMetadataEnabled() {
+			// Bounded writes read the rows of the people they can name
+			// in the transaction instead (issueMoveAudience).
+			if err := s.loadMemberAccess(ctx, &metadata); err != nil {
+				return domain.Bootstrap{}, err
+			}
 		}
 		return metadata, nil
 	}
@@ -84,7 +108,11 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	// A metadata record the write changes (a project's progress, a document's
 	// scope) was changed on another server in the same field: refresh it and
 	// rerun the write; after the last attempt the conflict is the error.
-	err := mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+	refresh := s.refreshConflictedMetadata(ctx, workspace)
+	if s.BoundedMetadataEnabled() {
+		refresh = s.refreshConflictedLogicalMetadata(ctx, workspace)
+	}
+	apply := func(ctx context.Context, stopWorkRetry func()) error {
 		var err error
 		// The callback edits a metadata clone (sharing only what it never
 		// changes, see issueUpdateMetadata) and progress refreshes copy the
@@ -105,7 +133,12 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return err
 		}
 		defer tx.Rollback()
-		if issueRenumbering(ctx) {
+		if issueRenumbering(ctx) && s.BoundedMetadataEnabled() {
+			// The installed image holds NextIssueNumber (issueTeamMove).
+			if metadata.NextIssueNumber, err = s.issueUpdateSequence(ctx, tx, workspace); err != nil {
+				return err
+			}
+		} else if issueRenumbering(ctx) {
 			// Lock the sequence before any issue row, in the order issue
 			// creation takes them.
 			next, err := s.lockedNextIssueNumber(ctx, tx, workspace)
@@ -128,14 +161,21 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		normalizeIssueRecord(&original)
 		result = original
+		receipt := issueMutationReceipt{issueID: id}
+		if scope.RebaseVersion != nil {
+			*scope.RebaseVersion = 0
+		}
 		if mutationKey != "" {
-			appliedID, found, err := readChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey)
+			applied, found, err := readChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey)
 			if err != nil {
 				return err
 			}
 			if found {
-				if appliedID != id {
+				if applied.issueID != id {
 					return ErrIssueQuery
+				}
+				if scope.RebaseVersion != nil {
+					*scope.RebaseVersion = applied.rebaseVersion
 				}
 				return ErrNoMutation
 			}
@@ -178,7 +218,6 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 				}
 			}
 		}
-		clause, args := bindList("id", ids)
 		family := "(parent_id=?"
 		familyArgs := []any{id}
 		if original.ParentID != nil {
@@ -188,17 +227,37 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		family += ")"
 		previous := map[string]domain.Issue{}
 		metadata.Issues = []domain.Issue{}
+		addIssue := func(encoded []byte) error {
+			var issue domain.Issue
+			if err := json.Unmarshal(encoded, &issue); err != nil {
+				return err
+			}
+			normalizeIssueRecord(&issue)
+			if _, seen := previous[issue.ID]; !seen {
+				previous[issue.ID] = issue
+				metadata.Issues = append(metadata.Issues, issue)
+			}
+			return nil
+		}
 		// Combining primary-key and parent-index predicates with OR makes MySQL
 		// scan the workspace primary-key range. Keep both lookups independently indexed.
-		lookups := []struct {
+		type lookup struct {
 			where string
 			args  []any
-		}{{clause, args}}
+		}
+		var lookups []lookup
+		if len(ids) == 1 {
+			// The target is already locked. Decode a separate callback copy so
+			// edits to nested fields cannot modify original.
+			if err := addIssue(raw); err != nil {
+				return err
+			}
+		} else {
+			clause, args := bindList("id", ids)
+			lookups = append(lookups, lookup{clause, args})
+		}
 		if scope.IncludeFamily {
-			lookups = append(lookups, struct {
-				where string
-				args  []any
-			}{family, familyArgs})
+			lookups = append(lookups, lookup{family, familyArgs})
 		}
 		for _, lookup := range lookups {
 			rows, err := tx.QueryContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND `+lookup.where+` ORDER BY id LIMIT 1001`+lock, append([]any{workspace}, lookup.args...)...)
@@ -211,15 +270,9 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 					rows.Close()
 					return err
 				}
-				var issue domain.Issue
-				if err := json.Unmarshal(encoded, &issue); err != nil {
+				if err := addIssue(encoded); err != nil {
 					rows.Close()
 					return err
-				}
-				normalizeIssueRecord(&issue)
-				if _, seen := previous[issue.ID]; !seen {
-					previous[issue.ID] = issue
-					metadata.Issues = append(metadata.Issues, issue)
 				}
 			}
 			if err := rows.Err(); err != nil {
@@ -241,8 +294,80 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if target == nil {
 			return sql.ErrNoRows
 		}
+		var projectInputs *issueHotInputs
+		var editor *issueEditorLookups
+		if s.BoundedMetadataEnabled() {
+			states, err := s.loadIssueWorkflowStates(ctx, workspace, &metadata, scope.Payload)
+			if err != nil {
+				return err
+			}
+			defer states.close()
+			metadata.States = states.states
+			storedMetadata.States = slices.Clone(states.states)
+			// An untyped payload (the stale-close and archive automation) runs
+			// applyUpdate's state path at most: it reads the closure of an
+			// update without input fields. Its event payload is unchanged.
+			input, _ := scope.Payload.(domain.IssueUpdateInput)
+			var inputs *issueHotInputs
+			if issueHotInputsSupported(metadata.Issues, *target, input) {
+				if inputs, err = s.loadIssueHotInputs(ctx, workspace, &metadata, *target, input); err != nil {
+					return err
+				}
+				defer inputs.close()
+				inputs.install(&metadata, &storedMetadata)
+			} else if issueProjectInputsSupported(*target, input) {
+				if projectInputs, err = s.loadIssueProjectInputs(ctx, workspace, &metadata, *target, input); err != nil {
+					return err
+				}
+				defer projectInputs.close()
+				projectInputs.installProjects(&metadata, &storedMetadata)
+				inputs = projectInputs
+			} else {
+				return ErrBoundedMetadataCoverage
+			}
+			_, actor := actorFromContext(ctx)
+			moving := input.TeamID != nil && *input.TeamID != target.Team.ID
+			if issueRenumbering(ctx) || moving {
+				users := []string{metadata.Viewer.ID}
+				for _, user := range metadata.Users {
+					users = append(users, user.ID)
+				}
+				if issueRenumbering(ctx) && actor {
+					metadata.Members, metadata.TeamMembers, err = inputs.issueMoveAudience(ctx, tx, metadata.Workspace.ID, users)
+				} else {
+					// Without the marker, or without an actor, the literal
+					// writer keeps the installed member snapshots.
+					metadata.Members, metadata.TeamMembers, err = inputs.issueMoveSnapshotAudience(ctx, users)
+				}
+				if err != nil {
+					return err
+				}
+				storedMetadata.Members, storedMetadata.TeamMembers = slices.Clone(metadata.Members), slices.Clone(metadata.TeamMembers)
+			}
+			if moving && !issueRenumbering(ctx) {
+				// Moved by another write since the caller read the issue: the
+				// legacy write numbers it from the snapshot, unlocked.
+				metadata.NextIssueNumber, err = inputs.issueMoveSnapshotNumber(ctx)
+				if err != nil {
+					return err
+				}
+				storedMetadata.NextIssueNumber = metadata.NextIssueNumber
+			}
+			if editor, err = newIssueEditorLookups(ctx, inputs, tx, workspace, metadata.Workspace.ID, *target); err != nil {
+				return err
+			}
+			defer editor.close()
+			editor.liveMembers = issueRenumbering(ctx) && actor
+		}
 		metadata.Activities = map[string][]domain.ActivityEvent{}
 		metadata.Comments = map[string][]domain.Comment{}
+		metadata.ActivityHistoryHeads = map[string]domain.ActivityEvent{}
+		// Activity heads are read lazily, only for the issues whose timeline
+		// the callback appends to (two bounded index lookups per issue), never
+		// for the rest of the loaded family.
+		metadata.ActivityHistoryLoader = func(issueID string) (domain.ActivityHistorySnapshot, error) {
+			return loadIssueHistoryHead(ctx, tx, workspace, issueID)
+		}
 		rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='notification' AND resource_id=? ORDER BY created_at DESC LIMIT 1000`, workspace, id)
 		if err != nil {
 			return err
@@ -269,16 +394,57 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if err != nil {
 			return err
 		}
-		metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
-		metadata.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
-		err = mutate(&metadata, target)
+		if editor != nil {
+			editor.install(&metadata)
+		} else {
+			metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
+			metadata.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
+		}
+		if len(fields) > 0 && !slices.Contains(fields, "projects") {
+			if projectInputs != nil {
+				metadata.Projects = nil
+			}
+			copyMutationProjects(&metadata, storedMetadata)
+		}
+		stopWorkRetry()
+		if len(fields) > 0 && verifyNarrowMutationInputs() {
+			_, err = s.verifyMutationCallback(ctx, tx, "issue", storedMetadata, &metadata, fields, scope.Payload, func(input *domain.Bootstrap) (string, error) {
+				for i := range input.Issues {
+					if input.Issues[i].ID == id {
+						return id, mutate(input, &input.Issues[i])
+					}
+				}
+				return id, sql.ErrNoRows
+			})
+			fields = nil
+			for i := range metadata.Issues {
+				if metadata.Issues[i].ID == id {
+					target = &metadata.Issues[i]
+					break
+				}
+			}
+		} else {
+			err = mutate(&metadata, target)
+		}
 		metadata.CollaborationUpdates = nil
 		metadata.FormerMembers = nil
+		metadata.CollaborationWork = nil
+		if editor != nil && editor.err != nil {
+			// A budget, coverage or cancellation failure of a bounded lookup
+			// the callback used; SQL errors keep the legacy warning.
+			return editor.err
+		}
+		if metadata.ActivityHistoryError != nil {
+			return metadata.ActivityHistoryError
+		}
+		if len(fields) > 0 {
+			restoreUnlistedMetadata(&metadata, storedMetadata, fields)
+		}
 		if err != nil {
 			if errors.Is(err, ErrNoMutation) {
 				result = original
 				if mutationKey != "" {
-					if receiptErr := writeChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey, id); receiptErr != nil {
+					if receiptErr := writeChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey, receipt); receiptErr != nil {
 						return receiptErr
 					}
 					if commitErr := tx.Commit(); commitErr != nil {
@@ -310,11 +476,28 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		for resource, items := range metadata.Activities {
 			for _, item := range items {
+				if head, exists := metadata.ActivityHistoryHeads[resource]; exists && item.ID == head.ID {
+					delete(metadata.ActivityHistoryHeads, resource)
+					if reflect.DeepEqual(head, item) {
+						continue
+					}
+				}
 				if err := writeContentRecord(ctx, tx, workspace, "activity", resource, item); err != nil {
 					return err
 				}
 			}
 		}
+		for resource, head := range metadata.ActivityHistoryHeads {
+			if head.Type != "issue.updated" || !hasIssueActivityChanges(head.Metadata) {
+				continue
+			}
+			if err := deleteIssueActivity(ctx, tx, workspace, resource, head.ID); err != nil {
+				return err
+			}
+		}
+		metadata.ActivityHistoryLoader = nil
+		metadata.ActivityHistoryError = nil
+		metadata.ActivityHistoryHeads = nil
 		for resource, items := range notificationRecords(metadata.Notifications) {
 			for _, item := range items {
 				if err := writeContentRecord(ctx, tx, workspace, "notification", resource, item); err != nil {
@@ -339,7 +522,16 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if original.Team.ID != result.Team.ID {
 			documents = metadata.Documents
 		}
-		if progressMetadata, err = s.persistIssueMetadata(ctx, tx, workspace, loadedIssues, metadata.Issues, documents); err != nil {
+		var publication *metadataLogicalPublication
+		if projectInputs != nil {
+			publication, err = s.persistSelectedIssueMetadata(ctx, tx, workspace, storedMetadata, loadedIssues, metadata.Issues, documents, projectInputs)
+			if publication != nil {
+				defer publication.Close()
+			}
+		} else {
+			progressMetadata, err = s.persistIssueMetadata(ctx, tx, workspace, loadedIssues, metadata.Issues, documents)
+		}
+		if err != nil {
 			return err
 		}
 		metadataWritten = tx.metadataWritten
@@ -378,12 +570,23 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		realtime = enrichRealtimePayload(payload, result, event.Type)
 		if mutationKey != "" {
-			if err := writeChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey, id); err != nil {
+			if scope.RebaseVersion != nil && expected != nil && *expected == original.Version {
+				receipt.rebaseVersion = result.Version
+			}
+			if err := writeChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey, receipt); err != nil {
 				return err
 			}
 		}
 		if err := tx.Commit(); err != nil {
 			return err
+		}
+		if scope.RebaseVersion != nil {
+			*scope.RebaseVersion = receipt.rebaseVersion
+		}
+		if publication != nil {
+			if err := publication.Install(); err != nil {
+				return err
+			}
 		}
 		if progressMetadata != nil {
 			s.installWrittenWorkspace(workspace, *progressMetadata, false, copyWrite)
@@ -392,9 +595,15 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			s.dropMetadataCache(ctx, workspace)
 		}
 		return nil
-	}, s.refreshConflictedMetadata(ctx, workspace))
+	}
+	err := mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+		return s.retryMetadataWriteWork(ctx, apply)
+	}, refresh)
 	if errors.Is(err, ErrNoMutation) {
 		return result, nil
+	}
+	if MetadataWorkContended(err) {
+		return domain.Issue{}, err
 	}
 	if err != nil {
 		return result, err

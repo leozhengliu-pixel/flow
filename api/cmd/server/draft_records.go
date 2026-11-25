@@ -2,18 +2,37 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
 
-func (s *server) draftRecordValidator(r *http.Request) (func(*domain.Bootstrap, domain.Draft) error, error) {
-	metadata, query, err := s.issueRecordsQuery(r)
+func draftRecordWriteRequest(r *http.Request) bool {
+	if r.Method == http.MethodPost {
+		return r.URL.Path == "/api/drafts"
+	}
+	id, ok := strings.CutPrefix(r.URL.Path, "/api/drafts/")
+	return r.Method == http.MethodPatch && ok && id != "" && !strings.Contains(id, "/")
+}
+
+func (s *server) draftRecordValidator(r *http.Request, repo *store.SQLiteStore) (func(*domain.Bootstrap, domain.Draft) error, error) {
+	// Resource authorization checks membership. The full projection belongs
+	// here, after decoding, so draft validation sees the current references.
+	if !s.store.BoundedMetadataEnabled() && !acquireProjectionWaiting(r) {
+		return nil, r.Context().Err()
+	}
+	metadata, query, err := s.issueRecordsQueryWithStore(r, repo)
 	if err != nil {
 		return nil, err
 	}
 	if !s.authDisabled {
-		metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+		if !repo.BoundedMetadataEnabled() {
+			if err := repo.RefreshColdMetadataRead(r.Context(), query.Workspace); err != nil {
+				return nil, err
+			}
+		}
+		metadata, err = repo.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
 		if err != nil {
 			return nil, err
 		}
@@ -27,7 +46,7 @@ func (s *server) draftRecordValidator(r *http.Request) (func(*domain.Bootstrap, 
 			}
 			q := query
 			q.Filter, q.Archived, q.Limit = store.IssueFilter{Field: "id", Values: []string{id}}, "all", 1
-			page, err := s.store.QueryIssueRecords(r.Context(), q)
+			page, err := repo.QueryIssueRecords(r.Context(), q)
 			queryError = err
 			return err == nil && len(page.Items) == 1
 		})

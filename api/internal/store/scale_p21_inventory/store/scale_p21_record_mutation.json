@@ -1,0 +1,23 @@
+{
+  "source": "store/scale_p21_record_mutation.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateResidentRecords": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap",
+        "decodeWorkspaceMetadata"
+      ]
+    },
+    "residentWebhookNeeded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode retains the exact installed logical generation and physical default workspace key through the streaming logicalWebhookNeeded predicate; it loads no unrelated bodies and preserves Go string predicates, authoritative chat fallback and cancellation errors. Off mode retains the original canonical SQL predicate verbatim. TestScaleP21HotWebhookInstalledDifferential compares warm NUL, Unicode whitespace, invalid bytes and large scalar inputs against the literal installed predicate, rejects canonical predicate queries and checks unrelated canonical bytes. IdentityAndLifetime, RetainedTraversal and MissingApplicationFallback cover exact/default/missing physical keys, cached and orphan application flags, source/admission/cancellation errors and lifetime across installation. PointWriterWarmPreviousValues compares direct generic point-writer publication and canonical rows under the distinguishing warm NUL loop.",
+      "accessors": [
+        "BeginInstalledMetadataRead"
+      ]
+    }
+  }
+}

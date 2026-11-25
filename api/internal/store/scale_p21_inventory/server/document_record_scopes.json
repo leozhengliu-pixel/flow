@@ -1,0 +1,40 @@
+{
+  "source": "server/document_record_scopes.go",
+  "unmigrated": 0,
+  "consumers": {
+    "documentAuthorizationMetadata": {
+      "owner": "P17",
+      "status": "reviewed",
+      "reason": "Bounded document authorization uses the owned typed BeginDocumentRead selection, live membership projection and shared application reader through response encoding; native mutation inputs, trash/private-team rules and API-key filtering retain their existing boundaries. The literal off branch and normal-only projection fallback remain unchanged. Verified by the exact 5,850-case document/P20 HTTP matrix twice on persistent SQLite, full shared-reader persistent/race proof, actual installed-app identities, queued authority revocation and normal/cancel/panic encoding lifetime cases.",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Document GET/comment/subscriber read authorization and fallback are reached from normal document views.",
+      "callers": [
+        "server/auth.go:resourceAllowedLegacy:996",
+        "server/document_record_scopes.go:documentWorkspaceData:173"
+      ]
+    },
+    "documentWorkspaceData": {
+      "owner": "P17",
+      "status": "reviewed",
+      "reason": "Bounded handler input reuses the owned document authorization handoff and its response owner, preserving native callback preimages and the existing API-key filtering; the off branch calls the literal workspaceData accessor. Shared selection owns only the document/reciprocal project closure, exact live SQL projection and application users, with final live epoch validation for owned snapshots. Exact HTTP differentials, persistent shared-reader repeats, full store race and server normal/cancel/panic encoding race passed; arbitrary P16 selectors remain independently pending.",
+      "accessors": [
+        "Bootstrap",
+        "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Called by getDocument, listDocumentComments and listDocumentSubscribers; therefore a document-view read boundary.",
+      "callers": [
+        "server/advanced_features.go:restoreDocumentRevision:769",
+        "server/document_lifecycle.go:getDocument:206",
+        "server/document_lifecycle.go:listDocumentSubscribers:318",
+        "server/document_permissions.go:listDocumentPermissions:13",
+        "server/document_permissions.go:replaceDocumentPermissions:45",
+        "server/document_permissions.go:listDocumentComments:201"
+      ]
+    }
+  }
+}

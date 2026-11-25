@@ -47,7 +47,11 @@ func auditStreamWebhook(data *domain.Bootstrap) int {
 }
 
 func (s *server) getAuditStream(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), auditStreamScope())
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -64,6 +68,10 @@ func (s *server) getAuditStream(w http.ResponseWriter, r *http.Request) {
 		slices.Reverse(status.Failures)
 	}
 	writeJSON(w, http.StatusOK, status)
+}
+
+func auditStreamScope() store.MetadataRecordScope {
+	return store.MetadataRecordScope{Fields: []string{"webhooks", "webhookFailureEvents"}}
 }
 
 func validAuditStreamURL(value string) (string, error) {
@@ -107,7 +115,7 @@ func (s *server) createAuditStream(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := requestActor(s, r)
 	var created domain.Webhook
-	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "webhook.created", map[string]any{"auditLog": true, "url": target}, func(data *domain.Bootstrap) (string, error) {
+	err = s.store.MutateWorkspaceScopedWithAggregate(r.Context(), workspaceKey(r), "webhook.created", map[string]any{"auditLog": true, "url": target}, auditStreamScope(), func(data *domain.Bootstrap) (string, error) {
 		if auditStreamWebhook(data) >= 0 {
 			return "", errConflict
 		}
@@ -145,7 +153,7 @@ func (s *server) updateAuditStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.Webhook
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "webhook.updated", "audit_log_stream", input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "webhook.updated", "audit_log_stream", input, auditStreamScope(), func(data *domain.Bootstrap) error {
 		index := auditStreamWebhook(data)
 		if index < 0 {
 			return errNotFound
@@ -179,7 +187,7 @@ func (s *server) updateAuditStream(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteAuditStream(w http.ResponseWriter, r *http.Request) {
 	var removedID string
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "webhook.deleted", "audit_log_stream", nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "webhook.deleted", "audit_log_stream", nil, auditStreamScope(), func(data *domain.Bootstrap) error {
 		index := auditStreamWebhook(data)
 		if index < 0 {
 			return errNotFound
@@ -200,11 +208,12 @@ func (s *server) deleteAuditStream(w http.ResponseWriter, r *http.Request) {
 // first. Each entry is retried with backoff; after the last attempt it is
 // recorded as a failure and skipped. A stream failing for a day is disabled.
 func (s *server) streamAuditLog(ctx context.Context, workspace string, now time.Time) {
-	if hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks"); !ok || auditStreamWebhook(&hooks) < 0 {
+	hooks, ok, readErr := s.store.WorkspaceMetadataFieldsScoped(ctx, workspace, store.MetadataRecordScope{Fields: []string{"webhooks"}}, "webhooks")
+	if readErr != nil || !ok || auditStreamWebhook(&hooks) < 0 {
 		return
 	}
-	data, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks")
-	if !ok {
+	data, ok, readErr := s.store.WorkspaceMetadataFieldsScoped(ctx, workspace, store.MetadataRecordScope{Fields: []string{"webhooks"}}, "webhooks")
+	if readErr != nil || !ok {
 		return
 	}
 	index := auditStreamWebhook(&data)
@@ -333,7 +342,7 @@ func (s *server) recordAuditStreamRetry(workspace, webhookID string, attempts in
 func (s *server) mutateAuditStream(workspace, webhookID string, apply func(*domain.Webhook)) {
 	// Progress only stamps the streaming webhook.
 	ctx := store.WithMetadataFields(context.Background(), "webhooks")
-	err := s.store.MutateWorkspace(ctx, workspace, "webhook.audit_stream_progress", webhookID, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(ctx, workspace, "webhook.audit_stream_progress", webhookID, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "webhooks", ID: webhookID}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == webhookID && item.AuditLog })
 		if index < 0 {
 			return errNotFound

@@ -1345,15 +1345,12 @@ func normalizeAgentToolArguments(call *domain.AgentToolCall) error {
 	return nil
 }
 
-func (s *server) runAgentToolCall(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {
-	if call.Name == agentProgressTool {
-		return []byte(`{"ok":true}`), nil
-	}
+func (s *server) requireAgentToolPolicy(r *http.Request, data domain.Bootstrap) error {
 	if s.store != nil {
 		// The policy check needs the workspace id and settings only.
 		fresh, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
 		if !ok {
-			return nil, errNotFound
+			return errNotFound
 		}
 		role := data.ViewerRole
 		if !s.authDisabled {
@@ -1361,15 +1358,25 @@ func (s *server) runAgentToolCall(r *http.Request, data domain.Bootstrap, call d
 			var err error
 			role, status, err = s.store.WorkspaceRole(r.Context(), fresh.Workspace.ID, data.Viewer.ID)
 			if err != nil || status != "active" {
-				return nil, fmt.Errorf("Workspace access was revoked")
+				return fmt.Errorf("Workspace access was revoked")
 			}
 		}
 		if err := agentWorkspacePolicy(fresh.WorkspaceSettings, role); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if !s.agent.ToolsEnabled {
-		return nil, fmt.Errorf("Agent tools are disabled")
+		return fmt.Errorf("Agent tools are disabled")
+	}
+	return nil
+}
+
+func (s *server) runAgentToolCall(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {
+	if call.Name == agentProgressTool {
+		return []byte(`{"ok":true}`), nil
+	}
+	if err := s.requireAgentToolPolicy(r, data); err != nil {
+		return nil, err
 	}
 	if strings.HasPrefix(call.Name, "external_") {
 		if invoker, ok := r.Context().Value(builtinInvokerContextKey{}).(domain.User); ok {

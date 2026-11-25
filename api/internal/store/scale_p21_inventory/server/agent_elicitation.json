@@ -1,0 +1,18 @@
+{
+  "source": "server/agent_elicitation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "resolveAgentElicitation": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/sessions/{id}/elicitations/{elicitationId} (server/main.go:480)"
+      ]
+    }
+  }
+}

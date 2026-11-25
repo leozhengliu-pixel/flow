@@ -1,0 +1,111 @@
+{
+  "source": "server/mcp_tools_write.go",
+  "unmigrated": 8,
+  "consumers": {
+    "createMCPLabel": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
+      ]
+    },
+    "deleteMCPComment": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
+      ]
+    },
+    "deleteMCPDiffComment": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
+      ]
+    },
+    "mutateAnyComment": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.saveMCPComment",
+        "server/server.deleteMCPComment"
+      ]
+    },
+    "resolveMCPDiffThread": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "reason": "The parent review key is known before the callback, but its thread aggregate can match an earlier Draft.ContentData object through legacy reflective lookup. TestScaleP21SW25AggregateCollisionEvidence preserves that complete event entity. A reviews/reviewID scope alone changes effects and remains pending a bounded aggregate resolver.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
+      ]
+    },
+    "saveMCPIssue": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
+      ]
+    },
+    "saveMCPProject": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
+      ]
+    },
+    "saveMCPRelease": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
+      ]
+    }
+  }
+}

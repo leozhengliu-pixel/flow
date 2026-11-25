@@ -1,0 +1,231 @@
+{
+  "source": "server/agent.go",
+  "unmigrated": 17,
+  "consumers": {
+    "appendAgentSessionMessage": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.createAgentSessionMessage",
+        "server/server.createAgentSessionMessageStream"
+      ]
+    },
+    "beginAgentSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.createAgentSession",
+        "server/server.createAgentSessionStream"
+      ]
+    },
+    "checkAgentMentions": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.decodeAgentMessageInput",
+        "server/server.beginAgentSession"
+      ]
+    },
+    "createAgentSessionFeedback": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/sessions/{id}/feedback (server/main.go:483)"
+      ]
+    },
+    "createAgentSkill": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "reason": "The agent_skill_ aggregate is not a typed fast-prefix family; legacy aggregate lookup may select an earlier document ContentData object or another nested object with the generated ID. Ordered append alone does not preserve this lookup closure. Keep pending until aggregate compatibility is bounded and verified.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/skills (server/main.go:488)"
+      ]
+    },
+    "deleteAgentSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/agent/sessions/{id} (server/main.go:473)"
+      ]
+    },
+    "deleteAgentSkill": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "reason": "SW20 collision differential proves a target-only scope changes realtime entity and webhook PreviousValues when an earlier document ContentData object has the skill ID. Keep the original writer pending a bounded aggregate compatibility resolver; no collision fields are normalized away.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/agent/skills/{id} (server/main.go:490)"
+      ]
+    },
+    "getAgentSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/agent/sessions/{id} (server/main.go:471)"
+      ]
+    },
+    "listAgentSessions": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/agent/sessions (server/main.go:467)"
+      ]
+    },
+    "listAgentSkillsHTTP": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/agent/skills (server/main.go:487)"
+      ]
+    },
+    "markAgentSessionRead": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/sessions/{id}/read (server/main.go:482)"
+      ]
+    },
+    "purgeDeletedAgentSessions": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.maintainStorage"
+      ]
+    },
+    "replaceAgentSessionMessage": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.updateAgentSessionMessage",
+        "server/server.updateAgentSessionMessageStream"
+      ]
+    },
+    "restoreAgentSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/sessions/{id}/restore (server/main.go:474)"
+      ]
+    },
+    "updateAgentMessageFeedback": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/agent/sessions/{id}/messages/{messageId}/feedback (server/main.go:484)"
+      ]
+    },
+    "updateAgentSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/agent/sessions/{id} (server/main.go:472)"
+      ]
+    },
+    "updateAgentSkill": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "reason": "SW20 collision differential proves legacy aggregate lookup emits an earlier document ContentData object with the skill ID, while a target-only scope emits the skill itself. Keep the original writer pending a bounded aggregate compatibility resolver.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/agent/skills/{id} (server/main.go:489)"
+      ]
+    }
+  }
+}

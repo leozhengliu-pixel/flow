@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -33,7 +34,7 @@ func (s *SQLiteStore) ensureIssueSearchIndex(ctx context.Context) error {
 		}
 	}
 	if s.dialect == "mysql" {
-		return s.ensureMySQLNgramIndex(ctx, "issue_search_documents", "issue_search_fulltext", issueSearchStopwordsMigrationVersion, false)
+		return s.ensureMySQLNgramIndex(ctx, "issue_search_documents", "issue_search_fulltext", false, fullTextIndexRebuilds("issue_search_documents", issueSearchStopwordsMigrationVersion, issueSearchRestoreMigrationVersion)...)
 	}
 	return nil
 }
@@ -49,6 +50,9 @@ func writeIssueSearchIndex(ctx context.Context, tx *sqlTx, workspace string, iss
 }
 
 func (s *SQLiteStore) migrateIssueSearchIndex(ctx context.Context) error {
+	if s.BoundedMetadataEnabled() {
+		return s.scaleP21SW18MigrateIssueSearchIndex(ctx)
+	}
 	for workspace := range s.workspaces {
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO issue_search_migrations(workspace_key,last_id,complete) VALUES(?,'',0) ON CONFLICT DO NOTHING`, workspace); err != nil {
 			return err
@@ -104,6 +108,116 @@ func (s *SQLiteStore) migrateIssueSearchIndex(ctx context.Context) error {
 			}()
 			if err != nil {
 				tx.Rollback()
+				return err
+			}
+			if err := tx.Commit(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Only ID headers cross the driver boundary. Canonical issue text, including
+// uncapped legal bodies, is copied into its index inside the same SQL transaction.
+func (s *SQLiteStore) scaleP21SW18MigrateIssueSearchIndex(ctx context.Context) error {
+	ctx, release, err := s.admitMetadataWork(ctx, 2<<20)
+	if err != nil {
+		return err
+	}
+	defer release()
+	parts := []string{}
+	for _, field := range []string{"identifier", "title", "description"} {
+		parts = append(parts, "COALESCE("+s.jsonText("data", field)+",'')")
+	}
+	content := strings.Join(parts, " || '\n' || ")
+	if s.dialect == "mysql" {
+		// CHAR(10) alone is a binary string, which would make the result and
+		// its LEFT() cap count bytes and split a UTF-8 character.
+		content = "CONCAT_WS(CHAR(10 USING utf8mb4)," + strings.Join(parts, ",") + ")"
+	}
+	content = s.searchCapExpression(content)
+	contentBytes := "OCTET_LENGTH(" + content + ")"
+	if s.dialect == "sqlite" {
+		contentBytes = "LENGTH(CAST(" + content + " AS BLOB))"
+	}
+	conflict := " ON CONFLICT(workspace_key,issue_id) DO UPDATE SET content=excluded.content WHERE issue_search_documents.content<>excluded.content"
+	if s.dialect == "mysql" {
+		conflict = " ON DUPLICATE KEY UPDATE content=IF(NOT (" + s.metadataRecordKeyEquals("content", "VALUES(content)") + "),VALUES(content),content)"
+	}
+	for _, workspace := range s.WorkspaceKeys() {
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO issue_search_migrations(workspace_key,last_id,complete) VALUES(?,'',0) ON CONFLICT DO NOTHING`, workspace); err != nil {
+			return err
+		}
+		for {
+			var last string
+			var complete int
+			if err := s.db.QueryRowContext(ctx, `SELECT last_id,complete FROM issue_search_migrations WHERE workspace_key=?`, workspace).Scan(&last, &complete); err != nil {
+				return err
+			}
+			if complete != 0 {
+				break
+			}
+			tx, err := s.db.BeginTx(ctx, nil)
+			if err != nil {
+				return err
+			}
+			err = func() error {
+				rows, err := tx.QueryContext(ctx, `SELECT id FROM issue_records WHERE workspace_key=? AND id>? ORDER BY id LIMIT 64`, workspace, last)
+				if err != nil {
+					return err
+				}
+				ids := []string{}
+				for rows.Next() {
+					var id string
+					if err := rows.Scan(&id); err != nil {
+						rows.Close()
+						return err
+					}
+					ids = append(ids, id)
+				}
+				err = rows.Err()
+				rows.Close()
+				if err != nil {
+					return err
+				}
+				if len(ids) > 0 {
+					clause, values := bindList("id", ids)
+					args := append([]any{workspace}, values...)
+					var copied int64
+					if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(`+contentBytes+`),0) FROM issue_records WHERE workspace_key=? AND `+clause+` AND NOT EXISTS (SELECT 1 FROM issue_search_documents idx WHERE idx.workspace_key=issue_records.workspace_key AND idx.issue_id=issue_records.id AND `+s.metadataRecordKeyEquals("idx.content", content)+`)`, args...).Scan(&copied); err != nil {
+						return err
+					}
+					if tx.maxTransactionBytes > 0 && copied > int64(tx.maxTransactionBytes-tx.writtenBytes) {
+						return fmt.Errorf("%w: maximum %d bytes; split the import into smaller batches", ErrTransactionWriteBudget, tx.maxTransactionBytes)
+					}
+					// INSERT SELECT has no text argument for ExecContext to charge.
+					tx.writtenBytes += int(copied)
+					if s.dialect == "mysql" {
+						// A multi-row upsert that changes rows drops them from
+						// the FULLTEXT index (mysqlFullTextIndexTables): update
+						// the existing documents in place, then insert the rest.
+						if _, err := tx.ExecContext(ctx, `UPDATE issue_search_documents idx JOIN issue_records ON issue_records.workspace_key=idx.workspace_key AND issue_records.id=idx.issue_id SET idx.content=`+content+` WHERE issue_records.workspace_key=? AND `+clause+` AND NOT (`+s.metadataRecordKeyEquals("idx.content", content)+`)`, args...); err != nil {
+							return err
+						}
+						if _, err := tx.ExecContext(ctx, `INSERT INTO issue_search_documents(workspace_key,issue_id,content) SELECT workspace_key,id,`+content+` FROM issue_records WHERE workspace_key=? AND `+clause+` AND NOT EXISTS (SELECT 1 FROM issue_search_documents idx WHERE idx.workspace_key=issue_records.workspace_key AND idx.issue_id=issue_records.id)`, args...); err != nil {
+							return err
+						}
+					} else if _, err := tx.ExecContext(ctx, `INSERT INTO issue_search_documents(workspace_key,issue_id,content) SELECT workspace_key,id,`+content+` FROM issue_records WHERE workspace_key=? AND `+clause+conflict, args...); err != nil {
+						return err
+					}
+				}
+				if len(ids) > 0 {
+					last = ids[len(ids)-1]
+				}
+				if len(ids) < 64 {
+					complete = 1
+				}
+				_, err = tx.ExecContext(ctx, `UPDATE issue_search_migrations SET last_id=?,complete=? WHERE workspace_key=?`, last, complete, workspace)
+				return err
+			}()
+			if err != nil {
+				_ = tx.Rollback()
 				return err
 			}
 			if err := tx.Commit(); err != nil {
@@ -182,6 +296,15 @@ func (s *SQLiteStore) issueTextVisibleSelection(q IssueRecordQuery, term string)
 // Retrieve a bounded union once: semantic synonyms must not independently
 // decode the same issue, nor discard the caller's indexed facet predicates.
 func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueRecordQuery, terms []string, labelIDs []string, limit int, visit func(domain.Issue) error) error {
+	var boundedScratch *ResourceRead
+	if issueSuggestionCandidateOwner(ctx, s) != nil {
+		var err error
+		boundedScratch, err = s.beginIssueCandidateQueryWork(ctx, q, terms, labelIDs)
+		if err != nil {
+			return err
+		}
+		defer boundedScratch.Close()
+	}
 	q.Text = ""
 	terms = normalizeSearchTerms(terms)
 	if len(terms) > 32 {
@@ -291,27 +414,68 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	params = append(params, textArgs...)
 	params = append(params, orderArgs...)
 	params = append(params, limit, q.Workspace)
-	rows, err := s.db.QueryContext(ctx, prefix+`SELECT output.list_data,output.data FROM (`+inner+`) candidates JOIN issue_records output ON output.id=candidates.id AND output.workspace_key=?`, params...)
+	// A join need not keep its subquery's order (PostgreSQL's hash join does
+	// not), so the joined rows are ordered again by the same keys: tied
+	// candidates keep the order the caller's scan breaks ties with.
+	outer := ` ORDER BY ` + strings.ReplaceAll(order, "i.", "output.")
+	if boundedScratch != nil {
+		return s.searchIssueCandidateRows(ctx, q.Workspace, prefix, inner, len(prefixArgs), params, outer, orderArgs, visit)
+	}
+	from := ` FROM (` + inner + `) candidates JOIN issue_records output ON output.id=candidates.id AND output.workspace_key=?` + outer
+	readDone := startSearchMetadataPhase(ctx, "issue_rows")
+	items, err := s.readIssueSearchProjections(ctx, prefix, from, append(params, orderArgs...), s.dialect == "mysql" && len(terms) > 0)
+	readDone()
 	if err != nil {
 		return err
+	}
+	resolveDone := startSearchMetadataPhase(ctx, "issue_refs")
+	err = s.resolveIssueReferences(ctx, q.Workspace, items)
+	resolveDone()
+	if err != nil {
+		return err
+	}
+	for _, issue := range items {
+		if err := visit(issue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) readIssueSearchProjections(ctx context.Context, prefix, from string, args []any, listOnly bool) ([]domain.Issue, error) {
+	body := "output.data"
+	if listOnly {
+		body = "NULL"
+	}
+	rows, err := s.db.QueryContext(ctx, prefix+`SELECT output.list_data,`+body+from, args...)
+	if err != nil {
+		return nil, err
 	}
 	defer rows.Close()
 	items := []domain.Issue{}
 	seen := map[string]bool{}
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
-			return err
+			return nil, err
 		}
 		var listRaw, dataRaw []byte
 		if err := rows.Scan(&listRaw, &dataRaw); err != nil {
-			return err
+			return nil, err
 		}
 		raw := listRaw
 		if !json.Valid(raw) {
+			if listOnly {
+				if err := rows.Close(); err != nil {
+					return nil, err
+				}
+				// Recheck visibility and order for the whole page so fallback
+				// rows and list projections come from one SQL snapshot.
+				return s.readIssueSearchProjections(ctx, prefix, from, args, false)
+			}
 			raw = dataRaw
-		}
-		if !json.Valid(raw) {
-			continue
+			if !json.Valid(raw) {
+				continue
+			}
 		}
 		var issue domain.Issue
 		if err := json.Unmarshal(raw, &issue); err != nil {
@@ -324,19 +488,7 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 		seen[issue.ID] = true
 		items = append(items, issueListProjection(issue))
 	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	rows.Close()
-	if err := s.resolveIssueReferences(ctx, q.Workspace, items); err != nil {
-		return err
-	}
-	for _, issue := range items {
-		if err := visit(issue); err != nil {
-			return err
-		}
-	}
-	return nil
+	return items, rows.Err()
 }
 
 // SearchIssueIDs returns the ids of visible issues whose identifier, title or

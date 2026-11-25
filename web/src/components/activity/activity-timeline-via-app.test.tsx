@@ -35,28 +35,26 @@ describe('Flow agent attribution in the issue activity timeline', () => {
   const at = (seconds: number) => new Date(Date.UTC(2026, 9, 12, 9, 0, seconds)).toISOString()
   const change = (id: string, seconds: number, metadata: Record<string, string>, botActor: ActivityEvent['botActor'] = agent): ActivityEvent => ({ id, type: 'issue.updated', createdAt: at(seconds), actor: viewer, metadata, botActor })
   const events = [
-    change('e1', 0, { priority: 'Urgent' }),
-    change('e2', 4, { dueDate: '2026-10-16' }),
-    change('e3', 6, { estimate: '3', estimateBefore: '0' }),
+    change('e1', 0, { priority: 'Urgent', estimate: '3', estimateBefore: '0', dueDate: '2026-10-16' }),
     { ...change('e4', 30, { priority: 'Low' }), botActor: undefined },
   ]
 
   it('names Flow as the actor, the person after "on behalf of", and folds its field changes into one row', () => {
     const { container } = render(<MemoryRouter><I18nProvider><ActivityTimeline {...base} events={events} comments={[]} /></I18nProvider></MemoryRouter>)
     const rows = Array.from(container.querySelectorAll('.activity-row'))
-    expect(rows).toHaveLength(2)
-    expect(rows[0]).toHaveTextContent(`Flow set priority to Urgent, set the due date to 2026-10-16 and set the estimate to 3 on behalf of ${viewer.displayName}`)
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toHaveTextContent(`Flow set priority to Urgent and estimated complexity as 3 points on behalf of ${viewer.displayName}`)
     expect(rows[0].querySelector('strong')).toHaveTextContent(/^Flow$/)
     // A row that changed several fields shows its actor: the agent's avatar.
-    expect(container.querySelector('#activity-e1 .activity-event-icon [data-agent-avatar-slot]')).toBeInTheDocument()
+    expect(container.querySelector('#activity-e1 .activity-event-icon svg')).toBeInTheDocument()
     // The person's own change afterwards stays theirs.
-    expect(rows[1]).toHaveTextContent(`${viewer.displayName} set priority to Low`)
-    expect(rows[1]).not.toHaveTextContent('on behalf of')
+    expect(rows[2]).toHaveTextContent(`${viewer.displayName} set priority to Low`)
+    expect(rows[2]).not.toHaveTextContent('on behalf of')
   })
 
   it('keeps a comment posted between two changes between their rows', () => {
     const comment = { id: 'c1', version: 1, body: 'In between', user: viewer, createdAt: at(2), reactions: {} } as Comment
-    const { container } = render(<MemoryRouter><I18nProvider><ActivityTimeline {...base} events={events.slice(0, 2)} comments={[comment]} /></I18nProvider></MemoryRouter>)
+    const { container } = render(<MemoryRouter><I18nProvider><ActivityTimeline {...base} events={[change('a', 0, { priority: 'Urgent' }), change('b', 4, { dueDate: '2026-10-16' })]} comments={[comment]} /></I18nProvider></MemoryRouter>)
     expect(container.querySelectorAll('.activity-row')).toHaveLength(2)
   })
 
@@ -66,7 +64,7 @@ describe('Flow agent attribution in the issue activity timeline', () => {
     await loadChineseDictionary()
     try {
       const { container } = render(<MemoryRouter><I18nProvider><ActivityTimeline {...base} events={events.slice(0, 3)} comments={[]} /></I18nProvider></MemoryRouter>)
-      expect(container.querySelector('.activity-row')).toHaveTextContent(`Flow 代表 ${viewer.displayName} 将优先级设为 紧急，将截止日期设为 2026-10-16，并将估算设为 3`)
+      expect(container.querySelector('.activity-row')).toHaveTextContent(`Flow 代表 ${viewer.displayName} 将优先级设为 紧急，并将复杂度估算为 3 点`)
     } finally {
       if (previous === null) localStorage.removeItem('flow:locale')
       else localStorage.setItem('flow:locale', previous)

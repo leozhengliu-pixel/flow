@@ -17,8 +17,44 @@ import (
 func (s *SQLiteStore) DeleteWorkflowStateRecords(ctx context.Context, workspace, teamID string, validate func(*domain.Bootstrap, bool) (domain.WorkflowState, *domain.WorkflowState, error)) error {
 	var event domain.DomainEvent
 	apply := func() error {
-		s.lockWorkspaceWrites()
-		defer s.unlockWorkspaceWrites()
+		var tx *sqlTx
+		var err error
+		if s.metadataResidency == nil {
+			tx, err = s.lockWorkspaceWritesTx(ctx)
+			if err != nil {
+				return err
+			}
+			defer s.unlockWorkspaceWrites()
+		} else {
+			// Bounded: the states live in the installed logical source, so
+			// the deletion publishes it as a COLD legacy write does (from the
+			// records it changed, or reloaded), under the same write lock.
+			// (Nothing committed leaves the stored stamp, and so the installed
+			// generation, as they were: the publication is then a no-op.)
+			s.writeMu.Lock()
+			var base *coldPublishBase
+			defer func() {
+				s.publishColdLegacyWriteLocked(ctx, workspace, true, base)
+				base.release()
+				s.writeMu.Unlock()
+			}()
+			if workspace == "" {
+				s.mu.RLock()
+				workspace = s.lastWorkspaceKey
+				s.mu.RUnlock()
+			}
+			var reason string
+			if base, reason = s.captureColdPublishBase(ctx, workspace); base == nil {
+				noteColdPublishFallback(reason)
+			}
+			tx, err = s.db.BeginTx(ctx, nil)
+			if err != nil {
+				return err
+			}
+			s.mu.Lock()
+			defer s.mu.Unlock()
+		}
+		defer tx.Rollback()
 		if workspace == "" {
 			workspace = s.lastWorkspaceKey
 		}
@@ -26,11 +62,6 @@ func (s *SQLiteStore) DeleteWorkflowStateRecords(ctx context.Context, workspace,
 		if !ok {
 			return ErrAuthForbidden
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
 		lock := ""
 		if s.dialect != "sqlite" {
 			lock = " FOR UPDATE"

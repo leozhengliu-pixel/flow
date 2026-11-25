@@ -74,6 +74,10 @@ func (s *server) unshareIssue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getSharedIssue(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.getBoundedSharedIssue(w, r)
+		return
+	}
 	workspace := strings.TrimSpace(r.URL.Query().Get("workspace"))
 	if workspace == "" {
 		writeError(w, http.StatusBadRequest, "workspace is required")

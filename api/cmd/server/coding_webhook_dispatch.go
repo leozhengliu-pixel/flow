@@ -68,7 +68,11 @@ func (s *server) codingTriggers(workspace string) (*coding.Triggers, bool) {
 		return nil, false
 	}
 	settings := domain.CodingAgentSettings{}
-	if data, found := s.store.WorkspaceMetadataFields(workspace, "workspaceSettings"); found {
+	data, found, err := s.store.WorkspaceMetadataFieldsScoped(context.Background(), workspace, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "codingAgentSettings"}}}, "workspaceSettings")
+	if err != nil {
+		return nil, false
+	}
+	if found {
 		settings = data.WorkspaceSettings.CodingAgentSettings
 	}
 	triggers := &coding.Triggers{
@@ -139,8 +143,11 @@ func (s *server) codingWebhookDispatcher() (*coding.WebhookDispatcher, bool) {
 		Starter:    s.codingSessionStarter(stores, domain.CodingAgentSettings{}),
 		Commenters: codingCommenterResolver{s: s},
 		Hosts:      s.coding.hosts,
-		Settings: func(_ context.Context, workspace string) (domain.CodingAgentSettings, error) {
-			data, found := s.store.WorkspaceMetadataFields(workspace, "workspaceSettings")
+		Settings: func(ctx context.Context, workspace string) (domain.CodingAgentSettings, error) {
+			data, found, err := s.store.WorkspaceMetadataFieldsScoped(ctx, workspace, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "codingAgentSettings"}}}, "workspaceSettings")
+			if err != nil {
+				return domain.CodingAgentSettings{}, err
+			}
 			if !found {
 				return domain.CodingAgentSettings{}, errNotFound
 			}
@@ -184,10 +191,24 @@ func (s *server) dispatchCodingWebhook(ctx context.Context, workspace string, ev
 		}
 	}
 	// Only workspaces with coding sessions on take part.
-	workspaces = slices.DeleteFunc(workspaces, func(key string) bool {
-		data, found := s.store.WorkspaceMetadataFields(key, "workspaceSettings")
-		return !found || !workspaceFeatureEnabled(data.WorkspaceSettings, "coding-sessions")
-	})
+	if s.store.BoundedMetadataEnabled() {
+		enabled := workspaces[:0]
+		for _, key := range workspaces {
+			data, found, err := s.store.WorkspaceMetadataFieldsScoped(ctx, key, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "featureFlags"}}}, "workspaceSettings")
+			if err != nil {
+				return err
+			}
+			if found && workspaceFeatureEnabled(data.WorkspaceSettings, "coding-sessions") {
+				enabled = append(enabled, key)
+			}
+		}
+		workspaces = enabled
+	} else {
+		workspaces = slices.DeleteFunc(workspaces, func(key string) bool {
+			data, found := s.store.WorkspaceMetadataFields(key, "workspaceSettings")
+			return !found || !workspaceFeatureEnabled(data.WorkspaceSettings, "coding-sessions")
+		})
+	}
 	if workspace == "" && event.InstallationID != "" && len(workspaces) == 0 {
 		return nil
 	}

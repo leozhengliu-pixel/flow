@@ -92,6 +92,10 @@
   line-height: inherit;
 }
 
+/* An uploaded picture (a person's photo, an OAuth application's logo) is the whole avatar: no initials colour behind it, so a
+   logo with transparent edges sits on the page, not on a coloured disc. */
+[data-user-avatar][data-avatar-image] { background: transparent; }
+
 :where([data-user-avatar]) > img {
   width: 100%;
   height: 100%;

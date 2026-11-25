@@ -9,6 +9,7 @@ import { ProjectTargetDatePicker } from '@/components/projects-page/project-targ
 import { PropertyMenu } from '@/components/property/property-menu'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { LabelPicker } from '@/components/issue/label-project-pickers'
+import { toggleGroupedLabelIds } from '@/lib/labels'
 import { DetailLabelControl } from '@/components/property/detail-label-control'
 import { customersForInitiative } from '@/components/property/initiative-customers'
 import type { Initiative, InitiativeMutationInput, IssueLabel, LabelGroup, Project, Team, User } from '@/types/flow'
@@ -83,13 +84,13 @@ export function InitiativeLabelsPicker({ initiative, labels, labelGroups = [], o
   customers?: Array<{ id: string; name: string; logoUrl?: string }>
   customerRequests?: Array<{ projectId?: string; customerId: string; archivedAt?: string }>
   onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
-  onCreateLabel?: (name: string) => Promise<IssueLabel>
+  onCreateLabel?: (name: string, groupId?: string) => Promise<IssueLabel>
 }) {
   const selected = labels.filter(label => initiative.labelIds.includes(label.id))
   const pileCustomers = customersForInitiative(initiative, projects, customers, customerRequests)
   return <DetailLabelControl changeLabelAction="changeLabelAction" customers={pileCustomers} host="initiative" isArchived={false} isReadOnly={isReadOnly}>
     <div className={compact ? 'li-label-picker li-label-picker--compact' : 'li-label-picker'}>
-      <LabelPicker emptyLabel="Start typing to create a new label" labels={labels} labelGroups={labelGroups} searchShortcut="N, then L" showGroupHeadings={false} surfaceClassName="li-initiative-label-command" value={selected} onToggle={labelId => { void onUpdate({ labelIds: initiative.labelIds.includes(labelId) ? initiative.labelIds.filter(id => id !== labelId) : [...initiative.labelIds, labelId] }) }} onCreate={onCreateLabel ? async name => { const label = await onCreateLabel(name); await onUpdate({ labelIds: [...new Set([...initiative.labelIds, label.id])] }) } : undefined}/>
+      <LabelPicker emptyLabel="Start typing to create a new label" labels={labels} labelGroups={labelGroups} searchShortcut="N, then L" showGroupHeadings={false} surfaceClassName="li-initiative-label-command" value={selected} onToggle={labelId => { void onUpdate({ labelIds: toggleGroupedLabelIds(initiative.labelIds, labelId, labels) }) }} onCreate={onCreateLabel ? async (name, groupId) => { const label = await onCreateLabel(name, groupId); await onUpdate({ labelIds: toggleGroupedLabelIds(initiative.labelIds, label.id, [...labels, label]) }) } : undefined}/>
     </div>
   </DetailLabelControl>
 }
@@ -100,13 +101,14 @@ export function InitiativeLabelsPill({ initiative, labels, labelGroups = [], onU
   labels: IssueLabel[]
   labelGroups?: LabelGroup[]
   onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
-  onCreateLabel?: (name: string) => Promise<IssueLabel>
+  onCreateLabel?: (name: string, groupId?: string) => Promise<IssueLabel>
 }) {
   const selected = labels.filter(label => initiative.labelIds.includes(label.id))
   const groupNames = new Map(labelGroups.map(group => [group.id, group.name]))
-  const options = labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, groupId: label.groupId, groupLabel: label.groupId ? groupNames.get(label.groupId) : undefined, i18nIgnore: true }))
+  const groupColors = new Map(labelGroups.map(group => [group.id, group.color]))
+  const options = labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, scope: label.scope, groupId: label.groupId, groupLabel: label.groupId ? groupNames.get(label.groupId) : undefined, groupColor: label.groupId ? groupColors.get(label.groupId) : undefined, i18nIgnore: true }))
   const display = selected.length === 1 ? selected[0].name : selected.length ? `${selected.length} labels` : 'Labels'
-  const toggle = (labelId: string) => void onUpdate({ labelIds: initiative.labelIds.includes(labelId) ? initiative.labelIds.filter(id => id !== labelId) : [...initiative.labelIds, labelId] })
+  const toggle = (labelId: string) => void onUpdate({ labelIds: toggleGroupedLabelIds(initiative.labelIds, labelId, labels) })
   return <PropertyMenu
     ariaLabel="Change labels"
     emptyLabel="Start typing to create a new label"
@@ -114,7 +116,7 @@ export function InitiativeLabelsPill({ initiative, labels, labelGroups = [], onU
     label="Labels"
     multiple
     onChange={toggle}
-    onCreate={onCreateLabel ? async name => { const label = await onCreateLabel(name); await onUpdate({ labelIds: [...new Set([...initiative.labelIds, label.id])] }) } : undefined}
+    onCreate={onCreateLabel ? async (name, groupId) => { const label = await onCreateLabel(name, groupId); await onUpdate({ labelIds: toggleGroupedLabelIds(initiative.labelIds, label.id, [...labels, label]) }) } : undefined}
     options={options}
     searchPlaceholder={selected.length ? 'Change or add labels…' : 'Add labels…'}
     searchShortcut="N, then L"

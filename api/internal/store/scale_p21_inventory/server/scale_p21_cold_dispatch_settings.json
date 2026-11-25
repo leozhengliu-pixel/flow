@@ -1,0 +1,156 @@
+{
+  "source": "server/scale_p21_cold_dispatch_settings.go",
+  "unmigrated": 0,
+  "consumers": {
+    "createProjectStatusWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "server/settings_features.go:createProjectStatus"
+      ],
+      "coldDispatch": "server/settings_features.go:createProjectStatus",
+      "reason": "Literal native mutation tail uses only the explicit borrowed legacy repository; no new loading, cache or locking. Retains status-type validation, defaults and native status-position normalization. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "updateProjectStatusWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "server/settings_features.go:updateProjectStatus"
+      ],
+      "coldDispatch": "server/settings_features.go:updateProjectStatus",
+      "reason": "Literal native mutation tail uses only the explicit borrowed legacy repository; no new loading, cache or locking. Retains type immutability, no-op detection and status snapshots cascaded into native projects. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "deleteProjectStatusWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "server/settings_features.go:deleteProjectStatus"
+      ],
+      "coldDispatch": "server/settings_features.go:deleteProjectStatus",
+      "reason": "Literal native mutation tail uses only the explicit borrowed legacy repository; no new loading, cache or locking. Retains last-of-type and assigned-project refusals before removing the native status. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "reorderProjectStatusesWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "server/settings_features.go:reorderProjectStatuses"
+      ],
+      "coldDispatch": "server/settings_features.go:reorderProjectStatuses",
+      "reason": "Literal native mutation tail uses only the explicit borrowed legacy repository; no new loading, cache or locking. Retains exact ID uniqueness/type-rank checks and reordered status snapshots in native projects. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "createWorkspaceIssueTemplateWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "server/settings_features.go:createWorkspaceIssueTemplate"
+      ],
+      "coldDispatch": "server/settings_features.go:createWorkspaceIssueTemplate",
+      "reason": "Literal native mutation tail uses only the explicit borrowed legacy repository; no new loading, cache or locking. Retains actor capture, native applyIssueTemplate reference checks and explicit empty label/form defaults. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "updateWorkspaceIssueTemplateWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "server/settings_features.go:updateWorkspaceIssueTemplate"
+      ],
+      "coldDispatch": "server/settings_features.go:updateWorkspaceIssueTemplate",
+      "reason": "Literal native mutation tail uses only the explicit borrowed legacy repository; no new loading, cache or locking. Retains the literal scope/visibility predicate, native reference checks, no-op and timestamp behavior. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "deleteWorkspaceIssueTemplateWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "server/settings_features.go:deleteWorkspaceIssueTemplate"
+      ],
+      "coldDispatch": "server/settings_features.go:deleteWorkspaceIssueTemplate",
+      "reason": "Literal native mutation tail uses only the explicit borrowed legacy repository; no new loading, cache or locking. Retains the original scoped writer, scope/visibility predicate and missing-template refusal on the borrowed legacy facade. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "createDocumentTemplateWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "server/settings_features.go:createDocumentTemplate"
+      ],
+      "coldDispatch": "server/settings_features.go:createDocumentTemplate",
+      "reason": "Literal native mutation tail uses only the explicit borrowed legacy repository; no new loading, cache or locking. Retains actor capture, native team checks, default content data and literal content/state input semantics. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "updateDocumentTemplateWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "server/settings_features.go:updateDocumentTemplate"
+      ],
+      "coldDispatch": "server/settings_features.go:updateDocumentTemplate",
+      "reason": "Literal native mutation tail uses only the explicit borrowed legacy repository; no new loading, cache or locking. Retains the original scoped writer, native team checks, field presence, no-op and timestamp behavior. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "deleteDocumentTemplateWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "server/settings_features.go:deleteDocumentTemplate"
+      ],
+      "coldDispatch": "server/settings_features.go:deleteDocumentTemplate",
+      "reason": "Literal native mutation tail uses only the explicit borrowed legacy repository; no new loading, cache or locking. Retains the original scoped writer and exact ID deletion/missing-template semantics. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    }
+  }
+}

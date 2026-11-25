@@ -3,8 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"math"
@@ -204,14 +202,7 @@ func (l *apiRateLimiter) budget(subject apiRateSubject) apiRateBudget {
 // and application; sessions per user.
 func subjectForAuthenticatedRequest(r *http.Request) (apiRateSubject, bool) {
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
-		user := authUser(r).ID
-		if key.OAuthClientID != "" || key.AuthorizationID != "" || key.Actor == "app" || key.GrantType != "" {
-			return apiRateSubject{Category: apiRateOAuth, Key: "oauth:" + key.OAuthClientID + ":" + user}, true
-		}
-		if user == "" {
-			user = key.ID
-		}
-		return apiRateSubject{Category: apiRateAPIKey, Key: "apikey:" + user}, true
+		return subjectForVerifiedKey(key, authUser(r).ID), true
 	}
 	if user := authUser(r).ID; user != "" {
 		return apiRateSubject{Category: apiRateSession, Key: "session:" + user}, true
@@ -219,29 +210,62 @@ func subjectForAuthenticatedRequest(r *http.Request) (apiRateSubject, bool) {
 	return apiRateSubject{}, false
 }
 
+// subjectForVerifiedKey is the budget of a credential that has been checked
+// against the key store: one per user for personal keys, shared with the REST
+// API, and one per user and application for OAuth tokens.
+func subjectForVerifiedKey(key domain.APIKey, userID string) apiRateSubject {
+	if key.OAuthClientID != "" || key.AuthorizationID != "" || key.Actor == "app" || key.GrantType != "" {
+		return apiRateSubject{Category: apiRateOAuth, Key: "oauth:" + key.OAuthClientID + ":" + userID}
+	}
+	if userID == "" {
+		userID = key.ID
+	}
+	return apiRateSubject{Category: apiRateAPIKey, Key: "apikey:" + userID}
+}
+
 // subjectForPublicRequest covers routes that authenticate inside the handler
-// (MCP, OAuth, upload tokens, signed file links). Bearer tokens there are
-// bucketed by token hash; everything else by client address.
+// (MCP, OAuth, upload tokens, signed file links). A token's prefix proves
+// nothing, so ingress never picks an authenticated budget from it: every
+// request spends its address's unauthenticated budget for that route class
+// (publicRateRoute). The one exception is a bearer token on /mcp, which the
+// MCP handler verifies right away: it spends the verified key's budget
+// (limitVerifiedKey) or, for a token it rejects, the address's MCP budget
+// (limitInvalidRunToken).
 func subjectForPublicRequest(r *http.Request) (apiRateSubject, bool) {
 	if !publicAPIRateLimitedPath(r.URL.Path) {
 		return apiRateSubject{}, false
 	}
-	path := r.URL.Path
-	header := strings.TrimSpace(r.Header.Get("Authorization"))
-	if strings.HasPrefix(strings.ToLower(header), "bearer ") {
-		token := strings.TrimSpace(header[len("Bearer "):])
-		digest := sha256.Sum256([]byte(token))
-		switch {
-		case strings.HasPrefix(token, "flow_api_"):
-			return apiRateSubject{Category: apiRateAPIKey, Key: "token:" + hex.EncodeToString(digest[:16])}, true
-		case strings.HasPrefix(token, "flow_oauth_"):
-			return apiRateSubject{Category: apiRateOAuth, Key: "token:" + hex.EncodeToString(digest[:16])}, true
-		case strings.HasPrefix(token, agentRunTokenPrefix) && (path == "/mcp" || path == "/mcp/readonly"):
-			// Limited by run and workspace once the MCP handler resolved the token (limitAgentRun).
+	if path := r.URL.Path; path == "/mcp" || path == "/mcp/readonly" {
+		if header := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(strings.ToLower(header), "bearer ") {
 			return apiRateSubject{}, false
 		}
 	}
-	return apiRateSubject{Category: apiRateUnauthenticated, Key: "ip:" + authClientAddress(r)}, true
+	return publicAddressSubject(r), true
+}
+
+// publicAddressSubject is the unauthenticated budget of the caller address for
+// the request's route class. MCP clients retry /mcp until they hold a token, so
+// sharing one bucket per address let those retries exhaust the OAuth exchange
+// that issues the token. Behind a proxy whose forwarded address Flow does not
+// trust, every caller shares the proxy address, which made that collision
+// global. Each class keeps the full unauthenticated budget and reports its own
+// Retry-After; replicas share the buckets through the limiter backend.
+func publicAddressSubject(r *http.Request) apiRateSubject {
+	return apiRateSubject{Category: apiRateUnauthenticated, Key: "ip:" + publicRateRoute(r.URL.Path) + ":" + authClientAddress(r)}
+}
+
+func publicRateRoute(path string) string {
+	switch {
+	case path == "/mcp" || path == "/mcp/readonly":
+		return "mcp"
+	case strings.HasPrefix(path, "/oauth/") || path == "/api/oauth/token":
+		return "oauth"
+	case strings.HasPrefix(path, "/api/files/signed/"):
+		return "signed"
+	case strings.HasPrefix(path, "/api/mcp/uploads/") || strings.HasPrefix(path, "/api/files/uploads/"):
+		return "upload"
+	}
+	return "other"
 }
 
 // Public routes that integrations call without a session. Browser sign-in
@@ -486,14 +510,29 @@ func (s *server) limitAgentRun(w http.ResponseWriter, r *http.Request, run store
 	return true
 }
 
-// limitInvalidRunToken spends the caller address's unauthenticated budget on a rejected run token, so tokens cannot
-// be probed at full speed. It reports false after writing a 429.
+// limitVerifiedKey spends the budget of an API key or OAuth token the MCP
+// handler verified (the user's key budget shared with the REST API). It
+// reports false after writing a 429.
+func (s *server) limitVerifiedKey(w http.ResponseWriter, r *http.Request, key domain.APIKey, userID string) bool {
+	if s.authDisabled {
+		return true
+	}
+	limiter := s.apiRateLimits()
+	subject := subjectForVerifiedKey(key, userID)
+	if limiter.exempt(subject) {
+		return true
+	}
+	return limiter.check(r.Context(), r, subject).write(w)
+}
+
+// limitInvalidRunToken spends the caller address's unauthenticated budget for the route (the MCP budget on /mcp) on a
+// rejected run token, so tokens cannot be probed at full speed. It reports false after writing a 429.
 func (s *server) limitInvalidRunToken(w http.ResponseWriter, r *http.Request) bool {
 	if s.authDisabled {
 		return true
 	}
 	limiter := s.apiRateLimits()
-	subject := apiRateSubject{Category: apiRateUnauthenticated, Key: "ip:" + authClientAddress(r)}
+	subject := publicAddressSubject(r)
 	if limiter.exempt(subject) {
 		return true
 	}

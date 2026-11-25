@@ -1,0 +1,100 @@
+{
+  "source": "server/webhook_delivery.go",
+  "unmigrated": 0,
+  "consumers": {
+    "attemptWebhookDelivery": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted read selects only webhooks/delivery.WebhookID using the exact webhooks-only accessor off mode. Missing/disabled cancellation, live retry URL replacement, lifecycle bypass, signing and completion/health order retained; scope errors do not become canceled deliveries. TestScaleP21M2WebhookDeliveryDifferential compares enabled, disabled, missing and lifecycle outcomes against a local receiver with zero full decodes.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "describeWebhookEvent": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded metadata input uses its own exact installed identity/actor generation at the original users accessor point; only consumed actor scalars and the complete first workspace-member subject are copied. Off accessor and subject/URL/issue/comment/attachment/child/offload logic remain unchanged. An owning dispatch lifetime retains actor strings through all base and reordered-milestone envelope queues, and read errors prevent incomplete envelope publication. TestScaleP21HotWebhookDeliveryRoutingAndActors passes twice on persistent SQLite comparing 20 actual queued v1/v2 payloads per warm/reloaded generation: actor names/URLs, missing actor, complete member subject, private selected/selected-empty rules, realtime-only deletion stripping, nested milestone reorder, zero bounded full decodes and zero retained work. This metadata review does not certify enqueueWebhookEvent's unresolved whole-graph team fallback.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Ordinary issue/project/document mutation publication synchronously classifies and queues configured webhooks.",
+      "callers": [
+        "store webhook sink -> dispatchDomainEvent -> dispatchWebhookEvent -> describeWebhookEvent/enqueueWebhookEvent"
+      ]
+    },
+    "disableFailingWebhook": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Shares the literal disable callback between the original off-mode MutateWorkspace and the dedicated bounded MutateFailingWebhookDisable transaction. The first native hook enabled guard, audit, creator inbox notification and channel deliveries commit atomically; queued-webhook cancellation and immediate email dispatch retain their post-commit order. TestScaleP21HotWebhookDisableCallbackDifferential compares all outputs across scoped/full oracle and warm/reloaded modes for digest timezone, urgent/breached empty-ID issues, operator defaults, channel/category flags, missing/inactive/duplicate creator and missing/already-disabled hooks, including repeated no-op, native hook state, audit, notification/deliveries and payload/previous/snapshot/realtime images. The Tier A primitive passes persistent SQLite twice and race with rollback, exactly-once concurrency, inline/native and imported physical-row coverage, stable body10x admission and zero full decodes/retained work. No cold fallback or split commit.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Due webhook delivery tick records outcomes and automatic failure disablement.",
+      "callers": [
+        "processDueDeliveries -> processDueWebhookDeliveries -> send webhook -> updateWebhookHealth/recordWebhookFailure/disableFailingWebhook",
+        "streamAuditLog -> recordWebhookFailure"
+      ]
+    },
+    "dispatchWebhookEvent": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned installed routing projection and independent actor/identity accessor generations retain literal v1/v2 selected-team routing, actor/member output, deletion stripping and reordered milestones. Previously proven readers remain unchanged. The remaining enqueue closure now uses the Tier A owned legacy JSON view, preserving nested JSON aggregate precedence and the existing DomainEvent.ID lookup. TestScaleP21WebhookJSONRoutingDifferential compares actual queued rows and complete envelopes across direct teams, terminal false/empty payload teamId, nonmatching payload teamIds falling through, raw nested metadata IDs and differing event/aggregate IDs, with zero bounded full decodes/retained work. TestScaleP21HotWebhookDeliveryRoutingAndActors continues to cover the surrounding dispatch family. Literal off accessors and network/queue order remain unchanged.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Ordinary issue/project/document mutation publication synchronously classifies and queues configured webhooks.",
+      "callers": [
+        "store webhook sink -> dispatchDomainEvent -> dispatchWebhookEvent -> describeWebhookEvent/enqueueWebhookEvent"
+      ]
+    },
+    "enqueueWebhookEvent": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Retains the proven owned organization identity read and switches only the selected-team whole-graph fallback to BeginWebhookAggregateRead. Lazy source capture is independent of earlier identity reads; payload teamId is terminal even when false/empty, a nonmatching teamIds list still falls through, and lookup continues to use event.eventID rather than AggregateID. Tier A JSON-view proof covers full validity, raw JSON, codec/UTF-8/duplicate-key behavior, own/nested precedence, fresh Go map traversal, warm/reload, cancellation, quotas, race and persistent SQLite repeats. TestScaleP21WebhookJSONRoutingDifferential compares actual stored queue rows and complete v1/v2 envelopes across eight exact routing cases. All ownership closes after the last hook; literal off callback/accessors, direct subject-team path and envelope/queue order remain unchanged. No full-hydration fallback is used in bounded mode.",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Ordinary issue/project/document mutation publication synchronously classifies and queues configured webhooks.",
+      "callers": [
+        "store webhook sink -> dispatchDomainEvent -> dispatchWebhookEvent -> describeWebhookEvent/enqueueWebhookEvent"
+      ]
+    },
+    "recordWebhookFailure": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded audit-stream failures call the dedicated root-locked RecordWebhookDeliveryFailure writer after unchanged ID/time, status-pointer, default error text and byte truncation preparation; the literal MutateWorkspace callback remains exact off mode. Hook existence, newest-50 matching retention and unrelated global order, missing-hook event behavior and native/canonical lifecycle commit atomically with the domain event before publication. The Tier A writer passes warm/reloaded persistent SQLite twice and race, including actual inline duplicates, rollback/cancellation, quotas, concurrent appends, body10x admission and aggregate collisions. TestScaleP21HotWebhookFailureAdapter passes twice on persistent SQLite comparing actual rows and one event per mode for positive/negative statuses, default text, 4096-byte truncation, attempted URL and retained order, with zero bounded full decodes/retained work. Enqueue whole-graph routing and automatic disablement remain independently pending.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Due webhook delivery tick records outcomes and automatic failure disablement.",
+      "callers": [
+        "processDueDeliveries -> processDueWebhookDeliveries -> send webhook -> updateWebhookHealth/recordWebhookFailure/disableFailingWebhook",
+        "streamAuditLog -> recordWebhookFailure"
+      ]
+    },
+    "updateWebhookHealth": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Existing scoped writer declares only webhooks/webhookID; original off metadata-fields context, health callback and ErrNoMutation behavior remain exact. Shared logical aggregate planning now retains legal earlier nested-document ID matches. TestScaleP21HotWebhookDeliveryHealthAggregateCollision passes twice on persistent SQLite for warm/reloaded actual FailingSince stamps and repeated no-op, canonical target state, webhook payload/PreviousValues/Snapshot and realtime payload, with an earlier Document.ContentData object owning the aggregate ID, byte-identical unrelated large hook/document rows, one event only, zero bounded full decodes and zero retained work. No network or notification side effect is moved into this trusted metadata callback.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Due webhook delivery tick records outcomes and automatic failure disablement.",
+      "callers": [
+        "processDueDeliveries -> processDueWebhookDeliveries -> send webhook -> updateWebhookHealth/recordWebhookFailure/disableFailingWebhook",
+        "streamAuditLog -> recordWebhookFailure"
+      ]
+    }
+  }
+}

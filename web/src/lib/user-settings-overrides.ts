@@ -1,4 +1,5 @@
 import type { UserSettings } from '@/types/flow'
+import { endsSession, registerSessionCacheClearer } from '@/lib/session-cache-registry'
 
 /**
  * Local user-settings writes that the server snapshot may not reflect yet.
@@ -64,6 +65,14 @@ export function overlayUserSettings<T extends Partial<UserSettings>>(workspaceKe
   }
   return next ?? settings
 }
+
+// The next viewer must never see the previous viewer's unsettled settings; an unfinished write is also
+// settled for the old viewer (its request is already sent), so nothing is replayed.
+registerSessionCacheClearer((_viewerId, workspaceKey) => {
+  if (!endsSession(workspaceKey) || !overrides.size) return
+  overrides.clear()
+  notify()
+})
 
 /** Test helper. */
 export function resetUserSettingsOverrides() {

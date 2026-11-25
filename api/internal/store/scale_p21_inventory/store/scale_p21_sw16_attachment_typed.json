@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_sw16_attachment_typed.go",
+  "unmigrated": 0,
+  "consumers": {
+    "scaleP21SW16MigrateTypedAttachmentIndex": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Resident access is limited to workspace map keys. Preflight sums their encoded and container charge under RLock, independently admits that complete key snapshot before allocation, then clones keys under RLock with a second cumulative bound to reject growth. No Bootstrap collection or body is copied. Leases retain keys through the complete trusted startup sidecar migration. Per-page headers, decoded checkpoints, one complete typed Issue and sparse index diff rows each receive independent nonwaiting admission and release on success/error. Flag-off remains the original caller branch. Exact typed 140-row/large-body, decoded-ID/checkpoint, malformed-source, rollback/admission and accepted-importer differentials run twice on persistent SQLite.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

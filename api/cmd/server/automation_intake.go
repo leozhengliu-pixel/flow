@@ -552,7 +552,7 @@ var errWorkflowNotDue = errors.New("workflow is no longer due")
 // still due, so replicas polling the same workspace run it once.
 func (s *server) runWorkflow(ctx context.Context, key, id, trigger, resourceType, resourceID string, dueOnly bool) (domain.WorkflowRun, error) {
 	var run domain.WorkflowRun
-	err := s.store.MutateWorkspace(ctx, key, "workflow_run.executed", id, map[string]string{"trigger": trigger}, func(data *domain.Bootstrap) error {
+	mutate := func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.WorkflowDefinitions, func(item domain.WorkflowDefinition) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -608,7 +608,13 @@ func (s *server) runWorkflow(ctx context.Context, key, id, trigger, resourceType
 			data.WorkflowRuns = data.WorkflowRuns[len(data.WorkflowRuns)-500:]
 		}
 		return nil
-	})
+	}
+	var err error
+	if s.store.BoundedMetadataEnabled() {
+		err = s.store.MutateWorkflowRun(ctx, key, id, resourceType, resourceID, map[string]string{"trigger": trigger}, mutate)
+	} else {
+		err = s.store.MutateWorkspace(ctx, key, "workflow_run.executed", id, map[string]string{"trigger": trigger}, mutate)
+	}
 	return run, err
 }
 
@@ -841,6 +847,10 @@ func (s *server) startWorkflowScheduler() {
 			case <-ticker.C:
 			}
 			now := time.Now().UTC()
+			if s.store.BoundedMetadataEnabled() {
+				s.boundedWorkflowScheduleTick(ctx, now)
+				continue
+			}
 			for _, key := range s.store.WorkspaceKeys() {
 				data, ok := s.store.WorkspaceMetadataFields(key, "workflowDefinitions", "workflowRuns")
 				if !ok {
@@ -965,13 +975,15 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 		address := data.EmailIntakeAddresses[addressIndex]
 		teamID := address.TeamID
 		var template *domain.IssueTemplate
+		templateID := ""
 		if address.TemplateID != "" {
-			if index := slices.IndexFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.ID == address.TemplateID }); index >= 0 {
+			// Issues land in the address's team. A template of another team
+			// (configured before this was enforced, or moved since) is not
+			// applied: it would create the issue, with its properties, in a
+			// team the address's managers may not reach.
+			if index := slices.IndexFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.ID == address.TemplateID }); index >= 0 && emailIntakeTemplateFits(data.IssueTemplates[index], teamID) {
 				template = &data.IssueTemplates[index]
-				// Like the reference app, a template from another team creates issues there.
-				if template.TeamID != "" {
-					teamID = template.TeamID
-				}
+				templateID = template.ID
 			}
 		}
 		teamIndex := slices.IndexFunc(data.Teams, func(item domain.Team) bool { return item.ID == teamID })
@@ -1029,7 +1041,7 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if address.Type == "asks" || slices.ContainsFunc(data.WorkspaceSettings.FeatureSettings.AsksEmailAddresses, func(value string) bool { return strings.EqualFold(value, address.Address) }) {
-			data.Asks = append(data.Asks, domain.Ask{ID: idgen.New("ask_email_"), Title: created.Title, Body: created.Description, Source: "email", TeamID: teamID, TemplateID: address.TemplateID, Requester: requester, Status: "approved", IssueID: created.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now})
+			data.Asks = append(data.Asks, domain.Ask{ID: idgen.New("ask_email_"), Title: created.Title, Body: created.Description, Source: "email", TeamID: teamID, TemplateID: templateID, Requester: requester, Status: "approved", IssueID: created.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now})
 		}
 		// "Link incoming emails as customer requests": attach the email to the
 		// customer whose domain matches the sender.
@@ -1096,9 +1108,22 @@ func (s *server) createPushSubscription(w http.ResponseWriter, r *http.Request) 
 	respondMutation(w, err, http.StatusCreated, created)
 }
 func (s *server) deletePushSubscription(w http.ResponseWriter, r *http.Request) {
-	viewerID := s.workspaceData(r).Viewer.ID
+	viewerID := authUser(r).ID
+	if !s.store.BoundedMetadataEnabled() {
+		viewerID = s.workspaceData(r).Viewer.ID
+	} else if s.authDisabled {
+		viewer, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{})
+		if err != nil || !ok {
+			if err == nil {
+				err = store.ErrAuthForbidden
+			}
+			respondMutation(w, err, http.StatusNoContent, nil)
+			return
+		}
+		viewerID = viewer.Viewer.ID
+	}
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "push_subscription.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "push_subscription.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "pushSubscriptions", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.PushSubscriptions)
 		data.PushSubscriptions = slices.DeleteFunc(data.PushSubscriptions, func(item domain.PushSubscription) bool { return item.ID == id && item.UserID == viewerID })
 		if before == len(data.PushSubscriptions) {

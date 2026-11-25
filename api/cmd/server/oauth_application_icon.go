@@ -81,7 +81,11 @@ func (s *server) uploadOAuthApplicationIcon(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "icon must be PNG, JPEG, WebP, or a safe SVG")
 		return
 	}
-	workspace, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	workspace, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{})
+	if err != nil {
+		respondMutation(w, err, http.StatusCreated, nil)
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -134,7 +138,14 @@ func (s *server) checkOAuthAppLogoInput(r *http.Request, logo *string, appID str
 	if logo == nil {
 		return nil
 	}
-	data, _ := s.store.WorkspaceMetadata(workspaceKey(r))
+	scope := store.MetadataRecordScope{}
+	if appID != "" {
+		scope.Read = []store.RecordKey{{Kind: "oauthApplications", ID: appID}}
+	}
+	data, _, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), scope)
+	if err != nil {
+		return err
+	}
 	current := ""
 	for _, app := range data.OAuthApplications {
 		if appID != "" && app.ID == appID {
@@ -221,6 +232,53 @@ func (s *server) oauthAppIconReadable(ctx context.Context, icon oauthAppIcon, us
 	return false
 }
 
+func (s *server) boundedOAuthAppIconAccess(ctx context.Context, name string, owner *store.FileUpload, userID string, checkPermission bool) (oauthAppIcon, bool, bool, error) {
+	icon := oauthAppIcon{name: name, contentType: store.OwnedUploadTypes[strings.ToLower(filepath.Ext(name))]}
+	if owner != nil {
+		if owner.Purpose != store.FileUploadPurposeOAuthAppIcon {
+			return icon, false, false, nil
+		}
+		icon.owner = owner
+		if owner.ContentType != "" {
+			icon.contentType = owner.ContentType
+		}
+	} else if !uploadedOAuthAppIcon("/uploads/" + name) {
+		return icon, false, false, nil
+	}
+	if icon.contentType == "" {
+		return icon, false, false, nil
+	}
+	readable := !checkPermission || userID != "" && owner != nil &&
+		(owner.UserID == userID || s.activeWorkspaceMember(ctx, owner.WorkspaceKey, userID, true))
+	var workspace *string
+	if owner != nil {
+		workspace = &owner.WorkspaceKey
+	}
+	matched, err := s.store.VisitOAuthApplicationLogos(context.WithoutCancel(ctx), "/uploads/"+name, workspace, func(match store.OAuthApplicationLogoMatch) (bool, error) {
+		if readable || checkPermission && userID == "" {
+			return true, nil
+		}
+		if match.PublicEnabled || s.activeWorkspaceMember(ctx, match.WorkspaceKey, userID, false) {
+			readable = true
+			return true, nil
+		}
+		err := match.WithClientID(func(clientID string) error {
+			found, err := s.store.VisitOAuthLogoInstallations(ctx, clientID, func(workspace string) bool {
+				return workspace != match.WorkspaceKey && s.activeWorkspaceMember(ctx, workspace, userID, false)
+			})
+			recordUploadVisibilityRefusal(ctx, err)
+			readable = found
+			return nil
+		})
+		return readable, err
+	})
+	if err != nil {
+		return icon, false, false, err
+	}
+	found := owner != nil || matched
+	return icon, found, found && readable, nil
+}
+
 // activeWorkspaceMember reports an active membership of the workspace (an
 // admin's when admin is set).
 func (s *server) activeWorkspaceMember(ctx context.Context, workspace, userID string, admin bool) bool {
@@ -229,8 +287,10 @@ func (s *server) activeWorkspaceMember(ctx context.Context, workspace, userID st
 	}
 	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspace)
 	if err != nil {
+		recordUploadVisibilityRefusal(ctx, err)
 		return false
 	}
 	role, status, err := s.store.WorkspaceRole(ctx, workspaceID, userID)
+	recordUploadVisibilityRefusal(ctx, err)
 	return err == nil && status == "active" && (!admin || workspaceAdminRole(role))
 }

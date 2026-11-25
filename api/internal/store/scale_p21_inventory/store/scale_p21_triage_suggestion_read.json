@@ -1,0 +1,58 @@
+{
+  "source": "store/scale_p21_triage_suggestion_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "ViewerProjectionScope": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Runs the literal PagedWorkspaceMetadata over a borrowed SQL snapshot whose metadata is only this installed generation's core and resident policy fields (workspace, viewer, viewerRole, teams, teamSettings, workspaceSettings, teamParents), after admitting the same live directory/principal rows as BeginIssueBootstrapRead. Role, user, member, team-membership and team-default-favorite rows are read exactly as the full accessor reads them. One synthetic project per team row (the only projects in the input, so no collision) reports the content scope its project filter applies; returned team rows are the projected Teams. Only database failures in the trailing favorite/review/release issue-visibility pass, which needs collections this input omits, could differ. TestScaleP21TriageSuggestionPrimitivesDifferential compares team rows and every fixture project's visibility with mcpWorkspaceData for 20 principal/credential pairs on warm and SQL-reloaded views, plus non-member, empty-user and cancelled failures, with zero full decodes.",
+      "accessors": [
+        "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Viewer projection scope for the polled triage suggestion list.",
+      "callers": [
+        "server/scale_p21_triage_suggestions.go:listIssueSuggestionsBounded"
+      ]
+    },
+    "projectedWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal PagedWorkspaceMetadata over a borrowed SQL snapshot whose metadata is this installed generation's core and policy fields plus only the requested complete collections (projects, labels, labelGroups, initiatives), after admitting the same live directory rows as BeginIssueBootstrapRead. Every projection rule and resource count reading those collections sees the stored records; absent collections only affect outputs callers do not use. Proven against mcpWorkspaceData for 27 principal/credential pairs on warm and reloaded views with zero full decodes.",
+      "accessors": [
+        "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Triage preview and AI context projection.",
+      "callers": [
+        "server/scale_p21_triage_suggestions.go:mcpWorkspaceDataProjected"
+      ]
+    },
+    "ProjectedWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Delegates literally to projectedWorkspace without capturing a scope, retaining the proven projection, admission and SQL behavior.",
+      "accessors": [
+        "projectedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Shared bounded directory and policy projection.",
+      "callers": [
+        "server/scale_p21_triage_suggestions.go:mcpWorkspaceDataProjected"
+      ]
+    },
+    "ProjectedWorkspaceWithScope": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Runs the unchanged projectedWorkspace path with the existing collaborationProjectionCapture hook, retaining the literal pre-filter viewerTeamScope rather than running another SQL projection. Returned scope maps are read-only and owned through Close. SW186CreationProjectionScope compares Data/scope with the original projection and independent scope across every fixture principal on warm/reloaded sources; cancellation, close/release and exact projection SQL (19/admin,14/other) pass.",
+      "accessors": [
+        "projectedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue creation reference validation.",
+      "callers": [
+        "server/scale_p21_issue_create_targets.go:boundedIssueCreateTargets"
+      ]
+    }
+  }
+}

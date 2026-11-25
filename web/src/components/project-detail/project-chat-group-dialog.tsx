@@ -77,7 +77,7 @@ function ProjectChatGroupsEditor({ provider, project, data, onClose, groups, rel
     {!teamIds.length
       ? <p className="chat-muted">{t("Only owners of this project's teams can connect groups to it.")}</p>
       : data && (adding || !bindings.length
-        ? <ChatBindingEditor provider={provider} data={data} bindableTeamIds={teamIds} privateTeamIds={settings.permissions?.teams.privateTeamIds} fixedProjectId={project.id} defaultEvents={['project.update_created', 'issue.created', 'issue.status_changed']} notificationsTitle={t('Project notifications')} notificationsDescription={t('Send notifications to a {name} group.').replace('{name}', () => name)} busy={Boolean(busy)} onCancel={() => bindings.length ? setAdding(false) : onClose()} onSave={input => mutate('binding', () => saveChatBinding(provider, input), 'Group binding saved', () => setAdding(false))}/>
+        ? <ChatBindingEditor provider={provider} data={data} bindableTeamIds={teamIds} privateTeamIds={settings.permissions?.teams.privateTeamIds} membersOnlyTeamIds={settings.permissions?.teams.membersOnlyTeamIds} fixedProjectId={project.id} defaultEvents={['project.update_created', 'issue.created', 'issue.status_changed']} notificationsTitle={t('Project notifications')} notificationsDescription={t('Send notifications to a {name} group.').replace('{name}', () => name)} busy={Boolean(busy)} onCancel={() => bindings.length ? setAdding(false) : onClose()} onSave={input => mutate('binding', () => saveChatBinding(provider, input), 'Group binding saved', () => setAdding(false))}/>
         : <button type="button" className="feature-button chat-dialog-add" disabled={Boolean(busy)} onClick={() => setAdding(true)}>{t('Connect {name} group').replace('{name}', () => name)}</button>)}
   </div>
 }

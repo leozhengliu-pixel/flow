@@ -1,4 +1,5 @@
 import { reviewsZhCN } from './translations-reviews';
+import { issueActivityZhCN } from './translations-issue-activity';
 import { pulseZhCN } from './translations-pulse';
 // coding sessions (track G)
 import { codingSessionUiZhCN } from './translations-coding-session-ui';
@@ -176,6 +177,7 @@ export const zhCN: Record<string, string> = {
   "Accept related suggestion": "接受相关建议",
   "Loading triage": "正在加载分流",
   "Could not update issue": "无法更新事项",
+  "Issue changed in another session": "事项已在另一个会话中修改",
   "Issue URL copied to clipboard": "已复制事项链接",
   "Favorite page": "收藏页面",
   "Configure triage responsibility": "配置分流职责",
@@ -1087,6 +1089,10 @@ export const zhCN: Record<string, string> = {
   Offline: "离线",
   "Skip to content": "跳到主要内容",
   "Loading your workspace...": "正在加载工作区...",
+  "Can't connect to Flow": "无法连接到 Flow",
+  "Flow will keep trying to reach the server.": "Flow 会继续尝试连接服务器。",
+  "Part of Flow could not be loaded.": "Flow 的部分内容无法加载。",
+  "Something went wrong.": "出了点问题。",
   "local time": "当地时间",
   "Invitation pending": "邀请待处理",
   dependencies: "依赖项",
@@ -1894,6 +1900,8 @@ export const zhCN: Record<string, string> = {
   "Review code in Flow and sync attribution of your git-related actions":
     "在 Flow 中评审代码并同步 Git 相关操作的归属",
   "Sign-in identities": "登录身份",
+  "Link this provider to sign in to your account with it":
+    "关联此提供商，以便用它登录你的账户",
   "Identity provider accounts connected to your Flow profile":
     "连接到 Flow 个人资料的身份提供商账户",
   "last used": "上次使用时间",
@@ -3651,6 +3659,7 @@ export const zhCN: Record<string, string> = {
   "Join workspace": "加入工作区",
   Labels: "标签",
   "Workspace labels": "工作区标签",
+  "Team labels": "团队标签",
   "No issue details": "暂无事项详情",
   "No labels used": "未使用标签",
   "No priorities used": "未设置优先级",
@@ -6157,6 +6166,7 @@ Object.assign(zhCN, templatesZhCN);
 Object.assign(zhCN, teamCreateZhCN);
 Object.assign(zhCN, settingsAccessZhCN);
 Object.assign(zhCN, agentHistoryZhCN);
+Object.assign(zhCN, issueActivityZhCN);
 Object.assign(zhCN, gitlabSettingsZhCN);
 for (const [key, value] of Object.entries(githubAppZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 for (const [key, value] of Object.entries(codeHostAccountsZhCN)) if (!(key in zhCN)) zhCN[key] = value;

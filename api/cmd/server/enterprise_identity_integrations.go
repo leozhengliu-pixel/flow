@@ -112,7 +112,7 @@ func (s *server) updateIdentityProvider(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var result domain.IdentityProvider
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "identity_provider.updated", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "identity_provider.updated", r.PathValue("id"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "identityProviders", ID: r.PathValue("id")}}}, func(data *domain.Bootstrap) error {
 		i := slices.IndexFunc(data.IdentityProviders, func(v domain.IdentityProvider) bool { return v.ID == r.PathValue("id") })
 		if i < 0 {
 			return errNotFound
@@ -180,7 +180,7 @@ func (s *server) updateIdentityProvider(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) deleteIdentityProvider(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "identity_provider.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "identity_provider.deleted", r.PathValue("id"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "identityProviders", ID: r.PathValue("id")}}}, func(data *domain.Bootstrap) error {
 		before := len(data.IdentityProviders)
 		data.IdentityProviders = slices.DeleteFunc(data.IdentityProviders, func(v domain.IdentityProvider) bool { return v.ID == r.PathValue("id") })
 		if before == len(data.IdentityProviders) {
@@ -192,7 +192,17 @@ func (s *server) deleteIdentityProvider(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) verifyIdentityProvider(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	scope := store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "identityProviders", ID: r.PathValue("id")}}}
+	if s.store.BoundedMetadataEnabled() {
+		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && !apiKeyHasScope(key, "admin") {
+			// Invisible providers must not disclose their size through a budget error.
+			scope.Read = nil
+		}
+	}
+	data, ok := s.workspaceDataScoped(w, r, scope)
+	if !ok {
+		return
+	}
 	index := slices.IndexFunc(data.IdentityProviders, func(v domain.IdentityProvider) bool { return v.ID == r.PathValue("id") })
 	if index < 0 {
 		writeError(w, http.StatusNotFound, "identity provider not found")
@@ -249,7 +259,7 @@ func (s *server) verifyIdentityProvider(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	var result domain.IdentityProvider
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "identity_provider.verified", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "identity_provider.verified", r.PathValue("id"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "identityProviders", ID: r.PathValue("id")}}}, func(data *domain.Bootstrap) error {
 		i := slices.IndexFunc(data.IdentityProviders, func(v domain.IdentityProvider) bool { return v.ID == snapshot.ID })
 		if i < 0 {
 			return errNotFound
@@ -310,7 +320,10 @@ func parseEnterpriseProviderKey(value string) (string, string, bool) {
 }
 
 func (s *server) enterpriseOIDCClient(ctx context.Context, workspaceKey, providerID string) (*oidcClient, domain.IdentityProvider, error) {
-	data, ok := s.store.WorkspaceMetadata(workspaceKey)
+	data, ok, err := s.store.WorkspaceMetadataScoped(ctx, workspaceKey, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "identityProviders", ID: providerID}}})
+	if err != nil {
+		return nil, domain.IdentityProvider{}, err
+	}
 	if !ok {
 		return nil, domain.IdentityProvider{}, errNotFound
 	}
@@ -334,10 +347,35 @@ func (s *server) enterpriseOIDCClient(ctx context.Context, workspaceKey, provide
 	redirect := strings.TrimRight(s.allowedOrigin, "/") + "/api/auth/enterprise/" + url.PathEscape(p.ID) + "/callback?workspace=" + url.QueryEscape(workspaceKey)
 	ctx = oidc.ClientContext(ctx, secureOutboundClient(10*time.Second, outboundTrustedPrivate))
 	client, err := discoverOIDC(ctx, p.Name, p.Issuer, p.ClientID, secret, redirect, p.Scopes)
-	return client, p, err
+	if err != nil {
+		return nil, p, err
+	}
+	// The discovery document is remote data: its endpoints get the same
+	// check as the issuer before the client secret is ever sent to them.
+	if !safeOutboundHTTPS(ctx, client.oauth.Endpoint.AuthURL, outboundTrustedPrivate) || !safeOutboundHTTPS(ctx, client.oauth.Endpoint.TokenURL, outboundTrustedPrivate) {
+		return nil, p, errors.New("unsafe identity provider endpoint")
+	}
+	return client, p, nil
+}
+
+// enterpriseOIDCContext carries the outbound-policy HTTP client for the token
+// exchange and token verification (oauth2 and go-oidc read it from the
+// context; without it they would use http.DefaultClient).
+func enterpriseOIDCContext(ctx context.Context) context.Context {
+	return oidc.ClientContext(ctx, secureOutboundClient(10*time.Second, outboundTrustedPrivate))
 }
 
 func (s *server) startEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
+	s.beginEnterpriseOIDC(w, r, false)
+}
+
+// startEnterpriseOIDCLink starts the round trip for a signed-in account that
+// links a workspace identity provider from its settings.
+func (s *server) startEnterpriseOIDCLink(w http.ResponseWriter, r *http.Request) {
+	s.beginEnterpriseOIDC(w, r, true)
+}
+
+func (s *server) beginEnterpriseOIDC(w http.ResponseWriter, r *http.Request, link bool) {
 	workspaceKey := strings.TrimSpace(r.URL.Query().Get("workspace"))
 	providerID := r.PathValue("id")
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -348,7 +386,15 @@ func (s *server) startEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state, nonce, verifier := randomURLToken(32), randomURLToken(32), randomURLToken(48)
-	encoded := encodeExternalState(externalAuthState{State: state, Nonce: nonce, Verifier: verifier, Provider: enterpriseProviderKey(workspaceKey, providerID)})
+	external := externalAuthState{State: state, Nonce: nonce, Verifier: verifier, Provider: enterpriseProviderKey(workspaceKey, providerID)}
+	if link {
+		if authUser(r).ID == "" {
+			writeError(w, http.StatusUnauthorized, "Sign in required")
+			return
+		}
+		external.Link, external.LinkWorkspace = true, workspaceKey
+	}
+	encoded := encodeExternalState(external)
 	http.SetCookie(w, &http.Cookie{Name: externalAuthCookie, Value: encoded, Path: "/api/auth/", HttpOnly: true, Secure: secureCookie(r), SameSite: http.SameSiteLaxMode, MaxAge: 600})
 	challenge := sha256.Sum256([]byte(verifier))
 	redirect := client.oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.SetAuthURLParam("code_challenge", base64.RawURLEncoding.EncodeToString(challenge[:])), oauth2.SetAuthURLParam("code_challenge_method", "S256"))
@@ -369,6 +415,7 @@ func (s *server) finishEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "identity provider is unavailable")
 		return
 	}
+	ctx = enterpriseOIDCContext(ctx)
 	token, err := client.oauth.Exchange(ctx, r.URL.Query().Get("code"), oauth2.SetAuthURLParam("code_verifier", state.Verifier))
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "identity provider token exchange failed")
@@ -390,30 +437,63 @@ func (s *server) finishEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "identity subject is required")
 		return
 	}
+	// The workspace admin controls the issuer and the domain list, so neither
+	// proves who owns an email. The email picks an existing account only when
+	// the provider states email_verified: true, the domain is in the
+	// provider's domain list, and the account is already an active member of
+	// this workspace; otherwise the person links the provider from settings.
+	domainListed := false
 	if email != "" && len(provider.Domains) > 0 {
 		at := strings.LastIndex(email, "@")
 		if at < 0 || !slices.Contains(provider.Domains, strings.ToLower(email[at+1:])) {
 			writeError(w, http.StatusForbidden, "identity domain is not allowed")
 			return
 		}
+		domainListed = true
 	}
+	emailVerified := oidcEmailVerified(claims)
+	emailTrusted := domainListed && emailVerified
 	if name == "" {
 		name = stringClaim(claims, "preferred_username")
 	}
 	claimsJSON, _ := json.Marshal(claims)
-	autoProvision := s.externalAuth != nil && s.externalAuth.config.AutoProvision
-	session, sessionToken, err := s.store.LoginExternalIdentity(ctx, "enterprise:"+provider.ID, provider.Issuer, subject, stringClaim(claims, "preferred_username"), email, name, picture, string(claimsJSON), autoProvision)
+	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspaceKey)
 	if err != nil {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	appURL := strings.TrimRight(s.allowedOrigin, "/")
+	if state.Link {
+		user, ok := s.linkSessionUser(r)
+		if !ok {
+			redirectAuthError(w, r, appURL, "Sign in to your account to link this provider.")
+			return
+		}
+		if err := s.store.LinkExternalIdentity(ctx, user.ID, "enterprise:"+provider.ID, provider.Issuer, subject, stringClaim(claims, "preferred_username"), string(claimsJSON)); err != nil {
+			message := "could not link this identity"
+			if errors.Is(err, store.ErrIdentityConflict) {
+				message = "This identity is already linked to another account."
+			}
+			redirectAuthError(w, r, appURL, message)
+			return
+		}
+		clearExternalState(w, r)
+		http.Redirect(w, r, linkSettingsRedirect(appURL, state.LinkWorkspace), http.StatusFound)
+		return
+	}
+	autoProvision := s.externalAuth != nil && s.externalAuth.config.AutoProvision
+	policy := store.ExternalLinkPolicy{TrustedEmail: emailTrusted && email != "", UnverifiedEmail: !emailVerified, MembershipWorkspaceID: workspaceID}
+	session, sessionToken, err := s.store.LoginExternalIdentityWithPolicy(ctx, "enterprise:"+provider.ID, provider.Issuer, subject, stringClaim(claims, "preferred_username"), email, name, picture, string(claimsJSON), autoProvision, policy)
+	if err != nil {
+		if errors.Is(err, store.ErrIdentityConflict) {
+			redirectAuthError(w, r, appURL, identityConflictMessage)
+			return
+		}
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return
 	}
 	if err := s.store.SetSessionAuthentication(ctx, sessionToken, "enterprise:"+provider.ID, provider.Issuer, verifiedMFAClaim(claims)); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save authentication context")
-		return
-	}
-	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspaceKey)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
 	if autoProvision {
@@ -554,7 +634,10 @@ func (s *server) upsertGitAutomation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result domain.GitAutomationState
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "git_automation.upserted", input.ID, input, func(data *domain.Bootstrap) error {
 		if !teamSettingsWriteAllowed(data, input.TeamID, teamRoles, role) {
 			return store.ErrAuthForbidden
@@ -589,7 +672,10 @@ func (s *server) upsertGitAutomation(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, result)
 }
 func (s *server) deleteGitAutomation(w http.ResponseWriter, r *http.Request) {
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "git_automation.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
 		if existing := slices.IndexFunc(data.GitAutomationStates, func(v domain.GitAutomationState) bool { return v.ID == r.PathValue("id") }); existing >= 0 && !teamSettingsWriteAllowed(data, data.GitAutomationStates[existing].TeamID, teamRoles, role) {
 			return store.ErrAuthForbidden
@@ -613,7 +699,10 @@ func (s *server) upsertTargetBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result domain.TargetBranch
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "target_branch.upserted", input.ID, input, func(data *domain.Bootstrap) error {
 		if !teamSettingsWriteAllowed(data, input.TeamID, teamRoles, role) {
 			return store.ErrAuthForbidden
@@ -665,7 +754,10 @@ func (s *server) upsertTargetBranch(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, result)
 }
 func (s *server) deleteTargetBranch(w http.ResponseWriter, r *http.Request) {
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "target_branch.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
 		if existing := slices.IndexFunc(data.TargetBranches, func(v domain.TargetBranch) bool { return v.ID == r.PathValue("id") }); existing >= 0 && !teamSettingsWriteAllowed(data, data.TargetBranches[existing].TeamID, teamRoles, role) {
 			return store.ErrAuthForbidden
@@ -776,6 +868,9 @@ func (s *server) retryIntegrationDelivery(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id string) (domain.IntegrationDelivery, error) {
+	if s.store.BoundedMetadataEnabled() {
+		return s.processBoundedIntegrationDelivery(ctx, workspace, id)
+	}
 	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok {
 		return domain.IntegrationDelivery{}, errNotFound
@@ -879,7 +974,7 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 		}
 	}
 	var result domain.IntegrationDelivery
-	persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	persistCtx, persistCancel := context.WithTimeout(context.Background(), integrationDeliveryPersistTimeout())
 	defer persistCancel()
 	err := s.store.MutateWorkspace(persistCtx, workspace, "integration_delivery.retry", id, nil, func(data *domain.Bootstrap) error {
 		i := slices.IndexFunc(data.IntegrationDeliveries, func(v domain.IntegrationDelivery) bool { return v.ID == id })

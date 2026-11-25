@@ -48,12 +48,11 @@ func releaseAccessKeyActive(pipeline *domain.ReleasePipeline, now time.Time) boo
 }
 
 // releasePipelineKeyMatches accepts the current key, or a rotated key during its grace period.
-func releasePipelineKeyMatches(pipeline *domain.ReleasePipeline, secret string, now time.Time) bool {
-	hash := []byte(secretHash(secret))
-	if releaseAccessKeyActive(pipeline, now) && subtle.ConstantTimeCompare([]byte(pipeline.AccessKeyHash), hash) == 1 {
+func releasePipelineKeyMatches(pipeline *domain.ReleasePipeline, hash string, now time.Time) bool {
+	if releaseAccessKeyActive(pipeline, now) && subtle.ConstantTimeCompare([]byte(pipeline.AccessKeyHash), []byte(hash)) == 1 {
 		return true
 	}
-	return pipeline.PreviousAccessKeyHash != "" && pipeline.PreviousAccessKeyExpiresAt != nil && now.Before(*pipeline.PreviousAccessKeyExpiresAt) && subtle.ConstantTimeCompare([]byte(pipeline.PreviousAccessKeyHash), hash) == 1
+	return pipeline.PreviousAccessKeyHash != "" && pipeline.PreviousAccessKeyExpiresAt != nil && now.Before(*pipeline.PreviousAccessKeyExpiresAt) && subtle.ConstantTimeCompare([]byte(pipeline.PreviousAccessKeyHash), []byte(hash)) == 1
 }
 
 // releaseAccessKeySecret reads the key from "Authorization: Bearer <key>" or a
@@ -71,24 +70,46 @@ func releaseAccessKeySecret(r *http.Request) string {
 
 // pipelineForAccessKey finds the workspace and pipeline an access key belongs
 // to; pipelineID narrows the lookup when the URL names the pipeline.
-func (s *server) pipelineForAccessKey(secret, pipelineID string) (string, string, bool) {
+func (s *server) pipelineForAccessKey(ctx context.Context, secret, pipelineID string) (string, string, bool, error) {
 	if secret == "" {
-		return "", "", false
+		return "", "", false, nil
 	}
 	now := time.Now().UTC()
+	hash := secretHash(secret)
+	bounded := s.store.BoundedMetadataEnabled()
+	if !bounded {
+		// The legacy typed snapshot preserves exact key values. Check SQL
+		// availability before trusting it for a credential decision.
+		if err := s.store.CheckDatabaseConnection(ctx); err != nil {
+			return "", "", false, err
+		}
+	}
 	for _, key := range s.store.WorkspaceKeys() {
+		if bounded {
+			id, ok, err := s.store.ReleasePipelineForKeyHash(ctx, key, hash, pipelineID, now)
+			if s.skipUncoveredWorkspace("Release pipeline key lookup", key, err) {
+				continue
+			}
+			if err != nil {
+				return "", "", false, err
+			}
+			if ok {
+				return key, id, true, nil
+			}
+			continue
+		}
 		data, ok := s.store.WorkspaceMetadata(key)
 		if !ok {
 			continue
 		}
 		for index := range data.ReleasePipelines {
 			pipeline := &data.ReleasePipelines[index]
-			if (pipelineID == "" || pipeline.ID == pipelineID) && releasePipelineKeyMatches(pipeline, secret, now) {
-				return key, pipeline.ID, true
+			if (pipelineID == "" || pipeline.ID == pipelineID) && releasePipelineKeyMatches(pipeline, hash, now) {
+				return key, pipeline.ID, true, nil
 			}
 		}
 	}
-	return "", "", false
+	return "", "", false, nil
 }
 
 // readOptionalJSON decodes a request body that may be empty.
@@ -126,7 +147,10 @@ func (s *server) rotateReleasePipelineAccessKey(w http.ResponseWriter, r *http.R
 	}
 	id := r.PathValue("id")
 	var result releasePipelineAccessKey
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.access_key_rotated", id, input, func(data *domain.Bootstrap) error {
 		pipeline := releasePipelineByID(data, id)
 		if pipeline == nil {
@@ -163,7 +187,10 @@ func (s *server) revokeReleasePipelineAccessKey(w http.ResponseWriter, r *http.R
 	}
 	id := r.PathValue("id")
 	var updated domain.ReleasePipeline
-	role, teamRoles := s.requestWorkspaceRole(r)
+	role, teamRoles, ok := s.requestWorkspaceRole(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.access_key_revoked", id, map[string]bool{"immediate": immediate}, func(data *domain.Bootstrap) error {
 		pipeline := releasePipelineByID(data, id)
 		if pipeline == nil {
@@ -253,7 +280,7 @@ type releaseCIResult struct {
 	Release *releaseCIRelease `json:"release"`
 	// SkippedIssueIdentifiers were not added because the release's stage is frozen.
 	SkippedIssueIdentifiers []string `json:"skippedIssueIdentifiers,omitempty"`
-	// UnknownIssueIdentifiers matched no issue in the workspace.
+	// UnknownIssueIdentifiers matched no issue the pipeline may reference (missing and out-of-scope issues are reported alike).
 	UnknownIssueIdentifiers []string `json:"unknownIssueIdentifiers,omitempty"`
 }
 
@@ -314,7 +341,13 @@ func releaseCIStages(pipeline *domain.ReleasePipeline) []releaseCIStage {
 // writes the error response itself.
 func (s *server) authenticateReleaseCI(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	w.Header().Set("Cache-Control", "no-store")
-	workspace, pipelineID, ok := s.pipelineForAccessKey(releaseAccessKeySecret(r), r.PathValue("id"))
+	workspace, pipelineID, ok, err := s.pipelineForAccessKey(r.Context(), releaseAccessKeySecret(r), r.PathValue("id"))
+	if err != nil {
+		if !writeStoreReadUnavailable(w, err) && !errors.Is(err, context.Canceled) {
+			writeError(w, http.StatusServiceUnavailable, "release pipeline access check unavailable")
+		}
+		return "", "", false
+	}
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "invalid release pipeline access key")
 		return "", "", false
@@ -836,18 +869,13 @@ func moveReleaseCIStage(data *domain.Bootstrap, pipeline *domain.ReleasePipeline
 // Frozen releases keep their issue set: syncs never add to frozen stages.
 func applyReleaseCIIssues(data *domain.Bootstrap, release *domain.Release, input releaseCIInput) ([]string, []string) {
 	skipped, unknown := []string{}, []string{}
+	pipeline := releasePipelineByID(data, release.PipelineID)
+	scope := store.NewDocumentLinkScope(data.Teams, data.TeamSettings)
+	// An issue outside the pipeline's scope is indistinguishable from one that
+	// does not exist: it is never linked, unlinked or reported differently.
 	find := func(identifier string) *domain.Issue {
-		for index := range data.Issues {
-			if strings.EqualFold(data.Issues[index].Identifier, identifier) && data.Issues[index].ArchivedAt == nil {
-				return &data.Issues[index]
-			}
-		}
-		// A commit can name an issue by an identifier it had before it moved
-		// to another team.
-		for index := range data.Issues {
-			if data.Issues[index].ArchivedAt == nil && slices.ContainsFunc(data.Issues[index].PreviousIdentifiers, func(previous string) bool { return strings.EqualFold(previous, identifier) }) {
-				return &data.Issues[index]
-			}
+		if issue := findReleaseCIIssue(data, identifier); issue != nil && pipeline != nil && issueInPipelineScope(scope, pipeline, issue) {
+			return issue
 		}
 		return nil
 	}
@@ -884,6 +912,32 @@ func applyReleaseCIIssues(data *domain.Bootstrap, release *domain.Release, input
 		unknown = nil
 	}
 	return skipped, unknown
+}
+
+// issueInPipelineScope reports whether a pipeline's automation may see an
+// issue: the pipeline's teams when it has any, otherwise the teams that do
+// not keep their content from non-members (the rule release notes use).
+func issueInPipelineScope(scope *store.DocumentLinkScope, pipeline *domain.ReleasePipeline, issue *domain.Issue) bool {
+	if len(pipeline.TeamIDs) > 0 {
+		return slices.Contains(pipeline.TeamIDs, issue.Team.ID)
+	}
+	return !scope.TeamClosed(issue.Team.ID)
+}
+
+func findReleaseCIIssue(data *domain.Bootstrap, identifier string) *domain.Issue {
+	for index := range data.Issues {
+		if strings.EqualFold(data.Issues[index].Identifier, identifier) && data.Issues[index].ArchivedAt == nil {
+			return &data.Issues[index]
+		}
+	}
+	// A commit can name an issue by an identifier it had before it moved
+	// to another team.
+	for index := range data.Issues {
+		if data.Issues[index].ArchivedAt == nil && slices.ContainsFunc(data.Issues[index].PreviousIdentifiers, func(previous string) bool { return strings.EqualFold(previous, identifier) }) {
+			return &data.Issues[index]
+		}
+	}
+	return nil
 }
 
 // applyReleaseCIResources adds links (deduplicated by URL) and upserts

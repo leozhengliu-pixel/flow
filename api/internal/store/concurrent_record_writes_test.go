@@ -17,7 +17,7 @@ import (
 // peerStoreSets returns pairs of independent store instances that share one
 // database and one Redis coordinator, like two API replicas: always a SQLite
 // pair, plus a pair on FLOW_TEST_DATABASE_DRIVER / FLOW_TEST_DATABASE_URL
-// when those name a throwaway MySQL or PostgreSQL database.
+// when those name a persistent SQLite file or throwaway MySQL/PostgreSQL database.
 func peerStoreSets(t *testing.T) map[string][2]*SQLiteStore {
 	t.Helper()
 	redisServer := miniredis.RunT(t)
@@ -35,8 +35,12 @@ func peerStoreSets(t *testing.T) map[string][2]*SQLiteStore {
 	sets["sqlite"] = sqlite
 	if driver, url := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL"); driver != "" && url != "" {
 		var external [2]*SQLiteStore
+		config := DatabaseConfig{Driver: driver, URL: url, FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 4}
+		if driver == "sqlite" {
+			config.Path = url
+		}
 		for index := range external {
-			repo, err := OpenDatabase(DatabaseConfig{Driver: driver, URL: url, FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 4})
+			repo, err := OpenDatabase(config)
 			if err != nil {
 				t.Fatal(err)
 			}

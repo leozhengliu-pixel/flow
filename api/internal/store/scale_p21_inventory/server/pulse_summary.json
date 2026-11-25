@@ -1,0 +1,14 @@
+{
+  "source": "server/pulse_summary.go",
+  "unmigrated": 0,
+  "consumers": {
+    "pulseSummaryRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginPulseRead"],
+      "temperature": "hot",
+      "temperatureReason": "Pulse summary capabilities, body generation/cache, reporting and audio HTTP reads.",
+      "reason": "Only bounded branches compose proven BeginPulseRead(indexed=false) and LoadUpdates for referenced project/initiative update IDs; repeated already-selected IDs reuse the owned snapshot and missing/deleted/hidden refs preserve the original order and cap. Close transfers to the existing request output owner, keeping escaping source names/body strings admitted through summary JSON, provider requests and audio output; an absent owner returns explicit coverage error. Each original feature, update, AI-policy and default-workspace read boundary remains separate, and off branches keep literal PulseFeed/pulseRequestContext/pulseWorkspaceKey access. TestScaleP21PulseSummaryReadDifferential compares capabilities, summary generation/cache, report and audio outputs plus saved cache/reports, exact decoded AI/speech provider requests and call effects across 18 principal/key/policy/cache/missing/default-workspace cases. Only generated cache/report clocks are normalized. A response writer asserts held admission during JSON/audio encoding; all bounded calls release work and full metadata decodes stay zero. Targeted Tier B test passed; no primitive was modified or re-proved."
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "source": "server/mcp_tools.go",
+  "unmigrated": 2,
+  "consumers": {
+    "mcpWorkspaceData": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Closed by caller reachability, literal body unchanged. SW271 pins the callset: the four HOT triage callers (preview/list/update suggestion routes, requestTriageAIPlan) dispatch to their owned projections before it with the flag on; the eight other callers are COLD MCP/agent tools whose flag-on reverse walks meet no HOT-classified consumer except through the pinned AI-run boundaries. mcpWorkspaceDataFrom is referenced only by this wrapper and by mcpWorkspaceDataProjected, which passes installed projections, never PagedWorkspaceMetadata.",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/issue-records/{id}/suggestions",
+      "callers": [
+        "server/server.agentEntitySnapshot",
+        "server/server.mcpWorkspaceDataForTool",
+        "server/server.appendMCPDocumentEmbed",
+        "server/server.deleteMCPResource",
+        "server/server.flowDeletePreview",
+        "server/server.deleteMCPDocument",
+        "server/server.saveMCPProject",
+        "server/server.deleteMCPComment",
+        "server/server.previewIssueSuggestions",
+        "server/server.listIssueSuggestions",
+        "server/server.updateIssueSuggestionState",
+        "server/server.requestTriageAIPlan"
+      ]
+    },
+    "mcpWorkspaceDataForTool": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields",
+        "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.runFlowTool"
+      ]
+    },
+    "runFlowTool": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "mcpWorkspaceDataForTool"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowTool"
+      ]
+    }
+  }
+}

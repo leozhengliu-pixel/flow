@@ -30,39 +30,53 @@ export function shouldShowProgressGraph(project: Pick<Project, 'startDate' | 'sc
 export function buildProgressData(issues: Issue[], start?: string, target?: string, persisted?: PersistedProgressHistory) {
   const today = startOfDay(new Date())
   const scopedIssues = issues.filter(issue => !['canceled', 'duplicate', 'triage'].includes(issue.state.type))
+  const events = new Map<number, ProgressTotals>()
+  const eventAt = (day: Date) => {
+    const time = +day
+    if (!Number.isFinite(time)) return
+    let event = events.get(time)
+    if (!event) events.set(time, event = { scope: 0, completed: 0, completedCount: 0, started: 0, inProgress: 0 })
+    return event
+  }
+  let firstCreated: Date | undefined
+  let localEstimate = 0
+  for (const issue of scopedIssues) {
+    const estimate = issueEstimate(issue)
+    localEstimate += estimate
+    const created = startOfDay(new Date(issue.createdAt))
+    const creation = eventAt(created)
+    if (creation) {
+      firstCreated ??= created
+      creation.scope += estimate
+      if (issue.state.type === 'started' || issue.state.type === 'completed') creation.started += estimate
+      if (issue.state.type === 'started') creation.inProgress += estimate
+    }
+    if (issue.state.type === 'completed') {
+      const completion = eventAt(startOfDay(new Date(issue.completedAt ?? issue.updatedAt)))
+      if (completion) {
+        completion.completed += estimate
+        completion.completedCount++
+      }
+    }
+  }
+  const eventTimes = [...events.keys()].sort((left, right) => left - right)
+  const totalsAt = cumulativeProgress(eventTimes, events)
   // In paged mode the project's issues may not be loaded here; the persisted
   // scope history is then the only source of the current scope.
-  const localEstimate = scopedIssues.reduce((total, issue) => total + issueEstimate(issue), 0)
   const totalEstimate = Math.max(localEstimate, latestHistoryValue(persisted?.scopeHistory ?? persisted?.issueCountHistory) ?? 0)
-  const createdDates = scopedIssues.map(issue => startOfDay(new Date(issue.createdAt))).filter(date => !Number.isNaN(date.getTime()))
-  const requestedStart = start ? startOfDay(new Date(`${start}T00:00:00`)) : createdDates[0]
+  const requestedStart = start ? startOfDay(new Date(`${start}T00:00:00`)) : firstCreated
   const startDate = requestedStart && !Number.isNaN(requestedStart.getTime()) ? requestedStart : today
   const requestedTarget = target ? startOfDay(new Date(`${target}T00:00:00`)) : addDays(startDate, 14)
   const targetDate = requestedTarget > startDate ? requestedTarget : addDays(startDate, 1)
   const baseEndDate = today > targetDate ? today : targetDate
   const currentDate = today < startDate ? startDate : today > baseEndDate ? baseEndDate : today
-  const isCreated = (issue: Issue, date: Date) => startOfDay(new Date(issue.createdAt)) <= date
-  const isStarted = (issue: Issue, date: Date) => ['started', 'completed'].includes(issue.state.type) && isCreated(issue, date)
-  const isCompleted = (issue: Issue, date: Date) => {
-    if (issue.state.type !== 'completed') return false
-    const completedDate = startOfDay(new Date(issue.completedAt ?? issue.updatedAt))
-    return completedDate <= date
-  }
-  const eventDays = uniqueDates([
-    startDate,
-    currentDate,
-    targetDate,
-    baseEndDate,
-    ...scopedIssues.flatMap(issue => [startOfDay(new Date(issue.createdAt)), ...(issue.state.type === 'completed' ? [startOfDay(new Date(issue.completedAt ?? issue.updatedAt))] : [])]),
-  ]).filter(date => date >= startDate && date <= baseEndDate)
-  const activeDays = eventDays.filter(date => date <= currentDate)
-  const completed = activeDays.map(date => ({ x: date, y: scopedIssues.filter(issue => isCompleted(issue, date)).reduce((total, issue) => total + issueEstimate(issue), 0) }))
-  const completedCount = completed.at(-1)?.y ?? 0
+  const eventDays = uniqueDates([startDate, currentDate, targetDate, baseEndDate, ...eventTimes
+    .filter(time => time >= +startDate && time <= +baseEndDate).map(time => new Date(time))])
+  const current = totalsAt(currentDate)
   const historyDays = differenceInCalendarDays(currentDate, startDate)
-  const inProgress = scopedIssues.filter(issue => issue.state.type === 'started' && isCreated(issue, currentDate)).reduce((total, issue) => total + issueEstimate(issue), 0)
-  const progressEstimatePoints = Math.floor(completedCount + inProgress * .25)
+  const progressEstimatePoints = Math.floor(current.completed + current.inProgress * .25)
   const persistedCompletedHistory = historyValues(persisted?.completedScopeHistory, startDate, currentDate)
-  const completedScopeHistory = persistedCompletedHistory.length ? persistedCompletedHistory : historyDays >= 7 ? weeklyHistory(startDate, currentDate).map(date => scopedIssues.filter(issue => isCompleted(issue, date)).length) : []
+  const completedScopeHistory = persistedCompletedHistory.length ? persistedCompletedHistory : historyDays >= 7 ? weeklyHistory(startDate, currentDate).map(date => totalsAt(date).completedCount) : []
   const persistedProgress = historyValues(persisted?.progressHistory, startDate, currentDate).at(-1)
   const progressVelocity = calculateProgressVelocity(completedScopeHistory, persistedProgress ?? progressEstimatePoints)
   const remainingPoints = Math.max(0, totalEstimate - progressEstimatePoints)
@@ -73,26 +87,62 @@ export function buildProgressData(issues: Issue[], start?: string, target?: stri
   const pessimisticDate = predictedDate ? addDays(currentDate, Math.max(1, Math.round(predictedDays * 1.4))) : undefined
   const endDate = pessimisticDate && pessimisticDate > baseEndDate ? pessimisticDate : baseEndDate
   const finalEventDays = uniqueDates([...eventDays, endDate, ...(optimisticDate ? [optimisticDate] : []), ...(pessimisticDate ? [pessimisticDate] : [])]).filter(date => date >= startDate && date <= endDate)
-  const scope = historySeries(persisted?.scopeHistory ?? persisted?.issueCountHistory, startDate, endDate) ?? finalEventDays.map(date => ({ x: date, y: scopedIssues.filter(issue => isCreated(issue, date)).reduce((total, issue) => total + issueEstimate(issue), 0) }))
+  const scope = historySeries(persisted?.scopeHistory ?? persisted?.issueCountHistory, startDate, endDate) ?? finalEventDays.map(date => ({ x: date, y: totalsAt(date).scope }))
   const targetData = finalEventDays.map(date => ({ x: date, y: totalEstimate }))
   const finalActiveDays = finalEventDays.filter(date => date <= currentDate)
-  const completedData = historySeries(persisted?.completedScopeHistory, startDate, currentDate) ?? finalActiveDays.map(date => ({ x: date, y: scopedIssues.filter(issue => isCompleted(issue, date)).reduce((total, issue) => total + issueEstimate(issue), 0) }))
+  const completedData = historySeries(persisted?.completedScopeHistory, startDate, currentDate) ?? finalActiveDays.map(date => ({ x: date, y: totalsAt(date).completed }))
   const startedHistory = historySeries(persisted?.inProgressScopeHistory, startDate, currentDate)
+  const completedByDay = new Map<number, number>()
+  if (startedHistory) {
+    for (const point of completedData) if (!completedByDay.has(+point.x)) completedByDay.set(+point.x, point.y)
+  }
   const startedData = startedHistory
-    ? startedHistory.map(point => ({ x: point.x, y: point.y + (completedData.find(completedPoint => completedPoint.x.getTime() === point.x.getTime())?.y ?? 0) }))
-    : finalActiveDays.map(date => ({ x: date, y: scopedIssues.filter(issue => isStarted(issue, date)).reduce((total, issue) => total + issueEstimate(issue), 0) }))
+    ? startedHistory.map(point => ({ x: point.x, y: point.y + (completedByDay.get(+point.x) ?? 0) }))
+    : finalActiveDays.map(date => ({ x: date, y: totalsAt(date).started }))
   const series = [{ id: 'Scope' as const, data: scope }, { id: 'Started' as const, data: startedData }, { id: 'Completed' as const, data: completedData }, { id: 'Target' as const, data: targetData }]
+  let yMax = Math.max(1, totalEstimate)
+  for (const { data } of series) for (const point of data) yMax = Math.max(yMax, point.y)
   return {
     startDate,
     targetDate,
     endDate,
     currentDate,
     /** Chart ceiling: every plotted value fits, whatever the local issues say. */
-    yMax: Math.max(1, totalEstimate, ...series.flatMap(item => item.data.map(point => point.y))),
+    yMax,
     completedChanges: buildCompletionChanges(scopedIssues, startDate, currentDate),
     forecast: { completed: completedData.at(-1)?.y ?? 0, optimisticDate, pessimisticDate, total: totalEstimate } satisfies ProgressForecast,
     totalEstimate,
     series,
+  }
+}
+
+type ProgressTotals = { scope: number; completed: number; completedCount: number; started: number; inProgress: number }
+
+/** Roll up dated changes once. A sample between two events uses the last event's totals. */
+function cumulativeProgress(times: number[], events: Map<number, ProgressTotals>) {
+  const empty: ProgressTotals = { scope: 0, completed: 0, completedCount: 0, started: 0, inProgress: 0 }
+  let totals = empty
+  const cumulative = times.map(time => {
+    const event = events.get(time)!
+    totals = {
+      scope: totals.scope + event.scope,
+      completed: totals.completed + event.completed,
+      completedCount: totals.completedCount + event.completedCount,
+      started: totals.started + event.started,
+      inProgress: totals.inProgress + event.inProgress,
+    }
+    return totals
+  })
+  return (date: Date) => {
+    const time = +date
+    let left = 0
+    let right = times.length
+    while (left < right) {
+      const mid = Math.floor((left + right) / 2)
+      if (times[mid] <= time) left = mid + 1
+      else right = mid
+    }
+    return cumulative[left - 1] ?? empty
   }
 }
 

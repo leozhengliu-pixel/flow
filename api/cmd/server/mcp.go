@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"maps"
 	"math"
 	"net/http"
@@ -73,7 +72,9 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 		}
 		// MCP bypasses session middleware but must also see preceding writes
 		// on another server before running a tool.
-		s.ensureCurrentWorkspace(r.Context(), actor.WorkspaceKey)
+		if !s.requireCurrentWorkspace(w, r, actor.WorkspaceKey) {
+			return
+		}
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", "POST")
 			writeOAuthError(w, http.StatusMethodNotAllowed, "method_not_allowed", "MCP uses Streamable HTTP POST requests")
@@ -380,6 +381,9 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 	if token := strings.TrimSpace(header[len("Bearer "):]); strings.HasPrefix(token, agentRunTokenPrefix) {
 		grant, err := s.authenticateAgentRunToken(r.Context(), token)
 		if err != nil {
+			if writeOAuthStoreUnavailable(w, err) {
+				return mcpActor{}, false
+			}
 			if s.limitInvalidRunToken(w, r) {
 				s.mcpUnauthorized(w, r, "Run token is invalid, expired, or its run has ended")
 			}
@@ -391,11 +395,24 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 		return mcpActor{WorkspaceKey: grant.run.WorkspaceKey, Run: grant}, true
 	}
 	authentication, err := s.store.AuthenticateAPIKeyRecord(r.Context(), "", secretHash(strings.TrimSpace(header[len("Bearer "):])), applicationApproved)
+	if writeOAuthStoreUnavailable(w, err) {
+		return mcpActor{}, false
+	}
+	if err != nil && !errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, sql.ErrNoRows) {
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not check access token")
+		return mcpActor{}, false
+	}
 	key := authentication.Key
 	if err != nil || key.Scopes != nil && !slices.ContainsFunc(key.Scopes, func(scope string) bool {
 		return slices.Contains([]string{"read", "write", "admin", "create_issues", "create_comments"}, canonicalAPIKeyScope(scope))
 	}) {
-		s.mcpUnauthorized(w, r, "Token is invalid, expired, or lacks read access")
+		// A rejected token spends its address's unauthenticated budget.
+		if s.limitInvalidRunToken(w, r) {
+			s.mcpUnauthorized(w, r, "Token is invalid, expired, or lacks read access")
+		}
+		return mcpActor{}, false
+	}
+	if !s.limitVerifiedKey(w, r, key, authentication.User.ID) {
 		return mcpActor{}, false
 	}
 	_ = s.store.RecordAPIKeyUse(r.Context(), authentication.Workspace.URLKey, key.ID, key.AuthorizationID)
@@ -448,8 +465,7 @@ func (s *server) writeMCPError(w http.ResponseWriter, id any, code int, message 
 }
 
 // toolInternalError replaces a database or driver error in a tool result: the
-// MCP client or agent model gets a generic sentence with the request id, the
-// log has the error.
+// client gets a generic sentence with its request ID.
 type toolInternalError struct {
 	requestID string
 	read      bool
@@ -465,10 +481,8 @@ func (e *toolInternalError) Error() string {
 // publicToolError is the error a tool call reports to an MCP client or an
 // agent model. Tool errors are written for the caller ("issue not found",
 // "title is required"), except database, driver and object-storage errors
-// (isInternalError): their text names tables, columns, SQL states, buckets
-// and paths, so they are logged with the request id and
-// replaced, as is a 500 from a REST handler the tool ran in process. A call
-// outside an HTTP request gets a fresh id for the log line.
+// (isInternalError) and 500s from REST handlers run in process. Those
+// errors are logged with a safe cause code and a server-generated ID.
 func publicToolError(ctx context.Context, tool string, err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return errNotFound
@@ -477,12 +491,19 @@ func publicToolError(ctx context.Context, tool string, err error) error {
 	if err == nil || !isInternalError(err) && !errors.As(err, &handlerErr) {
 		return err
 	}
+	logger := requestLoggerFrom(ctx)
 	requestID := requestIDFrom(ctx)
 	if requestID == "" {
-		requestID = newRequestID()
+		id := newRequestID()
+		logger = logger.With("request_id", id)
+		requestID = id
+	}
+	if loop, _ := ctx.Value(loopRunRequestKey{}).(bool); loop {
+		logger.ErrorContext(ctx, "loop tool internal error")
+	} else {
+		logger.ErrorContext(ctx, "flow tool internal error", "cause", requestErrorCode(err))
 	}
 	tool = strings.TrimPrefix(tool, "mcp__flow.")
-	slog.ErrorContext(ctx, "flow tool internal error", "request_id", requestID, "tool", tool, "error", err.Error())
 	return &toolInternalError{requestID: requestID, read: agentChangeToolAccess()[tool] == "read"}
 }
 

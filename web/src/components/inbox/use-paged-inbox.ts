@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { fetchInboxNotifications, listIssueRecords } from '@/lib/api'
-import { INBOX_ACTIVITY_EVENT, inboxUnread } from '@/lib/inbox-unread'
+import { INBOX_ACTIVITY_EVENT, INBOX_STATE_EVENT, inboxUnread, type InboxStateActivity } from '@/lib/inbox-unread'
 import type { Issue, Notification, RealtimeEvent } from '@/types/flow'
 
 /** Notifications per page (the server caps a page at 500). */
@@ -50,15 +50,26 @@ export function usePagedInbox({ enabled, workspaceKey, live, loadedIssues }: { e
     const run = ++generation.current
     setPage(current => ({ ...current, loading: true, error: false }))
     try {
-      const limit = Math.min(MAX_RELOAD, Math.max(INBOX_PAGE_SIZE, pageRef.current.items.length))
-      const result = await fetchInboxNotifications(query(limit))
-      if (run !== generation.current) return
-      applyCount(result.unreadCount)
-      setPage({ items: result.notifications ?? [], cursor: result.nextCursor, hasMore: Boolean(result.hasMore ?? result.nextCursor), loading: false, loadingMore: false, error: false })
+      const requested = Math.max(INBOX_PAGE_SIZE, pageRef.current.items.length)
+      const recipientOverlay = inboxUnread.overlayEnabled(workspaceKey)
+      const target = recipientOverlay ? requested : Math.min(MAX_RELOAD, requested)
+      const items: Notification[] = []
+      let cursor: string | undefined
+      let hasMore = false
+      do {
+        const result = await fetchInboxNotifications(query(Math.min(MAX_RELOAD, target - items.length), cursor))
+        if (run !== generation.current) return
+        applyCount(result.unreadCount)
+        items.push(...(result.notifications ?? []))
+        hasMore = Boolean(result.hasMore ?? result.nextCursor)
+        if (recipientOverlay && (cursor === result.nextCursor || !result.notifications?.length)) hasMore = false
+        cursor = result.nextCursor
+      } while (recipientOverlay && items.length < target && hasMore && cursor)
+      setPage({ items, cursor, hasMore, loading: false, loadingMore: false, error: false })
     } catch {
       if (run === generation.current) setPage(current => ({ ...current, loading: false, error: true }))
     }
-  }, [applyCount, pageRef])
+  }, [applyCount, pageRef, workspaceKey])
 
   const cancel = useCallback(() => { generation.current++ }, [])
   useEffect(() => {
@@ -113,6 +124,7 @@ export function usePagedInbox({ enabled, workspaceKey, live, loadedIssues }: { e
     let timer: ReturnType<typeof setTimeout> | undefined
     let full = false
     const onActivity = (event: Event) => {
+      if (inboxUnread.overlayEnabled(workspaceKey)) return
       const detail = (event as CustomEvent<RealtimeEvent>).detail
       const entity = detail?.payload?.entity as Notification | undefined
       if (detail?.type?.startsWith('notification.') && entity && 'recipientId' in entity) { upsert(entity); return }
@@ -126,12 +138,30 @@ export function usePagedInbox({ enabled, workspaceKey, live, loadedIssues }: { e
         void (reloadAll ? reload() : refreshFirstPage())
       }, 500)
     }
+    const onState = (event: Event) => {
+      const detail = (event as CustomEvent<InboxStateActivity>).detail
+      if (detail?.workspaceKey !== workspaceKey || !inboxUnread.overlayEnabled(workspaceKey, detail.viewerId)) return
+      const { state } = detail
+      if (!state.invalidated && !state.changedIds?.length) return
+      // A changed row can be on an older loaded page. Re-read that window;
+      // fetching just page one would leave mark/read/archive state stale.
+      full = full || state.invalidated || Boolean(state.changedIds?.some(id => pageRef.current.items.some(item => item.id === id)))
+      if (timer) return
+      timer = setTimeout(() => {
+        timer = undefined
+        const reloadAll = full
+        full = false
+        void (reloadAll ? reload() : refreshFirstPage())
+      }, 500)
+    }
     window.addEventListener(INBOX_ACTIVITY_EVENT, onActivity)
+    window.addEventListener(INBOX_STATE_EVENT, onState)
     return () => {
       if (timer) clearTimeout(timer)
       window.removeEventListener(INBOX_ACTIVITY_EVENT, onActivity)
+      window.removeEventListener(INBOX_STATE_EVENT, onState)
     }
-  }, [enabled, refreshFirstPage, reload, upsert])
+  }, [enabled, pageRef, refreshFirstPage, reload, upsert, workspaceKey])
 
   // Issue summaries for notifications whose issue the app has not loaded.
   const [fetchedIssues, setFetchedIssues] = useState<Map<string, Issue>>(() => new Map())

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -29,20 +30,42 @@ func (s *server) requestIssueQueryAccess(r *http.Request) (domain.Bootstrap, sto
 		return cached.metadata, cached.access, cached.err
 	}
 	cached := issueRequestAccess{workspace: workspace, userID: userID}
-	if s.authDisabled {
+	if !s.store.BoundedMetadataEnabled() {
+		// A cold facade refreshes only at the original cache-miss read.
+		// An ordinary legacy store's refresh is a literal no-op.
+		cached.err = s.store.RefreshColdMetadataRead(r.Context(), workspace)
+	}
+	if cached.err == nil && s.authDisabled {
 		var ok bool
 		cached.metadata, ok = s.store.IssueAccessMetadata(r.Context(), workspace)
+		cached.metadata.Viewer = authUser(r)
 		cached.metadata.ViewerRole = "admin"
 		if !ok {
 			cached.err = store.ErrAuthForbidden
 		}
-	} else {
+	} else if cached.err == nil {
 		cached.metadata, cached.access, cached.err = s.store.IssueQueryAccess(r.Context(), workspace, userID)
 	}
 	if cacheable {
 		*r = *r.WithContext(context.WithValue(r.Context(), issueRequestAccessKey{}, cached))
 	}
 	return cached.metadata, cached.access, cached.err
+}
+
+// A canceled access check must stop the request with an explicit failure.
+// The query error writer otherwise leaves a disconnected read unanswered.
+func issueRequestAccessError(w http.ResponseWriter, r *http.Request, err error) {
+	if !writeRequestCanceled(w, err) {
+		issueRecordsErrorFor(w, r, err)
+	}
+}
+
+func writeRequestCanceled(w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, context.Canceled) {
+		return false
+	}
+	writeError(w, http.StatusRequestTimeout, "Request canceled")
+	return true
 }
 
 func boundedIssueAuthorizationRequest(r *http.Request) bool {

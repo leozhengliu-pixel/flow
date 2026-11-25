@@ -29,7 +29,7 @@ func (s *Service) buildBootstrap(ctx context.Context, grant SandboxGrant, sessio
 			user = found
 		}
 		if session.IssueID != "" {
-			if found, err := s.directory.CodingIssue(ctx, session.WorkspaceKey, session.IssueID); err == nil {
+			if found, err := s.issueFor(ctx, session.WorkspaceKey, session.CreatorID, session.IssueID); err == nil {
 				issue = found
 			}
 		}

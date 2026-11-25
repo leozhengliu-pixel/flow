@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_issue_create_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "createBoundedIssueRecords": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns the transaction, sequence, parent/family rows, exact installed input closure, metadata patches and publication; storedWorkspace checks presence only. SW186 proves literal legacy/warm/reloaded creation responses, all canonical metadata/issue/content rows, sequence, notifications, audits, events, webhook/realtime and installed postimages across principals/credentials, templates, workflow/triage/SLA actions, cancellation, concurrent creators, stale sequences/custom-ID collisions, ContentState and legal 4MiB ASCII/escaped large descriptions. Selected native inputs retain original ordinals/defaults. Owned old-row preimages and independent callback/row/content/event encoding phases preserve atomic publication with zero full decodes and released work. Flag-off forwards to the literal original writer.",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue-record creation, including legacy clients routed to the record handler.",
+      "callers": [
+        "store/issue_record_create.go:createIssueRecords"
+      ]
+    }
+  }
+}

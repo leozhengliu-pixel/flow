@@ -68,7 +68,7 @@ func (s *server) setThreadSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 	issueID, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var saved domain.ThreadSubscription
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "comment.thread_subscription", issueID, map[string]string{"commentId": commentID, "state": input.State}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.ContextWithMutationResults(r.Context(), &saved), workspaceKey(r), "comment.thread_subscription", issueID, map[string]string{"commentId": commentID, "state": input.State}, func(data *domain.Bootstrap) error {
 		if _, err := issueByID(data, issueID); err != nil {
 			return err
 		}

@@ -1,0 +1,31 @@
+{
+  "source": "server/mcp_tools_attachments.go",
+  "unmigrated": 2,
+  "consumers": {
+    "appendMCPDocumentEmbed": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.attachMCPFile"
+      ]
+    },
+    "attachStoredObject": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.attachMCPFile"
+      ]
+    }
+  }
+}

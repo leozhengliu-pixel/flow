@@ -223,6 +223,9 @@ func (s *SQLiteStore) ensureAgentRuns(ctx context.Context) error {
 type agentRunWaker struct {
 	mu sync.Mutex
 	ch chan struct{}
+	// forward is the bounded parent's waker of a COLD facade, so a run a
+	// COLD legacy write enqueues wakes the claims waiting on the live store.
+	forward *agentRunWaker
 }
 
 func (w *agentRunWaker) wait() <-chan struct{} {
@@ -236,10 +239,14 @@ func (w *agentRunWaker) wait() <-chan struct{} {
 
 func (w *agentRunWaker) wake() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	if w.ch != nil {
 		close(w.ch)
 		w.ch = nil
+	}
+	forward := w.forward
+	w.mu.Unlock()
+	if forward != nil {
+		forward.wake()
 	}
 }
 

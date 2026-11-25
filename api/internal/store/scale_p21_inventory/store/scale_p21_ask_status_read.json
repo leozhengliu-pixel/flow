@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_ask_status_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginAskStatusRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted owned installed Ask status reader preserves physical/default source choice and inherits explicit Context pins through independently owned descriptors. It selects the first exact Ask.ID including duplicates/empty/NUL IDs, decodes Status, streams exact approval Decision predicates, and decodes only the final rejected approval's Note when Status is rejected. No Ask body, requester, approver or earlier/nonrejected note graph is hydrated. NativeOwnership, SelectedNoteBudget and WarmReloadAndPin compare source-relative legacy projection, case sensitivity, nil/empty approvals, empty final notes, cancellation before read and after retained output, partial/dynamic-budget rejection, idempotent clear/release, caller isolation, concurrent readers, source replacement and parent-close pin survival. Warm/reloaded 1x/10x ignored bodies retain 139504 or 139520 admitted bytes; a fixed 64-byte scalar framing allowance covers the observed 16-byte normalization difference while exact output stays independently checked. Full metadata decodes and leaked work remain zero. All three targeted tests passed normally, with -race and twice against the same persistent SQLite database. Caller formatting, platform sends and SQL outcome effects are independently covered by the 19-case ChatRequestStatusDifferential table. No cache, new lock or mutation preimage is introduced.",
+      "accessors": [
+        "BeginInstalledMetadataRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Request status delivery after audited HOT processChatNotification dispatch.",
+      "callers": [
+        "server/chat_requests.go:chatSendRequestStatus"
+      ]
+    }
+  }
+}

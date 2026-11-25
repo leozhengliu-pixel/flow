@@ -15,6 +15,14 @@ const base = {
 } as Comment
 
 describe('ResolvedComment', () => {
+  it('expands the compact activity summary using one accessible control', () => {
+    render(<I18nProvider><ResolvedComment comment={{ ...base, resolved: true }} activitySummary="1 resolved comment from Viewer"><p>Thread content</p></ResolvedComment></I18nProvider>)
+    const toggle = screen.getByRole('button', { name: '1 resolved comment from Viewer' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('Thread content')).toBeVisible()
+  })
   it('resolves and shows thread summary when enabled', async () => {
     const onResolve = vi.fn()
     const comment = { ...base, resolved: true, threadSummary: { content: 'Decision: ship it' } }

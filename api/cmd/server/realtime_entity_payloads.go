@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
 	"sync"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Realtime entity payloads let a client apply a document, project or
@@ -126,7 +129,7 @@ func realtimeInitiativeView(rules *pulseRules, viewer pulseViewer, initiative do
 // replaced by the viewer's projection of the aggregate. decided is false for
 // events of other kinds and for aggregates that are not a project or
 // initiative (a relation, an update).
-func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, event domain.RealtimeEvent) (projected domain.RealtimeEvent, visible, decided bool) {
+func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, event domain.RealtimeEvent) (projected domain.RealtimeEvent, visible, decided bool, err error) {
 	kind := ""
 	switch {
 	case strings.HasPrefix(event.Type, "project.") || strings.HasPrefix(event.Type, "project_update."):
@@ -134,17 +137,41 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 	case strings.HasPrefix(event.Type, "initiative.") || strings.HasPrefix(event.Type, "initiative_update."):
 		kind = "initiative"
 	default:
-		return event, false, false
+		return event, false, false, nil
 	}
 	if event.AggregateID == "" {
-		return event, false, false
+		return event, false, false, nil
 	}
-	snapshot, ok := s.store.PulseSources(workspaceKey(r))
-	if !ok {
-		return event, false, true
+	var snapshot *store.PulseFeedSnapshot
+	var rules *pulseRules
+	if s.store.BoundedMetadataEnabled() {
+		read, ok, err := s.store.BeginPulseRead(r.Context(), workspaceKey(r), false)
+		if err != nil {
+			return event, false, true, err
+		}
+		if !ok {
+			return event, false, true, nil
+		}
+		defer read.Close()
+		if err := read.LoadSource(r.Context(), kind, event.AggregateID); err != nil {
+			return event, false, true, err
+		}
+		if strings.HasPrefix(event.Type, kind+".update_") {
+			if err := read.LoadUpdates(r.Context(), kind, event.AggregateID, nil); err != nil {
+				return event, false, true, err
+			}
+		}
+		snapshot = read.Snapshot
+		rules = newPulseRules(snapshot)
+	} else {
+		var ok bool
+		snapshot, ok = s.store.PulseSources(workspaceKey(r))
+		if !ok {
+			return event, false, true, nil
+		}
+		// One index per installed workspace copy, shared by every stream.
+		rules = s.realtime.pulseRulesFor(workspaceKey(r), snapshot)
 	}
-	// One index of the projects and initiatives per installed workspace copy, shared by every stream.
-	rules := s.realtime.pulseRulesFor(workspaceKey(r), snapshot)
 	role := data.ViewerRole
 	if s.authDisabled && role == "" {
 		role = "admin"
@@ -161,17 +188,17 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 			if event.Type == "project.deleted" {
 				// Gone: who could see it is no longer known, so the signal
 				// names neither it nor who deleted it; clients reload.
-				return anonymousRealtimeEvent(event), true, true
+				return anonymousRealtimeEvent(event), true, true, nil
 			}
-			return event, false, false
+			return event, false, false, nil
 		}
 		if !rules.projectVisible(viewer, project) {
 			if scopeChanged {
 				// It may have just left this viewer's reach: they reload,
 				// told neither which project it was nor who moved it.
-				return anonymousRealtimeEvent(event), true, true
+				return anonymousRealtimeEvent(event), true, true, nil
 			}
-			return event, false, true
+			return event, false, true, nil
 		}
 		view := realtimeProjectView(rules, viewer, *project)
 		key := event.ID + "|" + strings.Join(view.TeamIDs, ",") + "|" + strings.Join(view.DependencyIDs, ",")
@@ -186,20 +213,20 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 			}
 			return realtimeEntityPayload(event, view, extra)
 		})
-		return event, true, true
+		return event, true, true, nil
 	}
 	initiative := rules.initiatives[event.AggregateID]
 	if initiative == nil {
 		if event.Type == "initiative.deleted" {
-			return anonymousRealtimeEvent(event), true, true
+			return anonymousRealtimeEvent(event), true, true, nil
 		}
-		return event, false, true
+		return event, false, true, nil
 	}
 	if !rules.initiativeVisible(viewer, initiative) {
 		if scopeChanged {
-			return anonymousRealtimeEvent(event), true, true
+			return anonymousRealtimeEvent(event), true, true, nil
 		}
-		return event, false, true
+		return event, false, true, nil
 	}
 	view := realtimeInitiativeView(rules, viewer, *initiative)
 	key := event.ID + "|" + view.LeadTeamID + "|" + strings.Join(view.ContributingTeamIDs, ",") + "|" + strings.Join(view.ProjectIDs, ",") + "|" + strings.Join(view.ParentInitiativeIDs, ",")
@@ -213,7 +240,7 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 		}
 		return realtimeEntityPayload(event, view, extra)
 	})
-	return event, true, true
+	return event, true, true, nil
 }
 
 // pagedDocumentEvent authorizes a document event against the document itself, since the realtime metadata carries no
@@ -243,7 +270,7 @@ func (s *server) pagedDocumentEvent(r *http.Request, data domain.Bootstrap, even
 		return anonymousRealtimeEvent(event), true
 	}
 	scopeChanged := s.realtime.scopeChanged(event)
-	if documentRole(s, data, document) == "none" {
+	if documentRole(s, data, document) == "none" || apiKeyDocumentOutsideScope(r, data, document) {
 		if scopeChanged {
 			// It may have just left this viewer's reach: an anonymous signal, they reload.
 			return anonymousRealtimeEvent(event), true
@@ -271,6 +298,100 @@ func (s *server) pagedDocumentEvent(r *http.Request, data domain.Bootstrap, even
 	return event, true
 }
 
+func (s *server) boundedLegacyDocumentPresenceAllowed(r *http.Request, documentID string) (bool, error) {
+	data, _, err := s.pagedRealtimeMetadata(r)
+	if err != nil {
+		return false, boundedLegacyDocumentMetadataFailure(r.Context(), err)
+	}
+	read, found, err := s.store.BeginPresenceDocumentRead(r.Context(), workspaceKey(r), documentID)
+	if err != nil || !found {
+		return false, err
+	}
+	defer read.Close()
+	return read.Found && documentRole(s, data, read.Document) != "none" && !apiKeyDocumentOutsideScope(r, data, read.Document), nil
+}
+
+func boundedLegacyDocumentMetadataFailure(ctx context.Context, err error) error {
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	if errors.Is(err, store.ErrMetadataWorkBudget) ||
+		errors.Is(err, store.ErrBoundedMetadataCoverage) ||
+		errors.Is(err, store.ErrMetadataPageBudget) ||
+		errors.Is(err, store.ErrResourceAccessChanged) {
+		return err
+	}
+	return nil
+}
+
+func (s *server) boundedPagedDocumentEvent(r *http.Request, data domain.Bootstrap, event domain.RealtimeEvent) (domain.RealtimeEvent, bool, error) {
+	documentID := event.AggregateID
+	if strings.HasPrefix(event.Type, "document.draft_") {
+		author := s.authDisabled || event.ActorID != "" && event.ActorID == data.Viewer.ID
+		if event.Type != "document.draft_published" {
+			return event, author, nil
+		}
+		var input struct {
+			DocumentID string `json:"documentId"`
+		}
+		_ = json.Unmarshal(event.Payload, &input)
+		if input.DocumentID == "" {
+			return event, author, nil
+		}
+		documentID = input.DocumentID
+	}
+	read, found, err := s.store.BeginPresenceDocumentRead(r.Context(), workspaceKey(r), documentID)
+	if err != nil {
+		return event, false, err
+	}
+	if !found {
+		return anonymousRealtimeEvent(event), true, nil
+	}
+	defer read.Close()
+	if !read.Found {
+		return anonymousRealtimeEvent(event), true, nil
+	}
+	scopeChanged := s.realtime.scopeChanged(event)
+	if documentRole(s, data, read.Document) == "none" || apiKeyDocumentOutsideScope(r, data, read.Document) {
+		if scopeChanged {
+			return anonymousRealtimeEvent(event), true, nil
+		}
+		return event, false, nil
+	}
+	build := func() (json.RawMessage, error) {
+		document, err := read.LoadDocument(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		extra := map[string]any{"documentId": document.ID}
+		if event.Type == "document.draft_published" {
+			extra["draftId"] = event.AggregateID
+		}
+		if strings.HasPrefix(event.Type, "document.comment_") {
+			comments, _, err := s.store.IssueContent(r.Context(), data.Workspace.URLKey, document.ID)
+			if err == nil {
+				if comments == nil {
+					comments = []domain.Comment{}
+				}
+				extra["comments"] = comments
+			}
+		}
+		document.Favorite = false
+		return realtimeEntityPayload(event, document, extra), nil
+	}
+	var payload json.RawMessage
+	if s.realtime == nil {
+		payload, err = build()
+	} else {
+		payload, err = s.realtime.payloads.loadResult(event.ID+"|document", build)
+	}
+	if err != nil {
+		return event, false, err
+	}
+	event.Payload = payload
+	return event, true, nil
+}
+
 // realtimePayloadCache shares a projected payload between the streams of
 // viewers who get the same projection of one event: a document edit sent to
 // every member builds and encodes the document once instead of once per
@@ -287,11 +408,13 @@ type realtimePayloadCache struct {
 type realtimePayloadEntry struct {
 	ready   chan struct{}
 	payload json.RawMessage
+	err     error
 }
 
 const (
 	realtimePayloadCacheEntries = 256
-	realtimePayloadCacheBytes   = 32 << 20
+	// The remaining 8 MiB of P06's payload envelope holds event sources.
+	realtimePayloadCacheBytes = 24 << 20
 )
 
 // cachedPayload is load on the hub's cache; a server without a hub (tests) builds every time.
@@ -303,11 +426,16 @@ func (h *realtimeHub) cachedPayload(key string, build func() json.RawMessage) js
 }
 
 func (c *realtimePayloadCache) load(key string, build func() json.RawMessage) json.RawMessage {
+	payload, _ := c.loadResult(key, func() (json.RawMessage, error) { return build(), nil })
+	return payload
+}
+
+func (c *realtimePayloadCache) loadResult(key string, build func() (json.RawMessage, error)) (json.RawMessage, error) {
 	c.mu.Lock()
 	if entry, ok := c.entries[key]; ok {
 		c.mu.Unlock()
 		<-entry.ready
-		return entry.payload
+		return entry.payload, entry.err
 	}
 	if c.entries == nil {
 		c.entries = map[string]*realtimePayloadEntry{}
@@ -317,10 +445,12 @@ func (c *realtimePayloadCache) load(key string, build func() json.RawMessage) js
 	c.order = append(c.order, key)
 	c.mu.Unlock()
 	var payload json.RawMessage
+	var err error
 	defer func() {
 		// Also on a panic in build: the waiters get nil and build for themselves next time.
 		c.mu.Lock()
 		entry.payload = payload
+		entry.err = err
 		if c.entries[key] == entry {
 			if payload == nil {
 				delete(c.entries, key)
@@ -338,6 +468,6 @@ func (c *realtimePayloadCache) load(key string, build func() json.RawMessage) js
 		c.mu.Unlock()
 		close(entry.ready)
 	}()
-	payload = build()
-	return payload
+	payload, err = build()
+	return payload, err
 }

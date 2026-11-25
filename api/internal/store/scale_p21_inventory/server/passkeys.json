@@ -1,0 +1,61 @@
+{
+  "source": "server/passkeys.go",
+  "unmigrated": 4,
+  "consumers": {
+    "beginPasskeyRegistration": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/account/passkeys/register/start (api/cmd/server/main.go:442)"
+      ]
+    },
+    "deletePasskey": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Blocked by legacy aggregate enrichment: an earlier Document.ContentData object with id equal to a normal passkey ID remains the realtime entity after deletion. A target-only scoped writer emits no entity. SW18 reproduced the wire difference and restored the original writer; shared bounded aggregate compatibility is required.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/account/passkeys/{id} (api/cmd/server/main.go:445)"
+      ]
+    },
+    "finishPasskeyRegistration": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/account/passkeys/register/finish (api/cmd/server/main.go:443)"
+      ]
+    },
+    "updatePasskey": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Blocked by legacy aggregate enrichment: an earlier Document.ContentData object with id equal to a normal passkey ID wins the reflective lookup. A target-only scoped writer emits the passkey instead. SW18 reproduced the wire difference and restored the original writer; shared bounded aggregate compatibility is required.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/account/passkeys/{id} (api/cmd/server/main.go:444)"
+      ]
+    }
+  }
+}

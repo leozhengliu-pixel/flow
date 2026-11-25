@@ -258,6 +258,8 @@ export interface DocumentContent {
   updatedAt: string;
 }
 export interface DocumentRevision {
+  _bodyOmitted?: boolean;
+  _current?: boolean;
   id: UUID;
   documentId: UUID;
   title: string;
@@ -2230,6 +2232,8 @@ export interface Draft {
   body: string;
   contentData?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  /** The key the composer that made this draft sends with every save, so a retried create returns this draft. */
+  clientKey?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -2621,7 +2625,72 @@ export interface InitiativeMutationInput {
   notificationRules?: InitiativeNotificationRules;
   updateSchedule?: InitiativeUpdateSchedule;
 }
+export type RecordCompleteness = 'summary' | 'detail' | 'stale' | 'omitted' | 'deleted';
+export interface RecordKey { kind: string; id: string }
+export interface SyncRecord {
+  key: RecordKey;
+  version: string;
+  value?: Record<string, unknown>;
+  completeness: RecordCompleteness;
+  detailStale?: boolean;
+}
+export interface SyncCollection {
+  revision: string;
+  /** Only an explicit complete declaration describes the entire visible collection. */
+  complete?: boolean;
+}
+export interface SyncManifest {
+  schema: 2;
+  workspaceId: string;
+  viewerId: string;
+  authzEpoch: string;
+  head: string;
+  capabilities: string[];
+  core: Partial<BootstrapData> & Pick<BootstrapData, 'workspace' | 'viewer' | 'viewerRole'>;
+  collections: Record<string, SyncCollection>;
+}
+export interface SyncPageRequest {
+  kind: string;
+  cursor?: string;
+  filter?: string;
+  order?: string;
+  limit?: number;
+  maxBytes?: number;
+}
+export interface SyncRecordBatch { items: SyncRecord[]; authzEpoch: string }
+export interface SyncRecordPage extends SyncRecordBatch {
+  next: string;
+  hasMore: boolean;
+  revision: string;
+}
+export interface SyncTransaction {
+  txId: string;
+  seq: string;
+  upserts: SyncRecord[];
+  removals: Array<{ key: RecordKey; version: string }>;
+  invalidations: string[];
+}
+export interface SyncChanges {
+  next: string;
+  head: string;
+  authzEpoch: string;
+  transactions: SyncTransaction[];
+  hasMore: boolean;
+  resyncRequired: boolean;
+}
+export interface WorkspaceSyncState {
+  schema: 2;
+  surface?: 'issue-detail' | 'document-detail' | 'document-directory' | 'people-directory' | 'trash-directory' | 'projects-page' | 'initiatives-page';
+  authzEpoch: string;
+  head: string;
+  capabilities: string[];
+  collections: Record<string, SyncCollection>;
+  /** Client adapter revision; never a replay cursor or a persisted baseline. */
+  revision: number;
+}
+
 export interface BootstrapData {
+  sync?: WorkspaceSyncState;
   resourceDetailsOmitted?: boolean;
   /** Days deleted items stay restorable before they are deleted permanently. */
   trashRetentionDays?: number;
@@ -3350,6 +3419,14 @@ export interface RealtimeEvent {
     /** Issues the viewer must drop (hidden by a permission change or batch move). */
     removedIssueIds?: string[];
     commentActionsChanged?: boolean;
+    transactions?: SyncTransaction[];
+    schema?: number;
+    transaction?: unknown;
+    next?: string;
+    head?: string;
+    authzEpoch?: string;
+    hasMore?: boolean;
+    resyncRequired?: boolean;
     /** Projected issues of a small batch update. */
     issues?: Issue[];
   };

@@ -245,7 +245,27 @@ func (s *server) runTriageIntelligence(ctx context.Context, actor mcpActor, issu
 	if err != nil {
 		return domain.Issue{}, nil, err
 	}
+	if s.store.BoundedMetadataEnabled() {
+		return s.runTriageIntelligenceBounded(ctx, actor, query, issue, issueID, options)
+	}
 	metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey)
+	return s.runTriageIntelligenceWith(ctx, actor, query, issue, issueID, options, metadata, ok,
+		func(ctx context.Context, scope []string, _ []domain.IssueSuggestion, teamMove bool) (context.Context, func(), error) {
+			if teamMove {
+				ctx = store.WithIssueRenumbering(ctx)
+			}
+			return store.WithIssueRecordMutations(ctx, scope...), func() {}, nil
+		})
+}
+
+// triageRunWrite prepares the context of the run's suggestion write: its
+// issue scope, the suggestions it will store and whether a team suggestion
+// may move the issue.
+type triageRunWrite func(ctx context.Context, scope []string, generated []domain.IssueSuggestion, teamMove bool) (context.Context, func(), error)
+
+// runTriageIntelligenceWith is runTriageIntelligence after the issue read,
+// over the given workspace metadata.
+func (s *server) runTriageIntelligenceWith(ctx context.Context, actor mcpActor, query store.IssueRecordQuery, issue domain.Issue, issueID string, options triageRunOptions, metadata domain.Bootstrap, ok bool, write triageRunWrite) (domain.Issue, []domain.IssueSuggestion, error) {
 	if !ok || !triageIntelligenceEnabled(metadata.WorkspaceSettings) || !isTriageIssue(&metadata, &issue) {
 		return domain.Issue{}, nil, fmt.Errorf("%w: Triage Intelligence is disabled or issue is not in triage", errInvalid)
 	}
@@ -293,10 +313,12 @@ func (s *server) runTriageIntelligence(ctx context.Context, actor mcpActor, issu
 	}
 	var updated domain.Issue
 	var stored []domain.IssueSuggestion
-	if triageTeamAutoMove(settings) {
-		ctx = store.WithIssueRenumbering(ctx)
+	writeCtx, release, err := write(ctx, scope, generated, triageTeamAutoMove(settings))
+	if err != nil {
+		return domain.Issue{}, nil, err
 	}
-	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, scope...), actor.WorkspaceKey, options.eventType, issueID, nil, func(data *domain.Bootstrap) error {
+	defer release()
+	err = s.store.MutateWorkspace(writeCtx, actor.WorkspaceKey, options.eventType, issueID, nil, func(data *domain.Bootstrap) error {
 		target, err := issueByID(data, issueID)
 		if err != nil {
 			return err
@@ -393,7 +415,17 @@ type triageAILink struct {
 }
 
 func (s *server) requestTriageAIPlan(ctx context.Context, actor mcpActor, query store.IssueRecordQuery, issue *domain.Issue, candidates []domain.Issue) (*triageAIPlan, error) {
-	data, err := s.mcpWorkspaceData(ctx, actor)
+	var data domain.Bootstrap
+	var err error
+	if s.store.BoundedMetadataEnabled() {
+		var release func()
+		data, release, err = s.triageAIWorkspaceBounded(ctx, actor)
+		if release != nil {
+			defer release()
+		}
+	} else {
+		data, err = s.mcpWorkspaceData(ctx, actor)
+	}
 	if err != nil {
 		return nil, err
 	}

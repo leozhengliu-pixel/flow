@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_application_webhook_sweep_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginApplicationWebhookSweepRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Reuses the proven installed WebhookDeliveryRead owner with routing=false and dynamically admitted consumed hook fields. App notification selection retains exactly ManagedBy/application, Enabled and resource membership, including AuditLog and empty URL; SLA selection retains !AuditLog, Enabled and issue_sla, including empty URL. Native order/duplicates/empty IDs, client/organization strings and team filters remain exact; unrelated hook bodies and resource-type strings do not materialize. TestScaleP21ApplicationWebhookSweepNative/CapturedAndFailure/WarmReloadBodyBound pass persistent SQLite twice and race for default/physical sources, native NUL/custom-zone headers, independent captured generations, cancellation/quota/concurrent ownership and body10x with identical344552-byte admission, SQL0, decode0 and final work0. Actual three-adapter queue table compares full stored rows/payloads in warm/reloaded off/on modes. No capacity claim.",
+      "accessors": ["BeginWebhookDeliveryRead"],
+      "temperature": "hot",
+      "temperatureReason": "App inbox and SLA sweep delivery scheduler metadata input.",
+      "callers": ["server/server.sweepAppUserNotifications", "server/server.dispatchAppAssignmentNotifications", "server/server.sweepIssueSLAWebhooks"]
+    },
+    "BeginApplicationSLAEventRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Separately captures the exact installed source at the second original context-free metadata lookup, with independently owned header/output admission. Retains last-wins SLA-ID lookup, source-order recent events then source-order highRisk events, time/quarter-window/24h-cap comparisons, missing-SLA zero values and independent downstream issue lookups. Read-only time receipts preserve wire output and instants without materializing users or issue/document bodies. Persistent SQLite count2 and race pass native duplicate/empty IDs, custom zones, future/age boundaries, missing SLA, pinned old-parent versus fresh source, cancellation/quota/release, eight concurrent reads and warm/reload body10x stable344552-byte admission with zero SQL/full decodes/retained work. Actual SLA queue payloads match the original. No generic full metadata or capacity claim.",
+      "accessors": ["BeginWebhookDeliveryRead"],
+      "temperature": "hot",
+      "temperatureReason": "Issue SLA recent-event and high-risk delivery scheduler sweep.",
+      "callers": ["server/server.sweepIssueSLAWebhooks"]
+    }
+  }
+}

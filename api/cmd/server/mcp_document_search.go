@@ -64,8 +64,6 @@ func documentSearchCJK(r rune) bool {
 	return unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul)
 }
 
-func documentSearchFold(value string) string { return strings.Map(unicode.ToLower, value) }
-
 type documentMatch struct {
 	document domain.Document
 	score    int
@@ -89,6 +87,10 @@ func (s *server) rankDocumentMatches(ctx context.Context, workspace string, cand
 	for _, document := range candidates {
 		byID[document.ID] = document
 	}
+	return s.rankDocumentTerms(ctx, workspace, byID, terms, anyFallback)
+}
+
+func (s *server) rankDocumentTerms(ctx context.Context, workspace string, byID map[string]domain.Document, terms []string, anyFallback bool) ([]documentMatch, error) {
 	matches := []documentMatch{}
 	for _, matchAll := range []bool{true, false} {
 		if !matchAll && (!anyFallback || len(terms) == 1) {
@@ -124,11 +126,11 @@ func (s *server) rankDocumentMatches(ctx context.Context, workspace string, cand
 // occurrences, and finds the first body line with a keyword for the snippet.
 func scoreDocumentMatch(document domain.Document, terms []string) documentMatch {
 	match := documentMatch{document: document}
-	title, content := documentSearchFold(document.Title), documentSearchFold(document.Content)
+	title, content := strings.ToLower(document.Title), strings.ToLower(document.Content)
 	titleHits, occurrences := 0, 0
 	folded := make([]string, 0, len(terms))
 	for _, term := range terms {
-		key := documentSearchFold(term)
+		key := strings.ToLower(term)
 		inTitle, count := strings.Contains(title, key), strings.Count(content, key)
 		if !inTitle && count == 0 {
 			continue
@@ -141,31 +143,34 @@ func scoreDocumentMatch(document domain.Document, terms []string) documentMatch 
 	}
 	match.all = len(match.terms) == len(terms)
 	match.score = len(match.terms)*1000 + titleHits*200 + occurrences
-	if phrase := documentSearchFold(strings.Join(terms, " ")); len(terms) > 1 && (strings.Contains(title, phrase) || strings.Contains(content, phrase)) {
+	if phrase := strings.ToLower(strings.Join(terms, " ")); len(terms) > 1 && (strings.Contains(title, phrase) || strings.Contains(content, phrase)) {
 		match.score += 100
 	}
-	match.snippet, match.section = documentSnippet(document.Content, folded)
+	if len(folded) > 0 {
+		match.snippet, match.section = documentSnippet(document.Content, content, folded)
+	}
 	return match
 }
 
 // documentSnippet returns about 240 characters from the first match on the
 // first body line with the most keywords, and the heading of its section.
-func documentSnippet(content string, folded []string) (string, string) {
-	lines := strings.Split(content, "\n")
-	best, bestCount := -1, 0
-	for index, line := range lines {
-		lower, count := documentSearchFold(line), 0
+func documentSnippet(content, lowerContent string, folded []string) (string, string) {
+	best, bestCount, bestLine, index := -1, 0, "", 0
+	for lower := range strings.SplitSeq(lowerContent, "\n") {
+		count := 0
 		for _, term := range folded {
 			if strings.Contains(lower, term) {
 				count++
 			}
 		}
 		if count > bestCount {
-			best, bestCount = index, count
+			best, bestCount, bestLine = index, count, lower
 		}
+		index++
 	}
 	section := ""
-	for index, line := range lines[:max(best+1, 0)] {
+	lines := strings.Split(content, "\n")
+	for index, line := range lines[:best+1] {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "#") {
 			section = strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
@@ -173,16 +178,15 @@ func documentSnippet(content string, folded []string) (string, string) {
 		if index < best {
 			continue
 		}
-		lower := documentSearchFold(line)
 		at := -1
 		for _, term := range folded {
-			if position := strings.Index(lower, term); position >= 0 && (at < 0 || position < at) {
+			if position := strings.Index(bestLine, term); position >= 0 && (at < 0 || position < at) {
 				at = position
 			}
 		}
 		// Folding maps rune to rune, so the match's rune offset holds in the original line.
 		original := []rune(line)
-		start := max(0, utf8.RuneCountInString(lower[:at])-60)
+		start := max(0, utf8.RuneCountInString(bestLine[:at])-60)
 		runes := []rune(strings.Join(strings.Fields(string(original[start:])+" "+strings.Join(lines[index+1:min(len(lines), index+6)], " ")), " "))
 		end := min(len(runes), 240)
 		snippet := string(runes[:end])
@@ -216,7 +220,6 @@ func (s *server) searchMCPDocuments(ctx context.Context, data domain.Bootstrap, 
 	if len(queries) == 0 || len(queries) > 5 {
 		return nil, fmt.Errorf("provide 1 to 5 queries")
 	}
-	candidates := slices.Clone(data.Documents)
 	var team *domain.Team
 	if value := stringArg(args, "team"); value != "" {
 		found, err := mcpFindTeam(data, value)
@@ -233,9 +236,14 @@ func (s *server) searchMCPDocuments(ctx context.Context, data domain.Bootstrap, 
 		}
 		project = &found
 	}
-	candidates = slices.DeleteFunc(candidates, func(item domain.Document) bool {
-		return !boolArg(args, "includeArchived") && item.ArchivedAt != nil || team != nil && !slices.Contains(item.TeamIDs, team.ID) || project != nil && !slices.Contains(item.ProjectIDs, project.ID)
-	})
+	includeArchived := boolArg(args, "includeArchived")
+	byID := make(map[string]domain.Document, len(data.Documents))
+	for _, item := range data.Documents {
+		if !includeArchived && item.ArchivedAt != nil || team != nil && !slices.Contains(item.TeamIDs, team.ID) || project != nil && !slices.Contains(item.ProjectIDs, project.ID) {
+			continue
+		}
+		byID[item.ID] = item
+	}
 	limit := min(max(intArg(args, "limit", 10), 1), 25)
 	type hit struct {
 		best    documentMatch
@@ -245,7 +253,11 @@ func (s *server) searchMCPDocuments(ctx context.Context, data domain.Bootstrap, 
 	}
 	hits := map[string]*hit{}
 	for _, query := range queries {
-		matches, err := s.rankDocumentMatches(ctx, data.Workspace.URLKey, candidates, query, true)
+		terms := documentSearchTerms(query)
+		if len(terms) == 0 {
+			continue
+		}
+		matches, err := s.rankDocumentTerms(ctx, data.Workspace.URLKey, byID, terms, true)
 		if err != nil {
 			return nil, err
 		}

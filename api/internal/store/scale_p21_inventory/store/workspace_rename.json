@@ -1,0 +1,30 @@
+{
+  "source": "store/workspace_rename.go",
+  "unmigrated": 2,
+  "consumers": {
+    "WorkspaceCredentialSecretIDs": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.deleteWorkspaceCredentials"
+      ]
+    },
+    "adoptWorkspaceKey": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.AdoptRenamedWorkspaceRows"
+      ]
+    }
+  }
+}

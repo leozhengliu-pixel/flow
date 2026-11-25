@@ -7,9 +7,9 @@ import type { MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-is
 import type { MyIssuesDisplayOptions, MyIssuesGrouping } from '@/components/my-issues/my-issues-surface'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { defaultDateOperator, filterValues, isComparableDateValue, type AdvancedFilterGroup } from '@/components/my-issues/my-issues-filter-types'
-import { compareDateFilter, DATE_FILTER_FIELDS, dateFilterMenu, parseDateFilterValue, releasedDateFilterCategory } from './issue-date-filter'
+import { compareDateFilter, DATE_FILTER_FIELDS, dateFilterMenu, parseDateFilterValue, releasedDateFilterCategory, withDateFilterCounts, type DateFilterOperator } from './issue-date-filter'
 import { advancedFilterTree, conditionAsFilter, isAdvancedGroup } from './advanced-filter'
-import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from '@/lib/labels'
+import { labelsForResource, labelTeamScopeIds, setGroupedLabelSelected, toggleGroupedLabelIds, REMOVE_ALL_LABELS } from '@/lib/labels'
 import { teamStateChanges, teamWorkflowStates, workflowStatusOptions } from '@/lib/team-workflow'
 import { resolvedTeamSettings, teamHierarchy } from '@/lib/team-hierarchy'
 import { estimateOnTeamScale } from '@/lib/estimates'
@@ -307,6 +307,7 @@ export function issueHierarchyFields(issue: Issue, issues: Issue[], byId = issue
 export function explorerPropertyOptions(data: BootstrapData, issues = data.issues) {
   const issueLabels = labelsForResource(data.labels, 'issue', data.labelGroups)
   const labelGroupNames = new Map(data.labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.name]))
+  const labelGroupColors = new Map(data.labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.color]))
   const issueTeamIds = [...new Set(issues.map(issue => issue.team.id))]
   // One team's issues offer its effective workflow; issues of several teams can be in any of their statuses.
   const teamStates = issueTeamIds.length === 1 ? teamWorkflowStates(data, issueTeamIds[0]) : []
@@ -356,8 +357,8 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     agentSession:AGENT_SESSION_STATE_FILTERS.map(option=>({id:option.id,label:option.label,count:option.states.reduce((sum,state)=>sum+(agentSessionStateCounts.get(state)??0),0)})),
     triageIntelligence: triageIntelligenceFilterOptions(data, issueLabels, triageCounts),
     dueDate: explorerDueDateOptions().map(option => ({ ...option, kind: 'dueDate' as const })),
-    dates: dateFilterMenu({ releasedDate: (data.releasePipelines?.length ?? 0) > 0 }),
-    labels: issueLabels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, count: labelCounts.get(label.id) ?? 0, kind: 'labels' as const })),
+    dates: withDateFilterCounts(dateFilterMenu({ releasedDate: (data.releasePipelines?.length ?? 0) > 0 }), issues),
+    labels: issueLabels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, groupColor: label.groupId ? labelGroupColors.get(label.groupId) : undefined, count: labelCounts.get(label.id) ?? 0, kind: 'labels' as const })),
     project: [{ id: '', label: 'No project', count: noProject, kind: 'project' as const }, ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, count: projectCounts.get(project.id) ?? 0, kind: 'project' as const }))],
     projectMilestone: projectMilestoneFilterOptions(data, issues),
     projectProperties:projectPropertyFilterOptions(data,issues),
@@ -426,7 +427,12 @@ export function explorerBulkOptions(action: MyIssuesBulkAction, options: Explore
   if (action === 'estimate') return selection ? explorerEstimateBulkOptions(selection.data, selection.teamIds) : undefined
   if (action === 'assign') return options.assignee
   if (action === 'project') return options.project
-  if (action === 'labels') return options.labels
+  if (action === 'labels') {
+    // Team labels of other teams are not offered (the selection's teams and their parents' labels are).
+    if (!selection) return options.labels
+    const scopes = new Set(selection.teamIds.flatMap(teamId => teamId ? labelTeamScopeIds(teamId, selection.data.teams, selection.data.teamSettings) : []))
+    return options.labels.filter(label => !label.scope || label.scope === 'Workspace' || scopes.has(label.scope))
+  }
   if (action === 'dueDate') return explorerDueDateOptions()
   if (action === 'subscribers') return options.assignee.filter(option => option.id && !('agent' in option && option.agent))
 }
@@ -468,6 +474,7 @@ export async function executeExplorerBulkAction({ action, ids, value, data, issu
     return
   }
   if (action.startsWith('copy')) { await copyIssues(action, ids, issuesById, data.workspace.urlKey); return }
+  if (action === 'labels' && value === REMOVE_ALL_LABELS) return onUpdateIssues(ids, { labelIds: [] })
   if (action === 'labels' && value != null) {
     const selected = !ids.every(id => issuesById.get(id)?.labels.some(label => label.id === value))
     return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { labelIds: setGroupedLabelSelected(issue.labels.map(label => label.id), value, data.labels, selected) }) }))
@@ -559,7 +566,7 @@ export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAp
     const all = values.length > 0 && values.every(value => matchesExplorerFilter(issue, { ...filter, operator: 'is', value, values: [{ value, valueLabel: value }] }, now, statusGroups))
     return filter.operator === 'includesAll' ? all : !all
   }
-  const comparison = filter.operator === 'before' || filter.operator === 'after' ? filter.operator : undefined
+  const comparison = filter.operator === 'before' || filter.operator === 'after' || filter.operator === 'on' || filter.operator === 'within' ? filter.operator : undefined
   let matched = true
   if (filter.field === 'priority') matched = values.includes(String(issue.priority))
   else if (filter.field === 'team') matched = values.includes(issue.teamId ?? '')
@@ -609,10 +616,10 @@ export function matchesAdvancedGroup(issue: MyIssuesRowData, group: AdvancedFilt
 function matchesProjectProperties(issue: MyIssuesRowData, values: string[]) {
   return values.some(value => value.startsWith('project-status:') ? issue.projectStatusId === value.slice(15) : value.startsWith('project-status-type:') ? issue.projectStatusType === value.slice(20) : value.startsWith('project-priority:') ? String(issue.projectPriority) === value.slice(17) : value.startsWith('project-label:') ? issue.projectLabelIds?.includes(value.slice(14)) : value === 'project-lead:' ? !issue.projectLeadId : value.startsWith('project-lead:') ? issue.projectLeadId === value.slice(13) : value.startsWith('project-milestone-name-contains:') ? issue.projectMilestoneNames?.some(name => name.toLocaleLowerCase().includes(value.slice(32).toLocaleLowerCase())) : false)
 }
-function matchesReleaseFilter(issue: MyIssuesRowData, values: string[], comparison?: 'before' | 'after', now = Date.now()) {
+function matchesReleaseFilter(issue: MyIssuesRowData, values: string[], comparison?: DateFilterOperator, now = Date.now()) {
   return values.some(value => value === 'no-releases' ? !issue.releaseIds?.length : value === 'released-any' ? Boolean(issue.hasReleasedRelease) : value === 'no-released-date' ? !issue.releasedDates?.length : value.startsWith('released:') ? matchesDateFilter(issue, value, comparison, now) : value.startsWith('release:') ? issue.releaseIds?.includes(value.slice(8)) : value.startsWith('release-pipeline:') ? issue.releasePipelineIds?.includes(value.slice(17)) : value.startsWith('release-stage:') ? issue.releaseStages?.includes(value.slice(14)) : value.startsWith('release-stage-type:') ? issue.releaseStatuses?.includes(value.slice(19)) : false)
 }
-function matchesDateFilter(issue: MyIssuesRowData, value: string, comparison?: 'before' | 'after', now = Date.now()) {
+function matchesDateFilter(issue: MyIssuesRowData, value: string, comparison?: DateFilterOperator, now = Date.now()) {
   const parsed = parseDateFilterValue(value)
   if (parsed && isComparableDateValue(value)) return compareDateFilter(parsed.kind === 'released' ? issue.releasedDates : issue[DATE_FILTER_FIELDS[parsed.kind] as Exclude<(typeof DATE_FILTER_FIELDS)[keyof typeof DATE_FILTER_FIELDS], 'releasedAt'>], parsed, comparison ?? defaultDateOperator(value), now)
   const age = (input: string | undefined, days: number) => Boolean(input && Date.parse(input) >= now - days * 86_400_000)

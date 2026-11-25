@@ -1,0 +1,12 @@
+{
+  "source": "store/scale_p21_selected_test_view.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BoundedMetadataViewForWorkspacesForTesting": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["Bootstrap"],
+      "reason": "Test-only selected policy view is guarded by testing.Testing and cannot activate production coverage. No keys delegates unchanged to the existing all-workspace helper; explicit keys use exact owner-installed identity/defaults, bounded resident reloads one workspace at a time, owned/charged viewer state, normal per-store policy cost limits and explicit missing/malformed errors. Focused SW0 tests cover unrelated unsupported shared-database state, explicit malformed rejection, defaults/viewer, aliases, missing/canceled keys, physical NUL namespace, SQL ownership and repeated persistent SQLite runs."
+    }
+  }
+}

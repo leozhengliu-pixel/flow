@@ -225,11 +225,13 @@ func (s *server) workerLoopContext(ctx context.Context, run store.AgentRun, info
 	if !workerLoopRecorderRunning(rec) {
 		return nil, &loopRunError{reason: "unavailable", message: "The loop run is no longer running"}
 	}
-	data, ok := s.store.WorkspaceMetadataFields(run.WorkspaceKey, "loops")
+	loop, ok, err := s.workerLoopDefinition(ctx, run.WorkspaceKey, info.LoopID)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, errNotFound
 	}
-	loop := loopByID(&data, info.LoopID)
 	if loop == nil {
 		return nil, &loopRunError{reason: "unavailable", message: "The loop no longer exists"}
 	}
@@ -296,6 +298,7 @@ func (s *server) serveMCPLoopRun(w http.ResponseWriter, r *http.Request, request
 	var params struct {
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
+		Meta      map[string]any `json:"_meta"`
 	}
 	if err := json.Unmarshal(request.Params, &params); err != nil {
 		var argumentErr *json.UnmarshalTypeError
@@ -367,7 +370,19 @@ func (s *server) serveMCPLoopRun(w http.ResponseWriter, r *http.Request, request
 		// A change (or a connector call) may land: a run that may have written is never restarted.
 		_ = s.store.MarkAgentRunWrote(ctx, grant.run.ID)
 	}
-	content, failed := lc.runToolCall(ctx, call)
+	content, failed, image := lc.runToolCall(ctx, call)
+	inspectImage, _ := params.Meta["flow/inspect-image"].(bool)
+	if image != nil && !failed && inspectImage {
+		// Opted-in workers inspect the image with their own configured model.
+		writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: request.ID, Result: map[string]any{
+			"content": []map[string]string{
+				{"type": "text", "text": content},
+				{"type": "image", "mimeType": image.MediaType, "data": image.Data},
+			},
+			"_meta": map[string]string{"flow/image-prompt": loopImagePrompt},
+		}})
+		return
+	}
 	result(content, failed)
 }
 
@@ -478,7 +493,13 @@ func (s *server) finishWorkerLoopRun(ctx context.Context, run store.AgentRun, in
 	if err != nil || !workerLoopRecorderRunning(rec) {
 		return
 	}
-	data, ok := s.store.WorkspaceMetadataFields(run.WorkspaceKey, "loops")
+	// Finalization uses the persisted run; finishLoopRun does not read loop
+	// fields. Keep the old loop read off mode and only workspace existence on.
+	data, ok, err := s.store.WorkspaceMetadataFieldsScoped(ctx, run.WorkspaceKey, store.MetadataRecordScope{}, "loops")
+	if err != nil {
+		log.Printf("Loop run finish workspace=%s run=%s: read loop: %v", run.WorkspaceKey, run.ID, err)
+		return
+	}
 	if !ok {
 		return
 	}

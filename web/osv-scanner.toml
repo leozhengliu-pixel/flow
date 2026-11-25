@@ -1,0 +1,7 @@
+# Reviewed advisories for web/package-lock.json. Each entry needs a reason and an
+# expiry, after which the scan fails again and the entry must be reviewed.
+
+[[IgnoredVulns]]
+id = "GHSA-fc5q-39xc-vjpf"
+ignoreUntil = 2027-02-05
+reason = "picomatch 4.0.7 (GHSA-fc5q-39xc-vjpf, ReDoS through single-branch repeated extglobs such as +(*)) has no fixed release; 4.0.7 is the latest. It is only a build and test dependency of vite, vitest and their tinyglobby/fdir file walkers, runs in CI and on developer machines, and is never part of the shipped product. The glob patterns come from this repo's own vite and vitest config files, never from user or network input. Upgrade and drop this entry when upstream publishes a fixed release."

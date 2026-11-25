@@ -1,0 +1,20 @@
+{
+  "source": "store/scale_p21_team_maintenance.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginTeamMaintenanceRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned trusted ticker projection pins the exact installed physical/default workspace generation, copies Team.ID in original order including duplicates, and selects only AutoCloseStale/StaleMonths/AutoArchiveMonths/StaleStatusID by exact settings map key. Keys decode under a transient size-aware allowance with O(1) needed lookup; unrelated larger keys/bodies and opaque settings are skipped. Retained IDs, settings, sweep grouping and processing remain charged until Close. Projects stays nil like the original fields-only accessor. TestScaleP21HotTeamMaintenanceInstalledProjection and WarmReloadAndBodyBound compare native/default/missing registry, duplicates/NUL/empty/mismatched keys, huge matching keys, partial-admission failure, cancellation, warm/reloaded installed state and 10x unrelated bodies with constant 81408-byte work and zero SQL. This reader review does not certify the downstream issue mutation path.",
+      "accessors": [
+        "WorkspaceMetadataFields",
+        "BeginInstalledMetadataRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Once-per-minute team automation ticker reads installed scalar scheduling policy.",
+      "callers": [
+        "server/server.maintainTeamSettings"
+      ]
+    }
+  }
+}

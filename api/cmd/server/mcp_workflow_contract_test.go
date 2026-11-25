@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -54,7 +55,16 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 		}
 	}))
 	defer upstream.Close()
+	// Review decisions and merges run as the member's own GitHub account
+	// (fix/sec-reviews): link one on the fake host the review lives on.
+	enableConnectorSecrets(t)
+	t.Setenv("FLOW_INTEGRATION_GITHUB_CLIENT_ID", "cid")
+	t.Setenv("FLOW_INTEGRATION_GITHUB_CLIENT_SECRET", "csecret")
+	t.Setenv("FLOW_INTEGRATION_GITHUB_AUTHORIZATION_URL", upstream.URL+"/login/oauth/authorize")
+	t.Setenv("FLOW_INTEGRATION_GITHUB_TOKEN_URL", upstream.URL+"/login/oauth/access_token")
+	t.Setenv("FLOW_INTEGRATION_GITHUB_API_URL", upstream.URL)
 	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.contract", "", nil, func(d *domain.Bootstrap) error {
+		d.Reviews[0].URL = upstream.URL + "/" + d.Reviews[0].RepositoryOwner + "/" + d.Reviews[0].RepositoryName + "/pull/" + strconv.Itoa(d.Reviews[0].Number)
 		d.Documents = append(d.Documents, domain.Document{ID: "contract-doc", Title: "Contract document", Content: "Detailed content", Creator: d.Viewer, TeamIDs: []string{d.Teams[0].ID}})
 		d.ReleasePipelines = append(d.ReleasePipelines, domain.ReleasePipeline{ID: "contract-pipeline", Name: "Contract pipeline", Type: "scheduled", TeamIDs: []string{d.Teams[0].ID}, Stages: []string{"Planned"}, StageStatuses: map[string]string{"Planned": "planned"}})
 		settings := d.UserSettings[d.Viewer.ID]
@@ -68,6 +78,13 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedIntegrationOAuthTokens(t, f.repository, f.data.Workspace.URLKey, "contract-github", "local-test-token", "")
+	account, err := f.repository.UpsertCodeHostAccount(t.Context(), domain.CodeHostAccount{ID: "cha_contract_member", UserID: f.data.Viewer.ID, CodeHost: domain.CodeHostGitHub, HostName: strings.TrimPrefix(upstream.URL, "http://"), BaseURL: upstream.URL, ExternalUserID: "7", Login: "contract-member", AuthType: domain.CodeHostAuthOAuth})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.service.writeCodeHostTokens(t.Context(), account.ID, codeHostAccountTokens{AccessToken: "member-token", ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
 	client := mcp.NewClient(&mcp.Implementation{Name: "All tools integration", Version: "1"}, nil)
 	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: f.host.URL + "/mcp", HTTPClient: &http.Client{Transport: mcpAuthTransport{f.secret}, Timeout: 10 * time.Second}, MaxRetries: -1}, nil)
 	if err != nil {

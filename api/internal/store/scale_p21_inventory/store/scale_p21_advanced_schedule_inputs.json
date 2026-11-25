@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_advanced_schedule_inputs.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginAdvancedScheduleRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Retains the actual installed logical generation under an owned ResourceRead and admits only scheduler settings, SLA inputs and project/update/trash headers. Unchanged bodies stay in source frames; nil/empty shapes, occurrences and first-update semantics are preserved. Cancellation and errors release the retained owner, and Close is idempotent. SW209 proves exact warm/actual-reload decisions and downstream effects, large unrelated-body independence, admission recovery and release, with normal, persistent SQLite count2 and complete race coverage.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Advanced reminder/SLA/trash checks precede ordinary bootstrap output.",
+      "callers": ["server/advanced_features.go:maintainAdvancedSchedules"]
+    }
+  }
+}

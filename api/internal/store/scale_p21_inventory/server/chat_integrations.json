@@ -1,0 +1,96 @@
+{
+  "source": "server/chat_integrations.go",
+  "unmigrated": 3,
+  "consumers": {
+    "chatBindableTeamIDs": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Bounded mode snapshots only ordered team ID/private/archive/retire headers, team parent/access/membership rules and workspace HIPAA status from the selected process-capped resident policy. Existing chatTeamState/chatBindingScopePermitted helpers and manageable-team authorization remain unchanged; exact original WorkspaceMetadataFields dispatch stays off mode. A preflight/recheck work allowance capped at 64 MiB charges typed map/slice storage, strings, timestamps, ancestry scratch and output IDs, and the actual writeChatSettings caller retains it through JSON encoding. TestScaleP21SW19ChatTeamPolicySnapshot, ChatTeamPolicyAdmissionRecheck, ChatBindablePolicyDifferential and ChatPolicyHTTPAdmission cover ownership, over 75 teams, large unused fields, required-policy budget failures/recovery, queue cancellation/growth, full M/key matrix, private/restricted/archived/retired/deep inheritance/cycles/order, live owner revocation during queued/replayed requests, cross-workspace refusal, HIPAA and actual HTTP admission lifetime. All targeted tests passed twice on persistent SQLite with zero full native metadata decodes. Other chat settings/session/permission consumers retain their independent inventory status.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "chatSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.chatInitiativeBindingSession",
+        "server/server.chatSettings",
+        "server/server.saveChatIntegration",
+        "server/server.disconnectChatIntegration",
+        "server/server.testChatIntegration",
+        "server/server.startChatIdentity",
+        "server/server.deleteChatIdentity",
+        "server/server.listChatProjectGroups",
+        "server/server.chatBindingSession",
+        "server/server.deleteChatBinding"
+      ]
+    },
+    "chatSettingsMetadata": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.chatSession",
+        "server/server.saveChatIntegration",
+        "server/server.testChatIntegration"
+      ]
+    },
+    "disconnectChatIntegration": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/integrations/{provider}/chat (server/chat_integrations.go:255)"
+      ]
+    },
+    "recordChatDeliveryResultLocked": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "The proven MutateWorkspaceScoped adapter declares only integrationConnections/ConnectionID Write and preserves the original WithMetadataFields context, configuration lock, live current-connection lookup, and literal callback. Current-row missing/disconnected exits, delivery success clearing/preservation, platform/processing failures, identical-error noops and missing metadata target effects match forced full legacy hydration. TestScaleP21SW46ChatHealthMutationDifferential passed15 actual writer cases comparing ordered raw canonical connection fields, untouched document/project bytes, domain payload/previous/snapshot and realtime effects. Earlier nested Document.ContentData aggregate wins for both writers without changing nil/empty representations. SQL full legacy/bounded: changed delivery27/15, identical-error noops8/5, missing metadata target25/12, missing/disconnected current1/1; no per-unrelated-record query loop or performance claim. Bounded work/full-decode counters remain zero after return. Strict SW44 actual job lifecycle separately confirms health writes reach FinishChatJob.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.recordChatDeliveryResult",
+        "server/server.processChatJobs"
+      ]
+    },
+    "syncChatConnection": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "The proven MutateWorkspaceAppending adapter declares integrationConnections/ConnectionID Write plus AppendKinds integrationConnections while forwarding the original WithMetadataFields context unchanged off mode and preserving the literal callback. Existing status/config/OAuth/test mappings and missing-target append ordinal match forced full legacy hydration. TestScaleP21SW46ChatHealthMutationDifferential passed15 actual writer cases, including both writers' earlier nested Document.ContentData aggregate collision, ordered raw canonical connection fields, unchanged unrelated records, domain previous/snapshot and realtime payloads. SQL full legacy/bounded is26/14 for existing targets and26/18 for missing-target append; the extra append membership/order checks remain fixed for this single target. Bounded work/full-decode counters remain zero after return. The earlier SW19 aggregate blocker is resolved by the proven global aggregate composition, not by loading unrelated bodies into this callback.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.saveChatIntegration",
+        "server/server.testChatIntegration",
+        "server/server.runChatTenantCheck"
+      ]
+    }
+  }
+}

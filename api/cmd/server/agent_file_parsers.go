@@ -308,15 +308,6 @@ func (b *budgetReader) Read(p []byte) (int, error) {
 
 func (a *agentZip) has(name string) bool { return a.files[name] != nil }
 
-func (a *agentZip) read(name string, limit int64) ([]byte, error) {
-	reader, closer, err := a.open(name, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer closer.Close()
-	return io.ReadAll(reader)
-}
-
 // xmlStream decodes an entry token by token; non-UTF-8 charsets and entity bombs are refused by the decoder.
 func (a *agentZip) xmlStream(name string, limit int64) (*xml.Decoder, io.Closer, error) {
 	reader, closer, err := a.open(name, limit)

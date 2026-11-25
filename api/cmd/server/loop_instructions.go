@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Rich loop instructions: the editor sends ProseMirror/Tiptap JSON
@@ -166,6 +167,10 @@ func (s *server) loopInstructionReferences(ctx context.Context, workspace string
 			issue, err := s.store.IssueRecord(ctx, workspace, mention.ID)
 			if err != nil && mention.Label != "" {
 				issue, err = s.issueByIdentifier(ctx, workspace, mention.Label)
+			}
+			// Only an issue of a team the loop's owner can read is described.
+			if err == nil && !s.authDisabled && !workspaceAdminRole(data.ViewerRole) && !store.TeamContentVisible(data, issue.Team.ID, data.Viewer.ID, data.ViewerRole) {
+				err = errNotFound
 			}
 			if err == nil {
 				line = fmt.Sprintf("Issue %s %q (id %s)", issue.Identifier, issue.Title, issue.ID)

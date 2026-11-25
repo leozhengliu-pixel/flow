@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_document_update_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedDocumentUpdate": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Closed updateDocument profile of mutateBoundedScopedImage (document.updated, favorite.added/removed only): literal first ID/current-slug over old-slug resolution with the route's issue scope, complete native occurrences of the selected document ID, document subscriptions, projected users/push entries, complete policy/favorite inputs, and linked/reciprocal projects as ID/Name/TeamIDs/Resources headers written back as a Resources-only delta over the framed stored record. Validation refuses any other callback output. SW480 (legacy/bounded warm and SQL-reloaded) covers the route's content, compaction, former-member, links, favorites, slug/duplicate, permission, archive/trash, 4 MiB current body/history and peer conflict retry cases; SW481 covers native selection, the project delta and captured-conflict ownership. A stale image of a document row above the large-row typed merge allowance is a pinned root gate (atomic refusal).",
+      "accessors": ["mutateBoundedScopedImage"],
+      "temperature": "hot",
+      "temperatureReason": "Closed native profile for the observed HOT document-save route.",
+      "callers": ["store/sqlite.go:dispatchMutation"]
+    }
+  }
+}

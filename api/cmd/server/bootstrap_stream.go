@@ -7,7 +7,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
+	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -36,7 +39,11 @@ func serializeLegacyBootstrap(next http.Handler, shared ...chan struct{}) http.H
 		_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Minute))
 		defer controller.SetWriteDeadline(time.Time{})
 		if r.Context().Err() == nil {
-			next.ServeHTTP(w, r)
+			if store.RecordHydrationEnabled() {
+				serveDetachedLegacyJSON(w, r, next)
+			} else {
+				next.ServeHTTP(w, r)
+			}
 		}
 	})
 }
@@ -49,6 +56,10 @@ func writeBootstrapJSON(w http.ResponseWriter, data domain.Bootstrap) {
 }
 
 func writeBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stream func(string, *bufio.Writer, *json.Encoder) (bool, error), overrides ...map[string]json.RawMessage) {
+	if store.RecordHydrationEnabled() {
+		writeHydratedBootstrapWithFields(w, data, stream, overrides...)
+		return
+	}
 	metadata := data
 	metadata.Issues, metadata.Comments, metadata.Activities = nil, nil, nil
 	metadata.Notifications, metadata.NotificationDeliveries = nil, nil
@@ -85,7 +96,7 @@ func writeBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stre
 		if stream != nil {
 			handled, err := stream(key, buffer, encoder)
 			if err != nil {
-				log.Printf("bootstrap stream field=%s: %v", key, err)
+				log.Printf("bootstrap stream field=%s: could not encode snapshot", key)
 				return
 			}
 			if handled {
@@ -107,7 +118,7 @@ func writeBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stre
 			_, err = buffer.Write(fields[key])
 		}
 		if err != nil {
-			log.Printf("bootstrap stream field=%s: %v", key, err)
+			log.Printf("bootstrap stream field=%s: could not encode snapshot", key)
 			return
 		}
 	}
@@ -115,10 +126,61 @@ func writeBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stre
 	_ = buffer.Flush()
 }
 
-func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, data domain.Bootstrap, overrides ...map[string]json.RawMessage) {
+type bootstrapCredentialVisibilityKey struct{}
+type bootstrapCredentialVisibility map[string]map[string]bool
+
+func captureBootstrapCredentialVisibility(r *http.Request, data domain.Bootstrap) *http.Request {
+	key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	if !ok || !apiKeyTeamRestrictionSelected(key) {
+		return r
+	}
+	visible := bootstrapCredentialVisibility{}
+	add := func(kind, id string) {
+		if visible[kind] == nil {
+			visible[kind] = map[string]bool{}
+		}
+		visible[kind][id] = true
+	}
+	for _, item := range data.Issues {
+		add("issue", item.ID)
+	}
+	for _, item := range data.Projects {
+		add("project", item.ID)
+	}
+	for _, item := range data.Documents {
+		add("document", item.ID)
+	}
+	for _, item := range data.Initiatives {
+		add("initiative", item.ID)
+	}
+	for _, item := range data.Cycles {
+		add("cycle", item.ID)
+	}
+	for _, item := range data.Teams {
+		add("team", item.ID)
+	}
+	for _, item := range data.Reviews {
+		add("review", item.ID)
+		add("review", item.SlugID)
+	}
+	return r.WithContext(context.WithValue(r.Context(), bootstrapCredentialVisibilityKey{}, visible))
+}
+
+type bootstrapStreamScope struct {
+	projectList  bool
+	issueDetails map[string]bool
+}
+
+func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, data domain.Bootstrap, scope bootstrapStreamScope, overrides ...map[string]json.RawMessage) {
+	const maxScopedIDs = 500
+	projectList, detailScope := scope.projectList, scope.issueDetails
 	visible := map[string]bool{}
+	visibleIssues := map[string]bool{}
 	for _, issue := range data.Issues {
-		visible[issue.ID] = true
+		if detailScope == nil || detailScope[issue.ID] {
+			visible[issue.ID] = true
+		}
+		visibleIssues[issue.ID] = true
 	}
 	for _, document := range data.Documents {
 		visible[document.ID] = true
@@ -129,9 +191,61 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 			visible[milestone.ID] = true
 		}
 	}
+	var contentIDs []string
+	if projectList || detailScope != nil {
+		contentIDs = make([]string, 0, len(visible))
+		for id := range visible {
+			contentIDs = append(contentIDs, id)
+		}
+		slices.Sort(contentIDs)
+	}
 	users := map[string]domain.User{}
 	for _, user := range data.Users {
 		users[user.ID] = user
+	}
+	key, credential := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	scoped := credential && apiKeyTeamRestrictionSelected(key)
+	captured, hasCaptured := r.Context().Value(bootstrapCredentialVisibilityKey{}).(bootstrapCredentialVisibility)
+	resourceVisible := func(kind, id string) bool {
+		if hasCaptured {
+			return captured[kind][id]
+		}
+		if kind == "issue" {
+			return visibleIssues[id]
+		}
+		return credentialResourceExists(&data, kind, id)
+	}
+	visibleNotification := func(item domain.Notification) bool {
+		if item.IssueID != "" {
+			return resourceVisible("issue", item.IssueID)
+		}
+		if item.ProjectID != "" {
+			return resourceVisible("project", item.ProjectID)
+		}
+		if item.ReviewID != "" {
+			return resourceVisible("review", item.ReviewID)
+		}
+		switch item.SourceType {
+		case "issue", "project", "initiative", "document", "cycle", "team":
+			return resourceVisible(item.SourceType, item.SourceID)
+		}
+		return true
+	}
+	visibleNotifications := map[string]bool{}
+	if scoped {
+		if err := s.store.WalkContentRecords(r.Context(), data.Workspace.URLKey, "notification", func(_ string, raw json.RawMessage) error {
+			var item domain.Notification
+			if err := json.Unmarshal(raw, &item); err != nil {
+				return err
+			}
+			if item.RecipientID == data.Viewer.ID && item.DeletedAt == nil && item.ArchivedAt == nil && visibleNotification(item) {
+				visibleNotifications[item.ID] = true
+			}
+			return nil
+		}); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
 	}
 	lean := leanBootstrapRequested(r)
 	writeBootstrapWithFields(w, data, func(field string, buffer *bufio.Writer, encoder *json.Encoder) (bool, error) {
@@ -144,7 +258,7 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 					if i > 0 {
 						buffer.WriteByte(',')
 					}
-					if err := encoder.Encode(leanIssueRecord(issue)); err != nil {
+					if err := encodeBootstrapValue(r.Context(), buffer, encoder, leanIssueRecord(issue)); err != nil {
 						return true, err
 					}
 				}
@@ -156,16 +270,50 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 			}
 		}
 		if field == "issues" {
+			if len(data.Issues) == 0 {
+				buffer.WriteString("[]")
+				return true, nil
+			}
 			buffer.WriteByte('[')
 			count := 0
+			encode := func(issue domain.Issue) error {
+				if count > 0 {
+					buffer.WriteByte(',')
+				}
+				count++
+				return encodeBootstrapValue(r.Context(), buffer, encoder, issue)
+			}
 			outlines := map[string]int{}
+			query := store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Archived: "all"}
+			if detailScope != nil || projectList {
+				query.RestrictToIssueIDs = true
+			}
 			for index, issue := range data.Issues {
 				outlines[issue.ID] = index
+				if query.RestrictToIssueIDs && (detailScope == nil || detailScope[issue.ID]) {
+					query.IssueIDs = append(query.IssueIDs, issue.ID)
+				}
 			}
-			err := s.store.WalkIssueRecords(r.Context(), store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Archived: "all"}, func(issue domain.Issue) error {
+			nextOutline := 0
+			encodeOutlines := func(end int) error {
+				for ; nextOutline < end; nextOutline++ {
+					if err := encode(data.Issues[nextOutline]); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			writeBody := func(issue domain.Issue) error {
 				index, ok := outlines[issue.ID]
 				if !ok {
 					return nil
+				}
+				if detailScope != nil {
+					// The body queries and outlines have the same collection order.
+					if err := encodeOutlines(index); err != nil {
+						return err
+					}
+					nextOutline = index + 1
 				}
 				outline := data.Issues[index]
 				issue.Team = outline.Team
@@ -178,20 +326,35 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 				issue.SubIssueIDs = outline.SubIssueIDs
 				issue.Relations = outline.Relations
 				issue.Labels = outline.Labels
+				if scoped {
+					issue.CycleID = outline.CycleID
+					issue.ProjectMilestoneID = outline.ProjectMilestoneID
+					issue.SuggestedLabelIDs = outline.SuggestedLabelIDs
+					issue.SuggestedProjectIDs = outline.SuggestedProjectIDs
+					issue.SuggestedTeamIDs = outline.SuggestedTeamIDs
+					issue.SuggestedDuplicateIDs = outline.SuggestedDuplicateIDs
+					issue.SuggestedRelatedIDs = outline.SuggestedRelatedIDs
+				}
 				// The outline carries the decorated agent task state (issue records store it empty).
 				issue.AgentSessionState = outline.AgentSessionState
 				issue.IsSummary = false
-				if count > 0 {
-					buffer.WriteByte(',')
+				return encode(issue)
+			}
+			if query.RestrictToIssueIDs {
+				for batch := range slices.Chunk(query.IssueIDs, maxScopedIDs) {
+					batchQuery := query
+					batchQuery.IssueIDs = batch
+					if err := s.store.WalkBootstrapIssueBodies(r.Context(), batchQuery, writeBody); err != nil {
+						return true, err
+					}
 				}
-				if err := encoder.Encode(issue); err != nil {
-					return err
-				}
-				count++
-				return nil
-			})
-			if err != nil {
+			} else if err := s.store.WalkBootstrapIssueBodies(r.Context(), query, writeBody); err != nil {
 				return true, err
+			}
+			if detailScope != nil {
+				if err := encodeOutlines(len(data.Issues)); err != nil {
+					return true, err
+				}
 			}
 			buffer.WriteByte(']')
 			return true, nil
@@ -220,7 +383,11 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 		resourceKey := ""
 		haveResource := false
 		count := 0
-		err := s.store.WalkContentRecords(r.Context(), data.Workspace.URLKey, kind, func(resource string, raw json.RawMessage) error {
+		var resources []string
+		if object {
+			resources = contentIDs
+		}
+		err := s.store.WalkContentRecordsForResources(r.Context(), data.Workspace.URLKey, kind, resources, func(resource string, raw json.RawMessage) error {
 			var value any
 			switch kind {
 			case "comment":
@@ -260,6 +427,9 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 				if !s.authDisabled && item.RecipientID != data.Viewer.ID {
 					return nil
 				}
+				if scoped && !visibleNotifications[item.ID] {
+					return nil
+				}
 				if user, ok := users[item.Actor.ID]; ok {
 					item.Actor = user
 				}
@@ -270,6 +440,9 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 					return err
 				}
 				if !s.authDisabled && item.RecipientID != data.Viewer.ID {
+					return nil
+				}
+				if scoped && !visibleNotifications[item.NotificationID] {
 					return nil
 				}
 				value = item
@@ -290,7 +463,7 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 				buffer.WriteByte(',')
 			}
 			count++
-			return encoder.Encode(value)
+			return encodeBootstrapValue(r.Context(), buffer, encoder, value)
 		})
 		if err != nil {
 			return true, err
@@ -307,7 +480,44 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 	}, overrides...)
 }
 
-func encodeBootstrapArray[T any](w io.Writer, encoder *json.Encoder, items []T) error {
+// Planning pages need the workspace issue directory for relationships and
+// counts, but only open the selected project's issue bodies and favorites.
+// Select them from the projection after all visibility filters have run.
+func planningIssueDetails(r *http.Request, data domain.Bootstrap) map[string]bool {
+	projection := r.Header.Get("X-Flow-Projection")
+	var projectID string
+	if encoded, ok := strings.CutPrefix(projection, "project-detail:"); ok {
+		ref, err := url.PathUnescape(encoded)
+		if err != nil || ref == "" {
+			return nil
+		}
+		if index := domain.IndexBySlugRef(data.Projects, ref, domain.ProjectSlugKey); index >= 0 {
+			projectID = data.Projects[index].ID
+		}
+	} else if projection != "initiative-detail" {
+		return nil
+	}
+	details := make(map[string]bool)
+	for _, favorite := range data.Favorites {
+		if favorite.ResourceType == "issue" && favorite.UserID == data.Viewer.ID {
+			details[favorite.ResourceID] = true
+		}
+	}
+	if projectID != "" {
+		for _, issue := range data.Issues {
+			if issue.Project != nil && issue.Project.ID == projectID {
+				details[issue.ID] = true
+			}
+		}
+	}
+	return details
+}
+
+func encodeBootstrapArray[T any](w io.Writer, encoder *json.Encoder, items []T, contexts ...context.Context) error {
+	ctx := context.Background()
+	if len(contexts) > 0 {
+		ctx = contexts[0]
+	}
 	if items == nil {
 		_, err := io.WriteString(w, "null")
 		return err
@@ -321,7 +531,13 @@ func encodeBootstrapArray[T any](w io.Writer, encoder *json.Encoder, items []T) 
 				return err
 			}
 		}
-		if err := encoder.Encode(&items[i]); err != nil {
+		var err error
+		if buffer, ok := w.(*bufio.Writer); ok {
+			err = encodeBootstrapValue(ctx, buffer, encoder, &items[i])
+		} else {
+			err = encoder.Encode(&items[i])
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -329,7 +545,93 @@ func encodeBootstrapArray[T any](w io.Writer, encoder *json.Encoder, items []T) 
 	return err
 }
 
-func encodeBootstrapMap[T any](w io.Writer, encoder *json.Encoder, items map[string][]T) error {
+func encodeBootstrapValue(ctx context.Context, buffer *bufio.Writer, encoder *json.Encoder, value any) error {
+	if !store.RecordHydrationEnabled() {
+		return encoder.Encode(value)
+	}
+	if err := encodeHydratedJSON(ctx, buffer, reflect.ValueOf(value), 0); err != nil {
+		return err
+	}
+	return buffer.WriteByte('\n')
+}
+
+// Preserve the legacy field ordering and newlines while visiting each field
+// directly. Marshaling metadata first duplicates every project and document.
+func writeHydratedBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stream func(string, *bufio.Writer, *json.Encoder) (bool, error), overrides ...map[string]json.RawMessage) {
+	ctx := hydratedSigningContext(context.Background(), w)
+	value := reflect.ValueOf(data)
+	fields := map[string]streamField{}
+	keys := []string{}
+	for _, field := range streamPlanFor(value.Type()) {
+		item := value.Field(field.index)
+		if field.omitEmpty && isEmptyJSONValue(item) {
+			continue
+		}
+		var name string
+		_ = json.Unmarshal(field.key[:len(field.key)-1], &name)
+		keys = append(keys, name)
+		fields[name] = field
+	}
+	if len(overrides) > 0 {
+		keys = keys[:0]
+		for name := range overrides[0] {
+			keys = append(keys, name)
+		}
+	}
+	slices.Sort(keys)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	prepareHydratedBootstrapSpool(w, data)
+	buffer := bufio.NewWriterSize(w, 64<<10)
+	encoder := json.NewEncoder(buffer)
+	buffer.WriteByte('{')
+	for i, key := range keys {
+		if i > 0 {
+			buffer.WriteByte(',')
+		}
+		if err := encoder.Encode(key); err != nil {
+			panic(http.ErrAbortHandler)
+		}
+		buffer.WriteByte(':')
+		if stream != nil {
+			handled, err := stream(key, buffer, encoder)
+			if err != nil {
+				panic(http.ErrAbortHandler)
+			}
+			if handled {
+				continue
+			}
+		}
+		var err error
+		switch key {
+		case "issues":
+			err = encodeBootstrapArray(buffer, encoder, data.Issues, ctx)
+		case "comments":
+			err = encodeBootstrapMap(buffer, encoder, data.Comments, ctx)
+		case "activities":
+			err = encodeBootstrapMap(buffer, encoder, data.Activities, ctx)
+		case "notifications":
+			err = encodeBootstrapArray(buffer, encoder, data.Notifications, ctx)
+		case "notificationDeliveries":
+			err = encodeBootstrapArray(buffer, encoder, data.NotificationDeliveries, ctx)
+		default:
+			if len(overrides) > 0 {
+				err = writeHydratedEncodedJSON(ctx, buffer, overrides[0][key])
+			} else {
+				err = encodeHydratedJSON(ctx, buffer, value.Field(fields[key].index), 0)
+			}
+		}
+		if err != nil {
+			panic(http.ErrAbortHandler)
+		}
+	}
+	buffer.WriteString("}\n")
+	if err := buffer.Flush(); err != nil {
+		panic(http.ErrAbortHandler)
+	}
+}
+
+func encodeBootstrapMap[T any](w io.Writer, encoder *json.Encoder, items map[string][]T, contexts ...context.Context) error {
 	if items == nil {
 		_, err := io.WriteString(w, "null")
 		return err
@@ -350,7 +652,7 @@ func encodeBootstrapMap[T any](w io.Writer, encoder *json.Encoder, items map[str
 		if _, err := io.WriteString(w, ":"); err != nil {
 			return err
 		}
-		if err := encodeBootstrapArray(w, encoder, values); err != nil {
+		if err := encodeBootstrapArray(w, encoder, values, contexts...); err != nil {
 			return err
 		}
 		i++

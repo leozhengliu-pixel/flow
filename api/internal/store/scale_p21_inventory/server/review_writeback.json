@@ -1,0 +1,21 @@
+{
+  "source": "server/review_writeback.go",
+  "unmigrated": 1,
+  "consumers": {
+    "writeBackReviewChange": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "commentOnReview (api/cmd/server/reviews_api.go:280)",
+        "resolveReviewThread (api/cmd/server/reviews_api.go:375)"
+      ]
+    }
+  }
+}

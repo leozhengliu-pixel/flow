@@ -33,6 +33,9 @@ func writeWorkspaceMetadata(ctx context.Context, tx *sqlTx, key, id string, raw 
 }
 
 func writeAccountMetadata(ctx context.Context, tx *sqlTx, key string, viewer []byte) error {
+	if handled, err := recordJournalWriteAccount(ctx, tx, key, viewer); handled {
+		return err
+	}
 	var previous []byte
 	var previousKey string
 	err := tx.QueryRowContext(ctx, "SELECT last_workspace_key,viewer FROM account_state WHERE id=1").Scan(&previousKey, &previous)

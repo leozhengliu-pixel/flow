@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
 	"flow/api/internal/store"
@@ -43,6 +44,40 @@ func writePage[T any](w http.ResponseWriter, r *http.Request, items []T) {
 func parityID(kind string) string { return idgen.New(kind + "_") }
 
 func (s *server) listProjectRelations(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		ctx, userID := r.Context(), authUser(r).ID
+		var credential *domain.APIKey
+		if s.authDisabled {
+			ctx, userID = context.WithoutCancel(ctx), ""
+		} else if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			credential = &key
+		}
+		if !s.authDisabled && userID == "" {
+			writePage(w, r, []domain.ProjectRelation(nil))
+			return
+		}
+		read, err := s.store.BeginResourceRelationRead(ctx, workspaceKey(r), userID, credential, "projects")
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) || errors.Is(err, context.Canceled) {
+				writePage(w, r, []domain.ProjectRelation(nil))
+			} else {
+				issueRecordsError(w, err)
+			}
+			return
+		}
+		defer read.Close()
+		if !s.authDisabled {
+			filterBootstrapForAPIKey(&read.Data, r)
+		}
+		if err := read.Select(ctx, r.PathValue("id")); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		items := read.ProjectRelations
+		sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
+		writePage(w, r, items)
+		return
+	}
 	data := s.workspaceData(r)
 	id := r.PathValue("id")
 	items := slices.DeleteFunc(slices.Clone(data.ProjectRelations), func(item domain.ProjectRelation) bool { return item.ProjectID != id && item.RelatedProjectID != id })
@@ -60,7 +95,7 @@ func (s *server) createProjectRelation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.ProjectRelation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.relation_created", input.ProjectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "relation", input.ProjectID, input, &created, &input), workspaceKey(r), "project.relation_created", input.ProjectID, input, func(data *domain.Bootstrap) error {
 		if _, err := fullProjectByID(data, input.ProjectID); err != nil {
 			return err
 		}
@@ -95,7 +130,7 @@ func (s *server) updateProjectRelation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.ProjectRelation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.relation_updated", r.PathValue("relationId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(projectRecordScope(r.Context(), "project", "relation", r.PathValue("id"), input, &updated), workspaceKey(r), "project.relation_updated", r.PathValue("relationId"), input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "projectRelations", ID: r.PathValue("relationId")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ProjectRelations, func(item domain.ProjectRelation) bool {
 			return item.ID == r.PathValue("relationId") && item.ProjectID == r.PathValue("id")
 		})
@@ -114,7 +149,7 @@ func (s *server) updateProjectRelation(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, updated)
 }
 func (s *server) deleteProjectRelation(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.relation_deleted", r.PathValue("relationId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(projectRecordScope(r.Context(), "project", "relation", r.PathValue("id"), nil), workspaceKey(r), "project.relation_deleted", r.PathValue("relationId"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "projectRelations", ID: r.PathValue("relationId")}}}, func(data *domain.Bootstrap) error {
 		before := len(data.ProjectRelations)
 		data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(item domain.ProjectRelation) bool {
 			return item.ID == r.PathValue("relationId") && item.ProjectID == r.PathValue("id")
@@ -131,12 +166,49 @@ func (s *server) deleteProjectRelation(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 func (s *server) projectHistory(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	id := r.PathValue("id")
 	writePage(w, r, s.resourceAuditHistory(r, data, "project", id))
 }
 
 func (s *server) listInitiativeRelations(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		ctx, userID := r.Context(), authUser(r).ID
+		var credential *domain.APIKey
+		if s.authDisabled {
+			ctx, userID = context.WithoutCancel(ctx), ""
+		} else if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			credential = &key
+		}
+		if !s.authDisabled && userID == "" {
+			writePage(w, r, []domain.InitiativeRelation(nil))
+			return
+		}
+		read, err := s.store.BeginResourceRelationRead(ctx, workspaceKey(r), userID, credential, "initiatives")
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) || errors.Is(err, context.Canceled) {
+				writePage(w, r, []domain.InitiativeRelation(nil))
+			} else {
+				issueRecordsError(w, err)
+			}
+			return
+		}
+		defer read.Close()
+		if !s.authDisabled {
+			filterBootstrapForAPIKey(&read.Data, r)
+		}
+		if err := read.Select(ctx, r.PathValue("id")); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		items := read.InitiativeRelations
+		sort.Slice(items, func(i, j int) bool { return items[i].SortOrder < items[j].SortOrder })
+		writePage(w, r, items)
+		return
+	}
 	data := s.workspaceData(r)
 	id := r.PathValue("id")
 	items := slices.DeleteFunc(slices.Clone(data.InitiativeRelations), func(item domain.InitiativeRelation) bool {
@@ -156,7 +228,7 @@ func (s *server) createInitiativeRelation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var created domain.InitiativeRelation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.relation_created", input.InitiativeID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "relation", input.InitiativeID, input, &created, &input), workspaceKey(r), "initiative.relation_created", input.InitiativeID, input, func(data *domain.Bootstrap) error {
 		if _, err := initiativeByID(data, input.InitiativeID); err != nil {
 			return err
 		}
@@ -193,7 +265,7 @@ func (s *server) updateInitiativeRelation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var updated domain.InitiativeRelation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.relation_updated", r.PathValue("relationId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "relation", r.PathValue("id"), input, &updated), workspaceKey(r), "initiative.relation_updated", r.PathValue("relationId"), input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.InitiativeRelations, func(item domain.InitiativeRelation) bool {
 			return item.ID == r.PathValue("relationId") && item.InitiativeID == r.PathValue("id")
 		})
@@ -227,7 +299,7 @@ func (s *server) updateInitiativeRelation(w http.ResponseWriter, r *http.Request
 	respondMutation(w, err, http.StatusOK, updated)
 }
 func (s *server) deleteInitiativeRelation(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.relation_deleted", r.PathValue("relationId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "relation", r.PathValue("id"), nil), workspaceKey(r), "initiative.relation_deleted", r.PathValue("relationId"), nil, func(data *domain.Bootstrap) error {
 		for _, relation := range data.InitiativeRelations {
 			if relation.ID == r.PathValue("relationId") && relation.InitiativeID == r.PathValue("id") && relation.Type == "parent" {
 				if err := changeInitiativeParent(data, relation.InitiativeID, relation.RelatedInitiativeID, false); err != nil {
@@ -251,13 +323,41 @@ func (s *server) deleteInitiativeRelation(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 func (s *server) initiativeHistory(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	id := r.PathValue("id")
 	writePage(w, r, s.resourceAuditHistory(r, data, "initiative", id))
 }
 
 func (s *server) listDocumentDrafts(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		ctx, userID, credential := r.Context(), authUser(r).ID, documentRecordCredential(r)
+		if s.authDisabled {
+			ctx, userID, credential = context.WithoutCancel(ctx), "", nil
+		}
+		read, err := s.store.BeginDocumentAuxiliaryRead(ctx, workspaceKey(r), userID, credential, store.DocumentAuxiliaryReadRequest{Ref: r.PathValue("id"), Drafts: true})
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) {
+				writeError(w, http.StatusNotFound, "document not found")
+			} else {
+				writeError(w, http.StatusServiceUnavailable, "document drafts are temporarily unavailable")
+			}
+			return
+		}
+		if err := read.TransferOutput(r.Context()); err != nil {
+			writeError(w, http.StatusServiceUnavailable, "document drafts are temporarily unavailable")
+			return
+		}
+		data = read.Data
+		if !s.authDisabled {
+			filterBootstrapForAPIKey(&data, r)
+		}
+	} else {
+		data = s.workspaceData(r)
+	}
 	id := r.PathValue("id")
 	document, err := documentByID(&data, id)
 	if err != nil || documentRole(s, data, *document) == "none" {
@@ -438,7 +538,37 @@ func (s *server) deleteDocumentDraft(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 func (s *server) documentContentHistory(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	if s.scaleP20History(w, r) {
+		return
+	}
+	var data domain.Bootstrap
+	var auxiliary *store.DocumentAuxiliaryRead
+	if s.store.BoundedMetadataEnabled() {
+		ctx, userID, credential := r.Context(), authUser(r).ID, documentRecordCredential(r)
+		if s.authDisabled {
+			ctx, userID, credential = context.WithoutCancel(ctx), "", nil
+		}
+		var err error
+		auxiliary, err = s.store.BeginDocumentAuxiliaryRead(ctx, workspaceKey(r), userID, credential, store.DocumentAuxiliaryReadRequest{Ref: r.PathValue("id"), History: true})
+		if err != nil {
+			if errors.Is(err, store.ErrAuthForbidden) {
+				writeError(w, http.StatusNotFound, "document not found")
+			} else {
+				writeError(w, http.StatusServiceUnavailable, "document history is temporarily unavailable")
+			}
+			return
+		}
+		if err := auxiliary.TransferOutput(r.Context()); err != nil {
+			writeError(w, http.StatusServiceUnavailable, "document history is temporarily unavailable")
+			return
+		}
+		data = auxiliary.Data
+		if !s.authDisabled {
+			filterBootstrapForAPIKey(&data, r)
+		}
+	} else {
+		data = s.workspaceData(r)
+	}
 	var revisions []domain.DocumentRevision
 	if document, err := documentByID(&data, r.PathValue("id")); err == nil && documentRole(s, data, *document) != "none" {
 		revisions = document.Revisions
@@ -453,7 +583,13 @@ func (s *server) documentContentHistory(w http.ResponseWriter, r *http.Request) 
 	// workspace snapshot's references.
 	revisions = slices.Clone(revisions)
 	start, end := pageBounds(r, len(revisions))
-	if err := s.store.LoadDocumentRevisionBodies(r.Context(), data.Workspace.URLKey, revisions[start:end]); err != nil {
+	var bodyErr error
+	if auxiliary != nil {
+		bodyErr = auxiliary.LoadRevisionBodies(r.Context(), revisions[start:end])
+	} else {
+		bodyErr = s.store.LoadDocumentRevisionBodies(r.Context(), data.Workspace.URLKey, revisions[start:end])
+	}
+	if bodyErr != nil {
 		writeError(w, http.StatusServiceUnavailable, "document history is temporarily unavailable")
 		return
 	}
@@ -463,7 +599,7 @@ func (s *server) documentContentHistory(w http.ResponseWriter, r *http.Request) 
 func (s *server) archiveCustomerNeed(w http.ResponseWriter, r *http.Request) {
 	archived := r.Method == http.MethodPost
 	var result domain.CustomerRequest
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer_need.archive_toggled", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "customer_need.archive_toggled", r.PathValue("id"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "customerRequests", ID: r.PathValue("id")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.ID == r.PathValue("id") })
 		if index < 0 {
 			return errNotFound
@@ -492,7 +628,14 @@ func (s *server) createReleaseNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result domain.ReleaseNote
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release.note_created", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+	if s.store.BoundedMetadataEnabled() && (len(r.PathValue("id")) > 191 || strings.ContainsRune(r.PathValue("id"), '\x00')) {
+		respondMutation(w, errNotFound, http.StatusCreated, result)
+		return
+	}
+	err := s.store.MutateWorkspaceAppending(r.Context(), workspaceKey(r), "release.note_created", r.PathValue("id"), input, store.MetadataAppendScope{
+		MetadataRecordScope: store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "releases", ID: r.PathValue("id")}}},
+		AppendKinds:         []string{"releaseNotes", "releaseHistory"},
+	}, func(data *domain.Bootstrap) error {
 		if !slices.ContainsFunc(data.Releases, func(item domain.Release) bool { return item.ID == r.PathValue("id") }) {
 			return errNotFound
 		}
@@ -520,7 +663,7 @@ func (s *server) updateReleaseNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result domain.ReleaseNote
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release.note_updated", r.PathValue("noteId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "release.note_updated", r.PathValue("noteId"), input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "releaseNotes", ID: r.PathValue("noteId")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ReleaseNotes, func(item domain.ReleaseNote) bool {
 			return item.ID == r.PathValue("noteId") && item.ReleaseID == r.PathValue("id")
 		})
@@ -561,7 +704,7 @@ func (s *server) updateReleaseNote(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, result)
 }
 func (s *server) deleteReleaseNote(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release.note_deleted", r.PathValue("noteId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "release.note_deleted", r.PathValue("noteId"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "releaseNotes", ID: r.PathValue("noteId")}}}, func(data *domain.Bootstrap) error {
 		before := len(data.ReleaseNotes)
 		data.ReleaseNotes = slices.DeleteFunc(data.ReleaseNotes, func(item domain.ReleaseNote) bool {
 			return item.ID == r.PathValue("noteId") && item.ReleaseID == r.PathValue("id")
@@ -639,7 +782,7 @@ func (s *server) updateTeamResourceSection(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var item domain.TeamResourceSection
-	err := s.store.MutateWorkspace(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_section_updated", r.PathValue("sectionId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_section_updated", r.PathValue("sectionId"), input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "teamResourceSections", ID: r.PathValue("sectionId")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.TeamResourceSections, func(value domain.TeamResourceSection) bool {
 			return value.ID == r.PathValue("sectionId") && value.TeamID == r.PathValue("id")
 		})
@@ -761,7 +904,7 @@ func (s *server) updateTeamResource(w http.ResponseWriter, r *http.Request) {
 		input.URL = &link
 	}
 	var item domain.TeamPinnedResource
-	err := s.store.MutateWorkspace(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_updated", r.PathValue("resourceId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_updated", r.PathValue("resourceId"), input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "teamPinnedResources", ID: r.PathValue("resourceId")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.TeamPinnedResources, func(value domain.TeamPinnedResource) bool {
 			return value.ID == r.PathValue("resourceId") && value.TeamID == r.PathValue("id")
 		})
@@ -796,7 +939,7 @@ func (s *server) updateTeamResource(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, item)
 }
 func (s *server) deleteTeamResource(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_deleted", r.PathValue("resourceId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_deleted", r.PathValue("resourceId"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "teamPinnedResources", ID: r.PathValue("resourceId")}}}, func(data *domain.Bootstrap) error {
 		before := len(data.TeamPinnedResources)
 		data.TeamPinnedResources = slices.DeleteFunc(data.TeamPinnedResources, func(item domain.TeamPinnedResource) bool {
 			return item.ID == r.PathValue("resourceId") && item.TeamID == r.PathValue("id")
@@ -852,7 +995,7 @@ func (s *server) updateAgentActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var item domain.AgentActivity
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.activity_updated", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "agent.activity_updated", r.PathValue("id"), input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "agentActivities", ID: r.PathValue("id")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.AgentActivities, func(value domain.AgentActivity) bool { return value.ID == r.PathValue("id") })
 		if index < 0 {
 			return errNotFound
@@ -912,7 +1055,7 @@ func (s *server) updateAIConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var item domain.AIConversation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "ai.conversation_updated", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+	err := s.mutateInternalConversation(r, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.AIConversations, func(value domain.AIConversation) bool {
 			return value.ID == r.PathValue("id") && value.UserID == data.Viewer.ID
 		})
@@ -946,7 +1089,14 @@ func (s *server) createAIPromptProgress(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var item domain.AIPromptProgress
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "ai.prompt_progress_created", input.ConversationID, input, func(data *domain.Bootstrap) error {
+	if s.store.BoundedMetadataEnabled() && (len(input.ConversationID) > 191 || strings.ContainsRune(input.ConversationID, '\x00')) {
+		respondMutation(w, errNotFound, http.StatusCreated, item)
+		return
+	}
+	err := s.store.MutateWorkspaceAppending(r.Context(), workspaceKey(r), "ai.prompt_progress_created", input.ConversationID, input, store.MetadataAppendScope{
+		MetadataRecordScope: store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "aiConversations", ID: input.ConversationID}}},
+		AppendKinds:         []string{"aiPromptProgress"},
+	}, func(data *domain.Bootstrap) error {
 		if !slices.ContainsFunc(data.AIConversations, func(value domain.AIConversation) bool {
 			return value.ID == input.ConversationID && value.UserID == data.Viewer.ID
 		}) {

@@ -1,6 +1,7 @@
 package coordination
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -35,6 +36,8 @@ type Config struct {
 	ConnectTimeout time.Duration
 	LockTTL        time.Duration
 	LockWait       time.Duration
+	// Cache configures the cross-replica result cache (shared_cache.go).
+	Cache SharedCacheConfig
 }
 
 type EventEnvelope struct {
@@ -44,12 +47,14 @@ type EventEnvelope struct {
 }
 
 type Redis struct {
-	client     redis.UniversalClient
-	mode       string
-	prefix     string
-	instanceID string
-	lockTTL    time.Duration
-	lockWait   time.Duration
+	client      redis.UniversalClient
+	cacheClient redis.UniversalClient
+	mode        string
+	prefix      string
+	instanceID  string
+	lockTTL     time.Duration
+	lockWait    time.Duration
+	shared      *SharedCache
 }
 
 var (
@@ -76,6 +81,14 @@ local values = redis.call('HVALS', KEYS[2])
 local result = {#stale}
 for _, value in ipairs(values) do table.insert(result, value) end
 return result`)
+	presenceTouchScript = redis.NewScript(`
+local previous = redis.call('HGET', KEYS[2], ARGV[1])
+local seen = redis.call('ZSCORE', KEYS[1], ARGV[1])
+redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1])
+redis.call('HSET', KEYS[2], ARGV[1], ARGV[3])
+redis.call('PEXPIRE', KEYS[1], ARGV[4])
+redis.call('PEXPIRE', KEYS[2], ARGV[4])
+return {previous or '', seen or ''}`)
 )
 
 func Open(ctx context.Context, config Config) (*Redis, error) {
@@ -100,6 +113,14 @@ func Open(ctx context.Context, config Config) (*Redis, error) {
 	if coordinator.lockWait <= 0 {
 		coordinator.lockWait = 5 * time.Second
 	}
+	if !config.Cache.Disabled {
+		coordinator.cacheClient, err = newRedisClient(config, true)
+		if err != nil {
+			_ = client.Close()
+			return nil, err
+		}
+		coordinator.shared = NewSharedCache(coordinator, config.Cache)
+	}
 	timeout := config.ConnectTimeout
 	if timeout <= 0 {
 		timeout = 10 * time.Second
@@ -114,7 +135,7 @@ func Open(ctx context.Context, config Config) (*Redis, error) {
 		}
 		select {
 		case <-probeCtx.Done():
-			_ = client.Close()
+			_ = coordinator.Close()
 			return nil, fmt.Errorf("connect to Redis %s: %w", mode, pingErr)
 		case <-time.After(200 * time.Millisecond):
 		}
@@ -123,7 +144,15 @@ func Open(ctx context.Context, config Config) (*Redis, error) {
 }
 
 func newClient(config Config) (redis.UniversalClient, error) {
+	return newRedisClient(config, false)
+}
+
+func newRedisClient(config Config, cache bool) (redis.UniversalClient, error) {
 	mode := strings.ToLower(strings.TrimSpace(config.Mode))
+	timeout := config.Cache.OpTimeout
+	if timeout <= 0 {
+		timeout = 25 * time.Millisecond
+	}
 	poolSize := config.PoolSize
 	if poolSize <= 0 {
 		poolSize = 40
@@ -144,6 +173,11 @@ func newClient(config Config) (redis.UniversalClient, error) {
 			options = &redis.Options{Addr: firstAddress(config.Addrs), Username: config.Username, Password: config.Password, DB: config.DB, TLSConfig: commonTLS}
 		}
 		applyOptions(options, config, poolSize)
+		if cache {
+			options.DialTimeout, options.ReadTimeout, options.WriteTimeout, options.PoolTimeout = timeout, timeout, timeout, timeout
+			options.ContextTimeoutEnabled = true
+			options.MaxRetries, options.DialerRetries, options.MinIdleConns = -1, 1, 0
+		}
 		return redis.NewClient(options), nil
 	}
 	if mode != "cluster" {
@@ -164,6 +198,11 @@ func newClient(config Config) (redis.UniversalClient, error) {
 	options.DialTimeout = config.DialTimeout
 	options.ReadTimeout = config.ReadTimeout
 	options.WriteTimeout = config.WriteTimeout
+	if cache {
+		options.DialTimeout, options.ReadTimeout, options.WriteTimeout, options.PoolTimeout = timeout, timeout, timeout, timeout
+		options.ContextTimeoutEnabled = true
+		options.MaxRetries, options.DialerRetries, options.MinIdleConns = -1, 1, 0
+	}
 	return redis.NewClusterClient(options), nil
 }
 
@@ -188,7 +227,14 @@ func firstAddress(values []string) string {
 	return values[0]
 }
 
-func (r *Redis) Close() error                   { return r.client.Close() }
+func (r *Redis) Close() error {
+	err := r.client.Close()
+	if r.cacheClient != nil {
+		err = errors.Join(err, r.cacheClient.Close())
+	}
+	return err
+}
+
 func (r *Redis) Mode() string                   { return r.mode }
 func (r *Redis) InstanceID() string             { return r.instanceID }
 func (r *Redis) Ping(ctx context.Context) error { return r.client.Ping(ctx).Err() }
@@ -205,6 +251,10 @@ func (r *Redis) Allow(ctx context.Context, key string, limit int, window time.Du
 	return values[0] <= int64(limit), retry, nil
 }
 
+// ErrWorkspaceLockBusy reports that another replica held the distributed
+// workspace lock for the whole wait; the request is retryable.
+var ErrWorkspaceLockBusy = errors.New("the workspace lock is held by another server")
+
 func (r *Redis) WithWorkspaceLock(ctx context.Context, workspace string, action func() error) error {
 	key := r.key("lock", slot(workspace))
 	token := randomID()
@@ -212,17 +262,24 @@ func (r *Redis) WithWorkspaceLock(ctx context.Context, workspace string, action 
 	for {
 		acquired, err := r.client.SetNX(ctx, key, token, r.lockTTL).Result()
 		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("%w: %w", ErrWorkspaceLockBusy, err)
+			}
 			return fmt.Errorf("acquire Redis workspace lock: %w", err)
 		}
 		if acquired {
 			break
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("workspace %q is busy", workspace)
+			return fmt.Errorf("workspace %q is busy: %w", workspace, ErrWorkspaceLockBusy)
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			err := ctx.Err()
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("%w: %w", ErrWorkspaceLockBusy, err)
+			}
+			return err
 		case <-time.After(25 * time.Millisecond):
 		}
 	}
@@ -348,6 +405,38 @@ func (r *Redis) UpdatePresence(ctx context.Context, workspace, clientID string, 
 		return nil, err
 	}
 	return r.Presence(ctx, workspace, ttl)
+}
+
+// TouchPresence refreshes one client atomically without reading the roster.
+// changed excludes the timestamp, but includes an expired client rejoining.
+func (r *Redis) TouchPresence(ctx context.Context, workspace, clientID string, presence domain.Presence, ttl time.Duration) (changed bool, err error) {
+	raw, err := json.Marshal(presence)
+	if err != nil {
+		return false, err
+	}
+	seenKey, itemsKey := r.presenceKeys(workspace)
+	values, err := presenceTouchScript.Run(ctx, r.client, []string{seenKey, itemsKey}, clientID, presence.LastSeenAt.UnixMilli(), raw, (ttl * 2).Milliseconds()).StringSlice()
+	if err != nil {
+		return false, err
+	}
+	var previous domain.Presence
+	if len(values) != 2 || values[1] == "" || json.Unmarshal([]byte(values[0]), &previous) != nil {
+		return true, nil
+	}
+	expired := presence.LastSeenAt.Sub(previous.LastSeenAt) > ttl
+	previous.LastSeenAt = presence.LastSeenAt
+	previousRaw, err := json.Marshal(previous)
+	return expired || !bytes.Equal(previousRaw, raw), err
+}
+
+// DeletePresence removes a single client without materializing other users.
+func (r *Redis) DeletePresence(ctx context.Context, workspace, clientID string) (bool, error) {
+	seenKey, itemsKey := r.presenceKeys(workspace)
+	pipe := r.client.TxPipeline()
+	pipe.ZRem(ctx, seenKey, clientID)
+	removed := pipe.HDel(ctx, itemsKey, clientID)
+	_, err := pipe.Exec(ctx)
+	return removed.Val() > 0, err
 }
 
 func (r *Redis) RemovePresence(ctx context.Context, workspace, clientID string, ttl time.Duration) ([]domain.Presence, error) {

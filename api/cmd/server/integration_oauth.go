@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func supportedIntegration(provider string) bool {
@@ -154,7 +155,7 @@ func persistOAuthIntegrationError(s *server, r *http.Request, provider, id, mess
 	if s == nil || s.store == nil || id == "" {
 		return
 	}
-	_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_error", id, map[string]string{"provider": provider, "error": message}, func(data *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.oauth_error", id, map[string]string{"provider": provider, "error": message}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		for i := range data.IntegrationConnections {
 			if data.IntegrationConnections[i].ID == id && data.IntegrationConnections[i].Provider == provider {
 				data.IntegrationConnections[i].LastError = message

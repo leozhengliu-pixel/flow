@@ -484,7 +484,7 @@ func (s *server) gitlabConnectionSnapshot(r *http.Request, id string) (domain.Bo
 
 func (s *server) saveGitLabConnection(ctx context.Context, workspaceKey, id, eventType string, mutate func(connection *domain.IntegrationConnection, now time.Time)) (domain.IntegrationConnection, error) {
 	var updated domain.IntegrationConnection
-	err := s.store.MutateWorkspace(ctx, workspaceKey, eventType, id, map[string]string{"provider": "gitlab"}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(ctx, workspaceKey, eventType, id, map[string]string{"provider": "gitlab"}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == "gitlab" })
 		if index < 0 {
 			return errNotFound
@@ -670,9 +670,24 @@ func (s *server) rotateDueGitLabTokens(ctx context.Context, key string, now time
 	if !store.ConnectorSecretsConfigured() {
 		return
 	}
-	data, ok := s.store.WorkspaceMetadataFields(key, "integrationConnections")
-	if !ok {
-		return
+	var data domain.Bootstrap
+	if !s.store.BoundedMetadataEnabled() {
+		var ok bool
+		data, ok = s.store.WorkspaceMetadataFields(key, "integrationConnections")
+		if !ok {
+			return
+		}
+	} else {
+		read, found, err := s.store.BeginGitLabConnectionConfigsRead(context.WithoutCancel(ctx), key)
+		if err != nil {
+			log.Printf("GitLab token rotation workspace=%s snapshot failed: %s", key, err.Error())
+			return
+		}
+		if !found {
+			return
+		}
+		defer read.Close()
+		data = domain.Bootstrap{Workspace: domain.Workspace{URLKey: read.WorkspaceURLKey}, IntegrationConnections: read.Connections}
 	}
 	for _, connection := range data.IntegrationConnections {
 		if connection.Provider != "gitlab" || connection.Config["rotationEnabled"] != "true" || connection.Config["canSelfRotate"] != "true" || connection.Config["rotationFailureReason"] != "" {

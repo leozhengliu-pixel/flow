@@ -1,0 +1,21 @@
+{
+  "source": "server/loop_triggers.go",
+  "unmigrated": 0,
+  "consumers": {
+    "dispatchLoopTriggers": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Direct HOT event-loop probe and trigger metadata use the reviewed owned BeginLoopScheduleRead projections (TestScaleP21HotLoopTickTriggerSelection, unchanged); the literal off probe and full accessor/body remain unchanged. Its remaining HOT descendant, startLoopRun, is now bounded: TestScaleP21SW260LoopRunStartDifferential dispatches actual project.updated (one and several matching loops, a 1 MiB project, a paused loop), issue.created (several loops, one non-matching) and private-team project events through dispatchLoopTriggers and compares the resulting runs, queued agent runs, stamps, versions, events and hooks byte for byte with the literal dispatch, warm and SQL-reloaded.",
+      "accessors": [
+        "WorkspaceMetadata",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Normal scheduler/publication unconditionally enumerates loop trigger metadata; actual AI run execution is a separate conditional boundary.",
+      "callers": [
+        "processDueDeliveries -> runDueLoops",
+        "ordinary issue/project event -> dispatchDomainEvent -> dispatchLoopTriggers"
+      ]
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { Archive, ArchiveRestore, CircleDashed, FilePenLine, Menu, MoreHorizontal, Rocket } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { BootstrapData, FlowDocument, Team, TrashEntry } from '@/types/flow'
 import { restoreTrashEntry, updateCycle, updateIssue, updateProject } from '@/lib/api'
@@ -19,6 +19,7 @@ import { DeletedDocumentMenuItems } from '@/components/documents/document-delete
 import { FlowContextMenuPortal, FlowContextMenuRoot, FlowContextMenuTrigger, FlowDropdownMenuContent, FlowMenuContent } from '@/components/ui/row-context-menu'
 import { TrashRowMenuItems } from './trash-row-menu'
 import { withTrashRetention } from '@/lib/trash-retention'
+import { localSliceScope } from '@/lib/local-store-slices'
 
 type ArchiveTabDefinition = { id: TeamArchiveTab; label: string; title: string; empty: string; resource?: string }
 
@@ -41,6 +42,7 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
   const archivedLoader = useArchivedModelsLoader({
     teamId: team.id,
     workspaceKey: data.workspace.urlKey,
+    localScope: localSliceScope(data),
     autoLoadOnMount: tab.id === 'issues',
     loadThreshold: 30,
     modelsPerLoad: 50,
@@ -55,19 +57,7 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
   const archivedCycles=tab.id==='cycles'?data.cycles.filter(item=>item.teamId===team.id&&item.status==='completed'):[]
   const trash=tab.resource?data.trash.filter(item=>item.resourceType===tab.resource&&item.teamIds?.includes(team.id)):[]
   const count = trash.length + archivedIssues.length + archivedProjects.length + archivedCycles.length
-  const listRef = useRef<HTMLDivElement | null>(null)
   const { loadMore } = archivedLoader
-  useEffect(() => {
-    if (tab.id !== 'issues') return
-    const node = listRef.current
-    if (!node) return
-    const onScroll = () => {
-      const distance = node.scrollHeight - node.scrollTop - node.clientHeight
-      loadMore(distance)
-    }
-    node.addEventListener('scroll', onScroll, { passive: true })
-    return () => node.removeEventListener('scroll', onScroll)
-  }, [loadMore, tab.id])
 
   // Each archive tab starts without filters.
   const[filtersTab,setFiltersTab]=useState(tab.id)
@@ -100,7 +90,10 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
       />}
     </div>
     {tab.id==='issues'&&filters.length>0&&<div className="archive-applied-filters"><MyIssuesFilterBar filters={filters} filterOptions={filter=>explorerFilterOptions(filter.field,issueOptions)} onAdd={()=>setFilterOpen(true)} onClear={()=>setFilters([])} onOperatorChange={(id,operator)=>setFilters(current=>updateFilterOperator(current,id,operator))} onRemove={id=>setFilters(current=>current.filter(filter=>filter.id!==id))} onValuesChange={(id,options)=>setFilters(current=>updateFilterValues(current,id,options))}/></div>}
-    {count>0&&<div className="archive-list" ref={listRef}>
+    {count>0&&<div className="archive-list" onScroll={event => {
+      const { scrollHeight, scrollTop, clientHeight } = event.currentTarget
+      if (tab.id === 'issues') loadMore(scrollHeight - scrollTop - clientHeight)
+    }}>
       {archivedIssues.map(item=><ArchiveRow icon={<CircleDashed/>} key={item.id} title={<span data-i18n-ignore>{item.identifier} {item.title}</span>} meta={<>{t('Issue')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateIssue(item.id,{archived:false});await onReload([item.id])}}/>)}
       {archivedProjects.map(item=><ArchiveRow icon={<Rocket/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Project')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateProject(item.id,{archived:false});await onReload()}}/>)}
       {archivedCycles.map(item=><ArchiveRow icon={<Archive/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Cycle')} · {t('ended')} {date(item.endsAt)}</>} onRestore={async()=>{await updateCycle(item.id,{status:'upcoming'});await onReload()}}/>)}

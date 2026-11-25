@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_startup_oauth_applications.go",
+  "unmigrated": 0,
+  "consumers": {
+    "installedOAuthApplications": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Startup enumeration of every installed workspace's OAuth applications for SyncAllApplicationIdentities (beginApplicationIdentityIDsRead) and BackfillUploadOwners. It reads the resident image only for the workspace keys (snapshotted under the read lock, then visited in key order without it) and, with bounded metadata on, each workspace's oauthApplications field from the legacy view of the installed workspace (coldAccessorView with the single field: the field decoded from the installed logical source on the legacy-view lane, released before the next workspace), so the applications equal the legacy store's; a field that cannot be read fails the enumeration instead of skipping the workspace. A store without installed sources (test views) reads the image as before. The identity ID reader keeps its 64MiB/process bound, counts the cost while collecting and admits it before returning, and still clones only ClientID. TestScaleP21SW557BoundedStartupMatchesLegacy copies a database seeded flag off (stale app user, icon without owner) plus a workspace created flag on and runs both startup syncs flag off and flag on: before this change the bounded sync renamed nobody and recorded no icon owner; now both copies end with identical rows in every table. TestScaleP21SW24ApplicationIdentityIDsSource/Ownership/Bounds/Allocations/Producer keep the enumeration, bounds and downstream contracts.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

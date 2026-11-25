@@ -1,0 +1,15 @@
+{
+  "source": "server/notification_settings.go",
+  "unmigrated": 0,
+  "consumers": {
+    "dispatchNotificationDigests": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded digest delivery uses the same owned due-row, installed recipient/review/HIPAA and native notification/issue display projection as immediate email; the handle remains open through SMTP delivery and all original claim/retry transitions. Off mode retains the literal NotificationDeliverySnapshot accessor. TestScaleP21HotDeliveryEmailDifferential compares actual immediate and digest SMTP output, claims, successful delivery, missing sources, HIPAA rendering and failed-transport retries; store source/count/writer tests cover canonical drift, cancellation, dynamic callback-output admission and rollback. Persistent SQLite count2 and existing delivery transaction/scheduler regressions pass with zero full metadata decodes or admission leaks.",
+      "accessors": ["BeginNotificationDeliveryContextRead"],
+      "temperature": "hot",
+      "temperatureReason": "Digest delivery runs on the ordinary delivery tick.",
+      "callers": ["server/server.processDueDeliveries"]
+    }
+  }
+}

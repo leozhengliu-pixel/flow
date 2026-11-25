@@ -59,13 +59,23 @@ func (r *archiveTestRepo) session(t *testing.T, id string, activities ...domain.
 	return task
 }
 
+// activities reads the whole log. AgentActivities returns one page at a time,
+// and a streaming run can write more than a page before an archive lands.
 func (r *archiveTestRepo) activities(t *testing.T, id string) []domain.AgentActivity {
 	t.Helper()
-	items, err := r.AgentActivities(context.Background(), r.workspace, id, "")
-	if err != nil {
-		t.Fatal(err)
+	all := []domain.AgentActivity{}
+	after := ""
+	for {
+		page, err := r.AgentActivities(context.Background(), r.workspace, id, after)
+		if err != nil {
+			t.Fatal(err)
+		}
+		all = append(all, page...)
+		if len(page) == 0 {
+			return all
+		}
+		after = page[len(page)-1].ID
 	}
-	return items
 }
 
 func listed(tasks []domain.AgentTask, id string) bool {

@@ -35,17 +35,38 @@ func (s *SQLiteStore) NotificationRecord(ctx context.Context, workspace, userID,
 	return result, nil
 }
 
+// NotificationStateChanges includes both owners on reassignment and the old
+// owner on removal. P09 uses it with the records captured by its write journal.
+func NotificationStateChanges(workspace string, before, after *domain.Notification) []NotificationStateChange {
+	if before == nil && after == nil {
+		return nil
+	}
+	if before != nil && after != nil {
+		oldJSON, oldErr := json.Marshal(before)
+		newJSON, newErr := json.Marshal(after)
+		if oldErr == nil && newErr == nil && bytes.Equal(oldJSON, newJSON) {
+			return nil
+		}
+	}
+	var changes []NotificationStateChange
+	for _, item := range []*domain.Notification{before, after} {
+		if item != nil && item.RecipientID != "" {
+			changes = append(changes, NotificationStateChange{WorkspaceKey: workspace, RecipientID: item.RecipientID, ChangedIDs: []string{item.ID}})
+		}
+	}
+	return changes
+}
+
 func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, userID, id, eventType string, input any, mutate func(*domain.Notification)) (domain.Notification, error) {
 	var result domain.Notification
 	var event domain.DomainEvent
 	var realtime json.RawMessage
 	err := func() error {
-		s.lockWorkspaceWrites()
-		defer s.unlockWorkspaceWrites()
-		tx, err := s.db.BeginTx(ctx, nil)
+		tx, err := s.lockWorkspaceWritesTx(ctx)
 		if err != nil {
 			return err
 		}
+		defer s.unlockWorkspaceWrites()
 		defer tx.Rollback()
 		lock := ""
 		if s.dialect != "sqlite" {

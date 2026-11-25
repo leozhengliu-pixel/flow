@@ -1,0 +1,29 @@
+{
+  "source": "server/owned_images.go",
+  "unmigrated": 0,
+  "consumers": {
+    "ownedImageAccess": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Flag-off invokes the literal original resolver and permission closure. Bounded mode completes OAuth icon resolution and permission checking within the pinned scalar visitor and then retains the existing workspace-logo path. The returned image holds no application collection or borrowed source. TestScaleP21HotOAuthLogoOwnedImageBoundary compares missing/ordinary/icon paths, signed bypass and public/private installation permissions.",
+      "accessors": [
+        "boundedOAuthAppIconAccess"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Shared ordinary/signed uploaded-image serving and file-read authorization boundary.",
+      "callers": [
+        "server/server.serveUploadOrAsset",
+        "server/server.serveSignedFile",
+        "server/server.fileReadableContext"
+      ]
+    },
+    "resolveWorkspaceLogo": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode reads only resident workspace identity/current logo URL and uses the upload owner row's purpose, workspace key and content type. Active-member authorization remains in serveOwnedImage's readable callback. Off mode keeps WorkspaceMetadata. TestScaleP21M1CoreReadsDifferential compares current/obsolete logos with oversized unrelated records.",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

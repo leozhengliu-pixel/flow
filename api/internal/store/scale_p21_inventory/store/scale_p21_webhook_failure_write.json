@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_webhook_failure_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "RecordWebhookDeliveryFailure": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted background writer owns the exact installed generation and root-locks retention selection, canonical point deletes/ordered append, event insertion and logical publication in one transaction. Dynamically admitted ID/frame planning preserves newest-50 native order and unrelated rows; no failure body is decoded on the split-row path. Actual inline duplicate arrays use the shared prepared inline postimage, preserving legacy first-record rebase adjustments (49 versus 50 retained native entries) under the existing 256KiB root bound and dynamically derived process work admission, never full-workspace hydration. Missing-hook nil-callback event behavior, display refresh, aggregate collisions, actual final commit stamps, retries and post-commit sinks remain exact. TestScaleP21WebhookFailureWrite passes twice on persistent SQLite and under race for warm/reloaded rows/native output/events, more than 50 deletes, 12 concurrent appends, cancellation/rollback, quota/root rejection, old-generation retention and zero full decodes/leaks. Body growth 10x holds admitted peak at 2936528 bytes. Measured normal SQL increases 67 to 75; inline duplicate SQL increases 12 to 20 or 10 to 18, documented in webhook-failure-write.md.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "The due delivery ticker records audit-stream webhook failures and trims their per-hook retention.",
+      "callers": ["server/server.recordWebhookFailure"]
+    }
+  }
+}

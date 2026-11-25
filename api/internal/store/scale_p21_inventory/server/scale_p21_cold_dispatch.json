@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_cold_dispatch.go",
+  "unmigrated": 0,
+  "consumers": {
+    "withColdMetadataRequest": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Explicit request adapter for inventory-registered COLD consumers. Off mode invokes the original receiver/request literally. Bounded mode borrows the legacy store through the complete route callback and encoding; it never copies or swaps the server or its mutexes. Read and supported mutation lifetimes delegate to the proven replica-wide cancellable cold primitive. SW191 tests the production loop settings route wrappers and store admission, nested lifetime, cancellation and publication; the all-pending production activation gate remains unchanged.",
+      "accessors": ["WithColdMetadataRead", "WithColdMetadataMutation"],
+      "temperature": "cold",
+      "temperatureReason": "Admission adapter called only by explicit COLD route wrappers.",
+      "callers": ["server/loop_settings.go:getLoopConfig", "server/loop_settings.go:updateLoopSettings"]
+    }
+  }
+}

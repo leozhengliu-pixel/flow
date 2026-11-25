@@ -1,0 +1,18 @@
+{
+  "source": "store/scale_p21_sw17_issue_attribute_migration.go",
+  "unmigrated": 0,
+  "consumers": {
+    "sw17MigrateIssueAttributesBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["resident-state"],
+      "reason": "Trusted startup index writer iterates catalog workspace keys, bounded ordered headers and one typed canonical Issue at a time under independent raw/decoded/retained-row work leases; existing sparse-row sync and 250-record atomic checkpoints retained. No application authorization change. Persistent SQLite differentials twice prove typed JSON fidelity, resume/version reset, rollback, cancellation, pool-one, explicit budget failure, unchanged source/outside-workspace state and zero full metadata decodes. SQL/allocations increase; repeatable-read transactions can be stronger than the old PostgreSQL default."
+    },
+    "sw17MigrateRecurrenceInstancesBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["resident-state"],
+      "reason": "Trusted startup recurrence writer preserves the original unordered LIKE cursor and full typed Issue semantics, independently admits one raw/decoded body, and stages sparse index projections in a byte-budgeted RecordSpool before replay in original 250-selected groups. Whole-workspace SQL transaction/marker and duplicate winners retained; snapshot remains open through disk staging/replay. No application authorization change. Persistent SQLite differentials twice cover reverse order and cross-group duplicate IDs, typed false positives, rollback, pool-one, cancellation and explicit admission/spool failure. Canonical/outside-workspace bytes unchanged; allocations and spool I/O increase."
+    }
+  }
+}

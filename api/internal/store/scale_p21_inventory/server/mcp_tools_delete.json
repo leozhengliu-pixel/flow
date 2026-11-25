@@ -1,0 +1,31 @@
+{
+  "source": "server/mcp_tools_delete.go",
+  "unmigrated": 2,
+  "consumers": {
+    "deleteMCPResource": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.callFlowWriteTool"
+      ]
+    },
+    "flowDeletePreview": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "mcpWorkspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "No production caller or registration found; TestMCPDeleteProjectMovesItToTrashWithItsCounts -> flowDeletePreview (mcp_tools_delete_test.go:56) is the only invocation"
+      ]
+    }
+  }
+}

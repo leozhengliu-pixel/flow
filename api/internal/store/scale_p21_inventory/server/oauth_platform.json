@@ -1,0 +1,74 @@
+{
+  "source": "server/oauth_platform.go",
+  "unmigrated": 4,
+  "consumers": {
+    "auditAPIKeyCredential": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Reads oauthApplications/app.ID for legacy realtime aggregate enrichment while retaining captured credential/application audit metadata and actor. Session requests remain no-ops. TestScaleP21M2IntegrationDifferential and TestScaleP21SW12SecretRotationDifferential compare the credential matrix, canonical state, audit metadata and complete webhook/realtime effects.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "updateApplicationWebhook (api/cmd/server/application_webhooks.go:132)",
+        "rotateApplicationWebhookSecret (api/cmd/server/application_webhooks.go:220)",
+        "createOAuthApplicationFromManifest (api/cmd/server/oauth_app_manifest.go:375)",
+        "respondManifestApplication (api/cmd/server/oauth_app_manifest.go:443)",
+        "issueApplicationToken (api/cmd/server/oauth_application_credentials.go:109)",
+        "getApplicationDeveloperToken (api/cmd/server/oauth_application_credentials.go:206)",
+        "createApplicationDeveloperToken (api/cmd/server/oauth_application_credentials.go:225)",
+        "rotateOAuthApplicationSecret (api/cmd/server/oauth_application_credentials.go:255)",
+        "getOAuthApplicationClientSecret (api/cmd/server/oauth_platform.go:46)",
+        "getApplicationWebhookSecret (api/cmd/server/oauth_platform.go:195)",
+        "createOAuthApplication (api/cmd/server/settings_features.go:1669)"
+      ]
+    },
+    "getApplicationWebhookSecret": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/oauth-applications/{id}/webhook/secret (api/cmd/server/oauth_platform.go:35)"
+      ]
+    },
+    "listOAuthApplicationInstalls": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/oauth-applications/{id}/installs (api/cmd/server/oauth_platform.go:32)"
+      ]
+    },
+    "oauthConsentInstallation": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Reads only users/installation.InstalledBy with original users-only accessor off mode; existing OAuth workspace admin boundary and SQL active-installation selection unchanged. TestScaleP21M2OAuthDifferential compares installer display name and all principal/key classes at the handler boundary.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "workspaceOAuthApplication": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "getOAuthApplicationClientSecret (api/cmd/server/oauth_platform.go:46)"
+      ]
+    }
+  }
+}

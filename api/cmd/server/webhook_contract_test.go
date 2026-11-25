@@ -242,7 +242,10 @@ func TestNestedEntityWebhooksDeliverTheEntityItself(t *testing.T) {
 		{"initiative.update_updated", "update", initiativeUpdate["id"].(string), "initiativeId", initiative.ID, "edited"},
 		{"initiative.update_deleted", "remove", initiativeUpdate["id"].(string), "initiativeId", initiative.ID, "edited"},
 	} {
-		envelope, raw := receiver.waitFor(t, func(envelope map[string]any, _ http.Header) bool { return envelope["eventType"] == expected.eventType })
+		envelope, raw := receiver.waitFor(t, func(envelope map[string]any, _ http.Header) bool {
+			data, _ := envelope["data"].(map[string]any)
+			return envelope["eventType"] == expected.eventType && data["id"] == expected.id
+		})
 		strictWebhookDecode(t, raw.body)
 		data, _ := envelope["data"].(map[string]any)
 		text, _ := data["body"].(string)

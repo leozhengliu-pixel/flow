@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type HtmlTagDescriptor, type Plugin, type UserConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
@@ -8,6 +8,49 @@ import { releaseManifest } from './release-assets.ts'
 import { layoutMedia } from './layout-media.ts'
 
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8080'
+
+function preloadAppEntry(): Plugin {
+  const entry = path.resolve(import.meta.dirname, 'src/app-entry.tsx')
+  return {
+    name: 'flow-preload-app-entry',
+    apply: 'build',
+    transformIndexHtml(html, { bundle }) {
+      const app = Object.values(bundle ?? {}).find(output => output.type === 'chunk' && output.moduleIds.includes(entry))
+      if (!app || !bundle) return
+      const seen = new Set<string>()
+      const tags: HtmlTagDescriptor[] = []
+      const add = (file: string, attrs: HtmlTagDescriptor['attrs']) => {
+        if (seen.has(file) || html.includes(`"/${file}"`)) return
+        seen.add(file)
+        tags.push({ tag: 'link', attrs: { ...attrs, href: `/${file}` }, injectTo: 'head' })
+      }
+      const pending = [app.fileName]
+      const modules = new Set<string>()
+      for (const file of pending) {
+        if (modules.has(file)) continue
+        modules.add(file)
+        const chunk = bundle[file]
+        if (chunk?.type !== 'chunk') continue
+        add(file, { rel: 'modulepreload', crossorigin: true })
+        for (const css of chunk.viteMetadata?.importedCss ?? []) add(css, { rel: 'stylesheet', crossorigin: true })
+        pending.push(...chunk.imports)
+      }
+      return tags
+    },
+  }
+}
+
+function asyncStartupEntry(): Plugin {
+  return {
+    name: 'flow-async-startup-entry',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'pre',
+      // Start the authority reads without waiting for the app's stylesheets.
+      handler: html => html.replace('src="/src/local-store-entry.ts"', 'async src="/src/local-store-entry.ts"'),
+    },
+  }
+}
 
 function inlineIconSprites() {
   return {
@@ -55,10 +98,11 @@ function chunkSizeBudget() {
 }
 
 // https://vite.dev/config/
-export default defineConfig(async ({ command }) => ({
+export default defineConfig(async ({ command }): Promise<UserConfig> => ({
   // tourMedia: docs/media/*.gif → /tour/ (dev server and build output) for the Getting started issues.
   // releaseManifest: dist/asset-manifest.json, which lets other releases' servers find this build's assets.
   plugins: [layoutMedia(), snapFloatingPositions(), react(), tailwindcss(), inlineIconSprites(),
+    asyncStartupEntry(), preloadAppEntry(),
     command === 'serve' && process.env.FLOW_E2E_AGENT_PANEL_SEED === '1'
       ? (await import('./e2e/agent-panel-seed-plugin.ts')).agentPanelSeedPlugin(apiProxyTarget)
       : undefined,
@@ -73,16 +117,12 @@ export default defineConfig(async ({ command }) => ({
     rolldownOptions: {
       output: {
         strictExecutionOrder: true,
+        // The retained view and its authority request start alongside the route chunks.
+        // Group startup dependencies to avoid a long chain of app-shell cache lookups.
         codeSplitting: {
           groups: [
-            // Diagram rendering is loaded on demand (see mermaid-preview.ts); keep its libraries out of the shared vendor chunks.
-            { name: 'diagram-vendor', test: /node_modules[\\/](?:mermaid|@mermaid-js|elkjs|cytoscape[^\\/]*|dagre-d3-es|langium|chevrotain[^\\/]*|@chevrotain|katex|roughjs|khroma|stylis|marked)[\\/]/, priority: 40, maxSize: 250_000 },
-            { name: 'react-vendor', test: /node_modules[\\/](?:react|react-dom|react-router|react-router-dom|scheduler)[\\/]/, priority: 30 },
-            { name: 'editor-vendor', test: /node_modules[\\/](?:@tiptap|prosemirror|yjs|y-prosemirror|lib0|markdown-it)[\\/]/, priority: 25, maxSize: 250_000 },
-            { name: 'ui-vendor', test: /node_modules[\\/](?:@radix-ui|cmdk|lucide-react|sonner)[\\/]/, priority: 20, maxSize: 220_000 },
-            { name: 'chart-vendor', test: /node_modules[\\/](?:@nivo|d3-)[\\/]/, priority: 15, maxSize: 250_000 },
-            { name: 'date-vendor', test: /node_modules[\\/](?:date-fns|chrono-node)[\\/]/, priority: 10, maxSize: 220_000 },
-            { name: 'vendor', test: /node_modules[\\/]/, priority: 1, maxSize: 250_000 },
+            { name: 'startup', tags: ['$initial'], priority: 1, maxSize: 420_000 },
+            { name: 'app-runtime', test: /[\\/]src[\\/](?:app-entry\.tsx|components[\\/](?:issue-explorer[\\/]issue-explorer-page|my-issues[\\/]my-issues-page)\.tsx)$/, maxSize: 900_000 },
           ],
         },
       },

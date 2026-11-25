@@ -57,6 +57,9 @@ func (s *SQLiteStore) migrateAgentWebAccess(ctx context.Context) error {
 
 // agentWebSearchFirstEnabled is when a settings save first turned agent web search on (zero when none did).
 func (s *SQLiteStore) agentWebSearchFirstEnabled(ctx context.Context) (time.Time, error) {
+	if s.BoundedMetadataEnabled() {
+		return s.agentWebSearchFirstEnabledBounded(ctx)
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT payload,created_at FROM domain_events WHERE event_type=?`, "workspace_preferences.updated")
 	if err != nil {
 		return time.Time{}, fmt.Errorf("read workspace preference events: %w", err)
@@ -111,6 +114,9 @@ func agentWebAccessFromRecord(settings domain.WorkspaceSettings, enabledAt time.
 }
 
 func (s *SQLiteStore) migrateWorkspaceAgentWebAccess(ctx context.Context, key string, enabledAt time.Time) (changed, off bool, err error) {
+	if s.BoundedMetadataEnabled() {
+		return s.migrateWorkspaceAgentWebAccessBounded(ctx, key, enabledAt)
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	before, ok := s.storedWorkspace(key)

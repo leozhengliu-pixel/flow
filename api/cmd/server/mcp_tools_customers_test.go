@@ -112,6 +112,10 @@ func TestMCPCustomerToolsRespectManualEditsInApp(t *testing.T) {
 	if created := mcpObject(t, f, "save_customer", map[string]any{"name": "Synced elsewhere"}); created["created"] != true {
 		t.Fatalf("API key create: %v", created)
 	}
+	// Deleting is a manual edit too.
+	if _, err := f.service.callFlowTool(t.Context(), inApp, "delete_customer", map[string]any{"id": "Synced elsewhere"}); err == nil || !strings.Contains(err.Error(), "manual customer attribute edits are disabled") {
+		t.Fatalf("in-app delete with manual edits off: %v", err)
+	}
 }
 
 func TestMCPApplicationScopesGateCustomerAndInitiativeTools(t *testing.T) {

@@ -190,7 +190,17 @@ func testDocumentLargeEditAcrossWritePaths(t *testing.T, repo *store.SQLiteStore
 	app := authRequest[domain.OAuthApplication](t, admin, http.MethodPost, host.URL+"/api/oauth-applications", map[string]any{"name": "Large documents " + suffix, "scopes": []string{"read", "write"}, "supportsClientCredentials": true}, workspace, http.StatusCreated)
 	token := applicationFormToken(t, host, app, "read write", http.StatusOK)
 	appOriginal, appUpdated := largeDocumentMarkdown("app original", 90<<10), largeDocumentMarkdown("app updated", 180<<10)
-	body, _ := json.Marshal(map[string]any{"title": "App document " + suffix, "content": appOriginal})
+	// An application is restricted to its teams (all public teams here): a
+	// document without a team of its own is outside it, so it writes in one.
+	metadata, ok := repo.WorkspaceMetadata(workspace)
+	publicTeam := slices.IndexFunc(metadata.Teams, func(team domain.Team) bool {
+		settings := metadata.TeamSettings[team.ID]
+		return ok && !team.Private && team.ArchivedAt == nil && team.RetiredAt == nil && settings.ParentTeamID == "" && !strings.EqualFold(settings.Access, "private") && !strings.EqualFold(settings.Access, "restricted")
+	})
+	if publicTeam < 0 {
+		t.Fatal("the workspace has no public team for the application")
+	}
+	body, _ := json.Marshal(map[string]any{"title": "App document " + suffix, "content": appOriginal, "teamIds": []string{metadata.Teams[publicTeam].ID}})
 	var appDocument domain.Document
 	if err := json.Unmarshal(applicationBearerRequest(t, host, token.Token, http.MethodPost, "/api/documents", string(body), http.StatusCreated), &appDocument); err != nil {
 		t.Fatal(err)

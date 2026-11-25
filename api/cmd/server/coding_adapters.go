@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/url"
 	"strings"
 
 	"flow/api/internal/coding"
@@ -30,16 +29,14 @@ func (w codingWorkspaces) CodingWorkspace(_ context.Context, workspaceKey string
 // codingDirectory resolves issues and users for the session core.
 type codingDirectory struct{ s *server }
 
+// CodingIssue reads an issue as the server, without an actor; sessions use
+// CodingIssueFor (coding_actor_access.go) so the creator's access applies.
 func (d codingDirectory) CodingIssue(ctx context.Context, workspaceKey, issueID string) (coding.IssueContext, error) {
 	issue, err := d.s.store.IssueRecord(ctx, workspaceKey, issueID)
 	if err != nil {
 		return coding.IssueContext{}, coding.ErrNotFound
 	}
-	result := coding.IssueContext{ID: issue.ID, TeamID: issue.Team.ID, Identifier: issue.Identifier, Title: issue.Title, Description: issue.Description}
-	if base := d.s.loopAppURL(); base != "" && issue.Identifier != "" {
-		result.URL = base + "/" + url.PathEscape(workspaceKey) + "/issue/" + url.PathEscape(issue.Identifier)
-	}
-	return result, nil
+	return d.s.codingIssueContext(workspaceKey, issue), nil
 }
 
 func (d codingDirectory) CodingUser(ctx context.Context, workspaceKey, userID string) (coding.UserInfo, error) {
@@ -48,7 +45,7 @@ func (d codingDirectory) CodingUser(ctx context.Context, workspaceKey, userID st
 		return coding.UserInfo{}, coding.ErrNotFound
 	}
 	info := coding.UserInfo{ID: user.ID, Name: user.Name, Email: user.Email}
-	if _, settings, ok := d.s.store.AccountCollections(workspaceKey, userID); ok && settings.CommitSigningKey != nil {
+	if _, settings, ok := d.s.accountCollections(ctx, workspaceKey, userID, false); ok && settings.CommitSigningKey != nil {
 		info.SigningFormat = "ssh"
 		if kind := strings.ToLower(settings.CommitSigningKey.Type); strings.Contains(kind, "pgp") || strings.Contains(kind, "gpg") {
 			info.SigningFormat = "openpgp"

@@ -1,6 +1,28 @@
 package store
 
-import "flow/api/internal/domain"
+import (
+	"slices"
+
+	"flow/api/internal/domain"
+)
+
+// RedactUserTeams also applies to application users embedded as actors.
+func RedactUserTeams(user *domain.User, allowed func(string) bool) {
+	user.AppTeamIDs = slices.DeleteFunc(slices.Clone(user.AppTeamIDs), func(id string) bool { return !allowed(id) })
+}
+
+// RefreshResourceCounts recomputes counts after a credential narrows the
+// viewer projection. The caller owns data and its nested collections.
+func RefreshResourceCounts(data *domain.Bootstrap) {
+	refreshResourceCounts(data)
+}
+
+// RedactProjectProgress removes stored aggregates whose historical issue
+// population cannot be narrowed to a credential's selected teams.
+func RedactProjectProgress(project *domain.Project) {
+	clearProjectProgressHistories(project)
+	project.Progress = 0
+}
 
 // refreshResourceCounts derives aggregate counts from the relationships that
 // own them. Stored counters are only denormalized read models.

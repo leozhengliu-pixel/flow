@@ -6,6 +6,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { expect, type BrowserContext, type Page } from '@playwright/test'
+import { scaleActivateB1Environment } from '../scale-activate-b1-env'
 
 /**
  * Browser checks of the security headers, run against the production build the Go server serves (the Vite dev server sends
@@ -72,6 +73,7 @@ export async function startApi(options: ApiOptions = {}): Promise<RunningApi> {
       ...(options.fixtureOrigin ? { FLOW_SECURITY_FIXTURE_ORIGIN: options.fixtureOrigin } : {}),
       ...(options.reportUri ? { FLOW_SECURITY_CSP_REPORT_URI: options.reportUri } : {}),
       ...(options.trustProxy ? { FLOW_TRUST_PROXY_HEADERS: 'true' } : {}),
+      ...scaleActivateB1Environment(),
       ...options.env,
     },
     stdio: ['ignore', 'pipe', 'pipe'],

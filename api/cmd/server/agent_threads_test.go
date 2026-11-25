@@ -149,7 +149,7 @@ func TestSuggestionsRuleIsChatOnly(t *testing.T) {
 // AIG: delegating an issue to an agent moves it to the team's first started status (unless it is already
 // started, completed or canceled) and keeps the human assignee.
 func TestDelegationMovesIssueToFirstStartedStatus(t *testing.T) {
-	_, handler, data, app := applicationFixture(t)
+	s, handler, data, app := applicationFixture(t)
 	started := stateForTeamByType(&data, data.Teams[0].ID, "started")
 	completed := stateForTeamByType(&data, data.Teams[0].ID, "completed")
 	unstarted := stateForTeamByType(&data, data.Teams[0].ID, "unstarted")
@@ -157,6 +157,7 @@ func TestDelegationMovesIssueToFirstStartedStatus(t *testing.T) {
 		t.Fatal("fixture states")
 	}
 	issue := requestJSON[domain.Issue](t, handler, "POST", "/api/issues", map[string]any{"title": "Delegate me", "teamId": data.Teams[0].ID, "stateId": unstarted.ID, "assigneeId": data.Viewer.ID}, 201)
+	issue = ageIssueForActivityTest(t, s.store, data.Workspace.URLKey, issue)
 	updated := requestJSON[domain.Issue](t, handler, "PATCH", "/api/issue-records/"+issue.ID, map[string]any{"delegateId": app.UserID}, 200)
 	if updated.State.ID != started.ID || updated.Assignee == nil || updated.Assignee.ID != data.Viewer.ID || updated.Delegate == nil || updated.Delegate.ID != app.UserID {
 		t.Fatalf("delegation: state=%s assignee=%+v delegate=%+v", updated.State.Name, updated.Assignee, updated.Delegate)

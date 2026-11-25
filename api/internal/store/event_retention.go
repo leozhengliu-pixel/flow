@@ -33,7 +33,7 @@ func (s *SQLiteStore) PruneDomainEvents(ctx context.Context, cutoff time.Time) (
 	if err := s.rescueAllStaleSequencing(ctx); err != nil {
 		return 0, err
 	}
-	args := []any{cutoff.UTC().Format(time.RFC3339Nano)}
+	args := []any{formatStoredTime(cutoff)}
 	for _, kind := range retainedDomainEventTypes {
 		args = append(args, kind)
 	}

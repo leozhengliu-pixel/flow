@@ -1,0 +1,18 @@
+const flags = [
+  'FLOW_RECORD_JOURNAL', 'FLOW_RECORD_PEER_SYNC', 'FLOW_SYNC_V2',
+  'FLOW_SYNC_MANIFEST', 'FLOW_INDEXED_READS', 'FLOW_RECORD_HYDRATION',
+  'FLOW_PROJECT_RECORD_MUTATIONS', 'FLOW_INITIATIVE_RECORD_MUTATIONS',
+  'FLOW_DOCUMENT_RECORDS', 'FLOW_TRASH_RECORDS',
+  'FLOW_MCP_PROJECT_RECORDS', 'FLOW_MCP_ISSUE_RECORDS', 'FLOW_MCP_AGENT_RECORDS', 'FLOW_MCP_WRITE_RECORDS',
+  'FLOW_INTERNAL_CHAT_RECORDS', 'FLOW_INTERNAL_CONVERSATION_RECORDS',
+]
+
+export function scaleActivateB1Environment(): Record<string, string> {
+  const mode = process.env.SCALE_ACTIVATE_B1_MODE
+  if (mode !== 'on' && mode !== 'off') return {}
+  return {
+    ...Object.fromEntries(flags.map(flag => [flag, mode])),
+    FLOW_BOUNDED_METADATA: 'off',
+    FLOW_RECORD_SPOOL_MAX_BYTES: '268435456',
+  }
+}

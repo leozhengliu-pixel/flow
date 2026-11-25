@@ -1,0 +1,34 @@
+{
+  "source": "server/chat_issue_threads.go",
+  "unmigrated": 0,
+  "consumers": {
+    "chatSyncIssueComments": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "SW65 replaces this function's users accessor with the proven owned ChatDisplay directory under an operation output scope; off mode retains the literal accessor. One actual off/on table passes ten cases for new comments and bot replies, edits and deletion notices, noecho/blank/old skips, platform failure and edit fallback, Chinese rendering, the limit of 20 messages, missing-thread creation and recalled-root restart. The issue-card fallback retains the proven inherited workflow selector and all four live durable actions. Exact platform calls, mirrored items, thread state, actions and errors match; work is live during actual POST/PATCH and durable item writes, then zero after return with no full metadata decode. processChatThreadReply remains independently unmigrated.",
+      "accessors": [
+        "WorkspaceMetadataFields",
+        "chatCardMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from audited HOT server/chat_notifications.go:processChatNotification",
+      "callers": [
+        "server/server.processChatNotification"
+      ]
+    },
+    "processChatThreadReply": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Uses proven declared workflow headers for the existing issue-role checks and proven chatAuthorizedPointRead for admitted GET buffer/decoded output. Off mode forwards the literal original typed bootstrap and point GET. Original thread retention/binding/linkage, scope and permission refusal, no-echo reservation, idempotent comment POST and cleanup remain; the POST reaches the already-proven bounded discussion writer. SW176 is one13-row exact actual legacy/bounded table covering public/private comments, replay deduplication, role/private/consent/membership/binding/scope/linkage denials and missing roots. It compares actual comments, SQL/domain events, webhook/realtime effects, thread items and platform calls with meaningful successful/no-echo witnesses, held output, zero full decodes and complete release. No new loading/cache/locking is added.",
+      "accessors": [
+        "Bootstrap",
+        "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.processChatInbound"
+      ]
+    }
+  }
+}

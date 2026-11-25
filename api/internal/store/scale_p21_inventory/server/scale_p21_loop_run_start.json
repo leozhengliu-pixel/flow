@@ -1,0 +1,20 @@
+{
+  "source": "server/scale_p21_loop_run_start.go",
+  "unmigrated": 0,
+  "consumers": {
+    "startBoundedLoopRun": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "startLoopRun's bounded branch: BeginLoopRunStartRead replaces the loops/loopVersions/settings/entity field read, MutateLoopRunStart the loop.run_started MutateWorkspace; the runnable check, guard claim, issue identifier read, entity label, occurrence, notices, contract outputs, worker in-flight check and budget reservation, stamp, failure unwinding, failed-budget record, worker queueing and local registration/record/goroutine handoff keep the literal order. A local run holds an execution lease on the captured loop until its goroutine ends. TestScaleP21SW260LoopRunStartDifferential compares results, run records and lease columns, queued agent runs and principals, stored events, webhooks, realtime events, loops/loopVersions/documents rows and the root byte for byte (generated IDs and clocks normalized) between the literal start and bounded starts on warm and SQL-reloaded installed metadata.",
+      "accessors": [
+        "BeginLoopRunStartRead",
+        "MutateLoopRunStart"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Actual run start after a due schedule loop or a matching event loop.",
+      "callers": [
+        "server/loop_runtime.go:startLoopRun"
+      ]
+    }
+  }
+}

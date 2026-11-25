@@ -1,14 +1,14 @@
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
 import { combineModelFilters } from '@/components/filter/filter-block-helper'
 import { filterToQueryNode, type IssueFilterQueryContext } from '@/components/issue-explorer/issue-filter-query'
-import { DATE_FILTER_VALUE } from '@/components/issue-explorer/issue-date-filter'
+import { DATE_FILTER_VALUE, defaultDateFilterOperator, isCustomDateValue, parseDateFilterValue } from '@/components/issue-explorer/issue-date-filter'
 import { CUSTOMER_NUMBER_COMPARISONS, customerNumberQueryValue, isCustomerNumberComparison, parseCustomerNumberValue, type CustomerNumberComparison } from '@/components/issue-explorer/customer-filter'
 
 /**
  * The reference app's operator sets: is / is not (several values read "is any of"), labels add "include all of" /
  * "exclude if all", dates compare "before" / "after". `isNot` and `excludesAll` negate.
  */
-export type MyIssuesFilterOperator = 'is' | 'isNot' | 'includesAll' | 'excludesAll' | 'before' | 'after' | CustomerNumberComparison
+export type MyIssuesFilterOperator = 'is' | 'isNot' | 'includesAll' | 'excludesAll' | 'before' | 'after' | 'on' | 'within' | CustomerNumberComparison
 export interface MyIssuesFilterValue { value: string; valueLabel: string; color?: string }
 
 /** Advanced filter tree (the reference app "Advanced filter"): top level → group → nested group, at most 3 levels. */
@@ -126,7 +126,8 @@ export function toggleFilterOption(filters: MyIssuesAppliedFilter[], field: MyIs
   const existing = filters.find(filter => filter.field === field && filter.fieldLabel === effectiveLabel && (singleValue || filter.operator === 'is'))
   if (!existing) return [...filters, fromOption(field, effectiveLabel, option)]
   if (singleValue) {
-    if (filterValues(existing).some(value => value.value === option.id)) return filters.filter(filter => filter.id !== existing.id)
+    // Picking the applied preset again removes it; a value from the date dialog (with its comparison) always replaces.
+    if (!option.dateOperator && filterValues(existing).some(value => value.value === option.id)) return filters.filter(filter => filter.id !== existing.id)
     const replacement = fromOption(field, effectiveLabel, option)
     return filters.map(filter => filter.id === existing.id ? { ...replacement, id: existing.id } : filter)
   }
@@ -158,14 +159,17 @@ export function consolidateFilters(filters: MyIssuesAppliedFilter[]) {
 export function replaceFilterValues(filter: MyIssuesAppliedFilter, options: MyIssuesFilterOption[]): MyIssuesAppliedFilter | undefined {
   if (!options.length) return
   const values = options.map(option => ({ value: option.id, valueLabel: option.label, color: option.color }))
-  return { ...filter, ...values[0], values, operator: normalizeFilterOperator(filter.field, filter.operator, values.map(value => value.value)) }
+  // A value chosen in the date dialog carries its comparison (on / before / after / within).
+  const operator = options[0].dateOperator ?? filter.operator
+  return { ...filter, ...values[0], values, operator: normalizeFilterOperator(filter.field, operator, values.map(value => value.value)) }
 }
 
 export function updateFilterOperator(filters: MyIssuesAppliedFilter[], id: string, operator: MyIssuesFilterOperator) {
   return filters.map(filter => filter.id === id ? { ...filter, operator } : filter)
 }
 
-export interface FilterOperatorChoice { operator: MyIssuesFilterOperator; label: string }
+/** `glyph` names the reference app's operator icon (the custom-day operators: on, before, after). */
+export interface FilterOperatorChoice { operator: MyIssuesFilterOperator; label: string; glyph?: 'dateOn' | 'dateBefore' | 'dateAfter' }
 
 /** Whether a dates value compares against a point in time (so it offers before / after). */
 export function isComparableDateValue(value: string) { return DATE_FILTER_VALUE.test(value) }
@@ -178,13 +182,9 @@ export function isDateComparison(field: MyIssuesFilterKey, values: string[]) {
   return (field === 'dates' || field === 'releases') && values.length > 0 && values.every(isComparableDateValue)
 }
 
-/** Default comparison for a dates value: future presets read "before", past presets "after". */
-export function defaultDateOperator(value: string): 'before' | 'after' {
-  const match = value.match(/^(\w+):([+-])?/)
-  if (!match) return 'after'
-  if (match[1] === 'status') return 'before'
-  if (match[2]) return match[2] === '+' ? 'before' : 'after'
-  return match[1] === 'due' ? 'before' : 'after'
+/** Default comparison for a dates value: future presets read "before", past presets "after", periods "within". */
+export function defaultDateOperator(value: string): 'before' | 'after' | 'on' | 'within' {
+  return defaultDateFilterOperator(value)
 }
 
 /**
@@ -196,6 +196,9 @@ export function filterOperatorChoices(field: MyIssuesFilterKey, values: string[]
   if (labels?.operatorLabel) return [{ operator: 'is', label: labels.operatorLabel }, { operator: 'isNot', label: labels.negativeOperatorLabel ?? 'is not' }]
   if (field === 'customers' && values.length > 0 && values.every(value => parseCustomerNumberValue(value))) return CUSTOMER_NUMBER_COMPARISONS.map(choice => ({ operator: choice.value, label: choice.label }))
   if (isDateComparison(field, values)) {
+    // The reference app: a calendar period reads "within"; a custom day offers on / before / after with their icons.
+    if (values.every(value => Boolean(parseDateFilterValue(value)?.period))) return [{ operator: 'within', label: 'within' }]
+    if (values.every(isCustomDateValue)) return [{ operator: 'on', label: 'on', glyph: 'dateOn' }, { operator: 'before', label: 'before', glyph: 'dateBefore' }, { operator: 'after', label: 'after', glyph: 'dateAfter' }]
     return values.every(value => value.startsWith('status:'))
       ? [{ operator: 'before', label: 'more than' }, { operator: 'after', label: 'less than' }]
       : [{ operator: 'before', label: 'before' }, { operator: 'after', label: 'after' }]
@@ -211,7 +214,7 @@ export function normalizeFilterOperator(field: MyIssuesFilterKey, operator: MyIs
   const choices = filterOperatorChoices(field, values)
   if (choices.some(choice => choice.operator === operator)) return operator
   if (operator === 'excludesAll' || operator === 'isNot') return choices.some(choice => choice.operator === 'isNot') ? 'isNot' : choices[0].operator
-  if ((operator === 'is' || operator === 'includesAll') && choices[0].operator === 'before') return values[0] ? defaultDateOperator(values[0]) : 'before'
+  if ((operator === 'is' || operator === 'includesAll' || operator === 'on' || operator === 'within' || operator === 'before' || operator === 'after') && isDateComparison(field, values)) return values[0] ? defaultDateOperator(values[0]) : choices[0].operator
   return choices.some(choice => choice.operator === 'is') ? 'is' : choices[0].operator
 }
 
@@ -230,7 +233,7 @@ export function updateFilterValues(filters: MyIssuesAppliedFilter[], id: string,
 
 function fromOption(field: MyIssuesFilterKey, fieldLabel: string, option: MyIssuesFilterOption): MyIssuesAppliedFilter {
   const value = { value: option.id, valueLabel: option.label, color: option.color }
-  const operator: MyIssuesFilterOperator = option.comparison ?? (isDateComparison(field, [option.id]) ? defaultDateOperator(option.id) : 'is')
+  const operator: MyIssuesFilterOperator = option.comparison ?? option.dateOperator ?? (isDateComparison(field, [option.id]) ? defaultDateOperator(option.id) : 'is')
   return { id: filterId(field), field, fieldLabel, operator, operatorLabel: option.operatorLabel, negativeOperatorLabel: option.negativeOperatorLabel, ...value, values: [value] }
 }
 

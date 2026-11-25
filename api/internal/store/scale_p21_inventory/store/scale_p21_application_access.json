@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_application_access.go",
+  "unmigrated": 0,
+  "consumers": {
+    "sources": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Captures exact JSON-named home and ordered global installed logical generations atomically under registry/residency locks, retaining immutable sources independently of later publication. Native teams preserve outer order and duplicate last-wins ancestry, while reachable parent/access settings use framed map keys. Every matching global registration cumulatively intersects scopes; only final name/logo nodes materialize. TestScaleP21ApplicationAccess covers native warm/reloaded state, empty/missing home and empty client, duplicate/cyclic/missing-parent grants, source replacement and concurrent retained reads, cancellation/release and 10x unrelated/overwritten bodies at constant admitted work.",
+      "accessors": ["resident-state"],
+      "temperature": "hot",
+      "temperatureReason": "Shared exact application user/access reader.",
+      "callers": ["store/SQLiteStore.BeginApplicationAccessRead"]
+    },
+    "BeginApplicationListRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns ordered complete installation output with admitted SQL identity headers and child full-typed readers; borrows an enclosing repeatable read transaction and closes row iteration before nested fixed-chunk queries. Selected JSON storage is preflight admitted and retains standard duplicate/null slice merge semantics. All child outputs close on error and remain independently admitted until the list owner closes. TestScaleP21ApplicationAccess compares full list output/ownership and borrowed pool-one snapshot operation.",
+      "accessors": ["BeginApplicationAccessRead"],
+      "temperature": "hot",
+      "temperatureReason": "Application installation output shares principal resolution.",
+      "callers": ["store/SQLiteStore.ListApplications"]
+    }
+  }
+}

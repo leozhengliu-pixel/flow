@@ -47,7 +47,55 @@ func defaultPreferences(userID string) domain.NotificationPreferences {
 }
 
 func (s *server) getNotificationPreferences(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	if !s.store.BoundedMetadataEnabled() {
+		data = s.workspaceData(r)
+	} else {
+		var access store.AccessContext
+		var err error
+		viewerID := ""
+		if s.authDisabled {
+			var ok bool
+			data, ok, err = s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{})
+			if err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+			if !ok {
+				writeError(w, http.StatusNotFound, "workspace not found")
+				return
+			}
+			viewerID = data.Viewer.ID
+		} else {
+			var key *domain.APIKey
+			if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+				key = &credential
+			}
+			access, err = s.store.ResolveAccess(r.Context(), workspaceKey(r), authUser(r).ID, key)
+			if err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+			viewerID = access.PrincipalID
+		}
+		var ok bool
+		data, ok, err = s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "notificationPreferences", ID: viewerID}}})
+		if err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		if !ok {
+			writeError(w, http.StatusNotFound, "workspace not found")
+			return
+		}
+		if !s.authDisabled {
+			if err := s.store.ValidateAccess(r.Context(), access); err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+		}
+		data.Viewer.ID = viewerID
+	}
 	preferences, ok := data.NotificationPreferences[data.Viewer.ID]
 	if !ok {
 		preferences = defaultPreferences(data.Viewer.ID)
@@ -62,10 +110,22 @@ func (s *server) updateNotificationPreferences(w http.ResponseWriter, r *http.Re
 	}
 	viewerID := authUser(r).ID
 	if s.authDisabled {
-		viewerID = s.workspaceData(r).Viewer.ID
+		if !s.store.BoundedMetadataEnabled() {
+			viewerID = s.workspaceData(r).Viewer.ID
+		} else {
+			viewer, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{})
+			if err != nil || !ok {
+				if err == nil {
+					err = store.ErrAuthForbidden
+				}
+				respondMutation(w, err, http.StatusOK, nil)
+				return
+			}
+			viewerID = viewer.Viewer.ID
+		}
 	}
 	var updated domain.NotificationPreferences
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "notification_preferences.updated", viewerID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "notification_preferences.updated", viewerID, input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "notificationPreferences", ID: viewerID}}}, func(data *domain.Bootstrap) error {
 		current, ok := data.NotificationPreferences[viewerID]
 		if !ok {
 			current = defaultPreferences(viewerID)
@@ -187,8 +247,19 @@ func (s *server) acknowledgeDesktopNotifications(w http.ResponseWriter, r *http.
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	viewerID := s.workspaceData(r).Viewer.ID
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "notification.desktop_acknowledged", viewerID, input, func(data *domain.Bootstrap) error {
+	ctx := r.Context()
+	viewerID := ""
+	if s.store.BoundedMetadataEnabled() {
+		data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+		if !ok {
+			return
+		}
+		viewerID = data.Viewer.ID
+		ctx = store.ContextWithDesktopNotificationAcknowledgement(ctx)
+	} else {
+		viewerID = s.workspaceData(r).Viewer.ID
+	}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "notification.desktop_acknowledged", viewerID, input, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		for index := range data.NotificationDeliveries {
 			delivery := &data.NotificationDeliveries[index]
@@ -231,7 +302,27 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 		// workspace metadata used to render emails is not needed.
 		snapshot = s.store.NotificationDeliveries
 	}
-	data, snapshotErr := snapshot(ctx, key, []string{"pending"}, time.Now().UTC())
+	var data domain.Bootstrap
+	var snapshotErr error
+	if s.store.BoundedMetadataEnabled() {
+		if s.mailer == nil {
+			read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, []string{"pending"}, time.Now().UTC())
+			if readErr != nil {
+				return
+			}
+			defer read.Close()
+			data.NotificationDeliveries = read.Deliveries
+		} else {
+			read, readErr := s.store.BeginNotificationDeliveryContextRead(ctx, key, []string{"pending"}, time.Now().UTC())
+			if readErr != nil {
+				return
+			}
+			defer read.Close()
+			data = read.Data
+		}
+	} else {
+		data, snapshotErr = snapshot(ctx, key, []string{"pending"}, time.Now().UTC())
+	}
 	if snapshotErr != nil {
 		return
 	}
@@ -258,7 +349,21 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 		} else {
 			notificationIndex := slices.IndexFunc(data.Notifications, func(item domain.Notification) bool { return item.ID == delivery.NotificationID })
 			recipient := userByID(&data, delivery.RecipientID)
-			if notificationIndex < 0 || recipient == nil {
+			dropped := false
+			if notificationIndex >= 0 && recipient != nil {
+				deliverable, accessErr := s.documentNotificationDeliverable(ctx, key, data.Notifications[notificationIndex])
+				if accessErr != nil {
+					notificationIndex = -1
+					status, message = "failed", documentDeliveryError(accessErr).Error()
+					dropped = true
+				} else if !deliverable {
+					s.dropDocumentDelivery(ctx, key, delivery.ID)
+					continue
+				}
+			}
+			if dropped {
+				// Transient: the normal retry applies.
+			} else if notificationIndex < 0 || recipient == nil {
 				status, message = "failed", "notification source is unavailable"
 			} else if item, err := s.notificationEmailItem(&data, key, data.Notifications[notificationIndex]); err != nil {
 				status, message = "failed", err.Error()
@@ -527,6 +632,10 @@ func (s *server) reorderWorkflowStates(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getTeamSettings(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.getTeamSettingsBounded(w, r)
+		return
+	}
 	data := s.workspaceData(r)
 	settings := teamSettings(&data, r.PathValue("id"))
 	writeJSON(w, http.StatusOK, settings)
@@ -540,10 +649,17 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 	teamID := r.PathValue("id")
 	var persistedTeamMembers []domain.TeamMember
 	if current, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r)); ok {
-		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), current.Workspace.ID)
+		var err error
+		persistedTeamMembers, err = s.store.ListTeamMembers(r.Context(), current.Workspace.ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
 	}
 	var updated domain.TeamSettings
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "team.settings_updated", teamID, input, func(data *domain.Bootstrap) error {
+	ctx := store.WithTeamIssueCascade(r.Context(), func(data *domain.Bootstrap) []string {
+		return teamSettingsIssueCascade(data, teamID, input)
+	})
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "team.settings_updated", teamID, input, func(data *domain.Bootstrap) error {
 		if len(data.TeamMembers) == 0 && len(persistedTeamMembers) > 0 {
 			data.TeamMembers = slices.Clone(persistedTeamMembers)
 		}
@@ -1014,6 +1130,33 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
+// teamSettingsIssueCascade lists the teams whose issues a settings patch
+// rewrites, from the metadata before it: a default status the first time
+// the team owns statuses (materializeTeamStates), private access (outsiders
+// leave the team's issues), and a new parent or inherited cycles (the
+// subtree's statuses are remapped and its inherited cycles reconciled).
+func teamSettingsIssueCascade(data *domain.Bootstrap, teamID string, input domain.TeamSettingsMutationInput) []string {
+	teams := []string{}
+	add := func(ids ...string) {
+		for _, id := range ids {
+			if !slices.Contains(teams, id) {
+				teams = append(teams, id)
+			}
+		}
+	}
+	if input.DefaultStateID != nil && !slices.ContainsFunc(data.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID }) {
+		add(teamID)
+	}
+	if input.Access != nil && strings.EqualFold(*input.Access, "private") && !strings.EqualFold(strings.TrimSpace(data.TeamSettings[teamID].Access), "private") {
+		add(teamID)
+	}
+	if input.ParentTeamID != nil && *input.ParentTeamID != "" && *input.ParentTeamID != teamSettings(data, teamID).ParentTeamID || input.InheritCycles != nil && *input.InheritCycles {
+		add(teamID)
+		add(teamDescendantIDs(data, teamID)...)
+	}
+	return teams
+}
+
 func (s *server) listIssueTemplates(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	teamID := r.PathValue("id")
@@ -1033,9 +1176,13 @@ func (s *server) createIssueTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	teamID := r.PathValue("id")
+	viewer, ok := s.issueTemplateEditAccess(w, r, input)
+	if !ok {
+		return
+	}
 	var created domain.IssueTemplate
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "issue_template.created", input, func(data *domain.Bootstrap) (string, error) {
-		if !teamExists(data, teamID) {
+		if !teamExists(data, teamID) || !viewer.teamRow(teamID) {
 			return "", errNotFound
 		}
 		now := time.Now().UTC()
@@ -1055,10 +1202,14 @@ func (s *server) updateIssueTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	teamID, templateID := r.PathValue("id"), r.PathValue("templateId")
+	viewer, ok := s.issueTemplateEditAccess(w, r, input)
+	if !ok {
+		return
+	}
 	var updated domain.IssueTemplate
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.updated", templateID, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool {
-			return item.ID == templateID && issueTemplateOwnedByTeam(item, teamID)
+			return item.ID == templateID && issueTemplateOwnedByTeam(item, teamID) && issueTemplateReachable(viewer, item)
 		})
 		if index < 0 {
 			return errNotFound
@@ -1080,10 +1231,14 @@ func (s *server) updateIssueTemplate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteIssueTemplate(w http.ResponseWriter, r *http.Request) {
 	teamID, templateID := r.PathValue("id"), r.PathValue("templateId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.deleted", templateID, nil, func(data *domain.Bootstrap) error {
+	viewer, ok := s.issueTemplateEditAccess(w, r, domain.IssueTemplateMutationInput{})
+	if !ok {
+		return
+	}
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "issue_template.deleted", templateID, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "issueTemplates", ID: templateID}}}, func(data *domain.Bootstrap) error {
 		before := len(data.IssueTemplates)
 		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool {
-			return item.ID == templateID && issueTemplateOwnedByTeam(item, teamID)
+			return item.ID == templateID && issueTemplateOwnedByTeam(item, teamID) && issueTemplateReachable(viewer, item)
 		})
 		if len(data.IssueTemplates) == before {
 			return errNotFound
@@ -1098,8 +1253,12 @@ func (s *server) deleteIssueTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listTeamLabels(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
 	teamID := r.PathValue("id")
+	if s.store.BoundedMetadataEnabled() {
+		s.listLabelsBounded(w, r, func(label domain.IssueLabel) bool { return label.Scope == teamID })
+		return
+	}
+	data := s.workspaceData(r)
 	result := []domain.IssueLabel{}
 	for _, label := range data.Labels {
 		if label.Scope == teamID {
@@ -1117,7 +1276,14 @@ func (s *server) createTeamLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	teamID := r.PathValue("id")
 	var created domain.IssueLabel
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "issue_label.created", input, func(data *domain.Bootstrap) (string, error) {
+	scope := store.MetadataAppendScope{AppendKinds: []string{"labels"}}
+	if len(teamID) <= 191 && !strings.ContainsRune(teamID, '\x00') {
+		scope.Read = append(scope.Read, store.RecordKey{Kind: "teams", ID: teamID})
+	}
+	if input.GroupID != nil && *input.GroupID != "" && len(*input.GroupID) <= 191 && !strings.ContainsRune(*input.GroupID, '\x00') {
+		scope.Read = append(scope.Read, store.RecordKey{Kind: "labelGroups", ID: *input.GroupID})
+	}
+	err := s.store.MutateWorkspaceAppendingWithAggregate(r.Context(), workspaceKey(r), "issue_label.created", input, scope, func(data *domain.Bootstrap) (string, error) {
 		if !teamExists(data, teamID) {
 			return "", errNotFound
 		}
@@ -1159,7 +1325,38 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	teamID, labelID := r.PathValue("id"), r.PathValue("labelId")
 	var updated domain.IssueLabel
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_label.updated", labelID, input, func(data *domain.Bootstrap) error {
+	scope := store.MetadataRecordScope{}
+	if labelID != "" && len(labelID) <= 191 && !strings.ContainsRune(labelID, '\x00') {
+		scope.Write = []store.RecordKey{{Kind: "labels", ID: labelID}}
+		scope.Read = []store.RecordKey{
+			{Kind: "providerJobs", ID: labelID},
+			{Kind: "users", ID: labelID},
+			{Kind: "teams", ID: labelID},
+			{Kind: "customers", ID: labelID},
+			{Kind: "states", ID: labelID},
+		}
+		switch {
+		case strings.HasPrefix(labelID, "label_"):
+			scope.Read = nil
+		case strings.HasPrefix(labelID, "team_resource_section_"):
+			scope.Read = []store.RecordKey{{Kind: "teamResourceSections", ID: labelID}}
+		case strings.HasPrefix(labelID, "team_resource_"):
+			scope.Read = []store.RecordKey{{Kind: "teamPinnedResources", ID: labelID}}
+		case strings.HasPrefix(labelID, "project_"):
+			scope.Read = append(scope.Read, store.RecordKey{Kind: "projects", ID: labelID})
+		case strings.HasPrefix(labelID, "cycle_"):
+			scope.Read = append(scope.Read, store.RecordKey{Kind: "cycles", ID: labelID})
+		}
+	}
+	writeCtx := r.Context()
+	var timestamps *store.MetadataTimestampInputs
+	if s.store.BoundedMetadataEnabled() {
+		writeCtx, timestamps = s.store.WithMetadataTimestampInputs(writeCtx)
+	}
+	err := s.store.MutateWorkspaceResolved(writeCtx, workspaceKey(r), "issue_label.updated", labelID, input, store.MetadataResolvedScope{
+		MetadataRecordScope: scope,
+		ResolveRead:         teamMetadataProjectDisplayReads,
+	}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Labels, func(item domain.IssueLabel) bool { return item.ID == labelID && item.Scope == teamID })
 		if index < 0 {
 			return errNotFound
@@ -1182,10 +1379,22 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 			value := strings.TrimSpace(*input.ArchivedAt)
 			if value == "" {
 				data.Labels[index].ArchivedAt = nil
-			} else if parsed, parseErr := time.Parse(time.RFC3339, value); parseErr == nil {
-				data.Labels[index].ArchivedAt = &parsed
 			} else {
-				return errInvalid
+				var parsed time.Time
+				var parseErr error
+				if timestamps == nil {
+					parsed, parseErr = time.Parse(time.RFC3339, value)
+				} else {
+					parsed, parseErr = timestamps.ParseRFC3339(value)
+				}
+				if parseErr != nil {
+					var syntax *time.ParseError
+					if errors.As(parseErr, &syntax) {
+						return errInvalid
+					}
+					return parseErr
+				}
+				data.Labels[index].ArchivedAt = &parsed
 			}
 		}
 		updated = data.Labels[index]
@@ -1202,6 +1411,18 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func teamMetadataProjectDisplayReads(data domain.Bootstrap) ([]store.RecordKey, error) {
+	var keys []store.RecordKey
+	for _, project := range data.Projects {
+		for _, user := range []*domain.User{project.Lead, project.Creator} {
+			if user != nil && user.ID != "" && len(user.ID) <= 191 && !strings.ContainsRune(user.ID, '\x00') {
+				keys = append(keys, store.RecordKey{Kind: "users", ID: user.ID})
+			}
+		}
+	}
+	return keys, nil
 }
 
 func (s *server) deleteTeamLabel(w http.ResponseWriter, r *http.Request) {
@@ -1912,9 +2133,25 @@ func applyCycleAutomation(data *domain.Bootstrap, issue *domain.Issue) {
 }
 
 func (s *server) maintainCycleSchedule(ctx context.Context, key string) {
-	data, ok := s.store.WorkspaceMetadataFields(key, "teams", "cycleSettings", "cycles")
-	if !ok {
-		return
+	var data domain.Bootstrap
+	var releasePreflight func()
+	if s.store.BoundedMetadataEnabled() {
+		var closeOutputs func()
+		ctx, closeOutputs = beginIndependentMetadataOutputReads(ctx)
+		defer closeOutputs()
+		read, found, err := s.store.BeginCycleScheduleRead(ctx, key)
+		if err != nil || !found {
+			return
+		}
+		defer read.Close()
+		releasePreflight = read.Close
+		data = read.Data
+	} else {
+		var found bool
+		data, found = s.store.WorkspaceMetadataFields(key, "teams", "cycleSettings", "cycles")
+		if !found {
+			return
+		}
 	}
 	now := time.Now().UTC()
 	needed := false
@@ -1924,8 +2161,15 @@ func (s *server) maintainCycleSchedule(ctx context.Context, key string) {
 			break
 		}
 	}
+	if releasePreflight != nil {
+		releasePreflight()
+		data = domain.Bootstrap{}
+	}
 	if !needed {
 		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		ctx = store.ContextWithCycleScheduleMaintenance(ctx, now)
 	}
 	// Only transitions out of an ended current cycle migrate issues.
 	ctx = cycleIssueScope(ctx, false, func(data domain.Bootstrap) []string {
@@ -1986,6 +2230,9 @@ func advanceCycleSchedule(data *domain.Bootstrap, teamID string, now time.Time) 
 }
 
 func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activity domain.ActivityEvent, comment *domain.Comment) {
+	if activity.ID == "" {
+		return
+	}
 	recipients := map[string]string{}
 	if newAssignee := activity.Metadata["assignee"]; newAssignee != "" && newAssignee != activity.Metadata["previousAssignee"] {
 		recipients[newAssignee] = "assignments"

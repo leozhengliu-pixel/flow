@@ -62,6 +62,7 @@ export type ProjectsPageSurfaceProps = {
   filterCount?: number
   selectedFilters?: ProjectFilter[]
   onSearchFilterOptions?: (field: string, query: string) => Promise<ProjectFilterOption[]>
+  onFilterOpenChange?: (open: boolean) => void
   /** The reference app's Customers blocks for the Customers filter sub-menu. */
   customerFilterOptions?: MyIssuesFilterOption[]
   displayLabelGroups?: Array<{ id: string; name: string }>
@@ -105,6 +106,7 @@ export function ProjectsPageSurface({
   filterCount = 0,
   selectedFilters = [],
   onSearchFilterOptions,
+  onFilterOpenChange,
   customerFilterOptions = [],
   displayLabelGroups = [],
   sidebarOpen = true,
@@ -121,6 +123,8 @@ export function ProjectsPageSurface({
   onNewViewResourceChange,
 }: ProjectsPageSurfaceProps) {
   const [openSurface, setOpenSurface] = useState<Surface>(null)
+  const filterOpen = openSurface?.kind === 'filter'
+  useEffect(() => { onFilterOpenChange?.(filterOpen) }, [filterOpen, onFilterOpenChange])
   const [settings, setSettings] = useState<ProjectsDisplaySettings>({ ...DEFAULT_PROJECTS_DISPLAY, ...displaySettings })
   const openSurfaceRef = useRef<HTMLDivElement>(null)
   const filterTriggerRef = useRef<HTMLButtonElement>(null)

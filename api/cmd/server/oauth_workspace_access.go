@@ -30,7 +30,9 @@ func (s *server) oauthWorkspaceForRequest(w http.ResponseWriter, r *http.Request
 	}
 	data, err := s.store.OAuthWorkspaceAccess(r.Context(), workspace, actor.ID)
 	if err != nil {
-		if errors.Is(err, store.ErrAuthForbidden) {
+		if writeOAuthStoreUnavailable(w, err) {
+			return data, false
+		} else if errors.Is(err, store.ErrAuthForbidden) {
 			writeOAuthError(w, http.StatusForbidden, "access_denied", "You do not have access to that workspace")
 		} else {
 			writeOAuthError(w, http.StatusServiceUnavailable, "server_error", "Could not check workspace access")
@@ -44,7 +46,17 @@ func (s *server) oauthWorkspaceForRequest(w http.ResponseWriter, r *http.Request
 		if duration < 1 {
 			duration = 30
 		}
-		if cookieErr != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, duration) {
+		if cookieErr == nil {
+			err = s.store.EnforceSessionDuration(r.Context(), cookie.Value, duration)
+			if writeOAuthStoreUnavailable(w, err) {
+				return data, false
+			}
+			if err != nil && !errors.Is(err, store.ErrAuthExpired) && !errors.Is(err, store.ErrAuthInvalid) {
+				writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not check workspace session")
+				return data, false
+			}
+		}
+		if cookieErr != nil || err != nil {
 			writeOAuthError(w, http.StatusUnauthorized, "access_denied", "Your workspace session has expired")
 			return data, false
 		}

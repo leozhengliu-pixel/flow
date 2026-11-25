@@ -24,6 +24,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"flow/api/internal/domain"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
@@ -117,7 +118,11 @@ func (s *server) createFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	workspace := workspaceKey(r)
-	metadata, ok := s.store.WorkspaceMetadata(workspace)
+	metadata, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspace, store.MetadataRecordScope{})
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if !ok || workspace == "" && !s.authDisabled {
 		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header")
 		return
@@ -257,16 +262,37 @@ func (s *server) cleanupFileUploads(ctx context.Context) {
 // icons, workspace logos) to the people who see their record, then falls back
 // to the existing attachment visibility rules.
 func (s *server) serveUploadOrAsset(w http.ResponseWriter, r *http.Request) {
+	// Uploads name no workspace, so each workspace the file could come from is
+	// held to its own sign-in policy (SSO enforcement, required second factor).
+	r = s.withSessionPolicy(r)
+	ctx, visibilityErr := withUploadVisibilityRefusal(r.Context())
+	r = r.WithContext(ctx)
 	name := r.PathValue("name")
 	if strings.HasPrefix(name, "asset_") && filepath.Base(name) == name {
-		if upload, err := s.store.FileUploadByObject(r.Context(), name); err == nil && upload.Purpose == "asset" && (s.authDisabled || s.assetReadable(r, upload)) {
+		upload, err := s.store.FileUploadByObject(ctx, name)
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
+		if err == nil && upload.Purpose == "asset" && (s.authDisabled || s.assetReadable(r, upload)) {
 			s.writeStoredObject(w, r, name)
 			return
 		}
 	}
+	if writeStoreReadUnavailable(w, visibilityErr()) {
+		return
+	}
 	if name != "" && filepath.Base(name) == name {
-		if image, ok := s.resolveOwnedImage(r.Context(), name); ok {
-			if !s.authDisabled && !image.readable(r.Context(), authUser(r).ID) {
+		image, ok, readable, err := s.ownedImageAccess(ctx, name, authUser(r).ID, !s.authDisabled)
+		if writeStoreReadUnavailable(w, visibilityErr()) {
+			return
+		}
+		if err != nil {
+			if !writeStoreReadUnavailable(w, err) {
+				writeAPIError(w, http.StatusServiceUnavailable, apiErrorUnavailable, "File metadata unavailable")
+			}
+			return
+		} else if ok {
+			if !readable {
 				http.NotFound(w, r)
 				return
 			}
@@ -278,19 +304,35 @@ func (s *server) serveUploadOrAsset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) assetReadable(r *http.Request, upload store.FileUpload) bool {
-	user := authUser(r).ID
+	return s.assetReadableContext(r.Context(), upload)
+}
+
+func (s *server) assetReadableContext(ctx context.Context, upload store.FileUpload) bool {
+	user := ctxAuthUser(ctx).ID
 	if user == "" {
 		return false
 	}
-	if user == upload.UserID {
-		return true
-	}
-	workspaceID, err := s.store.WorkspaceIDForKey(r.Context(), upload.WorkspaceKey)
-	if err != nil {
+	if !apiKeyWorkspaceMatches(ctx, upload.WorkspaceKey) {
 		return false
 	}
-	role, status, err := s.store.WorkspaceRole(r.Context(), workspaceID, user)
-	return err == nil && status == "active" && role != "guest"
+	workspaceID, err := s.store.WorkspaceIDForKey(ctx, upload.WorkspaceKey)
+	if err != nil {
+		if databaseReadUnavailable(err) {
+			recordUploadVisibilityRefusal(ctx, err)
+			return false
+		}
+		return user == upload.UserID
+	}
+	role, status, err := s.store.WorkspaceRole(ctx, workspaceID, user)
+	if databaseReadUnavailable(err) {
+		recordUploadVisibilityRefusal(ctx, err)
+		return false
+	}
+	member := err == nil && status == "active"
+	if member && !workspacePolicyAllows(ctx, upload.WorkspaceKey, role) {
+		return false
+	}
+	return user == upload.UserID || member && role != "guest"
 }
 
 func (s *server) writeStoredObject(w http.ResponseWriter, r *http.Request, name string) {
@@ -339,18 +381,62 @@ func (s *server) fileSigningKey(ctx context.Context) ([]byte, error) {
 	return []byte(secret), nil
 }
 
+// fileSigner is who a download link was signed for. A link carries it (and the
+// signature covers it), so the server can ask at download time whether this
+// principal may still read the file: the user, the workspace the request named
+// and the API key id when a key signed it. Subject "cs:<session>" names a
+// coding session, for the links written into change-request bodies.
+type fileSigner struct{ Subject, Workspace, KeyID string }
+
+func (f fileSigner) bound() bool { return f.Subject != "" }
+
+func (f fileSigner) valid() bool {
+	return f.bound() && !strings.ContainsAny(f.Subject+f.Workspace+f.KeyID, "\n\r")
+}
+
 func fileURLSignature(key []byte, name string, expires int64) string {
+	return fileURLSignatureFor(key, name, expires, fileSigner{})
+}
+
+func fileURLSignatureFor(key []byte, name string, expires int64, signer fileSigner) string {
 	mac := hmac.New(sha256.New, key)
 	fmt.Fprintf(mac, "%s\n%d", name, expires)
+	if signer.bound() {
+		fmt.Fprintf(mac, "\n%s\n%s\n%s", signer.Subject, signer.Workspace, signer.KeyID)
+	}
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func signedFileURL(key []byte, baseURL, name string, expires time.Time) string {
-	unix := expires.Unix()
-	return strings.TrimRight(baseURL, "/") + "/api/files/signed/" + url.PathEscape(name) + "?expires=" + strconv.FormatInt(unix, 10) + "&signature=" + fileURLSignature(key, name, unix)
+// signerQuery is the query suffix that names the signer ("" for a link that
+// names none: only owned images such as a workspace logo are served that way).
+func signerQuery(signer fileSigner) string {
+	if !signer.bound() {
+		return ""
+	}
+	values := url.Values{"sub": {signer.Subject}}
+	if signer.Workspace != "" {
+		values.Set("ws", signer.Workspace)
+	}
+	if signer.KeyID != "" {
+		values.Set("kid", signer.KeyID)
+	}
+	return "&" + values.Encode()
 }
 
-// serveSignedFile serves an object to anyone holding an unexpired signature.
+func signedFileURL(key []byte, baseURL, name string, expires time.Time) string {
+	return signedFileURLFor(key, baseURL, name, expires, fileSigner{})
+}
+
+func signedFileURLFor(key []byte, baseURL, name string, expires time.Time, signer fileSigner) string {
+	unix := expires.Unix()
+	return strings.TrimRight(baseURL, "/") + "/api/files/signed/" + url.PathEscape(name) + "?expires=" + strconv.FormatInt(unix, 10) + "&signature=" + fileURLSignatureFor(key, name, unix, signer) + signerQuery(signer)
+}
+
+// serveSignedFile serves an object to the holder of an unexpired signature
+// whose signer may still read it: the signature proves the link was issued
+// after the signer's authentication and file-read authorization, and the
+// authorization is asked again now, so a deleted record, a removed member or a
+// revoked key ends the link before it expires.
 func (s *server) serveSignedFile(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	expires, err := strconv.ParseInt(r.URL.Query().Get("expires"), 10, 64)
@@ -365,14 +451,61 @@ func (s *server) serveSignedFile(w http.ResponseWriter, r *http.Request) {
 	}
 	key, err := s.fileSigningKey(r.Context())
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "file signing unavailable")
+		if !writeStoreReadUnavailable(w, err) {
+			writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "file signing unavailable")
+		}
 		return
 	}
-	if !hmac.Equal([]byte(fileURLSignature(key, name, expires)), []byte(strings.ToLower(signature))) {
+	query := r.URL.Query()
+	signer := fileSigner{Subject: query.Get("sub"), Workspace: query.Get("ws"), KeyID: query.Get("kid")}
+	if signer.bound() && !signer.valid() || !signer.bound() && (signer.Workspace != "" || signer.KeyID != "") {
 		writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "Invalid file URL signature")
 		return
 	}
-	if image, ok := s.resolveOwnedImage(r.Context(), name); ok {
+	if !hmac.Equal([]byte(fileURLSignatureFor(key, name, expires, signer)), []byte(strings.ToLower(signature))) {
+		writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "Invalid file URL signature")
+		return
+	}
+	ctx, visibilityErr := withUploadVisibilityRefusal(r.Context())
+	r = r.WithContext(ctx)
+	image, owned, _, err := s.ownedImageAccess(ctx, name, "", false)
+	if writeStoreReadUnavailable(w, visibilityErr()) {
+		return
+	}
+	if err != nil {
+		if !writeStoreReadUnavailable(w, err) {
+			writeAPIError(w, http.StatusServiceUnavailable, apiErrorUnavailable, "File metadata unavailable")
+		}
+		return
+	}
+	if !signer.bound() {
+		// A link that names no signer is issued only for owned images (the
+		// workspace logo of an invitation preview), or where nothing is
+		// authenticated at all.
+		if s.authDisabled {
+			if owned {
+				s.serveOwnedImage(w, r, image)
+				return
+			}
+			s.writeStoredObject(w, r, name)
+			return
+		}
+		if !owned {
+			writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "Invalid file URL signature")
+			return
+		}
+		s.serveOwnedImage(w, r, image)
+		return
+	}
+	readable := s.signedFileSignerReadable(r, name, signer)
+	if writeStoreReadUnavailable(w, visibilityErr()) {
+		return
+	}
+	if !readable {
+		writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "file not found")
+		return
+	}
+	if owned {
 		s.serveOwnedImage(w, r, image)
 		return
 	}
@@ -384,6 +517,7 @@ type signedFile = publicapi.SignedFile
 // signFileURLs issues signed URLs for files the caller can download now:
 // GET /api/files/sign?url=<file url>&url=…&expiresIn=<seconds, default 3600>.
 func (s *server) signFileURLs(w http.ResponseWriter, r *http.Request) {
+	r = s.withSessionPolicy(r)
 	urls := r.URL.Query()["url"]
 	if len(urls) == 0 || len(urls) > 100 {
 		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Pass 1 to 100 url parameters")
@@ -399,18 +533,26 @@ func (s *server) signFileURLs(w http.ResponseWriter, r *http.Request) {
 	}
 	key, err := s.fileSigningKey(r.Context())
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "file signing unavailable")
+		if !writeStoreReadUnavailable(w, err) {
+			writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "file signing unavailable")
+		}
 		return
 	}
 	expires := time.Now().Add(lifetime).Truncate(time.Second)
+	signer := requestFileSigner(r)
 	result := []signedFile{}
+	ctx, visibilityErr := withUploadVisibilityRefusal(r.Context())
 	for _, raw := range urls {
 		name := uploadNameFromURL(raw)
-		if name == "" || !s.fileReadable(r, name) {
+		readable := name != "" && s.fileReadableContext(ctx, name)
+		if writeStoreReadUnavailable(w, visibilityErr()) {
+			return
+		}
+		if !readable {
 			writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "file not found: "+raw)
 			return
 		}
-		result = append(result, signedFile{URL: raw, SignedURL: signedFileURL(key, externalBaseURL(r), name, expires), ExpiresAt: expires})
+		result = append(result, signedFile{URL: raw, SignedURL: signedFileURLFor(key, externalBaseURL(r), name, expires, signer), ExpiresAt: expires})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"files": result})
 }
@@ -431,20 +573,99 @@ func uploadNameFromURL(raw string) string {
 	return name
 }
 
+// requestFileSigner is the principal an authenticated request signs links as.
+func requestFileSigner(r *http.Request) fileSigner {
+	signer := fileSigner{Subject: authUser(r).ID, Workspace: workspaceKey(r)}
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		signer.KeyID = key.ID
+	}
+	return signer
+}
+
 // fileReadable applies the same rules as an authenticated GET /uploads/{name}.
 func (s *server) fileReadable(r *http.Request, name string) bool {
+	return s.fileReadableContext(r.Context(), name)
+}
+
+func (s *server) fileReadableContext(ctx context.Context, name string) bool {
 	if s.authDisabled {
 		return true
 	}
-	if upload, err := s.store.FileUploadByObject(r.Context(), name); err == nil && upload.Purpose == "asset" && s.assetReadable(r, upload) {
+	if upload, err := s.store.FileUploadByObject(ctx, name); err == nil && upload.Purpose == "asset" && s.assetReadableContext(ctx, upload) {
+		return true
+	} else if databaseReadUnavailable(err) {
+		recordUploadVisibilityRefusal(ctx, err)
+		return false
+	}
+	user := ctxAuthUser(ctx)
+	if _, ok, readable, err := s.ownedImageAccess(ctx, name, user.ID, true); err != nil {
+		recordUploadVisibilityRefusal(ctx, err)
+		return false
+	} else if ok {
+		return readable
+	}
+	account, err := s.store.AccountForUser(ctx, user.ID)
+	recordUploadVisibilityRefusal(ctx, err)
+	return err == nil && s.attachmentVisible(ctx, account, user.ID, "/uploads/"+name)
+}
+
+// apiKeyWorkspaceMatches is true for a session and for a key issued in the
+// workspace: a key reaches only its own workspace's files.
+func apiKeyWorkspaceMatches(ctx context.Context, workspace string) bool {
+	if _, ok := ctx.Value(apiKeyContextKey{}).(domain.APIKey); !ok {
 		return true
 	}
-	if image, ok := s.resolveOwnedImage(r.Context(), name); ok {
-		return image.readable(r.Context(), authUser(r).ID)
+	bound, _ := ctx.Value(workspaceKeyContextKey{}).(string)
+	return strings.TrimSpace(bound) == workspace
+}
+
+func ctxAuthUser(ctx context.Context) domain.User {
+	user, _ := ctx.Value(authUserContextKey{}).(domain.User)
+	return user
+}
+
+// signedFileSignerReadable asks, at download time, whether the principal a
+// link was signed for may still read the file. The request is the anonymous
+// download; the principal is rebuilt from the live records.
+func (s *server) signedFileSignerReadable(r *http.Request, name string, signer fileSigner) bool {
+	if s.authDisabled {
+		return true
 	}
-	user := authUser(r)
-	account, err := s.store.AccountForUser(r.Context(), user.ID)
-	return err == nil && s.attachmentVisible(r.Context(), account, user.ID, "/uploads/"+name)
+	ctx := r.Context()
+	if session, ok := strings.CutPrefix(signer.Subject, "cs:"); ok {
+		return s.codingArtifactLinkLive(ctx, name, signer.Workspace, session)
+	}
+	user, apiKey := domain.User{}, (*domain.APIKey)(nil)
+	if signer.KeyID != "" {
+		auth, err := s.store.APIKeyAuthenticationByID(ctx, signer.Workspace, signer.KeyID, applicationApproved)
+		recordUploadVisibilityRefusal(ctx, err)
+		if err != nil || auth.User.ID != signer.Subject || !apiKeyAllowsRequest(&http.Request{Method: http.MethodGet, URL: &url.URL{Path: "/api/files"}}, auth.Key) {
+			return false
+		}
+		user, apiKey = auth.User, &auth.Key
+	} else {
+		var err error
+		if user, err = s.store.UserByID(ctx, signer.Subject); err != nil || !user.Active || user.Deleted {
+			recordUploadVisibilityRefusal(ctx, err)
+			return false
+		}
+	}
+	ctx = context.WithValue(ctx, authUserContextKey{}, user)
+	if apiKey != nil {
+		ctx = context.WithValue(ctx, apiKeyContextKey{}, *apiKey)
+		ctx = context.WithValue(ctx, workspaceKeyContextKey{}, signer.Workspace)
+	}
+	ctx = store.ContextWithActor(ctx, user)
+	principal := r.WithContext(ctx)
+	if s.store.BoundedMetadataEnabled() {
+		var release func()
+		principal, release = beginRequestResourceReads(principal)
+		defer release()
+	}
+	if s.fileReadableContext(principal.Context(), name) {
+		return true
+	}
+	return s.codingArtifactReadableBy(principal, name)
 }
 
 func signedURLLifetime(raw string) (time.Duration, bool) {
@@ -472,10 +693,23 @@ var (
 // signedFileURLs rewrites /uploads/ URLs inside successful JSON responses to
 // signed URLs when the client asks for them with the expire-in header.
 func (s *server) signedFileURLs(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return boundHydratedLegacyDownloads(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if store.RecordHydrationEnabled() && s.realtime != nil {
+			r = r.WithContext(context.WithValue(r.Context(), legacyTransportBudgetKey{}, s.realtime.budget))
+		}
 		lifetime, requested := requestedFileURLLifetime(r)
+		if store.RecordHydrationEnabled() && !requested && r.Method == http.MethodGet && r.URL.Path == "/api/issue-records/bootstrap" {
+			serveDetachedLegacyJSON(w, r, next)
+			return
+		}
 		if !requested || !strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/api/files") || r.Header.Get("Upgrade") != "" {
 			next.ServeHTTP(w, r)
+			return
+		}
+		r, authority := s.beginFileSigning(r)
+		defer authority.close()
+		if store.RecordHydrationEnabled() {
+			s.signedFileURLsStream(w, r, next, lifetime, authority)
 			return
 		}
 		writer := &bufferedJSONWriter{ResponseWriter: w, limit: 32 << 20}
@@ -485,26 +719,43 @@ func (s *server) signedFileURLs(next http.Handler) http.Handler {
 		}
 		body := writer.buffer.Bytes()
 		if key, err := s.fileSigningKey(r.Context()); err == nil {
-			body = rewriteUploadURLs(body, key, externalBaseURL(r), time.Now().Add(lifetime).Truncate(time.Second))
+			body = rewriteUploadURLsFor(body, authority.signing(key, externalBaseURL(r), time.Now().Add(lifetime).Truncate(time.Second)))
 		} else {
 			slog.WarnContext(r.Context(), "file url signing unavailable", "error", err)
 		}
 		w.Header().Del("Content-Length")
 		w.WriteHeader(writer.status)
 		_, _ = w.Write(body)
-	})
+	}), s.hydratedLegacySnapshotReservation)
+}
+
+func logSigningFailure(ctx context.Context, err error) {
+	slog.WarnContext(ctx, "file url signing unavailable", "error", err)
 }
 
 func rewriteUploadURLs(body, key []byte, baseURL string, expires time.Time) []byte {
-	sign := func(name string) string {
+	return rewriteUploadURLsFor(body, &hydratedURLSigning{key: key, base: baseURL, expires: expires})
+}
+
+// rewriteUploadURLsFor signs the /uploads/ names signing.allow accepts (all of
+// them when it is nil) as signing.signer; every other URL stays as written.
+func rewriteUploadURLsFor(body []byte, signing *hydratedURLSigning) []byte {
+	sign := func(name string) (string, bool) {
 		if decoded, err := url.PathUnescape(name); err == nil {
 			name = decoded
 		}
-		return signedFileURL(key, baseURL, name, expires)
+		if signing.allow != nil && !signing.allow(name) {
+			return "", false
+		}
+		return signedFileURLFor(signing.key, signing.base, name, signing.expires, signing.signer), true
 	}
 	body = uploadURLValue.ReplaceAllFunc(body, func(match []byte) []byte {
 		parts := uploadURLValue.FindSubmatch(match)
-		encoded, _ := json.Marshal(sign(string(parts[2])))
+		signed, ok := sign(string(parts[2]))
+		if !ok {
+			return match
+		}
+		encoded, _ := json.Marshal(signed)
 		return encoded
 	})
 	// Markdown and text occurrences. Upload *routes* (/api/files/uploads/,
@@ -517,8 +768,12 @@ func rewriteUploadURLs(body, key []byte, baseURL string, expires time.Time) []by
 		if bytes.HasSuffix(prefix, []byte("/api/files")) || bytes.HasSuffix(prefix, []byte("/api/mcp")) {
 			continue
 		}
+		signed, ok := sign(string(body[match[2]:match[3]]))
+		if !ok {
+			continue
+		}
 		output.Write(body[last:start])
-		encoded, _ := json.Marshal(sign(string(body[match[2]:match[3]])))
+		encoded, _ := json.Marshal(signed)
 		output.Write(encoded[1 : len(encoded)-1])
 		last = end
 	}

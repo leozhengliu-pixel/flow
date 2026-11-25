@@ -89,6 +89,14 @@ func (s *server) prepareLoopRun(ctx context.Context, workspace string, loop doma
 	if err := agentWorkspacePolicy(data.WorkspaceSettings, data.ViewerRole); err != nil {
 		return nil, &loopRunError{reason: "unavailable", message: err.Error(), err: err}
 	}
+	// Scheduled and manual runs both act as the owner, who must still belong
+	// to the loop's team and pass the loop permission.
+	if err := s.checkLoopOwnerForRun(&data, loop, *owner); err != nil {
+		return nil, err
+	}
+	if err := s.restrictToBehaviorEditor(ctx, workspace, &data, loop, *owner); err != nil {
+		return nil, err
+	}
 	request, err := s.loopRunRequest(ctx, workspace, *owner)
 	if err != nil {
 		return nil, err
@@ -105,7 +113,7 @@ func (s *server) prepareLoopRun(ctx context.Context, workspace string, loop doma
 	// its tools run with a key restricted to the loop's teams, so lists,
 	// searches and reads outside them come back empty or not found.
 	request = request.WithContext(context.WithValue(request.Context(), apiKeyContextKey{}, scope.toolKey()))
-	request = request.WithContext(context.WithValue(request.Context(), agentExtraToolsKey{}, append([]agentProviderTool{loopFinishToolDefinition}, loopGrantedTools()...)))
+	request = request.WithContext(context.WithValue(request.Context(), agentExtraToolsKey{}, append([]agentProviderTool{loopFinishToolDefinition, loopReadFileDefinition}, loopGrantedTools()...)))
 	request = request.WithContext(withAgentGrantedTools(request.Context(), loopGrantedToolNames))
 	request = request.WithContext(withCodingLoopRun(request.Context(), loop, rec.run.ID, trigger, scope.codeAccess)) // coding sessions (track L)
 	if loop.WebSearch && s.webSearchAvailable() {
@@ -121,7 +129,7 @@ func (s *server) prepareLoopRun(ctx context.Context, workspace string, loop doma
 		if stored, ok := s.store.WorkspaceMetadataFields(workspace, "documents"); ok {
 			documents = stored.Documents
 		}
-		contract = resolveLoopContract(data, documents, loop, s.loopContractFor(ctx, workspace, loop), trigger, time.Now())
+		contract = resolveLoopContract(data, documents, loop, s.loopRunContract(ctx, workspace, loop), trigger, time.Now())
 		rec.timing.LoadMs += time.Since(contractStarted).Milliseconds()
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -131,9 +139,12 @@ func (s *server) prepareLoopRun(ctx context.Context, workspace string, loop doma
 		}
 	}
 	plan := loopRunPlan{Tools: toolNames, Limits: limits, Contract: contract}
+	rewrite := loopAttachmentToolDefinition
 	if loopModelFilledTitles(contract, "document") || loopModelFilledTitles(contract, "issue") {
-		request = request.WithContext(context.WithValue(request.Context(), agentToolRewriteKey{}, loopTitleFieldsTools(contract)))
+		titleFields := loopTitleFieldsTools(contract)
+		rewrite = func(tool agentProviderTool) agentProviderTool { return titleFields(loopAttachmentToolDefinition(tool)) }
 	}
+	request = request.WithContext(context.WithValue(request.Context(), agentToolRewriteKey{}, rewrite))
 	return &loopRunContext{s: s, workspace: workspace, loop: loop, trigger: trigger, rec: rec, limits: limits, data: data, request: request, scope: scope, readOnly: readOnly, contract: contract, plan: plan}, nil
 }
 
@@ -145,11 +156,12 @@ func (lc *loopRunContext) systemPrompt(ctx context.Context) string {
 
 // runToolCall runs one tool call of the run's model (not report_progress or finish_run, which the run handles itself)
 // through the loop's gates, records it on the run and returns what the model reads.
-func (lc *loopRunContext) runToolCall(ctx context.Context, call domain.AgentToolCall) (string, bool) {
+func (lc *loopRunContext) runToolCall(ctx context.Context, call domain.AgentToolCall) (string, bool, *agentProviderImage) {
 	s, rec, request, data, scope, contract, readOnly, limits, workspace := lc.s, lc.rec, lc.request, lc.data, lc.scope, lc.contract, lc.readOnly, lc.limits, lc.workspace
 	index := rec.startTool(request.Context(), call)
 	status := "completed"
 	var result []byte
+	var image *agentProviderImage
 	toolStarted := time.Now()
 	callErr := normalizeAgentToolArguments(&call)
 	if callErr == nil {
@@ -202,7 +214,21 @@ func (lc *loopRunContext) runToolCall(ctx context.Context, call domain.AgentTool
 		result = document.appliedResult()
 	} else {
 		execute := func() error {
-			result, callErr = s.executeAgentTool(request, data, call)
+			args := loopToolArgs(call)
+			if loopAttachmentRead(name, args) {
+				if callErr = s.requireAgentToolPolicy(request, data); callErr != nil {
+					return callErr
+				}
+				var fileResult loopAttachmentResult
+				fileResult, image = lc.readWorkspaceAttachment(request.Context(), name, args)
+				if _, worker := agentRunFrom(request.Context()); image != nil && !worker {
+					s.inspectLoopAttachmentImage(request.Context(), &fileResult, *image)
+					image = nil
+				}
+				result, callErr = json.Marshal(fileResult)
+			} else {
+				result, callErr = s.executeAgentTool(request, data, call)
+			}
 			return callErr
 		}
 		if readOnly[strings.TrimPrefix(call.Name, "mcp__flow.")] {
@@ -231,7 +257,7 @@ func (lc *loopRunContext) runToolCall(ctx context.Context, call domain.AgentTool
 		// A write that was not repeated changes nothing now.
 		write = write && (document.applied == "" || record.Changed)
 	}
-	callErr = publicToolError(ctx, call.Name, callErr)
+	callErr = publicToolError(request.Context(), call.Name, callErr)
 	var written *domain.LoopRunOutputWrite
 	if output != nil {
 		written = output.record
@@ -244,7 +270,7 @@ func (lc *loopRunContext) runToolCall(ctx context.Context, call domain.AgentTool
 	if callErr != nil {
 		content = agentToolFailureText(result, callErr)
 	}
-	return truncateLoopToolOutput(content, limits.MaxToolOutputBytes), callErr != nil
+	return truncateLoopToolOutput(redactLoopFileLinks(content), limits.MaxToolOutputBytes), callErr != nil, image
 }
 
 // progressStep records a report_progress call as a step of the run.

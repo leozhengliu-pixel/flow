@@ -5,7 +5,7 @@ import type { Initiative, InitiativeUpdate, User } from '@/types/flow'
 import { InitiativeLatestUpdate } from './initiative-latest-update'
 
 describe('InitiativeLatestUpdate', () => {
-  it.each([{ age: 25 * 60_000, timeLabel: '25m ago' }, { age: 22 * 86_400_000, timeLabel: '22d ago' }])('renders update data and compact age $timeLabel', ({ age, timeLabel }) => {
+  it.each([{ age: 25 * 60_000, timeLabel: '25min ago' }, { age: 22 * 86_400_000, timeLabel: '22d ago' }])('renders update data and compact age $timeLabel', ({ age, timeLabel }) => {
     const onOpen = vi.fn()
     const user = { id: 'viewer', name: 'Reviewer', displayName: 'Reviewer' } as User
     const update: InitiativeUpdate = { id: 'update', initiativeId: 'initiative', body: 'Delivery is on schedule.', health: 'onTrack', user, createdAt: new Date(Date.now() - age).toISOString(), comments: [], reactions: {}, attachments: [] }

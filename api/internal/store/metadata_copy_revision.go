@@ -90,7 +90,13 @@ func readMetadataStamp(ctx context.Context, reader metadataRowReader, workspace 
 
 // copyRevisionLocked returns the revision the installed copy is exact at;
 // false when there is no copy or its revision is unknown. The caller holds mu.
+// A bounded image holds only the resident fields, so it is never the exact
+// copy of a revision: readers that certify the installed copy before reading
+// its collections fall back to their canonical reads (SW559).
 func (s *SQLiteStore) copyRevisionLocked(workspace string) (copyRevision, bool) {
+	if s.metadataResidency != nil {
+		return copyRevision{}, false
+	}
 	if _, ok := s.workspaces[workspace]; !ok {
 		return copyRevision{}, false
 	}
@@ -147,7 +153,7 @@ func (s *SQLiteStore) refreshWorkspaceCopy(ctx context.Context, workspace string
 	}
 	data, stamp, err := s.loadWorkspaceStamped(ctx, workspace)
 	if err != nil {
-		return err
+		return PreWriteDatabaseError(err)
 	}
 	s.mu.Lock()
 	s.workspaces[workspace] = data
@@ -165,7 +171,7 @@ func (s *SQLiteStore) refreshWorkspaceCopyLocked(ctx context.Context, workspace 
 	}
 	data, stamp, err := s.loadWorkspaceStamped(ctx, workspace)
 	if err != nil {
-		return err
+		return PreWriteDatabaseError(err)
 	}
 	s.workspaces[workspace] = data
 	s.setCopyRevisionLocked(workspace, stamp)
@@ -248,6 +254,17 @@ func (s *SQLiteStore) installWrittenWorkspace(workspace string, data domain.Boot
 func (s *SQLiteStore) installWrittenWorkspaceLocked(workspace string, data domain.Bootstrap, write *metadataWrite) {
 	current, ok := s.copyRevisionLocked(workspace)
 	s.workspaces[workspace] = data
+	// A default COLD legacy writer without a prepared publication (any
+	// writer but the full metadata writer) publishes through the parent's
+	// reload when it returns the shared write lock (coldLegacyMutation).
+	if s.coldWrite != nil {
+		if hook := coldInstallHookForTesting.Load(); hook != nil {
+			(*hook)()
+		}
+	}
+	if s.coldWrite != nil && (s.coldWrite.prepared != nil || !s.coldWrite.legacy) {
+		s.installColdFullWriteLocked(workspace, write, current, ok)
+	}
 	if write == nil || write.workspace != workspace || !ok || current.epoch != write.base.epoch {
 		s.forgetCopyRevisionLocked(workspace)
 		return

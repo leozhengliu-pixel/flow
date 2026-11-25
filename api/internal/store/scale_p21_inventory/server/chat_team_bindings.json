@@ -1,0 +1,94 @@
+{
+  "source": "server/chat_team_bindings.go",
+  "unmigrated": 3,
+  "consumers": {
+    "auditChatIntegrationContext": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Uses the proven scoped writer with an empty callback-input scope, preserving the literal original writer off mode and existing detached cancellation context. TestScaleP21SW45DeliveryAuditDifferential compares actual persisted audits, actors, metadata, canonical target, complete webhook event including Snapshot/PreviousValues and realtime output against full hydration across the principal/key matrix. A nested earlier Draft.ContentData match proves global aggregate precedence; canceled caller contexts still complete the original detached audit. All work releases after publication and no full metadata decode occurs. Route authorization remains independently inventoried.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.auditChatIntegration",
+        "server/server.auditChatTenantKey",
+        "server/server.auditChatTenant"
+      ]
+    },
+    "checkChatBindingAuthorizer": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "The identity-only scoped read supplies the live TeamRole owner check. Binding writes propagate storage errors and delivery checks refuse authorization. TestScaleP21M2IdentityDifferential compares admin, private outsider, member, guest and inherited principals.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "chatBindingPermitted": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Bounded rechecks bind one installed Context generation for Pulse project headers, exact ChatDisplay HIPAA/team ID/private/archive/retire/ancestry scalars and selected ChatEventPolicy issue-template headers. The typed predicate reuses original non-template scope/project rules and preserves every matching template row with any-disqualifying-match refusal. Original live private-team authorizer and platform group/membership checks keep their contexts and order; owners remain live through final platform use. Literal off WorkspaceMetadataFields and complete old branch remain. ChatEventAdaptersDifferential compares actual plain, duplicate-template refusal, authorized private team, lost authorizer, missing bot membership and retired-team outcomes, including group calls/errors and zero retained work/full decodes.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from audited HOT server/chat_notifications.go:processChatNotification",
+      "callers": [
+        "server/server.chatSendMessageActionForm",
+        "server/server.saveChatBinding",
+        "server/server.chatBindingByID",
+        "server/server.chatBindingForChat"
+      ]
+    },
+    "chatBindingViews": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Settings list blocked reasons reuse the delivery policy reads of queueChatDomainEvent: bounded mode binds one installed Context generation for Pulse project headers, exact ChatDisplay HIPAA/team ID/private/archive/retire/ancestry scalars and the bindings' selected ChatEventPolicy template headers, then applies chatEventBindingScopeBlock; the literal off branch keeps WorkspaceMetadataFields with chatBindingScopeBlock. Both share chatBindingTeamBlock and the live private-team authorizer check, so reasons are identical by construction. Owners are released before the settings response is encoded (only reason codes leave). TestChatBindingBlockedReasonModes compares the actual settings encoder in both modes for public/members/owners/private/private-parent/archived/template/HIPAA bindings.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "chatManageableTeamIDs": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.writeChatSettings",
+        "server/server.listChatProjectGroups",
+        "server/server.chatBindingSession"
+      ]
+    },
+    "chatPermissions": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.writeChatSettings"
+      ]
+    },
+    "saveChatBinding": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/integrations/{provider}/chat/bindings (server/chat_integrations.go:258)"
+      ]
+    }
+  }
+}

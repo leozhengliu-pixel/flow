@@ -1,0 +1,12 @@
+{
+  "source": "store/scale_p21_sw22_team_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "TeamRecordForWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted auth-disabled resolver uses exact stamped resident Team headers or eight-row canonical scalar key pages, preserves canonical exact-ID/current EqualFold key precedence and reads one complete bounded Team row without cloning the catalog. Eight MiB admission bounds stale key-page transfer and point decoding; missing workspace and missing team remain distinct. TestScaleP21SW22TeamNativeReads, TeamReferenceOrder and TeamHandlerDifferential cover raw private/archived/retired rows, duplicate/case/Unicode keys, MySQL byte-exact workspace binding, PG NUL-stripping rejection, complete values/owned timestamps, cancellation/storage/budget rollback and recovery, while canonical state and full-decode count remain unchanged. Tests passed twice against one persistent SQLite file; callers still own authorization.",
+      "accessors": ["resident-state"]
+    }
+  }
+}

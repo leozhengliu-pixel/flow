@@ -12,6 +12,7 @@ import type { ReleasePipelineTab, ReleaseRouteTab } from '@/lib/app-routes'
 import { customerPath, documentPath, initiativePath, issuePath, newLoopPath, projectPath, releasePath, releasePipelinePath, reviewPath, settingsPath } from '@/lib/app-routes'
 import { useI18n } from '@/i18n/i18n'
 import { clearComposerDraft, readLocalComposerDrafts } from '@/lib/composer-drafts'
+import { forgetDraft, serverDraftId } from '@/lib/draft-autosave'
 import { StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 
@@ -213,6 +214,7 @@ function clearLocalIssueDraft(draft: Draft) {
 function clearLocalDraft(draft: Draft) {
   clearLocalIssueDraft(draft)
   if ((draft.type === 'comment' || draft.type === 'project_update' || draft.type === 'initiative_update') && draft.resourceId) clearComposerDraft(draft.type, draft.resourceId)
+  forgetDraft(serverDraftId(draft))
 }
 
 function readLocalIssueDrafts(data: BootstrapData): Draft[] {

@@ -173,17 +173,21 @@ describe('context-aware command menu', () => {
     })
   })
 
-  it('toggles a label on every selected issue and keeps the multi-select page open', async () => {
+  it('lists a label group as one row (mixed, naming its label) whose step sets the label on every selected issue', async () => {
     const { user, onUpdateIssue, onOpenChange } = setup({ kind: 'issues', source: 'selection', issues: [first, second] })
     await user.click(screen.getByRole('option', { name: /Add labels…/ }))
-    const feature = screen.getByRole('option', { name: /Feature/ })
-    expect(feature.querySelector('[data-checked="mixed"]')).not.toBeNull()
-    await user.click(feature)
+    const group = screen.getByRole('option', { name: /Type/ })
+    expect(group).toHaveAttribute('aria-checked', 'mixed')
+    expect(group.querySelector('[data-checked="mixed"]')).not.toBeNull()
+    expect(group.querySelector('.label-command-detail')).toHaveTextContent('Feature')
+    await user.click(group)
+    expect(input()).toHaveAttribute('placeholder', 'Type')
+    await user.click(screen.getByRole('option', { name: /Feature/ }))
     await waitFor(() => expect(onUpdateIssue).toHaveBeenCalledTimes(2))
     expect(onUpdateIssue).toHaveBeenCalledWith('issue-1', { labelIds: ['label-1'] })
     expect(onUpdateIssue).toHaveBeenCalledWith('issue-2', { labelIds: ['label-1'] })
-    expect(onOpenChange).not.toHaveBeenCalledWith(false)
-    expect(screen.getByRole('option', { name: /Feature/ })).toBeInTheDocument()
+    // Choosing a label of a group closes the menu, like the labels picker.
+    expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
   it('assign page: No assignee 0, people, agents continuing the numbers, number keys select, invite under "New user"', async () => {

@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_issue_attachment_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedIssueReaction": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Preserves the original single-target scoped reaction profile while delegating to the shared point executor. Its event, input selection, callback validation, progress and persistence remain the previously proven reaction contract; the attachment profile is selected separately. SW116/SW76/SW98 normal affected checks retain legacy differential coverage after extraction.",
+      "accessors": ["mutateBoundedScopedIssuePoint"],
+      "temperature": "hot",
+      "temperatureReason": "Existing issue-record reaction route.",
+      "callers": ["store/sqlite.go:dispatchMutation"]
+    },
+    "mutateBoundedIssueAttachment": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Selects the explicit attachment profile of the proven single-issue scoped executor without changing the original event or payload. File creation permits markdown embed and affected-team cycle automation; ordinary metadata updates prohibit content/activity edits; stale URL upserts preserve the caller's earlier event while validating the actual transactional create/update. SW149 proves callback, physical SQL, event and publication equivalence, warm/reloaded state, refusal, cancellation and release with persistent SQLite twice and race. Off-mode server contexts remain literally unchanged.",
+      "accessors": ["mutateBoundedScopedIssuePoint"],
+      "temperature": "hot",
+      "temperatureReason": "Shared scoped file and link attachment transaction.",
+      "callers": ["store/sqlite.go:dispatchMutation"]
+    }
+  }
+}

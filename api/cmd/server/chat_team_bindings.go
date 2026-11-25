@@ -31,30 +31,48 @@ type chatGroup struct {
 }
 
 // chatTeamState reports whether a team and its parent chain are active, and
-// whether any of them is private or restricted.
+// whether any of them is private: private or restricted access, or a
+// membership limited to members or owners (such a team is not visible to
+// non-members, as in issue visibility).
 func chatTeamState(data domain.Bootstrap, teamID string) (active, private bool) {
+	active, privacy := chatTeamPrivacy(data, teamID)
+	return active, privacy != ""
+}
+
+// Why a team counts as private for group bindings.
+const (
+	chatTeamPrivateAccess = "private"
+	chatTeamMembersOnly   = "members_only"
+)
+
+// chatTeamPrivacy is chatTeamState with the kind of privacy: private access
+// on the team or a parent (chatTeamPrivateAccess) wins over a public team
+// limited to its members or owners (chatTeamMembersOnly); "" for a public team.
+func chatTeamPrivacy(data domain.Bootstrap, teamID string) (active bool, privacy string) {
 	seen := map[string]bool{}
 	for current := teamID; current != ""; current = data.TeamSettings[current].ParentTeamID {
 		if seen[current] {
-			return false, private
+			return false, privacy
 		}
 		seen[current] = true
 		index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == current })
 		if index < 0 {
-			return false, private
+			return false, privacy
 		}
 		team := data.Teams[index]
 		if team.ArchivedAt != nil || team.RetiredAt != nil {
-			return false, private
+			return false, privacy
 		}
 		settings := data.TeamSettings[current]
 		access := strings.ToLower(strings.TrimSpace(settings.Access))
 		membership := strings.ToLower(strings.TrimSpace(settings.MembershipRestriction))
-		if team.Private || access == "private" || access == "restricted" || membership == "members" || membership == "owners" {
-			private = true
+		if team.Private || access == "private" || access == "restricted" {
+			privacy = chatTeamPrivateAccess
+		} else if (membership == "members" || membership == "owners") && privacy == "" {
+			privacy = chatTeamMembersOnly
 		}
 	}
-	return teamID != "", private
+	return teamID != "", privacy
 }
 
 func chatPublicTeam(data domain.Bootstrap, teamID string) bool {
@@ -74,13 +92,130 @@ func chatTeamShareable(data domain.Bootstrap, binding domain.ChatBinding, teamID
 }
 
 func chatBindingScopePermitted(data domain.Bootstrap, binding domain.ChatBinding) bool {
-	if data.WorkspaceSettings.HIPAACompliance || binding.RevokedAt != nil || binding.TeamID == "" || !chatTeamShareable(data, binding, binding.TeamID) {
-		return false
+	return chatBindingScopeBlock(data, binding) == ""
+}
+
+// chatBindingScopeBlock is the scope rule with its reason: the first
+// domain.ChatBindingBlocked code that stops the binding, or "" when its scope
+// may be shared.
+func chatBindingScopeBlock(data domain.Bootstrap, binding domain.ChatBinding) string {
+	if reason := chatBindingTeamBlock(data, binding); reason != "" {
+		return reason
 	}
-	if !chatBindingProjectsPermitted(data, binding) {
-		return false
+	if binding.TemplateID != "" && !chatBindingTemplatePermitted(data, binding, binding.TemplateID) {
+		return domain.ChatBindingBlockedTemplate
 	}
-	return binding.TemplateID == "" || chatBindingTemplatePermitted(data, binding, binding.TemplateID)
+	return ""
+}
+
+// chatBindingTeamBlock is the scope rule without the binding's template:
+// workspace, revocation, team and projects.
+func chatBindingTeamBlock(data domain.Bootstrap, binding domain.ChatBinding) string {
+	switch {
+	case data.WorkspaceSettings.HIPAACompliance:
+		return domain.ChatBindingBlockedHIPAA
+	case binding.RevokedAt != nil:
+		return domain.ChatBindingBlockedRevoked
+	}
+	if binding.TeamID == "" {
+		return domain.ChatBindingBlockedTeamInactive
+	}
+	active, privacy := chatTeamPrivacy(data, binding.TeamID)
+	switch {
+	case !active:
+		return domain.ChatBindingBlockedTeamInactive
+	case privacy == chatTeamPrivateAccess && !chatPrivateBinding(binding):
+		return domain.ChatBindingBlockedTeamPrivate
+	case privacy == chatTeamMembersOnly && !chatPrivateBinding(binding):
+		return domain.ChatBindingBlockedTeamMembersOnly
+	case !chatBindingProjectsPermitted(data, binding):
+		return domain.ChatBindingBlockedProjects
+	}
+	return ""
+}
+
+// chatBindingView is a binding as the settings list it: with BlockedReason,
+// the domain.ChatBindingBlocked code that stops it now by the same rules
+// queueChatDomainEvent applies (empty when it may deliver).
+type chatBindingView struct {
+	domain.ChatBinding
+	BlockedReason string `json:"blockedReason,omitempty"`
+}
+
+// chatBindingViews adds each binding's current blocked reason, read from the
+// same metadata and rules as event delivery in both metadata modes.
+func (s *server) chatBindingViews(ctx context.Context, workspace string, bindings []domain.ChatBinding) ([]chatBindingView, error) {
+	views := make([]chatBindingView, len(bindings))
+	for index, binding := range bindings {
+		views[index].ChatBinding = binding
+	}
+	if len(bindings) == 0 {
+		return views, nil
+	}
+	reasons := make([]string, len(bindings))
+	if s.store.BoundedMetadataEnabled() {
+		owner, found, err := s.store.BeginInstalledMetadataRead(ctx, workspace)
+		if err != nil || !found {
+			return nil, chatBindingViewsUnavailable(err)
+		}
+		defer owner.Close()
+		bound, err := owner.Context(ctx)
+		if err != nil {
+			return nil, err
+		}
+		pulse, found, err := s.store.BeginPulseRead(bound, workspace, false)
+		if err != nil || !found {
+			return nil, chatBindingViewsUnavailable(err)
+		}
+		defer pulse.Close()
+		policy, found, err := s.store.BeginChatDisplayRead(bound, workspace, store.ChatDisplayRequest{Policy: true})
+		if err != nil || !found {
+			return nil, chatBindingViewsUnavailable(err)
+		}
+		defer policy.Close()
+		var ids []string
+		for _, binding := range bindings {
+			if binding.TemplateID != "" {
+				ids = append(ids, binding.TemplateID)
+			}
+		}
+		var templates []store.ChatEventTemplateHeader
+		if len(ids) > 0 {
+			read, found, err := s.store.BeginChatEventPolicyRead(bound, workspace, store.ChatEventPolicyRequest{TemplateIDs: ids})
+			if err != nil || !found {
+				return nil, chatBindingViewsUnavailable(err)
+			}
+			defer read.Close()
+			templates = read.Templates
+		}
+		data := policy.Data
+		data.Projects = pulse.Snapshot.Projects
+		for index, binding := range bindings {
+			reasons[index] = chatEventBindingScopeBlock(data, binding, templates)
+		}
+	} else {
+		data, ok := s.store.WorkspaceMetadataFields(workspace, "teams", "teamSettings", "projects", "issueTemplates", "workspaceSettings")
+		if !ok {
+			return nil, chatBindingViewsUnavailable(nil)
+		}
+		for index, binding := range bindings {
+			reasons[index] = chatBindingScopeBlock(data, binding)
+		}
+	}
+	for index, binding := range bindings {
+		if reasons[index] == "" && !s.chatBindingAuthorizerValid(ctx, workspace, binding) {
+			reasons[index] = domain.ChatBindingBlockedAuthorizer
+		}
+		views[index].BlockedReason = reasons[index]
+	}
+	return views, nil
+}
+
+func chatBindingViewsUnavailable(err error) error {
+	if err != nil {
+		return err
+	}
+	return errors.New("chat binding policy metadata unavailable")
 }
 
 // chatBindingTemplatePermitted: a plain issue template of the binding's team
@@ -113,15 +248,28 @@ func chatValidRequestSettings(data domain.Bootstrap, binding domain.ChatBinding)
 // who authorized it: once they can no longer administer the team (they left
 // it, lost the owner role or the workspace), the binding stops.
 func (s *server) chatBindingAuthorizerValid(ctx context.Context, workspace string, binding domain.ChatBinding) bool {
+	return s.checkChatBindingAuthorizer(ctx, workspace, binding) == nil
+}
+
+func (s *server) checkChatBindingAuthorizer(ctx context.Context, workspace string, binding domain.ChatBinding) error {
 	if !chatPrivateBinding(binding) {
-		return true
+		return nil
 	}
-	data, ok := s.store.WorkspaceMetadataFields(workspace, "workspace")
+	data, ok, err := s.store.WorkspaceMetadataFieldsScoped(ctx, workspace, store.MetadataRecordScope{}, "workspace")
+	if err != nil {
+		return store.PreWriteDatabaseError(err)
+	}
 	if !ok || binding.Authorization.UserID == "" {
-		return false
+		return store.ErrAuthForbidden
 	}
 	role, err := s.store.TeamRole(ctx, data.Workspace.ID, binding.TeamID, binding.Authorization.UserID)
-	return err == nil && role == "owner"
+	if err != nil {
+		return store.PreWriteDatabaseError(err)
+	}
+	if role != "owner" {
+		return store.ErrAuthForbidden
+	}
+	return nil
 }
 
 type chatGroupRefusal struct{ message string }
@@ -133,9 +281,63 @@ func (e chatGroupRefusal) Error() string { return e.message }
 // group is an internal group of the application's tenant. checkMembership also
 // asks the platform whether the bot is in the group (when saving).
 func (s *server) chatBindingPermitted(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, checkMembership ...bool) error {
+	if s.store.BoundedMetadataEnabled() {
+		owner, found, err := s.store.BeginInstalledMetadataRead(ctx, record.WorkspaceKey)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return store.ErrAuthForbidden
+		}
+		defer owner.Close()
+		bound, err := owner.Context(ctx)
+		if err != nil {
+			return err
+		}
+		pulse, found, err := s.store.BeginPulseRead(bound, record.WorkspaceKey, false)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return store.ErrAuthForbidden
+		}
+		defer pulse.Close()
+		policy, found, err := s.store.BeginChatDisplayRead(bound, record.WorkspaceKey, store.ChatDisplayRequest{Policy: true})
+		if err != nil {
+			return err
+		}
+		if !found {
+			return store.ErrAuthForbidden
+		}
+		defer policy.Close()
+		var headers []store.ChatEventTemplateHeader
+		if binding.TemplateID != "" {
+			templates, found, err := s.store.BeginChatEventPolicyRead(bound, record.WorkspaceKey, store.ChatEventPolicyRequest{TemplateIDs: []string{binding.TemplateID}})
+			if err != nil {
+				return err
+			}
+			if !found {
+				return store.ErrAuthForbidden
+			}
+			defer templates.Close()
+			headers = templates.Templates
+		}
+		data := policy.Data
+		data.Projects = pulse.Snapshot.Projects
+		if !chatEventBindingScopePermitted(data, binding, headers) {
+			return store.ErrAuthForbidden
+		}
+		if err := s.checkChatBindingAuthorizer(ctx, record.WorkspaceKey, binding); err != nil {
+			return err
+		}
+		return s.chatGroupPermitted(ctx, record, binding.ChatID, len(checkMembership) > 0 && checkMembership[0])
+	}
 	data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "teams", "teamSettings", "projects", "issueTemplates", "workspaceSettings")
-	if !ok || !chatBindingScopePermitted(data, binding) || !s.chatBindingAuthorizerValid(ctx, record.WorkspaceKey, binding) {
+	if !ok || !chatBindingScopePermitted(data, binding) {
 		return store.ErrAuthForbidden
+	}
+	if err := s.checkChatBindingAuthorizer(ctx, record.WorkspaceKey, binding); err != nil {
+		return err
 	}
 	return s.chatGroupPermitted(ctx, record, binding.ChatID, len(checkMembership) > 0 && checkMembership[0])
 }
@@ -182,35 +384,57 @@ func (s *server) chatGroupDetails(ctx context.Context, record domain.ChatIntegra
 
 // chatTeamOwner reports whether the viewer administers the team: a team
 // owner (inherited from parent teams) or a workspace administrator.
-func (s *server) chatTeamOwner(r *http.Request, data domain.Bootstrap, teamID string) bool {
+func (s *server) chatTeamOwner(r *http.Request, data domain.Bootstrap, teamID string) (bool, error) {
 	if s.authDisabled {
-		return true
+		return true, nil
 	}
 	if strings.EqualFold(data.ViewerRole, "guest") || teamID == "" {
-		return false
+		return false, nil
 	}
 	role, err := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, data.Viewer.ID)
-	return err == nil && role == "owner"
+	if errors.Is(err, store.ErrAuthForbidden) {
+		return false, nil
+	}
+	return role == "owner", err
+}
+
+func (s *server) requireChatTeamOwner(w http.ResponseWriter, r *http.Request, data domain.Bootstrap, teamID string) bool {
+	owner, err := s.chatTeamOwner(r, data, teamID)
+	if writeAuthCheckFailure(w, err) {
+		return false
+	}
+	if !owner {
+		writeChatError(w, http.StatusForbidden, chatTeamBindingPermissionMessage)
+	}
+	return owner
 }
 
 // chatManageableTeamIDs lists the teams whose bindings the viewer may see and
 // manage (team binding permission).
-func (s *server) chatManageableTeamIDs(r *http.Request, data domain.Bootstrap) []string {
+func (s *server) chatManageableTeamIDs(r *http.Request, data domain.Bootstrap) ([]string, error) {
 	ids := []string{}
 	if !s.authDisabled && strings.EqualFold(data.ViewerRole, "guest") {
-		return ids
+		return ids, nil
 	}
 	teams, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "teams")
 	if !ok {
-		return ids
+		return ids, nil
 	}
 	admin := s.applicationPolicyAdmin(r, data)
 	for _, team := range teams.Teams {
-		if admin || s.chatTeamOwner(r, data, team.ID) {
+		owner := admin
+		if !owner {
+			var err error
+			owner, err = s.chatTeamOwner(r, data, team.ID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if owner {
 			ids = append(ids, team.ID)
 		}
 	}
-	return ids
+	return ids, nil
 }
 
 // chatTenantAuthorized: the automatic tenant check last succeeded.
@@ -227,12 +451,18 @@ func (s *server) chatPermissions(r *http.Request, data domain.Bootstrap, record 
 		}
 	}
 	tenant := chatTenantPermission(record, exists, connectedBy)
-	privateTeams := []string{}
+	// membersOnlyTeamIds: the private teams that are private only because
+	// their membership (or a parent's) is limited to members or owners.
+	privateTeams, membersOnlyTeams := []string{}, []string{}
 	if len(manageable) > 0 {
 		if teams, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "teams", "teamSettings"); ok {
 			for _, id := range manageable {
-				if _, private := chatTeamState(teams, id); private {
+				_, privacy := chatTeamPrivacy(teams, id)
+				if privacy != "" {
 					privateTeams = append(privateTeams, id)
+				}
+				if privacy == chatTeamMembersOnly {
+					membersOnlyTeams = append(membersOnlyTeams, id)
 				}
 			}
 		}
@@ -240,7 +470,7 @@ func (s *server) chatPermissions(r *http.Request, data domain.Bootstrap, record 
 	return map[string]any{
 		"tenant":    tenant,
 		"workspace": map[string]any{"canManage": canManage},
-		"teams":     map[string]any{"manageableTeamIds": manageable, "privateTeamIds": privateTeams},
+		"teams":     map[string]any{"manageableTeamIds": manageable, "privateTeamIds": privateTeams, "membersOnlyTeamIds": membersOnlyTeams},
 	}
 }
 
@@ -257,9 +487,15 @@ func (s *server) chatBindingSession(w http.ResponseWriter, r *http.Request) (dom
 		writeChatError(w, 404, "Chat application not configured")
 		return data, record, false
 	}
-	if !s.applicationPolicyAdmin(r, data) && len(s.chatManageableTeamIDs(r, data)) == 0 && !s.chatInitiativeOwnerRequest(r, data) {
-		writeChatError(w, 403, chatTeamBindingPermissionMessage)
-		return data, record, false
+	if !s.applicationPolicyAdmin(r, data) {
+		manageable, err := s.chatManageableTeamIDs(r, data)
+		if writeAuthCheckFailure(w, err) {
+			return data, record, false
+		}
+		if len(manageable) == 0 && !s.chatInitiativeOwnerRequest(r, data) {
+			writeChatError(w, 403, chatTeamBindingPermissionMessage)
+			return data, record, false
+		}
 	}
 	if !chatTenantAuthorized(record) {
 		writeChatError(w, 409, chatTenantRefusal(record))
@@ -361,8 +597,7 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if !s.chatTeamOwner(r, data, binding.TeamID) {
-		writeChatError(w, 403, chatTeamBindingPermissionMessage)
+	if !s.requireChatTeamOwner(w, r, data, binding.TeamID) {
 		return
 	}
 	if requests := binding.Requests; requests != nil {
@@ -377,6 +612,9 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 	binding.ConnectionID = record.ConnectionID
 	binding.CreatedAt = time.Now().UTC()
 	binding.RevokedAt, binding.RevokedBy = nil, ""
+	// A saved binding passed the sharing rules again; earlier skips are
+	// history (the audit log and server log keep them).
+	binding.LastSkipped = nil
 	var previous *domain.ChatBinding
 	if binding.ID == "" {
 		id, err := randomSecret("chat_binding_")
@@ -391,8 +629,7 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Moving a binding to another team needs permission on both teams.
-		if !s.chatTeamOwner(r, data, existing.TeamID) {
-			writeChatError(w, 403, chatTeamBindingPermissionMessage)
+		if !s.requireChatTeamOwner(w, r, data, existing.TeamID) {
 			return
 		}
 		if existing.RevokedAt != nil {
@@ -407,6 +644,13 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 	}
 	if !input.Authorize {
 		writeChatError(w, 400, "Authorize sharing this team with the group to save the binding")
+		return
+	}
+	// The binding's templates create issues as the group's members: the
+	// person binding it must be able to use them in the binding's team.
+	templates, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "issueTemplates", "teams", "teamSettings")
+	if !s.chatBindingTemplatesUsable(r, templates, binding) {
+		writeChatError(w, 400, "Select an active team and a compatible project and template")
 		return
 	}
 	teams, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "teams", "teamSettings")
@@ -426,6 +670,7 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 			writeChatError(w, 400, refusal.message)
 		case errors.As(err, &platform):
 			writeChatError(w, 502, "Could not verify the group on the chat platform; check the bot's permissions and retry")
+		case writeStoreBusy(w, err):
 		default:
 			writeChatError(w, 400, "Select an active team and a compatible project and template")
 		}
@@ -468,8 +713,7 @@ func (s *server) revokeChatBinding(w http.ResponseWriter, r *http.Request) {
 	if !found {
 		return
 	}
-	if !s.chatTeamOwner(r, data, binding.TeamID) {
-		writeChatError(w, 403, chatTeamBindingPermissionMessage)
+	if !s.requireChatTeamOwner(w, r, data, binding.TeamID) {
 		return
 	}
 	if binding.RevokedAt == nil {
@@ -504,8 +748,7 @@ func (s *server) deleteChatBinding(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(204)
 		return
 	}
-	if !s.chatTeamOwner(r, data, items[index].TeamID) {
-		writeChatError(w, 403, chatTeamBindingPermissionMessage)
+	if !s.requireChatTeamOwner(w, r, data, items[index].TeamID) {
 		return
 	}
 	err = s.store.DeleteChatBinding(r.Context(), record.WorkspaceKey, record.ConnectionID, items[index].ID)
@@ -549,7 +792,7 @@ func (s *server) auditChatIntegration(r *http.Request, workspace, action, resour
 
 func (s *server) auditChatIntegrationContext(ctx context.Context, workspace, action, resourceType, resourceID string, metadata map[string]any) {
 	ctx = store.WithMetadataFields(context.WithoutCancel(ctx), "auditLog")
-	if err := s.store.MutateWorkspace(ctx, workspace, "audit.chat_integration", resourceID, map[string]any{"action": action}, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspaceScoped(ctx, workspace, "audit.chat_integration", resourceID, map[string]any{"action": action}, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
 		appendAudit(data, action, resourceType, resourceID, metadata)
 		return nil
 	}); err != nil {

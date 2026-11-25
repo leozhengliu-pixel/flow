@@ -21,7 +21,7 @@ function renderUsage(view?: 'analytics' | 'spend-limits' | 'user-limits' | 'loop
   const onReload = vi.fn().mockResolvedValue(undefined)
   const data = makeBootstrap({
     members,
-    loops: [{ id: 'loop-1', name: 'Weekly digest', status: 'published' }] as never,
+    loops: [{ id: 'loop-1', name: 'Weekly digest', status: 'published', runCount30d: 7 }] as never,
     viewerRole: 'owner',
     workspace: { id: 'w', name: 'W', urlKey: 'w', createdAt: '2026-03-17T10:00:00Z' } as never,
     workspaceSettings: { ...makeBootstrap().workspaceSettings, spendLimits } as never,
@@ -44,6 +44,8 @@ it('lists real credits and spend limits without purchase controls and opens the 
   expect(screen.getByRole('heading', { level: 1, name: 'Usage & limits' })).toBeInTheDocument()
   expect(await screen.findByText('$9.49 remaining')).toBeInTheDocument()
   expect(screen.getByText('No limits set')).toBeInTheDocument()
+  expect(screen.getByText('7 runs in the last 30 days')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Manage' })).toHaveAttribute('href', '/w/settings/loops')
   expect(screen.queryByRole('button', { name: 'Manage' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Add credits' })).not.toBeInTheDocument()
   expect(screen.queryByText('Automatic reload')).not.toBeInTheDocument()

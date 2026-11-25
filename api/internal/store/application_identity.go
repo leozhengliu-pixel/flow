@@ -38,6 +38,14 @@ func (s *SQLiteStore) SyncApplicationIdentity(ctx context.Context, clientID stri
 // users in line with the application (e.g. records written before renames
 // and logo changes were propagated). It runs at startup.
 func (s *SQLiteStore) SyncAllApplicationIdentities(ctx context.Context) error {
+	if s.BoundedMetadataEnabled() {
+		read, err := s.beginApplicationIdentityIDsRead(context.WithoutCancel(ctx))
+		if err != nil {
+			return err
+		}
+		defer read.close()
+		return syncApplicationIdentityIDs(ctx, read.ids, s.SyncApplicationIdentity)
+	}
 	s.mu.RLock()
 	clientIDs := []string{}
 	for _, data := range s.workspaces {
@@ -63,6 +71,9 @@ func (s *SQLiteStore) syncInstallationIdentity(ctx context.Context, ref Installa
 		}
 		var installation domain.ApplicationInstallation
 		if err := json.Unmarshal(raw, &installation); err != nil {
+			return current, err
+		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "users", []string{"ID"}, installation.UserID); err != nil {
 			return current, err
 		}
 		index := slices.IndexFunc(current.Users, func(user domain.User) bool { return user.ID == installation.UserID })

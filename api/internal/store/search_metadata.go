@@ -4,8 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -13,11 +16,31 @@ import (
 )
 
 type SearchMetadataQuery struct {
-	Scope  IssueRecordQuery
-	Types  map[string]bool
-	Terms  []string
-	Recent []domain.RecentResource
-	Limit  int
+	Scope           IssueRecordQuery
+	Types           map[string]bool
+	Terms           []string
+	Recent          []domain.RecentResource
+	Limit           int
+	CredentialID    string // id of a verified personal key, never its secret
+	SkipSharedCache bool   // application-key projections are finished by the caller
+	hits            map[string][]string
+	catalogFields   map[string]bool
+}
+
+type searchMetadataTimingKey struct{}
+
+// WithSearchMetadataTiming observes request-local search phases without
+// recording search terms, keys or result data.
+func WithSearchMetadataTiming(ctx context.Context, observe func(string, time.Duration)) context.Context {
+	return context.WithValue(ctx, searchMetadataTimingKey{}, observe)
+}
+
+func startSearchMetadataPhase(ctx context.Context, phase string) func() {
+	if observe, ok := ctx.Value(searchMetadataTimingKey{}).(func(string, time.Duration)); ok {
+		start := time.Now()
+		return func() { observe(phase, time.Since(start)) }
+	}
+	return func() {}
 }
 
 type searchMetadataKind struct {
@@ -51,7 +74,27 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 	if limit < 1 || limit > 500 {
 		limit = 100
 	}
+	q.Limit = limit
 	q.Terms = normalizeSearchTerms(q.Terms)
+	cache := s.newSearchMetadataCache(ctx, policy, q)
+	// Release catalog snapshots before waiting on another cache fill. MySQL
+	// retains the existing batched-hit snapshot.
+	perKindSnapshot := s.dialect != "mysql" && cache.cache != nil
+	var releaseSearch func()
+	var searchCtx context.Context
+	prepareSearch := func(runCtx context.Context) (context.Context, error) {
+		if searchCtx != nil {
+			return searchCtx, nil
+		}
+		var err error
+		searchCtx, releaseSearch, err = s.beginMetadataSearch(runCtx, &q, !perKindSnapshot)
+		return searchCtx, err
+	}
+	defer func() {
+		if releaseSearch != nil {
+			releaseSearch()
+		}
+	}()
 	for _, kind := range searchMetadataKinds {
 		if !q.Types[kind.kind] {
 			continue
@@ -59,183 +102,502 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		where, args := "workspace_key=? AND field=?", []any{q.Scope.Workspace, kind.field}
-		if len(q.Terms) == 0 {
-			ids := []string{}
-			for _, recent := range q.Recent {
-				if recent.ResourceType == kind.kind {
-					ids = append(ids, recent.ResourceID)
-				}
-			}
-			if len(ids) == 0 {
-				continue
-			}
-			clause, values := bindList("record_key", ids)
-			where += " AND " + clause
-			args = append(args, values...)
-		} else {
-			matches := []string{}
-			for _, term := range q.Terms {
-				selection, value := s.metadataTermSelection(term)
-				matches = append(matches, selection)
-				args = append(args, q.Scope.Workspace, kind.field, value)
-			}
-			// Filter visibility before pagination; private records must not consume
-			// the raw search-hit cap and hide an authorized match.
-			where += " AND record_key IN (" + strings.Join(matches, " UNION ") + ")"
+		prepare := prepareSearch
+		if perKindSnapshot && kind.kind != "project" && kind.kind != "document" {
+			prepare = func(ctx context.Context) (context.Context, error) { return ctx, nil }
 		}
-		if q.Scope.Archived != "all" && q.Scope.Archived != "true" {
-			where += " AND " + s.jsonText("data", "archivedAt") + " IS NULL"
+		collection, err := cache.read(ctx, kind, prepare, func(searchCtx context.Context) (searchMetadataProjection, error) {
+			return s.searchMetadataCollection(searchCtx, policy, q, allowed, linkScope, kind, limit)
+		})
+		if perKindSnapshot && releaseSearch != nil {
+			releaseSearch()
+			searchCtx, releaseSearch = nil, nil
 		}
-		if len(q.Scope.TeamIDs) > 0 {
-			clauses := []string{}
-			for _, id := range q.Scope.TeamIDs {
-				for _, field := range []string{"teamIds", "teamId", "leadTeamId", "contributingTeamIds"} {
-					if field == "teamId" || field == "leadTeamId" {
-						clauses = append(clauses, s.jsonText("data", field)+"=?")
-						args = append(args, id)
-					} else {
-						clauses = append(clauses, s.searchJSONArrayMember("data", field))
-						args = append(args, id)
-					}
-				}
-			}
-			where += " AND (" + strings.Join(clauses, " OR ") + ")"
-		}
-		clause, values, err := s.searchMetadataFilter(kind.kind, q.Scope.Filter, 0)
+		result.Projects = append(result.Projects, collection.Projects...)
+		result.Documents = append(result.Documents, collection.Documents...)
+		result.Initiatives = append(result.Initiatives, collection.Initiatives...)
+		result.Users = append(result.Users, collection.Users...)
+		result.Customers = append(result.Customers, collection.Customers...)
+		result.Releases = append(result.Releases, collection.Releases...)
+		result.SavedViews = append(result.SavedViews, collection.SavedViews...)
 		if err != nil {
 			return result, err
 		}
+	}
+	return result, nil
+}
+
+type searchMetadataProjection struct {
+	Projects    []domain.Project    `json:",omitempty"`
+	Documents   []domain.Document   `json:",omitempty"`
+	Initiatives []domain.Initiative `json:",omitempty"`
+	Users       []domain.User       `json:",omitempty"`
+	Customers   []domain.Customer   `json:",omitempty"`
+	Releases    []domain.Release    `json:",omitempty"`
+	SavedViews  []domain.SavedView  `json:",omitempty"`
+}
+
+func (s *SQLiteStore) searchMetadataCollection(ctx context.Context, policy domain.Bootstrap, q SearchMetadataQuery, allowed map[string]bool, linkScope *DocumentLinkScope, kind searchMetadataKind, limit int) (searchMetadataProjection, error) {
+	var result searchMetadataProjection
+	records, column := "workspace_metadata_records", "data"
+	textField := ""
+	useCatalog := q.catalogFields[kind.field]
+	if useCatalog {
+		// The catalog supplies filters, sort keys and visibility fields. Only
+		// the text of accepted shells needs the canonical record.
+		records, column = "metadata_catalog", "summary"
+		textField = "description"
+		if kind.kind == "document" {
+			textField = "content"
+		}
+	}
+	source := records
+	if useCatalog {
+		source = "(SELECT workspace_key,field,record_key,summary AS data FROM metadata_catalog) matching_records"
+	}
+	where, args := "workspace_key=? AND field=?", []any{q.Scope.Workspace, kind.field}
+	if len(q.Terms) == 0 {
+		ids := []string{}
+		for _, recent := range q.Recent {
+			if recent.ResourceType == kind.kind {
+				ids = append(ids, recent.ResourceID)
+			}
+		}
+		if len(ids) == 0 {
+			return result, nil
+		}
+		clause, values := bindList("record_key", ids)
 		where += " AND " + clause
 		args = append(args, values...)
-		fields := append([]string{"id", "slugId", "createdAt", "updatedAt", "archivedAt"}, kind.fields...)
-		columns := make([]string, len(fields))
-		for i, field := range fields {
-			columns[i] = s.jsonText("data", field)
-			if field == "description" || field == "content" {
-				columns[i] = "SUBSTR(" + columns[i] + ",1,2048)"
-			}
+	} else if q.hits != nil {
+		ids := q.hits[kind.field]
+		if len(ids) == 0 {
+			return result, nil
 		}
-		sortField, direction := "updatedAt", "DESC"
-		if q.Scope.Sort == "createdAt" {
-			sortField = "createdAt"
+		clause, values := bindList("record_key", ids)
+		where += " AND " + clause
+		args = append(args, values...)
+	} else {
+		matches := []string{}
+		var matchArgs []any
+		for _, term := range q.Terms {
+			selection, value := s.metadataTermSelection(term)
+			matches = append(matches, selection)
+			matchArgs = append(matchArgs, q.Scope.Workspace, kind.field, value)
 		}
-		if q.Scope.Sort == "title" {
-			sortField = "name"
-			if kind.kind == "document" {
-				sortField = "title"
-			}
-			if kind.kind == "member" {
-				sortField = "displayName"
-			}
-			direction = "ASC"
+		selection := strings.Join(matches, " UNION ")
+		if s.dialect == "mysql" {
+			// Materialize the unique matched keys before sorting. MySQL's
+			// semijoin plan for an IN subquery can discard full-text matches.
+			source += " JOIN (SELECT DISTINCT record_key AS match_key FROM (" + selection + ") search_hits) hits ON " + s.metadataRecordKeyEquals("record_key", "hits.match_key")
+			args = append(matchArgs, args...)
+		} else {
+			where += " AND record_key IN (" + selection + ")"
+			args = append(args, matchArgs...)
 		}
-		if q.Scope.Direction == "asc" {
-			direction = "ASC"
+	}
+	fields := append([]string{"id", "slugId", "createdAt", "updatedAt", "archivedAt"}, kind.fields...)
+	if useCatalog {
+		fields = slices.DeleteFunc(fields, func(field string) bool { return field == textField })
+	}
+	sortField, direction := "updatedAt", "DESC"
+	if q.Scope.Sort == "createdAt" {
+		sortField = "createdAt"
+	}
+	if q.Scope.Sort == "title" {
+		sortField = "name"
+		if kind.kind == "document" {
+			sortField = "title"
 		}
-		orderExpr := "COALESCE(" + s.jsonText("data", sortField) + ",'')"
-		if q.Scope.Sort == "title" {
-			orderExpr = "LOWER(" + orderExpr + ")"
+		if kind.kind == "member" {
+			sortField = "displayName"
 		}
-		lastValue, lastID := "", ""
-		accepted := 0
-		for accepted < limit {
-			if err := ctx.Err(); err != nil {
-				return result, err
-			}
-			pageWhere, pageArgs := where, slices.Clone(args)
-			if lastID != "" {
-				op := "<"
-				if direction == "ASC" {
-					op = ">"
+		direction = "ASC"
+	}
+	if q.Scope.Direction == "asc" {
+		direction = "ASC"
+	}
+	archived, orderValue := s.jsonText("data", "archivedAt"), s.jsonText("data", sortField)
+	pageSize := 64
+	if s.dialect == "mysql" && s.BoundedMetadataEnabled() && kind.kind == "project" {
+		teams := "JSON_EXTRACT(CONVERT(data USING utf8mb4),'$.teamIds')"
+		if !useCatalog {
+			// Share one parse when the canonical project is needed here.
+			source += " JOIN JSON_TABLE(CONVERT(data USING utf8mb4),'$' COLUMNS (archived JSON PATH '$.archivedAt' ERROR ON ERROR, ordered JSON PATH '$." + sortField + "' ERROR ON ERROR, teams JSON PATH '$.teamIds' ERROR ON ERROR)) candidate ON TRUE"
+			archived, orderValue = mysqlSearchJSONText("candidate.archived"), mysqlSearchJSONText("candidate.ordered")
+			teams = "candidate.teams"
+		}
+		teamClause, teamArgs := mysqlSearchProjectTeams(teams, allowed, q.Scope.AllowedTeamIDs == nil)
+		where += " AND " + teamClause
+		args = append(args, teamArgs...)
+		// The SQL team predicate covers project visibility. Avoid sorting the
+		// full hit set again for each 64-row page of visible projects.
+		pageSize = min(limit, 200)
+	}
+	if q.Scope.Archived != "all" && q.Scope.Archived != "true" {
+		where += " AND " + archived + " IS NULL"
+	}
+	if len(q.Scope.TeamIDs) > 0 {
+		clauses := []string{}
+		for _, id := range q.Scope.TeamIDs {
+			for _, field := range []string{"teamIds", "teamId", "leadTeamId", "contributingTeamIds"} {
+				if field == "teamId" || field == "leadTeamId" {
+					clauses = append(clauses, s.jsonText("data", field)+"=?")
+					args = append(args, id)
+				} else {
+					clauses = append(clauses, s.searchJSONArrayMember("data", field))
+					args = append(args, id)
 				}
-				pageWhere += " AND (" + orderExpr + op + "? OR (" + orderExpr + "=? AND record_key>?))"
-				pageArgs = append(pageArgs, lastValue, lastValue, lastID)
 			}
-			rows, err := s.db.QueryContext(ctx, "SELECT record_key,"+orderExpr+","+strings.Join(columns, ",")+" FROM workspace_metadata_records WHERE "+pageWhere+" ORDER BY "+orderExpr+" "+direction+",record_key ASC LIMIT 64", pageArgs...)
-			if err != nil {
-				return result, err
+		}
+		where += " AND (" + strings.Join(clauses, " OR ") + ")"
+	}
+	clause, values, err := s.searchMetadataFilter(kind.kind, q.Scope.Filter, 0)
+	if err != nil {
+		return result, err
+	}
+	where += " AND " + clause
+	args = append(args, values...)
+	orderExpr := "COALESCE(" + orderValue + ",'')"
+	if q.Scope.Sort == "title" {
+		orderExpr = "LOWER(" + orderExpr + ")"
+	}
+	lastValue, lastID := "", ""
+	accepted := 0
+	var acceptedKeys []string
+	for accepted < limit {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		pageWhere, pageArgs := where, slices.Clone(args)
+		if lastID != "" {
+			op := "<"
+			if direction == "ASC" {
+				op = ">"
 			}
-			batch := [][]byte{}
-			for rows.Next() {
-				values := make([]sql.NullString, len(fields))
-				dest := []any{&lastID, &lastValue}
-				for i := range values {
-					dest = append(dest, &values[i])
+			pageWhere += " AND (" + orderExpr + op + "? OR (" + orderExpr + "=? AND record_key>?))"
+			pageArgs = append(pageArgs, lastValue, lastValue, lastID)
+		}
+		// Pick the page by key and sort value first, then compute the output
+		// columns for that page only; the planner would otherwise evaluate
+		// every jsonText column for every matching row before sorting.
+		page := "SELECT record_key," + orderExpr + " AS sort_value FROM " + source + " WHERE " + pageWhere + " ORDER BY " + orderExpr + " " + direction + ",record_key ASC LIMIT " + strconv.Itoa(pageSize)
+		pageDone := startSearchMetadataPhase(ctx, "page_"+kind.kind)
+		rows, err := s.readSearchMetadataPage(ctx, s.searchMetadataPageSQL(page, direction, records, column, fields, pageSize), append(pageArgs, q.Scope.Workspace, kind.field), len(fields))
+		pageDone()
+		if err != nil {
+			return result, err
+		}
+		encodeDone := startSearchMetadataPhase(ctx, "shell_encode")
+		batch := [][]byte{}
+		for _, row := range rows {
+			lastID, lastValue = row.Key, row.Sort
+			values := row.Values
+			object := map[string]json.RawMessage{}
+			for i, value := range values {
+				if !value.Valid {
+					continue
 				}
-				if err := rows.Scan(dest...); err != nil {
-					rows.Close()
-					return result, err
-				}
-				object := map[string]json.RawMessage{}
-				for i, value := range values {
-					if !value.Valid {
-						continue
-					}
-					field := fields[i]
-					if field == "active" && (value.String == "1" || value.String == "0") {
-						if value.String == "1" {
-							value.String = "true"
-						} else {
-							value.String = "false"
-						}
-					}
-					if searchMetadataJSONField(field, kind.kind) {
-						object[field] = json.RawMessage(value.String)
+				field := fields[i]
+				if field == "active" && (value.String == "1" || value.String == "0") {
+					if value.String == "1" {
+						value.String = "true"
 					} else {
-						raw, _ := json.Marshal(value.String)
-						object[field] = raw
+						value.String = "false"
 					}
 				}
-				raw, err := json.Marshal(object)
-				if err != nil {
-					rows.Close()
-					return result, err
+				if searchMetadataJSONField(field, kind.kind) {
+					object[field] = json.RawMessage(value.String)
+				} else {
+					raw, _ := json.Marshal(value.String)
+					object[field] = raw
 				}
-				batch = append(batch, raw)
 			}
-			err = rows.Err()
-			rows.Close()
+			raw, err := json.Marshal(object)
 			if err != nil {
+				encodeDone()
 				return result, err
 			}
-			for _, raw := range batch {
-				ok, err := s.appendSearchMetadata(ctx, &result, policy, q.Scope, allowed, linkScope, kind.kind, raw)
-				if err != nil {
-					return result, err
-				}
-				if ok {
-					accepted++
-				}
-				if accepted >= limit {
-					break
+			batch = append(batch, raw)
+		}
+		encodeDone()
+		visibilityDone := startSearchMetadataPhase(ctx, "visibility")
+		for i, raw := range batch {
+			ok, err := s.appendSearchMetadata(ctx, &result, policy, q.Scope, allowed, linkScope, kind.kind, raw)
+			if err != nil {
+				visibilityDone()
+				return result, err
+			}
+			if ok {
+				accepted++
+				if useCatalog {
+					acceptedKeys = append(acceptedKeys, rows[i].Key)
 				}
 			}
-			if len(batch) < 64 {
+			if accepted >= limit {
 				break
+			}
+		}
+		visibilityDone()
+		if len(batch) < pageSize {
+			break
+		}
+	}
+	if len(acceptedKeys) > 0 {
+		textDone := startSearchMetadataPhase(ctx, "text_"+kind.kind)
+		text, err := s.searchMetadataText(ctx, q.Scope.Workspace, kind.field, textField, acceptedKeys)
+		textDone()
+		if err != nil {
+			return result, err
+		}
+		for i, key := range acceptedKeys {
+			if kind.kind == "document" {
+				result.Documents[i].Content = text[key]
+			} else {
+				result.Projects[i].Description = text[key]
 			}
 		}
 	}
 	return result, nil
 }
 
+func (s *SQLiteStore) searchMetadataText(ctx context.Context, workspace, collection, field string, keys []string) (map[string]string, error) {
+	clause, args := bindList("record_key", keys)
+	rows, err := s.db.QueryContext(ctx, "SELECT record_key,SUBSTR("+s.jsonText("data", field)+",1,2048) FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND "+clause, append([]any{workspace, collection}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	text := make(map[string]string, len(keys))
+	for rows.Next() {
+		var key string
+		var value sql.NullString
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, err
+		}
+		text[key] = value.String
+	}
+	return text, rows.Err()
+}
+
+func mysqlSearchJSONText(value string) string {
+	return "NULLIF(JSON_UNQUOTE(" + value + "),'null')"
+}
+
+func mysqlSearchProjectTeams(teamIDs string, allowed map[string]bool, allowTeamless bool) (string, []any) {
+	teams := make([]string, 0, len(allowed))
+	for id := range allowed {
+		teams = append(teams, id)
+	}
+	slices.Sort(teams)
+	encoded, _ := json.Marshal(teams)
+	// JSON string comparison is bytewise, like the Go authorization check.
+	// Leave non-array legacy values to the original Go decoder.
+	predicate := "JSON_TYPE(" + teamIDs + ")<>'ARRAY' OR "
+	if !allowTeamless {
+		predicate = "(JSON_TYPE(" + teamIDs + ") NOT IN ('ARRAY','NULL')) OR "
+	}
+	predicate += "JSON_OVERLAPS(" + teamIDs + ",CAST(? AS JSON))"
+	if allowTeamless {
+		predicate += " OR " + teamIDs + " IS NULL OR JSON_LENGTH(" + teamIDs + ")=0"
+	}
+	return "(" + predicate + ")", []any{string(encoded)}
+}
+
+func (s *SQLiteStore) searchMetadataPageSQL(page, direction, table, column string, fields []string, pageSize int) string {
+	from := "(" + page + ") p JOIN " + table + " r ON r.workspace_key=? AND r.field=? AND " + s.metadataRecordKeyEquals("r.record_key", "p.record_key")
+	column = "r." + column
+	if s.dialect == "mysql" && s.BoundedMetadataEnabled() {
+		values := make([]string, len(fields))
+		paths := make([]string, len(fields))
+		for i, field := range fields {
+			columnName := "v" + strconv.Itoa(i)
+			paths[i] = columnName + " JSON PATH '$." + field + "' ERROR ON ERROR"
+			values[i] = "NULLIF(JSON_UNQUOTE(shell." + columnName + "),'null')"
+			if field == "description" || field == "content" {
+				values[i] = "SUBSTR(" + values[i] + ",1,2048)"
+			}
+		}
+		from += " LEFT JOIN JSON_TABLE(CONVERT(" + column + " USING utf8mb4), '$' COLUMNS (" + strings.Join(paths, ",") + ")) shell ON TRUE"
+		return "SELECT p.record_key,p.sort_value," + strings.Join(values, ",") + " FROM " + from + " ORDER BY p.sort_value " + direction + ",p.record_key ASC"
+	}
+	var nativeJSON string
+	if s.BoundedMetadataEnabled() {
+		switch s.dialect {
+		case "mysql":
+			nativeJSON = "CAST(CONVERT(" + column + " USING utf8mb4) AS JSON)"
+		case "postgres":
+			nativeJSON = "flow_utf8(" + column + ")::jsonb"
+		}
+	}
+	if nativeJSON != "" {
+		// The second LIMIT keeps the planner from merging the derived table
+		// and parsing the original record once per output field.
+		from = "(SELECT p.record_key,p.sort_value," + nativeJSON + " AS doc FROM " + from + " LIMIT " + strconv.Itoa(pageSize) + ") p"
+	}
+	values := make([]string, len(fields))
+	for i, field := range fields {
+		switch {
+		case nativeJSON == "":
+			values[i] = s.jsonText(column, field)
+		case s.dialect == "mysql":
+			values[i] = mysqlSearchJSONText("JSON_EXTRACT(p.doc,'$." + field + "')")
+		case s.dialect == "postgres":
+			values[i] = "(p.doc ->> '" + field + "')"
+		}
+		if field == "description" || field == "content" {
+			values[i] = "SUBSTR(" + values[i] + ",1,2048)"
+		}
+	}
+	return "SELECT p.record_key,p.sort_value," + strings.Join(values, ",") + " FROM " + from + " ORDER BY p.sort_value " + direction + ",p.record_key ASC"
+}
+
+const mysqlMetadataTermMatch = "MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
+
+// Prepare the candidate sources lazily, so an all-cache-hit request never
+// opens a transaction. The catalog proof and candidate and shell reads must
+// use the same snapshot.
+func (s *SQLiteStore) beginMetadataSearch(ctx context.Context, q *SearchMetadataQuery, allowBatch bool) (context.Context, func(), error) {
+	if len(q.Terms) == 0 || !s.BoundedMetadataEnabled() {
+		return ctx, nil, nil
+	}
+	batchHits := false
+	if allowBatch && len(q.Terms) == 1 {
+		runes := utf8.RuneCountInString(q.Terms[0])
+		switch s.dialect {
+		case "mysql":
+			batchHits = runes >= 2
+		case "postgres", "sqlite":
+			batchHits = runes >= 3
+		}
+	}
+	// TeamIDs also looks at the unprojected singular teamId field. Keep
+	// that predicate on canonical JSON even for types that store teamIds.
+	useCatalog := len(q.Scope.TeamIDs) == 0 &&
+		(q.Types["project"] || q.Types["document"]) && recordJournalMode() == "on" && s.RecordJournalReady()
+	if !batchHits && !useCatalog {
+		return ctx, nil, nil
+	}
+	release := func() {}
+	if existing, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); !ok || existing.database != s.db {
+		tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+		if err != nil {
+			return ctx, nil, err
+		}
+		release = func() { _ = tx.Rollback() }
+		ctx = context.WithValue(ctx, workspaceReadKey{}, workspaceRead{database: s.db, workspace: q.Scope.Workspace, reader: tx})
+	}
+	if useCatalog {
+		var err error
+		q.catalogFields, err = s.metadataSearchCatalogFields(ctx, q.Scope.Workspace)
+		if err != nil {
+			release()
+			return ctx, nil, err
+		}
+	}
+	if batchHits {
+		const maxHits = 4096
+		fields := make([]string, 0, len(searchMetadataKinds))
+		for _, kind := range searchMetadataKinds {
+			if q.Types[kind.kind] {
+				fields = append(fields, kind.field)
+			}
+		}
+		// A broad search falls back to per-kind queries with the full hit set.
+		var err error
+		q.hits, err = s.metadataSearchHits(ctx, q.Scope.Workspace, q.Terms[0], fields, maxHits)
+		if err != nil {
+			release()
+			return ctx, nil, err
+		}
+	}
+	return ctx, release, nil
+}
+
+func (s *SQLiteStore) metadataSearchCatalogFields(ctx context.Context, workspace string) (map[string]bool, error) {
+	defer startSearchMetadataPhase(ctx, "catalog")()
+	if err := checkRecordJournalCoverage(ctx, s.db, workspace); err != nil {
+		if errors.Is(err, ErrRecordJournalCoverage) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT field FROM metadata_catalog_collections WHERE workspace_key=? AND field IN ('projects','documents') AND phase=2 AND omissions=0`, workspace)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	fields := make(map[string]bool, 2)
+	for rows.Next() {
+		var field string
+		if err := rows.Scan(&field); err != nil {
+			return nil, err
+		}
+		fields[field] = true
+	}
+	return fields, rows.Err()
+}
+
+func (s *SQLiteStore) metadataSearchHits(ctx context.Context, workspace, term string, fields []string, maxHits int) (map[string][]string, error) {
+	defer startSearchMetadataPhase(ctx, "match")()
+	// Let SQL classify each field using its collation, just as in the
+	// per-kind lookup. Keys remain byte strings in the canonical table.
+	clause, fieldsArgs := bindList("s.field", fields)
+	fieldIndex := "CASE s.field"
+	args := []any{}
+	for i, field := range fields {
+		fieldIndex += " WHEN ? THEN " + strconv.Itoa(i)
+		args = append(args, field)
+	}
+	fieldIndex += " END"
+	args = append(args, workspace)
+	args = append(args, fieldsArgs...)
+	source, match, value := s.metadataTermMatch(term)
+	args = append(args, value, maxHits+1)
+	rows, err := s.db.QueryContext(ctx, "SELECT "+fieldIndex+",s.record_key FROM "+source+" WHERE s.workspace_key=? AND "+clause+" AND "+match+" LIMIT ?", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	hits := make(map[string][]string, len(fields))
+	for count := 0; rows.Next(); count++ {
+		if count == maxHits {
+			return nil, nil
+		}
+		var field int
+		var key string
+		if err := rows.Scan(&field, &key); err != nil {
+			return nil, err
+		}
+		hits[fields[field]] = append(hits[fields[field]], key)
+	}
+	return hits, rows.Err()
+}
+
 // metadataTermSelection selects the record keys whose indexed text contains
 // term; its placeholders are workspace, field and the returned value.
 func (s *SQLiteStore) metadataTermSelection(term string) (string, string) {
-	value := "%" + escapeIssueLike(strings.ToLower(term)) + "%"
-	selection := "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND LOWER(s.content) LIKE ? ESCAPE '!'"
+	source, match, value := s.metadataTermMatch(term)
+	return "SELECT s.record_key FROM " + source + " WHERE s.workspace_key=? AND s.field=? AND " + match, value
+}
+
+func (s *SQLiteStore) metadataTermMatch(term string) (source, match, value string) {
+	source = "metadata_search_documents s"
+	value = "%" + escapeIssueLike(strings.ToLower(term)) + "%"
+	match = "LOWER(s.content) LIKE ? ESCAPE '!'"
 	if s.dialect == "sqlite" && utf8.RuneCountInString(term) >= 3 {
 		value = "\"" + strings.ReplaceAll(term, "\"", "\"\"") + "\""
-		selection = "SELECT s.record_key FROM metadata_search_fts JOIN metadata_search_documents s ON metadata_search_fts.rowid=s.rowid WHERE s.workspace_key=? AND s.field=? AND metadata_search_fts MATCH ?"
+		source = "metadata_search_fts JOIN metadata_search_documents s ON metadata_search_fts.rowid=s.rowid"
+		match = "metadata_search_fts MATCH ?"
 	}
 	if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 {
-		selection = "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
+		match = mysqlMetadataTermMatch
 		value = mysqlBooleanPhrase(term)
 	}
 	if s.dialect == "postgres" {
-		selection = "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND s.content ILIKE ? ESCAPE '!'"
+		match = "s.content ILIKE ? ESCAPE '!'"
 	}
-	return selection, value
+	return source, match, value
 }
 
 // SearchDocumentIDs returns the ids of documents whose indexed title and body
@@ -434,7 +796,7 @@ func (s *SQLiteStore) searchMetadataFilter(kind string, node IssueFilter, depth 
 	return "(" + strings.Join(clauses, " AND ") + ")", args, nil
 }
 
-func (s *SQLiteStore) appendSearchMetadata(ctx context.Context, result *domain.Bootstrap, policy domain.Bootstrap, q IssueRecordQuery, allowed map[string]bool, linkScope *DocumentLinkScope, kind string, raw []byte) (bool, error) {
+func (s *SQLiteStore) appendSearchMetadata(ctx context.Context, result *searchMetadataProjection, policy domain.Bootstrap, q IssueRecordQuery, allowed map[string]bool, linkScope *DocumentLinkScope, kind string, raw []byte) (bool, error) {
 	if !json.Valid(raw) {
 		return false, nil
 	}
@@ -590,4 +952,32 @@ func (s *SQLiteStore) appendSearchMetadata(ctx context.Context, result *domain.B
 		result.SavedViews = append(result.SavedViews, item)
 	}
 	return true, nil
+}
+
+// searchMetadataPageRow is one row of a metadata search page: its record key,
+// sort value and output columns.
+type searchMetadataPageRow struct {
+	Key, Sort string
+	Values    []sql.NullString
+}
+
+func (s *SQLiteStore) readSearchMetadataPage(ctx context.Context, statement string, args []any, width int) ([]searchMetadataPageRow, error) {
+	rows, err := s.db.QueryContext(ctx, statement, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []searchMetadataPageRow
+	for rows.Next() {
+		row := searchMetadataPageRow{Values: make([]sql.NullString, width)}
+		dest := append(make([]any, 0, width+2), &row.Key, &row.Sort)
+		for i := range row.Values {
+			dest = append(dest, &row.Values[i])
+		}
+		if err := rows.Scan(dest...); err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
 }

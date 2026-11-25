@@ -242,9 +242,14 @@
   .groupEstimate{margin-left:3px}
 }
 .identifierProbe{position:absolute;visibility:hidden;pointer-events:none;white-space:nowrap;font-size:13px;font-variant-numeric:tabular-nums;font-feature-settings:"calt","cpsp","tnum";letter-spacing:0}
+.identifierProbe[data-observe-width]{width:max-content;height:0;overflow:hidden}
+.identifierProbe[data-observe-width]>span{display:block}
+.identifierProbe[data-observe-width]>span::before{content:attr(data-identifier-sample)}
 
 /* A folded group on desktop keeps its header's 2px trailing margin plus the group's own 2px, like an empty group (the reference pitch is 40px). */
 @media(--desktop-layout){
   .group[data-collapsed=true]{padding-bottom:4px}
 }
 .creatorAvatar{display:inline-flex;flex:none;align-items:center}
+/* Row menu Labels: the labels picker hugs its widest row like the property picker (207px to 399px). */
+.contextSubmenu.contextLabelsSubmenu{width:max-content;min-width:207px;max-width:min(399px,calc(100vw - 20px));max-height:min(490px,calc(100vh - 20px));padding:0;overflow:hidden}

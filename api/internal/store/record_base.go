@@ -166,13 +166,24 @@ func (s *SQLiteStore) readIssueRecordsWithBase(ctx context.Context, workspace st
 	return issues, nil
 }
 
+// The literal hydrator and bounded image must encounter malformed rows in the
+// same order. MySQL can read through content_resource_order_idx because both
+// hydrators group the results by resource.
+func contentRecordHydrationOrder(dialect string) string {
+	if dialect == "mysql" {
+		return "resource_id,created_at,id"
+	}
+	return "created_at,id"
+}
+
 // readContentRecordsWithBase reads one kind like readContentRecords and
 // remembers each stored payload's hash in base.
 func readContentRecordsWithBase[T any](ctx context.Context, s *SQLiteStore, workspace, kind string, base *recordBase) (map[string][]T, error) {
 	if base == nil {
 		return readContentRecords[T](ctx, s, workspace, kind, nil)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT resource_id,id,data FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY created_at,id`, workspace, kind)
+	query := `SELECT resource_id,id,data FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY ` + contentRecordHydrationOrder(s.dialect)
+	rows, err := s.db.QueryContext(ctx, query, workspace, kind)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_sw307_team_resource_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginTeamResourceAuthorizationRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Authenticated team overview GET resource output and the corresponding literal HEAD authorization/denial path.",
+      "callers": ["server/scale_p21_sw307_team_resource_authorization.go:boundedTeamResourceAuthorization"],
+      "reason": "Owns the selected team's read-only resource response from the exact installed generation, including unknown revisions, or the matching caller snapshot. Original ResolveTeamID precedence and live ResolveAccess/ValidateAccess intersect projected team rows, admin-private content and selected credentials. Native order, inline duplicate/empty IDs, Position ties and exact timestamp JSON survive WireValue decoding; every retained row is charged until the unchanged concrete GET handoff closes with the outer response scope. Raw aliases and HEAD keep literal handler denials. SW307 proves four source provenance cells with zero body SQL, 768 actual-cookie/Bearer M route pairs, private admins, grants/inheritance, selected-empty/set, cross-workspace binding, authority changes, cancellation/admission/concurrency and repeated cleanup. Normal, persistent SQLite count-two and race proofs pass; MySQL/PostgreSQL server repeats pass. Source shard and residency guards and vet pass separately. This is a point primitive certificate, not whole-wrapper or activation coverage."
+    }
+  }
+}

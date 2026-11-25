@@ -34,7 +34,14 @@ Scopes: `read`, `write`, `admin`, `create_issues` (`issues:create`),
 `create_comments` (`comments:create`) and the application scopes
 `customer:read|write`, `initiative:read|write`, `release:read|create`,
 `releaseStage:update`, `app:assignable`, `app:mentionable`. Team-restricted
-keys and application team access narrow every list below.
+keys and application team access intersect the owner's access with the selected
+teams for records, referenced IDs and counts. A selected policy with no teams
+grants no team content; an unrestricted key keeps the owner's access. App
+scopes also apply to references. These rules apply to REST, bootstrap and MCP.
+Restricted keys see webhook subscriptions only when all their selected teams
+are within the key's teams; delivery snapshots and previous values are projected
+again when read through a key. Outbound webhook delivery uses the subscription's
+own authorization.
 
 ```bash
 curl --fail-with-body "$FLOW_BASE_URL/api/viewer" -H "Authorization: Bearer $FLOW_TOKEN"
@@ -405,10 +412,15 @@ short-lived signed URLs, valid for 1 second to 7 days:
   `{"files":[{"url","signedUrl","expiresAt"}]}` for files you can read.
 - Or send `X-Flow-File-Urls-Expire-In: <seconds>` (alias
   `Public-File-Urls-Expire-In`) on any API request: every `/uploads/…` URL in
-  the JSON response, including Markdown, is replaced by a signed URL.
+  the JSON response, including Markdown, is replaced by a signed URL. Only
+  files you can read are signed; any other `/uploads/…` URL in the response
+  stays as written.
 
 Signed URLs (`/api/files/signed/{name}?expires=…&signature=…`) work without
-credentials until they expire; treat them as secrets. They are HMAC-signed
+credentials until they expire; treat them as secrets. A link names who it was
+signed for and is checked again when it is used: it stops working once the
+file's record is deleted, the signer loses access to it, or the signer's API
+key is revoked. They are HMAC-signed
 with `FLOW_FILE_URL_SIGNING_KEY`, or with a random key that Flow stores in the
 database on first use.
 
@@ -507,6 +519,14 @@ SCIM provisioning writes its own entries with `source` `scim`: resource type
 `suspended`, `restored`, `deprovisioned`, `removed`, `role_changed` with
 `roleBefore`/`roleAfter`) and `scim_group` (`created`, `linked`, `updated`,
 `deleted`, `members_changed` with the added and removed user ids).
+
+A SCIM `POST /Users` whose email belongs to an account that already exists and
+is not a member of the workspace does not enrol it: the IdP gets `201` with the
+user resource (`id` is the account id, `active` is `false`), the account gets a
+workspace invitation by email, and it becomes a member, with the role the
+directory sent, only when its owner accepts while signed in. Until then SCIM
+writes change neither the account (name, email, active) nor its settings, and
+the account does not count as a member for enterprise sign-in linking.
 
 Workspace members provisioned by an active SCIM connection have
 `managedBy: "scim"`; changing their role, name or email

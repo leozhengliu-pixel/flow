@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
+import http from 'node:http'
 import path from 'node:path'
 import { signUp, startApi, startProxy, watchViolations, type RunningApi } from './harness'
 
@@ -35,8 +36,8 @@ test('the asset service worker registers, activates and serves from its cache un
   await page.reload()
   await expect(page.locator('main').first()).toBeVisible()
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe(`${api.origin}/sw.js`)
-  await expect.poll(async () => page.evaluate(async () => (await (await caches.open('flow-assets-v1')).keys()).length), { timeout: 15_000 }).toBeGreaterThan(0)
-  const cached = await page.evaluate(async () => (await (await caches.open('flow-assets-v1')).keys()).map(request => new URL(request.url).pathname))
+  await expect.poll(async () => page.evaluate(async () => (await (await caches.open('flow-assets-v2')).keys()).length), { timeout: 15_000 }).toBeGreaterThan(0)
+  const cached = await page.evaluate(async () => (await (await caches.open('flow-assets-v2')).keys()).map(request => new URL(request.url).pathname))
   expect(cached.every(path => path.startsWith('/assets/'))).toBe(true)
 
   // Offline, a cached asset still answers (the worker's fetch handler ran), and a file it never cached fails.
@@ -86,8 +87,8 @@ test('a new worker version activates without closing the page and retires its ol
     const violations = await watchViolations(page)
     await page.goto(`${origin}/${account.workspaceKey}/issues/all`)
     await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.state)).toBe('activated')
-    await page.evaluate(async () => { await (await caches.open('flow-assets-v1')).put('/assets/old-AbCdEf12.js', new Response('old')) })
-    script = script.replace("'flow-assets-v1'", "'flow-assets-security-v2'")
+    await page.evaluate(async () => { await (await caches.open('flow-assets-v2')).put('/assets/old-AbCdEf12.js', new Response('old')) })
+    script = script.replace("'flow-assets-v2'", "'flow-assets-security-v2'")
     const updated = await page.evaluate(async () => {
       const registration = (await navigator.serviceWorker.getRegistration())!
       const previous = registration.active!
@@ -101,7 +102,7 @@ test('a new worker version activates without closing the page and retires its ol
     expect(updated).toEqual({ previous: 'redundant', waiting: undefined })
     // controllerchange can precede completion of the new worker's activate event.
     await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.state)).toBe('activated')
-    await expect.poll(() => page.evaluate(() => caches.has('flow-assets-v1'))).toBe(false)
+    await expect.poll(() => page.evaluate(() => caches.has('flow-assets-v2'))).toBe(false)
     await page.reload()
     await expect(page.locator('main').first()).toBeVisible()
     await expect.poll(() => page.evaluate(async () => (await (await caches.open('flow-assets-security-v2')).keys()).length)).toBeGreaterThan(0)
@@ -117,7 +118,7 @@ test('the browser kill switch unregisters the worker and clears only Flow asset 
   await page.goto(`${api.origin}/${account.workspaceKey}/issues/all`)
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.state)).toBe('activated')
   await page.evaluate(async () => {
-    await (await caches.open('flow-assets-v1')).put('/assets/old-AbCdEf12.js', new Response('old'))
+    await (await caches.open('flow-assets-v2')).put('/assets/old-AbCdEf12.js', new Response('old'))
     await caches.open('unrelated-cache')
     localStorage.setItem('flow:disable-sw', '1')
   })
@@ -129,7 +130,7 @@ test('the browser kill switch unregisters the worker and clears only Flow asset 
   await page.reload()
   await expect(page.locator('main').first()).toBeVisible()
   expect(await page.evaluate(() => navigator.serviceWorker.controller)).toBeNull()
-  await expect.poll(() => page.evaluate(async () => (await caches.keys()).filter(key => key.startsWith('flow-assets-')))).toEqual([])
+  await expect.poll(() => page.evaluate(async () => (await caches.keys()).filter(key => /^flow-(?:assets|shell)-/.test(key)))).toEqual([])
   expect(await page.evaluate(() => caches.has('unrelated-cache'))).toBe(true)
   expect(violations.all()).toEqual([])
 })
@@ -159,6 +160,85 @@ test('a deployed kill-switch script unregisters on the next update check', async
     // Inspect a non-app navigation so its bootstrap cannot register the retired script again.
     await page.goto(`${origin}/sw.js`)
     expect(await page.evaluate(() => navigator.serviceWorker.controller)).toBeNull()
+    expect(violations.all()).toEqual([])
+  } finally {
+    await gateway.stop()
+  }
+})
+
+test('navigations get the cached app shell at once, a new deploy is used from the next load, server and sign-in routes never', async ({ page, context }) => {
+  let marker = ''
+  const gateway = await startProxy(api.port, { intercept: { '/': (request, response) => {
+    // The root page as the server sends it, plus a marker standing in for a new deploy's HTML.
+    http.get({ host: '127.0.0.1', port: api.port, path: '/', headers: { cookie: request.headers.cookie ?? '' } }, upstream => {
+      let body = ''
+      upstream.setEncoding('utf8')
+      upstream.on('data', chunk => { body += chunk })
+      upstream.on('end', () => {
+        const headers = { ...upstream.headers }
+        delete headers['content-length']
+        delete headers['content-encoding']
+        response.writeHead(upstream.statusCode ?? 502, headers)
+        response.end(marker ? body.replace('<head>', `<head><!-- ${marker} -->`) : body)
+      })
+    })
+  } } })
+  const origin = `http://localhost:${gateway.port}`
+  const shellHtml = () => page.evaluate(async () => (await (await (await caches.open('flow-shell-v2')).match('/__flow-app-shell'))?.text()) ?? '')
+  try {
+    const account = await signUp(context, origin, 'worker-shell')
+    const violations = await watchViolations(page)
+    await page.goto(`${origin}/`)
+    await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.state)).toBe('activated')
+    // The first navigation the worker sees stores the shell together with every hashed file it references.
+    await page.goto(`${origin}/`)
+    await expect.poll(shellHtml, { timeout: 15_000 }).toContain('<div id="root">')
+    const stored = await page.evaluate(async () => {
+      const cache = await caches.open('flow-shell-v2')
+      const html = await (await cache.match('/__flow-app-shell'))!.text()
+      const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(match => match[1])
+      return { assets: assets.length, stored: (await Promise.all(assets.map(path => cache.match(path)))).filter(Boolean).length }
+    })
+    expect(stored.assets).toBeGreaterThan(0)
+    expect(stored.stored).toBe(stored.assets)
+
+    // A new deploy: the page still opens with the stored shell, the new one is stored meanwhile and used next time.
+    marker = 'deploy-two'
+    await page.goto(`${origin}/`)
+    expect(await page.evaluate(() => document.documentElement.innerHTML.includes('deploy-two'))).toBe(false)
+    await expect.poll(shellHtml, { timeout: 15_000 }).toContain('deploy-two')
+    await page.goto(`${origin}/`)
+    expect(await page.evaluate(() => document.documentElement.innerHTML.includes('deploy-two'))).toBe(true)
+    await expect(page.locator('main').first()).toBeVisible()
+
+    // Offline, an app page still opens from the shell; the API, sign-in pages and files are never answered by it.
+    await context.setOffline(true)
+    try {
+      const shell = await page.goto(`${origin}/${account.workspaceKey}/inbox`)
+      expect(shell?.status()).toBe(200)
+      expect(shell?.fromServiceWorker()).toBe(true)
+      for (const path of ['/api/health', '/login', '/auth/google/callback', '/oauth/authorize', '/favicon.svg']) {
+        // Offline these fail, or come from the browser's own HTTP cache: never from the worker.
+        const answer = await page.goto(`${origin}${path}`).catch(() => null)
+        expect(answer?.fromServiceWorker() ?? false, path).toBe(false)
+      }
+    } finally {
+      await context.setOffline(false)
+    }
+
+    // A shell whose files are gone is never served: the navigation goes to the network.
+    await page.goto(`${origin}/`)
+    await page.evaluate(async () => {
+      const cache = await caches.open('flow-shell-v2')
+      const html = await (await cache.match('/__flow-app-shell'))!.text()
+      await cache.delete(html.match(/src="(\/assets\/[^"]+)"/)![1])
+    })
+    await context.setOffline(true)
+    try {
+      await expect(page.goto(`${origin}/${account.workspaceKey}/inbox`)).rejects.toThrow()
+    } finally {
+      await context.setOffline(false)
+    }
     expect(violations.all()).toEqual([])
   } finally {
     await gateway.stop()

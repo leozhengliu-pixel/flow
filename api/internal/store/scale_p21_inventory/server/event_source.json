@@ -1,0 +1,15 @@
+{
+  "source": "server/event_source.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BuildEventSource": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded document source resolution uses the owned exact first installed ID/current-slug occurrence and complete first native creator-user grant only when canonical permissions are empty. Other canonical source loading and projection stay unchanged; the old DocumentByID call is literal off-only. SW104 compares exact sources and existing M frames, full grant fields, draft handling, fallback/task visibility and SQL counts; SW105 proves native selection, warm/reload, legal large values, cancellation, admission and release.",
+      "accessors": ["BeginPresenceDocumentRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared realtime event-source construction.",
+      "callers": ["server/server.eventSourceForAuthority", "server/server.committedDeletionSource"]
+    }
+  }
+}

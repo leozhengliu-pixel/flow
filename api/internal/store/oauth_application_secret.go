@@ -10,6 +10,11 @@ import (
 // application. Workspace projections strip secrets, so the settings page's
 // copy button reads it here.
 func (s *SQLiteStore) OAuthApplicationSecret(workspaceKey, applicationID string) (string, bool) {
+	if s.metadataResidency != nil {
+		value, found, release := s.residentOAuthIdentityValue(workspaceKey, applicationID, residentOAuthApplicationSecret)
+		defer release()
+		return value, found
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	data, ok := s.workspaces[workspaceKey]
@@ -28,6 +33,9 @@ func (s *SQLiteStore) OAuthApplicationSecret(workspaceKey, applicationID string)
 // workspace) by client ID, without its secret: Settings › Applications shows
 // an installed application's public details (description, developer).
 func (s *SQLiteStore) OAuthApplicationByClientID(clientID string) (domain.OAuthApplication, bool) {
+	if s.BoundedMetadataEnabled() {
+		return s.scaleP21OAuthApplicationByClientID(clientID)
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, data := range s.workspaces {

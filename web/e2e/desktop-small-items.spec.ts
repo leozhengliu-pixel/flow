@@ -42,16 +42,37 @@ test('dims the issue placeholder, updates event disclosure and fits project crea
   const response = await request.post('/api/issues', { headers, data: { title: '[audit] Desktop details', teamId: data.teams[0].id, stateId: data.states.find(state => state.type === 'unstarted')!.id } })
   expect(response.status()).toBe(201)
   const issue = await response.json() as Issue
-  for (const priority of [1, 2, 3]) expect((await request.patch(`/api/issues/${issue.id}`, { headers, data: { priority } })).ok()).toBeTruthy()
+  // The server drops the creator's own edits made within minutes of creation (the creation record stands for them) and
+  // the timeline only folds events older than four hours, so a fresh issue cannot show a collapsed run. Serve a history
+  // of one creation and eight older edits instead (priority and estimate alternate so no two rows merge): the first
+  // three and last three rows stay, the three in between fold into "Show 3 events".
+  await page.route(`**/api/issue-records/${issue.id}/history*`, async route => {
+    const real = await (await route.fetch()).json() as { activities: Array<Record<string, unknown>> }
+    const created = real.activities.find(activity => activity.type === 'issue.created')!
+    const start = Date.now() - 10 * 86_400_000
+    const edit = (index: number) => ({
+      ...created,
+      id: `activity_audit_${index}`,
+      type: 'issue.updated',
+      createdAt: new Date(start + index * 3_600_000).toISOString(),
+      metadata: index % 2 ? { priority: 'High', priorityBefore: 'Urgent' } : { estimate: '2', estimateBefore: '1' },
+    })
+    await route.fulfill({ json: { ...real, activities: [{ ...created, createdAt: new Date(start).toISOString() }, ...Array.from({ length: 8 }, (_, index) => edit(index + 1))] } })
+  })
   await page.goto(`/${workspaceKey}/issue/${issue.identifier}`)
   const placeholder = page.locator('.issue-document > .composer .is-editor-empty').first()
   await expect(placeholder).toBeVisible()
   expect(await placeholder.evaluate(el => getComputedStyle(el, '::before').color)).toBe('lch(39.452 1.425 272)')
-  const events = page.getByRole('button', { name: /^Show 3 events/ })
-  await events.click()
-  await expect(page.getByRole('button', { name: 'Show less', exact: true })).toHaveAttribute('aria-expanded', 'true')
-  await page.getByRole('button', { name: 'Show less', exact: true }).click()
+  // The collapsed run is one button named "Expand all activity" that reads "Show 3 events"; opening it
+  // reveals every row and the button goes away (the block does not collapse again).
+  const rows = page.locator('.activity-history-block > .timeline-item.event:not(.activity-event-group)')
+  await expect(rows).toHaveCount(6)
+  const events = page.getByRole('button', { name: 'Expand all activity', exact: true })
   await expect(events).toHaveAttribute('aria-expanded', 'false')
+  await expect(events).toContainText(/^Show 3 events/)
+  await events.click()
+  await expect(events).toHaveCount(0)
+  await expect(rows).toHaveCount(9)
   await page.locator('.issue-properties .issue-project-trigger').click()
   const picker = page.getByRole('dialog', { name: 'Change Project' })
   await expect(picker).toHaveCSS('width', '186px')

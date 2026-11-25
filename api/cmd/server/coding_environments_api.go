@@ -156,7 +156,11 @@ type codingEnvironmentRequest struct {
 // codingEnvironmentAccess checks the workspace, the coding-sessions feature
 // flag and the caller's role. Guests are refused.
 func (s *server) codingEnvironmentAccess(w http.ResponseWriter, r *http.Request) (codingEnvironmentRequest, bool) {
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	read := s.store.WorkspaceMetadata
+	if s.store.BoundedMetadataEnabled() {
+		read = s.store.WorkspaceSettingsMetadata
+	}
+	data, ok := read(workspaceKey(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "Workspace not found")
 		return codingEnvironmentRequest{}, false
@@ -170,8 +174,11 @@ func (s *server) codingEnvironmentAccess(w http.ResponseWriter, r *http.Request)
 		request.admin = true
 		return request, true
 	}
-	role, _, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, request.user.ID)
-	if err != nil || role == "" || strings.EqualFold(role, "guest") {
+	role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, request.user.ID)
+	if writeAuthCheckFailure(w, err) {
+		return codingEnvironmentRequest{}, false
+	}
+	if err != nil || status != "active" || role == "" || strings.EqualFold(role, "guest") {
 		writeError(w, http.StatusForbidden, "Guests cannot use coding environments")
 		return codingEnvironmentRequest{}, false
 	}
@@ -185,7 +192,11 @@ func (s *server) codingWorkspaceKey(r *http.Request, data domain.Bootstrap) stri
 		return key
 	}
 	for _, key := range s.store.WorkspaceKeys() {
-		if candidate, ok := s.store.WorkspaceMetadata(key); ok && candidate.Workspace.ID == data.Workspace.ID {
+		read := s.store.WorkspaceMetadata
+		if s.store.BoundedMetadataEnabled() {
+			read = s.store.WorkspaceSettingsMetadata
+		}
+		if candidate, ok := read(key); ok && candidate.Workspace.ID == data.Workspace.ID {
 			return key
 		}
 	}
@@ -251,7 +262,7 @@ func writeCodingEnvironmentError(w http.ResponseWriter, err error) {
 
 func (s *server) auditCodingEnvironment(r *http.Request, workspace, action, resourceID string, metadata map[string]any) {
 	ctx := store.WithMetadataFields(context.WithoutCancel(r.Context()), "auditLog")
-	if err := s.store.MutateWorkspace(ctx, workspace, "audit.coding_environment", resourceID, map[string]any{"action": action}, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspaceScoped(ctx, workspace, "audit.coding_environment", resourceID, map[string]any{"action": action}, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
 		appendAudit(data, action, "coding_environment", resourceID, metadata)
 		return nil
 	}); err != nil {
@@ -296,14 +307,6 @@ func (s *server) codingSnapshotStrategy() sandbox.SnapshotStrategy {
 		return nil
 	}
 	return strategy
-}
-
-func (s *server) codingSnapshotWorkspace(ctx context.Context, snapshotID string) (string, error) {
-	workspace, err := s.store.CodingSnapshotWorkspace(ctx, snapshotID)
-	if err != nil {
-		return "", err
-	}
-	return workspace, nil
 }
 
 // codingSnapshotReconciler builds the (stateless) snapshot reconciler.

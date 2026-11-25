@@ -98,6 +98,10 @@ func setApplicationPolicies(data *domain.Bootstrap, items []applicationPolicy) {
 	data.Settings["applicationPolicies"] = items
 }
 
+func applicationPolicyScope() store.MetadataRecordScope {
+	return store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "settings", ID: "applicationPolicies"}}}
+}
+
 func applicationApproved(data *domain.Bootstrap, clientID string, scopes []string) bool {
 	for _, app := range data.OAuthApplications {
 		if app.ClientID == clientID {
@@ -116,7 +120,10 @@ func applicationApproved(data *domain.Bootstrap, clientID string, scopes []strin
 }
 
 func (s *server) listApplicationPolicies(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, applicationPolicyScope())
+	if !ok {
+		return
+	}
 	items := applicationPolicies(&data)
 	items = slices.DeleteFunc(items, func(item applicationPolicy) bool {
 		return !s.applicationPolicyAdmin(r, data) && !item.Shared && item.OwnerID != data.Viewer.ID
@@ -139,7 +146,10 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	view := s.workspaceData(r)
+	view, ok := s.workspaceDataScoped(w, r, applicationPolicyScope())
+	if !ok {
+		return
+	}
 	admin := s.applicationPolicyAdmin(r, view)
 	if input.Kind != "mcp" && input.Kind != "oauth" || strings.TrimSpace(input.Name) == "" || len(input.Name) > 200 {
 		writeError(w, 400, "invalid application")
@@ -194,7 +204,7 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid application id")
 		return
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "application_policy.updated", input.ID, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "application_policy.updated", input.ID, nil, applicationPolicyScope(), func(data *domain.Bootstrap) error {
 		items := applicationPolicies(data)
 		index := slices.IndexFunc(items, func(item applicationPolicy) bool { return item.ID == input.ID })
 		input.OwnerID = view.Viewer.ID
@@ -243,9 +253,12 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteApplicationPolicy(w http.ResponseWriter, r *http.Request) {
-	view := s.workspaceData(r)
+	view, ok := s.workspaceDataScoped(w, r, applicationPolicyScope())
+	if !ok {
+		return
+	}
 	var removed applicationPolicy
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "application_policy.updated", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "application_policy.updated", r.PathValue("id"), nil, applicationPolicyScope(), func(data *domain.Bootstrap) error {
 		items := applicationPolicies(data)
 		index := slices.IndexFunc(items, func(item applicationPolicy) bool { return item.ID == r.PathValue("id") })
 		if index < 0 {

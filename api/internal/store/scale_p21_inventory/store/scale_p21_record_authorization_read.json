@@ -1,0 +1,64 @@
+{
+  "source": "store/scale_p21_record_authorization_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginRecordAuthorizationRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "workspaces"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Per-record authorization headers for the authorization middleware's bounded fallback (cycles, saved views, exact-ID projects/initiatives, reviews, releases, pipelines, customers, customer requests, asks, labels).",
+      "callers": [
+        "server/scale_p21_sw492_record_authorization.go:boundedRecordDecision",
+        "server/scale_p21_sw493_view_dashboard_authorization.go:boundedProjectVisibleByID",
+        "server/scale_p21_sw494_record_kind_authorization.go:boundedRecordHeaders",
+        "server/scale_p21_sw495_reference_authorization.go:boundedReferencePredicate",
+        "server/scale_p21_sw495_reference_authorization.go:boundedSelectedInitiative",
+        "server/scale_p21_sw495_reference_authorization.go:boundedSelectedPipeline",
+        "server/scale_p21_sw495_reference_authorization.go:boundedSelectedRelease"
+      ],
+      "reason": "Reads only the authorization header fields of the records of one kind whose id (or slug) equals the reference. The installed map is read only to choose the current logical source (native, normalized values, collection order); a newer policy snapshot streams the stored collection through the reviewed BeginMetadataArrayRead, which also covers inline arrays with duplicate, empty or overlong IDs. The epoch/stamp of the access policy is revalidated after the read (ErrResourceAccessChanged retries). Slug-referenced project/initiative headers (projectRefs/initiativeRefs) serve a selected credential's favorite/subscription projection. It never hydrates the workspace. SW491-SW496 compare actual middleware, leaf and bare decisions literal vs bounded warm vs SQL-reloaded for every principal and credential, including duplicate IDs, slugs, trashed/archived/missing records and escaped paths."
+    },
+    "canonical": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "BeginMetadataArrayRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Canonical fallback of BeginRecordAuthorizationRead when the policy snapshot is newer than the installed source.",
+      "callers": [
+        "store/scale_p21_record_authorization_read.go:BeginRecordAuthorizationRead"
+      ],
+      "reason": "Streams one stored collection in collection order (split rows or the inline root array) and decodes each element with encoding/json, as loading does; a repeated root field (RequiresTypedMerge) fails closed. Admission is reserved per element; the decoded value is a header copy. SW492 exercises this path (warm phase) including an inline collection with duplicate IDs."
+    },
+    "BeginSettingAuthorizationRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "workspaces"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Dashboards setting for dashboard authorization in the bounded fallback.",
+      "callers": [
+        "server/scale_p21_sw493_view_dashboard_authorization.go:boundedDashboards"
+      ],
+      "reason": "Reads one settings value (dashboards.v1) from the current installed logical source or, for a newer snapshot, by replaying the stored settings map occurrences; revalidates the access epoch/stamp. The caller applies the store's own filterSettingsByVisibility and the literal settingCollection decode. SW493 and SW495 cover private/team/workspace/duplicate dashboards across every principal and credential."
+    },
+    "setting": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "BeginMetadataCollectionRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Canonical fallback of BeginSettingAuthorizationRead.",
+      "callers": [
+        "store/scale_p21_record_authorization_read.go:BeginSettingAuthorizationRead"
+      ],
+      "reason": "Replays the settings map's decoding occurrences (reset, canonical and inline keys, last value wins) through the reviewed collection reader and decodes the selected value with encoding/json; admission is reserved before reading the value."
+    }
+  }
+}

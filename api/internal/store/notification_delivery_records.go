@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	"flow/api/internal/domain"
@@ -20,6 +21,9 @@ func (s *SQLiteStore) NotificationDeliverySnapshot(ctx context.Context, workspac
 }
 
 func (s *SQLiteStore) notificationDeliverySnapshot(ctx context.Context, workspace string, statuses []string, now time.Time, full bool) (domain.Bootstrap, error) {
+	if s.BoundedMetadataEnabled() {
+		return domain.Bootstrap{}, ErrBoundedMetadataCoverage
+	}
 	// The scheduler asks every few seconds and usually finds nothing due; only
 	// clone the workspace metadata when there is a delivery to process.
 	data, ok := s.WorkspaceSettingsMetadata(workspace)
@@ -80,6 +84,16 @@ func (s *SQLiteStore) notificationDeliverySnapshot(ctx context.Context, workspac
 }
 
 func (s *SQLiteStore) MutateNotificationDelivery(ctx context.Context, workspace, id string, mutate func(*domain.NotificationDelivery) error) error {
+	var owner *ResourceRead
+	if s.BoundedMetadataEnabled() {
+		work, release, err := s.tryAdmitAdditionalMetadataWork(ctx, 2<<20)
+		if err != nil {
+			return err
+		}
+		ctx = work
+		owner = &ResourceRead{store: s, release: []func(){release}}
+		defer owner.Close()
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -89,9 +103,30 @@ func (s *SQLiteStore) MutateNotificationDelivery(ctx context.Context, workspace,
 	if s.dialect != "sqlite" {
 		lock = " FOR UPDATE"
 	}
+	if owner != nil {
+		var size int64
+		if err := tx.QueryRowContext(ctx, `SELECT `+s.scaleP21SW22VisibilityLength("data")+` FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND resource_id='' AND id=?`+lock, workspace, id).Scan(&size); err != nil {
+			return err
+		}
+		if size < 0 || size > (metadataWorkBytes-4096)/32 {
+			return ErrMetadataWorkBudget
+		}
+		if err := owner.reserve(ctx, uint64(size)*32+4096); err != nil {
+			return err
+		}
+	}
 	var raw []byte
 	if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND resource_id='' AND id=?`+lock, workspace, id).Scan(&raw); err != nil {
 		return err
+	}
+	if owner != nil {
+		work, err := metadataAggregatePayloadJSONWork(ctx, raw)
+		if err != nil {
+			return err
+		}
+		if err := owner.reserve(ctx, work); err != nil {
+			return err
+		}
 	}
 	var delivery domain.NotificationDelivery
 	if err := json.Unmarshal(raw, &delivery); err != nil {
@@ -99,6 +134,15 @@ func (s *SQLiteStore) MutateNotificationDelivery(ctx context.Context, workspace,
 	}
 	if err := mutate(&delivery); err != nil {
 		return err
+	}
+	if owner != nil {
+		work, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(delivery), 0)
+		if err != nil {
+			return err
+		}
+		if err := owner.reserve(ctx, uint64(work)); err != nil {
+			return err
+		}
 	}
 	if err := writeContentRecord(ctx, tx, workspace, "delivery", "", delivery); err != nil {
 		return err

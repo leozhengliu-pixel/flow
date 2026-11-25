@@ -19,9 +19,10 @@ import { I18nProvider } from '@/i18n/i18n'
 import type { SettingsPageId } from '@/lib/app-routes'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import { MemoryRouter } from 'react-router-dom'
+import { clearSessionCaches } from '@/lib/session-cache-registry'
 
 const api = vi.hoisted(() => ({
-  updateAccountProfile: vi.fn(), removeMember: vi.fn(), fetchAccountIdentities: vi.fn(), fetchAccountSessions: vi.fn(),
+  updateAccountProfile: vi.fn(), removeMember: vi.fn(), fetchAccountIdentities: vi.fn(), fetchAuthProviders: vi.fn(), fetchAccountSessions: vi.fn(),
   listPushSubscriptions: vi.fn(), deletePushSubscription: vi.fn(), revokeAccountSession: vi.fn(),
   revokeOtherAccountSessions: vi.fn(), revokeOAuthAuthorization: vi.fn(), updateNotificationPreferences: vi.fn(),
   createAPIKey: vi.fn(), updateAPIKey: vi.fn(), revokeAPIKey: vi.fn(), rotateAPIKey: vi.fn(), logoutAccount: vi.fn(),
@@ -127,6 +128,7 @@ describe('personal settings workflows', () => {
     api.revokeAPIKey.mockResolvedValue(undefined)
     api.rotateAPIKey.mockResolvedValue({ key: { id: 'key-1' }, secret: 'flow_rotated_secret' })
     api.fetchAccountIdentities.mockResolvedValue([])
+    api.fetchAuthProviders.mockResolvedValue({ email: true, providers: [] })
     api.fetchPasskeys.mockResolvedValue([])
     api.fetchCommitSigningKey.mockResolvedValue(null)
     api.addCommitSigningKey.mockResolvedValue({ name: 'Laptop key', type: 'ssh', fingerprint: 'SHA256:test', addedAt: '2026-09-04T00:00:00.000Z' })
@@ -502,6 +504,49 @@ describe('personal settings workflows', () => {
     expect(sessionStorage.getItem('flow.api-key-secret:key-full')).toBeNull()
   })
 
+  describe('one-time API key secret hand-off', () => {
+    const created = { id: 'key-full', name: 'Full access', scopes: null, teamIds: null, creatorId: viewer.id, prefix: 'flow_api_hidden', createdAt: '2026-09-01T00:00:00.000Z' }
+    async function createWithoutOpeningDetail() {
+      const user = userEvent.setup()
+      const input = props('account-security')
+      input.onOpenAPIKey = vi.fn()
+      api.createAPIKey.mockResolvedValue({ key: created, secret: 'flow_full_secret' })
+      input.apiKeyMode = 'new'
+      const view = render(<MemoryRouter><I18nProvider><PersonalSettings {...input}/></I18nProvider></MemoryRouter>)
+      await user.type(screen.getByRole('textbox', { name: 'Key name' }), 'Full access')
+      await user.click(screen.getByRole('button', { name: 'Create' }))
+      await waitFor(() => expect(input.onOpenAPIKey).toHaveBeenCalled())
+      return { view, input }
+    }
+    function detailProps() {
+      const input = props('account-security')
+      input.data = { ...input.data, apiKeys: [created] } as never
+      input.apiKeyMode = 'detail'
+      input.apiKeyId = created.id
+      return input
+    }
+
+    it('drops an unopened secret when the settings view unmounts', async () => {
+      const { view } = await createWithoutOpeningDetail()
+      view.unmount()
+      render(<MemoryRouter><I18nProvider><PersonalSettings {...detailProps()}/></I18nProvider></MemoryRouter>)
+      expect(screen.queryByText('flow_full_secret')).not.toBeInTheDocument()
+    })
+
+    it('drops an unopened secret on logout or account switch', async () => {
+      await createWithoutOpeningDetail()
+      clearSessionCaches()
+      render(<MemoryRouter><I18nProvider><PersonalSettings {...detailProps()}/></I18nProvider></MemoryRouter>)
+      expect(screen.queryByText('flow_full_secret')).not.toBeInTheDocument()
+    })
+
+    it('still shows the secret once to the detail page opened right after creation', async () => {
+      const { view, input } = await createWithoutOpeningDetail()
+      view.rerender(<MemoryRouter><I18nProvider><PersonalSettings {...{ ...detailProps(), onOpenAPIKey: input.onOpenAPIKey }}/></I18nProvider></MemoryRouter>)
+      expect(await screen.findByText('flow_full_secret')).toBeVisible()
+    })
+  })
+
   it('edits API-key permissions and team policy through the dedicated form', async () => {
     const user = userEvent.setup()
     const input = props('account-security')
@@ -568,5 +613,14 @@ describe('personal settings workflows', () => {
     expect(await screen.findByText('Laptop key')).toBeVisible()
     expect(screen.queryByText('Upload this key again so coding sessions can sign your commits')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Upload again' })).toBeNull()
+  })
+
+  it('shows the profile the server confirms after mounting from cached data', () => {
+    const input = props('profile')
+    const view = render(<I18nProvider><PersonalSettings {...input}/></I18nProvider>)
+    expect(screen.getByRole('textbox', { name: 'Full name' })).toHaveValue(input.data.viewer.displayName)
+    view.rerender(<I18nProvider><PersonalSettings {...input} data={{ ...input.data, viewer: { ...input.data.viewer, displayName: 'Renamed Elsewhere' } }}/></I18nProvider>)
+    expect(screen.getByRole('textbox', { name: 'Full name' })).toHaveValue('Renamed Elsewhere')
+    expect(screen.queryByRole('button', { name: 'Update' })).not.toBeInTheDocument()
   })
 })

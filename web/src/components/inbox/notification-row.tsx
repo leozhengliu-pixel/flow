@@ -296,7 +296,7 @@ function ActorVisual({ notification }: { notification: InboxNotificationRowData 
         {notification.actorAvatarUrl ? (
           <AvatarImage className="flow-inbox-row__avatar" src={notification.actorAvatarUrl} alt="" aria-label={notification.actor} />
         ) : (
-          <span className="flow-inbox-row__avatar flow-inbox-row__initials" aria-label={notification.actor} style={{ '--flow-inbox-avatar': avatarColor(notification.actorId ?? notification.actor) } as CSSProperties}>
+          <span className="flow-inbox-row__avatar flow-inbox-row__initials" aria-label={notification.actor} style={{ '--flow-inbox-avatar': avatarColor(notification.actorId) } as CSSProperties}>
             {notification.actorInitials ?? avatarInitials(notification.actor)}
           </span>
         )}

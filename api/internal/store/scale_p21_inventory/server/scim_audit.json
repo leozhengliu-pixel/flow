@@ -1,0 +1,38 @@
+{
+  "source": "server/scim_audit.go",
+  "unmigrated": 2,
+  "consumers": {
+    "applySCIMProfileSettings": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending complete aggregate-reference closure for accepted legacy IDs or missing subjects. Callback can create userSettings even with absent Users/subjectID. Positive user read is safe; absent user falls through to arbitrary omitted matching ContentData.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "scimUsers (api/cmd/server/scim.go:345)",
+        "scimUser (api/cmd/server/scim.go:397)"
+      ]
+    },
+    "recordSCIMAudit": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The empty scope also omits the ordinary users/subjectID winner for member audit entries. Previous review: Empty metadata scope; entries and actor are already captured and appendAuditEntries is consumed by the existing transactional audit collector. No audit history is loaded. TestScaleP21M2SCIMProfileAndAudit compares both persisted audit entries including actor and metadata.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "scimUsers (api/cmd/server/scim.go:345)",
+        "scimUser (api/cmd/server/scim.go:397)",
+        "deprovisionSCIMUser (api/cmd/server/scim.go:529)",
+        "auditSCIMGroupWrite (api/cmd/server/scim.go:911)"
+      ]
+    }
+  }
+}

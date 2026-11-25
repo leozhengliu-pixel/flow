@@ -1,0 +1,18 @@
+{
+  "source": "server/cycle_graph.go",
+  "unmigrated": 1,
+  "consumers": {
+    "getCycleGraph": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/cycles/{id}/graph (server/main.go:997)"
+      ]
+    }
+  }
+}

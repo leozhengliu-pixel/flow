@@ -33,6 +33,9 @@ func (s *server) resolveOwnedImage(ctx context.Context, name string) (ownedImage
 	var owner *store.FileUpload
 	if upload, err := s.store.FileUploadByObject(ctx, name); err == nil {
 		owner = &upload
+	} else if databaseReadUnavailable(err) {
+		recordUploadVisibilityRefusal(ctx, err)
+		return ownedImage{}, false
 	}
 	if icon, ok := s.resolveOAuthAppIcon(name, owner); ok {
 		return ownedImage{name: name, contentType: icon.contentType, readable: func(ctx context.Context, userID string) bool {
@@ -41,10 +44,53 @@ func (s *server) resolveOwnedImage(ctx context.Context, name string) (ownedImage
 	}
 	if logo, ok := s.resolveWorkspaceLogo(name, owner); ok {
 		return ownedImage{name: name, contentType: logo.contentType, readable: func(ctx context.Context, userID string) bool {
-			return s.activeWorkspaceMember(ctx, logo.workspaceKey, userID, false)
+			return s.workspaceLogoReadable(ctx, logo.workspaceKey, userID)
 		}}, true
 	}
 	return ownedImage{}, false
+}
+
+// ownedImageAccess keeps the bounded icon source alive through the permission
+// decision. The off branch preserves the original resolver and callback order.
+func (s *server) ownedImageAccess(ctx context.Context, name, userID string, checkPermission bool) (ownedImage, bool, bool, error) {
+	if !s.store.BoundedMetadataEnabled() {
+		image, found := s.resolveOwnedImage(ctx, name)
+		return image, found, found && (!checkPermission || image.readable(ctx, userID)), nil
+	}
+	var owner *store.FileUpload
+	if upload, err := s.store.FileUploadByObject(ctx, name); err == nil {
+		owner = &upload
+	} else if databaseReadUnavailable(err) {
+		return ownedImage{}, false, false, err
+	}
+	icon, found, readable, err := s.boundedOAuthAppIconAccess(ctx, name, owner, userID, checkPermission)
+	if err != nil {
+		return ownedImage{}, false, false, err
+	}
+	if found {
+		return ownedImage{name: name, contentType: icon.contentType}, true, readable, nil
+	}
+	if logo, found := s.resolveWorkspaceLogo(name, owner); found {
+		return ownedImage{name: name, contentType: logo.contentType}, true,
+			!checkPermission || s.workspaceLogoReadable(ctx, logo.workspaceKey, userID), nil
+	}
+	return ownedImage{}, false, false, nil
+}
+
+// workspaceLogoReadable is the logo's read permission: an active member whose
+// sign-in satisfies the workspace's authentication policy.
+func (s *server) workspaceLogoReadable(ctx context.Context, workspace, userID string) bool {
+	if !apiKeyWorkspaceMatches(ctx, workspace) {
+		return false
+	}
+	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspace)
+	if err != nil {
+		recordUploadVisibilityRefusal(ctx, err)
+		return false
+	}
+	role, status, err := s.store.WorkspaceRole(ctx, workspaceID, userID)
+	recordUploadVisibilityRefusal(ctx, err)
+	return err == nil && status == "active" && workspacePolicyAllows(ctx, workspace, role)
 }
 
 // workspaceLogo is an uploaded workspace logo that is its workspace's logo now.
@@ -67,7 +113,11 @@ func (s *server) resolveWorkspaceLogo(name string, owner *store.FileUpload) (wor
 	if owner == nil || owner.Purpose != store.FileUploadPurposeWorkspaceLogo || owner.WorkspaceKey == "" {
 		return workspaceLogo{}, false
 	}
-	data, ok := s.store.WorkspaceMetadata(owner.WorkspaceKey)
+	read := s.store.WorkspaceMetadata
+	if s.store.BoundedMetadataEnabled() {
+		read = s.store.WorkspaceSettingsMetadata
+	}
+	data, ok := read(owner.WorkspaceKey)
 	if !ok || data.Workspace.URLKey != owner.WorkspaceKey || data.Workspace.LogoURL != "/uploads/"+name {
 		return workspaceLogo{}, false
 	}

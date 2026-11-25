@@ -1,0 +1,35 @@
+{
+  "source": "server/scale_p21_issue_record_authorization_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "boundedIssueRecordAuthorizationMetadata": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Composes the proven BeginIssueWriteAuthorizationRead over the original query and requested issue IDs, with its exact two-page/ancestor/comment-author behavior and a request output lifetime. AuthorizationProjectionScope borrows the viewerTeamScope already computed by that reader before API-key filtering, avoiding a redundant SQL directory/policy projection. New release existence checks visit only release ID/PipelineID and pipeline ID/TeamIDs; the viewer's content-team filter precedes the selected API-key filter, and development mode remains unfiltered. Complete metadata is never handed to handlers. SW187 covers 960 exact legacy/warm/reloaded route decisions and consumed header pairs, all M principals/credentials, release pipeline visibility, cross-workspace refusal, legal large unrelated bodies, cancellation and output release.",
+      "accessors": [
+        "BeginIssueWriteAuthorizationRead",
+        "BeginInstalledMetadataRead",
+        "AuthorizationProjectionScope",
+        "IssueAuthorizationReleaseVisible"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue route authorization shared by update, batch, delete and issue child endpoints.",
+      "callers": ["server/issue_record_aliases.go:buildIssueRecordAuthorizationData"]
+    },
+    "boundedIssueRecordAuthorizationTargets": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The route authorization destination inputs use the proven InstalledMetadataRead generation, the parent issue reader's already-computed viewer scope, ProjectVisibleInProjection, CycleVisibleInProjection and ProjectedWorkspace directory (only when an assignee is requested). Development uses the proven unfiltered RecordIDPresent. The tiny destination result supplies only the IDs read by resourceAllowed's existence predicates and is never a complete handler projection; the live directory is request-owned through response output. SW187 compares update/batch destination authorization across the complete M matrix, warm/reloaded sources and development mode, with output retention, cancellation and zero complete decodes.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "RecordIDPresent",
+        "ProjectVisibleInProjection",
+        "CycleVisibleInProjection",
+        "ProjectedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "PATCH and batch issue route authorization destination validation.",
+      "callers": ["server/scale_p21_issue_record_authorization_read.go:boundedIssueRecordAuthorizationMetadata"]
+    }
+  }
+}

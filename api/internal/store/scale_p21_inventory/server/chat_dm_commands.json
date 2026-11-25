@@ -1,0 +1,59 @@
+{
+  "source": "server/chat_dm_commands.go",
+  "unmigrated": 0,
+  "consumers": {
+    "chatDMComment": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "GET issue preflight uses chatAuthorizedPointRead and the existing chatAuthorizedMutation POST now reaches the owned bounded discussion writer. The containing output lifetime remains live through notices, returned comments, final card construction and actual platform send/errors. TestScaleP21SW40DMPointOutputDifferential retains all 13 prior GET/card/error cases and adds exact successful, Chinese and platform-refused comment comparisons (16 total). Three literal old-GET, bounded old-GET and bounded point-GET variants return identical complete POST comments; four actual success-card retries match exactly and create one comment under the unchanged creation key. Held admission is observed during platform sends and after POST until output close, all paths release work afterward, and bounded complete metadata decodes remain zero. The source adapter is unchanged; pending create and linked foreign-preview siblings retain independent status.",
+      "accessors": [
+        "chatAuthorizedPointRead",
+        "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.chatDMMessage"
+      ]
+    },
+    "chatDMCreateIssue": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Tier B: the existing stable creation-key POST adapter reaches the proven bounded issue-record creation writer under the containing output lifetime. Offered-team/assignee validation, action consumption, language, success card and platform errors remain literal; no loading, cache or locking is added here. SW197's actual adapter table passes normal, invalid-input and expired-consent cases, comparing canonical issue/content rows, events, webhook/realtime output and actual platform calls, with zero retained work/full decodes. The flag-off route remains unchanged; the creation primitive's permission proof is reused.",
+      "accessors": [
+        "chatAuthorizedMutation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.chatDMCardAction"
+      ]
+    },
+    "chatDMInbox": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Tier B substitution uses proven ChatDisplayRead at the original metadata lookup boundary and lazily loads first ID/current-slug review title/slug headers from that same installed generation. The owner remains live through actual card encoding/platform send and releases on errors; new bounded loading errors propagate. Literal off WorkspaceMetadata remains, while original native QueryNotifications latest10 selection and unfiltered unread count, IssueQueryAccess/VisibleIssueRecordIDs, native issue fetches, missing-source skips, embedded actors, markdown/redaction, language and send/dedup arguments are unchanged. TestScaleP21SW56DMInboxDifferential compares complete actual fake-platform payloads and returned errors across nine empty/mixed/unavailable/review-order/limit/Chinese/platform-failure/missing-workspace/inactive-viewer cases, including native duplicate review and slug-before-ID precedence, no backfill after filtering, held admission during sends, zero full decodes and zero retained work. Create/comment/foreign-preview siblings and upstream authorization retain independent status.",
+      "accessors": [
+        "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.chatDMMessage"
+      ]
+    },
+    "chatDMLinkPreview": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Existing local issue point reads and operation lifetime retain their SW40 proof; linked foreign-workspace authorization now uses the proven owned declared DM headers, closing the remaining broad bootstrap dependency. Original workspace/link lookup, first ordered ID/current/old-slug matching including duplicate IDs, real project card text, point issue reads, localized notices and platform send/error behavior remain. SW173 is one18-row exact actual off/on table covering foreign project and issue previews, aliases/duplicate precedence, selected credentials, HIPAA, expired/revoked access, disconnected linkage, Chinese and platform failure. Successful witnesses assert actual foreign payloads; work remains held through sends and releases afterward with zero full decodes. No new reader/loading/cache/locking is added in this consumer.",
+      "accessors": [
+        "chatAuthorizedPointRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.chatDMMessage"
+      ]
+    }
+  }
+}

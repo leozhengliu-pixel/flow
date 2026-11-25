@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_slack_notification_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginSlackNotificationRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted owned installed Slack rendering source preserves physical/default workspace selection and explicit Context pins. It streams exact Provider/Status/OAuthAuthorized predicates and retains only the first connected authorized Slack ID plus installed Workspace.URLKey. LoadTarget streams exact ID predicates and keeps only the first project Name/SlugID/TeamIDs or initiative Name/SlugID/LeadTeamID/ContributingTeamIDs, with no slug/current-ID ranking. LoadTeams owns only requested settings map keys, channel ID or fallback channel name and exact requested notification bool keys; configs, unrelated keys/body fields and unused channel names are skipped. ReservePosts atomically admits 64 KiB per outgoing goroutine/request plus eight times token/channel/text input bytes before any launch; failed/canceled admission leaves the source owned for caller cleanup. Four Tier A tests cover native duplicate/empty/NUL/order/ID-vs-slug semantics, caller isolation, cancellation, idempotent close/closed-stage refusal, partial/selected/post budget failures, concurrent readers, source replacement, independently reopened preflight generations and parent-pin survival. Warm/reloaded 1x/10x unrelated bodies retain exactly 163296 admitted source bytes with zero SQL/full decodes/leaks. Tests passed normally, with -race, and twice against the same persistent SQLite database. The separate 26-case dispatch table verifies actual platform output and admission through final asynchronous success/failure/cancellation; server race passed. No cache or mutation preimage is introduced.",
+      "accessors": [
+        "BeginInstalledMetadataRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Ordinary domain-event Slack notification routing.",
+      "callers": [
+        "server/team_slack_notifications.go:dispatchTeamSlackEvent"
+      ]
+    }
+  }
+}

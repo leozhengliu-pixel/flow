@@ -1,0 +1,23 @@
+# Known-failing Go tests, tracked until fixed (baseline of 2026-11-17/18, CI runs
+# 44173057528, 44222295379, 44239650983 and 44253320777). Not listed, flaky:
+# TestScaleP19EnablePermissionDifferential/postgres/key-selected-set (503) and
+# TestScaleP21SW186IssueCreationDifferential/development on MySQL.
+#
+#   <package> <TestName> <scope>[,<scope>...] # <reason> (owner: <who fixes it>)
+#
+# Scopes say where the test fails and is left out:
+#   race      the API shards with the race detector (pushes to main)
+#   plain     the API shards without it (pull requests)
+#   postgres  the Scale differentials jobs on PostgreSQL
+#   mysql     the Scale differentials jobs on MySQL
+# Everywhere else the test runs as usual. The "Known failing (tracked)" job runs
+# every entry in each of its scopes, never blocks, and warns for each one that
+# passes: remove that line (or that scope) in the change that fixes it. The shard
+# check fails when a listed test no longer exists. Do not add tests here to make
+# a red build green; this list only shrinks.
+
+# Fail under the race detector on CI
+
+# PostgreSQL and MySQL (Scale differentials jobs)
+./cmd/server TestScaleP21SW209AdvancedScheduleTickerLargeInlineWarmDifferential postgres,mysql # combined duplicate gate lost occurrence order (Health/DueAt/Missing of the 192-byte inline project ID); fails on the base commit too (owner: P21 SW209)
+./cmd/server TestScaleP21SW209AdvancedScheduleTickerLargeInlineReloadedDifferential postgres,mysql # combined duplicate gate lost occurrence order (Health/DueAt/Missing of the 192-byte inline project ID); fails on the base commit too (owner: P21 SW209)

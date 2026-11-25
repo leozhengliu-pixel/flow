@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_project_directory_query.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginProjectDirectoryQueryWithAccess": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Preserves the old directory adapter's pre/post live access validation, workspace binding and selected/app refusal around the owned raw query. SW90 supplies the complete source/query proof and SW87 the indexed route role/key matrix; failures close the page owner before returning.",
+      "accessors": ["BeginProjectDirectoryQuery"],
+      "temperature": "hot",
+      "temperatureReason": "Indexed project-list route entry.",
+      "callers": ["server/server.listProjectRecords"]
+    },
+    "projectDirectoryInstalledSource": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Retains the exact current installed project source independently of request pins. Authoritative nonnil empty projects stay empty; nil projects and the specific policy-only missing-source state use canonical fallback. SW90 covers current/stale/foreign generations, nil/empty/default namespaces, duplicates, policy-only fallback, cancellation, admission and lifetime with stable 1x/10x held work; persistent SQLite and race pass.",
+      "accessors": ["resident-state", "BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared source selection for project lists.",
+      "callers": ["store/SQLiteStore.BeginProjectDirectoryQuery", "store/SQLiteStore.legacyProjectDirectoryQueryOwned"]
+    }
+  }
+}

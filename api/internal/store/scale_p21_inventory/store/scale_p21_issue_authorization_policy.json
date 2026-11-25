@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_issue_authorization_policy.go",
+  "unmigrated": 0,
+  "consumers": {
+    "CurrentCommentActionSettings": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Preserves the separate contextless current installed AccountCollections preference lookup after authorization, bypassing the request's pinned generation. Only UserID, AgentEnabled and SuggestedActionsOnComments are decoded, with saved-key and nil-pointer presence intact, and decoded output remains charged to the containing authorization owner. The server overrides its earlier policy snapshot only for a nonempty saved UserID. SW49 compares newer, saved-empty and missing settings against literal AccountCollections, retains the original authorization snapshot, and checks canceled-context timing and release. No passkeys or unrelated settings are loaded. General AccountCollections consumers remain independently pending.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Current preference override after issue comment creation.",
+      "callers": ["server/server.startCommentActions"]
+    }
+  }
+}

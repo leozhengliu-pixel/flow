@@ -135,7 +135,12 @@ func (p *fakeLoopProvider) serve(w http.ResponseWriter, r *http.Request) {
 
 func newLoopTestServer(t *testing.T, provider *fakeLoopProvider) (*server, http.Handler) {
 	t.Helper()
-	upstream := httptest.NewServer(http.HandlerFunc(provider.serve))
+	return newLoopTestServerWithProvider(t, provider.serve)
+}
+
+func newLoopTestServerWithProvider(t *testing.T, provider http.HandlerFunc) (*server, http.Handler) {
+	t.Helper()
+	upstream := httptest.NewServer(provider)
 	t.Cleanup(upstream.Close)
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

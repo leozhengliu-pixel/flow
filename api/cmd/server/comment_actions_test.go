@@ -41,6 +41,7 @@ func commentActionFixture(t *testing.T) (*server, http.Handler, domain.Bootstrap
 	h := newHandler(s)
 	data := repo.Bootstrap()
 	issue := requestJSON[domain.Issue](t, h, "POST", "/api/issues", domain.IssueCreateInput{Title: "Comment actions", TeamID: data.Teams[0].ID}, 201)
+	issue = ageIssueForActivityTest(t, repo, data.Workspace.URLKey, issue)
 	comment := requestJSON[domain.Comment](t, h, "POST", "/api/issues/"+issue.ID+"/comments", domain.CommentCreateInput{Body: "Please make this urgent."}, 201)
 	s.agent.Enabled = true
 	return s, h, data, issue, comment, calls
@@ -169,6 +170,7 @@ func TestCommentActionsTwoEditorsAcceptOnce(t *testing.T) {
 		authRequest[domain.UserSettings](t, client, "PATCH", f.host.URL+"/api/account/settings", map[string]bool{"agentEnabled": true, "suggestedActionsOnComments": true}, outcomeWorkspace, 200)
 	}
 	issue := f.home[0]
+	issue = ageIssueForActivityTest(t, f.repository, outcomeWorkspace, issue)
 	priority := 1
 	a := domain.CommentAction{ID: "race_action", IssueID: issue.ID, CommentID: "race_comment", TargetUserID: issue.Creator.ID, Status: "pending", Action: "priority", Arguments: domain.CommentActionArguments{Priority: &priority}, CreatedAt: time.Now().UTC()}
 	if err := f.repository.MutateWorkspace(t.Context(), outcomeWorkspace, "test.proposal", issue.ID, nil, func(d *domain.Bootstrap) error {

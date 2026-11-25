@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# Refresh scripts/ci/go-test-timings.json from recent successful CI runs on main.
+# Refresh scripts/ci/go-test-timings.json from recent completed CI runs on main.
 #
 #   update-go-test-timings.sh [RUN_ID...]
 #
 # Every push to main uploads the artifact "go-test-timings" (job "API test
 # timings"): the seconds each top-level Go test took in that run, per package.
 # This script downloads the artifact of the newest TIMING_RUNS (default 3)
-# successful main runs that still have one, or of the RUN_IDs given, and rewrites
-# the entries of every package found in them in scripts/ci/go-test-timings.json
-# with each test's median time. One run alone is noisy (a test can take 130 s on
-# one runner and 235 s on another), so the median over several runs is what the
-# shard packing is based on. A test missing from some runs uses the runs it is in.
-# Packages that are not in the artifacts keep their old entries.
+# completed main runs that still have one, or of the RUN_IDs given, and updates
+# the timings with each test's median time. One run alone is noisy (a test can
+# take 130 s on one runner and 235 s on another). A test missing from some runs
+# uses the runs it is in.
+# Tests that did not finish keep their old entries.
 #
 # The scheduled go-test-timings.yml workflow opens a pull request. To refresh manually:
 #
@@ -53,21 +52,21 @@ runs=()
 if [ "$#" -ge 1 ]; then
   for run in "$@"; do
     download "$run" || {
-      echo "run $run has no usable $artifact artifact (expired, or its tests did not all pass)" >&2
+      echo "run $run has no usable $artifact artifact" >&2
       exit 1
     }
     runs+=("$run")
   done
 else
-  for candidate in $(gh run list --workflow ci.yml --branch main --event push --status success \
-    --limit 40 --json databaseId --jq '.[].databaseId'); do
+  for candidate in $(gh run list --workflow ci.yml --branch main --event push --status completed \
+    --limit 40 --json databaseId,conclusion --jq '.[] | select(.conclusion == "success" or .conclusion == "failure") | .databaseId'); do
     if download "$candidate"; then
       runs+=("$candidate")
       [ "${#runs[@]}" -ge "$wanted" ] && break
     fi
   done
   if [ "${#runs[@]}" -eq 0 ]; then
-    echo "no successful main run in the last 40 has a $artifact artifact" >&2
+    echo "no completed main run in the last 40 has a $artifact artifact" >&2
     exit 1
   fi
 fi
@@ -87,7 +86,7 @@ jq -S -s '
       | group_by(.pkg)
       | map({key: .[0].pkg, value: (map({key: .test, value: .seconds}) | from_entries)})
       | from_entries) as $new
-  | $old + $new
+  | $old * $new
 ' "$old" "$work"/runs/*.json > "$work/new.json"
 
 mv "$work/new.json" "$target"

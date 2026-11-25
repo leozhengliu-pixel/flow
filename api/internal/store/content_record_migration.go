@@ -7,18 +7,18 @@ import (
 
 func (s *SQLiteStore) migrateContentIndexes(ctx context.Context) error {
 	type record struct {
-		workspace, kind, resource string
-		raw                       json.RawMessage
+		workspace, kind, resource, id string
+		raw                           json.RawMessage
 	}
 	for {
-		rows, err := s.db.QueryContext(ctx, `SELECT workspace_key,kind,resource_id,data FROM workspace_content_records WHERE record_version=0 LIMIT 1000`)
+		rows, err := s.db.QueryContext(ctx, `SELECT workspace_key,kind,resource_id,id,data FROM workspace_content_records WHERE record_version=0 LIMIT 1000`)
 		if err != nil {
 			return err
 		}
 		batch := []record{}
 		for rows.Next() {
 			var item record
-			if err := rows.Scan(&item.workspace, &item.kind, &item.resource, &item.raw); err != nil {
+			if err := rows.Scan(&item.workspace, &item.kind, &item.resource, &item.id, &item.raw); err != nil {
 				rows.Close()
 				return err
 			}
@@ -49,6 +49,11 @@ func (s *SQLiteStore) migrateContentIndexes(ctx context.Context) error {
 			if row, err = buildContentRecordRow(item.workspace, item.kind, item.resource, raw); err != nil {
 				break
 			}
+			// Rewrite the selected row under its stored key. The id inside the
+			// JSON can be missing or differ (legacy and hand-written rows); keyed
+			// on it, the upsert added another row and left this one at version 0,
+			// so the next query returned it again and startup never finished.
+			row.id = item.id
 			records = append(records, row)
 		}
 		if err == nil {

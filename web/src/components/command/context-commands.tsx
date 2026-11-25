@@ -38,6 +38,7 @@ import { issueMoveTeams } from '@/lib/issue-team-move'
 import { statesForTeams, teamStateChanges } from '@/lib/team-workflow'
 import type { BootstrapData, Issue, IssueRelationType, IssueUpdateInput, WorkflowState } from '@/types/flow'
 import type { CommandContext, CommandIssueRef, IssueCommandContext } from './command-context'
+import type { LabelCommandLabel, LabelCommandState } from './label-command-items'
 import { useI18n } from '@/i18n/i18n'
 import { issueReleaseCommands } from './release-commands'
 import { issueDeleteConfirmation, issueDeleteDescription } from '@/lib/issue-delete-confirmation'
@@ -45,7 +46,7 @@ import { issueDeleteConfirmation, issueDeleteDescription } from '@/lib/issue-del
 export type CommandPageId =
   | 'projectOpen' | 'cycleOpen' | 'teamOpen' | 'userOpen' | 'viewOpen' | 'initiativeOpen' | 'favoriteOpen'
   | 'issueOpen'
-  | 'status' | 'assignee' | 'priority' | 'labels' | 'dueDate' | 'project' | 'cycle' | 'estimate' | 'team'
+  | 'status' | 'assignee' | 'priority' | 'labels' | 'labelGroup' | 'dueDate' | 'project' | 'cycle' | 'estimate' | 'team'
   | 'relation' | 'relatedIssue' | 'parent' | 'subIssue'
   | 'issueRelease' | 'issueReleaseRemove' | 'releaseOpenPipeline' | 'releaseCreate' | 'releaseDate' | 'releaseStage'
   | 'projectStatus' | 'projectLead' | 'projectTargetDate' | 'projectInitiative'
@@ -56,8 +57,16 @@ export interface CommandPage {
   id: CommandPageId
   label: string
   relationType?: IssueRelationType
-  /** Carries the earlier pick of a two-step flow (template id, team id). */
+  /** Carries the earlier pick of a two-step flow (template id, team id, label group id). */
   payload?: string
+}
+
+/** The labels step ("Add labels…" and a label group's own step): rendered by `LabelCommandItems`. */
+export interface LabelCommands {
+  labels: LabelCommandLabel[]
+  state: (labelId: string) => LabelCommandState
+  toggle: (labelId: string) => void
+  removeAll?: () => void
 }
 
 export interface ContextAction {
@@ -159,7 +168,7 @@ export function useContextCommands({ context, data, page, query, handlers, close
   handlers: ContextCommandHandlers
   close: () => void
   t: (value: string) => string
-}): { heading: string; actions: ContextAction[]; options: PageOption[] } {
+}): { heading: string; actions: ContextAction[]; options: PageOption[]; labels?: LabelCommands } {
   const { refs, issues, remember } = useContextIssues(context, data)
   const { formatDate } = useI18n()
   const pickerOpen = Boolean(data && page && ['relatedIssue', 'parent', 'subIssue'].includes(page.id))
@@ -278,7 +287,23 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
   ]
 
   const options = page ? issuePageOptions() : []
-  return { heading: single ? 'Issue' : 'Issues', actions, options }
+  return { heading: single ? 'Issue' : 'Issues', actions, options, labels: page && (page.id === 'labels' || page.id === 'labelGroup') ? labelCommands() : undefined }
+
+  function labelCommands(): LabelCommands {
+    const labels = labelsFor(data, teamIds)
+    const groups = new Map(data.labelGroups.map(group => [group.id, group]))
+    const state = (labelId: string): LabelCommandState => {
+      const count = issues.filter(issue => issue.labels.some(item => item.id === labelId)).length
+      return count > 0 && count === issues.length ? true : count > 0 ? 'mixed' : false
+    }
+    return {
+      labels: labels.map(label => ({ id: label.id, name: label.name, color: label.color, scope: label.scope, groupId: label.groupId && groups.has(label.groupId) ? label.groupId : undefined, groupLabel: label.groupId ? groups.get(label.groupId)?.name : undefined, groupColor: label.groupId ? groups.get(label.groupId)?.color : undefined })),
+      state,
+      // Picking a label of a group sets it on every issue (replacing the group's other label) and closes the menu.
+      toggle: labelId => { const grouped = Boolean(labels.find(label => label.id === labelId)?.groupId); const run = () => applyEach(issue => ({ labelIds: setGroupedLabelSelected(issue.labels.map(item => item.id), labelId, labels, state(labelId) !== true) })); if (grouped) void choose(run)(); else void run() },
+      removeAll: issues.some(issue => issue.labels.length) ? () => void choose(() => apply({ labelIds: [] }))() : undefined,
+    }
+  }
 
   function issuePageOptions(): PageOption[] {
     if (!page) return []
@@ -306,16 +331,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
         ...(viewerCanInvite() ? [{ id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', icon: <FlowGlyph className="command-invite-icon" name="invitePlane" size={16}/>, keywords: 'invite member user new', group: 'New user', select: choose(async () => openMemberInvite()) }] : []),
       ]
     }
-    if (page.id === 'labels') {
-      const labels = labelsFor(data, teamIds)
-      const groups = new Map(data.labelGroups.map(group => [group.id, group.name]))
-      return labels.map(label => {
-        const count = issues.filter(issue => issue.labels.some(item => item.id === label.id)).length
-        const checked = count > 0 && count === issues.length ? true : count > 0 ? 'mixed' as const : false
-        return { id: label.id, label: label.name, entity: true, icon: <span className="option-dot" style={{ background: label.color }}/>, detail: label.groupId ? groups.get(label.groupId) : undefined, keywords: label.groupId ? groups.get(label.groupId) : undefined, checked,
-          select: () => applyEach(issue => ({ labelIds: setGroupedLabelSelected(issue.labels.map(item => item.id), label.id, labels, checked !== true) })) }
-      })
-    }
+    if (page.id === 'labels' || page.id === 'labelGroup') return []
     if (page.id === 'dueDate') return datePageOptions(query, same(issue => issue.dueDate ?? ''), issues.some(issue => issue.dueDate) && !issues.some(issue => issue.recurrence), value => choose(() => apply({ dueDate: value })), t)
     if (page.id === 'project') {
       const current = same(issue => issue.project?.id ?? '')

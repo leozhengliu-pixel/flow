@@ -179,6 +179,16 @@
   .phone-menu-surface.property-command-labels .property-command-options [role="option"] { grid-template-columns: 20px 16px minmax(0,1fr); gap: 8px; }
   .phone-menu-surface.property-command-labels .property-command-checkbox { justify-self: start; margin-left: 1px; }
   .phone-menu-surface.property-command-labels .option-dot { width: 9px; height: 9px; flex-basis: 9px; }
+  /* Phones show no submenu marker on a label group row; its name runs to the row's end. */
+  html:root body .property-command-labels .property-command-label-group-option > .property-command-group-chevron,
+  html:root body .project-label-option.is-group > .project-label-chevron { display: none; }
+  html:root body .property-command-labels .property-command-label-group-option > .property-command-group-copy { padding-right: 0; }
+  /* Label sheet headings sit 12px in, and section separators run the full width of the sheet (through the list's 6px inset). */
+  html:root body .phone-menu-surface.property-command-labels:not(#_) .property-command-options > .property-command-group { padding-inline: 12px; }
+  html:root body .phone-menu-surface.property-command-labels:not(#_) .property-command-options > .property-command-separator { margin-inline: -6px; }
+  /* The row menu's Labels level (the labels picker inside a phone submenu) shows no key hint, like the labels sheet. */
+  html:root body [data-phone-submenu].property-command-labels .property-command-search-shortcut,
+  html:root body [data-phone-submenu].property-command-labels .property-command-search kbd { display: none; }
   html:root body .phone-menu-surface:not(#_) .property-command-group { font-size: var(--phone-property-group-font-size, 13px); font-weight: 500; }
   html:root body .phone-menu-surface:not(#_):has(.phone-menu-heading) .property-command-options:not(.virtual-property-options) { max-height: min(369px, calc(100dvh - var(--phone-menu-top) - 97px)); }
 }
@@ -438,4 +448,25 @@
     transform: translate(-50%, -50%);
   }
   html:root .sidebar .sidebar-help > svg { width: 14px; height: 14px; color: var(--text); opacity: .64; }
+}
+
+/* Phone sidebar button, as measured on the reference phone pages: a 32px round ghost button with a 14px panel glyph
+   (12.25x10.5 outline, divider at x4 of 16) drawn as one SVG in the muted icon ink on every page, nudged 0.1px right like the reference's glyph. */
+@media (max-width: 767px) {
+  html:root[data-sidebar-mode] body .app [data-sidebar-trigger] {
+    box-sizing: border-box;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+  }
+  html:root body .app [data-sidebar-trigger]::before {
+    width: 14px;
+    height: 14px;
+    transform: translateX(.1px);
+    background: var(--issue-muted);
+    mask: url('/icons/sidebar-navigation-left.svg') center / 14px 14px no-repeat;
+  }
+  html:root body .app [data-sidebar-trigger]::after { display: none; }
+  /* Pages that show their own 14px glyph instead get the same nudge. */
+  html:root body .app [data-sidebar-trigger] > svg { transform: translateX(.1px); }
 }

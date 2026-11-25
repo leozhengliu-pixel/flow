@@ -189,8 +189,19 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		}
 		// writeMu holds the copy (and its revision) until the install.
 		ctx, copyWrite := s.watchMetadataWrite(ctx, workspaceKey)
+		ctx, callback, documentRecords := prepareDocumentRecordMutation(ctx, stored, eventType, payload, mutate)
 		discussionOnly := IsIssueDiscussionMutation(ctx)
-		current := cloneBootstrap(collectionMetadata(stored))
+		var fields []string
+		var current domain.Bootstrap
+		if documentRecords {
+			selectedFields, _ := metadataFieldsFromContext(ctx)
+			current = metadataRecordFieldSnapshot(ctx, stored, selectedFields)
+		} else if narrowMutationInputs() && discussionOnly && scope.Resolve == nil && scope.Expand == nil && !scope.StatusAutomation && !scope.CreateIssues {
+			fields = discussionCallbackFields
+			current = metadataFieldSnapshot(stored, fields)
+		} else {
+			current = cloneBootstrap(collectionMetadata(stored))
+		}
 		if discussionOnly {
 			current.IssueSLAs = nil
 			current.SLAEvents = nil
@@ -209,12 +220,14 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		// Resolve the actor's role before opening the transaction: SQLite
 		// pools can hold a single connection.
 		actor, hasActor := actorFromContext(ctx)
+		actor = mutationInputActor(actor)
 		actorRole := ""
 		var actorTeams []string
 		if hasActor {
-			if role, status, roleErr := s.WorkspaceRole(ctx, current.Workspace.ID, actor.ID); roleErr == nil && status == "active" {
-				actorRole = role
-				actorTeams = s.actorTeamIDs(ctx, current.Workspace.ID, actor.ID)
+			var err error
+			actorRole, actorTeams, err = s.mutationActorAccess(ctx, current.Workspace.ID, actor.ID)
+			if err != nil && !errors.Is(err, ErrAuthForbidden) {
+				return err
 			}
 		}
 		// Team moves see the current memberships; the snapshot's copies are
@@ -307,6 +320,9 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		}
 		// Snapshot clones drop json:"-" fields such as the next issue number.
 		next.NextIssueNumber = nextIssueNumber
+		if len(fields) > 0 {
+			copyMutationProjects(&next, stored)
+		}
 		refreshDisplayReferences(&next)
 		refreshIssueReferences(&next)
 		originalViewerRole := next.ViewerRole
@@ -329,8 +345,22 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		traceMark(ctx, "load")
 		next.FormerMembers = s.formerMemberLookup(ctx, tx, &next)
 		next.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspaceKey)
-		aggregateID, err := mutate(&next)
+		var aggregateID string
+		if len(fields) > 0 && verifyNarrowMutationInputs() {
+			aggregateID, err = s.verifyMutationCallback(ctx, tx, "scoped discussion", stored, &next, fields, payload, mutate)
+			restoreUnlistedMetadata(&current, stored, fields)
+			fields = nil
+		} else {
+			aggregateID, err = callback(&next)
+		}
 		next.CollaborationUpdates = nil
+		if documentRecords {
+			restoreUnlistedMetadata(&current, stored, nil)
+		}
+		if len(fields) > 0 {
+			restoreUnlistedMetadata(&current, stored, fields)
+			restoreUnlistedMetadata(&next, stored, fields)
+		}
 		if discussionOnly {
 			// These collections are unrelated to a comment but may contain
 			// hundreds of thousands of records. Restore their shared snapshots

@@ -13,6 +13,7 @@ import { useI18n } from '@/i18n/i18n'
 import { PersonHover } from './person-info'
 import { SearchableMenuItems } from '@/components/ui/searchable-menu-items'
 import './virtual-property-options.css'
+import { useResourcePeople } from '@/hooks/scale-p20-resource-pickers'
 
 /**
  * A searchable people list for dropdown/context menus. `assignee` makes it the reference app's assignee list: "Assign to…" search,
@@ -21,6 +22,7 @@ import './virtual-property-options.css'
  */
 export function PeopleMenuItems({ users, selectedId, selectedIds, onSelect, emptyLabel, itemClassName, contextMenu = false, assignee = false, onInvite = openMemberInvite }: { users: User[]; selectedId?: string; selectedIds?: string[]; onSelect: (id: string) => void; emptyLabel?: string; itemClassName?: string; contextMenu?: boolean; assignee?: boolean; onInvite?: () => void }) {
   const { t } = useI18n()
+  users = useResourcePeople(users)
   const checked = selectedIds ?? (selectedId === undefined ? [] : [selectedId])
   const checkedKey = checked.join('\n')
   const options = useMemo(() => {

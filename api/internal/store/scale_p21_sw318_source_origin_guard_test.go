@@ -1,0 +1,274 @@
+package store
+
+import (
+	"crypto/sha256"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+// This is one closed production-source audit, not a list of convenient test
+// constructors. Fingerprints deliberately require re-audit even for harmless
+// changes to a carrier: metadata can escape through an existing captured value.
+func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
+	contracts := map[string]string{
+		// SQL-reader borrower only: it never binds or edits snapshot metadata.
+		"scale_p21_workflow_run_write.go": "a1fba71672d01fae78447673c322c1d868ca26e39bbc3482969c0c6bb22a5994",
+		"issue_records.go":                "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
+		"issue_query.go":                  "6ca65a3c10ae72d0b57c0b72b369de83ae40e64afaa15214afd6b441f068e843",
+		// Bootstrap bodies reuse the outline's snapshot only for the same
+		// database and workspace; the IDs come from the authorized outline.
+		"issue_scan.go": "9b63608832b1056a60f36705a4bbb2762d0a60d454b41acf5f959447e4c8b970",
+		// The result cache only checks for a borrowed snapshot to bypass Redis.
+		"shared_result_cache.go":                      "a8b3776efb34fe28b10957fe5e9e29f064bf2965809262760d29bfa07351afb3",
+		"auth.go":                                     "ebf4155c13b06f088ef0cd452d12112b5a032c4411a8955a89bac54273895f44",
+		"team_default_favorites.go":                   "8ba62b09173955d3f412bba9820ba6292e3ee06fec852571c691e5a62e49e657",
+		"scale_p15_snapshot_buffers.go":               "55e0d8d461ffd547d4d4fd9329cf9fda23259a0fef08da7e6ba42a0d51c88f7f",
+		"snapshot_clone.go":                           "4a6d61a5291c12c71aa737f952c137a51d5dbd5ccbdf72fbce5af5fed755b166",
+		"../../cmd/server/advanced_features.go":       "cf26c25b133fe761ff8ec08bebd3b2d0417b6733356d6f676f76c391fde148e7",
+		"../../cmd/server/loop_settings.go":           "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
+		"../../cmd/server/main.go":                    "675fd1b3b139101f792fb499bbc5de2e67649deacaaeeb50fcd09b7b4bc27284",
+		"../../cmd/server/notification_state.go":      "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
+		"../../cmd/server/personal_data.go":           "ac5b80d21fc3f3edc717e140729d0b59b9e245ae5d68597c388336856cc0bb01",
+		"../../cmd/server/scale_p21_cold_dispatch.go": "78f6979c7b6492f603c4b1a452786f590b800139ea08d371bc3bc8054ba3e597",
+		// Background comment-action generator: borrows the issue bootstrap
+		// projection for its own run; never reaches request authorization.
+		"../../cmd/server/scale_p21_comment_action_writes.go":           "5765c0ab53a9346be3631aa48ab3d55c96204256e4ce63bdc5eb31db83983c39",
+		"../../cmd/server/scale_p21_general_bootstrap.go":               "4a4d2c67bc03934b0ab5306a249648e2101f2e22e5eab4bb48f920ac329bf94d",
+		"../../cmd/server/scale_p21_issue_bootstrap_stream.go":          "3a3083bf9dae00c0978985561a01b1ffc2d83055d93bd87e4376b6374219651b",
+		"../../cmd/server/scale_p21_issue_create_targets.go":            "4797fc2981774f90cbd94a0f00a835e5391e323bc28d5e067692b0b426172523",
+		"../../cmd/server/scale_p21_issue_record_authorization_read.go": "6026fba608d49f31c47ac07de86b8ea1f000f94b93a7f0758e0ee964303025d4",
+		"../../cmd/server/scale_p21_issue_update_targets.go":            "0aba87367470607dfcbc0ae7e48ec7c0e8402c7c5020991d85acc2c6af9594ee",
+		"../../cmd/server/scale_p21_triage_suggestions.go":              "ce4dc87da131244726aadae31d61b8a7fe9cd5760d05b895013aa8ac88fc2002",
+		"../../cmd/server/settings_features.go":                         "f2867b72c1f9b5611f57a4b8033cd362865754b1757d7866600ecb95fc0e84e6",
+		"authz_epoch.go":                                                "ce59afa33d8daca93d0901d13d86a0f7bb5f140cc479efc38395ab568173e9c4",
+		"content_records.go":                                            "b128e7aa3a74c4dcf0167ccbef6f316757c3ddc02645a89a12becee369fcdff2",
+		"database.go":                                                   "66c9f8b9fcf452d11179e040e3889ffa459e5f5d8a5fc557e39fb638a856f9dd",
+		"issue_access_metadata.go":                                      "e94330023938805faa4db03459377c9807c5bcb467182e4919a756924fd5ae74",
+		"metadata_decode.go":                                            "54ddefe9f0e9b60a2a2f92b49470622a31dc6ad9039ef44798953929c8838fef",
+		"metadata_delta.go":                                             "a79e58b9c65fd49c020acf27493596a9ce1546378d3a4ffa5548ccc9e81b7b0b",
+		"metadata_copy_revision.go":                                     "f41b31e55f638beb5ba7fd37adc66cc39f31e5602cf94d5987ad930e205f1ba5",
+		"metadata_mutation.go":                                          "b7589f199a137fbec8cf28d63b4558bc9712e148cd3c67eae2a9984174c21293",
+		"metadata_record_scope.go":                                      "0f02418f3ec0efe4cccc28a7eaf3cf768629493d407c6c2f7b8c80331ce163c1",
+		"read_snapshot.go":                                              "cc14903369aeacba0b8d30fe19573a6f5924790d2a235ed2c71b57bc654756b6",
+		"resource_access.go":                                            "460e374d1cf4a0915d8887aa408d68a6bb79f6ae267c3ebfff2d1d298977de64",
+		"scale_p11_peer_state.go":                                       "aabfdf46597e6f84410c9eb70367cc7d3bde01ac0dcd3510b761d8c7feaa173e",
+		"scale_p12_epoch_access.go":                                     "3a90a16ace7b653f6269cef736dd758162ea758d5e754508dc3d3804f771903a",
+		"scale_p19_metadata.go":                                         "0d847695e8a6dae32226bd778b04736af3e5759416b9ca6e43f2b9cd847aa411",
+		"scale_p17_record_selection.go":                                 "6569e3416267eaebeee483c6418859b303ea3a7c6928eed5ffa0de871f6ad287",
+		"scale_p21_issue_authorization_read.go":                         "e97d79bd6680ccf399ffd0a01037c7031924599ba24b906f0e6371799199c23f",
+		"scale_p21_issue_create_read.go":                                "2f3b94c3036cb5e4f0c138dcef6393eb112a3c3b9a7deb0fbc6c722617ada196",
+		"scale_p21_issue_record_authorization_release.go":               "9f812ba7e907bca285aeefa89ff5cbb08825046d045e469336ebb0bd81c2d64d",
+		"scale_p21_issue_update_targets.go":                             "6f8158f72b939dadc5a948dbc759a5c59e6243977ec7457ef2b0a21c37e13814",
+		"scale_p21_account_read.go":                                     "764509ac1287b4f3c340e6f0a3cb0082d6cb8b66422b14582217c52324d26c59",
+		"scale_p21_application_access.go":                               "373a4bb17dd58d702b0d52482e8cc3896efd379d3875df8aa5bcc13d639b9ab8",
+		"scale_p21_application_task_context_read.go":                    "71df6cdfc0fe46f2d149fb90d125eea56515b10c711633e4dab1f464f555f8da",
+		"scale_p21_bootstrap_content_walk.go":                           "b795207a7c8db00fb91479dcb795a6112f6678a5b9213216eac1254936f5ccd0",
+		"scale_p21_bootstrap_issue_walk.go":                             "12f6b78490e7b638a4f9190763fc8988c2202a2f733b025fd31863e489a93a3c",
+		"scale_p21_bootstrap_projection_read.go":                        "27a82fd14f7ba9244cbe70fe286bfd1fc5b4de3f2d6d711cbb56df078912ee5b",
+		"scale_p21_collaboration_document_read.go":                      "d4839174c25808b899839955839d6cd2d9e4a74b5ac76d1158c8a0fb1fb8fae8",
+		"scale_p21_collection_snapshot.go":                              "e8d843ee5626ba45c1aa11009ddf1e6860289895367d581fd8552309dbaec1fa",
+		"scale_p21_cycle_schedule_write.go":                             "e0effd9f9d6594ddce8b87b32036805a059702a6af22a597c256fbf72862dc5a",
+		"scale_p21_delivery_context.go":                                 "89590bfc452c82e405c4ddd0727946bf6274794ce0c819576ed8da1d0271792a",
+		"scale_p21_desktop_ack_write.go":                                "caca6a6974572bf3205f7dcf5280b54dd7ad502f75b761967281665259b90682",
+		"scale_p21_document_auxiliary_read.go":                          "509970bec9f7e70a18b5054485374e46e441f5a03c31dfb491497ba16b570a6d",
+		"scale_p21_document_directory_read.go":                          "8f82ff264a997bfdd6dc71f5c3992856f5df4ece322ea248ff29f60f2e2c3247",
+		"scale_p21_document_read.go":                                    "dbb5f22aa06b5d6cb2d90ca0646fb4e4dceea1df2e96acf54724cdf9038d5a9f",
+		"scale_p21_general_bootstrap_read.go":                           "d7a45918ea4ec4fdfad5bab2614ea5135cd2dbdc50db14db27c47eb873adb32d",
+		"scale_p21_installed_resource_point_read.go":                    "9ea5e51dc1e426ffe0a3fda73a001acfef726c1b07798498f79fee5ab3b16e9e",
+		"scale_p21_issue_authorization_policy.go":                       "3b1db13512c208deb9b7c7c650e50cb15e926835c5151fc2e841d85313416d21",
+		"scale_p21_issue_authorization_rows.go":                         "0b5289e704257da9833d2e335efe53dacafc5cf2ee0b071cb65ed994b3b1d564",
+		"scale_p21_issue_facet_read.go":                                 "61147a9c92d8306b9d4dcdcb6c32272d0bb202c1b64b71a0c8de71792b302069",
+		"scale_p21_legacy_discussion_write.go":                          "fb168bbffcffd0d3c616ed2aa0a42c50c036bfe58fd272a1d53758aecdd22f1b",
+		"scale_p21_legacy_event_policy_read.go":                         "974033b2bc4b12a943f916bbf087a927191a26c694c2edb61b17fc7fa1a86c7b",
+		"scale_p21_legacy_import_inputs.go":                             "f5435bd286f1ba1547f54e791fe3b5204b1f28740dd29ec2fad585881c7d10e6",
+		"scale_p21_native_reads.go":                                     "f9f002b8b707a39498b93a2032dcd3833e13e3822bd89acdf080cc1142d40b25",
+		"scale_p21_notification_visibility.go":                          "e77a0497022fd22973aeb14e63dd9f85cbe3d42d534ee5602bb3174e6a7d820c",
+		"scale_p21_p19_snapshot_read.go":                                "d8d326e1fa687b9d3adfe5de6e63351a399e6ee58172b45fe775ed58e15a9160",
+		"scale_p21_project_directory_query.go":                          "a7d33c1d062035abe237b4180d0edd386bde44d25dc364f874f96714e676f079",
+		"scale_p21_read_leaf_rows.go":                                   "45c2d9bd63bd19145b8c48771aad80470efa4d75d051449d4b4644a09b50e05f",
+		"scale_p21_resource_authorization_read.go":                      "6a82512ebc0e8087b1de53b815cfeaf05e1c2fe4b1a98e26c67f198eaab07ef4",
+		"scale_p21_resource_directory_read.go":                          "5401a9c8b2a1f342f0c9d75c03b1f67cc1e0b6a5c5c9f84e67ae714aa8f059be",
+		"scale_p21_resource_policy_memo.go":                             "f4134522db037aadc7cc519e1ceb6f64eb65db899b616681eaeb4257886601e3",
+		"scale_p21_resource_read.go":                                    "5ca09910f1c137dfd89587667b24c63996fb802783b8e5e6a6f50a0b6a7e9d5c",
+		"scale_p21_sw16_former_members.go":                              "b9cc69d0ce8e48f062ab38f6bf9d617baaa2c47aa9ff89dc1f9bc78f72f5e716",
+		"scale_p21_sw21_sync_requests.go":                               "813f93f5de089ba2a7ebdc0985ee9d434adf1494fd49068afda17fad6d1c8295",
+		"scale_p21_sw307_team_resource_read.go":                         "c7600edbc7ef258ec5e983cd510812facb4ca9533a6e0125edcc41783fc10bc8",
+		"scale_p21_team_member_request.go":                              "131cbc4c25f0dc1a5c3d222f9427e21fb350efcf62880559a6310af2e11fc7ac",
+		"scale_p21_triage_suggestion_read.go":                           "83681e09dfbf29ea6c4888607bac7d7e97a37605bd1f7ef904f1f6941e65477f",
+		// Issue deletion borrows its own write transaction for policy and issue headers.
+		"bounded_issue_lifecycle.go": "9d33443fd44941047790c547c61d5a1c1925ad8dd8af0e32bfd778f790aa395a",
+		// Attachment visibility binds its owned raw projection only inside its
+		// own Project call; the context never reaches request authorization.
+		"scale_p21_attachment_visibility_read.go": "d6ae0a5f2e25635ae7a834a18e27eccb2b23b1ef31848d7cb47c376418729221",
+		"scale_p21_sw318_issue_read_source.go":    "434b6412f3e6546786feba97a97e5dd5c9c1a726f579949b03bf9d78bf0f9286",
+		// Search binds its local SQL reader for bounded candidates and catalog coverage.
+		"search_metadata.go": "2035dcdbf551533763079ee658e905e1e44a58bfb8b3dd3e0e6e1f72faf22f17",
+		// Cold-request route: the cold store stays inside its callback.
+		"../../cmd/server/oauth_authorized_applications.go": "8a0e9bec2c8ea317de40e3e4872b8587a6930369391d9e70fa7b895c38c94e9a",
+		// The issue read owns a SQL transaction and the policy it uses.
+		"issue_read_snapshot.go": "13cae7fbe50f86fd6f36302adfeb909a0277ea3af6a0b03c3330b974d27c3414",
+		// Borrows policy from the same database and workspace, then returns
+		// an owned copy of the viewer and team settings required by the route.
+		"legacy_comment_action_read.go": "894774ef15c193373601031cd2b5aa670334b39d0bbec90754a9c91a3c722372",
+		// Borrows one issue write's policy inputs from the same database and
+		// workspace and returns an owned copy of only the named records.
+		"legacy_issue_write_authorization.go": "d41b19518097270d1a0e4dd7adcbcd23afb033ebbffc203843d2860147f88223",
+	}
+	want := map[string]int{
+		"authz_epoch.go:AuthzEpoch:clear":                                             1,
+		"bounded_issue_lifecycle.go:checkAccess:metadata":                             1,
+		"issue_read_snapshot.go:BeginIssueReadSnapshot:metadata":                      1,
+		"issue_read_snapshot.go:BeginIssueReadSnapshot:sql":                           1,
+		"read_snapshot.go:BeginWorkspaceRead:metadata":                                2,
+		"resource_access.go:ResolveAccess:sql":                                        1,
+		"scale_p12_epoch_access.go:LiveEventContext:clear":                            1,
+		"scale_p19_metadata.go:scaleP19MetadataAt:metadata":                           1,
+		"scale_p21_account_read.go:BeginAccountRead:clear":                            1,
+		"scale_p21_application_access.go:BeginApplicationListRead:sql":                1,
+		"scale_p21_attachment_visibility_read.go:Project:metadata":                    1,
+		"scale_p21_bootstrap_projection_read.go:BeginIssueBootstrapRead:metadata":     2,
+		"scale_p21_collaboration_document_read.go:beginCollaborationDocumentRead:sql": 1,
+		"scale_p21_collection_snapshot.go:metadataCollectionsInSnapshot:sql":          1,
+		"scale_p21_document_auxiliary_read.go:BeginDocumentAuxiliaryRead:sql":         1,
+		"scale_p21_document_directory_read.go:BeginDocumentDirectoryRead:sql":         1,
+		"scale_p21_document_read.go:BeginDocumentRead:sql":                            1,
+		"scale_p21_general_bootstrap_read.go:Context:clear":                           1,
+		"scale_p21_general_bootstrap_read.go:Context:metadata":                        1,
+		"scale_p21_issue_authorization_policy.go:loadPolicy:sql":                      1,
+		"scale_p21_issue_authorization_rows.go:rowSnapshot:sql":                       1,
+		"scale_p21_issue_facet_read.go:BeginIssueFacetRead:clear":                     1,
+		"scale_p21_legacy_event_policy_read.go:readLegacyEventPolicyRecords:sql":      1,
+		"scale_p21_native_reads.go:readResidentResourcePolicy:sql":                    1,
+		"scale_p21_notification_visibility.go:BeginNotificationVisibilityRead:clear":  1,
+		"scale_p21_notification_visibility.go:BeginNotificationVisibilityRead:sql":    1,
+		"scale_p21_p19_snapshot_read.go:p19SnapshotAt:metadata":                       1,
+		"scale_p21_read_leaf_rows.go:readLeafBegin:clear":                             1,
+		"scale_p21_resource_authorization_read.go:BeginResourceAuthorizationRead:sql": 1,
+		"scale_p21_resource_directory_read.go:BeginResourceDirectoryRead:sql":         1,
+		"scale_p21_resource_read.go:BeginResourceRead:sql":                            1,
+		"scale_p21_sw21_sync_requests.go:scaleP21SW21VisitRequest:sql":                1,
+		"scale_p21_triage_suggestion_read.go:ViewerProjectionScope:metadata":          1,
+		"scale_p21_triage_suggestion_read.go:projectedWorkspace:metadata":             1,
+		"search_metadata.go:beginMetadataSearch:sql":                                  1,
+	}
+	var files []string
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = filepath.WalkDir("../..", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			filename, err := filepath.Rel(root, filepath.Join(root, path))
+			if err != nil {
+				return err
+			}
+			files = append(files, filename)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int{}
+	seen := map[string]bool{}
+	closedNames := map[string]bool{
+		"workspaceRead": true, "workspaceReadKey": true,
+		"BeginWorkspaceRead": true, "BeginGeneralBootstrapRead": true,
+		"GeneralBootstrapRead": true, "BeginIssueBootstrapRead": true,
+		"ViewerProjectionScope": true, "HydrateWorkspaceMetadata": true,
+		"withColdMetadataRequest": true, "projectedWorkspace": true,
+		"scaleP19MetadataAt": true, "p19SnapshotAt": true,
+		"p19SnapshotFields": true, "projectedWorkspaceCollections": true,
+	}
+	for _, filename := range files {
+		if strings.HasSuffix(filename, "_test.go") {
+			continue
+		}
+		raw, err := os.ReadFile(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), filename, raw, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		usesCarrier := false
+		for _, declaration := range parsed.Decls {
+			owner := "<package>"
+			if function, ok := declaration.(*ast.FuncDecl); ok {
+				owner = function.Name.Name
+			}
+			methods := map[*ast.SelectorExpr]bool{}
+			ast.Inspect(declaration, func(node ast.Node) bool {
+				if call, ok := node.(*ast.CallExpr); ok {
+					if selector, ok := call.Fun.(*ast.SelectorExpr); ok {
+						methods[selector] = true
+					}
+				}
+				return true
+			})
+			ast.Inspect(declaration, func(node ast.Node) bool {
+				switch node := node.(type) {
+				case *ast.Ident:
+					if closedNames[node.Name] {
+						usesCarrier = true
+					}
+				case *ast.SelectorExpr:
+					if filepath.Dir(filename) == "." && node.Sel.Name == "references" && !methods[node] {
+						usesCarrier = true
+					}
+				case *ast.CompositeLit:
+					name, ok := node.Type.(*ast.Ident)
+					if !ok || name.Name != "workspaceRead" {
+						break
+					}
+					class := "sql"
+					if len(node.Elts) == 0 {
+						class = "clear"
+					} else if _, keyed := node.Elts[0].(*ast.KeyValueExpr); !keyed {
+						if len(node.Elts) != 4 {
+							t.Fatal("unclassified positional workspaceRead", filename, owner)
+						}
+						class = "metadata"
+					} else {
+						for _, element := range node.Elts {
+							key, ok := element.(*ast.KeyValueExpr)
+							if !ok {
+								t.Fatal("mixed workspaceRead literal", filename, owner)
+							}
+							if name, ok := key.Key.(*ast.Ident); ok && name.Name == "metadata" {
+								class = "metadata"
+							}
+						}
+					}
+					got[filename+":"+owner+":"+class]++
+				}
+				return true
+			})
+		}
+		expected, closed := contracts[filename]
+		if usesCarrier && !closed {
+			t.Fatal("new unclassified snapshot use, alias, capture or references write", filename)
+		}
+		if closed {
+			seen[filename] = true
+			if actual := fmt.Sprintf("%x", sha256.Sum256(raw)); actual != expected {
+				t.Fatal("production source contract changed; re-audit origins, scope filters and carriers", filename, actual)
+			}
+		}
+	}
+	if len(seen) != len(contracts) || !reflect.DeepEqual(got, want) {
+		t.Fatal("closed source inventory changed", seen, got, want)
+	}
+}

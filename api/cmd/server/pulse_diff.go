@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"strconv"
@@ -205,71 +206,250 @@ func pulseInitiativeIn(snapshot *store.PulseFeedSnapshot, id string) *domain.Ini
 // projectUpdateDiffPreview returns the diff the next project update would
 // record, for the composer. It reads the shared snapshot without copying it.
 func (s *server) projectUpdateDiffPreview(w http.ResponseWriter, r *http.Request) {
-	snapshot, ok := s.store.PulseFeed(workspaceKey(r))
+	read, ok := s.pulseSourceRead(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	defer read.Close()
+	snapshot := read.Snapshot
 	id := r.PathValue("id")
 	project := pulseProjectIn(snapshot, id)
 	if project == nil {
 		writeError(w, http.StatusNotFound, "resource not found")
 		return
 	}
+	previous, err := read.LoadLatestSnapshot(r.Context(), "project", id)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	next := s.projectPulseSnapshot(r.Context(), snapshot.Workspace.URLKey, *project, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"diff": pulseDiffBetween(latestProjectSnapshot(snapshot.ProjectUpdates[id]), next), "snapshot": next})
+	writeJSON(w, http.StatusOK, map[string]any{"diff": pulseDiffBetween(previous, next), "snapshot": next})
 }
 
 func (s *server) initiativeUpdateDiffPreview(w http.ResponseWriter, r *http.Request) {
-	snapshot, ok := s.store.PulseFeed(workspaceKey(r))
+	read, ok := s.pulseSourceRead(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	defer read.Close()
+	snapshot := read.Snapshot
 	id := r.PathValue("id")
 	initiative := pulseInitiativeIn(snapshot, id)
 	if initiative == nil {
 		writeError(w, http.StatusNotFound, "resource not found")
 		return
 	}
+	previous, err := read.LoadLatestSnapshot(r.Context(), "initiative", id)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	next := initiativePulseSnapshot(&domain.Bootstrap{Projects: snapshot.Projects, Initiatives: snapshot.Initiatives, InitiativeRelations: snapshot.InitiativeRelations}, *initiative, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"diff": pulseDiffBetween(latestInitiativeSnapshot(snapshot.InitiativeUpdates[id]), next), "snapshot": next})
+	writeJSON(w, http.StatusOK, map[string]any{"diff": pulseDiffBetween(previous, next), "snapshot": next})
+}
+
+func (s *server) pulseSourceRead(w http.ResponseWriter, r *http.Request) (*store.PulseRead, bool) {
+	read, found, err := s.store.BeginPulseRead(r.Context(), workspaceKey(r), !s.store.BoundedMetadataEnabled())
+	if err != nil {
+		issueRecordsError(w, err)
+		return nil, false
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return nil, false
+	}
+	return read, true
+}
+
+func pulseHistoryReferenceError(w http.ResponseWriter, err error) {
+	if errors.Is(err, store.ErrAuthForbidden) {
+		writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+	} else {
+		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+	}
+}
+
+func (s *server) pulseHistoryReferenceRead(w http.ResponseWriter, r *http.Request) (*store.NotificationVisibilityRead, bool) {
+	if workspaceKey(r) == "" {
+		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header (API keys and OAuth tokens select it automatically)")
+		return nil, false
+	}
+	key := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	access, err := s.store.ResolveAccess(r.Context(), workspaceKey(r), authUser(r).ID, &key)
+	var read *store.NotificationVisibilityRead
+	if err == nil {
+		read, err = s.store.BeginNotificationVisibilityRead(r.Context(), access)
+	}
+	if err != nil {
+		pulseHistoryReferenceError(w, err)
+		return nil, false
+	}
+	return read, true
+}
+
+func redactPulseHistoryReferences(read *store.NotificationVisibilityRead, snapshot *store.PulseFeedSnapshot, diff *domain.PulseDiff, partial bool) (*domain.PulseDiff, error) {
+	var err error
+	visible := func(kind, id string) bool {
+		if err != nil {
+			return false
+		}
+		if read == nil {
+			if kind == "project" {
+				return pulseProjectIn(snapshot, id) != nil
+			}
+			return pulseInitiativeIn(snapshot, id) != nil
+		}
+		var allowed bool
+		allowed, err = read.ReferenceVisible(kind, id)
+		return allowed
+	}
+	result := redactPulseReferences(diff, func(id string) bool { return visible("project", id) }, func(id string) bool { return visible("initiative", id) }, partial)
+	return result, err
 }
 
 // listProjectUpdates serves a project's updates (newest first) for paged
 // clients, which no longer receive updates in the workspace bootstrap.
 func (s *server) listProjectUpdates(w http.ResponseWriter, r *http.Request) {
-	snapshot, ok := s.store.PulseFeed(workspaceKey(r))
+	read, ok := s.pulseSourceRead(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	defer read.Close()
+	snapshot := read.Snapshot
 	id := r.PathValue("id")
 	if pulseProjectIn(snapshot, id) == nil {
 		writeError(w, http.StatusNotFound, "resource not found")
 		return
 	}
+	if err := read.LoadUpdates(r.Context(), "project", id, nil); err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	updates := append([]domain.ProjectUpdate{}, snapshot.ProjectUpdates[id]...)
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
+		if s.store.BoundedMetadataEnabled() {
+			var references *store.NotificationVisibilityRead
+			referenceSnapshot := snapshot
+			if s.authDisabled {
+				current, found := s.pulseSourceRead(w, r)
+				if !found {
+					return
+				}
+				defer current.Close()
+				referenceSnapshot = current.Snapshot
+			} else {
+				references, ok = s.pulseHistoryReferenceRead(w, r)
+				if !ok {
+					return
+				}
+				defer references.Close()
+			}
+			partial := slices.ContainsFunc(pulseProjectIn(snapshot, id).TeamIDs, func(id string) bool { return !slices.Contains(key.TeamIDs, id) })
+			for i := range updates {
+				var err error
+				updates[i].Diff, err = redactPulseHistoryReferences(references, referenceSnapshot, updates[i].Diff, partial)
+				if err != nil {
+					pulseHistoryReferenceError(w, err)
+					return
+				}
+				store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+			}
+			if references != nil {
+				if err := references.FinishReferences(); err != nil {
+					pulseHistoryReferenceError(w, err)
+					return
+				}
+			}
+		} else {
+			data, ok := s.publicMetadata(w, r)
+			if !ok {
+				return
+			}
+			partial := slices.ContainsFunc(pulseProjectIn(snapshot, id).TeamIDs, func(id string) bool { return !slices.Contains(key.TeamIDs, id) })
+			for i := range updates {
+				updates[i].Diff = redactPulseReferences(updates[i].Diff, func(id string) bool { return resourceExists(&data, "project", id) }, func(id string) bool { return resourceExists(&data, "initiative", id) }, partial)
+				store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+			}
+		}
+	}
 	for index := range updates {
 		updates[index].Snapshot = nil
+	}
+	if r.URL.Query().Get("window") == "1" {
+		s.scaleP19UpdatePage(w, r, "projects", updates)
+		return
 	}
 	writeJSON(w, http.StatusOK, updates)
 }
 
 func (s *server) listInitiativeUpdates(w http.ResponseWriter, r *http.Request) {
-	snapshot, ok := s.store.PulseFeed(workspaceKey(r))
+	read, ok := s.pulseSourceRead(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	defer read.Close()
+	snapshot := read.Snapshot
 	id := r.PathValue("id")
 	if pulseInitiativeIn(snapshot, id) == nil {
 		writeError(w, http.StatusNotFound, "resource not found")
 		return
 	}
+	if err := read.LoadUpdates(r.Context(), "initiative", id, nil); err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	updates := append([]domain.InitiativeUpdate{}, snapshot.InitiativeUpdates[id]...)
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
+		if s.store.BoundedMetadataEnabled() {
+			var references *store.NotificationVisibilityRead
+			referenceSnapshot := snapshot
+			if s.authDisabled {
+				current, found := s.pulseSourceRead(w, r)
+				if !found {
+					return
+				}
+				defer current.Close()
+				referenceSnapshot = current.Snapshot
+			} else {
+				references, ok = s.pulseHistoryReferenceRead(w, r)
+				if !ok {
+					return
+				}
+				defer references.Close()
+			}
+			for i := range updates {
+				var err error
+				updates[i].Diff, err = redactPulseHistoryReferences(references, referenceSnapshot, updates[i].Diff, true)
+				if err != nil {
+					pulseHistoryReferenceError(w, err)
+					return
+				}
+				store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+			}
+			if references != nil {
+				if err := references.FinishReferences(); err != nil {
+					pulseHistoryReferenceError(w, err)
+					return
+				}
+			}
+		} else {
+			data, ok := s.publicMetadata(w, r)
+			if !ok {
+				return
+			}
+			for i := range updates {
+				updates[i].Diff = redactPulseReferences(updates[i].Diff, func(id string) bool { return resourceExists(&data, "project", id) }, func(id string) bool { return resourceExists(&data, "initiative", id) }, true)
+				store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+			}
+		}
+	}
 	for index := range updates {
 		updates[index].Snapshot = nil
+	}
+	if r.URL.Query().Get("window") == "1" {
+		s.scaleP19UpdatePage(w, r, "initiatives", updates)
+		return
 	}
 	writeJSON(w, http.StatusOK, updates)
 }

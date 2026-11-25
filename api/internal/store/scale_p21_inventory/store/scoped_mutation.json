@@ -1,0 +1,20 @@
+{
+  "source": "store/scoped_mutation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "mutateScoped": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "mutateFull",
+        "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.dispatchMutation"
+      ]
+    }
+  }
+}

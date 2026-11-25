@@ -160,6 +160,8 @@ func TestIssueRecordsCreateUpdateAndContext(t *testing.T) {
 		t.Fatal("paged bootstrap materialized issue collection")
 	}
 	created := requestJSON[domain.Issue](t, handler, "POST", "/api/issue-records", map[string]any{"title": "Created through row storage", "teamId": metadata.Teams[0].ID}, 201)
+	// Past the creator's grace window, so the update is recorded.
+	created = ageIssueForActivityTest(t, repository, metadata.Workspace.URLKey, created)
 	updated := requestJSON[domain.Issue](t, handler, "PATCH", "/api/issue-records/"+created.ID, map[string]any{"title": "Updated through row storage", "priority": 1, "expectedVersion": created.Version}, 200)
 	if updated.Version != created.Version+1 || updated.Priority != 1 {
 		t.Fatalf("update %#v", updated)

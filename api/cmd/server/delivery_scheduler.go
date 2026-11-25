@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 const defaultDeliverySchedulerInterval = 5 * time.Second
@@ -21,7 +22,9 @@ func (s *server) startDeliveryScheduler() {
 	if interval <= 0 {
 		interval = defaultDeliverySchedulerInterval
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	// Delivery ticks reach COLD consumers (chat integration ticks, DM reply
+	// jobs): with bounded metadata on they run COLD per operation (SW550).
+	ctx, cancel := context.WithCancel(store.WithColdWork(context.Background(), "delivery-scheduler"))
 	done := make(chan struct{})
 	s.deliverySchedulerMu.Lock()
 	s.deliverySchedulerCancel, s.deliverySchedulerDone = cancel, done
@@ -97,9 +100,15 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 		if sweepSettings {
 			s.sweepIssueSLAWebhooks(ctx, key, now)
 			if err := s.maintainTeamSettings(ctx, key, now); err != nil {
+				if s.skipUncoveredWorkspace("Delivery scheduler", key, err) {
+					continue
+				}
 				return err
 			}
 			if err := s.preparePulseSummaries(ctx, key, now); err != nil {
+				if s.skipUncoveredWorkspace("Delivery scheduler", key, err) {
+					continue
+				}
 				return err
 			}
 			s.runDueLoops(key, now)
@@ -109,12 +118,31 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 			}
 		}
 		if err := s.prepareDueNotificationDeliveries(ctx, key, now); err != nil {
+			if s.skipUncoveredWorkspace("Delivery scheduler", key, err) {
+				continue
+			}
 			return err
 		}
 		s.streamAuditLog(ctx, key, now)
 		s.dispatchNotificationEmails(ctx, key)
 		s.dispatchChatNotifications(ctx, key)
 		s.dispatchNotificationDigests(ctx, key, now)
+		if s.store.BoundedMetadataEnabled() {
+			err := s.store.DueIntegrationDeliveryIDs(ctx, key, now, func(id string) error {
+				if _, err := s.processIntegrationDelivery(ctx, key, id); err != nil && !errors.Is(err, errConflict) && !errors.Is(err, context.Canceled) {
+					log.Printf("Integration delivery workspace=%s id=%s: %v", key, id, err)
+				}
+				return nil
+			})
+			if err != nil {
+				if s.skipUncoveredWorkspace("Delivery scheduler", key, err) {
+					continue
+				}
+				return err
+			}
+			s.coveredWorkspacePassed("Delivery scheduler", key)
+			continue
+		}
 		data, ok := s.store.WorkspaceMetadataFields(key, "integrationDeliveries")
 		if !ok {
 			continue
@@ -184,7 +212,18 @@ func (s *server) prepareDueNotificationDeliveries(ctx context.Context, key strin
 	if s.mailer != nil {
 		statuses = append(statuses, "pending-disabled")
 	}
-	snapshot, err := s.store.NotificationDeliveries(ctx, key, statuses, now)
+	var snapshot domain.Bootstrap
+	var err error
+	if s.store.BoundedMetadataEnabled() {
+		read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, statuses, now)
+		if readErr != nil {
+			return readErr
+		}
+		defer read.Close()
+		snapshot.NotificationDeliveries = read.Deliveries
+	} else {
+		snapshot, err = s.store.NotificationDeliveries(ctx, key, statuses, now)
+	}
 	if err != nil {
 		return err
 	}

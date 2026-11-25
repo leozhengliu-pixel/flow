@@ -61,14 +61,22 @@ function startOfYear(date: Date) { return new Date(date.getFullYear(), 0, 1) }
 
 export type TimelineRange = { start: Date; end: Date; days: number; width: number; pxPerDay: number; zoom: TimelineZoom }
 
+export function timelineDateBounds(dates: Iterable<Date>, today: Date): [Date, Date] {
+  let min = today
+  let max = today
+  for (const date of dates) {
+    if (date < min) min = date
+    if (date > max) max = date
+  }
+  return [min, max]
+}
+
 /**
  * Canvas range covering every dated value plus today, snapped to the zoom's
  * major unit with one unit of breathing room on each side.
  */
-export function timelineRange(dates: Date[], today: Date, zoom: TimelineZoom): TimelineRange {
-  const values = [today, ...dates].map(date => date.getTime())
-  const min = new Date(Math.min(...values))
-  const max = new Date(Math.max(...values))
+export function timelineRange(dates: Iterable<Date>, today: Date, zoom: TimelineZoom): TimelineRange {
+  const [min, max] = timelineDateBounds(dates, today)
   const snap = zoom === 'week' ? startOfWeek : zoom === 'month' ? startOfMonth : zoom === 'quarter' ? startOfQuarter : startOfYear
   const padBefore = zoom === 'week' ? addTimelineDays(min, -14) : zoom === 'month' ? new Date(min.getFullYear(), min.getMonth() - 1, 1) : zoom === 'quarter' ? new Date(min.getFullYear(), min.getMonth() - 3, 1) : new Date(min.getFullYear() - 1, 0, 1)
   const start = snap(padBefore)
@@ -95,12 +103,21 @@ export function timelineDateAt(range: Pick<TimelineRange, 'start' | 'pxPerDay'>,
 }
 
 export type TimelineSegment = { key: string; label: string; x: number; width: number; emphasis?: boolean }
+export type TimelineAxisWindow = { left: number; right: number }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-function segments(range: TimelineRange, next: (date: Date) => Date, first: (date: Date) => Date, label: (date: Date) => string, emphasis?: (date: Date) => boolean): TimelineSegment[] {
+function axisDates(range: TimelineRange, window?: TimelineAxisWindow) {
+  return {
+    start: window ? timelineDateAt(range, Math.max(0, window.left)) : range.start,
+    end: window ? Math.min(+range.end, +timelineDateAt(range, window.right + range.pxPerDay)) : +range.end,
+  }
+}
+
+function segments(range: TimelineRange, window: TimelineAxisWindow | undefined, next: (date: Date) => Date, first: (date: Date) => Date, label: (date: Date) => string, emphasis?: (date: Date) => boolean): TimelineSegment[] {
   const output: TimelineSegment[] = []
-  for (let cursor = first(range.start); cursor < range.end && output.length < 2000; cursor = next(cursor)) {
+  const dates = axisDates(range, window)
+  for (let cursor = first(dates.start); +cursor < dates.end; cursor = next(cursor)) {
     const following = next(cursor)
     const from = cursor < range.start ? range.start : cursor
     const to = following > range.end ? range.end : following
@@ -114,7 +131,7 @@ function segments(range: TimelineRange, next: (date: Date) => Date, first: (date
  * Two-tier header: `major` spans (months / quarters / years) above `minor`
  * ticks (days / weeks / months). Adapts to the zoom's scale.
  */
-export function timelineHeader(range: TimelineRange): { major: TimelineSegment[]; minor: TimelineSegment[] } {
+export function timelineHeader(range: TimelineRange, window?: TimelineAxisWindow): { major: TimelineSegment[]; minor: TimelineSegment[] } {
   const nextDay = (date: Date) => addTimelineDays(date, 1)
   const nextWeek = (date: Date) => addTimelineDays(date, 7)
   const nextMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 1)
@@ -123,20 +140,20 @@ export function timelineHeader(range: TimelineRange): { major: TimelineSegment[]
   const monthLabel = (date: Date) => `${MONTHS[date.getMonth()]} ${date.getFullYear()}`
   const quarterLabel = (date: Date) => `Q${Math.floor(date.getMonth() / 3) + 1} ${date.getFullYear()}`
   if (range.zoom === 'week') return {
-    major: segments(range, nextMonth, startOfMonth, monthLabel),
-    minor: segments(range, nextDay, date => date, date => String(date.getDate()), date => date.getDay() === 1),
+    major: segments(range, window, nextMonth, startOfMonth, monthLabel),
+    minor: segments(range, window, nextDay, date => date, date => String(date.getDate()), date => date.getDay() === 1),
   }
   if (range.zoom === 'month') return {
-    major: segments(range, nextMonth, startOfMonth, monthLabel),
-    minor: segments(range, nextWeek, startOfWeek, date => String(date.getDate())),
+    major: segments(range, window, nextMonth, startOfMonth, monthLabel),
+    minor: segments(range, window, nextWeek, startOfWeek, date => String(date.getDate())),
   }
   if (range.zoom === 'quarter') return {
-    major: segments(range, nextQuarter, startOfQuarter, quarterLabel),
-    minor: segments(range, nextMonth, startOfMonth, date => MONTHS[date.getMonth()], date => date.getMonth() % 3 === 0),
+    major: segments(range, window, nextQuarter, startOfQuarter, quarterLabel),
+    minor: segments(range, window, nextMonth, startOfMonth, date => MONTHS[date.getMonth()], date => date.getMonth() % 3 === 0),
   }
   return {
-    major: segments(range, nextYear, startOfYear, date => String(date.getFullYear())),
-    minor: segments(range, nextMonth, startOfMonth, date => MONTHS[date.getMonth()].slice(0, 1), date => date.getMonth() % 3 === 0),
+    major: segments(range, window, nextYear, startOfYear, date => String(date.getFullYear())),
+    minor: segments(range, window, nextMonth, startOfMonth, date => MONTHS[date.getMonth()].slice(0, 1), date => date.getMonth() % 3 === 0),
   }
 }
 
@@ -149,24 +166,35 @@ export const DESKTOP_AXIS_LABEL_PITCH = 35
  * The labelled weeks come from the calendar, not from where the range starts, so scrolling or
  * changing the range never shifts which weeks are numbered.
  */
-export function desktopTimelineHeader(range: TimelineRange, locale: string) {
+export function desktopTimelineHeader(range: TimelineRange, locale: string, window?: TimelineAxisWindow) {
   const daily = range.zoom === 'week'
   const tickDays = daily ? 1 : 7
   const tickWidth = tickDays * range.pxPerDay
   const labelEvery = Math.max(1, Math.ceil(DESKTOP_AXIS_LABEL_PITCH / tickWidth))
   const minor: TimelineSegment[] = []
-  for (let cursor = daily ? range.start : startOfWeek(range.start); cursor < range.end && minor.length < 4000; cursor = addTimelineDays(cursor, tickDays)) {
+  const dates = axisDates(range, window)
+  for (let cursor = daily ? dates.start : startOfWeek(dates.start); +cursor < dates.end; cursor = addTimelineDays(cursor, tickDays)) {
     if (cursor < range.start) continue
     // Weeks are counted from the first Monday after the Unix epoch.
     const index = daily ? dayNumber(cursor) : Math.floor((dayNumber(cursor) - 4) / 7)
     const labelled = labelEvery === 1 || index % labelEvery === 1 % labelEvery
     minor.push({ key: isoTimelineDay(cursor), label: labelled ? String(cursor.getDate()) : '', x: timelineX(range, cursor), width: tickWidth })
   }
-  return {
-    major: segments(range, date => new Date(date.getFullYear(), date.getMonth() + 1, 1), startOfMonth, date =>
-      new Intl.DateTimeFormat(locale, { month: 'short', ...(date.getMonth() === 0 ? { year: 'numeric' } : {}) }).format(date)),
-    minor,
+  const month = new Intl.DateTimeFormat(locale, { month: 'short' })
+  const january = new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric' })
+  return { major: segments(range, window, date => new Date(date.getFullYear(), date.getMonth() + 1, 1), startOfMonth, date => (date.getMonth() === 0 ? january : month).format(date)), minor }
+}
+
+/** First item that satisfies a monotonic predicate on a sorted collection. */
+export function timelineLowerBound<T>(items: readonly T[], after: (value: T) => boolean) {
+  let left = 0
+  let right = items.length
+  while (left < right) {
+    const mid = left + Math.floor((right - left) / 2)
+    if (after(items[mid])) right = mid
+    else left = mid + 1
   }
+  return left
 }
 
 export type TimelineSpan = { start: Date; end: Date; hasStart: boolean; hasTarget: boolean }
@@ -192,20 +220,35 @@ export function timelineBarBox(range: Pick<TimelineRange, 'start' | 'pxPerDay'>,
 }
 
 export type TimelineMilestoneInput = { id: string; name: string; targetDate?: string; progress: number }
-export type TimelineMilestoneMarker = TimelineMilestoneInput & { x: number; date: Date; completed: boolean }
+export type TimelineDatedMilestone = TimelineMilestoneInput & { date: Date }
+export type TimelineMilestoneMarker = TimelineDatedMilestone & { x: number; completed: boolean }
 
-/** Diamond markers centred on each dated milestone's target day. */
-export function timelineMilestoneMarkers(range: Pick<TimelineRange, 'start' | 'pxPerDay'>, milestones: TimelineMilestoneInput[] = []): TimelineMilestoneMarker[] {
+export function timelineDatedMilestones(milestones: TimelineMilestoneInput[] = []): TimelineDatedMilestone[] {
   return milestones.flatMap(milestone => {
     const date = parseTimelineDay(milestone.targetDate)
-    if (!date) return []
-    return [{ ...milestone, date, x: timelineX(range, date) + range.pxPerDay / 2, completed: milestone.progress >= 100 }]
-  }).sort((left, right) => left.x - right.x)
+    return date ? [{ ...milestone, date }] : []
+  }).sort((left, right) => +left.date - +right.date)
+}
+
+export function timelineMilestoneX(range: Pick<TimelineRange, 'start' | 'pxPerDay'>, date: Date) {
+  return timelineX(range, date) + range.pxPerDay / 2
+}
+
+export function timelineMilestoneMarker(range: Pick<TimelineRange, 'start' | 'pxPerDay'>, milestone: TimelineDatedMilestone): TimelineMilestoneMarker {
+  return { ...milestone, x: timelineMilestoneX(range, milestone.date), completed: milestone.progress >= 100 }
+}
+
+/** Diamond markers centred on each dated milestone's target day. */
+export function timelineMilestoneMarkers(range: Pick<TimelineRange, 'start' | 'pxPerDay'>, milestones?: TimelineMilestoneInput[]): TimelineMilestoneMarker[] {
+  return timelineDatedMilestones(milestones).map(milestone => timelineMilestoneMarker(range, milestone))
 }
 
 export type TimelineDependency = { blockerId: string; blockedId: string }
 export type TimelineRowBox = { left: number; width: number; y: number; start: Date; end: Date }
 export type TimelineDependencyPath = TimelineDependency & { d: string; conflict: boolean; from: { x: number; y: number }; to: { x: number; y: number } }
+export type TimelineWindow = TimelineAxisWindow & { top: number; bottom: number }
+type IndexedDependency = TimelineDependency & { order: number; blocker: TimelineRowBox; blocked: TimelineRowBox; bounds: TimelineWindow }
+type DependencyNode = { bounds: TimelineWindow; edges: IndexedDependency[] } | { bounds: TimelineWindow; left: DependencyNode; right: DependencyNode }
 
 /** The reference app flags a dependency when the blocked project starts before its blocker ends. */
 export function isDependencyConflict(blocker: Pick<TimelineSpan, 'end'>, blocked: Pick<TimelineSpan, 'start'>) {
@@ -228,8 +271,25 @@ export function dependencyPath(from: { x: number; y: number }, to: { x: number; 
   return `M${round(from.x)},${round(from.y)} H${round(from.x + gap)} V${midY} H${round(to.x - gap)} V${round(to.y)} H${round(to.x)}`
 }
 
-export function timelineDependencyPaths(dependencies: TimelineDependency[], rows: Map<string, TimelineRowBox>): TimelineDependencyPath[] {
-  const output: TimelineDependencyPath[] = []
+function dependencyBounds(blocker: TimelineRowBox, blocked: TimelineRowBox): TimelineWindow {
+  const from = blocker.left + blocker.width
+  const to = blocked.left
+  // Includes the backward elbow and the arrow stroke.
+  const margin = to - from >= 24 ? 6 : 18
+  return { left: Math.min(from, to) - margin, right: Math.max(from, to) + margin, top: Math.min(blocker.y, blocked.y) - 6, bottom: Math.max(blocker.y, blocked.y) + 6 }
+}
+
+function joinBounds(a: TimelineWindow, b: TimelineWindow): TimelineWindow {
+  return { left: Math.min(a.left, b.left), right: Math.max(a.right, b.right), top: Math.min(a.top, b.top), bottom: Math.max(a.bottom, b.bottom) }
+}
+
+function intersects(a: TimelineWindow, b: TimelineWindow) {
+  return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top
+}
+
+export function indexTimelineDependencies(dependencies: TimelineDependency[], rows: ReadonlyMap<string, TimelineRowBox>) {
+  const edges: IndexedDependency[] = []
+  const byProject = new Map<string, IndexedDependency[]>()
   const seen = new Set<string>()
   for (const dependency of dependencies) {
     const key = `${dependency.blockerId}>${dependency.blockedId}`
@@ -238,11 +298,63 @@ export function timelineDependencyPaths(dependencies: TimelineDependency[], rows
     const blocker = rows.get(dependency.blockerId)
     const blocked = rows.get(dependency.blockedId)
     if (!blocker || !blocked) continue
-    const from = { x: blocker.left + blocker.width, y: blocker.y }
-    const to = { x: blocked.left, y: blocked.y }
-    output.push({ ...dependency, from, to, d: dependencyPath(from, to), conflict: isDependencyConflict(blocker, blocked) })
+    const edge = { ...dependency, order: edges.length, blocker, blocked, bounds: dependencyBounds(blocker, blocked) }
+    edges.push(edge)
+    for (const id of [edge.blockerId, edge.blockedId]) {
+      const adjacent = byProject.get(id)
+      if (adjacent) adjacent.push(edge)
+      else byProject.set(id, [edge])
+    }
   }
-  return output
+  const sorted = edges.slice().sort((a, b) => a.bounds.top + a.bounds.bottom - b.bounds.top - b.bounds.bottom)
+  const tree = (start: number, end: number): DependencyNode => {
+    if (end - start <= 16) {
+      const leaf = sorted.slice(start, end)
+      return { bounds: leaf.reduce((bounds, edge) => joinBounds(bounds, edge.bounds), leaf[0].bounds), edges: leaf }
+    }
+    const mid = Math.floor((start + end) / 2)
+    const left = tree(start, mid)
+    const right = tree(mid, end)
+    return { bounds: joinBounds(left.bounds, right.bounds), left, right }
+  }
+  return { root: edges.length ? tree(0, edges.length) : undefined, byProject, edges, pairs: seen }
+}
+
+/** Includes connectors crossing the viewport even when neither endpoint is visible. */
+export function timelineWindowDependencies(index: ReturnType<typeof indexTimelineDependencies>, window: TimelineWindow, moved?: { id: string; box: TimelineRowBox }): TimelineDependencyPath[] {
+  const visible: IndexedDependency[] = []
+  const visit = (node: DependencyNode) => {
+    if (!intersects(node.bounds, window)) return
+    if ('edges' in node) {
+      for (const edge of node.edges) {
+        if (moved && (edge.blockerId === moved.id || edge.blockedId === moved.id)) continue
+        if (intersects(edge.bounds, window)) visible.push(edge)
+      }
+    } else {
+      visit(node.left)
+      visit(node.right)
+    }
+  }
+  if (index.root) visit(index.root)
+  if (moved) {
+    for (const edge of index.byProject.get(moved.id) ?? []) {
+      const blocker = edge.blockerId === moved.id ? moved.box : edge.blocker
+      const blocked = edge.blockedId === moved.id ? moved.box : edge.blocked
+      const bounds = dependencyBounds(blocker, blocked)
+      if (intersects(bounds, window)) visible.push({ ...edge, blocker, blocked, bounds })
+    }
+  }
+  return visible.sort((a, b) => a.order - b.order).map(formatDependency)
+}
+
+function formatDependency({ blockerId, blockedId, blocker, blocked }: IndexedDependency): TimelineDependencyPath {
+  const from = { x: blocker.left + blocker.width, y: blocker.y }
+  const to = { x: blocked.left, y: blocked.y }
+  return { blockerId, blockedId, from, to, d: dependencyPath(from, to), conflict: isDependencyConflict(blocker, blocked) }
+}
+
+export function timelineDependencyPaths(dependencies: TimelineDependency[], rows: Map<string, TimelineRowBox>): TimelineDependencyPath[] {
+  return indexTimelineDependencies(dependencies, rows).edges.map(formatDependency)
 }
 
 type DependencyRelation = { projectId: string; relatedProjectId: string; type: string }

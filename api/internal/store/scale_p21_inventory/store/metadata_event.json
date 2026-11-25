@@ -1,0 +1,18 @@
+{
+  "source": "store/metadata_event.go",
+  "unmigrated": 1,
+  "consumers": {
+    "recordMetadataEvent": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.cleanupTeamMemberData"
+      ]
+    }
+  }
+}

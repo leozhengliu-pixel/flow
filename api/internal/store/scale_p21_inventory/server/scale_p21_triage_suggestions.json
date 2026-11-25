@@ -1,0 +1,112 @@
+{
+  "source": "server/scale_p21_triage_suggestions.go",
+  "unmigrated": 0,
+  "consumers": {
+    "listIssueSuggestionsBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns one InstalledMetadataRead through response encoding. Reads core workspace, workspaceSettings plus the issue team's teamSettings point (only when the agent is enabled, as the literal short-circuit does), the issue's suggestions by IssueID header scan, and the viewer projection scope; no full metadata decode. Projection failures, including cancellation and missing workspaces, keep mcpWorkspaceData's flattened 500. Only active suggestions are target-checked, which preserves output because the literal target checks are side-effect-free reads. SW triage differential: 236 cases x3 services (legacy, warm, SQL-reloaded), exact bytes.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "ViewerProjectionScope",
+        "ReadIssueSuggestions",
+        "ProjectVisibleInProjection"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue-detail triage suggestion component fetches/polls this endpoint.",
+      "callers": [
+        "server/triage_intelligence.go:listIssueSuggestions"
+      ]
+    },
+    "staleIssueSuggestionIssues": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal prune scan of one installed generation: VisitIssueSuggestions decodes and admits one row at a time and keeps first-seen issue order; contextless like WorkspaceMetadata; missing workspaces skip the prune. Covered by TestScaleP21TriagePruneWriterDifferential.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "VisitIssueSuggestions"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Issue/project deletion and target deactivation cleanup.",
+      "callers": [
+        "server/triage_intelligence.go:pruneIssueSuggestionTargets"
+      ]
+    },
+    "updateIssueSuggestionStateBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned reads replace WorkspaceMetadata (first suggestion by ID via ReadIssueSuggestion, contextless), the Viewer fallback (BeginInstalledViewerRead) and mcpWorkspaceData's project/team/label filters (ViewerProjectionScope, ProjectVisibleInProjection, LabelVisibleInProjection, both selected-key label filters); the literal state callback is shared through issueSuggestionStateMutation and written by mutateBoundedIssueSuggestions. TestScaleP21TriageSuggestionStateWriterDifferential: 18 legacy/warm/reloaded cases (project/assignee/label/duplicate/related/self relation acceptance, dismissals, private and selected-key refusals, missing and inactive rows, cancellation) with exact rows, list order, events and publications. Team acceptance adds the literal issueTeamMoveForbidden over mcpWorkspaceDataProjected and writes under WithIssueRenumbering with the target declared (TestScaleP21TeamMoveAcceptDifferential, TestScaleP21TeamMoveConcurrentSameTeam).",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "ReadIssueSuggestion",
+        "ViewerProjectionScope",
+        "ProjectVisibleInProjection",
+        "LabelVisibleInProjection",
+        "mcpWorkspaceDataProjected",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Acceptance/dismissal route from the issue detail suggestion UI.",
+      "callers": [
+        "server/triage_intelligence.go:updateIssueSuggestionState"
+      ]
+    },
+    "generateTriageIntelligenceForIssuesBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned contextless reads replace WorkspaceMetadata (Viewer fallback via BeginInstalledViewerRead, workspaceSettings field, one teamSettings point per issue team for isTriageIssue); issue query, candidate search, run starts and the shared literal generateTriageMutation are unchanged. The write uses mutateBoundedIssueSuggestions with Complete scoring inputs under the request's output owner. TestScaleP21TriageGenerateWriterDifferential compares legacy, warm and SQL-reloaded single, auto-apply, batch and non-triage generations (rows, list order, activities, events, publications) scoped-candidate and mutual-candidate batches. Team auto-moves write with WithIssueRenumbering and the candidates' teams declared (TestScaleP21TeamMoveAutoApplyDifferential). SW185 additionally proves dense 350/1000 generation, original accumulated/duplicate candidate ordering, first-2000 qualification and score ties, stale stored member snapshots on team moves, cancellation/release and persisted inline suggestions. Candidate search/reference transfer and scoring storage have operation-owned lifetimes; the private callback preimage is released at its last use. SQL 2513->3270/7104->9248 is bounded by per-query size preflights, canonical reference groups and fixed chunk reads, with no viewer fan-out. The policy reads (installed read, workspaceSettings selection, Viewer fallback) end before the write, which declares HistoryHeads: the shared callback reads and edits history only through RecordIssueActivity. Covered on a 1000-issue scope from an empty work budget by TestScaleP21SW440 and SW442 (SW441, another server's write before the generation, is an open blocker).",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Conditional dependency of issue creation/update in triage.",
+      "callers": [
+        "server/triage_intelligence.go:generateTriageIntelligenceForIssues"
+      ]
+    },
+    "mcpWorkspaceDataProjected": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Calls the literal mcpWorkspaceData body (mcpWorkspaceDataFrom) with ProjectedWorkspace as the paged source for both the principal and any authorization user, owning every projection until the caller's release. Exact for the requested collections, policy fields and live directory; proven by TestScaleP21TriageProjectedWorkspaceDifferential (27 pairs, warm and reloaded).",
+      "accessors": [
+        "ProjectedWorkspace",
+        "mcpWorkspaceDataFrom"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Triage preview and AI context projection.",
+      "callers": [
+        "server/scale_p21_triage_suggestions.go:triageAIWorkspaceBounded"
+      ]
+    },
+    "triageAIWorkspaceBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Contextless installed read (like the legacy accessor's source) held until release, then mcpWorkspaceDataProjected over projects, labels, labelGroups and initiatives; a missing workspace returns the flattened access-denied error. Covered by the projected-workspace, preview and run differentials.",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "mcpWorkspaceDataProjected"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Triage preview and AI context projection.",
+      "callers": [
+        "server/scale_p21_triage_suggestions.go:previewIssueSuggestionsBounded",
+        "server/triage_intelligence_ai.go:requestTriageAIPlan"
+      ]
+    },
+    "runTriageIntelligenceBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Contextless TriageScoringInputs replace WorkspaceMetadata for the run checks and heuristic scorer; the shared run body writes through mutateBoundedIssueSuggestions with the issue scope and generated targets declared, under the request's output owner. TestScaleP21TriageRunWriterDifferential: heuristic and model runs, auto-apply, non-triage, legacy/warm/reloaded exact; team auto-moves write with WithIssueRenumbering and the generated teams declared (TestScaleP21TeamMoveAutoApplyDifferential).",
+      "accessors": [
+        "BeginInstalledMetadataRead",
+        "TriageScoringInputs"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Run again and background triage runs.",
+      "callers": [
+        "server/triage_intelligence_ai.go:runTriageIntelligence"
+      ]
+    }
+  }
+}

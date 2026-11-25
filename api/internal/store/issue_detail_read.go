@@ -64,14 +64,6 @@ func (s *SQLiteStore) AuthorizedIssueRecordID(ctx context.Context, query IssueRe
 	return result, err
 }
 
-func (s *SQLiteStore) authorizedIssueRecordVersion(ctx context.Context, query IssueRecordQuery, id string) (string, int64, error) {
-	resolvedID, err := s.authorizedIssueLookupID(ctx, query.Workspace, id)
-	if err != nil {
-		return "", 0, err
-	}
-	return s.authorizedIssueRecordVersionByID(ctx, query, resolvedID)
-}
-
 func (s *SQLiteStore) authorizedIssueRecordVersionByID(ctx context.Context, query IssueRecordQuery, id string) (string, int64, error) {
 	statement, args, err := authorizedIssueByIDStatement(query, id, "i.id,i.version")
 	if err != nil {

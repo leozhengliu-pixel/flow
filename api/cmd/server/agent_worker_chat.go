@@ -272,7 +272,7 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 				_ = writer.send(event)
 			}
 		case now := <-ticker.C:
-			if _, streaming := s.workerChatStoredReply(r.Context(), workspaceKey(r), session.ID, data.Viewer.ID, info.MessageID); !streaming {
+			if !s.workerChatStoredReplyStreaming(r.Context(), workspaceKey(r), session.ID, data.Viewer.ID, info.MessageID) {
 				settled = true
 				break
 			}
@@ -320,6 +320,21 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 
 // workerChatStoredReply reads the saved reply and whether it is still streaming.
 func (s *server) workerChatStoredReply(ctx context.Context, workspace, sessionID, owner, messageID string) (domain.AgentMessage, bool) {
+	if internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		session, err := s.internalAgentConversation(ctx, workspace, owner, sessionID, false)
+		if err != nil {
+			return domain.AgentMessage{}, false
+		}
+		for _, message := range session.Messages {
+			if message.ID == messageID {
+				return message, message.Status == agentMessageStreaming
+			}
+		}
+		return domain.AgentMessage{}, false
+	}
+	if s.store.BoundedMetadataEnabled() {
+		return s.workerChatStoredReplyBounded(ctx, workspace, sessionID, owner, messageID)
+	}
 	data, ok := s.store.WorkspaceMetadataFields(workspace, "agentSessions")
 	if !ok {
 		return domain.AgentMessage{}, false
@@ -335,6 +350,34 @@ func (s *server) workerChatStoredReply(ctx context.Context, workspace, sessionID
 		}
 	}
 	return domain.AgentMessage{}, false
+}
+
+func (s *server) workerChatStoredReplyBounded(outputCtx context.Context, workspace, sessionID, owner, messageID string) (domain.AgentMessage, bool) {
+	ctx := context.Background()
+	sessions, found, err := s.store.BeginAgentSessionRead(ctx, workspace)
+	if err != nil || !found {
+		return domain.AgentMessage{}, false
+	}
+	defer sessions.Close()
+	point, found, err := sessions.FirstMessage(ctx, sessionID, owner, messageID)
+	if err != nil || !found {
+		point.Close()
+		return domain.AgentMessage{}, false
+	}
+	if err := point.TransferOutput(outputCtx); err != nil {
+		return domain.AgentMessage{}, false
+	}
+	return point.Data, point.Data.Status == agentMessageStreaming
+}
+
+func (s *server) workerChatStoredReplyStreaming(ctx context.Context, workspace, sessionID, owner, messageID string) bool {
+	if s.store.BoundedMetadataEnabled() && !internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		owned, closeReply := beginIndependentMetadataOutputReads(ctx)
+		ctx = owned
+		defer closeReply()
+	}
+	_, streaming := s.workerChatStoredReply(ctx, workspace, sessionID, owner, messageID)
+	return streaming
 }
 
 // enqueueWorkerChatRun queues a chat run for the reply info names. run carries the id (generated when empty),
@@ -477,7 +520,7 @@ func (s *server) workerChatReplyFor(ctx context.Context, run store.AgentRun, inf
 	if err != nil {
 		return nil, err
 	}
-	if _, streaming := s.workerChatStoredReply(ctx, run.WorkspaceKey, run.SessionID, owner.ID, info.MessageID); !streaming {
+	if !s.workerChatStoredReplyStreaming(ctx, run.WorkspaceKey, run.SessionID, owner.ID, info.MessageID) {
 		return nil, errAgentLiveSkip
 	}
 	return &workerChatReply{s: s, run: run, info: info, owner: owner}, nil
@@ -532,6 +575,9 @@ func (c *workerChatReply) cursorStart(cursor *domain.AgentWorkerCursor) (int64, 
 // saved the reply first), each time on a fresh draft. It reports whether the reply is finished; errAgentLiveSkip
 // when the conversation no longer holds it streaming (finished, stopped or edited away).
 func (c *workerChatReply) update(ctx context.Context, final bool, change func(*workerChatDraft)) (bool, error) {
+	if c.s.store.BoundedMetadataEnabled() && !internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		return c.updateBounded(ctx, final, change)
+	}
 	for range workerChatUpdateAttempts {
 		stored, streaming := c.s.workerChatStoredReply(ctx, c.run.WorkspaceKey, c.run.SessionID, c.owner.ID, c.info.MessageID)
 		if !streaming {
@@ -567,6 +613,48 @@ func (c *workerChatReply) update(ctx context.Context, final bool, change func(*w
 	return false, errWorkerChatStale
 }
 
+func (c *workerChatReply) updateBounded(ctx context.Context, final bool, change func(*workerChatDraft)) (bool, error) {
+	for range workerChatUpdateAttempts {
+		finished, err := c.updateBoundedOnce(ctx, final, change)
+		if errors.Is(err, errWorkerChatStale) {
+			continue
+		}
+		return finished, err
+	}
+	return false, errWorkerChatStale
+}
+
+func (c *workerChatReply) updateBoundedOnce(ctx context.Context, final bool, change func(*workerChatDraft)) (bool, error) {
+	ctx, closeReply := beginIndependentMetadataOutputReads(ctx)
+	defer closeReply()
+	stored, streaming := c.s.workerChatStoredReply(ctx, c.run.WorkspaceKey, c.run.SessionID, c.owner.ID, c.info.MessageID)
+	if !streaming {
+		return true, errAgentLiveSkip
+	}
+	draft, err := c.draft(ctx, stored)
+	if err != nil {
+		return false, err
+	}
+	waiting, err := draft.applyStored(ctx, final)
+	if err != nil {
+		return false, err
+	}
+	if change != nil && !draft.finished {
+		change(draft)
+	}
+	if waiting {
+		c.updateLater("gap", workerChatGapWait)
+	}
+	if !draft.changed {
+		return draft.finished, nil
+	}
+	if err := c.save(ctx, stored, draft); err != nil {
+		return false, err
+	}
+	workerChatPublish(c.info.MessageID, draft.events...)
+	return draft.finished, nil
+}
+
 // draft is the saved reply with its offloaded text and results loaded, to change and save whole.
 func (c *workerChatReply) draft(ctx context.Context, stored domain.AgentMessage) (*workerChatDraft, error) {
 	one := domain.AgentSession{ID: c.run.SessionID, UserID: c.owner.ID, Messages: []domain.AgentMessage{stored}}
@@ -599,7 +687,7 @@ func (c *workerChatReply) save(ctx context.Context, stored domain.AgentMessage, 
 		// Scoped to agentSessions alone, the mutation would drop the activity.
 		mutationCtx = withAgentReplyFields(mutationCtx)
 	}
-	err := c.s.store.MutateWorkspace(mutationCtx, c.run.WorkspaceKey, event, c.run.SessionID, nil, func(data *domain.Bootstrap) error {
+	mutate := func(data *domain.Bootstrap) error {
 		session, err := ownedAgentSession(data, c.run.SessionID)
 		if err != nil {
 			return errAgentLiveSkip
@@ -620,7 +708,24 @@ func (c *workerChatReply) save(ctx context.Context, stored domain.AgentMessage, 
 			}
 		}
 		return nil
-	})
+	}
+	var err error
+	if c.s.store.BoundedMetadataEnabled() {
+		ownedCtx, closeOutput := beginIndependentMetadataOutputReads(mutationCtx)
+		defer closeOutput()
+		owner := c.owner.ID
+		err = c.s.store.MutateAgentSessionLifecycle(ownedCtx, c.run.WorkspaceKey, event, c.run.SessionID, store.AgentSessionLifecycleScope{
+			ID: c.run.SessionID, OwnerID: &owner, MatchSlug: true, ExcludeDeleted: true,
+			FirstSession: true, MessageID: &message.ID,
+			AppendActivities: draft.activity != nil,
+			CallbackInput: struct {
+				Message  domain.AgentMessage
+				Activity *domain.AgentActivity
+			}{message, draft.activity},
+		}, mutate)
+	} else {
+		err = c.s.store.MutateWorkspace(mutationCtx, c.run.WorkspaceKey, event, c.run.SessionID, nil, mutate)
+	}
 	if err != nil && !errors.Is(err, errAgentLiveSkip) && !errors.Is(err, errWorkerChatStale) {
 		log.Printf("save worker chat reply %s: %v", c.info.MessageID, err)
 	}
@@ -1538,6 +1643,11 @@ func (s *server) resumeWorkerChat(ctx context.Context, run store.AgentRun, info 
 	if err != nil || current.Status != store.AgentRunAwaiting {
 		return
 	}
+	if s.store.BoundedMetadataEnabled() && !internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		owned, closeReply := beginIndependentMetadataOutputReads(ctx)
+		ctx = owned
+		defer closeReply()
+	}
 	message, streaming := s.workerChatStoredReplyOf(ctx, current, info)
 	if !streaming {
 		return
@@ -1570,10 +1680,13 @@ func (s *server) resumeWorkerChat(ctx context.Context, run store.AgentRun, info 
 	}
 }
 
-func (s *server) workerChatStoredReplyOf(_ context.Context, run store.AgentRun, info workerChatRunInfo) (domain.AgentMessage, bool) {
+func (s *server) workerChatStoredReplyOf(ctx context.Context, run store.AgentRun, info workerChatRunInfo) (domain.AgentMessage, bool) {
 	principal, err := decodeAgentRunPrincipal(run)
 	if err != nil {
 		return domain.AgentMessage{}, false
+	}
+	if s.store.BoundedMetadataEnabled() && !internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		return s.workerChatStoredReplyBounded(ctx, run.WorkspaceKey, run.SessionID, principal.UserID, info.MessageID)
 	}
 	return s.workerChatStoredReply(context.Background(), run.WorkspaceKey, run.SessionID, principal.UserID, info.MessageID)
 }
@@ -1879,44 +1992,69 @@ func (s *server) sweepWorkerChatReplies(ctx context.Context, now time.Time) int 
 		if ctx.Err() != nil {
 			return swept
 		}
-		data, ok := s.store.WorkspaceMetadataFields(key, "agentSessions")
-		if !ok {
-			continue
-		}
-		for _, session := range data.AgentSessions {
-			for _, message := range session.Messages {
-				if message.Status != agentMessageStreaming || !workerChatMessage(message.ID) {
-					continue
-				}
-				run, info, abandoned := s.workerChatReplyAbandoned(ctx, key, session.ID, message, now)
-				if !abandoned {
-					if run.ID != "" && s.expireWorkerChatRun(ctx, run, info, now) {
-						swept++
-					}
-					continue
-				}
-				if run.ID == "" {
-					// No run names the reply: interrupt it as the conversation holds it.
-					run = store.AgentRun{ID: strings.TrimPrefix(message.ID, "agent_message_"), WorkspaceKey: key, SessionID: session.ID, Kind: store.AgentRunKindChat}
-					run.Principal, _ = json.Marshal(agentRunPrincipal{Mode: agentRunModeUser, UserID: session.UserID})
-					info = workerChatRunInfo{MessageID: message.ID}
-				}
-				reply, err := s.workerChatReplyFor(ctx, run, info)
-				if err != nil {
-					continue
-				}
-				canceled := run.Status == store.AgentRunCanceled
-				if _, err := reply.update(ctx, true, func(d *workerChatDraft) {
-					if canceled {
-						d.fail("", agentReasonUserStop, true, reply.durationMS())
-					} else {
-						d.interrupt(reply.durationMS())
-					}
-				}); err == nil {
+		swept += s.sweepWorkerChatWorkspace(ctx, key, now)
+	}
+	return swept
+}
+
+func (s *server) sweepWorkerChatWorkspace(ctx context.Context, key string, now time.Time) int {
+	swept := 0
+	visit := func(session domain.AgentSession) {
+		for _, message := range session.Messages {
+			if message.Status != agentMessageStreaming || !workerChatMessage(message.ID) {
+				continue
+			}
+			run, info, abandoned := s.workerChatReplyAbandoned(ctx, key, session.ID, message, now)
+			if !abandoned {
+				if run.ID != "" && s.expireWorkerChatRun(ctx, run, info, now) {
 					swept++
 				}
+				continue
+			}
+			if run.ID == "" {
+				// No run names the reply: interrupt it as the conversation holds it.
+				run = store.AgentRun{ID: strings.TrimPrefix(message.ID, "agent_message_"), WorkspaceKey: key, SessionID: session.ID, Kind: store.AgentRunKindChat}
+				run.Principal, _ = json.Marshal(agentRunPrincipal{Mode: agentRunModeUser, UserID: session.UserID})
+				info = workerChatRunInfo{MessageID: message.ID}
+			}
+			reply, err := s.workerChatReplyFor(ctx, run, info)
+			if err != nil {
+				continue
+			}
+			canceled := run.Status == store.AgentRunCanceled
+			if _, err := reply.update(ctx, true, func(d *workerChatDraft) {
+				if canceled {
+					d.fail("", agentReasonUserStop, true, reply.durationMS())
+				} else {
+					d.interrupt(reply.durationMS())
+				}
+			}); err == nil {
+				swept++
 			}
 		}
+	}
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginAgentSessionRead(ctx, key)
+		if err == nil && found {
+			defer read.Close()
+			err = read.VisitHeaders(ctx, store.AgentSessionMatch{}, func(session domain.AgentSession) error {
+				visit(session)
+				return nil
+			})
+		}
+		if err != nil && ctx.Err() == nil && !s.skipUncoveredWorkspace("sweep worker chat replies", key, err) {
+			log.Printf("sweep worker chat replies workspace=%s: %v", key, err)
+		} else if err == nil {
+			s.coveredWorkspacePassed("sweep worker chat replies", key)
+		}
+		return swept
+	}
+	data, ok := s.store.WorkspaceMetadataFields(key, "agentSessions")
+	if !ok {
+		return swept
+	}
+	for _, session := range data.AgentSessions {
+		visit(session)
 	}
 	return swept
 }

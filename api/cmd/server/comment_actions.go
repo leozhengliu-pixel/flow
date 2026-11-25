@@ -33,15 +33,36 @@ func (s *server) commentActionsAllowed(data domain.Bootstrap, issue domain.Issue
 }
 
 func (s *server) startCommentActions(r *http.Request, issueID string, comment domain.Comment) {
+	if s.store.BoundedMetadataEnabled() {
+		s.startCommentActionsBounded(r, issueID, comment)
+		return
+	}
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && !apiKeyHasScope(key, "write") {
 		return
 	}
 	if comment.User.App || comment.BotActor != nil || comment.User.Via != nil {
 		return
 	}
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	if read, bounded := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); bounded {
+		data = read.Data
+	} else if authorized, handedOff := r.Context().Value(issueRecordAuthorizationContext{}).(domain.Bootstrap); handedOff {
+		// The issue authorization's projection holds the viewer policy and
+		// issue rows read below, also when it was scoped to the issue.
+		data = authorized
+	} else {
+		data = s.workspaceData(r)
+	}
 	data.Viewer = requestActor(s, r)
-	if _, settings, ok := s.store.AccountCollections(data.Workspace.URLKey, data.Viewer.ID); ok && settings.UserID != "" {
+	if read, bounded := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); bounded {
+		settings, ok, err := read.CurrentCommentActionSettings(r.Context(), data.Viewer.ID)
+		if err != nil {
+			return
+		}
+		if ok && settings.UserID != "" {
+			data.UserSettings = map[string]domain.UserSettings{data.Viewer.ID: settings}
+		}
+	} else if _, settings, ok := s.accountCollections(r.Context(), data.Workspace.URLKey, data.Viewer.ID, false); ok && settings.UserID != "" {
 		data.UserSettings = map[string]domain.UserSettings{data.Viewer.ID: settings}
 	}
 	issue, err := issueByID(&data, issueID)
@@ -63,6 +84,10 @@ func (s *server) startCommentActions(r *http.Request, issueID string, comment do
 }
 
 func (s *server) generateCommentActions(ctx context.Context, workspace, issueID, commentID string, actor domain.User) {
+	if s.store.BoundedMetadataEnabled() {
+		s.generateCommentActionsBounded(ctx, workspace, issueID, commentID, actor)
+		return
+	}
 	// Checked again here: the run may wait for a slot after the comment was
 	// posted, and the workspace may have turned AI off meanwhile.
 	if s.workspaceAIPolicy(ctx, workspace, actor.ID) != nil {
@@ -106,7 +131,10 @@ func (s *server) generateCommentActions(ctx context.Context, workspace, issueID,
 		return
 	}
 	claimed := false
-	claimCtx := store.WithIssueDiscussionMutation(ctx, issueID, commentID)
+	// The claim and append check edit rights as the read above did, with the
+	// grants the issue inherits from its ancestors.
+	claimCtx := store.WithIssueAncestorInputs(store.WithIssueDiscussionMutation(ctx, issueID, commentID))
+	claimCtx = store.ContextWithMutationResults(claimCtx, &claimed)
 	err = s.store.MutateWorkspace(claimCtx, workspace, "comment.actions_started", issueID, nil, func(next *domain.Bootstrap) error {
 		claimed = false
 		current, e := issueByID(next, issueID)
@@ -286,9 +314,21 @@ func validateCommentAction(data *domain.Bootstrap, issue domain.Issue, action do
 }
 
 func (s *server) listCommentActions(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.listCommentActionsBounded(w, r)
+		return
+	}
+	// The unrewritten HEAD alias can reach the legacy bootstrap fallback in
+	// development mode. The issue-record routes already carry scoped inputs.
+	if _, handedOff := r.Context().Value(issueRecordAuthorizationContext{}).(domain.Bootstrap); !handedOff && !acquireProjection(r) {
+		if !writeProjectionRefusal(w, r) {
+			writeRequestCanceled(w, r.Context().Err())
+		}
+		return
+	}
 	data := s.workspaceData(r)
 	data.Viewer = requestActor(s, r)
-	if _, settings, ok := s.store.AccountCollections(data.Workspace.URLKey, data.Viewer.ID); ok && settings.UserID != "" {
+	if _, settings, ok := s.accountCollections(r.Context(), data.Workspace.URLKey, data.Viewer.ID, false); ok && settings.UserID != "" {
 		data.UserSettings = map[string]domain.UserSettings{data.Viewer.ID: settings}
 	}
 	issue, err := issueByID(&data, r.PathValue("id"))
@@ -298,11 +338,8 @@ func (s *server) listCommentActions(w http.ResponseWriter, r *http.Request) {
 	}
 	result := []domain.CommentAction{}
 	if s.commentActionsAllowed(data, *issue) {
-		raw, _ := s.store.WorkspaceMetadata(data.Workspace.URLKey)
+		raw := s.store.CommentActionReadMetadata(data.Workspace.URLKey, issue.ID, issue.Team.ID)
 		for _, a := range raw.CommentActions {
-			if a.IssueID != issue.ID || a.Status == "dismissed" {
-				continue
-			}
 			comment, err := s.store.ResourceComment(r.Context(), data.Workspace.URLKey, issue.ID, a.CommentID)
 			if err != nil || a.Status == "pending" && comment.Version != a.CommentVersion {
 				continue
@@ -329,6 +366,11 @@ func (s *server) resolveCommentAction(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]any{"commentActionsChanged": true}
 	// Acceptance may create a sub-issue and run normal workflow automation.
 	ctx := store.WithMutationScope(store.WithoutIssueRecordMutations(r.Context()), store.MutationScope{IssueIDs: []string{id}, StatusAutomation: true, CreateIssues: true})
+	if s.store.BoundedMetadataEnabled() {
+		// The closed resolution writer keeps this scope and callback; the
+		// request owns its captured result until the response is written.
+		ctx = store.ContextWithCommentActionResolution(ctx, store.CommentActionResolution{IssueID: id, ActionID: actionID, Status: input.Status})
+	}
 	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.updated", id, payload, func(data *domain.Bootstrap) error {
 		issue, e := issueByID(data, id)
 		if e != nil {
@@ -424,6 +466,6 @@ func appendIssueLink(data *domain.Bootstrap, issue *domain.Issue, input domain.I
 	}
 	attachment := domain.Attachment{ID: idgen.New("link_"), IssueID: issue.ID, Title: title, URL: parsed.String(), ContentType: "text/uri-list", CreatedAt: time.Now().UTC(), Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 	issue.Attachments = append(issue.Attachments, attachment)
-	appendActivity(data, issue.ID, "issue.link_created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title, "url": attachment.URL})
+	appendActivity(data, issue.ID, "issue.link_created", data.Viewer, issueLinkActivityMetadata(attachment))
 	return attachment
 }

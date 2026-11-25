@@ -1,0 +1,18 @@
+{
+  "source": "server/file_preview.go",
+  "unmigrated": 1,
+  "consumers": {
+    "filePreview": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Optional external code-host file preview is outside the specified metadata view workload; profile promotion remains possible.",
+      "callers": [
+        "GET /api/integrations/file-preview (server/main.go)"
+      ]
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "source": "server/scale_p21_cold_dispatch_oauth.go",
+  "unmigrated": 0,
+  "consumers": {
+    "listAuthorizedApplicationsWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal remainder of listAuthorizedApplications after its access/admin checks with the repository explicit. Bounded it refreshes the borrowed facade (authorization may have pinned it earlier), then reads the facade's complete installed workspace exactly as legacy. TestScaleP21SW430OAuthColdRoutes (see listAuthorizedApplications).",
+      "coldDispatch": "server/oauth_authorized_applications.go:listAuthorizedApplications",
+      "accessors": [
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD authorized-applications listing.",
+      "callers": [
+        "server/oauth_authorized_applications.go:listAuthorizedApplications"
+      ]
+    },
+    "updateOAuthApplicationWithStore": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Literal remainder of updateOAuthApplication after its decode/validation with the repository explicit; the oauth_application.updated writer runs on the cold facade, the identity sync and webhook reconcile on the server's store. TestScaleP21SW430OAuthColdRoutes (see updateOAuthApplication).",
+      "coldDispatch": "server/settings_features.go:updateOAuthApplication",
+      "accessors": [
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Literal callback body of the registered COLD application edit route.",
+      "callers": [
+        "server/settings_features.go:updateOAuthApplication"
+      ]
+    }
+  }
+}

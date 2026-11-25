@@ -62,10 +62,17 @@ func (s *server) scimManagesMember(ctx context.Context, workspaceID, userID stri
 	return managed
 }
 
-// refuseSCIMManagedMember answers 403 SCIM_MANAGED for a manual change to a
-// SCIM-managed member and reports whether it did.
+// refuseSCIMManagedMember blocks manual changes when SCIM owns the member
+// or the ownership check fails.
 func (s *server) refuseSCIMManagedMember(w http.ResponseWriter, r *http.Request, workspaceID, userID string) bool {
-	if !s.scimManagesMember(r.Context(), workspaceID, userID) {
+	if s.authDisabled || workspaceID == "" || userID == "" {
+		return false
+	}
+	managed, err := s.store.IsSCIMManagedMember(r.Context(), workspaceID, userID)
+	if writeAuthCheckFailure(w, err) {
+		return true
+	}
+	if !managed {
 		return false
 	}
 	writeJSON(w, http.StatusForbidden, map[string]any{"error": scimManagedMemberMessage, "code": "SCIM_MANAGED", "managedBy": "scim"})

@@ -241,8 +241,11 @@ export function TeamOverviewPage({
         teamIds: [team.id],
         ...(projectId ? { projectIds: [projectId] } : {}),
       });
-      await onReload();
+      // Open the document at once: the page fetches a document the loaded data
+      // does not hold yet, and the team metadata refresh (a full issue
+      // bootstrap on large workspaces) runs behind it.
       onNavigate(documentPath(data.workspace.urlKey, document));
+      void onReload().catch(() => undefined);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not create document",
@@ -268,8 +271,8 @@ export function TeamOverviewPage({
         title: document.title || t("Untitled"),
       });
       pinned.catch((error: unknown) => toast.error(error instanceof Error ? error.message : t("Could not update resource")));
-      await onReload();
       onNavigate(documentPath(data.workspace.urlKey, document));
+      void onReload().catch(() => undefined);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not create document",

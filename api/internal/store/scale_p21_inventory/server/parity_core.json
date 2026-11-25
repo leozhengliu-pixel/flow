@@ -1,0 +1,448 @@
+{
+  "source": "server/parity_core.go",
+  "unmigrated": 28,
+  "consumers": {
+    "archiveCustomerNeed": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes customerRequests/id only; existing archive timestamp and response retained with route authorization independent. TestScaleP21M2RecordWritesDifferential compares canonical collections, responses and event effects across the principal/key matrix including missing IDs.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/customer-requests/{id}/archive (server/main.go:847)",
+        "DELETE /api/customer-requests/{id}/archive (server/main.go:848)"
+      ]
+    },
+    "createAIConversation": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Needs shared aggregate compatibility: the original event's literal aggregate ID ai can match an existing unrelated record or nested settings object through aggregateJSONValue. A bare append scope would omit that realtime entity; retain the original writer until the bounded reference closure is covered.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/ai/conversations (server/main.go:865)"
+      ]
+    },
+    "createAIPromptProgress": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Reads aiConversations/conversationID for ownership and aggregate enrichment; appends aiPromptProgress with indexed global ordering. Callback and off accessor unchanged. TestScaleP21SW6CreatorDifferential compares principal/key matrix, two ordered creations, canonical rows and generated references, complete sinks, ownership/missing/foreign/malformed references, unrelated oversized bodies, cancellation, output-budget rollback and recovery with zero full decodes.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/ai/prompt-progress (server/main.go:867)"
+      ]
+    },
+    "createAgentActivity": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Needs shared aggregate compatibility: the original SessionID aggregate can include an existing session or another legacy aggregate match in realtime. The callback also accepts arbitrary nonempty session strings, so a mandatory canonical-key read would introduce new key-validation failures. Retain the original writer until those effects are covered.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/activities (server/main.go:862)"
+      ]
+    },
+    "createDocumentDraft": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents/{id}/drafts (server/main.go)"
+      ]
+    },
+    "createInitiativeRelation": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/initiatives/{id}/relations (server/main.go)"
+      ]
+    },
+    "createProjectRelation": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/projects/{id}/relations (server/main.go)"
+      ]
+    },
+    "createReleaseNote": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Reads releases/pathID for existence and aggregate enrichment; appends releaseNotes and releaseHistory with indexed global ordering. Callback and off accessor unchanged. TestScaleP21SW6CreatorDifferential compares principal/key matrix, two ordered creations, canonical history references, sinks, missing/foreign/malformed references, oversized unrelated collections, cancellation, output-budget rollback and recovery with zero full decodes.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/releases/{id}/notes (server/main.go:850)"
+      ]
+    },
+    "createTeamPinnedResource": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/teams/{id}/resources (server/main.go)"
+      ]
+    },
+    "createTeamResourceSection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/teams/{id}/resource-sections (server/main.go)"
+      ]
+    },
+    "deleteDocumentDraft": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/documents/{id}/drafts/{draftId} (server/main.go)"
+      ]
+    },
+    "deleteInitiativeRelation": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/initiatives/{id}/relations/{relationId} (server/main.go)"
+      ]
+    },
+    "deleteProjectRelation": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes/deletes only projectRelations/relationId with the existing project ID binding; preserves P16 context and off-mode writer. TestScaleP21M2RecordWritesDifferential compares canonical target/other relations, response and event effects across the principal/key matrix including missing IDs.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/projects/{id}/relations/{relationId} (server/main.go)"
+      ]
+    },
+    "deleteReleaseNote": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes/deletes releaseNotes/noteId only, preserving release ID binding and missing-record semantics. TestScaleP21M2RecordWritesDifferential compares last-selected deletion while unrelated rows remain, responses and event effects across the principal/key matrix.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/releases/{id}/notes/{noteId} (server/main.go:852)"
+      ]
+    },
+    "deleteTeamResource": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending complete aggregate-reference closure for accepted legacy IDs or missing subjects. Standard team_resource_ delete returns found=true with nil entity, preserving no fallback after deletion. Non-prefix persisted IDs still use generic lookup; no schema prefix invariant exists.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/teams/{id}/resources/{resourceId} (server/main.go)"
+      ]
+    },
+    "deleteTeamResourceSection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/teams/{id}/resource-sections/{sectionId} (server/main.go)"
+      ]
+    },
+    "documentContentHistory": {
+      "owner": "P17",
+      "status": "reviewed",
+      "reason": "Bounded mode reuses BeginDocumentAuxiliaryRead for ordered live reference occurrences and matching trash payloads, preserving ID/current-before-previous lookup, case-folded typed JSON aliases and invalid-payload skipping. Live role denial never activates trash fallback; restore Links and current body/attachments are excluded. Existing P20 dispatch remains first, while off mode retains workspaceData and LoadDocumentRevisionBodies. Only the selected page, at most 200 revisions, reaches the proven owned directory body loader; source, policy, payload decode and response work stay admitted through encoding. SW129 passes reader normal/persistent SQLite count2/race with source replacement, caller snapshots, cancellation, partial/late quota refusal, typed null expansion and independent close. SW130 passes 598 exact registered-handler comparisons across warm unknown and certified reloaded sources, five roles/four credential variants, live/trash aliases, role-denied fallback, nil/empty histories, pagination, missing/foreign IDs, development bypass and outer owners, with zero complete metadata decodes or retained work. Direct-handler proof leaves Account/authenticate as an independent boundary; no SQL reduction relative to legacy or capacity gain is claimed.",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/documents/{id}/history is the document history view; preserves old-client fallback when P20 history is off.",
+      "callers": [
+        "GET /api/documents/{id}/history (server/main.go)"
+      ]
+    },
+    "initiativeHistory": {
+      "owner": "P16",
+      "status": "reviewed",
+      "reason": "Identity-only projection supplies workspace ID and live viewer role; resourceAuditHistory retains its admin check and SQL bounded audit query. TestScaleP21M2RecordWritesDifferential compares principal/key matrix and response shape; resource route authorization remains independent.",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "listAIConversations": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/ai/conversations (server/main.go:864)"
+      ]
+    },
+    "listAgentActivities": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/agent/activities (server/main.go:861)"
+      ]
+    },
+    "listDocumentDrafts": {
+      "owner": "P17",
+      "status": "reviewed",
+      "reason": "Bounded mode reuses BeginDocumentAuxiliaryRead to select ordered native drafts for the literal route DocumentID and current user from the exact installed source or an explicit same-database caller snapshot. Existing document lookup, role checks and API-key filtering remain unchanged: a current/old slug can authorize without matching draft DocumentID, and development preserves context-free cancellation behavior, credential bypass and all-user raw-ID drafts. Nil/empty roots and native dynamic values remain intact; unrelated drafts are scanned by compact headers without materializing their bodies, and off mode retains workspaceData. Owned source, policy and complete response values survive through JSON encoding and release independently. SW129 normal/persistent SQLite count2/race covers warm/reloaded/unknown sources, native ownership, old pins/source replacement, caller snapshots, cancellation, late quota errors and concurrent double-close; 100/1000 unrelated large drafts both retain 3350016 admitted bytes. SW130 passes 598 exact two-route comparisons across five roles/four credential variants and warm unknown/certified reloaded sources, including raw old-slug drafts, pagination, development, missing/foreign IDs and outer output owners, with zero full metadata decodes or retained work. Direct-handler coverage leaves Account/authenticate independent.",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/documents/{id}/drafts is the document editor/view draft lookup.",
+      "callers": [
+        "GET /api/documents/{id}/drafts (server/main.go)"
+      ]
+    },
+    "listInitiativeRelations": {
+      "owner": "P16",
+      "status": "reviewed",
+      "reason": "Bounded path reuses BeginResourceRelationRead with the exact fresh Bootstrap source boundary and existing API/application credential filters. The projected initiative relation slice retains legacy guest survivors even after guest initiative rows are cleared; development bypass retains raw hidden/dangling/empty endpoints and context-free cancellation behavior. Literal path-ID incoming/outgoing filtering, duplicates/source order, original SortOrder sort.Slice and writePage limit/cursor/total behavior remain unchanged; off mode keeps literal workspaceData. TestScaleP21ResourceRelationListDifferential passes2624 exact two-handler comparisons across warm/reload, principal/key/app scope matrix, guest/development/default/missing/canceled, ignored handoffs/gates, aliases and tied duplicate pagination, with held JSON output ownership and zero full decodes/retained work. Shared Tier A new loader passes persistent SQLite twice and race.",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/initiatives/{id}/relations populates the initiative view.",
+      "callers": [
+        "GET /api/initiatives/{id}/relations (server/main.go)"
+      ]
+    },
+    "listProjectRelations": {
+      "owner": "P16",
+      "status": "reviewed",
+      "reason": "Bounded path reuses BeginResourceRelationRead's compact directory policy and streamed native project relation source, then applies existing API/application credential filtering before exact both-endpoint visible-ID selection. Development retains raw hidden/dangling/empty endpoints; caller projected/point handoffs remain ignored as by the original Bootstrap source boundary. Literal path-ID matching, all incoming/outgoing occurrences, complete milestone/type/time fields, duplicates, source order, original CreatedAt sort.Slice and writePage behavior remain exact; off mode keeps literal workspaceData. TestScaleP21ResourceRelationListDifferential passes2624 exact two-handler comparisons across warm/reload, principal/key/app matrices, native tied duplicate pagination, aliases, missing/canceled/default/dev and ignored handoff/gate cases, with held encoding ownership and zero full decodes/retained work. Tier A loader persistent SQLite twice and race pass, including body10x stable work.",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/projects/{id}/relations populates the project view.",
+      "callers": [
+        "GET /api/projects/{id}/relations (server/main.go)"
+      ]
+    },
+    "listReleaseNotes": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/releases/{id}/notes (server/main.go:849)"
+      ]
+    },
+    "projectHistory": {
+      "owner": "P16",
+      "status": "reviewed",
+      "reason": "Identity-only projection supplies workspace ID and live viewer role; existing admin check and bounded SQL audit query unchanged. TestScaleP21M2RecordWritesDifferential compares principal/key matrix and response shape without loading project bodies.",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "publishDocumentDraft": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents/{id}/drafts/{draftId}/publish (server/main.go)"
+      ]
+    },
+    "releaseHistory": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/releases/{id}/history (server/main.go:853)"
+      ]
+    },
+    "updateAgentActivity": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only agentActivities/id plus the shared writer's legacy implicit actor point; status/body/metadata edits, target attribution, no-op detection and timestamps retain the original callback and exact off-mode accessor. Route authorization remains an independent boundary. TestScaleP21SW6AgentActivityDifferential compares canonical target/actor rows, responses, webhook previous values and realtime actor/client payloads across the principal/key matrix, missing/old-reference IDs, foreign-workspace IDs and cancellation. Over 50 unrelated activities and oversized unrelated bodies remain byte-identical; an oversized output rolls back without publication, a subsequent write succeeds, and bounded full-decode count stays zero. The coordinator passed the targeted test and repeated it twice against one persistent SQLite file.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/agent/activities/{id} (server/main.go:863)"
+      ]
+    },
+    "updateDocumentDraft": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/documents/{id}/drafts/{draftId} (server/main.go)"
+      ]
+    },
+    "updateInitiativeRelation": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/initiatives/{id}/relations/{relationId} (server/main.go)"
+      ]
+    },
+    "updateProjectRelation": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only projectRelations/relationId; type validation, project binding, unchanged-edit and P16 context retained. TestScaleP21M2RecordWritesDifferential compares canonical relations, response and hooks across the principal/key matrix including missing IDs.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/projects/{id}/relations/{relationId} (server/main.go)"
+      ]
+    },
+    "updateReleaseNote": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes releaseNotes/noteId only; release binding, former-member mention validator, publication timestamp and unchanged-edit checks retained. TestScaleP21M2RecordWritesDifferential compares canonical notes, response and hooks across the principal/key matrix and missing IDs.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/releases/{id}/notes/{noteId} (server/main.go:851)"
+      ]
+    },
+    "updateTeamResource": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending complete aggregate-reference closure for accepted legacy IDs or missing subjects. team_resource_ branch returns found=true even missing. Current constructor uses this prefix; no persisted namespace check exists for imported/legacy records.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/teams/{id}/resources/{resourceId} (server/main.go)"
+      ]
+    },
+    "updateTeamResourceSection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending complete aggregate-reference closure for accepted legacy IDs or missing subjects. team_resource_section_ branch returns found=true even missing. Current constructor uses this prefix, but schema only enforces nonempty<=191 unique IDs; non-prefix imported/legacy records need proof or scope closure.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/teams/{id}/resource-sections/{sectionId} (server/main.go)"
+      ]
+    }
+  }
+}

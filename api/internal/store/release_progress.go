@@ -15,7 +15,11 @@ func (s *SQLiteStore) PopulateReleaseProgress(ctx context.Context, data *domain.
 		return nil
 	}
 	if data.Workspace.URLKey == "" {
-		if metadata, ok := s.WorkspaceMetadata(""); ok {
+		read := s.WorkspaceMetadata
+		if s.BoundedMetadataEnabled() {
+			read = s.WorkspaceSettingsMetadata
+		}
+		if metadata, ok := read(""); ok {
 			data.Workspace.URLKey = metadata.Workspace.URLKey
 		}
 	}

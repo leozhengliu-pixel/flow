@@ -318,7 +318,10 @@ func TestCodingArtifactUploadStoresLinksAndSigns(t *testing.T) {
 		t.Fatalf("video: %d %s", video.Code, video.Body.String())
 	}
 
-	// Listing: signed for one hour plus the stable content URL.
+	// Listing: signed for one hour plus the stable content URL. (The request
+	// carries no sign-in, so the server runs without authentication here and
+	// the link names no signer; the change-request links below name the session.)
+	env.server.authDisabled = true
 	list := env.get(t, "/api/coding/sessions/s1/artifacts", env.server.listCodingSessionArtifacts, map[string]string{"id": "s1"}, nil)
 	var listed []domain.CodingArtifact
 	if err := json.Unmarshal(list.Body.Bytes(), &listed); err != nil || list.Code != http.StatusOK || len(listed) != 2 {
@@ -335,6 +338,20 @@ func TestCodingArtifactUploadStoresLinksAndSigns(t *testing.T) {
 	served := env.get(t, signed.RequestURI(), env.server.serveSignedFile, map[string]string{"name": name}, nil)
 	if served.Code != http.StatusOK || !bytes.Equal(served.Body.Bytes(), testPNG) || served.Header().Get("Content-Type") != "image/png" {
 		t.Fatalf("signed download: %d %q", served.Code, served.Header())
+	}
+	env.server.authDisabled = false
+	// A link written into a change-request body works while its session and
+	// artifact exist, and only for that session.
+	signingKey, _ := env.server.fileSigningKey(ctx)
+	prLink := func(session string) string {
+		u, _ := url.Parse(signedFileURLFor(signingKey, "https://flow.example", name, time.Now().Add(time.Hour), codingArtifactSigner(env.workspace, session)))
+		return u.RequestURI()
+	}
+	if recorder := env.get(t, prLink("s1"), env.server.serveSignedFile, map[string]string{"name": name}, nil); recorder.Code != http.StatusOK || !bytes.Equal(recorder.Body.Bytes(), testPNG) {
+		t.Fatalf("change-request link: %d", recorder.Code)
+	}
+	if recorder := env.get(t, prLink("gone"), env.server.serveSignedFile, map[string]string{"name": name}, nil); recorder.Code != http.StatusNotFound {
+		t.Fatalf("link of another session: %d", recorder.Code)
 	}
 	tampered := strings.Replace(signed.RequestURI(), "signature=", "signature=0", 1)
 	if recorder := env.get(t, tampered, env.server.serveSignedFile, map[string]string{"name": name}, nil); recorder.Code != http.StatusForbidden {

@@ -1,0 +1,33 @@
+{
+  "source": "store/scale_p21_logical_generic_json.go",
+  "unmigrated": 0,
+  "consumers": {
+    "genericValue": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginMetadataJSONRead"],
+      "temperature": "hot",
+      "temperatureReason": "Value/WireValue materialization of normalized generic ContentData reached by HOT issue canonical reads and writes.",
+      "callers": ["store/scale_p21_logical_source_read.go:materialize"],
+      "reason": "Materializes only declared standard generic JSON nodes. Encoded input and DecodeGeneric temporaries have separate admitted owners, while the containing Value/WireValue caller retains the complete native output allowance. Warm native graphs and custom marshalers are not implicitly normalized. SW228/SW234/SW248 and shared retry/codec proofs cover standard type/null/error behavior, large and deep required success, stored/native equality, copy/import/install, nested precedence, cancellation, denied admission and release. Production assertions passed twice against one persistent SQLite file; focused race executions cover ownership and retry lifetimes. The separate SW316 private synchronous COLD decoder preserves literal JSON under its retained source and single replica slot without borrowing HOT quota; normal and persistent count-two race proofs pass. This helper does not certify its callers or activation."
+    },
+    "metadataGenericJSONDecodeError": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginMetadataJSONRead"],
+      "temperature": "hot",
+      "temperatureReason": "Invalid-value error branch of the HOT canonical issue ContentData generic decoder.",
+      "callers": ["store/scale_p21_logical_generic_json.go:writeGenericJSON"],
+      "reason": "Reconstructs encoding/json numeric and type errors with the existing grammar scanners and admitted traversal; strings validate in fixed chunks and scalar-only standard decoding retains its complete temporary input owner. No second generic container graph is materialized. SW248 covers malformed and overflow values, declared dynamic types, cancellation, denial and recovery, with the production matrix repeated twice on one persistent SQLite file. Focused race executions cover shared ownership and cancellation paths; serial equality vectors are not claimed as a full race matrix. Error reconstruction neither loads workspace metadata nor changes permission or flag-off behavior."
+    },
+    "writeGenericJSON": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginMetadataJSONRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared constructor for normalized SQL ContentData in HOT canonical issue mutation/response processing.",
+      "callers": ["store/scale_p21_legacy_issue_canonical.go:legacyIssueCanonicalContentData"],
+      "reason": "Accepts only declared standard generic JSON types at SQL/normalized boundaries. Separate input, generic decode and canonical encode owners cover their overlapping lifetimes; fixed-chunk frame writing transfers immutable bytes and native output cost before temporaries close. SW228/SW234/SW248 establish repeated/null/type/error behavior, supported large/deep success, exact frame-copy provenance and nested aggregate precedence; SW239/SW258/SW301/SW302 exercise actual retries and typed codecs. Production assertions passed twice against one persistent SQLite file, ownership and retry race continuations pass, and MySQL/PostgreSQL targeted repeats pass within their native JSON depth contracts. It does not convert arbitrary warm native values or custom marshalers, and does not certify unfinished workflow, document or delivery callers."
+    }
+  }
+}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -226,27 +227,60 @@ type AccountSignInEvent struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// AccountSignInEvents lists the sign-in notifications sent to userID.
+// AccountSignInEvents lists the sign-in notifications sent to userID, newest
+// first, at most accountSignInEventLimit. Rows written before fixed-width
+// times hold RFC3339Nano text, which misorders events within one second
+// (stored_time.go), so they are ordered by decoded time; when the cap cuts a
+// second, the whole second is read so the newest of it are kept.
 func (s *SQLiteStore) AccountSignInEvents(ctx context.Context, userID string) ([]AccountSignInEvent, error) {
 	if err := s.ensureAccountEmailEvents(ctx); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT kind,created_at FROM auth_email_events WHERE user_id=? ORDER BY created_at DESC LIMIT 500`, userID)
+	rows, err := s.accountSignInEventRows(ctx, `SELECT kind,created_at FROM auth_email_events WHERE user_id=? ORDER BY created_at DESC LIMIT ?`, userID, accountSignInEventLimit)
+	if err != nil || len(rows) < accountSignInEventLimit {
+		return accountSignInEventsByTime(rows), err
+	}
+	last := rows[len(rows)-1].raw
+	if rows, err = s.accountSignInEventRows(ctx, `SELECT kind,created_at FROM auth_email_events WHERE user_id=? AND created_at>=? ORDER BY created_at DESC`, userID, last[:min(len(last), storedTimeSecond)]); err != nil {
+		return nil, err
+	}
+	items := accountSignInEventsByTime(rows)
+	return items[:min(len(items), accountSignInEventLimit)], nil
+}
+
+const accountSignInEventLimit = 500
+
+type accountSignInEventRow struct {
+	item     AccountSignInEvent
+	raw, key string
+}
+
+func (s *SQLiteStore) accountSignInEventRows(ctx context.Context, query string, args ...any) ([]accountSignInEventRow, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AccountSignInEvent{}
+	items := []accountSignInEventRow{}
 	for rows.Next() {
-		var item AccountSignInEvent
-		var created string
-		if err := rows.Scan(&item.Kind, &created); err != nil {
+		var row accountSignInEventRow
+		if err := rows.Scan(&row.item.Kind, &row.raw); err != nil {
 			return nil, err
 		}
-		item.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
-		items = append(items, item)
+		row.item.CreatedAt, _ = time.Parse(time.RFC3339Nano, row.raw)
+		row.key = normalizeStoredTime(row.raw)
+		items = append(items, row)
 	}
 	return items, rows.Err()
+}
+
+func accountSignInEventsByTime(rows []accountSignInEventRow) []AccountSignInEvent {
+	slices.SortStableFunc(rows, func(a, b accountSignInEventRow) int { return strings.Compare(b.key, a.key) })
+	items := make([]AccountSignInEvent, len(rows))
+	for index, row := range rows {
+		items[index] = row.item
+	}
+	return items
 }
 
 // AccountWorkspaces lists every workspace userID has a membership row in
@@ -556,11 +590,38 @@ func (s *SQLiteStore) ScrubPersonCopies(ctx context.Context, workspaceKey, userI
 		return 0, ErrAuthForbidden
 	}
 	anonymous := domain.DeletedUserIdentity(userID)
+	bounded := s.BoundedMetadataEnabled()
+	writeCtx, release := ctx, func() {}
+	if bounded {
+		if parent, ok := ctx.Value(metadataWorkLeaseKey{}).(*metadataWorkLease); ok && parent.budget == s.metadataResidency.work {
+			budget := s.metadataResidency.work
+			budget.mu.Lock()
+			// ReloadWorkspace borrows this same caller lease after commit:
+			// it needs the resident policy allowance plus its 2 MiB parser.
+			insufficient := parent.live && parent.bytes < metadataPolicyBytes+scaleP21SW21ScrubFixedWork
+			budget.mu.Unlock()
+			if insufficient {
+				return 0, ErrMetadataWorkBudget
+			}
+		}
+		var err error
+		writeCtx, release, err = s.admitMetadataWork(ctx, scaleP21SW21ScrubFixedWork)
+		if err != nil {
+			return 0, err
+		}
+		defer release()
+	}
 	changed := 0
 	apply := func() error {
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
-		count, err := s.scrubPersonCopies(ctx, workspaceKey, data.Workspace.ID, anonymous)
+		var count int
+		var err error
+		if bounded {
+			count, err = s.scrubPersonCopiesBounded(writeCtx, workspaceKey, data.Workspace.ID, anonymous)
+		} else {
+			count, err = s.scrubPersonCopies(ctx, workspaceKey, data.Workspace.ID, anonymous)
+		}
 		changed = count
 		return err
 	}
@@ -570,6 +631,7 @@ func (s *SQLiteStore) ScrubPersonCopies(ctx context.Context, workspaceKey, userI
 	} else {
 		err = apply()
 	}
+	release()
 	if err != nil {
 		return changed, err
 	}
@@ -628,7 +690,7 @@ func (s *SQLiteStore) textCast(column string) string {
 		if personTextColumns[column] {
 			return column
 		}
-		return "convert_from(" + column + ",'UTF8')"
+		return "flow_utf8(" + column + ")"
 	default:
 		return "CAST(" + column + " AS TEXT)"
 	}

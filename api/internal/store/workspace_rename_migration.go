@@ -60,6 +60,9 @@ func (s *SQLiteStore) migrateRenamedWorkspaceKeys(ctx context.Context) error {
 // workspace that no longer exists, so its keys count as taken by it). It
 // returns how many keys it recorded.
 func (s *SQLiteStore) seedWorkspaceKeyRenames(ctx context.Context) (int, error) {
+	if s.BoundedMetadataEnabled() {
+		return s.seedWorkspaceKeyRenamesBounded(ctx)
+	}
 	s.mu.RLock()
 	live := map[string]string{}
 	for key, data := range s.workspaces {

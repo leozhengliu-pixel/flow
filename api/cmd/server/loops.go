@@ -14,6 +14,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 type loopInput struct {
@@ -132,7 +133,13 @@ func canEditLoop(data *domain.Bootstrap, loop domain.Loop, userID string) bool {
 // checkLoopEditor is canEditLoop for the request's viewer; local development
 // without authentication edits everything.
 func (s *server) checkLoopEditor(data *domain.Bootstrap, loop domain.Loop) error {
-	if s.authDisabled || canEditLoop(data, loop, data.Viewer.ID) {
+	if s.authDisabled {
+		return nil
+	}
+	if err := s.checkLoopTeamAccess(data, loop); err != nil {
+		return err
+	}
+	if canEditLoop(data, loop, data.Viewer.ID) {
 		return nil
 	}
 	return errLoopEditForbidden
@@ -142,6 +149,10 @@ func (s *server) checkLoopEditor(data *domain.Bootstrap, loop domain.Loop) error
 func respondLoopMutation(w http.ResponseWriter, err error, success int, value any) {
 	if errors.Is(err, errLoopEditForbidden) {
 		writeError(w, http.StatusForbidden, "Only the people this loop's \"Who can edit\" setting allows can change it")
+		return
+	}
+	if errors.Is(err, errLoopTeamForbidden) || errors.Is(err, errLoopOwnerForbidden) {
+		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 	respondMutation(w, err, success, value)
@@ -384,16 +395,36 @@ func (s *server) listLoops(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	access, err := s.loopAccessData(r)
+	if err != nil {
+		writeError(w, http.StatusForbidden, "workspace access denied")
+		return
+	}
+	readable := s.loopReadableFilter(&access)
 	counts := s.loopRunCounts(r.Context(), data.Workspace.URLKey)
 	loops := make([]domain.Loop, 0, len(data.Loops))
 	for _, loop := range data.Loops {
-		loops = append(loops, presentLoop(counts, loop))
+		if readable(loop) {
+			loops = append(loops, presentLoop(counts, loop))
+		}
 	}
 	writeJSON(w, http.StatusOK, loops)
 }
 
 func (s *server) getLoop(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "loops")
+	scope := store.MetadataRecordScope{}
+	if ref := r.PathValue("id"); len(ref) <= 191 && !strings.ContainsRune(ref, '\x00') {
+		scope.Read = []store.RecordKey{{Kind: "loops", ID: ref}}
+	}
+	data, ok, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), workspaceKey(r), scope, "loops")
+	if err != nil {
+		if errors.Is(err, store.ErrMetadataPageBudget) {
+			writeError(w, http.StatusServiceUnavailable, err.Error())
+			return
+		}
+		issueRecordsError(w, err)
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -414,6 +445,17 @@ func (s *server) withLoopRef(next http.HandlerFunc) http.HandlerFunc {
 			if data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "loops"); ok {
 				if index := domain.LoopIndexBySlugRef(data.Loops, ref); index >= 0 {
 					r.SetPathValue("id", data.Loops[index].ID)
+				}
+			}
+		}
+		// Reads of a team's loop (and replies, feedback and cancels on its
+		// runs) follow the team's visibility: a private team's loop is not
+		// found by people outside it. Changes answer 403 in their handlers.
+		if !s.authDisabled && (r.Method == http.MethodGet || r.Method == http.MethodHead || r.PathValue("runId") != "") {
+			if data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "loops"); ok {
+				if loop := loopByID(&data, r.PathValue("id")); loop != nil && !s.loopVisibleToRequest(r, *loop) {
+					writeError(w, http.StatusNotFound, "loop not found")
+					return
 				}
 			}
 		}
@@ -442,6 +484,10 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	access, ok := s.loopWriteAccess(w, r)
+	if !ok {
+		return
+	}
 	var created domain.Loop
 	var referenced []domain.Issue
 	if len(input.InstructionsData) == 0 {
@@ -455,6 +501,7 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 		referenced = s.loopReferencedIssues(r, markdowns...)
 	}
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "loop.created", input, func(data *domain.Bootstrap) (string, error) {
+		view := s.loopMutationView(data, access)
 		now := time.Now().UTC()
 		created = domain.Loop{ID: idgen.New("loop_"), Status: "draft", Icon: "Automation", Color: "#d9b84b", Level: "workspace", TriggerType: "schedule", TriggerConfig: defaultLoopTriggerConfig("schedule", now), ConnectorIDs: []string{}, TeamAccess: "allPublic", AllowChangesOutsideTrigger: true, CodeAccess: "disabled", OwnerID: data.Viewer.ID, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		if input.TemplateID != nil && *input.TemplateID != "" {
@@ -493,6 +540,12 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 		if err := checkLoop(data, created, publish); err != nil {
 			return "", err
 		}
+		if err := s.checkLoopOwnerChange(view, view.Viewer.ID, created.OwnerID); err != nil {
+			return "", err
+		}
+		if err := s.checkLoopTeamTarget(view, created); err != nil {
+			return "", err
+		}
 		if len(input.AttachmentIDs) > 0 {
 			attachments, err := claimLoopAttachments(data, input.AttachmentIDs, created.ID)
 			if err != nil {
@@ -513,7 +566,7 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		s.extractLoopContractAsync(workspaceKey(r), created)
 	}
-	respondMutation(w, err, http.StatusCreated, presentLoop(nil, created))
+	respondLoopMutation(w, err, http.StatusCreated, presentLoop(nil, created))
 }
 
 func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
@@ -526,6 +579,10 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	access, ok := s.loopWriteAccess(w, r)
+	if !ok {
+		return
+	}
 	var updated domain.Loop
 	describe := false
 	var referenced []domain.Issue
@@ -537,7 +594,8 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 		if loop == nil {
 			return errNotFound
 		}
-		if err := s.checkLoopEditor(data, *loop); err != nil {
+		view := s.loopMutationView(data, access)
+		if err := s.checkLoopEditor(view, *loop); err != nil {
 			return err
 		}
 		wasDraft := loop.Status == "draft"
@@ -573,6 +631,13 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 		if err := checkLoop(data, next, wasDraft && next.Status == "published"); err != nil {
 			return err
 		}
+		if err := s.checkLoopOwnerChange(view, loop.OwnerID, next.OwnerID); err != nil {
+			return err
+		}
+		if err := s.checkLoopTeamTarget(view, next); err != nil {
+			return err
+		}
+		s.trackLoopBehaviorEditor(view, loop, &next)
 		if next.Status == "published" && input.Description == nil && (wasDraft || next.Instructions != previousInstructions) {
 			describe = true
 			if next.Description == "" || next.Instructions != previousInstructions {
@@ -606,11 +671,18 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 // duplicateLoop copies a loop into a new draft ("⋯ › Duplicate").
 func (s *server) duplicateLoop(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	access, ok := s.loopWriteAccess(w, r)
+	if !ok {
+		return
+	}
 	var created domain.Loop
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "loop.duplicated", map[string]string{"sourceId": id}, func(data *domain.Bootstrap) (string, error) {
 		source := loopByID(data, id)
 		if source == nil {
 			return "", errNotFound
+		}
+		if err := s.checkLoopTeamAccess(s.loopMutationView(data, access), *source); err != nil {
+			return "", err
 		}
 		now := time.Now().UTC()
 		created = *source
@@ -630,18 +702,22 @@ func (s *server) duplicateLoop(w http.ResponseWriter, r *http.Request) {
 		appendAudit(data, "created", "loop", created.ID, map[string]any{"duplicateOf": id})
 		return created.ID, nil
 	})
-	respondMutation(w, err, http.StatusCreated, presentLoop(nil, created))
+	respondLoopMutation(w, err, http.StatusCreated, presentLoop(nil, created))
 }
 
 func (s *server) deleteLoop(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	access, ok := s.loopWriteAccess(w, r)
+	if !ok {
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "loop.deleted", id, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Loops, func(item domain.Loop) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
 		}
 		item := data.Loops[index]
-		if err := s.checkLoopEditor(data, item); err != nil {
+		if err := s.checkLoopEditor(s.loopMutationView(data, access), item); err != nil {
 			return err
 		}
 		// Like the reference app ("Delete this loop?"), deleting a loop is permanent:
@@ -711,7 +787,9 @@ func (s *server) describeLoopAsync(workspace string, loop domain.Loop) {
 		if description == "" || len([]rune(description)) > 200 {
 			return
 		}
-		err = s.store.MutateWorkspace(context.Background(), workspace, "loop.described", loop.ID, nil, func(data *domain.Bootstrap) error {
+		// No migrated writer serves loop.described: COLD work with bounded
+		// metadata on, so the write runs its legacy dispatch (SW557).
+		err = s.store.MutateWorkspace(store.WithColdWork(context.Background(), "loop-description"), workspace, "loop.described", loop.ID, nil, func(data *domain.Bootstrap) error {
 			current := loopByID(data, loop.ID)
 			// Skip when the instructions changed again meanwhile; that change describes itself.
 			if current == nil || current.Instructions != loop.Instructions {

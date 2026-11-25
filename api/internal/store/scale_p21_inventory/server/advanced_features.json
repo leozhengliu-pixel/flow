@@ -1,0 +1,715 @@
+{
+  "source": "server/advanced_features.go",
+  "unmigrated": 46,
+  "consumers": {
+    "addFavorite": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/favorites/{type}/{id} (server/main.go:764)"
+      ]
+    },
+    "addSubscription": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/subscriptions/{type}/{id} (server/main.go:771)"
+      ]
+    },
+    "commitImport": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/imports/{id}/commit (api/cmd/server/main.go:776)"
+      ]
+    },
+    "commitImportSync": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "commitImport (api/cmd/server/advanced_features.go:3471)"
+      ]
+    },
+    "completeExport": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: The completion callback writes only exportJobs/id using root workspace identity for its filename; no exported entity/content collections are loaded. Original worker context, ignored error, completion timestamp and staged audit remain unchanged. TestScaleP21M3AdvancedPointDifferential compares the point writer's canonical record, missing ID, audit and event effects across principal/credential fixtures; actual export assembly stays blocked separately.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "createExport (api/cmd/server/advanced_features.go:3826)",
+        "retryExport (api/cmd/server/analytics_imports.go:245)"
+      ]
+    },
+    "createAsk": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/asks (server/main.go:578)"
+      ]
+    },
+    "createCustomerRequest": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/customer-requests (server/main.go:528)"
+      ]
+    },
+    "createCustomerRequestAttachment": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only customerRequests/requestID, retaining attachment creator attribution, timestamp, audit and existing upload policy. Storage Put remains before the transaction and failed/missing/cancelled mutations retain upload cleanup. TestScaleP21SW4AttachmentCreationDifferential compares response, canonical requests, audit/webhook/realtime and actual object bytes across the principal/credential matrix with oversized unrelated metadata; no full decode occurs. Route authorization and upload-policy access remain independently registered.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/customer-requests/{id}/attachments (server/main.go:531)"
+      ]
+    },
+    "createDocument": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents (server/main.go)"
+      ]
+    },
+    "createDocumentComment": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents/{id}/comments (server/main.go)"
+      ]
+    },
+    "createDraft": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "COLD production root. The original 2 MiB decoder remains before validator construction. The explicit repository callback then owns the literal query, constructor-time metadata capture, draft.created writer/publication and response until encoding completes, using the legacy cold facade under one cancellable replica slot. createDraftWithStore preserves the remaining body literally. SW191 covers exact legacy/cold validation across the M matrix, warm/reloaded route responses and persisted draft rows, and a body-reader mutation proving capture stays after decoding.",
+      "coldDispatch": "server/advanced_features.go:createDraft",
+      "accessors": [
+        "withColdMetadataRequest"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/drafts (server/main.go:760)"
+      ]
+    },
+    "createExport": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate",
+        "workspaceDataWithError"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/exports (api/cmd/server/main.go:782)"
+      ]
+    },
+    "createFavoriteFolder": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/favorite-folders (server/main.go:768)"
+      ]
+    },
+    "createProjectTemplate": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "reason": "The template list's installed-source adapter does not certify this writer. Existing projectTemplateScope supplies issue inputs to applyProjectTemplateInput and arbitrary nested reference validation; a generic metadata-only scoped writer rejects that MutationScope and cannot reproduce legal large-body creation or exact aggregate/previous-value closure. Keep this creator pending for a dedicated writer with complete native source, reference validation, creation ordering and side-effect coverage; generated IDs are not a compatibility waiver.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "POST /api/project-templates (server/main.go)",
+        "POST /api/project-templates (api/cmd/server/main.go:605)"
+      ]
+    },
+    "createRelease": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/releases (server/main.go:555)"
+      ]
+    },
+    "createSLARule": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/sla-rules (server/main.go:754)"
+      ]
+    },
+    "decideAsk": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/asks/{id}/decision (server/main.go:580)"
+      ]
+    },
+    "deleteAllDrafts": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/drafts (server/main.go:761)"
+      ]
+    },
+    "deleteAsk": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/asks/{id} (server/main.go:581)"
+      ]
+    },
+    "deleteCustomerRequest": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/customer-requests/{id} (server/main.go:530)"
+      ]
+    },
+    "deleteCustomerRequestAttachment": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes customerRequests/requestID only, preserving nested attachment lookup, target timestamp, audit and post-commit object deletion. TestScaleP21SW4PointDeletesDifferential compares canonical rows, responses and audit/webhook/realtime across principal/key classes, missing request IDs and live membership revocation, and verifies failed deletes retain owned objects. TestScaleP21SW4ForeignDraftAndPointBudgets proves explicit oversized-target rejection without canonical mutation; unrelated rows remain unchanged. Middleware is independently registered.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/customer-requests/{id}/attachments/{attachmentId} (server/main.go:532)"
+      ]
+    },
+    "deleteLegacyDocument": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Flag-off compatibility branch of deletePortfolioDocument.",
+      "callers": [
+        "server/server.deletePortfolioDocument"
+      ]
+    },
+    "deleteDocumentComment": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/documents/{id}/comments/{commentId} (server/main.go)"
+      ]
+    },
+    "deleteDraft": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes/deletes drafts/id only; the original item.UserID == data.Viewer.ID ownership predicate and missing-record response are unchanged. TestScaleP21SW4PointDeletesDifferential compares responses, canonical state and event effects across principal/credential classes and revoked/cross-workspace membership; TestScaleP21SW4ForeignDraftAndPointBudgets verifies foreign-owner drafts stay unchanged and oversized targets fail explicitly. Unrelated draft records and large metadata remain byte-identical; full HTTP authorization remains independently registered.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/drafts/{id} (server/main.go:763)"
+      ]
+    },
+    "deleteFavoriteFolder": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/favorite-folders/{id} (server/main.go:770)"
+      ]
+    },
+    "deleteProjectTemplate": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. TestScaleP21SW16ProjectTemplateWriteAggregateHold executes both actual delete branches: both remove the canonical target, but legacy falls through to a matching Document.ContentData marker/count after deletion while the scoped branch omits it. The template list migration does not certify this writer. Previous review: Writes/deletes projectTemplates/id only; existing missing semantics and transaction-staged deletion audit remain unchanged. TestScaleP21SW4PointDeletesDifferential compares response, canonical target/other records, audit/webhook/realtime across the helper principal/key matrix, missing IDs and live cross-workspace/revocation boundaries. TestScaleP21SW4ForeignDraftAndPointBudgets checks explicit oversized-target rejection with no canonical change. Route authorization is independently registered and no complete template collection is loaded.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "DELETE /api/project-templates/{id} (server/main.go)",
+        "DELETE /api/project-templates/{id} (api/cmd/server/main.go:607)"
+      ]
+    },
+    "deleteRelease": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/releases/{id} (server/main.go:560)"
+      ]
+    },
+    "deleteSLARule": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/sla-rules/{id} (server/main.go:757)"
+      ]
+    },
+    "downloadExport": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BeginWorkspaceRead"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/exports/{id}/download (api/cmd/server/main.go:786)"
+      ]
+    },
+    "listDocuments": {
+      "owner": "P17",
+      "status": "reviewed",
+      "reason": "The bounded representation is completely handled by the owned directory branch in serveDocumentRecordList before workspaceData can run. The literal off branches retain the existing accessors, complete document/version output, team/archive/query predicates and stable UpdatedAt ordering. One exact 1,500-case HTTP table passed across off/on record mode, warm/reloaded/uncertified sources and principal/key classes; the shared directory has persistent SQLite count2 and race ownership/search/revision/authority proof.",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Normal GET /api/documents list, including legacy fallback when record-read mode is off/shadow.",
+      "callers": [
+        "GET /api/documents (server/main.go)"
+      ]
+    },
+    "listProjectTemplates": {
+      "owner": "P16",
+      "status": "reviewed",
+      "reason": "Bounded dispatch uses BeginProjectTemplatesRead at the same actual installed-store boundary as BootstrapFor, preserving exact/default lookup, native warm NUL/invalid UTF-8, nil/empty, creator/nested fields and time JSON/error behavior. It owns only admitted detached templates and logical workspace identity, retains the handle through signed/ordinary response encoding, and validates the same conditional issue plus always-import/conditional four-content typed sources in bounded keyset snapshots so unrelated hydration failures still return the legacy missing-workspace response. Off branch is unchanged. Store/server TestScaleP21SW16ProjectTemplate tests pass twice on persistent SQLite across large admitted values, source/reload shape witness, malformed later-page content, logical empty/default identities, admission and original cancellation, and direct principal/key matrix. This is direct accessor decomposition only: the bounded source loader still independently omits templates and remains pending; no populated test-view injection or source-loader parity claim is made. Existing route authorization remains independently registered. Exact failure compatibility adds per-row SQL; no latency/capacity gain is claimed.",
+      "accessors": [
+        "BootstrapFor"
+      ]
+    },
+    "maintainAdvancedSchedules": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Every ordinary bootstrap delegates to maintainAdvancedSchedulesAt with time.Now. The clock is invoked only after preflight loading, preserving the original production capture point. The reviewed helper owns the complete bounded scheduler path and the literal flag-off behavior; SW209 covers exact warm/reloaded scheduler effects, no-op, admission, cancellation and release.",
+      "accessors": [
+        "maintainAdvancedSchedulesAt",
+        "BeginAdvancedScheduleRead",
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Every ordinary workspace bootstrap checks advanced reminders/schedules.",
+      "callers": [
+        "GET /api/bootstrap -> bootstrap -> maintainAdvancedSchedules"
+      ]
+    },
+    "maintainAdvancedSchedulesAt": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded dispatch reads admitted installed scheduler headers through BeginAdvancedScheduleRead and releases preflight ownership before the closed mutation. Only captured cadence/reminder decisions and one UTC clock survive into the callback; the independent output scope spans mutation and post-write cleanup. Literal flag-off loading and callback behavior remain. SW209 compares exact SLA/reminder/trash, canonical/native state, events and publication across principal/key fixtures, warm and actual reload, including duplicate-large map/inline shapes; normal, persistent SQLite count2 and complete race evidence preserve exact RemainingMinutes and the strict due-soon boundary without normalization.",
+      "accessors": [
+        "BeginAdvancedScheduleRead",
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Every ordinary workspace bootstrap checks advanced reminders/schedules.",
+      "callers": [
+        "GET /api/bootstrap -> bootstrap -> maintainAdvancedSchedules"
+      ]
+    },
+    "previewImport": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/imports/preview (api/cmd/server/main.go:775)"
+      ]
+    },
+    "purgeTrashEntry": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/trash/{id} (server/main.go:774)"
+      ]
+    },
+    "removeFavorite": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/favorites/{type}/{id} (server/main.go:767)"
+      ]
+    },
+    "removeSubscription": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/subscriptions/{type}/{id} (server/main.go:772)"
+      ]
+    },
+    "reorderSLARules": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/sla-rules/reorder (server/main.go:755)"
+      ]
+    },
+    "restoreDocumentRevision": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents/{id}/restore/{revisionId} (server/main.go)"
+      ]
+    },
+    "restoreTrashEntry": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/trash/{id}/restore (server/main.go:773)"
+      ]
+    },
+    "toggleDocumentCommentReaction": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/documents/{id}/comments/{commentId}/reactions (server/main.go)"
+      ]
+    },
+    "updateAsk": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Point ask/team/template inputs do not preserve legacy aggregate lookup: TestScaleP21SW16AskAggregateCollisionDifferential reproduced an earlier Document.ContentData object with id equal to the ask ID winning realtime enrichment, while a point scope emitted the Ask. The attempted point migration was reverted; retain the original writer until a bounded aggregate compatibility resolver covers that closure.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/asks/{id} (server/main.go:579)"
+      ]
+    },
+    "updateCustomerRequest": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/customer-requests/{id} (server/main.go:529)"
+      ]
+    },
+    "updateDocument": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode installs the closed DocumentUpdateWriteRequest marker (ref, normalized new project IDs, linked-issue read) and a request output owner, then calls MutateWorkspace with the unchanged callback, scope, postcommit compaction, generation conflict, access invalidation, mail and P20 response; the off branch is untouched. store/sqlite.go dispatches only document.updated and favorite.added/removed with that marker to mutateBoundedDocumentUpdate, so the workspace is never hydrated. SW480 runs the real route against legacy and bounded warm and SQL-reloaded sources and compares responses, canonical and installed documents/projects/favorites, collaboration logs, offloaded history, audits, events, webhooks and realtime: title/Markdown/rich/state edits, compaction (accepted, stale, replay), former-member retained/queued/rejected mentions with rollback, favorites, no-op, version conflict and match, links (project, issue, existing issue, unlink, invalid), reciprocal and large linked projects, team move, subscribers, archive/unarchive, trashed, missing, slug over earlier old slug, ID over old slug, duplicate IDs, 4 MiB current body title and content edits with offloaded history, a peer write to the same rows retried to the literal order, and the principal x key matrix on shared, private-team and outsider documents. The large stale document fixture also compares the successful merge at a 768 MiB work budget. At 64 MiB it checks atomic refusal of the bounded write.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu); promoted from static COLD. On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/documents/{id} (server/main.go)"
+      ]
+    },
+    "updateDocumentComment": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/documents/{id}/comments/{commentId} (server/main.go)"
+      ]
+    },
+    "updateDraft": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "COLD production root. The original 2 MiB decoder remains before validator construction. The explicit repository callback owns the literal query, constructor-time metadata capture, draft.updated writer/publication and response through encoding, using the legacy cold facade under the replica slot. updateDraftWithStore preserves the remaining body literally. SW191 compares warm/reloaded legacy/cold route responses and persisted drafts, with constructor-time capture and the M validator matrix; the original all-pending activation gate remains.",
+      "coldDispatch": "server/advanced_features.go:updateDraft",
+      "accessors": [
+        "withColdMetadataRequest"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/drafts/{id} (server/main.go:762)"
+      ]
+    },
+    "updateFavorite": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/favorites/{type}/{id} (server/main.go:766)"
+      ]
+    },
+    "updateFavoriteFolder": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only canonical favoriteFolders/id; the existing viewer ownership predicate, name/position validation, no-op and timestamp remain unchanged. TestScaleP21M3AdvancedPointDifferential compares principal/credential combinations, missing IDs, canonical state and audit/webhook/realtime effects while hashing oversized unrelated bodies. Route authorization is independently registered.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/favorite-folders/{id} (server/main.go:769)"
+      ]
+    },
+    "updateProjectTemplate": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "reason": "The callback still requires complete native template/validation inputs, existing issue MutationScope semantics and exact legacy aggregate closure. TestScaleP21SW16ProjectTemplateWriteAggregateHold executes the real update with an accepted earlier IssueTemplate.FormField whose ID equals the target template and proves that nested form field wins realtime entity lookup. A target-only scoped image would emit the template instead. Keep pending until a bounded writer preserves complete callback inputs, no-op, audit/webhook previous values/realtime and large legal body behavior; the list adapter does not certify this writer.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "PATCH /api/project-templates/{id} (server/main.go)",
+        "PATCH /api/project-templates/{id} (api/cmd/server/main.go:606)"
+      ]
+    },
+    "updateProjectUpdateSettings": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Reads and writes only settings/projectUpdates; merges retain unknown keys and appendAudit remains transaction-staged without loading audit history. TestScaleP21M3AdvancedPointDifferential compares responses, canonical records, audits, webhook previous values and realtime across the principal/credential matrix with oversized unrelated records; route authorization remains a separate blocker.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PUT /api/project-update-settings (server/main.go)"
+      ]
+    },
+    "updateRelease": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/releases/{id} (server/main.go:559)"
+      ]
+    },
+    "updateSLARule": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/sla-rules/{id} (server/main.go:756)"
+      ]
+    },
+    "updateSLASettings": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Reads and writes settings/sla only, including slaEnabled/slaWorkWeek defaults, work-week validation and unchanged-value behavior. Existing audit staging is retained. TestScaleP21M3AdvancedPointDifferential compares responses, canonical state and audit/webhook/realtime effects across principal/credential classes, with unrelated body fingerprints. No issue/SLA recalculation is performed by this callback; middleware is independently registered.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/sla-settings (server/main.go:758)"
+      ]
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "source": "server/email_intake_addresses.go",
+  "unmigrated": 6,
+  "consumers": {
+    "createEmailIntakeAddress": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/teams/{id}/email-intake-addresses (api/cmd/server/main.go:978)"
+      ]
+    },
+    "deleteEmailIntakeAddress": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Target write alone is not equivalent: the unknown email_intake_ aggregate prefix permits an earlier Document.ContentData id collision, so legacy realtime publishes that nested object while a scoped writer publishes the address. SW18 reproduced this and restored the original writer pending bounded aggregate compatibility.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/teams/{id}/email-intake-addresses/{addressId} (api/cmd/server/main.go:982)"
+      ]
+    },
+    "listEmailIntakeAddresses": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/teams/{id}/email-intake-addresses (api/cmd/server/main.go:977)"
+      ]
+    },
+    "rotateEmailIntakeAddress": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Target write alone is not equivalent: the unknown email_intake_ aggregate prefix permits an earlier Document.ContentData id collision, so legacy realtime publishes that nested object while a scoped writer publishes the rotated address. SW18 reproduced this and restored the original writer pending bounded aggregate compatibility.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/teams/{id}/email-intake-addresses/{addressId}/rotate (api/cmd/server/main.go:981)"
+      ]
+    },
+    "updateEmailIntakeAddress": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/teams/{id}/email-intake-addresses/{addressId} (api/cmd/server/main.go:979)"
+      ]
+    },
+    "verifyEmailIntakeAddress": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/teams/{id}/email-intake-addresses/{addressId}/verify (api/cmd/server/main.go:980)"
+      ]
+    }
+  }
+}

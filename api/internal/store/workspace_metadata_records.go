@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync/atomic"
 
 	"flow/api/internal/domain"
@@ -214,6 +215,11 @@ func syncMetadataRecordSet(ctx context.Context, tx *sqlTx, workspace string, ref
 // the database: stored payloads are taken from known, and fetched only for
 // rows known does not have.
 func syncMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, shapes map[string]string, wanted map[metadataRecordKey]metadataRecord, fields []string, known map[metadataRecordKey]metadataRecord) error {
+	// Stored rows come back under their stored keys: compare ours under those.
+	wanted, known = storedMetadataRecordMap(tx.dialect, wanted), storedMetadataRecordMap(tx.dialect, known)
+	if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
+		return budget.syncRecords(ctx, tx, workspace, refs, shapes, wanted, fields, known)
+	}
 	previous := map[metadataRecordKey]metadataRecord{}
 	columns := `field,record_key,collection_order,data`
 	if known != nil {
@@ -427,19 +433,8 @@ func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, ke
 	// the project, like a project comment (the reference app answers in the update's
 	// thread).
 	if key.field == "projectUpdates" {
-		var next, prior metadataUpdate
-		if err := json.Unmarshal(value.data, &next); err != nil {
+		if err := syncProjectUpdateMentions(ctx, tx, workspace, key.key, value.data, previous); err != nil {
 			return err
-		}
-		if len(previous) > 0 {
-			if err := json.Unmarshal(previous, &prior); err != nil {
-				return err
-			}
-		}
-		if next.Parent != "" && len(next.Item) > 0 {
-			if err := syncNewCommentMentions(ctx, tx, workspace, next.Parent, next.Item, prior.Item); err != nil {
-				return err
-			}
 		}
 	}
 	if err := writeCustomerFilterRecord(ctx, tx, workspace, key.field, key.key, value.data); err != nil {
@@ -449,6 +444,66 @@ func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, ke
 		return err
 	}
 	return syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, value.data)
+}
+
+// syncProjectUpdateMentions starts the mention sessions of the comments a
+// project update row gained. A row normally holds one update
+// (metadataUpdate). When a project's updates repeat an ID the field is stored
+// per project instead: the row, keyed by the project, holds its update list,
+// and each update is compared with the same occurrence of its ID before.
+func syncProjectUpdateMentions(ctx context.Context, tx *sqlTx, workspace, key string, data, previous []byte) error {
+	if trimmed := bytes.TrimSpace(data); len(trimmed) == 0 || trimmed[0] != '{' {
+		var items, before []json.RawMessage
+		if err := json.Unmarshal(data, &items); err != nil {
+			return err
+		}
+		if trimmed := bytes.TrimSpace(previous); len(trimmed) > 0 && trimmed[0] == '[' {
+			if err := json.Unmarshal(previous, &before); err != nil {
+				return err
+			}
+		}
+		identity := func(raw json.RawMessage) string {
+			var item struct {
+				ID string `json:"id"`
+			}
+			_ = json.Unmarshal(raw, &item)
+			return item.ID
+		}
+		seen := map[string]int{}
+		for _, item := range items {
+			id := identity(item)
+			occurrence := seen[id]
+			seen[id]++
+			var prior json.RawMessage
+			for _, candidate := range before {
+				if identity(candidate) != id {
+					continue
+				}
+				if occurrence == 0 {
+					prior = candidate
+					break
+				}
+				occurrence--
+			}
+			if err := syncNewCommentMentions(ctx, tx, workspace, key, item, prior); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	var next, prior metadataUpdate
+	if err := json.Unmarshal(data, &next); err != nil {
+		return err
+	}
+	if len(previous) > 0 {
+		if err := json.Unmarshal(previous, &prior); err != nil {
+			return err
+		}
+	}
+	if next.Parent != "" && len(next.Item) > 0 {
+		return syncNewCommentMentions(ctx, tx, workspace, next.Parent, next.Item, prior.Item)
+	}
+	return nil
 }
 
 // syncNewCommentMentions starts application mention sessions for the
@@ -601,4 +656,31 @@ func (s *SQLiteStore) expandWorkspaceMetadata(ctx context.Context, workspace str
 	}
 	delete(root, metadataCollectionsKey)
 	return json.Marshal(root)
+}
+
+// storedMetadataRecordMap keys records as PostgreSQL stores them: without
+// NUL (see storedMetadataRecordKeys), so a record known or wanted under an ID
+// with NUL is matched with, replaced over or deleted as its stored row rather
+// than mistaken for another write's row. A key that only differs by NUL from
+// another one shares its stored row; the later record wins, as its write
+// would. The map is returned as it is when no key changes.
+func storedMetadataRecordMap(dialect string, records map[metadataRecordKey]metadataRecord) map[metadataRecordKey]metadataRecord {
+	if dialect != "postgres" || records == nil {
+		return records
+	}
+	changed := false
+	for key := range records {
+		if strings.IndexByte(key.key, 0) >= 0 {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		return records
+	}
+	stored := make(map[metadataRecordKey]metadataRecord, len(records))
+	for key, value := range records {
+		stored[metadataRecordKey{key.field, StripNUL(key.key)}] = value
+	}
+	return stored
 }

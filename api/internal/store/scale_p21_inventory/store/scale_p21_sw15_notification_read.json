@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_sw15_notification_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginDueNotificationDeliveryRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted full=false delivery reader preserves literal off NotificationDeliveries dispatch, exact installed physical/default lookup and logical SQL key, including source-first missing errors and an atomic default re-selection after independent admission. It clears borrowed source headers, byte-gates flat typed SQL rows before decoding, preserves statuses/due ordering/LIMIT 1000, and retains detached output under a separate 64 MiB allowance through Close. SW15 tests compare ordinary/resident outputs, malformed rows, source replacement, parent release, cancellation, row and argument budgets, default switching and the 1000-row boundary; actual retry, chat and no-mailer callers compare canonical effects repeatedly. This primitive performs no recipient authorization or full email rendering.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

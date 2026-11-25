@@ -1,0 +1,47 @@
+{
+  "source": "server/agent_live_reply.go",
+  "unmigrated": 2,
+  "consumers": {
+    "release": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "runAgentSession -> deferred live.release() (agent_stream.go:378); actual AI run completion, separate from sweepAgentLiveReplies ticker"
+      ]
+    },
+    "sweepAgentLiveReplies": {
+      "owner": "P18",
+      "status": "reviewed",
+      "reason": "Retains global WorkspaceKeys order, cancellation checks and accumulated changed count, delegating to the proven per-workspace header stream and native lifecycle writer. The first-changing duplicate callback and exact cleanup effects remain unchanged. SW198 passes legacy/bounded output, rows and events, the principal/key matrix, warm and actual SQL-loaded sources, cancellation, CAS and revocation. Large user transcripts succeed for split and duplicate-ID inline sessions; normal, persistent SQLite repeats and server/store race proofs pass. Literal flag-off behavior remains.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Always-started cleanup ticker probes installed agent sessions even without interactive agent use.",
+      "callers": [
+        "newHandler -> startAgentLiveReplySweeper -> sweepAgentLiveReplies -> sweepWorkerChatReplies"
+      ]
+    },
+    "write": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/agentLiveReply.run"
+      ]
+    }
+  }
+}

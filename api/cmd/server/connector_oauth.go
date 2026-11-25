@@ -110,7 +110,31 @@ func (s *server) connectorCredential(ctx context.Context, workspace, userID stri
 }
 
 func (s *server) connectorForRequest(r *http.Request) (domain.Bootstrap, applicationPolicy, error) {
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	if !s.store.BoundedMetadataEnabled() {
+		data = s.workspaceData(r)
+	} else {
+		var key *domain.APIKey
+		if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			key = &credential
+		}
+		scope := store.MetadataRecordScope{Fields: []string{"workspaceSettings"}, Read: []store.RecordKey{{Kind: "settings", ID: "applicationPolicies"}}}
+		var err error
+		if s.authDisabled {
+			var ok bool
+			data, ok, err = s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), scope)
+			if err == nil && !ok {
+				err = errNotFound
+			}
+			data.ViewerRole = "admin"
+		} else {
+			data, err = s.store.ProjectScopedMetadata(r.Context(), workspaceKey(r), authUser(r).ID, key, scope)
+		}
+		if err != nil {
+			return domain.Bootstrap{}, applicationPolicy{}, err
+		}
+		filterBootstrapForAPIKey(&data, r)
+	}
 	for _, item := range applicationPolicies(&data) {
 		if item.Kind == "mcp" && item.ID == r.PathValue("id") {
 			if item.OwnerID != data.Viewer.ID && !(item.Shared && s.applicationPolicyAdmin(r, data)) {

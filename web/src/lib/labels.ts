@@ -60,3 +60,6 @@ export function labelScopeName(label: IssueLabel, teams: Team[] = []) {
 export function groupsForResource(groups: LabelGroup[], resourceType: LabelResourceType) {
   return groups.filter(group => group.resourceType === resourceType && (!group.scope || group.scope.toLowerCase() === 'workspace'))
 }
+
+/** A bulk "Remove all labels" choice, passed where a label id is expected. */
+export const REMOVE_ALL_LABELS = '__remove-all-labels__'

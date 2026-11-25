@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -86,8 +87,18 @@ type workspaceKeyContextKey struct{}
 
 func (s *server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.store != nil && s.store.BoundedMetadataEnabled() {
+			var release func()
+			r, release = beginRequestResourceReads(r)
+			defer release()
+		}
 		if s.authDisabled {
-			viewer := s.store.Account().Viewer
+			var viewer domain.User
+			if s.store.BoundedMetadataEnabled() {
+				viewer = s.store.DefaultViewer()
+			} else {
+				viewer = s.store.Account().Viewer
+			}
 			ctx := context.WithValue(s.withAuditRequest(r, viewer, nil), authUserContextKey{}, viewer)
 			ctx = store.ContextWithActor(ctx, viewer)
 			ctx = store.ContextWithRealtimeClient(ctx, r.Header.Get("X-Client-ID"))
@@ -95,10 +106,16 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			if !s.authorizeWorkspaceRequest(w, r, viewer) {
 				return
 			}
+			s.stampLocalStoreResponse(w, r, workspaceKey(r))
+			releaseColdWriteProjection(r)
+			recordFileSigningPrincipal(r.Context(), viewer, nil, workspaceKey(r))
 			next.ServeHTTP(w, r)
 			return
 		}
 		if publicAuthPath(r.URL.Path) {
+			if r.URL.Path == "/api/auth/session" {
+				s.stampLocalStoreResponse(w, r, "")
+			}
 			next.ServeHTTP(w, r.WithContext(s.withAuditRequest(r, domain.User{}, nil)))
 			return
 		}
@@ -106,10 +123,12 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 		// header was supplied. Otherwise a bearer token that lacks a required
 		// scope could be accidentally upgraded by an ambient cookie session.
 		authorizationHeader := strings.TrimSpace(r.Header.Get("Authorization"))
-		user, apiKey, apiWorkspace := s.authenticateAPIKey(r)
+		user, apiKey, apiWorkspace, keyErr := s.authenticateAPIKey(r)
 		if apiKey == nil {
 			if authorizationHeader != "" {
-				writeError(w, http.StatusUnauthorized, "Invalid authorization credentials")
+				if !writeAuthCheckFailure(w, keyErr) {
+					writeError(w, http.StatusUnauthorized, "Invalid authorization credentials")
+				}
 				return
 			}
 			cookie, err := r.Cookie(sessionCookieName)
@@ -119,6 +138,9 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			}
 			user, err = s.store.AuthenticateSession(r.Context(), cookie.Value)
 			if err != nil {
+				if writeAuthCheckFailure(w, err) {
+					return
+				}
 				clearSessionCookie(w, r)
 				writeError(w, http.StatusUnauthorized, "Your session has expired")
 				return
@@ -160,6 +182,9 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 		if !s.authorizeWorkspaceRequest(w, r, user) {
 			return
 		}
+		s.stampLocalStoreResponse(w, r, workspaceKey(r))
+		releaseColdWriteProjection(r)
+		recordFileSigningPrincipal(r.Context(), user, apiKey, apiWorkspace)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -174,18 +199,36 @@ func apiKeyRestrictedPersonalPath(path string) bool {
 	return path == "/api/api-keys" || strings.HasPrefix(path, "/api/api-keys/") || path == "/api/account" || strings.HasPrefix(path, "/api/account/")
 }
 
-func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKey, string) {
+// writeAuthCheckFailure handles store errors that cannot establish a
+// credential decision. Callers retain their existing credential denials.
+func writeAuthCheckFailure(w http.ResponseWriter, err error) bool {
+	switch {
+	case err == nil, errors.Is(err, store.ErrAuthInvalid), errors.Is(err, store.ErrAuthExpired),
+		errors.Is(err, store.ErrAuthForbidden), errors.Is(err, sql.ErrNoRows):
+		return false
+	case writeRequestCanceled(w, err), writeStoreReadUnavailable(w, err):
+		return true
+	default:
+		writeError(w, http.StatusInternalServerError, internalErrorMessage)
+		return true
+	}
+}
+
+func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKey, string, error) {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
-		return domain.User{}, nil, ""
+		return domain.User{}, nil, "", store.ErrAuthInvalid
 	}
 	secret := strings.TrimSpace(header[len("Bearer "):])
 	auth, err := s.store.AuthenticateAPIKeyRecord(r.Context(), workspaceKey(r), secretHash(secret), applicationApproved)
-	if err != nil || !apiKeyAllowsRequest(r, auth.Key) {
-		return domain.User{}, nil, ""
+	if err != nil {
+		return domain.User{}, nil, "", err
+	}
+	if !apiKeyAllowsRequest(r, auth.Key) {
+		return domain.User{}, nil, "", store.ErrAuthForbidden
 	}
 	_ = s.store.RecordAPIKeyUse(r.Context(), auth.Workspace.URLKey, auth.Key.ID, auth.Key.AuthorizationID)
-	return auth.User, &auth.Key, auth.Workspace.URLKey
+	return auth.User, &auth.Key, auth.Workspace.URLKey, nil
 }
 
 // apiKeyAllowsRequest supports the granular scopes exposed by the API-key
@@ -241,7 +284,7 @@ func apiKeyAllowsRequest(r *http.Request, key domain.APIKey) bool {
 	has := func(scope string) bool {
 		return apiKeyHasScope(key, scope) || apiKeyHasScope(key, "write")
 	}
-	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions || r.Method == http.MethodPost && r.URL.Path == "/api/issue-records/visibility" {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions || r.Method == http.MethodPost && (r.URL.Path == "/api/issue-records/visibility" || r.URL.Path == "/api/sync/batch") {
 		return has("read")
 	}
 	// A nil scope slice is the legacy full-access representation. Route it
@@ -307,6 +350,91 @@ func workspaceAdminRole(role string) bool {
 	return role == "admin" || role == "owner"
 }
 
+// apiKeyDocumentOutOfTeams reports whether a document lies outside a team
+// restricted key's teams, by the one rule every read applies (the bootstrap,
+// the lists and the single reads): a document with teams of its own is inside
+// when one of them is allowed. A document without a team of its own is
+// outside, except for an application reading the documents attached to the
+// issues and projects of its teams; even then a private team of its issue or
+// project outside the key keeps it out. linkScope must be built from the
+// key's teams only (apiKeyDocumentLinkScope). It ignores every grant the key's
+// owner holds as a person.
+func apiKeyDocumentOutOfTeams(key domain.APIKey, allowed map[string]bool, linkScope *store.DocumentLinkScope, document domain.Document) bool {
+	inKey := func(id string) bool { return allowed[id] }
+	if len(document.TeamIDs) > 0 {
+		return !slices.ContainsFunc(document.TeamIDs, inKey)
+	}
+	if key.Actor != "app" || !slices.ContainsFunc(document.InheritedTeamIDs, inKey) {
+		return true
+	}
+	closed := linkScope.ClosedTeams(document)
+	return len(closed) > 0 && !slices.ContainsFunc(closed, inKey)
+}
+
+// apiKeyDocumentLinkScope is the document link scope a key sees: its teams
+// alone, so a team outside the key scopes a document like a private one.
+func apiKeyDocumentLinkScope(data domain.Bootstrap, allowed map[string]bool) *store.DocumentLinkScope {
+	teams := make([]domain.Team, 0, len(allowed))
+	for _, team := range data.Teams {
+		if allowed[team.ID] {
+			teams = append(teams, team)
+		}
+	}
+	return store.NewDocumentLinkScope(teams, data.TeamSettings)
+}
+
+// apiKeyDocumentOutsideScope applies the request key's team restriction over
+// the grants its owner holds as a person (creator, workspace admin, subscriber,
+// explicit user grant): a restricted key never reaches a document outside its
+// teams. A session and an unrestricted key are never out of scope.
+func apiKeyDocumentOutsideScope(r *http.Request, data domain.Bootstrap, document domain.Document) bool {
+	key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	if !ok || !apiKeyTeamRestrictionSelected(key) {
+		return false
+	}
+	allowed := make(map[string]bool, len(key.TeamIDs))
+	for _, id := range key.TeamIDs {
+		allowed[id] = true
+	}
+	return apiKeyDocumentOutOfTeams(key, allowed, apiKeyDocumentLinkScope(data, allowed), document)
+}
+
+// documentOutsideTeamList is apiKeyDocumentOutsideScope for the realtime
+// projections, which carry the key's team list in the access query
+// (IssueRecordQuery.AllowedTeamIDs: nil for a session or an unrestricted key).
+func documentOutsideTeamList(data domain.Bootstrap, allowedTeamIDs []string, appKey bool, document domain.Document) bool {
+	if allowedTeamIDs == nil {
+		return false
+	}
+	allowed := make(map[string]bool, len(allowedTeamIDs))
+	for _, id := range allowedTeamIDs {
+		allowed[id] = true
+	}
+	key := domain.APIKey{}
+	if appKey {
+		key.Actor = "app"
+	}
+	return apiKeyDocumentOutOfTeams(key, allowed, apiKeyDocumentLinkScope(data, allowed), document)
+}
+
+// apiKeyTrashOutsideScope is apiKeyDocumentOutsideScope for a deleted
+// resource: a restricted key restores or purges only entries within its teams,
+// whoever deleted them.
+func apiKeyTrashOutsideScope(r *http.Request, data domain.Bootstrap, entry domain.TrashEntry) bool {
+	key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	if !ok || !apiKeyTeamRestrictionSelected(key) {
+		return false
+	}
+	if len(entry.TeamIDs) > 0 && !slices.ContainsFunc(entry.TeamIDs, func(id string) bool { return slices.Contains(key.TeamIDs, id) }) {
+		return true
+	}
+	if entry.ResourceType != "document" {
+		return false
+	}
+	var document domain.Document
+	return json.Unmarshal(entry.Payload, &document) == nil && apiKeyDocumentOutsideScope(r, data, document)
+}
+
 // applyAPIKeyProjection applies team restrictions after the normal user
 // projection. API keys are often narrower than the creator's membership, so
 // returning the unrestricted bootstrap would expose unrelated resources.
@@ -329,6 +457,17 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 		return !slices.ContainsFunc(project.TeamIDs, func(id string) bool { return allowed[id] })
 	})
 	for index := range data.Projects {
+		if slices.ContainsFunc(data.Projects[index].TeamIDs, func(id string) bool { return !allowed[id] }) {
+			store.RedactProjectProgress(&data.Projects[index])
+			id := data.Projects[index].ID
+			updates := slices.Clone(data.ProjectUpdates[id])
+			for i := range updates {
+				updates[i].Diff = redactPulseReferences(updates[i].Diff, func(string) bool { return true }, func(string) bool { return true }, true)
+			}
+			if updates != nil {
+				data.ProjectUpdates[id] = updates
+			}
+		}
 		data.Projects[index].TeamIDs = slices.DeleteFunc(data.Projects[index].TeamIDs, func(id string) bool { return !allowed[id] })
 	}
 	data.ReleasePipelines = slices.DeleteFunc(data.ReleasePipelines, func(pipeline domain.ReleasePipeline) bool {
@@ -349,18 +488,19 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 	})
 	for index := range data.Releases {
 		data.Releases[index].ProjectIDs = slices.DeleteFunc(data.Releases[index].ProjectIDs, func(id string) bool { return !visibleProjects[id] })
-		data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
-	}
-	// A document scoped by a private team of its issue or project follows the
-	// key's teams like its own teams do.
-	linkScope := store.NewDocumentLinkScope(data.Teams, data.TeamSettings)
-	data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
-		if len(document.TeamIDs) > 0 && !slices.ContainsFunc(document.TeamIDs, func(id string) bool { return allowed[id] }) {
-			return true
+		if !data.IssueCollectionPaged {
+			data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
 		}
-		closed := linkScope.ClosedTeams(document)
-		return len(closed) > 0 && !slices.ContainsFunc(closed, func(id string) bool { return allowed[id] })
+	}
+	// The one document rule of every key read (apiKeyDocumentOutOfTeams).
+	linkScope := apiKeyDocumentLinkScope(*data, allowed)
+	data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
+		return apiKeyDocumentOutOfTeams(key, allowed, linkScope, document)
 	})
+	// Templates, team settings and team page collections stay within the
+	// key's teams; release notes and history follow the releases left above.
+	store.FilterTeamScopedCollections(data, func(id string) bool { return allowed[id] }, func(id string) bool { return allowed[id] })
+	store.BlankHiddenTemplateDefaults(data)
 	data.SavedViews = slices.DeleteFunc(data.SavedViews, func(view domain.SavedView) bool {
 		return view.Scope == "team" && !allowed[view.TeamID] || view.ProjectID != "" && !visibleProjects[view.ProjectID]
 	})
@@ -382,6 +522,7 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 		})
 		saveSettingCollection(data, meetingsSettingsKey, meetings)
 	}
+	redactAPIKeyReferences(data, key)
 }
 
 // A member may join or leave their own public/open team. Changes involving a
@@ -462,9 +603,14 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		if r.URL.Path == "/api/oauth/authorization-request" {
 			return true
 		}
-		s.ensureCurrentWorkspace(r.Context(), workspaceKey(r))
+		if !s.requireCurrentWorkspace(w, r, workspaceKey(r)) {
+			return false
+		}
 		_, ok := s.oauthWorkspaceForRequest(w, r, workspaceKey(r), user)
 		return ok
+	}
+	if !s.authorizeAccountFactorChange(w, r, user) {
+		return false
 	}
 	key := workspaceKey(r)
 	if key == "" && s.authDisabled && r.URL.Path == "/api/workspace/preferences" {
@@ -489,15 +635,24 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			key = account.LastWorkspaceKey
 			*r = *r.WithContext(context.WithValue(r.Context(), workspaceKeyContextKey{}, key))
 		} else {
-			writeError(w, http.StatusForbidden, "You don't have access to this workspace")
+			if !writeAuthCheckFailure(w, err) {
+				writeError(w, http.StatusForbidden, "You don't have access to this workspace")
+			}
 			return false
 		}
 	}
-	// The workspace may have changed (or been created) on another server a
-	// moment ago; authorize against, and serve, the committed state.
-	s.ensureCurrentWorkspace(r.Context(), key)
-	// Issue routes accept identifiers, old ones included; authorization and
-	// handlers below see the issue's id.
+	if s.issueReadUsesSQL(r, key) {
+		if !s.pinIssueRead(w, r, key) {
+			return false
+		}
+	} else {
+		// Authorization and handlers that depend on installed metadata must
+		// wait for the workspace's committed state.
+		if !s.requireCurrentWorkspace(w, r, key) {
+			return false
+		}
+	}
+	// Authorization and handlers share the visible issue's canonical ID.
 	s.resolveIssuePathReference(r)
 	if key == "" || r.URL.Path == "/api/account/bootstrap" || r.URL.Path == "/api/invitations/accept" || (r.Method == http.MethodPost && r.URL.Path == "/api/workspaces") {
 		return true
@@ -514,6 +669,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		var accessErr error
 		data, _, accessErr = s.requestIssueQueryAccess(r)
 		ok = accessErr == nil
+		if writeStoreReadUnavailable(w, accessErr) {
+			return false
+		}
 		if accessErr != nil && data.Workspace.ID != "" {
 			writeError(w, http.StatusForbidden, "You don't have access to this workspace")
 			return false
@@ -527,7 +685,20 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			}
 		}
 		if ok && r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/trash/") {
-			data.Trash = s.store.TrashSnapshot(key)
+			if headers, selected := s.documentTrashAuthorizationHeaders(r, key); selected {
+				data.Trash = headers
+			} else {
+				repository := s.store
+				if repository.BoundedMetadataEnabled() {
+					var readErr error
+					repository, readErr = s.legacyColdAuthorizationRepository(r, false)
+					if readErr != nil {
+						respondMutation(w, readErr, http.StatusOK, nil)
+						return false
+					}
+				}
+				data.Trash = repository.TrashSnapshot(key)
+			}
 		}
 	}
 	if !ok {
@@ -547,10 +718,26 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": chatReconnectMessage, "code": "chat_identity_expired"})
 					return false
 				}
-			} else if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
-				clearSessionCookie(w, r)
-				writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
-				return false
+			} else {
+				if err == nil {
+					err = s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays)
+					if writeAuthCheckFailure(w, err) {
+						return false
+					}
+					if err != nil {
+						if read, ok := r.Context().Value(issueReadSnapshotKey{}).(*issueReadAttempt); ok {
+							// The read-only snapshot cannot delete an expired session.
+							if live, closeErr := read.End(); closeErr == nil {
+								_ = s.store.EnforceSessionDuration(live, cookie.Value, durationDays)
+							}
+						}
+					}
+				}
+				if err != nil {
+					clearSessionCookie(w, r)
+					writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
+					return false
+				}
 			}
 		}
 	}
@@ -559,7 +746,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		role, status, err = s.store.WorkspaceRole(r.Context(), data.Workspace.ID, user.ID)
 	}
 	if err != nil || status != "active" {
-		writeError(w, http.StatusForbidden, "You don't have access to this workspace")
+		if !writeAuthCheckFailure(w, err) {
+			writeError(w, http.StatusForbidden, "You don't have access to this workspace")
+		}
 		return false
 	}
 	if aiPolicyPath(r.URL.Path) && agentWorkspacePolicy(data.WorkspaceSettings, role) != nil {
@@ -584,7 +773,10 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	}
 	if teamManagementRequest(r) && !workspaceAdminRole(role) && !membershipSelfServiceRequest(r, user.ID) {
 		teamID := s.store.ResolveTeamID(key, teamIDFromWorkspacePath(r.URL.Path))
-		teamRole, _ := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, user.ID)
+		teamRole, err := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, user.ID)
+		if writeStoreReadUnavailable(w, err) {
+			return false
+		}
 		allowed := teamOperationPermission(data.TeamSettings[teamID], r)
 		if !teamOperationAllowed(data.TeamSettings[teamID], allowed, teamRole, role) {
 			writeError(w, http.StatusForbidden, teamOperationDeniedMessage(allowed, role))
@@ -620,17 +812,22 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			return false
 		}
 	}
-	// AUTH_DISABLED previously skipped authorizeWorkspaceRequest entirely, so
-	// team-scoped resourceAllowed checks must not block local/dev fixtures.
-	if !s.authDisabled && !s.resourceAllowed(r, key, user.ID) {
-		if retryAfter, refused := projectionRefused(r); refused {
-			writeProjectionBusy(w, retryAfter)
-			return false
-		}
-		writeError(w, http.StatusForbidden, "This resource is outside your teams")
+	return s.authorizeResourceRequest(w, r, key, user.ID)
+}
+
+func (s *server) authorizeResourceRequest(w http.ResponseWriter, r *http.Request, workspace, userID string) bool {
+	if writeRequestCanceled(w, r.Context().Err()) {
 		return false
 	}
-	return true
+	// AUTH_DISABLED previously skipped authorizeWorkspaceRequest entirely, so
+	// team-scoped resourceAllowed checks must not block local/dev fixtures.
+	if s.authDisabled || s.resourceAllowed(r, workspace, userID) {
+		return true
+	}
+	if !writeProjectionRefusal(w, r) {
+		writeError(w, http.StatusForbidden, "This resource is outside your teams")
+	}
+	return false
 }
 
 // trashedReleasePipelineAdministrable applies the reference app's canAdministerPipeline to
@@ -842,6 +1039,11 @@ func chatMemberRoute(method string, path []string) bool {
 }
 
 func permissionForRequest(r *http.Request) string {
+	// The join link is a credential: reading, rotating and disabling it all
+	// need the same invite permission, GET included.
+	if workspaceInviteLinkPath(r.URL.Path) {
+		return "invite"
+	}
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		return ""
 	}
@@ -870,6 +1072,10 @@ func permissionForRequest(r *http.Request) string {
 	default:
 		return ""
 	}
+}
+
+func workspaceInviteLinkPath(path string) bool {
+	return strings.HasPrefix(path, "/api/workspaces/") && strings.HasSuffix(strings.TrimRight(path, "/"), "/invite-link")
 }
 
 func workspacePermissionAllows(settings domain.WorkspaceSettings, permission, role string) bool {
@@ -960,10 +1166,37 @@ func guestRestrictedPath(path string) bool {
 }
 
 func (s *server) resourceAllowed(r *http.Request, workspace string, userID string) bool {
+	if _, _, ok := recordAccessRoute(r); ok && recordAccessMode() != "off" {
+		if recordAccessMode() == "on" {
+			result := s.requestResourceRead(r, workspace, userID)
+			defer result.releaseUnscoped()
+			noteAuthorizationBusy(r, result.err)
+			return result.err == nil && result.allowed
+		}
+		allowed := s.resourceAllowedLegacy(r, workspace, userID)
+		return s.shadowResourceAuthorization(r, workspace, userID, allowed)
+	}
+	return s.resourceAllowedLegacy(r, workspace, userID)
+}
+
+func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID string) bool {
+	if syncReadRequest(r) || scaleP20ReadRequest(r) || s.notificationStateReadRequest(r) {
+		return true // Sync handlers resolve and validate AccessContext per batch.
+	}
+	if _, selected := s.documentTrashAuthorizationHeaders(r, workspace); selected {
+		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
+		if !ok {
+			return false
+		}
+		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		noteAuthorizationBusy(r, err)
+		return err == nil && status == "active"
+	}
 	if strings.HasSuffix(r.URL.Path, "/default-favorites") {
 		teamID := s.store.ResolveTeamID(workspace, teamIDFromWorkspacePath(r.URL.Path))
 		data, access, err := s.requestIssueQueryAccess(r)
 		if err != nil {
+			noteAuthorizationBusy(r, err)
 			return false
 		}
 		// A team setting: workspace admins manage it for private teams they have not joined.
@@ -979,23 +1212,42 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			return false
 		}
 		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		noteAuthorizationBusy(r, err)
 		return err == nil && status == "active" && role != "guest"
 	}
-	if r.URL.Path == "/api/workspace/preferences" {
+	legacyListRead := (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
+		(r.URL.Path == "/api/reviews" || r.URL.Path == "/api/search/filter-suggestions")
+	if r.URL.Path == "/api/workspace/preferences" || !s.store.BoundedMetadataEnabled() && (draftRecordWriteRequest(r) || legacyListRead) {
+		// The handlers decide resource visibility from their own projection.
 		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
 		if !ok {
 			return false
 		}
 		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		noteAuthorizationBusy(r, err)
 		return err == nil && status == "active"
 	}
 	if r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/api/notifications/") && len(strings.Split(strings.Trim(r.URL.Path, "/"), "/")) == 3 {
 		_, err := s.store.NotificationRecord(r.Context(), workspace, userID, strings.TrimPrefix(r.URL.Path, "/api/notifications/"))
+		noteAuthorizationBusy(r, err)
 		return err == nil
 	}
 	// Bootstrap performs the viewer projection itself. Repeating it here loads
 	// every issue and discussion once before the handler loads them again.
 	if r.URL.Path == "/api/bootstrap" {
+		return true
+	}
+	// The collection has no resource in its path. Workspace membership and
+	// credential scope were checked above; the list checks each task's anchor.
+	if r.URL.Path == "/api/agent-tasks" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+		return true
+	}
+	// So does the detail of an issue-anchored task (or coding session): its
+	// handler checks the task and its issue with scoped reads.
+	if allowed, handled := s.legacyAgentTaskDetailAuthorization(r, workspace); handled {
+		return allowed
+	}
+	if r.URL.Path == "/api/sync/changes" {
 		return true
 	}
 	// Pulse handlers check visibility per update from the shared feed index
@@ -1011,11 +1263,28 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			return false
 		}
 		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		noteAuthorizationBusy(r, err)
 		return err == nil && status == "active"
+	}
+	if s.store.BoundedMetadataEnabled() && (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/api/search/filter-suggestions" {
+		_, _, err := s.requestIssueQueryAccess(r)
+		return err == nil
+	}
+	if allowed, handled := s.boundedHotCollectionAuthorization(r, workspace, userID); handled {
+		return allowed
 	}
 	if boundedIssueAuthorizationRequest(r) {
 		_, _, err := s.requestIssueQueryAccess(r)
 		return err == nil
+	}
+	if allowed, handled := s.boundedIssueLabelPointAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
+	if allowed, handled := s.boundedPointResourceAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
+	if allowed, handled := s.boundedTeamResourceAuthorization(r, workspace, userID); handled {
+		return allowed
 	}
 	if boundedSettingsDeletionRequest(r) {
 		data, access, err := s.requestIssueQueryAccess(r)
@@ -1044,29 +1313,66 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 				return false
 			}
 			_, err := s.store.NotificationRecord(r.Context(), metadata.Workspace.URLKey, userID, parts[2])
+			noteAuthorizationBusy(r, err)
 			return err == nil
 		}
 		return true
 	}
+	if allowed, handled := s.boundedMembershipAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
+	if allowed, handled := s.boundedTeamMembershipAuthorization(r, workspace, userID); handled {
+		return allowed
+	}
+	if allowed, handled := s.boundedEmptyLegacyIssueDenial(r, workspace); handled {
+		return allowed
+	}
 	var data domain.Bootstrap
 	var ok bool
 	var err error
-	if isIssueRecordsRequest(r) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if selected, readErr, handled := s.projectRecordAuthorizationMetadata(r, workspace, userID); handled {
+		data, err, ok = selected, readErr, readErr == nil
+	} else if selected, readErr, handled := s.documentAuthorizationMetadata(r, workspace, userID); handled {
+		data, err, ok = selected, readErr, readErr == nil
+	} else if isIssueRecordsRequest(r) {
 		data, err = s.issueRecordAuthorizationData(r)
 		ok = err == nil
+	} else if !s.store.BoundedMetadataEnabled() && r.Method == http.MethodPost && len(parts) == 4 && parts[1] == "teams" && parts[3] == "recurring-issues" {
+		// Creation validates its targets after decoding. Authorization here
+		// needs only the viewer's team settings access.
+		data, err = s.store.LegacyIssueViewerPolicy(r.Context(), workspace, userID)
+		ok = err == nil
 	} else {
+		// With bounded metadata, the reviewed readers decide every shape that
+		// has one; the remaining shapes keep the literal projection below.
+		if allowed, handled := s.boundedFallbackAuthorization(r, workspace, userID); handled {
+			return allowed
+		}
 		// The viewer's whole projection: bounded by the projection gate (projection_gate.go).
 		if !acquireProjection(r) {
 			return false
 		}
-		data, err = s.store.PagedWorkspaceMetadata(r.Context(), workspace, userID)
+		repo := s.store
+		if repo.BoundedMetadataEnabled() {
+			repo, err = s.legacyColdAuthorizationRepository(r, true)
+			if err != nil {
+				return false
+			}
+		}
+		data, err = repo.PagedWorkspaceMetadata(r.Context(), workspace, userID)
 		ok = err == nil
 	}
 	if err != nil || !ok {
+		noteAuthorizationBusy(r, err)
 		return false
 	}
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	documentCommentWrite := len(parts) >= 5 && parts[1] == "documents" && parts[3] == "comments" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete)
+	if r.Method == http.MethodPatch && len(parts) == 3 && parts[1] == "documents" && s.store.BoundedMetadataEnabled() {
+		// The update handler refuses an edit this viewer cannot make before it
+		// takes the workspace write lock (updateDocument).
+		handOffMetadata(r, documentWriteMetadataKey{}, workspace, userID, data)
+	}
 	if (r.Method == http.MethodGet || r.Method == http.MethodHead) && !isIssueRecordsRequest(r) && !resourcePreferenceRequest(r) && !documentCommentWrite {
 		// Below, the projection is only read: a read handler may take it
 		// instead of building the same one again (request_metadata.go).
@@ -1082,6 +1388,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	if documentCommentWrite {
 		comment, readErr := s.store.ResourceComment(r.Context(), data.Workspace.URLKey, parts[2], parts[4])
 		if readErr != nil {
+			noteAuthorizationBusy(r, readErr)
 			return false
 		}
 		data.Comments[parts[2]] = []domain.Comment{comment}
@@ -1096,6 +1403,12 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		}
 		return slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == teamID })
 	}
+	// keyTeamOK is the API key's team restriction alone, which person-level
+	// grants (creator, owner, explicit grants) never widen.
+	keyTeamOK := func(teamID string) bool {
+		key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+		return !ok || !apiKeyTeamRestrictionSelected(key) || slices.Contains(key.TeamIDs, teamID)
+	}
 	teamAllowed := func(teamID string) bool {
 		if !teamRowAllowed(teamID) {
 			return false
@@ -1105,7 +1418,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	issueAllowed := func(issueID string) bool {
 		if isIssueRecordsRequest(r) {
 			return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool {
-				return issueAnswersTo(item, issueID) && (teamAllowed(item.Team.ID) || issueRole(s, data, item) != "none")
+				return issueAnswersTo(item, issueID) && keyTeamOK(item.Team.ID) && (teamAllowed(item.Team.ID) || issueRole(s, data, item) != "none")
 			})
 		}
 		return s.pagedIssueVisible(r, issueID)
@@ -1144,6 +1457,12 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 				return false
 			}
 			if item.Scope == "personal" {
+				// A restricted key reaches its owner's personal view only
+				// when the project the view is bound to lies within the
+				// key's teams; sessions and unrestricted keys are unchanged.
+				if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) && item.ProjectID != "" && !projectAllowed(item.ProjectID) {
+					return false
+				}
 				return item.OwnerID == userID || workspaceAdminRole(data.ViewerRole)
 			}
 			if item.Scope == "team" && item.TeamID != "" && !teamAllowed(item.TeamID) {
@@ -1223,6 +1542,11 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	pipelineMutationAllowed := func(input releasePipelineInput) bool {
 		return input.TeamIDs == nil || !slices.ContainsFunc(*input.TeamIDs, func(id string) bool { return strings.TrimSpace(id) != "" && !teamAllowed(strings.TrimSpace(id)) })
 	}
+	knownPerson := func(id string) bool {
+		known, err := s.workspacePersonKnown(r.Context(), workspace, data.Users, id)
+		noteAuthorizationBusy(r, err)
+		return known
+	}
 	mutationAllowed := func(input domain.IssueUpdateInput) bool {
 		if input.TeamID != nil && *input.TeamID != "" && !teamAllowed(*input.TeamID) {
 			return false
@@ -1233,7 +1557,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if input.CycleID != nil && *input.CycleID != "" && !slices.ContainsFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == *input.CycleID }) {
 			return false
 		}
-		if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(data.Users, func(item domain.User) bool { return item.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(r.Context(), workspace, *input.AssigneeID) {
+		if input.AssigneeID != nil && *input.AssigneeID != "" && !knownPerson(*input.AssigneeID) {
 			return false
 		}
 		if input.ParentID != nil && *input.ParentID != "" && !issueAllowed(*input.ParentID) {
@@ -1247,9 +1571,6 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		}
 		// The viewer's directory leaves removed people out; the write decides
 		// whether naming one keeps a reference (allowed) or adds one (400).
-		knownPerson := func(id string) bool {
-			return slices.ContainsFunc(data.Users, func(item domain.User) bool { return item.ID == id }) || s.formerMemberOutsideWrite(r.Context(), workspace, id)
-		}
 		if input.LeadID != nil && *input.LeadID != "" && !knownPerson(*input.LeadID) {
 			return false
 		}
@@ -1296,7 +1617,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			return releaseAllowed(id)
 		case "document":
 			return slices.ContainsFunc(data.Documents, func(item domain.Document) bool {
-				return (item.ID == id || item.SlugID == id) && documentRole(s, data, item) != "none"
+				return (item.ID == id || item.SlugID == id) && documentRole(s, data, item) != "none" && !apiKeyDocumentOutsideScope(r, data, item)
 			})
 		case "customer":
 			return customerAllowed(id)
@@ -1652,7 +1973,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 				if item.ID != id && item.SlugID != id {
 					return false
 				}
-				return len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed) || documentRole(s, data, item) != "none"
+				// The key's team restriction applies over the person-level
+				// grants (creator, admin, user grants) of its owner.
+				return !apiKeyDocumentOutsideScope(r, data, item) && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed) || documentRole(s, data, item) != "none")
 			})
 		}
 		if len(parts) == 2 && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
@@ -1879,6 +2202,9 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	session, token, err := s.store.Login(r.Context(), input.Email, input.Password)
 	if err != nil {
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
 		s.recordSignInFailure(r, input.Email, signInFailureReason(err))
 		writeErrorFor(w, r, http.StatusUnauthorized, err)
 		return
@@ -1891,7 +2217,14 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookieName); err == nil {
 		user, authErr := s.store.AuthenticateSession(r.Context(), cookie.Value)
-		if s.store.Logout(r.Context(), cookie.Value) == nil && authErr == nil {
+		if writeStoreReadUnavailable(w, authErr) {
+			return
+		}
+		err := s.store.Logout(r.Context(), cookie.Value)
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
+		if err == nil && authErr == nil {
 			s.recordAccountAudit(r, user, "", "signed_out", store.AuditResultSuccess, nil)
 		}
 	}
@@ -1902,7 +2235,18 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 func (s *server) authSession(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	if s.authDisabled {
-		account := s.store.Account()
+		var account domain.AccountBootstrap
+		if s.store.BoundedMetadataEnabled() {
+			read, err := s.store.BeginAccountRead(r.Context())
+			if err != nil {
+				respondMutation(w, err, http.StatusOK, nil)
+				return
+			}
+			defer read.Close()
+			account = read.Account
+		} else {
+			account = s.store.Account()
+		}
 		writeJSON(w, http.StatusOK, domain.AuthSession{User: account.Viewer, Memberships: account.Workspaces, ExpiresAt: time.Now().UTC().Add(24 * time.Hour)})
 		return
 	}
@@ -1914,6 +2258,9 @@ func (s *server) authSession(w http.ResponseWriter, r *http.Request) {
 	session, err := s.store.Session(r.Context(), cookie.Value)
 	w.Header().Set("Server-Timing", fmt.Sprintf("session;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
 	if err != nil {
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
 		clearSessionCookie(w, r)
 		writeError(w, http.StatusUnauthorized, "Your session has expired")
 		return
@@ -1985,6 +2332,9 @@ func (s *server) tokenLogin(w http.ResponseWriter, r *http.Request) {
 	_ = input.InviteLink
 	session, token, err := s.store.LoginWithAuthToken(r.Context(), input.Email, input.AuthToken, input.ForceReauth)
 	if err != nil {
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
 		s.recordSignInFailure(r, input.Email, signInFailureReason(err))
 		writeErrorFor(w, r, http.StatusUnauthorized, err)
 		return
@@ -2044,8 +2394,11 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if strings.EqualFold(input.Role, "owner") && !s.authDisabled {
-		role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
-		if !workspaceAdminRole(role) {
+		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
+		if err != nil || status != "active" || !workspaceAdminRole(role) {
 			writeError(w, http.StatusForbidden, "Only workspace owners and admins can invite owners")
 			return
 		}
@@ -2056,7 +2409,12 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 	input.TeamIDs = uniqueStrings(input.TeamIDs)
 	if !s.authDisabled {
-		if team, denied := s.inviteTeamDenied(r, data, input.TeamIDs); denied {
+		team, denied, err := s.inviteTeamDenied(r, data, input.TeamIDs)
+		if err != nil {
+			respondMutation(w, store.PreWriteDatabaseError(err), http.StatusCreated, nil)
+			return
+		}
+		if denied {
 			writeError(w, http.StatusForbidden, fmt.Sprintf("You can't add people to %s", team.Name))
 			return
 		}
@@ -2126,14 +2484,20 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 // team directly: workspace admins may use any team, private ones included; anyone else needs the team's member
 // management permission, which also requires being on a private team. A team that does not exist is left to the
 // store, which refuses it as an invalid team.
-func (s *server) inviteTeamDenied(r *http.Request, data domain.Bootstrap, teamIDs []string) (domain.Team, bool) {
+func (s *server) inviteTeamDenied(r *http.Request, data domain.Bootstrap, teamIDs []string) (domain.Team, bool, error) {
 	if len(teamIDs) == 0 {
-		return domain.Team{}, false
+		return domain.Team{}, false, nil
 	}
 	actorID := authUser(r).ID
-	role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, actorID)
+	role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, actorID)
+	if err != nil {
+		return domain.Team{}, false, err
+	}
+	if status != "active" {
+		return domain.Team{}, false, store.ErrAuthForbidden
+	}
 	if workspaceAdminRole(role) {
-		return domain.Team{}, false
+		return domain.Team{}, false, nil
 	}
 	for _, teamID := range teamIDs {
 		index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID })
@@ -2142,12 +2506,15 @@ func (s *server) inviteTeamDenied(r *http.Request, data domain.Bootstrap, teamID
 		}
 		team := data.Teams[index]
 		settings := data.TeamSettings[teamID]
-		teamRole, _ := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, actorID)
+		teamRole, err := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, actorID)
+		if err != nil && !errors.Is(err, store.ErrAuthForbidden) {
+			return domain.Team{}, false, err
+		}
 		if team.Private && teamRole == "" || !teamOperationAllowed(settings, settings.MemberPermission, teamRole, role) {
-			return team, true
+			return team, true, nil
 		}
 	}
-	return domain.Team{}, false
+	return domain.Team{}, false, nil
 }
 
 func (s *server) invitationPreview(w http.ResponseWriter, r *http.Request) {
@@ -2328,6 +2695,30 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 	if (input.Role != "" || input.DisplayName != "" || input.Email != "") && s.refuseSCIMManagedMember(w, r, data.Workspace.ID, userID) {
 		return
 	}
+	var roleBefore string
+	var currentIdentity domain.User
+	if !s.authDisabled {
+		if input.Role != "" {
+			var err error
+			roleBefore, _, err = s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+			if err != nil {
+				respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
+				return
+			}
+		}
+		if input.DisplayName != "" || input.Email != "" {
+			members, err := s.store.ListMembers(r.Context(), data.Workspace.ID)
+			if writeAuthCheckFailure(w, err) {
+				return
+			}
+			index := slices.IndexFunc(members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
+			if index < 0 {
+				writeError(w, http.StatusNotFound, "member not found")
+				return
+			}
+			currentIdentity = members[index].User
+		}
+	}
 	// A username is the workspace handle kept in the member's account settings,
 	// validated like a self-service change; the account name stays as it is.
 	username := ""
@@ -2340,7 +2731,7 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 		// Members an identity provider provisioned may not be in the workspace's user list until they sign in.
 		member, memberErr := s.store.HasWorkspaceMembership(r.Context(), data.Workspace.ID, userID)
 		if memberErr != nil {
-			writeError(w, http.StatusInternalServerError, memberErr.Error())
+			respondMutation(w, store.PreWriteDatabaseError(memberErr), http.StatusOK, nil)
 			return
 		}
 		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.username_updated", userID, map[string]string{"username": username}, func(workspace *domain.Bootstrap) error {
@@ -2433,7 +2824,6 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Role != "" {
-		roleBefore, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
 		if err := s.store.UpdateMemberRole(r.Context(), data.Workspace.ID, userID, input.Role); err != nil {
 			respondMutation(w, err, http.StatusOK, nil)
 			return
@@ -2442,27 +2832,17 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 			s.recordAudit(r.Context(), r.PathValue("workspaceKey"), newAuditEntry(requestActor(s, r), "role_changed", "workspace_member", userID, map[string]any{"userId": userID, "roleBefore": roleBefore, "roleAfter": input.Role}))
 		}
 	}
-	if input.DisplayName != "" || input.Username != "" || input.Email != "" {
-		members, _ := s.store.ListMembers(r.Context(), data.Workspace.ID)
-		index := slices.IndexFunc(members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
-		if index < 0 {
-			writeError(w, http.StatusNotFound, "member not found")
-			return
-		}
-		current := members[index].User
-		displayName, username, email := input.DisplayName, input.Username, input.Email
+	if input.DisplayName != "" || input.Email != "" {
+		displayName, email := input.DisplayName, input.Email
 		if displayName == "" {
-			displayName = current.DisplayName
-		}
-		if username == "" {
-			username = current.Name
+			displayName = currentIdentity.DisplayName
 		}
 		if email == "" {
-			email = current.Email
+			email = currentIdentity.Email
 		}
 		// The current identity again leaves the account as it is.
-		if strings.TrimSpace(displayName) != current.DisplayName || strings.TrimSpace(username) != current.Name || !strings.EqualFold(strings.TrimSpace(email), current.Email) {
-			if _, err := s.store.UpdateMemberIdentity(r.Context(), userID, displayName, username, email); err != nil {
+		if strings.TrimSpace(displayName) != currentIdentity.DisplayName || !strings.EqualFold(strings.TrimSpace(email), currentIdentity.Email) {
+			if _, err := s.store.UpdateMemberIdentity(r.Context(), userID, displayName, currentIdentity.Name, email); err != nil {
 				respondMutation(w, err, http.StatusOK, nil)
 				return
 			}
@@ -2728,7 +3108,7 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) recordMemberStatusAudit(r *http.Request, action string) {
-	err := s.store.MutateWorkspace(store.WithMetadataFields(r.Context(), "auditLog"), r.PathValue("workspaceKey"), "audit.workspace_member", r.PathValue("userId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(store.WithMetadataFields(r.Context(), "auditLog"), r.PathValue("workspaceKey"), "audit.workspace_member", r.PathValue("userId"), nil, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "users", ID: r.PathValue("userId")}}}, func(data *domain.Bootstrap) error {
 		appendAudit(data, action, "workspace_member", r.PathValue("userId"), nil)
 		return nil
 	})

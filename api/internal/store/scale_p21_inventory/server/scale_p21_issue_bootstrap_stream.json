@@ -1,0 +1,47 @@
+{
+  "source": "server/scale_p21_issue_bootstrap_stream.go",
+  "unmigrated": 0,
+  "consumers": {
+    "issueRecordsBootstrapBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The bounded-only HTTP branch owns BeginIssueBootstrapRead through all literal credential filtering, preference/team visibility, three projection modes, release/cycle/calendar/loop decoration and final output. Shared streamed loop presentation avoids interpreting opaque instructions. Logical encoding binds every body before writing and uses the existing hydrated URL signer per encoded leaf; existing outer spools retain the producer through direct overflow and release it before detached replay. Missing development workspaces keep the literal 404, authenticated denial stays 403, and caller SQL snapshots keep their original authority lifetime. SW145 compares fifty-five actual registered legacy/bounded responses byte-for-byte with exact statuses and headers except numeric timing durations, across principals/keys, warm/reloaded and public SQL handoffs, all projection modes, cross-workspace denial, development defaults, and signed zero/small/full spool budgets. Producer work, request scopes, files and spool allowance release exactly. The original flag-off handler and separately guarded typed chat bootstrap helper remain literal. The read's authority check and output admission (IssueBootstrapRead.Prepare) run before the status is written, so a budget refusal is a 503 rather than a cut-off 200. A read whose workspace authorization moved under it (store.ErrAccessChanged, which the flag-off single-snapshot read cannot meet) is read again, up to three reads, then answered 503 with Retry-After; a principal who lost access is refused by the next read with the literal 403. TestScaleP21IssueBootstrapAccessChangedDuringRead and TestScaleP21IssueBootstrapLargeProjectHistory compare flag off and on byte for byte on SQLite, MySQL and PostgreSQL.",
+      "accessors": [
+        "openIssueRecordsBootstrapRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Paged issue list, board and issue detail bootstrap HTTP response.",
+      "callers": [
+        "GET /api/issue-records/bootstrap -> issueRecordsBootstrap"
+      ]
+    },
+    "beginIssueRecordsBootstrapRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Exact extraction of the existing bounded HTTP reader preparation preserves cursor/source selection, all credential/preference filters, projection modes, release/cycle decoration, streamed loop sanitization, calendar and loop counts, nil/empty shapes and error order. The caller owns successful reads; every failed preparation closes its owner. Existing SW145 passes all55 actual registered legacy/bounded HTTP pairs after extraction. SW170 and SW174 add exact declared typed-header consumers across permission/source matrices, ownership/cancellation, persistent repeats and race without changing the underlying store loader or limits. The literal flag-off HTTP handler remains unchanged. It now answers the failure of openIssueRecordsBootstrapRead, the same preparation returning its error unanswered, unchanged in order and responses.",
+      "accessors": [
+        "openIssueRecordsBootstrapRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Shared issue bootstrap HTTP and declared chat header preparation.",
+      "callers": [
+        "server/server.issueRecordsBootstrapBounded",
+        "server/server.chatBootstrapHeaders"
+      ]
+    },
+    "openIssueRecordsBootstrapRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The former body of beginIssueRecordsBootstrapRead, returning its failure instead of answering it so that the bootstrap handler can read again when the workspace authorization moved under a read: the same cursor/source selection, credential and preference filters, projection modes, release/cycle decoration, streamed loop sanitization, calendar and loop counts and error order; the missing development workspace is errIssueBootstrapWorkspaceNotFound (answered with the literal 404). Every failed preparation closes its read.",
+      "accessors": [
+        "BeginIssueBootstrapRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Shared issue bootstrap HTTP and declared chat header preparation.",
+      "callers": [
+        "server/server.issueRecordsBootstrapBounded",
+        "server/server.beginIssueRecordsBootstrapRead"
+      ]
+    }
+  }
+}

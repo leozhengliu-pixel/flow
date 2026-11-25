@@ -1,10 +1,12 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -95,7 +97,7 @@ func insertDomainEvent(ctx context.Context, db domainEventExecer, row domainEven
 			actor = user.ID
 		}
 	}
-	return db.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id,seq,actor_id) VALUES(?,?,?,?,?,?,?,?,?)`, row.ID, row.Type, eventAggregateKey(row.AggregateID), row.Payload, row.PreviousValues, row.CreatedAt, workspace, seq, actor)
+	return db.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id,seq,actor_id) VALUES(?,?,?,?,?,?,?,?,?)`, row.ID, row.Type, eventAggregateKey(row.AggregateID), row.Payload, row.PreviousValues, normalizeStoredTime(row.CreatedAt), workspace, seq, actor)
 }
 
 func nextWorkspaceSeq(ctx context.Context, db domainEventExecer, workspaceID string) (int64, error) {
@@ -247,8 +249,10 @@ func (s *SQLiteStore) addChangeLog(ctx context.Context) error {
 }
 
 // backfillChangeLog numbers events written before the change log existed, per
-// workspace in (created_at,id) order. It resumes after a partial run: rows
-// already numbered are kept and the rest continue from the highest seq.
+// workspace in (time,id) order. Those rows hold RFC3339Nano text, which does
+// not sort by time (stored_time.go), so they are ordered here by decoded time.
+// It resumes after a partial run: rows already numbered are kept and the rest
+// continue from the highest seq.
 func (s *SQLiteStore) backfillChangeLog(ctx context.Context) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT workspace_id FROM domain_events WHERE seq IS NULL AND workspace_id IS NOT NULL AND workspace_id<>''`)
 	if err != nil {
@@ -273,23 +277,30 @@ func (s *SQLiteStore) backfillChangeLog(ctx context.Context) error {
 		if err := s.db.QueryRowContext(ctx, `SELECT MAX(seq) FROM domain_events WHERE workspace_id=?`, workspaceID).Scan(&last); err != nil {
 			return err
 		}
-		idRows, err := s.db.QueryContext(ctx, `SELECT id FROM domain_events WHERE workspace_id=? AND seq IS NULL ORDER BY created_at,id`, workspaceID)
+		idRows, err := s.db.QueryContext(ctx, `SELECT id,created_at FROM domain_events WHERE workspace_id=? AND seq IS NULL`, workspaceID)
 		if err != nil {
 			return err
 		}
-		ids := []string{}
+		type unnumbered struct{ at, id string }
+		pending := []unnumbered{}
 		for idRows.Next() {
-			var id string
-			if err := idRows.Scan(&id); err != nil {
+			var row unnumbered
+			if err := idRows.Scan(&row.id, &row.at); err != nil {
 				idRows.Close()
 				return err
 			}
-			ids = append(ids, id)
+			row.at = normalizeStoredTime(row.at)
+			pending = append(pending, row)
 		}
 		err = idRows.Err()
 		idRows.Close()
 		if err != nil {
 			return err
+		}
+		slices.SortFunc(pending, func(a, b unnumbered) int { return cmp.Or(strings.Compare(a.at, b.at), strings.Compare(a.id, b.id)) })
+		ids := make([]string, len(pending))
+		for index, row := range pending {
+			ids[index] = row.id
 		}
 		seq := last.Int64
 		for start := 0; start < len(ids); start += 500 {

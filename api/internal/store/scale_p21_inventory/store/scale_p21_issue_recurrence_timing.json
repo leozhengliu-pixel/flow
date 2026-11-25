@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_issue_recurrence_timing.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedIssueRecurrenceTiming": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Selects the closed timing-only profile of the shared executor, preserving original MutationScope semantics rather than issue-record mutation semantics. Only the aggregate's literal/trim ID set is accepted; DueDate, NextOccurrenceAt, Version and captured UpdatedAt may change. Native callback results remain unchanged while temporary framed issue values use the same RFC3339 representation as canonical persistence, under live admitted timestamp provenance. SW155 proves 34 legacy/effect pairs and 22 strict guards, warm/reloaded and IANA/dual-ID cases, persistent SQLite twice and race; SW158 proves Transform timestamp receipt ownership and rejection/release. SQL for the no-actor writer is 36 to 71; additional selected-row/content preflights and native scoped closure are work-admitted, with at most two issue IDs and 32-row/256KiB payload batches. No SQL/capacity gain is claimed.",
+      "accessors": ["mutateBoundedScopedIssuePoint"],
+      "temperature": "hot",
+      "temperatureReason": "Recurring normalization in the first per-workspace ticker pass.",
+      "callers": ["store/sqlite.go:dispatchMutation"]
+    }
+  }
+}

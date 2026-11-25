@@ -38,7 +38,13 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "could not read webhook")
 		return
 	}
-	connection := s.webhookConnection(r, provider)
+	credentials, release, err := s.webhookConnection(r, provider)
+	defer release()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "webhook configuration unavailable")
+		return
+	}
+	connection := integrationWebhookConnection(credentials)
 	if connection == nil || !verifyCodeWebhook(provider, connection, r, body) {
 		writeError(w, http.StatusUnauthorized, "invalid webhook signature")
 		return
@@ -240,7 +246,13 @@ func (s *server) slackWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "could not read webhook")
 		return
 	}
-	connection := s.webhookConnection(r, "slack")
+	credentials, release, err := s.webhookConnection(r, "slack")
+	defer release()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "webhook configuration unavailable")
+		return
+	}
+	connection := integrationWebhookConnection(credentials)
 	if connection == nil || !verifySlackWebhook(connection, r, body) {
 		writeError(w, http.StatusUnauthorized, "invalid webhook signature")
 		return
@@ -393,7 +405,14 @@ func (s *server) testIntegrationConnection(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	data := s.workspaceData(r)
+	scope := store.MetadataRecordScope{}
+	if id != "" {
+		scope.Read = []store.RecordKey{{Kind: "integrationConnections", ID: id}}
+	}
+	data, ok := s.workspaceDataScoped(w, r, scope)
+	if !ok {
+		return
+	}
 	var connection *domain.IntegrationConnection
 	if id != "" {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
@@ -475,7 +494,7 @@ func persistIntegrationTestError(s *server, r *http.Request, provider, id, messa
 	if id == "" {
 		return
 	}
-	_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.connection_tested", id, map[string]string{"provider": provider, "status": "error"}, func(data *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.connection_tested", id, map[string]string{"provider": provider, "status": "error"}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
 		if index < 0 {
 			return errNotFound
@@ -493,7 +512,7 @@ func persistIntegrationTestSuccess(s *server, r *http.Request, provider, id stri
 	if id == "" {
 		return
 	}
-	_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.connection_tested", id, map[string]string{"provider": provider, "status": "ready"}, func(data *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.connection_tested", id, map[string]string{"provider": provider, "status": "ready"}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
 		if index < 0 {
 			return errNotFound
@@ -506,17 +525,25 @@ func persistIntegrationTestSuccess(s *server, r *http.Request, provider, id stri
 	})
 }
 
-func (s *server) webhookConnection(r *http.Request, provider string) *domain.IntegrationConnection {
+func (s *server) webhookConnection(r *http.Request, provider string) (*store.IntegrationWebhookCredentials, func(), error) {
+	if s.store.BoundedMetadataEnabled() {
+		credentials, found, release, err := s.store.BeginIntegrationWebhookCredentials(r.Context(), workspaceKey(r), provider)
+		if err != nil || !found {
+			return nil, release, err
+		}
+		return &credentials, release, nil
+	}
 	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
 	if !ok {
-		return nil
+		return nil, func() {}, nil
 	}
 	for index := range data.IntegrationConnections {
 		if data.IntegrationConnections[index].Provider == provider && slices.Contains([]string{"configured", "connected"}, data.IntegrationConnections[index].Status) {
-			return &data.IntegrationConnections[index]
+			credentials := integrationWebhookCredentials(data.IntegrationConnections[index])
+			return &credentials, func() {}, nil
 		}
 	}
-	return nil
+	return nil, func() {}, nil
 }
 
 func verifyCodeWebhook(provider string, connection *domain.IntegrationConnection, r *http.Request, body []byte) bool {

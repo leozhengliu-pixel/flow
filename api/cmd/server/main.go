@@ -44,10 +44,21 @@ var (
 
 type server struct {
 	store *store.SQLiteStore
+	// reloadWorkspaceFn is used by focused freshness tests to exercise the
+	// shared reload failure path without replacing the concrete store.
+	reloadWorkspaceFn func(context.Context, string) error
+	// fileSigningAllowAll lets pipeline tests sign fixture names that no record
+	// references; production never sets it.
+	fileSigningAllowAll bool
 	// metadataGate bounds concurrent workspace metadata projections (metadata_read_gate.go).
-	metadataGate *metadataReadGate
+	metadataGate       *metadataReadGate
+	bootstrapEncodings *bootstrapEncodingRenderer
 	// projectionGate bounds resource requests that build the viewer's projection (projection_gate.go).
 	projectionGate *metadataReadGate
+	// coldProjectionGate bounds COLD requests' projections apart from HOT
+	// ones (scale_p21_cold_authorization.go).
+	coldProjectionGate     *metadataReadGate
+	coldProjectionGateOnce sync.Once
 	// coding is the coding-session runtime (coding_runtime.go).
 	coding *codingServices
 	// agentAutoTitle names new Agent chats with a small extra model call (off in test fixtures).
@@ -67,6 +78,7 @@ type server struct {
 	realtime                       *realtimeHub
 	coordinator                    *coordination.Redis
 	coordinationStarted            atomic.Bool
+	peerSyncUnavailableOnce        sync.Once
 	renamedKeysAdopted             atomic.Bool       // the maintenance pass checked every recorded rename once (storage_maintenance.go)
 	healthDegraded                 atomic.Bool       // the last health probe found the coordinator unreachable (health.go)
 	remoteEvents                   remoteEventQueue  // peer events waiting to be applied (redis_coordination.go)
@@ -154,6 +166,12 @@ func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "audit-verify" {
 		os.Exit(runAuditVerifyCommand(os.Args[2:]))
 	}
+	// Operators prepare a database for FLOW_BOUNDED_METADATA=on (journal
+	// repair and metadata catalog, docs/bounded-metadata.md) with
+	// `server metadata-prepare`.
+	if len(os.Args) >= 2 && os.Args[1] == "metadata-prepare" {
+		os.Exit(runMetadataPrepareCommand(os.Args[2:]))
+	}
 	// The YAML configuration file (--config or FLOW_CONFIG_FILE) is read
 	// first: its server settings become environment values the environment
 	// does not set, so logging and every later reader see them.
@@ -203,6 +221,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Deferred first so it runs after repository.Close has released every
+	// installed spool file: the per-process spool directory goes last.
+	defer func() { _ = store.RemoveMetadataSpoolDirectory() }()
 	defer repository.Close()
 	objects, err := objectstore.Open(context.Background(), applicationConfig.Storage)
 	if err != nil {
@@ -262,6 +283,7 @@ func main() {
 	repository.SetWorkspaceKeyObjects(codingHarnessKeyObjects{objects: objects})
 
 	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
+	observeLoadRigGates(s.metadataGate, s.projectionGate)
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -278,7 +300,8 @@ func main() {
 	// Replicas starting together would otherwise race to install the same
 	// built-in application rows; the database startup lock makes them take
 	// turns, and later ones find the rows current.
-	if err := s.store.WithStartupLock(shutdownSignal, "built-in applications", func(ctx context.Context) error {
+	// The startup syncs run as COLD work with bounded metadata on (SW557).
+	if err := s.store.WithStartupLock(store.WithColdWork(shutdownSignal, "startup"), "built-in applications", func(ctx context.Context) error {
 		s.ensureBuiltinApplications(ctx)
 		if err := s.store.SyncAllApplicationIdentities(ctx); err != nil {
 			log.Printf("sync application identities: %v", err)
@@ -293,16 +316,28 @@ func main() {
 	}); err != nil {
 		log.Fatal(err)
 	}
+	// With bounded metadata on, operators see the catalog state per workspace
+	// once and the COLD path counters periodically (FLOW_BOUNDED_METADATA_STATS_INTERVAL).
+	if s.store.BoundedMetadataEnabled() {
+		s.store.LogMetadataCatalogCompleteness(store.WithColdWork(shutdownSignal, "catalog-report"))
+		go store.RunColdMetricsLog(shutdownSignal, store.BoundedMetadataStatsInterval())
+	}
 	// Other replicas look here for this release's assets once it serves pages.
 	startSharedAssetPublish(s.staticPath, applicationConfig.Assets, 30*time.Second)
-	go s.runCoding(shutdownSignal)
-	go s.runApplicationAgentWorker(shutdownSignal)
+	// Background work that reaches COLD consumers runs COLD per operation
+	// with bounded metadata on (SW550 background roots, SW557). The coding
+	// service calls back into the server (its notifier and hooks) with the
+	// context runCoding hands its reconcilers.
+	go s.runCoding(store.WithColdWork(shutdownSignal, "coding"))
+	go s.runApplicationAgentWorker(store.WithColdWork(shutdownSignal, "application-agent-worker"))
 	go s.runRecurringIssueScheduler(shutdownSignal)
-	go s.runReviewImportScheduler(shutdownSignal)
+	go s.runReviewImportScheduler(store.WithColdWork(shutdownSignal, "review-import-scheduler"))
 	go s.runPersonalConnectionScheduler(shutdownSignal)
-	go s.runStorageMaintenance(shutdownSignal, applicationConfig.Retention.DomainEvents)
+	go s.runStorageMaintenance(store.WithColdWork(shutdownSignal, "storage-maintenance"), applicationConfig.Retention.DomainEvents)
 	go s.resealStoredSecrets(shutdownSignal)
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-shutdownSignal.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
@@ -315,6 +350,12 @@ func main() {
 	log.Printf("Flow API %s (commit %s) listening on %s using database=%s storage=%s redis=%s", version, commit, httpServer.Addr, applicationConfig.Database.Driver, applicationConfig.Storage.Driver, applicationConfig.Redis.Mode)
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
+	}
+	// ListenAndServe returns as soon as Shutdown starts; wait until the drain
+	// ends so the deferred store close (which removes the spool files) never
+	// runs under a request that is still reading.
+	if shutdownSignal.Err() != nil {
+		<-shutdownDone
 	}
 }
 
@@ -340,10 +381,19 @@ func runHealthcheck() int {
 func newHandler(s *server) http.Handler {
 	legacyReadGate := make(chan struct{}, 1)
 	if s.metadataGate == nil {
-		s.metadataGate = metadataReadGateFromEnv()
+		s.metadataGate = metadataReadGateFromEnv(s.store != nil && s.store.BoundedMetadataEnabled())
+	}
+	if s.bootstrapEncodings == nil && s.store != nil && s.store.BoundedMetadataEnabled() {
+		s.bootstrapEncodings = newBootstrapEncodingRenderer(store.BoundedBootstrapEncodingBytes())
 	}
 	if s.projectionGate == nil {
 		s.projectionGate = projectionGateFromEnv()
+	}
+	if s.store != nil && !s.store.BoundedMetadataEnabled() {
+		if s.projectionGate.projectionBudget == nil {
+			s.projectionGate.projectionBudget = newLegacyProjectionBudget(s.hydratedLegacySnapshotReservation, legacyProjectionBudgetBytes())
+		}
+		s.metadataGate.projectionBudget = s.projectionGate.projectionBudget
 	}
 	if s.importSlots == nil {
 		s.importSlots = make(chan struct{}, 2)
@@ -444,6 +494,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/account/passkeys/{id}", s.deletePasskey)
 	mux.HandleFunc("GET /api/account/identities", s.listAccountIdentities)
 	mux.HandleFunc("DELETE /api/account/identities/{id}", s.unlinkAccountIdentity)
+	mux.HandleFunc("GET /api/account/identities/link/enterprise/{id}/start", s.startEnterpriseOIDCLink)
+	mux.HandleFunc("GET /api/account/identities/link/{provider}/start", s.startOIDCLink)
 	mux.HandleFunc("POST /api/account/change-password", s.changeAccountPassword)
 	mux.HandleFunc("DELETE /api/account", s.deleteAccount)
 	mux.HandleFunc("GET /api/account/data-exports", s.listPersonalDataExports)
@@ -453,6 +505,8 @@ func newHandler(s *server) http.Handler {
 	s.registerPersonalConnectionRoutes(mux)
 	mux.HandleFunc("GET /api/realtime/events", s.realtimeEvents)
 	mux.HandleFunc("GET /api/realtime/changes", s.realtimeChanges)
+	mux.HandleFunc("GET /api/sync/changes", s.syncChanges)
+	s.registerSyncRoutes(mux)
 	mux.HandleFunc("GET /api/realtime/socket", s.realtimeSocket)
 	mux.HandleFunc("GET /api/realtime/presence", s.listPresence)
 	mux.HandleFunc("POST /api/realtime/presence", s.updatePresence)
@@ -528,14 +582,14 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/customer-requests/{id}/attachments", s.createCustomerRequestAttachment)
 	mux.HandleFunc("DELETE /api/customer-requests/{id}/attachments/{attachmentId}", s.deleteCustomerRequestAttachment)
 	mux.HandleFunc("GET /api/documents", connectionOr(s.listDocuments, s.listDocumentsConnection))
-	mux.HandleFunc("POST /api/documents", s.createDocument)
+	mux.HandleFunc("POST /api/documents", s.createPortfolioDocument)
 	mux.HandleFunc("GET /api/documents/{id}", s.getDocument)
 	mux.HandleFunc("PATCH /api/documents/{id}", s.updateDocument)
 	mux.HandleFunc("POST /api/documents/{id}/restore", s.restoreDeletedDocument)
 	mux.HandleFunc("GET /api/documents/{id}/subscribers", s.listDocumentSubscribers)
 	mux.HandleFunc("POST /api/documents/{id}/subscribers", s.addDocumentSubscribers)
 	mux.HandleFunc("DELETE /api/documents/{id}/subscribers/{userId}", s.removeDocumentSubscriber)
-	mux.HandleFunc("DELETE /api/documents/{id}", s.deleteDocument)
+	mux.HandleFunc("DELETE /api/documents/{id}", s.deletePortfolioDocument)
 	mux.HandleFunc("POST /api/documents/{id}/reminders", s.createDocumentReminder)
 	mux.HandleFunc("GET /api/documents/{id}/permissions", s.listDocumentPermissions)
 	mux.HandleFunc("PUT /api/documents/{id}/permissions", s.replaceDocumentPermissions)
@@ -832,6 +886,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/documents/{id}/drafts/{draftId}", s.deleteDocumentDraft)
 	mux.HandleFunc("POST /api/documents/{id}/drafts/{draftId}/publish", s.publishDocumentDraft)
 	mux.HandleFunc("GET /api/documents/{id}/history", s.documentContentHistory)
+	s.registerScaleP20Routes(mux)
 	mux.HandleFunc("POST /api/workspace/documents/{id}/revisions/import", s.importDocumentRevision)
 	mux.HandleFunc("GET /api/customer-taxonomy", s.listCustomerTaxonomy)
 	mux.HandleFunc("POST /api/customer-statuses", s.createCustomerTaxonomy)
@@ -999,7 +1054,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/calendar/cycles/{id}", s.cycleCalendar)
 	mux.HandleFunc("GET /api/projects", connectionOr(s.listProjectRecords, s.listProjectsConnection))
 	mux.HandleFunc("POST /api/projects", s.createProject)
-	mux.HandleFunc("PATCH /api/projects/{id}", s.updateProject)
+	mux.HandleFunc("PATCH /api/projects/{id}", s.updatePortfolioProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", s.deleteProject)
 	mux.HandleFunc("POST /api/projects/{id}/reminders", s.createProjectReminder)
 	mux.HandleFunc("POST /api/projects/{id}/resources", s.createProjectResource)
@@ -1013,10 +1068,10 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/projects/{id}/comments/{commentId}", s.updateProjectComment)
 	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}", s.deleteProjectComment)
 	mux.HandleFunc("POST /api/projects/{id}/comments/{commentId}/reactions", s.toggleProjectCommentReaction)
-	mux.HandleFunc("PUT /api/projects/{id}/comments/{commentId}/subscription", s.setProjectThreadSubscription)
-	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}/subscription", s.clearProjectThreadSubscription)
-	mux.HandleFunc("POST /api/projects/{id}/comment-attachments", s.createProjectCommentAttachment)
-	mux.HandleFunc("POST /api/initiatives/{id}/comment-attachments", s.createInitiativeCommentAttachment)
+	mux.HandleFunc("PUT /api/projects/{id}/comments/{commentId}/subscription", projectRecordHandler("project", "comment", s.setProjectThreadSubscription))
+	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}/subscription", projectRecordHandler("project", "comment", s.clearProjectThreadSubscription))
+	mux.HandleFunc("POST /api/projects/{id}/comment-attachments", projectRecordHandler("project", "comment", s.createProjectCommentAttachment))
+	mux.HandleFunc("POST /api/initiatives/{id}/comment-attachments", projectRecordHandler("initiative", "comment", s.createInitiativeCommentAttachment))
 	mux.HandleFunc("POST /api/documents/{id}/attachments", s.createDocumentAttachment)
 	mux.HandleFunc("GET /api/pulse/feed", s.getPulseFeed)
 	mux.HandleFunc("GET /api/pulse/unread", s.getPulseUnread)
@@ -1040,8 +1095,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/projects/{id}/updates/{updateId}", s.deleteProjectUpdate)
 	mux.HandleFunc("POST /api/projects/{id}/updates/{updateId}/comments", s.createProjectUpdateComment)
 	mux.HandleFunc("POST /api/projects/{id}/updates/{updateId}/reactions", s.toggleProjectUpdateReaction)
-	mux.HandleFunc("POST /api/projects/{id}/updates/{updateId}/attachments", s.createPulseUpdateAttachment("project"))
-	mux.HandleFunc("DELETE /api/projects/{id}/updates/{updateId}/attachments/{attachmentId}", s.deletePulseUpdateAttachment("project"))
+	mux.HandleFunc("POST /api/projects/{id}/updates/{updateId}/attachments", projectRecordHandler("project", "update", s.createPulseUpdateAttachment("project")))
+	mux.HandleFunc("DELETE /api/projects/{id}/updates/{updateId}/attachments/{attachmentId}", projectRecordHandler("project", "update", s.deletePulseUpdateAttachment("project")))
 	mux.HandleFunc("POST /api/initiatives", s.createInitiative)
 	mux.HandleFunc("PATCH /api/initiatives/{id}", s.updateInitiative)
 	mux.HandleFunc("DELETE /api/initiatives/{id}", s.deleteInitiative)
@@ -1053,15 +1108,15 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/initiatives/{id}/comments/{commentId}", s.updateInitiativeComment)
 	mux.HandleFunc("DELETE /api/initiatives/{id}/comments/{commentId}", s.deleteInitiativeComment)
 	mux.HandleFunc("POST /api/initiatives/{id}/comments/{commentId}/reactions", s.toggleInitiativeCommentReaction)
-	mux.HandleFunc("PUT /api/initiatives/{id}/comments/{commentId}/subscription", s.setInitiativeThreadSubscription)
-	mux.HandleFunc("DELETE /api/initiatives/{id}/comments/{commentId}/subscription", s.clearInitiativeThreadSubscription)
+	mux.HandleFunc("PUT /api/initiatives/{id}/comments/{commentId}/subscription", projectRecordHandler("initiative", "comment", s.setInitiativeThreadSubscription))
+	mux.HandleFunc("DELETE /api/initiatives/{id}/comments/{commentId}/subscription", projectRecordHandler("initiative", "comment", s.clearInitiativeThreadSubscription))
 	mux.HandleFunc("POST /api/initiatives/{id}/updates", s.createInitiativeUpdate)
 	mux.HandleFunc("PATCH /api/initiatives/{id}/updates/{updateId}", s.updateInitiativeUpdate)
 	mux.HandleFunc("DELETE /api/initiatives/{id}/updates/{updateId}", s.deleteInitiativeUpdate)
 	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/comments", s.createInitiativeUpdateComment)
 	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/reactions", s.toggleInitiativeUpdateReaction)
-	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/attachments", s.createPulseUpdateAttachment("initiative"))
-	mux.HandleFunc("DELETE /api/initiatives/{id}/updates/{updateId}/attachments/{attachmentId}", s.deletePulseUpdateAttachment("initiative"))
+	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/attachments", projectRecordHandler("initiative", "update", s.createPulseUpdateAttachment("initiative")))
+	mux.HandleFunc("DELETE /api/initiatives/{id}/updates/{updateId}/attachments/{attachmentId}", projectRecordHandler("initiative", "update", s.deletePulseUpdateAttachment("initiative")))
 	mux.HandleFunc("PATCH /api/issues/{id}", s.updateIssue)
 	mux.HandleFunc("PUT /api/issues/{id}/releases", s.setIssueReleases)
 	mux.HandleFunc("DELETE /api/issues/{id}", s.deleteIssue)
@@ -1090,7 +1145,7 @@ func newHandler(s *server) http.Handler {
 	s.registerPublicAPIRoutes(mux)
 	s.registerCodingRoutes(mux)
 
-	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.limitFailedAuthentication(s.projectionGate.holdProjections(s.authenticate(s.limitAuthenticatedAPI(mux))))))
+	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.limitFailedAuthentication(s.projectionGate.holdProjections(s.withColdMetadataRouteMux(mux, s.authenticate(s.limitAuthenticatedAPI(mux)))))))
 	securityConfig := appconfig.DefaultSecurityHeaders()
 	if s.securityHeaders != nil {
 		securityConfig = *s.securityHeaders
@@ -1102,7 +1157,7 @@ func newHandler(s *server) http.Handler {
 	if s.securityHeaders != nil {
 		forwarding = forwardingPolicyFromConfig(securityConfig, s.allowedOrigin)
 	}
-	return withForwardingPolicy(forwarding, withSecurityHeaders(security, recoverPanics(requestLog(s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(stripQueryNUL(handler))))))))))
+	return withForwardingPolicy(forwarding, withSecurityHeaders(security, recoverPanics(requestLog(mux, s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(stripQueryNUL(handler))))))))))
 }
 
 // serverRoute reports whether path is answered by the API rather than the
@@ -1176,7 +1231,18 @@ var staticAssetExtensions = map[string]bool{
 
 func (s *server) accountBootstrap(w http.ResponseWriter, r *http.Request) {
 	if s.authDisabled {
-		account := s.store.Account()
+		var account domain.AccountBootstrap
+		if s.store.BoundedMetadataEnabled() {
+			read, err := s.store.BeginAccountRead(r.Context())
+			if err != nil {
+				respondMutation(w, err, http.StatusOK, nil)
+				return
+			}
+			defer read.Close()
+			account = read.Account
+		} else {
+			account = s.store.Account()
+		}
 		account.WorkspaceRegionSelectorEnabled = s.regionSelectorEnabled()
 		account.WorkspaceDefaultRegion = s.defaultWorkspaceRegion()
 		account.ChatPlatform = chatPlatform()
@@ -1204,6 +1270,10 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	if r.Header.Get("X-Flow-Projection") == "issue-detail" {
 		s.issueRecordsBootstrap(w, r)
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.generalBootstrapBounded(w, r)
 		return
 	}
 	s.maintainCycleSchedule(r.Context(), workspaceKey(r))
@@ -1238,7 +1308,9 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if projectListBootstrapRequested(r) {
+	projectList := projectListBootstrapRequested(r)
+	if projectList {
+		r = captureBootstrapCredentialVisibility(r, data)
 		store.ProjectListBootstrapProjection(&data)
 	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
 		issueRecordsError(w, err)
@@ -1258,6 +1330,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	sanitizeBootstrap(&data)
 	s.applyCalendarAway(r.Context(), &data)
+	s.hideUnreadableLoops(r, &data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
 	if leanBootstrapRequested(r) {
 		// Everything before the streamed body; the body is a pure encode of data.
@@ -1265,7 +1338,11 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
 	}
-	s.writeStoredBootstrap(w, r, data)
+	scope := bootstrapStreamScope{projectList: projectList}
+	if !projectList {
+		scope.issueDetails = planningIssueDetails(r, data)
+	}
+	s.writeStoredBootstrap(w, r, data, scope)
 }
 
 func sanitizeBootstrap(data *domain.Bootstrap) {
@@ -1320,6 +1397,11 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	delete(data.Settings, meetingsSettingsKey)
 	for index := range data.Invitations {
 		data.Invitations[index].Token = ""
+	}
+	// The join link token is a credential for whoever may invite; everyone
+	// else gets no link at all (the role comes from the viewer's own record).
+	if !workspacePermissionAllows(data.WorkspaceSettings, "invite", data.ViewerRole) {
+		data.WorkspaceInviteLink = nil
 	}
 	data.DocumentContentDrafts = slices.DeleteFunc(data.DocumentContentDrafts, func(item domain.DocumentContentDraft) bool { return item.UserID != data.Viewer.ID })
 	data.AgentSessions = slices.DeleteFunc(data.AgentSessions, func(item domain.AgentSession) bool { return item.UserID != data.Viewer.ID || item.DeletedAt != nil })
@@ -1452,6 +1534,10 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 		return
 	}
 	allowed := func(id string) bool { return slices.Contains(key.TeamIDs, id) }
+	keyTeams := make(map[string]bool, len(key.TeamIDs))
+	for _, id := range key.TeamIDs {
+		keyTeams[id] = true
+	}
 	data.Teams = slices.DeleteFunc(data.Teams, func(item domain.Team) bool { return !allowed(item.ID) })
 	data.States = slices.DeleteFunc(data.States, func(item domain.WorkflowState) bool { return item.TeamID != "" && !allowed(item.TeamID) })
 	// Labels and label groups share one scope convention: empty or
@@ -1477,17 +1563,23 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	for index := range data.Issues {
 		data.Issues[index].Labels = slices.DeleteFunc(data.Issues[index].Labels, func(label domain.IssueLabel) bool { return !visibleLabel(label.ID) })
 	}
+	issueIDs := make(map[string]bool, len(data.Issues))
+	for _, issue := range data.Issues {
+		issueIDs[issue.ID] = true
+	}
 	visibleIssue := func(id string) bool {
-		return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool { return item.ID == id })
+		return issueIDs[id] || (data.IssueCollectionPaged && len(data.Issues) == 0)
 	}
 	data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool {
 		return !visibleIssue(item.IssueID)
 	})
 	data.Cycles = slices.DeleteFunc(data.Cycles, func(item domain.Cycle) bool { return !allowed(item.TeamID) })
 	data.Projects = slices.DeleteFunc(data.Projects, func(item domain.Project) bool { return !slices.ContainsFunc(item.TeamIDs, allowed) })
-	visibleProject := func(id string) bool {
-		return slices.ContainsFunc(data.Projects, func(item domain.Project) bool { return item.ID == id })
+	projectIDs := make(map[string]bool, len(data.Projects))
+	for _, project := range data.Projects {
+		projectIDs[project.ID] = true
 	}
+	visibleProject := func(id string) bool { return projectIDs[id] }
 	data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool {
 		if item.SuggestedIssueID != "" && !visibleIssue(item.SuggestedIssueID) {
 			return true
@@ -1500,20 +1592,28 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(relation domain.ProjectRelation) bool {
 		return !visibleProject(relation.ProjectID) || !visibleProject(relation.RelatedProjectID)
 	})
-	data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.TeamID != "" && !allowed(item.TeamID) })
 	data.ProjectTemplates = slices.DeleteFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
 	})
-	data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.TeamID != "" && !allowed(item.TeamID) })
-	data.Documents = slices.DeleteFunc(data.Documents, func(item domain.Document) bool {
-		if slices.ContainsFunc(item.TeamIDs, allowed) {
+	// The one document rule of every key read, single reads included
+	// (apiKeyDocumentOutOfTeams). The viewer projection has already applied
+	// the document's grants.
+	documentScope := apiKeyDocumentLinkScope(*data, keyTeams)
+	documentOutside := func(item domain.Document) bool {
+		return apiKeyDocumentOutOfTeams(key, keyTeams, documentScope, item)
+	}
+	data.Documents = slices.DeleteFunc(data.Documents, documentOutside)
+	// A deleted resource stays within its teams like a live one: the key's
+	// owner having deleted (or created) it does not widen the key.
+	data.Trash = slices.DeleteFunc(data.Trash, func(entry domain.TrashEntry) bool {
+		if len(entry.TeamIDs) > 0 && !slices.ContainsFunc(entry.TeamIDs, allowed) {
+			return true
+		}
+		if entry.ResourceType != "document" {
 			return false
 		}
-		// An application reads the documents attached to the issues and
-		// projects of its teams (the parent resources it can read), when the
-		// document has no teams of its own; the viewer projection has already
-		// applied the document's grants.
-		return key.Actor != "app" || len(item.TeamIDs) > 0 || !slices.ContainsFunc(item.InheritedTeamIDs, allowed)
+		var document domain.Document
+		return json.Unmarshal(entry.Payload, &document) == nil && documentOutside(document)
 	})
 	for id := range data.Comments {
 		if !visibleIssue(id) && !visibleProject(id) && !slices.ContainsFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id }) {
@@ -1526,7 +1626,9 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 			issue.ParentID = nil
 		}
 		issue.SubIssueIDs = slices.DeleteFunc(issue.SubIssueIDs, func(id string) bool { return !visibleIssue(id) })
-		issue.Relations = slices.DeleteFunc(issue.Relations, func(relation domain.IssueRelation) bool { return !visibleIssue(relation.RelatedIssueID) })
+		issue.Relations = slices.DeleteFunc(issue.Relations, func(relation domain.IssueRelation) bool {
+			return relation.IssueID != "" && !visibleIssue(relation.IssueID) || !visibleIssue(relation.RelatedIssueID)
+		})
 		if issue.Project != nil && !visibleProject(issue.Project.ID) {
 			issue.Project = nil
 		}
@@ -1632,11 +1734,9 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return !visibleResource(item.ResourceType, item.ResourceID) })
 	data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool { return !visibleResource(item.ResourceType, item.ResourceID) })
 	data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool {
-		if item.TeamRestriction == "" || item.TeamRestriction == "all" {
-			return false
-		}
-		return !slices.ContainsFunc(item.TeamIDs, allowed)
+		return !webhookWithinKeyTeams(item, key)
 	})
+	applyAPIKeyProjection(data, key)
 }
 
 func (s *server) updateWorkspaceSettings(w http.ResponseWriter, r *http.Request) {
@@ -1780,14 +1880,21 @@ func (s *server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) uploadWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("workspaceKey")
-	data, ok := s.store.BootstrapFor(key)
+	read := s.store.WorkspaceSettingsMetadata
+	if s.store.BoundedMetadataEnabled() {
+		read = s.store.BootstrapFor
+	}
+	data, ok := read(key)
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
 	if !s.authDisabled {
-		role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
-		if !workspaceAdminRole(role) {
+		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
+		if err != nil || status != "active" || !workspaceAdminRole(role) {
 			writeError(w, http.StatusForbidden, "admin access required")
 			return
 		}
@@ -1947,14 +2054,21 @@ func validateWorkspaceLogoSVG(payload []byte) error {
 
 func (s *server) deleteWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("workspaceKey")
-	data, ok := s.store.BootstrapFor(key)
+	read := s.store.WorkspaceSettingsMetadata
+	if s.store.BoundedMetadataEnabled() {
+		read = s.store.BootstrapFor
+	}
+	data, ok := read(key)
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
 	if !s.authDisabled {
-		role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
-		if !workspaceAdminRole(role) {
+		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
+		if err != nil || status != "active" || !workspaceAdminRole(role) {
 			writeError(w, http.StatusForbidden, "admin access required")
 			return
 		}
@@ -1999,12 +2113,16 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	var persistedTeamMembers []domain.TeamMember
 	if data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey); ok {
-		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+		var err error
+		persistedTeamMembers, err = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
 	}
 	var developmentCreatorID string
 	now := time.Now().UTC()
 	team := domain.Team{ID: idgen.New("team_"), Name: input.Name, Key: input.Key, Color: input.Color, Icon: input.Icon, Private: input.Private, CreatedAt: &now, UpdatedAt: &now}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.created", team.ID, input, func(data *domain.Bootstrap) error {
+	create := func(data *domain.Bootstrap) error {
 		if domain.TeamKeyTaken(data, team.Key, team.ID) {
 			return errTeamKeyTaken
 		}
@@ -2094,7 +2212,13 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 			domain.SyncTeamAncestorMembers(data)
 		}
 		return nil
-	})
+	}
+	var err error
+	if s.store.BoundedMetadataEnabled() {
+		err = s.createTeamRecords(r.Context(), workspaceKey, team.ID, input.ParentTeamID, input.CopyFromTeamID, input, create)
+	} else {
+		err = s.store.MutateWorkspace(r.Context(), workspaceKey, "team.created", team.ID, input, create)
+	}
 	if err == nil {
 		// Without auth the development viewer is the creator; the in-memory row added above
 		// is not the persisted team_memberships row that issue visibility reads.
@@ -2103,10 +2227,16 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		if s.authDisabled {
 			creatorID = developmentCreatorID
 		}
+		// The team is committed: a lost write race of the creator's
+		// membership is rerun, never answered as a conflict (409 says
+		// nothing was written, and a client retry would find the key taken).
 		var created store.TeamMembershipChangeResult
-		created, err = s.store.ChangeTeamMembership(r.Context(), store.TeamMembershipChangeRequest{WorkspaceID: data.Workspace.ID, TeamID: team.ID, UserID: creatorID, Member: true, Role: "owner", Origin: defaultTeamMemberOrigin(r)})
+		created, err = s.store.ChangeTeamMembership(r.Context(), store.TeamMembershipChangeRequest{WorkspaceID: data.Workspace.ID, TeamID: team.ID, UserID: creatorID, Member: true, Role: "owner", Origin: defaultTeamMemberOrigin(r), RetryConcurrentWrites: true})
 		if err == nil {
-			s.recordTeamMemberAudit(r.Context(), workspaceKey, requestTeamMemberActor(r, ""), teamMemberReasonTeamCreated, created.Changes, nil)
+			s.recordCreatedTeamMemberAudit(r.Context(), workspaceKey, requestTeamMemberActor(r, ""), teamMemberReasonTeamCreated, created.Changes)
+		} else if errors.Is(err, store.ErrConcurrentWrite) {
+			log.Printf("team creator membership workspace=%s team=%s: %v", workspaceKey, team.ID, err)
+			err = nil
 		}
 	}
 	if err == nil {
@@ -2129,7 +2259,11 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	var persistedTeamMembers []domain.TeamMember
 	if data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey); ok {
-		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+		var err error
+		persistedTeamMembers, err = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
 	}
 	var updated domain.Team
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.updated", teamID, input, func(data *domain.Bootstrap) error {
@@ -2365,6 +2499,10 @@ func (s *server) updateCustomer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteCustomer(w http.ResponseWriter, r *http.Request) {
+	// Deleting a customer is a manual edit like creating or updating one.
+	if !s.allowManualCustomerEdit(w, r) {
+		return
+	}
 	id := r.PathValue("id")
 	var uploads []string
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer.deleted", id, nil, func(data *domain.Bootstrap) error {
@@ -2518,37 +2656,44 @@ func workspaceKey(r *http.Request) string {
 }
 
 func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
-	if metadataReadRequest(r) || r.URL.Path == "/api/views" || strings.HasPrefix(r.URL.Path, "/api/views/") {
+	data, _ := s.workspaceDataWithError(r)
+	return data
+}
+
+func (s *server) workspaceDataWithError(r *http.Request) (domain.Bootstrap, error) {
+	if metadataReadRequest(r) || r.URL.Path == "/api/views" || strings.HasPrefix(r.URL.Path, "/api/views/") ||
+		legacyPagedMetadataReadRequest(r) && !s.authDisabled && !s.store.BoundedMetadataEnabled() {
 		if !s.authDisabled {
 			data, handedOff := takePagedMetadata(r, workspaceKey(r), authUser(r).ID)
+			var err error
 			if !handedOff {
-				// Bounded with the other projections; this caller cannot answer 503, so it waits.
+				// Share the projection limit with callers that still wait for a slot.
 				if !acquireProjectionWaiting(r) {
-					// The client left while waiting: nothing reads the answer.
-					return domain.Bootstrap{}
+					return domain.Bootstrap{}, r.Context().Err()
 				}
-				data, _ = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
+				data, err = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
 			}
 			filterBootstrapForAPIKey(&data, r)
-			return data
+			return data, err
 		}
 		data, _ := s.store.WorkspaceMetadata(workspaceKey(r))
 		data.ViewerRole = "admin"
-		return data
+		return data, nil
 	}
 	if data, ok := r.Context().Value(issueRecordAuthorizationContext{}).(domain.Bootstrap); ok {
-		return data
+		if complete, scoped := r.Context().Value(issueRecordCompleteProjectionKey{}).(*issueRecordCompleteProjection); scoped {
+			return s.completeIssueRecordProjection(r, complete, data)
+		}
+		return data, nil
 	}
 	if pagedRealtimeRequest(r) {
-		data, _, _ := s.pagedRealtimeMetadata(r)
-		return data
+		data, _, err := s.pagedRealtimeMetadata(r)
+		return data, err
 	}
 	if !s.authDisabled {
-		data, _, _ := s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
-		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
-			applyAPIKeyProjection(&data, key)
-		}
-		return data
+		data, _, err := s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
+		filterBootstrapForAPIKey(&data, r)
+		return data, err
 	}
 	data, _ := s.store.BootstrapFor(workspaceKey(r))
 	// Development mode emulates the seeded owner account. Keep the role on
@@ -2556,7 +2701,7 @@ func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
 	// admin-only security controls (including API-key scopes) behave the same
 	// in the local stack.
 	data.ViewerRole = "admin"
-	return data
+	return data, nil
 }
 
 func (s *server) updateProjectDisplayDefault(w http.ResponseWriter, r *http.Request) {
@@ -2577,7 +2722,7 @@ func (s *server) updateProjectDisplayDefault(w http.ResponseWriter, r *http.Requ
 	}
 
 	var updated json.RawMessage
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_display_default.updated", "workspace", object, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "project_display_default.updated", "workspace", object, store.MetadataRecordScope{Fields: []string{"projectDisplayDefault"}}, func(data *domain.Bootstrap) error {
 		if len(data.ProjectDisplayDefault) > 0 && sameRawJSON(data.ProjectDisplayDefault, input.Display) {
 			updated = append(json.RawMessage(nil), data.ProjectDisplayDefault...)
 			return store.ErrNoMutation
@@ -2618,7 +2763,33 @@ func (s *server) listNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	result, err := s.store.QueryNotifications(r.Context(), store.NotificationQuery{Workspace: data.Workspace.URLKey, UserID: requestActor(s, r).ID, IncludeArchived: includeArchived, IncludeDeleted: includeDeleted, IncludeSnoozed: includeSnoozed, Read: read, Cursor: r.URL.Query().Get("cursor"), Limit: limit})
+	query := store.NotificationQuery{Workspace: data.Workspace.URLKey, UserID: requestActor(s, r).ID, IncludeArchived: includeArchived, IncludeDeleted: includeDeleted, IncludeSnoozed: includeSnoozed, Read: read, Cursor: r.URL.Query().Get("cursor"), Limit: limit}
+	var result store.NotificationPage
+	var err error
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
+		if s.store.BoundedMetadataEnabled() {
+			access, accessErr := s.store.ResolveAccess(r.Context(), data.Workspace.URLKey, query.UserID, &key)
+			if accessErr != nil {
+				issueRecordsError(w, accessErr)
+				return
+			}
+			reader, readErr := s.store.BeginNotificationVisibilityRead(r.Context(), access)
+			if readErr != nil {
+				issueRecordsError(w, readErr)
+				return
+			}
+			defer reader.Close()
+			result, err = reader.Query(query)
+		} else {
+			projected, ok := s.publicMetadata(w, r)
+			if !ok {
+				return
+			}
+			result, err = s.queryAPIKeyNotifications(r.Context(), key, projected, query)
+		}
+	} else {
+		result, err = s.store.QueryNotifications(r.Context(), query)
+	}
 	if err != nil {
 		issueRecordsError(w, err)
 		return
@@ -2663,7 +2834,7 @@ func (s *server) createSavedView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.SavedView
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "view.created", input, func(data *domain.Bootstrap) (string, error) {
+	err := s.mutateSavedViewWithAggregate(r, "view.created", "", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		createdID := idgen.New("view_")
 		created = domain.SavedView{ID: createdID, SlugID: savedViewSlugID(*input.Name, createdID), CreatedAt: now, UpdatedAt: now}
@@ -2677,7 +2848,7 @@ func (s *server) createSavedView(w http.ResponseWriter, r *http.Request) {
 		data.SavedViews = append(data.SavedViews, created)
 		return created.ID, nil
 	})
-	respondMutation(w, err, http.StatusCreated, created)
+	respondSavedViewMutation(w, r, err, http.StatusCreated, created)
 }
 
 func (s *server) updateSavedView(w http.ResponseWriter, r *http.Request) {
@@ -2687,7 +2858,7 @@ func (s *server) updateSavedView(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.SavedView
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("view.updated", input), id, input, func(data *domain.Bootstrap) error {
+	err := s.mutateSavedView(r, favoriteMutationEvent("view.updated", input), id, input, func(data *domain.Bootstrap) error {
 		view, err := savedViewByID(data, id)
 		if err != nil {
 			return err
@@ -2704,12 +2875,12 @@ func (s *server) updateSavedView(w http.ResponseWriter, r *http.Request) {
 		updated = *view
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, updated)
+	respondSavedViewMutation(w, r, err, http.StatusOK, updated)
 }
 
 func (s *server) deleteSavedView(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "view.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	err := s.mutateSavedView(r, "view.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.SavedViews, func(view domain.SavedView) bool { return view.ID == id || view.SlugID == id })
 		if index < 0 {
 			return errNotFound
@@ -2719,11 +2890,7 @@ func (s *server) deleteSavedView(w http.ResponseWriter, r *http.Request) {
 		removeResourcePreferences(data, "view", removedID)
 		return nil
 	})
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	respondSavedViewMutation(w, r, err, http.StatusNoContent, nil)
 }
 
 // shareSavedView issues a revocable, opaque token. Unlike an authenticated view
@@ -2778,7 +2945,8 @@ func (s *server) getSharedView(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "workspace is required")
 		return
 	}
-	data, ok := s.store.BootstrapFor(workspace)
+	data, closeRead, ok := s.sharedViewInputs(r, workspace)
+	defer closeRead()
 	if !ok {
 		writeSharedResourceNotFound(w)
 		return
@@ -2852,7 +3020,10 @@ func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		settings := data.CycleSettings[teamID]
 		if settings.DurationWeeks == 0 {
-			settings = domain.CycleSettings{Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2}
+			// A team without stored settings starts from the built-in defaults
+			// (the values a new team gets), with cycles turned on.
+			settings = domain.TeamCreationDefaults{}.NewTeamCycleSettings()
+			settings.Enabled = true
 		}
 		if input.Enabled != nil {
 			settings.Enabled = *input.Enabled
@@ -3211,10 +3382,21 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		var ok bool
 		var err error
 		if store.UsesIssueRecordMutations(r.Context()) {
-			projected, err = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
+			if s.store.BoundedMetadataEnabled() {
+				var release func()
+				projected, release, err = s.boundedIssueCreateDefaultTeam(r)
+				if release != nil {
+					defer release()
+				}
+			} else {
+				projected, err = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
+			}
 			ok = err == nil
 		} else {
 			projected, ok, err = s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
+		}
+		if writeAuthCheckFailure(w, err) {
+			return
 		}
 		if err != nil || !ok || len(projected.Teams) == 0 {
 			writeError(w, http.StatusForbidden, "Join a team before creating an issue")
@@ -3229,7 +3411,19 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		input.TeamID = projected.Teams[0].ID
 	}
+	var templateViewer templateAccess
+	if input.TemplateID != "" {
+		viewer, err := s.requestTemplateAccess(r)
+		if err != nil {
+			respondMutation(w, err, http.StatusCreated, nil)
+			return
+		}
+		templateViewer = viewer
+	}
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "issue.created", input, func(data *domain.Bootstrap) (string, error) {
+		if err := issueCreateTemplateUsable(data, templateViewer, input); err != nil {
+			return "", err
+		}
 		return createIssueInWorkspace(data, input, store.IssueCreationKey(r.Context()), &created)
 	})
 	if err == nil && triageIntelligenceWorkspaceEnabled(s, workspaceKey(r)) {
@@ -3266,6 +3460,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		// its template issues are created there.
 		ctx = projectTemplateScope(ctx, nil, input.TemplateID)
 	}
+	ctx = projectRecordScope(ctx, "project", "create", "", input, &created, &input)
 	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "project.created", input, func(data *domain.Bootstrap) (string, error) {
 		var template *domain.ProjectTemplate
 		if input.TemplateID != "" {
@@ -3413,6 +3608,16 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Project
+	if s.store.BoundedMetadataEnabled() {
+		if scope, hot := boundedProjectEditScope(id, input); hot {
+			// A metadata-only edit of the project record: the scoped
+			// metadata writer selects the callback's declared inputs
+			// (project_edit_scope.go) and never takes the COLD slot.
+			err := s.store.MutateWorkspaceScoped(store.WithScopedSelectionWrite(r.Context()), workspaceKey(r), "project.updated", id, input, scope, projectEditCallback(id, input, &updated))
+			respondMutation(w, err, http.StatusOK, updated)
+			return
+		}
+	}
 	ctx := r.Context()
 	if input.UpdateSchedule != nil || input.StartDate != nil {
 		// Turning update reminders off archives the project's pending
@@ -3421,39 +3626,17 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 		// metadata-only.
 		ctx = store.WithMutationScope(ctx, store.MutationScope{Resources: []string{id}})
 	}
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.updated", id, input, func(data *domain.Bootstrap) error {
-		project, err := fullProjectByID(data, id)
-		if err != nil {
-			return err
-		}
-		before, relationsBefore := *project, projectRelationsOf(data, id)
-		if input.Description != nil && *input.Description != project.Description {
-			project.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: idgen.New("project_description_revision_"), ProjectID: id, Description: project.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, project.DescriptionRevisions...)
-		}
-		previous := projectTrackedProperties(*project)
-		if err := applyProjectUpdate(data, project, input); err != nil {
-			return err
-		}
-		if unchangedEdit(before, *project) && unchangedEdit(relationsBefore, projectRelationsOf(data, id)) {
-			updated = before
-			return store.ErrNoMutation
-		}
-		project.UpdatedAt = time.Now().UTC()
-		appendProjectPropertyAudit(data, previous, *project)
-		updated = *project
-		return nil
-	})
+	ctx = projectRecordScope(ctx, "project", "edit", id, input, &updated, &input)
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.updated", id, input, projectEditCallback(id, input, &updated))
 	if err == nil && input.Archived != nil && *input.Archived {
-		s.pruneIssueSuggestionTargets(r.Context(), workspaceKey(r), func(item domain.IssueSuggestion) bool {
-			return item.Type == "project" && item.SuggestedProjectID == id
-		})
+		s.pruneProjectRecordSuggestions(r.Context(), workspaceKey(r), id)
 	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
 func (s *server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(projectIssueScope(r.Context(), id), workspaceKey(r), "project.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(projectIssueScope(r.Context(), id), "project", "delete", id, nil), workspaceKey(r), "project.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -3490,9 +3673,7 @@ func (s *server) deleteProject(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	s.pruneIssueSuggestionTargets(r.Context(), workspaceKey(r), func(item domain.IssueSuggestion) bool {
-		return item.Type == "project" && item.SuggestedProjectID == id
-	})
+	s.pruneProjectRecordSuggestions(r.Context(), workspaceKey(r), id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -3503,7 +3684,7 @@ func (s *server) createInitiative(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.Initiative
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "initiative.created", input, func(data *domain.Bootstrap) (string, error) {
+	err := s.store.MutateWorkspaceWithAggregate(projectRecordScope(r.Context(), "initiative", "create", "", input, &created, &input), workspaceKey(r), "initiative.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		created = domain.Initiative{ID: idgen.New("initiative_"), Name: strings.TrimSpace(*input.Name), SlugID: domain.SlugWithSuffix(*input.Name, domain.NewSlugSuffix()), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Position: nextInitiativePosition(data.Initiatives), Health: "noUpdate", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyInitiativeUpdate(data, &created, input); err != nil {
@@ -3528,7 +3709,7 @@ func (s *server) updateInitiative(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Initiative
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("initiative.updated", input), id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "edit", id, input, &updated, &input), workspaceKey(r), favoriteMutationEvent("initiative.updated", input), id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3554,7 +3735,7 @@ func (s *server) updateInitiative(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteInitiative(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "delete", id, nil), workspaceKey(r), "initiative.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -3599,7 +3780,7 @@ func (s *server) createInitiativeReminder(w http.ResponseWriter, r *http.Request
 	}
 	id := r.PathValue("id")
 	var reminder domain.Notification
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.reminder_created", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "reminder", id, input, &reminder, &input), workspaceKey(r), "initiative.reminder_created", id, input, func(data *domain.Bootstrap) error {
 		initiative, initiativeErr := initiativeByID(data, id)
 		if initiativeErr != nil {
 			return initiativeErr
@@ -3620,7 +3801,7 @@ func (s *server) createInitiativeResource(w http.ResponseWriter, r *http.Request
 	}
 	id := r.PathValue("id")
 	var created domain.InitiativeResource
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.resource_created", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "resource", id, input, &created, &input), workspaceKey(r), "initiative.resource_created", id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3678,7 +3859,7 @@ func (s *server) updateInitiativeResource(w http.ResponseWriter, r *http.Request
 	}
 	initiativeID, resourceID := r.PathValue("id"), r.PathValue("resourceId")
 	var updated domain.InitiativeResource
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.resource_updated", initiativeID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "resource", initiativeID, input, &updated, &input), workspaceKey(r), "initiative.resource_updated", initiativeID, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, initiativeID)
 		if err != nil {
 			return err
@@ -3728,7 +3909,7 @@ func (s *server) updateInitiativeResource(w http.ResponseWriter, r *http.Request
 
 func (s *server) deleteInitiativeResource(w http.ResponseWriter, r *http.Request) {
 	initiativeID, resourceID := r.PathValue("id"), r.PathValue("resourceId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.resource_deleted", initiativeID, map[string]string{"id": resourceID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "resource", initiativeID, nil), workspaceKey(r), "initiative.resource_deleted", initiativeID, map[string]string{"id": resourceID}, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, initiativeID)
 		if err != nil {
 			return err
@@ -3760,7 +3941,7 @@ func (s *server) createInitiativeComment(w http.ResponseWriter, r *http.Request)
 	}
 	id := r.PathValue("id")
 	var created domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.commented", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "comment", id, input, &created, &input), workspaceKey(r), "initiative.commented", id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3809,7 +3990,7 @@ func (s *server) updateInitiativeComment(w http.ResponseWriter, r *http.Request)
 			eventType = "initiative.comment_unresolved"
 		}
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "comment", id, input, &updated, &current, &input), workspaceKey(r), eventType, id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3858,7 +4039,7 @@ func (s *server) updateInitiativeComment(w http.ResponseWriter, r *http.Request)
 // may delete it.
 func (s *server) deleteInitiativeComment(w http.ResponseWriter, r *http.Request) {
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.comment_deleted", id, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "comment", id, nil), workspaceKey(r), "initiative.comment_deleted", id, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3890,7 +4071,7 @@ func (s *server) toggleInitiativeCommentReaction(w http.ResponseWriter, r *http.
 	}
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.comment_reaction_toggled", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "comment", id, input, &updated, &input), workspaceKey(r), "initiative.comment_reaction_toggled", id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3934,7 +4115,7 @@ func (s *server) createInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 	id := r.PathValue("id")
 	var created domain.InitiativeUpdate
 	payload := childEventPayload{Input: input, Child: &webhookChild{}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_created", id, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update-create", id, input, &created, &payload), workspaceKey(r), "initiative.update_created", id, payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3973,7 +4154,7 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 	id, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.InitiativeUpdate
 	payload := childEventPayload{Input: input, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_updated", id, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update", id, input, &updated, &payload), workspaceKey(r), "initiative.update_updated", id, payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -4027,7 +4208,7 @@ func (s *server) deleteInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 	id, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var objectKeys []string
 	payload := childEventPayload{Input: map[string]string{"id": updateID}, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_deleted", id, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update", id, nil, &objectKeys, &payload), workspaceKey(r), "initiative.update_deleted", id, payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -4076,7 +4257,7 @@ func (s *server) createInitiativeUpdateComment(w http.ResponseWriter, r *http.Re
 	initiativeID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.InitiativeUpdate
 	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "initiative.update_commented", initiativeID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(ctx, "initiative", "update", initiativeID, input, &updated, &input), workspaceKey(r), "initiative.update_commented", initiativeID, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, initiativeID)
 		if err != nil {
 			return err
@@ -4110,7 +4291,7 @@ func (s *server) toggleInitiativeUpdateReaction(w http.ResponseWriter, r *http.R
 	initiativeID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.InitiativeUpdate
 	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "initiative.update_reaction_toggled", initiativeID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(ctx, "initiative", "update", initiativeID, input, &updated, &input), workspaceKey(r), "initiative.update_reaction_toggled", initiativeID, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, initiativeID)
 		if err != nil {
 			return err
@@ -4153,7 +4334,7 @@ func (s *server) createProjectResource(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	actor := requestActor(s, r)
 	var created domain.ProjectResource
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.resource_created", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "resource", projectID, input, &created, &input), workspaceKey(r), "project.resource_created", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4187,7 +4368,7 @@ func (s *server) updateProjectResource(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID, resourceID := r.PathValue("id"), r.PathValue("resourceId")
 	var updated domain.ProjectResource
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.resource_updated", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "resource", projectID, input, &updated, &input), workspaceKey(r), "project.resource_updated", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4234,7 +4415,7 @@ func (s *server) updateProjectResource(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteProjectResource(w http.ResponseWriter, r *http.Request) {
 	projectID, resourceID := r.PathValue("id"), r.PathValue("resourceId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.resource_deleted", projectID, map[string]string{"id": resourceID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "resource", projectID, nil), workspaceKey(r), "project.resource_deleted", projectID, map[string]string{"id": resourceID}, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4263,7 +4444,7 @@ func (s *server) createProjectMilestone(w http.ResponseWriter, r *http.Request) 
 	projectID := r.PathValue("id")
 	var created domain.ProjectMilestone
 	payload := childEventPayload{Input: input, Child: &webhookChild{}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestone_created", projectID, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "milestone", projectID, input, &created, &payload), workspaceKey(r), "project.milestone_created", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4293,7 +4474,7 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 	projectID, milestoneID := r.PathValue("id"), r.PathValue("milestoneId")
 	var updated domain.ProjectMilestone
 	payload := childEventPayload{Input: input, Child: &webhookChild{ID: milestoneID}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestone_updated", projectID, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "milestone", projectID, input, &updated, &payload), workspaceKey(r), "project.milestone_updated", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4339,7 +4520,7 @@ func (s *server) reorderProjectMilestones(w http.ResponseWriter, r *http.Request
 	}
 	projectID := r.PathValue("id")
 	var updated []domain.ProjectMilestone
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestones_reordered", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "milestone", projectID, input, &updated), workspaceKey(r), "project.milestones_reordered", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4375,7 +4556,7 @@ func (s *server) deleteProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		return issue.ProjectMilestoneID != nil && *issue.ProjectMilestoneID == milestoneID
 	}})
 	payload := childEventPayload{Input: map[string]string{"id": milestoneID}, Child: &webhookChild{ID: milestoneID}}
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.milestone_deleted", projectID, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(ctx, "project", "milestone", projectID, nil, &payload), workspaceKey(r), "project.milestone_deleted", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4425,7 +4606,7 @@ func (s *server) createProjectComment(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID := r.PathValue("id")
 	var created domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.commented", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "comment", projectID, input, &created, &input), workspaceKey(r), "project.commented", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4482,7 +4663,7 @@ func (s *server) updateProjectComment(w http.ResponseWriter, r *http.Request) {
 			eventType = "project.comment_unresolved"
 		}
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "comment", projectID, input, &updated, &current, &input), workspaceKey(r), eventType, projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4530,7 +4711,7 @@ func (s *server) updateProjectComment(w http.ResponseWriter, r *http.Request) {
 // workspace admin may delete it.
 func (s *server) deleteProjectComment(w http.ResponseWriter, r *http.Request) {
 	projectID, commentID := r.PathValue("id"), r.PathValue("commentId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.comment_deleted", projectID, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "comment", projectID, nil), workspaceKey(r), "project.comment_deleted", projectID, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4564,7 +4745,7 @@ func (s *server) toggleProjectCommentReaction(w http.ResponseWriter, r *http.Req
 	}
 	projectID, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.comment_reaction_toggled", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "comment", projectID, input, &updated, &input), workspaceKey(r), "project.comment_reaction_toggled", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4608,16 +4789,32 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var created domain.ProjectUpdate
 	var snapshot *domain.PulseSnapshot
-	if feed, ok := s.store.PulseFeed(workspaceKey(r)); ok {
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginPulseRead(r.Context(), workspaceKey(r), false)
+		if err != nil {
+			if r.Context().Err() != nil {
+				respondMutation(w, err, http.StatusCreated, nil)
+			} else {
+				issueRecordsError(w, err)
+			}
+			return
+		}
+		if found {
+			defer read.Close()
+			if project := pulseProjectIn(read.Snapshot, id); project != nil {
+				snapshot = s.projectPulseSnapshot(r.Context(), read.Snapshot.Workspace.URLKey, *project, time.Now().UTC())
+			}
+		}
+	} else if feed, ok := s.store.PulseFeed(workspaceKey(r)); ok {
 		if project := pulseProjectIn(feed, id); project != nil {
 			snapshot = s.projectPulseSnapshot(r.Context(), feed.Workspace.URLKey, *project, time.Now().UTC())
 		}
 	}
 	// Posting an update archives the project's pending update reminders,
 	// which are notifications owned by the project.
-	ctx := store.WithMutationScope(r.Context(), store.MutationScope{Resources: []string{id}})
+	ctx := projectContentScope(r.Context(), id)
 	payload := childEventPayload{Input: input, Child: &webhookChild{}}
-	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "project.update_created", payload, func(data *domain.Bootstrap) (string, error) {
+	err := s.store.MutateWorkspaceWithAggregate(projectRecordScope(ctx, "project", "update-create", id, input, &created, &payload), workspaceKey(r), "project.update_created", payload, func(data *domain.Bootstrap) (string, error) {
 		project, err := fullProjectByID(data, id)
 		if err != nil {
 			return "", err
@@ -4675,7 +4872,7 @@ func (s *server) deleteProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var objectKeys []string
 	payload := childEventPayload{Input: map[string]string{"id": updateID}, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.update_deleted", projectID, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "update", projectID, nil, &objectKeys, &payload), workspaceKey(r), "project.update_deleted", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4735,7 +4932,7 @@ func (s *server) updateProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.ProjectUpdate
 	payload := childEventPayload{Input: input, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.update_updated", projectID, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "update", projectID, input, &updated, &payload), workspaceKey(r), "project.update_updated", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4788,7 +4985,7 @@ func (s *server) createProjectUpdateComment(w http.ResponseWriter, r *http.Reque
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.ProjectUpdate
 	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.update_commented", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(ctx, "project", "update", projectID, input, &updated, &input), workspaceKey(r), "project.update_commented", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4822,7 +5019,7 @@ func (s *server) toggleProjectUpdateReaction(w http.ResponseWriter, r *http.Requ
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.ProjectUpdate
 	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.update_reaction_toggled", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(ctx, "project", "update", projectID, input, &updated, &input), workspaceKey(r), "project.update_reaction_toggled", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4875,7 +5072,15 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	workspace := workspaceKey(r)
 	if workspace == "" {
-		workspace = s.store.Bootstrap().Workspace.URLKey
+		// Only with authentication disabled: an authenticated request names
+		// its workspace. Bounded, the key is resident; the legacy accessor
+		// would decode the whole workspace for it (SW558).
+		if s.store.BoundedMetadataEnabled() {
+			metadata, _ := s.store.WorkspaceSettingsMetadata("")
+			workspace = metadata.Workspace.URLKey
+		} else {
+			workspace = s.store.Bootstrap().Workspace.URLKey
+		}
 	}
 	var updated, current domain.Issue
 	var previousDocumentID string
@@ -4958,75 +5163,10 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
-func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	workspace := workspaceKey(r)
-	if workspace == "" {
-		workspace = s.store.Bootstrap().Workspace.URLKey
-	}
-	trashed := []string{}
-	documentIDs := []string{}
-	// issueIds lists every issue trashed with this one (sub-issues) and issueAccess
-	// the team/grants needed to authorize them per viewer once the rows are gone.
-	// Both are set at the end of each mutation attempt so a retry overwrites them.
-	payload := map[string]any{"id": id}
-	err := s.store.MutateWorkspace(r.Context(), workspace, "issue.deleted", id, payload, func(data *domain.Bootstrap) error {
-		if issueIndexByID(data, id) < 0 {
-			return errNotFound
-		}
-		// Like the reference app, deleting an issue deletes its sub-issues with it
-		// (deepest first, so each keeps its parent link in the trash), and
-		// restoring the issue brings them back.
-		// ?subIssues=keep (converting an issue to a project) keeps them,
-		// detached from the deleted issue.
-		descendants := []string{}
-		if r.URL.Query().Get("subIssues") != "keep" {
-			descendants = issueDescendants(data, id)
-		}
-		children := []string{}
-		for _, issue := range data.Issues {
-			if len(descendants) > 0 && issue.ParentID != nil && *issue.ParentID == id {
-				children = append(children, issue.ID)
-			}
-		}
-		trashed, documentIDs = nil, nil
-		delete(payload, "issueIds")
-		delete(payload, "issueAccess")
-		access := deletedIssueAccessEntries(data, append([]string{id}, descendants...))
-		for index := len(descendants) - 1; index >= 0; index-- {
-			documentID, err := trashIssue(data, descendants[index], id, nil)
-			if err != nil {
-				return err
-			}
-			trashed, documentIDs = append(trashed, descendants[index]), append(documentIDs, documentID)
-		}
-		documentID, err := trashIssue(data, id, "", children)
-		if err != nil {
-			return err
-		}
-		trashed, documentIDs = append(trashed, id), append(documentIDs, documentID)
-		payload["issueIds"] = slices.Clone(trashed)
-		payload["issueAccess"] = access
-		return nil
-	})
-	if err == nil {
-		for _, documentID := range documentIDs {
-			if deleteErr := s.store.DeleteDocumentCollaborationDocument(r.Context(), workspace, documentID); deleteErr != nil {
-				log.Printf("delete collaboration document=%s: %v", documentID, deleteErr)
-			}
-		}
-		s.pruneIssueSuggestionTargets(r.Context(), workspace, func(item domain.IssueSuggestion) bool {
-			return (item.Type == "similarIssue" || item.Type == "relatedIssue") && slices.Contains(trashed, item.SuggestedIssueID)
-		})
-	}
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
+func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
+	if writeRequestCanceled(w, r.Context().Err()) {
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 	var input domain.BatchIssueUpdateInput
 	if !decodeStrictJSON(w, r, &input) {
 		return
@@ -5055,9 +5195,23 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 	})
 	var updated []domain.Issue
 	ctx := r.Context()
+	bounded := s.store.BoundedMetadataEnabled()
 	if input.Update.TeamID != nil {
-		if !s.authDisabled {
-			metadata, err := s.store.PagedWorkspaceMetadata(ctx, workspaceKey(r), authUser(r).ID)
+		if !s.authDisabled && bounded {
+			// The same projection over one installed generation; the batch
+			// has no destination checks of its own.
+			metadata, release, ok := s.boundedIssueUpdateTargets(w, r, workspaceKey(r), domain.IssueUpdateInput{})
+			if !ok {
+				return
+			}
+			message := issueTeamMoveForbidden(s, metadata, *input.Update.TeamID)
+			release()
+			if message != "" {
+				writeError(w, http.StatusForbidden, message)
+				return
+			}
+		} else if !s.authDisabled {
+			metadata, err := s.store.LegacyIssueViewerPolicy(ctx, workspaceKey(r), authUser(r).ID)
 			if err != nil {
 				issueRecordsError(w, err)
 				return
@@ -5070,10 +5224,35 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		ctx = store.WithIssueRenumbering(ctx)
 	}
+	releaseBatch := func() {}
+	releaseResults := func() {}
+	defer func() { releaseResults() }()
+	if bounded {
+		// The dedicated bounded writer owns the batch's selected inputs
+		// until the write is published.
+		owned, closeOwned := beginIndependentMetadataOutputReads(ctx)
+		defer closeOwned()
+		releaseBatch = closeOwned
+		ctx = store.ContextWithIssueBatchUpdate(owned, input.Update)
+	}
 	var affected []domain.IssueVersion
+	keepResults := func() error {
+		kept, closeKept := beginIndependentMetadataOutputReads(r.Context())
+		if err := s.store.KeepIssueResults(kept, updated, affected); err != nil {
+			closeKept()
+			return err
+		}
+		releaseResults = closeKept
+		return nil
+	}
 	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.batch_updated", idgen.New("issue_batch_"), input, func(data *domain.Bootstrap) error {
 		changed := false
 		updated, affected = nil, nil
+		if bounded {
+			// Only the latest callback's result reaches this HTTP response.
+			// Earlier attempts remain owned by the batch scope itself.
+			releaseResults()
+		}
 		versionsBefore := make(map[string]int64, len(data.Issues))
 		for _, issue := range data.Issues {
 			versionsBefore[issue.ID] = issue.Version
@@ -5105,6 +5284,11 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 			appendIssueNotifications(data, *issue, activity, nil)
 		}
 		if !changed {
+			if bounded {
+				if err := keepResults(); err != nil {
+					return err
+				}
+			}
 			return store.ErrNoMutation
 		}
 		// A later edit of the batch can change an earlier one (an auto-closed
@@ -5119,9 +5303,17 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 				affected = append(affected, domain.IssueVersion{ID: issue.ID, Version: issue.Version})
 			}
 		}
+		if bounded {
+			return keepResults()
+		}
 		return nil
 	})
 	if err == nil {
+		if bounded {
+			// Response admission already succeeded before commit. Release
+			// attempt-only inputs before triage reads or writes these rows.
+			releaseBatch()
+		}
 		if triageIntelligenceWorkspaceEnabled(s, workspaceKey(r)) {
 			issueIDs := make([]string, len(updated))
 			for index := range updated {
@@ -5161,7 +5353,7 @@ func (s *server) createComment(w http.ResponseWriter, r *http.Request) {
 	var comment domain.Comment
 	// The event names the created comment beside the input (comment_events.go).
 	payload := &commentCreatedPayload{CommentCreateInput: &input}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "comment.created", id, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.ContextWithMutationResults(r.Context(), &comment), workspaceKey(r), "comment.created", id, payload, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
@@ -5223,7 +5415,7 @@ func (s *server) updateComment(w http.ResponseWriter, r *http.Request) {
 			eventType = "comment.unresolved"
 		}
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, issueID, commentUpdatedPayload{CommentUpdateInput: input, CommentID: commentID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.ContextWithMutationResults(r.Context(), &updated, &current), workspaceKey(r), eventType, issueID, commentUpdatedPayload{CommentUpdateInput: input, CommentID: commentID}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Comments[issueID], func(comment domain.Comment) bool { return comment.ID == commentID })
 		if index < 0 {
 			return errNotFound
@@ -5292,7 +5484,7 @@ func (s *server) toggleCommentReaction(w http.ResponseWriter, r *http.Request) {
 	// The event payload records the comment and whether the reaction was
 	// added (webhooks send it as a Reaction create or remove).
 	input.CommentID, input.Added = commentID, nil
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "comment.reaction_toggled", issueID, &input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.ContextWithMutationResults(r.Context(), &updated), workspaceKey(r), "comment.reaction_toggled", issueID, &input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Comments[issueID], func(comment domain.Comment) bool { return comment.ID == commentID })
 		if index < 0 {
 			return errNotFound
@@ -5359,6 +5551,9 @@ func (s *server) toggleIssueReaction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) createRelation(w http.ResponseWriter, r *http.Request) {
+	if writeRequestCanceled(w, r.Context().Err()) {
+		return
+	}
 	var input domain.RelationCreateInput
 	if !decodeJSON(w, r, &input) || !validRelation(input.Type) {
 		writeError(w, http.StatusBadRequest, "invalid relation")
@@ -5366,7 +5561,11 @@ func (s *server) createRelation(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var relation domain.IssueRelation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.relation_added", id, input, func(data *domain.Bootstrap) error {
+	ctx := store.WithIssueRecordMutations(r.Context(), id)
+	if s.store.BoundedMetadataEnabled() {
+		ctx = store.ContextWithIssueRelationMutation(ctx)
+	}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.relation_added", id, input, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
@@ -5390,7 +5589,7 @@ func (s *server) createRelation(w http.ResponseWriter, r *http.Request) {
 		} else if input.Type == "sub_issue_of" {
 			setParent(data, issue, input.RelatedIssueID)
 		}
-		appendActivity(data, id, "issue.relation_added", data.Viewer, map[string]string{"type": input.Type, "relatedIssueId": input.RelatedIssueID})
+		appendRelationActivities(data, relation, "issue.relation_added")
 		return nil
 	})
 	respondMutation(w, err, http.StatusCreated, relation)
@@ -5398,7 +5597,7 @@ func (s *server) createRelation(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteRelation(w http.ResponseWriter, r *http.Request) {
 	id, relationID := r.PathValue("id"), r.PathValue("relationId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.relation_removed", id, map[string]string{"relationId": relationID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), id), workspaceKey(r), "issue.relation_removed", id, map[string]string{"relationId": relationID}, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
@@ -5423,7 +5622,7 @@ func (s *server) deleteRelation(w http.ResponseWriter, r *http.Request) {
 				setParent(data, issue, "")
 			}
 		}
-		appendActivity(data, id, "issue.relation_removed", data.Viewer, map[string]string{"relationId": relationID})
+		appendRelationActivities(data, removed, "issue.relation_removed")
 		return nil
 	})
 	if err != nil {
@@ -5473,14 +5672,14 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var attachment domain.Attachment
-	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), id), workspaceKey(r), "attachment.created", id, map[string]string{"name": header.Filename}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(s.issueAttachmentContext(r.Context()), id), workspaceKey(r), "attachment.created", id, map[string]string{"name": header.Filename}, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
 		}
 		attachment = domain.Attachment{ID: attachmentID, IssueID: id, Title: header.Filename, URL: "/uploads/" + safeName, ContentType: header.Header.Get("Content-Type"), Size: size, CreatedAt: time.Now().UTC(), Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		issue.Attachments = append(issue.Attachments, attachment)
-		appendActivity(data, id, "attachment.created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title})
+		appendActivity(data, id, "attachment.created", data.Viewer, issueLinkActivityMetadata(attachment))
 		if formEmbedEnabled(r) {
 			return applyIssueAttachmentEmbed(data, issue, attachment)
 		}
@@ -5508,7 +5707,7 @@ func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
 		title = defaultLinkTitle(parsed)
 	}
 	var attachment domain.Attachment
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.link_created", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(s.issueAttachmentContext(r.Context()), workspaceKey(r), "issue.link_created", id, input, func(data *domain.Bootstrap) error {
 		issue, issueErr := issueByID(data, id)
 		if issueErr != nil {
 			return issueErr
@@ -5565,7 +5764,7 @@ func (s *server) createProjectReminder(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var reminder domain.Notification
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.reminder_created", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "reminder", id, input, &reminder, &input), workspaceKey(r), "project.reminder_created", id, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, id)
 		if err != nil {
 			return err
@@ -5622,8 +5821,9 @@ func (s *server) deleteAttachment(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		path = issue.Attachments[index].URL
+		metadata := issueLinkActivityMetadata(issue.Attachments[index])
 		issue.Attachments = slices.Delete(issue.Attachments, index, index+1)
-		appendActivity(data, id, "attachment.deleted", data.Viewer, map[string]string{"attachmentId": attachmentID})
+		appendActivity(data, id, "attachment.deleted", data.Viewer, metadata)
 		return nil
 	})
 	if err != nil {
@@ -5647,7 +5847,18 @@ func (s *server) serveUpload(w http.ResponseWriter, r *http.Request) {
 	if !s.authDisabled {
 		user := authUser(r)
 		account, err := s.store.AccountForUser(r.Context(), user.ID)
-		if err != nil || !s.attachmentVisible(r.Context(), account, user.ID, "/uploads/"+name) {
+		if writeStoreReadUnavailable(w, err) {
+			return
+		}
+		ctx, refused := withUploadVisibilityRefusal(r.Context())
+		visible := err == nil && s.attachmentVisible(ctx, account, user.ID, "/uploads/"+name)
+		if writeStoreReadUnavailable(w, refused()) {
+			return
+		}
+		if !visible {
+			if readLeafBusy(w, refused()) {
+				return
+			}
 			http.NotFound(w, r)
 			return
 		}
@@ -5696,24 +5907,39 @@ func safeInlineUploadType(value string) bool {
 }
 
 func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBootstrap, userID, url string) bool {
+	if s.store.BoundedMetadataEnabled() {
+		return s.boundedAttachmentVisible(ctx, account, userID, url)
+	}
 	if agentUploadVisible(userID, url) {
 		return true
 	}
 	for _, membership := range account.Workspaces {
-		data, access, err := s.store.IssueQueryAccess(ctx, membership.Workspace.URLKey, userID)
-		if err != nil {
+		if !workspacePolicyAllows(ctx, membership.Workspace.URLKey, membership.Role) || !apiKeyWorkspaceMatches(ctx, membership.Workspace.URLKey) {
 			continue
 		}
-		visible, err := s.store.IssueAttachmentVisible(ctx, store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access}, url)
+		data, access, err := s.store.IssueQueryAccess(ctx, membership.Workspace.URLKey, userID)
+		if err != nil {
+			recordUploadVisibilityRefusal(ctx, err)
+			continue
+		}
+		visible, err := s.store.IssueAttachmentVisible(ctx, attachmentIssueQuery(ctx, data.Workspace.URLKey, &access), url)
+		if databaseReadUnavailable(err) {
+			recordUploadVisibilityRefusal(ctx, err)
+			return false
+		}
 		if err == nil && visible {
 			return true
 		}
-		if metadata, ok := s.store.WorkspaceMetadata(data.Workspace.URLKey); ok && loopAttachmentVisible(metadata, userID, url) {
+		if metadata, ok := s.store.WorkspaceMetadata(data.Workspace.URLKey); ok && loopAttachmentVisible(metadata, userID, url, attachmentLoopReadable(ctx, access)) {
 			return true
 		}
 		data, err = s.store.PagedWorkspaceMetadata(ctx, data.Workspace.URLKey, userID)
 		if err != nil {
+			recordUploadVisibilityRefusal(ctx, err)
 			continue
+		}
+		if key, ok := ctx.Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			applyAPIKeyProjection(&data, key)
 		}
 		for _, request := range data.CustomerRequests {
 			if slices.ContainsFunc(request.Attachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
@@ -5884,6 +6110,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 	if err := checkArchivedIssueUpdate(*issue, input); err != nil {
 		return nil, err
 	}
+	before := *issue
 	// Cycle graphs replay membership history, so every cycle change records its previous cycle.
 	cycleBeforeUpdate := optionalID(issue.CycleID)
 	triageSettings := teamSettings(data, issue.Team.ID)
@@ -6028,7 +6255,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if issue.Estimate != nil {
 			changes["estimateBefore"] = strconv.FormatFloat(*issue.Estimate, 'f', -1, 64)
 		} else {
-			changes["estimateBefore"] = "0"
+			changes["estimateBefore"] = ""
 		}
 		if *input.Estimate < 0 || (*input.Estimate == 0 && !teamSettings(data, issue.Team.ID).EstimateAllowZero) {
 			issue.Estimate = nil
@@ -6036,7 +6263,10 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			estimate := *input.Estimate
 			issue.Estimate = &estimate
 		}
-		changes["estimate"] = strconv.FormatFloat(*input.Estimate, 'f', -1, 64)
+		changes["estimate"] = ""
+		if issue.Estimate != nil {
+			changes["estimate"] = strconv.FormatFloat(*issue.Estimate, 'f', -1, 64)
+		}
 	}
 	if input.AssigneeID != nil {
 		if candidate := userByID(data, *input.AssigneeID); candidate != nil && candidate.App {
@@ -6260,6 +6490,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		changes["cycle"] = cycle
 		changes["cycleBefore"] = cycleBeforeUpdate
 	}
+	addIssueActivityBeforeValues(before, *issue, changes)
 	return changes, nil
 }
 
@@ -7121,8 +7352,7 @@ func validLabelGroupSelection(labels []domain.IssueLabel) bool {
 }
 func appendActivity(data *domain.Bootstrap, issueID, eventType string, actor domain.User, metadata map[string]string) domain.ActivityEvent {
 	activity := domain.ActivityEvent{ID: idgen.New("activity_"), Type: eventType, CreatedAt: time.Now().UTC(), Actor: actor, BotActor: viewerBotActor(data, actor), Metadata: metadata}
-	data.Activities[issueID] = append(data.Activities[issueID], activity)
-	return activity
+	return store.RecordIssueActivity(data, issueID, activity)
 }
 func validRelation(value string) bool {
 	return slices.Contains([]string{"related", "blocks", "blocked_by", "duplicate", "parent_of", "sub_issue_of"}, value)
@@ -7225,6 +7455,14 @@ func optionalQueryBool(w http.ResponseWriter, r *http.Request, key string) (*boo
 	return &parsed, true
 }
 func respondMutation(w http.ResponseWriter, err error, success int, value any) {
+	respondMutationWithFallback(w, err, success, value, "")
+}
+
+func respondMutationWithFallback(w http.ResponseWriter, err error, success int, value any, fallback string) {
+	if writeStoreBusy(w, err) {
+		// COLD slot, workspace lock or metadata work budget: retryable.
+		return
+	}
 	if errors.Is(err, store.ErrAuthForbidden) {
 		writeError(w, http.StatusForbidden, "You don't have permission to perform this action")
 		return
@@ -7278,7 +7516,10 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		if fallback == "" {
+			fallback = err.Error()
+		}
+		writeError(w, http.StatusInternalServerError, fallback)
 		return
 	}
 	if value != nil {
@@ -7303,6 +7544,12 @@ func writeVersionConflict(w http.ResponseWriter, current any) {
 	writeJSON(w, http.StatusConflict, map[string]any{"error": "This item changed in another session", "code": "VERSION_CONFLICT", "current": current})
 }
 func writeJSON(w http.ResponseWriter, status int, value any) {
+	if err := prepareJSONOutput(w, value); err != nil {
+		return
+	}
+	if writeHydratedSignedJSON(w, status, value) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {
@@ -7325,4 +7572,23 @@ func (s *server) cors(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// attachmentIssueQuery is the issue access a file read runs under: the user's
+// own, narrowed to the teams of a team-restricted API key.
+func attachmentIssueQuery(ctx context.Context, workspace string, access *store.IssueRecordAccess) store.IssueRecordQuery {
+	query := store.IssueRecordQuery{Workspace: workspace, Access: access}
+	if key, ok := ctx.Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
+		query.AllowedTeamIDs = append([]string{}, key.TeamIDs...)
+	}
+	return query
+}
+
+// attachmentLoopReadable is loopTeamReadableBy narrowed to a restricted key's teams.
+func attachmentLoopReadable(ctx context.Context, access store.IssueRecordAccess) func(string) bool {
+	readable := loopTeamReadableBy(access)
+	if key, ok := ctx.Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
+		return func(teamID string) bool { return readable(teamID) && slices.Contains(key.TeamIDs, teamID) }
+	}
+	return readable
 }

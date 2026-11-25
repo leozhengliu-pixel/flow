@@ -1,0 +1,63 @@
+{
+  "source": "server/personal_data.go",
+  "unmigrated": 3,
+  "consumers": {
+    "auditPersonalData": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending complete aggregate-reference closure for accepted legacy IDs or missing subjects. Account membership selects workspace, but users/subjectID canonical presence is not enforced by the record schema. Missing subject plus matching omitted ContentData changes audit enrichment.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "createPersonalDataExport (api/cmd/server/personal_data.go:83)"
+      ]
+    },
+    "eraseMember": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Legacy mode reads WorkspaceMetadata. Bounded mode takes only the installed core Workspace.ID through eraseMemberWorkspaceID. For a target without a membership row, the former-member read uses BeginFormerMembersRead, retains the handle through every map use, and refuses the write on a failed directory read. SW25 covers identity selection and successful legacy erasure. The bounded writer remains pending at erasePersonInWorkspace.",
+      "accessors": [
+        "WorkspaceMetadata",
+        "BeginFormerMembersRead"
+      ]
+    },
+    "erasePersonInWorkspace": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "eraseAccount (api/cmd/server/personal_data.go:631)",
+        "eraseMember (api/cmd/server/personal_data.go:758)"
+      ]
+    },
+    "refuseSoleAdmin": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The existing field accessor requests only workspace identity, which remains resident under the process policy cap. SoleAdminWorkspaces supplies authoritative ownership; no member/body collection is loaded. TestScaleP21M1CoreReadsDifferential compares the refusal body across principal and credential classes, including users from another workspace.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "writeWorkspacePersonalData": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BeginWorkspaceRead"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "writePersonalData (api/cmd/server/personal_data.go:295)"
+      ]
+    }
+  }
+}

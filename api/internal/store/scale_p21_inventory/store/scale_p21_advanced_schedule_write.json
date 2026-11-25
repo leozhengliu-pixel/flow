@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_advanced_schedule_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedAdvancedSchedule": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The closed schedules.maintained profile uses the common scoped/full executor with admitted callback inputs and output allowance. Raw SLA candidate occurrences retain the 20,000 cap, duplicate and direct-ID/filter semantics; only project Health, first-update DueAt/Missing, expired trash and literal SLA/reminder effects are patched while unchanged bodies remain in source frames. Exact spool fingerprints preserve native JSON failures and abort on storage/admission/cancellation errors. SW209 proves native/canonical/publication parity, no-op and release warm and actually reloaded, including duplicate-large map/inline shapes, under normal, persistent SQLite count2 and complete race coverage.",
+      "accessors": ["mutateBoundedScopedImage"],
+      "temperature": "hot",
+      "temperatureReason": "Advanced schedule mutation runs during ordinary bootstrap when maintenance is due.",
+      "callers": ["store/sqlite.go:dispatchMutation"]
+    }
+  }
+}

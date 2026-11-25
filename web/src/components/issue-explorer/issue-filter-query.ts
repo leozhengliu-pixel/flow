@@ -1,7 +1,7 @@
 import type { BootstrapData } from '@/types/flow'
 import { defaultDateOperator, filterValues, isComparableDateValue, type AdvancedFilterGroup, type IssueQueryAstNode, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
 import { advancedFilterTree, conditionAsFilter, isAdvancedGroup } from './advanced-filter'
-import { DATE_FILTER_FIELDS, dateFilterThreshold, localDay, parseDateFilterValue } from './issue-date-filter'
+import { DATE_FILTER_FIELDS, dateFilterQueryConditions, localDay, parseDateFilterValue, type DateFilterOperator, type ParsedDateValue } from './issue-date-filter'
 import { triageIntelligenceQueryNode } from './triage-intelligence-filter'
 import { agentSessionStatesFor } from '@/lib/agent-members'
 import { customerNumberQueryValue, isCustomerNumberComparison } from './customer-filter'
@@ -36,7 +36,7 @@ export function filterToQueryNode(filter: MyIssuesAppliedFilter, context: IssueF
     const comparison = filter.operator
     return { field: 'customerId', operator: 'in', values: values.map(value => customerNumberQueryValue(value, comparison)) }
   }
-  const node = positiveNode(filter.field, values, context, filter.operator === 'before' || filter.operator === 'after' ? filter.operator : undefined)
+  const node = positiveNode(filter.field, values, context, filter.operator === 'before' || filter.operator === 'after' || filter.operator === 'on' || filter.operator === 'within' ? filter.operator : undefined)
   return filter.operator === 'isNot' ? { not: node } : node
 }
 
@@ -49,7 +49,13 @@ export function advancedGroupToQueryNode(group: AdvancedFilterGroup, context: Is
   return group.conjunction === 'or' ? { or: nodes } : { and: nodes }
 }
 
-function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], { data, now = Date.now() }: IssueFilterQueryContext, comparison?: 'before' | 'after'): IssueQueryAstNode {
+/** A dates value as server conditions on its field: one comparison for a preset, a bounded range for a custom day or period. */
+function dateValueNode(field: string, parsed: ParsedDateValue, operator: DateFilterOperator, now: number): IssueQueryAstNode {
+  const conditions = dateFilterQueryConditions(parsed, operator, now).map(condition => ({ field, operator: condition.operator, values: [condition.value] }))
+  return conditions.length === 1 ? conditions[0] : { and: conditions }
+}
+
+function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], { data, now = Date.now() }: IssueFilterQueryContext, comparison?: DateFilterOperator): IssueQueryAstNode {
   const since = (days: number) => new Date(now - days * DAY).toISOString()
   const isoDay = (offset: number) => localDay(now + offset * DAY)
   switch (field) {
@@ -117,7 +123,7 @@ function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], {
       if (value === 'released-any') return { field: 'releasedAt', operator: 'isNotEmpty' }
       if (value === 'no-released-date') return { field: 'releasedAt', operator: 'isEmpty' }
       const parsed = parseDateFilterValue(value)
-      if (parsed?.kind === 'released') return { field: 'releasedAt', operator: comparison ?? defaultDateOperator(value), values: [dateFilterThreshold(parsed, now)] }
+      if (parsed?.kind === 'released') return dateValueNode('releasedAt', parsed, comparison ?? defaultDateOperator(value), now)
       if (value.startsWith('release:')) return { field: 'release', operator: 'in', values: [value.slice(8)] }
       if (value.startsWith('release-pipeline:')) return { field: 'releasePipeline', operator: 'in', values: [value.slice(17)] }
       if (value.startsWith('release-stage:')) return { field: 'releaseStage', operator: 'in', values: [value.slice(14)] }
@@ -126,7 +132,7 @@ function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], {
     }))
     case 'dates': return any(values.map(value => {
       const parsed = parseDateFilterValue(value)
-      if (parsed && isComparableDateValue(value)) return { field: DATE_FILTER_FIELDS[parsed.kind], operator: comparison ?? defaultDateOperator(value), values: [dateFilterThreshold(parsed, now)] }
+      if (parsed && isComparableDateValue(value)) return dateValueNode(DATE_FILTER_FIELDS[parsed.kind], parsed, comparison ?? defaultDateOperator(value), now)
       const window = value.endsWith('day') ? 1 : value.endsWith('week') ? 7 : 30
       if (value.startsWith('created-past-')) return { field: 'createdAt', operator: 'after', values: [since(window)] }
       if (value.startsWith('updated-past-')) return { field: 'updatedAt', operator: 'after', values: [since(window)] }

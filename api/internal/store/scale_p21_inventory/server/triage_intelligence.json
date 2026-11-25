@@ -1,0 +1,100 @@
+{
+  "source": "server/triage_intelligence.go",
+  "unmigrated": 0,
+  "consumers": {
+    "generateTriageIntelligenceForIssues": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Conditional dependency of successful issue creation/update (including the paged update handler).",
+      "callers": [
+        "createIssue -> generateTriageIntelligenceForIssue",
+        "updateIssue -> generateTriageIntelligenceForIssue",
+        "updateIssueRecord -> generateTriageIntelligenceForIssue",
+        "batchUpdate -> generateTriageIntelligenceForIssues"
+      ],
+      "reason": "Off mode keeps the literal WorkspaceMetadata and MutateWorkspace path. Bounded mode (generateTriageIntelligenceForIssuesBounded) reproduces background-run starts and heuristic generation, including auto-applied project/label/relation suggestions, batches and mutual-candidate batches, through mutateBoundedIssueSuggestions with complete scoring inputs (TestScaleP21TriageGenerateWriterDifferential). Workspaces whose team suggestions auto-apply write with WithIssueRenumbering and declare the scoring candidates' teams; the writer's team-move closure (issueTeamMove: locked sequence, target workflow-state chains, same-named labels and their groups, attached documents and their projects) reproduces the literal moveIssueToTeam. TestScaleP21TeamMoveAutoApplyDifferential compares legacy, warm and SQL-reloaded single and batch auto-moves, auto without a team suggestion and suggest-only generation: issue rows and columns, sequence, aliases, label rows, document rows, suggestion order, activities, events with previous values, webhooks, realtime and the SQL-reloaded image, with zero full decodes. SW185 additionally proves dense 350/1000 generation, original accumulated/duplicate candidate ordering, first-2000 qualification and score ties, stale stored member snapshots on team moves, cancellation/release and persisted inline suggestions. Candidate search/reference transfer and scoring storage have operation-owned lifetimes; the private callback preimage is released at its last use. SQL 2513->3270/7104->9248 is bounded by per-query size preflights, canonical reference groups and fixed chunk reads, with no viewer fan-out."
+    },
+    "listIssueSuggestions": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "WorkspaceMetadata",
+        "mcpWorkspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue-detail triage suggestion component fetches/polls this endpoint.",
+      "callers": [
+        "TriageIntelligenceSuggestions -> fetchIssueSuggestions -> GET /api/issue-records/{id}/suggestions",
+        "GET /api/issues/{id}/suggestions"
+      ],
+      "reason": "Off mode keeps the literal handler. Bounded mode delegates to listIssueSuggestionsBounded: the absent-actor fallback uses the proven BeginInstalledViewerRead (contextless, like legacy WorkspaceMetadata); the paged projection's only used outputs (its error, team rows and project filter, then mcpWorkspaceData's selected-team credential filter) come from ViewerProjectionScope/ProjectVisibleInProjection; the issue's suggestions come from ReadIssueSuggestions; core workspace, workspaceSettings and one teamSettings point come from one installed generation. Issue query, AuthorizedIssueRecord, refreshTriageIntelligence and run tracking calls are unchanged. TestScaleP21TriageListSuggestionsDifferential compares exact status and body bytes of legacy, warm and SQL-reloaded bounded views over 236 cases (admin, private outsider, member, guest with grant, sub-team inheritance x session/unrestricted/selected-empty/selected-set keys, agent on/off, ID/identifier/private/missing issues, default/missing/foreign bindings, absent actor, cancelled requests) with visible, private, child, mixed, unscoped, archived and missing project/team/issue targets and inactive/other-issue/duplicate rows, and zero full metadata decodes. Background runs started by refreshTriageIntelligence remain covered by runTriageIntelligence, which is still pending."
+    },
+    "previewIssueSuggestions": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata",
+        "mcpWorkspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Issue-create suggestion preview endpoint; conservative HOT for the ordinary issue-creation flow.",
+      "callers": [
+        "GET /api/issue-suggestions -> previewIssueSuggestions",
+        "web/src/lib/api.ts issue-suggestion preview"
+      ],
+      "reason": "Off mode keeps the literal handler (scoring moved unchanged into writeIssueSuggestionPreview). Bounded mode (previewIssueSuggestionsBounded) uses the proven installed Viewer fallback and triageAIWorkspaceBounded: the literal mcpWorkspaceData credential/application/preference filters over ProjectedWorkspace, i.e. the literal PagedWorkspaceMetadata over core and policy fields plus complete projects, labels, labelGroups and initiatives with the live SQL directory. TestScaleP21TriageProjectedWorkspaceDifferential compares the projected viewer, role, teams, team settings, workspace settings, users, members, team members, projects, labels, label groups and initiatives with mcpWorkspaceData for 27 principal/credential pairs (5 principals x session/unrestricted/selected-empty/selected-set/app keys, empty and non-member users, error text included) on warm and SQL-reloaded views, plus byte-identical preview route responses for in-team, private-team, empty and oversized text; zero full decodes."
+    },
+    "pruneIssueSuggestionTargets": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Callers are issue/project deletion and user/label deactivation/purge; no issue create/update/comment/reaction caller was found.",
+      "callers": [
+        "deleteIssue",
+        "deleteProject",
+        "remove user",
+        "delete label/merge labels",
+        "personal-data cleanup",
+        "pruneRecordIssueSuggestionTargets"
+      ],
+      "reason": "Off mode keeps the literal WorkspaceMetadata scan. Bounded mode finds stale issues with VisitIssueSuggestions over one installed generation (one decoded row at a time, contextless like WorkspaceMetadata) and runs the unchanged batched callback through mutateBoundedIssueSuggestions under an independent output owner. TestScaleP21TriagePruneWriterDifferential compares legacy, warm and SQL-reloaded bounded runs for multi-issue project, assignee, label/team, dismissed-only, empty and missing-workspace predicates: issue rows (version, order, data), activity/content rows, the complete issueSuggestions list in canonical order, project rows, domain events, webhook and realtime envelopes, normalizing only generated stamps and call clocks, with zero full decodes. A concurrent stale row added for an issue outside the scanned batch is left for the next prune, where the legacy full callback would also delete it."
+    },
+    "refreshIssueSuggestions": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Direct read only: absent request actor uses an owned BeginInstalledViewerRead snapshot of exact installed core Viewer, held through the run service and response. Off mode retains the literal WorkspaceMetadata branch; supplied actors/API keys and run ordering are unchanged. The adaptive clone has an independent work allowance, preserves NUL/nil/empty fields and legacy Via omission, and keeps exact default/missing/NUL Go workspace lookup. SW20 triage differentials cover full principal/key matrix, actual Viewer delta plus full UpdateWorkspace warm/canonical divergence, actor-ID authorization outcome, default/missing/foreign bindings and legacy canceled handler output, with zero full decodes. runTriageIntelligence remains independently pending for complete heuristic inputs and mutations; this review certifies the direct fallback source, not successful endpoint readiness.",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "updateIssueSuggestionState": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata",
+        "mcpWorkspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Acceptance/dismissal route updates an issue from its detail suggestion UI.",
+      "callers": [
+        "acceptIssueSuggestion/dismissIssueSuggestion -> updateIssueSuggestionState",
+        "POST /api/issue-records/{id}/suggestions/{suggestionId}/accept|dismiss"
+      ],
+      "reason": "Off mode keeps the literal handler. Bounded mode (updateIssueSuggestionStateBounded) reproduces dismissals and non-team acceptances (TestScaleP21TriageSuggestionStateWriterDifferential, 21 cases x3 sources) and team acceptances: the literal issueTeamMoveForbidden over mcpWorkspaceDataProjected (guest and outside-team 403s), then mutateBoundedIssueSuggestions under WithIssueRenumbering with the target declared, whose issueTeamMove closure (locked sequence, target and inherited workflow states, same-named labels and groups, attached documents and their projects) runs the literal moveIssueToTeam. TestScaleP21TeamMoveAcceptDifferential: 15 cases (parent team with an incompatible project, sub-team with inherited workflow and compatible project, a team without settings or matching labels, triage target on/off, merged update activity, member mover, same team, private outsider/member admin, sub-team of a private team, guest, ghost team, selected-key 403, cancellation) legacy vs warm vs SQL-reloaded with exact responses, issue rows and columns, sequence, aliases, label rows, document rows, suggestions, activities, events, webhooks and realtime, and the image reloaded from SQL; TestScaleP21TeamMoveConcurrentSameTeam proves concurrent moves into one team equal a sequential legacy order with distinct numbers."
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "source": "server/code_host_accounts_coding.go",
+  "unmigrated": 1,
+  "consumers": {
+    "MemberAccount": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "reason": "SW11 inspection: applyUsernames calls workspaceUsernames over ordered users, members and userSettings; explicit-name claims and numeric suffix collisions depend on the complete workspace directory. A target-only selection changes returned Username. Requires a bounded native username resolver before migration; no scoped replacement certified.",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "initCodingCore -> services.service.Members = codingMemberHosts{s:s} (coding_runtime.go:130); coding.Service.memberAccount -> Members.MemberAccount interface call (internal/coding/member_identity.go:46)"
+      ]
+    }
+  }
+}

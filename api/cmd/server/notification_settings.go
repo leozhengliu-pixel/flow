@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"time"
 
 	"flow/api/internal/domain"
@@ -53,9 +54,20 @@ func (s *server) dispatchNotificationDigests(ctx context.Context, workspace stri
 	if s.mailer == nil {
 		return
 	}
-	data, err := s.store.NotificationDeliverySnapshot(ctx, workspace, []string{"digest"}, now)
-	if err != nil {
-		return
+	var data domain.Bootstrap
+	var err error
+	if s.store.BoundedMetadataEnabled() {
+		read, readErr := s.store.BeginNotificationDeliveryContextRead(ctx, workspace, []string{"digest"}, now)
+		if readErr != nil {
+			return
+		}
+		defer read.Close()
+		data = read.Data
+	} else {
+		data, err = s.store.NotificationDeliverySnapshot(ctx, workspace, []string{"digest"}, now)
+		if err != nil {
+			return
+		}
 	}
 	byUser := map[string][]domain.NotificationDelivery{}
 	for _, delivery := range data.NotificationDeliveries {
@@ -87,18 +99,40 @@ func (s *server) dispatchNotificationDigests(ctx context.Context, workspace stri
 			continue
 		}
 		items := make([]notificationEmailItem, 0, len(claimed))
+		sendable := make([]domain.NotificationDelivery, 0, len(claimed))
 		for _, delivery := range claimed {
-			for _, notification := range data.Notifications {
-				if notification.ID == delivery.NotificationID {
-					item, itemErr := s.notificationEmailItem(&data, workspace, notification)
-					if itemErr != nil {
-						item = notificationEmailItem{Title: notification.Type, URL: s.mailer.appURL + "/" + url.PathEscape(workspace) + "/inbox", Icon: item.Icon, Line: inviterDisplayName(notification.Actor)}
-					}
-					items = append(items, item)
-					break
-				}
+			index := slices.IndexFunc(data.Notifications, func(item domain.Notification) bool { return item.ID == delivery.NotificationID })
+			if index < 0 {
+				sendable = append(sendable, delivery)
+				continue
 			}
+			notification := data.Notifications[index]
+			// The recipient may have lost the document since it was queued.
+			deliverable, accessErr := s.documentNotificationDeliverable(ctx, workspace, notification)
+			if accessErr != nil {
+				_ = s.store.MutateNotificationDelivery(ctx, workspace, delivery.ID, func(current *domain.NotificationDelivery) error {
+					if current.Status == "delivering" {
+						current.Status, current.UpdatedAt = "digest", now
+					}
+					return nil
+				})
+				continue
+			}
+			if !deliverable {
+				s.dropDocumentDelivery(ctx, workspace, delivery.ID)
+				continue
+			}
+			sendable = append(sendable, delivery)
+			item, itemErr := s.notificationEmailItem(&data, workspace, notification)
+			if itemErr != nil {
+				item = notificationEmailItem{Title: notification.Type, URL: s.mailer.appURL + "/" + url.PathEscape(workspace) + "/inbox", Icon: item.Icon, Line: inviterDisplayName(notification.Actor)}
+			}
+			items = append(items, item)
 		}
+		if len(sendable) == 0 {
+			continue
+		}
+		claimed = sendable
 		err = s.mailer.sendNotificationEmail(recipient.Email, workspace, fmt.Sprintf("Flow: %d notifications", len(claimed)), items, data.WorkspaceSettings.HIPAACompliance)
 		for _, delivery := range claimed {
 			_ = s.store.MutateNotificationDelivery(ctx, workspace, delivery.ID, func(current *domain.NotificationDelivery) error {

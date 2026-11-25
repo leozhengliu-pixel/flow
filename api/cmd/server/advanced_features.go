@@ -161,6 +161,9 @@ func canEditDocument(role string) bool    { return documentRoleRank(role) >= 3 }
 func canCommentDocument(role string) bool { return documentRoleRank(role) >= 2 }
 
 func (s *server) listDocuments(w http.ResponseWriter, r *http.Request) {
+	if s.serveDocumentRecordList(w, r) {
+		return
+	}
 	data := s.workspaceData(r)
 	query := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("q")))
 	teamID := strings.TrimSpace(r.URL.Query().Get("teamId"))
@@ -284,6 +287,8 @@ type draftInput struct {
 	Body        *string        `json:"body,omitempty"`
 	ContentData map[string]any `json:"contentData,omitempty"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
+	// ClientKey makes a create idempotent for one composer's draft: see draftWithClientKey.
+	ClientKey *string `json:"clientKey,omitempty"`
 }
 
 type deletedIssuePayload struct {
@@ -472,7 +477,20 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.Document
-	err := s.store.MutateWorkspaceWithAggregate(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), "document.created", input, func(data *domain.Bootstrap) (string, error) {
+	var viewer templateAccess
+	if input.TemplateID != nil && *input.TemplateID != "" {
+		var err error
+		if viewer, err = s.requestTemplateAccess(r); err != nil {
+			respondMutation(w, err, http.StatusCreated, nil)
+			return
+		}
+	}
+	err := s.store.MutateWorkspaceWithAggregate(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), "document.created", input, documentCreateCallback(input, viewer, &created))
+	respondMutation(w, err, http.StatusCreated, created)
+}
+
+func documentCreateCallback(input documentInput, viewer templateAccess, result *domain.Document) func(*domain.Bootstrap) (string, error) {
+	return func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		title := ""
 		var template *domain.DocumentTemplate
@@ -480,6 +498,12 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 			index := slices.IndexFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == *input.TemplateID })
 			if index < 0 {
 				return "", errInvalid
+			}
+			// A template of a team the viewer does not see is unknown to
+			// them; one that files the document in its team needs that
+			// team's content access, as choosing the team would.
+			if err := documentTemplateUsableBy(viewer, data.DocumentTemplates[index], input.TeamIDs != nil); err != nil {
+				return "", err
 			}
 			template = &data.DocumentTemplates[index]
 			if template.Title != "" {
@@ -509,7 +533,7 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 				return "", errInvalid
 			}
 		}
-		created = domain.Document{ID: idgen.New("document_"), SlugID: documentSlugID(title, newDocumentSlugSuffix()), Title: title, Color: "#8b8b90", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: idgen.New("document_permission_"), DocumentID: "", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: now, UpdatedAt: now}}}
+		created := domain.Document{ID: idgen.New("document_"), SlugID: documentSlugID(title, newDocumentSlugSuffix()), Title: title, Color: "#8b8b90", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: idgen.New("document_permission_"), DocumentID: "", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: now, UpdatedAt: now}}}
 		created.Permissions[0].DocumentID = created.ID
 		created.Permissions = append(created.Permissions, defaultDocumentGrants(created, now)...)
 		inheritDocumentTeams(data, &created)
@@ -559,9 +583,25 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 		data.Documents = append([]domain.Document{created}, data.Documents...)
 		syncDocumentProjectResources(data, created)
 		appendAudit(data, "created", "document", created.ID, map[string]any{"title": created.Title})
+		*result = created
 		return created.ID, nil
-	})
-	respondMutation(w, err, http.StatusCreated, created)
+	}
+}
+
+// documentEditRefused reports that the authorization of this request read the
+// document and the viewer's role on it cannot edit: the write callback would
+// answer store.ErrAuthForbidden for the same document and role. It decides
+// nothing else (a missing, ambiguous or editable document takes the write path).
+func (s *server) documentEditRefused(r *http.Request, ref string) bool {
+	if !s.store.BoundedMetadataEnabled() || s.authDisabled {
+		return false
+	}
+	data, ok := takeDocumentWriteMetadata(r, workspaceKey(r), authUser(r).ID)
+	if !ok {
+		return false
+	}
+	document, err := documentByID(&data, ref)
+	return err == nil && !canEditDocument(documentRole(s, data, *document))
 }
 
 func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
@@ -570,6 +610,12 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	if s.documentEditRefused(r, id) {
+		// The same answer the write callback gives, without queueing for the
+		// workspace write lock or loading the writer's image first.
+		respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+		return
+	}
 	var updated, current domain.Document
 	var compactCollaborationID, replacedCollaborationID string
 	unchanged := false
@@ -579,6 +625,19 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 	if input.ProjectIDs != nil && input.IssueID == nil {
 		// Re-deriving the inherited scope reads the attached issue's team.
 		scope = documentLinkMutationScope(r.Context(), id)
+	}
+	if s.store.BoundedMetadataEnabled() {
+		// The closed writer selects the document, its old and new linked
+		// projects (Resources only) and the issues the scope names; the
+		// callback below is unchanged.
+		var closeOutputs func()
+		scope, closeOutputs = beginMetadataOutputReads(scope)
+		defer closeOutputs()
+		request := store.DocumentUpdateWriteRequest{Ref: id, ReadExistingIssue: input.ProjectIDs != nil && input.IssueID == nil}
+		if input.ProjectIDs != nil {
+			request.ProjectIDs = normalizedStrings(*input.ProjectIDs)
+		}
+		scope = store.WithDocumentUpdateWrite(scope, request)
 	}
 	err := s.store.MutateWorkspace(scope, workspaceKey(r), favoriteMutationEvent("document.updated", input), id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
@@ -749,7 +808,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		s.dispatchNotificationEmails(r.Context(), workspace)
 	}
-	respondMutation(w, err, http.StatusOK, s.withDocumentVersions(r, updated))
+	respondMutation(w, err, http.StatusOK, s.scaleP20DocumentResult(r, updated))
 }
 
 // jsonEqual compares two decoded JSON values.
@@ -772,7 +831,7 @@ func (s *server) restoreDocumentRevision(w http.ResponseWriter, r *http.Request)
 	// Older versions' bodies are offloaded: load the one to restore before
 	// taking the write lock.
 	var loaded *domain.DocumentRevision
-	snapshot := s.workspaceData(r)
+	snapshot := s.documentWorkspaceData(r)
 	if document, err := documentByID(&snapshot, id); err == nil {
 		if index := slices.IndexFunc(document.Revisions, func(item domain.DocumentRevision) bool { return item.ID == revisionID }); index >= 0 && len(document.Revisions[index].Offloaded) > 0 {
 			revision := []domain.DocumentRevision{document.Revisions[index]}
@@ -825,11 +884,16 @@ func (s *server) restoreDocumentRevision(w http.ResponseWriter, r *http.Request)
 	respondMutation(w, err, http.StatusOK, s.withDocumentVersions(r, updated))
 }
 
-func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
+func (s *server) deleteLegacyDocument(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	workspace, removedID := workspaceKey(r), id
 	directory := s.documentMemberDirectory(r)
-	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.deleted", id, nil, s.documentDeleteCallback(id, directory, &workspace, &removedID))
+	s.finishDocumentDelete(w, r, err, workspace, removedID)
+}
+
+func (s *server) documentDeleteCallback(id string, directory memberDirectory, workspace, removedID *string) func(*domain.Bootstrap) error {
+	return func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id })
 		if index < 0 {
 			if document, err := documentByID(data, id); err == nil {
@@ -843,7 +907,7 @@ func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 			return store.ErrAuthForbidden
 		}
 		removed := data.Documents[index]
-		workspace, removedID = data.Workspace.URLKey, removed.ID
+		*workspace, *removedID = data.Workspace.URLKey, removed.ID
 		if err := appendTrashWithLinks(data, "document", removed.ID, documentDisplayTitle(removed.Title), removed, captureDocumentLinks(data, removed.ID)); err != nil {
 			return err
 		}
@@ -855,7 +919,10 @@ func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		appendDocumentNotifications(s, data, removed, documentNotice{directory: directory, kind: notificationDocumentDeleted, recipients: documentSubscribers(data, removed)}, time.Now().UTC())
 		return nil
-	})
+	}
+}
+
+func (s *server) finishDocumentDelete(w http.ResponseWriter, r *http.Request, err error, workspace, removedID string) {
 	if err == nil {
 		s.realtime.invalidateDocumentAccess(workspace, removedID)
 		s.dispatchNotificationEmails(r.Context(), workspace)
@@ -1335,7 +1402,7 @@ func (s *server) createCustomerRequestAttachment(w http.ResponseWriter, r *http.
 		return
 	}
 	var attachment domain.Attachment
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer_request.attachment_created", requestID, map[string]string{"name": header.Filename}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "customer_request.attachment_created", requestID, map[string]string{"name": header.Filename}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "customerRequests", ID: requestID}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.ID == requestID })
 		if index < 0 {
 			return errNotFound
@@ -1355,7 +1422,7 @@ func (s *server) createCustomerRequestAttachment(w http.ResponseWriter, r *http.
 func (s *server) deleteCustomerRequestAttachment(w http.ResponseWriter, r *http.Request) {
 	requestID, attachmentID := r.PathValue("id"), r.PathValue("attachmentId")
 	var objectKey string
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer_request.attachment_deleted", requestID, map[string]string{"attachmentId": attachmentID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "customer_request.attachment_deleted", requestID, map[string]string{"attachmentId": attachmentID}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "customerRequests", ID: requestID}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.ID == requestID })
 		if index < 0 {
 			return errNotFound
@@ -1690,11 +1757,18 @@ func (s *server) createAsk(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "title is required")
 		return
 	}
+	viewer, ok := s.askTemplateAccess(w, r, input.TemplateID != nil && *input.TemplateID != "")
+	if !ok {
+		return
+	}
 	var created domain.Ask
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "ask.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		created = domain.Ask{ID: idgen.New("ask_"), Title: strings.TrimSpace(*input.Title), Source: "web", Requester: data.Viewer, Status: "pending", Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyAskInput(data, &created, input); err != nil {
+			return "", err
+		}
+		if err := askTemplateUsable(data, viewer, created); err != nil {
 			return "", err
 		}
 		data.Asks = append([]domain.Ask{created}, data.Asks...)
@@ -1710,6 +1784,12 @@ func (s *server) updateAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	// The template is checked again when it or the team it fills changes.
+	retemplated := input.TemplateID != nil || input.TeamID != nil
+	viewer, ok := s.askTemplateAccess(w, r, retemplated)
+	if !ok {
+		return
+	}
 	var updated domain.Ask
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "ask.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Asks, func(item domain.Ask) bool { return item.ID == id })
@@ -1719,6 +1799,11 @@ func (s *server) updateAsk(w http.ResponseWriter, r *http.Request) {
 		before := data.Asks[index]
 		if err := applyAskInput(data, &data.Asks[index], input); err != nil {
 			return err
+		}
+		if retemplated {
+			if err := askTemplateUsable(data, viewer, data.Asks[index]); err != nil {
+				return err
+			}
 		}
 		if unchangedEdit(before, data.Asks[index]) {
 			updated = before
@@ -1742,6 +1827,13 @@ func (s *server) decideAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	// Read now, refused only when an approval creates the issue from a
+	// template (the callback below decides that).
+	var viewer templateAccess
+	var viewerErr error
+	if input.Decision == "approved" {
+		viewer, viewerErr = s.requestTemplateAccess(r)
+	}
 	var updated domain.Ask
 	createdIssueID := ""
 	err := s.store.MutateWorkspace(issueCreationScope(r.Context(), nil), workspaceKey(r), "ask.decided", id, input, func(data *domain.Bootstrap) error {
@@ -1750,6 +1842,15 @@ func (s *server) decideAsk(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		ask := &data.Asks[index]
+		// Approving creates the issue from the ask's template as the approver.
+		if input.Decision == "approved" && ask.IssueID == "" && ask.TemplateID != "" {
+			if viewerErr != nil {
+				return viewerErr
+			}
+			if err := askTemplateUsable(data, viewer, *ask); err != nil {
+				return err
+			}
+		}
 		now := time.Now().UTC()
 		approval := domain.AskApproval{ID: idgen.New("ask_approval_"), AskID: id, Approver: data.Viewer, Decision: input.Decision, Note: strings.TrimSpace(input.Note), DecidedAt: &now}
 		ask.Approvals = append(ask.Approvals, approval)
@@ -1858,6 +1959,10 @@ func (s *server) deleteAsk(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listProjectTemplates(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.scaleP21SW16ListProjectTemplates(w, r)
+		return
+	}
 	data, ok := s.store.BootstrapFor(workspaceKey(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
@@ -2058,7 +2163,7 @@ func (s *server) updateProjectTemplate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteProjectTemplate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_template.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "project_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "projectTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.ProjectTemplates)
 		data.ProjectTemplates = slices.DeleteFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool { return item.ID == id })
 		if before == len(data.ProjectTemplates) {
@@ -2358,7 +2463,7 @@ func (s *server) updateProjectUpdateSettings(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var result map[string]any
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_update_settings.updated", "project_update_settings", input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "project_update_settings.updated", "project_update_settings", input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "settings", ID: "projectUpdates"}}}, func(data *domain.Bootstrap) error {
 		current, _ := data.Settings["projectUpdates"].(map[string]any)
 		if current == nil {
 			current = map[string]any{}
@@ -2392,7 +2497,7 @@ func (s *server) updateSLASettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result map[string]any
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "sla_settings.updated", "workspace", input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "sla_settings.updated", "workspace", input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "settings", ID: "sla"}}}, func(data *domain.Bootstrap) error {
 		if data.Settings == nil {
 			data.Settings = map[string]any{}
 		}
@@ -2419,27 +2524,34 @@ func (s *server) createDraft(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	validate, err := s.draftRecordValidator(r)
-	if err != nil {
-		issueRecordsError(w, err)
-		return
-	}
-	var created domain.Draft
-	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "draft.created", input, func(data *domain.Bootstrap) (string, error) {
-		now := time.Now().UTC()
-		kind := "issue"
-		if input.Type != nil && *input.Type != "" {
-			kind = *input.Type
-		}
-		created = domain.Draft{ID: idgen.New("draft_"), UserID: data.Viewer.ID, Type: kind, ContentData: input.ContentData, Metadata: input.Metadata, CreatedAt: now, UpdatedAt: now}
-		applyDraftInput(&created, input)
-		if err := validate(data, created); err != nil {
-			return "", err
-		}
-		data.Drafts = append([]domain.Draft{created}, data.Drafts...)
-		return created.ID, nil
+	s.withColdMetadataRequest(w, r, "server/advanced_features.go:createDraft", "draft.created", func(repo *store.SQLiteStore, request *http.Request) {
+		s.createDraftWithStore(w, request, repo, input)
 	})
-	respondMutation(w, err, http.StatusCreated, created)
+}
+
+// draftWithClientKey finds the draft a create with a client key repeats: the
+// same user's draft with the same key, type and resource (and, for a comment,
+// the same parent kind). The key is generated by one composer for one draft,
+// so drafts of other users, workspaces (each has its own data), resources,
+// draft types or composers never match, and a create without a key never does.
+func draftWithClientKey(drafts []domain.Draft, item domain.Draft) int {
+	if item.ClientKey == "" {
+		return -1
+	}
+	return slices.IndexFunc(drafts, func(existing domain.Draft) bool {
+		return existing.ClientKey == item.ClientKey && existing.UserID == item.UserID && existing.Type == item.Type && existing.ResourceID == item.ResourceID && draftParentType(existing) == draftParentType(item)
+	})
+}
+
+// draftParentType is the kind of resource a comment draft comments on ("" for other drafts).
+func draftParentType(item domain.Draft) string {
+	if item.Type != "comment" {
+		return ""
+	}
+	if value, ok := item.Metadata["resourceType"].(string); ok && strings.TrimSpace(value) != "" {
+		return normalizeDraftType(value)
+	}
+	return "issue"
 }
 
 func (s *server) updateDraft(w http.ResponseWriter, r *http.Request) {
@@ -2448,32 +2560,9 @@ func (s *server) updateDraft(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	validate, err := s.draftRecordValidator(r)
-	if err != nil {
-		issueRecordsError(w, err)
-		return
-	}
-	id := r.PathValue("id")
-	var updated domain.Draft
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "draft.updated", id, input, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.Drafts, func(item domain.Draft) bool { return item.ID == id && item.UserID == data.Viewer.ID })
-		if index < 0 {
-			return errNotFound
-		}
-		candidate := data.Drafts[index]
-		applyDraftInput(&candidate, input)
-		if err := validate(data, candidate); err != nil {
-			return err
-		}
-		if unchangedEdit(data.Drafts[index], candidate) {
-			updated = data.Drafts[index]
-			return store.ErrNoMutation
-		}
-		candidate.UpdatedAt = time.Now().UTC()
-		data.Drafts[index], updated = candidate, candidate
-		return nil
+	s.withColdMetadataRequest(w, r, "server/advanced_features.go:updateDraft", "draft.updated", func(repo *store.SQLiteStore, request *http.Request) {
+		s.updateDraftWithStore(w, request, repo, input)
 	})
-	respondMutation(w, err, http.StatusOK, updated)
 }
 
 func applyDraftInput(item *domain.Draft, input draftInput) {
@@ -2494,6 +2583,9 @@ func applyDraftInput(item *domain.Draft, input draftInput) {
 	}
 	if input.Metadata != nil {
 		item.Metadata = input.Metadata
+	}
+	if input.ClientKey != nil && strings.TrimSpace(*input.ClientKey) != "" {
+		item.ClientKey = strings.TrimSpace(*input.ClientKey)
 	}
 }
 
@@ -2596,7 +2688,7 @@ func validateDraftResource(data *domain.Bootstrap, item domain.Draft, exists fun
 
 func (s *server) deleteDraft(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "draft.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "draft.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "drafts", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.Drafts)
 		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return item.ID == id && item.UserID == data.Viewer.ID })
 		if before == len(data.Drafts) {
@@ -2947,7 +3039,7 @@ func (s *server) updateFavoriteFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.FavoriteFolder
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite_folder.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "favorite_folder.updated", id, input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "favoriteFolders", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.FavoriteFolders, func(folder domain.FavoriteFolder) bool { return folder.ID == id && folder.UserID == data.Viewer.ID })
 		if index < 0 {
 			return errNotFound
@@ -3132,13 +3224,13 @@ func setDocumentSubscription(data *domain.Bootstrap, kind, id, userID string, su
 func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var restored any
-	err := s.store.MutateWorkspace(trashRestoreScope(r.Context(), id), workspaceKey(r), "trash.restored", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(trashRecordRestoreScope(r.Context(), id), workspaceKey(r), "trash.restored", id, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
 		}
 		entry := data.Trash[index]
-		if !workspaceAdminRole(data.ViewerRole) && entry.DeletedBy.ID != data.Viewer.ID {
+		if !workspaceAdminRole(data.ViewerRole) && entry.DeletedBy.ID != data.Viewer.ID || apiKeyTrashOutsideScope(r, *data, entry) {
 			return store.ErrAuthForbidden
 		}
 		switch entry.ResourceType {
@@ -3339,6 +3431,9 @@ func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 		purgedLoopIDs = trashedLoopIDs(data.Trash, func(entry domain.TrashEntry) bool { return entry.ID == id })
 		purgedUploads = trashedUploads(data.Trash, func(entry domain.TrashEntry) bool { return entry.ID == id })
 		before := len(data.Trash)
+		if entryIndex := slices.IndexFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id }); entryIndex >= 0 && apiKeyTrashOutsideScope(r, *data, data.Trash[entryIndex]) {
+			return store.ErrAuthForbidden
+		}
 		if !workspaceAdminRole(data.ViewerRole) {
 			entryIndex := slices.IndexFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id })
 			if entryIndex < 0 {
@@ -3831,9 +3926,15 @@ func (s *server) createExport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "format must be json or csv")
 		return
 	}
-	if input.IncludePrivate && !s.authDisabled && !workspaceAdminRole(s.workspaceData(r).ViewerRole) {
-		writeError(w, http.StatusForbidden, "Only workspace admins can export private data")
-		return
+	if input.IncludePrivate && !s.authDisabled {
+		data, err := s.workspaceDataWithError(r)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
+		if err != nil || !workspaceAdminRole(data.ViewerRole) {
+			writeError(w, http.StatusForbidden, "Only workspace admins can export private data")
+			return
+		}
 	}
 	var created domain.ExportJob
 	key := workspaceKey(r)
@@ -3851,7 +3952,7 @@ func (s *server) createExport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) completeExport(workspaceKey, id string) {
-	_ = s.store.MutateWorkspace(s.store.WorkerContext(), workspaceKey, "export.completed", id, nil, func(data *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspaceScoped(s.store.WorkerContext(), workspaceKey, "export.completed", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "exportJobs", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ExportJobs, func(item domain.ExportJob) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -4009,7 +4110,7 @@ func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "could not encode export")
 		return
 	}
-	s.writeStoredBootstrap(w, r, data, fields)
+	s.writeStoredBootstrap(w, r, data, bootstrapStreamScope{}, fields)
 }
 
 func formatExportTime(value *time.Time) string {
@@ -4027,42 +4128,83 @@ func csvText(value string) string {
 }
 
 func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
+	s.maintainAdvancedSchedulesAt(ctx, key, time.Now)
+}
+
+func (s *server) maintainAdvancedSchedulesAt(ctx context.Context, key string, clock func() time.Time) {
 	// Page loads run this check; read only what it inspects.
-	data, ok := s.store.WorkspaceMetadataFields(key, "settings", "issueSlas", "slaRules", "trash", "projects", "projectUpdates")
-	if !ok {
-		return
+	var data domain.Bootstrap
+	var releasePreflight func()
+	if s.store.BoundedMetadataEnabled() {
+		var closeOutputs func()
+		ctx, closeOutputs = beginIndependentMetadataOutputReads(ctx)
+		defer closeOutputs()
+		read, found, err := s.store.BeginAdvancedScheduleRead(ctx, key)
+		if err != nil || !found {
+			return
+		}
+		defer read.Close()
+		releasePreflight, data = read.Close, read.Data
+	} else {
+		var found bool
+		data, found = s.store.WorkspaceMetadataFields(key, "settings", "issueSlas", "slaRules", "trash", "projects", "projectUpdates")
+		if !found {
+			return
+		}
 	}
-	now := time.Now().UTC()
+	now := clock().UTC()
 	needsMutation := slaEnabled(&data) && slices.ContainsFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.Status == "active" && now.After(item.DueAt) })
 	needsMutation = needsMutation || slices.ContainsFunc(data.Trash, func(item domain.TrashEntry) bool { return trashExpired(item, now) })
 	settings, _ := data.Settings["projectUpdates"].(map[string]any)
 	defaultCadence := intFromAny(settings["cadenceDays"])
 	leadReminders := boolFromAny(settings["reminders"])
 	missingNotifications := settings["missingNotifications"] == nil || boolFromAny(settings["missingNotifications"])
-	for _, project := range data.Projects {
+	const reminderBatchSize = 128
+	var reminderFlags map[string]store.ProjectUpdateReminderFlags
+	for index, project := range data.Projects {
 		cadence := projectScheduleDays(project, defaultCadence)
-		if cadence > 0 {
-			updates := data.ProjectUpdates[project.ID]
-			reference := project.CreatedAt
-			if len(updates) > 0 && updates[0].CreatedAt.After(reference) {
-				reference = updates[0].CreatedAt
+		if cadence <= 0 {
+			continue
+		}
+		reminder, cached := reminderFlags[project.ID]
+		if !cached {
+			ids := make([]string, 0, reminderBatchSize)
+			for next := index; next < len(data.Projects) && len(ids) < reminderBatchSize; next++ {
+				candidate := data.Projects[next]
+				if projectScheduleDays(candidate, defaultCadence) > 0 {
+					ids = append(ids, candidate.ID)
+				}
 			}
-			dueAt := projectNextUpdateDue(project, reference, cadence)
-			missing := now.After(dueAt)
-			dueSoon := leadReminders && !missing && now.After(dueAt.Add(-24*time.Hour))
-			latestOutdated := len(updates) > 0 && (updates[0].DueAt == nil || !updates[0].DueAt.Equal(dueAt) || updates[0].Missing != missing)
-			activeMissingReminder, activeDueReminder, err := s.store.ProjectReminderFlags(ctx, data.Workspace.URLKey, project.ID)
+			var err error
+			reminderFlags, err = s.store.ProjectReminderFlags(ctx, data.Workspace.URLKey, ids)
 			if err != nil {
 				return
 			}
-			if latestOutdated || (missing && (project.Health != "noUpdate" || (missingNotifications && !activeMissingReminder))) || (!missing && activeMissingReminder) || dueSoon != activeDueReminder {
-				needsMutation = true
-				break
-			}
+			reminder = reminderFlags[project.ID]
 		}
+		updates := data.ProjectUpdates[project.ID]
+		reference := project.CreatedAt
+		if len(updates) > 0 && updates[0].CreatedAt.After(reference) {
+			reference = updates[0].CreatedAt
+		}
+		dueAt := projectNextUpdateDue(project, reference, cadence)
+		missing := now.After(dueAt)
+		dueSoon := leadReminders && !missing && now.After(dueAt.Add(-24*time.Hour))
+		latestOutdated := len(updates) > 0 && (updates[0].DueAt == nil || !updates[0].DueAt.Equal(dueAt) || updates[0].Missing != missing)
+		if latestOutdated || (missing && (project.Health != "noUpdate" || (missingNotifications && !reminder.Missing))) || (!missing && reminder.Missing) || dueSoon != reminder.Due {
+			needsMutation = true
+			break
+		}
+	}
+	if releasePreflight != nil {
+		releasePreflight()
+		data = domain.Bootstrap{}
 	}
 	if !needsMutation {
 		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		ctx = store.ContextWithAdvancedScheduleMaintenance(ctx, now, trashRetention)
 	}
 	// The job touches project updates, the projects' reminder notifications,
 	// the trash and — with SLAs on — the issues applySLARules can change.
@@ -4096,6 +4238,9 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 		// write and realtime event when nothing changed, so page loads do not
 		// keep rewriting the workspace and re-triggering each other.
 		fingerprint := func() []byte {
+			if s.store.BoundedMetadataEnabled() {
+				return store.AdvancedScheduleFingerprint(mutationCtx, *next)
+			}
 			raw, _ := json.Marshal([]any{next.Projects, next.ProjectUpdates, next.Notifications, next.NotificationDeliveries, next.Trash, next.IssueSLAs, next.SLAEvents})
 			return raw
 		}

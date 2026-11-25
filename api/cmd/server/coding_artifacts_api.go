@@ -377,7 +377,7 @@ func humanBytes(value int64) string {
 }
 
 func (s *server) writeCodingArtifactResponse(w http.ResponseWriter, r *http.Request, status int, workspace string, artifact domain.CodingArtifact) {
-	signed := s.signCodingArtifacts(r.Context(), workspace, artifact.SessionID, []domain.CodingArtifact{artifact}, s.codingArtifactBaseURL(r), coding.ArtifactListURLLifetime)
+	signed := s.signCodingArtifacts(r.Context(), workspace, artifact.SessionID, []domain.CodingArtifact{artifact}, s.codingArtifactBaseURL(r), coding.ArtifactListURLLifetime, codingArtifactSigner(workspace, artifact.SessionID))
 	writeJSON(w, status, coding.ArtifactResponse{ID: artifact.ID, URL: signed[0].URL})
 }
 
@@ -393,10 +393,18 @@ func codingArtifactContentPath(sessionID, artifactID string) string {
 	return "/api/coding/sessions/" + url.PathEscape(sessionID) + "/artifacts/" + url.PathEscape(artifactID) + "/content"
 }
 
+// codingArtifactSigner is the principal of the links written for a session
+// without a person behind them: the runner's response and the change-request
+// body, which readers on the code host open without a Flow sign-in. The link
+// works while the artifact and its session exist.
+func codingArtifactSigner(workspace, sessionID string) fileSigner {
+	return fileSigner{Subject: "cs:" + sessionID, Workspace: workspace}
+}
+
 // signCodingArtifacts fills URL (signed, expiring after lifetime), ExpiresAt
 // and ContentURL. Artifacts whose object is unknown or whose signing key is
 // unavailable keep only ContentURL.
-func (s *server) signCodingArtifacts(ctx context.Context, workspace, sessionID string, artifacts []domain.CodingArtifact, baseURL string, lifetime time.Duration) []domain.CodingArtifact {
+func (s *server) signCodingArtifacts(ctx context.Context, workspace, sessionID string, artifacts []domain.CodingArtifact, baseURL string, lifetime time.Duration, signer fileSigner) []domain.CodingArtifact {
 	result := make([]domain.CodingArtifact, len(artifacts))
 	copy(result, artifacts)
 	keys, err := s.store.CodingArtifactObjectKeys(ctx, workspace, sessionID)
@@ -413,7 +421,7 @@ func (s *server) signCodingArtifacts(ctx context.Context, workspace, sessionID s
 		result[index].URL = ""
 		result[index].ExpiresAt = nil
 		if objectKey := keys[result[index].ID]; objectKey != "" && signErr == nil {
-			result[index].URL = signedFileURL(signingKey, baseURL, objectKey, expires)
+			result[index].URL = signedFileURLFor(signingKey, baseURL, objectKey, expires, signer)
 			at := expires
 			result[index].ExpiresAt = &at
 		}
@@ -436,7 +444,7 @@ func (s *server) CodingArtifactMarkdown(ctx context.Context, workspace, sessionI
 	if baseURL == "" {
 		baseURL = strings.TrimRight(firstNonEmpty(strings.TrimSpace(os.Getenv("FLOW_APP_URL")), s.allowedOrigin), "/")
 	}
-	return coding.ArtifactMarkdown(s.signCodingArtifacts(ctx, workspace, sessionID, artifacts, baseURL, coding.ArtifactPullRequestURLLifetime)), nil
+	return coding.ArtifactMarkdown(s.signCodingArtifacts(ctx, workspace, sessionID, artifacts, baseURL, coding.ArtifactPullRequestURLLifetime, codingArtifactSigner(workspace, sessionID))), nil
 }
 
 // syncCodingArtifactsToChangeRequests rewrites the screenshots section of
@@ -459,7 +467,7 @@ func (s *server) syncCodingArtifactsToChangeRequests(ctx context.Context, worksp
 		slog.WarnContext(ctx, "coding artifact: list artifacts", "session", sessionID, "error", err)
 		return
 	}
-	signed := s.signCodingArtifacts(ctx, workspace, sessionID, artifacts, baseURL, coding.ArtifactPullRequestURLLifetime)
+	signed := s.signCodingArtifacts(ctx, workspace, sessionID, artifacts, baseURL, coding.ArtifactPullRequestURLLifetime, codingArtifactSigner(workspace, sessionID))
 	for _, pullRequest := range pullRequests {
 		if pullRequest.State != "" && pullRequest.State != "open" {
 			continue
@@ -553,7 +561,11 @@ func (s *server) codingArtifactSession(w http.ResponseWriter, r *http.Request) (
 		return "", "", false
 	}
 	workspace := workspaceKey(r)
-	metadata, ok := s.store.WorkspaceMetadata(workspace)
+	metadata, ok, readErr := s.store.WorkspaceMetadataScoped(r.Context(), workspace, store.MetadataRecordScope{})
+	if readErr != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not read workspace")
+		return "", "", false
+	}
 	if !ok {
 		writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "Workspace not found")
 		return "", "", false
@@ -591,7 +603,7 @@ func (s *server) listCodingSessionArtifacts(w http.ResponseWriter, r *http.Reque
 		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not read session artifacts")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.signCodingArtifacts(r.Context(), workspace, sessionID, artifacts, s.codingArtifactBaseURL(r), coding.ArtifactListURLLifetime))
+	writeJSON(w, http.StatusOK, s.signCodingArtifacts(r.Context(), workspace, sessionID, artifacts, s.codingArtifactBaseURL(r), coding.ArtifactListURLLifetime, requestFileSigner(r)))
 }
 
 // getCodingSessionArtifactContent serves an artifact to a reader of the

@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_event_policy_source.go",
+  "unmigrated": 0,
+  "consumers": {
+    "readBoundedEventPolicySource": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Retains the exact logical source generation under store/residency locks, then projects only policy fields with existing ResourceRead admission outside locks. Unknown source versions use the exact trusted SQL policy constructor; source construction preserves retained labels while downstream access validation remains authoritative. SW73 proves native-versus-SQL shape differences, defaults, inline Team prefixes, independent recovery, source handoffs, separately refreshed policy isolation, credential outcomes, cancellation, budgets and release, with persistent SQLite repeats and race. No full metadata decode or new cache is introduced.",
+      "accessors": [
+        "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Shared policy source for realtime fan-out and replay.",
+      "callers": [
+        "store/SQLiteStore.ReadEventPolicySource"
+      ]
+    }
+  }
+}

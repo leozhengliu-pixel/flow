@@ -331,7 +331,9 @@ type loopWork struct {
 // caller runs it with runLoopWork or, when it is never stored, abandons it.
 func (s *server) registerLoopWork(workspace, runID string, limits loopRunLimits) *loopWork {
 	registry := s.loopRunRegistry()
-	ctx, cancel := context.WithCancelCause(context.Background())
+	// A loop run's tool calls reach COLD consumers (runFlowTool): with
+	// bounded metadata on, each runs COLD per operation (SW552).
+	ctx, cancel := context.WithCancelCause(store.WithColdWork(context.Background(), "loop-run"))
 	ctx, stop := context.WithTimeoutCause(ctx, limits.Timeout, errLoopRunTimedOut)
 	return &loopWork{registry: registry, runID: runID, entry: registry.register(runID, workspace, cancel), ctx: ctx, cancel: cancel, stop: stop}
 }
@@ -509,7 +511,9 @@ func (s *server) cancelLoopRun(w http.ResponseWriter, r *http.Request) {
 	id, runID := r.PathValue("id"), r.PathValue("runId")
 	data, err := s.loopViewerData(r)
 	if err != nil {
-		writeError(w, http.StatusForbidden, "workspace access denied")
+		if errors.Is(err, errNotFound) || !writeAuthCheckFailure(w, err) {
+			writeError(w, http.StatusForbidden, "workspace access denied")
+		}
 		return
 	}
 	workspace := data.Workspace.URLKey
@@ -592,7 +596,11 @@ func (s *server) finishOrphanedLoopRun(ctx context.Context, workspace, runID, us
 // listLoopRunEvents returns a run's append-only event log after a sequence
 // number (?after=), oldest first.
 func (s *server) listLoopRunEvents(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "loops")
+	data, ok, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{}, "loops")
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -626,12 +634,16 @@ func (s *server) loopViewerData(r *http.Request) (domain.Bootstrap, error) {
 	}
 	data.Viewer = authUser(r)
 	role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, data.Viewer.ID)
-	if err != nil || status != "active" {
+	if err != nil {
+		return data, err
+	}
+	if status != "active" {
 		return data, store.ErrAuthForbidden
 	}
 	data.ViewerRole = role
-	if members, err := s.store.ListTeamMembers(r.Context(), data.Workspace.ID); err == nil {
-		data.TeamMembers = members
+	data.TeamMembers, err = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+	if err != nil {
+		return data, err
 	}
 	return data, nil
 }

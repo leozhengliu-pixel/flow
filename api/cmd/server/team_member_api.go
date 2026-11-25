@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -135,10 +136,24 @@ func teamMemberOriginList(values []string) ([]string, error) {
 type teamMemberNames struct {
 	users map[string]domain.User
 	teams map[string]domain.Team
+	close func()
+	err   error
 }
 
 func (s *server) teamMemberNames(ctx context.Context, workspace string) teamMemberNames {
 	names := teamMemberNames{users: map[string]domain.User{}, teams: map[string]domain.Team{}}
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginMemberDirectoryRead(ctx, workspace, !s.authDisabled)
+		if err != nil || !found {
+			names.err = err
+			return names
+		}
+		names.users, names.teams = read.Users, read.Teams
+		if !registerRequestReadClose(ctx, read.Close) {
+			names.close = read.Close
+		}
+		return names
+	}
 	data, ok := s.store.WorkspaceMetadataFields(workspace, "users", "teams")
 	if !ok {
 		return names
@@ -157,6 +172,12 @@ func (s *server) teamMemberNames(ctx context.Context, workspace string) teamMemb
 		}
 	}
 	return names
+}
+
+func (names teamMemberNames) closeUnscoped() {
+	if names.close != nil {
+		names.close()
+	}
 }
 
 func (names teamMemberNames) decorate(changes []domain.TeamMemberChange) {
@@ -241,6 +262,11 @@ func (s *server) recordTeamMemberAudit(ctx context.Context, workspace string, ac
 		return
 	}
 	names := s.teamMemberNames(ctx, workspace)
+	defer names.closeUnscoped()
+	if names.err != nil {
+		log.Printf("team member audit names workspace=%s: %v", workspace, names.err)
+		return
+	}
 	names.decorate(changes)
 	ctx = store.WithMetadataFields(context.WithoutCancel(ctx), "auditLog")
 	err := s.store.MutateWorkspace(ctx, workspace, "team_member.updated", changes[0].TeamID, map[string]any{"auditEntries": len(changes)}, func(data *domain.Bootstrap) error {
@@ -296,11 +322,20 @@ func writeTeamMemberError(w http.ResponseWriter, err error, kept *domain.TeamMem
 // REST, MCP), enforcing the owner-role rule, and audits it.
 func (s *server) changeTeamMember(r *http.Request, workspace, workspaceID string, request store.TeamMembershipChangeRequest) (store.TeamMembershipChangeResult, error) {
 	actorID := authUser(r).ID
-	workspaceRole, _, _ := s.store.WorkspaceRole(r.Context(), workspaceID, actorID)
-	actorTeamRole, _ := s.store.TeamRole(r.Context(), workspaceID, request.TeamID, actorID)
+	workspaceRole, status, err := s.store.WorkspaceRole(r.Context(), workspaceID, actorID)
+	if err != nil && !errors.Is(err, store.ErrAuthForbidden) {
+		return store.TeamMembershipChangeResult{}, store.PreWriteDatabaseError(err)
+	}
+	if !s.authDisabled && status != "active" {
+		return store.TeamMembershipChangeResult{}, store.ErrAuthForbidden
+	}
+	actorTeamRole, err := s.store.TeamRole(r.Context(), workspaceID, request.TeamID, actorID)
+	if err != nil && !errors.Is(err, store.ErrAuthForbidden) {
+		return store.TeamMembershipChangeResult{}, store.PreWriteDatabaseError(err)
+	}
 	target, isMember, err := s.store.TeamMembership(r.Context(), workspaceID, request.TeamID, request.UserID)
 	if err != nil {
-		return store.TeamMembershipChangeResult{}, fmt.Errorf("could not verify team membership: %w", err)
+		return store.TeamMembershipChangeResult{}, store.PreWriteDatabaseError(err)
 	}
 	currentRole := ""
 	if isMember {
@@ -324,7 +359,7 @@ func (s *server) changeTeamMember(r *http.Request, workspace, workspaceID string
 		if len(planned.Changes) > 0 {
 			last, err := s.store.LeavingLastActiveTeam(r.Context(), workspaceID, request.TeamID, actorID)
 			if err != nil {
-				return store.TeamMembershipChangeResult{}, fmt.Errorf("could not verify team membership: %w", err)
+				return store.TeamMembershipChangeResult{}, store.PreWriteDatabaseError(err)
 			}
 			if last {
 				return store.TeamMembershipChangeResult{}, errLastActiveTeam
@@ -348,10 +383,100 @@ var errLastActiveTeam = errors.New("You should be a member of at least one activ
 
 // teamForMemberRequest resolves {id} (team id or key) among the teams the
 // caller can see, applying API key team restrictions.
-func (s *server) teamForMemberRequest(w http.ResponseWriter, r *http.Request) (domain.Bootstrap, domain.Team, bool) {
+func (s *server) teamForMemberRequest(w http.ResponseWriter, r *http.Request) (domain.Bootstrap, domain.Team, func(), bool) {
+	if s.store.BoundedMetadataEnabled() {
+		workspace := workspaceKey(r)
+		if workspace == "" && !s.authDisabled {
+			writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header (API keys and OAuth tokens select it automatically)")
+			return domain.Bootstrap{}, domain.Team{}, nil, false
+		}
+		// An authorization's existing one-shot projection retains precedence.
+		// publicMetadata applies its original key/preference projection to that
+		// exact request-owned copy before the normal reference lookup below.
+		handoff, _ := r.Context().Value(pagedMetadataHandoffKey{}).(*pagedMetadataHandoff)
+		handedOff := !s.authDisabled && handoff != nil && handoff.workspace == workspace && handoff.userID == authUser(r).ID && !handoff.taken.Load()
+		if !handedOff {
+			if !s.authDisabled && !acquireProjection(r) {
+				if retryAfter, refused := projectionRefused(r); refused {
+					writeProjectionBusy(w, retryAfter)
+				}
+				return domain.Bootstrap{}, domain.Team{}, nil, false
+			}
+			var read *store.TeamMemberRequestRead
+			found := false
+			var err error
+			for attempt := 0; ; attempt++ {
+				var access *store.AccessContext
+				var credential *domain.APIKey
+				if !s.authDisabled {
+					if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+						credential = &key
+					}
+					current, resolveErr := s.store.ResolveAccess(r.Context(), workspace, authUser(r).ID, credential)
+					if errors.Is(resolveErr, sql.ErrNoRows) {
+						resolveErr = store.ErrAuthForbidden
+					}
+					err = resolveErr
+					if err == nil {
+						access = &current
+					}
+				}
+				if err == nil {
+					read, found, err = s.store.BeginTeamMemberRequestRead(r.Context(), workspace, r.PathValue("id"), access, s.authDisabled && r.Method == http.MethodGet)
+				}
+				// A concurrent write retired the resolved access, as in
+				// boundedTeamRowAuthorization: resolve it again, which
+				// refuses a real revocation.
+				if s.authDisabled || !errors.Is(err, store.ErrResourceAccessChanged) {
+					break
+				}
+				if attempt == 2 {
+					noteAuthorizationBusy(r, err)
+					if !writeProjectionRefusal(w, r) {
+						writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+					}
+					return domain.Bootstrap{}, domain.Team{}, nil, false
+				}
+				if credential != nil {
+					user, current, selectedWorkspace, authErr := s.authenticateAPIKey(r)
+					if current == nil || user.ID != authUser(r).ID || selectedWorkspace != workspace || !apiKeyAllowsRequest(r, *current) {
+						if !writeAuthCheckFailure(w, authErr) {
+							writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+						}
+						return domain.Bootstrap{}, domain.Team{}, nil, false
+					}
+					*r = *r.WithContext(context.WithValue(r.Context(), apiKeyContextKey{}, *current))
+				}
+			}
+			if err == nil && !found {
+				if s.authDisabled {
+					writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "workspace not found")
+					return domain.Bootstrap{}, domain.Team{}, nil, false
+				}
+				err = store.ErrAuthForbidden
+			}
+			if errors.Is(err, sql.ErrNoRows) {
+				writePublicRecordNotFound(w, "team")
+				return domain.Bootstrap{}, domain.Team{}, nil, false
+			}
+			if err != nil {
+				if errors.Is(err, store.ErrAuthForbidden) {
+					writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+				} else {
+					writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+				}
+				return domain.Bootstrap{}, domain.Team{}, nil, false
+			}
+			var close func()
+			if !registerRequestReadClose(r.Context(), read.Close) {
+				close = read.Close
+			}
+			return read.Data, read.Team, close, true
+		}
+	}
 	data, ok := s.publicMetadata(w, r)
 	if !ok {
-		return data, domain.Team{}, false
+		return data, domain.Team{}, nil, false
 	}
 	id := r.PathValue("id")
 	index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == id })
@@ -360,9 +485,9 @@ func (s *server) teamForMemberRequest(w http.ResponseWriter, r *http.Request) (d
 	}
 	if index < 0 {
 		writePublicRecordNotFound(w, "team")
-		return data, domain.Team{}, false
+		return data, domain.Team{}, nil, false
 	}
-	return data, data.Teams[index], true
+	return data, data.Teams[index], nil, true
 }
 
 func (s *server) registerTeamMemberRoutes(mux *http.ServeMux) {
@@ -374,7 +499,15 @@ func (s *server) registerTeamMemberRoutes(mux *http.ServeMux) {
 
 // GET /api/teams/{id}/members: the team's memberships with role and origin.
 func (s *server) listTeamMemberships(w http.ResponseWriter, r *http.Request) {
-	data, team, ok := s.teamForMemberRequest(w, r)
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		r, close = beginRequestResourceReads(r)
+		defer close()
+	}
+	data, team, close, ok := s.teamForMemberRequest(w, r)
+	if close != nil {
+		defer close()
+	}
 	if !ok {
 		return
 	}
@@ -402,7 +535,15 @@ func (s *server) listTeamMemberships(w http.ResponseWriter, r *http.Request) {
 // PUT /api/teams/{id}/members/{userId}: add the user to the team or change
 // their role. A given origin is stored (also on an existing membership).
 func (s *server) putTeamMembership(w http.ResponseWriter, r *http.Request) {
-	data, team, ok := s.teamForMemberRequest(w, r)
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		r, close = beginRequestResourceReads(r)
+		defer close()
+	}
+	data, team, close, ok := s.teamForMemberRequest(w, r)
+	if close != nil {
+		defer close()
+	}
 	if !ok {
 		return
 	}
@@ -454,7 +595,15 @@ func (s *server) putTeamMembership(w http.ResponseWriter, r *http.Request) {
 // TEAM_OWNER_PROTECTED). dryRun writes nothing and returns what would be
 // removed, with the reason a member would be kept.
 func (s *server) deleteTeamMembership(w http.ResponseWriter, r *http.Request) {
-	data, team, ok := s.teamForMemberRequest(w, r)
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		r, close = beginRequestResourceReads(r)
+		defer close()
+	}
+	data, team, close, ok := s.teamForMemberRequest(w, r)
+	if close != nil {
+		defer close()
+	}
 	if !ok {
 		return
 	}
@@ -482,6 +631,11 @@ func (s *server) deleteTeamMembership(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	names := s.teamMemberNames(r.Context(), workspaceKey(r))
+	defer names.closeUnscoped()
+	if names.err != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load member names")
+		return
+	}
 	removal := domain.TeamMemberRemoval{DryRun: dryRun, Removed: result.Changes, Kept: []domain.TeamMemberKept{}}
 	if removal.Removed == nil {
 		removal.Removed = []domain.TeamMemberChange{}
@@ -510,7 +664,15 @@ func (names teamMemberNames) userName(userID string) string {
 // always kept, and manual members unless "manual" is listed explicitly.
 // dryRun writes nothing.
 func (s *server) syncTeamMemberships(w http.ResponseWriter, r *http.Request) {
-	data, team, ok := s.teamForMemberRequest(w, r)
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		r, close = beginRequestResourceReads(r)
+		defer close()
+	}
+	data, team, close, ok := s.teamForMemberRequest(w, r)
+	if close != nil {
+		defer close()
+	}
 	if !ok {
 		return
 	}
@@ -545,12 +707,12 @@ func (s *server) syncTeamMemberships(w http.ResponseWriter, r *http.Request) {
 	workspace := workspaceKey(r)
 	members, err := s.store.ListMembers(r.Context(), data.Workspace.ID)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace members")
+		respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
 		return
 	}
 	current, err := s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load team members")
+		respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
 		return
 	}
 	result := domain.TeamMemberSyncResult{DryRun: input.DryRun, Added: []domain.TeamMemberChange{}, Removed: []domain.TeamMemberChange{}, Kept: []domain.TeamMemberKept{}, Skipped: []domain.TeamMemberKept{}}
@@ -618,6 +780,12 @@ func (s *server) syncTeamMemberships(w http.ResponseWriter, r *http.Request) {
 		result.Removed = append(result.Removed, changed.Changes...)
 	}
 	names := s.teamMemberNames(r.Context(), workspace)
+	defer names.closeUnscoped()
+	if names.err != nil {
+		audit(append(slices.Clone(result.Added), result.Removed...))
+		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load member names")
+		return
+	}
 	names.decorate(result.Added)
 	names.decorate(result.Removed)
 	for _, list := range [][]domain.TeamMemberKept{result.Kept, result.Skipped} {

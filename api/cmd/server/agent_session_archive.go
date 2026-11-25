@@ -117,7 +117,7 @@ func (s *server) auditAgentSessionArchive(r *http.Request, outcome store.AgentTa
 		metadata["codingSessionId"] = task.CodingSessionID
 	}
 	ctx := store.WithMetadataFields(context.WithoutCancel(r.Context()), "auditLog")
-	if err := s.store.MutateWorkspace(ctx, task.WorkspaceKey, "audit.agent_session", task.ID, map[string]any{"action": "agent_session.archived"}, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspaceScoped(ctx, task.WorkspaceKey, "audit.agent_session", task.ID, map[string]any{"action": "agent_session.archived"}, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
 		appendAudit(data, "agent_session.archived", "agent_session", task.ID, metadata)
 		return nil
 	}); err != nil {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -26,12 +27,45 @@ type reviewInput struct {
 }
 
 func (s *server) listReviews(w http.ResponseWriter, r *http.Request) {
+	// Reviews use the full issue projection to redact links. The paged
+	// authorization projection does not have the same review semantics.
+	if !s.store.BoundedMetadataEnabled() && !acquireProjection(r) {
+		if !writeProjectionRefusal(w, r) {
+			writeRequestCanceled(w, r.Context().Err())
+		}
+		return
+	}
 	writeJSON(w, http.StatusOK, s.workspaceData(r).Reviews)
 }
 
 func (s *server) getReview(w http.ResponseWriter, r *http.Request) {
 	review, err := reviewByID(s.workspaceData(r), r.PathValue("id"))
 	respondMutation(w, err, http.StatusOK, review)
+}
+
+// reviewActionFailed answers a failed code host action. The member has no
+// usable linked account: 403 with a stable code. The host refusing the member
+// (403, 404 or 422) is a refusal, not an outage.
+func reviewActionFailed(w http.ResponseWriter, r *http.Request, err error) {
+	var needAccount *reviewAccountRequiredError
+	if errors.As(err, &needAccount) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": needAccount.Error(), "code": reviewAccountRequiredCode})
+		return
+	}
+	status := http.StatusBadGateway
+	if code := reviewRemoteStatus(err); code == http.StatusForbidden || code == http.StatusNotFound || code == http.StatusUnprocessableEntity {
+		status = http.StatusUnprocessableEntity
+	}
+	writeErrorFor(w, r, status, err)
+}
+
+// reviewMemberCanAct: guests see reviews they are shown but change nothing.
+func reviewMemberCanAct(w http.ResponseWriter, data domain.Bootstrap) bool {
+	if data.ViewerRole == "guest" {
+		writeError(w, http.StatusForbidden, "Guests cannot change reviews")
+		return false
+	}
+	return true
 }
 
 func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
@@ -42,17 +76,43 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var statusPostedAs *domain.ReviewPostedAs
 	statusActor := requestActor(s, r)
+	// A favorite is the viewer's own; every other edit needs a non-guest
+	// member who can see the review (the route already checked visibility).
+	var data domain.Bootstrap
+	if input.Title != nil || input.Status != nil || input.ReviewerIDs != nil || input.IssueIDs != nil || input.IssueLinkTypes != nil || input.Draft != nil || input.BranchState != nil || input.MergeMethod != nil {
+		var err error
+		data, err = s.workspaceDataWithError(r)
+		if err != nil {
+			respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
+			return
+		}
+		if !reviewMemberCanAct(w, data) {
+			return
+		}
+	}
 	if input.Status != nil {
 		if !slices.Contains([]string{"open", "inReview", "approved", "merged", "closed"}, *input.Status) {
 			writeError(w, 400, "invalid review status")
 			return
+		}
+		if slices.Contains([]string{"inReview", "approved"}, *input.Status) {
+			// Approval and requested changes are host decisions made through
+			// submit; a PATCH may only repeat the status the review has.
+			current, err := reviewByID(data, id)
+			if err != nil {
+				respondMutation(w, err, 200, nil)
+				return
+			}
+			if current.Status != *input.Status {
+				writeError(w, http.StatusBadRequest, "approve or request changes through the review decision, not a status edit")
+				return
+			}
 		}
 		if slices.Contains([]string{"open", "merged", "closed"}, *input.Status) {
 			if input.Title != nil || input.ReviewerIDs != nil || input.IssueIDs != nil || input.IssueLinkTypes != nil || input.Favorite != nil || input.Draft != nil || input.BranchState != nil {
 				writeError(w, 400, "submit repository status changes separately from metadata edits")
 				return
 			}
-			data := s.workspaceData(r)
 			current, err := reviewByID(data, id)
 			if err != nil {
 				respondMutation(w, err, 200, nil)
@@ -69,7 +129,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 			if current.Status != *input.Status {
 				posted, err := s.syncReviewStatusAs(r.Context(), data, current, statusActor, *input.Status, method)
 				if err != nil {
-					writeErrorFor(w, r, http.StatusBadGateway, err)
+					reviewActionFailed(w, r, err)
 					return
 				}
 				statusPostedAs = posted
@@ -78,7 +138,6 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 	}
 	var updated domain.CodeReview
 	if input.ReviewerIDs != nil && len(*input.ReviewerIDs) > 0 {
-		data := s.workspaceData(r)
 		review, err := reviewByID(data, id)
 		if err != nil {
 			respondMutation(w, err, 200, nil)
@@ -94,7 +153,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if err := s.markReviewReady(r.Context(), data, review); err != nil {
-				writeErrorFor(w, r, http.StatusBadGateway, err)
+				reviewActionFailed(w, r, err)
 				return
 			}
 		}
@@ -118,6 +177,9 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Status != nil {
 			if !slices.Contains([]string{"open", "inReview", "approved", "merged", "closed"}, *input.Status) {
+				return errInvalid
+			}
+			if slices.Contains([]string{"inReview", "approved"}, *input.Status) && review.Status != *input.Status {
 				return errInvalid
 			}
 			now := time.Now().UTC()
@@ -216,7 +278,11 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, actor := r.PathValue("id"), requestActor(s, r)
-	data := s.workspaceData(r)
+	data, err := s.workspaceDataWithError(r)
+	if err != nil {
+		respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
+		return
+	}
 	current, err := reviewByID(data, id)
 	if err != nil {
 		respondMutation(w, err, 200, nil)
@@ -226,9 +292,12 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "closed reviews cannot be submitted")
 		return
 	}
+	if input.Decision != "comment" && !reviewMemberCanAct(w, data) {
+		return
+	}
 	if input.Decision == "approve" && data.UserSettings[actor.ID].AutoConvertDrafts {
 		if err := s.markReviewReady(r.Context(), data, current); err != nil {
-			writeErrorFor(w, r, http.StatusBadGateway, err)
+			reviewActionFailed(w, r, err)
 			return
 		}
 	}
@@ -238,11 +307,7 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// The code host refusing the decision (for example approving your
 		// own pull request) is not an outage.
-		status := http.StatusBadGateway
-		if code := reviewRemoteStatus(err); code == http.StatusForbidden || code == http.StatusNotFound || code == http.StatusUnprocessableEntity {
-			status = http.StatusUnprocessableEntity
-		}
-		writeErrorFor(w, r, status, err)
+		reviewActionFailed(w, r, err)
 		return
 	}
 	var updated domain.CodeReview
@@ -300,7 +365,11 @@ func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, actor := r.PathValue("id"), requestActor(s, r)
-	data := s.workspaceData(r)
+	data, err := s.workspaceDataWithError(r)
+	if err != nil {
+		respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
+		return
+	}
 	current, err := reviewByID(data, id)
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
@@ -384,7 +453,11 @@ func (s *server) resolveReviewThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, commentID, actor := r.PathValue("id"), r.PathValue("commentId"), requestActor(s, r)
-	data := s.workspaceData(r)
+	data, err := s.workspaceDataWithError(r)
+	if err != nil {
+		respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
+		return
+	}
 	current, err := reviewByID(data, id)
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)

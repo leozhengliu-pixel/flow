@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_notification_visibility.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginNotificationVisibilityRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Shared selected-credential notification visibility/count/state reader owns a 2 MiB parser allowance plus size/structure-based processing and output admission through response use. One repeatable SQL snapshot binds viewer policy, recipient records, reference closure, unread count and notification revision. Exact installed logical M wins at that snapshot stamp; otherwise canonical point/header queries read only the requested reference closure. Existing resource policy predicates, filterBootstrapTeams for documents and indexed issue visibility supply viewer authorization before the selected-key intersection. Matching native headers use ResourceRead.projectNode; canonical projections reuse its size preflight and structural decode admission. Fifty notification headers and their visibility memo are discarded between count batches; unrelated workspace headers are never retained. Generated Pulse summaries stay in SQL; legal large returned bodies receive dynamic admission under the existing process budget rather than a generic page cap. Live authority is checked after closing the snapshot; recipient/workspace binding, changed-ID order/duplicates, missing-record invalidation and selected-empty unreferenced survivors are retained. TestScaleP21HotNotificationsDifferential/PagingAndAuthority/SourceChoiceAndBudgets/UnrelatedCountBound cover permissions, source selection, flags/cursors/counts, hidden actors/refs, held ownership, legal large bodies, saturation, cancellation, native membership revocation and equal retained work at 100/1000 unrelated records.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared GET notifications list, notification-state recovery and realtime state projection.",
+      "callers": ["server/server.listNotifications", "server/server.scopedNotificationState"]
+    }
+  }
+}

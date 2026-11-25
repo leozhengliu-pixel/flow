@@ -19,15 +19,8 @@ const (
 	maxSigningKeyNameRunes = 255
 )
 
-// parseCommitSigningKey validates an uploaded private key and returns only
-// display-safe metadata. Private key bytes are never part of the metadata.
-func parseCommitSigningKey(raw string) (domain.CommitSigningKey, error) {
-	key, _, err := parseCommitSigningKeyMaterial(raw)
-	return key, err
-}
-
-// parseCommitSigningKeyMaterial also returns the parsed key, whose material
-// coding sessions keep encrypted to sign commits (track E).
+// parseCommitSigningKeyMaterial returns display-safe metadata and the parsed
+// key, whose material coding sessions keep encrypted to sign commits.
 func parseCommitSigningKeyMaterial(raw string) (domain.CommitSigningKey, coding.SigningKey, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -74,7 +67,7 @@ func (s *server) signingKeyNeedsReupload(ctx context.Context, userID string) boo
 }
 
 func (s *server) getCommitSigningKey(w http.ResponseWriter, r *http.Request) {
-	_, settings, ok := s.store.AccountCollections(workspaceKey(r), requestActor(s, r).ID)
+	_, settings, ok := s.accountCollections(r.Context(), workspaceKey(r), requestActor(s, r).ID, false)
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -142,7 +135,7 @@ func (s *server) removeCommitSigningKey(w http.ResponseWriter, r *http.Request) 
 	actor := requestActor(s, r)
 	// Coding sessions (track E): the stored private key goes first, so a
 	// failure leaves the key listed and the removal can be retried.
-	if _, settings, ok := s.store.AccountCollections(workspaceKey(r), actor.ID); ok && settings.CommitSigningKey != nil {
+	if _, settings, ok := s.accountCollections(r.Context(), workspaceKey(r), actor.ID, false); ok && settings.CommitSigningKey != nil {
 		if err := s.store.DeleteSigningKeyMaterial(r.Context(), actor.ID); err != nil {
 			slog.ErrorContext(r.Context(), "commit signing key material not deleted", "user_id", actor.ID, "error", err.Error())
 			writeError(w, http.StatusInternalServerError, "the signing key could not be removed; try again")

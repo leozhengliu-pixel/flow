@@ -1,0 +1,21 @@
+{
+  "source": "store/notification_delivery_records.go",
+  "unmigrated": 0,
+  "consumers": {
+    "notificationDeliverySnapshot": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Reviewed as an explicit off-only/rejection boundary, not as a by-value bounded reader. Both public legacy APIs immediately forward unchanged arguments to this implementation; its first statement returns an empty Bootstrap and ErrBoundedMetadataCoverage in bounded representation before metadata, SQL or cold admission. TestScaleP21HotDeliveryLegacyBoundaryAST audits all production selectors/method values in store and server: seven references across six allowlisted boundaries. Direct legacy calls are exclusively off-mode; immediate email's two captured method values have exactly one off-mode invocation and cannot escape; bounded branches use BeginDueNotificationDeliveryRead or BeginNotificationDeliveryContextRead. Negative AST fixtures reject new callers/method values, extra calls, reversed/unrelated guards, closure/alias escapes and bounded alias invocation. TestScaleP21HotDeliveryLegacyRejectsAndColdFacade proves direct bounded rejection with zero SQL/cold admission, then exact complete old responses for both APIs on a private non-bounded cold facade under its single replica slot, including a 400000-byte metadata body, and graph/slot cleanup afterward. Existing rendering/source/count/writer tests retain their separate reviewed owned-reader contract. Final boundary tests pass persistent SQLite count2, zero mismatches/held work; frozen delivery implementations are unchanged.",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "HOT callers retain only guarded off-mode legacy edges; every bounded edge uses owned readers. Direct bounded compatibility calls reject before work, while an explicitly admitted cold facade runs the unchanged complete legacy implementation under its replica slot.",
+      "callers": [
+        "store/SQLiteStore.NotificationDeliveries",
+        "store/SQLiteStore.NotificationDeliverySnapshot"
+      ]
+    }
+  }
+}

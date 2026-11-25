@@ -5,6 +5,7 @@ import { toast } from '@/lib/toast'
 import { insertEmbedFiles } from './file-extension'
 import { openLightbox, type LightboxItem } from '@/components/editor/lightbox-bridge'
 import { importTextFile, isTextImportFile } from '@/components/editor/markdown-paste'
+import { directiveUrlKey, encodeDirectiveUrl } from '@/lib/directive-url'
 
 export type DescriptionImageUpload = (file: File) => Promise<string>
 export type DescriptionImageComment = (selection: { text: string; from: number; to: number; src: string }) => void
@@ -31,7 +32,15 @@ export function descriptionImageSrcs(markdown: string, state?: string, data?: Re
     try { walk(JSON.parse(state) as unknown) } catch { /* markdown-only records */ }
   }
   if (data) walk(data)
+  // Bodies write attachment URLs in their directive encoding: add the comparable key so a raw attachment URL
+  // (`attachmentInBody`) still finds its encoded reference.
+  for (const src of [...srcs]) srcs.add(directiveUrlKey(src))
   return srcs
+}
+
+/** Whether a set from `descriptionImageSrcs` references the attachment URL, raw or directive-encoded. */
+export function attachmentInBody(srcs: Set<string>, url: string) {
+  return srcs.has(url) || srcs.has(directiveUrlKey(url))
 }
 
 export const DescriptionImage = Node.create({
@@ -110,7 +119,7 @@ export const DescriptionImage = Node.create({
   parseMarkdown: (token, helpers) => helpers.createNode('image', { src: String(token.href ?? token.src ?? ''), alt: String(token.text ?? ''), title: token.title ? String(token.title) : null }),
   renderMarkdown: node => {
     const alt = String(node.attrs?.alt ?? '')
-    const src = String(node.attrs?.src ?? '')
+    const src = encodeDirectiveUrl(String(node.attrs?.src ?? ''))
     const title = node.attrs?.title ? ` "${String(node.attrs.title)}"` : ''
     return `![${alt}](${src}${title})`
   },
@@ -206,7 +215,7 @@ function persistImage(view: EditorView, placeholder: string, file: File, upload?
     URL.revokeObjectURL(placeholder)
   }
   if (!upload) return
-  return upload(file).then(url => apply(url)).catch(error => { apply(null); toast.error(error instanceof Error && error.message ? error.message : `Could not upload ${file.name}`) })
+  return upload(file).then(url => apply(encodeDirectiveUrl(url))).catch(error => { apply(null); toast.error(error instanceof Error && error.message ? error.message : `Could not upload ${file.name}`) })
 }
 
 function applyImageAttrs(img: HTMLImageElement, attrs: Record<string, unknown>) {

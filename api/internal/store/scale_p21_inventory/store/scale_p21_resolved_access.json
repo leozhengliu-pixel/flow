@@ -1,0 +1,18 @@
+{
+  "source": "store/scale_p21_resolved_access.go",
+  "unmigrated": 0,
+  "consumers": {
+    "MutateWorkspaceResolved": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Transaction-local planner derives additional Read keys from an owned selected snapshot, rehydrates the validated union under the original transaction and P15 bounds, and never permits additional writes. TestScaleP21SW0ResolvedReferenceDifferential and RejectsAndDispatch compare exact off dispatch, canonical/event/reference parity, unchanged read-only SQL rows, owned declarations/snapshots, callback and resolver errors, invalid/over-budget scopes, cancellation and admission recovery. Persistent SQLite count2 and SW20 permission/reference differentials pass; each consumer remains responsible for its complete reference closure.",
+      "accessors": ["MutateWorkspace", "MutateWorkspaceScoped"]
+    },
+    "MutateWorkspaceResolvedWithAggregate": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Preserves the exact original aggregate-returning accessor off mode. On mode the transaction-local planner adds only validated read keys under fixed admission and P15 record/byte bounds; callback validation uses refreshed input while reference-only event enrichment does not persist read records. TestScaleP21SW0ResolvedRejectsAndDispatch covers successful bounded aggregate-returning recovery, errors, rollback, cancellation, ownership and exact off dispatch; reference and SW20 consumer differentials pass twice on persistent SQLite.",
+      "accessors": ["MutateWorkspaceWithAggregate", "MutateWorkspaceScopedWithAggregate"]
+    }
+  }
+}

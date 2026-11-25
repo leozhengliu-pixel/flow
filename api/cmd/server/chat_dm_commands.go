@@ -21,8 +21,13 @@ import (
 // chatDMComment adds the member's reply to a personal notification card as a
 // comment on its issue.
 func (s *server) chatDMComment(ctx context.Context, dm chatDMRequest, thread chatDMThread, text string) error {
+	if s.store.BoundedMetadataEnabled() {
+		var closeOutputs func()
+		ctx, closeOutputs = beginMetadataOutputReads(ctx)
+		defer closeOutputs()
+	}
 	var issue domain.Issue
-	if err := s.chatAuthorizedMutation(dm.authContext(ctx), dm.target.Workspace, dm.identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(thread.IssueID), nil, &issue); err != nil {
+	if err := s.chatAuthorizedPointRead(dm.authContext(ctx), dm.target.Workspace, dm.identity.UserID, "/api/issue-records/"+url.PathEscape(thread.IssueID), &issue); err != nil {
 		return s.chatDMCommandFailure(ctx, dm, err, chatDMText(dm.zh, "You can no longer open this issue in Flow.", "你已无法在 Flow 中打开这个事项。"))
 	}
 	if strings.TrimSpace(text) == "" {
@@ -162,7 +167,22 @@ func (s *server) chatDMMyIssues(ctx context.Context, dm chatDMRequest) error {
 // chatDMInbox lists the member's latest notifications, unread first marked,
 // leaving out those about issues they can no longer open.
 func (s *server) chatDMInbox(ctx context.Context, dm chatDMRequest) error {
-	data, ok := s.store.WorkspaceMetadata(dm.target.Workspace)
+	var data domain.Bootstrap
+	var display *store.ChatDisplayRead
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		var err error
+		display, ok, err = s.store.BeginChatDisplayRead(ctx, dm.target.Workspace, store.ChatDisplayRequest{})
+		if err != nil {
+			return err
+		}
+		if ok {
+			defer display.Close()
+			data = display.Data
+		}
+	} else {
+		data, ok = s.store.WorkspaceMetadata(dm.target.Workspace)
+	}
 	if !ok {
 		return chatInvalid("workspace unavailable")
 	}
@@ -201,6 +221,12 @@ func (s *server) chatDMInbox(ctx context.Context, dm chatDMRequest) error {
 	for _, notification := range page.Notifications {
 		if notification.IssueID != "" && notification.ReviewID == "" && !visible[notification.IssueID] {
 			continue
+		}
+		if display != nil && notification.ReviewID != "" {
+			if err := display.LoadReview(ctx, notification.ReviewID); err != nil {
+				return err
+			}
+			data.Reviews = display.Data.Reviews
 		}
 		item, err := notificationSummary(&data, root, notification)
 		if err != nil {
@@ -249,6 +275,11 @@ func (s *server) chatDMFlowLink(text string) (chatDMLink, bool) {
 
 // chatDMLinkPreview shows what a pasted link is, when the member can open it.
 func (s *server) chatDMLinkPreview(ctx context.Context, dm chatDMRequest, link chatDMLink) error {
+	if s.store.BoundedMetadataEnabled() {
+		var closeOutputs func()
+		ctx, closeOutputs = beginMetadataOutputReads(ctx)
+		defer closeOutputs()
+	}
 	// With the app's link preview configured, the platform already shows a
 	// preview of the link (chat_unfurl.go); a second card would repeat it.
 	if s.chatLinkPreviewConfigured(ctx, dm.record) {
@@ -273,7 +304,7 @@ func (s *server) chatDMLinkPreview(ctx context.Context, dm chatDMRequest, link c
 	switch link.Kind {
 	case "issue":
 		var issue domain.Issue
-		if err := s.chatAuthorizedMutation(dm.authContext(ctx), dm.target.Workspace, dm.identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(link.Ref), nil, &issue); err != nil {
+		if err := s.chatAuthorizedPointRead(dm.authContext(ctx), dm.target.Workspace, dm.identity.UserID, "/api/issue-records/"+url.PathEscape(link.Ref), &issue); err != nil {
 			return s.chatDMCommandFailure(ctx, dm, err, noAccess)
 		}
 		card = s.chatDMIssueCard(dm.target.Workspace, issue, dm.zh)

@@ -1,0 +1,24 @@
+{
+  "source": "server/scale_p21_comment_action_writes.go",
+  "unmigrated": 0,
+  "consumers": {
+    "commentActionGenerationInputs": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Replaces generateCommentActions' two broad reads while keeping their separate boundaries: the contextless existence probe is the installed identity read, the authenticated projection is BeginIssueBootstrapRead (the same PagedWorkspaceMetadata over an owned installed source; the states, labels and users the prompt serializes are real values, not body tokens), followed by the unchanged IssueQueryAccess. Development keeps the raw installed viewer and its own viewerRole instead of the bootstrap's admin role. The read is owned by the generation run until it returns.",
+      "accessors": ["BeginInstalledWorkspaceIdentityRead", "BeginIssueBootstrapRead"],
+      "temperature": "hot",
+      "temperatureReason": "Background comment action generation inputs.",
+      "callers": ["server/scale_p21_comment_action_writes.go:generateCommentActionsBounded"]
+    },
+    "generateCommentActionsBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The literal generation body (policy recheck, authorized parent walk, claim and append callbacks, prompt, model request, strict proposal decoding, validation and dedup) over the bounded inputs and the closed comment action writer, with an independent output owner held through inference, the prompt and every kept proposal admitted. TestScaleP21CommentActionGenerationDifferential compares legacy, warm and SQL-reloaded runs (narrow inputs on and off) including the captured model requests: update and link/sub-issue proposals with duplicates, invalid and unknown-field calls, an owner actor, an already claimed comment, an existing action for the comment, and a comment rewrite, a setting turned off, a raced action and an archived issue between claim and append, and a parent-only grant that the claim's issue scope denies. Persistent SQLite twice and race pass.",
+      "accessors": ["MutateWorkspace"],
+      "temperature": "hot",
+      "temperatureReason": "Conditional asynchronous child of the hot create-comment path.",
+      "callers": ["server/comment_actions.go:generateCommentActions"]
+    }
+  }
+}

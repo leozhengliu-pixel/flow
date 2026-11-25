@@ -1,7 +1,7 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { ChevronRight, Layers3, Plus } from 'lucide-react'
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import './virtual-property-options.css'
 import { createPortal } from 'react-dom'
@@ -9,6 +9,7 @@ import { LabelGroupIcon, LabelIcon, NoAssigneeIcon, ProjectIcon, PriorityIcon } 
 import { LabelHoverPreview } from './label-hover-preview'
 import { usePropertyCommand } from './use-property-command'
 import { groupOptionSections } from '@/lib/group-options'
+import { matchesSearch } from '@/lib/search-match'
 import { treeGuideLevels } from '@/lib/team-hierarchy'
 import { fitTreeMenu } from '@/lib/tree-menu-width'
 import { readLabelUsage, recordLabelUsage } from '@/lib/label-usage'
@@ -16,6 +17,7 @@ import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import type { LabelResourceType } from '@/types/flow'
 import { useI18n } from '@/i18n/i18n'
 import { ProjectLabelMenuContent } from './project-label-menu-content'
+import { labelMenuModel, type LabelMenuEntry, type LabelMenuGroup } from './label-menu-model'
 import { directoryPerson, isPeopleProperty, personSearchText, type PersonIdentity } from '@/lib/people'
 import { usePeopleDirectory } from './people-context'
 import { PersonInfo } from './person-info'
@@ -26,6 +28,8 @@ import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { PhoneMenu } from '@/components/ui/phone-menu'
 import { usePhoneSheetRecord } from './phone-sheet-context'
+import { usePhoneSubmenuLevel } from '@/components/ui/use-phone-submenu-level'
+import { SubmenuChevron } from '@/components/ui/submenu-chevron'
 
 export interface PropertyOption {
   searchOnly?: boolean
@@ -158,7 +162,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   }
   const personCard = hoverClassName === 'assignee-person-surface'
   const kind = explicitKind ?? (multiple && label === 'Labels' ? 'labels' : label === 'Project' ? 'project' : 'standard')
-  const orderedOptions = useMemo(() => multiple && kind !== 'labels' ? [...menuOptions.filter(option => selectedSet.has(option.id)), ...menuOptions.filter(option => !selectedSet.has(option.id))] : menuOptions, [menuOptions, multiple, kind, selectedSet])
+  const orderedOptions = useMemo(() => kind === 'labels' ? menuOptions.map(option => option.groupLabel ? { ...option, keywords: `${option.keywords ?? ''} ${option.groupLabel}` } : option) : multiple ? [...menuOptions.filter(option => selectedSet.has(option.id)), ...menuOptions.filter(option => !selectedSet.has(option.id))] : menuOptions, [menuOptions, multiple, kind, selectedSet])
   const { inputRef: commandInputRef, ...command } = usePropertyCommand({
     highlightOnOpen: kind !== 'labels',
     autoFocus: kind !== 'project-labels',
@@ -171,11 +175,25 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     intercept: option => { if (!option.submenu) return false; setOpenSubmenuId(option.id); return true },
     onSelect: option => { if (kind === 'labels') recordLabelUsage(option.id); void onChange?.(option.id) },
   })
-  const labelMenu = groupLabelOptions(command.filteredOptions, selectedSet)
-  // The reference's label picker: with nothing selected and no query, labels already in use (on issues, or picked by the viewer before) list first under "Frequently used".
+  const labelMatches = useMemo(() => new Set(command.filteredOptions.map(option => option.id)), [command.filteredOptions])
+  const labelMenu = labelMenuModel(kind === 'labels' ? orderedOptions : [], selectedSet, command.query.trim() ? { query: command.query, matches: option => labelMatches.has(option.id), groupMatches: name => matchesSearch(command.query.trim(), [name], undefined, { fuzzy: true }) } : undefined)
+  // The reference's label picker: with nothing selected and no query, labels already in use (on issues, or picked by the viewer before) list first under "Frequently used";
+  // a label of a group names its group after it there.
   const labelUsage = kind === 'labels' && open ? readLabelUsage() : {}
-  const frequentLabels = kind === 'labels' && !groupHeading && !command.query && labelMenu.selectedOptions.length === 0 ? labelMenu.options.filter(option => (option.issueCount ?? 0) > 0 || (labelUsage[option.id] ?? 0) > 0) : []
-  const restOptions = frequentLabels.length ? labelMenu.options.filter(option => !frequentLabels.includes(option)) : labelMenu.options
+  const frequentLabels: LabelMenuEntry[] = kind === 'labels' && !groupHeading && !command.query && labelMenu.selected.length === 0 ? orderedOptions.filter(option => !selectedSet.has(option.id) && ((option.issueCount ?? 0) > 0 || (labelUsage[option.id] ?? 0) > 0)).map(option => ({ type: 'label', option, groupName: option.groupId && option.groupLabel ? 'detail' : undefined })) : []
+  const frequentIds = new Set(frequentLabels.map(entry => entry.type === 'label' ? entry.option.id : ''))
+  const notFrequent = (entry: LabelMenuEntry) => entry.type === 'group' || !frequentIds.has(entry.option.id)
+  // Team labels (and groups) list under their own heading above the workspace's, as in the reference.
+  const labelSections = [
+    { id: 'frequent', heading: 'Frequently used', entries: frequentLabels },
+    { id: 'team', heading: 'Team labels', entries: labelMenu.team.filter(notFrequent) },
+    { id: 'workspace', heading: groupHeading ?? 'Workspace labels', entries: labelMenu.workspace.filter(notFrequent) },
+  ].filter(section => section.entries.length > 0).map((section, index, list) => section.id === 'workspace' && list[index - 1]?.id === 'frequent' ? { ...section, id: 'workspace-after-frequent' } : section)
+  const labelRowCount = labelMenu.selected.length + labelSections.reduce((count, section) => count + section.entries.length, 0)
+  const showLabelHeadings = showGroupHeadings && (Boolean(groupHeading) || !command.query)
+  const labelEntry = (entry: LabelMenuEntry, checked: boolean) => entry.type === 'group'
+    ? <LabelGroupOption key={`group:${entry.group.id}`} group={entry.group} open={openLabelGroupId === entry.group.id} selectedIds={selectedSet} listboxId={listboxId} onOpenChange={next => setOpenLabelGroupId(next ? entry.group.id : undefined)} onChoose={option => { command.choose(option); setOpen(false) }} onClear={() => { const option = entry.group.options.find(item => selectedSet.has(item.id)); if (option) command.choose(option) }} onCreate={onCreate ? name => { setOpen(false); void onCreate(name, entry.group.id) } : undefined}/>
+    : <CommandOption key={entry.option.id} option={entry.option} groupName={entry.groupName} active={entry.option.id === command.activeId} checked={checked} labelHover listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(entry.option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(entry.option.id) }}/>
   const noProject = command.filteredOptions.filter(option => !option.id)
   const projects = command.filteredOptions.filter(option => option.id)
   const selectedProjects = projects.filter(option => command.isSelected(option.id))
@@ -185,7 +203,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const canCreateStandard = kind === 'standard' && Boolean(createOptionLabel && onCreate && createName && !options.some(option => option.label.toLocaleLowerCase() === createName.toLocaleLowerCase()))
   const createStandard = () => { if (!canCreateStandard || !onCreate) return; setOpen(false); void onCreate(createName) }
   const canCreateMilestone = kind === 'milestone' && Boolean(onCreate && createName && !options.some(option => option.label.toLocaleLowerCase() === createName.toLocaleLowerCase()))
-  const showLabelCreateHint = kind === 'labels' && Boolean(emptyLabel && !createName && !command.filteredOptions.length)
+  const showLabelCreateHint = kind === 'labels' && Boolean(emptyLabel && !createName && !labelRowCount)
   const createLabelText = kind === 'labels' ? 'Create new workspace label' : t('Create new label')
   const createLabel = () => { if (!canCreateLabel || !onCreate) return; setOpen(false); void onCreate(createName) }
   const createMilestone = () => { if (!canCreateMilestone || !onCreate) return; setOpen(false); void onCreate(createName) }
@@ -228,12 +246,12 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
             {(searchShortcut ?? (kind === 'labels' ? 'L' : kind === 'project' ? 'Shift P' : undefined)) && <SearchShortcut value={searchShortcut ?? (kind === 'labels' ? 'L' : 'Shift P')}/>}
           </div>
           {kind === 'standard' && command.filteredOptions.length > 60 ? <VirtualStandardOptions options={command.filteredOptions} activeId={command.activeId} selected={selectedSet} label={label} multiple={multiple} listboxId={listboxId} onChoose={command.choose} onActive={command.setActiveId}/> : <div id={listboxId} className="property-command-options" role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} onWheel={event => event.stopPropagation()}>
-            {kind === 'labels' && <>{labelMenu.selectedOptions.length > 0 && <>{showGroupHeadings && groupHeading && <div className="property-command-group">{t('Frequently used')}</div>}{labelMenu.selectedOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked labelHover listboxId={listboxId} icon={iconFor(label)} multi showGroupLabel onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>)}{!groupHeading && !command.query && (restOptions.length > 0 || labelMenu.groups.length > 0) && <div className="property-command-separator" role="separator"/>}</>}{frequentLabels.length > 0 && <>{showGroupHeadings && <div className="property-command-group">{t('Frequently used')}</div>}{frequentLabels.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} labelHover listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>)}</>}{showGroupHeadings && (restOptions.length > 0 || labelMenu.groups.length > 0) && (groupHeading || !command.query) && <div className="property-command-group">{t(groupHeading ?? 'Workspace labels')}</div>}{labelMenu.groups.map(group => <LabelGroupOption key={group.id} group={group} open={openLabelGroupId === group.id} selectedIds={selectedSet} listboxId={listboxId} onOpenChange={next => setOpenLabelGroupId(next ? group.id : undefined)} onChoose={option => command.choose(option)} onCreate={onCreate ? name => { setOpen(false); void onCreate(name, group.id) } : undefined}/>)}{restOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} labelHover listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>) }{canCreateLabel && <button data-i18n-ignore type="button" className="property-command-create" role="option" aria-label={`${createLabelText}: ${createName}`} onClick={createLabel}><Plus size={15}/><span data-i18n-ignore>{createLabelText}: <strong data-i18n-ignore>"{createName}"</strong></span></button>}{showLabelCreateHint && <div aria-disabled="true" className="property-command-create-hint" data-i18n-ignore role="option"><Plus size={16}/><span>{emptyLabel}</span></div>}</>}
+            {kind === 'labels' && <>{labelMenu.selected.length > 0 && <>{labelMenu.selected.map(entry => labelEntry(entry, true))}{!command.query && labelSections.length > 0 && <div className="property-command-separator" role="separator"/>}</>}{labelSections.map((section, index) => <Fragment key={section.id}>{index > 0 && section.id !== 'workspace-after-frequent' && showLabelHeadings && <div className="property-command-separator" role="separator"/>}{showLabelHeadings && <div className="property-command-group">{t(section.heading)}</div>}{section.entries.map(entry => labelEntry(entry, false))}</Fragment>)}{canCreateLabel && <button data-i18n-ignore type="button" className="property-command-create" role="option" aria-label={`${createLabelText}: ${createName}`} onClick={createLabel}><Plus size={15}/><span data-i18n-ignore>{createLabelText}: <strong data-i18n-ignore>"{createName}"</strong></span></button>}{showLabelCreateHint && <div aria-disabled="true" className="property-command-create-hint" data-i18n-ignore role="option"><Plus size={16}/><span>{emptyLabel}</span></div>}</>}
             {kind === 'project' && <>{noProject.map(option => <CommandOption key="none" option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{selectedProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{otherProjects.length > 0 && <div className="property-command-group">{teamName ? t('Projects in {team} team').replace('{team}', () => teamName) : t('Projects')}</div>}{otherProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{onCreate&&<><div className="property-command-group">{t('New project')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new project…')} onClick={()=>{setOpen(false);void onCreate('')}}><Plus size={15}/><span>{t('Create new project…')}</span></button></>}</>}
             {kind === 'milestone' && <>{command.filteredOptions.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{canCreateMilestone&&<><div className="property-command-group">{t('New project milestone')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new milestone…')} onClick={createMilestone}><Plus size={15}/><span>{t('Create new milestone…')}</span></button></>}</>}
             {kind === 'standard' && groupOptionSections(command.filteredOptions).map(section => { const guides = treeGuideLevels(section.options.map(option => option.indent ?? 0)); return <div className="property-command-section" data-unlabelled={!section.label || undefined} key={section.id} style={{ '--property-option-count': section.options.length } as CSSProperties}>{section.label && <div className="property-command-group">{t(section.label)}</div>}{section.options.map((option, index) => <CommandOption rowIndex={index} treeThrough={guides[index]} key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} submenuOpen={openSubmenuId === option.id} onSubmenuOpenChange={next => setOpenSubmenuId(next ? option.id : undefined)} onSubmenuChosen={() => setOpen(false)} onChoose={() => command.choose(option)} onActive={() => { if (openSubmenuId && openSubmenuId !== option.id) setOpenSubmenuId(undefined); command.setActiveId(option.id) }}/>)}</div> }) }
             {canCreateStandard && createOptionLabel && <button type="button" className="property-command-create" role="option" aria-label={createOptionLabel(createName)} onClick={createStandard}><Plus size={16}/><span data-i18n-ignore>{createOptionLabel(createName)}</span></button>}
-            {!command.filteredOptions.length && !canCreateLabel && !canCreateMilestone && !canCreateStandard && !showLabelCreateHint && <div className="core-property-empty">{t(emptyLabel ?? 'No results')}</div>}
+            {!(kind === 'labels' ? labelRowCount : command.filteredOptions.length) && !canCreateLabel && !canCreateMilestone && !canCreateStandard && !showLabelCreateHint && <div className="core-property-empty">{t(emptyLabel ?? 'No results')}</div>}
           </div>}
         </div>
   if (embedded) return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}>{content}</Tooltip.Provider>
@@ -268,27 +286,16 @@ function VirtualStandardOptions({ options, activeId, selected, label, multiple, 
   return <Virtuoso ref={ref} id={listboxId} role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} className="property-command-options virtual-property-options" data={rows} fixedItemHeight={phone ? undefined : 32} defaultItemHeight={phone ? 46 : 32} initialTopMostItemIndex={activeIndex} increaseViewportBy={64} computeItemKey={(_index, row) => row.key} style={{height:Math.min(phone ? 369 : 319, rows.length*(phone ? 46 : 32))}} itemContent={(_index,row) => row.option ? <CommandOption option={row.option} treeThrough={row.through} active={row.option.id===activeId} checked={selected.has(row.option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={()=>onChoose(row.option!)} onActive={()=>onActive(row.option!.id)}/> : <div className="property-command-group" style={{height:phone ? 30 : 32}}>{t(row.heading)}</div>}/>
 }
 
-function groupLabelOptions(options: PropertyOption[], selectedIds: Set<string>) {
-  const direct: PropertyOption[] = []
-  const groups = new Map<string, { id: string; label: string; color?: string; options: PropertyOption[] }>()
-  for (const option of options) {
-    if (!option.groupId || !option.groupLabel) { direct.push(option); continue }
-    const group = groups.get(option.groupId) ?? { id: option.groupId, label: option.groupLabel, color: option.groupColor, options: [] }
-    group.options.push(option)
-    groups.set(option.groupId, group)
-  }
-  return {
-    selectedOptions: [...direct.filter(option => selectedIds.has(option.id)), ...[...groups.values()].flatMap(group => group.options.filter(option => selectedIds.has(option.id)))],
-    options: direct.filter(option => !selectedIds.has(option.id)),
-    groups: [...groups.values()],
-  }
-}
-
-function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, onChoose, onCreate }: { group: { id: string; label: string; color?: string; options: PropertyOption[] }; open: boolean; selectedIds: Set<string>; listboxId: string; onOpenChange: (open: boolean) => void; onChoose: (option: PropertyOption) => void; onCreate?: (name: string) => void }) {
+function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, onChoose, onClear, onCreate }: { group: LabelMenuGroup; open: boolean; selectedIds: Set<string>; listboxId: string; onOpenChange: (open: boolean) => void; onChoose: (option: PropertyOption) => void; onClear: () => void; onCreate?: (name: string) => void }) {
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string>()
   const inputRef = useRef<HTMLInputElement>(null)
   const openTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null)
+  const [content, setContent] = useState<HTMLDivElement | null>(null)
+  // Phones replace the label list with the group's labels (a search field named after the group, then its labels), as in the reference,
+  // instead of opening a side menu off-screen.
+  const phone = usePhoneSubmenuLevel(open, trigger, content)
   const { t } = useI18n()
   const createName = query.trim()
   const canCreate = Boolean(onCreate && createName && !group.options.some(option => option.label.toLocaleLowerCase() === createName.toLocaleLowerCase()))
@@ -301,9 +308,10 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
     setActiveId(group.options.find(option => selectedIds.has(option.id))?.id ?? group.options[0]?.id)
     requestAnimationFrame(() => inputRef.current?.focus())
   }
-  const choose = (option: PropertyOption) => { onChoose(option); onOpenChange(false) }
+  // Choosing a label of a group closes the whole picker, as in the reference.
+  const choose = (option: PropertyOption) => { onOpenChange(false); onChoose(option) }
   const openFromHover = () => {
-    if (open || openTimer.current) return
+    if (phone || open || openTimer.current) return
     openTimer.current = setTimeout(() => { openTimer.current = undefined; changeOpen(true) }, 300)
   }
   const cancelHoverOpen = () => {
@@ -325,12 +333,12 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
       if (option) { event.preventDefault(); choose(option) }
     }
   }
-  return <Popover.Root open={open} onOpenChange={changeOpen}><Popover.Anchor asChild><button type="button" className="property-command-label-group-option" role="option" aria-selected={open} aria-haspopup="listbox" aria-expanded={open} onPointerEnter={openFromHover} onPointerLeave={cancelHoverOpen} onFocus={() => changeOpen(true)} onClick={() => changeOpen(true)}>
-    <span className="property-command-option-background"/><span className="property-command-checkbox"/><span className="property-command-icon"><LabelGroupIcon color={group.color ?? group.options[0]?.color ?? 'currentColor'} size={16}/></span><span className="property-command-group-copy"><span className="property-command-label">{group.label}</span></span><ChevronRight className="property-command-group-chevron" size={13}/>
-  </button></Popover.Anchor><Popover.Portal><Popover.Content data-flow-motion="floating" className="property-command-label-submenu" side="right" align="start" alignOffset={-6} sideOffset={-2} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}><div onKeyDown={onKeyDown}><div className="property-command-search"><input ref={inputRef} value={query} onChange={event=>{setQuery(event.target.value);const normalized=event.target.value.trim().toLocaleLowerCase();setActiveId(group.options.find(option=>option.label.toLocaleLowerCase().includes(normalized))?.id)}} aria-label={group.label} placeholder={group.label} autoComplete="off" spellCheck={false}/></div><div className="property-command-options" role="listbox" aria-label={group.label}>{filtered.map(option => <CommandOption key={option.id} option={option} active={option.id === activeId} checked={selectedIds.has(option.id)} listboxId={`${listboxId}-${group.id}`} icon={<LabelIcon size={14}/>} onChoose={() => choose(option)} onActive={() => setActiveId(option.id)}/>)}{canCreate&&<button type="button" className="property-command-create" role="option" aria-label={`${t('Create label in group')} "${group.label}": "${createName}"`} onClick={() => onCreate?.(createName)}><Plus size={15}/><span data-i18n-ignore>{t('Create label in group')} "{group.label}": <strong data-i18n-ignore>"{createName}"</strong></span></button>}{!filtered.length&&!canCreate&&<div className="core-property-empty">{t('No results')}</div>}</div></div></Popover.Content></Popover.Portal></Popover.Root>
+  return <Popover.Root open={open} onOpenChange={changeOpen}><Popover.Anchor asChild><button ref={setTrigger} type="button" className="property-command-label-group-option" role="option" aria-label={group.detail ? `${group.label} ${group.detail}` : group.label} aria-selected={open} aria-checked={group.checked} aria-haspopup="listbox" aria-expanded={open} onPointerEnter={openFromHover} onPointerLeave={cancelHoverOpen} onFocus={() => { if (!phone) changeOpen(true) }} onClick={() => changeOpen(true)}>
+    <span className="property-command-option-background"/>{group.checked && <span className="property-command-checkbox" onPointerDown={event => event.preventDefault()} onClick={event => { event.stopPropagation(); cancelHoverOpen(); onOpenChange(false); onClear() }}><CheckboxMark/></span>}<span className="property-command-icon"><LabelGroupIcon color={group.color ?? group.options[0]?.color ?? 'currentColor'} size={16}/></span><span className="property-command-group-copy"><span className="property-command-label" data-i18n-ignore>{group.label}</span>{group.detail && <span className="property-command-group-detail" data-i18n-ignore>{group.detail}</span>}</span><span className="property-command-group-chevron"><SubmenuChevron/></span>
+  </button></Popover.Anchor><Popover.Portal><Popover.Content ref={setContent} data-flow-motion="floating" data-phone-submenu={phone ? '' : undefined} className="property-command-label-submenu" side="right" align="start" alignOffset={-6} sideOffset={-2} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (phone) event.preventDefault() }} onInteractOutside={event => { if (phone && event.target instanceof Node && trigger?.contains(event.target)) event.preventDefault() }}><div onKeyDown={onKeyDown}><div className="property-command-search"><input ref={inputRef} value={query} onChange={event=>{setQuery(event.target.value);const normalized=event.target.value.trim().toLocaleLowerCase();setActiveId(group.options.find(option=>option.label.toLocaleLowerCase().includes(normalized))?.id)}} aria-label={group.label} placeholder={group.label} autoComplete="off" spellCheck={false}/></div><div className="property-command-options" role="listbox" aria-label={group.label}>{filtered.map(option => <CommandOption key={option.id} option={option} active={option.id === activeId} checked={selectedIds.has(option.id)} listboxId={`${listboxId}-${group.id}`} icon={<LabelIcon size={14}/>} onChoose={() => choose(option)} onActive={() => setActiveId(option.id)}/>)}{canCreate&&<button type="button" className="property-command-create" role="option" aria-label={`${t('Create label in group')} "${group.label}": "${createName}"`} onClick={() => onCreate?.(createName)}><Plus size={15}/><span data-i18n-ignore>{t('Create label in group')} "{group.label}": <strong data-i18n-ignore>"{createName}"</strong></span></button>}{!filtered.length&&!canCreate&&<div className="core-property-empty">{t('No results')}</div>}</div></div></Popover.Content></Popover.Portal></Popover.Root>
 }
 
-function CommandOption({ option, active, checked, icon, labelHover = false, listboxId, multi = false, rowIndex, showGroupLabel = false, submenuOpen = false, treeThrough, onSubmenuOpenChange, onSubmenuChosen, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; labelHover?: boolean; listboxId: string; multi?: boolean; rowIndex?: number; showGroupLabel?: boolean; treeThrough?: number[]; submenuOpen?: boolean; onSubmenuOpenChange?: (open: boolean) => void; onSubmenuChosen?: () => void; onChoose: () => void; onActive: () => void }) {
+function CommandOption({ option, active, checked, icon, groupName, labelHover = false, listboxId, multi = false, rowIndex, submenuOpen = false, treeThrough, onSubmenuOpenChange, onSubmenuChosen, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; groupName?: 'detail' | 'path'; labelHover?: boolean; listboxId: string; multi?: boolean; rowIndex?: number; treeThrough?: number[]; submenuOpen?: boolean; onSubmenuOpenChange?: (open: boolean) => void; onSubmenuChosen?: () => void; onChoose: () => void; onActive: () => void }) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
   if (option.submenu) {
@@ -338,8 +346,14 @@ function CommandOption({ option, active, checked, icon, labelHover = false, list
     return option.hoverContent && !phone ? <OptionHover besideMenu={option.hoverBesideMenu} className={option.hoverClassName} content={option.hoverContent} suppressed={submenuOpen}>{submenuRow}</OptionHover> : submenuRow
   }
   const indent = option.indent ?? 0
-  const row = <button aria-label={option.ariaLabel} aria-disabled={option.disabled || undefined} className={showGroupLabel && option.groupLabel ? 'is-grouped-label' : undefined} data-indent={indent || undefined} style={indent || rowIndex !== undefined ? { '--option-indent': indent || undefined, '--property-option-index': rowIndex } as CSSProperties : undefined} disabled={option.disabled} id={`${listboxId}-${option.id || 'none'}`} role="option" type="button" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
-    <span className="property-command-option-background"/>{multi && !option.action && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}{indent > 0 && <TreeElbow through={treeThrough}/>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><FlowGlyph name="check" width={16} height={16}/></span>}{option.end && <span className="property-command-option-end" data-i18n-ignore={option.i18nIgnore || undefined}>{option.i18nIgnore ? option.end : t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
+  const row = <button aria-label={option.ariaLabel} aria-disabled={option.disabled || undefined} data-indent={indent || undefined} style={indent || rowIndex !== undefined ? { '--option-indent': indent || undefined, '--property-option-index': rowIndex } as CSSProperties : undefined} disabled={option.disabled} id={`${listboxId}-${option.id || 'none'}`} role="option" type="button" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
+    <span className="property-command-option-background"/>{multi && !option.action && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}{indent > 0 && <TreeElbow through={treeThrough}/>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span>{(() => { const name = <span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span>
+      // A label of a group names the group: after it (a frequently used label) or before it as "Group › Label" (a search result).
+      if (!groupName || !option.groupLabel) return name
+      return groupName === 'detail'
+        ? <span className="property-command-group-copy">{name}<span className="property-command-group-detail" data-i18n-ignore>{option.groupLabel}</span></span>
+        : <span className="property-command-group-copy is-path"><span className="property-command-group-path" data-i18n-ignore>{option.groupLabel}</span><span className="property-command-path-chevron" aria-hidden="true"><svg width="5" height="9" viewBox="0 0 5 9"><path d="M1 1.25 3.75 4.5 1 7.75" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.25"/></svg></span>{name}</span>
+    })()}{!multi && checked && <span className="property-command-check"><FlowGlyph name="check" width={16} height={16}/></span>}{option.end && <span className="property-command-option-end" data-i18n-ignore={option.i18nIgnore || undefined}>{option.i18nIgnore ? option.end : t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
   </button>
   // A touch focus must not open a desktop hover card over the next tap target.
   if (phone) return row

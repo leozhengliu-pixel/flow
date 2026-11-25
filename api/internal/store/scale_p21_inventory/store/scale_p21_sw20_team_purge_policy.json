@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_sw20_team_purge_policy.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginExpiredTeamPolicyRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted installed-policy selector consumes only ordered Teams ID/ArchivedAt values and returns owned IDs passing the exact legacy Add(window) time predicate. It preserves missing/default/NUL Go key behavior and avoids unrelated team names/settings/bodies. Two-pass cost checks and admission outside the store lock cap cloned candidate IDs at 64 MiB; the caller owns Close through processing, with a fixed 2 MiB allowance for sequential downstream inputs. An incoming same-store work lease gets an independent nonwaiting allowance, so parent release cannot uncharge the owned result; ordinary calls retain queued admission. TestScaleP21SW20ExpiredTeamPolicySnapshot/SelectedBudget/ParentLease and server PurgeExpiredTeamInputs cover source/caller ownership, exact order/time boundary, canceled/saturated admission, parent release/stale-parent handling, selected limits and ignored oversized unused IDs. This selector does not authorize or certify purgeTeam's separately inventoried mutation.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

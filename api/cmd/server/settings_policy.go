@@ -62,7 +62,10 @@ func teamOperationPermission(settings domain.TeamSettings, r *http.Request) stri
 	case strings.Contains(path, "/labels"), strings.Contains(path, "/label-groups"):
 		return settings.LabelPermission
 	case strings.Contains(path, "/templates"), strings.HasSuffix(path, "/recurring-issues"):
-		return settings.TemplatePermission
+		// A team without stored settings shows (and stores, once saved) the
+		// default "allMembers" (teamSettings); document templates read it alike
+		// (templateAccess.teamTemplatesManageable).
+		return teamTemplatePermission(settings)
 	case strings.Contains(path, "/agent-skills"):
 		return settings.AgentSkillPermission
 	case strings.Contains(path, "/loops"):
@@ -152,30 +155,36 @@ func effectiveTeamRole(data *domain.Bootstrap, teamID string, directRoles map[st
 // team memberships (team id → role; see effectiveTeamRole for inheritance) for
 // handlers that enforce role checks inside a workspace mutation, where the
 // store lock is already held. Local AUTH_DISABLED fixtures act as an admin.
-func (s *server) requestWorkspaceRole(r *http.Request) (string, map[string]string) {
+func (s *server) requestWorkspaceRole(w http.ResponseWriter, r *http.Request) (string, map[string]string, bool) {
 	teamRoles := map[string]string{}
 	if s.authDisabled {
-		return "admin", teamRoles
+		return "admin", teamRoles, true
 	}
 	userID := authUser(r).ID
 	data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
 	if !ok {
-		return "", teamRoles
+		respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+		return "", nil, false
 	}
 	role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+	if writeAuthCheckFailure(w, err) {
+		return "", nil, false
+	}
 	if err != nil || status != "active" {
-		return "", teamRoles
+		respondMutation(w, store.ErrAuthForbidden, http.StatusOK, nil)
+		return "", nil, false
 	}
 	members, err := s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
 	if err != nil {
-		return role, teamRoles
+		respondMutation(w, store.PreWriteDatabaseError(err), http.StatusOK, nil)
+		return "", nil, false
 	}
 	for _, member := range members {
 		if member.UserID == userID {
 			teamRoles[member.TeamID] = member.Role
 		}
 	}
-	return role, teamRoles
+	return role, teamRoles, true
 }
 
 // releasePipelineAdministrable's canAdministerPipeline: workspace
@@ -211,4 +220,13 @@ func releasePipelineChangeAllowed(data *domain.Bootstrap, current domain.Release
 func teamResourcePath(path string) bool {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	return len(parts) == 5 && parts[0] == "api" && parts[1] == "workspaces" && parts[3] == "teams"
+}
+
+// teamTemplatePermission is a team's template permission, empty when the team
+// has no stored settings: the default every team starts with applies.
+func teamTemplatePermission(settings domain.TeamSettings) string {
+	if settings.TemplatePermission == "" {
+		return "allMembers"
+	}
+	return settings.TemplatePermission
 }

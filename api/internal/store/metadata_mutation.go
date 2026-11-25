@@ -261,6 +261,16 @@ func metadataFieldsFromContext(ctx context.Context) ([]string, bool) {
 func metadataFieldSnapshot(data domain.Bootstrap, fields []string) domain.Bootstrap {
 	result := domain.Bootstrap{Workspace: data.Workspace, Viewer: data.Viewer, ViewerRole: data.ViewerRole, NextIssueNumber: data.NextIssueNumber}
 	source, target := reflect.ValueOf(&data).Elem(), reflect.ValueOf(&result).Elem()
+	if narrowMutationInputs() {
+		result.Workspace = cloneSnapshotValue(reflect.ValueOf(data.Workspace)).Interface().(domain.Workspace)
+		result.Viewer = cloneSnapshotValue(reflect.ValueOf(data.Viewer)).Interface().(domain.User)
+		for _, field := range persistedMetadataFields() {
+			if slices.Contains(fields, field.name) {
+				target.Field(field.index).Set(cloneSnapshotValue(source.Field(field.index)))
+			}
+		}
+		return result
+	}
 	for _, field := range persistedMetadataFields() {
 		if slices.Contains(fields, field.name) {
 			target.Field(field.index).Set(source.Field(field.index))

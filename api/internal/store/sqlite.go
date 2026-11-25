@@ -29,7 +29,9 @@ type SQLiteStore struct {
 	// install the result (installWorkspace), so readers never wait on a
 	// database round trip.
 	mu               sync.RWMutex
-	writeMu          sync.Mutex
+	writeMu          coldWriteMutex
+	coldWrite        *coldFullWrite
+	coldParent       *SQLiteStore
 	pulseIndexes     pulseIndexCache
 	issueGroupCounts issueGroupCountCache
 	workspaces       map[string]domain.Bootstrap
@@ -38,10 +40,13 @@ type SQLiteStore struct {
 	// at, when known (metadata_copy_revision.go). Guarded by mu.
 	copyRevisions     map[string]copyRevision
 	copyRevisionEpoch uint64
-	// metadataDecodes counts decodeWorkspaceMetadata calls
-	// (WorkspaceMetadataDecodes).
-	metadataDecodes atomic.Int64
-	viewer          domain.User
+	peerApplied       map[string]peerAppliedWorkspace // installed journal cursors; guarded by writeMu (scale_p11_peer_apply.go)
+	// metadataDecodes keeps the legacy decode-call diagnostic. Scoped bounded
+	// hydration does not count as a full workspace decode.
+	metadataDecodes   atomic.Int64
+	metadataResidency *metadataResidency
+	logicalTestViews  []*metadataResidency
+	viewer            domain.User
 	// The sinks are read after every committed write; atomics keep that
 	// read from queueing behind a writer holding mu.
 	realtimeSink atomic.Pointer[func(string, domain.RealtimeEvent)]
@@ -96,9 +101,30 @@ func (s *SQLiteStore) unlockWorkspaceWrites() {
 	s.writeMu.Unlock()
 }
 
+// lockWorkspaceWritesTx is lockWorkspaceWrites for a writer whose SQL under
+// the locks runs in one transaction: the transaction begins after the write
+// lock and before the store lock. A read snapshot holds a database
+// connection (SQLite has one) and may then wait for the store's read lock
+// (ResolveAccess, a resource read); a writer that waited for a connection
+// while holding the store lock deadlocked with it until a request timed out.
+// The caller ends the transaction and calls unlockWorkspaceWrites.
+func (s *SQLiteStore) lockWorkspaceWritesTx(ctx context.Context) (*sqlTx, error) {
+	s.writeMu.Lock()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.writeMu.Unlock()
+		return nil, err
+	}
+	s.mu.Lock()
+	return tx, nil
+}
+
 // storedWorkspace reads a workspace snapshot. Copy-on-write writers call it
 // while holding writeMu, so the snapshot cannot change until they install
 // their result.
+// In bounded mode this is the exact installed core/policy borrow under the
+// process resident cap. It never hydrates omitted records; each writer must
+// declare its own complete inputs before treating those records as available.
 func (s *SQLiteStore) storedWorkspace(workspaceKey string) (domain.Bootstrap, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -153,13 +179,19 @@ func (s *SQLiteStore) Close() error {
 	}
 	s.apiKeyUseMu.Unlock()
 	s.apiKeyUseWorkers.Wait()
+	s.releaseMetadataLogicalSources()
 	return s.db.Close()
 }
 func (s *SQLiteStore) WorkerContext() context.Context {
+	ctx := context.Background()
 	if s.lifecycle != nil {
-		return s.lifecycle
+		ctx = s.lifecycle
 	}
-	return context.Background()
+	if s.metadataResidency != nil {
+		// Background work runs COLD per operation (WithColdWork).
+		ctx = WithColdWork(ctx, "worker")
+	}
+	return ctx
 }
 
 // publishNotificationSignals sends notification.created for notifications a
@@ -271,14 +303,48 @@ func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) 
 }
 
 // ReloadWorkspace replaces this instance's copy of the workspace with the
-// stored one. It reads under writeMu, as a write's own reload does
-// (mutateFull): a write on this instance then cannot install its result
-// between the read and the install, so a reload never puts back a copy older
-// than the one in place (the write's result would be lost here, and the
-// instance, having counted the write as applied, would not reload again).
+// stored one. A bounded incremental reload prepares from its retained base
+// and validates it under writeMu. Other reloads hold writeMu through their
+// read and install, so a local write's result cannot be replaced by an older
+// copy.
 // A copy still at the stored metadata revision is kept without decoding the
 // workspace again (metadata_copy_revision.go).
 func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) error {
+	if s.metadataResidency != nil {
+		installed, raced := s.reloadKnownPublication(ctx, workspaceKey)
+		if installed {
+			return nil
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// A discarded delta still had a usable base. After repeated install
+		// races, rebuild that delta under the lock. Speculative full copies
+		// cost more and face the same race.
+		if s.metadataResidency.requireCoverage && !raced {
+			for range 2 {
+				handled, err := s.reloadResidentWorkspaceOptimistic(ctx, workspaceKey)
+				if !handled {
+					break
+				}
+				if !errors.Is(err, errResidentReloadRace) {
+					return err
+				}
+			}
+		}
+		started := time.Now()
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
+		trace := workspaceReloadTrace(ctx)
+		if trace == nil {
+			return s.reloadResidentWorkspace(ctx, workspaceKey)
+		}
+		trace.InstallWait += time.Since(started)
+		started = time.Now()
+		err := s.reloadResidentWorkspace(ctx, workspaceKey)
+		trace.LockedReload += time.Since(started)
+		return err
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	known, ok := s.copyRevisionOf(workspaceKey)
@@ -312,6 +378,16 @@ func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) 
 // writeMu for the reason ReloadWorkspace does. Copies still at the stored
 // metadata revision are kept without decoding them again.
 func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
+	if s.metadataResidency != nil {
+		ctx, release, err := s.metadataResidency.work.acquire(ctx, metadataPolicyBytes+2<<20)
+		if err != nil {
+			return err
+		}
+		defer release()
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
+		return s.loadResidentWorkspaces(ctx)
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
@@ -393,7 +469,22 @@ func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey strin
 
 // loadWorkspaceStamped decodes the stored workspace metadata and reads, in
 // the same snapshot, the metadata revision the result is exact at.
-func (s *SQLiteStore) loadWorkspaceStamped(ctx context.Context, workspaceKey string) (domain.Bootstrap, copyStamp, error) {
+func (s *SQLiteStore) loadWorkspaceStamped(ctx context.Context, workspaceKey string) (_ domain.Bootstrap, _ copyStamp, err error) {
+	if s.metadataResidency != nil {
+		return domain.Bootstrap{}, copyStamp{}, fmt.Errorf("%w: full workspace load %q", ErrBoundedMetadataCoverage, workspaceKey)
+	}
+	// This result can replace the canonical cache. A request's callback/read
+	// selection must never turn it into a partial workspace snapshot.
+	if _, scoped := ctx.Value(metadataRecordScopeKey{}).(MetadataRecordScope); scoped {
+		ctx = context.WithValue(ctx, metadataRecordScopeKey{}, nil)
+	}
+	defer func() {
+		// database/sql may roll this snapshot back before the reader learns
+		// its context ended. A live context still gets ErrTxDone.
+		if errors.Is(err, sql.ErrTxDone) && ctx.Err() != nil {
+			err = ctx.Err()
+		}
+	}()
 	var stamp copyStamp
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
@@ -420,6 +511,9 @@ func (s *SQLiteStore) loadWorkspaceStamped(ctx context.Context, workspaceKey str
 }
 
 func (s *SQLiteStore) migrate(ctx context.Context) error {
+	if err := s.ensurePostgresUTF8Decoder(ctx); err != nil {
+		return err
+	}
 	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name VARCHAR(191) NOT NULL, applied_at VARCHAR(40) NOT NULL)`); err != nil {
 		return fmt.Errorf("create schema migrations table: %w", err)
 	}
@@ -486,6 +580,9 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 22, name: "chat intake requests", apply: s.createChatIntakeRequestSchema},
 		{version: 23, name: "chat reply thread leases", apply: s.createChatReplyLeaseSchema},
 		{version: 24, name: "personal data exports and account erasure", apply: s.createPersonalDataSchema},
+		{version: boundedMetadataStagingSchemaVersion, name: "transactional bounded metadata write staging", apply: s.createBoundedMetadataStagingSchema},
+		{version: boundedMetadataStagingChunksSchemaVersion, name: "bounded metadata write staging chunks", apply: s.createBoundedMetadataStagingChunksSchema},
+		{version: 32, name: "versioned issue mutation receipts", apply: s.addIssueMutationReceiptVersion},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}
@@ -626,6 +723,9 @@ func (s *SQLiteStore) makeAuthEmailNullable(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
+	if s.metadataResidency != nil {
+		return s.loadResidentWorkspaces(ctx)
+	}
 	s.workspaces = map[string]domain.Bootstrap{}
 	s.copyRevisions = nil
 	historyChanged := map[string]bool{}
@@ -1130,13 +1230,6 @@ func normalize(data *domain.Bootstrap) {
 			settings.AgentSkills = []domain.TeamAgentSkill{}
 		}
 		data.TeamSettings[team.ID] = settings
-		cycle := data.CycleSettings[team.ID]
-		if cycle.DurationWeeks > 0 && cycle.Capacity == 0 {
-			cycle.Capacity = 4
-			cycle.AutoCreate = true
-			cycle.AutoMigrate = true
-			data.CycleSettings[team.ID] = cycle
-		}
 	}
 	if len(data.ProjectStatuses) == 0 {
 		data.ProjectStatuses = canonicalProjectStatuses()
@@ -1405,6 +1498,16 @@ func (s *SQLiteStore) BootstrapFor(workspaceKey string) (domain.Bootstrap, bool)
 // Propagate request cancellation through compatibility collection reads so a
 // disconnected browser does not keep decoding the workspace in the background.
 func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey string) (domain.Bootstrap, bool) {
+	if view, release, handled := s.coldProjectionView(ctx, "BootstrapFor", workspaceKey); handled {
+		defer release()
+		if view == nil {
+			return domain.Bootstrap{}, false
+		}
+		return view.BootstrapForContext(ctx, view.lastWorkspaceKey)
+	}
+	if s.skeletalRead("BootstrapFor") {
+		return domain.Bootstrap{}, false
+	}
 	s.mu.RLock()
 	if workspaceKey == "" {
 		workspaceKey = s.lastWorkspaceKey
@@ -1436,6 +1539,9 @@ func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey stri
 }
 
 func (s *SQLiteStore) CycleForCalendar(id, token string) (domain.Cycle, bool) {
+	if cycle, found, handled := s.installedCycleForCalendar(id, token); handled {
+		return cycle, found
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, data := range s.workspaces {
@@ -1446,6 +1552,33 @@ func (s *SQLiteStore) CycleForCalendar(id, token string) (domain.Cycle, bool) {
 		}
 	}
 	return domain.Cycle{}, false
+}
+
+// installedCycleForCalendar is CycleForCalendar on a bounded store, whose
+// image holds no cycles (the public calendar feed answered 404, SW559): each
+// workspace's cycles are read from its legacy view, in workspace key order.
+// handled is false flag off and on a store without installed sources (a test
+// view), which read the image as before.
+func (s *SQLiteStore) installedCycleForCalendar(id, token string) (domain.Cycle, bool, bool) {
+	if s.metadataResidency == nil || s.coldParent != nil {
+		return domain.Cycle{}, false, false
+	}
+	for _, key := range s.WorkspaceKeys() {
+		view, release, handled := s.coldAccessorView(context.Background(), "CycleForCalendar", key, []string{"cycles"})
+		if !handled {
+			return domain.Cycle{}, false, false
+		}
+		if view == nil {
+			release()
+			continue
+		}
+		cycle, found := view.CycleForCalendar(id, token)
+		release()
+		if found {
+			return cycle, true, true
+		}
+	}
+	return domain.Cycle{}, false, true
 }
 
 func (s *SQLiteStore) Account() domain.AccountBootstrap {
@@ -1484,6 +1617,21 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 }
 
 func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) (err error) {
+	if scope, scoped := metadataRecordScopeFromContext(ctx); scoped && (s.metadataResidency != nil || !projectRecordSelectionEnabled(ctx)) {
+		if err := validateMetadataRecordScope(scope); err != nil {
+			return err
+		}
+		if metadataRecordPointMutation(ctx, eventType, payload) {
+			return fmt.Errorf("%w: record scope is not supported by the %s point callback", ErrMetadataRecordQuery, eventType)
+		}
+		ctx = WithMetadataFields(ctx, metadataRecordFields(scope)...)
+		if metadataRecordVerificationEnabled(ctx) {
+			ctx = WithMetadataFields(ctx, metadataRecordOracleFields()...)
+			mutate = verifiedMetadataRecordMutationAdapter(ctx, eventType, payload, mutate)
+		} else {
+			mutate = metadataRecordMutationAdapter(ctx, mutate)
+		}
+	}
 	ctx, trace := startMutationTrace(ctx)
 	defer func() { trace.report(workspaceKey, eventType, err) }()
 	// Audit entries the callback stages are committed by the mutation's own
@@ -1516,6 +1664,86 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 }
 
 func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	if s.coldParent != nil {
+		if s.coldWrite == nil {
+			return ErrBoundedMetadataCoverage
+		}
+		if err := validateColdMetadataMutation(ctx, eventType, payload); err != nil {
+			return err
+		}
+	}
+	if s.metadataResidency != nil {
+		ctx = trackMetadataWorkDemand(ctx)
+		if advancedScheduleMaintenance(ctx) != nil && eventType == "schedules.maintained" {
+			return s.mutateBoundedAdvancedSchedule(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if reply, selected := agentReplyNotificationFromContext(ctx); selected && eventType == "agent_task.replied" {
+			if reply.Kind == "issue" {
+				return s.mutateBoundedScopedIssuePoint(ctx, workspaceKey, eventType, payload, scopedIssueAgentReplyProfile, mutate)
+			}
+			return s.mutateBoundedScopedImage(ctx, workspaceKey, eventType, payload, agentReplyImageProfile{reply: reply}, mutate)
+		}
+		if resolution, selected := commentActionResolutionFromContext(ctx); selected && eventType == "issue.updated" && !UsesIssueRecordMutations(ctx) {
+			return s.mutateBoundedScopedImage(ctx, workspaceKey, eventType, payload, &commentActionResolveProfile{resolution: resolution}, mutate)
+		}
+		if commentActionProposalEvent(ctx, eventType) && IsIssueDiscussionMutation(ctx) {
+			return s.mutateBoundedCommentActionProposal(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if _, selected := cycleScheduleMaintenance(ctx); selected && eventType == "cycles.automatically_maintained" {
+			return s.mutateBoundedCycleSchedule(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if boundedDocumentUpdateEvent(ctx, eventType) {
+			return s.mutateBoundedDocumentUpdate(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if boundedRecurringOccurrenceEvent(ctx, eventType) {
+			return s.mutateBoundedRecurringOccurrence(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if boundedIssueRelationEvent(ctx, eventType) {
+			return s.mutateBoundedIssueRelation(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if boundedIssueReleasesEvent(ctx, eventType) {
+			return s.mutateBoundedIssueReleases(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if eventType == "issue.created" && UsesIssueRecordMutations(ctx) {
+			return s.createIssueRecords(ctx, workspaceKey, payload, mutate)
+		}
+		if _, batch := issueBatchUpdateFromContext(ctx); batch && UsesIssueRecordMutations(ctx) && eventType == "issue.batch_updated" {
+			return s.mutateBoundedIssueBatch(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if _, suggestions := issueSuggestionWriteFromContext(ctx); suggestions && UsesIssueRecordMutations(ctx) {
+			return s.mutateBoundedIssueSuggestions(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if issueRecurrenceTimingMutation(ctx) {
+			return s.mutateBoundedIssueRecurrenceTiming(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if desktopNotificationAcknowledgement(ctx) && eventType == "notification.desktop_acknowledged" {
+			return s.mutateBoundedDesktopAck(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if boundedIssueAttachmentEvent(ctx, eventType) {
+			if UsesIssueRecordMutations(ctx) {
+				return s.mutateBoundedIssueAttachment(ctx, workspaceKey, eventType, payload, mutate)
+			}
+			return s.mutateBoundedLegacyDiscussion(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if IsIssueDiscussionMutation(ctx) && boundedIssueDiscussionEvent(eventType) {
+			return s.mutateBoundedIssueDiscussion(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if UsesIssueRecordMutations(ctx) && eventType == "issue.reaction_toggled" {
+			return s.mutateBoundedIssueReaction(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if !UsesIssueRecordMutations(ctx) && boundedLegacyIssueEvent(eventType) && mutationAggregateID(ctx) != "" {
+			return s.mutateBoundedLegacyDiscussion(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		if coldCapable(ctx) && !residentRecordWriterReady(ctx, eventType) {
+			// No migrated writer serves this COLD write: run the literal
+			// legacy dispatch on the COLD facade (scale_p21_default_cold.go).
+			return s.coldLegacyMutation(ctx, workspaceKey, eventType, payload, mutate)
+		}
+		return s.mutateResidentRecords(ctx, workspaceKey, eventType, payload, mutate)
+	}
+	if projectRecordSelectionEnabled(ctx) {
+		return s.mutateProjectRecordSelection(ctx, workspaceKey, eventType, payload, mutate)
+	}
 	if eventType == "loop.output_contract" && !fullMutationsForced.Load() {
 		return s.mutateLoopContract(ctx, workspaceKey, payload, mutate)
 	}
@@ -1546,10 +1774,16 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 // mutateFull runs a mutation against the workspace snapshot. Unless the event
 // is metadata-only it loads every issue and content record first.
 func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	if s.metadataResidency != nil {
+		return s.mutateResidentRecords(ctx, workspaceKey, eventType, payload, mutate)
+	}
 	if workspaceKey == "" {
 		s.mu.RLock()
 		workspaceKey = s.lastWorkspaceKey
 		s.mu.RUnlock()
+	}
+	if s.coldWrite != nil {
+		s.coldWrite.requested = workspaceKey
 	}
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
@@ -1560,6 +1794,13 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		// transaction runs; readers keep reading the committed snapshot.
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
+		if s.coldWrite != nil {
+			var err error
+			if workspaceKey, err = s.refreshColdFullWriteLocked(ctx); err != nil {
+				return err
+			}
+			webhookEnabled = s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
+		}
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
 		if s.coordinator != nil {
@@ -1584,7 +1825,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		fields, fieldScoped := metadataFieldsFromContext(ctx)
 		fieldScoped = fieldScoped && metadataOnly
 		if fieldScoped {
-			current = metadataFieldSnapshot(stored, fields)
+			current = metadataRecordFieldSnapshot(ctx, stored, fields)
 		} else {
 			current = cloneBootstrap(current)
 		}
@@ -1614,7 +1855,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		next := current
 		if webhookEnabled {
 			if fieldScoped {
-				next = metadataFieldSnapshot(current, fields)
+				next = metadataRecordFieldSnapshot(ctx, current, fields)
 			} else {
 				next = cloneBootstrap(current)
 			}
@@ -1624,12 +1865,17 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		originalViewerRole := next.ViewerRole
 		if actor, ok := actorFromContext(ctx); ok {
 			next.Viewer = actor
-			if role, status, roleErr := s.WorkspaceRole(ctx, next.Workspace.ID, actor.ID); roleErr == nil && status == "active" {
+			role, teams, err := s.mutationActorAccess(ctx, next.Workspace.ID, actor.ID)
+			// Account-wide writes can visit workspaces the actor has left.
+			// Personal key creation requires an active workspace role.
+			if err != nil && (eventType == "api_key.created" || !errors.Is(err, ErrAuthForbidden)) {
+				return err
+			}
+			if err == nil {
 				// The canonical snapshot does not carry a viewer-specific role.
 				// Populate it only while authorization-aware callbacks execute,
 				// then restore the snapshot value before persistence.
-				next.ViewerRole = role
-				next.ViewerTeamIDs = s.actorTeamIDs(ctx, next.Workspace.ID, actor.ID)
+				next.ViewerRole, next.ViewerTeamIDs = role, teams
 			}
 			if fieldScoped && !slices.Contains(fields, "users") {
 				// Users are not part of this mutation's snapshot.
@@ -1656,8 +1902,8 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		if fieldScoped {
 			// Unlisted fields were hidden from the callback; keep the stored
 			// (shared, unchanged) values so the delta skips them.
-			restoreUnlistedMetadata(&current, stored, fields)
-			restoreUnlistedMetadata(&next, stored, fields)
+			restoreMetadataRecordFields(ctx, &current, stored, fields)
+			restoreMetadataRecordFields(ctx, &next, stored, fields)
 		}
 		previousValues := json.RawMessage(nil)
 		if webhookEnabled {
@@ -1871,6 +2117,18 @@ func aggregateEntityByID(data domain.Bootstrap, id string) (any, bool) {
 				return data.Cycles[index], true
 			}
 		}
+	case strings.HasPrefix(id, "workflow_run_"):
+		for index := range data.WorkflowRuns {
+			if data.WorkflowRuns[index].ID == id {
+				return data.WorkflowRuns[index], true
+			}
+		}
+	case strings.HasPrefix(id, "workflow_"):
+		for index := range data.WorkflowDefinitions {
+			if data.WorkflowDefinitions[index].ID == id {
+				return data.WorkflowDefinitions[index], true
+			}
+		}
 	}
 	return nil, false
 }
@@ -1913,6 +2171,11 @@ func (s *SQLiteStore) persistWorkspaceOnto(ctx context.Context, workspaceKey str
 	defer tx.Rollback()
 	if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, before, data, raw, event, base); err != nil {
 		return err
+	}
+	if s.coldWrite != nil {
+		if err := s.prepareColdFullWrite(ctx, tx, workspaceKey, *data); err != nil {
+			return err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return err
@@ -1981,26 +2244,8 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 	}
 	if event != nil && event.Type == "pulse.summary_scheduled" {
 		// One tick can add a summary for every member: write them in batches.
-		rows := make([]contentRecordRow, 0, len(notifications)+len(deliveries))
-		for _, notification := range notifications {
-			row, err := contentRecordRowFor(workspaceKey, "notification", notification.IssueID, notification)
-			if err != nil {
-				return err
-			}
-			rows = append(rows, row)
-		}
-		for _, delivery := range deliveries {
-			row, err := contentRecordRowFor(workspaceKey, "delivery", "", delivery)
-			if err != nil {
-				return err
-			}
-			rows = append(rows, row)
-		}
-		if err := writeContentRecordRows(ctx, tx, rows); err != nil {
+		if err := writePulseSummaryRows(ctx, tx, workspaceKey, notifications, deliveries); err != nil {
 			return err
-		}
-		for _, row := range rows {
-			tx.noteNotificationRow(row, nil, false)
 		}
 		notifications, deliveries = nil, nil
 	}
@@ -2029,7 +2274,7 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 			return err
 		}
 	}
-	if before != nil {
+	if before != nil && !scopedMetadataAlreadyPersisted(ctx) {
 		stored := *before
 		if base != nil && len(base.progressProjects) > 0 {
 			var err error
@@ -2046,8 +2291,10 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 		for _, field := range persistedMetadataFields() {
 			setRebasedField(field, destination.Field(field.index), source.Field(field.index))
 		}
-	} else if err := writeWorkspaceMetadata(ctx, tx, workspaceKey, data.Workspace.ID, raw); err != nil {
-		return err
+	} else if before == nil {
+		if err := writeWorkspaceMetadata(ctx, tx, workspaceKey, data.Workspace.ID, raw); err != nil {
+			return err
+		}
 	}
 	viewerRaw, _ := json.Marshal(s.viewer)
 	if len(viewerRaw) == 0 || string(viewerRaw) == "{}" {
@@ -2112,8 +2359,18 @@ func (s *SQLiteStore) CreateWorkspaceWith(ctx context.Context, name, urlKey, reg
 }
 
 func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region string, seed WorkspaceSeed) (domain.Bootstrap, error) {
+	if s.metadataResidency != nil {
+		return s.createResidentWorkspace(ctx, name, urlKey, region, seed)
+	}
 	s.lockWorkspaceWrites()
 	defer s.unlockWorkspaceWrites()
+	return s.createWorkspaceLocked(ctx, name, urlKey, region, seed, nil)
+}
+
+// createWorkspaceLocked is the workspace creation write. The caller holds the
+// workspace write locks. persisted, when set, reports whether the workspace's
+// metadata committed (the later membership writes can still fail).
+func (s *SQLiteStore) createWorkspaceLocked(ctx context.Context, name, urlKey, region string, seed WorkspaceSeed, persisted *bool) (domain.Bootstrap, error) {
 	if _, exists := s.workspaces[urlKey]; exists {
 		return domain.Bootstrap{}, ErrWorkspaceKeyTaken
 	}
@@ -2144,10 +2401,17 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	if err := s.persistWorkspace(ctx, urlKey, data, event); err != nil {
 		return domain.Bootstrap{}, err
 	}
-	stored := collectionMetadata(data)
-	domain.RebuildTeamDirectory(&stored)
-	s.setWorkspaceLocked(urlKey, stored)
-	s.lastWorkspaceKey = urlKey
+	if persisted != nil {
+		*persisted = true
+	}
+	if s.metadataResidency == nil {
+		// A bounded store installs the workspace's resident image from SQL
+		// once the write is done (createResidentWorkspace).
+		stored := collectionMetadata(data)
+		domain.RebuildTeamDirectory(&stored)
+		s.setWorkspaceLocked(urlKey, stored)
+		s.lastWorkspaceKey = urlKey
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,display_name=excluded.display_name,active=excluded.active,updated_at=excluded.updated_at`, viewer.ID, nullableString(viewer.Email), viewer.Name, viewer.DisplayName, viewer.AvatarURL, "", nullableTime(viewer.EmailVerified, time.Now().UTC()), boolInt(viewer.Active), now, now); err != nil {
 		return domain.Bootstrap{}, fmt.Errorf("auth user: %w", err)
@@ -2165,6 +2429,25 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 }
 
 func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, workspace domain.Workspace) (domain.Bootstrap, error) {
+	if s.metadataResidency != nil && coldCapable(ctx) {
+		// COLD: the literal legacy update on the COLD facade, which answers
+		// and writes the complete workspace (scale_p21_default_cold.go). A
+		// rename also publishes the new key and drops the old one (SW555).
+		next := workspace.URLKey
+		if next == "" {
+			next = workspaceKey
+		}
+		var updated domain.Bootstrap
+		err := s.coldLegacyWrite(ctx, workspaceKey, func(ctx context.Context, facade *SQLiteStore) error {
+			var err error
+			updated, err = facade.UpdateWorkspace(ctx, workspaceKey, workspace)
+			return err
+		}, next)
+		if err == nil {
+			s.setLastWorkspaceKey(next)
+		}
+		return updated, err
+	}
 	if s.coordinator == nil {
 		updated, err := s.updateWorkspace(ctx, workspaceKey, workspace)
 		if errors.Is(err, ErrNoMutation) {

@@ -11,8 +11,8 @@
   border-bottom: 0.5px solid var(--theme-control);
 }
 .workspace-directory__header h1 {
-  /* The reference app's title sits 1px below the centred line box (y15 in the 44px bar), same as Projects. */
-  margin: 1px 0 0;
+  /* Centred in the bar above its hairline, like Projects (measured in Chrome at 1x and 2x: y14 at 2x, y13.75 at 1x). */
+  margin: 0;
   color: var(--theme-text-primary);
   font-size: 13px;
   font-weight: 500;
@@ -1105,7 +1105,7 @@
   display: grid;
   grid-template-columns: var(--team-columns);
   align-items: center;
-  padding: 0 12.5px 0 18px;
+  padding: 0 34px 0 18px;
 }
 .workspace-team-columns {
   height: 32px;
@@ -1169,26 +1169,119 @@
 :root .workspace-directory .workspace-team-row:focus-visible {
   background: var(--project-row-hover-bg);
 }
+/* Name cell — the reference app's geometry: an 18px icon slot (14px glyph), the name 8px after it, the key 12px after
+   the name and the collapse arrow 4px after the key; each nesting level steps in 24px. */
+.workspace-team-row {
+  position: relative;
+  /* Each row is its own layer like the reference's rows; at 1x this decides how the row's text snaps to pixels. */
+  isolation: isolate;
+  contain: layout style;
+  will-change: transform;
+}
+.workspace-team-row[data-context] {
+  opacity: 0.5;
+}
 .workspace-team-identity {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  margin-right: 6px;
+  padding-left: calc(var(--team-depth, 0) * 24px);
 }
-.workspace-team-identity svg {
-  width: 16px;
-  height: 16px;
+.workspace-team-glyph-slot {
+  width: 18px;
+  height: 24px;
+  display: grid;
+  flex: none;
+  place-items: center;
+}
+.workspace-team-identity .workspace-team-glyph-slot svg {
+  width: 14px;
+  height: 14px;
   fill: currentColor;
 }
-.workspace-team-identity strong {
+.workspace-teams-table .workspace-team-identity strong {
+  min-width: 0;
   overflow: hidden;
-  color: var(--theme-text-primary);
+  margin-left: 8px;
+  color: var(--bright);
+  font-size: 13px;
   font-weight: 500;
+  line-height: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.workspace-team-identity small {
-  color: var(--theme-text-secondary);
+.workspace-teams-table .workspace-team-identity small {
+  flex: none;
+  margin-left: 12px;
+  color: var(--theme-text-tertiary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+}
+.workspace-team-expand {
+  position: relative;
+  width: 22px;
+  height: 24px;
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin: 0 2px 0 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--theme-text-tertiary);
+  cursor: default;
+}
+/* A larger hit area around the small arrow. */
+.workspace-team-expand::before {
+  position: absolute;
+  top: -8px;
+  left: -2px;
+  width: 32px;
+  height: 40px;
+  content: "";
+}
+.workspace-team-expand:hover,
+.workspace-team-expand:focus-visible {
+  color: var(--theme-text-primary);
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-team-expand svg {
+    transition: none !important;
+  }
+}
+/* Tree guides, 1px lines under each parent's icon (18px row inset + 8px): a sub-team's own level runs from the row's
+   top into the 10x9 curve at y15, the whole row while a later sibling follows; a parent's line drops from y36. */
+.workspace-teams-table {
+  --team-tree-line: lch(16.32% 1.48 272);
+}
+:root[data-theme="light"] .workspace-teams-table {
+  --team-tree-line: var(--nesting-line);
+}
+.workspace-team-tree-line {
+  position: absolute;
+  top: 0;
+  left: calc(2px + var(--tree-level, 1) * 24px);
+  width: 1px;
+  height: 18px;
+  background: var(--team-tree-line);
+  pointer-events: none;
+}
+.workspace-team-tree-line[data-continues] {
+  height: 48px;
+}
+.workspace-team-tree-line[data-branch] {
+  top: 36px;
+  height: 12px;
+}
+.workspace-team-tree-elbow {
+  position: absolute;
+  top: 15px;
+  left: calc(2px + var(--tree-level, 1) * 24px);
+  fill: var(--team-tree-line);
+  pointer-events: none;
 }
 .workspace-team-joined {
   width: max-content;
@@ -1207,35 +1300,51 @@
 .workspace-team-joined svg {
   width: 14px;
   height: 14px;
+  flex: none;
+  fill: currentColor;
 }
+/* The reference renders the chip's label with optimizeLegibility (kerning and ligatures on) in a normal line box, which
+   puts the 1x baseline on the same device pixel (an explicit 14.5px line height lands it one pixel lower at 1x). */
+:root span.workspace-team-joined.workspace-team-joined.workspace-team-joined {
+  line-height: normal;
+  text-rendering: optimizeLegibility;
+}
+/* Like the count buttons, the members button starts 6px left of its column so its 16px avatars line up with the header. */
 .workspace-team-members {
-  height: 27px;
+  height: 24px;
   display: flex;
   align-items: center;
-  padding: 0;
-  border: 0;
+  justify-self: start;
+  margin-left: -6px;
+  padding: 0 6px;
+  border: 0.5px solid transparent;
+  border-radius: 9999px;
   background: transparent;
 }
 .workspace-team-members .workspace-directory-avatar {
-  width: 19px;
-  height: 19px;
-  flex-basis: 19px;
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
   margin-left: -4px;
-  border: 1.5px solid var(--theme-surface-0);
-  font-size: 7px;
+  border: 0;
+  box-shadow: 0 0 0 1.5px var(--theme-surface-0);
+  font-size: 9px;
 }
 .workspace-team-members .workspace-directory-avatar:first-child {
   margin-left: 0;
+  box-shadow: none;
 }
+/* The count buttons sit 6px left of their column so the 16px icon lines up with the header. */
 .workspace-team-projects {
-  height: 26px;
+  height: 24px;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   justify-self: start;
+  margin-left: -6px;
   padding: 0 6px;
-  border: 0;
-  border-radius: 5px;
+  border: 0.5px solid transparent;
+  border-radius: 9999px;
   background: transparent;
   color: var(--theme-text-secondary);
 }
@@ -1244,8 +1353,8 @@
   color: var(--theme-text-primary);
 }
 .workspace-team-projects svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   fill: currentColor;
 }
 .workspace-row-menu {
@@ -1274,6 +1383,17 @@
 .workspace-row-menu svg {
   width: 14px;
   height: 14px;
+}
+/* The teams table's row menu: a 32px round button starting at its 28px column. */
+:root .workspace-teams-table .workspace-team-row .workspace-row-menu {
+  width: 32px;
+  height: 32px;
+  justify-self: start;
+  border-radius: 9999px;
+}
+:root .workspace-teams-table .workspace-team-row .workspace-row-menu svg {
+  width: 16px;
+  height: 16px;
 }
 
 .workspace-status-select {
@@ -1312,12 +1432,6 @@
     border: 0;
     background: transparent;
   }
-  .workspace-directory__mobile span {
-    width: 14px;
-    height: 1px;
-    margin: 2px 0;
-    background: var(--theme-text-tertiary);
-  }
   .workspace-members-columns,
   .workspace-directory-member-row {
     grid-template-columns: minmax(0, 1fr) 85px;
@@ -1335,6 +1449,32 @@
   .workspace-team-row > *:not(:first-child):not(:last-child) {
     display: none;
   }
+  /* Phone (the reference app): no column header; a row keeps the name, the members and the 28px menu column, 6px apart. */
+  .workspace-teams-table .workspace-team-columns {
+    display: none;
+  }
+  .workspace-teams-table .workspace-team-row {
+    grid-template-columns: minmax(0, 1fr) auto 28px !important;
+    column-gap: 6px;
+    padding-right: 22px;
+    border-radius: 0;
+  }
+  .workspace-teams-table .workspace-team-identity {
+    margin-right: 0;
+  }
+  .workspace-teams-table .workspace-team-row > .workspace-team-members {
+    display: flex;
+    height: 28px;
+  }
+  .workspace-teams-table .workspace-team-members .workspace-directory-avatar {
+    width: 18px;
+    height: 18px;
+    flex-basis: 18px;
+  }
+  :root .workspace-teams-table .workspace-team-row .workspace-row-menu {
+    width: 36px;
+    height: 36px;
+  }
 
   :is(.workspace-members-toolbar,.workspace-teams-toolbar) label {
     min-width: 0;
@@ -1350,11 +1490,6 @@
   
 }
 
-.workspace-team-expand,.workspace-team-expand-placeholder{width:20px;height:24px;flex:0 0 20px}
-.workspace-team-expand{display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;border-radius:4px;color:var(--theme-text-secondary);padding:0}
-.workspace-team-expand:hover{background:var(--theme-control-active);color:var(--theme-text-primary)}
-.workspace-team-expand svg{transition:transform 150ms ease}
-@media(prefers-reduced-motion:reduce){.workspace-team-expand svg{transition:none}}
 
 :root[data-theme="light"] .workspace-directory {
   background: var(--bg-sidebar);
@@ -1403,13 +1538,9 @@
 :root[data-theme="light"] .workspace-members-empty {
   color: var(--text-label);
 }
-:root[data-theme="light"] .workspace-team-identity small,
 :root[data-theme="light"] :is(.workspace-members-toolbar,.workspace-teams-toolbar) input::placeholder,
 :root[data-theme="light"] .workspace-filter-bar__clear:disabled {
   color: var(--text-placeholder);
-}
-:root[data-theme="light"] .workspace-team-identity small {
-  font-size: 11px;
 }
 :root[data-theme="light"] .workspace-directory-filter-menu,
 :root[data-theme="light"] .workspace-directory-filter-submenu,
@@ -1434,16 +1565,8 @@
   background: var(--theme-text-tertiary);
 }
 
-:root[data-theme="light"] .workspace-directory__mobile span {
-  background: var(--text-label);
-}
 
 :root[data-theme="light"] .workspace-directory__header h1 {
-  color: var(--theme-text-primary);
-  font-size: 13px;
-  font-weight: 500;
-}
-:root[data-theme="light"] .workspace-team-identity strong {
   color: var(--theme-text-primary);
   font-size: 13px;
   font-weight: 500;
@@ -1625,11 +1748,12 @@
 .workspace-directory__create.is-ghost span {
   line-height: normal;
 }
-/* The reference app's toolbar row has no fill or divider; 43.5px keeps the column header on the 88px line under the 0.5px panel border. */
+/* The reference app's toolbar row has no fill or divider; 43.5px keeps the column header on the 88px line under the 0.5px panel border.
+   It is inset 8px on both sides (measured in Chrome at 2x: search field at x8, last button ending 8px from the edge). */
 :root .workspace-directory__toolbar:is(.workspace-members-toolbar,.workspace-teams-toolbar) {
   height: 43.5px;
   flex: 0 0 43.5px;
-  padding: 0 7.5px 0 8.5px;
+  padding: 0 8px;
   border-bottom: 0;
   background: transparent;
 }
@@ -1804,3 +1928,116 @@
 /* The reference app's Teams "Membership" chip: grey 12px/500 chip with a 14px check (measured). */
 :root .workspace-team-joined.workspace-team-joined.workspace-team-joined { padding: 1px 3px; border-color: var(--team-joined-border); background: var(--team-joined-bg); font-size: 12px; line-height: 14.5px; }
 :root[data-theme] span.workspace-team-joined.workspace-team-joined { border-color: var(--team-joined-border); background: var(--team-joined-bg); }
+
+/* ── Teams page: details measured against the reference app ── */
+/* The count glyph is drawn in the tertiary ink, lighter than its number. */
+.workspace-teams-table .workspace-team-projects svg {
+  fill: var(--theme-text-tertiary);
+}
+.workspace-teams-table .workspace-directory-avatar,
+.workspace-teams-table .workspace-directory-avatar .user-avatar-initials {
+  font-weight: 500;
+}
+/* Hairlines under the title bar and the column header: 0.5px on high-density screens, a lighter 1px line below 2dppx. */
+:root[data-theme="light"] .workspace-directory--teams :is(.workspace-directory__header, .workspace-team-columns) {
+  border-bottom-color: var(--theme-border);
+}
+@media (resolution < 2dppx) {
+  :root[data-theme="light"] .workspace-directory--teams .workspace-team-columns,
+  :root[data-theme="light"] .workspace-directory .workspace-directory__header {
+    border-bottom: 1px solid lch(95.24% 0 282);
+  }
+  /* The light panel frame is a full pixel here too, so the toolbar gives back the half pixel to keep the 88px line. */
+  :root[data-theme="light"] .workspace-directory__toolbar:is(.workspace-members-toolbar,.workspace-teams-toolbar) {
+    height: 43px;
+    flex-basis: 43px;
+  }
+}
+/* Title bar and toolbar end 8px from the panel edge; the title's "⋯" starts 8px after the title. */
+:root .workspace-directory--teams .workspace-directory__header {
+  padding-right: 8px;
+}
+:root .workspace-directory.workspace-directory--teams .workspace-directory__header .workspace-directory__title-menu {
+  margin-left: 8px;
+}
+:root .workspace-directory--teams .workspace-directory__toolbar.workspace-teams-toolbar {
+  padding-right: 8px;
+}
+/* The toolbar's filter and display glyphs use the header icon ink (lighter than the button text) until hovered or open. */
+:root .workspace-directory--teams .workspace-directory__toolbar.workspace-teams-toolbar > .workspace-directory__icon-button:not(:hover):not([data-state="open"]) svg {
+  fill: var(--issue-header-icon);
+}
+/* Touch screens get 32px header and toolbar buttons. */
+@media (pointer: coarse) {
+  :root .workspace-directory.workspace-directory--teams .workspace-directory__header .workspace-directory__title-menu,
+  :root .workspace-directory--teams .workspace-directory__toolbar.workspace-teams-toolbar > .workspace-directory__icon-button {
+    width: 32px;
+    height: 32px;
+  }
+  :root .workspace-directory.workspace-directory--teams .workspace-directory__header .workspace-directory__title-menu {
+    margin-left: 6px;
+  }
+  :root .workspace-directory--teams .workspace-directory__header .workspace-directory__create.workspace-directory__icon-button.is-ghost {
+    height: 32px;
+  }
+  /* The touch-size glyphs sit 0.1px right of centre. */
+  :root .workspace-directory--teams :is(.workspace-directory__header, .workspace-directory__toolbar) button > svg {
+    transform: translateX(.1px);
+  }
+}
+/* Phone: "New team" becomes a 32px "+" button. */
+@media (max-width: 800px) {
+  :root .workspace-directory--teams .workspace-directory__header .workspace-directory__create.workspace-directory__icon-button.is-ghost {
+    width: 32px;
+    height: 32px;
+    justify-content: center;
+    padding: 0 2px;
+  }
+  .workspace-directory--teams .workspace-directory__create.is-ghost span {
+    display: none;
+  }
+}
+/* Rows stay transparent over the panel like the reference (its chips' rounded corners blend with the panel itself). */
+:root[data-theme="light"] .workspace-teams-table .workspace-team-row:not(:hover):not(:focus-visible) {
+  background: transparent;
+}
+/* Below 2dppx the reference draws the chip's hairline as a full 1px line in the slightly darker border ink. */
+@media (resolution < 2dppx) {
+  :root[data-theme="light"] span.workspace-team-joined.workspace-team-joined {
+    border-width: 1px;
+    border-color: var(--border);
+  }
+}
+/* Phone: the sidebar button draws Flow's 14px panel glyph as an SVG (like Projects) rather than the shared mask. */
+@media (max-width: 767px) {
+  html:root body .app .workspace-directory__header .workspace-directory__mobile::before,
+  html:root body .app .workspace-directory__header .workspace-directory__mobile::after { content: none; }
+  html:root body .app .workspace-directory__header .workspace-directory__mobile > svg { display: block; width: 14px; height: 14px; color: var(--issue-muted); }
+}
+/* Toolbar pills draw their ring and lift on a layer over the padding box (inside the 0.5px transparent border),
+   like the reference, rather than as the button's own outer shadow. */
+:root .workspace-directory--teams .workspace-directory__toolbar.workspace-teams-toolbar > .workspace-directory__icon-button {
+  position: relative;
+  box-shadow: none;
+}
+:root .workspace-directory--teams .workspace-directory__toolbar.workspace-teams-toolbar > .workspace-directory__icon-button::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 0.5px var(--ui-pill-ring), var(--ui-pill-shadow);
+  content: "";
+  pointer-events: none;
+}
+:root .workspace-directory--teams .workspace-directory__toolbar.workspace-teams-toolbar > .workspace-directory__icon-button:hover::after {
+  box-shadow: 0 0 0 0.5px var(--ui-pill-hover-ring), var(--ui-pill-shadow);
+}
+/* Below 2dppx the reference's light header and toolbar buttons use full-pixel transparent borders and a 1px pill ring. */
+@media (resolution < 2dppx) {
+  :root[data-theme="light"] .workspace-directory.workspace-directory--teams :is(.workspace-directory__header, .workspace-directory__toolbar) button.workspace-directory__icon-button,
+  :root[data-theme="light"] .workspace-directory.workspace-directory--teams .workspace-directory__header button.workspace-directory__title-menu {
+    border-width: 1px;
+  }
+  :root[data-theme="light"] .workspace-directory--teams .workspace-directory__toolbar.workspace-teams-toolbar > .workspace-directory__icon-button::after {
+    box-shadow: 0 0 0 1px lch(0% 0 0 / 0.105), var(--ui-pill-shadow);
+  }
+}

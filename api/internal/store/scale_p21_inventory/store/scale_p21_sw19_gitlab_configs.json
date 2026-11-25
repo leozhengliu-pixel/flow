@@ -1,0 +1,22 @@
+{
+  "source": "store/scale_p21_sw19_gitlab_configs.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginGitLabConnectionConfigsRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "resident-state"
+      ],
+      "reason": "Trusted rotation config projection reads only installed workspace URLKey plus exact GitLab connection ID/provider/config in source order. It counts typed slots, map overhead, detached string bytes and downstream encoding before independently admitting output, re-resolves defaults and rechecks under the source lock, and retains its allowance until Close after caller use. No authorization scalar crosses SQL; no time.Time, source Location, other connection fields or unrelated provider bodies escape. Targeted tests cover full warm/reload and actual policy-only sources, duplicates/empty IDs, NUL/config shape, owned generations, parent-release lifetime, saturation/stale/cancelled parents and oversize rejection. This primitive neither authorizes requests, loads an absent family nor substitutes canonical rows; the independent loader/source blocker remains."
+    },
+    "installedGitLabConnectionConfigs": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded branch of BeginGitLabConnectionConfigsRead (SW559): the resident image holds no integration connections, so the rotation sweep found none. It resolves the workspace key under the read lock, pins the installed logical generation (BeginInstalledMetadataRead), decodes only its workspace and integrationConnections fields as wire values on an owned ResourceRead (charged to the work budget and released before return), and projects the same URLKey and GitLab ID/provider/config as the resident read, admitting that projection's cost until Close. A store without an installed source of the workspace (test views) keeps the resident read, as coldAccessorView does. TestScaleP21SW559GitLabRotationDifferential runs the sweep flag off, bounded warm and bounded loaded from SQL and finds the same rotated tokens, credentials and connection configs; TestScaleP21SW19GitLabConfigsInstalledDifferential compares the bounded view with the legacy owner.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

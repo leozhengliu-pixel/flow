@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -312,6 +313,218 @@ func TestMetadataSearchHonorsDocumentACLBeforeReturningTitles(t *testing.T) {
 	}
 }
 
+func TestMetadataSearchProjectionDifferential(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	legacy := openPreparationDatabase(t, preparationDatabase(t))
+	defer legacy.Close()
+	ctx := t.Context()
+	const workspace, private = "search-differential", "search-private"
+	data, err := legacy.CreateWorkspace(ctx, "Search projection", workspace, "us")
+	if err != nil {
+		t.Fatal(err)
+	}
+	public := data.Teams[0].ID
+	data.Teams = append(data.Teams, domain.Team{ID: private, Private: true})
+	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	for i := range 206 {
+		id := fmt.Sprintf("project-%03d", i)
+		team := public
+		if i < 70 {
+			team = private
+		}
+		item := domain.Project{ID: id, SlugID: id + "-slug", Name: []string{"A zephyr", "a zephyr", "É zephyr"}[i%3],
+			TeamIDs: []string{team}, Status: domain.ProjectStatus{Type: "started"}, Lead: &data.Viewer, UpdatedAt: stamp, CreatedAt: stamp.Add(time.Duration(i%5) * time.Second)}
+		if i%5 == 0 {
+			item.TeamIDs = nil
+		}
+		if i%7 == 0 {
+			item.ArchivedAt = &stamp
+		}
+		insertSearchMetadata(t, legacy, workspace, "projects", id, item)
+	}
+	// Explicit and inherited grants are checked independently of direct teams.
+	large := strings.Repeat("界", 16384)
+	for _, item := range []domain.Document{
+		{ID: "public", TeamIDs: []string{public}, Content: large},
+		{ID: "private", TeamIDs: []string{private}},
+		{ID: "inherited", InheritedTeamIDs: []string{private}},
+		{ID: "teamless"},
+		{ID: "shared", TeamIDs: []string{private}, Permissions: []domain.DocumentPermission{{SubjectType: "user", SubjectID: "reader", Role: "viewer"}}},
+		{ID: "restricted", TeamIDs: []string{public}, Permissions: []domain.DocumentPermission{{SubjectType: "user", SubjectID: "other", Role: "viewer"}}},
+		{ID: "archived", TeamIDs: []string{public}, ArchivedAt: &stamp},
+		{ID: "deleted", TeamIDs: []string{public}},
+	} {
+		item.Title, item.CreatedAt, item.UpdatedAt = "zephyr "+item.ID, stamp, stamp
+		insertSearchMetadata(t, legacy, workspace, "documents", item.ID, item)
+	}
+	if _, err := legacy.db.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='documents' AND record_key='deleted'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	insertSearchMetadata(t, legacy, workspace, "initiatives", "strategy", domain.Initiative{
+		ID: "strategy", Name: "Zephyr strategy", LeadTeamID: public, ContributingTeamIDs: []string{public}, Owner: &data.Viewer, Creator: data.Viewer,
+	})
+	insertSearchMetadata(t, legacy, workspace, "users", "guest", domain.User{ID: "guest", Name: "Zephyr guest", Active: true})
+	insertSearchMetadata(t, legacy, workspace, "customers", "customer", domain.Customer{
+		ID: "customer", Name: "Zephyr customer", Domains: []string{"example.test"}, OwnerID: data.Viewer.ID,
+	})
+	insertSearchMetadata(t, legacy, workspace, "releases", "release", domain.Release{
+		ID: "release", Name: "Zephyr release", Version: "1.2.3", Creator: data.Viewer, ProjectIDs: []string{}, IssueIDs: []string{},
+	})
+	insertSearchMetadata(t, legacy, workspace, "savedViews", "personal", domain.SavedView{
+		ID: "personal", Name: "Zephyr personal view", Scope: "personal", OwnerID: data.Viewer.ID,
+	})
+	insertSearchMetadata(t, legacy, workspace, "savedViews", "team", domain.SavedView{
+		ID: "team", Name: "Zephyr team view", Scope: "team", TeamID: public,
+	})
+	report, err := legacy.metadataCatalogPass(ctx, false)
+	if err != nil || len(report.Skipped) != 0 {
+		t.Fatalf("catalog preparation: %v, skipped: %v", err, report.Skipped)
+	}
+	bounded, err := legacy.BoundedMetadataViewForTesting(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.dialect != "mysql" {
+		fields := []string{"projects", "documents"}
+		hits, err := bounded.metadataSearchHits(ctx, workspace, "zephyr", fields, 4096)
+		if err != nil || len(hits["projects"]) != 206 || len(hits["documents"]) != 7 {
+			t.Fatalf("batched trigram hits: %d projects, %d documents: %v", len(hits["projects"]), len(hits["documents"]), err)
+		}
+		if hits, err := bounded.metadataSearchHits(ctx, workspace, "zephyr", fields, 64); err != nil || hits != nil {
+			t.Fatalf("over-limit trigram lookup retained a partial hit set: %v", err)
+		}
+	}
+	// Keep membership and key restrictions separate, including a selected
+	// empty key scope and a case variant of the stored team ID.
+	for _, principal := range []struct {
+		name, role, id string
+		admin          bool
+		keyTeams       []string
+		wantDocuments  []string
+	}{
+		{"owner", "owner", data.Viewer.ID, true, nil, []string{"inherited", "private", "public", "restricted", "shared", "teamless"}},
+		{"member", "member", "reader", false, nil, []string{"public", "shared", "teamless"}},
+		{"guest", "guest", "guest", false, nil, []string{"public", "teamless"}},
+		{"restricted-key", "member", "reader", false, []string{public}, []string{"public", "teamless"}},
+		{"empty-key", "member", "reader", false, []string{}, []string{"teamless"}},
+		{"case-variant-key", "member", "reader", false, []string{strings.ToUpper(public)}, []string{"teamless"}},
+	} {
+		t.Run(principal.name, func(t *testing.T) {
+			policy := data
+			policy.Viewer, policy.ViewerRole = domain.User{ID: principal.id}, principal.role
+			policy.TeamMembers = []domain.TeamMember{{TeamID: public, UserID: principal.id}}
+			q := SearchMetadataQuery{
+				Scope: IssueRecordQuery{Workspace: workspace, AllowedTeamIDs: principal.keyTeams, Access: &IssueRecordAccess{Admin: principal.admin, WorkspaceAdmin: principal.admin, VisibleTeamIDs: []string{public}}},
+				Types: map[string]bool{"project": true, "document": true, "initiative": true, "member": true, "customer": true, "release": true, "view": true},
+				Terms: []string{"zephyr"}, Limit: 120, SkipSharedCache: true,
+			}
+			for _, sort := range []string{"updatedAt", "createdAt", "title"} {
+				q.Scope.Sort = sort
+				want, err := legacy.SearchMetadata(ctx, policy, q)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var ids []string
+				for _, item := range want.Documents {
+					ids = append(ids, item.ID)
+					if item.ID == "public" && item.Content != strings.Repeat("界", 2048) {
+						t.Fatal("document shell content changed")
+					}
+				}
+				slices.Sort(ids)
+				if !slices.Equal(ids, principal.wantDocuments) {
+					t.Fatalf("document scope = %v, want %v", ids, principal.wantDocuments)
+				}
+				if (principal.name == "member" || principal.name == "restricted-key") && len(want.Projects) <= 64 {
+					t.Fatalf("fixture did not cross the page boundary: %d projects", len(want.Projects))
+				}
+				if principal.admin && (len(want.Initiatives) != 1 || len(want.Users) != 1 || len(want.Customers) != 1 || len(want.Releases) != 1 || len(want.SavedViews) != 2) {
+					t.Fatal("fixture did not exercise all metadata search kinds")
+				}
+				got, err := bounded.SearchMetadata(ctx, policy, q)
+				assertSearchMetadataEqual(t, sort, got, want, err)
+			}
+			q.Scope.Archived = "all"
+			q.Scope.Direction = "asc"
+			q.Scope.Sort = "createdAt"
+			q.Scope.Filter = IssueFilter{And: []IssueFilter{{Field: "team", Values: []string{public}}, {Field: "createdAt", Operator: "gte", Values: []string{stamp.Format(time.RFC3339)}}}}
+			want, err := legacy.SearchMetadata(ctx, policy, q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := bounded.SearchMetadata(ctx, policy, q)
+			assertSearchMetadataEqual(t, "archived/filtered", got, want, err)
+			q.Terms = []string{"nonexistent", "zephyr"}
+			got, err = bounded.SearchMetadata(ctx, policy, q)
+			assertSearchMetadataEqual(t, "multi-term", got, want, err)
+			if principal.admin {
+				q.Scope.Filter = IssueFilter{}
+				q.Terms = []string{"zephyr"}
+				q.Limit = 300
+				want, err := legacy.SearchMetadata(ctx, policy, q)
+				if err != nil || len(want.Projects) != 206 {
+					t.Fatalf("large page fixture: got %d projects, want 206: %v", len(want.Projects), err)
+				}
+				var catalogPages int
+				observed := WithSQLStatementObserver(ctx, func(statement string) {
+					if strings.Contains(statement, "summary AS data FROM metadata_catalog") {
+						catalogPages++
+					}
+				})
+				got, err := bounded.SearchMetadata(observed, policy, q)
+				assertSearchMetadataEqual(t, "large paginated", got, want, err)
+				if catalogPages < 3 {
+					t.Fatalf("catalog path read %d pages, want at least two project pages and one document page", catalogPages)
+				}
+				if _, err := legacy.db.ExecContext(ctx, `UPDATE metadata_catalog_collections SET phase=1 WHERE workspace_key=? AND field='projects'`, workspace); err != nil {
+					t.Fatal(err)
+				}
+				catalogPages = 0
+				got, err = bounded.SearchMetadata(observed, policy, q)
+				assertSearchMetadataEqual(t, "incomplete catalog", got, want, err)
+				if catalogPages != 1 {
+					t.Fatalf("catalog path read %d pages, want only the document page", catalogPages)
+				}
+				if _, err := legacy.db.ExecContext(ctx, `UPDATE metadata_catalog_collections SET phase=2 WHERE workspace_key=? AND field='projects'`, workspace); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func assertSearchMetadataEqual(t *testing.T, name string, got, want domain.Bootstrap, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("%s search: %v", name, err)
+	}
+	if reflect.DeepEqual(got, want) {
+		return
+	}
+	actual, expected := reflect.ValueOf(got), reflect.ValueOf(want)
+	for i := range actual.NumField() {
+		a, b := actual.Field(i), expected.Field(i)
+		if reflect.DeepEqual(a.Interface(), b.Interface()) {
+			continue
+		}
+		field := actual.Type().Field(i).Name
+		if a.Kind() == reflect.Slice && a.Type().Elem().Kind() == reflect.Struct {
+			for j := range min(a.Len(), b.Len()) {
+				left, right := a.Index(j), b.Index(j)
+				for k := range left.NumField() {
+					if !reflect.DeepEqual(left.Field(k).Interface(), right.Field(k).Interface()) {
+						t.Fatalf("%s search %s[%d].%s differs: got %.120v (ID %v), want %.120v (ID %v); lengths %d/%d", name, field, j, left.Type().Field(k).Name, left.Field(k), left.FieldByName("ID"), right.Field(k), right.FieldByName("ID"), a.Len(), b.Len())
+					}
+				}
+			}
+			t.Fatalf("%s search %s differs: lengths %d/%d", name, field, a.Len(), b.Len())
+		}
+		t.Fatalf("%s search %s differs", name, field)
+	}
+}
+
 func TestMetadataSearchNegativeFiltersDoNotMatchUnrelatedTypesOrMissingDates(t *testing.T) {
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "search.db"))
 	if err != nil {
@@ -440,6 +653,10 @@ func TestMetadataSearchRepairReconcilesCompletedAndResumesCheckpoint(t *testing.
 	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET completed=1,last_record_key='repair-project' WHERE workspace_key=? AND field='projects'`, data.Workspace.URLKey); err != nil {
 		t.Fatal(err)
 	}
+	// The completed migration ran under other rules, so it is reconciled again.
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_index_rules SET rules='previous-rules' WHERE workspace_key=? AND field='projects'`, data.Workspace.URLKey); err != nil {
+		t.Fatal(err)
+	}
 	if err := repo.migrateMetadataSearchIndex(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -464,6 +681,111 @@ func TestMetadataSearchRepairReconcilesCompletedAndResumesCheckpoint(t *testing.
 	var count int
 	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "repair-tail").Scan(&count); err != nil || count != 1 {
 		t.Fatalf("checkpoint retry did not restore row: %d %v", count, err)
+	}
+}
+
+// A restart after a completed reconciliation under the same rules must not
+// walk the field again (issue #238); records written in between are indexed
+// by their own transactions. Changed rules and interrupted runs still repair.
+func TestMetadataSearchRestartSkipsCompletedReconciliation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "restart.db")
+	repo, err := OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	workspace := repo.Bootstrap().Workspace.URLKey
+	insertSearchMetadata(t, repo, workspace, "projects", "restart-project", domain.Project{ID: "restart-project", Name: "Restart content"})
+	checkpoint := func(repo *SQLiteStore) (string, int) {
+		t.Helper()
+		var last string
+		var complete int
+		if err := repo.db.QueryRowContext(ctx, `SELECT last_record_key,completed FROM metadata_search_migration_checkpoints WHERE workspace_key=? AND field='projects'`, workspace).Scan(&last, &complete); err != nil {
+			t.Fatal(err)
+		}
+		return last, complete
+	}
+	content := func(repo *SQLiteStore) string {
+		t.Helper()
+		var value string
+		if err := repo.db.QueryRowContext(ctx, `SELECT content FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key='restart-project'`, workspace).Scan(&value); err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	if _, complete := checkpoint(repo); complete != 1 {
+		t.Fatal("the first open did not complete the reconciliation")
+	}
+	completedAt, _ := checkpoint(repo)
+	// A marker the reconciliation would overwrite, and an orphan its prune
+	// would delete, prove whether either ran.
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_documents SET content='untouched marker' WHERE workspace_key=? AND field='projects' AND record_key='restart-project'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.db.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) VALUES(?,'projects','restart-orphan','orphan marker')`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	orphans := func(repo *SQLiteStore) int {
+		t.Helper()
+		var count int
+		if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key='restart-orphan'`, workspace).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	repo.Close()
+
+	repo, err = OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last, complete := checkpoint(repo); complete != 1 || last != completedAt {
+		t.Fatalf("a restart reset the completed checkpoint: last=%q completed=%d", last, complete)
+	}
+	if got := content(repo); got != "untouched marker" {
+		t.Fatal("a restart walked a field that had completed under the same rules")
+	}
+	if orphans(repo) != 1 {
+		t.Fatal("a restart ran the orphan prune on a field that had completed under the same rules")
+	}
+
+	// Changed rules: the next start reconciles the field once more.
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_index_rules SET rules='previous-rules' WHERE workspace_key=? AND field='projects'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	repo.Close()
+	repo, err = OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := content(repo); !strings.Contains(got, "Restart content") {
+		t.Fatalf("changed rules did not reconcile the field: %q", got)
+	}
+	if orphans(repo) != 0 {
+		t.Fatal("the reconciliation under new rules kept an orphaned index row")
+	}
+	if _, complete := checkpoint(repo); complete != 1 {
+		t.Fatal("the reconciliation under new rules did not complete")
+	}
+
+	// An interrupted run resumes from its key and completes.
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_documents SET content='untouched marker' WHERE workspace_key=? AND field='projects' AND record_key='restart-project'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET completed=0,last_record_key='' WHERE workspace_key=? AND field='projects'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	repo.Close()
+	repo, err = OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	if got := content(repo); !strings.Contains(got, "Restart content") {
+		t.Fatalf("an interrupted reconciliation did not resume: %q", got)
+	}
+	if _, complete := checkpoint(repo); complete != 1 {
+		t.Fatal("the resumed reconciliation did not complete")
 	}
 }
 
@@ -503,5 +825,67 @@ func TestMetadataSearchRollbackAndSameContentAvoidIndexWrites(t *testing.T) {
 	var content string
 	if err := repo.db.QueryRowContext(ctx, `SELECT content FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "atomic-project").Scan(&content); err != nil || !strings.Contains(content, "Stable searchable") {
 		t.Fatalf("same-content update changed index: %q %v", content, err)
+	}
+}
+
+func TestMetadataSearchPagesKeepSortAndTieOrder(t *testing.T) {
+	repo := openSearchOrderRepo(t)
+	defer repo.Close()
+	data := repo.Bootstrap()
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_, _ = repo.db.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='documents' AND record_key LIKE 'tie-doc-%'`, data.Workspace.URLKey)
+	})
+	policy, access, err := repo.IssueQueryAccess(ctx, data.Workspace.URLKey, data.Viewer.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type doc struct{ id, title, updated string }
+	docs := []doc{}
+	for i := 0; i < 150; i++ {
+		// Few distinct titles and timestamps force ties across the 64-row batches.
+		title := []string{"alpha", "Alpha", "beta", "gamma", ""}[i%5]
+		updated := fmt.Sprintf("2026-01-0%dT00:00:00Z", i%3+1)
+		d := doc{fmt.Sprintf("tie-doc-%03d", (i*37)%150), title, updated}
+		docs = append(docs, d)
+		insertSearchMetadata(t, repo, data.Workspace.URLKey, "documents", d.id, map[string]any{"id": d.id, "title": d.title, "content": "tiebreakneedle", "updatedAt": d.updated, "createdAt": d.updated, "teamIds": []string{data.Teams[0].ID}})
+	}
+	for _, tc := range []struct{ sort, dir string }{{"title", ""}, {"title", "asc"}, {"", ""}, {"", "asc"}, {"createdAt", ""}} {
+		want := slices.Clone(docs)
+		desc := tc.dir != "asc" && tc.sort != "title"
+		key := func(d doc) string {
+			switch tc.sort {
+			case "title":
+				return strings.ToLower(d.title)
+			case "createdAt":
+				return d.updated
+			}
+			return d.updated
+		}
+		slices.SortFunc(want, func(a, b doc) int {
+			if c := strings.Compare(key(a), key(b)); c != 0 {
+				if desc {
+					return -c
+				}
+				return c
+			}
+			return strings.Compare(a.id, b.id)
+		})
+		q := SearchMetadataQuery{Scope: IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access, Sort: tc.sort, Direction: tc.dir}, Types: map[string]bool{"document": true}, Terms: []string{"tiebreakneedle"}, Limit: 150}
+		got, err := repo.SearchMetadata(ctx, policy, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := []string{}
+		for _, item := range got.Documents {
+			ids = append(ids, item.ID)
+		}
+		wantIDs := []string{}
+		for _, d := range want {
+			wantIDs = append(wantIDs, d.id)
+		}
+		if !slices.Equal(ids, wantIDs) {
+			t.Fatalf("sort=%q dir=%q order differs\n got %v\nwant %v", tc.sort, tc.dir, ids, wantIDs)
+		}
 	}
 }

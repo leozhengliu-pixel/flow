@@ -32,11 +32,37 @@ func (s *SQLiteStore) ResourceComment(ctx context.Context, workspace, resource, 
 }
 
 func (s *SQLiteStore) WalkContentRecords(ctx context.Context, workspace, kind string, visit func(string, json.RawMessage) error) error {
+	return s.WalkContentRecordsForResources(ctx, workspace, kind, nil, visit)
+}
+
+// WalkContentRecordsForResources keeps collection order over an already
+// authorized selection. A nil selection walks the original collection.
+func (s *SQLiteStore) WalkContentRecordsForResources(ctx context.Context, workspace, kind string, resources []string, visit func(string, json.RawMessage) error) error {
 	var reader metadataReader = s.db
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.workspace == workspace {
 		reader = snapshot.reader
 	}
-	rows, err := reader.QueryContext(ctx, `SELECT resource_id,data FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY resource_id,created_at,id`, workspace, kind)
+	if resources == nil {
+		return walkContentRecords(ctx, reader, workspace, kind, nil, visit)
+	}
+	const resourceBatch = 500
+	for batch := range slices.Chunk(resources, resourceBatch) {
+		if err := walkContentRecords(ctx, reader, workspace, kind, batch, visit); err != nil {
+			return err
+		}
+	}
+	return ctx.Err()
+}
+
+func walkContentRecords(ctx context.Context, reader metadataReader, workspace, kind string, resources []string, visit func(string, json.RawMessage) error) error {
+	query := `SELECT resource_id,data FROM workspace_content_records WHERE workspace_key=? AND kind=?`
+	args := []any{workspace, kind}
+	if resources != nil {
+		clause, ids := bindList("resource_id", resources)
+		query += " AND " + clause
+		args = append(args, ids...)
+	}
+	rows, err := reader.QueryContext(ctx, query+` ORDER BY resource_id,created_at,id`, args...)
 	if err != nil {
 		return err
 	}
@@ -164,7 +190,13 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 	}
 	var previous []byte
 	var version int
-	err = tx.QueryRowContext(ctx, `SELECT data,record_version FROM workspace_content_records WHERE workspace_key=? AND kind=? AND resource_id=? AND id=?`, workspace, kind, resource, id).Scan(&previous, &version)
+	if budgetStore, ok := ctx.Value(legacyContentWriteBudgetKey{}).(*SQLiteStore); ok {
+		var release func()
+		previous, version, release, err = readLegacyContentBefore(ctx, tx, workspace, kind, resource, id, budgetStore)
+		defer release()
+	} else {
+		err = tx.QueryRowContext(ctx, `SELECT data,record_version FROM workspace_content_records WHERE workspace_key=? AND kind=? AND resource_id=? AND id=?`, workspace, kind, resource, id).Scan(&previous, &version)
+	}
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
@@ -366,8 +398,10 @@ func contentRecordRowFor[T any](workspace, kind, resource string, item T) (conte
 	return buildContentRecordRow(workspace, kind, resource, raw)
 }
 
+const contentRecordWriteBatchSize = 200
+
 func writeContentRecordRows(ctx context.Context, tx *sqlTx, rows []contentRecordRow) error {
-	const chunk = 200
+	const chunk = contentRecordWriteBatchSize
 	type actorKey struct{ workspace, issue, user string }
 	actors := map[actorKey]string{}
 	actorOrder := []actorKey{}
@@ -430,6 +464,47 @@ func writeContentRecordRows(ctx context.Context, tx *sqlTx, rows []contentRecord
 		}
 	}
 	return nil
+}
+
+// A scheduled batch has no comment, activity or issue actor side effects.
+// Keep only one SQL batch of encoded rows live while this transaction writes.
+func writePulseSummaryRows(ctx context.Context, tx *sqlTx, workspace string, notifications []domain.Notification, deliveries []domain.NotificationDelivery) error {
+	if len(notifications) == 0 && len(deliveries) == 0 {
+		return nil
+	}
+	rows := make([]contentRecordRow, 0, contentRecordWriteBatchSize)
+	flush := func() error {
+		if err := writeContentRecordRows(ctx, tx, rows); err != nil {
+			return err
+		}
+		for _, row := range rows {
+			tx.noteNotificationRow(row, nil, false)
+		}
+		clear(rows)
+		rows = rows[:0]
+		return nil
+	}
+	add := func(row contentRecordRow, err error) error {
+		if err != nil {
+			return err
+		}
+		rows = append(rows, row)
+		if len(rows) == contentRecordWriteBatchSize {
+			return flush()
+		}
+		return nil
+	}
+	for _, notification := range notifications {
+		if err := add(contentRecordRowFor(workspace, "notification", notification.IssueID, notification)); err != nil {
+			return err
+		}
+	}
+	for _, delivery := range deliveries {
+		if err := add(contentRecordRowFor(workspace, "delivery", "", delivery)); err != nil {
+			return err
+		}
+	}
+	return flush()
 }
 
 func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind string, items map[string][]T, metadata domain.Bootstrap, scopes ...[]string) error {
@@ -519,6 +594,12 @@ func syncContentRecordsFrom[T any](ctx context.Context, tx *sqlTx, workspace, ki
 				return fmt.Errorf("%s %s: %w", kind, k.id, ErrConcurrentWrite)
 			}
 		}
+		if kind == "activity" {
+			if err := deleteIssueActivity(ctx, tx, workspace, k.resource, k.id); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_content_records WHERE workspace_key=? AND kind=? AND resource_id=? AND id=?`, workspace, kind, k.resource, k.id); err != nil {
 			return err
 		}
@@ -533,7 +614,13 @@ func readContentRecords[T any](ctx context.Context, s *SQLiteStore, workspace, k
 		query += ` AND resource_id=?`
 		args = append(args, *resource)
 	}
-	query += ` ORDER BY created_at,id`
+	if resource == nil && s.dialect == "mysql" && (kind == "activity" || kind == "comment") {
+		// These collections return a map of resource slices. MySQL can use
+		// content_resource_order_idx without sorting rows from different resources.
+		query += ` ORDER BY resource_id,created_at,id`
+	} else {
+		query += ` ORDER BY created_at,id`
+	}
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err

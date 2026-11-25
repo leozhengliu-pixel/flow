@@ -124,7 +124,54 @@ type ChatBinding struct {
 	// never delivers or accepts group actions again.
 	RevokedAt *time.Time `json:"revokedAt,omitempty"`
 	RevokedBy string     `json:"revokedBy,omitempty"`
+	// LastSkipped is set by the server: the latest event for the binding's
+	// team that it did not deliver because a sharing rule blocked it. A
+	// save clears it.
+	LastSkipped *ChatBindingSkip `json:"lastSkipped,omitempty"`
 }
+
+// ChatBindingSkip records an event a binding did not deliver and why.
+// Reason is one of the ChatBindingBlocked codes.
+type ChatBindingSkip struct {
+	Reason    string    `json:"reason"`
+	EventID   string    `json:"eventId"`
+	EventType string    `json:"eventType"`
+	At        time.Time `json:"at"`
+}
+
+// Why a group binding does not deliver: its blocked reason (now) and the
+// reason of its last skipped event.
+const (
+	// ChatBindingBlockedHIPAA: the workspace has HIPAA compliance on.
+	ChatBindingBlockedHIPAA = "hipaa"
+	// ChatBindingBlockedRevoked: the binding was revoked.
+	ChatBindingBlockedRevoked = "revoked"
+	// ChatBindingBlockedTeamInactive: the team, or a parent team, is
+	// archived, retired or missing.
+	ChatBindingBlockedTeamInactive = "team_inactive"
+	// ChatBindingBlockedTeamPrivate: the team (or a parent team) is private
+	// and the binding has no private-team authorization.
+	ChatBindingBlockedTeamPrivate = "team_private_needs_authorization"
+	// ChatBindingBlockedTeamMembersOnly: the team is public but limited to
+	// its members or owners (on it or a parent), so non-members cannot see
+	// it, and the binding has no private-team authorization.
+	ChatBindingBlockedTeamMembersOnly = "team_members_only_needs_authorization"
+	// ChatBindingBlockedAuthorizer: the person who authorized a private
+	// team binding can no longer administer the team.
+	ChatBindingBlockedAuthorizer = "authorizer_lost_access"
+	// ChatBindingBlockedProjects: a project of the binding is archived,
+	// left the team or is shared with a team the group may not see.
+	ChatBindingBlockedProjects = "project_out_of_scope"
+	// ChatBindingBlockedTemplate: the binding's template is missing or no
+	// longer fits its team and projects.
+	ChatBindingBlockedTemplate = "template_not_permitted"
+	// ChatBindingBlockedIssueRestricted: the issue has its own access
+	// restrictions (last skipped only).
+	ChatBindingBlockedIssueRestricted = "issue_restricted"
+	// ChatBindingBlockedInitiative: an initiative's contributing team may
+	// not be shared with the group (last skipped only).
+	ChatBindingBlockedInitiative = "initiative_out_of_scope"
+)
 
 type ChatIdentity struct {
 	UserID    string `json:"userId"`

@@ -1,0 +1,45 @@
+/* A command menu labels step, measured on the reference's ⌘K / bulk "Change or add labels…" (46px rows, 12px inset):
+   a 20px checkbox track (the 14px box 1px in), the 16px icon at 40px, the name at 64px in the strong ink, and a group's
+   selected labels 8px after its name in the faint ink. A group's own step lists its labels with the dot at 12px and a
+   tick at the row end. */
+[cmdk-item].label-command-row:not(#_) {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  min-width: 0;
+  padding: 0 12px;
+}
+.label-command-row .label-command-check { width: 20px; flex: none; display: flex; align-items: center; }
+.label-command-row .label-command-checkbox {
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  margin-left: 1px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--pk-faint);
+  border-radius: 4px;
+  color: var(--pk-check-mark);
+}
+.label-command-row .label-command-checkbox[data-checked="true"] { border-color: var(--pk-check-on); background: var(--pk-check-on); }
+.label-command-row .label-command-checkbox[data-checked="mixed"] { border-color: var(--pk-faint); background: var(--pk-faint); }
+.label-command-row .label-command-icon,
+.label-command-row .label-command-action-icon { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
+.label-command-row .label-command-icon svg,
+.label-command-row .label-command-action-icon svg { width: 16px; height: 16px; }
+.label-command-row .label-command-action-icon { color: var(--pk-text-strong); }
+.label-command-row .label-command-dot { width: 9px; height: 9px; display: block; border-radius: 50%; }
+.label-command-row .label-command-copy { min-width: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; overflow: hidden; }
+.label-command-row .label-command-copy.is-path { gap: 4px; }
+.label-command-row .label-command-name { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--pk-text-strong); font-size: 13px; font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
+.label-command-row .label-command-detail { flex: 1 1 0; min-width: 0; overflow: hidden; color: var(--pk-faint); font-size: 13px; font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
+.label-command-row .label-command-path { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--pk-muted); text-overflow: ellipsis; white-space: nowrap; }
+.label-command-row .label-command-path-chevron { width: 9px; flex: none; display: flex; justify-content: center; color: var(--pk-faint); }
+.label-command-row .label-command-current { flex: none; margin-left: auto; display: grid; color: var(--pk-text); }
+/* An empty box shows only on the highlighted row. */
+.label-command-row .label-command-checkbox[data-checked="false"] { opacity: 0; }
+.label-command-row[data-selected="true"] .label-command-checkbox[data-checked="false"] { opacity: 1; }
+/* Section headings: 30px, 12px in, the muted 12px/500 ink (as in the command menu). */
+.label-command-group [cmdk-group-heading]:not(#_) { box-sizing: border-box; height: 30px; display: flex; align-items: center; padding: 0 12px; color: var(--pk-muted); font-size: 12px; font-weight: 500; }

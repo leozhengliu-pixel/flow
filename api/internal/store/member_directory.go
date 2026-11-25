@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -26,7 +27,7 @@ const memberDirectoryMigrationVersion = 1008
 // they are; profile edits reach it through their own cascade. Application
 // users are kept by their installation, not here.
 func (s *SQLiteStore) syncMemberDirectory(ctx context.Context, workspaceKey string, userIDs ...string) (int, error) {
-	current, ok := s.storedWorkspace(workspaceKey)
+	current, ok := s.memberDirectorySource(ctx, workspaceKey)
 	if !ok {
 		return 0, nil
 	}
@@ -54,6 +55,22 @@ func (s *SQLiteStore) syncMemberDirectory(ctx context.Context, workspaceKey stri
 		return 0, err
 	}
 	return len(missing), nil
+}
+
+// memberDirectorySource is the workspace (its record and users) the directory
+// sync compares against. A bounded image holds no users, so every member
+// looked missing and each sign-in (and startup) wrote a join (SW559): bounded,
+// the users come from the workspace's legacy view, which answers a workspace
+// it cannot read as missing, as the legacy accessors do.
+func (s *SQLiteStore) memberDirectorySource(ctx context.Context, workspaceKey string) (domain.Bootstrap, bool) {
+	if view, release, handled := s.coldAccessorView(ctx, "syncMemberDirectory", workspaceKey, []string{"users"}); handled {
+		defer release()
+		if view == nil {
+			return domain.Bootstrap{}, false
+		}
+		return view.memberDirectorySource(ctx, view.lastWorkspaceKey)
+	}
+	return s.storedWorkspace(workspaceKey)
 }
 
 // syncMemberDirectoryByID is syncMemberDirectory for flows that know the
@@ -167,6 +184,9 @@ func (s *SQLiteStore) formerMemberLookup(ctx context.Context, q metadataReader, 
 // viewer's directory, which leaves removed people out, use it to let the
 // write answer with its own refusal.
 func (s *SQLiteStore) FormerMembers(ctx context.Context, workspaceKey string) (map[string]bool, error) {
+	if s.BoundedMetadataEnabled() {
+		return map[string]bool{}, ErrBoundedMetadataCoverage
+	}
 	data, ok := s.WorkspaceMetadataFields(workspaceKey, "workspace", "members")
 	if !ok {
 		return map[string]bool{}, nil
@@ -187,7 +207,7 @@ func readFormerMembers(ctx context.Context, q metadataReader, workspaceID string
 		return former, err
 	}
 	hasMemberships := rows.Next()
-	if err := rows.Close(); err != nil {
+	if err := errors.Join(rows.Close(), rows.Err()); err != nil {
 		return former, err
 	}
 	if !hasMemberships {
@@ -230,11 +250,11 @@ func (s *SQLiteStore) loadMemberAccess(ctx context.Context, data *domain.Bootstr
 	}
 	members, err := s.ListMembers(ctx, data.Workspace.ID)
 	if err != nil {
-		return err
+		return PreWriteDatabaseError(err)
 	}
 	teamMembers, err := s.ListTeamMembers(ctx, data.Workspace.ID)
 	if err != nil {
-		return err
+		return PreWriteDatabaseError(err)
 	}
 	data.Members, data.TeamMembers = members, teamMembers
 	return nil

@@ -2,6 +2,27 @@ import { expect } from '@playwright/test'
 import { mkdir } from 'node:fs/promises'
 import { test } from './workspace-fixture'
 
+test('skip link focuses the assigned issues page after it loads', async ({ page, workspaceKey }) => {
+  let releasePage!: () => void
+  const loading = new Promise<void>(resolve => { releasePage = resolve })
+  await page.route('**/src/components/my-issues/index.ts*', async route => {
+    await loading
+    await route.continue()
+  })
+  try {
+    await page.goto(`/${workspaceKey}/my-issues/assigned`, { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('main[aria-busy="true"]')).toBeVisible()
+    await page.keyboard.press('Tab')
+    const skip = page.locator('.skip-to-content')
+    await expect(skip).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(skip).toBeFocused()
+  } finally {
+    releasePage()
+  }
+  await expect(page.locator('main:not([aria-busy="true"])')).toBeFocused()
+})
+
 for (const width of [1440, 390, 375]) {
   for (const theme of ['dark', 'light']) {
     for (const locale of ['en-US', 'zh-CN']) {

@@ -126,7 +126,7 @@ func (s *server) updateJiraLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.JiraLink
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "jira.link_updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "jira.link_updated", id, input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "jiraLinks", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.JiraLinks, func(link domain.JiraLink) bool { return link.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -152,7 +152,7 @@ func (s *server) updateJiraLink(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteJiraLink(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.PathValue("id"))
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "jira.link_deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "jira.link_deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "jiraLinks", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.JiraLinks)
 		data.JiraLinks = slices.DeleteFunc(data.JiraLinks, func(link domain.JiraLink) bool { return link.ID == id })
 		if before == len(data.JiraLinks) {

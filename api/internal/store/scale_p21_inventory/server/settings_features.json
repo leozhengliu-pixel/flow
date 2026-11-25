@@ -1,0 +1,565 @@
+{
+  "source": "server/settings_features.go",
+  "unmigrated": 13,
+  "consumers": {
+    "connectIntegration": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PUT /api/integrations/{provider} (api/cmd/server/main.go:698)"
+      ]
+    },
+    "createAPIKey": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "MutateWorkspaceScopedWithAggregate"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Bounded API-key settings write used by active workspace administration.",
+      "callers": [
+        "POST /api/api-keys (api/cmd/server/main.go:635)"
+      ],
+      "reason": "Bounded mode decodes and validates the request, then calls createAPIKeyWithStore with the scoped aggregate writer. Flag off keeps the existing cold wrapper. SW450 compares cookie and Bearer authentication, responses, rows, audit, events, publications and installed images across legacy, warm and SQL-reloaded stores."
+    },
+    "createDocumentTemplate": {
+      "owner": "P17",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "POST /api/document-templates (server/main.go)",
+        "POST /api/document-templates (api/cmd/server/main.go:612)"
+      ],
+      "coldDispatch": "server/settings_features.go:createDocumentTemplate",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains actor capture, native team checks, default content data and literal content/state input semantics. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "createLabelGroup": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Flag off forwards to the literal MutateWorkspaceWithAggregate. Bounded the appending writer appends labelGroups and reads teams/<scope> for the teamExists check; the label_group_ ID is minted inside the callback. TestScaleP21SW600LabelRoutes compares workspace and team groups and refusals legacy vs warm vs SQL-reloaded, zero full decodes.",
+      "accessors": [
+        "MutateWorkspaceAppendingWithAggregate"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Label group creation from label settings.",
+      "callers": [
+        "POST /api/label-groups (server/main.go:621)"
+      ]
+    },
+    "createOAuthApplication": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "withColdMetadataRequest"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/oauth-applications (api/cmd/server/main.go:640)"
+      ],
+      "coldDispatch": "server/settings_features.go:createOAuthApplication",
+      "reason": "COLD production route after the original decode, validateOAuthInput, logo check and client id/secret generation. Bounded before this, every request was refused with 403 by authorization (SW450 control run). POST /api/oauth-applications is registered in scaleP21ColdRoutes: the metadata-only oauth_application.created mutation (applyOAuthInput, GitHub username uniqueness) runs on the cold facade through the existing cold publication; the asynchronous webhook reconcile and the API key credential audit (client_secret_issued) use the server's store. Flag off unchanged. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real routes through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded: responses, rows, audit, events, publications and installed image == reload."
+    },
+    "createProjectStatus": {
+      "owner": "P16",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/project-statuses (server/main.go)",
+        "POST /api/project-statuses (api/cmd/server/main.go:624)"
+      ],
+      "coldDispatch": "server/settings_features.go:createProjectStatus",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains status-type validation, defaults and native status-position normalization. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "createWorkspaceIssueTemplate": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/issue-templates (api/cmd/server/main.go:609)"
+      ],
+      "coldDispatch": "server/settings_features.go:createWorkspaceIssueTemplate",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains actor capture, native applyIssueTemplate reference checks and explicit empty label/form defaults. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "createWorkspaceLabel": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Flag off MutateWorkspaceAppendingWithAggregate forwards to the literal MutateWorkspaceWithAggregate with the unchanged callback. Bounded the reviewed appending writer appends labels and reads only the requested group (labelGroups/<trimmed groupId>, the one record validLabelGroup reads); the new label_ ID is minted inside the callback, so no stored object precedes it. TestScaleP21SW600LabelRoutes compares plain, grouped, project, archived and refused creations legacy vs warm vs SQL-reloaded: responses, metadata rows, root, events, webhooks (previous values), realtime, installed image == reload, zero full decodes.",
+      "accessors": [
+        "MutateWorkspaceAppendingWithAggregate"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Creating a label is an ordinary member action (label pickers create labels inline).",
+      "callers": [
+        "POST /api/labels (server/main.go:616)"
+      ]
+    },
+    "deleteDocumentTemplate": {
+      "owner": "P17",
+      "status": "reviewed",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains the original scoped writer and exact ID deletion/missing-template semantics. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "DELETE /api/document-templates/{id} (server/main.go)",
+        "DELETE /api/document-templates/{id} (api/cmd/server/main.go:614)"
+      ],
+      "coldDispatch": "server/settings_features.go:deleteDocumentTemplate"
+    },
+    "deleteOAuthApplication": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "withColdMetadataRequest"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/oauth-applications/{id} (api/cmd/server/main.go:642)"
+      ],
+      "coldDispatch": "server/settings_features.go:deleteOAuthApplication",
+      "reason": "COLD production route. Bounded before this, every request was refused with 403 by authorization (SW450 control run). DELETE /api/oauth-applications/{id} is registered in scaleP21ColdRoutes: the oauth_application.deleted writer runs on the cold facade (a legacy store, where the scoped writer is MutateWorkspace) through the existing cold publication, so the realtime entity and webhook snapshot are legacy's; the installations lookup, uninstalls, webhook reconcile and the creator's email use the server's store. Flag off unchanged. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real routes through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded: responses, rows, audit, events, publications and installed image == reload."
+    },
+    "deleteProjectStatus": {
+      "owner": "P16",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "DELETE /api/project-statuses/{id} (server/main.go)",
+        "DELETE /api/project-statuses/{id} (api/cmd/server/main.go:626)"
+      ],
+      "coldDispatch": "server/settings_features.go:deleteProjectStatus",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains last-of-type and assigned-project refusals before removing the native status. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "deleteWorkspaceIssueTemplate": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains the original scoped writer, scope/visibility predicate and missing-template refusal on the borrowed legacy facade. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/issue-templates/{id} (api/cmd/server/main.go:611)"
+      ],
+      "coldDispatch": "server/settings_features.go:deleteWorkspaceIssueTemplate"
+    },
+    "disconnectIntegration": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/integrations/{provider} (api/cmd/server/main.go:720)"
+      ]
+    },
+    "disconnectIntegrationConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/integrations/{provider}/{id} (api/cmd/server/main.go:731)"
+      ]
+    },
+    "finishIntegrationOAuth": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/integrations/{provider}/oauth/callback (api/cmd/server/main.go:716)",
+        "finishIntegrationOAuthJSON (api/cmd/server/settings_features.go:2173)"
+      ]
+    },
+    "getOAuthApplication": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Flag off the literal withColdMetadataRequest body runs unchanged. Bounded it answers from withOAuthApplicationsBounded (the reviewed installed oauthApplications field, emptied for a non-admin key as filterBootstrapForAPIKey does) with the literal ID lookup, 404 Application not found and client secret stripping; no longer registered in scaleP21ColdRoutes. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares present, missing and refused reads legacy vs warm vs SQL-reloaded.",
+      "accessors": [
+        "BeginOAuthApplicationsRead",
+        "withColdMetadataRequest"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Admin OAuth application detail, read when an application settings page opens.",
+      "callers": [
+        "GET /api/oauth-applications/{id} (api/cmd/server/oauth_platform.go:31)"
+      ]
+    },
+    "listAPIKeys": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "WorkspaceMetadataScoped",
+        "WorkspaceRole"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Bounded API-key settings read used by active workspace administration.",
+      "callers": [
+        "GET /api/api-keys (api/cmd/server/main.go:634)"
+      ],
+      "reason": "Bounded mode calls listAPIKeysWithStore directly, reading only apiKeys and the live member role through scoped metadata. Flag off keeps the existing cold wrapper. SW450 compares the real route through cookie and Bearer authentication and the route mux across legacy, warm and SQL-reloaded stores."
+    },
+    "listIntegrations": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/integrations (api/cmd/server/main.go:664)"
+      ]
+    },
+    "listOAuthApplications": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Flag off the literal withColdMetadataRequest body runs on the server store unchanged (listOAuthApplicationsWithStore over workspaceData). Bounded it returns before that through withOAuthApplicationsBounded: the viewer projection leaves oauthApplications as stored and filterBootstrapForAPIKey empties it for a key without the admin scope, so the reviewed BeginOAuthApplicationsRead installed-field decode answers the same applications in source order (nil versus empty kept) with client secrets stripped literally; the route is no longer registered in scaleP21ColdRoutes, so its authorization is the bounded membership decision. TestScaleP21SW450APIKeyAndMCPSettingsRoutes compares the real routes through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded (owner, admin, member and guest refusals, admin-scope key, empty list, created and deleted applications).",
+      "accessors": [
+        "BeginOAuthApplicationsRead",
+        "withColdMetadataRequest"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Admin OAuth application list, read whenever the API settings page opens.",
+      "callers": [
+        "GET /api/oauth-applications (api/cmd/server/main.go:639)"
+      ]
+    },
+    "listWorkspaceIssueTemplates": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/issue-templates (api/cmd/server/main.go:608)"
+      ]
+    },
+    "listWorkspaceLabels": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Flag off the literal body reads workspaceData unchanged. Bounded it returns before workspaceData through listLabelsBounded (workspace-scope and resourceType predicate unchanged), which answers the same labels in source order with the same issue counts from the reviewed resource directory read and the issue indexes. TestScaleP21SW600LabelRoutes compares the real route through cookie and Bearer authentication and the route mux, legacy vs warm vs SQL-reloaded, for every role, plain and team-restricted keys and resource filters, with zero full decodes.",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Label settings list read by every member who opens label settings or label pickers.",
+      "callers": [
+        "GET /api/labels (server/main.go:615)"
+      ]
+    },
+    "moveWorkspaceLabelToTeams": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/labels/{id}/move-to-teams (server/main.go:618)"
+      ]
+    },
+    "refreshIntegrationOAuth": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Projects integrationConnections/id and writes that same canonical record, preserving provider binding and workspace identity. Endpoint validation, provider exchange, encrypted refresh-token CAS and disconnect cleanup remain outside the metadata callback; expiry/status/error fields and existing event envelopes are retained. TestScaleP21SW5IntegrationOAuthDifferential compares principal/credential classes, missing/provider mismatch, encrypted tokens, provider errors, expiry, reconnect CAS/disconnect races, unrelated bytes and queued/replayed revocation under the explicit live boundary. HTTP authorization remains independently blocked.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/integrations/{provider}/{id}/oauth/refresh (api/cmd/server/main.go:718)"
+      ]
+    },
+    "reorderProjectStatuses": {
+      "owner": "P16",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "POST /api/project-statuses/reorder (server/main.go)",
+        "POST /api/project-statuses/reorder (api/cmd/server/main.go:627)"
+      ],
+      "coldDispatch": "server/settings_features.go:reorderProjectStatuses",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains exact ID uniqueness/type-rank checks and reordered status snapshots in native projects. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "requestActor": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Explicit authenticated user short-circuit is unchanged. Auth-disabled fallback uses identity-only WorkspaceMetadataScoped with exact off-mode WorkspaceMetadata dispatch and default-workspace semantics. TestScaleP21SW17RequestActorDifferential covers principal/key matrix, missing/empty workspace, stored viewer, explicit actor under cancellation, cancelled bounded fallback, ownership and unrelated large metadata with zero full decodes. Request authorization remains an independent boundary.",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "revokeAPIKey": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "WorkspaceSettingsMetadata",
+        "WorkspaceRole",
+        "MutateWorkspaceScoped"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Bounded API-key settings write used by active workspace administration.",
+      "callers": [
+        "DELETE /api/api-keys/{id} (api/cmd/server/main.go:637)"
+      ],
+      "reason": "Bounded mode reads workspace identity and role through scoped metadata before the scoped api_key.revoked writer. Flag off keeps the existing cold wrapper. SW450 compares authentication, responses, durable rows, audit, events, publications and installed images across legacy, warm and SQL-reloaded stores."
+    },
+    "revokeIntegrationOAuth": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Projects integrationConnections/id and writes that same canonical record, retaining provider binding and workspace identity. External revocation and conditional encrypted-token removal remain outside the callback; status/state/expiry reset and event envelopes are unchanged. TestScaleP21SW5IntegrationOAuthDifferential compares principal/credential classes, missing/provider mismatch, no-token behavior, endpoint/provider failures, reconnect CAS, exact token/record effects, unrelated bytes and queued/replayed revocation under the explicit live boundary. HTTP authorization remains independently blocked.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "DELETE /api/integrations/{provider}/{id}/oauth/token (api/cmd/server/main.go:719)"
+      ]
+    },
+    "rotateAPIKeySecret": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "MutateWorkspaceScoped"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Bounded API-key secret rotation used by active workspace administration.",
+      "callers": [
+        "POST /api/api-keys/{id}/rotate-secret (api/cmd/server/main.go:638)"
+      ],
+      "reason": "Bounded mode calls rotateAPIKeySecretWithStore after secret generation, using the scoped writer. Flag off keeps the existing cold wrapper. SW450 compares authentication, responses, durable rows, audit, events, publications and installed images across legacy, warm and SQL-reloaded stores."
+    },
+    "startIntegrationOAuth": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/integrations/{provider}/oauth/start (api/cmd/server/main.go:715)"
+      ]
+    },
+    "updateAPIKey": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "MutateWorkspaceScopedWithAggregate"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Bounded API-key settings write used by active workspace administration.",
+      "callers": [
+        "PATCH /api/api-keys/{id} (api/cmd/server/main.go:636)"
+      ],
+      "reason": "Bounded mode decodes and validates the request, then calls updateAPIKeyWithStore with the scoped aggregate writer. Flag off keeps the existing cold wrapper. SW450 compares authentication, responses, durable rows, audit, events, publications and installed images across legacy, warm and SQL-reloaded stores."
+    },
+    "updateAccountProfile": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/account/profile (api/cmd/server/main.go:435)"
+      ]
+    },
+    "updateDocumentTemplate": {
+      "owner": "P17",
+      "status": "reviewed",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains the original scoped writer, native team checks, field presence, no-op and timestamp behavior. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Template administration is explicitly COLD under the owner's decision.",
+      "callers": [
+        "PATCH /api/document-templates/{id} (server/main.go)",
+        "PATCH /api/document-templates/{id} (api/cmd/server/main.go:613)"
+      ],
+      "coldDispatch": "server/settings_features.go:updateDocumentTemplate"
+    },
+    "updateIntegration": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes integrationConnections/id only, preserving exact provider binding, config merge with credential-key exclusions, normalized scopes/channels, status validation, redacted response and no-op behavior. TestScaleP21SW5SettingsPointDifferential compares canonical target/unrelated records, response and webhook/realtime effects across principal/credential classes and missing IDs; TestScaleP21SW5SettingsPointFailures covers provider mismatch and client-secret input rejection. HTTP authorization remains independently blocked.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/integrations/{provider}/{id} (api/cmd/server/main.go:730)"
+      ]
+    },
+    "updateLabelGroup": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Flag off forwards to the literal MutateWorkspace. Bounded it writes labelGroups/<id> (with the labelRecordScope aggregate predecessors of the ID) and, when archivedAt is given, the complete labels field its cascade rewrites; label_group.updated is metadata-only. TestScaleP21SW600LabelRoutes compares renames, archiving and unarchiving a group with its labels, unchanged edits, invalid times and missing groups legacy vs warm vs SQL-reloaded, zero full decodes.",
+      "accessors": [
+        "MutateWorkspaceResolved"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Label group edits from label settings.",
+      "callers": [
+        "PATCH /api/label-groups/{id} (server/main.go:622)"
+      ]
+    },
+    "updateOAuthApplication": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "withColdMetadataRequest"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/oauth-applications/{id} (api/cmd/server/main.go:641)"
+      ],
+      "coldDispatch": "server/settings_features.go:updateOAuthApplication",
+      "reason": "COLD production route after the original decode, validateOAuthInput and logo check. Flag off withColdMetadataRequest runs updateOAuthApplicationWithStore on the server's store literally. Bounded, PATCH /api/oauth-applications/{id} is registered in scaleP21ColdRoutes: authorization's projection and the oauth_application.updated metadata-only mutation share the replica cold slot, the literal callback (applyOAuthInput, GitHub username uniqueness, CredentialsAuthorizedBy, unchanged-edit ErrNoMutation) runs on the cold facade and the existing cold full-metadata publication installs its postimage before output; the identity sync (bounded SyncApplicationIdentity) and the asynchronous webhook reconcile use the server's store. Bounded before this, the route answered 500 (no migrated point writer). TestScaleP21SW430OAuthColdRoutes compares rename (installed/uninstalled/webhook app, then the listing), scopes edit by an admin, unchanged, member forbidden, unknown app, taken GitHub username, invalid input, duplicate client and a large record: responses, rows, app users, events, publications and installed image == reload, after the reconcile finished."
+    },
+    "updateProjectStatus": {
+      "owner": "P16",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "On-demand project/document mutation, sharing/reminder/subscription or settings operation; not a prerequisite of the owner's specified read views or issue-write/tick workload. Promote if the single load profile or a HOT caller reaches it.",
+      "callers": [
+        "PATCH /api/project-statuses/{id} (server/main.go)",
+        "PATCH /api/project-statuses/{id} (api/cmd/server/main.go:625)"
+      ],
+      "coldDispatch": "server/settings_features.go:updateProjectStatus",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains type immutability, no-op detection and status snapshots cascaded into native projects. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "updateUserSettings": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Writes through MutateUserSettings with the literal callback: flag off the literal MutateWorkspace; bounded a patch without username runs the literal point writer's transaction on the member's settings record (stored row as the base, installed entry as written, no previous values), one with username the scoped writer with the complete users, members and userSettings fields that usernameTaken reads. TestScaleP21SW602AccountSettings compares legacy vs warm vs SQL-reloaded (responses, rows, events, webhooks, realtime, installed entries, zero full decodes) for field edits, unchanged edits, invalid values, members with unnormalized stored rows, without rows and without entries, username changes, conflicts and clears, and development mode.",
+      "accessors": [
+        "Bootstrap",
+        "MutateUserSettings"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Personal preferences page (every account settings toggle).",
+      "callers": [
+        "PATCH /api/account/settings (api/cmd/server/main.go:431)"
+      ]
+    },
+    "updateWorkspaceIssueTemplate": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/issue-templates/{id} (api/cmd/server/main.go:610)"
+      ],
+      "coldDispatch": "server/settings_features.go:updateWorkspaceIssueTemplate",
+      "reason": "COLD branch follows original decode/validation/actor capture; flag-off body and server receiver remain literal. Retains the literal scope/visibility predicate, native reference checks, no-op and timestamp behavior. Existing one-slot COLD dispatch owns authorization, mutation publication and final output. SW207 passes 25 actual-cookie/mux Tier B cases (10 successful writes), comparing exact responses, durable root/metadata/issues/content and event/webhook/realtime effects; SW215 supplies shared authentication, cancellation and output-lifetime proof. COLD dispatch obligation remains; no activation exemption."
+    },
+    "updateWorkspaceLabel": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Flag off MutateWorkspaceResolved forwards to the literal MutateWorkspace with the unchanged callback. Bounded it writes labels/<id> with updateTeamLabel reviewed aggregate predecessors (labelRecordScope) and resolves, inside the transaction, the group validLabelGroup reads (the requested groupId, else the label current group) and the selected projects display users. label.updated is metadata-only (issue copies are resolved from the catalog on read), so cascadeLabel changes no stored issue. TestScaleP21SW600LabelRoutes compares renames, regrouping, archiving, unchanged edits, team labels, missing IDs and an ID shared with a team legacy vs warm vs SQL-reloaded, zero full decodes.",
+      "accessors": [
+        "MutateWorkspaceResolved"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Renaming, recolouring, regrouping and archiving labels are ordinary member actions.",
+      "callers": [
+        "PATCH /api/labels/{id} (server/main.go:617)"
+      ]
+    },
+    "updateWorkspacePreferences": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/workspace/preferences (api/cmd/server/main.go:629)"
+      ]
+    }
+  }
+}

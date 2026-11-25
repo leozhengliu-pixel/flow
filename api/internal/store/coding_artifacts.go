@@ -96,6 +96,16 @@ func (s *SQLiteStore) CodingArtifact(ctx context.Context, workspaceKey, sessionI
 	return artifact, objectKey, nil
 }
 
+// CodingArtifactByObject names the session and artifact stored under an object
+// key (ErrCodingArtifactNotFound when no artifact row holds it any more).
+func (s *SQLiteStore) CodingArtifactByObject(ctx context.Context, objectKey string) (workspaceKey, sessionID, id string, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT workspace_key,session_id,id FROM coding_session_artifacts WHERE object_key=? LIMIT 1`, objectKey).Scan(&workspaceKey, &sessionID, &id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", "", ErrCodingArtifactNotFound
+	}
+	return workspaceKey, sessionID, id, err
+}
+
 // CodingArtifactObjectKeys maps artifact ids to object keys for a session.
 func (s *SQLiteStore) CodingArtifactObjectKeys(ctx context.Context, workspaceKey, sessionID string) (map[string]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id,object_key FROM coding_session_artifacts WHERE workspace_key=? AND session_id=?`, workspaceKey, sessionID)

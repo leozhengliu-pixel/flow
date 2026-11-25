@@ -1,0 +1,14 @@
+{
+  "source": "store/cycle_settings_defaults_migration.go",
+  "unmigrated": 0,
+  "consumers": {
+    "migrateCycleSettingsDefaults": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "One-time startup data migration. It selects only the cycleSettings record keys that lack a capacity key with a record-level SQL query and rewrites those records through the scoped writer restricted to the cycleSettings field and no issue record mutations, so no complete workspace body is read. TestCycleSettingsDefaultsMigration covers SQLite and TestExternalDatabaseCycleSettingsDefaultsMigration covers MySQL and PostgreSQL: a legacy row gets the old defaults and an explicit capacity 0 row is untouched.",
+      "accessors": [
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

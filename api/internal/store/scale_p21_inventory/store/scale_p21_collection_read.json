@@ -1,0 +1,18 @@
+{
+  "source": "store/scale_p21_collection_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginMetadataArrayRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted raw array adapter over one detached repeatable-read snapshot: fixed-chunk source parsing, strict process spool admission and callback-only readers. Root SW0 differentials passed twice on persistent SQLite for split/inline ordering, repeated aliases and typed occurrences, malformed input, null/empty shape, canonical byte lengths, stamped property objects, cancellation, pool-one ownership and released work/spools. No authorization or legacy warm normalization is claimed; each consumer retains its own independent review.",
+      "accessors": ["BeginMetadataCollectionRead"]
+    },
+    "StreamMetadataArray": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted raw callback wrapper retains the detached array reader and its admission until visitation completes, including early-stop, callback errors and cancellation, then releases all spools. Root SW0 collection tests passed twice on persistent SQLite, including explicit spool/budget errors and repeated-array merge rejection. Callers still own typed decoding/merging admission, live permissions, legacy source provenance and publication lifetime; this wrapper certifies no downstream handler.",
+      "accessors": ["BeginMetadataArrayRead"]
+    }
+  }
+}

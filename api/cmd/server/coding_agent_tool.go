@@ -71,11 +71,10 @@ func (s *server) startCodingSessionFromTool(ctx context.Context, actor mcpActor,
 		CheckIntent: true, Request: request, ContextText: stringArg(args, "repository"),
 	}
 	if issueID := strings.TrimSpace(stringArg(args, "issueId")); issueID != "" {
-		issue, err := s.store.IssueRecord(ctx, workspace, issueID)
+		// The requesting person's read of the issue, not the server's.
+		issue, err := s.codingIssueReadable(ctx, workspace, firstNonEmpty(actor.AuthorizationUserID, actor.User.ID), issueID)
 		if err != nil {
-			if issue, err = s.issueByIdentifier(ctx, workspace, issueID); err != nil {
-				return nil, errNotFound
-			}
+			return nil, errNotFound
 		}
 		if key := actor.APIKey; key.TeamRestriction == "selected" && !slices.Contains(key.TeamIDs, issue.Team.ID) {
 			return nil, errNotFound
@@ -114,7 +113,7 @@ func (s *server) startCodingSessionFromTool(ctx context.Context, actor mcpActor,
 			return codingToolError{Code: domain.CodingErrPermissionDenied, Error: "This loop cannot change code: set its code access to read and write (and allow automation access to repositories) to start coding sessions."}, nil
 		}
 		if trigger.Issue == nil && loopRun.trigger.EntityType == "issue" && loopRun.trigger.EntityID != "" {
-			if issue, err := s.store.IssueRecord(ctx, workspace, loopRun.trigger.EntityID); err == nil {
+			if issue, err := s.codingIssueReadable(ctx, workspace, firstNonEmpty(loopRun.loop.OwnerID, actor.User.ID), loopRun.trigger.EntityID); err == nil {
 				withIssue := s.issueCodingTrigger(ctx, workspace, metadata, issue, actor.User)
 				trigger.Issue, trigger.RecentEnvironmentIDs = withIssue.Issue, withIssue.RecentEnvironmentIDs
 				trigger.Prompt = coding.IssuePrompt(*withIssue.Issue, prompt)

@@ -109,7 +109,7 @@ func (s *server) auditAPIKeyCredential(r *http.Request, action string, app domai
 	}
 	workspace := workspaceKey(r)
 	ctx := store.WithMetadataFields(context.WithoutCancel(r.Context()), "auditLog")
-	err := s.store.MutateWorkspace(ctx, workspace, "audit.oauth_application_credential", app.ID, map[string]any{"action": action}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(ctx, workspace, "audit.oauth_application_credential", app.ID, map[string]any{"action": action}, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "oauthApplications", ID: app.ID}}}, func(data *domain.Bootstrap) error {
 		appendAudit(data, action, "oauth_application", app.ID, map[string]any{"application": app.Name, "clientId": app.ClientID, "apiKeyId": key.ID, "apiKeyName": key.Name, "authentication": "apiKey"})
 		return nil
 	})
@@ -175,7 +175,12 @@ func (s *server) oauthConsentInstallation(w http.ResponseWriter, r *http.Request
 	if result.Scopes == nil {
 		result.Scopes = []string{}
 	}
-	if metadata, ok := s.store.WorkspaceMetadataFields(access.Workspace.URLKey, "users"); ok {
+	metadata, ok, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), access.Workspace.URLKey, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "users", ID: installation.InstalledBy}}}, "users")
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	if ok {
 		if index := slices.IndexFunc(metadata.Users, func(user domain.User) bool { return user.ID == installation.InstalledBy }); index >= 0 {
 			result.InstallerName = cmp.Or(metadata.Users[index].DisplayName, metadata.Users[index].Name)
 		}
@@ -238,6 +243,13 @@ func (s *server) listOAuthApplicationInstalls(w http.ResponseWriter, r *http.Req
 // username (the reference app's "GitHub username": commits and comments in GitHub by
 // that account belong to the app user).
 func (s *server) githubAppUsers(ctx context.Context, workspace string) map[string]domain.User {
+	if s.store.BoundedMetadataEnabled() {
+		// The review sync tick and review import call this outside a
+		// request: own the installation list here (the map copies users).
+		var closeOutputs func()
+		ctx, closeOutputs = applicationOutputContext(ctx)
+		defer closeOutputs()
+	}
 	installations, err := s.store.ListApplications(ctx, workspace)
 	if err != nil {
 		return nil

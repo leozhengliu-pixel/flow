@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_recurring_occurrence_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedRecurringOccurrence": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Closed recurring-occurrence profile of mutateBoundedScopedImage (creation kind): literal recurringIssueScope expansion with the 20,000 limits under the transaction, durable sequence lock, selected creation closure, source-field and metadata validation, issue SLA ordinal patch and renumbered SLA event appends, owned new-ID preimages, shared full image path over the limit. SW206 differential (legacy/warm/legacy-reloaded/reloaded) covers schedules, families, SLA/cycle/project effects, no-op/source-only/rollback branches, multi-series ticks, concurrency and stale-image conflict retry; the >20,000 full fallback refuses atomically on the shared full-image work budget (root gate).",
+      "accessors": [
+        "mutateBoundedScopedImage"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Closed recurring-occurrence profile of the scoped image writer for the minute recurring-issue ticker.",
+      "callers": [
+        "store/sqlite.go:dispatchMutation"
+      ]
+    }
+  }
+}

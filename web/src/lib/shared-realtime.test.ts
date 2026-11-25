@@ -34,17 +34,18 @@ class FakeStream implements StreamLike {
 class FakeLocks implements LocksLike {
   private holders = new Map<string, { release: () => void }>()
   private queues = new Map<string, Array<() => void>>()
-  request(name: string, options: { signal?: AbortSignal }, callback: () => Promise<void> | void) {
+  request(name: string, options: { signal?: AbortSignal; ifAvailable?: boolean }, callback: (lock: Lock | null) => Promise<void> | void) {
     return new Promise<void>((resolve, reject) => {
       const run = async () => {
         let release!: () => void
         const done = new Promise<void>(r => { release = r })
         this.holders.set(name, { release })
-        try { await Promise.race([Promise.resolve(callback()), done]) }
+        try { await Promise.race([Promise.resolve(callback({ name, mode: 'exclusive' })), done]) }
         finally { this.holders.delete(name); this.queues.get(name)?.shift()?.(); resolve() }
       }
       if (options.signal?.aborted) return reject(new DOMException('aborted', 'AbortError'))
       if (!this.holders.has(name)) { void run(); return }
+      if (options.ifAvailable) { resolve(callback(null)); return }
       const queue = this.queues.get(name) ?? []
       const entry = () => void run()
       queue.push(entry)
@@ -108,7 +109,7 @@ describe('shared realtime stream', () => {
   })
   afterEach(() => { vi.useRealTimers() })
 
-  function openTab({ workspace = 'acme', user = 'user-1', useLocks = true, stored }: { workspace?: string; user?: string; useLocks?: boolean; stored?: string } = {}): Tab {
+  function openTab({ workspace = 'acme', user = 'user-1', useLocks = true, stored, localCursor }: { workspace?: string; user?: string; useLocks?: boolean; stored?: string; localCursor?: string } = {}): Tab {
     const messages: RealtimeMessage[] = []
     const status: boolean[] = []
     const roles: string[] = []
@@ -122,11 +123,13 @@ describe('shared realtime stream', () => {
     const dispose = connectSharedRealtime({
       workspaceKey: workspace,
       userId: user,
+      appliedCursor: localCursor ? true : undefined,
       url: cursor => `/api/realtime/events?workspace=${workspace}${cursor ? `&since=${cursor}` : ''}`,
       cursor: () => stored ?? cursors[workspace],
       onMessage: message => messages.push(message),
       onStatus: connected => status.push(connected),
       onRole: role => roles.push(role),
+      localStore: localCursor ? { name: `flow-sync:${user}:${workspace}`, cursor: async () => localCursor, onDisconnect: () => {} } : undefined,
       env,
     })
     return {
@@ -168,6 +171,20 @@ describe('shared realtime stream', () => {
     tabs.forEach(tab => tab.dispose())
     await settle()
     expect(FakeStream.live()).toHaveLength(0)
+  })
+
+  it('distinguishes initial store ownership from a follower taking over', async () => {
+    const owner = openTab({ stored: '8', localCursor: '9' })
+    const follower = openTab({ stored: '8', localCursor: '9' })
+    await settle()
+    expect(owner.roles).toEqual(['leader'])
+    expect(follower.roles).toEqual(['follower'])
+    expect(FakeStream.live().map(stream => stream.url)).toEqual(['/api/realtime/events?workspace=acme&since=8'])
+    owner.dispose()
+    await settle()
+    expect(follower.roles).toEqual(['follower', 'leader'])
+    expect(FakeStream.live().map(stream => stream.url)).toEqual(['/api/realtime/events?workspace=acme&since=9'])
+    follower.dispose()
   })
 
   it('fans every event out to all tabs, including the leader, with identical payloads', async () => {

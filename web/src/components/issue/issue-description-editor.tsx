@@ -11,8 +11,8 @@ import { FlowCodeBlock, FlowCodeBlockSchema } from '@/components/editor/code-blo
 import { LinkBehavior } from '@/components/editor/link-behavior'
 import { MarkdownPaste } from '@/components/editor/markdown-paste'
 import { OutlineMinimap } from '@/components/editor/outline/outline-minimap'
-import { Markdown } from '@tiptap/markdown'
-import { Editor as CoreEditor, getSchema, type Extensions } from '@tiptap/core'
+import { Markdown, MarkdownManager } from '@tiptap/markdown'
+import { createDocument, getSchema, type Extensions } from '@tiptap/core'
 import type { EditorState } from '@tiptap/pm/state'
 import { handleEmoticonInput } from '@/components/editor/emoticon-input'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
@@ -679,8 +679,8 @@ function RetrySaveButton({ unsaved, label, onRetry }: { unsaved: ReturnType<type
   return pending ? <button type="button" onClick={onRetry}>{label}</button> : null
 }
 
-function schemaExtensions() {
-  return [
+function collaborationSeedParser() {
+  const extensions = [
     FlowStarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, codeBlock: false, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: false, trailingNode: false }),
     FlowCodeBlockSchema,
     TableKit.configure({ table: { resizable: true } }),
@@ -697,7 +697,10 @@ function schemaExtensions() {
     InlineCommentMark,
     SlashCommandExtension,
   ]
+  return { schema: getSchema(extensions), markdown: new MarkdownManager({ extensions }) }
 }
+
+const seedParser = collaborationSeedParser()
 
 function pickDescriptionFiles(onFiles: (files: File[]) => void, accept?: string) {
   const input = document.createElement('input')
@@ -722,10 +725,14 @@ function seededCollaborationDocument(documentId: string, value: string, state?: 
   const document = new YDoc()
   document.clientID = deterministicClientId(documentId)
   const parsed = parseDescriptionContent(value, state)
-  const markdownEditor = parsed.contentType === 'markdown' ? new CoreEditor({ extensions: schemaExtensions(), content: parsed.content, contentType: 'markdown' }) : undefined
-  const content = markdownEditor?.getJSON() ?? descriptionDocumentJSON(value, state)
-  prosemirrorJSONToYXmlFragment(getSchema(schemaExtensions()), content, document.getXmlFragment('prosemirror'))
-  markdownEditor?.destroy()
+  let content
+  if (parsed.contentType === 'markdown') {
+    const markdown = seedParser.markdown.parse(parsed.content as string)
+    content = createDocument(markdown.content?.length ? markdown : parsed.content, seedParser.schema).toJSON()
+  } else {
+    content = descriptionDocumentJSON(value, state)
+  }
+  prosemirrorJSONToYXmlFragment(seedParser.schema, content, document.getXmlFragment('prosemirror'))
   document.clientID = randomClientId()
   return document
 }

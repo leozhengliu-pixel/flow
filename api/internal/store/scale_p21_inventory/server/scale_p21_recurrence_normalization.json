@@ -1,0 +1,24 @@
+{
+  "source": "server/scale_p21_recurrence_normalization.go",
+  "unmigrated": 0,
+  "consumers": {
+    "normalizeLegacyRecurringIssuesBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Composes the proven admitted ID/first-page/timezone reader, releasing each candidate page after its original per-issue loop and retaining the location cache through the pass. It preserves the literal summary-page skip behavior, current timezone cache, missing/no-op/error ordering and partial success. SW156 compares 11 actual legacy/bounded ticker pairs with exact rows, all issue fields, captured clock, events/publications and log text. SW157 separately proves the reader; the actual representative ticker observes SQL 31 to 68 for added preflight and exact selected scoped closure, with IDs limited to 10000, pages to 200 and admitted work bounded. No performance gain is claimed.",
+      "accessors": ["BeginRecurringNormalizationRead"],
+      "temperature": "hot",
+      "temperatureReason": "First recurring normalization pass and retries from the minute scheduler.",
+      "callers": ["server/recurring_issues.go:normalizeLegacyRecurringIssues"]
+    },
+    "normalizeRecurringIssueTimingBounded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Runs the unchanged timing callback under an independent output lifetime and explicit closed MutationScope profile, retaining the original map payload, aggregate, captured timestamp and upgrade log. Admission outlives callback-captured issue use. SW156 proves exact actual ticker output/effects; SW155 proves the shared writer's complete scoped native/account/progress/PreviousValues/publication behavior, warm/reloaded, persistent SQLite twice and race. It does not create occurrences or change callback clocks.",
+      "accessors": ["MutateWorkspace"],
+      "temperature": "hot",
+      "temperatureReason": "Selected recurring timing mutation from the first scheduler pass.",
+      "callers": ["server/scale_p21_recurrence_normalization.go:normalizeLegacyRecurringIssuesBounded"]
+    }
+  }
+}

@@ -60,6 +60,17 @@ func (s *SQLiteStore) ensureApplicationAgents(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) ApplicationByUser(ctx context.Context, id string) (domain.ApplicationInstallation, error) {
+	if s.BoundedMetadataEnabled() {
+		read, err := s.BeginApplicationAccessRead(ctx, id, "full")
+		if err != nil {
+			return domain.ApplicationInstallation{}, recordMetadataOutputError(ctx, err)
+		}
+		if !registerMetadataOutputClose(ctx, read.Close) {
+			read.Close()
+			return domain.ApplicationInstallation{}, recordMetadataOutputError(ctx, ErrBoundedMetadataCoverage)
+		}
+		return read.Installation, nil
+	}
 	var a domain.ApplicationInstallation
 	var raw []byte
 	err := s.db.QueryRowContext(ctx, `SELECT data FROM application_installations WHERE user_id=?`, id).Scan(&raw)
@@ -73,6 +84,17 @@ func (s *SQLiteStore) ApplicationByUser(ctx context.Context, id string) (domain.
 }
 
 func (s *SQLiteStore) ListApplications(ctx context.Context, workspace string) ([]domain.ApplicationInstallation, error) {
+	if s.BoundedMetadataEnabled() {
+		read, err := s.BeginApplicationListRead(ctx, workspace)
+		if err != nil {
+			return nil, recordMetadataOutputError(ctx, err)
+		}
+		if !registerMetadataOutputClose(ctx, read.Close) {
+			read.Close()
+			return nil, recordMetadataOutputError(ctx, ErrBoundedMetadataCoverage)
+		}
+		return read.Applications, nil
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT data FROM application_installations WHERE workspace_key=? ORDER BY id`, workspace)
 	if err != nil {
 		return nil, err
@@ -129,7 +151,11 @@ func (s *SQLiteStore) installApplicationTx(ctx context.Context, tx *sqlTx, lock 
 // activeWorkspaceAdminTx requires userID to be an active workspace admin.
 func activeWorkspaceAdminTx(ctx context.Context, tx *sqlTx, lock, workspaceID, userID string) error {
 	var role, status string
-	if err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`+lock, workspaceID, userID).Scan(&role, &status); err != nil || status != "active" || !isWorkspaceAdminRole(role) {
+	err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`+lock, workspaceID, userID).Scan(&role, &status)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return PreWriteDatabaseError(err)
+	}
+	if err != nil || status != "active" || !isWorkspaceAdminRole(role) {
 		return ErrAuthForbidden
 	}
 	return nil
@@ -220,6 +246,9 @@ func (s *SQLiteStore) writeApplicationInstallationTx(ctx context.Context, tx *sq
 	if err = ensureOAuthMetadataShape(ctx, tx, a.WorkspaceKey, "users", "array", lock); err != nil {
 		return current, a, err
 	}
+	if err = oauthMetadataSelect(ctx, tx, &current, "users", []string{"ID"}, user.ID); err != nil {
+		return current, a, err
+	}
 	current.Users = slices.Clone(current.Users)
 	idx := slices.IndexFunc(current.Users, func(u domain.User) bool { return u.ID == user.ID })
 	if idx < 0 {
@@ -254,6 +283,13 @@ func (s *SQLiteStore) InstallApplication(ctx context.Context, workspace string, 
 }
 
 func revokeApplicationCredentialsTx(ctx context.Context, tx *sqlTx, workspace, userID string, data domain.Bootstrap) (domain.Bootstrap, error) {
+	// SubjectID is SubjectUserID, else CreatorID: select either match.
+	if err := oauthMetadataSelect(ctx, tx, &data, "apiKeys", []string{"SubjectUserID", "CreatorID"}, userID); err != nil {
+		return data, err
+	}
+	if err := oauthMetadataSelect(ctx, tx, &data, "oauthAuthorizations", []string{"UserID"}, userID); err != nil {
+		return data, err
+	}
 	now := time.Now().UTC()
 	data.APIKeys = slices.Clone(data.APIKeys)
 	for index := range data.APIKeys {
@@ -290,6 +326,18 @@ func revokeApplicationCredentialsTx(ctx context.Context, tx *sqlTx, workspace, u
 
 func (s *SQLiteStore) decorateAppUser(ctx context.Context, u *domain.User) error {
 	if !strings.HasPrefix(u.ID, "app_") {
+		return nil
+	}
+	if s.BoundedMetadataEnabled() {
+		read, err := s.BeginApplicationAccessRead(ctx, u.ID, "user")
+		if err != nil {
+			return recordMetadataOutputError(ctx, err)
+		}
+		if !registerMetadataOutputClose(ctx, read.Close) {
+			read.Close()
+			return recordMetadataOutputError(ctx, ErrBoundedMetadataCoverage)
+		}
+		*u = read.User
 		return nil
 	}
 	a, err := s.ApplicationByUser(ctx, u.ID)

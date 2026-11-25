@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+
+	"flow/api/internal/store"
 )
 
 // writeStreamedJSON writes value (a struct) exactly as writeJSON would, but
@@ -24,6 +26,13 @@ import (
 // status line was sent, the response is aborted rather than left as valid
 // but truncated JSON.
 func writeStreamedJSON(ctx context.Context, w http.ResponseWriter, status int, value any) {
+	writeStreamedJSONFields(ctx, w, status, value, nil)
+}
+
+func writeStreamedJSONFields(ctx context.Context, w http.ResponseWriter, status int, value any, encode hydratedFieldEncoder) {
+	if status == http.StatusOK || status == http.StatusCreated {
+		ctx = hydratedSigningContext(ctx, w)
+	}
 	v := reflect.ValueOf(value)
 	plan := streamPlanFor(v.Type())
 	if plan == nil {
@@ -32,8 +41,17 @@ func writeStreamedJSON(ctx context.Context, w http.ResponseWriter, status int, v
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
+	if store.RecordHydrationEnabled() {
+		prepareHydratedBootstrapSpool(w, value)
+	}
 	buffer := bufio.NewWriterSize(w, 64<<10)
-	if err := encodeStreamedStruct(ctx, buffer, v, plan); err != nil {
+	var err error
+	if encode != nil && store.RecordHydrationEnabled() {
+		err = encodeHydratedStructFields(ctx, buffer, v, plan, 0, encode)
+	} else {
+		err = encodeStreamedStruct(ctx, buffer, v, plan)
+	}
+	if err != nil {
 		log.Printf("encode streamed response: %v", err)
 		panic(http.ErrAbortHandler)
 	}
@@ -131,6 +149,9 @@ func isEmptyJSONValue(v reflect.Value) bool {
 }
 
 func encodeStreamedStruct(ctx context.Context, buffer *bufio.Writer, v reflect.Value, plan []streamField) error {
+	if store.RecordHydrationEnabled() {
+		return encodeHydratedStruct(ctx, buffer, v, plan, 0)
+	}
 	buffer.WriteByte('{')
 	first := true
 	for _, field := range plan {

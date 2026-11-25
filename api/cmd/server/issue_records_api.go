@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -56,7 +57,10 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		return data, query, err
 	}
 	query.Workspace = data.Workspace.URLKey
-	if s.authDisabled && r.Method != http.MethodGet && r.Method != http.MethodHead && r.URL.Path != "/api/issue-records/visibility" {
+	if s.authDisabled && !s.store.BoundedMetadataEnabled() && r.Method != http.MethodGet && r.Method != http.MethodHead && r.URL.Path != "/api/issue-records/visibility" {
+		if err := s.store.RefreshColdMetadataRead(r.Context(), query.Workspace); err != nil {
+			return data, query, err
+		}
 		data, _ = s.store.WorkspaceMetadata(query.Workspace)
 		data.ViewerRole = "admin"
 	}
@@ -146,30 +150,30 @@ func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
 	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	query.Nested = r.URL.Query().Get("nested") == "true"
 	page, err := s.store.QueryIssueRecords(r.Context(), query)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	page.Items, err = s.projectIssueRecordReferences(r, metadata, query, page.Items)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if len(page.Descendants) > 0 {
 		if page.Descendants, err = s.projectIssueRecordReferences(r, metadata, query, page.Descendants); err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 	}
 	if r.URL.Query().Get("includeStatusHistory") == "true" {
 		intervals, err := s.store.IssueInsightIntervals(r.Context(), query.Workspace, page.Items, metadata.States)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, struct {
@@ -178,10 +182,14 @@ func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
 		}{page, intervals})
 		return
 	}
-	writeJSON(w, http.StatusOK, page)
+	s.writeIssueRead(w, r, page)
 }
 
 func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.issueRecordsBootstrapBounded(w, r)
+		return
+	}
 	started := time.Now()
 	data, ok := s.issueRecordsBootstrapData(w, r)
 	if !ok {
@@ -203,21 +211,21 @@ func (s *server) issueRecordsBootstrapData(w http.ResponseWriter, r *http.Reques
 	var data domain.Bootstrap
 	if s.authDisabled {
 		var ok bool
-		data, ok = s.store.WorkspaceMetadata(key)
+		data, ok = s.store.WorkspaceMetadataForRead(r.Context(), key)
 		if !ok {
 			writeError(w, 404, "workspace not found")
 			return data, false
 		}
 		data.ViewerRole = "admin"
 		if err := s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID); err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return data, false
 		}
 	} else {
 		var err error
 		data, err = s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return data, false
 		}
 		filterBootstrapForAPIKey(&data, r)
@@ -225,7 +233,7 @@ func (s *server) issueRecordsBootstrapData(w http.ResponseWriter, r *http.Reques
 	data.IssueCollectionPaged = true
 	data.CommentActions = nil
 	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return data, false
 	}
 	if projectListBootstrapRequested(r) {
@@ -233,15 +241,19 @@ func (s *server) issueRecordsBootstrapData(w http.ResponseWriter, r *http.Reques
 	} else if r.Header.Get("X-Flow-Projection") == "issue-detail" {
 		store.IssueDetailBootstrapProjection(&data)
 	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return data, false
 	}
 	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return data, false
+	}
+	if s.authDisabled && r.Header.Get(localStoreHeader) == localStoreShadowCapability {
+		materializeDevelopmentMembers(&data)
 	}
 	sanitizeBootstrap(&data)
 	s.applyCalendarAway(r.Context(), &data)
+	s.hideUnreadableLoops(r, &data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
 	// Paged clients read project and initiative updates (with their comments
 	// and reactions) from /api/pulse/feed and the per-project and
@@ -263,10 +275,18 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRequestAccessError(w, r, err)
 		return
 	}
-	if !s.authDisabled {
+	if s.store.BoundedMetadataEnabled() {
+		var release func()
+		var ok bool
+		metadata, release, ok = s.boundedIssueCreateTargets(w, r, query.Workspace, input)
+		if !ok {
+			return
+		}
+		defer release()
+	} else if !s.authDisabled {
 		// The authorization built this projection a moment ago, before any
 		// write (request_metadata.go); otherwise build it.
 		var handedOff bool
@@ -274,11 +294,13 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 			metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
 		}
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 	}
-	filterBootstrapForAPIKey(&metadata, r)
+	if !s.store.BoundedMetadataEnabled() {
+		filterBootstrapForAPIKey(&metadata, r)
+	}
 	// A workspace admin sees private teams they have not joined, but adds
 	// issues to them only as a member.
 	teamAllowed := func(id string) bool {
@@ -288,8 +310,7 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "Team is outside your workspace access")
 		return
 	}
-	if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(r.Context(), query.Workspace, *input.AssigneeID) {
-		writeError(w, 403, "Assignee is outside this workspace")
+	if !s.authorizeIssueAssignee(w, r, query.Workspace, metadata.Users, input.AssigneeID) {
 		return
 	}
 	if input.ProjectID != nil && *input.ProjectID != "" && !slices.ContainsFunc(metadata.Projects, func(project domain.Project) bool { return project.ID == *input.ProjectID }) {
@@ -331,13 +352,13 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 func (s *server) searchIssueRecordIDs(w http.ResponseWriter, r *http.Request) {
 	_, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	ids, truncated, err := s.store.SearchIssueIDs(r.Context(), query, r.URL.Query().Get("q"), limit)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ids": ids, "truncated": truncated})
@@ -346,22 +367,22 @@ func (s *server) searchIssueRecordIDs(w http.ResponseWriter, r *http.Request) {
 func (s *server) listIssueRecordGroups(w http.ResponseWriter, r *http.Request) {
 	_, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	query.Nested = r.URL.Query().Get("nested") == "true"
 	groups, err := s.store.QueryIssueGroups(r.Context(), query)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
+	s.writeIssueRead(w, r, map[string]any{"groups": groups})
 }
 
 func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Request) {
 	_, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if len(query.ProjectIDs) != 1 {
@@ -370,7 +391,7 @@ func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Reques
 	}
 	metadata, err := s.store.IssueReferenceMetadata(r.Context(), query, []domain.Issue{{Project: &domain.ProjectSummary{ID: query.ProjectIDs[0]}}})
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if len(metadata.Projects) == 0 {
@@ -379,7 +400,7 @@ func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Reques
 	}
 	summary, err := s.store.QueryIssueRecordSummary(r.Context(), query)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, summary)
@@ -388,7 +409,7 @@ func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Reques
 func (s *server) getIssueRecord(w http.ResponseWriter, r *http.Request) {
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	id := r.PathValue("id")
@@ -399,10 +420,10 @@ func (s *server) getIssueRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{issue})
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, items[0])
+	s.writeIssueRead(w, r, items[0])
 }
 
 func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
@@ -424,7 +445,11 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRequestAccessError(w, r, err)
+		return
+	}
+	ctx, ok := s.localStoreIssueWriteContext(w, r, query.Workspace)
+	if !ok {
 		return
 	}
 	id := r.PathValue("id")
@@ -433,7 +458,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	query.Archived = "all"
 	page, err := s.store.QueryIssueRecords(r.Context(), query)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if len(page.Items) == 0 {
@@ -443,7 +468,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 			id = resolved
 			query.Filter = store.IssueFilter{Field: "id", Values: []string{id}}
 			if page, err = s.store.QueryIssueRecords(r.Context(), query); err != nil {
-				issueRecordsError(w, err)
+				issueRecordsErrorFor(w, r, err)
 				return
 			}
 		}
@@ -456,41 +481,74 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, issueEditForbiddenMessage)
 		return
 	}
-	if input.ExpectedVersion == nil && issueUpdateIsNoop(page.Items[0], input) && store.ChatMutationKey(r.Context()) == "" {
+	if input.ExpectedVersion == nil && issueUpdateIsNoop(page.Items[0], input) && store.ChatMutationKey(ctx) == "" {
 		projected, projectionErr := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{page.Items[0]})
 		if projectionErr != nil {
-			issueRecordsError(w, projectionErr)
+			issueRecordsErrorFor(w, r, projectionErr)
 			return
 		}
 		writeJSON(w, http.StatusOK, projected[0])
 		return
 	}
-	if !s.authDisabled {
-		// The authorization built this projection a moment ago, before any
-		// write (request_metadata.go); otherwise build it.
-		var handedOff bool
-		if metadata, handedOff = takeIssueWriteMetadata(r, query.Workspace, authUser(r).ID); !handedOff {
-			metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+	if s.store.BoundedMetadataEnabled() {
+		// The same projection and destination checks over one installed
+		// generation, without the complete workspace.
+		if s.authDisabled {
+			filterBootstrapForAPIKey(&metadata, r)
+			if !s.boundedIssueUpdatePresence(w, r, query.Workspace, input) {
+				return
+			}
+		} else {
+			var release func()
+			var ok bool
+			if metadata, release, ok = s.boundedIssueUpdateTargets(w, r, query.Workspace, input); !ok {
+				return
+			}
+			defer release()
 		}
-		if err != nil {
-			issueRecordsError(w, err)
+	} else {
+		if !s.authDisabled {
+			// The authorization built this projection a moment ago, before any
+			// write (request_metadata.go); otherwise build it.
+			var handedOff bool
+			if metadata, handedOff = takeIssueWriteMetadata(r, query.Workspace, authUser(r).ID); !handedOff {
+				// The checks below read the viewer policy and the project and
+				// cycle the input names (issue #244).
+				var projectIDs, cycleIDs []string
+				if input.ProjectID != nil && *input.ProjectID != "" {
+					projectIDs = []string{*input.ProjectID}
+				}
+				if input.CycleID != nil && *input.CycleID != "" {
+					cycleIDs = []string{*input.CycleID}
+				}
+				err = store.ErrLegacyIssueAuthorizationUnscoped
+				if !completeIssueWriteReads.Load() {
+					metadata, err = s.store.LegacyIssueWriteAuthorization(r.Context(), query.Workspace, authUser(r).ID, projectIDs, cycleIDs)
+				}
+				if errors.Is(err, store.ErrLegacyIssueAuthorizationUnscoped) {
+					if err = acquireIssueAuthorizationProjection(r); err == nil {
+						metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+					}
+				}
+			}
+			if err != nil {
+				issueRecordsErrorFor(w, r, err)
+				return
+			}
+		}
+		filterBootstrapForAPIKey(&metadata, r)
+		if input.ProjectID != nil && *input.ProjectID != "" && !slices.ContainsFunc(metadata.Projects, func(project domain.Project) bool { return project.ID == *input.ProjectID }) {
+			writeError(w, 403, "Project is outside your teams")
+			return
+		}
+		if input.CycleID != nil && *input.CycleID != "" && !slices.ContainsFunc(metadata.Cycles, func(cycle domain.Cycle) bool { return cycle.ID == *input.CycleID }) {
+			writeError(w, 403, "Cycle is outside your teams")
+			return
+		}
+		if !s.authorizeIssueAssignee(w, r, query.Workspace, metadata.Users, input.AssigneeID) {
 			return
 		}
 	}
-	filterBootstrapForAPIKey(&metadata, r)
-	if input.ProjectID != nil && *input.ProjectID != "" && !slices.ContainsFunc(metadata.Projects, func(project domain.Project) bool { return project.ID == *input.ProjectID }) {
-		writeError(w, 403, "Project is outside your teams")
-		return
-	}
-	if input.CycleID != nil && *input.CycleID != "" && !slices.ContainsFunc(metadata.Cycles, func(cycle domain.Cycle) bool { return cycle.ID == *input.CycleID }) {
-		writeError(w, 403, "Cycle is outside your teams")
-		return
-	}
-	if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(r.Context(), query.Workspace, *input.AssigneeID) {
-		writeError(w, 403, "Assignee is outside this workspace")
-		return
-	}
-	ctx := r.Context()
 	if input.TeamID != nil && *input.TeamID != page.Items[0].Team.ID {
 		// A team move needs access to the target team too (and a new number
 		// from the workspace sequence).
@@ -519,7 +577,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		for _, direction := range []string{"asc", "desc"} {
 			boundary, err := s.store.QueryIssueRecords(r.Context(), store.IssueRecordQuery{Workspace: query.Workspace, TeamIDs: []string{stateTeamID}, StateIDs: []string{*input.StateID}, Sort: "sortOrder", Direction: direction, Archived: "all", Limit: 1})
 			if err != nil {
-				issueRecordsError(w, err)
+				issueRecordsErrorFor(w, r, err)
 				return
 			}
 			if len(boundary.Items) > 0 {
@@ -528,6 +586,10 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	mutationScope := store.IssueMutationScope{RelatedIDs: extra, IncludeFamily: input.StateID != nil || input.ParentID != nil, Payload: input}
+	var rebaseVersion int64
+	if r.Header.Get("X-Flow-Local-Mutation") != "" {
+		mutationScope.RebaseVersion = &rebaseVersion
+	}
 	if input.ParentID != nil {
 		mutationScope.NewParentID = *input.ParentID
 	}
@@ -574,7 +636,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	if updated.ID != "" {
 		projected, projectionErr := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{updated})
 		if projectionErr != nil {
-			issueRecordsError(w, projectionErr)
+			issueRecordsErrorFor(w, r, projectionErr)
 			return
 		}
 		updated = projected[0]
@@ -584,7 +646,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, store.ErrAuthForbidden) {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if err == nil && triageIntelligenceWorkspaceEnabled(s, query.Workspace) {
@@ -605,13 +667,16 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 			log.Printf("compact collaboration updates document=%s: %v", updated.DocumentContent.ID, deleteErr)
 		}
 	}
+	if err == nil && rebaseVersion > 0 {
+		w.Header().Set("X-Flow-Local-Rebase-Version", strconv.FormatInt(rebaseVersion, 10))
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
 func (s *server) getIssueRecordContext(w http.ResponseWriter, r *http.Request) {
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	issue, err := s.store.AuthorizedIssueRecord(r.Context(), query, r.PathValue("id"))
@@ -621,13 +686,13 @@ func (s *server) getIssueRecordContext(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{issue})
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	issue = items[0]
 	history, err := s.store.IssueHistoryPage(r.Context(), query.Workspace, issue.ID, r.URL.Query().Get("commentsCursor"), r.URL.Query().Get("activitiesCursor"))
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	ids := []string{}
@@ -644,12 +709,12 @@ func (s *server) getIssueRecordContext(w http.ResponseWriter, r *http.Request) {
 		query.Limit = 500
 		result, err := s.store.QueryIssueRecords(r.Context(), query)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 		related, err = s.projectIssueRecordReferences(r, metadata, query, result.Items)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 	}
@@ -675,7 +740,7 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 		}
 		ids = append(ids, issue.SubIssueIDs...)
 		for _, relation := range issue.Relations {
-			ids = append(ids, relation.RelatedIssueID)
+			ids = append(ids, relation.IssueID, relation.RelatedIssueID)
 		}
 		ids = append(ids, issue.SuggestedDuplicateIDs...)
 		ids = append(ids, issue.SuggestedRelatedIDs...)
@@ -684,7 +749,7 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 	if err != nil {
 		return nil, err
 	}
-	projects, labels, teams := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	projects, labels, teams, cycles := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, project := range metadata.Projects {
 		projects[project.ID] = true
 	}
@@ -694,14 +759,40 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 	for _, label := range metadata.Labels {
 		labels[label.ID] = true
 	}
+	for _, cycle := range metadata.Cycles {
+		cycles[cycle.ID] = true
+	}
 	for index := range issues {
 		issue := &issues[index]
+		if query.AllowedTeamIDs != nil {
+			allowed := func(id string) bool { return slices.Contains(query.AllowedTeamIDs, id) }
+			for _, user := range []*domain.User{&issue.Creator, issue.Assignee, issue.Delegate} {
+				if user != nil {
+					store.RedactUserTeams(user, allowed)
+				}
+			}
+		}
+		if query.AllowedTeamIDs != nil && issue.CycleID != nil && !cycles[*issue.CycleID] {
+			issue.CycleID = nil
+		}
 		if issue.ParentID != nil && !visible[*issue.ParentID] {
 			issue.ParentID = nil
 		}
 		issue.SubIssueIDs = slices.DeleteFunc(issue.SubIssueIDs, func(id string) bool { return !visible[id] })
-		issue.Relations = slices.DeleteFunc(issue.Relations, func(relation domain.IssueRelation) bool { return !visible[relation.RelatedIssueID] })
+		issue.Relations = slices.DeleteFunc(issue.Relations, func(relation domain.IssueRelation) bool {
+			if query.AllowedTeamIDs == nil {
+				return !visible[relation.RelatedIssueID]
+			}
+			return relation.IssueID != "" && relation.IssueID != issue.ID && !visible[relation.IssueID] || relation.RelatedIssueID != issue.ID && !visible[relation.RelatedIssueID]
+		})
 		issue.Labels = slices.DeleteFunc(issue.Labels, func(label domain.IssueLabel) bool { return !labels[label.ID] })
+		if query.AllowedTeamIDs != nil {
+			// Embedded label counters come from the owner's workspace, not
+			// this credential's issue projection.
+			for i := range issue.Labels {
+				issue.Labels[i].IssueCount = 0
+			}
+		}
 		// Suggestion targets the viewer cannot see are not disclosed.
 		issue.SuggestedLabelIDs = slices.DeleteFunc(issue.SuggestedLabelIDs, func(id string) bool { return !labels[id] })
 		issue.SuggestedProjectIDs = slices.DeleteFunc(issue.SuggestedProjectIDs, func(id string) bool { return !projects[id] })
@@ -722,6 +813,27 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 const issueEditForbiddenMessage = "You can view this issue but don't have permission to edit it"
 
 func issueRecordsError(w http.ResponseWriter, err error) {
+	issueRecordsErrorFor(w, nil, err)
+}
+
+func (s *server) authorizeIssueAssignee(w http.ResponseWriter, r *http.Request, workspace string, users []domain.User, assignee *string) bool {
+	if assignee == nil || *assignee == "" {
+		return true
+	}
+	known, err := s.workspacePersonKnown(r.Context(), workspace, users, *assignee)
+	if err != nil {
+		issueRequestAccessError(w, r, err)
+		return false
+	}
+	if !known {
+		writeError(w, http.StatusForbidden, "Assignee is outside this workspace")
+	}
+	return known
+}
+
+// issueRecordsErrorFor classifies retryable errors and logs the cause without
+// including the error text or request data.
+func issueRecordsErrorFor(w http.ResponseWriter, r *http.Request, err error) {
 	if err == nil || errors.Is(err, context.Canceled) {
 		return
 	}
@@ -733,7 +845,26 @@ func issueRecordsError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, "You don't have access to this workspace")
 		return
 	}
-	writeError(w, http.StatusInternalServerError, "Could not query issues")
+	if r == nil {
+		r = apiErrorRequest(w)
+	}
+	retryAfter := storeBusyRetryAfter(err)
+	if retryAfter == 0 {
+		retryAfter, _ = retryableBusy(err)
+	}
+	if r != nil {
+		level := slog.LevelError
+		if retryAfter > 0 {
+			level = slog.LevelWarn
+		}
+		slog.Log(r.Context(), level, "issue query failed",
+			"request_id", serverRequestIDFrom(r.Context()), "cause", requestErrorCode(err), "retry_after", retryAfter)
+	}
+	if retryAfter > 0 {
+		(&metadataReadGate{}).busy(w, retryAfter)
+		return
+	}
+	writeError(w, http.StatusInternalServerError, internalErrorMessage)
 }
 
 func optionalID(value *string) string {

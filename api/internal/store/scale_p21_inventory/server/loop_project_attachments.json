@@ -1,0 +1,14 @@
+{
+  "source": "server/loop_project_attachments.go",
+  "unmigrated": 0,
+  "consumers": {
+    "lookupAttachment": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginDocumentRead"],
+      "temperature": "cold",
+      "temperatureReason": "Loop attachment tool calls only.",
+      "reason": "Selects and projects the named document with the owned point reader. Applies the document download ACL and the Loop's team allow-list before selecting an attachment; releases the read before opening the object."
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "source": "server/cycles_resources.go",
+  "unmigrated": 5,
+  "consumers": {
+    "createCycleResource": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/cycles/{id}/resources (server/main.go:1000)"
+      ]
+    },
+    "cycleCalendarToken": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "A cycles/id point scope matches generated cycle_ IDs but changes legacy aggregate enrichment for accepted nonprefix stored IDs: an earlier cycle resource with the same ID wins reflective lookup. TestScaleP21SW25AggregateCollisionEvidence records that legacy behavior; the attempted scope and failing differential are held outside the verified batch pending a bounded aggregate resolver.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/cycles/{id}/calendar-token (server/main.go:1002)"
+      ]
+    },
+    "deleteCycleResource": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Retain the original writer until aggregate closure is covered for accepted nonprefix stored cycle IDs: earlier cycle resources or typed records can win legacy enrichment despite editing only the requested cycle. Prefix-only differentials are insufficient; TestScaleP21SW25AggregateCollisionEvidence records the independent blocker.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/cycles/{id}/resources/{resourceId} (server/main.go:1001)"
+      ]
+    },
+    "getCycleCapacity": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/cycles/{id}/capacity (server/main.go:996)"
+      ]
+    },
+    "updateCycleCapacity": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/cycles/{id}/capacity (server/main.go:998)"
+      ]
+    }
+  }
+}

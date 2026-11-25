@@ -17,3 +17,19 @@ describe('selected filter values', () => {
     expect(screen.getByRole('option', { name: label })).toHaveAttribute('aria-checked', 'true')
   })
 })
+
+describe('label filter values', () => {
+  it('reads "Group › Label" for a label of a group, with the group muted and the label after the marker', async () => {
+    const filter = { id: 'filter', fieldLabel: 'Labels', operator: 'is' as const, values: [{ id: 'a', label: 'Flow parity A', color: '#f2c94c' }] }
+    const options = [{ id: 'a', label: 'Flow parity A', color: '#f2c94c', groupLabel: 'Flow parity group', count: 1 }, { id: 'bug', label: 'Bug', color: '#eb5757', count: 0 }]
+    render(<AppliedFilterBar ariaLabel="Applied filters" filters={[filter]} onAdd={vi.fn()} onClear={vi.fn()} onRemove={vi.fn()} onOperatorChange={vi.fn()} onValuesChange={vi.fn()} optionsFor={() => options}/>)
+    // The chip itself names the label only.
+    expect(screen.getByRole('button', { name: 'Labels values' })).toHaveTextContent(/^Flow parity A$/)
+    await userEvent.click(screen.getByRole('button', { name: 'Labels values' }))
+    const grouped = screen.getAllByRole('option')[0]
+    expect(grouped.closest('[data-label-values]')).not.toBeNull()
+    const path = grouped.querySelector('span[title="Flow parity group › Flow parity A"]')!
+    expect([...path.children].map(child => child.tagName.toLowerCase() + (child.textContent ? `:${child.textContent}` : ''))).toEqual(['span:Flow parity group', 'svg', 'span:Flow parity A'])
+    expect(screen.getAllByRole('option')[1].querySelector('span[title="Bug"]')).toHaveTextContent('Bug')
+  })
+})

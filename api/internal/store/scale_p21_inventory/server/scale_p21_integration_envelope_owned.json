@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_integration_envelope_owned.go",
+  "unmigrated": 0,
+  "consumers": {
+    "prepareBoundedIntegrationEnvelope": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginMetadataJSONRead"],
+      "temperature": "hot",
+      "temperatureReason": "Every outbound integration delivery decodes and re-encodes its supported JSON envelope.",
+      "callers": ["server/scale_p21_integration_delivery.go:processBoundedIntegrationDelivery"],
+      "reason": "Literal integrationDeliveryPayload algorithm over the proven owned JSON primitives: payload copy when there are no previous values, a non-object or invalid payload, or invalid previous values; otherwise decode, set previousValues and re-encode with encoding/json semantics (duplicate keys, large/small numbers, HTML escaping, U+2028, deep nesting, 1e999 fallback). Decode and wire lifetimes are separately owned and the wire bytes stay admitted until the network call ends. TestScaleP21SW202IntegrationEnvelopeDifferential and TestScaleP21SW228IntegrationEnvelopeFallbacksAndOwnership compare bytes and nil/empty identity with the literal function and pin release and cancellation; SW510 and SW228 near-limit compare the envelope actually sent."
+    }
+  }
+}

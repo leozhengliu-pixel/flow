@@ -334,7 +334,7 @@ func (s *server) chatDMMessage(ctx context.Context, record domain.ChatIntegratio
 // as every chat action does, and that the workspace lets its content reach
 // chat applications; it answers the member when not (handled).
 func (s *server) chatDMAuthorize(ctx context.Context, dm *chatDMRequest) (bool, error) {
-	if err := s.chatAuthorizedMutation(dm.authContext(ctx), dm.target.Workspace, dm.identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &dm.metadata); err != nil {
+	if err := s.chatAuthorizedBootstrapHeaders(dm.authContext(ctx), dm.target.Workspace, dm.identity.UserID, &dm.metadata); err != nil {
 		chatLogDirectMessage(ctx, dm.record, dm.job, "dm_workspace_access_refused")
 		return true, s.chatDMFailure(ctx, *dm, err)
 	}
@@ -1219,8 +1219,20 @@ func (r *chatDMReply) stopForUnlink(ctx context.Context) {
 	r.mu.Lock()
 	sessionID := r.sessionID
 	r.mu.Unlock()
+	var stopErr error
 	if sessionID != "" && !r.s.stopAgentRun(r.dm.target.Workspace, sessionID) {
-		if data, ok := r.s.store.WorkspaceMetadata(r.dm.target.Workspace); ok {
+		if r.s.store.BoundedMetadataEnabled() {
+			var read *store.AgentSessionRead
+			var found bool
+			read, found, stopErr = r.s.store.BeginAgentSessionRead(ctx, r.dm.target.Workspace)
+			if stopErr == nil && found {
+				stopErr = read.VisitHeaders(ctx, store.AgentSessionMatch{ID: &sessionID, UserID: &r.dm.identity.UserID}, func(session domain.AgentSession) error {
+					r.s.stopWorkerChat(ctx, session, r.dm.target.Workspace)
+					return nil
+				})
+				read.Close()
+			}
+		} else if data, ok := r.s.store.WorkspaceMetadata(r.dm.target.Workspace); ok {
 			for _, session := range data.AgentSessions {
 				if session.ID == sessionID && session.UserID == r.dm.identity.UserID {
 					r.s.stopWorkerChat(ctx, session, r.dm.target.Workspace)
@@ -1228,9 +1240,16 @@ func (r *chatDMReply) stopForUnlink(ctx context.Context) {
 			}
 		}
 	}
+	if stopErr != nil {
+		r.deliveryErr = stopErr
+		log.Printf("Chat direct message workspace=%s: %v", r.dm.record.WorkspaceKey, stopErr)
+	}
 	view := chatDMReplyView{Status: "stopped", Failure: chatDMText(r.dm.zh, "Stopped: this chat account is no longer linked to Flow.", "已停止：这个聊天账号已不再关联 Flow。")}
 	if err := r.s.chatDMDeliverReplyFinal(r.lease, r.dm, view); err != nil {
 		r.deliveryErr = err
+		if stopErr != nil {
+			r.deliveryErr = errors.Join(stopErr, err)
+		}
 		log.Printf("Chat direct message workspace=%s: %v", r.dm.record.WorkspaceKey, err)
 	}
 }
@@ -1243,7 +1262,7 @@ func (s *server) chatDMMarkSessionRead(ctx context.Context, workspace, userID, s
 	if err != nil {
 		return
 	}
-	err = s.store.MutateWorkspace(store.ContextWithActor(ctx, user), workspace, "agent.session_read", sessionID, nil, func(data *domain.Bootstrap) error {
+	mutate := func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.AgentSessions, func(session domain.AgentSession) bool {
 			return session.ID == sessionID && session.UserID == userID && session.DeletedAt == nil
 		})
@@ -1260,7 +1279,17 @@ func (s *server) chatDMMarkSessionRead(ctx context.Context, workspace, userID, s
 		}
 		session.LastReadAt = agentReadStamp(readAt)
 		return nil
-	})
+	}
+	if s.store.BoundedMetadataEnabled() {
+		ownedCtx, closeOutput := beginIndependentMetadataOutputReads(store.ContextWithActor(ctx, user))
+		defer closeOutput()
+		err = s.store.MutateAgentSessionLifecycle(ownedCtx, workspace, "agent.session_read", sessionID, store.AgentSessionLifecycleScope{
+			ID: sessionID, OwnerID: &userID, ExcludeDeleted: true, PersistActor: true,
+			FirstSession: true, HeaderOnly: true,
+		}, mutate)
+	} else {
+		err = s.store.MutateWorkspace(store.ContextWithActor(ctx, user), workspace, "agent.session_read", sessionID, nil, mutate)
+	}
 	if err != nil && !errors.Is(err, store.ErrNoMutation) && !errors.Is(err, errNotFound) {
 		log.Printf("Chat direct message workspace=%s: mark read: %v", workspace, err)
 	}

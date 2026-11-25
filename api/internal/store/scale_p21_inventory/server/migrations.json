@@ -1,0 +1,125 @@
+{
+  "source": "server/migrations.go",
+  "unmigrated": 9,
+  "consumers": {
+    "downloadMigrationBundle": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/migrations/bundle (api/cmd/server/main.go:796)"
+      ]
+    },
+    "downloadMigrationManifest": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/migrations/{id}/manifest (api/cmd/server/main.go:790)"
+      ]
+    },
+    "executeMigration": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/migrations/{id}/execute (api/cmd/server/main.go:794)"
+      ]
+    },
+    "getMigration": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "The owner-concealed canonical typed point reader passes the normal permission/shape/source/large-record and live-revocation matrix, but actual multipart preview accepts NUL in source mapping IDs and names. Its warm legacy GET returns those NULs while canonical rows have stripped them. TestScaleP21SW25MigrationMultipartNULDifferential demonstrates the wire mismatch. Keep this consumer pending until that input/canonical compatibility decision is resolved; do not normalize or force a cold oracle.",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/migrations/{id} (api/cmd/server/main.go:789)"
+      ]
+    },
+    "inviteMigrationUsers": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/migrations/{id}/invite-users (api/cmd/server/main.go:792)"
+      ]
+    },
+    "listMigrations": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "GET /api/migrations (api/cmd/server/main.go:787)"
+      ]
+    },
+    "previewMigration": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/migrations/preview (api/cmd/server/main.go:788)"
+      ]
+    },
+    "rollbackMigration": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "POST /api/migrations/{id}/rollback (api/cmd/server/main.go:795)"
+      ]
+    },
+    "updateMigrationMappings": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "The callback only edits migrationJobs/id, but legacy event enrichment can select an earlier Draft.ContentData object whose id matches the migration ID. TestScaleP21SW25AggregateCollisionEvidence preserves this existing wire behavior. A target-only scope cannot be reviewed until a bounded aggregate closure also preserves it.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Administrative, setup, onboarding, privacy, import/export or rare maintenance operation outside the owner's active-user hot-path set. Static classification; the single load profile overrides this if observed.",
+      "callers": [
+        "PATCH /api/migrations/{id}/mappings (api/cmd/server/main.go:791)"
+      ]
+    }
+  }
+}

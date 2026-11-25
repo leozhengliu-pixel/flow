@@ -87,9 +87,15 @@ func TestTeamHierarchyMembershipAndPrivateBoundary(t *testing.T) {
 	if err := repository.SetTeamMembership(ctx, data.Workspace.ID, grandchild.ID, guest.ID, "member", true); err != nil {
 		t.Fatal(err)
 	}
-	if repository.teamRoleDirect(ctx, data.Workspace.ID, root.ID, guest.ID) != "" || repository.teamRoleDirect(ctx, data.Workspace.ID, child.ID, guest.ID) != "" {
-		t.Fatal("guest was automatically added to ancestor teams")
+	assertDirectRole := func(teamID, userID, want string) {
+		t.Helper()
+		role, err := repository.teamRoleDirect(ctx, data.Workspace.ID, teamID, userID)
+		if err != nil || role != want {
+			t.Fatalf("direct role: got %q, want %q (error: %v)", role, want, err)
+		}
 	}
+	assertDirectRole(root.ID, guest.ID, "")
+	assertDirectRole(child.ID, guest.ID, "")
 	if err := repository.MutateWorkspace(ctx, data.Workspace.URLKey, "team.created", "other", nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, domain.Team{ID: "other"})
 		next.TeamSettings["other"] = domain.TeamSettings{TeamID: "other"}
@@ -108,10 +114,6 @@ func TestTeamHierarchyMembershipAndPrivateBoundary(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if repository.teamRoleDirect(ctx, data.Workspace.ID, "other", data.Viewer.ID) != "owner" {
-		t.Fatal("reparenting replaced existing owner role")
-	}
-	if repository.teamRoleDirect(ctx, data.Workspace.ID, "other", guest.ID) != "" {
-		t.Fatal("reparenting propagated a guest")
-	}
+	assertDirectRole("other", data.Viewer.ID, "owner")
+	assertDirectRole("other", guest.ID, "")
 }

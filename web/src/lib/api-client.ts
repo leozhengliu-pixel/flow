@@ -1,3 +1,5 @@
+import { SnapshotUnconfirmedError, snapshotWriteGate } from '@/lib/snapshot-write-gate'
+import { invalidateLocalStoreResponse } from '@/lib/local-store-db'
 const pageRealtimeClientId = crypto.randomUUID()
 
 export class ApiError<T = unknown> extends Error {
@@ -15,6 +17,16 @@ export class ApiError<T = unknown> extends Error {
     this.current = current
     this.params = params
   }
+}
+
+/**
+ * An interrupted request says nothing about the session or access: fetch's
+ * network TypeError and the timeout or gateway responses below.
+ */
+export function isConnectivityError(error: unknown): boolean {
+  if (error instanceof SnapshotUnconfirmedError) return false
+  if (error instanceof ApiError) return [408, 502, 503, 504].includes(error.status)
+  return error instanceof TypeError
 }
 
 export function realtimeClientId() {
@@ -73,14 +85,26 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 /** `quiet` keeps a failed speculative call from raising the authentication-policy event. */
-export type ApiRequestInit = RequestInit & { quiet?: boolean }
+export type ApiRequestInit = RequestInit & { quiet?: boolean; onResponse?: (response: Response) => void }
 
-export function apiFetch(url: string, { quiet, ...init }: ApiRequestInit = {}) {
+export function apiFetch(url: string, { quiet, onResponse, ...init }: ApiRequestInit = {}) {
   if (import.meta.env.VITE_PAGED_ISSUES === 'true') url = url.replace(/^\/api\/issues(?=\/|\?|$)/, '/api/issue-records')
   const workspaceKey = currentWorkspaceKey()
   const headers = new Headers(init.headers)
   if (workspaceKey && !headers.has('X-Workspace-Key')) headers.set('X-Workspace-Key', workspaceKey)
   headers.set('X-Client-ID', realtimeClientId())
+  // A write for a workspace shown from an unconfirmed local snapshot waits for the fresh bootstrap.
+  const gate = snapshotWriteGate(init.method, url, headers.get('X-Workspace-Key'))
+  const fetchResponse = () => send(url, init, headers, quiet, workspaceKey).then(response => {
+    onResponse?.(response)
+    const clearing = invalidateLocalStoreResponse(url, response, headers.get('X-Workspace-Key') ?? '')
+    if (clearing) return clearing.then(() => response)
+    return response
+  })
+  return gate ? gate.then(fetchResponse) : fetchResponse()
+}
+
+function send(url: string, init: RequestInit, headers: Headers, quiet: boolean | undefined, workspaceKey: string) {
 	return fetch(url, { ...init, headers, credentials: 'same-origin' }).then(async response => {
     if(response.status===403 && !quiet) {
       const payload=await response.clone().json().catch(()=>null)

@@ -32,6 +32,17 @@ var attachmentFetchClient = func() *http.Client {
 	return client
 }
 
+// parseFetchURL is the shared shape check for user-supplied download URLs:
+// absolute http or https, a host, no userinfo. The address itself is checked
+// by the outbound policy when the connection is made.
+func parseFetchURL(raw string) (*url.URL, error) {
+	parsed, err := url.ParseRequestURI(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+		return nil, errors.New("a valid http or https URL is required")
+	}
+	return parsed, nil
+}
+
 func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		URL   string `json:"url"`
@@ -42,8 +53,8 @@ func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	raw := strings.TrimSpace(input.URL)
-	parsed, err := url.ParseRequestURI(raw)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+	parsed, err := parseFetchURL(raw)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "a valid http or https URL is required")
 		return
 	}
@@ -101,14 +112,14 @@ func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request)
 	}
 	var attachment domain.Attachment
 	embed := input.Embed == nil || *input.Embed
-	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), issueID), workspaceKey(r), "attachment.created", issueID, map[string]string{"name": filename, "sourceUrl": raw}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(s.issueAttachmentContext(r.Context()), issueID), workspaceKey(r), "attachment.created", issueID, map[string]string{"name": filename, "sourceUrl": raw}, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, issueID)
 		if err != nil {
 			return err
 		}
 		attachment = domain.Attachment{ID: attachmentID, IssueID: issueID, Title: filename, URL: "/uploads/" + safeName, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC(), Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ProviderURL: raw}
 		issue.Attachments = append(issue.Attachments, attachment)
-		appendActivity(data, issueID, "attachment.created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title})
+		appendActivity(data, issueID, "attachment.created", data.Viewer, issueLinkActivityMetadata(attachment))
 		if embed {
 			return applyIssueAttachmentEmbed(data, issue, attachment)
 		}

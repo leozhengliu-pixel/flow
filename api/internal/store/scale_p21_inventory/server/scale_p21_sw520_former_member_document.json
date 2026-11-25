@@ -1,0 +1,19 @@
+{
+  "source": "server/scale_p21_sw520_former_member_document.go",
+  "unmigrated": 0,
+  "consumers": {
+    "beginFormerMemberDocumentContent": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "BeginCollaborationDocumentContentRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Former-member mention check of every collaboration update frame on a standalone document in a workspace with former members.",
+      "callers": [
+        "server/former_member_collaboration.go:refuseFormerMemberCollaborationUpdate"
+      ],
+      "reason": "With the flag on, the standalone-document branch of refuseFormerMemberCollaborationUpdate no longer calls socketWorkspaceMetadata (PagedWorkspaceMetadata, which has no resident source with the flag on and refused every such frame as forbidden; WorkspaceMetadata in development mode). It reuses the reviewed single-header collaboration reader (same principal, none in development mode, same credential projection and first-match/conflict order as collaborationDocument) and reads only the selected visible document's ContentState and ContentData, held until the refusal returns; a hidden or missing document is errNotFound as collaborationDocument returns. TestScaleP21SW520FormerMemberDocumentDifferential runs the actual collaboration frame for 20 rows (owner, member, guest, private-team admin, selected-empty/public/private keys, development mode, generation, stale-ID and slug conflicts, first duplicate, earlier stale ID before a later current match, hidden and missing documents, mentions kept in content data, state or pending updates, a new mention, no mention, a malformed update and 400-paragraph content) and compares legacy against warm and SQL-reloaded bounded sources: the content read, refusal, public error, socket output and stored update, with zero full decodes and released work. Its control run without the fix reproduces the flag-on forbidden refusals."
+    }
+  }
+}

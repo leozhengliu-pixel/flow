@@ -1,0 +1,102 @@
+{
+  "source": "server/public_api_records.go",
+  "unmigrated": 4,
+  "consumers": {
+    "getCustomerRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/customers/{id} (server/public_api_routes.go:30)"
+      ]
+    },
+    "getCycleRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/cycles/{id} (server/public_api_routes.go:21)"
+      ]
+    },
+    "getInitiativeRecord": {
+      "owner": "P16",
+      "status": "reviewed",
+      "reason": "Initial serveResourceRead remains literal for default/on record access. Bounded authenticated off/shadow uses live ResolveAccess plus the owned native/caller-snapshot point projection, retaining native target/policy provenance, existing paged handoff precedence and credential/preference filtering, projection refusal and error envelopes. Auth-disabled fallback uses the trusted installed point read with original cancellation semantics and raw private/archive/count/stale-actor output; all handles remain open through encoding. Nonbounded publicMetadata stays literal. TestScaleP21PublicResourceRecordHandlerDifferential passes 2304 exact project/initiative comparisons across warm/reloaded-known-current/unknown sources, all record-access modes, principals/API/app keys, references, missing/refused/handoff/development cases and 24 actual resource authorization-gate hidden-exact/visible-alias denials; NUL identity cases also pass. New primitive suite passes persistent SQLite twice and race; no full metadata decodes or retained work. Extra ResolveAccess Team-policy SQL is explicitly reported without a speed/capacity claim.",
+      "accessors": [
+        "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/initiatives/{id} is the ordinary initiative detail endpoint despite the public_api filename.",
+      "callers": [
+        "GET /api/initiatives/{id} (server/public_api_routes.go)"
+      ]
+    },
+    "getIssueLabelRecord": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded detail reuses the proven owned ResourceDirectoryRead labels graph without reader changes, applies the original API/application credential and preference filters before selection, and retains the first exact-ID occurrence that passes the original visibleTeamSet scope check. Full IssueLabel Load preserves Description, projected GroupID/counts, native names/times and archived/project-resource output; both source and selected-value owners remain live through JSON encoding. Original publicMetadata runs unchanged off mode. Missing binding/workspace, projection handoff/refusal, authenticated error envelopes and auth-disabled raw/key-bypass/cancellation behavior remain exact. TestScaleP21PublicLabelRecordDifferential passes 476 byte-identical status/content-type/retry-header/body comparisons across warm/reload, principal/key matrix, duplicate/hidden-first labels, workspace/private/archive scopes, complete detail, list-query-parameter bypass and dev/error/handoff cases, with held encoding admission, zero full decodes and zero final retained work. Shared directory primitive persistent SQLite twice and race are independently verified.",
+      "accessors": [
+        "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Read-only issue-label detail for compatible clients.",
+      "callers": [
+        "GET /api/issue-labels/{id}"
+      ]
+    },
+    "getProjectRecord": {
+      "owner": "P16",
+      "status": "reviewed",
+      "reason": "Initial serveResourceRead remains literal for default/on record access. Bounded authenticated off/shadow uses live ResolveAccess plus the owned native/caller-snapshot point projection, retaining native target/policy provenance, existing paged handoff precedence and credential/preference filtering, projection refusal and error envelopes. Auth-disabled fallback uses the trusted installed point read with original cancellation semantics and raw private/archive/count/stale-actor output; all handles remain open through encoding. Nonbounded publicMetadata stays literal. TestScaleP21PublicResourceRecordHandlerDifferential passes 2304 exact project/initiative comparisons across warm/reloaded-known-current/unknown sources, all record-access modes, principals/API/app keys, references, missing/refused/handoff/development cases and 24 actual resource authorization-gate hidden-exact/visible-alias denials; NUL identity cases also pass. New primitive suite passes persistent SQLite twice and race; no full metadata decodes or retained work. Extra ResolveAccess Team-policy SQL is explicitly reported without a speed/capacity claim.",
+      "accessors": [
+        "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET /api/projects/{id} is the ordinary project detail endpoint despite the public_api filename.",
+      "callers": [
+        "GET /api/projects/{id} (server/public_api_routes.go)"
+      ]
+    },
+    "getTeamRecord": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode resolves live AccessContext and reads one complete Team through TeamRecordForAccess using settings-directory visibility, credential team intersection, exact visible ID then current EqualFold key order, and transaction/live authority validation. Auth-disabled mode uses the trusted bounded reader and retains raw private/archived rows and credential bypass; off mode keeps the exact publicMetadata path. TestScaleP21SW22TeamHandlerDifferential, TeamLargeBodyAndCurrentKey and native tests compare full M2 principal/key matrix, private admin settings versus content, inherited/retired/directory/archived rows, duplicate/hidden-ID/key/Unicode collisions, full fields and pointer ownership, cross-workspace/malformed/NUL/case bindings, current-key rename, queued/replayed/in-flight revocation, legal large fields, explicit budget/cancellation/storage failures and recovery with zero full decodes. Tests passed twice on one persistent SQLite file; shared HTTP authorization remains separately inventoried.",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "getUserRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/users/{id} (server/public_api_routes.go:15)"
+      ]
+    },
+    "getWorkflowStateRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Deferred after SW22 same-snapshot typed reader and ordinary M2 differential passed twice: the full legacy logical copy normalizes builtin Default/Reserved/colors on reload, while a bounded raw reader preserves the persisted warm values. A disposition probe on one persistent SQLite file proves the difference; unconditional normalization would instead corrupt freshly written warm values. The actual stamped logical source must be preserved before this handler can be reviewed. Implementation and evidence are archived under the task temporary directory.",
+      "accessors": [
+        "publicMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "GET /api/workflow-states/{id} (server/public_api_routes.go:17)"
+      ]
+    }
+  }
+}

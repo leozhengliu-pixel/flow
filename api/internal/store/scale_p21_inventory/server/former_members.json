@@ -1,0 +1,14 @@
+{
+  "source": "server/former_members.go",
+  "unmigrated": 0,
+  "consumers": {
+    "formerMemberOutsideWrite": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The trusted former-member lookup uses BeginFormerMembersRead and closes its nonnil handle after the exact err==nil and ID membership refusal check. Empty IDs still return before storage. The map is read only during its output lease; reader failures retain the old false result. TestScaleP21SW16FormerMemberRequestMatrix compares admin/private outsider, member, guest, sub-team and session/unrestricted/selected-empty/selected-set classes through queued/replayed suspend/resume checks, exact IDs versus aliases/NUL, cross-workspace and zero complete decodes. The storage development fallback remains independently pending.",
+      "accessors": [
+        "BeginFormerMembersRead"
+      ]
+    }
+  }
+}

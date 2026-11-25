@@ -55,6 +55,16 @@ type teamMutationSnapshot struct {
 	cycleIDs         []string
 	oldCycleSettings map[string]domain.CycleSettings
 
+	// team.settings_updated cascades (team_settings_cascade.go): the team
+	// and its sub-teams (retired ones included), the sub-teams' settings and
+	// the scope's statuses, issue templates and cycles by position.
+	scopeIDs      []string
+	scopeSettings map[string]domain.TeamSettings
+	oldStates     map[int]domain.WorkflowState
+	oldTemplates  map[int]domain.IssueTemplate
+	oldCycles     map[int]domain.Cycle
+	cycleBacking  []domain.Cycle
+
 	oldTeams          []domain.Team
 	oldUsers          []domain.User
 	oldProjects       []domain.Project
@@ -92,19 +102,34 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		workspaceKey = s.lastWorkspaceKey
 		s.mu.RUnlock()
 	}
+	if s.coldWrite != nil {
+		s.coldWrite.requested = workspaceKey
+	}
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
 	var deletedIssues bool
 	var deletedProjectRefs bool
+	var changedIssues []string
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
 	traceStart(ctx, "team")
 	apply := func() error {
-		s.lockWorkspaceWrites()
+		if s.coldWrite != nil {
+			s.writeMu.Lock()
+			var err error
+			workspaceKey, err = s.refreshColdFullWriteLocked(ctx)
+			if err != nil {
+				s.writeMu.Unlock()
+				return err
+			}
+			s.mu.Lock()
+		} else {
+			s.lockWorkspaceWrites()
+		}
 		defer s.unlockWorkspaceWrites()
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
-		event, realtimePayload = domain.DomainEvent{}, nil
-		if s.coordinator != nil {
+		event, realtimePayload, changedIssues = domain.DomainEvent{}, nil, nil
+		if s.coordinator != nil && s.coldWrite == nil {
 			if err := s.refreshWorkspaceCopyLocked(ctx, workspaceKey); err != nil {
 				return fmt.Errorf("reload workspace before mutation: %w", err)
 			}
@@ -121,8 +146,12 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		snap := snapshotTeamMutation(eventType, mutationAggregateID(ctx), &next)
 		originalViewerRole, originalViewer := next.ViewerRole, next.Viewer
 		if actor, ok := actorFromContext(ctx); ok {
+			role, err := s.mutationWorkspaceRole(ctx, next.Workspace.ID, actor.ID)
+			if err != nil && !errors.Is(err, ErrAuthForbidden) {
+				return err
+			}
 			next.Viewer = actor
-			if role, status, roleErr := s.WorkspaceRole(ctx, next.Workspace.ID, actor.ID); roleErr == nil && status == "active" {
+			if err == nil {
 				next.ViewerRole = role
 			}
 			if index := slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID == actor.ID }); index >= 0 {
@@ -135,8 +164,28 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 				next.Users = append(next.Users, actor)
 			}
 		}
+		// The issues a settings write may rewrite are loaded (and locked) in
+		// the transaction that writes them back.
+		var cascade *teamIssueCascade
+		if resolve := teamIssueCascadeFromContext(ctx); resolve != nil && eventType == "team.settings_updated" {
+			var issues []domain.Issue
+			var err error
+			cascade, issues, err = s.loadTeamIssueCascade(ctx, workspaceKey, &next, resolve(&next))
+			if err != nil {
+				next.ViewerRole, next.Viewer = originalViewerRole, originalViewer
+				rollbackTeamMutation(&next, &snap, snap.hintID)
+				return err
+			}
+			if cascade != nil {
+				defer cascade.tx.Rollback()
+				next.Issues = issues
+			}
+		}
 		aggregateID, err := mutate(&next)
 		traceMark(ctx, "mutate")
+		if cascade != nil {
+			cascade.issues = next.Issues
+		}
 		next.ViewerRole = originalViewerRole
 		next.Viewer = originalViewer
 		if aggregateID == "" {
@@ -172,7 +221,13 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			membersChanged = false
 			teamMembersChanged = false
 		}
-		if len(upserts) > 0 || membersChanged || teamMembersChanged {
+		var prepare func(*sqlTx) error
+		if s.coldWrite != nil {
+			prepare = func(tx *sqlTx) error {
+				return s.prepareColdTeamWrite(ctx, tx, workspaceKey, next, upserts)
+			}
+		}
+		if len(upserts) > 0 || membersChanged || teamMembersChanged || cascade != nil {
 			payloadRaw, err := json.Marshal(payload)
 			if err != nil {
 				rollbackTeamMutation(&next, &snap, aggregateID)
@@ -180,15 +235,32 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			}
 			event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
 			realtimePayload = enrichRealtimePayload(payloadRaw, teamMutationEntity(&next, aggregateID, snap.teamsLen), eventType)
-			removedIssues, err := s.persistTeamMetadata(ctx, workspaceKey, next, &event, upserts, membersChanged, teamMembersChanged)
+			removedIssues, err := s.persistTeamMetadata(ctx, workspaceKey, next, &event, upserts, membersChanged, teamMembersChanged, prepare, cascade)
 			if snap.deletion != nil {
 				snap.deletion.removedIssues = removedIssues
+			}
+			if cascade != nil && err == nil {
+				changedIssues = cascade.written
 			}
 			if err != nil {
 				rollbackTeamMutation(&next, &snap, aggregateID)
 				if snap.deletion != nil {
 					s.setWorkspaceLocked(workspaceKey, next)
 				}
+				return err
+			}
+		} else if prepare != nil {
+			// The original still installs in-memory callback changes when no
+			// tracked rows changed. Admit that exact image before publication.
+			tx, err := s.db.BeginTx(ctx, nil)
+			if err != nil {
+				return err
+			}
+			defer tx.Rollback()
+			if err := prepare(tx); err != nil {
+				return err
+			}
+			if err := tx.Commit(); err != nil {
 				return err
 			}
 		}
@@ -255,6 +327,9 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 	} else {
 		s.invalidateHotCache(ctx, workspaceKey, eventType, event.AggregateID)
 	}
+	if len(changedIssues) > 0 {
+		s.invalidateIssueRecords(ctx, workspaceKey, changedIssues)
+	}
 	if sink := s.webhook(); sink != nil {
 		sink(workspaceKey, webhookEvent(ctx, event, realtimePayload))
 	}
@@ -309,7 +384,8 @@ func snapshotTeamMutation(eventType, hintID string, data *domain.Bootstrap) team
 		return snap
 	}
 	snap.oldParent = data.TeamSettings[hintID].ParentTeamID
-	scopes := append([]string{hintID}, domain.TeamDescendantIDs(data, hintID)...)
+	scopes := teamSubtreeIncludingRetired(data, hintID)
+	snapshotTeamSettingsCascade(&snap, data, scopes)
 	snap.oldLabels = snapshotScopedLabels(data, scopes)
 	snap.cycleIDs = scopes
 	if data.CycleSettings != nil {
@@ -415,6 +491,7 @@ func rollbackTeamMutation(next *domain.Bootstrap, snap *teamMutationSnapshot, ag
 			next.Labels[index] = label
 		}
 	}
+	rollbackTeamSettingsCascade(next, snap)
 }
 
 func restoreCatalogByID[T any](items []T, previous []T, idOf func(T) string) {
@@ -647,7 +724,14 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 		if err := appendRange("labels", snap.labelsLen, func(i int) string { return next.Labels[i].ID }, func(i int) any { return next.Labels[i] }); err != nil {
 			return nil, err
 		}
-		if err := appendRange("cycles", snap.cyclesLen, func(i int) string { return next.Cycles[i].ID }, func(i int) any { return next.Cycles[i] }); err != nil {
+		if snap.scopeIDs != nil {
+			drop := func(field, key string) {
+				upserts = append(upserts, metadataRecordChange{field: field, key: key, drop: true})
+			}
+			if err := collectTeamSettingsCascade(aggregateID, snap, next, appendRecord, drop); err != nil {
+				return nil, err
+			}
+		} else if err := appendRange("cycles", snap.cyclesLen, func(i int) string { return next.Cycles[i].ID }, func(i int) any { return next.Cycles[i] }); err != nil {
 			return nil, err
 		}
 		seen := map[string]bool{}
@@ -781,12 +865,87 @@ func lenForField(next domain.Bootstrap, field string) int {
 	}
 }
 
-func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey string, next domain.Bootstrap, event *domain.DomainEvent, upserts []metadataRecordChange, membersChanged, teamMembersChanged bool) (int64, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, err
+// Mirror the original postcommit installation on a detached cold graph after
+// SQL has selected merged/skipped rows, while preparation can still roll back.
+func (s *SQLiteStore) prepareColdTeamWrite(ctx context.Context, tx *sqlTx, workspace string, next domain.Bootstrap, upserts []metadataRecordChange) error {
+	installed := next
+	merged := map[metadataRecordKey][]byte{}
+	for _, change := range upserts {
+		if change.skipped {
+			merged[metadataRecordKey{change.field, change.key}] = nil
+		} else if change.merged {
+			merged[metadataRecordKey{change.field, change.key}] = change.raw
+		}
 	}
-	defer tx.Rollback()
+	if len(merged) > 0 {
+		root := reflect.ValueOf(&installed).Elem()
+		cloned := map[int]bool{}
+		for key := range merged {
+			field, _, ok := metadataRecordType(key.field)
+			if !ok || cloned[field.index] {
+				continue
+			}
+			cloned[field.index] = true
+			value := root.Field(field.index)
+			switch value.Kind() {
+			case reflect.Slice:
+				if value.IsNil() {
+					continue
+				}
+				copy := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+				reflect.Copy(copy, value)
+				value.Set(copy)
+			case reflect.Map:
+				if value.IsNil() {
+					continue
+				}
+				copy := reflect.MakeMapWithSize(value.Type(), value.Len())
+				iter := value.MapRange()
+				for iter.Next() {
+					copy.SetMapIndex(iter.Key(), iter.Value())
+				}
+				value.Set(copy)
+			}
+		}
+		if err := s.setColdMetadataRecords(ctx, &installed, merged); err != nil {
+			return err
+		}
+	}
+	// Directory updates touch only json:"-" fields, which source preparation
+	// already clears. The original postcommit path still applies them once.
+	return s.prepareColdFullWrite(ctx, tx, workspace, collectionMetadata(installed))
+}
+
+// persistTeamMetadata writes a team write's records. cascade (a settings
+// write's) also writes back, in the transaction that loaded them, the issue
+// records its cascades changed.
+func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey string, next domain.Bootstrap, event *domain.DomainEvent, upserts []metadataRecordChange, membersChanged, teamMembersChanged bool, prepare func(*sqlTx) error, cascade *teamIssueCascade) (int64, error) {
+	var tx *sqlTx
+	if cascade != nil {
+		tx = cascade.tx
+	} else {
+		var err error
+		if tx, err = s.db.BeginTx(ctx, nil); err != nil {
+			return 0, err
+		}
+		defer tx.Rollback()
+	}
+	var err error
+	if cascade != nil && len(cascade.issues) > 0 {
+		metadata := next
+		metadata.Issues = nil
+		// A record the cascade changed moves to its next version, as other
+		// writers' cascades do, so a write based on the old one is refused.
+		refs := newIssueReferences(metadata)
+		for index := range cascade.issues {
+			if !refs.equalOwned(cascade.base[cascade.issues[index].ID], cascade.issues[index]) {
+				cascade.issues[index].Version++
+			}
+		}
+		if cascade.written, err = s.writeIssueRecordBatch(ctx, tx, workspaceKey, cascade.issues, metadata, cascade.base); err != nil {
+			return 0, err
+		}
+	}
 	if event != nil && event.Type == "team.settings_updated" {
 		var change map[string]json.RawMessage
 		if json.Unmarshal(event.Payload, &change) == nil && change["parentTeamId"] != nil {
@@ -795,8 +954,34 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 			}
 		}
 	}
-	if err := writeMetadataRecordChanges(ctx, tx, workspaceKey, newIssueReferences(domain.Bootstrap{Users: next.Users}), upserts); err != nil {
+	// Fields stored inline (entries without unique IDs) have no rows: write
+	// them whole as the legacy delta writer does, the rest row by row.
+	var fields []string
+	for _, change := range upserts {
+		fields = append(fields, change.field)
+	}
+	inline, err := s.inlineMetadataFields(ctx, tx, workspaceKey, fields...)
+	if err != nil {
 		return 0, err
+	}
+	rows, positions := upserts, []int(nil)
+	if len(inline) > 0 {
+		if err := s.writeInlineMetadataFields(ctx, tx, workspaceKey, next, inline); err != nil {
+			return 0, err
+		}
+		rows = nil
+		for index, change := range upserts {
+			if !slices.Contains(inline, change.field) {
+				rows = append(rows, change)
+				positions = append(positions, index)
+			}
+		}
+	}
+	if err := writeMetadataRecordChanges(ctx, tx, workspaceKey, newIssueReferences(domain.Bootstrap{Users: next.Users}), rows); err != nil {
+		return 0, err
+	}
+	for index, position := range positions {
+		upserts[position] = rows[index]
 	}
 	var removedIssues int64
 	if event != nil && event.Type == "team.deleted" {
@@ -829,7 +1014,11 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 		}
 	}
 	if event != nil {
-		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(event.PreviousValues), CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: next.Workspace.ID}); err != nil {
+		row := domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(event.PreviousValues), CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: next.Workspace.ID}
+		if tx.journalToken != "" {
+			row.WorkspaceKey = workspaceKey
+		}
+		if _, err := insertDomainEvent(ctx, tx, row); err != nil {
 			return 0, err
 		}
 	}
@@ -839,6 +1028,11 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 	}
 	if err := writeAccountMetadata(ctx, tx, workspaceKey, viewerRaw); err != nil {
 		return 0, err
+	}
+	if prepare != nil {
+		if err := prepare(tx); err != nil {
+			return 0, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
@@ -937,7 +1131,12 @@ func writeMetadataRecordUpserts(ctx context.Context, tx *sqlTx, workspace string
 	bases := map[string]int{}
 	for i, change := range upserts {
 		var existing sql.NullInt64
-		err := tx.QueryRowContext(ctx, `SELECT collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, change.field, change.key).Scan(&existing)
+		var err error
+		if order, known := tx.recordJournalOrder(workspace, change.field, change.key); known {
+			existing = sql.NullInt64{Int64: order, Valid: true}
+		} else {
+			err = tx.QueryRowContext(ctx, `SELECT collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, change.field, change.key).Scan(&existing)
+		}
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -961,6 +1160,9 @@ func writeMetadataRecordUpserts(ctx context.Context, tx *sqlTx, workspace string
 			order = base
 		}
 		upserts[i].order = order
+		// Metadata JSON is parsed in SQL (journal triggers, search), where
+		// PostgreSQL refuses \u0000: as in writeMetadataRecordRow, NUL is dropped.
+		change.raw = StripJSONNUL(change.raw)
 		// The hot cache mirrors the row as stored.
 		stored, err := offloadRecord(ctx, tx, workspace, change.field, change.raw)
 		if err != nil {
@@ -1003,6 +1205,8 @@ func writeRootCollectionArray(ctx context.Context, tx *sqlTx, workspace, field s
 	if err != nil {
 		return err
 	}
+	// The root JSON is parsed in SQL, where PostgreSQL refuses \u0000.
+	encoded = StripJSONNUL(encoded)
 	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET data=?,updated_at=? WHERE workspace_key=?`, encoded, time.Now().UTC().Format(time.RFC3339Nano), workspace)
 	return err
 }

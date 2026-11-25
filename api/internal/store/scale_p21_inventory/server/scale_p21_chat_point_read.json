@@ -1,0 +1,22 @@
+{
+  "source": "server/scale_p21_chat_point_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "chatAuthorizedPointRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "chatAuthorizedMutation"
+      ],
+      "reason": "GET-only adapter retains the literal original helper and original context when bounded metadata is off. Bounded dispatch uses the original identity, route allowlist, middleware, response cap, status/error handling and original-destination JSON merge semantics. An enclosing operation owns encoding, recorder bytes, decode work and subordinate readers through output/error use; missing or closed owners fail before dispatch. This adapter certifies response ownership only; its handler metadata dependencies and each caller remain independently inventoried."
+    },
+    "beginChatPointReadOutput": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "BeginMetadataJSONRead"
+      ],
+      "reason": "Constructs an independent internal request scope and JSON work owner, registers its close with the containing operation before dispatch, and releases both on failed transfer. Explicit close clears recorder bytes and closes subordinate scopes and process admission. The JSON owner tests cover quota, dense containers, cancellation, error latching, parent independence, concurrent close and actual warm/reloaded point-output lifetimes; chat adapter tests cover actual HTTP output and enclosing ownership."
+    }
+  }
+}

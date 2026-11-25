@@ -56,6 +56,7 @@ html:root .settings-app .settings-main .usage-page > .settings-page-header { mar
   color: var(--set-button-text);
   font: 500 13px/normal var(--font);
   white-space: nowrap;
+  text-decoration: none;
 }
 .usage-row > .usage-pill-button { margin-right: -6px; }
 .usage-pill-button:hover:not(:disabled) { background: var(--bg-hover); }

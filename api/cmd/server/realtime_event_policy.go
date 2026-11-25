@@ -62,6 +62,9 @@ type realtimeRecord struct {
 	IssueID    string   `json:"issueId"`
 	IssueIDs   []string `json:"issueIds"`
 	PipelineID string   `json:"pipelineId"`
+	// An issue template's narrowed team and sub-issue teams.
+	VisibilityTeamID string                  `json:"visibilityTeamId"`
+	SubIssues        []store.RealtimeTeamRef `json:"subIssues"`
 }
 
 type realtimeRule struct {
@@ -108,6 +111,10 @@ var (
 )
 
 var realtimeRules = []realtimeRuleEntry{
+	// Viewer-projected transport frames are written directly. A peer or log
+	// cannot forward one viewer's projection through the shared event hub.
+	{"sync.frame", realtimeNobodyRule},
+	{"sync.delta", realtimeNobodyRule},
 	// Personal records.
 	{"user_settings.", realtimeRule{audience: realtimeSubject, keepAll: true}},
 	{"notification_preferences.", realtimeRule{audience: realtimeSubject, keepAll: true}},
@@ -179,8 +186,9 @@ var realtimeRules = []realtimeRuleEntry{
 	{"schedules.", realtimeMembersRule},
 	{"cycles.", realtimeMembersRule},
 	{"coding_environment.", realtimeMembersRule},
-	// Loops and automations are listed to every member (/api/loops, /api/workflows).
-	{"loop.", realtimeRule{audience: realtimeEveryone}},
+	// Workspace loops and automations are listed to every member (/api/loops,
+	// /api/workflows); a team's loop follows the team's row, like the list.
+	{"loop.", realtimeRule{audience: realtimeEveryone, fields: []string{"loops"}, visible: realtimeTeamRowVisible, scope: []string{"teamId"}}},
 	{"workflow_definition.", realtimeMembersRule},
 	{"workflow_run.", realtimeMembersRule},
 	{"coding.approval_requested", realtimeRule{audience: realtimeEveryone}},
@@ -195,7 +203,7 @@ var realtimeRules = []realtimeRuleEntry{
 	{"label_group.", realtimeRule{audience: realtimeEveryone, fields: []string{"labelGroups"}, visible: realtimeLabelVisible, keep: []string{"labelIds"}, scope: []string{"scope"}}},
 	{"workflow_state.", realtimeRule{audience: realtimeEveryone, fields: []string{"states"}, payloadTeam: true, visible: realtimeTeamRowVisible, keep: []string{"state", "teamId", "stateId", "replacementStateId"}}},
 	{"workflow_states.", realtimeRule{audience: realtimeEveryone, teamAggregate: true, visible: realtimeTeamRowVisible}},
-	{"issue_template.", realtimeRule{audience: realtimeEveryone, fields: []string{"issueTemplates"}, visible: realtimeTeamRowVisible, scope: []string{"teamId"}}},
+	{"issue_template.", realtimeRule{audience: realtimeEveryone, fields: []string{"issueTemplates"}, visible: realtimeIssueTemplateVisible, scope: []string{"teamId", "visibilityTeamId", "subIssues"}}},
 	{"document_template.", realtimeRule{audience: realtimeEveryone, fields: []string{"documentTemplates"}, visible: realtimeTeamRowVisible, scope: []string{"teamId"}}},
 	{"project_template.", realtimeRule{audience: realtimeEveryone, fields: []string{"projectTemplates"}, visible: realtimeAnyTeamRowVisible, scope: []string{"teamIds"}}},
 	{"release_pipeline.", realtimeRule{audience: realtimeEveryone, fields: []string{"releasePipelines"}, visible: realtimeAnyTeamContentVisible, scope: []string{"teamIds"}}},
@@ -238,12 +246,14 @@ func realtimeRuleFor(eventType string) (realtimeRule, bool) {
 // realtimeViewer is a stream's viewer as the read rules need it. Team sets
 // are computed on first use.
 type realtimeViewer struct {
-	s     *server
-	r     *http.Request
-	data  domain.Bootstrap
-	query store.IssueRecordQuery
-	event domain.RealtimeEvent
-	rows  map[string]bool
+	s      *server
+	r      *http.Request
+	data   domain.Bootstrap
+	query  store.IssueRecordQuery
+	event  domain.RealtimeEvent
+	rows   map[string]bool
+	source *EventSource
+	err    error
 }
 
 func (v *realtimeViewer) id() string { return v.data.Viewer.ID }
@@ -304,17 +314,41 @@ func (v *realtimeViewer) content(teamID string) bool {
 }
 
 func (v *realtimeViewer) projectVisible(id string) bool {
+	if v.source != nil {
+		if v.source.rules == nil || v.source.rules.projects[id] == nil {
+			return false
+		}
+		project := v.source.rules.projects[id]
+		return len(project.TeamIDs) == 0 || slices.ContainsFunc(project.TeamIDs, v.content)
+	}
+	if v.s.store.BoundedMetadataEnabled() {
+		return v.boundedProjectVisible(id)
+	}
 	project, ok := v.s.store.ProjectByID(workspaceKey(v.r), id)
 	return ok && (len(project.TeamIDs) == 0 || slices.ContainsFunc(project.TeamIDs, v.content))
 }
 
 func (v *realtimeViewer) anyIssueVisible(ids []string) bool {
+	if v.source != nil {
+		return v.source.issues != nil && slices.ContainsFunc(ids, func(id string) bool { return v.source.issues.Visible(v.query, id) })
+	}
 	visible, err := v.s.store.VisibleIssueRecordIDs(v.r.Context(), v.query, ids)
 	return err == nil && slices.ContainsFunc(ids, func(id string) bool { return visible[id] })
 }
 
 func realtimeTeamRowVisible(v *realtimeViewer, record realtimeRecord) bool {
 	return record.TeamID == "" || v.row(record.TeamID)
+}
+
+// realtimeIssueTemplateVisible is the bootstrap's issue template rule
+// (store.IssueTemplateTeamsVisible): every team the template names, its
+// narrowed team and its sub-issues' teams included, is a visible team row.
+func realtimeIssueTemplateVisible(v *realtimeViewer, record realtimeRecord) bool {
+	template := domain.IssueTemplate{TeamID: record.TeamID, VisibilityTeamID: record.VisibilityTeamID}
+	for _, child := range record.SubIssues {
+		template.SubIssues = append(template.SubIssues, domain.TemplateSubIssue{TeamID: child.TeamID})
+	}
+	return store.IssueTemplateTeamsVisible(template, v.row)
 }
 
 func realtimeTeamContentVisible(v *realtimeViewer, record realtimeRecord) bool {
@@ -474,6 +508,20 @@ func (s *server) pagedPolicyEvent(r *http.Request, data domain.Bootstrap, query 
 		return realtimeSignal(rule, event, realtimeRecord{}), true
 	}
 	record, found := s.realtimeRecordFor(r, data, rule, event)
+	return projectPolicyRecord(viewer, rule, record, found)
+}
+
+func projectPolicyRecord(viewer *realtimeViewer, rule realtimeRule, record realtimeRecord, found bool) (domain.RealtimeEvent, bool) {
+	event := viewer.event
+	if !viewer.inAudience(rule) {
+		return event, false
+	}
+	if rule.anonymous {
+		return anonymousRealtimeEvent(event), true
+	}
+	if rule.visible == nil {
+		return realtimeSignal(rule, event, realtimeRecord{}), true
+	}
 	if !found {
 		return anonymousRealtimeEvent(event), true
 	}

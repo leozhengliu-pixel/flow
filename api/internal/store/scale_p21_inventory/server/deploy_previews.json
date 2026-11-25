@@ -1,0 +1,32 @@
+{
+  "source": "server/deploy_previews.go",
+  "unmigrated": 2,
+  "consumers": {
+    "applyDeploymentWebhook": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.codeWebhook"
+      ]
+    },
+    "putReviewPreview": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/reviews/{id}/previews (server/main.go:744)"
+      ]
+    }
+  }
+}

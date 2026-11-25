@@ -1,0 +1,20 @@
+{
+  "source": "server/storage_maintenance.go",
+  "unmigrated": 1,
+  "consumers": {
+    "purgeExpiredTrash": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.maintainStorage"
+      ]
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "source": "server/agent_stream.go",
+  "unmigrated": 5,
+  "consumers": {
+    "persistAgentCompletion": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.runAgentSession",
+        "server/server.persistAgentFailure"
+      ]
+    },
+    "resolveAgentApproval": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/sessions/{id}/approvals/{approvalId} (server/main.go:479)"
+      ]
+    },
+    "runAgentSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.completeAgentSession",
+        "server/server.streamAgentSession"
+      ]
+    },
+    "startAgentSessionTitle": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.runAgentSession",
+        "server/server.runAgentSessionOnWorker"
+      ]
+    },
+    "stopAgentSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/agent/sessions/{id}/stop (server/main.go:481)"
+      ]
+    }
+  }
+}

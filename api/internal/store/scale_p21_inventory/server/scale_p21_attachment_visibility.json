@@ -1,0 +1,19 @@
+{
+  "source": "server/scale_p21_attachment_visibility.go",
+  "unmigrated": 0,
+  "consumers": {
+    "boundedWorkspaceAttachmentVisible": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Per membership, after the unchanged indexed issue-attachment SQL, evaluates the literal loopAttachmentVisible on the unprojected owned generation, skips the projection when no other family names the upload (the projection only removes records), and otherwise applies the original family predicates (customer requests, project updates, documentAttachmentVisible, owned undeleted agent sessions, project/initiative/review comment attachments, initiative updates) to the owned literal paged projection. Read failures skip the workspace as the original accessor errors did; a work-budget refusal also skips it and is recorded so serveUpload answers 503 with Retry-After when no workspace granted the upload. SW268 compares status/headers/body and fileReadable for 34 uploads x 6 principals on warm and SQL-reloaded sources, including private teams, guest, app user, archived/trashed owners, deleted sessions, duplicate occurrences, a second membership, a missing object and an agent upload; SW265 guards the callset and the absence of hydrating accessors.",
+      "accessors": [
+        "BeginAttachmentVisibilityRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /uploads/{name} and signed file reads.",
+      "callers": [
+        "server/server.boundedAttachmentVisible"
+      ]
+    }
+  }
+}

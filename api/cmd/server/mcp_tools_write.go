@@ -1126,7 +1126,7 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 	if operation != "create" {
 		payload.CommentID = targetID
 	}
-	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, eventType, aggregateID, payload, func(next *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.ContextWithMutationResults(ctx, &result), actor.WorkspaceKey, eventType, aggregateID, payload, func(next *domain.Bootstrap) error {
 		defer func() {
 			if operation == "create" || operation == "reply" {
 				payload.CommentID, payload.ParentID = result.ID, result.ParentID
@@ -1347,6 +1347,9 @@ func mcpReviewEvent(data domain.Bootstrap, id string) (string, domain.ReviewEven
 }
 
 func invokeJSONHandler(ctx context.Context, method string, pathValues map[string]string, input any, handler http.HandlerFunc) (any, error) {
+	if err := authorizeInternalJSONHandler(ctx, method, pathValues, input, handler); err != nil {
+		return nil, err
+	}
 	var body io.Reader
 	if input != nil {
 		raw, err := json.Marshal(input)

@@ -19,7 +19,10 @@ func (s *server) listSCIMTokens(w http.ResponseWriter, r *http.Request) {
 	if !s.requireWorkspaceAdmin(w, r) {
 		return
 	}
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	items, err := s.store.ListSCIMTokens(r.Context(), data.Workspace.ID)
 	respondMutation(w, err, http.StatusOK, items)
 }
@@ -38,12 +41,15 @@ func (s *server) createSCIMToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	item, err := s.store.CreateSCIMToken(r.Context(), data.Workspace.ID, input.Name)
 	if err == nil {
 		// Token issuance enables the SCIM surface for this workspace. The
 		// plaintext secret is returned exactly once by CreateSCIMToken.
-		err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "scim.enabled", "workspace", nil, func(next *domain.Bootstrap) error {
+		err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "scim.enabled", "workspace", nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "workspaceSettings", ID: "scimEnabled"}, {Kind: "workspaceSettings", ID: "scimDefaultRole"}}}, func(next *domain.Bootstrap) error {
 			next.WorkspaceSettings.SCIMEnabled = true
 			if next.WorkspaceSettings.SCIMDefaultRole == "" {
 				next.WorkspaceSettings.SCIMDefaultRole = "member"
@@ -59,11 +65,14 @@ func (s *server) revokeSCIMToken(w http.ResponseWriter, r *http.Request) {
 	if !s.requireWorkspaceAdmin(w, r) {
 		return
 	}
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	err := s.store.RevokeSCIMToken(r.Context(), data.Workspace.ID, r.PathValue("id"))
 	if err == nil {
 		auditCtx := store.WithMetadataFields(r.Context(), "auditLog")
-		if auditErr := s.store.MutateWorkspace(auditCtx, workspaceKey(r), "scim.token_revoked", r.PathValue("id"), nil, func(next *domain.Bootstrap) error {
+		if auditErr := s.store.MutateWorkspaceScoped(auditCtx, workspaceKey(r), "scim.token_revoked", r.PathValue("id"), nil, store.MetadataRecordScope{}, func(next *domain.Bootstrap) error {
 			appendAudit(next, "revoked", "scim_token", r.PathValue("id"), nil)
 			return nil
 		}); auditErr != nil {
@@ -77,9 +86,15 @@ func (s *server) requireWorkspaceAdmin(w http.ResponseWriter, r *http.Request) b
 	if s.authDisabled {
 		return true
 	}
-	role, _, err := s.store.WorkspaceRole(r.Context(), s.workspaceData(r).Workspace.ID, authUser(r).ID)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return false
+	}
+	role, _, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
 	if err != nil || !workspaceAdminRole(role) {
-		writeError(w, http.StatusForbidden, "workspace administrator access required")
+		if !writeAuthCheckFailure(w, err) {
+			writeError(w, http.StatusForbidden, "workspace administrator access required")
+		}
 		return false
 	}
 	return true
@@ -96,11 +111,19 @@ func (s *server) authenticateSCIMRequest(w http.ResponseWriter, r *http.Request)
 	workspaceKey := strings.TrimSpace(r.PathValue("workspace"))
 	workspaceID, err := s.store.AuthenticateSCIMToken(r.Context(), secret)
 	if err != nil {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="Flow SCIM", error="invalid_token"`)
-		writeSCIMError(w, http.StatusUnauthorized, "", "invalid SCIM bearer token")
+		if errors.Is(err, store.ErrAuthInvalid) {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="Flow SCIM", error="invalid_token"`)
+			writeSCIMError(w, http.StatusUnauthorized, "", "invalid SCIM bearer token")
+		} else {
+			writeSCIMRequestError(w, err)
+		}
 		return "", "", false
 	}
-	data, ok := s.store.WorkspaceMetadata(workspaceKey)
+	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "scimEnabled"}}})
+	if err != nil {
+		writeSCIMRequestError(w, err)
+		return "", "", false
+	}
 	if !ok || data.Workspace.ID != workspaceID {
 		writeSCIMError(w, http.StatusForbidden, "", "SCIM token is not valid for this workspace")
 		return "", "", false
@@ -370,8 +393,21 @@ func (s *server) scimUsers(w http.ResponseWriter, r *http.Request) {
 	if item.Restored {
 		action = "restored"
 	}
-	s.recordSCIMAudit(r, workspaceKey, []scimAuditEntry{scimUserAudit(action, item, map[string]any{"role": item.Role, "active": item.Active(), "linkedExistingAccount": item.Linked})})
-	s.applySCIMProfileSettings(r.Context(), workspaceKey, item.User.ID, store.SCIMProfile{}, item.Profile)
+	// An account that existed before is not enrolled by the directory: it
+	// has an invitation to accept, so the resource reads active=false until
+	// it does, and the account's own settings are left alone.
+	pending := item.LinkedExisting && item.MemberStatus == ""
+	s.recordSCIMAudit(r, workspaceKey, []scimAuditEntry{scimUserAudit(action, item, map[string]any{"role": item.Role, "active": item.Active(), "linkedExistingAccount": item.Linked, "invitationPending": pending})})
+	if item.Invitation != nil && s.mailer != nil {
+		if inviter, err := s.store.UserByID(r.Context(), item.Invitation.InviterID); err == nil {
+			if err := s.mailer.sendInvitation(item.Invitation.Email, item.InvitationWorkspace, inviter, item.Invitation.Token); err != nil {
+				log.Printf("scim: invitation email for a linked account was not sent: %v", err)
+			}
+		}
+	}
+	if !pending {
+		s.applySCIMProfileSettings(r.Context(), workspaceKey, item.User.ID, store.SCIMProfile{}, item.Profile)
+	}
 	resource := scimUserResource(base, item)
 	w.Header().Set("Location", base+"/Users/"+item.User.ID)
 	writeSCIMResource(w, http.StatusCreated, readSCIMProjection(r).apply(resource), scimUserVersion(item))
@@ -499,7 +535,9 @@ func (s *server) scimUser(w http.ResponseWriter, r *http.Request) {
 	}
 	entries = append(entries, s.scimRoleChangeAudits(r.Context(), workspaceID, before, s.scimMemberStates(r.Context(), workspaceID, item.User.ID), nil)...)
 	s.recordSCIMAudit(r, workspaceKey, entries)
-	s.applySCIMProfileSettings(r.Context(), workspaceKey, item.User.ID, current.Profile, item.Profile)
+	if !item.LinkedExisting || item.MemberStatus != "" { // a linked account that has not joined keeps its own settings
+		s.applySCIMProfileSettings(r.Context(), workspaceKey, item.User.ID, current.Profile, item.Profile)
+	}
 	writeSCIMResource(w, http.StatusOK, readSCIMProjection(r).apply(scimUserResource(base, item)), scimUserVersion(item))
 }
 
@@ -588,6 +626,19 @@ func scimTeamResource(base string, team domain.Team, members []domain.TeamMember
 
 // unlinkedSCIMTeams returns workspace teams no SCIM group is linked to.
 func (s *server) unlinkedSCIMTeams(workspaceKey string, groups []store.SCIMGroup) []domain.Team {
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginSCIMTeamRead(context.Background(), workspaceKey, groups)
+		if err != nil || !found {
+			return nil
+		}
+		defer read.Close()
+		teams, err := read.Teams()
+		if err != nil {
+			log.Printf("SCIM team directory unavailable: %v", err)
+			return nil
+		}
+		return teams
+	}
 	data, ok := s.store.WorkspaceMetadata(workspaceKey)
 	if !ok {
 		return nil
@@ -679,7 +730,23 @@ func (s *server) listSCIMGroupResources(ctx context.Context, workspaceKey, works
 	for _, group := range groups {
 		all = append(all, scimGroupResourceFromStore(base, group, withMembers))
 	}
-	for _, team := range s.unlinkedSCIMTeams(workspaceKey, groups) {
+	var teams []domain.Team
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginSCIMTeamRead(ctx, workspaceKey, groups)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			defer read.Close()
+			teams, err = read.Teams()
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		teams = s.unlinkedSCIMTeams(workspaceKey, groups)
+	}
+	for _, team := range teams {
 		all = append(all, scimTeamResource(base, team, teamMembers, withMembers))
 	}
 	matched := []map[string]any{}
@@ -692,7 +759,11 @@ func (s *server) listSCIMGroupResources(ctx context.Context, workspaceKey, works
 }
 
 func (s *server) syncSCIMGroupTeamIfLinked(r *http.Request, workspaceKey, workspaceID string, group store.SCIMGroup) error {
-	if teamID := s.scimTeamForGroup(workspaceKey, group); teamID != "" {
+	teamID, err := s.scimTeamForGroupContext(r.Context(), workspaceKey, group)
+	if err != nil {
+		return err
+	}
+	if teamID != "" {
 		return s.syncSCIMGroupTeam(r, workspaceKey, workspaceID, group, teamID)
 	}
 	return nil
@@ -706,7 +777,17 @@ func (s *server) scimGroupOrTeam(ctx context.Context, workspaceKey, workspaceID,
 	if err == nil || !errors.Is(err, sql.ErrNoRows) {
 		return group, nil, err
 	}
-	data, ok := s.store.WorkspaceMetadata(workspaceKey)
+	scope := store.MetadataRecordScope{}
+	if len(id) <= 191 && !strings.ContainsRune(id, '\x00') {
+		scope.Read = append(scope.Read, store.RecordKey{Kind: "teams", ID: id})
+	}
+	if link {
+		scope.Read = append(scope.Read, store.RecordKey{Kind: "workspaceSettings", ID: "scimRoleGroups"})
+	}
+	data, ok, readErr := s.store.WorkspaceMetadataScoped(ctx, workspaceKey, scope)
+	if readErr != nil {
+		return store.SCIMGroup{}, nil, readErr
+	}
 	if !ok {
 		return store.SCIMGroup{}, nil, err
 	}
@@ -910,7 +991,10 @@ func (s *server) applySCIMGroupChange(r *http.Request, workspaceKey, workspaceID
 	}
 	role := scimGroupRole(s.scimWorkspaceSettings(workspaceKey), displayName)
 	var err error
-	linkedTeam := s.scimTeamForGroup(workspaceKey, group)
+	linkedTeam, err := s.scimTeamForGroupContext(ctx, workspaceKey, group)
+	if err != nil {
+		return store.SCIMGroup{}, err
+	}
 	if change.clearExternalID && group.ExternalID != "" {
 		if group, err = s.store.ClearSCIMGroupExternalID(ctx, workspaceID, group.ID); err != nil {
 			return store.SCIMGroup{}, err
@@ -921,7 +1005,14 @@ func (s *server) applySCIMGroupChange(r *http.Request, workspaceKey, workspaceID
 			return store.SCIMGroup{}, err
 		}
 	}
-	if linkedTeam != "" && linkedTeam != s.scimTeamForGroup(workspaceKey, group) {
+	currentTeam := ""
+	if linkedTeam != "" {
+		currentTeam, err = s.scimTeamForGroupContext(ctx, workspaceKey, group)
+		if err != nil {
+			return store.SCIMGroup{}, err
+		}
+	}
+	if linkedTeam != "" && linkedTeam != currentTeam {
 		// No longer linked to that team: its members stay as ordinary
 		// members, as when the group is deleted.
 		if err := s.store.DetachSCIMGroupTeams(ctx, workspaceID, group.ID); err != nil {
@@ -941,6 +1032,10 @@ func (s *server) applySCIMGroupChange(r *http.Request, workspaceKey, workspaceID
 }
 
 func (s *server) scimWorkspaceSettings(workspaceKey string) domain.WorkspaceSettings {
+	if s.store.BoundedMetadataEnabled() {
+		data, _ := s.store.WorkspaceSettingsMetadata(workspaceKey)
+		return data.WorkspaceSettings
+	}
 	data, _ := s.store.WorkspaceMetadata(workspaceKey)
 	return data.WorkspaceSettings
 }
@@ -949,6 +1044,13 @@ func (s *server) scimWorkspaceSettings(workspaceKey string) domain.WorkspaceSett
 // externalId is the Flow team ID/key. Display names are not matched implicitly
 // because IdP group labels are not guaranteed to be unique.
 func (s *server) scimTeamForGroup(workspaceKey string, group store.SCIMGroup) string {
+	if s.store.BoundedMetadataEnabled() {
+		teamID, err := s.scimTeamForGroupContext(context.Background(), workspaceKey, group)
+		if err != nil {
+			log.Printf("SCIM team mapping unavailable: %v", err)
+		}
+		return teamID
+	}
 	data, ok := s.store.WorkspaceMetadata(workspaceKey)
 	if !ok {
 		return ""
@@ -966,6 +1068,18 @@ func (s *server) scimTeamForGroup(workspaceKey string, group store.SCIMGroup) st
 		}
 	}
 	return ""
+}
+
+func (s *server) scimTeamForGroupContext(ctx context.Context, workspace string, group store.SCIMGroup) (string, error) {
+	if !s.store.BoundedMetadataEnabled() {
+		return s.scimTeamForGroup(workspace, group), nil
+	}
+	read, found, err := s.store.BeginSCIMTeamRead(ctx, workspace, []store.SCIMGroup{group})
+	if err != nil || !found {
+		return "", err
+	}
+	defer read.Close()
+	return read.TeamID(0), nil
 }
 
 func scimGroupRole(settings domain.WorkspaceSettings, displayName string) string {
@@ -988,7 +1102,12 @@ func scimGroupRole(settings domain.WorkspaceSettings, displayName string) string
 }
 
 func (s *server) scimRole(workspaceKey, value string) string {
-	data, _ := s.store.WorkspaceMetadata(workspaceKey)
+	var data domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		data, _ = s.store.WorkspaceSettingsMetadata(workspaceKey)
+	} else {
+		data, _ = s.store.WorkspaceMetadata(workspaceKey)
+	}
 	settings := data.WorkspaceSettings
 	value = strings.TrimSpace(value)
 	if mapped := settings.SCIMRoleMapping[strings.ToLower(value)]; mapped != "" {

@@ -10,8 +10,9 @@ import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { isPeopleProperty } from '@/lib/people'
 
 export type AppliedFilterOperator = 'is' | 'isNot'
-export type AppliedFilterOption = { id: string; label: string; color?: string; count?: number; icon?: ReactNode; visualType?: 'person' | 'team'; end?: string; keywords?: string }
-export type AppliedFilterOperatorChoice<TOperator extends string = string> = { operator: TOperator; label: string }
+export type AppliedFilterOption = { id: string; label: string; color?: string; /** A label's group: the value reads "Group › Label". */ groupLabel?: string; count?: number; icon?: ReactNode; visualType?: 'person' | 'team'; end?: string; keywords?: string }
+/** `icon` leads the menu row (the reference app's on / before / after date operators). */
+export type AppliedFilterOperatorChoice<TOperator extends string = string> = { operator: TOperator; label: string; icon?: ReactNode }
 export type AppliedFilterItem<TOption extends AppliedFilterOption = AppliedFilterOption, TOperator extends string = AppliedFilterOperator> = {
   id: string
   fieldLabel: string
@@ -23,6 +24,8 @@ export type AppliedFilterItem<TOption extends AppliedFilterOption = AppliedFilte
   operatorChoices?: AppliedFilterOperatorChoice<TOperator>[]
   /** Several values summarised ("2 priorities"); defaults to the joined labels. */
   valueSummary?: string
+  /** Opens the value's own editor instead of the option menu (a custom date reopens the date dialog, as in the reference app). */
+  onValueClick?: () => void
 }
 
 type Translate = (value: string) => string
@@ -97,7 +100,9 @@ export function FilterConditionChip<TOption extends AppliedFilterOption, TFilter
   return <div className={styles.condition} data-filter-chip="">
     <span className={styles.field}>{fieldVisual ?? <i/>}<span>{translate(filter.fieldLabel)}</span></span>
     <OperatorMenu filter={filter} onChange={onOperatorChange} translate={translate}/>
-    <ValueMenu countLabel={countLabel} filter={filter} onChange={onValuesChange} options={options} translate={translate} valueVisual={valueVisual}/>
+    {filter.onValueClick
+      ? <button aria-label={translate('{field} values').replace('{field}', () => translate(filter.fieldLabel))} className={styles.value} onClick={filter.onValueClick} type="button"><ValueSummary summary={filter.valueSummary} translate={translate} values={filter.values} visual={valueVisual}/></button>
+      : <ValueMenu countLabel={countLabel} filter={filter} onChange={onValuesChange} options={options} translate={translate} valueVisual={valueVisual}/>}
     <button className={styles.remove} aria-label={translate('Remove {field} filter').replace('{field}', () => translate(filter.fieldLabel))} onClick={onRemove} type="button"><X size={13}/></button>
   </div>
 }
@@ -106,7 +111,7 @@ function OperatorMenu<TOption extends AppliedFilterOption, TFilter extends Appli
   const choices: AppliedFilterOperatorChoice[] = filter.operatorChoices ?? [{ operator: 'is', label: filter.operatorLabel ?? 'is' }, { operator: 'isNot', label: filter.negativeOperatorLabel ?? 'is not' }]
   const current = choices.find(choice => choice.operator === filter.operator) ?? choices[0]
   return <Popover.Root><Popover.Trigger asChild><button className={styles.operator} type="button" aria-label={translate('{field} operator').replace('{field}', () => translate(filter.fieldLabel))}>{translate(current.label)}</button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="start" className={styles.operatorMenu} collisionPadding={8} sideOffset={4} role="menu">
-    {choices.map(choice => <Popover.Close asChild key={choice.operator}><button aria-checked={choice.operator === filter.operator} onClick={() => onChange(choice.operator)} role="menuitemradio" type="button"><span>{translate(choice.label)}</span>{choice.operator === filter.operator && <Check size={13}/>}</button></Popover.Close>)}
+    {choices.map(choice => <Popover.Close asChild key={choice.operator}><button aria-checked={choice.operator === filter.operator} data-icon={choice.icon ? '' : undefined} onClick={() => onChange(choice.operator)} role="menuitemradio" type="button">{choice.icon}<span>{translate(choice.label)}</span>{!choice.icon && choice.operator === filter.operator && <Check size={13}/>}</button></Popover.Close>)}
   </Popover.Content></Popover.Portal></Popover.Root>
 }
 
@@ -119,7 +124,7 @@ function ValueMenu<TOption extends AppliedFilterOption>({ countLabel, filter, on
   const selectedLabels = filter.values.map(value => value.label).join(', ')
   return <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button aria-label={translate('{field} values').replace('{field}', () => translate(filter.fieldLabel))} aria-description={selectedLabels} title={selectedLabels} className={styles.value} type="button"><ValueSummary summary={filter.valueSummary} translate={translate} values={filter.values} visual={valueVisual}/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="start" className={styles.valueMenu} collisionPadding={8} onKeyDown={command.onKeyDown} onOpenAutoFocus={event=>event.preventDefault()} sideOffset={4}>
     <div className={styles.search}><input aria-label="Filter values" onChange={event=>command.onQueryChange(event.target.value)} placeholder={translate('Filter...')} ref={commandInputRef} value={command.query}/></div>
-    <div className={styles.options} role="listbox" aria-multiselectable="true">{command.filteredOptions.map((option,index)=><Fragment key={option.id||'none'}>{index>0&&index===firstUnselected&&<hr className={styles.divider}/>}<PersonHover userId={isPeopleProperty(filter.fieldLabel)?option.id:undefined}><button aria-checked={command.isSelected(option.id)} aria-selected={command.activeId===option.id} onClick={()=>command.choose(option)} onMouseMove={()=>command.setActiveId(option.id)} role="option" type="button"><span className={styles.checkbox}>{command.isSelected(option.id)&&<CheckboxMark/>}</span>{option.icon ?? <i style={{background:option.color??'var(--theme-text-secondary)'}}/>}<span data-i18n-ignore title={option.label}>{option.label}</span>{option.end&&<small data-i18n-ignore>{option.end}</small>}{option.count!==undefined&&<small>{option.count} {countLabel?.(option.count)}</small>}</button></PersonHover></Fragment>)}{!command.filteredOptions.length&&<span className={styles.empty}>{translate('No results')}</span>}</div>
+    <div className={styles.options} role="listbox" aria-multiselectable="true" data-label-values={filter.fieldLabel === 'Labels' || undefined}>{command.filteredOptions.map((option,index)=><Fragment key={option.id||'none'}>{index>0&&index===firstUnselected&&<hr className={styles.divider}/>}<PersonHover userId={isPeopleProperty(filter.fieldLabel)?option.id:undefined}><button aria-checked={command.isSelected(option.id)} aria-selected={command.activeId===option.id} onClick={()=>command.choose(option)} onMouseMove={()=>command.setActiveId(option.id)} role="option" type="button"><span className={styles.checkbox}>{command.isSelected(option.id)&&<CheckboxMark/>}</span>{option.icon ?? <i style={{background:option.color??'var(--theme-text-secondary)'}}/>}{option.groupLabel?<span className={styles.valuePath} title={`${option.groupLabel} › ${option.label}`}><span className={styles.valueGroup} data-i18n-ignore>{option.groupLabel}</span><svg aria-hidden="true" width="5" height="9" viewBox="0 0 5 9"><path d="M1 1.25 3.75 4.5 1 7.75" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.25"/></svg><span className={styles.valueName} data-i18n-ignore>{option.label}</span></span>:<span data-i18n-ignore title={option.label}>{option.label}</span>}{option.end&&<small data-i18n-ignore>{option.end}</small>}{option.count!==undefined&&<small>{option.count} {countLabel?.(option.count)}</small>}</button></PersonHover></Fragment>)}{!command.filteredOptions.length&&<span className={styles.empty}>{translate('No results')}</span>}</div>
   </Popover.Content></Popover.Portal></Popover.Root>
 }
 

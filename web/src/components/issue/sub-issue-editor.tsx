@@ -6,6 +6,8 @@ import { EstimateIcon } from '@/components/issue/estimate-icon'
 import { estimateMenuProps } from '@/components/issue/estimate-menu'
 import { CalendarDays, ChevronRight, MoreHorizontal, Paperclip } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
+import type { Editor } from '@tiptap/react'
+import { focusEditorStart } from '@/components/issue/editor/focus-editor-start'
 
 import type { BootstrapData, Issue } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
@@ -50,6 +52,8 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
   const [labelIds, setLabelIds] = useState<string[]>([])
   const [attachments, setAttachments] = useState<File[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
+  // Enter in the title moves to the body, as in the full composer.
+  const descriptionEditorRef = useRef<Editor | null>(null)
   const [discardOpen, setDiscardOpen] = useState(false)
   // Like the full composer, only ask before throwing away something the user typed.
   const cancel = () => { if (title.trim() || description?.markdown.trim() || attachments.length) setDiscardOpen(true); else onCancel() }
@@ -76,9 +80,9 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
   return <form className="sub-issue-editor" onSubmit={event => { event.preventDefault(); void submit() }}>
     <div className="sub-issue-title-row">
       <PropertyMenu ariaLabel={`Change status. ${state.name} is selected`} compact label="Status" value={state.name} selectedId={stateId} icon={<StatusIcon state={state}/>} options={teamStates.map(item => ({ id: item.id, label: item.name, icon: <StatusIcon state={item}/> }))} onChange={setStateId} trigger={<StatusIcon state={state} size={14}/>} triggerClassName="sub-issue-status-trigger"/>
-      <IssueTitleEditor autoFocus value={title} onChange={setTitle} onEnter={() => document.querySelector<HTMLElement>('.sub-issue-description-editor')?.focus()} onSubmit={() => void submit()} className="sub-issue-title-editor"/>
+      <IssueTitleEditor autoFocus value={title} onChange={setTitle} onEnter={() => focusEditorStart(descriptionEditorRef.current)} onSubmit={() => void submit()} className="sub-issue-title-editor"/>
     </div>
-    <IssueDescriptionEditor users={data.users} value={description?.markdown ?? ''} state={description?.documentJSON} onChange={setDescription} onSubmit={() => void submit()} className="sub-issue-description-editor"/>
+    <IssueDescriptionEditor users={data.users} value={description?.markdown ?? ''} state={description?.documentJSON} onChange={setDescription} onSubmit={() => void submit()} className="sub-issue-description-editor" editorRef={editor => { descriptionEditorRef.current = editor }}/>
     <div className="sub-issue-actions"><div className="sub-issue-properties">
       <button type="button" className="sub-issue-team" aria-label="Set team" disabled><TeamIcon team={parent.team} /><span data-i18n-ignore>{parent.team.key}</span></button>
       <PropertyMenu compact label="Priority" value={priority ? ['', 'Urgent', 'High', 'Medium', 'Low'][priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, id) => ({ id: String(id), label, icon: <PriorityIcon priority={id}/> }))} onChange={id => setPriority(Number(id))}/>

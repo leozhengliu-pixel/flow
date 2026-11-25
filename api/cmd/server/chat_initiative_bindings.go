@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Initiative group bindings connect an initiative directly to a chat group,
@@ -380,7 +381,43 @@ func (s *server) queueChatInitiativeBindingEvent(ctx context.Context, workspace 
 	if err != nil || len(bindings) == 0 {
 		return err
 	}
-	data, ok := s.store.WorkspaceMetadataFields(workspace, "workspace", "initiatives", "teams", "teamSettings", "workspaceSettings")
+	var data domain.Bootstrap
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		owner, found, err := s.store.BeginInstalledMetadataRead(ctx, workspace)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("chat notification metadata unavailable")
+		}
+		defer owner.Close()
+		ctx, err = owner.Context(ctx)
+		if err != nil {
+			return err
+		}
+		read, found, err := s.store.BeginPulseRead(ctx, workspace, false)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("chat notification metadata unavailable")
+		}
+		defer read.Close()
+		policy, found, err := s.store.BeginChatDisplayRead(ctx, workspace, store.ChatDisplayRequest{Policy: true})
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("chat notification metadata unavailable")
+		}
+		defer policy.Close()
+		data = policy.Data
+		data.Workspace, data.Initiatives = read.Snapshot.Workspace, read.Snapshot.Initiatives
+		ok = true
+	} else {
+		data, ok = s.store.WorkspaceMetadataFields(workspace, "workspace", "initiatives", "teams", "teamSettings", "workspaceSettings")
+	}
 	if !ok {
 		return chatInvalid("chat notification metadata unavailable")
 	}
@@ -415,7 +452,43 @@ func (s *server) chatSendInitiativeBindingUpdate(ctx context.Context, record dom
 	if !chatInitiativeBindingActive(binding) || binding.InitiativeID != payload.InitiativeID {
 		return nil
 	}
-	data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "workspace", "initiatives", "teams", "teamSettings", "workspaceSettings", "users")
+	var data domain.Bootstrap
+	var pulse *store.PulseRead
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		owner, found, beginErr := s.store.BeginInstalledMetadataRead(ctx, record.WorkspaceKey)
+		if beginErr != nil {
+			return beginErr
+		}
+		if !found {
+			return chatInvalid("initiative metadata unavailable")
+		}
+		defer owner.Close()
+		ctx, err = owner.Context(ctx)
+		if err != nil {
+			return err
+		}
+		pulse, ok, err = s.store.BeginPulseRead(ctx, record.WorkspaceKey, false)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return chatInvalid("initiative metadata unavailable")
+		}
+		defer pulse.Close()
+		policy, found, err := s.store.BeginChatDisplayRead(ctx, record.WorkspaceKey, store.ChatDisplayRequest{Policy: true})
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("initiative metadata unavailable")
+		}
+		defer policy.Close()
+		data = policy.Data
+		data.Workspace, data.Initiatives = pulse.Snapshot.Workspace, pulse.Snapshot.Initiatives
+	} else {
+		data, ok = s.store.WorkspaceMetadataFields(record.WorkspaceKey, "workspace", "initiatives", "teams", "teamSettings", "workspaceSettings", "users")
+	}
 	if !ok {
 		return chatInvalid("initiative metadata unavailable")
 	}
@@ -430,11 +503,40 @@ func (s *server) chatSendInitiativeBindingUpdate(ctx context.Context, record dom
 		}
 		return err
 	}
+	if pulse != nil {
+		if err := pulse.LoadSource(ctx, "initiative", binding.InitiativeID); err != nil {
+			return err
+		}
+		data.Initiatives = pulse.Snapshot.Initiatives
+		initiative, _ = chatFindInitiative(data, binding.InitiativeID)
+		display, found, err := s.store.BeginChatDisplayRead(ctx, record.WorkspaceKey, store.ChatDisplayRequest{Directory: true, TeamID: initiative.LeadTeamID})
+		if err != nil {
+			return err
+		}
+		if !found {
+			return chatInvalid("initiative metadata unavailable")
+		}
+		defer display.Close()
+		data.Users, data.TeamSettings = display.Data.Users, display.Data.TeamSettings
+		var ids []string
+		if payload.UpdateID != "" {
+			ids = []string{payload.UpdateID}
+		}
+		if err := pulse.LoadUpdates(ctx, "initiative", binding.InitiativeID, ids); err != nil {
+			return err
+		}
+	}
 	slug := initiative.SlugID
 	if slug == "" {
 		slug = initiative.ID
 	}
 	link := fmt.Sprintf("%s/%s/initiative/%s/overview", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey), url.PathEscape(slug))
-	content, _ := json.Marshal(s.chatInitiativeUpdateCard(chatProviderLanguage(record.Provider), record, data, initiative, link, payload))
+	var card map[string]any
+	if pulse != nil {
+		card = s.chatInitiativeUpdateCardFrom(chatProviderLanguage(record.Provider), data, initiative, link, payload, pulse.Snapshot.InitiativeUpdates[initiative.ID])
+	} else {
+		card = s.chatInitiativeUpdateCard(chatProviderLanguage(record.Provider), record, data, initiative, link, payload)
+	}
+	content, _ := json.Marshal(card)
 	return s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages?receive_id_type=chat_id", map[string]any{"receive_id": binding.ChatID, "msg_type": "interactive", "content": string(content), "uuid": chatKey(job.DedupKey, "initiative-binding")[:32]}, nil)
 }

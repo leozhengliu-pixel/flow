@@ -1,0 +1,2 @@
+.flow-product-name { display: inline-block; inline-size: var(--product-name-body-inline-size); }
+.flow-product-name[data-emphasis] { inline-size: var(--product-name-emphasis-inline-size); }

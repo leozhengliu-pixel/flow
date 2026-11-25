@@ -1,0 +1,652 @@
+{
+  "source": "store/sqlite.go",
+  "unmigrated": 10,
+  "consumers": {
+    "Account": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The literal full accessor remains unchanged and is bypassed by every supported bounded production caller: DefaultViewer handles the two scalar consumers and owned AccountRead handles both account responses. SW125 scans the entire production API callset and rejects any reachable bounded Account call, including adapter fallback mistakes; SW118/SW123 prove their respective native ownership and SQL bounds. This review does not claim direct Account() is bounded; direct tests retain it as the literal oracle.",
+      "accessors": [
+        "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/account/bootstrap",
+      "callers": [
+        "server/server.authenticate",
+        "server/server.authSession",
+        "server/server.accountBootstrap",
+        "server/server.oauthRequestUser"
+      ]
+    },
+    "Bootstrap": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "TestScaleP21SW286StoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. With FLOW_BOUNDED_METADATA on no HOT inventory route, ticker or consumer reaches it: PATCH /api/issues/{id} is rewritten to the record route before dispatch (updateIssue is unrouted), the coding runtime Bootstrap is internal/coding's protocol (pinned name collision), and every other caller (deleteIssue, MCP/agent tools) is COLD. The literal body is unchanged and still clones and hydrates; this review certifies only HOT unreachability, not a bounded body.",
+      "accessors": [
+        "Bootstrap",
+        "BootstrapFor"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issues/{id}",
+      "callers": [
+        "server/server.updateIssue",
+        "server/server.deleteIssue"
+      ]
+    },
+    "BootstrapFor": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "TestScaleP21SW286StoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. With the flag on its only HOT-classified reachers are the compatibility relays workspaceData and findIssueForPermissions: every GET or HEAD permission list reads the retained authorized issue headers (SW113, now including HEAD), the COLD permission writers and other COLD callers keep the literal read, and the workspace administration callers (updateWorkspace, logo, shared dashboard/view, invite preview, cancel/delete/purge) are COLD. The literal hydrating body is unchanged; this review certifies HOT unreachability only.",
+      "accessors": [
+        "Bootstrap",
+        "BootstrapForContext"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from audited HOT server/issue_share.go:getSharedIssue",
+      "callers": [
+        "server/server.listProjectTemplates",
+        "server/server.getSharedDashboard",
+        "server/server.inviteLinkPreview",
+        "server/server.getSharedIssue",
+        "server/server.updateWorkspace",
+        "server/server.uploadWorkspaceLogo",
+        "server/server.deleteWorkspaceLogo",
+        "server/server.workspaceDataWithError",
+        "server/server.getSharedView",
+        "server/server.purgeWorkspace",
+        "store/SQLiteStore.Bootstrap",
+        "store/SQLiteStore.CancelWorkspaceDeletion",
+        "store/SQLiteStore.DeleteWorkspace",
+        "store/SQLiteStore.BeginWorkspacePurge",
+        "store/SQLiteStore.RemoveWorkspaceFromCatalog",
+        "store/SQLiteStore.PurgeWorkspaceRows"
+      ]
+    },
+    "BootstrapForContext": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "TestScaleP21SW286StoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. It is reached only through Bootstrap, BootstrapFor and BootstrapForUser, each closed by the same guard. The literal body still clones the resident copy and hydrates issues and content; this review certifies only that no HOT route or ticker executes it with the flag on.",
+      "accessors": [
+        "Bootstrap"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issues",
+      "callers": [
+        "store/SQLiteStore.BootstrapForUser",
+        "store/SQLiteStore.BootstrapFor"
+      ]
+    },
+    "CancelWorkspaceDeletion": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "BootstrapFor",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.cancelWorkspaceDeletion"
+      ]
+    },
+    "CycleForCalendar": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.cycleCalendar"
+      ]
+    },
+    "DeleteWorkspace": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapFor"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "No production callers; exported immediate administrative deletion API used by test cleanup (for example scale_p01_database_test.go:41); production scheduled deletion uses separate purge flow"
+      ]
+    },
+    "Mutate": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "No production callers; legacy default-workspace wrapper used by customer_settings_test.go:180 -> Mutate -> MutateWorkspace"
+      ]
+    },
+    "MutateWithAggregate": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "No production callers; legacy default-workspace wrapper used by sqlite_test.go:34 -> MutateWithAggregate -> MutateWorkspaceWithAggregate"
+      ]
+    },
+    "MutateWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Forwarding adapter only: the unchanged callback adapter preserves the fixed aggregate/context, payload, callback result/error and ErrNoMutation while the reviewed dispatcher owns bounded selection and admission. SW103 compares literal and bounded supported point writes, default workspace, empty aggregate, errors, results and events. This review does not certify any leaf callback; those consumers retain their independent guards.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/batch",
+      "callers": [
+        "server/server.updateWebhook",
+        "server/server.deleteWebhook",
+        "server/server.rotateWebhookSecret",
+        "server/server.revokeWebhookSecret",
+        "server/server.updateDocument",
+        "server/server.restoreDocumentRevision",
+        "server/server.deleteLegacyDocument",
+        "server/server.createDocumentComment",
+        "server/server.updateDocumentComment",
+        "server/server.deleteDocumentComment",
+        "server/server.toggleDocumentCommentReaction",
+        "server/server.updateCustomerRequest",
+        "server/server.deleteCustomerRequest",
+        "server/server.updateRelease",
+        "server/server.deleteRelease",
+        "server/server.updateAsk",
+        "server/server.decideAsk",
+        "server/server.deleteAsk",
+        "server/server.updateProjectTemplate",
+        "server/server.updateSLARule",
+        "server/server.reorderSLARules",
+        "server/server.deleteSLARule",
+        "server/server.updateDraft",
+        "server/server.deleteAllDrafts",
+        "server/server.addFavorite",
+        "server/server.removeFavorite",
+        "server/server.updateFavorite",
+        "server/server.createFavoriteFolder",
+        "server/server.deleteFavoriteFolder",
+        "server/server.addSubscription",
+        "server/server.removeSubscription",
+        "server/server.restoreTrashEntry",
+        "server/server.purgeTrashEntry",
+        "server/server.commitImport",
+        "server/server.commitImportSync",
+        "server/server.maintainAdvancedSchedules",
+        "server/server.beginAgentSession",
+        "server/server.appendAgentSessionMessage",
+        "server/server.replaceAgentSessionMessage",
+        "server/server.updateAgentSession",
+        "server/server.markAgentSessionRead",
+        "server/server.updateAgentMessageFeedback",
+        "server/server.createAgentSessionFeedback",
+        "server/server.deleteAgentSession",
+        "server/server.restoreAgentSession",
+        "server/server.purgeDeletedAgentSessions",
+        "server/server.createAgentSkill",
+        "server/server.updateAgentSkill",
+        "server/server.deleteAgentSkill",
+        "server/server.resumeAgentApproval",
+        "server/server.applyAgentMessageChangesLocked",
+        "server/agentLiveReply.write",
+        "server/agentLiveReply.release",
+        "server/server.sweepAgentLiveReplies",
+        "server/server.notifyAgentReply",
+        "server/server.startAgentSessionTitle",
+        "server/server.persistAgentCompletion",
+        "server/server.runAgentSessionOnWorker",
+        "server/workerChatReply.save",
+        "server/server.cancelImport",
+        "server/server.retryImport",
+        "server/server.resumeImport",
+        "server/server.retryExport",
+        "server/server.updateApplicationWebhook",
+        "server/server.storeApplicationWebhookSecret",
+        "server/server.reconcileApplicationWebhooksWith",
+        "server/server.createAttachmentFromURL",
+        "server/server.saveLinkAttachment",
+        "server/server.updateLinkAttachment",
+        "server/server.createInvitation",
+        "server/server.revokeInvitation",
+        "server/server.resendInvitation",
+        "server/server.acceptInvitation",
+        "server/server.updateMemberRole",
+        "server/server.suspendMember",
+        "server/server.resumeMember",
+        "server/server.removeMember",
+        "server/server.updateTeamMember",
+        "server/server.updateTriageResponsibility",
+        "server/server.deleteTriageResponsibility",
+        "server/server.updateTriageRule",
+        "server/server.deleteTriageRule",
+        "server/server.updateWorkflowDefinition",
+        "server/server.deleteWorkflowDefinition",
+        "server/server.runWorkflow",
+        "server/server.chatDMMarkSessionRead",
+        "server/server.chatDMInterruptSavedReply",
+        "server/server.syncChatConnection",
+        "server/server.recordChatDeliveryResultLocked",
+        "server/server.disconnectChatIntegration",
+        "server/server.applyCodeReviewEvent",
+        "server/server.slackWebhook",
+        "server/server.recordCodingSessionArchived",
+        "server/codingTriggerNotifier.notifyApprovers",
+        "server/codingTriggerNotifier.SessionArchived",
+        "server/server.generateCommentActions",
+        "server/server.resolveCommentAction",
+        "server/server.mergeCustomer",
+        "server/server.createCustomerTaxonomy",
+        "server/server.updateCustomerTaxonomy",
+        "server/server.deleteCustomerTaxonomy",
+        "server/server.updateCycleCapacity",
+        "server/server.createCycleResource",
+        "server/server.deleteCycleResource",
+        "server/server.cycleCalendarToken",
+        "server/server.createDashboard",
+        "server/server.updateDashboard",
+        "server/server.deleteDashboard",
+        "server/server.subscribeDashboard",
+        "server/server.shareDashboard",
+        "server/server.createPost",
+        "server/server.updatePost",
+        "server/server.deletePost",
+        "server/server.createMeeting",
+        "server/server.updateMeeting",
+        "server/server.deleteMeeting",
+        "server/server.applyDeploymentWebhook",
+        "server/server.putReviewPreview",
+        "server/server.recordDocumentAttachment",
+        "server/server.saveDocumentLinkAttachment",
+        "server/server.deleteDocumentAttachment",
+        "server/server.restoreDeletedDocument",
+        "server/server.changeDocumentSubscribers",
+        "server/server.setDocumentThreadSubscription",
+        "server/server.importDocumentRevision",
+        "server/server.replaceDocumentPermissions",
+        "server/server.updateDocumentPermission",
+        "server/server.deleteDocumentPermission",
+        "server/server.createDocumentReminder",
+        "server/server.updateEmailIntakeAddress",
+        "server/server.verifyEmailIntakeAddress",
+        "server/server.rotateEmailIntakeAddress",
+        "server/server.deleteEmailIntakeAddress",
+        "server/server.createIdentityProvider",
+        "server/server.upsertGitAutomation",
+        "server/server.deleteGitAutomation",
+        "server/server.upsertTargetBranch",
+        "server/server.deleteTargetBranch",
+        "server/server.createIntegrationDelivery",
+        "server/server.processIntegrationDelivery",
+        "server/server.createReleasePipeline",
+        "server/server.updateReleasePipeline",
+        "server/server.createCustomEmoji",
+        "server/server.updateCustomEmoji",
+        "server/server.refreshGitLabOAuthConnection",
+        "server/server.connectGitLabToken",
+        "server/server.handleGitLabReleaseHook",
+        "server/server.setInitiativeThreadSubscription",
+        "server/server.clearInitiativeThreadSubscription",
+        "server/server.mutateInternalConversation",
+        "server/server.joinOrganization",
+        "server/server.replaceIssuePermissions",
+        "server/server.updateIssuePermission",
+        "server/server.deleteIssuePermission",
+        "server/server.shareIssue",
+        "server/server.unshareIssue",
+        "server/server.createJiraLink",
+        "server/server.uploadLoopAttachment",
+        "server/server.storeLoopContract",
+        "server/server.startLoopRun",
+        "server/server.setLoopNextRun",
+        "server/server.updateLoopSettings",
+        "server/server.restoreLoopVersion",
+        "server/server.updateLoop",
+        "server/server.deleteLoop",
+        "server/server.describeLoopAsync",
+        "server/server.updateWorkspaceSettings",
+        "server/server.createTeam",
+        "server/server.updateTeam",
+        "server/server.purgeTeam",
+        "server/server.createCustomer",
+        "server/server.updateCustomer",
+        "server/server.deleteCustomer",
+        "server/server.updateSavedView",
+        "server/server.deleteSavedView",
+        "server/server.shareSavedView",
+        "server/server.unshareSavedView",
+        "server/server.deleteTeamCycles",
+        "server/server.updateCycleSettings",
+        "server/server.updateCycle",
+        "server/server.startCycle",
+        "server/server.updateProject",
+        "server/server.deleteProject",
+        "server/server.updateInitiative",
+        "server/server.deleteInitiative",
+        "server/server.createInitiativeReminder",
+        "server/server.createInitiativeResource",
+        "server/server.updateInitiativeResource",
+        "server/server.deleteInitiativeResource",
+        "server/server.createInitiativeComment",
+        "server/server.updateInitiativeComment",
+        "server/server.deleteInitiativeComment",
+        "server/server.toggleInitiativeCommentReaction",
+        "server/server.createInitiativeUpdate",
+        "server/server.updateInitiativeUpdate",
+        "server/server.deleteInitiativeUpdate",
+        "server/server.createInitiativeUpdateComment",
+        "server/server.toggleInitiativeUpdateReaction",
+        "server/server.createProjectResource",
+        "server/server.updateProjectResource",
+        "server/server.deleteProjectResource",
+        "server/server.createProjectMilestone",
+        "server/server.updateProjectMilestone",
+        "server/server.reorderProjectMilestones",
+        "server/server.deleteProjectMilestone",
+        "server/server.createProjectComment",
+        "server/server.updateProjectComment",
+        "server/server.deleteProjectComment",
+        "server/server.toggleProjectCommentReaction",
+        "server/server.deleteProjectUpdate",
+        "server/server.updateProjectUpdate",
+        "server/server.createProjectUpdateComment",
+        "server/server.toggleProjectUpdateReaction",
+        "server/server.updateIssue",
+        "server/server.deleteIssue",
+        "server/server.batchUpdate",
+        "server/server.createComment",
+        "server/server.updateComment",
+        "server/server.deleteComment",
+        "server/server.toggleCommentReaction",
+        "server/server.toggleIssueReaction",
+        "server/server.createRelation",
+        "server/server.deleteRelation",
+        "server/server.createAttachment",
+        "server/server.createIssueLink",
+        "server/server.createIssueReminder",
+        "server/server.createProjectReminder",
+        "server/server.createIssueLoopRun",
+        "server/server.deleteAttachment",
+        "server/server.attachStoredObject",
+        "server/server.createMCPLabel",
+        "server/server.saveMCPIssue",
+        "server/server.saveMCPRelease",
+        "server/server.mutateAnyComment",
+        "server/server.resolveMCPDiffThread",
+        "server/server.deleteMCPDiffComment",
+        "server/server.beginMFA",
+        "server/server.finishMFA",
+        "server/server.scanLinearMigrationTarget",
+        "server/server.persistLinearMigration",
+        "server/server.failLinearMigration",
+        "server/server.updateMigrationMappings",
+        "server/server.inviteMigrationUsers",
+        "server/server.executeMigration",
+        "server/server.rollbackMigration",
+        "server/server.acknowledgeDesktopNotifications",
+        "server/server.retryNotificationDelivery",
+        "server/server.updateWorkflowState",
+        "server/server.reorderWorkflowStates",
+        "server/server.updateStructuredTeamSettings",
+        "server/server.updateIssueTemplate",
+        "server/server.maintainCycleSchedule",
+        "server/server.updateOAuthApplicationFromManifest",
+        "server/server.createProjectRelation",
+        "server/server.createInitiativeRelation",
+        "server/server.updateInitiativeRelation",
+        "server/server.deleteInitiativeRelation",
+        "server/server.createDocumentDraft",
+        "server/server.updateDocumentDraft",
+        "server/server.publishDocumentDraft",
+        "server/server.deleteDocumentDraft",
+        "server/server.createTeamResourceSection",
+        "server/server.deleteTeamResourceSection",
+        "server/server.createTeamPinnedResource",
+        "server/server.createAgentActivity",
+        "server/server.createAIConversation",
+        "server/server.beginPasskeyRegistration",
+        "server/server.finishPasskeyRegistration",
+        "server/server.updatePasskey",
+        "server/server.deletePasskey",
+        "server/server.auditPersonalConnection",
+        "server/server.erasePersonInWorkspace",
+        "server/server.storeCommentAttachment",
+        "server/server.setProjectThreadSubscription",
+        "server/server.clearProjectThreadSubscription",
+        "server/server.createPulseUpdateAttachment",
+        "server/server.deletePulseUpdateAttachment",
+        "server/server.postPulseSeen",
+        "server/server.setPulseSubscription",
+        "server/server.setInitiativeProjectUpdatesSubscription",
+        "server/server.preparePulseSummaries",
+        "server/server.normalizeLegacyRecurringIssues",
+        "server/server.rotateReleasePipelineAccessKey",
+        "server/server.revokeReleasePipelineAccessKey",
+        "server/server.touchReleaseAccessKey",
+        "server/server.applyReleaseCIOperation",
+        "server/server.setIssueReleases",
+        "server/server.reorderReleases",
+        "server/server.reorderReleasePipelines",
+        "server/server.deleteReleasePipeline",
+        "server/reviewImportRun.apply",
+        "server/server.toggleReviewReaction",
+        "server/server.syncReview",
+        "server/server.applyGitHubReviewActivity",
+        "server/server.writeBackReviewChange",
+        "server/server.updateReview",
+        "server/server.submitReview",
+        "server/server.commentOnReview",
+        "server/server.resolveReviewThread",
+        "server/server.pruneProjectRecordSuggestions",
+        "server/server.updateUserSettings",
+        "server/server.updateAccountProfile",
+        "server/server.updateWorkspacePreferences",
+        "server/server.updateWorkspaceLabel",
+        "server/server.updateLabelGroup",
+        "server/server.updateProjectStatus",
+        "server/server.deleteProjectStatus",
+        "server/server.reorderProjectStatuses",
+        "server/server.updateWorkspaceIssueTemplate",
+        "server/server.updateOAuthApplication",
+        "server/server.connectIntegration",
+        "server/server.startIntegrationOAuth",
+        "server/server.finishIntegrationOAuth",
+        "server/server.disconnectIntegrationConnection",
+        "server/server.disconnectIntegration",
+        "server/server.addCommitSigningKey",
+        "server/server.removeCommitSigningKey",
+        "server/server.purgeExpiredTrash",
+        "server/server.deleteTeam",
+        "server/server.recordTeamMemberAudit",
+        "server/server.maintainTeamSettings",
+        "server/server.setThreadSubscription",
+        "server/server.clearThreadSubscription",
+        "server/server.pruneIssueSuggestionTargets",
+        "server/server.generateTriageIntelligenceForIssues",
+        "server/server.updateIssueSuggestionState",
+        "server/server.runTriageIntelligence",
+        "server/server.disableFailingWebhook",
+        "server/server.recordWebhookFailure",
+        "server/server.sendWelcomeMessage",
+        "server/server.testWelcomeMessage",
+        "store/SQLiteStore.cleanupTeamMemberData",
+        "store/SQLiteStore.migrateCommentActions",
+        "store/SQLiteStore.migrateIntegrationOAuthTokens",
+        "store/SQLiteStore.syncMemberDirectory",
+        "store/SQLiteStore.MutateWorkspaceAppending",
+        "store/SQLiteStore.MutateWorkspaceResolved",
+        "store/SQLiteStore.MutateWorkspaceScoped",
+        "store/SQLiteStore.Mutate",
+        "store/SQLiteStore.ScheduleWorkspaceDeletion",
+        "store/SQLiteStore.CancelWorkspaceDeletion"
+      ]
+    },
+    "ReloadAllWorkspaces": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap",
+        "decodeWorkspaceMetadata"
+      ]
+    },
+    "ReloadWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "loadWorkspaceStamped"
+      ]
+    },
+    "ScheduleWorkspaceDeletion": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.deleteWorkspace"
+      ]
+    },
+    "WorkspaceAccessStatus": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.eraseMemberWorkspaceID",
+        "server/server.workspaceAccessStatus"
+      ]
+    },
+    "WorkspaceKeys": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "createWorkspaceLocked": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.createWorkspace",
+        "store/SQLiteStore.createResidentWorkspace"
+      ]
+    },
+    "dispatchMutation": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests. Desktop acknowledgements dispatch only with the private certified callback marker and exact event, so arbitrary callbacks sharing the public event cannot receive a sparse input. SW134/SW135 prove ordinary full-writer hydration, actor/count/aggregate effects, canonical rebasing, audit transaction/rollback, account and last-workspace publication, empty aggregates, opt-in rejection and the actual route permission matrix; flag-off remains the original dispatcher.",
+      "accessors": [
+        "Bootstrap",
+        "mutateFull",
+        "mutateScoped",
+        "mutateTeamMetadata"
+      ]
+    },
+    "loadOrSeed": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap",
+        "decodeWorkspaceMetadata"
+      ]
+    },
+    "loadWorkspaceStamped": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap",
+        "decodeWorkspaceMetadata"
+      ]
+    },
+    "loadWorkspaceState": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "loadWorkspaceStamped"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "No production callers; metadata_record_races_test.go:49 and other store persistence tests -> loadWorkspaceState -> loadWorkspaceStamped"
+      ]
+    },
+    "mutateFull": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap",
+        "storedWorkspace"
+      ]
+    },
+    "storedWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Exact O(1) installed-map borrow under the store read lock and caller writeMu. The bounded representation contains only globally capped core/policy state; this helper does not clone or hydrate record bodies and preserves physical key and missing semantics. TestScaleP21SW18StoredWorkspaceResidentBoundary compares real legacy/resident sources with large unrelated records, verifies omitted fields, zero full decodes, no leaked work and zero allocations. Callers must still declare complete callback inputs and remain independently guarded; this review does not certify source loading or those writers.",
+      "accessors": [
+        "Bootstrap"
+      ]
+    },
+    "updateWorkspace": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.UpdateWorkspace"
+      ]
+    },
+    "webhookNeeded": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The original complete predicate is retained only off or inside the serialized cold view. SW102 closes all nine direct references and four upstream mutation-helper callsets, rejecting aliases, new callers and bypasses of the bounded dispatcher. Bounded HOT writers use their owned logical predicate; SW97 proves exact native/reloaded enabled webhook, loop, connection and authoritative chat fallback behavior with cancellation, admission, persistent SQLite and race coverage.",
+      "accessors": [
+        "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issue-records/{id}",
+      "callers": [
+        "store/SQLiteStore.UpdateIssueRecord",
+        "store/SQLiteStore.mutateLoopContract",
+        "store/SQLiteStore.mutateProjectRecordSelection",
+        "store/SQLiteStore.mutateScoped",
+        "store/SQLiteStore.mutateFull",
+        "store/SQLiteStore.mutateTeamMetadata"
+      ]
+    }
+  }
+}

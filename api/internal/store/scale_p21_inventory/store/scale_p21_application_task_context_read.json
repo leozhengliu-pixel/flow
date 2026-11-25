@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_application_task_context_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginApplicationTaskContextRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned installed/caller task rendering closure retains guidance, native selected targets and the live directory/policy inputs actually consumed downstream; output transfers to its containing operation. Full-bootstrap counts stream and validate raw typed issue JSON headers, preserving duplicate/null/case decoding, raw/index divergence, private/direct/inherited permissions and admin unknown-team semantics through the literal bootstrap projector. Supported unrelated content producers retain typed Marshal invariants, guarded by the source test. Eight Tier A tests pass persistent SQLite twice and race, including cancellation, retained output, live revocation, full codec comparisons, <=50-row/256KiB small raw batches, exact/cross-cap and mixed large rows, SQLite TEXT/BLOB/NUL/empty physical locators and a borrowed one-connection transaction. Batches independently admit raw/driver work and close SQL before unchanged full typed validation. Owned large-row spool fragments change from the true Wave 5 16KiB baseline to 32KiB without changing the shared constant. The actual task context table still compares 1260 outputs; SQL-observed admission stays 23134528 bytes under 10x ignored bodies and retained output is unchanged. Measured SQL improves from bounded 45/75 to 42/51 for 1x/10x, versus 15 off. Raw SQL is two header statements plus small-batch count plus sum ceil(large-row bytes/32KiB), alongside existing authority/projection work. This is not a latency or capacity claim.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Project, document and coding-environment agent task authorization and execution context.",
+      "callers": ["server/server.applicationTaskContext"]
+    }
+  }
+}

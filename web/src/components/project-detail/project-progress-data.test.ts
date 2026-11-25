@@ -1,5 +1,6 @@
 import { addDays, format, startOfDay } from 'date-fns'
 import { describe, expect, it } from 'vitest'
+import type { Issue } from '@/types/flow'
 import { buildProgressData } from './project-progress-data'
 
 const day = (offset: number) => format(addDays(startOfDay(new Date()), offset), 'yyyy-MM-dd')
@@ -26,5 +27,28 @@ describe('buildProgressData', () => {
     const chart = buildProgressData([issue('a', 3), issue('b', 5)], day(-7), day(7))
     expect(chart.totalEstimate).toBe(8)
     expect(chart.yMax).toBe(8)
+  })
+
+  it('matches direct counts over many dates, including events before the chart start', () => {
+    const date = (offset: number) => `${day(offset)}T12:00:00`
+    const issues = Array.from({ length: 2_000 }, (_, index) => ({
+      id: `issue-${index}`, title: `Issue ${index}`, estimate: index % 6 + 1,
+      createdAt: date(-900 + index % 880), updatedAt: date(-891 + index % 880),
+      state: { type: ['completed', 'started', 'canceled', 'unstarted'][index % 4] },
+    }) as Issue)
+    const chart = buildProgressData(issues, day(-700), day(30))
+    const scoped = issues.filter(issue => issue.state.type !== 'canceled')
+    for (const series of chart.series) {
+      for (const point of series.data.filter((_, index) => index % 13 === 0)) {
+        const key = format(point.x, 'yyyy-MM-dd')
+        const matches = scoped.filter(issue => {
+          if (series.id === 'Target') return true
+          if (series.id === 'Completed') return issue.state.type === 'completed' && issue.updatedAt.slice(0, 10) <= key
+          if (series.id === 'Started' && issue.state.type === 'unstarted') return false
+          return issue.createdAt.slice(0, 10) <= key
+        })
+        expect(point.y, `${series.id} ${key}`).toBe(matches.reduce((sum, issue) => sum + issue.estimate!, 0))
+      }
+    }
   })
 })

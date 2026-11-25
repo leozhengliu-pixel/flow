@@ -65,8 +65,50 @@ func (s *server) pulseAudioAllowed(settings domain.WorkspaceSettings, role strin
 	return s.tts.Enabled && agentWorkspacePolicy(settings, role) == nil
 }
 
+func (s *server) pulseSummaryRead(ctx context.Context, workspace string) (*store.PulseRead, bool, error) {
+	read, found, err := s.store.BeginPulseRead(ctx, workspace, false)
+	if err != nil || !found {
+		return read, found, err
+	}
+	if !registerRequestReadClose(ctx, read.Close) {
+		read.Close()
+		return nil, false, store.ErrBoundedMetadataCoverage
+	}
+	return read, true, nil
+}
+
+func (s *server) pulseSummaryRequestContext(w http.ResponseWriter, r *http.Request) (*store.PulseFeedSnapshot, pulseViewer, bool) {
+	if !s.store.BoundedMetadataEnabled() {
+		snapshot, _, viewer, ok := s.pulseRequestContext(w, r)
+		return snapshot, viewer, ok
+	}
+	read, found, err := s.pulseSummaryRead(r.Context(), workspaceKey(r))
+	if err != nil {
+		issueRecordsError(w, err)
+		return nil, pulseViewer{}, false
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return nil, pulseViewer{}, false
+	}
+	if !workspaceFeatureEnabled(read.Snapshot.WorkspaceSettings, "pulse") {
+		writeError(w, http.StatusForbidden, "This workspace feature is disabled")
+		return nil, pulseViewer{}, false
+	}
+	viewer, err := s.pulseRequestViewer(r, read.Snapshot)
+	if err != nil {
+		if errors.Is(err, store.ErrAuthForbidden) {
+			writeError(w, http.StatusForbidden, "Guests cannot access Pulse")
+		} else {
+			issueRecordsError(w, err)
+		}
+		return nil, pulseViewer{}, false
+	}
+	return read.Snapshot, viewer, true
+}
+
 func (s *server) getPulseCapabilities(w http.ResponseWriter, r *http.Request) {
-	snapshot, _, viewer, ok := s.pulseRequestContext(w, r)
+	snapshot, viewer, ok := s.pulseSummaryRequestContext(w, r)
 	if !ok {
 		return
 	}
@@ -188,7 +230,21 @@ type pulseSummaryUpdate struct {
 // recipient can no longer see (restrictTeams narrows that to an API key's
 // teams). It also returns the recipient's workspace role.
 func (s *server) pulseSummaryUpdates(ctx context.Context, workspace string, notification domain.Notification, restrictTeams []string) ([]pulseSummaryUpdate, string, error) {
-	snapshot, ok := s.store.PulseFeed(workspace)
+	var snapshot *store.PulseFeedSnapshot
+	var read *store.PulseRead
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		var err error
+		read, ok, err = s.pulseSummaryRead(ctx, workspace)
+		if err != nil {
+			return nil, "", err
+		}
+		if ok {
+			snapshot = read.Snapshot
+		}
+	} else {
+		snapshot, ok = s.store.PulseFeed(workspace)
+	}
 	if !ok {
 		return nil, "", errNotFound
 	}
@@ -215,6 +271,19 @@ func (s *server) pulseSummaryUpdates(ctx context.Context, workspace string, noti
 		entry := &store.PulseFeedEntry{Kind: ref.Kind, SourceID: ref.SourceID, UpdateID: ref.ID}
 		if !rules.sourceShown(viewer, entry) {
 			continue
+		}
+		if read != nil {
+			loaded := false
+			if ref.Kind == "project" {
+				loaded = slices.ContainsFunc(snapshot.ProjectUpdates[ref.SourceID], func(update domain.ProjectUpdate) bool { return update.ID == ref.ID })
+			} else {
+				loaded = slices.ContainsFunc(snapshot.InitiativeUpdates[ref.SourceID], func(update domain.InitiativeUpdate) bool { return update.ID == ref.ID })
+			}
+			if !loaded {
+				if err := read.LoadUpdates(ctx, ref.Kind, ref.SourceID, []string{ref.ID}); err != nil {
+					return nil, "", err
+				}
+			}
 		}
 		item := pulseSummaryUpdate{ref: ref, name: rules.sourceName(ref.Kind, ref.SourceID)}
 		found := false
@@ -397,11 +466,39 @@ func (s *server) pulseWorkspaceKey(r *http.Request) string {
 	return ""
 }
 
-func (s *server) pulseSummaryNotification(r *http.Request) (domain.Notification, error) {
-	if snapshot, ok := s.store.PulseFeed(workspaceKey(r)); !ok || !workspaceFeatureEnabled(snapshot.WorkspaceSettings, "pulse") {
-		return domain.Notification{}, store.ErrAuthForbidden
+func (s *server) pulseSummaryWorkspaceKey(r *http.Request) (string, error) {
+	if !s.store.BoundedMetadataEnabled() {
+		return s.pulseWorkspaceKey(r), nil
 	}
-	notification, err := s.store.NotificationRecord(r.Context(), s.pulseWorkspaceKey(r), requestActor(s, r).ID, r.PathValue("id"))
+	if key := workspaceKey(r); key != "" {
+		return key, nil
+	}
+	read, found, err := s.pulseSummaryRead(r.Context(), "")
+	if err != nil || !found {
+		return "", err
+	}
+	return read.Snapshot.Workspace.URLKey, nil
+}
+
+func (s *server) pulseSummaryNotification(r *http.Request) (domain.Notification, error) {
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.pulseSummaryRead(r.Context(), workspaceKey(r))
+		if err != nil {
+			return domain.Notification{}, err
+		}
+		if !found || !workspaceFeatureEnabled(read.Snapshot.WorkspaceSettings, "pulse") {
+			return domain.Notification{}, store.ErrAuthForbidden
+		}
+	} else {
+		if snapshot, ok := s.store.PulseFeed(workspaceKey(r)); !ok || !workspaceFeatureEnabled(snapshot.WorkspaceSettings, "pulse") {
+			return domain.Notification{}, store.ErrAuthForbidden
+		}
+	}
+	workspace, err := s.pulseSummaryWorkspaceKey(r)
+	if err != nil {
+		return domain.Notification{}, err
+	}
+	notification, err := s.store.NotificationRecord(r.Context(), workspace, requestActor(s, r).ID, r.PathValue("id"))
 	if errors.Is(err, sql.ErrNoRows) || err == nil && notification.Type != "pulseSummary" {
 		return notification, errNotFound
 	}
@@ -430,15 +527,28 @@ func (s *server) loadPulseSummary(r *http.Request) (domain.PulseSummary, error) 
 	if err != nil {
 		return domain.PulseSummary{}, err
 	}
-	workspace := s.pulseWorkspaceKey(r)
+	workspace, err := s.pulseSummaryWorkspaceKey(r)
+	if err != nil {
+		return domain.PulseSummary{}, err
+	}
 	restrict := pulseRestrictTeams(r)
 	updates, role, err := s.pulseSummaryUpdates(r.Context(), workspace, notification, restrict)
 	if err != nil {
 		return domain.PulseSummary{}, err
 	}
 	settings := domain.WorkspaceSettings{}
-	if snapshot, ok := s.store.PulseFeed(workspace); ok {
-		settings = snapshot.WorkspaceSettings
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.pulseSummaryRead(r.Context(), workspace)
+		if err != nil {
+			return domain.PulseSummary{}, err
+		}
+		if found {
+			settings = read.Snapshot.WorkspaceSettings
+		}
+	} else {
+		if snapshot, ok := s.store.PulseFeed(workspace); ok {
+			settings = snapshot.WorkspaceSettings
+		}
 	}
 	aiAllowed := s.pulseAIAllowed(settings, role)
 	now := time.Now().UTC()
@@ -505,7 +615,12 @@ func (s *server) reportPulseSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	report := domain.PulseSummaryReport{UserID: notification.RecipientID, UpdateID: strings.TrimSpace(input.UpdateID), Reason: input.Reason, CreatedAt: time.Now().UTC()}
-	_, err = s.store.UpdateNotificationRecord(r.Context(), s.pulseWorkspaceKey(r), notification.RecipientID, notification.ID, "notification.pulse_summary_reported", map[string]string{"updateId": report.UpdateID}, func(item *domain.Notification) {
+	workspace, err := s.pulseSummaryWorkspaceKey(r)
+	if err != nil {
+		pulseSummaryError(w, err)
+		return
+	}
+	_, err = s.store.UpdateNotificationRecord(r.Context(), workspace, notification.RecipientID, notification.ID, "notification.pulse_summary_reported", map[string]string{"updateId": report.UpdateID}, func(item *domain.Notification) {
 		item.SummaryReports = append(item.SummaryReports, report)
 		if len(item.SummaryReports) > 50 {
 			item.SummaryReports = item.SummaryReports[len(item.SummaryReports)-50:]
@@ -531,7 +646,7 @@ func (s *server) getPulseSummaryAudio(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "audio is not available")
 		return
 	}
-	snapshot, _, viewer, ok := s.pulseRequestContext(w, r)
+	snapshot, viewer, ok := s.pulseSummaryRequestContext(w, r)
 	if !ok {
 		return
 	}

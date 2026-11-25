@@ -4,7 +4,7 @@
     "title": "Flow API",
     "version": "0.1.0",
     "summary": "REST API of the Flow issue tracker",
-    "description": "Flow's HTTP API. Typed operations (with request and response schemas reflected from the server's Go types) form the public contract; every other route is listed as an inventory entry that may change.\n\nAuthenticate with a personal API key or an OAuth access token in `Authorization: Bearer <token>`; tokens select their workspace. Browser sessions send the `X-Workspace-Key` header.\nLists return connections (`nodes`, `pageInfo`) paged with `first`/`after` or `last`/`before`, ordered newest first by `orderBy` (createdAt or updatedAt), filtered with a `filter` object.\nRoutes marked `x-flow-internal` serve the web app and are not part of the contract. Payloads Flow sends to webhook endpoints are described in the `webhooks` section.\nErrors use one envelope (`error`, `code`, `type`, `requestId`). Requests are rate limited per user or application (X-RateLimit-* headers, HTTP 429 with type RATELIMITED).\nThe API is unversioned: changes are additive, deprecated operations are flagged and kept for at least six months. See docs/api.md.",
+    "description": "Flow's HTTP API. Typed operations (with request and response schemas reflected from the server's Go types) form the public contract; every other route is listed as an inventory entry that may change.\n\nAuthenticate with a personal API key or an OAuth access token in `Authorization: Bearer <token>`; tokens select their workspace. Browser sessions send the `X-Workspace-Key` header.\nTeam-restricted credentials intersect the owner's access with the selected teams for records, referenced IDs and counts. A selected policy with no teams grants no team content. Application scopes also narrow references; unrestricted credentials keep their owner's access.\nLists return connections (`nodes`, `pageInfo`) paged with `first`/`after` or `last`/`before`, ordered newest first by `orderBy` (createdAt or updatedAt), filtered with a `filter` object.\nRoutes marked `x-flow-internal` serve the web app and are not part of the contract. Payloads Flow sends to webhook endpoints are described in the `webhooks` section.\nErrors use one envelope (`error`, `code`, `type`, `requestId`). Requests are rate limited per user or application (X-RateLimit-* headers, HTTP 429 with type RATELIMITED).\nThe API is unversioned: changes are additive, deprecated operations are flagged and kept for at least six months. See docs/api.md.",
     "license": {
       "name": "Proprietary"
     }
@@ -685,6 +685,76 @@
           "account"
         ],
         "summary": "DELETE /api/account/identities/{id}",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/account/identities/link/{provider}/start": {
+      "get": {
+        "operationId": "get_account_identities_link_provider_start",
+        "tags": [
+          "account"
+        ],
+        "summary": "GET /api/account/identities/link/{provider}/start",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/account/identities/link/enterprise/{id}/start": {
+      "get": {
+        "operationId": "get_account_identities_link_enterprise_id_start",
+        "tags": [
+          "account"
+        ],
+        "summary": "GET /api/account/identities/link/enterprise/{id}/start",
         "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
@@ -8857,6 +8927,49 @@
         },
         "x-flow-internal": true,
         "x-flow-source": "main.go"
+      }
+    },
+    "/api/documents/{id}/history/{revisionId}": {
+      "get": {
+        "operationId": "get_documents_id_history_revisionId",
+        "tags": [
+          "documents"
+        ],
+        "summary": "GET /api/documents/{id}/history/{revisionId}",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "scale_p20_resource_reads.go"
       }
     },
     "/api/documents/{id}/permissions": {
@@ -20386,6 +20499,31 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/notifications/state": {
+      "get": {
+        "operationId": "get_notifications_state",
+        "tags": [
+          "notifications"
+        ],
+        "summary": "GET /api/notifications/state",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "sync_manifest.go"
+      }
+    },
     "/api/notion/link-preview": {
       "get": {
         "operationId": "get_notion_link_preview",
@@ -26908,6 +27046,56 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/resource-windows/members": {
+      "get": {
+        "operationId": "get_resource_windows_members",
+        "tags": [
+          "resource-windows"
+        ],
+        "summary": "GET /api/resource-windows/members",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "scale_p20_resource_reads.go"
+      }
+    },
+    "/api/resource-windows/trash": {
+      "get": {
+        "operationId": "get_resource_windows_trash",
+        "tags": [
+          "resource-windows"
+        ],
+        "summary": "GET /api/resource-windows/trash",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "scale_p20_resource_reads.go"
+      }
+    },
     "/api/reviews": {
       "get": {
         "operationId": "get_reviews",
@@ -27908,6 +28096,106 @@
         },
         "x-flow-internal": true,
         "x-flow-source": "main.go"
+      }
+    },
+    "/api/sync/batch": {
+      "post": {
+        "operationId": "post_sync_batch",
+        "tags": [
+          "sync"
+        ],
+        "summary": "POST /api/sync/batch",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "sync_manifest.go"
+      }
+    },
+    "/api/sync/changes": {
+      "get": {
+        "operationId": "get_sync_changes",
+        "tags": [
+          "sync"
+        ],
+        "summary": "GET /api/sync/changes",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/sync/manifest": {
+      "get": {
+        "operationId": "get_sync_manifest",
+        "tags": [
+          "sync"
+        ],
+        "summary": "GET /api/sync/manifest",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "sync_manifest.go"
+      }
+    },
+    "/api/sync/records": {
+      "get": {
+        "operationId": "get_sync_records",
+        "tags": [
+          "sync"
+        ],
+        "summary": "GET /api/sync/records",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "sync_manifest.go"
       }
     },
     "/api/target-branches": {
@@ -38394,6 +38682,78 @@
   },
   "components": {
     "schemas": {
+      "ActivityEvent": {
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/User"
+          },
+          "botActor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorBot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "properties": {
+              "addedLabelIds": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "removedLabelIds": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "type": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "actor",
+          "createdAt",
+          "id",
+          "metadata",
+          "type"
+        ],
+        "type": "object"
+      },
       "ActorBot": {
         "description": "ActorBot attributes a record to an OAuth application (\"<User> via <App>\"). It is stored on issues, comments, attachments, documents and activity when the request was authenticated with an OAuth token: - actor=user token: the record's user is the person who authorized the application; ActorBot names the application. - actor=app token with createAsUser: the record's user is the application user; UserDisplayName / UserAvatarURL name the external person the application acted for. - Flow's agent (Type \"agent\"): the record's user is the person the agent worked for (in-app chat) or the agent's own app user (comment threads and delegation); OnBehalfOfID / OnBehalfOfName name the person either way, so history reads \"Flow <did X> on behalf of <User>\".",
         "properties": {

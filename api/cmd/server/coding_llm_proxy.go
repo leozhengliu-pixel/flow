@@ -162,6 +162,11 @@ func (s *server) codingLLMPolicy(ctx context.Context, caller codingSandboxCaller
 	if s.workspaceAIPolicy(ctx, caller.grant.WorkspaceKey, caller.session.CreatorID) != nil {
 		return llmproxy.ErrPolicy
 	}
+	// The session runs as its creator: once they lost the workspace or the
+	// issue, no further model request goes out for it.
+	if s.coding != nil && s.coding.service != nil && s.coding.service.CreatorAllowed(ctx, caller.session) != nil {
+		return llmproxy.ErrPolicy
+	}
 	return nil
 }
 
@@ -354,7 +359,7 @@ func (s *server) codingRuntimeSign(w http.ResponseWriter, r *http.Request) {
 // it is a key uploaded before Flow kept private keys, and the user is asked to
 // upload it again rather than to add one.
 func (s *server) userHasLegacySigningKey(workspace, userID string) bool {
-	_, settings, ok := s.store.AccountCollections(workspace, userID)
+	_, settings, ok := s.accountCollections(context.Background(), workspace, userID, false)
 	return ok && settings.CommitSigningKey != nil
 }
 

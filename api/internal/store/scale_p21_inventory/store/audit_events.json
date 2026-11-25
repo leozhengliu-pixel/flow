@@ -1,0 +1,30 @@
+{
+  "source": "store/audit_events.go",
+  "unmigrated": 2,
+  "consumers": {
+    "legacyAuditLogPending": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "Storage maintenance and startup only (MigrateLegacyAuditLog); flag off it reads the image, bounded the auditLog field of the legacy view (coldAccessorView, SW559)",
+      "callers": [
+        "store/SQLiteStore.MigrateLegacyAuditLog"
+      ]
+    },
+    "migrateWorkspaceAuditLog": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.migrateWorkspaceAuditLogWrite"
+      ]
+    }
+  }
+}

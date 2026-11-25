@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_desktop_ack_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "mutateBoundedDesktopAck": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Explicit private context opt-in restricts this sparse callback to the desktop acknowledgement handler. Hydrates and fingerprints the literal immutable native/SQL aggregate image with proven owned primitives, selects every matching delivery occurrence by native ordinal, and patches only status/acknowledgedAt/deliveredAt/updatedAt. Preserves actor substitution and canonical rebase, all other delivery fields, full resource counts, pre-count PreviousValues, post-count realtime, physical row replacement, import compaction, account/last-workspace effects, audit transaction staging, retry/cancellation and response ownership. No direct narrow SQL write or progress recomputation: the legacy notification event is not a progress event. SW134 compares 34 warm/reloaded source/error pairs including native duplicate IDs, empty viewer/IDs, peer actor merge, account state, SQL/catalog/native/publication, audit commit/rollback/chain and release; normal, persistent SQLite twice and race pass. SW135 compares 63 actual route principal/key/input pairs plus queued/replay revocation and auth-disabled installed-viewer selection. Off dispatch remains the literal original writer.",
+      "accessors": [
+        "storedWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Ordinary desktop notification acknowledgement request.",
+      "callers": [
+        "store/sqlite.go:dispatchMutation"
+      ]
+    }
+  }
+}

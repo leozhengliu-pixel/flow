@@ -1,0 +1,88 @@
+{
+  "source": "store/metadata_copy_revision.go",
+  "unmigrated": 0,
+  "consumers": {
+    "copyRevisionLocked": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "This existing metadata-cache guard reads only workspace map membership and the fixed-size copyRevision stamp; it never traverses/copies a Bootstrap collection. TestScaleP21M1CoreMetadataDifferential exercises both certified legacy and policy-only bounded paths through BeginWorkspaceRead, including missing selections, ownership, cancellation and admission release.",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "installWrittenWorkspaceLocked": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issue-records/{id}",
+      "callers": [
+        "store/SQLiteStore.mutateStandaloneFavorite",
+        "store/SQLiteStore.mutateFeatureFlags",
+        "store/SQLiteStore.installWrittenWorkspace",
+        "store/SQLiteStore.mutateProjectRecordSelection",
+        "store/SQLiteStore.mutateTeamMetadata",
+        "store/SQLiteStore.mutateUserSettingsRecord"
+      ],
+      "reason": "Closed by reachability: TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the five legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it) and finds no HOT reacher; its allow-list is empty. UpdateIssueRecord -> installWrittenWorkspace is a pinned proof boundary: the install runs only under progressMetadata != nil, progressMetadata is assigned only nil or from persistIssueMetadata, whose single flag-on return is nil (refuseBoundedHotIssueMetadata; its non-nil return &next is flag-off-only), proven by TestScaleP21SW278BoundedIssueMetadataRefusal and pinned by TestScaleP21SW278PersistIssueMetadataCallset. mutateTeamMetadata is closed; the favorite, feature-flag, user-settings and project-selection writers are not reached with the flag on. The literal flag-off chain is unchanged."
+    },
+    "refreshWorkspaceCopy": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "loadWorkspaceStamped"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.mutateScoped",
+        "store/SQLiteStore.mutateFull"
+      ],
+      "reason": "No HOT route or ticker reaches this literal pre-write refresh with FLOW_BOUNDED_METADATA on: TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the five legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it). mutateFull refreshes only without residency (pinned dispatch; a cold facade has no residency), and mutateScoped's callers are flag-off or COLD. Its allow-list is empty. Flag-off revision checks, decode-on-change and stamp installation are unchanged."
+    },
+    "refreshWorkspaceCopyLocked": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "loadWorkspaceStamped"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.mutateProjectRecordSelection",
+        "store/SQLiteStore.mutateTeamMetadata"
+      ],
+      "reason": "No HOT route or ticker reaches this literal locked refresh with FLOW_BOUNDED_METADATA on: TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the five legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it). Its HOT inventory caller mutateTeamMetadata is closed (no flag-on reference; dispatchMutation's always-returning bounded block is pinned, TestScaleP21TeamMetadataCallset) and mutateProjectRecordSelection's callers are flag-off or COLD. Its allow-list is empty; flag-off behaviour is unchanged."
+    },
+    "setWorkspaceLocked": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "store/SQLiteStore.writeAPIKeyUse",
+        "store/SQLiteStore.migrateIssueCollections",
+        "store/SQLiteStore.MutateLabelDeletion",
+        "store/SQLiteStore.migrateLoopRunRecords",
+        "store/SQLiteStore.oauthMetadataTransaction",
+        "store/SQLiteStore.ExchangeOAuthGrant",
+        "store/SQLiteStore.backfillWorkspaceProjectProgress",
+        "store/SQLiteStore.mutateProjectRecordSelection",
+        "store/SQLiteStore.installWorkspace",
+        "store/SQLiteStore.ReloadWorkspace",
+        "store/SQLiteStore.loadOrSeed",
+        "store/SQLiteStore.createWorkspaceLocked",
+        "store/SQLiteStore.updateWorkspace",
+        "store/SQLiteStore.mutateTeamMetadata",
+        "store/SQLiteStore.DeleteWorkflowStateRecords",
+        "store/SQLiteStore.migrateWorkspaceMetadataRecords"
+      ],
+      "reason": "TestScaleP21SW292WriteChainHotBoundaries (cmd/server) walks every flag-on reference of cmd/server and internal/store back from the legacy write/install/refresh targets with first-return dominance (TestScaleP21SW292GuardDetectsFlagOnReach probes it) and finds no HOT reacher of setWorkspaceLocked with the flag on: bounded team creation's ensureBuiltinApplication now writes through boundedOAuthMetadataTransaction (TestScaleP21SW294OAuthMetadataDifferential, TestScaleP21TeamCreateDifferential), writeAPIKeyUse installs into the logical generation first (publishBoundedAPIKeyUse, TestScaleP21SW293APIKeyUseDifferential), and the loop run start's AI work is an async COLD boundary. The literal off-mode installs are unchanged."
+    }
+  }
+}

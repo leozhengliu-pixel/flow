@@ -67,15 +67,29 @@ var projectStatuses = []domain.ProjectStatus{
 func main() {
 	issues := flag.Int("issues", 75000, "issues in the main workspace")
 	otherIssues := flag.Int("other-issues", 2500, "issues in each secondary workspace")
+	projects := flag.Int("projects", projectCount, "projects in the main workspace (use a fresh database to change metadata)")
+	milestones := flag.Int("milestones", 0, "milestones per main-workspace project (0 uses the default mix)")
+	timelineDays := flag.Int("timeline-days", 0, "distribute main-workspace projects across this many calendar days and link them to a roadmap")
+	dependencies := flag.Int("dependencies", 0, "maximum preceding projects blocking each main-workspace project")
 	content := flag.Bool("content", true, "seed comments, activity and notifications")
 	flag.Parse()
+	if *projects < 1 || *milestones < 0 || *timelineDays < 0 || *dependencies < 0 {
+		log.Fatal("projects must be positive and timeline options must be nonnegative")
+	}
 
 	driver := strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_DATABASE_DRIVER")))
 	if driver == "" {
 		driver = "sqlite"
 	}
 	rawURL := strings.TrimSpace(os.Getenv("FLOW_DATABASE_URL"))
+	path := os.Getenv("FLOW_DATABASE_PATH")
 	dsn := rawURL
+	if driver == "sqlite" {
+		if path == "" {
+			log.Fatal("set FLOW_DATABASE_PATH to a scratch database file for SQLite")
+		}
+		dsn = path
+	}
 	if driver == "mysql" {
 		var err error
 		if dsn, err = mysqlDSN(rawURL); err != nil {
@@ -86,7 +100,7 @@ func main() {
 	s, err := store.OpenDatabase(store.DatabaseConfig{
 		Driver:              driver,
 		URL:                 rawURL,
-		Path:                os.Getenv("FLOW_DATABASE_PATH"),
+		Path:                path,
 		MaxOpenConns:        12,
 		MaxIdleConns:        12,
 		MaxTransactionBytes: 32 << 20,
@@ -99,7 +113,7 @@ func main() {
 
 	ctx := context.Background()
 	worlds := []seedWorld{
-		{key: mainWorkspace, name: "Performance Main", issues: *issues, teams: teamCount, projects: projectCount, documents: documentCount, views: viewCount},
+		{key: mainWorkspace, name: "Performance Main", issues: *issues, teams: teamCount, projects: *projects, documents: documentCount, views: viewCount, milestones: *milestones, timelineDays: *timelineDays, dependencies: *dependencies},
 		{key: secondWorkspace, name: "Performance Two", issues: *otherIssues, teams: 2, projects: 4, documents: 10, views: 3},
 		{key: thirdWorkspace, name: "Performance Three", issues: *otherIssues, teams: 2, projects: 4, documents: 10, views: 3},
 	}
@@ -107,7 +121,7 @@ func main() {
 	for index := range worlds {
 		world := &worlds[index]
 		if err := seedMetadata(ctx, s, world); err != nil {
-			log.Fatalf("seed workspace %s: %v", world.key, err)
+			log.Fatalf("seed workspace %s failed (database code: %s)", world.key, store.DatabaseErrorCode(err))
 		}
 		began := time.Now()
 		if err := seedIssues(ctx, s, world); err != nil {
@@ -145,6 +159,9 @@ type seedWorld struct {
 	projects         int
 	documents        int
 	views            int
+	milestones       int
+	timelineDays     int
+	dependencies     int
 	viewer           domain.User
 	users            []domain.User
 	teamsByID        []domain.Team
@@ -185,7 +202,15 @@ func seedMetadata(ctx context.Context, s *store.SQLiteStore, world *seedWorld) e
 			team := data.Teams[index%len(data.Teams)]
 			data.TeamMembers = append(data.TeamMembers, domain.TeamMember{TeamID: team.ID, UserID: user.ID, Role: "member", JoinedAt: now})
 		}
-		data.Projects = makeProjects(world.projects, data.Teams, data.Users, now)
+		data.Projects = world.makeProjects(data.Teams, data.Users, now)
+		if world.timelineDays > 0 {
+			roadmap := domain.Initiative{ID: "initiative_perf_roadmap", SlugID: "performance-roadmap-000000000001", Name: "Performance roadmap", Status: "active", Health: "onTrack", Creator: viewer, CreatedAt: now, UpdatedAt: now}
+			for i := range data.Projects {
+				roadmap.ProjectIDs = append(roadmap.ProjectIDs, data.Projects[i].ID)
+				data.Projects[i].Initiatives = []string{roadmap.ID}
+			}
+			data.Initiatives = []domain.Initiative{roadmap}
+		}
 		data.Cycles = makeCycles(data.Teams, now)
 		data.Documents = makeDocuments(world.documents, data.Teams, data.Projects, viewer, now)
 		data.SavedViews = makeViews(world.views, data.Teams, now)
@@ -204,7 +229,7 @@ func fillWorld(world *seedWorld) {
 	world.users = makeUsers(memberCount)
 	world.teamsByID = makeTeams(world.teams)
 	world.labels = makeLabels(world.key)
-	world.projectsByID = makeProjects(world.projects, world.teamsByID, world.users, time.Now().UTC())
+	world.projectsByID = world.makeProjects(world.teamsByID, world.users, time.Now().UTC())
 	world.cyclesByTeam = makeCycleMap(world.teamsByID)
 	world.longTail = map[int]bool{}
 	for i := 0; i < longTailIssues && i < world.issues; i++ {
@@ -472,21 +497,32 @@ func makeLabels(workspace string) []domain.IssueLabel {
 	return labels
 }
 
-func makeProjects(count int, teams []domain.Team, users []domain.User, now time.Time) []domain.Project {
-	projects := make([]domain.Project, 0, count)
-	for i := 0; i < count; i++ {
+func (world *seedWorld) makeProjects(teams []domain.Team, users []domain.User, now time.Time) []domain.Project {
+	projects := make([]domain.Project, 0, world.projects)
+	for i := 0; i < world.projects; i++ {
 		team := teams[i%len(teams)]
 		lead := users[(i+1)%len(users)]
 		status := projectStatuses[i%len(projectStatuses)]
-		milestones := make([]domain.ProjectMilestone, 0, 3)
-		for m := 0; m < 2+i%3; m++ {
-			target := now.AddDate(0, 0, 14*(m+1)).Format("2006-01-02")
+		milestoneCount := world.milestones
+		if milestoneCount == 0 {
+			milestoneCount = 2 + i%3
+		}
+		anchor := now
+		if world.timelineDays > 0 && i%3 == 2 {
+			anchor = now.AddDate(0, 0, world.timelineDays*i/max(1, world.projects-1)-world.timelineDays/2)
+		}
+		milestones := make([]domain.ProjectMilestone, 0, milestoneCount)
+		for m := 0; m < milestoneCount; m++ {
+			target := anchor.AddDate(0, 0, 14*(m+1)).Format("2006-01-02")
+			if world.timelineDays > 0 {
+				target = anchor.AddDate(0, 0, 3*m-21).Format("2006-01-02")
+			}
 			milestones = append(milestones, domain.ProjectMilestone{
 				ID: fmt.Sprintf("milestone_perf_%d_%d", i, m), ProjectID: fmt.Sprintf("project_perf_%d", i),
 				Name: fmt.Sprintf("Milestone %d.%d", i, m), TargetDate: &target, CreatedAt: now, UpdatedAt: now,
 			})
 		}
-		projects = append(projects, domain.Project{
+		project := domain.Project{
 			ID: fmt.Sprintf("project_perf_%d", i), Name: fmt.Sprintf("Project %02d", i),
 			SlugID: fmt.Sprintf("project-%02d-000000000000", i), Summary: "Seeded project",
 			Description: "A seeded project used to measure list and detail reads at production scale.",
@@ -494,7 +530,16 @@ func makeProjects(count int, teams []domain.Team, users []domain.User, now time.
 			Progress: 0.5, Health: "onTrack", Status: status, Lead: &lead, CreatorID: lead.ID,
 			MemberIDs: []string{lead.ID}, TeamIDs: []string{team.ID}, Milestones: milestones,
 			CreatedAt: now.AddDate(0, 0, -30), UpdatedAt: now,
-		})
+		}
+		if world.timelineDays > 0 {
+			start := anchor.AddDate(0, 0, -50+i%18).Format("2006-01-02")
+			target := anchor.AddDate(0, 0, 12+i%28).Format("2006-01-02")
+			project.StartDate, project.TargetDate = &start, &target
+		}
+		for blocker := max(0, i-world.dependencies); blocker < i; blocker++ {
+			project.DependencyIDs = append(project.DependencyIDs, projects[blocker].ID)
+		}
+		projects = append(projects, project)
 	}
 	return projects
 }
@@ -597,6 +642,15 @@ func mysqlDSN(raw string) (string, error) {
 	return fmt.Sprintf("%s@tcp(%s)/%s?%s", credentials, parsed.Host, strings.TrimPrefix(parsed.Path, "/"), query.Encode()), nil
 }
 
+const seedContentBatchSize = 400
+
+func seedContentBatchArgs(rows [][]any, columns int) ([]any, error) {
+	if len(rows) > seedContentBatchSize || columns < 1 || columns > 11 {
+		return nil, store.ErrTransactionWriteBudget
+	}
+	return make([]any, 0, len(rows)*columns), nil
+}
+
 // seedContent writes comments, activity history, field history and inbox
 // notifications directly into the content table. The rows match what the
 // server writes (the same JSON shapes and index columns), so reads exercise
@@ -614,14 +668,17 @@ func seedContent(ctx context.Context, db *sql.DB, driver string, world *seedWorl
 		suffix = " ON DUPLICATE KEY UPDATE created_at=VALUES(created_at),data=VALUES(data),owner_id=VALUES(owner_id),parent_id=VALUES(parent_id),status=VALUES(status),next_attempt_at=VALUES(next_attempt_at),record_version=VALUES(record_version)"
 	}
 	const tuple = "(?,?,?,?,?,?,?,?,?,?,?)"
-	batch := 400
+	const batch = seedContentBatchSize
 	insert := func(rows [][]any) error {
 		if len(rows) == 0 {
 			return nil
 		}
 		var builder strings.Builder
 		builder.WriteString(quote)
-		args := make([]any, 0, len(rows)*11)
+		args, err := seedContentBatchArgs(rows, 11)
+		if err != nil {
+			return err
+		}
 		for i, row := range rows {
 			if i > 0 {
 				builder.WriteString(",")
@@ -630,7 +687,7 @@ func seedContent(ctx context.Context, db *sql.DB, driver string, world *seedWorl
 			args = append(args, row...)
 		}
 		builder.WriteString(suffix)
-		_, err := db.ExecContext(ctx, builder.String(), args...)
+		_, err = db.ExecContext(ctx, builder.String(), args...)
 		return err
 	}
 	rows := make([][]any, 0, batch)
@@ -641,7 +698,10 @@ func seedContent(ctx context.Context, db *sql.DB, driver string, world *seedWorl
 		}
 		var builder strings.Builder
 		builder.WriteString("INSERT INTO issue_activity_cycles(workspace_key,activity_id,cycle_id,issue_id) VALUES ")
-		args := make([]any, 0, len(cycleRows)*4)
+		args, err := seedContentBatchArgs(cycleRows, 4)
+		if err != nil {
+			return err
+		}
 		for i, row := range cycleRows {
 			if i > 0 {
 				builder.WriteString(",")
@@ -654,7 +714,7 @@ func seedContent(ctx context.Context, db *sql.DB, driver string, world *seedWorl
 		} else {
 			builder.WriteString(" ON CONFLICT DO NOTHING")
 		}
-		_, err := db.ExecContext(ctx, builder.String(), args...)
+		_, err = db.ExecContext(ctx, builder.String(), args...)
 		cycleRows = cycleRows[:0]
 		return err
 	}
@@ -749,7 +809,7 @@ func seedNotifications(ctx context.Context, db *sql.DB, driver string, world *se
 		return nil
 	}
 	const total = 5000
-	const batch = 400
+	const batch = seedContentBatchSize
 	quote := "INSERT INTO workspace_content_records(workspace_key,kind,resource_id,id,created_at,data,owner_id,parent_id,status,next_attempt_at,record_version) VALUES "
 	suffix := " ON CONFLICT(workspace_key,kind,resource_id,id) DO UPDATE SET created_at=excluded.created_at,data=excluded.data,owner_id=excluded.owner_id,parent_id=excluded.parent_id,status=excluded.status,next_attempt_at=excluded.next_attempt_at,record_version=excluded.record_version"
 	if driver == "mysql" {
@@ -762,7 +822,10 @@ func seedNotifications(ctx context.Context, db *sql.DB, driver string, world *se
 		}
 		var builder strings.Builder
 		builder.WriteString(quote)
-		args := make([]any, 0, len(rows)*11)
+		args, err := seedContentBatchArgs(rows, 11)
+		if err != nil {
+			return err
+		}
 		for i, row := range rows {
 			if i > 0 {
 				builder.WriteString(",")
@@ -771,7 +834,7 @@ func seedNotifications(ctx context.Context, db *sql.DB, driver string, world *se
 			args = append(args, row...)
 		}
 		builder.WriteString(suffix)
-		_, err := db.ExecContext(ctx, builder.String(), args...)
+		_, err = db.ExecContext(ctx, builder.String(), args...)
 		rows = rows[:0]
 		return err
 	}

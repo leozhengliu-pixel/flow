@@ -1,0 +1,833 @@
+package store
+
+import (
+	"context"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"os"
+	"reflect"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"flow/api/internal/domain"
+)
+
+const metadataLogicalDepth = 128
+const metadataLogicalTypes = 256
+const metadataLogicalDiskBytes = 1 << 30
+const metadataLogicalDescriptorBytes = 128 << 10
+const metadataLogicalDescriptorLimit = 64 << 20
+
+// metadataStructField is what frame writers and readers ask of a struct
+// field for every value: its name and type, whether it is exported and
+// whether its JSON tag is "-".
+type metadataStructField struct {
+	name                  string
+	typ                   reflect.Type
+	exported, jsonOmitted bool
+}
+
+var metadataStructFieldTypes sync.Map
+
+// metadataStructFields lists a struct type's fields in declaration order,
+// computed once per type (reflect builds a field's name and tag anew on each
+// lookup).
+func metadataStructFields(t reflect.Type) []metadataStructField {
+	if fields, found := metadataStructFieldTypes.Load(t); found {
+		return fields.([]metadataStructField)
+	}
+	fields := make([]metadataStructField, t.NumField())
+	for index := range fields {
+		field := t.Field(index)
+		fields[index] = metadataStructField{name: field.Name, typ: field.Type, exported: field.PkgPath == "", jsonOmitted: field.Tag.Get("json") == "-"}
+	}
+	metadataStructFieldTypes.Store(t, fields)
+	return fields
+}
+
+var errMetadataLogicalClosed = errors.New("installed logical metadata source is closed")
+var metadataLogicalDiskUsed atomic.Int64
+var metadataLogicalDescriptorsUsed atomic.Int64
+var metadataLogicalProcessLocal = time.Local
+
+// A source owns a process-local immutable typed spool. Its generation is
+// independent of the current SQL rows: retaining it preserves request handoffs
+// across later writes and reloads.
+type metadataLogicalSource struct {
+	mu     sync.Mutex
+	refs   int
+	stamp  copyStamp
+	fields []metadataLogicalNode
+	stores []*metadataLogicalStorage
+	// behind: this generation is known to lack another server's commit. A
+	// conflict refresh replaced only the records the lost race named, so the
+	// rest of that commit (records it added, removed or changed beside them)
+	// is missing here. A publication derived from it reloads the generation
+	// from SQL instead (installedGenerationBehind).
+	behind atomic.Bool
+}
+
+// Storage owners contain no parent-generation links, so sharing an unchanged
+// field never retains an unbounded chain of obsolete source descriptors.
+type metadataLogicalStorage struct {
+	mu            sync.Mutex
+	refs          int
+	types         []reflect.Type
+	times         []time.Time
+	locations     []*time.Location
+	locationBytes int64
+	bytes         int64
+	diskDemand    *atomic.Int64
+	genericStore  *SQLiteStore
+	// group is the lineage this storage was written in
+	// (scale_p21_logical_spool_group.go): it holds the descriptor charge and
+	// the read cache. writeCharge is the write buffer a storage that joined
+	// a group holds until it settles; resident is what its settled in-memory
+	// spool takes of the group's allowance.
+	group       *metadataLogicalSpoolGroup
+	writeCharge int64
+	resident    int64
+	settled     bool
+	ownCache    atomic.Pointer[metadataLogicalBlockCache]
+	// Spool I/O (scale_p21_logical_spool_io.go, invariants there): file is
+	// created lazily in directory and holds [0, flushed); pending holds later
+	// appends; the group's blocks cache small reads of flushed bytes.
+	directory string
+	pendingMu sync.Mutex
+	file      *os.File
+	closed    bool
+	dropped   atomic.Bool
+	pending   []byte
+	flushed   atomic.Int64
+	// patches is odd while a patch of flushed bytes is in flight and changes
+	// with each one; a block read that overlapped one is never served.
+	patches atomic.Int64
+	// Frame memo (scale_p21_logical_frame_memo.go): verbatim copies by
+	// offset and child headers of scanned collections.
+	memoMu  sync.Mutex
+	copies  []metadataLogicalCopy
+	indexes map[int64]metadataLogicalChildIndex
+	clones  map[int64]metadataLogicalCloneCheck
+	// userIndexes: the IDs of users frames (scale_p21_aggregate_user_index.go).
+	userIndexes map[int64]metadataLogicalUserIndex
+
+	// borrows are the ranges whose bytes other storages hold
+	// (scale_p21_logical_borrowed_range.go), replaced whole under pendingMu;
+	// lenders are those storages, each retained once.
+	borrows atomic.Pointer[[]metadataLogicalBorrow]
+	lenders []*metadataLogicalStorage
+}
+
+type metadataLogicalNode struct {
+	source       *metadataLogicalStorage
+	offset       int64
+	size         int64
+	cost         uint64
+	typ          reflect.Type
+	unavailable  bool
+	blocked      bool
+	generic      bool
+	genericRange bool
+	// window holds the bytes of an enclosing node read in one piece when it
+	// was materialized (scale_p21_logical_read_window.go); nil reads the
+	// storage.
+	window *metadataLogicalWindow
+}
+
+type metadataLogicalBuilder struct {
+	ctx         context.Context
+	source      *metadataLogicalSource
+	storage     *metadataLogicalStorage
+	diskLimit   int64
+	offset      int64
+	active      int
+	count       uint64
+	header      int64
+	cost        uint64
+	collection  reflect.Type
+	unavailable bool
+	// collectionIndex collects the child headers of the collection
+	// between BeginCollection and EndCollection (written child indexes,
+	// scale_p21_logical_written_index.go).
+	collectionIndex *writtenChildIndex
+	path            [metadataLogicalDepth]metadataLogicalAncestor
+	buffer          [32 << 10]byte
+	finished        bool
+	closed          bool
+}
+
+type metadataLogicalAncestor struct {
+	kind reflect.Kind
+	ptr  uintptr
+	len  int
+}
+
+func newMetadataLogicalBuilder(ctx context.Context) (*metadataLogicalBuilder, error) {
+	return newMetadataLogicalBuilderIn(ctx, nil)
+}
+
+// newMetadataLogicalBuilderIn starts a builder whose storages join group: a
+// generation derived from an installed source writes in that source's group
+// and takes no descriptor charge of its own (scale_p21_logical_spool_group.go).
+// A nil group starts a new one.
+func newMetadataLogicalBuilderIn(ctx context.Context, group *metadataLogicalSpoolGroup) (*metadataLogicalBuilder, error) {
+	storage, err := newMetadataLogicalStorage(ctx, group)
+	if err != nil {
+		return nil, err
+	}
+	t := reflect.TypeFor[domain.Bootstrap]()
+	source := &metadataLogicalSource{refs: 1, fields: make([]metadataLogicalNode, t.NumField()), stores: []*metadataLogicalStorage{storage}}
+	return &metadataLogicalBuilder{ctx: ctx, source: source, storage: storage, diskLimit: metadataLogicalDiskCap(), active: -1}, nil
+}
+
+func reserveMetadataLogicalBytes(used *atomic.Int64, size, limit int64) bool {
+	for {
+		current := used.Load()
+		if size < 0 || size > limit-current {
+			return false
+		}
+		if used.CompareAndSwap(current, current+size) {
+			return true
+		}
+	}
+}
+
+// Close abandons an unfinished builder. Finished builders transfer this
+// ownership to their source and must not be closed separately.
+func (b *metadataLogicalBuilder) Close() {
+	if !b.finished && !b.closed {
+		b.closed = true
+		b.source.Release()
+	}
+}
+
+func captureMetadataLogicalSource(ctx context.Context, data domain.Bootstrap, stamp copyStamp) (_ *metadataLogicalSource, err error) {
+	b, err := newMetadataLogicalBuilder(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			b.source.Release()
+		}
+	}()
+	if err := b.inheritTimestampInputs(ctx); err != nil {
+		return nil, err
+	}
+	value := reflect.ValueOf(data)
+	for i := 0; i < value.NumField(); i++ {
+		field := value.Type().Field(i)
+		v := value.Field(i)
+		if field.Tag.Get("json") == "-" && field.Name != "NextIssueNumber" {
+			v = reflect.Zero(v.Type())
+		}
+		var node metadataLogicalNode
+		var err error
+		if field.Name == "Viewer" {
+			node, err = b.writeAggregateNode(legacyActorUserNode{value: v}, 0)
+		} else {
+			node, err = b.writeValue(v, 0, false)
+		}
+		if err != nil {
+			return nil, err
+		}
+		b.source.fields[i] = node
+	}
+	return b.Finish(stamp)
+}
+
+func metadataLogicalField(name string) (int, reflect.StructField, bool) {
+	t := reflect.TypeFor[domain.Bootstrap]()
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if strings.Split(f.Tag.Get("json"), ",")[0] == name {
+			return i, f, true
+		}
+	}
+	return 0, reflect.StructField{}, false
+}
+
+func (b *metadataLogicalBuilder) Field(name string, value reflect.Value) error {
+	i, f, ok := metadataLogicalField(name)
+	if !ok || b.finished || b.closed || b.active >= 0 || !value.IsValid() || value.Type() != f.Type {
+		return ErrMetadataRecordQuery
+	}
+	node, err := b.writeValue(value, 0, false)
+	if err == nil {
+		b.source.fields[i] = node
+	}
+	return err
+}
+
+// BeginCollection/Append/EndCollection let cold recovery supply one typed
+// record at a time. A nil key denotes an array item; map keys retain their type.
+func (b *metadataLogicalBuilder) BeginCollection(name string, nilValue bool) error {
+	i, f, ok := metadataLogicalField(name)
+	if !ok || b.finished || b.closed || b.active >= 0 || f.Type.Kind() != reflect.Map && f.Type.Kind() != reflect.Slice ||
+		f.Type.Kind() == reflect.Slice && f.Type.Elem().Kind() == reflect.Uint8 {
+		return ErrMetadataRecordQuery
+	}
+	b.active, b.collection, b.count, b.header = i, f.Type, 0, b.offset
+	b.cost = uint64(f.Type.Size())*2 + 128
+	b.unavailable = false
+	if err := b.write(make([]byte, 16)); err != nil {
+		return err
+	}
+	flag := byte(1)
+	if nilValue {
+		flag = 0
+	}
+	if err := b.write([]byte{flag}); err != nil {
+		return err
+	}
+	if err := b.writeUint(0); err != nil {
+		return err
+	}
+	b.collectionIndex = newWrittenChildIndex(f.Type, b.offset)
+	return nil
+}
+
+func (b *metadataLogicalBuilder) Append(key, value reflect.Value) error {
+	if b.finished || b.closed || b.active < 0 || !value.IsValid() || value.Type() != b.collection.Elem() {
+		return ErrMetadataRecordQuery
+	}
+	var cost uint64
+	if b.collection.Kind() == reflect.Map {
+		if !key.IsValid() || key.Type() != b.collection.Key() {
+			return ErrMetadataRecordQuery
+		}
+		node, err := b.writeValue(key, 0, true)
+		if err != nil {
+			return err
+		}
+		cost += node.cost + 128
+		b.unavailable = b.unavailable || node.unavailable
+	}
+	node, err := b.writeValue(value, 0, false)
+	if err != nil {
+		return err
+	}
+	b.collectionIndex.add(node)
+	b.cost += cost + node.cost + uint64(value.Type().Size())*2
+	b.unavailable = b.unavailable || node.unavailable
+	b.count++
+	return nil
+}
+
+func (b *metadataLogicalBuilder) EndCollection() error {
+	if b.finished || b.closed || b.active < 0 {
+		return ErrMetadataRecordQuery
+	}
+	if b.count > 0 {
+		if err := b.storage.writeAt([]byte{1}, b.header+16); err != nil {
+			return err
+		}
+	}
+	var count [8]byte
+	binary.LittleEndian.PutUint64(count[:], b.count)
+	if err := b.storage.writeAt(count[:], b.header+17); err != nil {
+		return err
+	}
+	node := metadataLogicalNode{source: b.storage, offset: b.header, size: b.offset - b.header, cost: b.cost, typ: b.collection, unavailable: b.unavailable}
+	if err := b.patch(node); err != nil {
+		return err
+	}
+	// Only a collection each of whose children was added keeps the
+	// headers (writers that copy children by other means add none).
+	if index := b.collectionIndex; index != nil && uint64(len(index.headers)) == b.count {
+		index.keep(b.storage, node)
+	}
+	b.collectionIndex = nil
+	b.source.fields[b.active] = node
+	b.active, b.collection = -1, nil
+	return nil
+}
+
+func (b *metadataLogicalBuilder) Finish(stamp copyStamp) (*metadataLogicalSource, error) {
+	if b.finished || b.closed || b.active >= 0 {
+		return nil, ErrMetadataRecordQuery
+	}
+	for i, node := range b.source.fields {
+		if node.typ == nil {
+			f := reflect.TypeFor[domain.Bootstrap]().Field(i)
+			if f.Tag.Get("json") != "-" {
+				return nil, fmt.Errorf("%w: incomplete installed logical source field %s", ErrBoundedMetadataCoverage, f.Name)
+			}
+			zero, err := b.writeValue(reflect.Zero(f.Type), 0, false)
+			if err != nil {
+				return nil, err
+			}
+			b.source.fields[i] = zero
+		}
+	}
+	if err := b.ctx.Err(); err != nil {
+		return nil, err
+	}
+	// Every storage the generation wrote settles: a publication writes each
+	// rewritten field to a storage of its own. Shared storages settled with
+	// the generation that wrote them.
+	for _, storage := range b.source.stores {
+		if err := storage.settle(); err != nil {
+			return nil, err
+		}
+	}
+	b.source.stamp = stamp
+	b.finished = true
+	return b.source, nil
+}
+
+func (s *metadataLogicalSource) Retain() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refs == 0 {
+		return errMetadataLogicalClosed
+	}
+	s.refs++
+	return nil
+}
+
+func (s *metadataLogicalSource) Release() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refs == 0 {
+		return
+	}
+	s.refs--
+	if s.refs == 0 {
+		for _, storage := range s.stores {
+			storage.Release()
+		}
+		s.stores, s.fields = nil, nil
+	}
+}
+
+func (s *metadataLogicalStorage) Retain() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refs == 0 {
+		return errMetadataLogicalClosed
+	}
+	s.refs++
+	return nil
+}
+
+func (s *metadataLogicalStorage) Release() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refs == 0 {
+		return
+	}
+	s.refs--
+	if s.refs == 0 {
+		// An orphan still occupies the temporary volume and keeps its charge.
+		if err := s.discard(); err == nil || errors.Is(err, os.ErrNotExist) {
+			metadataLogicalDiskUsed.Add(-s.bytes)
+			if s.diskDemand != nil {
+				s.diskDemand.Add(-s.bytes)
+			}
+		}
+		s.pendingMu.Lock()
+		writeCharge, resident := s.writeCharge, s.resident
+		s.writeCharge, s.resident = 0, 0
+		s.pendingMu.Unlock()
+		metadataLogicalDescriptorsUsed.Add(-s.locationBytes - writeCharge)
+		if s.group != nil {
+			s.group.leave(resident)
+		}
+		s.times, s.types, s.locations = nil, nil, nil
+	}
+}
+
+func (s *metadataLogicalSource) Stamp() copyStamp { return s.stamp }
+
+func (s *metadataLogicalSource) VisitFields(ctx context.Context, visit func(string, metadataLogicalNode) error) error {
+	if err := s.Retain(); err != nil {
+		return err
+	}
+	defer s.Release()
+	t := reflect.TypeFor[domain.Bootstrap]()
+	for i, node := range s.fields {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		name := strings.Split(t.Field(i).Tag.Get("json"), ",")[0]
+		if err := visit(name, node); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (n metadataLogicalNode) Type() reflect.Type { return n.typ }
+
+func (b *metadataLogicalBuilder) write(data []byte) error {
+	if b.finished || b.closed {
+		return errMetadataLogicalClosed
+	}
+	if err := b.ctx.Err(); err != nil {
+		return err
+	}
+	if int64(len(data)) > metadataLogicalDiskBytes-b.offset {
+		return ErrMetadataWorkBudget
+	}
+	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, int64(len(data)), b.diskLimit) {
+		if metadataLogicalDiskContended(b.storage.diskDemand, int64(len(data)), b.diskLimit) {
+			// Disk pressure will not wake a waiter on the memory work budget.
+			return ErrRecordSpoolContended
+		}
+		return ErrMetadataWorkBudget
+	}
+	count := len(data)
+	err := b.storage.append(data)
+	if err != nil {
+		count = 0
+	}
+	b.offset += int64(count)
+	b.storage.bytes += int64(count)
+	metadataLogicalDiskUsed.Add(int64(count) - int64(len(data)))
+	if b.storage.diskDemand != nil {
+		b.storage.diskDemand.Add(int64(count))
+	}
+	if err == nil && count != len(data) {
+		return io.ErrShortWrite
+	}
+	return err
+}
+
+func (b *metadataLogicalBuilder) writeUint(value uint64) error {
+	var data [8]byte
+	binary.LittleEndian.PutUint64(data[:], value)
+	return b.write(data[:])
+}
+
+func (b *metadataLogicalBuilder) patch(n metadataLogicalNode) error {
+	var data [16]byte
+	binary.LittleEndian.PutUint64(data[:8], uint64(n.size))
+	cost := n.cost
+	if n.unavailable {
+		cost |= uint64(1) << 63
+	}
+	if n.blocked {
+		cost |= uint64(1) << 62
+	}
+	if n.generic {
+		cost |= metadataLogicalGenericJSON
+	}
+	binary.LittleEndian.PutUint64(data[8:], cost)
+	return b.storage.writeAt(data[:], n.offset)
+}
+
+func (b *metadataLogicalBuilder) writeValue(v reflect.Value, depth int, key bool) (node metadataLogicalNode, err error) {
+	if depth >= metadataLogicalDepth {
+		return node, ErrMetadataWorkBudget
+	}
+	node = metadataLogicalNode{source: b.storage, offset: b.offset, cost: uint64(v.Type().Size())*2 + 128, typ: v.Type()}
+	if err = b.write(make([]byte, 16)); err != nil {
+		return node, err
+	}
+	// The child headers of a slice this writes (written index).
+	var headers *writtenChildIndex
+	defer func() {
+		if err == nil {
+			node.size = b.offset - node.offset
+			err = b.patch(node)
+			if err == nil {
+				headers.keep(b.storage, node)
+			}
+		}
+	}()
+	if v.Type() == reflect.TypeFor[time.Time]() {
+		return b.writeTime(node, v.Interface().(time.Time))
+	}
+	child := func(value reflect.Value, isKey bool) error {
+		n, e := b.writeValue(value, depth+1, isKey)
+		node.cost += n.cost
+		node.unavailable = node.unavailable || n.unavailable
+		if e == nil {
+			headers.add(n)
+		}
+		return e
+	}
+	switch v.Kind() {
+	case reflect.Bool:
+		x := byte(0)
+		if v.Bool() {
+			x = 1
+		}
+		err = b.write([]byte{x})
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		err = b.writeUint(uint64(v.Int()))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		err = b.writeUint(v.Uint())
+	case reflect.Float32, reflect.Float64:
+		err = b.writeUint(math.Float64bits(v.Float()))
+	case reflect.Complex64, reflect.Complex128:
+		err = b.writeUint(math.Float64bits(real(v.Complex())))
+		if err == nil {
+			err = b.writeUint(math.Float64bits(imag(v.Complex())))
+		}
+	case reflect.String:
+		node.cost += uint64(v.Len())*2 + 64
+		err = b.writeUint(uint64(v.Len()))
+		if err == nil {
+			_, err = io.CopyBuffer(metadataLogicalWriter{b}, strings.NewReader(v.String()), b.buffer[:])
+		}
+	case reflect.Pointer, reflect.Map, reflect.Slice, reflect.Interface:
+		if v.IsNil() {
+			err = b.write([]byte{0})
+			break
+		}
+		if key && v.Kind() == reflect.Pointer {
+			node.unavailable, node.blocked = true, true
+			return node, nil
+		}
+		err = b.write([]byte{1})
+		if err != nil {
+			break
+		}
+		if v.Kind() == reflect.Interface {
+			t := v.Elem().Type()
+			index := -1
+			for i, known := range b.storage.types {
+				if known == t {
+					index = i
+					break
+				}
+			}
+			if index < 0 {
+				if len(b.storage.types) >= metadataLogicalTypes {
+					return node, ErrMetadataWorkBudget
+				}
+				if err := validateMetadataLogicalTypes(append(slices.Clone(b.storage.types), t)); err != nil {
+					return node, err
+				}
+				index = len(b.storage.types)
+				b.storage.types = append(b.storage.types, t)
+			}
+			if err = b.writeUint(uint64(index)); err == nil {
+				err = child(v.Elem(), key)
+			}
+			break
+		}
+		ptr := v.Pointer
+		address := uintptr(0)
+		if v.Kind() == reflect.Map {
+			address = uintptr(v.UnsafePointer())
+		} else {
+			address = ptr()
+		}
+		length := 0
+		if v.Kind() == reflect.Slice {
+			length = v.Len()
+		}
+		for _, a := range b.path[:depth] {
+			if a.kind == v.Kind() && a.ptr == address && a.len == length {
+				node.unavailable, node.blocked = true, true
+				return node, nil
+			}
+		}
+		b.path[depth] = metadataLogicalAncestor{v.Kind(), address, length}
+		defer func() { b.path[depth] = metadataLogicalAncestor{} }()
+		if v.Kind() == reflect.Pointer {
+			err = child(v.Elem(), key)
+			break
+		}
+		err = b.writeUint(uint64(v.Len()))
+		if err != nil {
+			break
+		}
+		if v.Kind() == reflect.Slice && v.Type().Elem().Kind() == reflect.Uint8 {
+			node.cost += uint64(v.Len()) * 2
+			for start := 0; start < v.Len() && err == nil; start += 32 << 10 {
+				end := min(start+32<<10, v.Len())
+				chunk := b.buffer[:end-start]
+				for i := range chunk {
+					chunk[i] = byte(v.Index(start + i).Uint())
+				}
+				err = b.write(chunk)
+			}
+		} else if v.Kind() == reflect.Slice {
+			node.cost += uint64(v.Len()) * (uint64(v.Type().Elem().Size())*2 + 64)
+			headers = newWrittenChildIndex(v.Type(), b.offset)
+			for i := 0; i < v.Len() && err == nil; i++ {
+				err = child(v.Index(i), key)
+			}
+		} else {
+			node.cost += uint64(v.Len()) * (uint64(v.Type().Elem().Size())*2 + 64)
+			iter := v.MapRange()
+			for iter.Next() && err == nil {
+				err = child(iter.Key(), true)
+				if err == nil {
+					err = child(iter.Value(), key)
+				}
+			}
+		}
+	case reflect.Struct:
+		fields := metadataStructFields(v.Type())
+		for i := 0; i < v.NumField() && err == nil; i++ {
+			f := fields[i]
+			if !f.exported {
+				node.unavailable, node.blocked = true, true
+				return node, nil
+			}
+			value := v.Field(i)
+			if f.jsonOmitted && !key {
+				value = reflect.Zero(value.Type())
+			}
+			err = child(value, key)
+		}
+	case reflect.Array:
+		for i := 0; i < v.Len() && err == nil; i++ {
+			err = child(v.Index(i), key)
+		}
+	case reflect.Func, reflect.Chan, reflect.UnsafePointer:
+		if !v.IsNil() {
+			node.unavailable, node.blocked = true, true
+		}
+	default:
+		node.unavailable, node.blocked = true, true
+	}
+	return node, err
+}
+
+func validateMetadataLogicalTypes(types []reflect.Type) error {
+	seen := map[reflect.Type]bool{}
+	text := 0
+	var visit func(reflect.Type, int) error
+	visit = func(t reflect.Type, depth int) error {
+		if seen[t] {
+			return nil
+		}
+		if depth >= metadataLogicalDepth || len(seen) >= 256 {
+			return ErrMetadataWorkBudget
+		}
+		seen[t] = true
+		text += len(t.Name()) + len(t.PkgPath())
+		if text > 32<<10 {
+			return ErrMetadataWorkBudget
+		}
+		switch t.Kind() {
+		case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Chan:
+			return visit(t.Elem(), depth+1)
+		case reflect.Map:
+			if err := visit(t.Key(), depth+1); err != nil {
+				return err
+			}
+			return visit(t.Elem(), depth+1)
+		case reflect.Struct:
+			for i := 0; i < t.NumField(); i++ {
+				field := t.Field(i)
+				text += len(field.Name) + len(field.PkgPath) + len(field.Tag)
+				if text > 32<<10 {
+					return ErrMetadataWorkBudget
+				}
+				if err := visit(field.Type, depth+1); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	for _, t := range types {
+		if err := visit(t, 0); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type metadataLogicalWriter struct{ b *metadataLogicalBuilder }
+
+func (w metadataLogicalWriter) Write(data []byte) (int, error) {
+	err := w.b.write(data)
+	if err != nil {
+		return 0, err
+	}
+	return len(data), nil
+}
+
+func (w metadataLogicalWriter) WriteString(value string) (int, error) {
+	written := 0
+	for len(value) > 0 {
+		size := copy(w.b.buffer[:], value)
+		if err := w.b.write(w.b.buffer[:size]); err != nil {
+			return written, err
+		}
+		written += size
+		value = value[size:]
+	}
+	return written, nil
+}
+
+func (b *metadataLogicalBuilder) writeTime(node metadataLogicalNode, value time.Time) (metadataLogicalNode, error) {
+	location := value.Location()
+	receipt := slices.Index(b.storage.locations, location)
+	if location != time.UTC && location != metadataLogicalProcessLocal && receipt < 0 {
+		inherited, err := b.inheritTimestampInputLocation(location)
+		if err != nil {
+			return node, err
+		}
+		if inherited {
+			receipt = slices.Index(b.storage.locations, location)
+		}
+	}
+	if location != time.UTC && location != metadataLogicalProcessLocal && receipt < 0 {
+		if offset, ok := metadataLogicalOffsetZone(value); ok {
+			return b.writeOffsetTime(node, value, offset)
+		}
+		node.unavailable, node.blocked = true, true
+		return b.writeWireTime(node, value)
+	}
+	plain := time.Unix(value.Unix(), int64(value.Nanosecond())).In(location)
+	if value == plain {
+		if err := b.write([]byte{0}); err != nil {
+			return node, err
+		}
+		if err := b.writeUint(uint64(value.Unix())); err != nil {
+			return node, err
+		}
+		if err := b.writeUint(uint64(value.Nanosecond())); err != nil {
+			return node, err
+		}
+		flag := uint64(0)
+		if location == metadataLogicalProcessLocal {
+			flag = 1
+		} else if receipt >= 0 {
+			flag = uint64(receipt + 2)
+		}
+		return node, b.writeUint(flag)
+	}
+	// Keep one monotonic anchor per process-owned Location, rather than one
+	// opaque receipt per timestamp. Add preserves the private monotonic state.
+	index := -1
+	var delta time.Duration
+	for i, base := range b.storage.times {
+		if base.Location() == location {
+			d := value.Sub(base)
+			if base.Add(d) == value {
+				index, delta = i, d
+				break
+			}
+		}
+	}
+	if index < 0 {
+		if len(b.storage.times) >= 32 {
+			return node, ErrMetadataWorkBudget
+		}
+		index = len(b.storage.times)
+		b.storage.times = append(b.storage.times, value)
+	}
+	if err := b.write([]byte{1}); err != nil {
+		return node, err
+	}
+	if err := b.writeUint(uint64(index)); err != nil {
+		return node, err
+	}
+	return node, b.writeUint(uint64(delta))
+}

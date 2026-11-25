@@ -257,6 +257,13 @@ func (s *Service) Start(ctx context.Context, in StartInput) (domain.CodingSessio
 	if !s.enabledFor(info) {
 		return domain.CodingSession{}, false, ErrDisabled
 	}
+	// Who may use the workspace, the environment and the issue comes first:
+	// nothing is built from the issue or sent anywhere before it passes.
+	issue, err := s.authorizeStart(ctx, in)
+	if err != nil {
+		return domain.CodingSession{}, false, err
+	}
+	in.EnvironmentCandidates = s.activeCandidates(ctx, in.WorkspaceKey, in.EnvironmentCandidates)
 	if err := s.aiAllowed(ctx, in.WorkspaceKey, in.CreatorID); err != nil {
 		return domain.CodingSession{}, false, err
 	}
@@ -283,12 +290,6 @@ func (s *Service) Start(ctx context.Context, in StartInput) (domain.CodingSessio
 	}
 	if agentUser == "" {
 		return domain.CodingSession{}, false, ErrNoAgent
-	}
-	issue := IssueContext{ID: in.IssueID}
-	if in.IssueID != "" && s.directory != nil {
-		if issue, err = s.directory.CodingIssue(ctx, in.WorkspaceKey, in.IssueID); err != nil {
-			return domain.CodingSession{}, false, err
-		}
 	}
 	now := s.now().UTC()
 	id := NewID()
@@ -745,6 +746,11 @@ func (s *Service) Prompt(ctx context.Context, workspaceKey, id string, in Prompt
 	switch session.Phase {
 	case domain.CodingPhaseAwaitingApproval, domain.CodingPhaseStopping:
 		return session, ErrConflict
+	}
+	// A turn is built from the issue and sent to a model as the creator:
+	// refuse it once the creator lost the workspace or the issue.
+	if err := s.CreatorAllowed(ctx, session); err != nil {
+		return session, err
 	}
 	if err := s.aiAllowed(ctx, workspaceKey, firstNonEmpty(in.AuthorID, session.CreatorID)); err != nil {
 		return session, err

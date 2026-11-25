@@ -24,9 +24,14 @@ import (
 )
 
 var (
-	ErrAuthInvalid              = errors.New("invalid email or password")
-	ErrAuthExpired              = errors.New("token is invalid or expired")
-	ErrAuthConflict             = errors.New("account already exists")
+	ErrAuthInvalid  = errors.New("invalid email or password")
+	ErrAuthExpired  = errors.New("token is invalid or expired")
+	ErrAuthConflict = errors.New("account already exists")
+	// ErrIdentityConflict is an external sign-in whose email belongs to an
+	// existing account that the provider is not trusted to claim, or an
+	// identity already linked to another account. The person signs in to the
+	// account and links the provider from their account settings.
+	ErrIdentityConflict         = errors.New("an account with this email already exists")
 	ErrAuthForbidden            = errors.New("forbidden")
 	ErrLastAdmin                = errors.New("a workspace needs at least one admin")
 	ErrLastTeamOwner            = errors.New("a team needs at least one owner")
@@ -92,9 +97,9 @@ func (s *SQLiteStore) ensureAuthTestFixture(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback()
-	for _, data := range s.workspaces {
-		for _, user := range data.Users {
-			_, err = tx.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
+	for key, data := range s.workspaces {
+		insert := func(user domain.User) error {
+			_, err := tx.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
 				user.ID, normalizeEmail(user.Email), user.Name, user.DisplayName, user.AvatarURL, string(hash), now.Format(time.RFC3339Nano), boolInt(user.Active), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 			if err != nil {
 				return err
@@ -113,6 +118,20 @@ func (s *SQLiteStore) ensureAuthTestFixture(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
+			}
+			return nil
+		}
+		if s.BoundedMetadataEnabled() {
+			// The resident copy holds policy only (workspace, viewer, teams):
+			// the users stream from their canonical records in order.
+			if err := s.visitAuthTestFixtureUsers(ctx, key, insert); err != nil {
+				return err
+			}
+			continue
+		}
+		for _, user := range data.Users {
+			if err := insert(user); err != nil {
+				return err
 			}
 		}
 	}
@@ -174,6 +193,9 @@ func (s *SQLiteStore) Register(ctx context.Context, name, email, password string
 
 func (s *SQLiteStore) Login(ctx context.Context, email, password string) (domain.AuthSession, string, error) {
 	user, hash, err := s.authUserByEmail(ctx, email)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return domain.AuthSession{}, "", err
+	}
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil || !user.Active {
 		return domain.AuthSession{}, "", ErrAuthInvalid
 	}
@@ -237,7 +259,27 @@ func (s *SQLiteStore) LoginExternal(ctx context.Context, email, name, avatarURL 
 // LoginExternalIdentity authenticates an IdP identity independently of email.
 // Email remains the compatibility lookup used by LoginExternal, but is optional
 // here so enterprise providers may identify users with an employee number.
+// ExternalLinkPolicy says whether an unknown identity may be attached to the
+// existing account that owns its email. The zero value never links: an email
+// alone is not proof that the person owns the account.
+type ExternalLinkPolicy struct {
+	// TrustedEmail: the provider vouches for the email (explicit
+	// email_verified, domain allowed for the provider).
+	TrustedEmail bool
+	// UnverifiedEmail: the provider did not state the email is verified. It
+	// never selects or creates an account by itself; an email that belongs to
+	// an existing account is ErrIdentityConflict, any other is dropped.
+	UnverifiedEmail bool
+	// MembershipWorkspaceID, when set, also requires the account to be an
+	// active member of that workspace (enterprise providers).
+	MembershipWorkspaceID string
+}
+
 func (s *SQLiteStore) LoginExternalIdentity(ctx context.Context, provider, issuer, subject, username, email, name, avatarURL, claimsJSON string, autoProvision bool) (domain.AuthSession, string, error) {
+	return s.LoginExternalIdentityWithPolicy(ctx, provider, issuer, subject, username, email, name, avatarURL, claimsJSON, autoProvision, ExternalLinkPolicy{})
+}
+
+func (s *SQLiteStore) LoginExternalIdentityWithPolicy(ctx context.Context, provider, issuer, subject, username, email, name, avatarURL, claimsJSON string, autoProvision bool, policy ExternalLinkPolicy) (domain.AuthSession, string, error) {
 	provider, issuer, subject = strings.TrimSpace(provider), strings.TrimSpace(issuer), strings.TrimSpace(subject)
 	if provider == "" || issuer == "" || subject == "" {
 		return domain.AuthSession{}, "", ErrAuthInvalid
@@ -302,25 +344,33 @@ func (s *SQLiteStore) LoginExternalIdentity(ctx context.Context, provider, issue
 	if !errors.Is(err, sql.ErrNoRows) {
 		return domain.AuthSession{}, "", err
 	}
+	if email != "" && policy.UnverifiedEmail {
+		if _, _, lookupErr := s.authUserByEmail(ctx, email); lookupErr == nil {
+			return domain.AuthSession{}, "", ErrIdentityConflict
+		} else if !errors.Is(lookupErr, sql.ErrNoRows) {
+			return domain.AuthSession{}, "", lookupErr
+		}
+		email = ""
+	}
 	if email != "" {
-		if existing, _, lookupErr := s.authUserByEmail(ctx, email); lookupErr == nil {
+		existing, _, lookupErr := s.authUserByEmail(ctx, email)
+		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+			return domain.AuthSession{}, "", lookupErr
+		}
+		if lookupErr == nil {
 			if !existing.Active {
 				return domain.AuthSession{}, "", ErrAuthInvalid
 			}
+			if !s.externalEmailLinkAllowed(ctx, existing.ID, policy) {
+				return domain.AuthSession{}, "", ErrIdentityConflict
+			}
 			user = existing
-			if name != "" || avatarURL != "" {
-				if name == "" {
-					name = user.Name
-				}
-				if avatarURL == "" {
-					avatarURL = user.AvatarURL
-				}
+			if !user.EmailVerified {
 				now := time.Now().UTC().Format(time.RFC3339Nano)
-				_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,email_verified_at=?,updated_at=? WHERE id=?`, name, name, avatarURL, now, now, user.ID)
-				if err != nil {
+				if _, err = s.db.ExecContext(ctx, `UPDATE auth_users SET email_verified_at=?,updated_at=? WHERE id=? AND email_verified_at IS NULL`, now, now, user.ID); err != nil {
 					return domain.AuthSession{}, "", err
 				}
-				user.Name, user.DisplayName, user.AvatarURL, user.EmailVerified = name, name, avatarURL, true
+				user.EmailVerified = true
 			}
 			if autoProvision {
 				if err = s.provisionExternalMemberships(ctx, user.ID, time.Now().UTC()); err != nil {
@@ -364,6 +414,55 @@ func (s *SQLiteStore) LoginExternalIdentity(ctx context.Context, provider, issue
 		return domain.AuthSession{}, "", err
 	}
 	return s.createSession(ctx, user)
+}
+
+// externalEmailLinkAllowed is the account-takeover guard for a first sign-in
+// whose email matches an existing account.
+func (s *SQLiteStore) externalEmailLinkAllowed(ctx context.Context, userID string, policy ExternalLinkPolicy) bool {
+	if !policy.TrustedEmail {
+		return false
+	}
+	if policy.MembershipWorkspaceID == "" {
+		return true
+	}
+	_, status, err := s.WorkspaceRole(ctx, policy.MembershipWorkspaceID, userID)
+	return err == nil && status == "active"
+}
+
+// LinkExternalIdentity attaches an identity to the signed-in account that
+// proved ownership by completing the provider round trip in its own session.
+// An identity already linked to another account is ErrIdentityConflict.
+func (s *SQLiteStore) LinkExternalIdentity(ctx context.Context, userID, provider, issuer, subject, username, claimsJSON string) error {
+	provider, issuer, subject, username = strings.TrimSpace(provider), strings.TrimSpace(issuer), strings.TrimSpace(subject), strings.TrimSpace(username)
+	if userID == "" || provider == "" || issuer == "" || subject == "" || provider == "scim" {
+		return ErrAuthInvalid
+	}
+	if checkTextFields(textField{"subject", subject, domain.SCIMValueMaxLength}, textField{"issuer", issuer, 2048}) != nil {
+		return ErrAuthInvalid
+	}
+	username = TruncateRunes(username, domain.SCIMValueMaxLength)
+	if strings.TrimSpace(claimsJSON) == "" {
+		claimsJSON = "{}"
+	}
+	var active int
+	if err := s.db.QueryRowContext(ctx, `SELECT active FROM auth_users WHERE id=?`, userID).Scan(&active); err != nil || active == 0 {
+		return ErrAuthInvalid
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	key := externalIdentityKey(provider, issuer, subject)
+	var owner string
+	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM auth_identities WHERE identity_key=?`, key).Scan(&owner)
+	switch {
+	case err == nil && owner != userID:
+		return ErrIdentityConflict
+	case err == nil:
+		_, err = s.db.ExecContext(ctx, `UPDATE auth_identities SET username=?,claims_json=?,last_login_at=? WHERE identity_key=? AND user_id=?`, username, claimsJSON, now, key, userID)
+		return err
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, idgen.New("identity_"), userID, provider, issuer, subject, key, username, claimsJSON, now, now)
+	return err
 }
 
 func externalIdentityKey(provider, issuer, subject string) string {
@@ -424,49 +523,65 @@ func (s *SQLiteStore) createSession(ctx context.Context, user domain.User) (doma
 }
 
 func (s *SQLiteStore) AuthenticateSession(ctx context.Context, token string) (domain.User, error) {
-	var userID, expiresRaw string
-	err := s.db.QueryRowContext(ctx, `SELECT user_id,expires_at FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&userID, &expiresRaw)
+	user, _, err := s.authenticatedSession(ctx, token)
+	return user, err
+}
+
+func (s *SQLiteStore) authenticatedSession(ctx context.Context, token string) (domain.User, time.Time, error) {
+	hash := tokenHash(token)
+	var userID, expiresRaw, lastSeenRaw string
+	err := s.db.QueryRowContext(ctx, `SELECT user_id,expires_at,last_seen_at FROM auth_sessions WHERE token_hash=?`, hash).Scan(&userID, &expiresRaw, &lastSeenRaw)
 	if err != nil {
-		return domain.User{}, ErrAuthInvalid
+		if errors.Is(err, sql.ErrNoRows) {
+			err = ErrAuthInvalid
+		}
+		return domain.User{}, time.Time{}, err
 	}
 	expires, err := time.Parse(time.RFC3339Nano, expiresRaw)
 	if err != nil || time.Now().After(expires) {
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE token_hash=?`, tokenHash(token))
-		return domain.User{}, ErrAuthExpired
+		return domain.User{}, time.Time{}, ErrAuthExpired
 	}
 	user, err := s.authUserByID(ctx, userID)
-	if err != nil || !user.Active {
-		return domain.User{}, ErrAuthInvalid
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return domain.User{}, time.Time{}, err
 	}
-	_, _ = s.db.ExecContext(ctx, `UPDATE auth_sessions SET last_seen_at=? WHERE token_hash=?`, time.Now().UTC().Format(time.RFC3339Nano), tokenHash(token))
-	return user, nil
+	if err != nil || !user.Active {
+		return domain.User{}, time.Time{}, ErrAuthInvalid
+	}
+	s.touchSession(ctx, hash, lastSeenRaw, time.Now().UTC())
+	return user, expires, nil
 }
 
-func (s *SQLiteStore) EnforceSessionDuration(ctx context.Context, token string, days int) bool {
+func (s *SQLiteStore) EnforceSessionDuration(ctx context.Context, token string, days int) error {
 	if token == "" || days < 1 {
-		return false
+		return ErrAuthInvalid
 	}
 	var createdRaw string
 	if err := s.db.QueryRowContext(ctx, `SELECT created_at FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&createdRaw); err != nil {
-		return false
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrAuthInvalid
+		}
+		return err
 	}
 	created, err := time.Parse(time.RFC3339Nano, createdRaw)
 	if err != nil || time.Now().UTC().After(created.Add(time.Duration(days)*24*time.Hour)) {
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE token_hash=?`, tokenHash(token))
-		return false
+		return ErrAuthExpired
 	}
-	return true
+	return nil
 }
 
 func (s *SQLiteStore) Session(ctx context.Context, token string) (domain.AuthSession, error) {
-	user, err := s.AuthenticateSession(ctx, token)
+	user, expires, err := s.authenticatedSession(ctx, token)
 	if err != nil {
 		return domain.AuthSession{}, err
 	}
-	var expiresRaw string
-	_ = s.db.QueryRowContext(ctx, `SELECT expires_at FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&expiresRaw)
-	expires, _ := time.Parse(time.RFC3339Nano, expiresRaw)
-	return s.sessionForUser(ctx, user, expires), nil
+	account, err := s.AccountForUser(ctx, user.ID)
+	if err != nil {
+		return domain.AuthSession{}, err
+	}
+	return domain.AuthSession{User: user, Memberships: account.Workspaces, ExpiresAt: expires}, nil
 }
 
 func (s *SQLiteStore) Logout(ctx context.Context, token string) error {
@@ -700,6 +815,9 @@ func (s *SQLiteStore) ResetPassword(ctx context.Context, token, password string)
 // RequestLoginToken issues a one-time kind=login token for magic-link / SSO bounce (LS-0083).
 func (s *SQLiteStore) RequestLoginToken(ctx context.Context, email string) (string, error) {
 	user, _, err := s.authUserByEmail(ctx, email)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
 	if err != nil || !user.Active {
 		return "", nil
 	}
@@ -717,12 +835,15 @@ func (s *SQLiteStore) LoginWithAuthToken(ctx context.Context, email, token strin
 		return domain.AuthSession{}, "", ErrAuthInvalid
 	}
 	user, _, err := s.authUserByEmail(ctx, email)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return domain.AuthSession{}, "", err
+	}
 	if err != nil || !user.Active {
 		return domain.AuthSession{}, "", ErrAuthInvalid
 	}
 	userID, err := s.consumeAuthToken(ctx, token, "login")
 	if err != nil {
-		return domain.AuthSession{}, "", ErrAuthExpired
+		return domain.AuthSession{}, "", err
 	}
 	if userID != user.ID {
 		return domain.AuthSession{}, "", ErrAuthInvalid
@@ -745,23 +866,57 @@ func (s *SQLiteStore) LoginWithAuthToken(ctx context.Context, email, token strin
 func (s *SQLiteStore) WorkspaceRole(ctx context.Context, workspaceID, userID string) (string, string, error) {
 	var role, status string
 	err := s.db.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&role, &status)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", ErrAuthForbidden
 	}
-	return role, status, nil
+	return role, status, err
+}
+
+// mutationWorkspaceRole reads the actor's role before a write. A database
+// outage or deadline is returned as ErrDatabaseUnavailable (503 with
+// Retry-After); every other failure, including a canceled request, keeps the
+// previous answer of no access.
+func (s *SQLiteStore) mutationWorkspaceRole(ctx context.Context, workspaceID, userID string) (string, error) {
+	role, status, err := s.WorkspaceRole(ctx, workspaceID, userID)
+	if err != nil {
+		if err := PreWriteDatabaseError(err); errors.Is(err, ErrDatabaseUnavailable) {
+			return "", err
+		}
+		return "", ErrAuthForbidden
+	}
+	if status != "active" {
+		return "", ErrAuthForbidden
+	}
+	return role, nil
+}
+
+func (s *SQLiteStore) mutationActorAccess(ctx context.Context, workspaceID, userID string) (string, []string, error) {
+	role, err := s.mutationWorkspaceRole(ctx, workspaceID, userID)
+	if err != nil {
+		return "", nil, err
+	}
+	teams, err := s.actorTeamIDs(ctx, workspaceID, userID)
+	return role, teams, PreWriteDatabaseError(err)
 }
 
 func (s *SQLiteStore) TeamRole(ctx context.Context, workspaceID, teamID, userID string) (string, error) {
 	// Workspace owners/admins can administer every team. Team owners are also
 	// inherited by descendants.
-	if workspaceRole, status, err := s.WorkspaceRole(ctx, workspaceID, userID); err == nil && status == "active" && isWorkspaceAdminRole(workspaceRole) {
+	workspaceRole, status, err := s.WorkspaceRole(ctx, workspaceID, userID)
+	if err != nil && !errors.Is(err, ErrAuthForbidden) {
+		return "", err
+	}
+	if status == "active" && isWorkspaceAdminRole(workspaceRole) {
 		return "owner", nil
 	}
 	data, _, ok := s.workspaceByID(workspaceID)
 	if !ok {
 		return "", ErrAuthForbidden
 	}
-	role := s.teamRoleDirect(ctx, workspaceID, teamID, userID)
+	role, err := s.teamRoleDirect(ctx, workspaceID, teamID, userID)
+	if err != nil {
+		return "", err
+	}
 	if role == "owner" {
 		return role, nil
 	}
@@ -775,7 +930,11 @@ func (s *SQLiteStore) TeamRole(ctx context.Context, workspaceID, teamID, userID 
 			break
 		}
 		parent := settings.ParentTeamID
-		if parentRole := s.teamRoleDirect(ctx, workspaceID, parent, userID); parentRole == "owner" {
+		parentRole, err := s.teamRoleDirect(ctx, workspaceID, parent, userID)
+		if err != nil {
+			return "", err
+		}
+		if parentRole == "owner" {
 			return "owner", nil
 		}
 		current = parent
@@ -786,12 +945,13 @@ func (s *SQLiteStore) TeamRole(ctx context.Context, workspaceID, teamID, userID 
 	return "", ErrAuthForbidden
 }
 
-func (s *SQLiteStore) teamRoleDirect(ctx context.Context, workspaceID, teamID, userID string) string {
+func (s *SQLiteStore) teamRoleDirect(ctx context.Context, workspaceID, teamID, userID string) (string, error) {
 	var role string
-	if err := s.db.QueryRowContext(ctx, `SELECT role FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&role); err != nil {
-		return ""
+	err := s.db.QueryRowContext(ctx, `SELECT role FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
 	}
-	return role
+	return role, err
 }
 
 func isWorkspaceAdminRole(role string) bool {
@@ -815,13 +975,24 @@ func (s *SQLiteStore) AccountForUser(ctx context.Context, userID string) (domain
 }
 
 func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey string) error {
-	data, ok := s.WorkspaceMetadata(workspaceKey)
+	var data domain.Bootstrap
+	var ok bool
+	if s.metadataResidency != nil {
+		s.mu.RLock()
+		key := workspaceKey
+		if key == "" {
+			key = s.lastWorkspaceKey
+		}
+		data, ok = s.workspaces[key]
+		s.mu.RUnlock()
+	} else {
+		data, ok = s.WorkspaceMetadata(workspaceKey)
+	}
 	if !ok {
 		return ErrAuthForbidden
 	}
-	_, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, userID)
-	if err != nil || status != "active" {
-		return ErrAuthForbidden
+	if _, err := s.mutationWorkspaceRole(ctx, data.Workspace.ID, userID); err != nil {
+		return err
 	}
 	// The current workspace again leaves the account state as it is.
 	var current string
@@ -829,11 +1000,18 @@ func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey
 		return nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, userID, workspaceKey, now)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, userID, workspaceKey, now)
 	return err
 }
 
 func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID string) (domain.Bootstrap, bool, error) {
+	if view, release, handled := s.coldProjectionView(ctx, "BootstrapForUser", workspaceKey); handled {
+		defer release()
+		if view == nil {
+			return domain.Bootstrap{}, false, nil
+		}
+		return view.BootstrapForUser(ctx, view.lastWorkspaceKey, userID)
+	}
 	data, ok := s.BootstrapForContext(ctx, workspaceKey)
 	if !ok {
 		return domain.Bootstrap{}, false, nil
@@ -842,9 +1020,17 @@ func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID
 }
 
 func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.Bootstrap, userID string) (domain.Bootstrap, bool, error) {
+	if s.BoundedMetadataEnabled() && !metadataOutputOwnerPresent(ctx) {
+		// Even an unowned legacy caller must observe a newly introduced
+		// bounded-read failure rather than silently emptying its directory.
+		ctx = WithMetadataOutputOwner(ctx, nil)
+	}
 	data.CommentActions = nil // Proposals are returned only by their permission-checked issue endpoint.
 	role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, userID)
-	if err != nil || status != "active" {
+	if err != nil {
+		return domain.Bootstrap{}, false, err
+	}
+	if status != "active" {
 		return domain.Bootstrap{}, false, ErrAuthForbidden
 	}
 	user, err := s.authUserByID(ctx, userID)
@@ -858,20 +1044,31 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 	if !isWorkspaceAdminRole(role) {
 		data.AuditLog = []domain.AuditLogEntry{}
 	}
-	data.Members, _ = s.ListMembers(ctx, data.Workspace.ID)
+	data.Members, err = s.ListMembers(ctx, data.Workspace.ID)
+	if err != nil {
+		return domain.Bootstrap{}, false, err
+	}
 	if !data.WorkspaceSettings.SCIMEnabled {
 		// Turning SCIM provisioning off hands every member back to admins.
 		for index := range data.Members {
 			data.Members[index].ManagedBy = ""
 		}
 	}
-	data.TeamMembers, _ = s.ListTeamMembers(ctx, data.Workspace.ID)
+	data.TeamMembers, err = s.ListTeamMembers(ctx, data.Workspace.ID)
+	if err != nil {
+		return domain.Bootstrap{}, false, err
+	}
 	data.DepartedMembers = nil
 	if isWorkspaceAdminRole(role) {
 		data.Invitations, _ = s.ListInvitations(ctx, data.Workspace.ID)
 		data.DepartedMembers, _ = s.ListDepartedMembers(ctx, data.Workspace.ID, data.Workspace.URLKey)
 	} else {
 		data.Invitations = []domain.Invitation{}
+	}
+	if s.BoundedMetadataEnabled() {
+		if err := metadataOutputError(ctx); err != nil {
+			return domain.Bootstrap{}, false, err
+		}
 	}
 	data.Users = make([]domain.User, 0, len(data.Members))
 	for _, member := range data.Members {
@@ -881,6 +1078,13 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 	for _, team := range data.Teams {
 		if teamVisibleToUser(data, team.ID, userID, role) {
 			allowed[team.ID] = true
+		}
+	}
+	if s.BoundedMetadataEnabled() {
+		if capture, _ := ctx.Value(collaborationProjectionCaptureKey{}).(*collaborationProjectionCapture); capture != nil {
+			if err := capture.capture(ctx, data, allowed); err != nil {
+				return domain.Bootstrap{}, false, err
+			}
 		}
 	}
 	filterBootstrapTeams(&data, viewerTeamScope(data, allowed, userID, role), role == "guest")
@@ -911,6 +1115,7 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 	data.ProjectTemplates = slices.DeleteFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, func(teamID string) bool { return allowed[teamID] })
 	})
+	BlankHiddenTemplateDefaults(&data)
 	data.Notifications = slices.DeleteFunc(data.Notifications, func(item domain.Notification) bool { return item.RecipientID != userID })
 	data.NotificationDeliveries = slices.DeleteFunc(data.NotificationDeliveries, func(item domain.NotificationDelivery) bool { return item.RecipientID != userID })
 	if preferences, ok := data.NotificationPreferences[userID]; ok {
@@ -1017,12 +1222,20 @@ func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]do
 }
 
 // actorTeamIDs lists the teams a user belongs to from the membership records
-// (one indexed read), for a mutation's authorization callback. A failed read
-// gives no teams, so team-based access fails closed.
-func (s *SQLiteStore) actorTeamIDs(ctx context.Context, workspaceID, userID string) []string {
+// (one indexed read), for a mutation's authorization callback. The lookup is
+// best effort: an unreadable row is skipped and an ordinary read failure gives
+// no teams, so team-based access fails closed. A database outage or deadline
+// is returned so the caller answers 503 instead of denying.
+func (s *SQLiteStore) actorTeamIDs(ctx context.Context, workspaceID, userID string) ([]string, error) {
+	unavailable := func(err error) error {
+		if err := PreWriteDatabaseError(err); errors.Is(err, ErrDatabaseUnavailable) {
+			return err
+		}
+		return nil
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT team_id FROM team_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID)
 	if err != nil {
-		return nil
+		return nil, unavailable(err)
 	}
 	defer rows.Close()
 	teams := []string{}
@@ -1032,17 +1245,17 @@ func (s *SQLiteStore) actorTeamIDs(ctx context.Context, workspaceID, userID stri
 			teams = append(teams, id)
 		}
 	}
-	if rows.Err() != nil {
-		return nil
+	if err := rows.Err(); err != nil {
+		return nil, unavailable(err)
 	}
-	return teams
+	return teams, nil
 }
 
 func (s *SQLiteStore) ListTeamMembers(ctx context.Context, workspaceID string) ([]domain.TeamMember, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT m.team_id,m.user_id,m.role,m.joined_at,
 		CASE WHEN EXISTS (SELECT 1 FROM scim_team_memberships sm WHERE sm.workspace_id=m.workspace_id AND sm.team_id=m.team_id AND sm.user_id=m.user_id AND sm.managed=1) THEN 1 ELSE 0 END,
 		m.origin
-		FROM team_memberships m WHERE m.workspace_id=? ORDER BY m.joined_at`, workspaceID)
+		FROM team_memberships m WHERE m.workspace_id=? ORDER BY `+teamMemberOrder(s.dialect, "m"), workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1262,8 +1475,12 @@ func (s *SQLiteStore) UpdateMemberRole(ctx context.Context, workspaceID, userID,
 		return fmt.Errorf("invalid role")
 	}
 	var current string
-	if err := s.db.QueryRowContext(ctx, `SELECT role FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&current); err != nil {
+	err := s.db.QueryRowContext(ctx, `SELECT role FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrAuthForbidden
+	}
+	if err != nil {
+		return PreWriteDatabaseError(err)
 	}
 	if strings.EqualFold(current, role) {
 		return nil
@@ -1333,16 +1550,16 @@ func (s *SQLiteStore) RemoveMember(ctx context.Context, workspaceID, userID stri
 }
 
 func (s *SQLiteStore) ensureAdminRemains(ctx context.Context, workspaceID, userID string) error {
-	var role, status string
-	if err := s.db.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&role, &status); err != nil {
-		return ErrAuthForbidden
+	role, status, err := s.WorkspaceRole(ctx, workspaceID, userID)
+	if err != nil {
+		return PreWriteDatabaseError(err)
 	}
 	if !isWorkspaceAdminRole(role) || status != "active" {
 		return nil
 	}
 	var count int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_memberships WHERE workspace_id=? AND role IN ('admin','owner') AND status='active'`, workspaceID).Scan(&count); err != nil {
-		return err
+		return PreWriteDatabaseError(err)
 	}
 	if count <= 1 {
 		return ErrLastAdmin
@@ -1539,8 +1756,11 @@ func (s *SQLiteStore) consumeAuthToken(ctx context.Context, token, kind string) 
 	var userID, expiresRaw string
 	var used sql.NullString
 	err := s.db.QueryRowContext(ctx, `SELECT user_id,expires_at,used_at FROM auth_tokens WHERE token_hash=? AND kind=?`, tokenHash(token), kind).Scan(&userID, &expiresRaw, &used)
-	if err != nil || used.Valid {
+	if errors.Is(err, sql.ErrNoRows) || err == nil && used.Valid {
 		return "", ErrAuthExpired
+	}
+	if err != nil {
+		return "", err
 	}
 	expires, _ := time.Parse(time.RFC3339Nano, expiresRaw)
 	if time.Now().After(expires) {
@@ -1823,15 +2043,15 @@ func filterBootstrapTeams(data *domain.Bootstrap, scope bootstrapTeamScope, gues
 	// A project can be shared by public and private teams. Keep the project
 	// shell when at least one team is visible, but redact hidden team bindings
 	// and all cross-team references from the projected payload.
+	visibleProjects := make(map[string]bool, len(data.Projects))
+	for _, project := range data.Projects {
+		visibleProjects[project.ID] = true
+	}
 	for index := range data.Projects {
 		data.Projects[index].TeamIDs = slices.DeleteFunc(data.Projects[index].TeamIDs, func(teamID string) bool { return !allowed[teamID] })
 		data.Projects[index].DependencyIDs = slices.DeleteFunc(data.Projects[index].DependencyIDs, func(projectID string) bool {
-			return !slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == projectID })
+			return !visibleProjects[projectID]
 		})
-	}
-	visibleProjects := map[string]bool{}
-	for _, project := range data.Projects {
-		visibleProjects[project.ID] = true
 	}
 	data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(suggestion domain.IssueSuggestion) bool {
 		if suggestion.SuggestedIssueID != "" && !visibleIssueIDs[suggestion.SuggestedIssueID] {
@@ -1938,6 +2158,7 @@ func filterBootstrapTeams(data *domain.Bootstrap, scope bootstrapTeamScope, gues
 		data.Releases[index].ProjectIDs = slices.DeleteFunc(data.Releases[index].ProjectIDs, func(id string) bool { return !visibleProjects[id] })
 		data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
 	}
+	FilterTeamScopedCollections(data, func(id string) bool { return teamRows[id] }, func(id string) bool { return allowed[id] })
 	for id := range data.ProjectUpdates {
 		if !visibleProjects[id] {
 			delete(data.ProjectUpdates, id)
@@ -2164,10 +2385,6 @@ func issuePermissionAllows(data domain.Bootstrap, issue domain.Issue, allowed, a
 	return false
 }
 
-func documentPermissionAllows(data *domain.Bootstrap, document domain.Document, allowed map[string]bool) bool {
-	return documentGrantAllows(data, document, allowed, true)
-}
-
 // documentGrantAllows reports whether one of the document's grants reaches
 // the viewer; workspace grants count only when workspace is true (the
 // viewer passes the document's inherited team scope).
@@ -2236,6 +2453,9 @@ func titleRole(value string) string {
 // a caller that only counts shared resources can project once per key
 // instead of once per member. Inactive members are left out.
 func (s *SQLiteStore) ViewerVisibilityKeys(ctx context.Context, workspace string) (map[string]string, error) {
+	if s.BoundedMetadataEnabled() {
+		return nil, fmt.Errorf("%w: ViewerVisibilityKeys requires BeginViewerVisibilityKeysRead", ErrBoundedMetadataCoverage)
+	}
 	data, ok := s.WorkspaceMetadataFields(workspace, "teams", "teamSettings")
 	if !ok {
 		return nil, ErrAuthForbidden

@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_chat_card_metadata.go",
+  "unmigrated": 0,
+  "consumers": {
+    "chatCardMetadata": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Composes the proven installed display reader and optional workflow closure, then transfers its output to the containing operation before any card action writes. Missing workspace keeps the zero metadata fallback; off mode does nothing and callers retain their literal accessors. Loading failures close the reader. SW53 actual enabled group/personal card table and Tier A SW54 validate this boundary without a new cache, lock or authority algorithm.",
+      "accessors": ["BeginChatDisplayRead", "LoadWorkflow"],
+      "temperature": "hot",
+      "temperatureReason": "Shared group and personal notification card rendering.",
+      "callers": ["server/server.chatGroupQuickControls", "server/server.chatPersonalIssueCard", "server/server.chatPersonalNotificationCard", "server/server.chatIssueCard"]
+    }
+  }
+}

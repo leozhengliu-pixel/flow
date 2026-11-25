@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"database/sql"
@@ -49,18 +50,20 @@ func oauthPolicyMetadata(ctx context.Context, tx metadataReader, workspace, lock
 // The legacy metadata writer replaces absent rows, so these targeted writes must
 // share its lock until both SQL and the immutable cache replacement are visible.
 func (s *SQLiteStore) oauthMetadataTransaction(ctx context.Context, workspace string, mutate func(*sqlTx, string, domain.Bootstrap) (domain.Bootstrap, error)) error {
+	if s.BoundedMetadataEnabled() {
+		return s.boundedOAuthMetadataTransaction(ctx, workspace, mutate)
+	}
 	apply := func() error {
-		s.lockWorkspaceWrites()
+		tx, err := s.lockWorkspaceWritesTx(ctx)
+		if err != nil {
+			return err
+		}
 		defer s.unlockWorkspaceWrites()
+		defer tx.Rollback()
 		current, ok := s.workspaces[workspace]
 		if !ok {
 			return ErrAuthForbidden
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
 		lock := ""
 		if s.dialect != "sqlite" {
 			lock = " FOR UPDATE"
@@ -104,6 +107,11 @@ func ensureOAuthMetadataShape(ctx context.Context, tx *sqlTx, workspace, field, 
 	if shapes[field] == shape {
 		return nil
 	}
+	if value := bytes.TrimSpace(root[field]); shapes[field] == "" && len(value) > 0 && !bytes.Equal(value, []byte("null")) &&
+		!bytes.Equal(value, []byte("[]")) && !bytes.Equal(value, []byte("{}")) {
+		// Entries kept inline would be replaced by an empty collection.
+		return ErrMetadataFieldInline
+	}
 	shapes[field] = shape
 	var err error
 	root[metadataCollectionsKey], err = json.Marshal(shapes)
@@ -119,6 +127,8 @@ func ensureOAuthMetadataShape(ctx context.Context, tx *sqlTx, workspace, field, 
 	if err != nil {
 		return err
 	}
+	// The root JSON is parsed in SQL, where PostgreSQL refuses \u0000.
+	raw = StripJSONNUL(raw)
 	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET data=? WHERE workspace_key=?`, raw, workspace)
 	return err
 }
@@ -213,7 +223,7 @@ func (s *SQLiteStore) CreateOAuthAuthorizationGrant(ctx context.Context, code st
 			text = "CAST(data AS CHAR)"
 		}
 		if s.dialect == "postgres" {
-			text = "convert_from(data,'UTF8')"
+			text = "flow_utf8(data)"
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='oauthAuthorizations' AND `+text+` LIKE ? ESCAPE '!' AND `+text+` LIKE ? ESCAPE '!' ORDER BY collection_order,record_key`+lock, grant.WorkspaceKey, labelReferencePattern(grant.ClientID), labelReferencePattern(grant.UserID))
 		if err != nil {
@@ -275,6 +285,9 @@ func (s *SQLiteStore) CreateOAuthAuthorizationGrant(ctx context.Context, code st
 		}
 		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, eventType, authorization.ID)
 		if err != nil {
+			return current, err
+		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "oauthAuthorizations", []string{"ID"}, authorization.ID); err != nil {
 			return current, err
 		}
 		if !slices.ContainsFunc(current.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool { return item.ID == authorization.ID }) {
@@ -349,9 +362,8 @@ func (s *SQLiteStore) RevokeOAuthAuthorizationRecords(ctx context.Context, works
 		// admins can revoke any member's (the reference app: "Owners and admins can
 		// revoke this connection at any time in Settings") and app installs.
 		if authorization.UserID != userID {
-			var role, status string
-			if err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, current.Workspace.ID, userID).Scan(&role, &status); err != nil || status != "active" || !isWorkspaceAdminRole(role) {
-				return current, ErrAuthForbidden
+			if err := activeWorkspaceAdminTx(ctx, tx, "", current.Workspace.ID, userID); err != nil {
+				return current, err
 			}
 		}
 		now := time.Now().UTC()
@@ -368,7 +380,7 @@ func (s *SQLiteStore) RevokeOAuthAuthorizationRecords(ctx context.Context, works
 			text = "CAST(data AS CHAR)"
 		}
 		if s.dialect == "postgres" {
-			text = "convert_from(data,'UTF8')"
+			text = "flow_utf8(data)"
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='apiKeys' AND `+text+` LIKE ? ESCAPE '!'`+lock, workspace, labelReferencePattern(id))
 		if err != nil {
@@ -409,6 +421,14 @@ func (s *SQLiteStore) RevokeOAuthAuthorizationRecords(ctx context.Context, works
 		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, "oauth_authorization.revoked", id)
 		if err != nil {
 			return current, err
+		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "oauthAuthorizations", []string{"ID"}, id); err != nil {
+			return current, err
+		}
+		if len(keys) > 0 {
+			if err := oauthMetadataSelect(ctx, tx, &current, "apiKeys", []string{"ID"}, slices.Collect(maps.Keys(keys))...); err != nil {
+				return current, err
+			}
 		}
 		current.OAuthAuthorizations = slices.Clone(current.OAuthAuthorizations)
 		for i := range current.OAuthAuthorizations {
@@ -474,6 +494,9 @@ func (s *SQLiteStore) RevokeOAuthAccessToken(ctx context.Context, secretHash str
 		}
 		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, "oauth_token.revoked", id)
 		if err != nil {
+			return current, err
+		}
+		if err := oauthMetadataSelect(ctx, tx, &current, "apiKeys", []string{"ID"}, id); err != nil {
 			return current, err
 		}
 		current.APIKeys = slices.Clone(current.APIKeys)

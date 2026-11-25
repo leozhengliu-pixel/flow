@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Workspace-level Loops settings: trusted sources and external triggers live
@@ -78,7 +79,21 @@ func (s *server) loopConfig(data domain.Bootstrap) loopConfigResponse {
 }
 
 func (s *server) getLoopConfig(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	if s.store.BoundedMetadataEnabled() {
+		s.getLoopConfigWithStore(w, r, s.store)
+		return
+	}
+	s.withColdMetadataRequest(w, r, "server/loop_settings.go:getLoopConfig", "", func(repo *store.SQLiteStore, request *http.Request) {
+		s.getLoopConfigWithStore(w, request, repo)
+	})
+}
+
+func (s *server) getLoopConfigWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore) {
+	data, ok, err := repo.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{Fields: []string{"workspaceSettings", "members", "integrationConnections"}})
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -120,6 +135,16 @@ func validTrustedSourcesMode(mode string) bool {
 }
 
 func (s *server) updateLoopSettings(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.updateLoopSettingsWithStore(w, r, s.store)
+		return
+	}
+	s.withColdMetadataRequest(w, r, "server/loop_settings.go:updateLoopSettings", "workspace_preferences.updated", func(repo *store.SQLiteStore, request *http.Request) {
+		s.updateLoopSettingsWithStore(w, request, repo)
+	})
+}
+
+func (s *server) updateLoopSettingsWithStore(w http.ResponseWriter, r *http.Request, repo *store.SQLiteStore) {
 	var input loopSettingsInput
 	if !decodeJSON(w, r, &input) {
 		return
@@ -137,7 +162,7 @@ func (s *server) updateLoopSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var updated domain.Bootstrap
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workspace_preferences.updated", "workspace", input, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "workspace_preferences.updated", "workspace", input, store.MetadataRecordScope{Fields: []string{"workspaceSettings", "members", "integrationConnections"}}, func(data *domain.Bootstrap) error {
 		settings := &data.WorkspaceSettings
 		if input.ExternalLoopTriggers != nil {
 			settings.ExternalLoopTriggers = *input.ExternalLoopTriggers

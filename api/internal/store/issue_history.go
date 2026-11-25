@@ -2,12 +2,52 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"slices"
 
 	"flow/api/internal/domain"
 )
+
+// loadIssueHistoryHead performs two bounded per-issue index lookups. The
+// caller invokes it lazily when an activity is appended, so a mutation that
+// edits one issue never scans its unrelated siblings.
+func loadIssueHistoryHead(ctx context.Context, tx *sqlTx, workspace, issueID string) (domain.ActivityHistorySnapshot, error) {
+	var snapshot domain.ActivityHistorySnapshot
+	var raw []byte
+	err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='activity' AND resource_id=? ORDER BY created_at DESC,id DESC LIMIT 1`, workspace, issueID).Scan(&raw)
+	if err == nil {
+		var event domain.ActivityEvent
+		if err := json.Unmarshal(raw, &event); err != nil {
+			return snapshot, err
+		}
+		snapshot.Activity = &event
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return snapshot, err
+	}
+	raw = nil
+	err = tx.QueryRowContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='comment' AND resource_id=? ORDER BY created_at DESC,id DESC LIMIT 1`, workspace, issueID).Scan(&raw)
+	if err == nil {
+		var comment domain.Comment
+		if err := json.Unmarshal(raw, &comment); err != nil {
+			return snapshot, err
+		}
+		snapshot.Comment = &comment
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return snapshot, err
+	}
+	return snapshot, nil
+}
+
+func deleteIssueActivity(ctx context.Context, tx *sqlTx, workspace, resource, id string) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM issue_activity_cycles WHERE workspace_key=? AND activity_id=?`, workspace, id); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM workspace_content_records WHERE workspace_key=? AND kind='activity' AND resource_id=? AND id=?`, workspace, resource, id)
+	return err
+}
 
 type IssueHistory struct {
 	Comments         []domain.Comment       `json:"comments"`

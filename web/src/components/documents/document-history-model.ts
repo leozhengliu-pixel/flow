@@ -43,7 +43,7 @@ export function buildHistoryEntries(document: Pick<FlowDocument, 'title' | 'cont
   // Only the newest revision can be the snapshot of the live document. An older revision with the same text is a real
   // earlier version (the pre-edit baseline after it was restored, or a revert) and stays listed.
   const previous = revisions
-    .filter((revision, index) => !(index === 0 && revision.title === document.title && (revision.content ?? '') === (document.content ?? '')))
+    .filter((revision, index) => !revision._current && !(index === 0 && !revision._bodyOmitted && revision.title === document.title && (revision.content ?? '') === (document.content ?? '')))
     .map((revision: DocumentRevision): HistoryEntry => ({
       id: revision.id,
       current: false,

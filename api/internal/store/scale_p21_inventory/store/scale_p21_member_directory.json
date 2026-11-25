@@ -1,0 +1,22 @@
+{
+  "source": "store/scale_p21_member_directory.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginMemberDirectoryRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared scalar producer for profile-observed teamMemberNames.",
+      "reason": "Pins exact installed source and projects only User ID/Name/DisplayName/Email and Team ID/Name/Key in original order, preserving duplicate last-wins map semantics and physical/default lookup. Independently admitted detached maps survive through Close. Membership overlay stages ordered complete auth scalar rows and validates every app installation with fixed-chunk typed projection; any SQL/installation decoding failure discards the entire overlay. Global installed OAuth ClientID/name matches retain each application's original slice precedence. HotMemberDirectory tests cover native NUL/invalid UTF-8, large ignored payloads, selected scalar budgets, malformed unrelated app all-or-none fallback, duplicate app names, pool-one SQL and released admission."
+    },
+    "memberDirectoryOAuthSources": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["resident-state"],
+      "temperature": "hot",
+      "temperatureReason": "Application display-name overlay for the shared bounded member directory.",
+      "reason": "Captures retained logical sources across the complete installed workspace registry under the same registry/residency locks, preserving global OAuthApplication name lookup rather than narrowing to the installation home. Only matched ClientID/name scalars materialize; descriptors and detached names have independent work admission. No complete application, team-access graph or unrelated body enters output."
+    }
+  }
+}

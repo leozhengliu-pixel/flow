@@ -436,6 +436,9 @@ export function ProjectIssues({
         groupLabel: label.groupId
           ? labelGroupNames.get(label.groupId)
           : undefined,
+        groupColor: label.groupId
+          ? labelGroups.find((group) => group.id === label.groupId)?.color
+          : undefined,
       })),
       project: [
         { id: "", label: "No project", kind: "project" as const },
@@ -447,7 +450,7 @@ export function ProjectIssues({
         })),
       ],
     }),
-    [allStates, cycles, labelGroupNames, labels, projects, users],
+    [allStates, cycles, labelGroupNames, labelGroups, labels, projects, users],
   );
   const changeProperty = async (
     row: MyIssuesRowData,

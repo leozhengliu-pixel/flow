@@ -1,0 +1,20 @@
+{
+  "source": "server/scale_p15_heap.go",
+  "unmigrated": 0,
+  "consumers": {
+    "hydratedLegacySnapshotReservation": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Own bounded branch: the bounded issue bootstrap uses its route read gate and store work reservations in place of the fixed legacy allowance. Other bounded downloads return HydratedSnapshotReservationMaxBytes. Both answers avoid the store lock and workspace read. SW272 pins the download and shared projection budget references and the flag-off-only store accessor. SW274 compares the estimates and checks concurrent paged admission.",
+      "accessors": [
+        "WorkspaceReadSnapshotReservation"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "callers": [
+        "server/server.signedFileURLs",
+        "server/server.newHandler"
+      ]
+    }
+  }
+}

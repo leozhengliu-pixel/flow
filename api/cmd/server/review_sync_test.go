@@ -27,7 +27,13 @@ import (
 func TestMain(m *testing.M) {
 	// Background review syncs never run in tests unless a test asks for them.
 	reviewSyncRunner = func(func()) {}
-	os.Exit(m.Run())
+	code := m.Run()
+	comparisons, differences := store.NarrowMutationVerificationCounts()
+	fmt.Fprintf(os.Stderr, "P04 verification callbacks=%d mismatches=%d\n", comparisons, differences)
+	if differences != 0 {
+		code = 1
+	}
+	os.Exit(code)
 }
 
 type recordedReviewRequest struct {

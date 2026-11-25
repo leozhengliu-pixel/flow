@@ -1,0 +1,667 @@
+package store
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"reflect"
+	"slices"
+	"strings"
+
+	"flow/api/internal/domain"
+)
+
+type metadataLogicalRecordPatch struct {
+	key metadataRecordKey
+	raw []byte
+}
+
+type metadataLogicalPatchedCollection struct {
+	base  metadataAggregateNode
+	shape metadataLogicalNode
+	key   string
+	value metadataAggregateNode
+}
+
+func (n metadataLogicalPatchedCollection) nodeType() reflect.Type           { return n.base.nodeType() }
+func (n metadataLogicalPatchedCollection) logicalBase() metadataLogicalNode { return n.shape }
+func (n metadataLogicalPatchedCollection) nodeValue(ctx context.Context, limit int) (reflect.Value, error) {
+	return metadataAggregateMaterializeChildren(ctx, n, limit)
+}
+func metadataLogicalMapEntries(ctx context.Context, node metadataAggregateNode, visit func(metadataAggregateNode, metadataAggregateNode) error) error {
+	if stored, ok := node.(metadataAggregateStoredNode); ok {
+		return stored.value.MapEntries(ctx, func(key, value metadataLogicalNode) error {
+			return visit(metadataAggregateStoredNode{key}, metadataAggregateStoredNode{value})
+		})
+	}
+	if mapped, ok := node.(metadataLogicalTransformMap); ok {
+		return mapped.logicalMapEntries(ctx, visit)
+	}
+	return ErrMetadataRecordQuery
+}
+func (n metadataLogicalPatchedCollection) logicalMapEntries(ctx context.Context, visit func(metadataAggregateNode, metadataAggregateNode) error) error {
+	found := false
+	if err := metadataLogicalMapEntries(ctx, n.base, func(key, value metadataAggregateNode) error {
+		match, err := metadataAggregateStringEqual(ctx, key, n.key)
+		if err != nil {
+			return err
+		}
+		if match {
+			found = true
+			if n.value == nil {
+				return nil
+			}
+			value = n.value
+		}
+		return visit(key, value)
+	}); err != nil {
+		return err
+	}
+	if !found && n.value != nil {
+		return visit(metadataAggregateNativeNode{reflect.ValueOf(n.key).Convert(n.nodeType().Key())}, n.value)
+	}
+	return nil
+}
+func (n metadataLogicalPatchedCollection) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
+	if n.nodeType().Kind() == reflect.Map {
+		return n.logicalMapEntries(ctx, func(key, value metadataAggregateNode) error {
+			decoded, err := key.nodeValue(ctx, MetadataRecordPageMaxBytes)
+			if err != nil {
+				return err
+			}
+			return visit(decoded, value)
+		})
+	}
+	found, ordinal := false, 0
+	id, _ := n.nodeType().Elem().FieldByName("ID")
+	if err := n.base.nodeChildren(ctx, func(_ reflect.Value, value metadataAggregateNode) error {
+		if !found {
+			idNode, err := metadataAggregateIDNode(ctx, value, id.Index)
+			if err != nil {
+				return err
+			}
+			match, err := metadataAggregateStringEqual(ctx, idNode, n.key)
+			if err != nil {
+				return err
+			}
+			if match {
+				found = true
+				if n.value == nil {
+					return nil
+				}
+				value = n.value
+			}
+		}
+		err := visit(reflect.ValueOf(ordinal), value)
+		ordinal++
+		return err
+	}); err != nil {
+		return err
+	}
+	if !found && n.value != nil {
+		return visit(reflect.ValueOf(ordinal), n.value)
+	}
+	return nil
+}
+
+type metadataLogicalRetainedRecord struct {
+	fresh metadataLogicalNode
+	keep  map[string]metadataAggregateNode
+}
+
+func (n metadataLogicalRetainedRecord) nodeType() reflect.Type { return n.fresh.typ }
+func (n metadataLogicalRetainedRecord) nodeValue(ctx context.Context, limit int) (reflect.Value, error) {
+	return metadataAggregateMaterializeChildren(ctx, n, limit)
+}
+func (n metadataLogicalRetainedRecord) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
+	return n.fresh.Children(ctx, func(key reflect.Value, value metadataLogicalNode) error {
+		child := metadataAggregateNode(metadataAggregateStoredNode{value})
+		if old, held := n.keep[key.String()]; held {
+			child = old
+		}
+		return visit(key, child)
+	})
+}
+
+func metadataLogicalFirstRecord(ctx context.Context, collection metadataAggregateNode, key string) (metadataAggregateNode, error) {
+	var result metadataAggregateNode
+	var err error
+	if collection.nodeType().Kind() == reflect.Map {
+		err = metadataLogicalMapEntries(ctx, collection, func(id, value metadataAggregateNode) error {
+			match, err := metadataAggregateStringEqual(ctx, id, key)
+			if err != nil {
+				return err
+			}
+			if match {
+				result = value
+				return errMetadataAggregateStop
+			}
+			return nil
+		})
+	} else {
+		id, _ := collection.nodeType().Elem().FieldByName("ID")
+		err = collection.nodeChildren(ctx, func(_ reflect.Value, value metadataAggregateNode) error {
+			child, err := metadataAggregateIDNode(ctx, value, id.Index)
+			if err != nil {
+				return err
+			}
+			match, err := metadataAggregateStringEqual(ctx, child, key)
+			if err != nil {
+				return err
+			}
+			if match {
+				result = value
+				return errMetadataAggregateStop
+			}
+			return nil
+		})
+	}
+	if errors.Is(err, errMetadataAggregateStop) {
+		err = nil
+	}
+	return result, err
+}
+
+func metadataLogicalRetryRecord(ctx context.Context, builder *metadataLogicalBuilder, field string, kind reflect.Type, raw []byte, old metadataAggregateNode, owned ...*metadataLogicalLargeRetry) (metadataAggregateNode, error) {
+	if len(owned) > 1 {
+		return nil, ErrMetadataRecordQuery
+	}
+	if len(owned) == 1 && owned[0] != nil && metadataLogicalLargeRetryField(field) &&
+		raw != nil {
+		fresh, err := owned[0].capturePart(ctx, field, legacySessionJSONPart{bytes.NewReader(raw), 0, int64(len(raw))})
+		if err != nil {
+			return nil, err
+		}
+		return metadataLogicalRetryFramedRecord(ctx, fresh, kind, old)
+	}
+	return metadataLogicalRetryRecordLimit(ctx, builder, field, kind, raw, old, 2<<20, false)
+}
+
+// metadataLogicalRetryRecordLimit is the typed byte-row refresh with the
+// resolved-record cap of its caller's admission; admitted callers have
+// already admitted the complete marker expansion.
+func metadataLogicalRetryRecordLimit(ctx context.Context, builder *metadataLogicalBuilder, field string, kind reflect.Type, raw []byte, old metadataAggregateNode, limit int, admitted bool) (metadataAggregateNode, error) {
+	// The existing marker resolver only expands current-document references.
+	// Reuse its audited realtime preflight before that bounded expansion.
+	if !admitted && (field == "documents" || field == "trash") && bytes.Contains(raw, documentMarkerBytes) {
+		document := raw
+		if field == "trash" {
+			var entry struct {
+				Payload json.RawMessage `json:"payload"`
+			}
+			if err := json.Unmarshal(raw, &entry); err != nil {
+				return nil, err
+			}
+			document = entry.Payload
+		}
+		if _, err := DecodeRealtimeDocument(document); err != nil {
+			return nil, err
+		}
+	}
+	resolved, err := resolveDocumentMarkers(field, raw)
+	if err != nil {
+		return nil, err
+	}
+	if len(resolved) > limit {
+		return nil, ErrMetadataPageBudget
+	}
+	record, err := decodeMetadataRecord(kind, resolved, reflect.Value{})
+	if err != nil {
+		return nil, err
+	}
+	keep, err := metadataLogicalRetryKeep(ctx, field, kind, record, old)
+	if err != nil {
+		return nil, err
+	}
+	if err := builder.auditJSONLocations(record); err != nil {
+		return nil, err
+	}
+	fresh, err := builder.writeValue(record, 0, false)
+	if err != nil {
+		return nil, err
+	}
+	if len(keep) == 0 {
+		return metadataAggregateStoredNode{fresh}, nil
+	}
+	return metadataLogicalRetainedRecord{fresh, keep}, nil
+}
+
+// metadataLogicalRetryKeep retains the old record's private inputs (json:"-"
+// fields, and an import's rows or a migration's bundle the stored row omits)
+// and clears them in the decoded record.
+func metadataLogicalRetryKeep(ctx context.Context, field string, kind reflect.Type, record reflect.Value, old metadataAggregateNode) (map[string]metadataAggregateNode, error) {
+	keep := map[string]metadataAggregateNode{}
+	if old != nil && kind.Kind() == reflect.Struct {
+		if err := old.nodeChildren(ctx, func(key reflect.Value, value metadataAggregateNode) error {
+			info, exists := kind.FieldByName(key.String())
+			if !exists || info.PkgPath != "" {
+				return nil
+			}
+			retain := info.Tag.Get("json") == "-"
+			retain = retain || field == "importJobs" && info.Name == "Rows" && record.Field(info.Index[0]).IsNil()
+			retain = retain || field == "migrationJobs" && info.Name == "Bundle" && record.Field(info.Index[0]).IsNil()
+			if retain {
+				keep[info.Name] = value
+				record.Field(info.Index[0]).SetZero()
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return keep, nil
+}
+
+// Replacements use the old collection's first-occurrence/set/remove/append
+// rules. Untouched frames and private/input subtrees are never JSON encoded.
+func metadataLogicalPatchRecords(ctx context.Context, source *metadataLogicalSource, patches []metadataLogicalRecordPatch, owned ...*metadataLogicalLargeRetry) (*metadataLogicalSource, error) {
+	return metadataLogicalPatchRecordsWith(ctx, source, patches, nil, owned...)
+}
+
+// metadataLogicalPatchRecordsWith also replaces the records of generic, the
+// streamed canonical rows of other fields above the page-sized batch (their
+// patch raw is nil); see largeRowRefresh.
+func metadataLogicalPatchRecordsWith(ctx context.Context, source *metadataLogicalSource, patches []metadataLogicalRecordPatch, generic map[metadataRecordKey]*largeRowRefresh, owned ...*metadataLogicalLargeRetry) (*metadataLogicalSource, error) {
+	if len(patches) == 0 {
+		return source, source.Retain()
+	}
+	if len(patches) > MetadataRecordBatchMaxKeys {
+		return nil, ErrMetadataPageBudget
+	}
+	if len(owned) > 1 {
+		return nil, ErrMetadataRecordQuery
+	}
+	var large *metadataLogicalLargeRetry
+	if len(owned) == 1 {
+		large = owned[0]
+	}
+	if large != nil {
+		if err := large.check(ctx); err != nil {
+			return nil, err
+		}
+	}
+	bytes := 0
+	for _, patch := range patches {
+		bytes += len(patch.key.key)
+		if large == nil || !metadataLogicalLargeRetryField(patch.key.field) {
+			bytes += len(patch.raw)
+		}
+	}
+	if bytes > MetadataRecordPageMaxBytes {
+		return nil, ErrMetadataPageBudget
+	}
+	fresh, err := newMetadataLogicalBuilder(metadataLogicalSourceScratchContext(ctx, source))
+	if err != nil {
+		return nil, err
+	}
+	defer fresh.Close()
+	return source.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
+		current := metadataAggregateNode(metadataAggregateStoredNode{node})
+		var changes []metadataLogicalRecordPatch
+		for _, patch := range patches {
+			if patch.key.field == name {
+				changes = append(changes, patch)
+			}
+		}
+		if len(changes) == 0 {
+			return current, false, nil
+		}
+		_, kind, ok := metadataRecordType(name)
+		if !ok {
+			return current, false, nil
+		}
+		shape := node
+		if node.typ.Kind() == reflect.Map {
+			shape, err = fresh.writeValue(reflect.MakeMap(node.typ), 0, false)
+			if err != nil {
+				return nil, false, err
+			}
+		}
+		for _, patch := range changes {
+			var replacement metadataAggregateNode
+			var framed metadataLogicalNode
+			framedPresent := false
+			if large != nil {
+				framed, framedPresent = large.rows[patch.key]
+			}
+			row := generic[patch.key]
+			if row != nil || !framedPresent && patch.raw != nil || framedPresent && framed.typ != nil {
+				old, err := metadataLogicalFirstRecord(ctx, current, patch.key.key)
+				if err != nil {
+					return nil, false, err
+				}
+				if row != nil {
+					replacement, err = metadataLogicalRetryLargeRecord(ctx, fresh, name, kind, row, old)
+				} else if framedPresent {
+					replacement, err = metadataLogicalRetryFramedRecord(ctx, framed, kind, old)
+				} else {
+					replacement, err = metadataLogicalRetryRecord(ctx, fresh, name, kind, patch.raw, old, large)
+				}
+				if err != nil {
+					return nil, false, err
+				}
+			}
+			current = metadataLogicalPatchedCollection{current, shape, patch.key.key, replacement}
+		}
+		return current, true, nil
+	})
+}
+
+func (s *SQLiteStore) refreshConflictedLogicalMetadata(ctx context.Context, workspace string) func(error) error {
+	return func(conflict error) error {
+		keys, ok := conflictedMetadataKeys(conflict)
+		if !ok {
+			return nil
+		}
+		if len(keys) > MetadataRecordBatchMaxKeys {
+			return ErrMetadataPageBudget
+		}
+		retryCtx := trackMetadataWorkDemand(metadataLogicalUnpinnedContext(ctx))
+		ctx, release, err := s.tryAdmitAdditionalMetadataWork(retryCtx, 32<<20)
+		if err != nil {
+			return err
+		}
+		defer release()
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
+		source, err := s.retainMetadataLogicalSource(ctx, workspace)
+		if err != nil {
+			return err
+		}
+		defer source.Release()
+		byField := map[string][]string{}
+		weight := 0
+		for _, key := range keys {
+			weight += len(key.key)
+			if _, _, ok := metadataRecordType(key.field); ok {
+				byField[key.field] = append(byField[key.field], key.key)
+			}
+		}
+		if weight > MetadataRecordPageMaxBytes {
+			return ErrMetadataPageBudget
+		}
+		loaded := map[metadataRecordKey][]byte{}
+		// seen holds the small rows read (any field) for the evidence below.
+		seen := map[metadataRecordKey][]byte{}
+		var large *metadataLogicalLargeRetry
+		defer func() {
+			if large != nil {
+				large.Close()
+			}
+		}()
+		var genericKeys []metadataRecordKey
+		generic := map[metadataRecordKey]*largeRowRefresh{}
+		defer func() {
+			for _, row := range generic {
+				row.spool.Close()
+			}
+		}()
+		ensureLarge := func() error {
+			if large != nil {
+				return nil
+			}
+			var err error
+			large, err = newMetadataLogicalLargeRetry(ctx, s, source)
+			return err
+		}
+		for field, ids := range byField {
+			fallback := false
+			var fieldRaw map[string][]byte
+			if metadataLogicalLargeRetryField(field) {
+				fieldRaw = map[string][]byte{}
+			}
+			clause, args := bindList("record_key", ids)
+			length := "LENGTH(data)"
+			if metadataLogicalLargeRetryField(field) {
+				// A supported SQLite TEXT row may contain multi-byte UTF-8.
+				// Cap actual bytes before SQL Scan can allocate its payload.
+				length = (&ResourceRead{store: s}).byteLength("data")
+			}
+			rows, err := s.db.QueryContext(ctx, `SELECT record_key,`+length+`,CASE WHEN `+length+`<=? THEN data ELSE NULL END FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause,
+				append([]any{MetadataRecordPageMaxBytes, workspace, field}, args...)...)
+			if err != nil {
+				return err
+			}
+			for rows.Next() {
+				var key string
+				var size int
+				var raw []byte
+				if err := rows.Scan(&key, &size, &raw); err != nil {
+					rows.Close()
+					return err
+				}
+				if !slices.Contains(ids, key) {
+					continue
+				}
+				if metadataLogicalLargeRetryField(field) &&
+					(raw == nil || size > MetadataRecordPageMaxBytes) {
+					fallback = true
+					continue
+				}
+				if raw == nil || size > MetadataRecordPageMaxBytes ||
+					!metadataLogicalLargeRetryField(field) && weight+len(raw) > MetadataRecordPageMaxBytes {
+					// Other fields' rows above the page-sized batch (or its
+					// remaining allowance) are streamed and framed apart.
+					genericKeys = append(genericKeys, metadataRecordKey{field, key})
+					continue
+				}
+				if metadataLogicalLargeRetryField(field) {
+					// Keep the original SELECT's last native-key receipt.
+					// Decode only after we know this entire field will use
+					// that generation rather than a fallback snapshot.
+					fieldRaw[key] = raw
+					seen[metadataRecordKey{field, key}] = raw
+					continue
+				}
+				weight += len(raw)
+				loaded[metadataRecordKey{field, key}] = raw
+				seen[metadataRecordKey{field, key}] = raw
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return err
+			}
+			if fallback {
+				fieldRaw = nil
+				for _, id := range ids {
+					delete(seen, metadataRecordKey{field, id})
+				}
+				if err := ensureLarge(); err != nil {
+					return err
+				}
+				if err := large.captureField(ctx, workspace, field, ids); err != nil {
+					return err
+				}
+			} else if len(fieldRaw) != 0 {
+				if err := ensureLarge(); err != nil {
+					return err
+				}
+				for _, id := range ids {
+					if raw, found := fieldRaw[id]; found {
+						if err := large.captureRaw(ctx, metadataRecordKey{field, id}, raw); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+		for _, key := range genericKeys {
+			row, found, err := s.readLargeRowRefresh(ctx, workspace, key)
+			if err != nil {
+				return err
+			}
+			if found {
+				row.store = s
+				generic[key] = row
+			}
+		}
+		var patches []metadataLogicalRecordPatch
+		for _, key := range keys {
+			if _, _, ok := metadataRecordType(key.field); ok {
+				patches = append(patches, metadataLogicalRecordPatch{key, loaded[key]})
+			}
+		}
+		var candidate *metadataLogicalSource
+		if len(patches) == 0 {
+			candidate, err = source.Transform(ctx, func(_ string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
+				return metadataAggregateStoredNode{node}, false, nil
+			})
+		} else {
+			candidate, err = metadataLogicalPatchRecordsWith(ctx, source, patches, generic, large)
+		}
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if candidate != nil {
+				candidate.Release()
+			}
+		}()
+		stamp := copyStamp{workspaceID: source.Stamp().workspaceID, revision: -1}
+		if err := candidate.setStamp(stamp); err != nil {
+			return err
+		}
+		// Only the conflicted records are refreshed: the rest of a peer's
+		// commit would still be missing (installedGenerationBehind). A
+		// conflict whose rows SQL holds exactly as this generation stores
+		// its own records is no evidence of a peer: the installed record
+		// differs from its row only by what persisting drops (NUL, the
+		// references of bodies that are loaded), as after any write of this
+		// server. Rows that are missing, too large to compare here, or not
+		// that stored form are evidence.
+		behind, err := s.conflictedRowsShowPeer(ctx, workspace, source, patches, seen)
+		if err != nil {
+			return err
+		}
+		candidate.behind.Store(behind)
+		policy, cost, err := s.metadataLogicalPolicy(ctx, candidate)
+		if err != nil {
+			return err
+		}
+		if err := s.installResidentPolicy(workspace, policy, stamp, 0, cost, candidate); err != nil {
+			return err
+		}
+		candidate = nil
+		return nil
+	}
+}
+
+// conflictedRowsShowPeer reports whether the conflicted rows just read are
+// evidence that another server wrote: the image was already behind, a key has
+// a NUL on PostgreSQL (the literal refresh drops it), a row is missing or was
+// not read as a small row, or it is not exactly the stored form of the
+// installed record.
+func (s *SQLiteStore) conflictedRowsShowPeer(ctx context.Context, workspace string, source *metadataLogicalSource, patches []metadataLogicalRecordPatch, seen map[metadataRecordKey][]byte) (bool, error) {
+	if source.behind.Load() {
+		return true, nil
+	}
+	if len(patches) == 0 {
+		return false, nil
+	}
+	owner := &ResourceRead{store: s}
+	defer owner.Close()
+	for _, patch := range patches {
+		key := patch.key
+		if s.dialect == "postgres" && strings.IndexByte(key.key, 0) >= 0 {
+			return true, nil
+		}
+		raw, found := seen[key]
+		if !found {
+			return true, nil
+		}
+		if err := owner.reserve(ctx, uint64(len(raw))*8+4096); err != nil {
+			return false, err
+		}
+		stored, err := func() (bool, error) {
+			spool, err := newMetadataLogicalRecordSpool(ctx)
+			if err != nil {
+				return false, err
+			}
+			defer spool.Close()
+			if _, err := spool.Write(raw); err != nil {
+				return false, err
+			}
+			return legacySessionInstalledRowStored(ctx, owner, nil, workspace, source, key.field, key.key, spool)
+		}()
+		if err != nil {
+			if ctx.Err() != nil {
+				return false, ctx.Err()
+			}
+			stored = false
+		}
+		if !stored {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func metadataLogicalMergedPostimage(ctx context.Context, source *metadataLogicalSource, changes []metadataRecordChange) (*metadataLogicalSource, error) {
+	var patches []metadataLogicalRecordPatch
+	for _, change := range changes {
+		if change.skipped {
+			patches = append(patches, metadataLogicalRecordPatch{key: metadataRecordKey{change.field, change.key}})
+		} else if change.merged && !change.drop {
+			patches = append(patches, metadataLogicalRecordPatch{metadataRecordKey{change.field, change.key}, change.raw})
+		}
+	}
+	return metadataLogicalPatchRecords(ctx, source, patches)
+}
+
+// The legacy delta writer may merge or delete records in complete fields.
+// Its target owns the callback's native values plus fresh standard-JSON
+// decodes. Existing location receipts cover the former; the latter are audited
+// before their typed values are framed. No native value is JSON round-tripped.
+// The preceding candidate.Fork already validated every callback-native value,
+// so only fresh canonical decoded Locations can require additional receipts.
+func metadataLogicalCompletePostimage(ctx context.Context, source *metadataLogicalSource, before, after domain.Bootstrap, scope MetadataRecordScope) (*metadataLogicalSource, error) {
+	left, right := reflect.ValueOf(before), reflect.ValueOf(after)
+	var fields []string
+	for _, name := range append(slices.Clone(scope.Fields), "viewer") {
+		index, _, ok := metadataLogicalField(name)
+		if ok && !metadataValueEqual(left.Field(index), right.Field(index)) {
+			fields = append(fields, name)
+		}
+	}
+	return metadataLogicalReplaceFields(ctx, source, after, fields)
+}
+
+func metadataLogicalReplaceFields(ctx context.Context, source *metadataLogicalSource, data domain.Bootstrap, fields []string) (*metadataLogicalSource, error) {
+	right := reflect.ValueOf(data)
+	var builders []*metadataLogicalBuilder
+	defer func() {
+		for _, builder := range builders {
+			builder.Close()
+		}
+	}()
+	return source.Transform(ctx, func(name string, original metadataLogicalNode) (metadataAggregateNode, bool, error) {
+		index, _, ok := metadataLogicalField(name)
+		if !ok || !slices.Contains(fields, name) {
+			return metadataAggregateStoredNode{original}, false, nil
+		}
+		builder, err := newMetadataLogicalBuilder(metadataLogicalSourceScratchContext(ctx, source))
+		if err != nil {
+			return nil, false, err
+		}
+		builders = append(builders, builder)
+		builder.storage.types = slices.Clone(original.source.types)
+		builder.storage.times = slices.Clone(original.source.times)
+		if err := builder.inheritLocations(original.source); err != nil {
+			return nil, false, err
+		}
+		if err := builder.inheritTimestampInputs(ctx); err != nil {
+			return nil, false, err
+		}
+		value := right.Field(index)
+		if err := builder.auditJSONLocations(value); err != nil {
+			return nil, false, err
+		}
+		node, err := builder.writeValue(value, 0, false)
+		if err != nil {
+			return nil, false, err
+		}
+		return metadataAggregateStoredNode{node}, true, nil
+	})
+}

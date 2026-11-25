@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p21_agent_session_lifecycle.go",
+  "unmigrated": 0,
+  "consumers": {
+    "sweepAgentLiveWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["WorkspaceMetadataFields", "MutateWorkspace", "Bootstrap", "BeginAgentSessionRead"],
+      "temperature": "hot",
+      "temperatureReason": "Per-workspace stage of the always-started abandoned in-process reply sweeper.",
+      "callers": ["server/sweepAgentLiveReplies"],
+      "reason": "Uses the exact header probe and proven native occurrence writer. Off mode retains the original fields accessor, ordered loop and mutate callback; bounded mode retains header loans through synchronous decisions and gives each write an independent owner. Callback ignores owner/deletion and continues past duplicate sessions until the first changing occurrence, without hydrating transcript bodies. SW198 proves exact root, row, event and output effects, including two original events for duplicate-session sweeps, the principal/key matrix, warm and actual SQL-loaded sources, cancellation and large split/inline transcript success. Normal, persistent SQLite repeats and server/store race proofs pass."
+    }
+  }
+}

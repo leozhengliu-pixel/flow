@@ -2,10 +2,15 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"log"
+	"net/http"
 	"strconv"
 	"sync"
 	"time"
+
+	"flow/api/internal/store"
 )
 
 // Read-after-write across servers.
@@ -16,18 +21,26 @@ import (
 // right after the change was committed elsewhere used to see the old copy
 // (a workspace created a moment ago was "not found", a new team "invalid").
 //
-// With Redis coordination every state change bumps a per-workspace version
-// in Redis before its event goes out (so before the writer's response). A
-// request names its workspace; when Redis holds a newer version than this
-// server has applied, or the workspace is not loaded here at all, the server
-// reloads it from the database before authorizing the request. Concurrent
-// requests share one reload.
+// SQL revisions, authorization epochs and durable heads are authoritative in
+// shadow/on mode. Redis only wakes the consumer. Requests wait for a shared
+// install when the copy is behind, and return an error if freshness cannot be
+// established. Off retains the Redis version/reload flow, with the same error
+// handling and shared background reload lifetime.
 
 type workspaceVersions struct {
 	mu      sync.Mutex
 	applied map[string]int64
-	loading map[string]chan struct{}
+	loading map[string]*workspaceReload
 }
+
+type workspaceReload struct {
+	done    chan struct{}
+	started time.Time
+	err     error
+}
+
+var diagnoseWorkspaceRefusal func(*server, *http.Request, string, error, time.Duration)
+var diagnoseWorkspaceReload func(time.Time, time.Duration, store.WorkspaceReloadTrace, error)
 
 // advanceOwn records this server's own change n when it already held every
 // earlier one (its copy then includes n); otherwise a request reloads.
@@ -91,19 +104,50 @@ func (s *server) sharedWorkspaceVersion(ctx context.Context, workspace string) (
 
 // ensureCurrentWorkspace makes this server's copy of the workspace include
 // every change committed by any server before the call (see above).
-func (s *server) ensureCurrentWorkspace(ctx context.Context, workspace string) {
+func (s *server) ensureCurrentWorkspace(ctx context.Context, workspace string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if s.coordinator == nil || workspace == "" {
-		return
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
+	if s.recordPeerSyncMode() != "off" {
+		for {
+			state, err := s.store.WorkspacePeerState(ctx, workspace)
+			if err != nil {
+				return err
+			}
+			if state.Current {
+				return nil
+			}
+			current, err := s.waitForPeerRefresh(ctx, workspace)
+			if err != nil {
+				return err
+			}
+			if current {
+				return nil
+			}
+		}
+	}
 	shared, err := s.sharedWorkspaceVersion(ctx, workspace)
 	if err != nil {
-		// Redis is unavailable: only a workspace missing here is loaded.
+		// Preserve the legacy Redis outage path: load only missing workspaces.
 		shared = 0
 	}
 	present := s.store.HasWorkspace(workspace)
 	applied := s.workspaceVersions.current(workspace)
+	if present && shared > applied {
+		// A bounded writer can install the exact generation before the
+		// legacy Redis version counter is observed here. Confirm that
+		// installed state against SQL before accepting it as fresh.
+		state, stateErr := s.store.WorkspacePeerState(ctx, workspace)
+		if stateErr == nil && state.Current {
+			s.workspaceVersions.record(workspace, shared)
+			return nil
+		}
+	}
 	if present && shared <= applied {
 		if shared < applied && err == nil {
 			// Redis lost the counter (flushed or replaced): start over from it.
@@ -111,41 +155,134 @@ func (s *server) ensureCurrentWorkspace(ctx context.Context, workspace string) {
 			s.workspaceVersions.applied[workspace] = shared
 			s.workspaceVersions.mu.Unlock()
 		}
-		return
+		return nil
 	}
-	s.reloadWorkspaceTo(ctx, workspace, shared)
+	return s.reloadWorkspaceDeadlineResult(workspace, shared, s.reloadWorkspaceTo(ctx, workspace, shared))
+}
+
+// A request's deadline stops its wait, not the shared install. Otherwise a
+// large fallback snapshot can be decoded and discarded on every retry.
+// waitForPeerRefresh returns current when an authoritative probe completed
+// after the request deadline. The caller must not reuse the expired context
+// after that result.
+func (s *server) waitForPeerRefresh(ctx context.Context, workspace string) (current bool, err error) {
+	versions := &s.workspaceVersions
+	versions.mu.Lock()
+	if versions.loading == nil {
+		versions.loading = map[string]*workspaceReload{}
+	}
+	load := versions.loading[workspace]
+	if load == nil {
+		load = &workspaceReload{done: make(chan struct{}), started: time.Now()}
+		versions.loading[workspace] = load
+		go func() {
+			workerCtx, cancel := context.WithTimeout(s.store.WorkerContext(), workspaceReloadTimeout)
+			defer cancel()
+			err := s.syncPeerWorkspace(workerCtx, workspace)
+			if diagnoseWorkspaceReload != nil {
+				diagnoseWorkspaceReload(load.started, 0, store.WorkspaceReloadTrace{}, err)
+			}
+			versions.mu.Lock()
+			load.err = err
+			delete(versions.loading, workspace)
+			close(load.done)
+			versions.mu.Unlock()
+		}()
+	}
+	versions.mu.Unlock()
+	select {
+	case <-load.done:
+		if load.err != nil {
+			return false, load.err
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			if s.probeWorkspaceCurrent(workspace) {
+				return true, nil
+			}
+			return false, ctx.Err()
+		}
+		return false, nil
+	case <-ctx.Done():
+		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return false, ctx.Err()
+		}
+		if s.probeWorkspaceCurrent(workspace) {
+			return true, nil
+		}
+		return false, ctx.Err()
+	}
+}
+
+func (s *server) probeWorkspaceCurrent(workspace string) bool {
+	probeCtx, cancel := context.WithTimeout(s.store.WorkerContext(), workspaceFreshnessProbeTimeout)
+	defer cancel()
+	state, err := s.store.WorkspacePeerState(probeCtx, workspace)
+	return err == nil && state.Current
+}
+
+func (s *server) reloadWorkspaceDeadlineResult(workspace string, target int64, err error) error {
+	if !errors.Is(err, context.DeadlineExceeded) || !s.probeWorkspaceCurrent(workspace) {
+		return err
+	}
+	if target > 0 {
+		s.workspaceVersions.record(workspace, target)
+	}
+	return nil
+}
+
+func (s *server) requireCurrentWorkspace(w http.ResponseWriter, r *http.Request, workspace string) bool {
+	started := time.Now()
+	if err := s.ensureCurrentWorkspace(r.Context(), workspace); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "workspace not found")
+		} else {
+			if diagnoseWorkspaceRefusal != nil {
+				diagnoseWorkspaceRefusal(s, r, workspace, err, time.Since(started))
+			}
+			w.Header().Set("Retry-After", "1")
+			writeError(w, http.StatusServiceUnavailable, "Workspace is temporarily unavailable")
+		}
+		return false
+	}
+	return true
 }
 
 // reloadWorkspaceTo reloads the workspace unless a reload in flight or done
 // meanwhile already brought it to version target.
-func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target int64) {
+func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target int64) error {
 	versions := &s.workspaceVersions
+	bounded := s.store != nil && s.store.BoundedMetadataEnabled()
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		versions.mu.Lock()
 		if versions.applied == nil {
-			versions.applied, versions.loading = map[string]int64{}, map[string]chan struct{}{}
+			versions.applied = map[string]int64{}
 		}
 		if versions.loading == nil {
-			versions.loading = map[string]chan struct{}{}
+			versions.loading = map[string]*workspaceReload{}
 		}
 		if target > 0 && versions.applied[workspace] >= target && s.store.HasWorkspace(workspace) {
 			versions.mu.Unlock()
-			return
+			return nil
 		}
 		if inFlight := versions.loading[workspace]; inFlight != nil {
 			versions.mu.Unlock()
 			select {
-			case <-inFlight:
-				if target == 0 {
-					return
+			case <-inFlight.done:
+				if inFlight.err != nil || target <= 0 || !bounded {
+					return inFlight.err
 				}
+				// A reload shared with the peer worker can have captured a
+				// lower version. Recheck the target before serving this read.
 				continue
 			case <-ctx.Done():
-				return
+				return ctx.Err()
 			}
 		}
-		done := make(chan struct{})
-		versions.loading[workspace] = done
+		load := &workspaceReload{done: make(chan struct{}), started: time.Now()}
+		versions.loading[workspace] = load
 		versions.mu.Unlock()
 
 		// The reload outlives the request that started it. A large workspace
@@ -153,38 +290,67 @@ func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target
 		// then threw the decoded copy away without recording the version, so
 		// the next request decoded the whole workspace again, and again, while
 		// the server was already short of memory. The requester still stops
-		// waiting at its own deadline and is served the copy it has. It does
+		// waiting at its own deadline and returns an error. It does
 		// not outlive the store: closing it (shutdown) ends the reload, which
 		// then decodes nothing more.
 		go func() {
 			reloadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workspaceReloadTimeout)
 			defer cancel()
 			defer context.AfterFunc(s.store.WorkerContext(), cancel)()
-			started := time.Now()
+			var (
+				version     int64
+				versionErr  error
+				err         error
+				versionWait time.Duration
+				trace       store.WorkspaceReloadTrace
+			)
+			defer func() {
+				if recover() != nil {
+					err = errors.New("workspace reload failed")
+				}
+				if diagnoseWorkspaceReload != nil {
+					diagnoseWorkspaceReload(load.started, versionWait, trace, err)
+				}
+				if elapsed := time.Since(load.started); err != nil {
+					log.Printf("Reload workspace failed after %s", elapsed.Round(time.Millisecond))
+				} else if elapsed > time.Second {
+					log.Printf("Reload workspace took %s", elapsed.Round(time.Millisecond))
+				}
+				versions.mu.Lock()
+				delete(versions.loading, workspace)
+				load.err = err
+				if err == nil && versionErr == nil && version > versions.applied[workspace] {
+					versions.applied[workspace] = version
+				}
+				close(load.done)
+				versions.mu.Unlock()
+			}()
 			// Read the version first: the reload then includes every change it
 			// counts (a writer commits before it bumps the version).
-			version, versionErr := s.sharedWorkspaceVersion(reloadCtx, workspace)
-			err := s.store.ReloadWorkspace(reloadCtx, workspace)
-			if elapsed := time.Since(started); err != nil {
-				log.Printf("Reload workspace=%s after %s: %v", workspace, elapsed.Round(time.Millisecond), err)
-			} else if elapsed > time.Second {
-				log.Printf("Reload workspace=%s took %s", workspace, elapsed.Round(time.Millisecond))
+			version, versionErr = s.sharedWorkspaceVersion(reloadCtx, workspace)
+			versionWait = time.Since(load.started)
+			reload := s.store.ReloadWorkspace
+			if s.reloadWorkspaceFn != nil {
+				reload = s.reloadWorkspaceFn
 			}
-			versions.mu.Lock()
-			delete(versions.loading, workspace)
-			close(done)
-			if err == nil && versionErr == nil && version > versions.applied[workspace] {
-				versions.applied[workspace] = version
+			if diagnoseWorkspaceReload != nil {
+				reloadCtx = store.WithWorkspaceReloadTrace(reloadCtx, &trace)
 			}
-			versions.mu.Unlock()
+			err = reload(reloadCtx, workspace)
 		}()
 		select {
-		case <-done:
+		case <-load.done:
+			return load.err
 		case <-ctx.Done():
+			return ctx.Err()
 		}
-		return
 	}
 }
 
 // workspaceReloadTimeout bounds one shared reload of a workspace's metadata.
 const workspaceReloadTimeout = 2 * time.Minute
+
+// A request can race the shared refresh completing just after its own
+// freshness deadline. A short authoritative probe avoids returning 503 in
+// that narrow window without allowing stale metadata through.
+const workspaceFreshnessProbeTimeout = 50 * time.Millisecond

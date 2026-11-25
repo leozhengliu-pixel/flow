@@ -40,10 +40,24 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 		workspace = s.lastWorkspaceKey
 		s.mu.RUnlock()
 	}
+	if s.coldWrite != nil {
+		s.coldWrite.requested = workspace
+	}
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
 	apply := func() error {
-		s.lockWorkspaceWrites()
+		if s.coldWrite != nil {
+			s.writeMu.Lock()
+			var err error
+			workspace, err = s.refreshColdFullWriteLocked(ctx)
+			if err != nil {
+				s.writeMu.Unlock()
+				return err
+			}
+			s.mu.Lock()
+		} else {
+			s.lockWorkspaceWrites()
+		}
 		defer s.unlockWorkspaceWrites()
 		current, ok := s.workspaces[workspace]
 		if !ok {
@@ -55,8 +69,10 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 		actor, hasActor := actorFromContext(ctx)
 		role := ""
 		if hasActor {
-			if value, status, err := s.WorkspaceRole(ctx, current.Workspace.ID, actor.ID); err == nil && status == "active" {
-				role = value
+			var err error
+			role, err = s.mutationWorkspaceRole(ctx, current.Workspace.ID, actor.ID)
+			if err != nil && !errors.Is(err, ErrAuthForbidden) {
+				return err
 			}
 		}
 		tx, err := s.db.BeginTx(ctx, nil)
@@ -101,7 +117,22 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 			return err
 		}
 		refs := newIssueReferences(domain.Bootstrap{Users: current.Users})
-		for _, key := range sortedKeys(next.UserSettings) {
+		// A map stored inline (an over-long key) has no rows: write the whole
+		// map as the legacy delta writer does instead of row by row.
+		inline, err := s.inlineMetadataFields(ctx, tx, workspace, "userSettings")
+		if err != nil {
+			return err
+		}
+		rowKeys, removed := sortedKeys(next.UserSettings), before
+		if len(inline) > 0 {
+			written := current
+			written.UserSettings = next.UserSettings
+			if err := s.writeInlineMetadataFields(ctx, tx, workspace, written, inline); err != nil {
+				return err
+			}
+			rowKeys, removed = nil, nil
+		}
+		for _, key := range rowKeys {
 			value := next.UserSettings[key]
 			previous, existed := before[key]
 			if existed && reflect.DeepEqual(previous, value) {
@@ -149,7 +180,7 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 				return err
 			}
 		}
-		for key := range before {
+		for key := range removed {
 			if _, ok := next.UserSettings[key]; !ok {
 				if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='userSettings' AND record_key=?`, workspace, key); err != nil {
 					return err
@@ -166,6 +197,13 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 			return err
 		}
 		realtimePayload = enrichRealtimePayload(payloadRaw, aggregateJSONValue(next, aggregateID), eventType)
+		if s.coldWrite != nil {
+			installed := current
+			installed.UserSettings = next.UserSettings
+			if err := s.prepareColdFullWrite(ctx, tx, workspace, installed); err != nil {
+				return err
+			}
+		}
 		if err := tx.Commit(); err != nil {
 			return err
 		}

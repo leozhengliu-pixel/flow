@@ -13,7 +13,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -23,7 +22,6 @@ import (
 	"testing"
 
 	"flow/api/internal/domain"
-	"flow/api/internal/store"
 )
 
 type writeCost struct {
@@ -47,15 +45,14 @@ func measureWrite(t *testing.T, peers peerServers, step func()) writeCost {
 // for B's events: it catches up when its next request asks.
 func writeLoadFixture(t *testing.T) (peers peerServers, adminA, adminB *http.Client, team domain.Team, issue domain.Issue) {
 	t.Helper()
-	peers = newPeerServers(t)
+	peers = scaleP01NewPeers(t)
 	first, second := peers.first.URL, peers.second.URL
 	adminA, adminB = peerAdmin(t, first), peerAdmin(t, second)
 	team = authRequest[domain.Team](t, adminB, http.MethodPost, second+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Write Load", "key": "WLD"}, "", http.StatusCreated)
 	issue = authRequest[domain.Issue](t, adminB, http.MethodPost, second+"/api/issues", map[string]any{"title": "Write load issue", "teamId": team.ID}, "test-workspace", http.StatusCreated)
-	if err := peers.stores[1].SeedSyntheticMetadata(context.Background(), "test-workspace", store.SyntheticMetadata{
-		Projects: 2321, ProjectBytes: 12000, Trash: 210, TrashBytes: 41000, Documents: 78, DocumentBytes: 64000, Conversations: 400, ConversationBytes: 2000,
-		TeamIDs: []string{team.ID},
-	}); err != nil {
+	spec := scaleP01MetadataSpec(t, []string{team.ID}, nil)
+	spec.Relations = false
+	if err := peers.stores[1].SeedSyntheticMetadata(context.Background(), "test-workspace", spec); err != nil {
 		t.Fatal(err)
 	}
 	for _, repository := range peers.stores {
@@ -114,6 +111,9 @@ func TestLoadWriteProfile(t *testing.T) {
 
 func TestLoadWriteDecodes(t *testing.T) {
 	writes := loadEnvInt("FLOW_LOAD_WRITES", 50)
+	if writes < 1 {
+		t.Fatal("FLOW_LOAD_WRITES must be positive")
+	}
 	peers, adminA, adminB, team, issue := writeLoadFixture(t)
 	first, second := peers.first.URL, peers.second.URL
 	teamsURL := "/api/workspaces/test-workspace/teams"
@@ -135,14 +135,14 @@ func TestLoadWriteDecodes(t *testing.T) {
 	}
 	report := map[string]map[string]any{}
 	for _, phase := range phases {
-		var writer, reader writeCost
+		var writer, reader scaleP01WriteCost
 		for index := range writes {
-			cost := measureWrite(t, peers, func() { phase.write(index) })
-			writer.decodes, writer.bytes = writer.decodes+cost.decodes, writer.bytes+cost.bytes
-			cost = measureWrite(t, peers, func() {
+			cost := scaleP01MeasureWrite(t, peers, func() { phase.write(index) })
+			writer.add(cost)
+			cost = scaleP01MeasureWrite(t, peers, func() {
 				authRequest[domain.Issue](t, adminA, http.MethodGet, first+"/api/issue-records/"+issue.ID, nil, "test-workspace", http.StatusOK)
 			})
-			reader.decodes, reader.bytes = reader.decodes+cost.decodes, reader.bytes+cost.bytes
+			reader.add(cost)
 		}
 		n := float64(writes)
 		report[phase.name] = map[string]any{
@@ -151,25 +151,23 @@ func TestLoadWriteDecodes(t *testing.T) {
 			"writerMiBPerWrite":          float64(writer.bytes) / n / (1 << 20),
 			"peerRequestDecodesPerWrite": float64(reader.decodes) / n,
 			"peerRequestMiBPerWrite":     float64(reader.bytes) / n / (1 << 20),
+			"writerCost":                 scaleP01WriteMetrics(writer, writes),
+			"peerRequestCost":            scaleP01WriteMetrics(reader, writes),
 		}
 	}
 	// Both replicas write the same team in turn: each write follows the
 	// other replica's, so both decode.
-	var alternating writeCost
+	var alternating scaleP01WriteCost
 	for index := range writes {
 		base, client := second, adminB
 		if index%2 == 1 {
 			base, client = first, adminA
 		}
-		cost := measureWrite(t, peers, func() {
+		cost := scaleP01MeasureWrite(t, peers, func() {
 			authRequest[domain.Team](t, client, http.MethodPatch, base+teamsURL+"/"+team.ID, map[string]any{"name": fmt.Sprintf("Write Load Alt %d", index)}, "", http.StatusOK)
 		})
-		alternating.decodes, alternating.bytes = alternating.decodes+cost.decodes, alternating.bytes+cost.bytes
+		alternating.add(cost)
 	}
-	report["team name alternating A/B"] = map[string]any{"writes": writes, "decodesPerWrite": float64(alternating.decodes) / float64(writes), "MiBPerWrite": float64(alternating.bytes) / float64(writes) / (1 << 20)}
-	raw, _ := json.MarshalIndent(report, "", "  ")
-	t.Logf("write costs:\n%s", raw)
-	if path := os.Getenv("FLOW_LOAD_REPORT"); path != "" {
-		_ = os.WriteFile(path, raw, 0o644)
-	}
+	report["team name alternating A/B"] = map[string]any{"writes": writes, "decodesPerWrite": float64(alternating.decodes) / float64(writes), "MiBPerWrite": float64(alternating.bytes) / float64(writes) / (1 << 20), "cost": scaleP01WriteMetrics(alternating, writes)}
+	scaleP01SaveReport(t, report)
 }

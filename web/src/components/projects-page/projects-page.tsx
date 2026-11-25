@@ -6,7 +6,7 @@ import type { BootstrapData, Customer, Initiative, Invitation, Issue, IssueLabel
 import { customerRowDataFor, isCustomerNumberComparison, matchesCustomerNumberValues, matchesCustomerValues, projectCustomerRowData } from '@/components/issue-explorer/customer-filter'
 import { customerFilterOptions } from '@/components/issue-explorer/issue-explorer-model'
 import type { ProjectCustomerFilterChoice } from './project-customer-filter'
-import { currentProjectMilestone, milestoneIssueProgress } from '@/components/issue/milestone-progress'
+import { currentProjectMilestone, indexMilestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
 import { NewProjectDialog, type NewProjectDraft, type NewProjectMilestoneDraft } from './new-project-dialog'
 import { projectPeopleChoices } from './project-people'
@@ -32,6 +32,13 @@ import { avatarColor } from '@/lib/avatar-color'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { dependencyRelationsWithBlocker, isTimelineZoom, projectDependencyEdges } from './project-timeline-model'
 import { projectTemplateChoices } from '@/lib/project-template-choice'
+import { useScaleP19FilterCounts, useScaleP19ProjectWindow } from './scale-p19-project-window'
+import { ScaleP19ProjectPager } from './scale-p19-project-pager'
+import { clearScaleP19ProjectHandoff, readScaleP19ProjectHandoff, writeScaleP19ProjectHandoff } from '@/lib/scale-p19-project-handoff'
+import type { ScaleP19ServerQuery } from '@/lib/scale-p19-window-api'
+import { ScaleP19TimelineContext, scaleP19Groups } from './scale-p19-view'
+
+const EMPTY_PROJECTS: Project[] = []
 
 /** The row's one-line summary falls back to the description as plain text (descriptions are stored as HTML). */
 function descriptionPreview(description: string | undefined) {
@@ -215,14 +222,19 @@ export function ProjectsPage({
   initialTemplateId,
 }: ProjectsPageProps) {
   const sourceView = savedView ?? duplicateFrom
+  const handoffScope = `${workspaceKey}:${viewerId ?? viewer?.id ?? ''}:${scopeTeamId ?? 'workspace'}:${sourceView?.id ?? 'all'}`
+  const handoff = useMemo(() => import.meta.env.VITE_SYNC_V2 === 'true' && import.meta.env.VITE_PROJECT_QUERY_WINDOWS === 'true' ? readScaleP19ProjectHandoff(handoffScope) : undefined, [handoffScope])
   const draftFiltersKey = `flow:projects:draft-filters:${workspaceKey}:${scopeTeamId ?? 'workspace'}`
-  const [projectFilters, setProjectFilters] = useState<ProjectFilter[]>(() => { const params=new URLSearchParams(location.search),fallback:ProjectFilter[]=[];const label=labelsForResource(labels,'project',labelGroups).find(item=>item.id===params.get('label'));if(label)fallback.push({id:`labels-url-${label.id}`,field:'labels',fieldLabel:'Labels',operator:'is',values:[{id:label.id,label:label.name,color:label.color}]});const status=projectStatuses.find(item=>item.id===params.get('status'));if(status)fallback.push({id:`status-url-${status.id}`,field:'status',fieldLabel:'Status',operator:'is',values:[{id:status.name,label:status.name,color:status.color}]});return projectFiltersFromSavedView(sourceView,fallback.length?fallback:creatingView?readDraftFilters(draftFiltersKey):[]) })
+  const [projectFilters, setProjectFilters] = useState<ProjectFilter[]>(() => { const params=new URLSearchParams(location.search),fallback:ProjectFilter[]=[];const label=labelsForResource(labels,'project',labelGroups).find(item=>item.id===params.get('label'));if(label)fallback.push({id:`labels-url-${label.id}`,field:'labels',fieldLabel:'Labels',operator:'is',values:[{id:label.id,label:label.name,color:label.color}]});const status=projectStatuses.find(item=>item.id===params.get('status'));if(status)fallback.push({id:`status-url-${status.id}`,field:'status',fieldLabel:'Status',operator:'is',values:[{id:status.name,label:status.name,color:status.color}]});return handoff?.filters ?? projectFiltersFromSavedView(sourceView,fallback.length?fallback:creatingView?readDraftFilters(draftFiltersKey):[]) })
   // The reference app: filters added on a saved view (outside edit mode) are temporary — the band with Clear / Save ⌄.
-  const [extraFilters, setExtraFilters] = useState<ProjectFilter[]>([])
+  const [extraFilters, setExtraFilters] = useState<ProjectFilter[]>(handoff?.extraFilters ?? [])
   const bandActive = Boolean(savedView && !editingView)
   const activeFilters = useMemo(() => bandActive && extraFilters.length ? [...projectFilters, ...extraFilters] : projectFilters, [bandActive, extraFilters, projectFilters])
   const projectFilterQuery = useMemo(() => activeFilters.map(filter => ({ field: filter.field, operator: filter.operator, values: filter.values.map(value => value.id) })), [activeFilters])
-  const [pagedProjects, setPagedProjects] = useState<Project[]>(projects)
+  const windowTeamIds = useMemo(() => scopeTeamId ? [...teamHierarchy(teams, teamSettings, teamParents).subtree(scopeTeamId)] : undefined, [scopeTeamId, teamParents, teamSettings, teams])
+  const [windowQuery, setWindowQuery] = useState<ScaleP19ServerQuery>({ schema: 1, display: DEFAULT_PROJECTS_DISPLAY, locale: navigator.language })
+  const projectWindow = useScaleP19ProjectWindow(workspaceKey, { teamId: windowTeamIds, archived: 'all', filter: projectFilterQuery, ...(windowQuery ? { window: { ...windowQuery, teamIds: windowTeamIds, filters: projectFilterQuery } } : {}) })
+  const [pagedProjects, setPagedProjects] = useState<Project[]>(projectWindow.enabled ? [] : projects)
   const [directoryLoading, setDirectoryLoading] = useState(projects.length === 0)
   const [directoryLoadingMore, setDirectoryLoadingMore] = useState(false)
   const [directoryError, setDirectoryError] = useState<string | null>(null)
@@ -237,13 +249,13 @@ export function ProjectsPage({
     for (const customer of page.customers ?? []) if (!customers.some(item => item.id === customer.id)) customers.push(customer)
     return { summaries: { ...base.summaries, ...page.customerSummaries }, customers }
   }), [])
-  const [seededProjects, setSeededProjects] = useState(projects)
-  if (seededProjects !== projects) {
+  const [seededProjects, setSeededProjects] = useState(projectWindow.enabled ? undefined : projects)
+  if (!projectWindow.enabled && seededProjects !== projects) {
     setSeededProjects(projects)
-    if (projects.length) setPagedProjects(projects)
+    if (!projectWindow.enabled && projects.length) setPagedProjects(projects)
   }
   useEffect(() => {
-    if (!workspaceKey || projects.length > 100) return
+    if (projectWindow.enabled || !workspaceKey || projects.length > 100) return
     const controller = new AbortController()
     directoryRequest.current?.abort()
     directoryRequest.current = controller
@@ -263,8 +275,12 @@ export function ProjectsPage({
     }
     const frame = requestAnimationFrame(() => { void load() })
     return () => { cancelled = true; cancelAnimationFrame(frame); controller.abort() }
-  }, [mergeDirectoryCustomers, projectFilterQuery, projects.length, scopeTeamId, workspaceKey])
+  }, [mergeDirectoryCustomers, projectFilterQuery, projectWindow.enabled, projects.length, scopeTeamId, workspaceKey])
   const loadMoreProjects = useCallback(async () => {
+    if (projectWindow.enabled) {
+      if (projectWindow.page?.hasMore && !projectWindow.loading) await projectWindow.load(projectWindow.page.index + 1)
+      return
+    }
     if (!directoryHasMore || !directoryCursor || directoryLoadingMore) return
     const controller = new AbortController()
     directoryRequest.current = controller
@@ -279,8 +295,10 @@ export function ProjectsPage({
     } finally {
       setDirectoryLoadingMore(false)
     }
-  }, [directoryCursor, directoryHasMore, directoryLoadingMore, mergeDirectoryCustomers, projectFilterQuery, scopeTeamId])
-  const projectCollection = pagedProjects.length || projects.length === 0 ? pagedProjects : projects
+  }, [directoryCursor, directoryHasMore, directoryLoadingMore, mergeDirectoryCustomers, projectFilterQuery, projectWindow, scopeTeamId])
+  const projectCollection = projectWindow.enabled ? projectWindow.page?.items ?? EMPTY_PROJECTS : pagedProjects.length || projects.length === 0 ? pagedProjects : projects
+  const projectDirectoryCustomers = projectWindow.enabled ? { summaries: projectWindow.page?.customerSummaries ?? {}, customers: projectWindow.page?.customers ?? [] } : directoryCustomers
+  const currentProjectRelations = useMemo(() => projectWindow.enabled ? projectWindow.metadata?.projectRelations ?? [] : projectRelations, [projectWindow.enabled, projectWindow.metadata, projectRelations])
   const currentViewerId = viewerId ?? viewer?.id
   const onlineUserIds = useMemo(() => {
     const ids = new Set(presence.map(item => item.user.id))
@@ -303,28 +321,38 @@ export function ProjectsPage({
   }), [initiatives, projectLabelGroups, projectLabels, teams])
   const blockedByIds = useMemo(() => {
     const map = new Map<string, string[]>()
-    for (const edge of projectDependencyEdges(projectCollection, projectRelations)) map.set(edge.blockedId, [...(map.get(edge.blockedId) ?? []), edge.blockerId])
+    for (const edge of projectDependencyEdges(projectCollection, currentProjectRelations)) {
+      const blockers = map.get(edge.blockedId)
+      if (blockers) blockers.push(edge.blockerId)
+      else map.set(edge.blockedId, [edge.blockerId])
+    }
     return map
-  }, [projectCollection, projectRelations])
-  const milestoneProgress = useMemo(() => milestoneProgressIndex(issues), [issues])
+  }, [projectCollection, currentProjectRelations])
+  const milestoneProgress = useMemo(() => indexMilestoneIssueProgress(issues), [issues])
   // Customers known to the page: the bootstrap's plus those the project directory returned.
   const customerSource = useMemo(() => {
     if (!customerData) return undefined
     const known = customerData.customers ?? []
-    const extra = directoryCustomers.customers.filter(customer => !known.some(item => item.id === customer.id))
+    const extra = projectDirectoryCustomers.customers.filter(customer => !known.some(item => item.id === customer.id))
     return extra.length ? { ...customerData, customers: [...known, ...extra] } : customerData
-  }, [customerData, directoryCustomers.customers])
+  }, [customerData, projectDirectoryCustomers.customers])
   const issueIdsByProject = useMemo(() => {
     const map = new Map<string, Set<string>>()
     for (const issue of issues) if (issue.project?.id) map.set(issue.project.id, (map.get(issue.project.id) ?? new Set()).add(issue.id))
     return map
   }, [issues])
+  const dateLocale = rowDateLocale()
+  const dateFormats = useMemo(() => ({
+    month: new Intl.DateTimeFormat(dateLocale, { month: 'short', year: 'numeric' }),
+    day: new Intl.DateTimeFormat(dateLocale, { month: 'short', day: 'numeric' }),
+  }), [dateLocale])
   const items = useMemo(() => scopedProjects.map(project => ({
-    ...toPageItem(project, projectHref?.(project), itemIndexes, projectUpdates[project.id]?.[0], issues),
-    ...(customerSource ? projectCustomerFields(directoryCustomers.summaries[project.id] ? summaryRowData(directoryCustomers.summaries[project.id], customerSource) : projectCustomerRowData(project.id, issueIdsByProject.get(project.id) ?? new Set(), customerSource)) : {}),
+    ...toPageItem(project, projectHref?.(project), itemIndexes, projectUpdates[project.id]?.[0], milestoneProgress, dateFormats),
+    ...(projectWindow.enabled && projectWindow.metadata?.latestUpdates?.[project.id] ? { updatedAt: projectWindow.metadata.latestUpdates[project.id] } : {}),
+    ...(customerSource ? projectCustomerFields(projectDirectoryCustomers.summaries[project.id] ? summaryRowData(projectDirectoryCustomers.summaries[project.id], customerSource) : projectCustomerRowData(project.id, issueIdsByProject.get(project.id) ?? new Set(), customerSource)) : {}),
     milestones: (project.milestones ?? []).map(milestone => ({ id: milestone.id, name: milestone.name, targetDate: milestone.targetDate, progress: milestoneProgress(project.id, milestone.id) })),
     blockedByIds: blockedByIds.get(project.id),
-  })), [blockedByIds, customerSource, directoryCustomers.summaries, issueIdsByProject, itemIndexes, issues, milestoneProgress, projectHref, projectUpdates, scopedProjects])
+  })), [blockedByIds, customerSource, dateFormats, projectDirectoryCustomers.summaries, issueIdsByProject, itemIndexes, milestoneProgress, projectHref, projectUpdates, scopedProjects, projectWindow.enabled, projectWindow.metadata])
   // With the project-list projection the app store holds no projects, so the directory page
   // (pagedProjects) must absorb timeline edits itself or bars snap back until the next fetch.
   const syncPagedProject = useCallback((project: Project) => setPagedProjects(current => current.map(item => item.id === project.id ? project : item)), [])
@@ -341,18 +369,19 @@ export function ProjectsPage({
   const createProjectDependency = useCallback(async (blockerId: string, blockedId: string) => {
     const blocked = projectCollection.find(project => project.id === blockedId)
     if (!blocked) return
-    await updateTimelineProject(blockedId, { dependencyRelations: dependencyRelationsWithBlocker(blockedId, blockerId, projectRelations, blocked.dependencyIds) })
-  }, [projectCollection, projectRelations, updateTimelineProject])
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [insightMode, setInsightMode] = useState<ProjectInsightMode>('health')
-  const [insightFilter, setInsightFilter] = useState<ProjectInsightFilter>(() => projectFilterFromSavedView(sourceView))
+    await updateTimelineProject(blockedId, { dependencyRelations: dependencyRelationsWithBlocker(blockedId, blockerId, currentProjectRelations, blocked.dependencyIds) })
+  }, [projectCollection, currentProjectRelations, updateTimelineProject])
+  const [sidebarOpen, setSidebarOpen] = useState(handoff?.sidebarOpen ?? false)
+  const [windowFilterOpen, setWindowFilterOpen] = useState(false)
+  const [insightMode, setInsightMode] = useState<ProjectInsightMode>(handoff?.insightMode ?? 'health')
+  const [insightFilter, setInsightFilter] = useState<ProjectInsightFilter>(() => handoff ? handoff.insightFilter : projectFilterFromSavedView(sourceView))
   const visibleItems = useMemo(() => {
-    let result = items.filter(item => activeFilters.every(filter => matchesProjectFilter(item, filter)))
+    let result = projectWindow.enabled ? items : items.filter(item => activeFilters.every(filter => matchesProjectFilter(item, filter)))
     if (!insightFilter) return result
     if (insightFilter.kind === 'health') result = result.filter(item => item.health === insightFilter.value)
     else result = result.filter(item => (item.lead?.id ?? '') === insightFilter.value)
     return result
-  }, [activeFilters, insightFilter, items])
+  }, [activeFilters, insightFilter, items, projectWindow.enabled])
   const availableProjectStatuses = useMemo(() => projectStatusesForLayout(projectStatuses.length ? projectStatuses : uniqueStatuses(projectCollection.map(project => project.status)), 'board'), [projectCollection, projectStatuses])
   const defaultCreateStatus = availableProjectStatuses.find(status => status.type === 'backlog')?.name ?? availableProjectStatuses[0]?.name ?? ''
   const workspaceDefault = useMemo(() => parseProjectDisplayDefault(projectDisplayDefault), [projectDisplayDefault])
@@ -362,7 +391,25 @@ export function ProjectsPage({
     const activeTeamIds = teams.map(team => team.id)
     return { id: currentViewerId, activeTeamIds }
   }, [currentViewerId, teams])
-  const view = useProjectsViewState(visibleItems, { initial: savedDisplay ? { display: savedDisplay } : undefined, projectStatuses: availableProjectStatuses, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault, relevanceViewer, leadTeamId: scopeTeamId })
+  const view = useProjectsViewState(visibleItems, { initial: savedDisplay || handoff ? { ...(savedDisplay ? { display: savedDisplay } : {}), ...(handoff ? { selectedIds: handoff.selectedIds } : {}) } : undefined, projectStatuses: availableProjectStatuses, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault, relevanceViewer, leadTeamId: scopeTeamId })
+  useEffect(() => {
+    const client = projectWindow.client
+    if (!projectWindow.enabled || !client) { clearScaleP19ProjectHandoff(handoffScope); return }
+    return client.subscribe(() => {
+      if (client.disposed && client.legacyRequired) writeScaleP19ProjectHandoff(handoffScope, { filters: projectFilters, extraFilters, selectedIds: view.state.selectedIds, sidebarOpen, insightMode, insightFilter })
+      else if (client.disposed) clearScaleP19ProjectHandoff(handoffScope)
+    })
+  }, [extraFilters, handoffScope, insightFilter, insightMode, projectFilters, projectWindow.client, projectWindow.enabled, sidebarOpen, view.state.selectedIds])
+  const { properties: _properties, timelineZoom: _timelineZoom, ...queryDisplay } = view.state.display
+  const localizedDates = [queryDisplay.ordering, queryDisplay.grouping, queryDisplay.subGrouping].some(value => value === 'Start date' || value === 'Target date')
+  const nextWindowQuery: ScaleP19ServerQuery = { schema: 1, display: queryDisplay, leadTeamId: scopeTeamId, insight: insightFilter, locale: navigator.language, ...(localizedDates ? { dateLocale: document.documentElement.dataset.locale === 'zh-CN' ? 'zh-CN' : 'en' } : {}) }
+  if (projectWindow.enabled && JSON.stringify(windowQuery) !== JSON.stringify(nextWindowQuery)) setWindowQuery(nextWindowQuery)
+  useEffect(() => {
+    if (projectWindow.enabled) {
+      try { projectWindow.select(view.state.selectedIds, projectCollection) }
+      catch { projectWindow.legacy() }
+    }
+  }, [projectCollection, projectWindow, view.state.selectedIds])
   // "Only show lead team projects" is applied client-side to the loaded pages; derive every other count from it too.
   const leadScopedItems = useMemo(() => filterProjectsByLeadTeam(items, view.state.display, scopeTeamId), [items, scopeTeamId, view.state.display])
   const leadScopedVisibleItems = useMemo(() => filterProjectsByLeadTeam(visibleItems, view.state.display, scopeTeamId), [scopeTeamId, view.state.display, visibleItems])
@@ -371,7 +418,7 @@ export function ProjectsPage({
   const [createStatus, setCreateStatus] = useState(defaultCreateStatus)
   const [updatesProjectId, setUpdatesProjectId] = useState<string>()
   const [scheduleProjectId, setScheduleProjectId] = useState<string>()
-  useRequestEntityUpdates('project', [updatesProjectId])
+  useRequestEntityUpdates('project', [projectWindow.enabled ? undefined : updatesProjectId])
   const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (!event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || savedView || creatingView || viewEditor || (event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return; event.preventDefault(); setViewEditor('create') }; addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey) }, [creatingView, savedView, viewEditor])
@@ -385,7 +432,8 @@ export function ProjectsPage({
     status: statusOptions,
     targetDate: targetDateOptions(),
   }), [labelGroups, projectLabelGroupNames, projectLabels, statusOptions, users])
-  const filterOptions = useMemo(() => projectFilterOptions(leadScopedItems, users, availableProjectStatuses, projectLabels, teams, teamSettings, teamParents), [availableProjectStatuses, leadScopedItems, projectLabels, teamParents, teamSettings, teams, users])
+  const localFilterOptions = useMemo(() => projectFilterOptions(leadScopedItems, users, availableProjectStatuses, projectLabels, teams, teamSettings, teamParents), [availableProjectStatuses, leadScopedItems, projectLabels, teamParents, teamSettings, teams, users])
+  const filterOptions = useScaleP19FilterCounts(projectWindow.enabled, workspaceKey, { teamId: windowTeamIds, archived: 'all', filter: projectFilterQuery }, localFilterOptions, windowFilterOpen, projectWindow.metadata?.counts)
   // The reference app's Customers filter blocks (Customer name … Customer size), offered while Customer requests is on.
   const customerOptions = useMemo(() => customerSource && featureFlags?.['customer-requests'] !== false ? customerFilterOptions(customerSource) : [], [customerSource, featureFlags])
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
@@ -539,7 +587,12 @@ export function ProjectsPage({
     onNavigateNewView?.()
   }
 
-  const selectedProjects = items.filter(item => view.state.selectedIds.includes(item.id))
+  const creationProjects = projectWindow.enabled ? [...projectCollection, ...projects.filter(project => !projectCollection.some(item => item.id === project.id))] : projects
+  const selectedProjects: ProjectPageItem[] = projectWindow.enabled ? view.state.selectedIds.flatMap<ProjectPageItem>(id => {
+    const loaded = items.find(item => item.id === id)
+    const selected = projectWindow.selectedProjects.find(item => item.id === id)
+    return loaded ? [loaded] : selected ? [{ ...selected, health: 'no-update' as const, priority: 'none' as const, issueCount: 0, progress: 0, status: '' }] : []
+  }) : items.filter(item => view.state.selectedIds.includes(item.id))
   const bulkActionOptions = (action: ProjectBulkAction) => {
     if (action === 'status') return statusOptions.map(option => ({ id: option.value, label: option.label, color: option.color }))
     if (action === 'priority') return [{ id: 'none', label: 'No priority' }, { id: 'urgent', label: 'Urgent', color: '#e56a68' }, { id: 'high', label: 'High' }, { id: 'medium', label: 'Medium' }, { id: 'low', label: 'Low' }]
@@ -599,6 +652,7 @@ export function ProjectsPage({
     displayLabelGroups={projectLabelGroups.map(group => ({ id: group.id, name: group.name }))}
     filterOptions={Object.fromEntries(Object.entries(PROJECT_FILTER_FIELDS).map(([label, field]) => [label, filterOptions[field] ?? []]))}
     onAddFilter={addFilter}
+    onFilterOpenChange={projectWindow.enabled ? setWindowFilterOpen : undefined}
     customerFilterOptions={customerOptions}
     onSearchFilterOptions={async (field, query) => {
       if (field !== 'Specific project') return []
@@ -671,12 +725,13 @@ export function ProjectsPage({
     views={projectViews}
   >
     <div className={`lp-projects__workspace ${sidebarOpen ? 'has-insights' : ''}`}>
-      <div className="lp-projects__data"><ProjectsDataView
+      <div className="lp-projects__data"><ScaleP19TimelineContext.Provider value={projectWindow.enabled ? projectWindow.metadata?.timeline : undefined}><ProjectsDataView
         {...view.dataViewProps}
-        loading={loading || directoryLoading && !items.length}
-        error={error ?? directoryError}
-        hasMore={directoryHasMore}
-        loadingMore={directoryLoadingMore}
+        groups={projectWindow.enabled ? scaleP19Groups(view.groups, leadScopedVisibleItems, projectWindow.metadata) : view.dataViewProps.groups}
+        loading={loading || (projectWindow.enabled ? projectWindow.loading : directoryLoading) && !items.length}
+        error={error ?? (projectWindow.enabled ? projectWindow.error : directoryError)}
+        hasMore={!projectWindow.enabled && directoryHasMore}
+        loadingMore={projectWindow.enabled ? projectWindow.loading : directoryLoadingMore}
         onLoadMore={loadMoreProjects}
         onCreateProject={openCreate}
         onOpenProject={item => {
@@ -707,9 +762,10 @@ export function ProjectsPage({
           onSubscriptionEventsChange: onSetProjectSubscriptionEvents,
           onCreateReminder: onCreateProjectReminder,
         } : undefined}
-      /></div>
-      {sidebarOpen && <ProjectsInsightsSidebar activeFilter={insightFilter} mode={insightMode} onChangeFilter={setInsightFilter} onChangeMode={setInsightMode} projects={leadScopedItems} />}
+      /></ScaleP19TimelineContext.Provider></div>
+      {sidebarOpen && <ProjectsInsightsSidebar activeFilter={insightFilter} mode={insightMode} onChangeFilter={setInsightFilter} onChangeMode={setInsightMode} projects={leadScopedItems} rows={projectWindow.enabled ? projectWindow.metadata?.insights : undefined} />}
     </div>
+    {projectWindow.enabled && <ScaleP19ProjectPager page={projectWindow.page} loading={projectWindow.loading} onPage={index => { void projectWindow.load(index) }}/ >}
     {scheduleProjectId && projectById.get(scheduleProjectId) && onUpdateProject && <ProjectUpdateScheduleDialog
       open
       onOpenChange={open => { if (!open) setScheduleProjectId(undefined) }}
@@ -732,13 +788,13 @@ export function ProjectsPage({
       agentSkills={agentSkills}
       initialTemplateId={initialTemplateId ?? (scopeTeamId ? teamSettings?.[scopeTeamId]?.defaultProjectTemplateId || undefined : undefined)}
       defaultStatus={createStatus}
-      dependencies={projects.filter(project => !project.archivedAt).map(project => ({ id: project.id, label: project.name, icon: normalizeProjectIcon(project.icon), color: project.color, group: viewerId && (project.lead?.id === viewerId || (project.memberIds ?? []).includes(viewerId)) ? 'your' : 'other', previewData: { summary: project.summary || project.description, status: project.status.name, milestone: (project.milestones ?? [])[0]?.name, team: (project.teamIds ?? []).map(id => teams.find(team => team.id === id)?.name).filter(Boolean).join(', '), lead: project.lead?.displayName, member: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.displayName).find(Boolean), memberId: (project.memberIds ?? []).find(id => users.some(user => user.id === id)), memberAvatarUrl: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.avatarUrl).find(Boolean), priority: project.priorityLabel, targetDate: project.targetDate, progress: Math.round(project.progress * 100), issueCount: project.issueCount } }))}
+      dependencies={creationProjects.filter(project => !project.archivedAt).map(project => ({ id: project.id, label: project.name, icon: normalizeProjectIcon(project.icon), color: project.color, group: viewerId && (project.lead?.id === viewerId || (project.memberIds ?? []).includes(viewerId)) ? 'your' : 'other', previewData: { summary: project.summary || project.description, status: project.status.name, milestone: (project.milestones ?? [])[0]?.name, team: (project.teamIds ?? []).map(id => teams.find(team => team.id === id)?.name).filter(Boolean).join(', '), lead: project.lead?.displayName, member: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.displayName).find(Boolean), memberId: (project.memberIds ?? []).find(id => users.some(user => user.id === id)), memberAvatarUrl: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.avatarUrl).find(Boolean), priority: project.priorityLabel, targetDate: project.targetDate, progress: Math.round(project.progress * 100), issueCount: project.issueCount } }))}
       initiatives={initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color, groupLabel: initiative.status ? `${initiative.status[0].toUpperCase()}${initiative.status.slice(1)}` : undefined }))}
       labels={projectLabelOptions(projectLabels, labelGroups)}
       leads={peopleChoices}
       members={peopleChoices}
       statuses={availableProjectStatuses.map(status=>({id:status.name,label:status.name,color:status.color,icon:<ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))}
-      templates={projectTemplateChoices(projectTemplates, { projectStatuses: availableProjectStatuses, projectLabels, projects })}
+      templates={projectTemplateChoices(projectTemplates, { projectStatuses: availableProjectStatuses, projectLabels, projects: creationProjects })}
       onClose={() => setCreateOpen(false)}
       onCreate={create}
       open={createOpen}
@@ -759,10 +815,11 @@ export function ProjectsPage({
 
 type ProjectPageIndexes = { teams: Map<string, Team>; initiatives: Map<string, string>; labels: Map<string, IssueLabel>; labelGroups: LabelGroup[] }
 
-function toPageItem(project: Project, href: string | undefined, indexes: ProjectPageIndexes, latestUpdate?: ProjectUpdate, issues: Issue[] = []): ProjectPageItem {
+function toPageItem(project: Project, href: string | undefined, indexes: ProjectPageIndexes, latestUpdate: ProjectUpdate | undefined, milestoneProgress: ReturnType<typeof indexMilestoneIssueProgress>, dates: { day: Intl.DateTimeFormat; month: Intl.DateTimeFormat }): ProjectPageItem {
   const projectLabels = (project.labelIds ?? []).map(id => indexes.labels.get(id)).filter((label): label is IssueLabel => Boolean(label))
   const labelsByGroup = Object.fromEntries(indexes.labelGroups.map(group => [group.id, projectLabels.filter(label => label.groupId === group.id).map(label => ({ id: label.id, name: label.name, color: label.color }))]))
-  const milestone = currentProjectMilestone(project.milestones, id => milestoneIssueProgress(issues, project.id, id))
+  const progressFor = (id: string) => milestoneProgress(project.id, id)
+  const milestone = currentProjectMilestone(project.milestones, progressFor)
   return {
     color: project.color,
     health: ({ onTrack: 'on-track', atRisk: 'at-risk', offTrack: 'off-track', noUpdate: 'no-update' } as const)[project.health],
@@ -773,8 +830,8 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     issueCount: project.issueCount,
     lead: project.lead ? { avatarUrl: project.lead.avatarUrl, color: avatarColor(project.lead.id), id: project.lead.id, name: project.lead.displayName } : undefined,
     milestone: milestone?.name,
-    milestoneDate: milestone?.targetDate ? formatDay(milestone.targetDate) : undefined,
-    milestoneProgress: milestone ? milestoneIssueProgress(issues, project.id, milestone.id) : undefined,
+    milestoneDate: formatProjectRowDate(milestone?.targetDate, dates.day),
+    milestoneProgress: milestone ? progressFor(milestone.id) : undefined,
     rawMilestoneDate: milestone?.targetDate,
     name: project.name,
     priority: ({ 0: 'none', 1: 'urgent', 2: 'high', 3: 'medium', 4: 'low' } as const)[project.priority as 0 | 1 | 2 | 3 | 4] ?? 'none',
@@ -784,7 +841,7 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     statusId: project.status.id,
     statusType: project.status.type,
     statusColor: project.status.color,
-    startDate: project.startDate ? formatMonth(project.startDate) : undefined,
+    startDate: formatProjectRowDate(project.startDate, dates.month),
     summary: project.summary || descriptionPreview(project.description),
     team: project.teamIds[0] ? indexes.teams.get(project.teamIds[0]) : undefined,
     // Flow records a project's lead (primary) team as the first of its teams.
@@ -796,7 +853,7 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     teamIds: project.teamIds,
     rawStartDate: project.startDate,
     rawTargetDate: project.targetDate,
-    targetDate: project.targetDate ? formatMonth(project.targetDate) : undefined,
+    targetDate: formatProjectRowDate(project.targetDate, dates.month),
     createdAt: project.createdAt,
     updatedAt: latestUpdate?.createdAt ?? project.updatedAt,
   }
@@ -858,35 +915,20 @@ function rowDateLocale() {
   return typeof document !== 'undefined' && document.documentElement.dataset.locale === 'zh-CN' ? 'zh-CN' : 'en'
 }
 
-function formatMonth(value: string) {
+function formatProjectRowDate(value: string | undefined, formatter: Intl.DateTimeFormat) {
+  if (!value) return undefined
   const date = new Date(`${value}T00:00:00`)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(rowDateLocale(), { month: 'short', year: 'numeric' }).format(date)
+  return formatter.format(date)
 }
 
-function formatDay(value: string) {
-  const date = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(rowDateLocale(), { month: 'short', day: 'numeric' }).format(date)
-}
-
-function uniqueStatuses(items: ProjectStatus[]) { return items.filter((item, index) => items.findIndex(candidate => candidate.id === item.id) === index) }
-
-/** Issue-based milestone progress, indexed once instead of scanning every issue per milestone. */
-function milestoneProgressIndex(issues: Issue[]) {
-  const counts = new Map<string, { done: number; total: number }>()
-  for (const issue of issues) {
-    if (!issue.project?.id || !issue.projectMilestoneId || issue.archivedAt) continue
-    const key = `${issue.project.id}:${issue.projectMilestoneId}`
-    const entry = counts.get(key) ?? { done: 0, total: 0 }
-    entry.total += 1
-    if (issue.state.type === 'completed' || issue.state.type === 'canceled') entry.done += 1
-    counts.set(key, entry)
-  }
-  return (projectId: string, milestoneId: string) => {
-    const entry = counts.get(`${projectId}:${milestoneId}`)
-    return entry?.total ? Math.round(entry.done / entry.total * 100) : 0
-  }
+function uniqueStatuses(items: ProjectStatus[]) {
+  const seen = new Set<string>()
+  return items.filter(item => {
+    if (seen.has(item.id)) return false
+    seen.add(item.id)
+    return true
+  })
 }
 
 function parseProjectDisplayDefault(value: Record<string, unknown> | undefined): ProjectsDisplaySettings | undefined {

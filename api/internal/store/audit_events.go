@@ -416,15 +416,21 @@ func lockAuditHead(ctx context.Context, tx *sqlTx, workspaceID string) (auditHea
 		}
 		return read("")
 	}
-	// A missing head is created in its own statement, outside tx: creating it
-	// inside after a locking read would deadlock two first writers on MySQL
-	// (gap locks). The plain read takes no lock; the locking read then sees
-	// the committed row.
-	if _, err := read(""); errors.Is(err, sql.ErrNoRows) && tx.database != nil {
-		if _, err := tx.database.ExecContext(ctx, create, workspaceID); err != nil {
+	// A missing head is created inside tx, after a plain read that takes no
+	// lock. A locking read first would gap-lock the missing key and deadlock
+	// two first writers on MySQL; a plain INSERT IGNORE would take a shared
+	// lock on a concurrent writer's row and deadlock two waiters upgrading it.
+	// The upsert takes the row's exclusive lock (MySQL ON DUPLICATE KEY
+	// UPDATE, PostgreSQL ON CONFLICT DO UPDATE), so later first writers queue
+	// behind the first one. It must not use a second pooled connection: tx
+	// already holds one, and a pool of N writers would wait on each other
+	// forever.
+	const upsert = `INSERT INTO audit_chain_heads(workspace_id,seq,hash,pruned_seq,pruned_hash) VALUES(?,0,'',0,'') ON CONFLICT(workspace_id) DO UPDATE SET workspace_id=excluded.workspace_id`
+	if _, err := read(""); errors.Is(err, sql.ErrNoRows) {
+		if _, err := tx.ExecContext(ctx, upsert, workspaceID); err != nil {
 			return auditHead{}, err
 		}
-	} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	} else if err != nil {
 		return auditHead{}, err
 	}
 	return read(" FOR UPDATE")
@@ -841,12 +847,12 @@ func (s *SQLiteStore) VerifyAuditChain(ctx context.Context, workspaceID string) 
 func (s *SQLiteStore) MigrateLegacyAuditLog(ctx context.Context) error {
 	moved := 0
 	for _, key := range s.WorkspaceKeys() {
-		if data, ok := s.storedWorkspace(key); !ok || len(data.AuditLog) == 0 {
+		if !s.legacyAuditLogPending(ctx, key) {
 			continue
 		}
 		var count int
 		err := s.rerunBackgroundWrite(ctx, "audit log migration", key, func() (err error) {
-			count, err = s.migrateWorkspaceAuditLog(ctx, key)
+			count, err = s.migrateWorkspaceAuditLogWrite(ctx, key)
 			return err
 		})
 		if err != nil {
@@ -858,6 +864,34 @@ func (s *SQLiteStore) MigrateLegacyAuditLog(ctx context.Context) error {
 		slog.Info("moved audit log entries into the audit_events table", "entries", moved)
 	}
 	return nil
+}
+
+// legacyAuditLogPending reports whether the workspace document still holds
+// audit entries. A bounded image holds no audit log, so the maintenance pass
+// never moved the entries an older server left (SW559): bounded, the entries
+// are read from the workspace's legacy view.
+func (s *SQLiteStore) legacyAuditLogPending(ctx context.Context, key string) bool {
+	if view, release, handled := s.coldAccessorView(ctx, "MigrateLegacyAuditLog", key, []string{"auditLog"}); handled {
+		defer release()
+		return view != nil && view.legacyAuditLogPending(ctx, view.lastWorkspaceKey)
+	}
+	data, ok := s.storedWorkspace(key)
+	return ok && len(data.AuditLog) != 0
+}
+
+// migrateWorkspaceAuditLogWrite moves one workspace's entries. A bounded
+// store runs the literal legacy move on a COLD facade, which holds the
+// complete workspace, and publishes its result (coldLegacyWrite).
+func (s *SQLiteStore) migrateWorkspaceAuditLogWrite(ctx context.Context, key string) (count int, err error) {
+	if s.metadataResidency == nil || s.coldParent != nil {
+		return s.migrateWorkspaceAuditLog(ctx, key)
+	}
+	err = s.coldLegacyWrite(ctx, key, func(ctx context.Context, facade *SQLiteStore) error {
+		var err error
+		count, err = facade.migrateWorkspaceAuditLog(ctx, key)
+		return err
+	})
+	return count, err
 }
 
 func (s *SQLiteStore) migrateWorkspaceAuditLog(ctx context.Context, key string) (int, error) {

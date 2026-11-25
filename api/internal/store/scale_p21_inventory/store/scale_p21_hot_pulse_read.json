@@ -1,0 +1,27 @@
+{
+  "source": "store/scale_p21_hot_pulse_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "beginPulseRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "WorkspaceMetadataFields",
+        "BeginInstalledMetadataRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Owned Pulse feed, unread, composer, history and realtime source reads.",
+      "reason": "Preserves the exact installed physical/default workspace source and literal original accessor off mode. Source projections retain only fields used by Pulse visibility, subscriptions, filters and composer snapshots. All selected values are read-only WireValue projections: JSON bytes and instant comparisons survive detached time zones, and values never become mutation preimages. Index construction skips detail comments/attachments/snapshots and decodes Body/BodyData only under per-update transient admission for mention extraction. Retained entries carry compact identities/counts/mentions and framed string descriptors, with empty Search. MatchSearch streams the exact Unicode-lowercase body/newline/display/name predicate using query-sized KMP admission, including UTF-8 and field boundaries. Complete selected update values, full aggregate payloads and latest snapshots remain independently charged through Close. VisitUpdates lends complete detail under one-record admission; LoadUpdatePage visits native slice order/count without decoding unrelated details. Cancellation and quota errors never become missing workspaces. TestScaleP21HotPulseGroupUpdateBodyScaling increases both Body and BodyData text by 10x across twelve project/initiative updates: retained feed/unread work stays 541808 bytes and summary work stays 744608 bytes. WireTimestamps uses a normal native mutation producer to prove exact warm/reloaded update, BodyData time/pointer, comment, attachment, aggregate, snapshot and cursor JSON with unchanged ordering/score/UnixNano and detached Location ownership. NativeOwnership, BoundsAndInstalledGeneration, WarmReload, ScheduleProjection and HandlerDifferential cover complete comments/reactions, mutable ownership, exact keys/default/NUL/duplicate sources, mentions/order/scoring, pinned generations, cleanup, native cursors and the principal/key feed/unread matrix. This reader does not certify unported PulseFeed callers, history window binding/redaction or the summary writer."
+    },
+    "LoadSchedule": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Once-per-minute Pulse scheduling input projection after feature enablement.",
+      "reason": "Off mode forwards the original fields-only settings accessor. Bounded mode keeps the pinned installed source and exact map keys, selecting only settings/pulseDeliveryCursors, userSettings/PulseSchedule and Timezone, and teamSettings/Timezone. Native typed delivery cursor values survive unchanged; unrelated settings and instruction bodies are skipped. Selected settings and downstream processing remain admitted until the enclosing PulseRead closes. TestScaleP21HotPulseGroupScheduleProjection proves feature probe isolation, native cursor/scalar preservation and constant sub-512KiB work across 10x multi-megabyte unrelated settings, instructions and project bodies. The downstream atomic summary notification/delivery writer remains an independent activation blocker."
+    }
+  }
+}

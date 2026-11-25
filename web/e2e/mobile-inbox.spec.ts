@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto'
 import { expect, type APIRequestContext } from '@playwright/test'
 import { test } from './workspace-fixture'
+import { openWorkspaceWithNetworkRecovery } from './scale-p14-workspace-navigation'
 
 async function workspaceTeamId(request: APIRequestContext, workspaceKey: string) {
   const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
@@ -387,21 +388,20 @@ test.describe('mobile inbox list', () => {
       expect(response.status()).toBe(202)
       return (await response.json() as { reviewId: string }).reviewId
     }
-    const readyOne = await webhook(201, `${workspaceKey}-open-201`)
-    const readyTwo = await webhook(202, `${workspaceKey}-open-202`)
+    // An open review without failing checks is ready to merge; approvals are
+    // code-host decisions, not local status edits.
+    await webhook(201, `${workspaceKey}-open-201`)
+    await webhook(202, `${workspaceKey}-open-202`)
     const draft = await webhook(203, `${workspaceKey}-open-203`)
-    for (const id of [readyOne, readyTwo]) {
-      const approved = await request.patch(`/api/reviews/${id}`, { headers, data: { status: 'approved' } })
-      expect(approved.status()).toBe(200)
-    }
     const drafted = await request.patch(`/api/reviews/${draft}`, { headers, data: { draft: true } })
     expect(drafted.status()).toBe(200)
 
-    await page.goto(`/${workspaceKey}/reviews/created`)
+    const displayOptions = page.locator('.reviews-topbar button[aria-label="Display options"]')
+    await openWorkspaceWithNetworkRecovery(page, `/${workspaceKey}/reviews/created`, displayOptions)
     const near = (actual: number | undefined, expected: number) => expect(Math.abs((actual ?? Number.NaN) - expected)).toBeLessThanOrEqual(1)
 
     // The reference account groups the Created view by focus; pick it the way a user does.
-    await page.locator('.reviews-topbar button[aria-label="Display options"]').click()
+    await displayOptions.click()
     await page.locator('.review-list-options .select-control[aria-label="Grouping"]').click()
     await page.locator('[role="option"]:has-text("Focus")').click()
     await page.locator('.reviews-topbar h1').click()

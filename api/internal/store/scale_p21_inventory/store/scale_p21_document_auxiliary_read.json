@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_document_auxiliary_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginDocumentAuxiliaryRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owns the exact latest installed source independently of inherited logical pins, or retains explicit same-database caller metadata for authenticated snapshots. Reuses admitted DocumentRead policy/project/favorite helpers, read-only DocumentDirectoryRead field projection and selected-page revision body loading. Ordered matching live occurrences preserve projected lookup precedence; raw-route/current-user draft filtering retains nil/empty/native values, while development retains all-user drafts and zero policy SQL. History scans only matching document trash payloads, excludes restore Links, and reuses shared casefold/typed JSON helpers so dense null revision expansion is admitted before decode. Existing policy memo shares one same-snapshot policy across both live access checks; certified installed stamps use the shared fastpath and unknown/stale stamps retain canonical recovery. Late metadata output errors preserve quota/context failures instead of becoming authorization 404s. Six SW129 tests pass normal, persistent SQLite count2 and race for native output, selected history pages, source replacement/old pins, caller snapshots, partial/canceled/late refusal, mutation isolation, independent readers and concurrent double-close. Latest normal checks retain all proofs; SW130 passes 598 exact warm-unknown/certified-reloaded handler pairs with complete output ownership and zero full metadata decodes/retained work. Certified route SQL is 23 admin/18 other versus 10/8 legacy; fallback remains 71/66, development 0/0. These are fixture counts, not a universal SQL cap or capacity claim.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared owned input primitive for the document editor drafts and legacy document history GET views.",
+      "callers": ["server/server.listDocumentDrafts", "server/server.documentContentHistory"]
+    }
+  }
+}

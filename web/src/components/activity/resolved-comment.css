@@ -4,6 +4,12 @@
   gap: 8px;
   min-width: 0;
 }
+.resolved-comment__activity-toggle { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--activity-ink); font: 450 12px/18px var(--font); text-align: left; }
+.resolved-comment__activity-toggle > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.resolved-comment__activity-toggle > svg { flex: none; }
+.resolved-comment__activity-toggle:hover { background: var(--theme-surface-hover); }
+.resolved-comment__activity-toggle:focus-visible { outline: 2px solid var(--focus-ring); }
+.resolved-comment__activity-toggle:disabled { opacity: .5; }
 
 .resolved-comment__bar {
   display: flex;

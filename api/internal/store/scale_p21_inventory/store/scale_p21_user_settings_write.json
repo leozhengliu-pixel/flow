@@ -1,0 +1,20 @@
+{
+  "source": "store/scale_p21_user_settings_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "MutateUserSettings": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Flag off the literal MutateWorkspace. Bounded, the dispatch the literal one makes for user_settings.updated: userSettingsRecordMutation patches (no username) run mutateBoundedUserSettingsRecord (mutateUserSettingsRecord's transaction under the bounded writers' lock and stamp protocol on the member's one installed record, the whole field only when stored inline; the literal row write, event without previous values and realtime entity; the installed source patched with exactly the entries the literal writer installs, as written), others the scoped writer over the complete users, members and userSettings fields (the metadata-only full writer's callback input for usernameTaken). TestScaleP21SW602AccountSettings (legacy vs warm vs SQL-reloaded).",
+      "accessors": [
+        "MutateWorkspace",
+        "MutateWorkspaceScoped"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Backs the HOT account settings write.",
+      "callers": [
+        "server/settings_features.go:updateUserSettings"
+      ]
+    }
+  }
+}

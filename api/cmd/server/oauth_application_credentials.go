@@ -84,7 +84,17 @@ func (s *server) issueClientCredentials(w http.ResponseWriter, r *http.Request, 
 		}
 		clientID, secret = basicID, basicSecret
 	}
-	workspace, found := s.store.OAuthApplicationHome(clientID)
+	if clientID == "" || secret == "" {
+		writeOAuthInvalidClient(w, false, "Invalid client credentials")
+		return
+	}
+	workspace, found, err := s.store.LookupOAuthApplicationHome(r.Context(), clientID)
+	if err != nil {
+		if !writeOAuthStoreUnavailable(w, err) {
+			writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not check client credentials")
+		}
+		return
+	}
 	if !found || workspaceKey(r) != "" && workspaceKey(r) != workspace {
 		writeOAuthError(w, 401, "invalid_client", "Invalid client credentials")
 		return
@@ -122,6 +132,7 @@ func (s *server) issueApplicationToken(w http.ResponseWriter, r *http.Request, w
 	key, err = s.store.IssueApplicationCredential(r.Context(), workspace, clientID, clientSecret, issuer, actor, scopes, key, applicationApproved)
 	if err != nil {
 		switch {
+		case writeOAuthStoreUnavailable(w, err):
 		case errors.Is(err, store.ErrOAuthGrantDisabled):
 			writeOAuthError(w, 400, "unauthorized_client", "Enable client credentials for this application")
 		case errors.Is(err, store.ErrOAuthTokenLimit):
@@ -139,7 +150,9 @@ func (s *server) issueApplicationToken(w http.ResponseWriter, r *http.Request, w
 		// only remembered encrypted: without FLOW_CONNECTOR_SECRET_KEY the
 		// token is returned once and a later copy mints a new one.
 		if err := s.store.SetApplicationDeveloperToken(r.Context(), workspace, clientID, key.ID, secret); err != nil && !errors.Is(err, store.ErrSecretKeyMissing) {
-			writeOAuthError(w, 500, "server_error", "Could not store developer token")
+			if !writeOAuthStoreUnavailable(w, err) {
+				writeOAuthError(w, 500, "server_error", "Could not store developer token")
+			}
 			return
 		}
 	}
@@ -163,8 +176,11 @@ func applicationTokenBody(secret string, key domain.APIKey, expiresIn int) publi
 // developerTokenApplication finds the application of a developer token
 // request; only workspace admins may create or copy developer tokens.
 func (s *server) developerTokenApplication(w http.ResponseWriter, r *http.Request) (*domain.Bootstrap, domain.OAuthApplication, bool) {
-	data := s.workspaceData(r)
-	if !workspaceAdminRole(data.ViewerRole) {
+	data, err := s.workspaceDataWithError(r)
+	if writeAuthCheckFailure(w, err) {
+		return nil, domain.OAuthApplication{}, false
+	}
+	if err != nil || !workspaceAdminRole(data.ViewerRole) {
 		writeError(w, 403, "Workspace admin access required")
 		return nil, domain.OAuthApplication{}, false
 	}
@@ -260,7 +276,7 @@ func (s *server) rotateOAuthApplicationSecret(w http.ResponseWriter, r *http.Req
 	}
 	id := r.PathValue("id")
 	var rotated domain.OAuthApplication
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.secret_rotated", id, nil, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "oauth_application.secret_rotated", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "oauthApplications", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
 		if index < 0 {
 			return errNotFound

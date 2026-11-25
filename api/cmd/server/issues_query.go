@@ -45,7 +45,7 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 	r = r.WithContext(ctx)
 	data, scope, scopeErr := s.pagedRealtimeMetadata(r)
 	if scopeErr != nil {
-		issueRecordsError(w, scopeErr)
+		issueRecordsErrorFor(w, r, scopeErr)
 		return
 	}
 	query := r.URL.Query()
@@ -71,12 +71,12 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 		}
 		page, err := s.store.QueryIssueRecords(ctx, scope)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 		page.Items, err = s.projectIssueRecordReferences(r, data, scope, page.Items)
 		if err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 		writeJSON(w, 200, page)
@@ -104,7 +104,7 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 	if root.references("agentsessionstate") {
 		// Resolved before the walk, which holds the read connection.
 		if sessionStates, err = s.store.WorkspaceAgentSessionStates(ctx, data.Workspace.URLKey); err != nil {
-			issueRecordsError(w, err)
+			issueRecordsErrorFor(w, r, err)
 			return
 		}
 	}
@@ -130,13 +130,13 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	sortIssues(result.items, query.Get("sort"), query.Get("direction"))
 	items, err := s.projectIssueRecordReferences(r, data, scope, result.items)
 	if err != nil {
-		issueRecordsError(w, err)
+		issueRecordsErrorFor(w, r, err)
 		return
 	}
 	if items == nil {
@@ -618,8 +618,8 @@ func issueFieldValues(issue domain.Issue, field string, data domain.Bootstrap) [
 		return []string{issue.CreatedAt.UTC().Format(time.RFC3339)}
 	case "updatedat":
 		return []string{issue.UpdatedAt.UTC().Format(time.RFC3339)}
-	case "startedat", "completedat", "triagedat", "statuschangedat", "autoclosedat":
-		value := map[string]*time.Time{"startedat": issue.StartedAt, "completedat": issue.CompletedAt, "triagedat": issue.TriagedAt, "statuschangedat": issue.StatusChangedAt, "autoclosedat": issue.AutoClosedAt}[strings.ToLower(strings.TrimSpace(field))]
+	case "startedat", "completedat", "canceledat", "triagedat", "statuschangedat", "autoclosedat":
+		value := map[string]*time.Time{"startedat": issue.StartedAt, "completedat": issue.CompletedAt, "canceledat": issue.CanceledAt, "triagedat": issue.TriagedAt, "statuschangedat": issue.StatusChangedAt, "autoclosedat": issue.AutoClosedAt}[strings.ToLower(strings.TrimSpace(field))]
 		if value == nil {
 			return nil
 		}

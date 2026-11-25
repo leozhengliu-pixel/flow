@@ -655,6 +655,8 @@
 :root[data-theme="light"] .flow-inbox-mutation-error button { border-color: var(--theme-border-strong); background: var(--theme-control-active); color: var(--theme-text-primary); }
 :root[data-theme="light"] .flow-inbox-menu__native-switch[aria-checked="true"] { background: var(--toggle-regular-on); }
 :root[data-theme="light"] .flow-inbox-row__avatar { color: var(--on-accent); }
+/* An uploaded picture (a person's photo, an OAuth application's logo) carries no initials colour behind it. */
+img.flow-inbox-row__avatar { background: transparent; }
 :root[data-theme="light"] .flow-inbox-list-state--message { color: var(--theme-text-tertiary); }
 :root[data-theme="light"] .flow-inbox-list-state__error-icon { stroke: var(--theme-text-tertiary); }
 :root[data-theme="light"] .flow-inbox-list-state--message button,

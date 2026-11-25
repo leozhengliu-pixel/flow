@@ -60,6 +60,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		}
 	}
 	metadataWritten := false
+	relationOnly := eventType == "issue.relation_added" || eventType == "issue.relation_removed"
 	needsFamily := eventType == "issue.deleted" || eventType == "issue.batch_updated" && (batch.Update.StateID != nil || batch.Update.ParentID != nil)
 	traceStart(ctx, "issue")
 	// A metadata record the callback changed was changed on another server
@@ -77,22 +78,14 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		}
 		// writeMu holds the copy (and its revision) until the install.
 		ctx, copyWrite := s.watchMetadataWrite(ctx, workspace)
-		metadata := collectionMetadata(current)
-		if discussionOnly {
-			// No discussion callback (the comment, reaction and thread
-			// subscription handlers, the comment action claim, the MCP
-			// comment tool) uses the trash, the second largest collection:
-			// keep it out of the clone, then put the stored entries back
-			// (TestIssueWritesLeaveTheSharedCollectionsAlone).
-			metadata.Trash = nil
-		}
-		data := cloneBootstrap(metadata)
+		data, fields := issueScopeCallbackInput(current, discussionOnly)
 		originalRole := data.ViewerRole
 		if actor, ok := actorFromContext(ctx); ok {
+			actor = mutationInputActor(actor)
 			data.Viewer = actor
-			role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, actor.ID)
-			if err != nil || status != "active" {
-				return ErrAuthForbidden
+			role, err := s.mutationWorkspaceRole(ctx, data.Workspace.ID, actor.ID)
+			if err != nil {
+				return err
 			}
 			data.ViewerRole = role
 		}
@@ -130,6 +123,66 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		for id, record := range records {
 			loaded[id], stored[id] = record.issue, record.raw
 		}
+		if relationOnly {
+			var input struct {
+				RelatedIssueID string `json:"relatedIssueId"`
+				RelationID     string `json:"relationId"`
+				Type           string `json:"type"`
+			}
+			raw, err := json.Marshal(payload)
+			if err != nil {
+				return err
+			}
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return err
+			}
+			if eventType == "issue.relation_removed" {
+				for _, issue := range loaded {
+					for _, relation := range issue.Relations {
+						if relation.ID == input.RelationID {
+							input.RelatedIssueID, input.Type = relation.RelatedIssueID, relation.Type
+						}
+					}
+				}
+			}
+			related, err := s.loadIssueRecordsByID(ctx, tx, workspace, []string{input.RelatedIssueID}, true)
+			if err != nil {
+				return err
+			}
+			for id, record := range related {
+				loaded[id], stored[id] = record.issue, record.raw
+			}
+			// Parent changes validate cycles and detach from the previous
+			// parent. Load only those ancestor chains, never workspace issues.
+			if input.Type == "parent_of" || input.Type == "sub_issue_of" {
+				for depth := 0; ; depth++ {
+					parents := []string{}
+					for _, issue := range loaded {
+						if issue.ParentID != nil && *issue.ParentID != "" {
+							if _, exists := loaded[*issue.ParentID]; !exists {
+								parents = append(parents, *issue.ParentID)
+							}
+						}
+					}
+					if len(parents) == 0 {
+						break
+					}
+					if depth == 64 {
+						return fmt.Errorf("issue ancestor limit exceeded")
+					}
+					ancestors, err := s.loadIssueRecordsByID(ctx, tx, workspace, parents, true)
+					if err != nil {
+						return err
+					}
+					if len(ancestors) == 0 {
+						break
+					}
+					for id, record := range ancestors {
+						loaded[id], stored[id] = record.issue, record.raw
+					}
+				}
+			}
+		}
 		if needsFamily {
 			related := []string{}
 			for _, id := range ids {
@@ -153,6 +206,24 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			}
 			for id, record := range records {
 				loaded[id], stored[id] = record.issue, record.raw
+			}
+		}
+		if discussionOnly && issueAncestorInputs(ctx) {
+			if target, ok := loaded[ids[0]]; ok {
+				chain, err := loadIssueAncestorChain(target, func(id string) (storedIssueRecord, bool, error) {
+					if issue, exists := loaded[id]; exists {
+						return storedIssueRecord{issue: issue, raw: stored[id]}, true, nil
+					}
+					records, err := s.loadIssueRecordsByID(ctx, tx, workspace, []string{id}, false)
+					record, found := records[id]
+					return record, found, err
+				})
+				if err != nil {
+					return err
+				}
+				for _, record := range chain {
+					loaded[record.issue.ID], stored[record.issue.ID] = record.issue, record.raw
+				}
 			}
 		}
 		if len(loaded) > 1000 {
@@ -227,7 +298,11 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			data.Issues = append(data.Issues, issue)
 		}
 		var notifications map[string][]domain.Notification
-		if discussionOnly {
+		if relationOnly {
+			data.Comments = map[string][]domain.Comment{}
+			data.Activities = map[string][]domain.ActivityEvent{}
+			notifications = map[string][]domain.Notification{}
+		} else if discussionOnly {
 			data.Comments, err = loadDiscussionComment(ctx, tx, workspace, ids[0], discussion.CommentID)
 			if err != nil {
 				return err
@@ -260,16 +335,28 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		for _, delivery := range data.NotificationDeliveries {
 			oldDeliveries[delivery.ID] = true
 		}
+		if len(fields) > 0 {
+			copyMutationProjects(&data, current)
+		}
 		refreshDisplayReferences(&data)
 		refreshIssueReferences(&data)
 		traceMark(ctx, "load")
 		data.FormerMembers = s.formerMemberLookup(ctx, tx, &data)
 		data.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
-		aggregate, err := mutate(&data)
+		var aggregate string
+		if len(fields) > 0 && verifyNarrowMutationInputs() {
+			aggregate, err = s.verifyMutationCallback(ctx, tx, "discussion", current, &data, fields, payload, mutate)
+			fields = nil
+		} else {
+			aggregate, err = mutate(&data)
+		}
 		data.CollaborationUpdates = nil
 		data.FormerMembers = nil
 		traceMark(ctx, "mutate")
 		data.Members, data.TeamMembers = storedMembers, storedTeamMembers
+		if len(fields) > 0 {
+			restoreUnlistedMetadata(&data, current, fields)
+		}
 		if discussionOnly {
 			data.Trash = current.Trash
 		}
@@ -313,7 +400,27 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 				return err
 			}
 		}
-		if discussionOnly {
+		if relationOnly {
+			// The callback starts from empty timelines, so only what it
+			// appended is written; existing history is never replaced.
+			if len(data.Comments) > 0 {
+				return fmt.Errorf("relation mutations cannot write comments")
+			}
+			for resource, items := range data.Activities {
+				for _, item := range items {
+					if err := writeContentRecord(ctx, tx, workspace, "activity", resource, item); err != nil {
+						return err
+					}
+				}
+			}
+			for resource, items := range notificationRecords(data.Notifications) {
+				for _, item := range items {
+					if err := writeContentRecord(ctx, tx, workspace, "notification", resource, item); err != nil {
+						return err
+					}
+				}
+			}
+		} else if discussionOnly {
 			if err := persistDiscussion(ctx, tx, workspace, ids[0], discussion.CommentID, data); err != nil {
 				return err
 			}

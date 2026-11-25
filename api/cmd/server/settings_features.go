@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -28,12 +27,12 @@ func requestActor(s *server, r *http.Request) domain.User {
 	if user := authUser(r); user.ID != "" {
 		return user
 	}
-	data, _ := s.store.WorkspaceMetadata(workspaceKey(r))
+	data, _, _ := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{})
 	return data.Viewer
 }
 
 func (s *server) getUserSettings(w http.ResponseWriter, r *http.Request) {
-	_, settings, ok := s.store.AccountCollections(workspaceKey(r), requestActor(s, r).ID)
+	_, settings, ok := s.accountCollections(r.Context(), workspaceKey(r), requestActor(s, r).ID, false)
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -48,7 +47,7 @@ func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := requestActor(s, r)
 	var updated domain.UserSettings
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "user_settings.updated", actor.ID, patch, func(data *domain.Bootstrap) error {
+	err := s.store.MutateUserSettings(r.Context(), workspaceKey(r), actor.ID, patch, func(data *domain.Bootstrap) error {
 		input, err := mergeSettingsPatch(data.UserSettings[actor.ID], patch, "userId", "updatedAt", "commitSigningKey", "personalSettingsVersion")
 		if err != nil {
 			return err
@@ -435,6 +434,12 @@ type labelInput struct {
 
 func (s *server) listWorkspaceLabels(w http.ResponseWriter, r *http.Request) {
 	resource := r.URL.Query().Get("resourceType")
+	if s.store.BoundedMetadataEnabled() {
+		s.listLabelsBounded(w, r, func(label domain.IssueLabel) bool {
+			return labelScopeIsWorkspace(label.Scope) && (resource == "" || labelResourceType(label) == resource)
+		})
+		return
+	}
 	result := []domain.IssueLabel{}
 	for _, label := range s.workspaceData(r).Labels {
 		if labelScopeIsWorkspace(label.Scope) && (resource == "" || labelResourceType(label) == resource) {
@@ -452,7 +457,11 @@ func (s *server) createWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := requestActor(s, r)
 	var created domain.IssueLabel
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "label.created", input, func(data *domain.Bootstrap) (string, error) {
+	scope := store.MetadataAppendScope{AppendKinds: []string{"labels"}}
+	if input.GroupID != nil {
+		scope.Read = labelGroupReads(strings.TrimSpace(*input.GroupID))
+	}
+	err := s.store.MutateWorkspaceAppendingWithAggregate(r.Context(), workspaceKey(r), "label.created", input, scope, func(data *domain.Bootstrap) (string, error) {
 		var err error
 		created, err = newLabel(data, actor.ID, "Workspace", input)
 		if err != nil {
@@ -474,7 +483,20 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	// The event carries the updated label (payload.label) so clients patch their
 	// embedded copies without refetching; it is filled in by the mutation.
 	payload := inputEventPayload(input)
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "label.updated", id, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceResolved(r.Context(), workspaceKey(r), "label.updated", id, payload, store.MetadataResolvedScope{
+		MetadataRecordScope: labelRecordScope(id),
+		ResolveRead: func(data domain.Bootstrap) ([]store.RecordKey, error) {
+			// The label's group: the requested one, else its current one.
+			var keys []store.RecordKey
+			if input.GroupID != nil {
+				keys = labelGroupReads(strings.TrimSpace(*input.GroupID))
+			} else if index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id }); index >= 0 {
+				keys = labelGroupReads(data.Labels[index].GroupID)
+			}
+			projects, err := teamMetadataProjectDisplayReads(data)
+			return append(keys, projects...), err
+		},
+	}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
 		if index < 0 {
 			return errNotFound
@@ -679,7 +701,11 @@ func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.LabelGroup
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "label_group.created", input, func(data *domain.Bootstrap) (string, error) {
+	scope := store.MetadataAppendScope{AppendKinds: []string{"labelGroups"}}
+	if input.Scope != nil && *input.Scope != "" && *input.Scope != "Workspace" && validLabelRecordKey(*input.Scope) {
+		scope.Read = []store.RecordKey{{Kind: "teams", ID: *input.Scope}}
+	}
+	err := s.store.MutateWorkspaceAppendingWithAggregate(r.Context(), workspaceKey(r), "label_group.created", input, scope, func(data *domain.Bootstrap) (string, error) {
 		resource := "issue"
 		if input.ResourceType != nil {
 			resource = strings.TrimSpace(*input.ResourceType)
@@ -713,7 +739,19 @@ func (s *server) updateLabelGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.LabelGroup
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "label_group.updated", id, input, func(data *domain.Bootstrap) error {
+	scope := labelRecordScope(id)
+	scope.Write = nil
+	if validLabelRecordKey(id) {
+		scope.Write = []store.RecordKey{{Kind: "labelGroups", ID: id}}
+	}
+	if input.ArchivedAt != nil {
+		// Archiving a group archives each of its labels.
+		scope.Fields = []string{"labels"}
+	}
+	err := s.store.MutateWorkspaceResolved(r.Context(), workspaceKey(r), "label_group.updated", id, input, store.MetadataResolvedScope{
+		MetadataRecordScope: scope,
+		ResolveRead:         teamMetadataProjectDisplayReads,
+	}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -951,6 +989,12 @@ func (s *server) createProjectStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, message)
 		return
 	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:createProjectStatus", "project_status.created", func(repo *store.SQLiteStore, request *http.Request) {
+			s.createProjectStatusWithStore(w, request, repo, input)
+		})
+		return
+	}
 	var created domain.ProjectStatus
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "project_status.created", input, func(data *domain.Bootstrap) (string, error) {
 		statusType := "planned"
@@ -984,6 +1028,12 @@ func (s *server) updateProjectStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if message := validateProjectStatusInput(input); message != "" {
 		writeError(w, http.StatusBadRequest, message)
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:updateProjectStatus", "project_status.updated", func(repo *store.SQLiteStore, request *http.Request) {
+			s.updateProjectStatusWithStore(w, request, repo, input)
+		})
 		return
 	}
 	id := r.PathValue("id")
@@ -1026,6 +1076,12 @@ func (s *server) updateProjectStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteProjectStatus(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:deleteProjectStatus", "project_status.deleted", func(repo *store.SQLiteStore, request *http.Request) {
+			s.deleteProjectStatusWithStore(w, request, repo)
+		})
+		return
+	}
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_status.deleted", id, nil, func(data *domain.Bootstrap) error {
 		statusIndex := slices.IndexFunc(data.ProjectStatuses, func(status domain.ProjectStatus) bool { return status.ID == id })
@@ -1063,6 +1119,12 @@ func (s *server) reorderProjectStatuses(w http.ResponseWriter, r *http.Request) 
 		IDs []string `json:"ids"`
 	}
 	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:reorderProjectStatuses", "project_status.reordered", func(repo *store.SQLiteStore, request *http.Request) {
+			s.reorderProjectStatusesWithStore(w, request, repo, input)
+		})
 		return
 	}
 	var updated []domain.ProjectStatus
@@ -1137,6 +1199,15 @@ func (s *server) createWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 		return
 	}
 	actor := requestActor(s, r)
+	if _, ok := s.issueTemplateEditAccess(w, r, input); !ok {
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:createWorkspaceIssueTemplate", "issue_template.created", func(repo *store.SQLiteStore, request *http.Request) {
+			s.createWorkspaceIssueTemplateWithStore(w, request, repo, input, actor)
+		})
+		return
+	}
 	var created domain.IssueTemplate
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "issue_template.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
@@ -1155,11 +1226,22 @@ func (s *server) updateWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	viewer, ok := s.issueTemplateEditAccess(w, r, input)
+	if !ok {
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:updateWorkspaceIssueTemplate", "issue_template.updated", func(repo *store.SQLiteStore, request *http.Request) {
+			s.updateWorkspaceIssueTemplateWithStore(w, request, repo, input, viewer)
+		})
+		return
+	}
 	id := r.PathValue("id")
 	var updated domain.IssueTemplate
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.updated", id, input, func(data *domain.Bootstrap) error {
+		// Team templates change only through their team's routes.
 		index := slices.IndexFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool {
-			return template.ID == id && (template.Scope == "workspace" || template.VisibilityTeamID == "")
+			return template.ID == id && workspaceIssueTemplate(template) && issueTemplateReachable(viewer, template)
 		})
 		if index < 0 {
 			return errNotFound
@@ -1180,11 +1262,22 @@ func (s *server) updateWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 }
 
 func (s *server) deleteWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Request) {
+	viewer, ok := s.issueTemplateEditAccess(w, r, domain.IssueTemplateMutationInput{})
+	if !ok {
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:deleteWorkspaceIssueTemplate", "issue_template.deleted", func(repo *store.SQLiteStore, request *http.Request) {
+			s.deleteWorkspaceIssueTemplateWithStore(w, request, repo, viewer)
+		})
+		return
+	}
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "issue_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "issueTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.IssueTemplates)
+		// Team templates are deleted only through their team's routes.
 		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool {
-			return template.ID == id && (template.Scope == "workspace" || template.VisibilityTeamID == "")
+			return template.ID == id && workspaceIssueTemplate(template) && issueTemplateReachable(viewer, template)
 		})
 		if before == len(data.IssueTemplates) {
 			return errNotFound
@@ -1331,33 +1424,28 @@ func apiKeyUpdateString(raw json.RawMessage) (value string, present bool, isNull
 	return strings.TrimSpace(value), true, false, nil
 }
 
+// GET /api/api-keys uses the scoped store in bounded mode. Flag off keeps the
+// legacy withColdMetadataRequest path.
 func (s *server) listAPIKeys(w http.ResponseWriter, r *http.Request) {
-	actor := requestActor(s, r)
-	data := s.workspaceData(r)
-	result := []domain.APIKey{}
-	admin := strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner")
-	apiKeyID := ""
-	if token, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
-		// A token-authenticated request must not enumerate the creator's other
-		// credentials, even when that creator is a workspace administrator.
-		apiKeyID = token.ID
+	if s.store.BoundedMetadataEnabled() {
+		s.listAPIKeysWithStore(w, r, s.store)
+		return
 	}
-	for _, key := range data.APIKeys {
-		if key.RevokedAt == nil && (apiKeyID != "" && key.ID == apiKeyID || apiKeyID == "" && (admin || key.CreatorID == actor.ID)) {
-			result = append(result, publicAPIKey(key))
-		}
-	}
-	writeJSON(w, http.StatusOK, result)
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:listAPIKeys", "", func(repo *store.SQLiteStore, request *http.Request) {
+		s.listAPIKeysWithStore(w, request, repo)
+	})
+}
+
+type apiKeyCreateInput struct {
+	Name            string   `json:"name"`
+	Scopes          []string `json:"scopes"`
+	TeamIDs         []string `json:"teamIds"`
+	TeamRestriction string   `json:"teamRestriction"`
+	ExpiresAt       *string  `json:"expiresAt,omitempty"`
 }
 
 func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name            string   `json:"name"`
-		Scopes          []string `json:"scopes"`
-		TeamIDs         []string `json:"teamIds"`
-		TeamRestriction string   `json:"teamRestriction"`
-		ExpiresAt       *string  `json:"expiresAt,omitempty"`
-	}
+	var input apiKeyCreateInput
 	if !decodeJSON(w, r, &input) {
 		return
 	}
@@ -1373,67 +1461,13 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor := requestActor(s, r)
-	var created domain.APIKey
-	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "api_key.created", input, func(data *domain.Bootstrap) (string, error) {
-		if s.authDisabled {
-			data.ViewerRole = "admin"
-		}
-		if strings.EqualFold(data.ViewerRole, "guest") {
-			return "", fmt.Errorf("%w: guest users cannot create personal API keys", store.ErrAuthForbidden)
-		}
-		if !roleSatisfiesWorkspacePermission(data.ViewerRole, data.WorkspaceSettings.APIKeyPermission) {
-			return "", fmt.Errorf("%w: API key creation is limited by workspace security policy", store.ErrAuthForbidden)
-		}
-		for _, existing := range data.APIKeys {
-			if existing.RevokedAt == nil && existing.CreatorID == actor.ID && strings.EqualFold(strings.TrimSpace(existing.Name), input.Name) {
-				return "", fmt.Errorf("%w: API key name already exists", errInvalid)
-			}
-		}
-		scopes := normalizeAPIKeyScopes(input.Scopes)
-		if err := validateAPIKeyScopes(data, scopes); err != nil {
-			return "", err
-		}
-		teamIDs := normalizedStrings(input.TeamIDs)
-		for _, id := range teamIDs {
-			if !teamExists(data, id) {
-				return "", fmt.Errorf("%w: unknown team", errInvalid)
-			}
-		}
-		restriction := strings.ToLower(strings.TrimSpace(input.TeamRestriction))
-		if restriction == "" {
-			if len(teamIDs) > 0 {
-				restriction = "selected"
-			} else {
-				restriction = "all"
-			}
-		}
-		if restriction != "all" && restriction != "selected" {
-			return "", fmt.Errorf("%w: teamRestriction must be all or selected", errInvalid)
-		}
-		if restriction == "selected" && len(teamIDs) == 0 {
-			return "", fmt.Errorf("%w: selected team access requires at least one team", errInvalid)
-		}
-		if restriction == "all" {
-			teamIDs = nil
-		}
-		var expiresAt *time.Time
-		if input.ExpiresAt != nil {
-			var parseErr error
-			expiresAt, parseErr = parseAPIKeyExpiry(input.ExpiresAt)
-			if parseErr != nil {
-				return "", parseErr
-			}
-		}
-		created = domain.APIKey{ID: idgen.New("api_key_"), Name: input.Name, Prefix: secret[:min(len(secret), 17)], SecretHash: secretHash(secret), CreatorID: actor.ID, Scopes: scopes, TeamIDs: teamIDs, TeamRestriction: restriction, CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt}
-		data.APIKeys = append([]domain.APIKey{created}, data.APIKeys...)
-		appendAudit(data, "created", "api_key", created.ID, map[string]any{"name": created.Name, "prefix": created.Prefix, "scopes": created.Scopes, "teamRestriction": created.TeamRestriction})
-		return created.ID, nil
-	})
-	if err != nil {
-		respondMutation(w, err, http.StatusCreated, nil)
+	if s.store.BoundedMetadataEnabled() {
+		s.createAPIKeyWithStore(w, r, s.store, input, secret, actor)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"key": publicAPIKey(created), "secret": secret})
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:createAPIKey", "api_key.created", func(repo *store.SQLiteStore, request *http.Request) {
+		s.createAPIKeyWithStore(w, request, repo, input, secret, actor)
+	})
 }
 
 // updateAPIKey changes the non-secret metadata of an existing personal key.
@@ -1498,81 +1532,15 @@ func (s *server) updateAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	actor := requestActor(s, r)
-	var updated domain.APIKey
-	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "api_key.updated", map[string]any{
-		"id": id, "name": name, "scopes": scopes, "teamIds": teamIDs, "teamRestriction": restrictionValue, "expiresAt": expiresAt,
-	}, func(data *domain.Bootstrap) (string, error) {
-		if s.authDisabled {
-			data.ViewerRole = "admin"
-		}
-		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
-			return key.ID == id && key.RevokedAt == nil && (key.CreatorID == actor.ID || workspaceAdminRole(data.ViewerRole))
-		})
-		if index < 0 {
-			return "", errNotFound
-		}
-		current := &data.APIKeys[index]
-		before := *current
-		if input.Name != nil {
-			for _, existing := range data.APIKeys {
-				if existing.ID != id && existing.RevokedAt == nil && existing.CreatorID == current.CreatorID && strings.EqualFold(strings.TrimSpace(existing.Name), name) {
-					return "", fmt.Errorf("%w: API key name already exists", errInvalid)
-				}
-			}
-			current.Name = name
-		}
-		if scopesSet {
-			if err := validateAPIKeyScopes(data, scopes); err != nil {
-				return "", err
-			}
-			current.Scopes = scopes
-		}
-		if teamIDsSet || restrictionSet {
-			ids := slices.Clone(current.TeamIDs)
-			restriction := strings.ToLower(strings.TrimSpace(current.TeamRestriction))
-			if teamIDsSet {
-				ids = teamIDs
-			}
-			if restrictionSet {
-				restriction = strings.ToLower(restrictionValue)
-			}
-			if restriction == "" {
-				if len(ids) > 0 {
-					restriction = "selected"
-				} else {
-					restriction = "all"
-				}
-			}
-			if restriction != "all" && restriction != "selected" {
-				return "", fmt.Errorf("%w: teamRestriction must be all or selected", errInvalid)
-			}
-			for _, teamID := range ids {
-				if !teamExists(data, teamID) {
-					return "", fmt.Errorf("%w: unknown team", errInvalid)
-				}
-			}
-			if restriction == "selected" && len(ids) == 0 {
-				return "", fmt.Errorf("%w: selected team access requires at least one team", errInvalid)
-			}
-			if restriction == "all" {
-				ids = nil
-			}
-			current.TeamIDs, current.TeamRestriction = ids, restriction
-		}
-		if expiresSet {
-			current.ExpiresAt = expiresAt
-		}
-		updated = publicAPIKey(*current)
-		if unchangedEdit(before, *current) {
-			return id, store.ErrNoMutation
-		}
-		return id, nil
-	})
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
+	update := apiKeyUpdate{id: id, name: name, nameSet: input.Name != nil, scopes: scopes, scopesSet: scopesSet, teamIDs: teamIDs, teamIDsSet: teamIDsSet,
+		restrictionValue: restrictionValue, restrictionSet: restrictionSet, expiresSet: expiresSet, expiresAt: expiresAt}
+	if s.store.BoundedMetadataEnabled() {
+		s.updateAPIKeyWithStore(w, r, s.store, update, actor)
 		return
 	}
-	writeJSON(w, http.StatusOK, updated)
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:updateAPIKey", "api_key.updated", func(repo *store.SQLiteStore, request *http.Request) {
+		s.updateAPIKeyWithStore(w, request, repo, update, actor)
+	})
 }
 
 // rotateAPIKeySecret revokes the previous secret and returns a replacement
@@ -1585,69 +1553,61 @@ func (s *server) rotateAPIKeySecret(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusInternalServerError, nil)
 		return
 	}
-	var rotated domain.APIKey
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "api_key.secret_rotated", id, nil, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
-			return key.ID == id && key.RevokedAt == nil && (key.CreatorID == actor.ID || strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner"))
-		})
-		if index < 0 {
-			return errNotFound
-		}
-		data.APIKeys[index].SecretHash = secretHash(secret)
-		data.APIKeys[index].Prefix = secret[:min(len(secret), 17)]
-		rotated = publicAPIKey(data.APIKeys[index])
-		appendAudit(data, "secret_rotated", "api_key", id, map[string]any{"name": rotated.Name, "prefix": rotated.Prefix})
-		return nil
-	})
-	if err != nil {
-		respondMutation(w, err, http.StatusNotFound, nil)
+	if s.store.BoundedMetadataEnabled() {
+		s.rotateAPIKeySecretWithStore(w, r, s.store, id, secret, actor)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"key": rotated, "secret": secret})
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:rotateAPIKeySecret", "api_key.secret_rotated", func(repo *store.SQLiteStore, request *http.Request) {
+		s.rotateAPIKeySecretWithStore(w, request, repo, id, secret, actor)
+	})
 }
 
 func (s *server) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
-	id, actor := r.PathValue("id"), requestActor(s, r)
-	viewerRole := s.workspaceData(r).ViewerRole
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "api_key.revoked", id, nil, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
-			return key.ID == id && (key.CreatorID == actor.ID || workspaceAdminRole(viewerRole))
-		})
-		if index < 0 {
-			return errNotFound
-		}
-		now := time.Now().UTC()
-		data.APIKeys[index].RevokedAt = &now
-		appendAudit(data, "revoked", "api_key", id, map[string]any{"name": data.APIKeys[index].Name, "prefix": data.APIKeys[index].Prefix, "ownerId": data.APIKeys[index].CreatorID})
-		return nil
-	})
-	if err != nil {
-		respondMutation(w, err, http.StatusNoContent, nil)
+	if s.store.BoundedMetadataEnabled() {
+		s.revokeAPIKeyWithStore(w, r, s.store)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:revokeAPIKey", "api_key.revoked", func(repo *store.SQLiteStore, request *http.Request) {
+		s.revokeAPIKeyWithStore(w, request, repo)
+	})
 }
 
+// GET /api/oauth-applications lists the workspace's applications without
+// their client secrets.
 func (s *server) listOAuthApplications(w http.ResponseWriter, r *http.Request) {
-	result := s.workspaceData(r).OAuthApplications
-	for index := range result {
-		result[index].ClientSecret = ""
+	if s.store.BoundedMetadataEnabled() {
+		s.withOAuthApplicationsBounded(w, r, func(result []domain.OAuthApplication) {
+			for index := range result {
+				result[index].ClientSecret = ""
+			}
+			writeJSON(w, http.StatusOK, result)
+		})
+		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:listOAuthApplications", "", func(repo *store.SQLiteStore, request *http.Request) {
+		s.listOAuthApplicationsWithStore(w, request, repo)
+	})
 }
 
 // GET /api/oauth-applications/{id} returns one application (without its
 // client secret).
 func (s *server) getOAuthApplication(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
-	index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == r.PathValue("id") })
-	if index < 0 {
-		writeError(w, http.StatusNotFound, "Application not found")
+	if s.store.BoundedMetadataEnabled() {
+		s.withOAuthApplicationsBounded(w, r, func(apps []domain.OAuthApplication) {
+			index := slices.IndexFunc(apps, func(app domain.OAuthApplication) bool { return app.ID == r.PathValue("id") })
+			if index < 0 {
+				writeError(w, http.StatusNotFound, "Application not found")
+				return
+			}
+			app := apps[index]
+			app.ClientSecret = ""
+			writeJSON(w, http.StatusOK, app)
+		})
 		return
 	}
-	app := data.OAuthApplications[index]
-	app.ClientSecret = ""
-	writeJSON(w, http.StatusOK, app)
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:getOAuthApplication", "", func(repo *store.SQLiteStore, request *http.Request) {
+		s.getOAuthApplicationWithStore(w, request, repo)
+	})
 }
 
 type oauthInput = publicapi.OAuthApplicationInput
@@ -1669,24 +1629,9 @@ func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) 
 	clientID, _ := randomSecret("flow_client_")
 	secret, _ := randomSecret("flow_secret_")
 	actor := requestActor(s, r)
-	var created domain.OAuthApplication
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "oauth_application.created", input, func(data *domain.Bootstrap) (string, error) {
-		created = domain.OAuthApplication{ID: idgen.New("oauth_app_"), Name: strings.TrimSpace(*input.Name), ClientID: clientID, ClientSecret: secret, CreatorID: actor.ID, CredentialsAuthorizedBy: actor.ID, RedirectURIs: []string{}, Scopes: []string{"read"}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
-		applyOAuthInput(&created, input)
-		if err := checkGitHubUsernameAvailable(data, created.ID, created.GitHubUsername); err != nil {
-			return "", err
-		}
-		data.OAuthApplications = append([]domain.OAuthApplication{created}, data.OAuthApplications...)
-		return created.ID, nil
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:createOAuthApplication", "oauth_application.created", func(repo *store.SQLiteStore, request *http.Request) {
+		s.createOAuthApplicationWithStore(w, request, repo, input, clientID, secret, actor)
 	})
-	if err == nil {
-		// Keep each workspace's managed app webhook in step, as manifest saves do.
-		go s.reconcileAllApplicationWebhooks(context.Background())
-		// The response carries the client secret.
-		s.auditAPIKeyCredential(r, "client_secret_issued", created)
-		w.Header().Set("Cache-Control", "no-store")
-	}
-	respondMutation(w, err, http.StatusCreated, created)
 }
 
 func applyOAuthInput(app *domain.OAuthApplication, input oauthInput) {
@@ -1737,80 +1682,17 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 		writeError(w, 400, err.Error())
 		return
 	}
-	var updated domain.OAuthApplication
-	changed := false
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.updated", id, input, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
-		if index < 0 {
-			return errNotFound
-		}
-		before := data.OAuthApplications[index]
-		applyOAuthInput(&data.OAuthApplications[index], input)
-		if err := checkGitHubUsernameAvailable(data, id, data.OAuthApplications[index].GitHubUsername); err != nil {
-			return err
-		}
-		if input.Scopes != nil || input.SupportsClientCredentials != nil {
-			data.OAuthApplications[index].CredentialsAuthorizedBy = requestActor(s, r).ID
-		}
-		updated = data.OAuthApplications[index]
-		if unchangedEdit(before, data.OAuthApplications[index]) {
-			updated = before
-			updated.ClientSecret = ""
-			return store.ErrNoMutation
-		}
-		updated.ClientSecret = ""
-		changed = true
-		return nil
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:updateOAuthApplication", "oauth_application.updated", func(repo *store.SQLiteStore, request *http.Request) {
+		s.updateOAuthApplicationWithStore(w, request, repo, input)
 	})
-	if err == nil && changed {
-		s.syncApplicationIdentity(r.Context(), updated.ClientID)
-		// Keep each workspace's managed app webhook in step, as manifest saves do.
-		go s.reconcileAllApplicationWebhooks(context.Background())
-	}
-	respondMutation(w, err, http.StatusOK, updated)
 }
 
+// DELETE /api/oauth-applications/{id} is COLD (registered in
+// scaleP21ColdRoutes).
 func (s *server) deleteOAuthApplication(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	clientID := ""
-	var deleted domain.OAuthApplication
-	deletedFrom := ""
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.deleted", id, nil, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
-		if index < 0 {
-			return errNotFound
-		}
-		clientID = data.OAuthApplications[index].ClientID
-		deleted, deletedFrom = data.OAuthApplications[index], data.Workspace.Name
-		data.OAuthApplications = slices.Delete(data.OAuthApplications, index, index+1)
-		return nil
+	s.withColdMetadataRequest(w, r, "server/settings_features.go:deleteOAuthApplication", "oauth_application.deleted", func(repo *store.SQLiteStore, request *http.Request) {
+		s.deleteOAuthApplicationWithStore(w, request, repo)
 	})
-	if err != nil {
-		respondMutation(w, err, http.StatusNoContent, nil)
-		return
-	}
-	// Like the reference app, a deleted application leaves every workspace it was
-	// installed in: its app users are listed as "Left workspace".
-	if clientID != "" {
-		installations, err := s.store.ApplicationInstallationsByClient(r.Context(), clientID)
-		if err != nil {
-			respondMutation(w, err, http.StatusNoContent, nil)
-			return
-		}
-		for _, installation := range installations {
-			if _, err := s.store.UninstallApplication(r.Context(), installation.WorkspaceKey, installation.ID); err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					continue
-				}
-				respondMutation(w, err, http.StatusNoContent, nil)
-				return
-			}
-			s.reconcileApplicationWebhooks(context.WithoutCancel(r.Context()), installation.WorkspaceKey)
-		}
-	}
-	// The application's tokens are gone with it; its creator hears so by email.
-	s.notifyApplicationRevoked(context.WithoutCancel(r.Context()), deleted, deletedFrom)
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) exchangeOAuthToken(w http.ResponseWriter, r *http.Request) {
@@ -2048,6 +1930,9 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 	snapshot := data.IntegrationConnections[index]
 	if !s.authDisabled {
 		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, snapshot.ConnectedBy)
+		if writeAuthCheckFailure(w, err) {
+			return
+		}
 		if err != nil || status != "active" || !workspaceAdminRole(role) {
 			writeError(w, http.StatusForbidden, "Integration administrator no longer has workspace access")
 			return
@@ -2222,7 +2107,10 @@ func exchangeIntegrationToken(ctx context.Context, tokenURL string, config integ
 
 func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "integrationConnections", ID: id}}})
+	if !ok {
+		return
+	}
 	index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
 	if index < 0 {
 		writeError(w, http.StatusNotFound, "resource not found")
@@ -2291,7 +2179,7 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var result domain.IntegrationConnection
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_refreshed", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.oauth_refreshed", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		currentIndex := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
 			return item.ID == id && item.Provider == provider
 		})
@@ -2321,7 +2209,10 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 
 func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "integrationConnections", ID: id}}})
+	if !ok {
+		return
+	}
 	index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
 	if index < 0 {
 		writeError(w, http.StatusNotFound, "resource not found")
@@ -2372,7 +2263,7 @@ func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 		respondMutation(w, errNotFound, http.StatusBadRequest, nil)
 		return
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_revoked", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.oauth_revoked", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		currentIndex := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
 			return item.ID == id && item.Provider == provider
 		})
@@ -2409,7 +2300,7 @@ func (s *server) updateIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.IntegrationConnection
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.updated", id, input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
 		if index < 0 {
 			return errNotFound
@@ -2568,6 +2459,15 @@ func (s *server) createDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	actor := requestActor(s, r)
+	if _, ok := s.documentTemplateEditAccess(w, r, input); !ok {
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:createDocumentTemplate", "document_template.created", func(repo *store.SQLiteStore, request *http.Request) {
+			s.createDocumentTemplateWithStore(w, request, repo, input, actor)
+		})
+		return
+	}
 	var created domain.DocumentTemplate
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "document_template.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
@@ -2586,12 +2486,29 @@ func (s *server) updateDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	viewer, ok := s.documentTemplateEditAccess(w, r, input)
+	if !ok {
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:updateDocumentTemplate", "document_template.updated", func(repo *store.SQLiteStore, request *http.Request) {
+			s.updateDocumentTemplateWithStore(w, request, repo, input, viewer)
+		})
+		return
+	}
 	id := r.PathValue("id")
 	var updated domain.DocumentTemplate
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document_template.updated", id, input, func(data *domain.Bootstrap) error {
+	scope := store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "documentTemplates", ID: id}}}
+	if input.TeamID != nil && strings.TrimSpace(*input.TeamID) != "" {
+		scope.Read = []store.RecordKey{{Kind: "teams", ID: strings.TrimSpace(*input.TeamID)}}
+	}
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "document_template.updated", id, input, scope, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
+		}
+		if err := viewer.documentTemplateWritable(data.DocumentTemplates[index]); err != nil {
+			return err
 		}
 		before := data.DocumentTemplates[index]
 		if err := applyDocumentTemplateInput(data, &data.DocumentTemplates[index], input); err != nil {
@@ -2608,8 +2525,23 @@ func (s *server) updateDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) deleteDocumentTemplate(w http.ResponseWriter, r *http.Request) {
+	viewer, ok := s.documentTemplateEditAccess(w, r, documentTemplateInput{})
+	if !ok {
+		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		s.withColdMetadataRequest(w, r, "server/settings_features.go:deleteDocumentTemplate", "document_template.deleted", func(repo *store.SQLiteStore, request *http.Request) {
+			s.deleteDocumentTemplateWithStore(w, request, repo, viewer)
+		})
+		return
+	}
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document_template.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "document_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "documentTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
+		if index := slices.IndexFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == id }); index >= 0 {
+			if err := viewer.documentTemplateWritable(data.DocumentTemplates[index]); err != nil {
+				return err
+			}
+		}
 		before := len(data.DocumentTemplates)
 		data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == id })
 		if before == len(data.DocumentTemplates) {

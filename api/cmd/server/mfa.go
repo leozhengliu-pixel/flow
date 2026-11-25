@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -52,7 +53,7 @@ func (s *server) accountPasskeys(userID string) []accountPasskey {
 	result := []accountPasskey{}
 	seen := map[string]bool{}
 	for _, workspace := range s.store.WorkspaceKeys() {
-		passkeys, _, ok := s.store.AccountCollections(workspace, userID)
+		passkeys, _, ok := s.accountCollections(context.Background(), workspace, userID, true)
 		if !ok {
 			continue
 		}
@@ -149,11 +150,11 @@ func (s *server) finishMFA(w http.ResponseWriter, r *http.Request) {
 	}
 	encoded, _ := json.Marshal(credential)
 	now := time.Now().UTC()
-	keyWorkspace := ""
+	keyWorkspace, signingPasskey := "", ""
 	for _, entry := range s.accountPasskeys(actor.ID) {
 		var stored webauthn.Credential
-		if json.Unmarshal([]byte(entry.key.CredentialJSON), &stored) == nil && bytes.Equal(stored.ID, credential.ID) {
-			keyWorkspace = entry.workspace
+		if entry.key.UserID == actor.ID && json.Unmarshal([]byte(entry.key.CredentialJSON), &stored) == nil && bytes.Equal(stored.ID, credential.ID) {
+			keyWorkspace, signingPasskey = entry.workspace, entry.key.ID
 			break
 		}
 	}
@@ -203,6 +204,6 @@ func (s *server) finishMFA(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "could not save authentication verification")
 		return
 	}
-	s.recordAccountAudit(r, actor, "", "mfa_verification", store.AuditResultSuccess, map[string]any{"method": "passkey"})
+	s.recordAccountAudit(r, actor, "", "mfa_verification", store.AuditResultSuccess, map[string]any{"method": "passkey", "passkeyId": signingPasskey})
 	writeJSON(w, 200, map[string]bool{"verified": true})
 }

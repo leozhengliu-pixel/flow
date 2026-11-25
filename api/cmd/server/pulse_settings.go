@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -106,16 +107,34 @@ func pulseUserZone(zones pulseZones, settings domain.UserSettings, memberships [
 const pulseMaxWindow = 31 * 24 * time.Hour
 
 func (s *server) preparePulseSummaries(ctx context.Context, key string, now time.Time) error {
-	metadata, ok := s.store.WorkspaceMetadataFields(key, "workspaceSettings")
-	if !ok || !workspaceFeatureEnabled(metadata.WorkspaceSettings, "pulse") {
+	read, found, err := s.store.BeginPulseScheduleRead(ctx, key)
+	if err != nil {
+		return err
+	}
+	if !found {
 		return nil
 	}
-	metadata, ok = s.store.WorkspaceMetadataFields(key, "workspaceSettings", "settings", "userSettings", "teamSettings")
-	if !ok {
+	defer read.Close()
+	if !workspaceFeatureEnabled(read.Snapshot.WorkspaceSettings, "pulse") {
 		return nil
 	}
+	if err := read.LoadSchedule(ctx); err != nil {
+		if !s.store.BoundedMetadataEnabled() && errors.Is(err, store.ErrResourceAccessChanged) {
+			return nil
+		}
+		return err
+	}
+	metadata := domain.Bootstrap{Workspace: read.Snapshot.Workspace, WorkspaceSettings: read.Snapshot.WorkspaceSettings,
+		Settings: read.Snapshot.Settings, UserSettings: read.Snapshot.UserSettings, TeamSettings: read.Snapshot.TeamSettings}
 	cursors := pulseCursors(&metadata)
 	workspaceDefault := metadata.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule
+	if s.store.BoundedMetadataEnabled() {
+		// The scheduler tick has no request: the member list's app users are
+		// decorated from owned installation reads, kept until this pass ends.
+		var closeOutputs func()
+		ctx, closeOutputs = beginMetadataOutputReads(ctx)
+		defer closeOutputs()
+	}
 	// Every active member is a candidate, including invited members who never
 	// wrote anything (the metadata user list only grows on writes).
 	members, err := s.store.ListMembers(ctx, metadata.Workspace.ID)
@@ -186,7 +205,14 @@ func (s *server) preparePulseSummaries(ctx context.Context, key string, now time
 	if len(due) == 0 {
 		return nil
 	}
-	if snapshot, ok := s.store.PulseFeed(key); ok {
+	if err := read.LoadFeed(ctx); err != nil {
+		if !s.store.BoundedMetadataEnabled() && errors.Is(err, store.ErrResourceAccessChanged) {
+			return nil
+		}
+		return err
+	}
+	{
+		snapshot := read.Snapshot
 		rules := newPulseRules(snapshot)
 		subscriptions := map[string][]domain.Subscription{}
 		for _, subscription := range snapshot.Subscriptions {
@@ -207,6 +233,32 @@ func (s *server) preparePulseSummaries(ctx context.Context, key string, now time
 	}
 	// One write for every due member: cursors live in one settings value, so
 	// per-member writes would each rewrite it.
+	if s.store.BoundedMetadataEnabled() {
+		candidates := make([]store.PulseSummaryCandidate, 0, len(due))
+		for _, item := range due {
+			candidate := store.PulseSummaryCandidate{UserID: item.user.ID, Schedule: item.schedule, End: item.end}
+			if item.eligible && item.total > 0 {
+				notification := newPulseSummaryNotification(item, now)
+				candidate.Notification = &notification
+			}
+			candidates = append(candidates, candidate)
+		}
+		return s.store.CommitPulseSummaries(ctx, key, candidates, func(input store.PulseSummaryDispatchInput) (store.PulseSummaryDispatch, error) {
+			preferences := input.Preferences
+			if !input.HasPreferences {
+				preferences = defaultPreferences(input.Notification.RecipientID)
+			}
+			if !preferences.Inbox.Enabled || !categoryEnabled(preferences.Inbox, "pulse") {
+				return store.PulseSummaryDispatch{}, nil
+			}
+			data := domain.Bootstrap{}
+			if input.PushEnabled {
+				data.PushSubscriptions = []domain.PushSubscription{{UserID: input.Notification.RecipientID, Enabled: true}}
+			}
+			enqueueNotificationDeliveries(&data, input.Notification, preferences)
+			return store.PulseSummaryDispatch{Send: true, Deliveries: data.NotificationDeliveries}, nil
+		})
+	}
 	pulseCtx := store.WithMetadataFields(ctx, "settings", "workspaceSettings", "userSettings", "notificationPreferences", "pushSubscriptions")
 	return s.store.MutateWorkspace(pulseCtx, key, "pulse.summary_scheduled", "", nil, func(data *domain.Bootstrap) error {
 		if !workspaceFeatureEnabled(data.WorkspaceSettings, "pulse") {

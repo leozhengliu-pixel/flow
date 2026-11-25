@@ -1295,25 +1295,29 @@ func semanticTerms(value string) []string {
 	return normalizedStrings(result)
 }
 
-func semanticTextScore(query string, fields ...string) (int, []string) {
-	terms := semanticTerms(query)
+func semanticTextScore(terms []string, fields ...string) (int, []string) {
 	if len(terms) == 0 {
 		return 1, nil
 	}
 	haystack := normalizeSearch(strings.Join(fields, " "))
+	title := ""
+	if len(fields) > 0 {
+		title = normalizeSearch(fields[0])
+	}
 	score := 0
 	matched := []string{}
 	for _, term := range terms {
-		if strings.Contains(haystack, normalizeSearch(term)) {
+		normalized := normalizeSearch(term)
+		if strings.Contains(haystack, normalized) {
 			weight := 70
-			if strings.Contains(normalizeSearch(strings.Join(fields[:min(1, len(fields))], " ")), normalizeSearch(term)) {
+			if strings.Contains(title, normalized) {
 				weight = 140
 			}
 			score += weight
 			matched = append(matched, term)
 		}
 	}
-	return score, normalizedStrings(matched)
+	return score, matched
 }
 
 func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
@@ -1341,7 +1345,7 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	candidateLimit := min(max(limit*4, 40), 200)
 	types := searchTypes(r.URL.Query().Get("types"))
-	data, err := s.store.SearchMetadata(ctx, policy, store.SearchMetadataQuery{Scope: scope, Types: types, Terms: terms, Limit: candidateLimit})
+	data, err := s.store.SearchMetadata(ctx, policy, searchMetadataQueryForRequest(r, scope, types, terms, nil, candidateLimit))
 	if err != nil {
 		issueRecordsError(w, err)
 		return
@@ -1358,7 +1362,7 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 			for _, label := range issue.Labels {
 				labels = append(labels, label.Name)
 			}
-			score, matched := semanticTextScore(query, issue.Title, issue.Description, issue.Identifier, issue.Team.Name, issue.State.Name, strings.Join(labels, " "))
+			score, matched := semanticTextScore(terms, issue.Title, issue.Description, issue.Identifier, issue.Team.Name, issue.State.Name, strings.Join(labels, " "))
 			if score == 0 {
 				score = 1
 			}
@@ -1379,7 +1383,7 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	add := func(item domain.SearchResult, fields ...string) {
-		score, matched := semanticTextScore(query, fields...)
+		score, matched := semanticTextScore(terms, fields...)
 		if score == 0 {
 			score = 1
 		}
@@ -1519,6 +1523,16 @@ func semanticFacets(data domain.Bootstrap, results []semanticResult) map[string]
 }
 
 func (s *server) filterSuggestions(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		s.boundedFilterSuggestions(w, r)
+		return
+	}
+	if !acquireProjection(r) {
+		if !writeProjectionRefusal(w, r) {
+			writeRequestCanceled(w, r.Context().Err())
+		}
+		return
+	}
 	data := s.workspaceData(r)
 	query := normalizeSearch(r.URL.Query().Get("q"))
 	field := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("field")))
@@ -1559,14 +1573,28 @@ func (s *server) filterSuggestions(w http.ResponseWriter, r *http.Request) {
 			result = append(result, *item)
 		}
 	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].Count == result[j].Count {
-			return result[i].Label < result[j].Label
-		}
-		return result[i].Count > result[j].Count
-	})
+	sortFilterSuggestions(result)
 	if len(result) > 50 {
 		result = result[:50]
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// sortFilterSuggestions orders suggestions by count, then label. Equal
+// counts and labels (unnamed teams) fall back to field and value, so the
+// order and the top-50 cut never follow map iteration.
+func sortFilterSuggestions(result []domain.FilterSuggestion) {
+	sort.Slice(result, func(i, j int) bool {
+		a, b := result[i], result[j]
+		if a.Count != b.Count {
+			return a.Count > b.Count
+		}
+		if a.Label != b.Label {
+			return a.Label < b.Label
+		}
+		if a.Field != b.Field {
+			return a.Field < b.Field
+		}
+		return a.Value < b.Value
+	})
 }

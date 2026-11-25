@@ -32,6 +32,13 @@ func (s *server) notifyAgentReply(ctx context.Context, task domain.AgentTask, ac
 	if resourceID == "" || resourceType != "issue" && resourceType != "document" && resourceType != "project" {
 		return
 	}
+	if s.store.BoundedMetadataEnabled() {
+		// The reply runs outside a request: this listener owns every bounded
+		// read and write output (the app user, the closed writer) it starts.
+		var closeOutput func()
+		ctx, closeOutput = beginIndependentMetadataOutputReads(ctx)
+		defer closeOutput()
+	}
 	app, err := s.store.ApplicationByUser(ctx, task.AppUserID)
 	if err != nil {
 		return
@@ -63,6 +70,16 @@ func (s *server) notifyAgentReply(ctx context.Context, task domain.AgentTask, ac
 		write = store.WithMutationScope(write, store.MutationScope{Resources: []string{resourceID}})
 	}
 	write = store.ContextWithActor(write, agent)
+	if s.store.BoundedMetadataEnabled() {
+		// The closed writer selects the anchor's thread inputs and the
+		// audience the callback can reach; its audience starts with the
+		// recipients resolved here, before the transaction.
+		audience := append([]string{task.CreatorID}, prompters...)
+		if coding != nil {
+			audience = append(audience, coding.SubscriberIDs...)
+		}
+		write = store.ContextWithAgentReplyNotification(write, store.AgentReplyNotification{Kind: resourceType, Resource: resourceID, UserIDs: audience})
+	}
 	directory := memberDirectory{}
 	if resourceType != "issue" {
 		directory = s.workspaceMemberDirectory(write, task.WorkspaceKey)

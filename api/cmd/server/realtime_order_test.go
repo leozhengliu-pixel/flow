@@ -183,6 +183,28 @@ func TestRealtimeResyncAllAfterMissedPeerEvents(t *testing.T) {
 	}
 }
 
+func TestRealtimePeerReplayKeepsGapDuringRedisReconnect(t *testing.T) {
+	hub := newRealtimeHub()
+	hub.ordered = true
+	hub.followPeerReplay("w", 0)
+	channel, stop := hub.subscribe("w")
+	defer stop()
+	hub.publish("w", domain.RealtimeEvent{ID: "evt_2", Seq: 2, Type: "issue.updated"})
+	hub.resyncAll()
+	if got := drainRealtime(channel); len(got) != 1 || got[0].Type != "workspace.resync_required" {
+		t.Fatal("reconnect released a durable event ahead of its predecessor")
+	}
+	hub.publish("w", domain.RealtimeEvent{ID: "evt_1", Seq: 1, Type: "issue.updated"})
+	if got := drainRealtime(channel); len(got) != 2 || got[0].Seq != 1 || got[1].Seq != 2 {
+		t.Fatal("reconnect lost or reordered durable events")
+	}
+	hub.resetPeerReplay("w", 0)
+	hub.publish("w", domain.RealtimeEvent{ID: "replacement_1", Seq: 1, Type: "issue.updated"})
+	if got := drainRealtime(channel); len(got) != 1 || got[0].ID != "replacement_1" {
+		t.Fatal("a previous generation suppressed an event in the new sequence")
+	}
+}
+
 // Peer events queue per workspace: one worker applies them in order, and a
 // burst that arrives while it is busy shares one batch (one reload).
 func TestRemoteEventQueueBatchesBursts(t *testing.T) {
@@ -207,13 +229,13 @@ func TestRemoteEventQueueBatchesBursts(t *testing.T) {
 	}
 	workers.Add(1)
 	for i := 1; i <= 3; i++ {
-		queue.push("w", domain.RealtimeEvent{ID: fmt.Sprintf("evt_%d", i)}, apply)
+		queue.push("w", domain.RealtimeEvent{ID: fmt.Sprintf("evt_%d", i)}, false, apply)
 	}
 	release <- struct{}{}
 	if got := <-batches; strings.Join(got, ",") != "evt_1,evt_2,evt_3" {
 		t.Fatalf("first batch = %v", got)
 	}
-	queue.push("w", domain.RealtimeEvent{ID: "evt_4"}, apply) // the worker is still running: no second one
+	queue.push("w", domain.RealtimeEvent{ID: "evt_4"}, false, apply) // the worker is still running: no second one
 	release <- struct{}{}
 	if got := <-batches; strings.Join(got, ",") != "evt_4" {
 		t.Fatalf("second batch = %v", got)
@@ -221,7 +243,7 @@ func TestRemoteEventQueueBatchesBursts(t *testing.T) {
 	release <- struct{}{}
 	workers.Wait()
 	workers.Add(1)
-	queue.push("w", domain.RealtimeEvent{ID: "evt_5"}, apply) // a stopped worker is started again
+	queue.push("w", domain.RealtimeEvent{ID: "evt_5"}, false, apply) // a stopped worker is started again
 	release <- struct{}{}
 	if got := <-batches; strings.Join(got, ",") != "evt_5" {
 		t.Fatalf("after restart = %v", got)

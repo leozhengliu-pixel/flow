@@ -3,7 +3,8 @@ import { writeFileSync } from 'node:fs'
 import { test } from './workspace-fixture'
 
 test.use({ deviceScaleFactor: 2, launchOptions: { args: ['--force-device-scale-factor=2'] } })
-test.afterEach(async ({ request, workspaceKey }) => {
+test.afterEach(async ({ page, request, workspaceKey }) => {
+  await page.unrouteAll({ behavior: 'wait' })
   await request.patch('/api/account/settings', { headers: { 'X-Workspace-Key': workspaceKey }, data: { interfaceTheme: 'System preference', language: 'en-US' } })
 })
 
@@ -53,9 +54,15 @@ for (const width of [1440, 375, 390]) for (const theme of ['dark', 'light'] as c
     await capture(page.locator('.workspace-row'), `workspace-rest-${key}`)
     await trigger.hover()
     await capture(page.locator('.workspace-row'), `workspace-hover-${key}`)
-    await page.keyboard.press('Tab')
-    await trigger.focus()
-    expect(await trigger.evaluate(element => element.matches(':focus-visible'))).toBe(true)
+    if (phone) {
+      await page.keyboard.press('Tab')
+      await trigger.focus()
+    } else {
+      // The Agent composer can take initial focus. Move the keyboard focus back to the trigger.
+      await trigger.press('Tab')
+      await page.keyboard.press('Shift+Tab')
+    }
+    await expect(page.locator('.workspace-menu-trigger:focus-visible')).toBeFocused()
     await capture(page.locator('.workspace-row'), `workspace-focus-${key}`)
     await trigger.click()
     const workspaceMenu = page.locator(phone ? '.workspace-phone-menu' : '.workspace-primary-menu')
@@ -190,7 +197,7 @@ for (const width of [1440, 375, 390]) for (const theme of ['dark', 'light'] as c
       await capture(context, `context-empty-${key}`)
       await filter.clear()
       await expect(context.getByRole('status')).toBeHidden()
-      expect(await context.getByRole('menuitem').count()).toBeGreaterThan(1)
+      await expect.poll(() => context.getByRole('menuitem').count()).toBeGreaterThan(1)
     }
   })
 }

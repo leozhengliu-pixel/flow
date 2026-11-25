@@ -1,0 +1,1130 @@
+{
+  "source": "server/main.go",
+  "unmigrated": 56,
+  "consumers": {
+    "accountBootstrap": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Development account output uses the certified owned AccountRead only in bounded mode, retaining the handle through settings decoration and encoding. Literal off Account and authenticated AccountForUser remain unchanged. SW125 compares actual warm/reopened routes, deployment settings, native NUL/timestamp values, output-owner lifetime and the complete off-only Account callset.",
+      "accessors": [
+        "BeginAccountRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "GET account bootstrap.",
+      "callers": [
+        "GET /api/account/bootstrap"
+      ]
+    },
+    "attachmentVisible": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode takes a single early branch to boundedAttachmentVisible (scale_p21_attachment_visibility.go): agent uploads, then per membership the unchanged IssueQueryAccess + indexed IssueAttachmentVisible SQL, then the owned BeginAttachmentVisibilityRead generation with the literal loop predicate and the original family predicates over the literal paged projection of that same generation. The flag-off body is unchanged. SW268 compares the actual GET /uploads/{name} response and fileReadable for every family (loop attached/draft, customer requests open/private-project/public-issue/private-issue, project and initiative updates, public/private/user-shared/archived/trashed documents, own/deleted agent sessions, public/private/archived project, initiative and review comments, duplicate and hidden-duplicate occurrences, second membership, missing object, agent upload, issue attachments) for owner, private admin, member, guest, sub-team member and app user on warm and SQL-reloaded sources with zero full decodes and no retained work; SW265 guards the callset and the early branch. A bounded work-budget refusal is recorded in a request-scoped holder: serveUpload answers it 503 with Retry-After (never 404) when nothing granted the upload, fileReadable keeps its boolean; flag off nothing is recorded and both callers are unchanged. SW268 holds the budget for the member's visible document/session/loop-draft uploads and an unreferenced one (503), checks an agent upload needing no read is unaffected, and compares all of them with the original after release. Both modes share loopAttachmentVisible: a claimed loop upload is served only while its loop exists (loops are read by every active member); SW291 checks private-team, disabled, deleted (through deleteLoop), orphaned and pending loop uploads for every principal, legacy against bounded.",
+      "accessors": [
+        "PagedWorkspaceMetadata",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /uploads/{name}",
+      "callers": [
+        "server/server.fileReadableContext",
+        "server/server.serveUpload"
+      ]
+    },
+    "batchUpdate": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/batch",
+      "callers": [
+        "POST /api/issue-records/batch (server/main.go:913)",
+        "POST /api/issues/batch (server/main.go:1073)"
+      ],
+      "reason": "Legacy mode projects viewer and team policy for the destination team check. Bounded mode uses boundedIssueUpdateTargets with its API-key filter and independent output owner, then routes the callback through mutateBoundedIssueBatch with the declared update. Both use issueTeamMoveForbidden and retain one transaction and one issue.batch_updated event. TestScaleP21IssueBatchDifferential (30 cases: fields, duplicate IDs, no-op, state with family and sort neighbours, auto-close, triage exit with SLA rules and SLA event numbering, labels, people, former-member rollback, descriptions and legacy editor snapshots with queued updates on another issue, parent, cycle, project, archive, mixed-team label rollback and edit, team moves of pairs and mixed teams incl. sub-team, triage target, private team, guest/outsider/selected-key 403s, SLA on move, missing issue, cancellation), BatchLarge (500 issues: commit and one-failure rollback), BatchConcurrent (overlapping batches equal a sequential legacy order), BatchInlineCollections (inline labels/documents): legacy/warm/SQL-reloaded byte-exact responses, issue rows, sequence, aliases, documents, labels, collaboration updates, content, suggestions, SLAs and SLA events, events, webhooks and realtime, installed image equal to the SQL reload, zero full decodes, no retained work; persistent SQLite x2 and -race. SW189 closes ContentState with the separately imported admitted CRDT engine, preserves malformed-new/invalid-old error behavior and retained/queued/deleted mention semantics, and compares actual update/batch routes plus the permission matrix with no leaked work. SW184 proves exact 1000-issue batches and SW185 proves exact postcommit triage generation at 350/1000 issues (persisted inline suggestions included), preserving accumulated candidate encounter order and stable scoring with a typed spool and released query/clone scratch. Shared authorization is proved by SW187."
+    },
+    "bootstrap": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Only the bounded general HTTP route delegates to the owned snapshot/stream adapter; the literal flag-off and separately certified issue-detail paths remain unchanged. SW164 compares actual full/lean responses, all forty permission/credential pairs, installed and canonical sources, development, signing/spool fallback, missing/cancellation and a concurrent SQL snapshot witness. Fifty-eight pairs include two native development clock cases whose sole generated viewer lastSeenAt is interval-validated; all other values, headers except duration, cursor, counts and signatures are exact. SW162/SW163/SW165/SW166 prove the shared source, walkers, opaque bodies and work lifetimes. Existing pre-read maintenance ordering is preserved; due scheduler writers retain their independent pending guards.",
+      "accessors": [
+        "BeginWorkspaceRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/bootstrap",
+      "callers": [
+        "GET /api/bootstrap (server/main.go:869)"
+      ]
+    },
+    "createAttachment": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Only marks the original scoped upload callback for the proven attachment executor; file creation, markdown embedding, cycle automation, activity and response behavior remain unchanged. SW150 compares real multipart uploads through the alias gate, disabled/default embed and affected-team current-cycle selection, exact canonical/event/webhook/realtime effects, and native middleware refusals. SW149 proves the shared writer's warm/reloaded inputs, admission, cancellation and release. Flag-off context is literal.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/attachments",
+      "callers": [
+        "POST /api/issue-records/{id}/attachments (server/main.go:941)",
+        "POST /api/issues/{id}/attachments (server/main.go:1086)"
+      ]
+    },
+    "createComment": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "SW106 compares the actual ordinary handler's create, reply and creation-key retry responses, canonical issue/content/subscription rows, primary events and complete webhook/realtime effects against the legacy path. Its unchanged callback now uses the independently proven ordinary legacy discussion writer (SW98) with exact installed actors, reference/count closure and previous/postimages; SW59/SW63 retain the scoped alias, permission and ownership proof. SW47/SW86 preserve production middleware behavior. Output remains admitted through response release with zero full workspace decodes. Asynchronous comment-action generation has its own independent guard; flag-off remains literal.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/comments",
+      "callers": [
+        "POST /api/issue-records/{id}/comments (server/main.go:933)",
+        "POST /api/issues/{id}/comments (server/main.go:1074)"
+      ]
+    },
+    "createCustomer": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/customers (server/main.go:524)"
+      ]
+    },
+    "createInitiative": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives (server/main.go:1049)"
+      ]
+    },
+    "createInitiativeComment": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/comments (server/main.go:1056)"
+      ]
+    },
+    "createInitiativeReminder": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/reminders (server/main.go:1052)"
+      ]
+    },
+    "createInitiativeResource": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/resources (server/main.go:1053)"
+      ]
+    },
+    "createInitiativeUpdate": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/updates (server/main.go:1062)"
+      ]
+    },
+    "createInitiativeUpdateComment": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/updates/{updateId}/comments (server/main.go:1065)"
+      ]
+    },
+    "createIssue": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "BootstrapForUser",
+        "MutateWorkspaceWithAggregate",
+        "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issues",
+      "callers": [
+        "POST /api/issues (server/main.go:952)",
+        "server/server.createIssueRecord"
+      ],
+      "reason": "Bounded mode uses the owned default-team policy read, then the unchanged createIssueInWorkspace callback through the bounded record creation dispatcher. SW186 proves literal legacy/warm/reloaded creation responses, all canonical metadata/issue/content rows, sequence, notifications, audits, events, webhook/realtime and installed postimages across principals/credentials, templates, workflow/triage/SLA actions, cancellation, concurrent creators, stale sequences/custom-ID collisions, ContentState and legal 4MiB ASCII/escaped large descriptions. Selected native inputs retain original ordinals/defaults. Owned old-row preimages and independent callback/row/content/event encoding phases preserve atomic publication with zero full decodes and released work. Flag-off forwards to the literal original writer."
+    },
+    "createIssueLink": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Keeps the original unscoped ordinary issue.link_created topology, aggregate and payload while selecting the declared attachment profile of the proven full legacy writer. It retains native counts/progress, PreviousValues, account and postcommit effects. SW150 compares actual authorized query/editor handler output and complete effects for native/alias links, while retaining the unchanged native outer middleware refusal witness. SW149 proves ordinary callback and physical effect equivalence, warm/reloaded values, retries and ownership. Flag-off context is literal.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/links",
+      "callers": [
+        "POST /api/issue-records/{id}/links (server/main.go:943)",
+        "POST /api/issues/{id}/links (server/main.go:1088)"
+      ]
+    },
+    "createIssueLoopRun": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/issue-records/{id}/loop-runs (server/main.go:946)",
+        "POST /api/issues/{id}/loop-runs (server/main.go:1090)"
+      ]
+    },
+    "createIssueReminder": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/issue-records/{id}/reminders (server/main.go:945)",
+        "POST /api/issues/{id}/reminders (server/main.go:1089)"
+      ]
+    },
+    "createProject": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate",
+        "PagedWorkspaceMetadata"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects (server/main.go:1005)"
+      ]
+    },
+    "createProjectComment": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/comments (server/main.go:1016)"
+      ]
+    },
+    "createProjectMilestone": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/milestones (server/main.go:1012)"
+      ]
+    },
+    "createProjectReminder": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/reminders (server/main.go:1008)"
+      ]
+    },
+    "createProjectResource": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/resources (server/main.go:1009)"
+      ]
+    },
+    "createProjectUpdate": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "reason": "P21 closes the pre-mutation PulseFeed snapshot lookup behind an explicit store-mode branch. Bounded mode keeps the proven BeginPulseRead(false) compact source admitted through respondMutation, preserving first duplicate project selection and all project snapshot status/priority/lead/date/milestone inputs; the literal off accessor remains unchanged. TestScaleP21PulseRemainingRequestDifferential compares fixed-clock derived snapshots using the same indexed issue summary. The update-create callback and its canonical writer remain independently pending, so this partial read closure does not certify the whole consumer.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/updates (server/main.go:1042)"
+      ]
+    },
+    "createProjectUpdateComment": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/updates/{updateId}/comments (server/main.go:1045)"
+      ]
+    },
+    "createRelation": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded relation routes select the proven SW210 closed point-writer adapter; flag-off retains the literal callback/path. Seventy legacy/warm/reloaded scenarios compare exact responses, business rows, history, versions, events, webhooks and realtime across six relation types, public/private principal/key cells, retained content, cancellation, legal large records and 64/65 ancestor limits. Authenticated ordinary-route 403 behavior remains exact; positive ordinary writes use the existing development bypass. Normal, twice-persistent SQLite and race proofs pass. Measured owner SQL is 44->75 for related and 46->79 for parent_of: selected reads have the adapter's bounded endpoint/ancestor closure, while shared canonical policy preflight adds 2+2F+2*sum(P_f) queries (F<=4, 32-row/256 KiB pages, 192 MiB resident-policy cap) to preserve commit validation; no performance gain is claimed.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/relations",
+      "callers": [
+        "POST /api/issue-records/{id}/relations (server/main.go:939)",
+        "POST /api/issues/{id}/relations (server/main.go:1084)"
+      ]
+    },
+    "createTeam": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode replaces only the MutateWorkspace call: the literal callback (key uniqueness, parent/copy validation, hierarchy permission, default/copied settings, cycle settings and cycles, cloned statuses, development members) runs through CreateTeamRecords, and the creator-membership audit through recordCreatedTeamMemberAudit; WorkspaceSettingsMetadata, ListTeamMembers, ChangeTeamMembership and the response are unchanged. Off mode is the original MutateWorkspace call. TestScaleP21TeamCreateDifferential covers top-level, private, sub-teams with inherited statuses and of inheriting teams, copy without inheritance (tied positions, shared statuses, no settings), parent over copy, copied and default-started cycles, duplicate key/name, missing/retired/too-deep parents, guest/member refusals, team owners from the stored list, inline statuses, 300 teams/1200 statuses/300 labels, built-in agent install/extension, development, cancellation; Concurrent and Peer differentials cover same/distinct-key creators and coordinator peer refresh. EnsureBuiltinApplication's OAuth transaction (separate unmigrated cold store writer) still installs its app user only into the legacy snapshot; SQL rows and events are identical.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Observed in the single classification profile (cpu; setup-only); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/workspaces/{workspaceKey}/teams (server/main.go:498)"
+      ]
+    },
+    "deleteAttachment": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/issue-records/{id}/attachments/{attachmentId} (server/main.go:944)",
+        "DELETE /api/issues/{id}/attachments/{attachmentId} (server/main.go:1091)"
+      ]
+    },
+    "deleteComment": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "SW106 compares the actual ordinary delete handler's 204 response, root/reply deletion, subscription removal, canonical issue/content rows, primary event and complete webhook/realtime effects using the independently proven SW98 ordinary discussion writer. SW59/SW63 retain scoped alias permission, native publication, cancellation and output-lifetime proof; SW47/SW86 retain production middleware behavior. Full actor/reference/count and previous/postimage inputs are owned by the shared writer; no full workspace decode occurs and flag-off is unchanged.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from DELETE /api/issue-records/{id}/comments/{commentId}",
+      "callers": [
+        "DELETE /api/issue-records/{id}/comments/{commentId} (server/main.go:937)",
+        "DELETE /api/issues/{id}/comments/{commentId} (server/main.go:1082)"
+      ]
+    },
+    "deleteCustomer": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/customers/{id} (server/main.go:526)"
+      ]
+    },
+    "deleteInitiative": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/initiatives/{id} (server/main.go:1051)"
+      ]
+    },
+    "deleteInitiativeComment": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/initiatives/{id}/comments/{commentId} (server/main.go:1058)"
+      ]
+    },
+    "deleteInitiativeResource": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/initiatives/{id}/resources/{resourceId} (server/main.go:1055)"
+      ]
+    },
+    "deleteInitiativeUpdate": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/initiatives/{id}/updates/{updateId} (server/main.go:1064)"
+      ]
+    },
+    "deleteProject": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/projects/{id} (server/main.go:1007)"
+      ]
+    },
+    "deleteProjectComment": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/projects/{id}/comments/{commentId} (server/main.go:1018)"
+      ]
+    },
+    "deleteProjectMilestone": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/projects/{id}/milestones/{milestoneId} (server/main.go:1015)"
+      ]
+    },
+    "deleteProjectResource": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/projects/{id}/resources/{resourceId} (server/main.go:1011)"
+      ]
+    },
+    "deleteProjectUpdate": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/projects/{id}/updates/{updateId} (server/main.go:1044)"
+      ]
+    },
+    "deleteRelation": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/issue-records/{id}/relations/{relationId} (server/main.go:940)",
+        "DELETE /api/issues/{id}/relations/{relationId} (server/main.go:1085)"
+      ]
+    },
+    "deleteTeamCycles": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/teams/{id}/cycles (server/main.go:962)"
+      ]
+    },
+    "deleteWorkspaceLogo": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapFor"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/workspaces/{workspaceKey}/logo (server/main.go:494)"
+      ]
+    },
+    "listNotifications": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The selected-key bounded branch resolves live access and uses NotificationVisibilityRead, holding its dynamic output admission through writeJSON; nonselected credentials retain QueryNotifications and the flag-off selected branch remains literal. Shared TestScaleP21HotNotificationsDifferential covers permission, reference precedence, hidden actors/counts and cursor semantics; TestScaleP21HotNotificationHandler compares actual endpoint JSON for selected-empty/public/private and unrestricted keys and checks zero full decodes, retained response admission and release.",
+      "accessors": [
+        "publicMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/notifications",
+      "callers": [
+        "GET /api/notifications (server/main.go:872)"
+      ]
+    },
+    "purgeTeam": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.purgeExpiredTeams"
+      ]
+    },
+    "reorderProjectMilestones": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/milestones/reorder (server/main.go:1013)"
+      ]
+    },
+    "shareSavedView": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/views/{id}/share (server/main.go:893)"
+      ]
+    },
+    "startCycle": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/cycles/{id}/start (server/main.go:999)"
+      ]
+    },
+    "toggleCommentReaction": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "SW106 compares actual ordinary reaction add/remove handler responses, canonical content, primary events and full webhook/realtime effects through the proven SW98 ordinary writer. SW59/SW63 retain scoped alias live actor, duplicate removal, nil/empty reactions, Added payload, permission matrix and owned output proof. SW47/SW86 retain middleware behavior. Both writer topologies preserve actor/reference/count and aggregate publication precedence, with zero full workspace decodes; issue reactions remain independently guarded and flag-off stays literal.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/comments/{commentId}/reactions",
+      "callers": [
+        "POST /api/issue-records/{id}/comments/{commentId}/reactions (server/main.go:938)",
+        "POST /api/issues/{id}/comments/{commentId}/reactions (server/main.go:1083)"
+      ]
+    },
+    "toggleInitiativeCommentReaction": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/comments/{commentId}/reactions (server/main.go:1059)"
+      ]
+    },
+    "toggleInitiativeUpdateReaction": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/initiatives/{id}/updates/{updateId}/reactions (server/main.go:1066)"
+      ]
+    },
+    "toggleIssueReaction": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The unchanged first-match reaction callback reaches separate certified bounded ordinary and issue-record adapters. Preserves Reactions/Version/UpdatedAt, Added mutation, count aliases, nested aggregate precedence, global ordinary progress versus scoped contribution rules, native viewer/actor, SQL/index/search/event/webhook effects and publication topology. Literal flag-off dispatch is unchanged. SW116 covers 66 warm/reloaded/native/error cases including exact warm import conflicts, persistent SQLite twice and race; SW117 compares 18 actual ordinary/alias route cases. Statement counts increase with bounded admission/canonical preflights and are reported explicitly.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from POST /api/issue-records/{id}/reactions",
+      "callers": [
+        "POST /api/issue-records/{id}/reactions (server/main.go:932)",
+        "POST /api/issues/{id}/reactions (server/main.go:1072)"
+      ]
+    },
+    "toggleProjectCommentReaction": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/comments/{commentId}/reactions (server/main.go:1019)"
+      ]
+    },
+    "toggleProjectUpdateReaction": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/projects/{id}/updates/{updateId}/reactions (server/main.go:1046)"
+      ]
+    },
+    "unshareSavedView": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "DELETE /api/views/{id}/share (server/main.go:894)"
+      ]
+    },
+    "updateComment": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "SW106 compares the actual ordinary update, unchanged, version-conflict, resolve and unresolve handler responses, canonical rows, primary events and complete webhook/realtime effects through the independently proven SW98 ordinary writer. SW59/SW63 retain scoped alias actor, former mentions, thread summary, recipient preferences and captured-output lifetime proof; SW47/SW86 retain middleware behavior. The shared writer supplies exact native actor/reference/count and previous/postimage semantics without a full workspace decode; flag-off is unchanged.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issue-records/{id}/comments/{commentId}",
+      "callers": [
+        "PATCH /api/issue-records/{id}/comments/{commentId} (server/main.go:936)",
+        "PATCH /api/issues/{id}/comments/{commentId} (server/main.go:1081)"
+      ]
+    },
+    "updateCustomer": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/customers/{id} (server/main.go:525)"
+      ]
+    },
+    "updateCycle": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/cycles/{id} (server/main.go:995)"
+      ]
+    },
+    "updateCycleSettings": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/teams/{id}/cycle-settings (server/main.go:961)"
+      ]
+    },
+    "updateInitiative": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/initiatives/{id} (server/main.go:1050)"
+      ]
+    },
+    "updateInitiativeComment": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/initiatives/{id}/comments/{commentId} (server/main.go:1057)"
+      ]
+    },
+    "updateInitiativeResource": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/initiatives/{id}/resources/{resourceId} (server/main.go:1054)"
+      ]
+    },
+    "updateInitiativeUpdate": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/initiatives/{id}/updates/{updateId} (server/main.go:1063)"
+      ]
+    },
+    "updateIssue": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from PATCH /api/issues/{id}",
+      "callers": [
+        "PATCH /api/issues/{id} (server/main.go:1069)"
+      ],
+      "reason": "Unreachable: boundedLegacyIssueWrites, the outermost handler wrapper, rewrites every POST/PATCH/PUT/DELETE under /api/issues to /api/issue-records before dispatch, so PATCH /api/issues/{id} is served by the migrated updateIssueRecord and this binding never runs (the web client and SDK use those paths). TestScaleP21LegacyIssueWritesReachRecordRoutes pins it through newHandler: the event payload is updateIssueRecord's input, not this handler's {changes, issue}. Deleting the dead handler is a follow-up."
+    },
+    "updateProject": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/projects/{id} (server/main.go:1006)"
+      ]
+    },
+    "updateProjectComment": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/projects/{id}/comments/{commentId} (server/main.go:1017)"
+      ]
+    },
+    "updateProjectDisplayDefault": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Complete projectDisplayDefault configuration field only; unchanged JSON object validation, response ownership and ErrNoMutation behavior. TestScaleP21M2IntegrationDifferential compares full principal/key matrix, persisted config and webhook/realtime effects without unrelated metadata.",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/workspace/project-display-default (server/main.go:870)"
+      ]
+    },
+    "updateProjectMilestone": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/projects/{id}/milestones/{milestoneId} (server/main.go:1014)"
+      ]
+    },
+    "updateProjectResource": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/projects/{id}/resources/{resourceId} (server/main.go:1010)"
+      ]
+    },
+    "updateProjectUpdate": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/projects/{id}/updates/{updateId} (server/main.go:1043)"
+      ]
+    },
+    "updateTeam": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/workspaces/{workspaceKey}/teams/{teamId} (server/main.go:499)"
+      ]
+    },
+    "updateWorkspace": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapFor"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PATCH /api/workspaces/{workspaceKey} (server/main.go:492)"
+      ]
+    },
+    "updateWorkspaceSettings": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "PUT /api/workspace/settings (server/main.go:871)"
+      ]
+    },
+    "uploadWorkspaceLogo": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapFor"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/workspaces/{workspaceKey}/logo (server/main.go:493)"
+      ]
+    },
+    "workspaceDataWithError": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "SW270 pins the compatibility wrapper's access and the scoped adapter's flag-off call. The scoped adapter preserves errors from legacy projections before authorizing writes.",
+      "accessors": [
+        "BootstrapFor",
+        "BootstrapForUser",
+        "PagedWorkspaceMetadata",
+        "WorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "callers": [
+        "server/server.workspaceData",
+        "server/server.workspaceDataScoped",
+        "server/server.findIssueForPermissions",
+        "server/server.developerTokenApplication",
+        "server/server.createExport",
+        "server/server.updateReview",
+        "server/server.submitReview",
+        "server/server.commentOnReview",
+        "server/server.resolveReviewThread"
+      ]
+    },
+    "workspaceData": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Closed by caller reachability. SW270 pins the complete direct and indirect callset. HOT consumers reach it only with the flag off. COLD callers remain unreachable from HOT consumers with the flag on outside the pinned AI-run worker handoff and in-process agent-route dispatch boundaries.",
+      "accessors": [
+        "workspaceDataWithError"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Reachable from GET /api/realtime/presence",
+      "callers": [
+        "server/server.listWebhooks",
+        "server/server.manageableWebhook",
+        "server/server.listWebhookFailures",
+        "server/server.testWebhook",
+        "server/server.listDocuments",
+        "server/server.checkAgentMentions",
+        "server/server.listAgentSessions",
+        "server/server.getAgentSession",
+        "server/server.listAgentSkillsHTTP",
+        "server/server.applyAgentMessageChangesLocked",
+        "server/server.resolveAgentElicitation",
+        "server/server.resolveAgentApproval",
+        "server/server.runAgentSession",
+        "server/server.stopAgentSession",
+        "server/server.runAgentSessionOnWorker",
+        "server/server.listAgentFeedback",
+        "server/server.listImports",
+        "server/server.getImport",
+        "server/server.listExports",
+        "server/server.getExport",
+        "server/server.workspaceAnalytics",
+        "server/server.applicationTaskContext",
+        "server/server.applicationWebhookDataScoped",
+        "server/server.rotateApplicationWebhookSecret",
+        "server/server.listTriageResponsibilities",
+        "server/server.listTriageRules",
+        "server/server.listWorkflowDefinitions",
+        "server/server.listWorkflowRuns",
+        "server/server.retryWorkflowRun",
+        "server/server.listPushSubscriptions",
+        "server/server.createPushSubscription",
+        "server/server.deletePushSubscription",
+        "server/server.codingTriggerRequestContext",
+        "server/server.startReviewCodingSession",
+        "server/server.startCommentActions",
+        "server/server.listCommentActions",
+        "server/server.connectorForRequest",
+        "server/server.listCustomerTaxonomy",
+        "server/server.getCycleGraph",
+        "server/server.getCycleCapacity",
+        "server/server.listDashboards",
+        "server/server.createDashboard",
+        "server/server.updateDashboard",
+        "server/server.deleteDashboard",
+        "server/server.subscribeDashboard",
+        "server/server.shareDashboard",
+        "server/server.dashboardResults",
+        "server/server.previewDashboardWidget",
+        "server/server.exportDashboard",
+        "server/server.listPosts",
+        "server/server.createPost",
+        "server/server.updatePost",
+        "server/server.deletePost",
+        "server/server.listMeetings",
+        "server/server.createMeeting",
+        "server/server.updateMeeting",
+        "server/server.deleteMeeting",
+        "server/server.listFeedItems",
+        "server/server.filterSuggestions",
+        "server/server.documentWorkspaceData",
+        "server/server.listEmailIntakeAddresses",
+        "server/server.verifyEmailIntakeAddress",
+        "server/server.listIdentityProviders",
+        "server/server.createIdentityProvider",
+        "server/server.findAttachmentsByURL",
+        "server/server.filePreview",
+        "server/server.connectGitLabToken",
+        "server/server.gitlabConnectionSnapshot",
+        "server/server.listOAuthAppFailures",
+        "server/server.listOAuthSyncGroupRequests",
+        "server/server.listJiraLinks",
+        "server/server.listJiraRemoteProjects",
+        "server/server.listJiraRemoteStatuses",
+        "server/server.finishMFA",
+        "server/server.scanLinearMigrationTarget",
+        "server/server.listMigrations",
+        "server/server.getMigration",
+        "server/server.downloadMigrationManifest",
+        "server/server.previewMigration",
+        "server/server.inviteMigrationUsers",
+        "server/server.executeMigration",
+        "server/server.rollbackMigration",
+        "server/server.downloadMigrationBundle",
+        "server/server.getNotificationPreferences",
+        "server/server.updateNotificationPreferences",
+        "server/server.listNotificationDeliveries",
+        "server/server.acknowledgeDesktopNotifications",
+        "server/server.retryNotificationDelivery",
+        "server/server.listWorkflowStates",
+        "server/server.getTeamSettings",
+        "server/server.listIssueTemplates",
+        "server/server.listTeamLabels",
+        "server/server.exportOAuthApplicationManifest",
+        "server/server.workspaceOAuthApplication",
+        "server/server.getApplicationWebhookSecret",
+        "server/server.listOAuthApplicationInstalls",
+        "server/server.listProjectRelations",
+        "server/server.listInitiativeRelations",
+        "server/server.listDocumentDrafts",
+        "server/server.documentContentHistory",
+        "server/server.listReleaseNotes",
+        "server/server.releaseHistory",
+        "server/server.listAgentActivities",
+        "server/server.listAIConversations",
+        "server/server.finishPasskeyRegistration",
+        "server/server.updatePresence",
+        "server/server.listPresence",
+        "server/server.listReleases",
+        "server/server.getRelease",
+        "server/server.listReleasePipelines",
+        "server/server.getReleasePipeline",
+        "server/server.syncReviewFromCodeHost",
+        "server/server.listReviews",
+        "server/server.getReview",
+        "server/server.listWorkspaceLabels",
+        "server/server.listWorkspaceIssueTemplates",
+        "server/server.listAPIKeys",
+        "server/server.revokeAPIKey",
+        "server/server.listOAuthApplications",
+        "server/server.getOAuthApplication",
+        "server/server.listIntegrations",
+        "server/server.disconnectIntegrationConnection",
+        "server/server.disconnectIntegration"
+      ]
+    }
+  }
+}

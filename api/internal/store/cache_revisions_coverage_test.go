@@ -106,8 +106,11 @@ func metadataSQLStatements(t *testing.T) []metadataSQLStatement {
 							}
 						}
 					}
-					if !expanded && !nonMetadataTableBuilders[enclosingFunction(t, statement.position)] {
-						t.Errorf("%s: classify the dynamic table builder %q so metadata writes cannot escape this scan", statement.position, text)
+					if !expanded {
+						builder := enclosingFunction(t, statement.position)
+						if !nonMetadataTableBuilders[builder] && !nonMetadataTableBuilders[name+":"+builder] {
+							t.Errorf("%s: classify the dynamic table builder %q so metadata writes cannot escape this scan", statement.position, text)
+						}
 					}
 				} else {
 					statements = append(statements, statement)
@@ -162,6 +165,9 @@ var metadataTables = map[string]bool{"workspace_metadata_records": true, "worksp
 // Audited dynamic-table builders whose callers only supply non-metadata
 // tables. New builders must either be expanded above or audited here.
 var nonMetadataTableBuilders = map[string]bool{
+	// Only the explicit P09 trigger sidecars; canonical writers are
+	// independently enumerated by TestScaleP09WriterCoverage.
+	"recordJournalTriggerSpecs":  true,
 	"PurgeChatHistory":           true,
 	"purgeChatThreads":           true,
 	"renameChatPayloadWorkspace": true,
@@ -181,6 +187,8 @@ var nonMetadataTableBuilders = map[string]bool{
 	"moveWorkspaceKeyRows":        true,
 	"conflictingKeyRowsStatement": true,
 	"rewriteWorkspaceKeyJSON":     true,
+	// Only private bounded SQLite stage tables, never the canonical database.
+	"scale_p21_legacy_progress_image.go:build": true,
 }
 
 // expectedWorkspaceArg is the index of the bound value naming the workspace a

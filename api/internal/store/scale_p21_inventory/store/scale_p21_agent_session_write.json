@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_agent_session_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "MutateAgentSessionLifecycle": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["MutateWorkspace", "Bootstrap"],
+      "temperature": "hot",
+      "temperatureReason": "Shared writer for the always-started reply sweeper, worker saves and chat read markers.",
+      "callers": ["server/sweepAgentLiveWorkspace", "server/workerChatReply.save", "server/chatDMMarkSessionRead"],
+      "reason": "Native ordinal/session/message writer preserves scoped and unscoped actors, append-only activities, transaction/event publication and one final inline/actor root update. Canonical/full-inline rebase and offload stream untouched transcripts through the common aggregate publisher and SQL stage. SW198 proves literal legacy equality, native and SQL-loaded sources, the principal/key matrix, cancellation/release, CAS, revocation, raw/typed merge and aggregate bytes. All four operations succeed with large split and duplicate-ID inline user transcripts; the store aggregate witness includes a nine MB body. All 15 roots pass normally and twice against persistent SQLite; all five server and ten store roots pass race verification."
+    }
+  }
+}

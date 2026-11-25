@@ -87,6 +87,7 @@ func TestMCPGetIssueReturnsFlowStyleDetail(t *testing.T) {
 func TestMCPIssueHistoryDescribesChanges(t *testing.T) {
 	f := newMCPContractFixture(t)
 	created := mcpObject(t, f, "save_issue", map[string]any{"team": f.data.Teams[0].ID, "title": "History issue"})
+	ageIssueForActivityTest(t, f.repository, f.data.Workspace.URLKey, domain.Issue{ID: created["id"].(string)})
 	mcpObject(t, f, "save_issue", map[string]any{"id": created["id"], "state": "In Progress", "priority": 1, "assignee": "me"})
 	mcpObject(t, f, "save_issue", map[string]any{"id": created["id"], "description": "New description"})
 	history := mcpObject(t, f, "list_issue_history", map[string]any{"issueId": created["identifier"]})
@@ -94,8 +95,8 @@ func TestMCPIssueHistoryDescribesChanges(t *testing.T) {
 		t.Fatalf("history identity: %v", history)
 	}
 	items := mcpItems(t, history)
-	if len(items) < 3 {
-		t.Fatalf("expected creation and two updates: %v", items)
+	if len(items) != 2 || items[0]["updatedAt"] == nil {
+		t.Fatalf("expected creation and one merged update: %v", items)
 	}
 	if items[len(items)-1]["type"] != "issue.created" {
 		t.Fatalf("history is not newest first: %v", items)

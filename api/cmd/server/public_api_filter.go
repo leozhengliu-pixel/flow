@@ -411,14 +411,6 @@ func filterRelation(id string, fields map[string]any) any {
 	return result
 }
 
-func filterRelations(relations []map[string]any) any {
-	list := make([]any, 0, len(relations))
-	for _, relation := range relations {
-		list = append(list, relation)
-	}
-	return list
-}
-
 func filterTime(value *time.Time) any {
 	if value == nil {
 		return nil

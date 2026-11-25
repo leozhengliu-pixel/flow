@@ -545,6 +545,13 @@ server:
 | `proxy.trustHeaders` | `FLOW_TRUST_PROXY_HEADERS` | boolean |
 | `proxy.trustedProxies` | `FLOW_TRUSTED_PROXIES` | list |
 | `redis.addrs` | `FLOW_REDIS_ADDRS` | list |
+| `redis.cache.enabled` | `FLOW_REDIS_CACHE` | boolean |
+| `redis.cache.viewer` | `FLOW_REDIS_CACHE_VIEWER` | boolean |
+| `redis.cache.syncPage` | `FLOW_REDIS_CACHE_SYNC_PAGE` | boolean |
+| `redis.cache.maxBytes` | `FLOW_REDIS_CACHE_MAX_BYTES` | number |
+| `redis.cache.maxEntryBytes` | `FLOW_REDIS_CACHE_MAX_ENTRY_BYTES` | number |
+| `redis.cache.timeout` | `FLOW_REDIS_CACHE_TIMEOUT` | duration |
+| `redis.cache.ttl` | `FLOW_REDIS_CACHE_TTL` | duration |
 | `redis.connectTimeout` | `FLOW_REDIS_CONNECT_TIMEOUT` | duration |
 | `redis.db` | `FLOW_REDIS_DB` | number |
 | `redis.dialTimeout` | `FLOW_REDIS_DIAL_TIMEOUT` | duration |
@@ -627,10 +634,17 @@ structured logging.
 | `FLOW_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 | `FLOW_LOG_FORMAT` | `text` | `text` for human-readable logs or `json` for log collectors. |
 | `FLOW_SLOW_MUTATION_MS` | `500` | Log a `slow workspace mutation` warning with stage timings (lock wait, clone, load, mutate, persist, publish) when a workspace write, or the time it holds the workspace lock, exceeds this many milliseconds. `0` disables it. |
+| `FLOW_BOUNDED_METADATA` | off | Opt-in bounded metadata residency. Requires `FLOW_RECORD_HYDRATION=on`, `FLOW_RECORD_JOURNAL=on`, a peer sync mode other than `shadow` and a complete metadata catalog. Prepare a database with `server metadata-prepare`. See [Bounded metadata](bounded-metadata.md) and the [activation runbook](bounded-metadata-activation.md). |
+| `FLOW_RECORD_PEER_SYNC` | `off` | `shadow` compares eligible journal installs to compatibility reloads and keeps legacy Redis envelopes. `on` uses the SQL journal and compact Redis hints. Both need a ready journal. Bounded metadata refuses `shadow`. Switch to and from `on` fleet-wide. |
+| `FLOW_METADATA_CATALOG` | `off` | `shadow` runs background journal repair and catalog backfill with bounded metadata off. After preparation, use `off` to stop this worker and retain the completed catalog. |
+| `FLOW_METADATA_MEMORY_BYTES` | 70% of the detected cgroup limit or physical RAM | Per-replica bounded metadata target in bytes, with a 1 GiB automatic floor where it fits. A lower `GOMEMLIMIT` limits automatic sizing. The target sizes decoded images (35%), concurrent work (25%), policy (1/16), installed sources (1/32), the spool disk budget, and COLD and bootstrap concurrency. With bounded metadata off, half of it is the byte budget that issue bootstrap and resource reads share for workspace copies. See [all tier overrides](bounded-metadata.md#tuning). |
+| `FLOW_COLD_SLOTS` | One per GiB, from 1 to 4 | Concurrent COLD facades per replica, each with its own decoded workspace. The 3 GiB target defaults to three slots. See the [MySQL slot control](bounded-metadata-performance.md#mysql-cold-slots). |
+| `FLOW_COLD_PROJECTION_CONCURRENCY` | One per 512 MiB, from 2 to 8 | Concurrent COLD projections per replica. The 3 GiB target defaults to six slots. |
 
-Every HTTP request receives an `X-Request-ID` response header. Clients may send
-their own `X-Request-ID`; otherwise Flow generates one and includes it in the
-request log record.
+Every HTTP request receives an `X-Request-ID` response header. Flow echoes a
+client-supplied ID or returns the generated one. Request completion and issue
+query diagnostics use the generated ID in either case. Completion logs use the
+registered route pattern for method-qualified routes.
 
 This follows the deployment model used by [Plane](https://developers.plane.so/self-hosting/govern/environment-variables),
 [Outline](https://docs.getoutline.com/s/hosting/doc/docker-7pfeLP5a8t), and
@@ -657,12 +671,25 @@ client host).
 | `FLOW_DATABASE_DRIVER` | `sqlite` | SQL dialect and driver. |
 | `FLOW_DATABASE_PATH` | `data/flow.db` | SQLite file path. |
 | `FLOW_DATABASE_URL` | empty | Required for PostgreSQL and MySQL. |
-| `FLOW_DATABASE_MAX_OPEN_CONNS` | driver default | `1` for SQLite, `20` otherwise. |
-| `FLOW_DATABASE_MAX_IDLE_CONNS` | driver default | `1` for SQLite, `5` otherwise. |
-| `FLOW_DATABASE_CONN_MAX_LIFETIME` | `30m` | Go duration for pooled connections. |
+| `FLOW_DATABASE_MAX_OPEN_CONNS` | `20` (`1` for SQLite) | Maximum open connections in each API replica's main pool. |
+| `FLOW_DATABASE_MAX_IDLE_CONNS` | `5` (`1` for SQLite) | Maximum idle connections in the main pool, capped at the open limit. A negative value disables idle connections. |
+| `FLOW_DATABASE_CONN_MAX_LIFETIME` | `30m` | Maximum lifetime of a pooled connection. Set it below any shorter MySQL `wait_timeout` or database proxy idle timeout. |
 | `FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT` | `10m` | How long a starting server waits for another one that holds the startup lock before it exits with an error naming the holder. Each waiting server spends this budget on its own, and servers after the first wait for each other in turn, so raise it when many replicas start at once on a large database. |
 | `FLOW_WORKSPACE_STATE_MAX_BYTES` | `67108864` | Maximum serialized workspace state size. Mutations fail before exceeding this limit. |
 | `FLOW_DATABASE_MAX_TRANSACTION_BYTES` | `33554432` | Cumulative SQL write text and parameter bytes per transaction. Exceeding the budget rolls back the transaction, even if a caller ignores the first error. Minimum 1 MiB. This is not a measurement of physical binlog bytes. |
+
+Budget `max_connections` for the sum of the pools across replicas, a separate
+connection per replica during startup, and other database clients. Requests
+waiting for a full local pool use their context deadline. On MySQL, error 1040
+indicates the server connection limit. A refused TCP dial indicates an
+unreachable listener, and an EOF during packet reads indicates a dropped
+connection. Check database uptime and container lifecycle logs when those
+errors start together across replicas.
+
+The MySQL driver checks pooled connections for liveness on checkout by
+default. Flow answers a recognized connection failure during an issue read or
+a workspace reload before a legacy mutation with `503` and `Retry-After: 2`.
+A connection error with an uncertain commit outcome gets no `Retry-After` header.
 
 ### Database growth
 
@@ -971,6 +998,13 @@ Awareness messages, and workspace entity events.
 | `FLOW_REDIS_CONNECT_TIMEOUT` | `15s` | Startup probe deadline. |
 | `FLOW_REDIS_LOCK_TTL` | `30s` | Distributed write lease, renewed while a mutation runs. |
 | `FLOW_REDIS_LOCK_WAIT` | `5s` | Maximum wait to acquire a workspace write lock. |
+| `FLOW_REDIS_CACHE` | `off` | Set to `on` to share repeated metadata search results across API instances. See [Redis cache measurements](redis-cache.md#measurements). |
+| `FLOW_REDIS_CACHE_VIEWER` | `false` | `true` opts into sharing viewer memberships when the result tier is enabled. |
+| `FLOW_REDIS_CACHE_SYNC_PAGE` | `false` | `true` opts into sharing eligible projected sync pages when the result tier is enabled. |
+| `FLOW_REDIS_CACHE_TTL` | `5m` | Maximum lifetime of one cache entry. A Redis cache shard starts its TTL on the first insertion. |
+| `FLOW_REDIS_CACHE_TIMEOUT` | `25ms` | Deadline of one cache read or write; a slower or failed Redis counts as a miss. |
+| `FLOW_REDIS_CACHE_MAX_ENTRY_BYTES` | `1048576` | Largest stored entry after compression; larger results are not cached. |
+| `FLOW_REDIS_CACHE_MAX_BYTES` | `67108864` | Shared result-cache admission budget per Redis namespace, including encoded values, keys and an overhead allowance. Use the same limit on all replicas. |
 
 ## Container security
 
@@ -1417,7 +1451,7 @@ budgets apply per client address rather than to the proxy (see
 | `FLOW_API_RATE_LIMIT` | on | `off` disables API rate limiting. |
 | `FLOW_API_RATE_LIMIT_API_KEY_REQUESTS` / `_COMPLEXITY` | `2500` / `3000000` | Hourly budgets per user for personal API keys. |
 | `FLOW_API_RATE_LIMIT_OAUTH_REQUESTS` / `_COMPLEXITY` | `5000` / `2000000` | Hourly budgets per user (or app user) and OAuth application. |
-| `FLOW_API_RATE_LIMIT_UNAUTHENTICATED_REQUESTS` / `_COMPLEXITY` | `600` / `100000` | Hourly budgets per client address. |
+| `FLOW_API_RATE_LIMIT_UNAUTHENTICATED_REQUESTS` / `_COMPLEXITY` | `600` / `100000` | Hourly budgets per client address and public route class: MCP (`/mcp`), OAuth (`/oauth/*`, `/api/oauth/token`), upload links and signed file links each keep their own bucket, so MCP retries before a client holds a token never use up the OAuth exchange that issues it. Behind a proxy, set `FLOW_TRUST_PROXY_HEADERS` and `FLOW_TRUSTED_PROXIES` so each client gets its own address. |
 | `FLOW_API_RATE_LIMIT_SESSION_REQUESTS` / `_COMPLEXITY` | `0` / `0` | Hourly budgets for browser sessions; `0` means unlimited. |
 | `FLOW_API_RATE_LIMIT_AGENT_RUN_REQUESTS` | `1200` | Hourly `/mcp` request budget per agent run (worker run tokens); `0` means unlimited. |
 | `FLOW_API_RATE_LIMIT_AGENT_WORKSPACE_REQUESTS` | `36000` | Hourly `/mcp` request budget shared by all agent runs of a workspace; `0` means unlimited. |
@@ -2839,6 +2873,21 @@ not replace full detail content. Pages also have a 4 MiB payload budget, except
 that one oversized record can be returned to ensure forward progress. Follow
 `nextCursor` rather than assuming every page contains the requested row count.
 Cursor checkpoints do not serialize workspace snapshots into localStorage.
+
+The web client uses the local issue store by default when the server has
+`FLOW_SYNC_V2`, `FLOW_SYNC_MANIFEST`, `FLOW_INDEXED_READS` and
+`FLOW_RECORD_JOURNAL` on. Every workspace is eligible, subject to the signed-in
+viewer's access. The previous workspace allowlists are ignored.
+
+Set `FLOW_LOCAL_STORE=off` on every API replica to opt out of the local store.
+Open tabs learn about the change when they next check session or local-store
+authority. Flow clears retained local-store databases at that origin and
+reads from the API. The wipe also discards edits still waiting in the local
+outbox. Reload after re-enabling to build a fresh store. See
+[Local-first sync](architecture/local-first-sync.md).
+
+Upgrading the web client removes the retired startup snapshot database and
+its index. The operator opt-out uses network reads through the same web build.
 
 Issue context accepts independent `commentsCursor` and `activitiesCursor`
 parameters. Omit a cursor to start from the latest page; use the corresponding

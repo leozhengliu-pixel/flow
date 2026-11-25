@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -83,23 +84,77 @@ func inheritedTeamOwner(data domain.Bootstrap, teamID, userID string) bool {
 	return false
 }
 
-func (s *server) findIssueForPermissions(r *http.Request) (*domain.Bootstrap, *domain.Issue, bool) {
-	data := s.workspaceData(r)
+func (s *server) findIssueForPermissions(w http.ResponseWriter, r *http.Request) (*domain.Bootstrap, *domain.Issue, bool) {
+	var data domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() && boundedIssuePermissionReadRequest(r) {
+		if read, ok := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); ok && read != nil {
+			data = read.Data
+		}
+	} else {
+		var err error
+		data, err = s.workspaceDataWithError(r)
+		if writeAuthCheckFailure(w, err) {
+			return nil, nil, false
+		}
+	}
 	id := r.PathValue("id")
 	index := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == id })
 	if index < 0 {
-		return &data, nil, false
+		writeError(w, http.StatusNotFound, "issue not found")
+		return nil, nil, false
 	}
 	return &data, &data.Issues[index], true
 }
 
 func (s *server) listIssuePermissions(w http.ResponseWriter, r *http.Request) {
-	data, issue, ok := s.findIssueForPermissions(r)
-	if !ok || issueRole(s, *data, *issue) == "none" {
+	if s.store.BoundedMetadataEnabled() {
+		s.listIssuePermissionsBounded(w, r)
+		return
+	}
+	data, issue, ok := s.findIssueForPermissions(w, r)
+	if !ok {
+		return
+	}
+	if issueRole(s, *data, *issue) == "none" {
 		writeError(w, http.StatusNotFound, "issue not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, slices.Clone(issue.Permissions))
+}
+
+// listIssuePermissionsBounded answers the permission list from the retained
+// bounded issue authorization read only and never reaches workspaceData. A GET
+// pattern also serves HEAD; boundedIssuePermissionReadRequest classifies a
+// HEAD as its GET, so the issue-record alias hands a HEAD the same retained
+// full-permission read it hands the GET, and a HEAD reuses it here exactly as
+// the GET does instead of reading it a second time.
+func (s *server) listIssuePermissionsBounded(w http.ResponseWriter, r *http.Request) {
+	permissionRead := boundedIssuePermissionReadRequest(r)
+	read, retained := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead)
+	if permissionRead && (!retained || read == nil) && strings.HasPrefix(r.URL.Path, "/api/issues/") {
+		if _, _, err := s.boundedIssueWriteAuthorizationMetadata(r); err != nil {
+			if r.Context().Err() != nil {
+				issueRecordsError(w, r.Context().Err())
+			} else if errors.Is(err, store.ErrMetadataWorkBudget) || errors.Is(err, store.ErrMetadataPageBudget) || errors.Is(err, store.ErrBoundedMetadataCoverage) {
+				writeError(w, http.StatusServiceUnavailable, "Issue permissions are temporarily unavailable")
+			} else {
+				issueRecordsError(w, err)
+			}
+			return
+		}
+		read, retained = r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead)
+	}
+	var data domain.Bootstrap
+	if permissionRead && retained && read != nil {
+		data = read.Data
+	}
+	id := r.PathValue("id")
+	index := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == id })
+	if index < 0 || issueRole(s, data, data.Issues[index]) == "none" {
+		writeError(w, http.StatusNotFound, "issue not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, slices.Clone(data.Issues[index].Permissions))
 }
 
 func validIssuePermission(data domain.Bootstrap, permission domain.IssuePermission) bool {
@@ -133,9 +188,8 @@ func (s *server) replaceIssuePermissions(w http.ResponseWriter, r *http.Request)
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	data, issue, ok := s.findIssueForPermissions(r)
+	data, issue, ok := s.findIssueForPermissions(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "issue not found")
 		return
 	}
 	if issueRole(s, *data, *issue) != "owner" {
@@ -197,9 +251,8 @@ func (s *server) updateIssuePermission(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	data, issue, ok := s.findIssueForPermissions(r)
+	data, issue, ok := s.findIssueForPermissions(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "issue not found")
 		return
 	}
 	if issueRole(s, *data, *issue) != "owner" {
@@ -235,9 +288,8 @@ func (s *server) updateIssuePermission(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteIssuePermission(w http.ResponseWriter, r *http.Request) {
-	data, issue, ok := s.findIssueForPermissions(r)
+	data, issue, ok := s.findIssueForPermissions(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "issue not found")
 		return
 	}
 	if issueRole(s, *data, *issue) != "owner" {

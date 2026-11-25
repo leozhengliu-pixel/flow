@@ -59,6 +59,11 @@ type workspacePurgeTable struct {
 // steps; there are no foreign keys between these tables, so the order only
 // keeps children before the rows that name them.
 var workspacePurgeTables = []workspacePurgeTable{
+	// Move bookkeeping before canonical rows during a workspace rename;
+	// canonical triggers then advance the versions under their new key.
+	{"record_journal_dirty", "workspace_key", false},
+	{"record_journal_coverage", "workspace_key", false},
+	{"record_versions", "workspace_key", false},
 	// Agent runs and sessions.
 	{"agent_run_activities", "workspace_key", false},
 	{"agent_run_changes", "workspace_key", false},
@@ -149,8 +154,12 @@ var workspacePurgeTables = []workspacePurgeTable{
 	// Uploads (their objects are deleted before the rows).
 	{"file_uploads", "workspace_key", false},
 	// Workspace content, metadata, search and caches.
+	{"metadata_catalog_collections", "workspace_key", false},
+	{"metadata_catalog_relations", "workspace_key", false},
+	{"metadata_catalog", "workspace_key", false},
 	{"metadata_search_documents", "workspace_key", false},
 	{"metadata_search_migration_checkpoints", "workspace_key", false},
+	{"metadata_search_index_rules", "workspace_key", false},
 	{"metadata_search_migrations", "workspace_key", false},
 	{"metadata_blob_migrations", "workspace_key", false},
 	{"metadata_blobs", "workspace_key", false},
@@ -159,6 +168,11 @@ var workspacePurgeTables = []workspacePurgeTable{
 	{"workspace_cache_revisions", "workspace_key", false},
 	{"workspace_states", "workspace_key", false},
 	// Rows keyed by the workspace ID.
+	{"record_journal_event_pending", "workspace_id", true},
+	{"record_journal_events", "workspace_id", true},
+	{"record_journal", "workspace_id", true},
+	{"workspace_authz_epochs", "workspace_id", true},
+	{"workspace_record_journal_heads", "workspace_id", true},
 	{"recently_viewed", "workspace_id", true},
 	{"search_history", "workspace_id", true},
 	{"scim_group_memberships", "workspace_id", true},
@@ -203,30 +217,39 @@ var workspacePurgeKept = map[string]string{
 
 // workspacePurgeExempt lists tables that hold no workspace rows.
 var workspacePurgeExempt = map[string]string{
-	"api_signing_secrets":         "instance signing keys",
-	"auth_identities":             "user accounts (account deletion)",
-	"auth_sessions":               "user accounts (account deletion)",
-	"auth_session_security":       "user accounts (account deletion)",
-	"auth_tokens":                 "user accounts (account deletion)",
-	"auth_users":                  "user accounts (account deletion)",
-	"auth_email_events":           "user accounts (account deletion)",
-	"coding_signing_keys":         "per-user commit signing keys",
-	"personal_connections":        "per-user connections",
-	"personal_data_exports":       "per-account Download your data jobs (user_id only); a workspace purge expires its members' archives (server expireMemberDataExports), account erasure deletes the jobs and archives",
-	"oauth_clients":               "instance OAuth client registrations",
-	"schema_migrations":           "schema bookkeeping",
-	"search_index_settings":       "instance search settings",
-	"sqlite_sequence":             "SQLite bookkeeping",
-	"issue_search_fts":            "SQLite full-text index kept in step with issue_search_documents by triggers",
-	"issue_search_fts_config":     "SQLite full-text index internals",
-	"issue_search_fts_data":       "SQLite full-text index internals",
-	"issue_search_fts_docsize":    "SQLite full-text index internals",
-	"issue_search_fts_idx":        "SQLite full-text index internals",
-	"metadata_search_fts":         "SQLite full-text index kept in step with metadata_search_documents by triggers",
-	"metadata_search_fts_config":  "SQLite full-text index internals",
-	"metadata_search_fts_data":    "SQLite full-text index internals",
-	"metadata_search_fts_docsize": "SQLite full-text index internals",
-	"metadata_search_fts_idx":     "SQLite full-text index internals",
+	"bounded_metadata_write_stage":  "transaction-local bounded metadata input; no committed rows",
+	"bounded_metadata_write_chunks": "transaction-local bounded metadata input chunks; no committed rows",
+	"record_journal_mode":           "database-wide journal activation generation",
+	"record_journal_flush":          "transaction-local derived write input; no committed rows",
+	"record_journal_commit":         "SQLite input view; no stored rows",
+	"record_journal_commit_v2":      "SQLite input view; no stored rows",
+	"record_journal_active":         "transactional session token bookkeeping; no committed rows",
+	"record_journal_context":        "connection token bookkeeping for SQLite's single writer",
+	"record_journal_inline":         "bounded transaction input; context changes materialize any stranded keys",
+	"api_signing_secrets":           "instance signing keys",
+	"auth_identities":               "user accounts (account deletion)",
+	"auth_sessions":                 "user accounts (account deletion)",
+	"auth_session_security":         "user accounts (account deletion)",
+	"auth_tokens":                   "user accounts (account deletion)",
+	"auth_users":                    "user accounts (account deletion)",
+	"auth_email_events":             "user accounts (account deletion)",
+	"coding_signing_keys":           "per-user commit signing keys",
+	"personal_connections":          "per-user connections",
+	"personal_data_exports":         "per-account Download your data jobs (user_id only); a workspace purge expires its members' archives (server expireMemberDataExports), account erasure deletes the jobs and archives",
+	"oauth_clients":                 "instance OAuth client registrations",
+	"schema_migrations":             "schema bookkeeping",
+	"search_index_settings":         "instance search settings",
+	"sqlite_sequence":               "SQLite bookkeeping",
+	"issue_search_fts":              "SQLite full-text index kept in step with issue_search_documents by triggers",
+	"issue_search_fts_config":       "SQLite full-text index internals",
+	"issue_search_fts_data":         "SQLite full-text index internals",
+	"issue_search_fts_docsize":      "SQLite full-text index internals",
+	"issue_search_fts_idx":          "SQLite full-text index internals",
+	"metadata_search_fts":           "SQLite full-text index kept in step with metadata_search_documents by triggers",
+	"metadata_search_fts_config":    "SQLite full-text index internals",
+	"metadata_search_fts_data":      "SQLite full-text index internals",
+	"metadata_search_fts_docsize":   "SQLite full-text index internals",
+	"metadata_search_fts_idx":       "SQLite full-text index internals",
 }
 
 // WorkspacePurgeTarget names the workspace a purge removes.
@@ -391,7 +414,17 @@ func (s *SQLiteStore) BeginWorkspacePurge(ctx context.Context, workspaceKey stri
 				return err
 			}
 		}
-		data, ok := s.BootstrapFor(workspaceKey)
+		var data domain.Bootstrap
+		var ok bool
+		if s.BoundedMetadataEnabled() {
+			var err error
+			data, ok, err = s.WorkspaceMetadataScoped(ctx, workspaceKey, MetadataRecordScope{})
+			if err != nil {
+				return err
+			}
+		} else {
+			data, ok = s.BootstrapFor(workspaceKey)
+		}
 		if !ok {
 			return nil
 		}
@@ -416,11 +449,29 @@ func (s *SQLiteStore) BeginWorkspacePurge(ctx context.Context, workspaceKey stri
 }
 
 // deletionRequestRef is the ID of the domain event that scheduled the
-// deletion, so the receipt names the request without naming its author.
+// deletion, so the receipt names the request without naming its author. The
+// latest is picked by decoded time: older rows hold RFC3339Nano text, which
+// does not sort by time (stored_time.go). A workspace has a few such events.
 func (s *SQLiteStore) deletionRequestRef(ctx context.Context, workspaceID string) string {
-	var id string
-	_ = s.db.QueryRowContext(ctx, `SELECT id FROM domain_events WHERE workspace_id=? AND event_type='workspace.deletion_scheduled' ORDER BY created_at DESC LIMIT 1`, workspaceID).Scan(&id)
-	return id
+	rows, err := s.db.QueryContext(ctx, `SELECT id,created_at FROM domain_events WHERE workspace_id=? AND event_type='workspace.deletion_scheduled'`, workspaceID)
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	var latest, latestAt string
+	for rows.Next() {
+		var id, at string
+		if rows.Scan(&id, &at) != nil {
+			return ""
+		}
+		if at = normalizeStoredTime(at); latest == "" || at > latestAt || at == latestAt && id > latest {
+			latest, latestAt = id, at
+		}
+	}
+	if rows.Err() != nil {
+		return ""
+	}
+	return latest
 }
 
 // workspacePurgeStarted reports whether the workspace's purge has begun.
@@ -912,7 +963,18 @@ func (s *SQLiteStore) RemoveWorkspaceFromCatalog(ctx context.Context, workspaceK
 		if err := s.ReloadAllWorkspaces(ctx); err != nil {
 			return err
 		}
-		if data, ok := s.BootstrapFor(workspaceKey); ok {
+		var data domain.Bootstrap
+		var ok bool
+		if s.BoundedMetadataEnabled() {
+			var err error
+			data, ok, err = s.WorkspaceMetadataScoped(ctx, workspaceKey, MetadataRecordScope{})
+			if err != nil {
+				return err
+			}
+		} else {
+			data, ok = s.BootstrapFor(workspaceKey)
+		}
+		if ok {
 			workspaceID = data.Workspace.ID
 		}
 		return s.removeWorkspaceFromCatalog(ctx, workspaceKey, counts)
@@ -974,6 +1036,24 @@ func (s *SQLiteStore) removeWorkspaceFromCatalog(ctx context.Context, workspaceK
 	s.forgetChatSnapshotFlag(workspaceKey)
 	s.issueGroupCounts.drop(workspaceKey)
 	s.workspaces = remaining
+	if residency := s.metadataResidency; residency != nil {
+		residency.mu.Lock()
+		residency.policyBytes -= residency.policy[workspaceKey]
+		delete(residency.policy, workspaceKey)
+		delete(residency.stamps, workspaceKey)
+		delete(residency.applied, workspaceKey)
+		removedSource := residency.logical[workspaceKey]
+		delete(residency.logical, workspaceKey)
+		for key, element := range residency.cache {
+			if key.workspace == workspaceKey {
+				residency.removeCacheEntry(element)
+			}
+		}
+		residency.mu.Unlock()
+		if removedSource != nil {
+			removedSource.Release()
+		}
+	}
 	for key := range s.copyRevisions {
 		if _, ok := remaining[key]; !ok {
 			s.forgetCopyRevisionLocked(key)
@@ -994,7 +1074,24 @@ func (s *SQLiteStore) PurgeWorkspaceRows(ctx context.Context, target WorkspacePu
 	if target.Key == "" || target.ID == "" {
 		return fmt.Errorf("purge needs the workspace URL key and ID")
 	}
-	if data, ok := s.BootstrapFor(target.Key); ok {
+	var data domain.Bootstrap
+	var ok bool
+	if s.BoundedMetadataEnabled() {
+		var release func()
+		var err error
+		ctx, release, err = s.admitMetadataWork(ctx, 2<<20)
+		if err != nil {
+			return err
+		}
+		defer release()
+		data, ok, err = s.WorkspaceMetadataScoped(ctx, target.Key, MetadataRecordScope{})
+		if err != nil {
+			return err
+		}
+	} else {
+		data, ok = s.BootstrapFor(target.Key)
+	}
+	if ok {
 		if data.Workspace.ID != target.ID {
 			return ErrWorkspaceKeyReused
 		}
@@ -1021,16 +1118,22 @@ func (s *SQLiteStore) PurgeWorkspaceRows(ctx context.Context, target WorkspacePu
 		}
 	}
 	// Code host account tokens are sealed under the account's ID.
-	accounts, err := s.workspaceStrings(ctx, `SELECT id FROM code_host_accounts WHERE workspace_key=?`, target.Key)
-	if err != nil {
-		return err
-	}
-	for _, id := range accounts {
-		result, err := s.db.ExecContext(ctx, `DELETE FROM connector_secrets WHERE id=?`, CodeHostAccountSecretID(id))
+	if s.BoundedMetadataEnabled() {
+		if err := s.scaleP21SW17PurgeCodeHostSecrets(ctx, target.Key, add); err != nil {
+			return err
+		}
+	} else {
+		accounts, err := s.workspaceStrings(ctx, `SELECT id FROM code_host_accounts WHERE workspace_key=?`, target.Key)
 		if err != nil {
 			return err
 		}
-		add("connector_secrets", rowsAffected(result))
+		for _, id := range accounts {
+			result, err := s.db.ExecContext(ctx, `DELETE FROM connector_secrets WHERE id=?`, CodeHostAccountSecretID(id))
+			if err != nil {
+				return err
+			}
+			add("connector_secrets", rowsAffected(result))
+		}
 	}
 	// Application agent activity logs are keyed by their task.
 	for {
@@ -1065,19 +1168,40 @@ func (s *SQLiteStore) PurgeWorkspaceRows(ctx context.Context, target WorkspacePu
 	// A legacy single-workspace row would bring the workspace back when no
 	// other workspace is left.
 	var legacy []byte
-	if err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_state WHERE id=1`).Scan(&legacy); err == nil {
+	var legacyErr error
+	if s.BoundedMetadataEnabled() {
+		column := s.jsonText("data", "workspace")
+		length := "OCTET_LENGTH(" + column + ")"
+		if s.dialect == "sqlite" {
+			length = "LENGTH(CAST(" + column + " AS BLOB))"
+		}
+		var size sql.NullInt64
+		legacyErr = s.db.QueryRowContext(ctx, `SELECT `+length+`,CASE WHEN `+length+`<=? THEN `+column+` ELSE NULL END FROM workspace_state WHERE id=1`, MetadataRecordPageMaxBytes).Scan(&size, &legacy)
+		if legacyErr == nil && size.Int64 > MetadataRecordPageMaxBytes {
+			return ErrMetadataPageBudget
+		}
+	} else {
+		legacyErr = s.db.QueryRowContext(ctx, `SELECT data FROM workspace_state WHERE id=1`).Scan(&legacy)
+	}
+	if legacyErr == nil {
 		var stored struct {
 			Workspace domain.Workspace `json:"workspace"`
 		}
-		if json.Unmarshal(legacy, &stored) == nil && (stored.Workspace.ID == target.ID || stored.Workspace.ID == "" && stored.Workspace.URLKey == target.Key) {
+		var decodeErr error
+		if s.BoundedMetadataEnabled() {
+			decodeErr = json.Unmarshal(legacy, &stored.Workspace)
+		} else {
+			decodeErr = json.Unmarshal(legacy, &stored)
+		}
+		if decodeErr == nil && (stored.Workspace.ID == target.ID || stored.Workspace.ID == "" && stored.Workspace.URLKey == target.Key) {
 			result, err := s.db.ExecContext(ctx, `DELETE FROM workspace_state WHERE id=1`)
 			if err != nil {
 				return err
 			}
 			add("workspace_state", rowsAffected(result))
 		}
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return err
+	} else if !errors.Is(legacyErr, sql.ErrNoRows) {
+		return legacyErr
 	}
 	// Offloaded bodies in the content store, then their rows.
 	if deleted, err := s.purgeWorkspaceContentObjects(ctx, target.Key); err != nil {
@@ -1103,6 +1227,27 @@ func (s *SQLiteStore) PurgeWorkspaceRows(ctx context.Context, target WorkspacePu
 	s.forgetChatSnapshotFlag(target.Key)
 	s.issueGroupCounts.drop(target.Key)
 	return nil
+}
+
+func (s *SQLiteStore) scaleP21SW17PurgeCodeHostSecrets(ctx context.Context, workspace string, add func(string, int64)) error {
+	last := ""
+	for {
+		ids, err := s.workspaceStrings(ctx, `SELECT id FROM code_host_accounts WHERE workspace_key=? AND id>? ORDER BY id LIMIT 200`, workspace, last)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			result, err := s.db.ExecContext(ctx, `DELETE FROM connector_secrets WHERE id=?`, CodeHostAccountSecretID(id))
+			if err != nil {
+				return err
+			}
+			add("connector_secrets", rowsAffected(result))
+		}
+		if len(ids) < 200 {
+			return nil
+		}
+		last = ids[len(ids)-1]
+	}
 }
 
 // purgeWorkspaceContentObjects deletes the content-store bodies of the
@@ -1148,6 +1293,9 @@ func (s *SQLiteStore) deleteWorkspaceRows(ctx context.Context, table, column, va
 		statement = `DELETE FROM ` + table + ` WHERE ctid IN (SELECT ctid FROM ` + table + ` WHERE ` + column + `=? LIMIT ` + fmt.Sprint(workspacePurgeBatch) + `)`
 	default:
 		statement = `DELETE FROM ` + table + ` WHERE rowid IN (SELECT rowid FROM ` + table + ` WHERE ` + column + `=? LIMIT ` + fmt.Sprint(workspacePurgeBatch) + `)`
+		if primary := recordJournalPrimaryKey(table); primary != "" {
+			statement = `DELETE FROM ` + table + ` WHERE (` + primary + `) IN (SELECT ` + primary + ` FROM ` + table + ` WHERE ` + column + `=? LIMIT ` + fmt.Sprint(workspacePurgeBatch) + `)`
+		}
 	}
 	var total int64
 	for {

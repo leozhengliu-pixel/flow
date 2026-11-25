@@ -40,6 +40,8 @@ var InternalRoutes = []string{
 	"DELETE /api/account/signing-key",
 	"GET /api/account/bootstrap",
 	"GET /api/account/identities",
+	"GET /api/account/identities/link/{provider}/start",
+	"GET /api/account/identities/link/enterprise/{id}/start",
 	"GET /api/account/passkeys",
 	"GET /api/account/sessions",
 	"GET /api/account/settings",
@@ -211,6 +213,9 @@ var InternalRoutes = []string{
 	"GET /api/documents/{id}/comments",
 	"GET /api/documents/{id}/drafts",
 	"GET /api/documents/{id}/history",
+	"GET /api/documents/{id}/history/{revisionId}",
+	"GET /api/resource-windows/members",
+	"GET /api/resource-windows/trash",
 	"GET /api/documents/{id}/permissions",
 	"GET /api/documents/{id}/subscribers",
 	"PATCH /api/documents/{id}/comments/{commentId}",
@@ -568,6 +573,7 @@ var InternalRoutes = []string{
 	"POST /api/push-subscriptions",
 	// /api/realtime
 	"GET /api/realtime/changes",
+	"GET /api/sync/changes",
 	"GET /api/realtime/events",
 	"GET /api/realtime/presence",
 	"GET /api/realtime/socket",
@@ -638,6 +644,11 @@ var InternalRoutes = []string{
 	"POST /api/sla-rules/reorder",
 	// /api/sla-settings
 	"PUT /api/sla-settings",
+	// /api/sync
+	"GET /api/sync/manifest",
+	"GET /api/sync/records",
+	"POST /api/sync/batch",
+	"GET /api/notifications/state",
 	// /api/subscriptions
 	"DELETE /api/subscriptions/{type}/{id}",
 	"PUT /api/subscriptions/{type}/{id}",

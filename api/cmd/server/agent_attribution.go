@@ -59,7 +59,7 @@ func agentBehalfName(user domain.User) string {
 func appendEstimateActivity(data *domain.Bootstrap, issue *domain.Issue, next *float64) {
 	format := func(value *float64) string {
 		if value == nil {
-			return "0"
+			return ""
 		}
 		return strconv.FormatFloat(*value, 'f', -1, 64)
 	}

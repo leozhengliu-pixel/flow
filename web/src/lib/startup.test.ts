@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api-client'
 import { clearNavigationCache, rememberWorkspace, writeNavigationCacheWhenIdle, readNavigationCache } from '@/lib/navigation-cache'
-import { settleBootstrapRequest, startStartup, type StartupDeps } from '@/lib/startup'
+import { beginStartup, settleBootstrapRequest, startStartup, takeStartup, type StartupDeps } from '@/lib/startup'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import type { AccountBootstrap, AuthSession } from '@/types/flow'
 
@@ -33,6 +33,24 @@ describe('startup ordering', () => {
     expect(fetchAccount).toHaveBeenCalledTimes(1)
     resolvers.forEach(resolve => resolve())
     await expect(ready).resolves.toMatchObject({ session })
+  })
+
+  it('hands the requests begun before the first render to the app, once, and only for the same page', async () => {
+    rememberWorkspace(viewer.id, 'acme')
+    const early = deps(), late = deps()
+    beginStartup(early.value, { requestedWorkspaceKey: 'acme', isRoot: false })
+    const taken = takeStartup(late.value, { requestedWorkspaceKey: 'acme', isRoot: false })
+    expect(late.value.fetchSession).not.toHaveBeenCalled()
+    expect(early.value.fetchSession).toHaveBeenCalledTimes(1)
+    await expect(taken.ready).resolves.toMatchObject({ session })
+    // Taken once: a second mount (or another page) starts its own.
+    takeStartup(late.value, { requestedWorkspaceKey: 'acme', isRoot: false })
+    expect(late.value.fetchSession).toHaveBeenCalledTimes(1)
+    const stale = deps(), fresh = deps()
+    beginStartup(stale.value, { requestedWorkspaceKey: 'acme', isRoot: false })
+    const other = takeStartup(fresh.value, { requestedWorkspaceKey: 'acme', isRoot: false, projection: 'issue-detail' })
+    expect(fresh.value.fetchSession).toHaveBeenCalledTimes(1)
+    await expect(other.ready).resolves.toMatchObject({ session })
   })
 
   it('does not speculate for a workspace key this device has not used', async () => {

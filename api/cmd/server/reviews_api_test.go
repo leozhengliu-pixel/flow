@@ -143,6 +143,14 @@ func TestReviewCommentRepliesAndThreadResolution(t *testing.T) {
 	}
 	requestJSON[any](t, handler, http.MethodPatch, base+"/"+root.ID, map[string]any{}, http.StatusBadRequest)
 	// Review summaries accept replies in the overview conversation.
+	// The sample review points at a code host nobody connected; approving it
+	// there needs the member's own account. A Flow-only review needs none.
+	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "test.review", "", nil, func(data *domain.Bootstrap) error {
+		data.Reviews[reviewIndex(*data, review.ID)].Provider = ""
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	approved := requestJSON[domain.CodeReview](t, handler, http.MethodPost, "/api/reviews/"+review.ID+"/submit", map[string]string{"decision": "approve", "body": "Ship it"}, http.StatusOK)
 	summary := approved.Events[len(approved.Events)-1]
 	updated = requestJSON[domain.CodeReview](t, handler, http.MethodPost, base, map[string]any{"body": "Thanks", "parentId": summary.ID}, http.StatusCreated)

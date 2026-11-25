@@ -224,7 +224,7 @@ func (s *server) codingPromptFiles(r *http.Request, viewer codingViewer, files [
 		file.URL = "/uploads/" + name
 		file.Name = firstNonEmpty(strings.TrimSpace(file.Name), name)
 		kept = append(kept, file)
-		signed = append(signed, signedFileURL(key, externalBaseURL(r), name, expires))
+		signed = append(signed, signedFileURLFor(key, externalBaseURL(r), name, expires, requestFileSigner(r)))
 	}
 	return kept, signed, nil
 }

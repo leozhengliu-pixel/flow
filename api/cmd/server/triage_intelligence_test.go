@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -390,5 +392,71 @@ func BenchmarkTriageIntelligenceGenerate2000Candidates(b *testing.B) {
 	b.ResetTimer()
 	for index := 0; index < b.N; index++ {
 		_ = generateIssueSuggestions(&data, &probe, time.Now().UTC())
+	}
+}
+
+// A batch whose scoped issue is another scoped issue's candidate must keep
+// the full stored row: candidate copies are search summaries.
+func TestTriageIntelligenceBatchKeepsScopedCandidateRows(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	bootstrap := repository.Bootstrap()
+	team := bootstrap.Teams[0]
+	var backlogStateID, startedStateID string
+	for _, state := range bootstrap.States {
+		if state.TeamID != "" && state.TeamID != team.ID {
+			continue
+		}
+		if state.Type == "backlog" && backlogStateID == "" {
+			backlogStateID = state.ID
+		}
+		if state.Type == "started" && startedStateID == "" {
+			startedStateID = state.ID
+		}
+	}
+	if backlogStateID == "" || startedStateID == "" {
+		t.Fatal("test workspace lacks backlog or started states")
+	}
+	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.triage_batch_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+		settings := teamSettings(data, team.ID)
+		settings.TriageEnabled = true
+		data.TeamSettings[team.ID] = settings
+		data.WorkspaceSettings.FeatureFlags["triage-intelligence"] = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
+	handler := newHandler(service)
+	existing := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{
+		"title": "Vehicle marketplace image preview component", "teamId": team.ID, "stateId": startedStateID,
+		"description": "Build a reusable image preview component for vehicle marketplace listings.",
+	}, http.StatusCreated)
+	triage := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{
+		"title": "Vehicle marketplace image preview", "teamId": team.ID, "stateId": backlogStateID,
+	}, http.StatusCreated)
+	stored := func() domain.Issue {
+		t.Helper()
+		data, ok := repository.BootstrapFor(bootstrap.Workspace.URLKey)
+		if !ok {
+			t.Fatal("workspace missing")
+		}
+		issue, err := issueByID(&data, existing.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return *issue
+	}
+	before := stored()
+	ctx := context.WithValue(t.Context(), authUserContextKey{}, bootstrap.Viewer)
+	results, err := service.generateTriageIntelligenceForIssues(ctx, bootstrap.Workspace.URLKey, []string{existing.ID, triage.ID})
+	if err != nil || len(results) != 1 || results[0].ID != triage.ID || results[0].SuggestionsGeneratedAt == nil {
+		t.Fatalf("batch generation: %v %#v", err, results)
+	}
+	if after := stored(); !reflect.DeepEqual(before, after) {
+		t.Fatalf("scoped candidate row was replaced:\nbefore %#v\nafter  %#v", before, after)
 	}
 }

@@ -599,6 +599,12 @@ func (s *server) startGitLabAccountLink(w http.ResponseWriter, r *http.Request) 
 
 // codeHostWorkspaceURLKey is the workspace's URL key (connector secrets are keyed by it).
 func (s *server) codeHostWorkspaceURLKey(key string) string {
+	if s.store.BoundedMetadataEnabled() {
+		if data, ok := s.store.WorkspaceSettingsMetadata(key); ok && data.Workspace.URLKey != "" {
+			return data.Workspace.URLKey
+		}
+		return key
+	}
 	if data, ok := s.store.WorkspaceMetadataFields(key, "integrationConnections"); ok && data.Workspace.URLKey != "" {
 		return data.Workspace.URLKey
 	}
@@ -745,7 +751,7 @@ func (s *server) auditCodeHostAccount(ctx context.Context, r *http.Request, work
 		auditCtx = store.WithMetadataFields(context.WithoutCancel(r.Context()), "auditLog")
 	}
 	metadata := map[string]any{"codeHost": account.CodeHost, "host": account.HostName, "login": account.Login, "authType": account.AuthType, "userId": account.UserID}
-	if err := s.store.MutateWorkspace(auditCtx, workspace, "audit.code_host_account", account.ID, map[string]any{"action": action}, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspaceScoped(auditCtx, workspace, "audit.code_host_account", account.ID, map[string]any{"action": action}, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
 		appendAudit(data, action, "code_host_account", account.ID, metadata)
 		return nil
 	}); err != nil {

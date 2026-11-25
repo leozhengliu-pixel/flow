@@ -1,0 +1,301 @@
+package store
+
+import "flow/api/internal/boundedcrdt/internal/meter"
+
+import "flow/api/internal/boundedcrdt/internal/block"
+
+// StateVector summarizes what the local doc knows. For each client it
+// holds the next free clock (exclusive). A peer can compare its own
+// StateVector against a remote SV to compute the diff.
+//
+// Iteration order is non-deterministic; wire-emitting paths must sort
+// by client ID before encoding. See store.md open question 4.
+type StateVector map[uint64]uint64
+
+// BlockStore owns the per-client block lists for a single Doc. It is
+// not safe for concurrent access; the Doc layer holds the RWMutex.
+type BlockStore struct {
+	clients map[uint64]*ClientBlockList
+	// order lists the clients in the order their first block arrived,
+	// the order in which yjs iterates store.clients (a Map).
+	order []uint64
+	// splits records the right half of every SplitBlock since the last
+	// TakeSplits: the commit tries to merge each one back with its
+	// neighbours, as yjs does with transaction._mergeStructs.
+	splits []block.ID
+}
+
+// NewBlockStore returns an empty store.
+func NewBlockStore(mc *meter.Meter) *BlockStore {
+	mc.Enter()
+	defer mc.Leave()
+
+	return meter.Pointer(mc, BlockStore{clients: meter.MakeMap[map[uint64]*ClientBlockList, uint64, *ClientBlockList](mc, 0)})
+}
+
+// GetClient returns the per-client list for client c, or nil if no block
+// has ever been inserted for that client.
+//
+// Mirrors yrs BlockStore::get_client (block_store.rs).
+func (s *BlockStore) GetClient(mc *meter.Meter, c uint64) *ClientBlockList {
+	mc.Enter()
+	defer mc.Leave()
+
+	return s.clients[c]
+}
+
+// GetClientMut returns the per-client list for c, creating an empty
+// list lazily if absent. The only API that constructs ClientBlockLists.
+//
+// Mirrors yrs BlockStore::get_client_blocks_mut (block_store.rs:429-433).
+func (s *BlockStore) GetClientMut(mc *meter.Meter, c uint64) *ClientBlockList {
+	mc.Enter()
+	defer mc.Leave()
+
+	l, ok := s.clients[c]
+	if !ok {
+		l = NewClientBlockList(mc)
+		meter.Set(mc, s.clients, c, l)
+		s.order = meter.Append(mc, s.order, c)
+	}
+	return l
+}
+
+// ClientOrder returns the clients in the order their first block arrived,
+// as yjs iterates store.clients: the order of a yjs state vector, and so of
+// the insertions an UndoManager records. The slice is new.
+func (s *BlockStore) ClientOrder(mc *meter.Meter) []uint64 {
+	mc.Enter()
+	defer mc.Leave()
+
+	return meter.Append(mc, []uint64(nil), s.order...)
+}
+
+// Contains reports whether the store has ever seen the given ID. Returns
+// true even for IDs covered by GC cells — the underlying knowledge is
+// preserved (matches JS Yjs and yrs semantics; see store.md open
+// question 9).
+func (s *BlockStore) Contains(mc *meter.Meter, id block.ID) bool {
+	mc.Enter()
+	defer mc.Leave()
+
+	l, ok := s.clients[id.Client]
+	if !ok {
+		return false
+	}
+	return id.Clock < l.Clock(mc)
+}
+
+// GetClock returns the next free clock for client c, or 0 if c is
+// unknown. Convenience shortcut over GetClient(c).Clock().
+//
+// Mirrors yrs BlockStore::get_clock (block_store.rs:419-425).
+func (s *BlockStore) GetClock(mc *meter.Meter, c uint64) uint64 {
+	mc.Enter()
+	defer mc.Leave()
+
+	l, ok := s.clients[c]
+	if !ok {
+		return 0
+	}
+	return l.Clock(mc)
+}
+
+// GetBlock returns the BlockCell containing id, or (zero, false) if no
+// client list exists or id.Clock is out of that client's range.
+func (s *BlockStore) GetBlock(mc *meter.Meter, id block.ID) (BlockCell, bool) {
+	mc.Enter()
+	defer mc.Leave()
+
+	l, ok := s.clients[id.Client]
+	if !ok {
+		return BlockCell{}, false
+	}
+	idx, ok := l.FindPivot(mc, id.Clock)
+	if !ok {
+		return BlockCell{}, false
+	}
+	return l.list[idx], true
+}
+
+// GetItem returns the *Item containing id. Returns nil for GC cells
+// (callers must treat nil as "either not found or already collected";
+// use Contains to disambiguate when it matters).
+//
+// Mirrors yrs BlockStore::get_item (block_store.rs:386-393).
+func (s *BlockStore) GetItem(mc *meter.Meter, id block.ID) *block.Item {
+	mc.Enter()
+	defer mc.Leave()
+
+	cell, ok := s.GetBlock(mc, id)
+	if !ok {
+		return nil
+	}
+	return cell.AsItem(mc)
+}
+
+// PushBlock appends a fresh Item to its client's list. The caller must
+// guarantee item.ID.Clock == s.GetClock(item.ID.Client) — i.e. the new
+// block's first clock is exactly the next free clock for that client.
+// Violating this breaks invariant 1 of ClientBlockList; tests should
+// follow with CheckInvariants.
+//
+// Mirrors yrs BlockStore::push_block (block_store.rs:314-326).
+func (s *BlockStore) PushBlock(mc *meter.Meter, item *block.Item) {
+	mc.Enter()
+	defer mc.Leave()
+
+	l := s.GetClientMut(mc, item.ID.Client)
+	l.Push(mc, CellOfItem(mc, item))
+}
+
+// PushGC appends a fresh GC range to its client's list, with the same
+// monotonicity precondition as PushBlock.
+//
+// Mirrors yrs BlockStore::push_gc (block_store.rs:328-341).
+func (s *BlockStore) PushGC(mc *meter.Meter, client, start, end uint64) {
+	mc.Enter()
+	defer mc.Leave()
+
+	l := s.GetClientMut(mc, client)
+	l.Push(mc, CellOfGC(mc, start, end))
+}
+
+// GetItemCleanStart returns the slice from id.Clock to the end of its
+// underlying block, without mutating anything. The caller can pass the
+// returned slice to a future Materialize to physically split the block;
+// here we only compute offsets.
+//
+// Returns (zero, false) when id is in a GC cell, in an unknown client,
+// or out of range.
+//
+// Mirrors yrs BlockStore::get_item_clean_start (block_store.rs:399-403).
+func (s *BlockStore) GetItemCleanStart(mc *meter.Meter, id block.ID) (ItemSlice, bool) {
+	mc.Enter()
+	defer mc.Leave()
+
+	cell, ok := s.GetBlock(mc, id)
+	if !ok || cell.Kind != CellKindItem {
+		return ItemSlice{}, false
+	}
+	it := cell.Item
+	return ItemSlice{
+		Ptr:   it,
+		Start: id.Clock - it.ID.Clock,
+		End:   it.Len - 1,
+	}, true
+}
+
+// GetItemCleanEnd returns the slice from the beginning of id's block up
+// to and including id. Symmetric to GetItemCleanStart.
+//
+// Mirrors yrs BlockStore::get_item_clean_end (block_store.rs:409-414).
+func (s *BlockStore) GetItemCleanEnd(mc *meter.Meter, id block.ID) (ItemSlice, bool) {
+	mc.Enter()
+	defer mc.Leave()
+
+	cell, ok := s.GetBlock(mc, id)
+	if !ok || cell.Kind != CellKindItem {
+		return ItemSlice{}, false
+	}
+	it := cell.Item
+	return ItemSlice{
+		Ptr:   it,
+		Start: 0,
+		End:   id.Clock - it.ID.Clock,
+	}, true
+}
+
+// GetStateVector materializes a fresh StateVector from the per-client
+// Clock() values. No caching — yrs derives the SV on each call too
+// (block_store.rs:357-364).
+//
+// Iteration order over s.clients is non-deterministic; the returned
+// map's order is also non-deterministic. Encoding paths must sort by
+// client ID before emitting bytes.
+func (s *BlockStore) GetStateVector(mc *meter.Meter) StateVector {
+	mc.Enter()
+	defer mc.Leave()
+
+	sv := meter.MakeMap[StateVector, uint64, uint64](mc, uint64(len(s.clients)))
+	for c, l := range s.clients {
+		mc.Step()
+		meter.Set(mc, sv, c, l.Clock(mc))
+	}
+	return sv
+}
+
+// SplitBlock locates the cell containing it.ID in its client's list,
+// calls it.Splice(offset), and inserts the new right-half cell at
+// index+1. Returns the new *Item.
+//
+// Returns nil if Splice declines (offset 0, offset >= it.Len, or
+// non-splittable content kind) or if the item is not currently in the
+// store.
+//
+// Implicitly uses UTF-16 offset semantics — matches yrs's
+// split_block_inner (block_store.rs:453-455). See store.md open
+// question 7.
+//
+// Mirrors yrs/src/block_store.rs:437-451.
+func (s *BlockStore) SplitBlock(mc *meter.Meter, it *block.Item, offset uint64) *block.Item {
+	mc.Enter()
+	defer mc.Leave()
+
+	l := s.GetClient(mc, it.ID.Client)
+	if l == nil {
+		return nil
+	}
+	idx, ok := l.FindPivot(mc, it.ID.Clock)
+	if !ok {
+		return nil
+	}
+	right := it.Splice(mc, offset)
+	if right == nil {
+		return nil
+	}
+	l.Insert(mc, idx+1, CellOfItem(mc, right))
+	s.splits = meter.Append(mc, s.splits, right.ID)
+	return right
+}
+
+// TakeSplits returns the IDs of the right halves split since the last
+// call, in split order, and forgets them.
+func (s *BlockStore) TakeSplits(mc *meter.Meter) []block.ID {
+	mc.Enter()
+	defer mc.Leave()
+
+	out := s.splits
+	s.splits = nil
+	return out
+}
+
+// Materialize splits the underlying block on both sides (as needed) so
+// that the returned *Item covers exactly the slice's [Start, End] range
+// in clock units. If the slice already covers the full block on either
+// side, the corresponding split is skipped.
+//
+// Returns the (possibly new) *Item that represents the slice exactly.
+// Always uses UTF-16 offset semantics, matching yrs's hard-coding.
+//
+// Mirrors yrs/src/store.rs:295-342 Store::materialize (without the
+// linked_by rewiring, which lives on the future Doc layer once weak
+// references arrive).
+func (s *BlockStore) Materialize(mc *meter.Meter, slc ItemSlice) *block.Item {
+	mc.Enter()
+	defer mc.Leave()
+
+	ptr := slc.Ptr
+	if !slc.AdjacentLeft(mc) {
+		right := s.SplitBlock(mc, ptr, slc.Start)
+		if right == nil {
+			return ptr
+		}
+		ptr = right
+	}
+	if !slc.AdjacentRight(mc) {
+		sliceLen := slc.End - slc.Start + 1
+		s.SplitBlock(mc, ptr, sliceLen)
+	}
+	return ptr
+}

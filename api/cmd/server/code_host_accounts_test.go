@@ -46,6 +46,7 @@ type memberGitLab struct {
 	refreshDelay time.Duration
 	refreshes    int      // refresh_token grants answered (accepted or not)
 	posts        []string // "path auth-token"
+	puts         []string // merge, close and reopen: "path auth-token"
 	seen         []string
 }
 
@@ -136,6 +137,14 @@ func (f *memberGitLab) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, _ = w.Write([]byte(fmt.Sprintf(`{"id":%d}`, len(f.posts))))
+	case r.Method == http.MethodPut && (r.URL.Path == "/api/v4/projects/acme/app/merge_requests/3/merge" || r.URL.Path == "/api/v4/projects/acme/app/merge_requests/3"):
+		// Merge, close and reopen.
+		if f.readOnly[token] || f.forbidden[token] {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		f.puts = append(f.puts, strings.TrimPrefix(r.URL.Path, "/api/v4/projects/acme/app/merge_requests/3")+" "+token)
+		_, _ = w.Write([]byte(`{}`))
 	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/v4/projects/acme/app/merge_requests/3/discussions/"):
 		// Thread resolution.
 		if f.readOnly[token] {

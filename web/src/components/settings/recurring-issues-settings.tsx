@@ -370,7 +370,8 @@ function NewRecurringIssuePage({ data, team, sourceId, onNavigateSubPath, onRelo
   const labelScopes = new Set(labelTeamScopeIds(team.id, data.teams, data.teamSettings));
   const labels = labelsForResource(data.labels, "issue", data.labelGroups).filter((label) => !label.scope || label.scope === "Workspace" || labelScopes.has(label.scope));
   const labelGroupNames = new Map(data.labelGroups.map((group) => [group.id, group.name]));
-  const labelOptions: PropertyOption[] = labels.map((label) => ({ id: label.id, label: label.name, color: label.color, description: label.description, scope: label.scope, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, i18nIgnore: true }));
+  const labelGroupColors = new Map(data.labelGroups.map((group) => [group.id, group.color]));
+  const labelOptions: PropertyOption[] = labels.map((label) => ({ id: label.id, label: label.name, color: label.color, description: label.description, scope: label.scope, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, groupColor: label.groupId ? labelGroupColors.get(label.groupId) : undefined, i18nIgnore: true }));
   const selectedLabels = labels.filter((label) => labelIds.includes(label.id));
   const state = states.find((item) => item.id === stateId);
   const assignee = data.users.find((user) => user.id === assigneeId);

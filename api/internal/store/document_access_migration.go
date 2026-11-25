@@ -37,6 +37,7 @@ func (s *SQLiteStore) dataMigrations() []struct {
 		{version: resourceSlugMigrationVersion, name: "stable project and initiative slugs", apply: s.migrateResourceSlugs},
 		{version: documentInheritedScopeMigrationVersion, name: "inherited document scope", apply: s.migrateDocumentInheritedScope},
 		{version: cycleCapacityOverrideMigrationVersion, name: "cycle capacity overrides", apply: s.migrateCycleCapacityOverrides},
+		{version: cycleSettingsDefaultsMigrationVersion, name: "defaults for cycle settings stored without a capacity", apply: s.migrateCycleSettingsDefaults},
 		{version: memberDirectoryMigrationVersion, name: "joined members in the workspace directory", apply: s.migrateMemberDirectory},
 		{version: commentActionsMigrationVersion, name: "personal comment action preference", apply: s.migrateCommentActions},
 		{version: workspaceInitialsColorMigrationVersion, name: "workspace initials colour from the workspace id", apply: s.migrateWorkspaceInitialsColor},
@@ -44,6 +45,7 @@ func (s *SQLiteStore) dataMigrations() []struct {
 		{version: auditLegacyMigrationVersion, name: "audit log entries into the audit_events table", apply: s.MigrateLegacyAuditLog},
 		{version: workspaceKeyRepairMigrationVersion, name: "rows left under previous workspace keys", apply: s.migrateRenamedWorkspaceKeys},
 		// coding sessions (track K)
+		{version: documentOwnerGrantMigrationVersion, name: "creator owner grant on documents stored without one", apply: s.migrateDocumentOwnerGrants},
 		{version: codingEnvironmentsMigrationVersion, name: "coding environments table", apply: s.migrateLegacyCodingEnvironments},
 	}
 }

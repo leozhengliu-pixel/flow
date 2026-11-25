@@ -142,6 +142,7 @@ func TestIssuePatchMovesIssueToAnotherTeam(t *testing.T) {
 		"title": "Move me", "teamId": source.ID, "stateId": inProgress.ID,
 		"labelIds": []string{shared.ID, sourceFrontend.ID, sourceOnly.ID}, "cycleId": cycle.ID,
 	}, http.StatusCreated)
+	issue = ageIssueForActivityTest(t, repository, bootstrap.Workspace.URLKey, issue)
 	child := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Child stays", "teamId": source.ID, "parentId": issue.ID}, http.StatusCreated)
 	if issue.CycleID == nil || len(issue.Labels) != 3 || issue.State.ID != inProgress.ID {
 		t.Fatalf("setup issue = %+v", issue)

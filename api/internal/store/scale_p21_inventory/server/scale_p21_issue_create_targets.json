@@ -1,0 +1,24 @@
+{
+  "source": "server/scale_p21_issue_create_targets.go",
+  "unmigrated": 0,
+  "consumers": {
+    "boundedIssueCreateDefaultTeam": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The creation callback's separate default-team lookup keeps the literal fresh projected team order and API-key filtering. InstalledMetadataRead and ProjectedWorkspace own the policy and live directory until the caller completes. SW186 compares legacy, warm and SQL-reloaded default-team creation with and without an authorization handoff; every request releases all work and performs zero full metadata decodes.",
+      "accessors": ["BeginInstalledMetadataRead", "ProjectedWorkspace"],
+      "temperature": "hot",
+      "temperatureReason": "Issue creation without an explicit team.",
+      "callers": ["server/main.go:createIssue"]
+    },
+    "boundedIssueCreateTargets": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Creation validation uses an installed generation, the literal projected policy/live directory, and its captured pre-filter team/content scope. The original no-key authorization handoff remains reusable; key requests and the default-team lookup remain fresh. Project/cycle presence is checked against the exact projected and credential scope; templates retain the first surviving ID and only child team IDs. Template bodies and unrelated collections are not decoded. SW186 compares exact legacy/warm/reloaded route results, rows, events, publications and installed images for all M principals, unrestricted/selected-empty/selected-set keys, development mode, template children, private-team templates, parent checks, cancellation and large descriptions. Its direct scope differential proves equal policy/maps and SQL counts with cancellation and release.",
+      "accessors": ["BeginInstalledMetadataRead", "ProjectedWorkspace", "ProjectedWorkspaceWithScope", "ProjectionScope", "AuthorizationProjectionScope", "RecordIDPresent", "ProjectVisibleInProjection", "CycleVisibleInProjection", "ReadIssueCreateTemplate"],
+      "temperature": "hot",
+      "temperatureReason": "POST issue-record validation before creation.",
+      "callers": ["server/issue_records_api.go:createIssueRecord"]
+    }
+  }
+}

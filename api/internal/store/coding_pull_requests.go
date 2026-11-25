@@ -278,6 +278,9 @@ func (s *SQLiteStore) WorkspacesForInstallation(ctx context.Context, codeHost, h
 // provider (GitLab connections used as a code host; classic GitHub
 // connections that already sync PRs).
 func (s *SQLiteStore) IntegrationConnections(_ context.Context, workspaceKey, provider string) ([]domain.IntegrationConnection, error) {
+	if s.BoundedMetadataEnabled() {
+		return nil, ErrBoundedMetadataCoverage
+	}
 	result := []domain.IntegrationConnection{}
 	if workspaceKey == "" {
 		return result, nil

@@ -46,6 +46,9 @@ func writeAttachmentIndex(ctx context.Context, tx *sqlTx, workspace string, issu
 }
 
 func (s *SQLiteStore) migrateAttachmentIndex(ctx context.Context) error {
+	if s.BoundedMetadataEnabled() {
+		return s.scaleP21SW16MigrateTypedAttachmentIndex(ctx)
+	}
 	for workspace := range s.workspaces {
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO issue_attachment_migrations(workspace_key,last_id,complete) VALUES(?,'',0) ON CONFLICT DO NOTHING`, workspace); err != nil {
 			return err
@@ -136,7 +139,7 @@ func (s *SQLiteStore) IssueAttachmentParent(ctx context.Context, q IssueRecordQu
 	if s.dialect == "mysql" {
 		match = "JSON_CONTAINS(JSON_EXTRACT(CONVERT(i.data USING utf8mb4), '$.attachments'), JSON_OBJECT('id', ?))"
 	} else if s.dialect == "postgres" {
-		match = "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(convert_from(i.data,'UTF8')::jsonb->'attachments','[]'::jsonb)) a WHERE a->>'id'=?)"
+		match = "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(flow_utf8(i.data)::jsonb->'attachments','[]'::jsonb)) a WHERE a->>'id'=?)"
 	}
 	prefix, prefixArgs := issueAccessCTE(q)
 	var parent string

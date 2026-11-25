@@ -1,10 +1,22 @@
 package store
 
-import "flow/api/internal/domain"
+import (
+	"context"
+
+	"flow/api/internal/domain"
+)
 
 // ProjectByID reads one project from the workspace cache without building a
 // viewer projection (realtime authorizes per event and must stay cheap).
 func (s *SQLiteStore) ProjectByID(workspace, id string) (domain.Project, bool) {
+	if view, release, handled := s.coldAccessorView(context.Background(), "ProjectByID", workspace, []string{"projects"}); handled {
+		// Bounded: the image holds no projects (SW559).
+		defer release()
+		if view == nil {
+			return domain.Project{}, false
+		}
+		return view.ProjectByID(view.lastWorkspaceKey, id)
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if workspace == "" {

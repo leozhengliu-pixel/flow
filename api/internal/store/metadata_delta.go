@@ -357,7 +357,13 @@ func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx
 			return nil, err
 		}
 		root[metadataCollectionsKey] = manifest
-		return json.Marshal(root)
+		// The root JSON is parsed in SQL, where PostgreSQL refuses \u0000: as in
+		// writeWorkspaceMetadata, NUL is dropped.
+		encoded, err := json.Marshal(root)
+		if err != nil {
+			return nil, err
+		}
+		return StripJSONNUL(encoded), nil
 	}
 	raw, err := patchRoot(root, storedShapes)
 	if err != nil {
@@ -439,6 +445,16 @@ func (s *SQLiteStore) persistMetadataTx(ctx context.Context, tx *sqlTx, workspac
 // collection (webhooks, loops, integration deliveries) use it instead of
 // copying every record in the workspace under the read lock.
 func (s *SQLiteStore) WorkspaceMetadataFields(workspace string, fields ...string) (domain.Bootstrap, bool) {
+	if view, release, handled := s.coldAccessorView(context.Background(), "WorkspaceMetadataFields", workspace, append(make([]string, 0, len(fields)), fields...)); handled {
+		defer release()
+		if view == nil {
+			return domain.Bootstrap{}, false
+		}
+		return view.WorkspaceMetadataFields(view.lastWorkspaceKey, fields...)
+	}
+	if s.skeletalFields(fields) {
+		return domain.Bootstrap{}, false
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if workspace == "" {
@@ -519,25 +535,33 @@ func writeArrayFieldDelta(ctx context.Context, tx *sqlTx, workspace string, refs
 	for _, item := range changed {
 		lookup = append(lookup, item.key.key)
 	}
-	clause, args := bindList("record_key", lookup)
-	rows, err := tx.QueryContext(ctx, `SELECT record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause, append([]any{workspace, field.name}, args...)...)
-	if err != nil {
-		return false, err
-	}
 	orders := map[string]int{}
-	for rows.Next() {
-		var key string
-		var order int
-		if err := rows.Scan(&key, &order); err != nil {
-			rows.Close()
+	if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
+		selected, err := budget.arrayOrders(ctx, tx, workspace, field.name, lookup)
+		if err != nil {
 			return false, err
 		}
-		orders[key] = order
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return false, err
+		orders = selected
+	} else {
+		clause, args := bindList("record_key", lookup)
+		rows, err := tx.QueryContext(ctx, `SELECT record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause, append([]any{workspace, field.name}, args...)...)
+		if err != nil {
+			return false, err
+		}
+		for rows.Next() {
+			var key string
+			var order int
+			if err := rows.Scan(&key, &order); err != nil {
+				rows.Close()
+				return false, err
+			}
+			orders[key] = order
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return false, err
+		}
 	}
 	for _, key := range lookup {
 		if _, ok := orders[key]; !ok {
@@ -665,6 +689,21 @@ func writeUpdatesFieldDelta(ctx context.Context, tx *sqlTx, workspace string, re
 	previous := make(map[metadataRecordKey]metadataRecord, len(known))
 	for start := 0; start < len(lookup); start += 500 {
 		chunk := lookup[start:min(start+500, len(lookup))]
+		if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
+			orders, err := budget.arrayOrders(ctx, tx, workspace, field.name, chunk)
+			if err != nil {
+				return false, err
+			}
+			for id, order := range orders {
+				key := metadataRecordKey{field: field.name, key: id}
+				value := metadataRecord{order: order}
+				if stored, ok := known[key]; ok {
+					value.data = stored.data
+				}
+				previous[key] = value
+			}
+			continue
+		}
 		clause, args := bindList("record_key", chunk)
 		rows, err := tx.QueryContext(ctx, `SELECT record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause, append([]any{workspace, field.name}, args...)...)
 		if err != nil {

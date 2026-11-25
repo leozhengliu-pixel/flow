@@ -37,11 +37,16 @@ type applicationWebhookInput = publicapi.ApplicationWebhookInput
 
 type applicationWebhookSettings = publicapi.ApplicationWebhookSettings
 
-func (s *server) applicationWebhookSettings(ctx context.Context, app domain.OAuthApplication) applicationWebhookSettings {
+func (s *server) applicationWebhookSettings(ctx context.Context, app domain.OAuthApplication) (applicationWebhookSettings, error) {
 	_, signing, _ := s.store.WebhookSigningSecret(ctx, store.ApplicationWebhookSecretRef(app.ClientID))
 	settings := applicationWebhookSettings{ApplicationID: app.ID, ClientID: app.ClientID, Enabled: app.WebhookEnabled, URL: app.WebhookURL, ResourceTypes: app.WebhookResourceTypes, SecretPrefix: app.WebhookSecretPrefix, SigningEnabled: signing}
 	if settings.ResourceTypes == nil {
 		settings.ResourceTypes = []string{}
+	}
+	if s.store.BoundedMetadataEnabled() {
+		count, err := s.store.ApplicationWebhookWorkspaceCount(ctx, app.ClientID)
+		settings.Installations = count
+		return settings, err
 	}
 	for _, key := range s.store.WorkspaceKeys() {
 		hooks, _ := s.store.WorkspaceMetadataFields(key, "webhooks")
@@ -51,17 +56,75 @@ func (s *server) applicationWebhookSettings(ctx context.Context, app domain.OAut
 			settings.Installations++
 		}
 	}
-	return settings
+	return settings, nil
+}
+
+func (s *server) applicationWebhookDataScoped(w http.ResponseWriter, r *http.Request) (domain.Bootstrap, bool) {
+	if !s.store.BoundedMetadataEnabled() {
+		return s.workspaceData(r), true
+	}
+	scope := store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "oauthApplications", ID: r.PathValue("id")}}}
+	if id := r.PathValue("id"); id == "" || len(id) > 191 || strings.ContainsRune(id, '\x00') {
+		scope.Read = nil
+	}
+	var access store.AccessContext
+	var core store.RecordReadCore
+	if !s.authDisabled {
+		var key *domain.APIKey
+		if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			key = &credential
+			if !apiKeyHasScope(credential, "admin") {
+				scope.Read = nil
+			}
+		}
+		var err error
+		access, err = s.store.ResolveAccess(r.Context(), workspaceKey(r), authUser(r).ID, key)
+		if err == nil {
+			core, err = s.store.ReadRecordCore(r.Context(), access)
+		}
+		if err != nil {
+			issueRecordsError(w, err)
+			return domain.Bootstrap{}, false
+		}
+	}
+	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), scope)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return domain.Bootstrap{}, false
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "application not found")
+		return domain.Bootstrap{}, false
+	}
+	if s.authDisabled {
+		data.ViewerRole = "admin"
+	} else {
+		data.Viewer, data.ViewerRole = core.Viewer, core.ViewerRole
+		if err := s.store.ValidateAccess(r.Context(), access); err != nil {
+			issueRecordsError(w, err)
+			return domain.Bootstrap{}, false
+		}
+		filterBootstrapForAPIKey(&data, r)
+	}
+	return data, true
 }
 
 func (s *server) getApplicationWebhook(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data, ok := s.applicationWebhookDataScoped(w, r)
+	if !ok {
+		return
+	}
 	index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == r.PathValue("id") })
 	if index < 0 {
 		writeError(w, http.StatusNotFound, "application not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.applicationWebhookSettings(r.Context(), data.OAuthApplications[index]))
+	settings, err := s.applicationWebhookSettings(r.Context(), data.OAuthApplications[index])
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
 }
 
 // updateApplicationWebhook saves the developer's webhook settings. The first
@@ -130,14 +193,22 @@ func (s *server) updateApplicationWebhook(w http.ResponseWriter, r *http.Request
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	settings := s.applicationWebhookSettings(r.Context(), updated)
+	settings, err := s.applicationWebhookSettings(r.Context(), updated)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
 	if updated.WebhookEnabled && !settings.SigningEnabled {
 		secret, err := s.storeApplicationWebhookSecret(r, updated, "")
 		if err != nil {
 			respondMutation(w, err, http.StatusOK, nil)
 			return
 		}
-		settings = s.applicationWebhookSettings(r.Context(), updated)
+		settings, err = s.applicationWebhookSettings(r.Context(), updated)
+		if err != nil {
+			respondMutation(w, err, http.StatusOK, nil)
+			return
+		}
 		settings.SecretPrefix, settings.Secret = secret[:min(len(secret), 17)], secret
 		s.auditAPIKeyCredential(r, "webhook_secret_issued", updated)
 		w.Header().Set("Cache-Control", "no-store")
@@ -163,7 +234,11 @@ func (s *server) rotateApplicationWebhookSecret(w http.ResponseWriter, r *http.R
 	}
 	app := data.OAuthApplications[index]
 	app.WebhookSecretPrefix = secret[:min(len(secret), 17)]
-	settings := s.applicationWebhookSettings(r.Context(), app)
+	settings, err := s.applicationWebhookSettings(r.Context(), app)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
 	settings.Secret = secret
 	s.auditAPIKeyCredential(r, "webhook_secret_rotated", app)
 	w.Header().Set("Cache-Control", "no-store")
@@ -217,15 +292,49 @@ func (s *server) oauthApplicationsByClient() map[string]domain.OAuthApplication 
 	return result
 }
 
+// applicationWebhookClients is oauthApplicationsByClient. Bounded, the index
+// is an owned read of the installed applications' webhook fields, held until
+// release; a refused read (budget) skips the reconcile.
+func (s *server) applicationWebhookClients(ctx context.Context) (map[string]domain.OAuthApplication, func(), bool) {
+	if !s.store.BoundedMetadataEnabled() {
+		return s.oauthApplicationsByClient(), func() {}, true
+	}
+	read, err := s.store.BeginApplicationWebhookClientsRead(ctx)
+	if err != nil {
+		log.Printf("Application webhooks: application index: %v", err)
+		return nil, nil, false
+	}
+	uncovered := map[string]bool{}
+	for _, workspace := range read.Uncovered {
+		uncovered[workspace] = true
+		s.skipUncoveredWorkspace("Application webhooks", workspace, store.ErrBoundedMetadataCoverage)
+	}
+	for _, workspace := range s.store.WorkspaceKeys() {
+		if !uncovered[workspace] {
+			s.coveredWorkspacePassed("Application webhooks", workspace)
+		}
+	}
+	return read.Apps, read.Close, true
+}
+
 func (s *server) reconcileAllApplicationWebhooks(ctx context.Context) {
-	apps := s.oauthApplicationsByClient()
+	apps, release, ok := s.applicationWebhookClients(ctx)
+	if !ok {
+		return
+	}
+	defer release()
 	for _, key := range s.store.WorkspaceKeys() {
 		s.reconcileApplicationWebhooksWith(ctx, key, apps)
 	}
 }
 
 func (s *server) reconcileApplicationWebhooks(ctx context.Context, workspace string) {
-	s.reconcileApplicationWebhooksWith(ctx, workspace, s.oauthApplicationsByClient())
+	apps, release, ok := s.applicationWebhookClients(ctx)
+	if !ok {
+		return
+	}
+	defer release()
+	s.reconcileApplicationWebhooksWith(ctx, workspace, apps)
 }
 
 var applicationWebhookReconcile sync.Mutex
@@ -251,11 +360,35 @@ func managedWebhookID(workspace, clientID string) string {
 func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace string, apps map[string]domain.OAuthApplication) {
 	applicationWebhookReconcile.Lock()
 	defer applicationWebhookReconcile.Unlock()
-	data, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks", "oauthAuthorizations", "teams", "teamSettings")
+	bounded := s.store.BoundedMetadataEnabled()
+	var data domain.Bootstrap
+	var ok bool
+	listCtx := ctx
+	if bounded {
+		// The managed hooks whole, live grant headers and reachable team IDs:
+		// all the reconcile reads of these fields.
+		read, found, err := s.store.BeginApplicationWebhookReconcileRead(ctx, workspace)
+		if err != nil {
+			if !s.skipUncoveredWorkspace("Application webhooks", workspace, err) {
+				log.Printf("Application webhooks workspace=%s: %v", workspace, err)
+			}
+			return
+		}
+		if !found {
+			return
+		}
+		defer read.Close()
+		data, ok = read.Data, true
+		var close func()
+		listCtx, close = applicationOutputContext(ctx)
+		defer close()
+	} else {
+		data, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks", "oauthAuthorizations", "teams", "teamSettings")
+	}
 	if !ok {
 		return
 	}
-	installations, err := s.store.ListApplications(ctx, workspace)
+	installations, err := s.store.ListApplications(listCtx, workspace)
 	if err != nil {
 		return
 	}
@@ -317,7 +450,7 @@ func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace
 	}
 	var revoked []domain.Webhook
 	var permissions []permissionChange
-	err = s.store.MutateWorkspace(store.WithMetadataFields(ctx, "webhooks"), workspace, "webhook.updated", "application_webhooks", map[string]any{"managed": true}, func(next *domain.Bootstrap) error {
+	change := func(next *domain.Bootstrap) error {
 		revoked, permissions = nil, nil
 		now := time.Now().UTC()
 		mutated := false
@@ -345,7 +478,15 @@ func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace
 			}
 			kept = append(kept, hook)
 		}
-		for clientID, item := range desired {
+		// New hooks are appended in client ID order, not map order, so the
+		// stored order is the same on every run.
+		clientIDs := make([]string, 0, len(desired))
+		for clientID := range desired {
+			clientIDs = append(clientIDs, clientID)
+		}
+		sort.Strings(clientIDs)
+		for _, clientID := range clientIDs {
+			item := desired[clientID]
 			if slices.ContainsFunc(kept, func(hook domain.Webhook) bool {
 				return hook.ManagedBy == "application" && hook.ApplicationClientID == clientID
 			}) {
@@ -363,7 +504,13 @@ func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace
 		}
 		next.Webhooks = kept
 		return nil
-	})
+	}
+	if bounded {
+		// The callback rewrites the webhooks field (only managed hooks change).
+		err = s.store.MutateWorkspaceScoped(store.WithMetadataFields(ctx, "webhooks"), workspace, "webhook.updated", "application_webhooks", map[string]any{"managed": true}, store.MetadataRecordScope{Fields: []string{"webhooks"}}, change)
+	} else {
+		err = s.store.MutateWorkspace(store.WithMetadataFields(ctx, "webhooks"), workspace, "webhook.updated", "application_webhooks", map[string]any{"managed": true}, change)
+	}
 	if err != nil {
 		log.Printf("Application webhooks workspace=%s: %v", workspace, err)
 		return
@@ -457,11 +604,27 @@ func appUserNotificationAction(notification domain.Notification) string {
 // installed application's user to its webhook. Delivery ids are derived from
 // the notification and its update time, so each change is sent once.
 func (s *server) sweepAppUserNotifications(ctx context.Context, workspace string, now time.Time) {
-	hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	var hooks domain.Bootstrap
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginApplicationWebhookSweepRead(ctx, workspace, "app_user_notifications")
+		if err != nil || !found {
+			return
+		}
+		defer read.Close()
+		hooks, ok = read.Data, true
+	} else {
+		hooks, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	}
 	if !ok || !slices.ContainsFunc(hooks.Webhooks, func(item domain.Webhook) bool {
 		return item.ManagedBy == "application" && item.Enabled && slices.Contains(item.ResourceTypes, "app_user_notifications")
 	}) {
 		return
+	}
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = applicationOutputContext(ctx)
+		defer close()
 	}
 	installations, err := s.store.ListApplications(ctx, workspace)
 	if err != nil {
@@ -534,13 +697,29 @@ func (s *server) dispatchAppAssignmentNotifications(workspace string, event doma
 	if json.Unmarshal(event.PreviousValues, &previous) != nil || previous["assignee"] == nil && previous["delegate"] == nil {
 		return
 	}
-	hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	var hooks domain.Bootstrap
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginApplicationWebhookSweepRead(context.Background(), workspace, "app_user_notifications")
+		if err != nil || !found {
+			return
+		}
+		defer read.Close()
+		hooks, ok = read.Data, true
+	} else {
+		hooks, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	}
 	if !ok || !slices.ContainsFunc(hooks.Webhooks, func(item domain.Webhook) bool {
 		return item.ManagedBy == "application" && item.Enabled && slices.Contains(item.ResourceTypes, "app_user_notifications")
 	}) {
 		return
 	}
 	ctx := context.Background()
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		ctx, close = applicationOutputContext(ctx)
+		defer close()
+	}
 	installations, err := s.store.ListApplications(ctx, workspace)
 	if err != nil {
 		return
@@ -591,44 +770,59 @@ func (s *server) dispatchAppAssignmentNotifications(workspace string, event doma
 // sweepIssueSLAWebhooks sends IssueSLA events (set, highRisk, breached) for
 // SLA changes of the last 15 minutes to webhooks subscribed to issue_sla.
 func (s *server) sweepIssueSLAWebhooks(ctx context.Context, workspace string, now time.Time) {
-	hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	var hooks domain.Bootstrap
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginApplicationWebhookSweepRead(ctx, workspace, "issue_sla")
+		if err != nil || !found {
+			return
+		}
+		defer read.Close()
+		hooks, ok = read.Data, true
+	} else {
+		hooks, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	}
 	if !ok || !slices.ContainsFunc(hooks.Webhooks, func(item domain.Webhook) bool {
 		return !item.AuditLog && item.Enabled && slices.Contains(item.ResourceTypes, "issue_sla")
 	}) {
 		return
 	}
-	data, ok := s.store.WorkspaceMetadataFields(workspace, "issueSlas", "slaEvents", "users")
-	if !ok {
-		return
-	}
-	type slaEvent struct {
-		key, action, issueID string
-		sla                  domain.IssueSLA
-		at                   time.Time
-	}
-	events := []slaEvent{}
-	slas := map[string]domain.IssueSLA{}
-	for _, sla := range data.IssueSLAs {
-		slas[sla.ID] = sla
-	}
-	for _, event := range data.SLAEvents {
-		if now.Sub(event.CreatedAt) > 15*time.Minute {
-			continue
+	var events []store.ApplicationSLAWebhookEvent
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginApplicationSLAEventRead(ctx, workspace, now)
+		if err != nil || !found {
+			return
 		}
-		action := map[string]string{"started": "set", "breached": "breached"}[event.Type]
-		if action == "" {
-			continue
+		defer read.Close()
+		events = read.Events
+	} else {
+		data, ok := s.store.WorkspaceMetadataFields(workspace, "issueSlas", "slaEvents", "users")
+		if !ok {
+			return
 		}
-		events = append(events, slaEvent{key: event.ID, action: action, issueID: event.IssueID, sla: slas[event.SLAID], at: event.CreatedAt})
-	}
-	// High risk: less than a quarter of the SLA window (at most 24 hours) left.
-	for _, sla := range data.IssueSLAs {
-		if sla.Status != "active" || sla.BreachedAt != nil || !now.Before(sla.DueAt) {
-			continue
+		slas := map[string]domain.IssueSLA{}
+		for _, sla := range data.IssueSLAs {
+			slas[sla.ID] = sla
 		}
-		window := min(sla.DueAt.Sub(sla.StartedAt)/4, 24*time.Hour)
-		if sla.DueAt.Sub(now) <= window {
-			events = append(events, slaEvent{key: sla.ID + ":highRisk:" + sla.DueAt.UTC().Format(time.RFC3339), action: "highRisk", issueID: sla.IssueID, sla: sla, at: now})
+		for _, event := range data.SLAEvents {
+			if now.Sub(event.CreatedAt) > 15*time.Minute {
+				continue
+			}
+			action := map[string]string{"started": "set", "breached": "breached"}[event.Type]
+			if action == "" {
+				continue
+			}
+			events = append(events, store.ApplicationSLAWebhookEvent{Key: event.ID, Action: action, IssueID: event.IssueID, SLA: slas[event.SLAID], At: event.CreatedAt})
+		}
+		// High risk: less than a quarter of the SLA window (at most 24 hours) left.
+		for _, sla := range data.IssueSLAs {
+			if sla.Status != "active" || sla.BreachedAt != nil || !now.Before(sla.DueAt) {
+				continue
+			}
+			window := min(sla.DueAt.Sub(sla.StartedAt)/4, 24*time.Hour)
+			if sla.DueAt.Sub(now) <= window {
+				events = append(events, store.ApplicationSLAWebhookEvent{Key: sla.ID + ":highRisk:" + sla.DueAt.UTC().Format(time.RFC3339), Action: "highRisk", IssueID: sla.IssueID, SLA: sla, At: now})
+			}
 		}
 	}
 	if len(events) == 0 {
@@ -636,7 +830,7 @@ func (s *server) sweepIssueSLAWebhooks(ctx context.Context, workspace string, no
 	}
 	root := s.appBaseURL() + "/" + url.PathEscape(workspace)
 	for _, event := range events {
-		issue, err := s.store.IssueRecord(ctx, workspace, event.issueID)
+		issue, err := s.store.IssueRecord(ctx, workspace, event.IssueID)
 		if err != nil {
 			continue
 		}
@@ -649,14 +843,14 @@ func (s *server) sweepIssueSLAWebhooks(ctx context.Context, workspace string, no
 				continue
 			}
 			body, _ := json.Marshal(map[string]any{
-				"action": event.action, "type": "IssueSLA", "createdAt": event.at.UTC().Format("2006-01-02T15:04:05.000Z07:00"),
-				"issueData": issue, "url": issueURL, "organizationId": hooks.Workspace.ID, "webhookId": hook.ID, "eventId": event.key,
-				"data":  map[string]any{"id": event.sla.ID, "issueId": issue.ID, "ruleId": event.sla.RuleID, "startedAt": event.sla.StartedAt, "dueAt": event.sla.DueAt, "breachedAt": event.sla.BreachedAt, "status": event.sla.Status},
+				"action": event.Action, "type": "IssueSLA", "createdAt": event.At.UTC().Format("2006-01-02T15:04:05.000Z07:00"),
+				"issueData": issue, "url": issueURL, "organizationId": hooks.Workspace.ID, "webhookId": hook.ID, "eventId": event.Key,
+				"data":  map[string]any{"id": event.SLA.ID, "issueId": issue.ID, "ruleId": event.SLA.RuleID, "startedAt": event.SLA.StartedAt, "dueAt": event.SLA.DueAt, "breachedAt": event.SLA.BreachedAt, "status": event.SLA.Status},
 				"actor": nil,
 			})
 			s.queueWebhookDelivery(ctx, workspace, hook, domain.WebhookDelivery{
-				ID: webhookDeliveryID(hook.ID, "sla:"+event.key), Kind: domain.WebhookDeliveryKindEvent, EventID: "sla:" + event.key,
-				EventType: "IssueSLA", Action: event.action, Payload: body,
+				ID: webhookDeliveryID(hook.ID, "sla:"+event.Key), Kind: domain.WebhookDeliveryKindEvent, EventID: "sla:" + event.Key,
+				EventType: "IssueSLA", Action: event.Action, Payload: body,
 			})
 		}
 	}

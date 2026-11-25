@@ -92,12 +92,25 @@ export function ProjectDetailsSidebar({ data, featureFlags, issueSummary, availa
     setSeenPickerRequestId(pickerRequestId)
     if (pickerRequestId !== undefined) setPropertiesOpen(true)
   }
-  const { blockedBy: blockedByProjects, blocking: blockingProjects } = dependencyProjects(project, projects, projectRelations)
-  const started = issueSummary?.started ?? projectIssues.filter(issue => issue.state.type === 'started').length
-  const completed = issueSummary?.completed ?? projectIssues.filter(issue => issue.state.type === 'completed').length
-  const issueLabels = (availableIssueLabels ?? labels).filter(label => issueSummary ? issueSummary.labels[label.id]?.total : projectIssues.some(issue => issue.labels.some(item => item.id === label.id))).sort((left, right) => left.name.localeCompare(right.name))
-  const assignees = users.filter(user => issueSummary ? issueSummary.assignees[user.id]?.total : projectIssues.some(issue => issue.assignee?.id === user.id)).sort((left, right) => left.displayName.localeCompare(right.displayName))
-  const milestoneSummary = (id = ''): MilestoneStats => { const totals = issueSummary?.milestones[id]; return issueSummary ? { count: totals?.total ?? 0, completed: totals?.completed ?? 0, progress: totals?.total ? Math.round(totals.completed / totals.total * 100) : 0 } : milestoneStats(projectIssues, id) }
+  const { blockedBy: blockedByProjects, blocking: blockingProjects } = useMemo(() => dependencyProjects(project, projects, projectRelations), [project, projects, projectRelations])
+  const otherProjects = useMemo(() => projects.filter(item => item.id !== project.id), [projects, project.id])
+  const localTotals = useMemo(() => projectIssueTotals(projectIssues), [projectIssues])
+  const started = issueSummary?.started ?? localTotals.started
+  const completed = issueSummary?.completed ?? localTotals.completed
+  const issueLabels = useMemo(() => (availableIssueLabels ?? labels)
+    .filter(label => issueSummary ? issueSummary.labels[label.id]?.total : localTotals.labels.has(label.id))
+    .sort((left, right) => left.name.localeCompare(right.name)), [availableIssueLabels, labels, issueSummary, localTotals])
+  const assignees = useMemo(() => users.filter(user => issueSummary ? issueSummary.assignees[user.id]?.total : localTotals.assignees.has(user.id))
+    .sort((left, right) => left.displayName.localeCompare(right.displayName)), [users, issueSummary, localTotals])
+  const milestoneSummary = (id = ''): MilestoneStats => {
+    const totals = (issueSummary ? issueSummary.milestones[id] : localTotals.milestones.get(id)) ?? EMPTY_TOTALS
+    return {
+      count: totals.total,
+      completed: totals.completed,
+      started: issueSummary ? undefined : totals.started,
+      progress: totals.total ? Math.round(totals.completed / totals.total * 100) : 0,
+    }
+  }
   const unassignedMilestoneStats = milestoneSummary()
   const events = useMemo(() => projectEvents(project, projectUpdates, viewer), [project, projectUpdates, viewer])
   const scopeCount = issueSummary?.total ?? projectIssues.length
@@ -123,7 +136,7 @@ export function ProjectDetailsSidebar({ data, featureFlags, issueSummary, availa
         <AnimatedMilestones items={project.milestones ?? []}>{(milestone) => {
           const stats = milestoneSummary(milestone.id)
           if (milestoneEditor !== 'new' && milestoneEditor?.id === milestone.id) return <MilestoneEditor key={milestone.id} milestone={milestone} onCancel={() => setMilestoneEditor(undefined)} onSubmit={async input => { await onUpdateMilestone(project.id, milestone.id, input); setMilestoneEditor(undefined) }} progress={stats.progress}/>
-          return <MilestoneRow disabled={Boolean(milestoneEditor)} dragging={draggingMilestoneId === milestone.id} dropEdge={milestoneDrop?.id === milestone.id ? milestoneDrop.edge : undefined} key={milestone.id} milestone={milestone} onConvert={async () => { await onConvertMilestone(project.id, milestone.id); toast.success('Milestone converted to project') }} onDelete={() => onDeleteMilestone(project.id, milestone.id)} onDragEnd={() => { setDraggingMilestoneId(undefined); setMilestoneDrop(undefined) }} onDragOver={(event) => { if (!draggingMilestoneId || draggingMilestoneId === milestone.id) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; const rect = event.currentTarget.getBoundingClientRect(); setMilestoneDrop({ id: milestone.id, edge: event.clientY < rect.top + rect.height / 2 ? 'before' : 'after' }) }} onDragStart={(event) => { setDraggingMilestoneId(milestone.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', milestone.id) }} onDrop={(event) => { event.preventDefault(); const sourceId = draggingMilestoneId ?? event.dataTransfer.getData('text/plain'); if (sourceId && milestoneDrop) reorderMilestone(sourceId, milestone.id, milestoneDrop.edge); setDraggingMilestoneId(undefined); setMilestoneDrop(undefined) }} onEdit={() => setMilestoneEditor(milestone)} onMove={async targetProjectId => { await onMoveMilestone(project.id, milestone.id, targetProjectId); toast.success('Milestone moved') }} onOpenIssues={() => onOpenMilestoneIssues(milestone.id)} onUpdateDate={targetDate => onUpdateMilestone(project.id, milestone.id, { targetDate })} projects={projects.filter(item => item.id !== project.id)} stats={stats}/>
+          return <MilestoneRow disabled={Boolean(milestoneEditor)} dragging={draggingMilestoneId === milestone.id} dropEdge={milestoneDrop?.id === milestone.id ? milestoneDrop.edge : undefined} key={milestone.id} milestone={milestone} onConvert={async () => { await onConvertMilestone(project.id, milestone.id); toast.success('Milestone converted to project') }} onDelete={() => onDeleteMilestone(project.id, milestone.id)} onDragEnd={() => { setDraggingMilestoneId(undefined); setMilestoneDrop(undefined) }} onDragOver={(event) => { if (!draggingMilestoneId || draggingMilestoneId === milestone.id) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; const rect = event.currentTarget.getBoundingClientRect(); setMilestoneDrop({ id: milestone.id, edge: event.clientY < rect.top + rect.height / 2 ? 'before' : 'after' }) }} onDragStart={(event) => { setDraggingMilestoneId(milestone.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', milestone.id) }} onDrop={(event) => { event.preventDefault(); const sourceId = draggingMilestoneId ?? event.dataTransfer.getData('text/plain'); if (sourceId && milestoneDrop) reorderMilestone(sourceId, milestone.id, milestoneDrop.edge); setDraggingMilestoneId(undefined); setMilestoneDrop(undefined) }} onEdit={() => setMilestoneEditor(milestone)} onMove={async targetProjectId => { await onMoveMilestone(project.id, milestone.id, targetProjectId); toast.success('Milestone moved') }} onOpenIssues={() => onOpenMilestoneIssues(milestone.id)} onUpdateDate={targetDate => onUpdateMilestone(project.id, milestone.id, { targetDate })} projects={otherProjects} stats={stats}/>
         }}</AnimatedMilestones>
         {milestoneEditor === 'new' && <MilestoneEditor onCancel={() => setMilestoneEditor(undefined)} onSubmit={async input => { await onCreateMilestone(project.id, input as { name: string; description?: string; targetDate?: string }); setMilestoneEditor(undefined) }} progress={0}/>}
         {(project.milestones?.length ?? 0) > 0 && <div aria-label={`No milestone ${unassignedMilestoneStats.count} issues`} className="project-details-sidebar__milestone is-unassigned" role="button" tabIndex={0} onClick={() => onOpenMilestoneIssues()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpenMilestoneIssues() } }}><MilestoneProgressIcon className="project-details-sidebar__milestone-icon" unassigned/><strong>No milestone</strong>{unassignedMilestoneStats.count > 0 && <span>{unassignedMilestoneStats.count}</span>}</div>}
@@ -136,13 +149,11 @@ export function ProjectDetailsSidebar({ data, featureFlags, issueSummary, availa
         <div className="project-details-sidebar__stats"><span><i className="is-scope"/>Scope<strong>{scopeCount}</strong></span><span><i className="is-started"/>Started<strong>{started}</strong></span><span><i className="is-completed"/>Completed<strong>{completed}</strong></span></div>
         {shouldShowProgressGraph(project) && <ProgressChart issues={projectIssues} progress={project.progress} start={project.startDate} target={project.targetDate} persistedHistory={project}/>}
         <div aria-label="Progress grouping" className="project-details-sidebar__segments" role="tablist"><button aria-selected={progressTab === 'assignees'} onClick={() => setProgressTab('assignees')} role="tab" type="button">Assignees</button><button aria-selected={progressTab === 'labels'} onClick={() => setProgressTab('labels')} role="tab" type="button">Labels</button></div>
-        <div className="project-details-sidebar__breakdown">{progressTab === 'assignees' ? assignees.map(user => {
-          const userIssues = projectIssues.filter(issue => issue.assignee?.id === user.id)
-          return <ProgressBreakdownRow totals={issueSummary?.assignees[user.id]} icon={<Avatar id={user.id} name={user.displayName}/>} issues={userIssues} key={user.id} label={user.displayName} onOpen={() => onOpenIssueFilter('assignee', user.id, user.displayName)}/>
-        }) : issueLabels.map(label => {
-          const labelIssues = projectIssues.filter(issue => issue.labels.some(item => item.id === label.id))
-          return <ProgressBreakdownRow totals={issueSummary?.labels[label.id]} icon={<i className="project-details-sidebar__label-dot" style={{ background: label.color }}/>} issues={labelIssues} key={label.id} label={label.name} onOpen={() => onOpenIssueFilter('labels', label.id, label.name)}/>
-        })}{progressTab === 'assignees' && !assignees.length && <p>No assigned issues</p>}{progressTab === 'labels' && !issueLabels.length && <p>No labels in scope</p>}</div>
+        <div className="project-details-sidebar__breakdown">{progressTab === 'assignees' ? assignees.map(user =>
+          <ProgressBreakdownRow totals={issueSummary?.assignees[user.id] ?? localTotals.assignees.get(user.id) ?? EMPTY_TOTALS} icon={<Avatar id={user.id} name={user.displayName}/>} key={user.id} label={user.displayName} onOpen={() => onOpenIssueFilter('assignee', user.id, user.displayName)}/>
+        ) : issueLabels.map(label =>
+          <ProgressBreakdownRow totals={issueSummary?.labels[label.id] ?? localTotals.labels.get(label.id) ?? EMPTY_TOTALS} icon={<i className="project-details-sidebar__label-dot" style={{ background: label.color }}/>} key={label.id} label={label.name} onOpen={() => onOpenIssueFilter('labels', label.id, label.name)}/>
+        )}{progressTab === 'assignees' && !assignees.length && <p>No assigned issues</p>}{progressTab === 'labels' && !issueLabels.length && <p>No labels in scope</p>}</div>
       </div>
     </SidebarSection>}
 
@@ -689,15 +700,13 @@ function ProgressSliceTooltip({ slice }: SliceTooltipProps<ProgressSeries>) {
   return <div className="project-details-sidebar__chart-tooltip"><time>{date ? format(date, 'MMM d, yyyy') : ''}</time>{slice.points.slice().reverse().map(point => <div key={point.id}><i className={`is-${String(point.seriesId).toLowerCase()}`}/><span>{point.seriesId}</span><strong>{point.data.y}</strong></div>)}</div>
 }
 
-function ProgressBreakdownRow({ totals, icon, issues, label, onOpen }: { totals?: { total: number; started: number; completed: number }; icon: ReactNode; issues: Issue[]; label: string; onOpen: () => void }) {
-  const count = totals?.total ?? issues.length
-  const completed = totals?.completed ?? issues.filter(issue => issue.state.type === 'completed').length
-  const engaged = totals ? totals.started + totals.completed : issues.filter(issue => ['started','completed'].includes(issue.state.type)).length
+function ProgressBreakdownRow({ totals, icon, label, onOpen }: { totals: BreakdownTotals; icon: ReactNode; label: string; onOpen: () => void }) {
+  const { total: count, completed, started } = totals
   const percent = count ? Math.round(completed / count * 100) : 0
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen() } }
   return <div aria-label={`${label} ${percent}% of ${count}`} className="project-details-sidebar__breakdown-row" onClick={onOpen} onKeyDown={onKeyDown} role="button" tabIndex={0}>
     <div className="project-details-sidebar__breakdown-name">{icon}<span data-i18n-ignore>{label}</span><button onClick={event => { event.stopPropagation(); onOpen() }} tabIndex={-1} type="button">See issues</button></div>
-    <ProgressRing completed={completed} engaged={engaged} total={count}/><span className="project-details-sidebar__breakdown-percent">{`${percent}% of`}</span><button className="project-details-sidebar__breakdown-count" onClick={event => { event.stopPropagation(); onOpen() }} tabIndex={-1} type="button">{count}</button>
+    <ProgressRing completed={completed} engaged={started + completed} total={count}/><span className="project-details-sidebar__breakdown-percent">{`${percent}% of`}</span><button className="project-details-sidebar__breakdown-count" onClick={event => { event.stopPropagation(); onOpen() }} tabIndex={-1} type="button">{count}</button>
   </div>
 }
 
@@ -730,7 +739,33 @@ function projectEvents(project: Project, updates: ProjectUpdate[], viewer: User)
 
 const formatProjectDate = formatProjectPropertyDate
 type MilestoneStats = { count: number; completed: number; progress: number; started?: number }
-function milestoneStats(issues: Issue[], milestoneId?: string): MilestoneStats { const items = issues.filter(issue => (issue.projectMilestoneId ?? '') === (milestoneId ?? '')); const completed = items.filter(issue => issue.state.type === 'completed').length; return { count: items.length, completed, started: items.filter(issue => issue.state.type === 'started').length, progress: items.length ? Math.round(completed / items.length * 100) : 0 } }
+type BreakdownTotals = { total: number; started: number; completed: number }
+const EMPTY_TOTALS: BreakdownTotals = { total: 0, started: 0, completed: 0 }
+
+function projectIssueTotals(issues: Issue[]) {
+  const milestones = new Map<string, BreakdownTotals>()
+  const assignees = new Map<string, BreakdownTotals>()
+  const labels = new Map<string, BreakdownTotals>()
+  let started = 0
+  let completed = 0
+  for (const issue of issues) {
+    const inProgress = Number(issue.state.type === 'started')
+    const done = Number(issue.state.type === 'completed')
+    started += inProgress
+    completed += done
+    const count = (groups: Map<string, BreakdownTotals>, id: string) => {
+      let totals = groups.get(id)
+      if (!totals) groups.set(id, totals = { ...EMPTY_TOTALS })
+      totals.total++
+      totals.started += inProgress
+      totals.completed += done
+    }
+    count(milestones, issue.projectMilestoneId ?? '')
+    if (issue.assignee) count(assignees, issue.assignee.id)
+    for (const id of new Set(issue.labels?.map(label => label.id))) count(labels, id)
+  }
+  return { milestones, assignees, labels, started, completed }
+}
 function toggleId(values: string[], value: string) { return values.includes(value) ? values.filter(item => item !== value) : [...values, value] }
 function uniqueById<T extends { id: string }>(values: T[]) { return [...new Map(values.map(value => [value.id, value])).values()] }
 import { AnimatedCollapse, AnimatedMilestones } from '@/components/ui/motion';

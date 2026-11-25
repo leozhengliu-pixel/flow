@@ -7,14 +7,15 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { AgentCursorGlyph, AgentHistoryGlyph } from "@/components/ui/agent-glyph";
-import { AppStartup } from '@/components/layout/app-startup';
-import { createBootstrapRequest, settleBootstrapRequest, startStartup, type BootstrapRequest } from '@/lib/startup';
+import { AppConnectionError, AppStartup } from '@/components/layout/app-startup';
+import { createBootstrapRequest, settleBootstrapRequest, startupRetryDelay, takeStartup, type BootstrapRequest } from '@/lib/startup';
 import { setRuntimePreferences, setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences';
 import { AuthenticationPolicyPage } from '@/components/auth/authentication-policy-page';
 import {
@@ -69,7 +70,6 @@ import {
   fetchAuthSession,
   fetchBootstrap,
   fetchIssueRecord,
-  fetchIssueHistory,
   fetchIssueRelated,
   fetchVisibleIssueIds,
   fetchIssueRecordContext,
@@ -171,10 +171,17 @@ import {
   carryNavigationHydration,
   clearNavigationCache,
   hydrateWorkspaceNavigation,
+  navigationCacheGeneration,
   readNavigationCache,
+  writeRecoveredNavigationCache,
   writeNavigationCacheWhenIdle,
+  readRememberedWorkspace,
   rememberWorkspace,
+  withoutSnapshotIssues,
 } from "@/lib/navigation-cache";
+import { holdSnapshotWrites, rejectSnapshotWrites, releaseSnapshotWrites } from '@/lib/snapshot-write-gate';
+import { rememberChatPlatform } from '@/lib/chat-platform';
+import { rememberTrashRetention } from '@/lib/trash-retention';
 import { fetchWorkspacePreferences, listLoops } from '@/lib/api';
 import { getAgentSession, listAgentSessions, listAgentSkills } from '@/lib/api';
 import type { AgentSession, ReleasePipeline } from "@/types/flow";
@@ -255,6 +262,7 @@ import {
   newProjectTemplatePath,
   newTeamPath,
   parseAppRoute,
+  isProjectListRoute,
   projectPath,
   projectSavedViewPath,
   projectSavedViewEditPath,
@@ -307,7 +315,6 @@ import {
 import { findDocumentBySlugSuffix } from "@/lib/document-slug";
 import { findBySlugRef, findLoopByRef } from "@/lib/resource-slug";
 import { rememberTeamHomeTab, teamHomeTab, teamHomeTabOf, teamHomeTabPath } from "@/lib/team-home-tab";
-import { findTrashedDocument } from "@/components/documents/document-trash";
 import { issueDeleteDescription } from "@/lib/issue-delete-confirmation";
 import { OPEN_COMMAND_MENU_EVENT } from "@/components/command/command-context";
 import type { CommandPage } from "@/components/command/context-commands";
@@ -362,6 +369,19 @@ import { useExitPresence } from '@/components/ui/motion';
 
 import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
+import { migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMatches, syncV2Enabled, SyncResetRequired } from '@/lib/sync-client'
+import { clearLocalStores, clearUnlistedLocalStores, hasLocalStore, keepLocalWorkspaceOpen, LOCAL_STARTUP_ISSUE_LIMIT, onLocalStoreSessionEnd, retainedLocalAuthority } from '@/lib/local-store-db'
+import { applyLocalIssueView, localStoreEnabled } from '@/lib/local-store-model'
+import { createLocalStoreShadow } from '@/lib/local-store-shadow'
+import { authorizedPreload, loadLocalWorkspace, localStoreCursor, localStoreLoadedWorkspace, localStoreRoute, type LocalStartup } from '@/lib/local-store-resume'
+import { loadLocalIssueHistory, localSliceScope, preloadLocalIssueVisit, type LocalIssueVisit } from '@/lib/local-store-slices'
+import { queueDurableIssueEdit, type LocalOutboxView } from '@/lib/local-store-outbox'
+import { locallyCreatedAgentSession } from '@/lib/scale-activate-a-agent-echo'
+import { isConnectivityError, realtimeClientId } from '@/lib/api-client'
+import { documentBodyLoaded, fetchResourceSurfaceBootstrap, refreshResourceDocument, resourceSyncSurface, resourceTrashedDocument, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
+import { fetchResourceDocument } from '@/lib/scale-p20-transport'
+import { scaleP19Surface } from '@/lib/scale-p19-surfaces'
+import type { RealtimeEvent } from '@/types/flow'
 import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
 import { classifyRealtimeEvent } from '@/lib/realtime-dispatch'
 import { inaccessible as inaccessibleResource, removeDocument, runEntityPlan, upsertDocument } from '@/lib/realtime-entity-sync'
@@ -372,9 +392,9 @@ import { ActiveTeamProvider } from '@/lib/active-team'
 import { TeamPagesLayout } from '@/components/team/team-pages-layout'
 import { isTeamPagesRoute } from '@/components/team/team-pages-routes'
 import { searchResultLink } from '@/lib/search-result-link'
-import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
+import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck, retainLocalIssueDetail } from '@/lib/issue-detail-cache'
 import { mergeAgentSession, mergeAgentSessions } from '@/lib/agent-session-merge'
-import { bootstrapNavigationDecision, bootstrapRefreshProjection, bootstrapRequestKey } from '@/lib/bootstrap-navigation'
+import { bootstrapNavigationDecision, bootstrapRefreshProjection, bootstrapRequestKey, loadedPlanningDirectory, planningBootstrapProjection } from '@/lib/bootstrap-navigation'
 import { teamWorkflowStateOfType } from '@/lib/team-workflow'
 import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-secondary-page'
 import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
@@ -383,25 +403,157 @@ import { canInviteMembers, setViewerCanInvite } from '@/lib/invite-navigation'
 
 // Realtime metadata reloads: one at a time per workspace, spread across tabs (realtime-bootstrap-coalescer).
 const realtimeMetadataBootstrap = createRealtimeCoalescer((workspaceKey: string) => fetchPagedBootstrap(workspaceKey))
+// P14 is additive and may be rolled out after this adapter.
+const recipientInbox = inboxUnread as typeof inboxUnread & {
+  configure?: (options?: { workspaceKey: string; viewerId: string; capabilities: readonly string[]; authzEpoch?: string }) => void;
+  receive?: (workspaceKey: string, viewerId: string, event: RealtimeEvent) => boolean;
+};
 
 const ReleaseEditorDialog = lazy(() => import('@/components/releases/release-editor-dialog').then(module => ({default:module.ReleaseEditorDialog})))
-const IssueLoadingPreview = lazy(() => import('@/components/issue/issue-loading-preview').then(module => ({default:module.IssueLoadingPreview})))
+const IssueLoadingPreview = lazy(() => import('@/components/detail/detail-pane').then(module => ({default:module.IssueLoadingPreview})))
 
-function App() {
+function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
   const location = useLocation(),
     navigateTo = useRouteNavigation(),
     route = useMemo(
       () => parseAppRoute(location.pathname, location.search),
       [location.pathname, location.search],
     );
-  const [account, setAccount] = useState<AccountBootstrap | null>(null),
-    [data, setData] = useState<BootstrapData | null>(null),
+  const openIssueIdentifier = useRef<string | undefined>(undefined);
+  openIssueIdentifier.current = route.kind === 'issue' ? route.identifier : undefined;
+  const candidate = prepared?.current;
+  const localStartup = candidate?.valid() && localStoreRoute(route) && 'workspaceSlug' in route && route.workspaceSlug === candidate.checkpoint.workspaceKey ? candidate : undefined;
+  const startedFromStore = useRef(Boolean(localStartup));
+  const [renderedStartup, setRenderedStartup] = useState(!localStartup);
+  useEffect(() => {
+    if (!startedFromStore.current) return;
+    const start = () => startTransition(() => setRenderedStartup(true));
+    let painted = 0;
+    const committed = requestAnimationFrame(() => {
+      painted = requestAnimationFrame(start);
+    });
+    const fallback = window.setTimeout(start, 250);
+    return () => { cancelAnimationFrame(committed); cancelAnimationFrame(painted); clearTimeout(fallback); };
+  }, []);
+  const [account, setAccount] = useState<AccountBootstrap | null>(localStartup?.account ?? null),
+    [baseData, setData] = useState<BootstrapData | null>(localStartup?.data ?? null),
     [error, setError] = useState(false);
-  const [session, setSession] = useState<AuthSession | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(localStartup?.session ?? null);
+  const [pendingEdits, setPendingEdits] = useState<LocalOutboxView>();
+  const pendingScope = pendingEdits?.scope;
+  const visibleEdits = pendingEdits && pendingScope && pendingScope.viewerId === session?.user.id && pendingScope.viewerId === baseData?.viewer.id &&
+    pendingScope.workspaceId === baseData.workspace.id && pendingScope.workspaceKey === baseData.workspace.urlKey &&
+    retainedLocalAuthority(pendingScope.viewerId, pendingScope.workspaceId, pendingScope.workspaceKey)?.token === pendingEdits.token ? pendingEdits.edits : undefined;
+  const data = useMemo(() => {
+    if (!baseData || !visibleEdits?.length) return baseData;
+    const byIssue = new Map<string, Issue>();
+    for (const edit of visibleEdits) {
+      const issue = byIssue.get(edit.issueId) ?? baseData.issues.find(issue => issue.id === edit.issueId);
+      if (issue) byIssue.set(edit.issueId, applyOptimisticIssue(issue, edit.input, baseData, new Date(edit.createdAt).toISOString()));
+    }
+    return byIssue.size ? deriveResourceCounts({ ...baseData, issues: baseData.issues.map(issue => byIssue.get(issue.id) ?? issue) }) : baseData;
+  }, [baseData, visibleEdits]);
+  const [syncFallback, setSyncFallback] = useState('');
   const sessionViewerRef=useRef(session?.user.id);
   sessionViewerRef.current=session?.user.id;
-  const dataRef=useRef(data);
-  dataRef.current=data;
+  const dataRef=useRef(baseData);
+  dataRef.current=baseData;
+  // In-app workspace navigation can show cached metadata while its bootstrap is pending.
+  // Hold writes and realtime until that bootstrap confirms the workspace.
+  const [unconfirmed, setUnconfirmedState] = useState<{ viewerId: string; workspaceKey: string } | null>(null);
+  const unconfirmedRef = useRef(unconfirmed);
+  const setUnconfirmed = useCallback((value: { viewerId: string; workspaceKey: string } | null) => {
+    unconfirmedRef.current = value;
+    setUnconfirmedState(value);
+  }, []);
+  const confirmSnapshot = useCallback((workspaceKey: string) => {
+    // A speculative bootstrap can resolve before React renders the cached view.
+    // In that case the unconfirmed state is batched away, so release explicitly.
+    releaseSnapshotWrites(workspaceKey);
+    setUnconfirmed(null);
+  }, [setUnconfirmed]);
+  const showsUnconfirmed = (viewerId: string, workspaceKey: string) => unconfirmedRef.current?.viewerId === viewerId && unconfirmedRef.current.workspaceKey === workspaceKey;
+  const snapshotUnconfirmed = Boolean(unconfirmed && data && data.workspace.urlKey === unconfirmed.workspaceKey && data.viewer.id === unconfirmed.viewerId);
+  useEffect(() => {
+    if (snapshotUnconfirmed) { holdSnapshotWrites(unconfirmed!.workspaceKey); return; }
+    if (unconfirmed) {
+      // The cached view left the screen without a confirming bootstrap (dropped, another workspace or viewer).
+      rejectSnapshotWrites(unconfirmed.workspaceKey);
+      setUnconfirmed(null);
+      return;
+    }
+    releaseSnapshotWrites();
+  }, [snapshotUnconfirmed, unconfirmed, setUnconfirmed]);
+  const syncClient = syncClientFor(data);
+  const openLocalWorkspace = data?.workspace.id;
+  const openLocalViewer = data?.viewer.id;
+  useEffect(() => {
+    if (openLocalWorkspace && openLocalViewer) return keepLocalWorkspaceOpen(openLocalViewer, openLocalWorkspace);
+  }, [openLocalWorkspace, openLocalViewer]);
+  const localCheckpointRef = useRef(localStoreCursor(localStartup?.checkpoint));
+  const [localStoreShadow] = useState(() => createLocalStoreShadow((viewerId, workspaceKey, status, keepDatabase) => {
+    const current = dataRef.current;
+    if (current?.viewer.id !== viewerId || current.workspace.urlKey !== workspaceKey) return;
+    if (status === 401) return; // The response layer has already ended the session.
+    if (!keepDatabase) clearNavigationCache(viewerId, workspaceKey);
+    bootstrapRequest.current?.controller.abort();
+    localCheckpointRef.current = undefined;
+    loadedBootstrapRequestKey.current = '';
+    initialIssueRef.current = null;
+    setInitialIssue(null);
+    setData(null);
+    setBootstrapRetry(value => value + 1);
+  }, (meta, update) => {
+    if (localCheckpointRef.current?.baseline !== meta.baseline || sessionViewerRef.current !== meta.viewerId) return;
+    setData(current => {
+      if (current?.viewer.id !== meta.viewerId || current.workspace.id !== meta.workspaceId || localCheckpointRef.current?.baseline !== meta.baseline) return current;
+      const issues = 'issues' in update ? update.issues : applyLocalIssueView(current.issues, update.changes);
+      return deriveResourceCounts({ ...current, issues: retainLocalIssueDetail(current.issues, issues, openIssueIdentifier.current) });
+    });
+  }));
+  useLayoutEffect(() => localStoreShadow.listen(), [localStoreShadow]);
+  useEffect(() => onLocalStoreSessionEnd(() => {
+    void clearLocalStores('session-ended');
+    if (!sessionViewerRef.current) return;
+    sessionViewerRef.current = undefined;
+    clearNavigationCache();
+    localStoreShadow.stop();
+    bootstrapRequest.current?.controller.abort();
+    localCheckpointRef.current = undefined;
+    initialIssueRef.current = null;
+    setInitialIssue(null);
+    setData(null);
+    setAccount(null);
+    setSession(null);
+  }), [localStoreShadow]);
+  useEffect(() => () => localStoreShadow.stop(), [localStoreShadow]);
+  useEffect(() => localStoreShadow.scope(session?.user.id, data?.workspace.urlKey), [localStoreShadow, session?.user.id, data?.workspace.urlKey]);
+  const inboxWorkspaceKey = data?.workspace.urlKey;
+  const inboxViewerId = data?.viewer.id;
+  const inboxCapabilities = data?.sync?.capabilities;
+  const inboxEpoch = data?.sync?.authzEpoch;
+  useEffect(() => {
+    recipientInbox.configure?.(inboxWorkspaceKey && inboxViewerId ? { workspaceKey: inboxWorkspaceKey, viewerId: inboxViewerId, capabilities: inboxCapabilities ?? [], authzEpoch: inboxEpoch } : undefined);
+    return () => recipientInbox.configure?.();
+  }, [inboxWorkspaceKey, inboxViewerId, inboxCapabilities, inboxEpoch]);
+  useEffect(() => {
+    if (!syncClient) return;
+    const unsubscribe = syncClient.subscribe(() => {
+      if (!syncClient.disposed && resourceWindowStale(syncClient)) { syncClient.requestReset(!syncClient.manifest.capabilities.includes('resource-windows')); return; }
+      if (syncClient.disposed) {
+        if (syncClient.legacyRequired) setSyncFallback(syncClient.manifest.core.workspace.urlKey);
+        clearNavigationCache(syncClient.manifest.viewerId, syncClient.manifest.core.workspace.urlKey);
+        initialIssueRef.current = null;
+        setInitialIssue(null);
+        setData(current => syncClientFor(current) === syncClient ? null : current);
+        loadedBootstrapRequestKey.current = '';
+        setBootstrapRetry(value => value + 1);
+        return;
+      }
+      setData(current => syncClientFor(current) === syncClient && !syncClient.disposed ? syncClient.adapt(current) : current);
+    });
+    return () => { unsubscribe(); syncClient.dispose(); };
+  }, [syncClient]);
   // Issue edits still waiting for an answer, by issue (see updateIssueById).
   const issueEditBursts=useRef(new Map<string,{pending:number;latest:Issue;settled:Issue}>());
   const reportedIssueErrors=useRef(new WeakSet<ApiError>());
@@ -409,12 +561,20 @@ function App() {
   if (data) setViewerCanInvite(canInviteMembers(data));
   const acceptBootstrap = useCallback((next:BootstrapData)=>{
     if(next.viewer.id!==sessionViewerRef.current) return;
+    const checkpoint = localStoreLoadedWorkspace(next)?.checkpoint;
+    const restored = localStoreCursor(checkpoint);
+    localCheckpointRef.current = restored;
+    localStoreShadow.confirm(next);
+    // Fresh data wins over a cached snapshot: none of the snapshot's issue rows survive the merge.
+    const replacesSnapshot = unconfirmedRef.current?.viewerId === next.viewer.id && unconfirmedRef.current.workspaceKey === next.workspace.urlKey;
     setData(current=>{
-      const merged=mergeWorkspaceDirectory(current,next);
-      writeNavigationCacheWhenIdle(next.viewer.id, next.workspace.urlKey, merged);
+      const base = replacesSnapshot && current?.workspace.urlKey === next.workspace.urlKey ? withoutSnapshotIssues(current) : current;
+      const merged=base?.sync || next.sync ? next : mergeWorkspaceDirectory(base,next);
+      if (!merged.sync && !restored) writeNavigationCacheWhenIdle(next.viewer.id, next.workspace.urlKey, merged);
       return merged;
     });
-  },[]);
+    if (replacesSnapshot) confirmSnapshot(next.workspace.urlKey);
+  },[confirmSnapshot, localStoreShadow]);
   // Metadata edits (projects, releases, documents, customers, drafts, ...)
   // never rewrite issue records. Refresh the metadata projection and keep the
   // loaded issues instead of downloading every issue again; only issues a
@@ -426,7 +586,7 @@ function App() {
     const releasedIssueIds = loaded?.workspace.urlKey === workspaceKey && !loaded.issueCollectionPaged ? newlyReleasedIssueIds(loaded, next) : [];
     setData(current => {
       if (current?.workspace.urlKey !== workspaceKey || current.viewer.id !== next.viewer.id) return current;
-      if (current.issueCollectionPaged) return mergeWorkspaceDirectory(current, next);
+      if (current.issueCollectionPaged) return current.sync || next.sync ? next : mergeWorkspaceDirectory(current, next);
       const merged = carryNavigationHydration(current, mergeWorkspaceMetadata(current, next));
       // A metadata projection still carries the cached notifications; until a
       // real bootstrap confirms the snapshot it must not replace the cache.
@@ -540,13 +700,16 @@ function App() {
   }, []);
   const bootstrapRequest = useRef<BootstrapRequest | null>(null);
   useEffect(() => () => bootstrapRequest.current?.controller.abort(), []);
-  const loadedBootstrapRequestKey = useRef('');
+  const loadedBootstrapRequestKey = useRef(localStartup ? `${bootstrapRequestKey(localStartup.checkpoint.viewerId, localStartup.checkpoint.workspaceKey)}:local-store` : '');
   // A streamed bootstrap can be cut short (a queued request, a transient
   // disconnect). Retry before replacing the cache-backed page with an error.
   const bootstrapFailures = useRef<{ key: string; count: number }>({ key: '', count: 0 });
   const [bootstrapRetry, setBootstrapRetry] = useState(0);
   const initialIssueRef = useRef<{key:string;viewerId:string;issue:Issue} | null>(null);
-  const [authReady, setAuthReady] = useState(false);
+  const [authReady, setAuthReady] = useState(Boolean(localStartup));
+  // The session and account requests could not reach the server; startup keeps retrying (startupRetryRef retries now).
+  const [startupUnreachable, setStartupUnreachable] = useState(false);
+  const startupRetryRef = useRef<(() => void) | undefined>(undefined);
   const [authenticationPolicy,setAuthenticationPolicy] = useState<string>();
   useEffect(()=>{const listener=(event:Event)=>{const detail=(event as CustomEvent<{code:string;workspaceKey:string}>).detail;if(detail.workspaceKey===decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0]??''))setAuthenticationPolicy(detail.code)};window.addEventListener('flow:authentication-policy',listener);return()=>window.removeEventListener('flow:authentication-policy',listener)},[]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -620,7 +783,19 @@ function App() {
     "workspaceSlug" in route ? route.workspaceSlug : "";
   const loadedWorkspaceKey = data?.workspace.urlKey;
   const projectListProjection = isProjectListRoute(route);
-  const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined;
+  const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : planningBootstrapProjection(route);
+  const syncSurface = resourceSyncSurface(route) ?? scaleP19Surface(route.kind);
+  const localIssueRoute = localStoreRoute(route);
+  const fetchRouteBootstrap = useCallback(async (workspaceKey: string, projection?: import('@/lib/api').BootstrapProjection, signal?: AbortSignal, quiet?: boolean) => {
+    if (localIssueRoute && !projection && !syncSurface) {
+      const restored = await loadLocalWorkspace(account, workspaceKey, signal);
+      if (restored) {
+        rememberChatPlatform(restored);
+        return rememberTrashRetention(restored);
+      }
+    }
+    return fetchResourceSurfaceBootstrap(workspaceKey, syncFallback === workspaceKey ? undefined : syncSurface, () => fetchBootstrap(workspaceKey, projection, signal, quiet), signal, quiet);
+  }, [account, localIssueRoute, syncSurface, syncFallback]);
   const { t: translateTitle, locale } = useI18n();
   useEffect(() => {
     // Search sets its own title (it includes the query); the OAuth consent page is titled "Flow" (the reference app: "the reference app").
@@ -634,26 +809,33 @@ function App() {
   }, [route, data, translateTitle, location.pathname]);
   useEffect(() => {
     if (!loadedWorkspaceKey) return;
+    const retainedIssues = Boolean(localCheckpointRef.current);
+    // For a large retained list, load the editor when a row gets pointer or
+    // keyboard focus. Keep its modules out of the list's idle heap.
+    const preloadOnIdle = !retainedIssues || (dataRef.current?.issues.length ?? 0) <= LOCAL_STARTUP_ISSUE_LIMIT;
     const warmDetails = () => {
       void DetailPane.preload().catch(() => undefined);
-      void ProjectDetailPage.preload().catch(() => undefined);
+      if (!retainedIssues) void ProjectDetailPage.preload().catch(() => undefined);
     };
     const onIntent = (event: Event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      if (target.closest('a[href*="/issue/"], .flow-inbox-row')) void DetailPane.preload().catch(() => undefined);
+      if (target.closest('a[href*="/issue/"], .flow-inbox-row, [data-issue-row-id]')) void DetailPane.preload().catch(() => undefined);
       if (target.closest('a[href*="/project/"], .lp-project-row, .lp-project-card')) void ProjectDetailPage.preload().catch(() => undefined);
     };
-    const idle = 'requestIdleCallback' in window;
-    const timer = idle ? window.requestIdleCallback(warmDetails, { timeout: 1500 }) : window.setTimeout(warmDetails, 500);
+    const idle = typeof window.requestIdleCallback === 'function' && typeof window.cancelIdleCallback === 'function';
+    let timer: number | undefined;
+    if (renderedStartup && preloadOnIdle) timer = idle ? window.requestIdleCallback(warmDetails, { timeout: 1500 }) : window.setTimeout(warmDetails, 500);
     document.addEventListener('pointerover', onIntent, { passive: true });
     document.addEventListener('focusin', onIntent);
     return () => {
-      if (idle) window.cancelIdleCallback(timer); else window.clearTimeout(timer);
+      if (timer !== undefined) {
+        if (idle) window.cancelIdleCallback(timer); else window.clearTimeout(timer);
+      }
       document.removeEventListener('pointerover', onIntent);
       document.removeEventListener('focusin', onIntent);
     };
-  }, [loadedWorkspaceKey]);
+  }, [loadedWorkspaceKey, renderedStartup]);
   const loadAccount = async () => {
     setError(false);
     try {
@@ -667,28 +849,77 @@ function App() {
     if (!key) return;
     setError(false);
     try {
-      acceptBootstrap(await fetchBootstrap(key));
+      acceptBootstrap(await fetchRouteBootstrap(key));
     } catch {
       setError(true);
     }
   };
+  const startupRequest = useRef<ReturnType<typeof takeStartup> | undefined>(undefined);
   useEffect(() => {
-    const startup = startStartup(
-      { fetchSession: fetchAuthSession, fetchAccount: fetchAccountBootstrap, fetchBootstrap },
-      { requestedWorkspaceKey: requestedWorkspaceKey ?? "", isRoot: route.kind === "root", projection: bootstrapProjection },
-    );
-    if (startup.speculative) bootstrapRequest.current = startup.speculative;
-    startup.ready
-      .then(({ session: authenticated, account: nextAccount }) => {
+    if (prepared) prepared.current = undefined;
+    if (startedFromStore.current && dataRef.current) {
+      rememberChatPlatform(dataRef.current);
+      rememberTrashRetention(dataRef.current);
+      localStoreShadow.confirm(dataRef.current);
+      return;
+    }
+    if (!startupRequest.current) {
+      startupRequest.current = takeStartup(
+        { fetchSession: fetchAuthSession, fetchAccount: fetchAccountBootstrap, fetchBootstrap: fetchRouteBootstrap },
+        { requestedWorkspaceKey: requestedWorkspaceKey ?? "", isRoot: route.kind === "root", projection: bootstrapProjection, skipSpeculative: localIssueRoute || undefined },
+      );
+      const speculative = startupRequest.current.speculative;
+      if (speculative) {
+        speculative.key = syncBootstrapRequestKey(speculative.key, syncSurface);
+        bootstrapRequest.current = speculative;
+      }
+    }
+    const startup = startupRequest.current;
+    let stopped = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    const settle = (ready: Promise<{ session: AuthSession; account: AccountBootstrap }>): void => void ready
+      .then(async ({ session: authenticated, account: nextAccount }) => {
+        await clearUnlistedLocalStores(authenticated.user.id, nextAccount.workspaces.map(item => item.workspace));
+        const resumed = localIssueRoute && !bootstrapProjection && !syncSurface && requestedWorkspaceKey && authenticated.user.id === nextAccount.viewer.id
+          ? await authorizedPreload(nextAccount, requestedWorkspaceKey) : undefined;
+        if (stopped) return;
+        setStartupUnreachable(false);
         setSession(authenticated);
         setAccount(nextAccount);
+        if (resumed && window.location.pathname === location.pathname && window.location.search === location.search && resumed.consume()) {
+          const next = resumed.data;
+          loadedBootstrapRequestKey.current = `${bootstrapRequestKey(next.viewer.id, next.workspace.urlKey)}:local-store`;
+          localCheckpointRef.current = localStoreCursor(resumed.checkpoint);
+          rememberChatPlatform(next);
+          rememberTrashRetention(next);
+          localStoreShadow.confirm(next);
+          setData(next);
+        }
+        finish();
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        if (isConnectivityError(error)) {
+          // A failed connection leaves the session unknown. Show the connection error and retry startup.
+          if (stopped) return;
+          setStartupUnreachable(true);
+          const retry = () => { clearTimeout(retryTimer); retryTimer = undefined; settle(Promise.all([fetchAuthSession(), fetchAccountBootstrap()]).then(([session, account]) => ({ session, account }))); };
+          startupRetryRef.current = retry;
+          retryTimer = setTimeout(retry, startupRetryDelay(attempts++));
+          return;
+        }
+        setStartupUnreachable(false);
         setSession(null);
         setAccount(null);
         clearNavigationCache();
-      })
-      .finally(() => setAuthReady(true));
+        finish();
+      });
+    const finish = () => {
+      startupRetryRef.current = undefined;
+      setAuthReady(true);
+    };
+    settle(startup.ready);
+    return () => { stopped = true; clearTimeout(retryTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- startup runs once on mount; later navigation goes through the bootstrap effect
   }, []);
   const themeSyncRef = useRef<string>("");
@@ -721,6 +952,8 @@ function App() {
       darkTheme: settings.darkTheme,
     });
     if (
+      // Settings read from a cached snapshot are never written back; the confirmed ones decide.
+      !snapshotUnconfirmed &&
       themeNeedsAccountSync(settings, applied) &&
       themeSyncRef.current !== `${accountWorkspaceKey}:${accountViewerId}:${applied.interfaceTheme}`
     ) {
@@ -757,6 +990,7 @@ function App() {
     accountUserSettings,
     accountWorkspaceSettings,
     settingsOverridesRevision,
+    snapshotUnconfirmed,
   ]);
   const oauthPath = location.pathname === "/oauth/authorize";
   const connectPath =
@@ -851,20 +1085,25 @@ function App() {
       return;
     }
     if (!requestedWorkspaceKey) return;
-    if (
-      !account.workspaces.some(
-        (item) => item.workspace.urlKey === requestedWorkspaceKey,
-      )
-    ) {
+    const requestedWorkspace = account.workspaces.find(item => item.workspace.urlKey === requestedWorkspaceKey)?.workspace;
+    if (!requestedWorkspace) {
       // The viewer no longer belongs to (or never had) this workspace: nothing cached for it may be shown again.
       clearNavigationCache(account.viewer.id, requestedWorkspaceKey);
       setData(null);
       setError(true);
       return;
     }
-    const requestKey = bootstrapRequestKey(account.viewer.id, requestedWorkspaceKey, bootstrapProjection);
-    // 'reuse' leaves loadedBootstrapRequestKey on the page the snapshot was loaded for, so going back there is a 'skip'.
-    if (bootstrapNavigationDecision({
+    const baseRequestKey = bootstrapRequestKey(account.viewer.id, requestedWorkspaceKey, bootstrapProjection);
+    const requestKey = localIssueRoute ? `${baseRequestKey}:local-store` : syncBootstrapRequestKey(baseRequestKey, syncFallback === requestedWorkspaceKey ? undefined : syncSurface);
+    // An in-workspace detail uses its authorized record and history loaders.
+    // Keep the retained directory and issue-list checkpoint for the Back path.
+    const checkpoint = localCheckpointRef.current;
+    if (bootstrapProjection === 'issue-detail' && checkpoint?.viewerId === account.viewer.id &&
+        checkpoint.workspaceKey === requestedWorkspaceKey && dataRef.current?.workspace.id === requestedWorkspace.id &&
+        loadedBootstrapRequestKey.current === `${bootstrapRequestKey(account.viewer.id, requestedWorkspaceKey)}:local-store`) return;
+    // Reuse keeps the loaded request key so Back can keep the same directory.
+    if (requestKey !== baseRequestKey && dataRef.current?.workspace.urlKey === requestedWorkspaceKey && dataRef.current.viewer.id === account.viewer.id && loadedBootstrapRequestKey.current === requestKey) return;
+    if (requestKey === baseRequestKey && !(dataRef.current?.sync && dataRef.current.sync.surface !== syncSurface) && bootstrapNavigationDecision({
       current: dataRef.current,
       requestedWorkspaceKey,
       viewerId: account.viewer.id,
@@ -875,7 +1114,14 @@ function App() {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     if (loadedWorkspaceKey !== requestedWorkspaceKey || loadedBootstrapRequestKey.current && loadedBootstrapRequestKey.current !== requestKey) {
-      const cachedNavigation = readNavigationCache(account.viewer.id, requestedWorkspaceKey);
+      // The local-store journal must confirm access before any retained issues enter the UI.
+      const waitForAuthority = localIssueRoute || localStoreEnabled() && hasLocalStore(account.viewer.id, requestedWorkspace.id);
+      const cachedNavigation = waitForAuthority || !localStoreEnabled() || syncV2Enabled() && syncSurface ? undefined : readNavigationCache(account.viewer.id, requestedWorkspaceKey);
+      if (loadedWorkspaceKey !== requestedWorkspaceKey && cachedNavigation?.viewer.id === account.viewer.id && cachedNavigation.workspace.urlKey === requestedWorkspaceKey) {
+        // The workspace is shown from its cached snapshot until this bootstrap confirms it.
+        holdSnapshotWrites(requestedWorkspaceKey);
+        setUnconfirmed({ viewerId: account.viewer.id, workspaceKey: requestedWorkspaceKey });
+      }
       setData((current) => {
         if (loadedWorkspaceKey === requestedWorkspaceKey) {
           if (!projectListProjection || !current) return current;
@@ -901,32 +1147,69 @@ function App() {
     if (bootstrapRequest.current?.key !== requestKey || bootstrapRequest.current.controller.signal.aborted) {
       bootstrapRequest.current?.controller.abort();
       bootstrapRequest.current?.release();
-      bootstrapRequest.current = createBootstrapRequest(requestKey, signal => fetchBootstrap(requestedWorkspaceKey, bootstrapProjection, signal));
+      bootstrapRequest.current = createBootstrapRequest(requestKey, signal => fetchRouteBootstrap(requestedWorkspaceKey, bootstrapProjection, signal));
     }
     const request = bootstrapRequest.current;
     const clear = () => { request.release(); if (bootstrapRequest.current === request) bootstrapRequest.current = null; };
     void request.promise.then(clear, clear);
-    settleBootstrapRequest(request, signal => fetchBootstrap(requestedWorkspaceKey, bootstrapProjection, signal))
+    settleBootstrapRequest(request, signal => fetchRouteBootstrap(requestedWorkspaceKey, bootstrapProjection, signal))
       .then(next => {
-        if (cancelled || next.viewer.id!==sessionViewerRef.current) return;
+        if (cancelled) return;
+        if (next.viewer.id!==sessionViewerRef.current) { syncClientFor(next)?.dispose(); return; }
         bootstrapFailures.current = { key: '', count: 0 };
         rememberWorkspace(account.viewer.id, requestedWorkspaceKey);
         loadedBootstrapRequestKey.current=requestKey;
+        const checkpoint = localStoreLoadedWorkspace(next)?.checkpoint;
+        const restored = localStoreCursor(checkpoint);
+        localCheckpointRef.current = restored;
+        localStoreShadow.confirm(next);
+        // Fresh data wins over a cached snapshot, wherever the user went meanwhile: none of the snapshot's issue
+        // rows survive the merge (rows fetched from the server since do).
+        const replacesSnapshot = showsUnconfirmed(account.viewer.id, requestedWorkspaceKey);
         setData(current=>{
-          const merged=mergeWorkspaceDirectory(current,next), preview=initialIssueRef.current;
-          const withPreview=preview?.viewerId===account.viewer.id && preview?.key.startsWith(`${requestedWorkspaceKey}:`) && !preview.issue.isSummary
+          const base = replacesSnapshot && current?.workspace.urlKey === requestedWorkspaceKey ? withoutSnapshotIssues(current) : current;
+          const merged=base?.sync || next.sync ? next : mergeWorkspaceDirectory(base,next), preview=initialIssueRef.current;
+          const withPreview=!next.sync && !restored && preview?.viewerId===account.viewer.id && preview?.key.startsWith(`${requestedWorkspaceKey}:`) && !preview.issue.isSummary
             ? {...merged,issues:mergeIssueRecords(merged.issues,[preview.issue])}
             : merged;
-          writeNavigationCacheWhenIdle(account.viewer.id, requestedWorkspaceKey, withPreview);
+          if (localStoreEnabled() && !withPreview.sync && !restored) writeNavigationCacheWhenIdle(account.viewer.id, requestedWorkspaceKey, withPreview);
           return withPreview;
         });
+        if (replacesSnapshot) confirmSnapshot(requestedWorkspaceKey);
       })
       .catch((error) => {
         if (cancelled) return;
+        const dropUnconfirmed = () => {
+          if (!showsUnconfirmed(account.viewer.id, requestedWorkspaceKey)) return false;
+          rejectSnapshotWrites(requestedWorkspaceKey);
+          setUnconfirmed(null);
+          setData(current => current?.workspace.urlKey === requestedWorkspaceKey && current.viewer.id === account.viewer.id ? null : current);
+          return true;
+        };
         // A definite refusal is not transient; only retry a cancelled/partial
         // stream. Exhausting the retries surfaces the usual error state.
-        if (error instanceof ApiError && error.status >= 400 && error.status < 500) { setError(true); return }
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500 && !isConnectivityError(error) && !(error.status === 429 && showsUnconfirmed(account.viewer.id, requestedWorkspaceKey))) {
+          // A cached view the server refused is dropped with every cache of the workspace, never kept on screen.
+          if (showsUnconfirmed(account.viewer.id, requestedWorkspaceKey)) {
+            clearNavigationCache(account.viewer.id, requestedWorkspaceKey);
+            dropUnconfirmed();
+          }
+          if (syncV2Enabled() && [401, 403].includes(error.status)) {
+            clearNavigationCache(account.viewer.id, requestedWorkspaceKey);
+            const rejected = syncClientFor(dataRef.current);
+            if (rejected?.manifest.core.workspace.urlKey === requestedWorkspaceKey && rejected.manifest.viewerId === account.viewer.id) rejected.requestReset();
+            setData(current => current?.workspace.urlKey === requestedWorkspaceKey && current.viewer.id === account.viewer.id ? null : current);
+          }
+          setError(true); return;
+        }
         const count = bootstrapFailures.current.key === requestKey ? bootstrapFailures.current.count : 0;
+        if (showsUnconfirmed(account.viewer.id, requestedWorkspaceKey)) {
+          // Unreachable, busy or failing server: only a refusal drops a cached view. It stays on screen with its
+          // writes held, and the load is tried again with backoff until the server answers.
+          bootstrapFailures.current = { key: requestKey, count: count + 1 };
+          retryTimer = setTimeout(() => setBootstrapRetry(value => value + 1), count < 2 ? 400 : startupRetryDelay(count - 2));
+          return;
+        }
         if (count < 2) {
           bootstrapFailures.current = { key: requestKey, count: count + 1 };
           retryTimer = setTimeout(() => setBootstrapRetry(value => value + 1), 400);
@@ -936,7 +1219,7 @@ function App() {
         setError(true);
       });
     return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
-  }, [account, bootstrapRetry, connectPath, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, requestedWorkspaceKey, route.kind]);
+  }, [account, bootstrapRetry, connectPath, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, fetchRouteBootstrap, localIssueRoute, syncSurface, syncFallback, requestedWorkspaceKey, route.kind, confirmSnapshot, setUnconfirmed, localStoreShadow]);
   // Surfaces ("Actions" buttons) register a command context and ask for the palette.
   useEffect(() => {
     const open = () => setCommandOpen(true);
@@ -1196,7 +1479,7 @@ function App() {
     )
       setCreateOpen(true);
   }, [location.pathname, location.search]);
-  const [floatingAgentOpen, setFloatingAgentOpen] = useState(false);
+  const [floatingAgentOpen, setFloatingAgentOpen] = useState<boolean>();
   // Bottom-right "Chat history" popover; picking a chat opens it in the floating chat (no navigation).
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
   const [floatingAgentSession, setFloatingAgentSession] = useState<AgentSession>();
@@ -1238,64 +1521,106 @@ function App() {
   const [issueContextLoading, setIssueContextLoading] = useState(false);
   const [initialIssue, setInitialIssue] = useState<{key:string;viewerId:string;issue:Issue} | null>(null);
   const [detailAccessPending,setDetailAccessPending]=useState('');
-  useEffect(()=>{initialIssueRef.current=null;setInitialIssue(null);setDetailAccessPending('');if(!session?.user.id)clearNavigationCache();},[session?.user.id]);
+  useEffect(()=>{initialIssueRef.current=null;setInitialIssue(null);setDetailAccessPending('');},[session?.user.id]);
+  useEffect(() => {
+    if (authReady && !session?.user.id) clearNavigationCache();
+  }, [authReady, session?.user.id]);
   const [issueHistoryState, setIssueHistoryState] = useState<{key:string;loading:boolean;error:boolean}>({key:'',loading:false,error:false});
+  const [verifiedHistory, setVerifiedHistory] = useState<{ location: typeof location; key: string }>();
   const issueContextKey = useRef('');
   const historyRefreshSequence = useRef(0);
+  const localIssueVisit = useRef<LocalIssueVisit | undefined>(undefined);
+  useEffect(() => () => localIssueVisit.current?.abort(), []);
   const recordIdentifier = route.kind === 'issue' ? route.identifier : '';
   const detailWorkspaceKey = route.kind === 'issue' ? route.workspaceSlug : '';
   const detailKey = `${detailWorkspaceKey}:${recordIdentifier}`;
   const detailViewerId=session?.user.id;
   const detailLookupId=selectedIssue?.id ?? recordIdentifier;
-  const previewIssue = initialIssue?.key === detailKey && initialIssue.viewerId===session?.user.id ? initialIssue.issue : undefined;
+  const previewIssue = !data?.sync && initialIssue?.key === detailKey && initialIssue.viewerId===session?.user.id ? initialIssue.issue : undefined;
+  const detailVersion = selectedIssue?.version;
+  const detailSyncVersion = syncClient?.get({ kind: 'issue', id: detailLookupId })?.version;
   const missingIssueRecord = Boolean(recordIdentifier && (!selectedIssue || selectedIssue.isSummary || selectedIssue.needsDetailRefresh));
   useEffect(() => {
     if (!authReady || !detailViewerId || !detailWorkspaceKey || !recordIdentifier || !missingIssueRecord || detailAccessPending===detailWorkspaceKey) return;
     const viewerId=detailViewerId;
     const key = `${detailWorkspaceKey}:${recordIdentifier}`;
     const controller = new AbortController();
-    setIssueContextLoading(true);
-    void fetchIssueRecord(detailLookupId, controller.signal, detailWorkspaceKey).then(issue => {
-      if (controller.signal.aborted || sessionViewerRef.current!==viewerId) return;
+    const signal = syncClient?.requestSignal(controller.signal) ?? controller.signal;
+    const warmRecord = localIssueVisit.current?.takeRecord(detailLookupId, viewerId, detailWorkspaceKey);
+    if (!warmRecord) setIssueContextLoading(true);
+    void (warmRecord ?? fetchIssueRecord(detailLookupId, signal, detailWorkspaceKey)).then(issue => {
+      if (signal.aborted || !syncScopeMatches(dataRef.current, syncClient) || sessionViewerRef.current!==viewerId) return;
+      if (warmRecord) performance.mark('flow:local-store:detail-record-ready');
       issueContextKey.current = key;
       initialIssueRef.current={key,viewerId,issue};
       setInitialIssue({key,viewerId,issue});
-      setData(current => current?.workspace.urlKey === detailWorkspaceKey && current.viewer.id===viewerId ? {...current,issues:mergeIssueRecords(current.issues,[issue])}:current);
-    }).catch(error => { if (!controller.signal.aborted && sessionViewerRef.current===viewerId) {
+      setData(current => {
+        if (current?.workspace.urlKey !== detailWorkspaceKey || current.viewer.id !== viewerId || !syncScopeMatches(current, syncClient)) return current;
+        let issues: Issue[];
+        if (!current.issueCollectionPaged && (localCheckpointRef.current?.workspaceKey === detailWorkspaceKey ||
+          loadedPlanningDirectory(viewerId, detailWorkspaceKey, loadedBootstrapRequestKey.current))) {
+          const index = current.issues.findIndex(row => row.id === issue.id);
+          issues = index < 0 ? [...current.issues, issue] : current.issues.map((row, i) =>
+            i === index && (row.version ?? 0) <= (issue.version ?? 0) ? issue : row);
+        } else issues = mergeIssueRecords(current.issues, [issue]);
+        return { ...current, issues };
+      });
+    }).catch(error => { if (!signal.aborted && syncScopeMatches(dataRef.current, syncClient) && sessionViewerRef.current===viewerId) {
       issueContextKey.current = key;
       if(initialIssueRef.current?.key===key)initialIssueRef.current=null;
       setInitialIssue(current=>current?.key===key?null:current);
-      if (error instanceof ApiError && [403,404].includes(error.status)) setData(current=>current?.workspace.urlKey===detailWorkspaceKey?{...current,issues:current.issues.filter(issue=>issue.identifier.toUpperCase()!==recordIdentifier.toUpperCase())}:current);
+      if (error instanceof ApiError && [403,404].includes(error.status)) setData(current=>current?.workspace.urlKey===detailWorkspaceKey && syncScopeMatches(current, syncClient)?{...current,issues:current.issues.filter(issue=>issue.identifier.toUpperCase()!==recordIdentifier.toUpperCase())}:current);
       toast.error('Could not load issue', { description: error.message });
     } })
-      .finally(() => { if (!controller.signal.aborted) setIssueContextLoading(false); });
+      .finally(() => { if (!signal.aborted) setIssueContextLoading(false); });
     return () => controller.abort();
-  }, [authReady,detailViewerId,detailLookupId,detailWorkspaceKey,recordIdentifier,missingIssueRecord,detailAccessPending]);
+  }, [authReady,detailViewerId,detailLookupId,detailWorkspaceKey,recordIdentifier,missingIssueRecord,detailAccessPending,detailVersion,detailSyncVersion,syncClient]);
   const historyIssueId=selectedIssue?.id;
   const historyIssueSummary=Boolean(selectedIssue?.isSummary);
   const historyLoaded=Boolean(historyIssueId && Object.hasOwn(data?.issueHistoryCursors ?? {},historyIssueId));
+  const historyWorkspaceKey = data?.workspace.urlKey;
+  const historyViewerId = data?.viewer.id;
+  const historyScope = historyIssueId ? localSliceScope(data) : undefined;
+  const historyLocalWorkspaceId = historyScope?.workspaceId;
+  const historyNavigationKey = historyLocalWorkspaceId && historyIssueId ? `${historyViewerId}:${historyLocalWorkspaceId}:${historyIssueId}` : '';
+  const historyLocation = historyNavigationKey ? location : undefined;
+  const historyUnverified = Boolean(historyLocation && (verifiedHistory?.location !== historyLocation || verifiedHistory.key !== historyNavigationKey));
+  const useNetworkHistory = Boolean(!historyLocalWorkspaceId && !historyIssueSummary && !historyLoaded &&
+    (data?.issueCollectionPaged || localCheckpointRef.current || loadedPlanningDirectory(historyViewerId, historyWorkspaceKey, loadedBootstrapRequestKey.current)));
   const relatedIssueKey=JSON.stringify([selectedIssue?.parentId,...(selectedIssue?.subIssueIds ?? [])].filter(Boolean));
   useEffect(() => {
-    if (!data?.issueCollectionPaged || !historyIssueId || historyIssueSummary || historyLoaded) return;
-    const id=historyIssueId, workspace=data.workspace.urlKey, viewerId=data.viewer.id, key=`${workspace}:${id}`;
+    if (!historyViewerId || !historyWorkspaceKey || !historyIssueId || historyWorkspaceKey !== detailWorkspaceKey || detailAccessPending === detailWorkspaceKey ||
+        (!historyNavigationKey && !useNetworkHistory)) return;
+    const id=historyIssueId, workspace=historyWorkspaceKey, viewerId=historyViewerId, key=`${workspace}:${id}`;
+    const scope = historyLocalWorkspaceId ? { workspaceId: historyLocalWorkspaceId, workspaceKey: workspace, viewerId } : undefined;
     const controller=new AbortController();
+    const signal=syncClient?.requestSignal(controller.signal) ?? controller.signal;
     const sequence=++historyRefreshSequence.current;
-    setIssueHistoryState({key,loading:true,error:false});
-    void fetchIssueHistory(id,controller.signal).then(history=>{
-      if(controller.signal.aborted || sequence!==historyRefreshSequence.current)return;
-      setData(current=>current?.workspace.urlKey===workspace && current.viewer.id===viewerId?{...current,comments:{...current.comments,[id]:history.comments},activities:{...current.activities,[id]:history.activities},issueHistoryCursors:{...current.issueHistoryCursors,[id]:{commentsCursor:history.commentsCursor,activitiesCursor:history.activitiesCursor}}}:current);
+    const warmHistory = scope && localIssueVisit.current?.takeHistory(id, viewerId, workspace);
+    if (!warmHistory) setIssueHistoryState({key,loading:true,error:false});
+    void (warmHistory ?? loadLocalIssueHistory(id,scope,signal)).then(history=>{
+      if(signal.aborted || sequence!==historyRefreshSequence.current || !syncScopeMatches(dataRef.current,syncClient))return;
+      if (scope) performance.mark('flow:local-store:detail-history-ready');
+      setData(current=>current?.workspace.urlKey===workspace && current.viewer.id===viewerId && syncScopeMatches(current,syncClient) ? {
+        ...current,
+        comments: { ...(scope ? {} : current.comments), [id]: history.comments },
+        activities: { ...(scope ? {} : current.activities), [id]: history.activities },
+        issueHistoryCursors: { ...(scope ? {} : current.issueHistoryCursors), [id]: { commentsCursor: history.commentsCursor, activitiesCursor: history.activitiesCursor } },
+      } : current);
+      if (historyLocation) setVerifiedHistory({ location: historyLocation, key: historyNavigationKey });
       setIssueHistoryState({key,loading:false,error:false});
-    }).catch(()=>{if(!controller.signal.aborted && sequence===historyRefreshSequence.current)setIssueHistoryState({key,loading:false,error:true});});
+    }).catch(()=>{if(!signal.aborted && sequence===historyRefreshSequence.current)setIssueHistoryState({key,loading:false,error:true});});
     return()=>controller.abort();
-  },[data?.issueCollectionPaged,data?.workspace.urlKey,data?.viewer.id,historyIssueId,historyIssueSummary,historyLoaded]);
+  },[historyWorkspaceKey,historyViewerId,historyIssueId,historyNavigationKey,historyLocation,historyLocalWorkspaceId,useNetworkHistory,detailAccessPending,detailWorkspaceKey,detailSyncVersion,syncClient]);
   useEffect(()=>{
     if(!data?.issueCollectionPaged || !historyIssueId || historyIssueSummary || relatedIssueKey==='[]')return;
     const controller=new AbortController(), workspace=data.workspace.urlKey, viewerId=data.viewer.id;
-    void fetchIssueRelated(historyIssueId,controller.signal).then(related=>{
-      if(!controller.signal.aborted)setData(current=>current?.workspace.urlKey===workspace && current.viewer.id===viewerId?{...current,issues:mergeIssueRecords(current.issues,related)}:current);
+    const signal=syncClient?.requestSignal(controller.signal) ?? controller.signal;
+    void fetchIssueRelated(historyIssueId,signal).then(related=>{
+      if(!signal.aborted)setData(current=>current?.workspace.urlKey===workspace && current.viewer.id===viewerId && syncScopeMatches(current,syncClient)?{...current,issues:mergeIssueRecords(current.issues,related)}:current);
     }).catch(()=>undefined);
     return()=>controller.abort();
-  },[data?.issueCollectionPaged,data?.workspace.urlKey,data?.viewer.id,historyIssueId,historyIssueSummary,relatedIssueKey]);
+  },[data?.issueCollectionPaged,data?.workspace.urlKey,data?.viewer.id,historyIssueId,historyIssueSummary,relatedIssueKey,syncClient]);
   const selectedProject =
     !data?.resourceDetailsOmitted && (route.kind === "project" || route.kind === "project-saved-view")
       ? // A stale-prefix or legacy slug (a link made before a rename) still resolves; the canonical-URL effect redirects.
@@ -1308,19 +1633,21 @@ function App() {
       if (historyIssueId !== issueId) return;
       active?.abort();
       const controller=new AbortController();active=controller;
+      const signal=syncClient?.requestSignal(controller.signal) ?? controller.signal;
       const sequence = ++historyRefreshSequence.current;
-      const context = await fetchIssueHistory(issueId,controller.signal);
-      if (controller.signal.aborted || sequence !== historyRefreshSequence.current) return;
-      setData(current => current && current.workspace.urlKey === data?.workspace.urlKey && current.viewer.id===data?.viewer.id ? { ...current,
+      const context = await loadLocalIssueHistory(issueId,localSliceScope(dataRef.current),signal,undefined,true);
+      if (signal.aborted || sequence !== historyRefreshSequence.current) return;
+      setData(current => current && current.workspace.urlKey === data?.workspace.urlKey && current.viewer.id===data?.viewer.id && syncScopeMatches(current,syncClient) ? { ...current,
         comments: { ...current.comments, [issueId]: context.comments }, activities: { ...current.activities, [issueId]: context.activities },
         issueHistoryCursors: { ...current.issueHistoryCursors, [issueId]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } },
       } : current);
+      if (historyLocation) setVerifiedHistory({ location: historyLocation, key: historyNavigationKey });
       setIssueHistoryState({key:`${data?.workspace.urlKey}:${issueId}`,loading:false,error:false});
     };
     const listener = (event: Event) => { void refresh(event).catch(() => undefined) };
     window.addEventListener('flow-issue-history-changed', listener);
     return () => { active?.abort(); window.removeEventListener('flow-issue-history-changed', listener) };
-  }, [historyIssueId, data?.workspace.urlKey, data?.viewer.id]);
+  }, [historyIssueId, historyNavigationKey, historyLocation, data?.workspace.urlKey, data?.viewer.id, syncClient]);
   useEffect(() => {
     const resolved = (event: Event) => {
       const { issue, workspaceKey, viewerId } = (event as CustomEvent<CommentActionResolution>).detail;
@@ -1329,8 +1656,8 @@ function App() {
     window.addEventListener(COMMENT_ACTION_RESOLVED, resolved);
     return () => window.removeEventListener(COMMENT_ACTION_RESOLVED, resolved);
   }, []);
-  const selectedDocument =
-    !data?.resourceDetailsOmitted && route.kind === "document"
+  const documentCandidate =
+    (!data?.resourceDetailsOmitted || syncClient && resourceWindowEnabled('documents')) && route.kind === "document"
       ? (data?.documents.find(
           (document) =>
             document.slugId === route.documentSlugId ||
@@ -1340,11 +1667,16 @@ function App() {
           findDocumentBySlugSuffix(data?.documents ?? [], route.documentSlugId)) ||
         null
       : null;
+  const documentCompleteness = documentCandidate && syncClient?.get({ kind: 'document', id: documentCandidate.id })?.completeness;
+  const selectedDocument = documentCandidate && (!syncClient || documentCompleteness === 'detail' || documentCompleteness === 'stale' && syncClient.getDetail({ kind: 'document', id: documentCandidate.id })) ? documentCandidate : null;
+  const selectedDocumentId = selectedDocument?.id;
+  useEffect(() => selectedDocumentId && syncClient ? syncClient.retainDetail({ kind: 'document', id: selectedDocumentId }) : undefined, [selectedDocumentId, syncClient]);
   // A deleted document stays on its URL (read-only, restorable) while it is in the trash.
-  const trashedDocument = !selectedDocument && !data?.resourceDetailsOmitted && route.kind === "document" ? findTrashedDocument(data?.trash, route.documentSlugId) : undefined;
-  const pageDocument = selectedDocument ?? trashedDocument?.document ?? null;
+  const trashedDocument = !selectedDocument && (!data?.resourceDetailsOmitted || syncClient && resourceWindowEnabled('trash')) && route.kind === "document" ? resourceTrashedDocument(data?.trash, route.documentSlugId) : undefined;
+  const trashBodyLoaded = !resourceWindowEnabled('documents') && !resourceWindowEnabled('trash') || data && trashedDocument && documentBodyLoaded(data, trashedDocument.document);
+  const pageDocument = selectedDocument ?? (trashBodyLoaded ? trashedDocument?.document : undefined) ?? null;
   // A document the loaded data does not hold yet (one an Agent reply just wrote) is fetched instead of left blank.
-  const routeDocument = useRouteDocument({ data, slugId: route.kind === "document" ? route.documentSlugId : undefined, found: Boolean(pageDocument), setData });
+  const routeDocument = useRouteDocument({ data, slugId: route.kind === "document" ? route.documentSlugId : undefined, found: Boolean(pageDocument) && documentCompleteness !== 'stale', setData });
   const selectedCustomer =
     route.kind === "customer"
       ? data?.customers.find((customer) =>
@@ -1454,7 +1786,7 @@ function App() {
     selectedSavedView?.id ??
     selectedProjectSavedView?.id;
   useEffect(() => {
-    if (!data || !viewedResourceType || !viewedResourceId) return;
+    if (!data || !viewedResourceType || !viewedResourceId || historyUnverified) return;
     const key = `${data.workspace.id}:${viewedResourceType}:${viewedResourceId}`;
     if (recordedResource.current === key) return;
     recordedResource.current = key;
@@ -1463,7 +1795,7 @@ function App() {
         if (recordedResource.current === key) recordedResource.current = "";
       },
     );
-  }, [data, viewedResourceId, viewedResourceType]);
+  }, [data, historyUnverified, viewedResourceId, viewedResourceType]);
   useEffect(() => {
     const update = (event: Event) => {
       const { workspaceKey, preferences } = (event as CustomEvent<{ workspaceKey: string; preferences: ResourcePreferences }>).detail;
@@ -1489,16 +1821,30 @@ function App() {
     const next = applyTeamResourcesChange(state, change);
     return next === state ? current : { ...current, teamPinnedResources: next.resources, teamResourceSections: next.sections };
   }))), []);
+  const localBaselineCursor = localCheckpointRef.current?.workspaceKey === data?.workspace.urlKey && localCheckpointRef.current?.viewerId === data?.viewer.id ? localCheckpointRef.current?.cursor : undefined;
+  const localRealtimeScope = !snapshotUnconfirmed && renderedStartup ? localSliceScope(data) : undefined;
   const realtime = useWorkspaceRealtime({
-    workspaceKey: data?.workspace.urlKey,
-    viewerId: data?.viewer.id,
+    // The stream starts once a bootstrap confirmed the workspace, resuming from the cursor it left off at; a
+    // cached snapshot is never patched by replayed events.
+    workspaceKey: snapshotUnconfirmed || !renderedStartup ? undefined : data?.workspace.urlKey,
+    viewerId: snapshotUnconfirmed || !renderedStartup ? undefined : data?.viewer.id,
     snapshot: data,
+    syncV2: Boolean(syncClient),
+    syncCursor: syncClient?.manifest.head,
+    baselineCursor: localBaselineCursor,
+    localWorkspaceId: localRealtimeScope?.workspaceId,
+    onStoreOwner: localStoreShadow.owner,
+    onReplayError: error => toast.error(translateTitle(error.status === 409 ? 'Issue changed in another session' : 'Could not update issue')),
+    onPendingEdits: setPendingEdits,
     issueId: selectedIssue?.id,
     route: location.pathname,
+    onJournalActivity: localStoreShadow.schedule,
     onRemoteSync: async (event) => {
       const workspace = data?.workspace.urlKey;
       if (!workspace) return;
       const viewerId=data.viewer.id;
+      const cacheGeneration = navigationCacheGeneration();
+      if (recipientInbox.receive?.(workspace, viewerId, event)) return;
       if (event.type === 'workspace_preferences.updated' || event.type === 'user_settings.updated' && event.aggregateId === viewerId || /^(workspace_member|team_member|membership)\./.test(event.type)) {
         window.dispatchEvent(new CustomEvent(COMMENT_ACTIONS_CHANGED));
       }
@@ -1542,6 +1888,8 @@ function App() {
         return;
       }
       if (event.type.startsWith('agent.')) {
+        const localSession = locallyCreatedAgentSession(event, realtimeClientId());
+        if (localSession) setClosedAgentSessionIds(current => new Set(current).add(localSession));
         await reloadAgentRecords(workspace, viewerId, event);
         return;
       }
@@ -1554,9 +1902,38 @@ function App() {
       }
       // Team overview pins and sections: refetch only that team's list.
       if (await refreshTeamResourcesForEvent(data, event)) return;
+      const activeSync = syncClientFor(dataRef.current);
+      if (activeSync) {
+        if (activeSync.manifest.capabilities.includes('resource-windows')) {
+          activeSync.requestReset();
+          return;
+        }
+        if (!migratedSyncSignal(event.type, activeSync.surface) && event.type !== 'sync.delta' && !Array.isArray(event.payload?.transactions)) {
+          activeSync.requestReset(true);
+          return;
+        }
+        try {
+          if (!activeSync.applyFrame(event.payload) || activeSync.needsCatchUp) await activeSync.catchUp();
+          setData(current => syncClientFor(current) === activeSync && !activeSync.disposed ? activeSync.adapt(current) : current);
+        } catch (error) {
+          if (!(error instanceof SyncResetRequired) && !activeSync.disposed) throw error;
+          // Revocation clears the old snapshot before any recovery read is awaited.
+          clearNavigationCache(viewerId, workspace);
+          initialIssueRef.current = null;
+          setInitialIssue(null);
+          setData(current => syncClientFor(current) === activeSync ? null : current);
+          loadedBootstrapRequestKey.current = '';
+          setBootstrapRetry(value => value + 1);
+        }
+        return;
+      }
       // Everything below is an entity patch, an issue patch, a metadata reload, a refetch of just the affected
       // issues, or (only for overflow, an expired cursor and unknown event types) a full resync. See realtime-dispatch.
       const action = classifyRealtimeEvent(event, Boolean(data.issueCollectionPaged));
+      // Issue lists render committed store rows. Realtime wakes the journal
+      // consumer, so a parallel SSE patch must not replace its version.
+      if (localIssueRoute && localBaselineCursor !== undefined &&
+          (action.kind === 'resync' || action.kind === 'refetch' || /^(issue|attachment|comment)\./.test(event.type))) return;
       if (action.kind === 'entity') {
         // Documents, projects, initiatives and team renames apply from the viewer's projected payload (realtime-entity-sync).
         await runEntityPlan(action.plan, event, {
@@ -1648,12 +2025,13 @@ function App() {
       setData(current=>{
         if(current?.workspace.urlKey!==workspace || current.viewer.id!==viewerId)return current;
         const authorized=visible?new Set([...visible,...current.issues.filter(issue=>!checked.has(issue.id)).map(issue=>issue.id)]):undefined;
-        const merged=mergeWorkspaceDirectory(current,next,authorized);
+        const merged=current.sync || next.sync ? next : mergeWorkspaceDirectory(current,next,authorized);
         if(deletedLabelIds)merged.issues=merged.issues.map(issue=>issue.labels.some(label=>deletedLabelIds.has(label.id))?{...issue,labels:issue.labels.filter(label=>!deletedLabelIds.has(label.id))}:issue);
         if(deletedWorkflowState){
           const replacement=next.states.find(state=>state.id===deletedWorkflowState.replacementStateId);
           if(replacement)merged.issues=merged.issues.map(issue=>issue.team.id===deletedWorkflowState.teamId&&issue.state.id===deletedWorkflowState.stateId?{...issue,state:replacement,needsDetailRefresh:!issue.isSummary}:issue);
         }
+        if (!merged.sync) writeRecoveredNavigationCache(viewerId, workspace, merged, cacheGeneration);
         return merged;
       });
       if(deletedWorkflowState)window.dispatchEvent(new CustomEvent('flow-issue-query-invalidated',{detail:{workspaceKey:workspace}}));
@@ -1665,7 +2043,28 @@ function App() {
       if(checkVisibility && sessionViewerRef.current===viewerId)setDetailAccessPending(current=>current===workspace?'':current);
     },
   });
+  useEffect(() => {
+    // A resumed workspace has already checked the journal. Its stream starts
+    // at the confirmed domain cursor and wakes the store for subsequent events.
+    if (realtime.connected && localBaselineCursor === undefined) localStoreShadow.schedule(data?.viewer.id, data?.workspace.urlKey);
+  }, [data?.viewer.id, data?.workspace.urlKey, localBaselineCursor, localStoreShadow, realtime.connected]);
   useDesktopNotifications(data);
+  useEffect(() => {
+    if (!syncClient || !realtime.connected) return;
+    let active = true;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const reconcile = async (attempt: number) => {
+      try { await syncClient.catchUp(); }
+      catch {
+        if (!active || syncClient.disposed) return;
+        if (attempt < 2) retry = setTimeout(() => void reconcile(attempt + 1), 400);
+        else syncClient.requestReset(true);
+      }
+    };
+    // Cover commits between H0 catch-up and the shared SSE connection becoming ready.
+    void reconcile(0);
+    return () => { active = false; clearTimeout(retry); };
+  }, [syncClient, realtime.connected]);
   const replaceIssue = (issue: Issue) =>
     setData((current) =>
       current && current.workspace.id===data?.workspace.id && current.viewer.id===data?.viewer.id
@@ -1908,9 +2307,9 @@ function App() {
     // Refresh just the open issue's history (and, in paged workspaces, the
     // issue): a workspace bootstrap would download every issue again. A full
     // snapshot still reloads for actions that can change other issues too.
-    if (selectedIssue && (data.issueCollectionPaged || !includeIssue)) {
+    if (selectedIssue && (data.issueCollectionPaged || historyScope || !includeIssue)) {
       const sequence=++historyRefreshSequence.current;
-      const [issue,context] = await Promise.all([includeIssue ? fetchIssueRecord(selectedIssue.id) : Promise.resolve(undefined), fetchIssueHistory(selectedIssue.id)]);
+      const [issue,context] = await Promise.all([includeIssue ? fetchIssueRecord(selectedIssue.id) : Promise.resolve(undefined), loadLocalIssueHistory(selectedIssue.id,historyScope,undefined,undefined,true)]);
       if(sequence!==historyRefreshSequence.current)return;
       setData(current => current?.workspace.id === data.workspace.id && current.viewer.id===data.viewer.id ? {
         ...current,
@@ -1919,6 +2318,7 @@ function App() {
         issueHistoryCursors: { ...current.issueHistoryCursors, [selectedIssue.id]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } },
         activities: { ...current.activities, [selectedIssue.id]: context.activities ?? [] },
       } : current);
+      if (historyLocation) setVerifiedHistory({ location: historyLocation, key: historyNavigationKey });
       setIssueHistoryState({key:`${data.workspace.urlKey}:${selectedIssue.id}`,loading:false,error:false});
       return;
     }
@@ -1927,7 +2327,7 @@ function App() {
   };
   const updateSelected = async (input: IssueUpdateInput) => {
     if (!selectedIssue) return;
-    await updateIssueById(selectedIssue, input);
+    await updateIssueById(selectedIssue, input, false);
     if (input.description !== undefined) void refreshActivity(false).catch(()=>setIssueHistoryState({key:`${data?.workspace.urlKey}:${selectedIssue.id}`,loading:false,error:true}));
   };
   const removeSelected = async () => {
@@ -2109,7 +2509,7 @@ function App() {
     );
     await refreshActivity();
   };
-  const updateIssueById = async (issue: Issue, input: IssueUpdateInput) => {
+  const updateIssueById = async (issue: Issue, input: IssueUpdateInput, waitForAcknowledgment = true) => {
     // Edits of one issue are sent one after another (see
     // issue-mutation-queue). While a burst of them is pending, each builds on
     // the optimistic issue of the one before, and only the last answer
@@ -2119,6 +2519,30 @@ function App() {
       dataRef.current?.issues.find((item) => item.id === issue.id) ??
       data?.issues.find((item) => item.id === issue.id) ??
       issue;
+    const queued = localRealtimeScope && queueDurableIssueEdit(localRealtimeScope, issue.id, { ...input, expectedVersion: stored.version });
+    if (queued) {
+      const reportFailure = (error: unknown) => {
+        const current = dataRef.current;
+        if (current?.viewer.id !== data?.viewer.id || current?.workspace.id !== data?.workspace.id || sessionViewerRef.current !== data?.viewer.id) return;
+        const refusal = error instanceof ApiError && (error.status === 403 || error.status === 404);
+        const conflict = error instanceof ApiError && error.status === 409;
+        if (refusal) dropInaccessibleIssue(issue.id);
+        if (conflict && error.current) replaceIssue(error.current as Issue);
+        toast.error(translateTitle(conflict ? 'Issue changed in another session' : 'Could not update issue'));
+      };
+      const durable = await queued.catch(error => { reportFailure(error); throw error });
+      if (durable) {
+        const acknowledged = durable.acknowledged.then(updated => {
+          const latest = dataRef.current?.issues.find(item => item.id === updated.id);
+          if ((updated.version ?? 0) >= (latest?.version ?? 0)) replaceIssue(updated);
+          return updated;
+        }, error => { reportFailure(error); throw error });
+        if (waitForAcknowledgment) return acknowledged;
+        // The editor can flush the next change once this one is durable.
+        void acknowledged.catch(() => undefined);
+        return applyOptimisticIssue(stored, input, data);
+      }
+    }
     const pending = issueEditBursts.current.get(issue.id);
     const current =
       pending && (pending.latest.version ?? 0) >= (stored.version ?? 0)
@@ -2761,9 +3185,9 @@ function App() {
     );
     return initiative;
   };
-  const addInitiativeLabel = async (name: string): Promise<IssueLabel> => {
+  const addInitiativeLabel = async (name: string, groupId?: string): Promise<IssueLabel> => {
     const label = await run(
-      () => createWorkspaceLabel({ name, resourceType: "initiative" }),
+      () => createWorkspaceLabel({ name, resourceType: "initiative", groupId }),
       "Could not create initiative label",
     );
     setData((current) =>
@@ -4799,13 +5223,17 @@ function App() {
     </WorkspaceStoreProvider>
   );
   if (authenticationPolicy && !authPath) return withStore(<AuthenticationPolicyPage code={authenticationPolicy}/>);
-  if (!authReady) return withStore(<AppStartup />);
+  if (!authReady) return withStore(startupUnreachable ? <AppConnectionError retry={() => startupRetryRef.current?.()} /> : <AppStartup />);
   const handleAuthenticated = async (authenticated: AuthSession, returnTo?: string) => {
     // Signing in as someone else without a logout in between: the previous viewer's cached rows go.
     const previousViewerId = sessionViewerRef.current;
     if (previousViewerId && previousViewerId !== authenticated.user.id) clearNavigationCache(previousViewerId);
+    // So is anything this device kept for its last viewer (a session that ended without a logout here).
+    const rememberedViewerId = readRememberedWorkspace()?.viewerId;
+    if (rememberedViewerId && rememberedViewerId !== authenticated.user.id && rememberedViewerId !== previousViewerId) clearNavigationCache(rememberedViewerId);
     setSession(authenticated);
     const nextAccount = await fetchAccountBootstrap();
+    await clearUnlistedLocalStores(authenticated.user.id, nextAccount.workspaces.map(item => item.workspace));
     setAccount(nextAccount);
     setError(false);
     navigateTo(returnTo || "/", { replace: true });
@@ -4929,6 +5357,7 @@ function App() {
       </Suspense>
     );
   }
+  if (data?.sync && data.sync.surface !== syncSurface) return withStore(error ? <ErrorState retry={load} /> : <AppStartup />);
   if (!data && !error && route.kind !== "issue" && (!previewIssue || previewIssue.isSummary)) return withStore(<AppStartup />);
   if (!data)
     return withStore(
@@ -4968,6 +5397,7 @@ function App() {
       >
         <SettingsPage
           data={data}
+          snapshotPending={snapshotUnconfirmed}
           page={settingsRoute.page}
           notificationChannel={settingsRoute.notificationChannel}
           onNavigateNotification={channel => navigateTo(`${settingsPath(data.workspace.urlKey,'notifications')}${channel ? `/${channel}` : ''}`)}
@@ -5199,10 +5629,10 @@ function App() {
             <IssueDetails
               key={selectedIssue.id}
               issue={selectedIssue}
-              data={data}
+              data={historyUnverified ? { ...data, comments: {}, activities: {}, issueHistoryCursors: {} } : data}
               full
               triageView={inTriage}
-              historyLoading={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}`&&issueHistoryState.loading}
+              historyLoading={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}` && issueHistoryState.error ? false : historyUnverified || issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}` && issueHistoryState.loading}
               historyError={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}`&&issueHistoryState.error ? 'Could not load issue history' : undefined}
               onRetryHistory={()=>{void refreshActivity(false).catch(()=>undefined)}}
               returnPath={issueListContextPath(location.state, data.workspace.urlKey)}
@@ -5257,7 +5687,10 @@ function App() {
   };
   const openIssue = (issue: Issue, sequence?: string[], sibling = false) => {
     if (data.issueCollectionPaged) setData(current => current ? { ...current, issues: [issue, ...current.issues.filter(item => item.id !== issue.id)].slice(0, 2000) } : current);
-    rememberResult("issue", issue.id);
+    const scope = localCheckpointRef.current && localSliceScope(data);
+    localIssueVisit.current?.abort();
+    localIssueVisit.current = scope ? preloadLocalIssueVisit(issue, scope) : undefined;
+    if (!scope) rememberResult("issue", issue.id);
     navigateTo(issuePath(data.workspace.urlKey, issue), {
       state: sequence ? { issueSequence: sequence.slice(0, 1000) } : sibling ? { issueSibling: true } : undefined,
     });
@@ -5431,7 +5864,7 @@ function App() {
       ) : (
       <Suspense
         fallback={
-          <main className="main-panel">
+          <main className="main-panel" aria-busy="true">
             <SkeletonRows />
           </main>
         }
@@ -5767,6 +6200,7 @@ function App() {
             key={pageDocument.id}
             data={data}
             deletedEntry={trashedDocument?.entry}
+            bodyPending={snapshotUnconfirmed}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onNavigate={(path) => navigateTo(path)}
             origin={navigationLabel(navigationReturnPath(location.state, data.workspace.urlKey, ''), data)}
@@ -5778,15 +6212,26 @@ function App() {
               // Other document actions refetch just this document and its thread (comments are content records
               // the metadata projection omits); a document the viewer can no longer open is dropped.
               const workspaceKey = data.workspace.urlKey, viewerId = data.viewer.id, documentId = pageDocument.id;
-              const mine = (current: BootstrapData | null): current is BootstrapData => current?.workspace.urlKey === workspaceKey && current.viewer.id === viewerId;
+              const mine = (current: BootstrapData | null): current is BootstrapData => current?.workspace.urlKey === workspaceKey && current.viewer.id === viewerId && syncScopeMatches(current, syncClient) && syncClient?.get({ kind: 'document', id: documentId })?.completeness !== 'deleted';
               if (saved) {
+                if (syncClient?.manifest.capabilities.includes('resource-windows')) {
+                  if (!mine(dataRef.current)) return;
+                  try {
+                    const next = await refreshResourceDocument(data, documentId, syncClient.requestSignal());
+                    setData(current => { if (mine(current)) return next; syncClientFor(next)?.dispose(); return current; });
+                  } catch { if (mine(dataRef.current)) syncClient.requestReset(); }
+                  return;
+                }
                 setData(current => mine(current) ? upsertDocument(current, saved) : current);
                 return;
               }
+              if (trashedDocument && syncClient && (resourceWindowEnabled('documents') || resourceWindowEnabled('trash'))) { syncClient.requestReset(!syncClient.manifest.capabilities.includes('resource-windows')); return; }
               const [document, comments] = await Promise.all([
-                getDocument(documentId).catch(error => { if (inaccessibleResource(error)) return null; throw error; }),
+                (resourceWindowEnabled('documents') || resourceWindowEnabled('trash') ? fetchResourceDocument(workspaceKey, documentId, syncClient?.requestSignal() ?? new AbortController().signal) : getDocument(documentId)).catch(error => { if (inaccessibleResource(error)) return null; throw error; }),
                 listDocumentComments(documentId).catch(() => undefined),
               ]);
+              if (!mine(dataRef.current)) return;
+              if (syncClient && (!document || document.deletedAt)) { syncClient.requestReset(Boolean(document?.deletedAt) && !syncClient.manifest.capabilities.includes('resource-windows')); return; }
               setData(current => {
                 if (!mine(current)) return current;
                 // A deleted document still answers (from "Recently deleted"), with deletedAt.
@@ -6072,6 +6517,7 @@ function App() {
               projectUpdates={data.projectUpdates}
               teams={data.teams}
               users={data.users}
+              labelGroups={data.labelGroups.filter(group => group.resourceType === "initiative")}
               labels={labelsForResource(
                 data.labels,
                 "initiative",
@@ -6216,6 +6662,7 @@ function App() {
         {page === "inbox" && (
           <InboxAppPage
             data={data}
+            pending={snapshotUnconfirmed}
             activeTab={route.kind === "inbox" && route.tab ? route.tab : "all"}
             onTabChange={(tab) => navigateTo(inboxPath(data.workspace.urlKey, tab === "all" ? undefined : tab))}
             presence={realtime.presence}
@@ -6267,6 +6714,7 @@ function App() {
             renderIssuePreview={renderIssuePreview}
             key={route.view}
             data={data}
+            windowedList={localBaselineCursor !== undefined}
             initialView={route.view}
             onNavigateView={(_view, href) => navigateTo(href)}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
@@ -6315,6 +6763,7 @@ function App() {
           <IssueExplorerPage
             key={`workspace-${route.view}-${location.search}`}
             data={data}
+            windowedList={localBaselineCursor !== undefined}
             initialInsightFilters={readInsightDrillFilters(location.search)}
             initialLabelId={
               new URLSearchParams(location.search).get("label") ?? undefined
@@ -6366,6 +6815,7 @@ function App() {
             key={`${route.teamKey}-${route.kind === "team-board" ? "board" : route.view}`}
             boardRoute={route.kind === "team-board"}
             data={data}
+            windowedList={localBaselineCursor !== undefined}
             initialStatusId={
               new URLSearchParams(location.search).get("status") ?? undefined
             }
@@ -7392,6 +7842,7 @@ function App() {
         )}
       </Suspense>
       {data.resourceDetailsOmitted && ['project-detail','document-detail'].includes(page) && <main className="main-panel" aria-busy="true"><div role="status">Loading…</div></main>}
+      <Suspense fallback={null}>
       {toolbarAgentSession && (
         <AgentChatPanel
           data={data}
@@ -7440,7 +7891,7 @@ function App() {
           }}
         />
       )}
-      <AgentChatPanel
+      {floatingAgentOpen !== undefined && <AgentChatPanel
         data={data}
         onCreateSkill={() => { setFloatingAgentOpen(false); navigateTo(newAgentSkillPath(data.workspace.urlKey)) }}
         // The page's issue rides along; a request from an issue shown elsewhere (a peek, the inbox) brings its own.
@@ -7472,14 +7923,15 @@ function App() {
         // Escape hides the chat with its draft, like the Agent button; only the X discards (and asks first).
         onHide={() => setFloatingAgentOpen(false)}
         onOpenFullPage={(session) => { setFloatingAgentOpen(false); navigateTo(agentPath(data.workspace.urlKey, session?.slugId)) }}
-      />
+      />}
+      </Suspense>
       <div className="bottom-agent">
         {/* Minimized floating chats park here as pills's bottom bar. */}
         <div className="bottom-agent__chats" data-agent-dock-slot="" />
         <FlowTooltip disabled={floatingAgentOpen} label="New chat" shortcut="⌘ J" side="top">
           <button
             aria-label="Agent"
-            aria-expanded={floatingAgentOpen}
+            aria-expanded={Boolean(floatingAgentOpen)}
             onClick={() => setFloatingAgentOpen((value) => !value)}
             type="button"
           >
@@ -7630,14 +8082,6 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   return "not-found";
 }
 
-function isProjectListRoute(route: AppRoute) {
-  return route.kind === 'projects'
-    || route.kind === 'team-projects'
-    || route.kind === 'projects-new-view'
-    || route.kind === 'projects-saved-view'
-    || route.kind === 'team-projects-new-view'
-    || route.kind === 'team-projects-saved-view'
-}
 function MainIssuePanel({ children, ...props }: React.HTMLAttributes<HTMLElement>) {
   return <main className="main-panel issue-panel" {...props}>{children}</main>;
 }
@@ -7715,8 +8159,9 @@ function applyOptimisticIssue(
   issue: Issue,
   input: IssueUpdateInput,
   data: BootstrapData | null,
+  updatedAt = new Date().toISOString(),
 ): Issue {
-  const next: Issue = { ...issue, updatedAt: new Date().toISOString() };
+  const next: Issue = { ...issue, updatedAt };
   if (input.title !== undefined) next.title = input.title;
   if (input.description !== undefined) next.description = input.description;
   if (input.descriptionState !== undefined)
@@ -7771,7 +8216,7 @@ function applyOptimisticIssue(
     next.nextOccurrenceAt = input.nextOccurrenceAt || undefined;
   if (input.sortOrder !== undefined) next.sortOrder = input.sortOrder;
   if (input.archived !== undefined)
-    next.archivedAt = input.archived ? new Date().toISOString() : undefined;
+    next.archivedAt = input.archived ? updatedAt : undefined;
   if (input.descriptionData !== undefined) {
     next.documentContent = {
       id: issue.documentContent?.id ?? `document_content_${issue.id}`,

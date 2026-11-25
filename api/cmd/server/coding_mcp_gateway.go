@@ -297,7 +297,7 @@ func (s *server) auditCodingMCPToolCall(caller codingSandboxCaller, policy appli
 		"sandboxId": caller.grant.SandboxID, "userId": caller.session.CreatorID, "durationMs": elapsed.Milliseconds(),
 	}
 	ctx := store.WithMetadataFields(context.Background(), "auditLog")
-	if err := s.store.MutateWorkspace(ctx, caller.grant.WorkspaceKey, "audit.coding_mcp", caller.session.ID, map[string]any{"action": "coding_session.mcp_tool_call"}, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspaceScoped(ctx, caller.grant.WorkspaceKey, "audit.coding_mcp", caller.session.ID, map[string]any{"action": "coding_session.mcp_tool_call"}, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
 		appendAudit(data, "coding_session.mcp_tool_call", "coding_session", caller.session.ID, metadata)
 		return nil
 	}); err != nil {

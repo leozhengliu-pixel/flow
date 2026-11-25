@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p20_resource_reads.go",
+  "unmigrated": 0,
+  "consumers": {
+    "scaleP20DocumentMetadata": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginDocumentRead"],
+      "temperature": "hot",
+      "reason": "Tier B P20 adapter uses the proven owned BeginDocumentRead selection for exact IDs, old/suffix links and matching trash, with strict canonical-large rejection retained. Detail/history/revision/trash callers defer Close through final encoding; each batch materializes its item before closing, avoiding accumulation of fifty owners. The literal SelectedDocumentMetadata selector remains unchanged off mode and independently pending for arbitrary selectors. TestScaleP21HotDocumentReadHTTPMatrix compares route output across the full existing permission/credential matrix and warm/reloaded/canonical sources; persistent SQLite ran the HTTP matrix twice. EncodingLifetime and Batch50 checks cover cancellation, denied/missing records, ownership and batch release; targeted boundary race and the shared document primitive's persistent/race proofs passed.",
+      "temperatureReason": "Document detail, summary history, revision, trash lookup and resource-window batch reads.",
+      "callers": ["scaleP20DocumentRead", "scaleP20Trash", "scaleP20History", "scaleP20Revision", "scaleP20Batch"]
+    }
+  }
+}

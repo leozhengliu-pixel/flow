@@ -1,0 +1,15 @@
+{
+  "source": "store/scale_p21_review_reference.go",
+  "unmigrated": 0,
+  "consumers": {
+    "InstalledReviewReferenceVisible": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted boolean predicate pins the exact installed logical source with BeginInstalledMetadataRead, preserving physical/default Go registry lookup without SQL hydration or canonical normalization. It visits ordered review ID/SlugID/IssueIDs frames only and stops at the first matching record, preserving duplicate IDs and ID/slug collisions while skipping legal huge bodies and comparing long aliases without truncation. An independent 8 MiB work allowance covers processing and at most 500 linked IDs/2 MiB decoded batch; the same VisibleIssueRecordIDs query processes every batch, with later errors overriding earlier visibility. Oversized selected links fail explicitly; no result or body escapes the internal source/work lifetime. Contextless metadata semantics use WithoutCancel for source visitation only; issue SQL uses the original request context. TestScaleP21HotReviewReferenceInstalled/RegistryAndAdmission cover exact typed NUL/long/case/space aliases, 1101 links in three SQL batches, late cancellation, explicit oversized-link rejection/recovery, physical/default/missing keys, missing logical coverage, expired parent/saturated admission, held processing work and zero full decodes/leaks. Server M/key tests validate actual preferenceReviewVisible and SQL parity.",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Review favorite/subscription authorization calls this installed-source predicate.",
+      "callers": ["server/server.preferenceReviewVisible"]
+    }
+  }
+}

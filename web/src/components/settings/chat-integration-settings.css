@@ -43,6 +43,9 @@
 .chat-binding-badge.is-revoked { color: var(--semantic-danger); border-color: color-mix(in srgb, var(--semantic-danger) 40%, var(--theme-border)); }
 .chat-binding-row[data-revoked] .chat-binding-name { color: var(--theme-text-secondary); text-decoration: line-through; }
 .chat-binding-authorization { color: var(--theme-text-tertiary); font-size: 12px; }
+.chat-binding-blocked { color: var(--theme-text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.chat-binding-blocked[data-blocked] { color: var(--semantic-warning-text); }
+.chat-binding-blocked[data-blocked] .chat-binding-skipped { color: var(--theme-text-secondary); }
 .chat-private-notice strong { display: inline-flex; align-items: center; gap: 6px; }
 .chat-fixed-value { color: var(--theme-text-secondary); font-size: 13px; }
 @media (max-width: 760px) {

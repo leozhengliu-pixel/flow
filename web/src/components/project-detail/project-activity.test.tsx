@@ -10,6 +10,11 @@ import { mentionFixture, mentionUrls } from '@/components/editor/mentions/mentio
 import type { AuditLogEntry, Comment, ProjectUpdate } from '@/types/flow'
 import { ProjectActivity } from './project-activity'
 import { projectUpdateChanges } from './project-update-changes'
+import { resetDraftAutosaves } from '@/lib/draft-autosave'
+
+// Every case renders the same project; each starts from a fresh page, with no draft (autosave or local copy) left from the
+// case before: leaving the page saves what is still waiting for the autosave delay.
+beforeEach(() => { resetDraftAutosaves(); localStorage.clear() })
 
 const apiMocks = vi.hoisted(() => ({
   listProjectHistory: vi.fn(async () => ({ nodes: [] as unknown[], nextCursor: '', total: 0 })),

@@ -100,7 +100,7 @@ func (tx *sqlTx) flushCacheRevisions() error {
 	ctx := tx.context()
 	for _, key := range keys {
 		shard := rand.IntN(cacheRevisionShards)
-		result, err := tx.Tx.ExecContext(ctx, rewriteSQL(`UPDATE workspace_cache_revisions SET revision=revision+1 WHERE workspace_key=? AND kind=? AND shard=?`, tx.dialect), key.workspace, key.kind, shard)
+		result, err := tx.Tx.ExecContext(ctx, rewriteSQL(`UPDATE workspace_cache_revisions SET revision=revision+1 WHERE workspace_key=? AND kind=? AND shard=?`, tx.dialect), textArgs(tx.dialect, []any{key.workspace, key.kind, shard})...)
 		if err != nil {
 			return err
 		}
@@ -114,7 +114,7 @@ func (tx *sqlTx) flushCacheRevisions() error {
 		// exclusively at once (an insert that ignores the conflict and
 		// updates after would hold a shared lock first, which two writers
 		// can deadlock on).
-		if _, err := tx.Tx.ExecContext(ctx, rewriteSQL(`INSERT INTO workspace_cache_revisions(workspace_key,kind,shard,revision) VALUES(?,?,?,1) ON CONFLICT(workspace_key,kind,shard) DO UPDATE SET revision=workspace_cache_revisions.revision+1`, tx.dialect), key.workspace, key.kind, shard); err != nil {
+		if _, err := tx.Tx.ExecContext(ctx, rewriteSQL(`INSERT INTO workspace_cache_revisions(workspace_key,kind,shard,revision) VALUES(?,?,?,1) ON CONFLICT(workspace_key,kind,shard) DO UPDATE SET revision=workspace_cache_revisions.revision+1`, tx.dialect), textArgs(tx.dialect, []any{key.workspace, key.kind, shard})...); err != nil {
 			return err
 		}
 	}

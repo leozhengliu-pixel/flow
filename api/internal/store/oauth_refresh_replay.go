@@ -159,6 +159,11 @@ func (s *SQLiteStore) OAuthRefreshToken(ctx context.Context, token string) (OAut
 // application. confidential is false for unknown and dynamically registered
 // public clients; ok reports whether secret matched.
 func (s *SQLiteStore) OAuthClientSecret(clientID, secret string) (confidential, ok bool) {
+	if s.metadataResidency != nil {
+		stored, found, release := s.residentOAuthIdentityValue("", clientID, residentOAuthConfidentialSecret)
+		defer release()
+		return found, found && secret != "" && subtle.ConstantTimeCompare([]byte(secret), []byte(stored)) == 1
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, data := range s.workspaces {
@@ -171,11 +176,31 @@ func (s *SQLiteStore) OAuthClientSecret(clientID, secret string) (confidential, 
 	return false, false
 }
 
+// CheckOAuthClientSecret rechecks a confidential client's current secret.
+func (s *SQLiteStore) CheckOAuthClientSecret(ctx context.Context, clientID, secret string) (bool, error) {
+	if clientID == "" || secret == "" {
+		return false, nil
+	}
+	if s.metadataResidency == nil {
+		if err := s.CheckDatabaseConnection(ctx); err != nil {
+			return false, err
+		}
+		_, matches := s.OAuthClientSecret(clientID, secret)
+		return matches, nil
+	}
+	stored, found, release, err := s.readOAuthIdentityValue(ctx, "", clientID, residentOAuthConfidentialSecret)
+	defer release()
+	return found && subtle.ConstantTimeCompare([]byte(secret), []byte(stored)) == 1, err
+}
+
 // revokeOAuthAccessFamily revokes every live access token of one refresh
 // chain. Other sessions of the same authorization keep working.
 func (s *SQLiteStore) revokeOAuthAccessFamily(ctx context.Context, workspace, family string) error {
 	var event domain.DomainEvent
 	err := s.oauthMetadataTransaction(ctx, workspace, func(tx *sqlTx, lock string, current domain.Bootstrap) (domain.Bootstrap, error) {
+		if err := oauthMetadataSelect(ctx, tx, &current, "apiKeys", []string{"RefreshFamilyID"}, family); err != nil {
+			return current, err
+		}
 		now := time.Now().UTC()
 		keys := slices.Clone(current.APIKeys)
 		changed := false

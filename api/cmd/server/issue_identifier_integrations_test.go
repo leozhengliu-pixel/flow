@@ -73,11 +73,12 @@ func TestIssueIDsNamedIn(t *testing.T) {
 // Release CI references found in commit messages resolve previous
 // identifiers too; an identifier another issue has now names that issue.
 func TestReleaseCIIssuesResolvePreviousIdentifiers(t *testing.T) {
-	data := &domain.Bootstrap{Issues: []domain.Issue{
-		{ID: "issue_moved", Identifier: "NEW-7", PreviousIdentifiers: []string{"OLD-1", "TAKEN-3"}},
-		{ID: "issue_current", Identifier: "TAKEN-3"},
+	team := domain.Team{ID: "team_open", Key: "NEW"}
+	data := &domain.Bootstrap{Teams: []domain.Team{team}, ReleasePipelines: []domain.ReleasePipeline{{ID: "pipeline_1"}}, Issues: []domain.Issue{
+		{ID: "issue_moved", Identifier: "NEW-7", PreviousIdentifiers: []string{"OLD-1", "TAKEN-3"}, Team: team},
+		{ID: "issue_current", Identifier: "TAKEN-3", Team: team},
 	}}
-	release := &domain.Release{ID: "release_1"}
+	release := &domain.Release{ID: "release_1", PipelineID: "pipeline_1"}
 	_, unknown := applyReleaseCIIssues(data, release, releaseCIInput{IssueReferences: []releaseCIIssueReference{{Identifier: "old-1"}, {Identifier: "TAKEN-3"}, {Identifier: "GONE-9"}}})
 	if !slices.Equal(release.IssueIDs, []string{"issue_moved", "issue_current"}) || !slices.Equal(unknown, []string{"GONE-9"}) {
 		t.Fatalf("release issues %v, unknown %v", release.IssueIDs, unknown)

@@ -80,8 +80,19 @@ func (s *server) purgeWorkspace(ctx context.Context, receipt store.WorkspaceDele
 		return false
 	}
 	inCatalog := false
-	if data, ok := s.store.BootstrapFor(target.Key); ok {
-		if data.Workspace.ID != target.ID {
+	var identity domain.Bootstrap
+	var catalogExists bool
+	if s.store.BoundedMetadataEnabled() {
+		var err error
+		identity, catalogExists, err = s.store.WorkspaceMetadataScoped(ctx, target.Key, store.MetadataRecordScope{})
+		if err != nil {
+			return fail("catalog", err)
+		}
+	} else {
+		identity, catalogExists = s.store.BootstrapFor(target.Key)
+	}
+	if catalogExists {
+		if identity.Workspace.ID != target.ID {
 			return fail("catalog", store.ErrWorkspaceKeyReused)
 		}
 		inCatalog = true

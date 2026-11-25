@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -90,7 +91,34 @@ func (s *server) listDeletedTeams(w http.ResponseWriter, r *http.Request) {
 func (s *server) restoreDeletedTeam(w http.ResponseWriter, r *http.Request) {
 	workspaceKey, teamID := r.PathValue("workspaceKey"), r.PathValue("teamId")
 	var restored domain.Team
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.unarchived", teamID, nil, func(data *domain.Bootstrap) error {
+	scope := store.MetadataRecordScope{
+		Read:  []store.RecordKey{{Kind: "providerJobs", ID: teamID}, {Kind: "users", ID: teamID}},
+		Write: []store.RecordKey{{Kind: "teams", ID: teamID}},
+	}
+	if teamID == "" || len(teamID) > 191 || strings.ContainsRune(teamID, '\x00') {
+		scope = store.MetadataRecordScope{}
+	} else {
+		switch {
+		case strings.HasPrefix(teamID, "team_resource_section_"):
+			scope.Read = []store.RecordKey{{Kind: "teamResourceSections", ID: teamID}}
+		case strings.HasPrefix(teamID, "team_resource_"):
+			scope.Read = []store.RecordKey{{Kind: "teamPinnedResources", ID: teamID}}
+		case strings.HasPrefix(teamID, "team_"):
+			scope.Read = nil
+		case strings.HasPrefix(teamID, "state_"):
+			scope.Read = append(scope.Read, store.RecordKey{Kind: "states", ID: teamID})
+		case strings.HasPrefix(teamID, "label_"):
+			scope.Read = append(scope.Read, store.RecordKey{Kind: "labels", ID: teamID})
+		case strings.HasPrefix(teamID, "project_"):
+			scope.Read = append(scope.Read, store.RecordKey{Kind: "projects", ID: teamID})
+		case strings.HasPrefix(teamID, "cycle_"):
+			scope.Read = append(scope.Read, store.RecordKey{Kind: "cycles", ID: teamID})
+		}
+	}
+	err := s.store.MutateWorkspaceResolved(r.Context(), workspaceKey, "team.unarchived", teamID, nil, store.MetadataResolvedScope{
+		MetadataRecordScope: scope,
+		ResolveRead:         teamMetadataProjectDisplayReads,
+	}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID })
 		if index < 0 || data.Teams[index].ArchivedAt == nil {
 			return errNotFound
@@ -107,6 +135,16 @@ func (s *server) restoreDeletedTeam(w http.ResponseWriter, r *http.Request) {
 
 // purgeExpiredTeams permanently deletes teams whose restoration window ended.
 func (s *server) purgeExpiredTeams(ctx context.Context, workspaceKey string, now time.Time) error {
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginExpiredTeamPolicyRead(ctx, workspaceKey, now, teamRestoreWindow)
+		if err != nil || !found {
+			return err
+		}
+		defer read.Close()
+		return purgeExpiredTeamIDs(read.IDs(), func(id string) error {
+			return s.purgeTeam(read.Context(), workspaceKey, id)
+		})
+	}
 	data, ok := s.store.WorkspaceMetadataFields(workspaceKey, "teams")
 	if !ok {
 		return nil
@@ -116,6 +154,15 @@ func (s *server) purgeExpiredTeams(ctx context.Context, workspaceKey string, now
 			continue
 		}
 		if err := s.purgeTeam(ctx, workspaceKey, team.ID); err != nil && !errors.Is(err, errNotFound) {
+			return err
+		}
+	}
+	return nil
+}
+
+func purgeExpiredTeamIDs(ids []string, purge func(string) error) error {
+	for _, id := range ids {
+		if err := purge(id); err != nil && !errors.Is(err, errNotFound) {
 			return err
 		}
 	}

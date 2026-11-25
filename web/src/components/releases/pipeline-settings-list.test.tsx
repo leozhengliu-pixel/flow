@@ -90,7 +90,7 @@ describe('Settings › Releases', () => {
     expect(names()).toEqual(['Alpha', 'Beta'])
     await userEvent.click(screen.getByRole('button', { name: 'Order by Pipeline name' }))
     expect(names()).toEqual(['Beta', 'Alpha'])
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Filter by pipeline name' }), 'zzz')
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Filter by pipeline name…' }), 'zzz')
     expect(screen.getByText('No matching pipelines')).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
     expect(names()).toHaveLength(2)

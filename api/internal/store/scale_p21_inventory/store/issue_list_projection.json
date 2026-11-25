@@ -1,0 +1,18 @@
+{
+  "source": "store/issue_list_projection.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateIssueListProjectionPass": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "store/SQLiteStore.migrateIssueListProjection"
+      ]
+    }
+  }
+}

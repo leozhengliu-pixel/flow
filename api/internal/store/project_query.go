@@ -49,6 +49,12 @@ type projectDirectoryCursor struct {
 	Offset int `json:"offset"`
 }
 
+// QueryProjectedProjectDirectory pages an already authorized projection,
+// including its references and counts, using the directory's usual filters.
+func QueryProjectedProjectDirectory(projects []domain.Project, query ProjectRecordQuery) ProjectRecordPage {
+	return filterProjectDirectory(projects, query)
+}
+
 func encodeProjectCursor(offset int) string {
 	raw, _ := json.Marshal(projectDirectoryCursor{Offset: offset})
 	return base64.RawURLEncoding.EncodeToString(raw)
@@ -143,11 +149,6 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 		neededPipelines[release.PipelineID] = true
 	}
 	favoritePipelines := slices.DeleteFunc(slices.Clone(data.ReleasePipelines), func(item domain.ReleasePipeline) bool { return !neededPipelines[item.ID] })
-	for index := range data.Projects {
-		data.Projects[index] = ProjectListProjection(data.Projects[index])
-	}
-	data.Projects = []domain.Project{}
-	data.Issues = []domain.Issue{}
 	data.Comments = map[string][]domain.Comment{}
 	data.Activities = map[string][]domain.ActivityEvent{}
 	data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
@@ -259,6 +260,21 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 }
 
 func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRecordQuery) (ProjectRecordPage, error) {
+	if s.BoundedMetadataEnabled() {
+		read, err := s.BeginProjectDirectoryQuery(ctx, query)
+		if err != nil {
+			return ProjectRecordPage{}, err
+		}
+		if !registerMetadataOutputClose(ctx, read.Close) {
+			read.Close()
+			return ProjectRecordPage{}, recordMetadataOutputError(ctx, ErrBoundedMetadataCoverage)
+		}
+		return read.Page, nil
+	}
+	return s.queryProjectDirectoryAdapter(ctx, query)
+}
+
+func (s *SQLiteStore) queryProjectDirectoryLegacy(ctx context.Context, query ProjectRecordQuery) (ProjectRecordPage, error) {
 	page := ProjectRecordPage{Items: []domain.Project{}, Total: -1}
 	if strings.TrimSpace(query.Workspace) == "" {
 		return page, ErrIssueQuery

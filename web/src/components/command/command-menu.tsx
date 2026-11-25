@@ -45,6 +45,7 @@ import { documentCommands, type DocumentCommandHost } from './document-commands'
 import { GLOBAL_DOCUMENT_PAGES } from './document-command-pages'
 import { GLOBAL_RELEASE_PAGES, releaseCommands, type ReleaseCommandHost } from './release-commands'
 import { contextChip, useContextCommands, type CommandPage, type ContextCommandHandlers, type PageOption } from './context-commands'
+import { LabelCommandItems } from './label-command-items'
 import './command-menu.css'
 import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
@@ -206,6 +207,7 @@ export function CommandMenu({
     detail: issue.identifier,
     select: closeAnd(() => onOpenResult({ type: 'issue', id: issue.id, identifier: issue.identifier, title: issue.title, score: 0 })),
   })) : []
+  const labelCommands = context?.kind === 'issues' ? issueCommands.labels : undefined
   const contextCommands = {
     heading: context?.kind === 'document' ? 'Document' : context?.kind === 'release' ? '' : issueCommands.heading,
     actions: context?.kind === 'document' ? documents.actions : context?.kind === 'release' ? context.actions : issueCommands.actions,
@@ -391,6 +393,9 @@ export function CommandMenu({
               <span data-i18n-ignore>{customer.name}</span>
             </Command.Item>)}
           </Command.Group>
+          <Command.Empty>{t('No results found.')}</Command.Empty>
+        </Command.List> : page && labelCommands ? <Command.List>
+          <LabelCommandItems labels={labelCommands.labels} state={labelCommands.state} query={query} groupId={page.id === 'labelGroup' ? page.payload : undefined} onToggle={labelCommands.toggle} onRemoveAll={labelCommands.removeAll} onOpenGroup={group => openPage({ id: 'labelGroup', label: group.name, payload: group.id })}/>
           <Command.Empty>{t('No results found.')}</Command.Empty>
         </Command.List> : page ? <Command.List>
           {optionGroups.map(group => <Command.Group key={group.heading ?? page.label} heading={t(group.heading ?? page.label)}>

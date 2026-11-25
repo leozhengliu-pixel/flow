@@ -1,0 +1,22 @@
+{
+  "source": "server/loop_run_steps.go",
+  "unmigrated": 1,
+  "consumers": {
+    "prepareLoopRun": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata",
+        "WorkspaceMetadata",
+        "WorkspaceMetadataFields"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "server/server.workerLoopContext",
+        "server/server.executeLoopRun"
+      ]
+    }
+  }
+}
