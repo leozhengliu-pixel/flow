@@ -9,6 +9,8 @@ import {
 } from "@/lib/api";
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from "@/lib/labels";
 import { useI18n } from "@/i18n/i18n";
+import { estimateLabel, estimatePickerOptions, teamUsesEstimates } from "@/lib/estimates";
+import { EstimateIcon, EstimateValueIcon } from "@/components/issue/estimate-icon";
 import { MentionTextField } from "@/components/editor/mention-text-field";
 import {
   ProjectStatusIcon,
@@ -1410,6 +1412,7 @@ function IssueComposer({
     assigneeId: issue?.assigneeId ?? "",
     labelIds: issue?.labelIds ?? [],
     milestoneId: issue?.milestoneId ?? "",
+    estimate: issue?.estimate,
   });
   const [value, setValue] = useState(blank);
   const [createMore, setCreateMore] = useState(false);
@@ -1419,6 +1422,8 @@ function IssueComposer({
     titleRef.current?.focus({ preventScroll: true });
   }, []);
   const team = data.teams.find((item) => item.id === value.teamId);
+  const estimateSettings = data.teamSettings?.[value.teamId || data.teams[0]?.id || ""];
+  const estimateType = estimateSettings?.estimateType ?? "notUsed";
   const assignee = data.users.find((item) => item.id === value.assigneeId);
   const milestone = milestones.find((item) => item.id === value.milestoneId);
   const issueLabels = labelOptions(data, "issue", value.teamId || undefined);
@@ -1438,6 +1443,7 @@ function IssueComposer({
         assigneeId: value.assigneeId || undefined,
         labelIds: value.labelIds,
         milestoneId: value.milestoneId || undefined,
+        estimate: value.estimate || undefined,
       },
       createMore,
     );
@@ -1530,6 +1536,22 @@ function IssueComposer({
               icon={assignee ? <UserAvatar className="avatar" name={assignee.displayName} avatarUrl={assignee.avatarUrl} userId={assignee.id} /> : <TemplateGlyph name="lead" size={14} />}
               options={userOptions(data, t("No assignee"))}
               onChange={(id) => patch({ assigneeId: id })}
+            />
+            <PropertyMenu
+              compact
+              label={t("Estimate")}
+              ariaLabel={t("Set estimate")}
+              searchPlaceholder={t("Set estimate…")}
+              value={value.estimate ? estimateLabel(value.estimate, estimateType) : t("Estimate")}
+              selectedId={value.estimate ? String(value.estimate) : "0"}
+              triggerClassName={pill(Boolean(value.estimate))}
+              icon={<EstimateIcon size={14} />}
+              options={
+                teamUsesEstimates(estimateSettings)
+                  ? estimatePickerOptions(estimateSettings).map((option) => ({ id: option.value < 0 ? "0" : option.id, label: t(option.label), icon: <EstimateValueIcon value={option.value} />, i18nIgnore: option.value >= 0 }))
+                  : [{ id: "0", label: t("Estimates are not enabled for this team"), icon: <EstimateIcon none /> }]
+              }
+              onChange={(id) => patch({ estimate: Number(id) || undefined })}
             />
             {milestones.length > 0 && (
               <PropertyMenu

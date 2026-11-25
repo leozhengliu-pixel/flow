@@ -1369,6 +1369,8 @@ export interface ProjectTemplateIssue {
   labelIds: UUID[];
   milestoneId?: UUID;
   parentId?: UUID;
+  /** Points copied onto the created issue when its team uses estimates and the value is on the team's scale. */
+  estimate?: number;
 }
 export interface ProjectTemplate {
   id: UUID;

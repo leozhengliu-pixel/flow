@@ -115,6 +115,24 @@ describe('project template editor', () => {
     expect(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' })).toHaveTextContent('2 issues')
   })
 
+  it('sets an estimate on a template issue from the team scale and saves it', async () => {
+    const user = userEvent.setup()
+    const base = fixture()
+    const data = { ...base, teamSettings: { ...base.teamSettings, [base.teams[0].id]: { ...base.teamSettings?.[base.teams[0].id], estimateType: 'fibonacci' } } } as BootstrapData
+    render(settings(data, 'new'))
+    await user.type(screen.getByPlaceholderText('Add a descriptive name…'), 'Estimated')
+    await user.type(screen.getByPlaceholderText('Project name'), 'Estimated project')
+    await user.click(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' }))
+    expect(screen.getByRole('combobox', { name: 'Set estimate' })).toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Issue title' }), 'Sized issue')
+    await user.click(screen.getByRole('combobox', { name: 'Set estimate' }))
+    await user.click((await screen.findAllByRole('option')).find(option => /^5/.test(option.textContent ?? '')) as HTMLElement)
+    await user.click(within(document.querySelector('.pt-issue-composer') as HTMLElement).getByRole('button', { name: 'Add issue' }))
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(api.createProjectTemplate).toHaveBeenCalled())
+    expect(api.createProjectTemplate.mock.calls[0][0].issues[0]).toMatchObject({ title: 'Sized issue', estimate: 5 })
+  })
+
   it('saves every preset, milestones, issues, dependencies and the team visibility', async () => {
     const user = userEvent.setup()
     const onReload = vi.fn(async () => {})
