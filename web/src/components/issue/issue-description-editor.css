@@ -91,15 +91,15 @@
 .description-image-toolbar button:hover { background: var(--description-image-toolbar-hover); color: var(--description-image-toolbar-fg-hover); }
 /* Crop mode: a full-window view with the image centred, a thirds grid and eight handles; Cancel / Save / close top right. */
 .description-image-crop { position: fixed; inset: 0; z-index: 1700; display: grid; place-items: center; background: var(--description-crop-backdrop); user-select: none; touch-action: none; }
-.description-image-crop-bar { position: absolute; top: 8px; right: 12px; display: flex; align-items: center; gap: 4px; }
+.description-image-crop-bar { position: absolute; top: 6px; right: 8px; height: 28px; display: flex; align-items: center; gap: 4px; }
 .description-image-crop-bar button { height: 24px; padding: 0 8px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--description-crop-fg); font: 500 12px / normal var(--font); cursor: default; }
 .description-image-crop-bar .description-image-crop-save { background: var(--description-crop-save-bg); color: var(--description-crop-save-fg); }
 .description-image-crop-bar .description-image-crop-save:disabled { opacity: .6; }
-.description-image-crop-bar .description-image-crop-close { display: grid; width: 24px; padding: 0; place-items: center; }
-.description-image-crop-close svg { width: 16px; height: 16px; }
+.description-image-crop-bar .description-image-crop-close { display: grid; width: 28px; height: 28px; padding: 0 2px; place-items: center; }
+.description-image-crop-close svg { width: 14px; height: 14px; }
 .description-image-crop-stage { position: relative; }
 .description-image-crop-image { display: block; width: 100%; height: 100%; }
-.description-image-crop-box { position: absolute; box-sizing: border-box; border: .5px solid var(--description-crop-line); box-shadow: 0 0 0 9999px var(--description-media-backdrop); cursor: move; }
+.description-image-crop-box { position: absolute; box-sizing: border-box; border: .5px solid var(--description-crop-line); box-shadow: 0 0 0 9999px var(--description-crop-dim); cursor: move; }
 .description-image-crop-line { position: absolute; background: var(--description-crop-grid); pointer-events: none; }
 .description-image-crop-line[data-line="v1"], .description-image-crop-line[data-line="v2"] { top: 0; bottom: 0; width: .5px; }
 .description-image-crop-line[data-line="h1"], .description-image-crop-line[data-line="h2"] { left: 0; right: 0; height: .5px; }

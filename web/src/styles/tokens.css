@@ -762,6 +762,9 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Image lightbox: a solid page and a faint checkerboard behind transparent pictures. */
 :root{--lightbox-bg:lch(5.52% .4 272);--lightbox-checker:lch(90.451% 1.2 272 / .08);--lightbox-caption-bg:lch(5.52% .4 272 / .8)}
 :root[data-theme="light"]{--lightbox-bg:lch(97.94% .5 282);--lightbox-checker:lch(19.588% 1.25 282 / .08);--lightbox-caption-bg:lch(97.94% .5 282 / .8)}
+/* Crop view: dark values are the description-crop tokens above; the light page dims what is outside the box by half. */
+:root{--description-crop-dim:var(--description-media-backdrop)}
+:root[data-theme="light"]{--description-crop-backdrop:lch(97.94% .5 282);--description-crop-dim:lch(97.94% .5 282 / .5);--description-crop-fg:lch(19.588% 1.25 282);--description-crop-save-bg:lch(99.997% .5 282);--description-crop-save-fg:lch(39.176% 1.25 282);--description-crop-line:lch(9.794% 0 282);--description-crop-grid:color(srgb .106073 .106103 .106094 / .28)}
 /* Entity hover cards (issue, document, project, person): the popover surface of the reference app. */
 :root{--hover-card-bg:lch(12.72% .85 272);--hover-card-border:lch(25.68% 1.93 272);--hover-card-rule:lch(34.32% 1.93 272);--hover-card-shadow:0 .5px 1px 1px lch(0% 0 0 / .3)}
 :root[data-theme="light"]{--hover-card-bg:#fff;--hover-card-border:#e8e8e8;--hover-card-rule:#d8d8d8;--hover-card-shadow:0 3px 6px -2px lch(0% 0 0 / .02),0 1px 1px lch(0% 0 0 / .04)}
