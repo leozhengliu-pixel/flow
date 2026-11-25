@@ -11,6 +11,7 @@ import { documentPath } from '@/lib/app-routes'
 import { formatRelativeTime } from '@/lib/relative-time'
 import type { Attachment, FlowDocument } from '@/types/flow'
 import type { IssueOptionsActions } from '@/components/issue/issue-options-menu'
+import { LinkBrandIcon, defaultLinkTitle, linkBrand } from './link-brand'
 import './issue-resources.css'
 
 const safeHost = (value: string) => { try { return new URL(value).hostname } catch { return 'Link' } }
@@ -47,19 +48,19 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
       <Popover.Root open={menuOpen} onOpenChange={setMenuOpen}>
         <Popover.Trigger asChild><button aria-label={t('Add resource to issue')} className="res-add" type="button"><Plus size={14}/></button></Popover.Trigger>
         <Popover.Portal><Popover.Content align="end" className="issue-resource-menu" data-flow-motion="floating" sideOffset={4}>
-          <button disabled={!actions} onClick={() => { setMenuOpen(false); void actions?.addDocument() }} type="button"><FileText/>{t('Create document')}</button>
-          <button disabled={!actions} onClick={() => { setMenuOpen(false); closeDialog(true) }} type="button"><Link2/>{t('Add link')}</button>
+          <button disabled={!actions} onClick={() => { setMenuOpen(false); closeDialog(true) }} type="button"><Link2/><span>{t('Add link…')}</span><kbd>Ctrl L</kbd></button>
+          <button disabled={!actions} onClick={() => { setMenuOpen(false); void actions?.addDocument() }} type="button"><FileText/><span>{t('Add document')}</span></button>
         </Popover.Content></Popover.Portal>
       </Popover.Root>
     </header>
     {!collapsed && <div className="res-rows">
-      {documents.map(document => <a className="res-row" href={documentPath(workspaceKey, document)} key={document.id}><span className="res-icon"><DocumentGlyph document={document}/></span><span className="res-title" data-i18n-ignore>{document.title}</span></a>)}
+      {documents.map(document => <a className="res-row" href={documentPath(workspaceKey, document)} key={document.id}><span className="res-icon" data-brand={!isFile ? linkBrand(link.url) ?? undefined : undefined}><DocumentGlyph document={document}/></span><span className="res-title" data-i18n-ignore>{document.title}</span></a>)}
       {[...links, ...files].map(link => {
         const isFile = link.contentType !== 'text/uri-list'
         const when = link.createdAt ? formatRelativeTime(link.createdAt, locale, nowMs) : ''
         return <a className="res-row" href={link.url} key={link.id} rel="noreferrer" target="_blank">
-          <span className="res-icon">{isFile && link.contentType.startsWith('image/') ? <img alt="" height={16} src={link.url} width={16}/> : isFile ? <File size={16}/> : link.iconUrl ? <img alt="" height={16} referrerPolicy="no-referrer" src={link.iconUrl} width={16}/> : <Link2 size={16}/>}</span>
-          <span className="res-title" data-i18n-ignore>{link.title || safeHost(link.url)}</span>
+          <span className="res-icon" data-brand={!isFile ? linkBrand(link.url) ?? undefined : undefined}>{isFile && link.contentType.startsWith('image/') ? <img alt="" height={16} src={link.url} width={16}/> : isFile ? <File size={16}/> : linkBrand(link.url) ? <LinkBrandIcon brand={linkBrand(link.url)!}/> : link.iconUrl ? <img alt="" height={16} referrerPolicy="no-referrer" src={link.iconUrl} width={16}/> : <Link2 size={16}/>}</span>
+          <span className="res-title" data-i18n-ignore>{(!link.title || link.title === safeHost(link.url)) && !isFile ? defaultLinkTitle(link.url) : link.title || safeHost(link.url)}</span>
           {(link.subtitle || isFile) && <span className="res-subtitle" data-i18n-ignore>{link.subtitle || formatFileSize(link.size)}</span>}
           <span className="res-meta"><span className="res-time">{when}</span>
             <span className="res-menu-slot" onClick={event => { event.preventDefault(); event.stopPropagation() }}>
