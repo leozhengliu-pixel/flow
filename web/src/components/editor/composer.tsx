@@ -105,7 +105,8 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
         const images = files.filter(file => file.type.startsWith('image/'))
         const rest = files.filter(file => !file.type.startsWith('image/'))
         if (images.length) insertImageFiles(editor.view, images, editor.storage.image.upload)
-        if (rest.length) insertEmbedFiles(editor.view, rest, editor.storage.image.upload)
+        // Each file goes after the one before it: a plain insert would replace the image that is still selected.
+        for (const file of rest) insertEmbedFiles(editor.view, [file], editor.storage.image.upload, editor.state.doc.content.size)
       })
       return
     }

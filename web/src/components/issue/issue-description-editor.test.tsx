@@ -84,6 +84,17 @@ describe('real Tiptap description collaboration', () => {
     expect(comment).toHaveBeenCalledWith(expect.objectContaining({ text: 'shot', src: 'https://flow.test/uploads/shot.png' }))
   })
 
+  it('hides Crop image and Delete from the image menu and toolbar when the description is read-only', async () => {
+    let editor: Editor | null = null
+    render(<IssueDescriptionEditor readOnly value={'![shot](https://flow.test/uploads/shot.png)'} editorRef={value => { editor = value }}/>)
+    await waitFor(() => expect(editor).not.toBeNull())
+    expect(document.querySelector<HTMLButtonElement>('.description-image-toolbar button[aria-label="Crop image"]')?.hidden).toBe(true)
+    fireEvent.contextMenu(screen.getByRole('img', { name: 'shot' }))
+    expect(screen.getByRole('menuitem', { name: 'Copy link' })).toBeVisible()
+    expect(screen.queryByRole('menuitem', { name: 'Crop image' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
   it('views an image from its Full screen action and deletes it from the context menu', async () => {
     let editor: Editor | null = null
     render(<IssueDescriptionEditor value={'![shot](https://flow.test/uploads/shot.png)'} editorRef={value => { editor = value }}/>)

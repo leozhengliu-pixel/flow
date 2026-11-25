@@ -73,9 +73,12 @@ export const DescriptionImage = Node.create({
       const actions = () => imageActions(editor, getPos, img)
       const toolbar = document.createElement('div')
       toolbar.className = 'description-image-toolbar'
+      const cropButton = iconButton('Crop image', cropIcon(), () => actions().crop(frame))
+      // Cropping rewrites the image, so it needs edit access (a read-only description, a guest) like Delete does.
+      cropButton.hidden = !editor.isEditable
       toolbar.append(
         iconButton('Copy image', copyImageIcon(), () => void actions().copyImage()),
-        iconButton('Crop image', cropIcon(), () => actions().crop(frame)),
+        cropButton,
         iconButton('Full screen', viewIcon(), () => actions().view()),
         iconButton('Add comment', commentIcon(), () => actions().comment()),
       )
@@ -88,7 +91,7 @@ export const DescriptionImage = Node.create({
         event.stopPropagation()
         const pos = getPos()
         if (typeof pos === 'number') editor.chain().focus().setNodeSelection(pos).run()
-        openImageContextMenu(event.clientX, event.clientY, actions(), frame)
+        openImageContextMenu(event.clientX, event.clientY, actions(), frame, editor.isEditable)
       })
       frame.append(img, toolbar)
       dom.append(frame)
@@ -97,6 +100,7 @@ export const DescriptionImage = Node.create({
         update(updated) {
           if (updated.type.name !== 'image') return false
           applyImageAttrs(img, updated.attrs)
+          cropButton.hidden = !editor.isEditable
           return true
         },
       }
@@ -262,17 +266,15 @@ function imageActions(editor: Editor, getPos: () => number | undefined, img: HTM
   }
 }
 
-function openImageContextMenu(x: number, y: number, actions: ReturnType<typeof imageActions>, frame: HTMLElement) {
+function openImageContextMenu(x: number, y: number, actions: ReturnType<typeof imageActions>, frame: HTMLElement, editable: boolean) {
   openDescriptionMenu(x, y, [
     { label: 'Copy image', icon: copyImageIcon(), run: () => void actions.copyImage() },
     { label: 'Copy link', icon: linkIcon(), run: () => void actions.copyLink() },
     { label: 'Download', icon: downloadIcon(), run: () => void actions.download() },
     'separator',
-    { label: 'Crop image', icon: cropIcon(), run: () => actions.crop(frame) },
-    'separator',
+    ...(editable ? [{ label: 'Crop image', icon: cropIcon(), run: () => actions.crop(frame) }, 'separator' as const] : []),
     { label: 'Add comment', icon: commentIcon(), run: actions.comment },
-    'separator',
-    { label: 'Delete', icon: deleteIcon(), run: actions.remove },
+    ...(editable ? ['separator' as const, { label: 'Delete', icon: deleteIcon(), run: actions.remove }] : []),
   ], 'image')
 }
 

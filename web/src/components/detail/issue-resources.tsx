@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
-import { ExternalLink, FileText, Link2, Plus, Trash2 } from 'lucide-react'
+import { ExternalLink, File, FileText, Link2, Plus, Trash2 } from 'lucide-react'
+import { formatFileSize } from '@/lib/format-file-size'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useCurrentTimeMs } from '@/hooks/use-current-time'
@@ -16,7 +17,7 @@ const safeHost = (value: string) => { try { return new URL(value).hostname } cat
 const caret = <svg aria-hidden="true" fill="currentColor" viewBox="0 0 16 16"><path d="M10.6239 6.75194C10.8183 6.41861 10.5779 6 10.192 6H5.80802C5.42212 6 5.18169 6.41861 5.37613 6.75194L7.56811 10.5096C7.76105 10.8404 8.23895 10.8404 8.43189 10.5096L10.6239 6.75194Z"/></svg>
 
 /** The issue's Resources section (the design reference's layout): a collapsible header with an add button, then one row per linked document or link. */
-export function IssueResources({ documents, links, workspaceKey, issueKey, actions, onDeleteLink }: { documents: FlowDocument[]; links: Attachment[]; workspaceKey: string; issueKey: string; actions?: IssueOptionsActions; onDeleteLink: (id: string) => Promise<void> }) {
+export function IssueResources({ documents, links, files = [], workspaceKey, issueKey, actions, onDeleteLink }: { documents: FlowDocument[]; links: Attachment[]; files?: Attachment[]; workspaceKey: string; issueKey: string; actions?: IssueOptionsActions; onDeleteLink: (id: string) => Promise<void> }) {
   const { t, locale } = useI18n()
   const nowMs = useCurrentTimeMs()
   const [collapsed, setCollapsed] = useState(false)
@@ -45,12 +46,13 @@ export function IssueResources({ documents, links, workspaceKey, issueKey, actio
     </header>
     {!collapsed && <div className="res-rows">
       {documents.map(document => <a className="res-row" href={documentPath(workspaceKey, document)} key={document.id}><span className="res-icon"><DocumentGlyph document={document}/></span><span className="res-title" data-i18n-ignore>{document.title}</span></a>)}
-      {links.map(link => {
+      {[...links, ...files].map(link => {
+        const isFile = link.contentType !== 'text/uri-list'
         const when = link.createdAt ? formatRelativeTime(link.createdAt, locale, nowMs) : ''
         return <a className="res-row" href={link.url} key={link.id} rel="noreferrer" target="_blank">
-          <span className="res-icon">{link.iconUrl ? <img alt="" height={16} referrerPolicy="no-referrer" src={link.iconUrl} width={16}/> : <Link2 size={16}/>}</span>
+          <span className="res-icon">{isFile && link.contentType.startsWith('image/') ? <img alt="" height={16} src={link.url} width={16}/> : isFile ? <File size={16}/> : link.iconUrl ? <img alt="" height={16} referrerPolicy="no-referrer" src={link.iconUrl} width={16}/> : <Link2 size={16}/>}</span>
           <span className="res-title" data-i18n-ignore>{link.title || safeHost(link.url)}</span>
-          {link.subtitle && <span className="res-subtitle" data-i18n-ignore>{link.subtitle}</span>}
+          {(link.subtitle || isFile) && <span className="res-subtitle" data-i18n-ignore>{link.subtitle || formatFileSize(link.size)}</span>}
           <span className="res-meta"><span className="res-time">{when}</span>
             <span className="res-menu-slot" onClick={event => { event.preventDefault(); event.stopPropagation() }}>
               <DropdownMenu>
