@@ -2661,7 +2661,8 @@ func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
 }
 
 func (s *server) workspaceDataWithError(r *http.Request) (domain.Bootstrap, error) {
-	if metadataReadRequest(r) || r.URL.Path == "/api/views" || strings.HasPrefix(r.URL.Path, "/api/views/") {
+	if metadataReadRequest(r) || r.URL.Path == "/api/views" || strings.HasPrefix(r.URL.Path, "/api/views/") ||
+		legacyPagedMetadataReadRequest(r) && !s.authDisabled && !s.store.BoundedMetadataEnabled() {
 		if !s.authDisabled {
 			data, handedOff := takePagedMetadata(r, workspaceKey(r), authUser(r).ID)
 			var err error
@@ -2680,6 +2681,9 @@ func (s *server) workspaceDataWithError(r *http.Request) (domain.Bootstrap, erro
 		return data, nil
 	}
 	if data, ok := r.Context().Value(issueRecordAuthorizationContext{}).(domain.Bootstrap); ok {
+		if complete, scoped := r.Context().Value(issueRecordCompleteProjectionKey{}).(*issueRecordCompleteProjection); scoped {
+			return s.completeIssueRecordProjection(r, complete, data)
+		}
 		return data, nil
 	}
 	if pagedRealtimeRequest(r) {
@@ -5207,7 +5211,7 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else if !s.authDisabled {
-			metadata, err := s.store.PagedWorkspaceMetadata(ctx, workspaceKey(r), authUser(r).ID)
+			metadata, err := s.store.LegacyIssueViewerPolicy(ctx, workspaceKey(r), authUser(r).ID)
 			if err != nil {
 				issueRecordsError(w, err)
 				return

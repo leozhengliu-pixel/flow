@@ -1,0 +1,22 @@
+{
+  "source": "store/legacy_comment_action_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "commentActionPolicySnapshot": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Legacy-only copy of the matching workspace's team graph and comment-action policy. The caller resolves the viewer's memberships separately.",
+      "accessors": [
+        "Bootstrap"
+      ]
+    },
+    "CommentActionReadMetadata": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Legacy-only copy of one issue's action rows and their referenced validation data from one installed generation.",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

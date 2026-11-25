@@ -2,12 +2,26 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
 
+func draftRecordWriteRequest(r *http.Request) bool {
+	if r.Method == http.MethodPost {
+		return r.URL.Path == "/api/drafts"
+	}
+	id, ok := strings.CutPrefix(r.URL.Path, "/api/drafts/")
+	return r.Method == http.MethodPatch && ok && id != "" && !strings.Contains(id, "/")
+}
+
 func (s *server) draftRecordValidator(r *http.Request, repo *store.SQLiteStore) (func(*domain.Bootstrap, domain.Draft) error, error) {
+	// Resource authorization checks membership. The full projection belongs
+	// here, after decoding, so draft validation sees the current references.
+	if !s.store.BoundedMetadataEnabled() && !acquireProjectionWaiting(r) {
+		return nil, r.Context().Err()
+	}
 	metadata, query, err := s.issueRecordsQueryWithStore(r, repo)
 	if err != nil {
 		return nil, err

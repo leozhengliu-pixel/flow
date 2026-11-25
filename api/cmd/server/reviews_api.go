@@ -27,6 +27,14 @@ type reviewInput struct {
 }
 
 func (s *server) listReviews(w http.ResponseWriter, r *http.Request) {
+	// Reviews use the full issue projection to redact links. The paged
+	// authorization projection does not have the same review semantics.
+	if !s.store.BoundedMetadataEnabled() && !acquireProjection(r) {
+		if !writeProjectionRefusal(w, r) {
+			writeRequestCanceled(w, r.Context().Err())
+		}
+		return
+	}
 	writeJSON(w, http.StatusOK, s.workspaceData(r).Reviews)
 }
 
