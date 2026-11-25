@@ -207,12 +207,12 @@ export function ProjectTemplateListCard({
       <header>
         <h3>
           {items.length
-            ? t(items.length === 1 ? "1 project template" : "project template count").replace("{count}", () => String(items.length))
+            ? t(items.length === 1 ? "1 project template" : "{count} project templates").replace("{count}", () => String(items.length))
             : t("No project templates")}
         </h3>
-        <button type="button" aria-label={t("Create new project template")} onClick={onCreate}>
+        <button type="button" aria-label={t("Create new project template")} className={items.length ? "pt-list-add" : undefined} onClick={onCreate}>
           <FlowGlyph name="plus" />
-          {t("New template")}
+          {!items.length && t("New template")}
         </button>
       </header>
       {items.map((item) => {

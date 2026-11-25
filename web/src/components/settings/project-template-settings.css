@@ -3,28 +3,31 @@
 /* List ----------------------------------------------------------------------------------------- */
 .pt-list-page{width:640px;color:var(--pt-text);text-rendering:optimizelegibility}
 .pt-list-header{margin:0 0 32px;padding:0 16px}
-.pt-list-header h1{margin:0;color:var(--pt-text);font-size:24px;font-weight:500;line-height:32px;letter-spacing:-.16px}
-.pt-list-header p{margin:4px 0 0;color:var(--pt-text-muted);font-size:13px;font-weight:450;line-height:22px}
+.pt-list-header h1{margin:0;text-indent:-1.44px;color:var(--pt-text);font-size:24px;font-weight:500;line-height:32px;letter-spacing:-.16px}
+.pt-list-header p{margin:4px 0 0;text-indent:-1.44px;color:var(--pt-text-muted);font-size:13px;font-weight:450;line-height:22px}
 .pt-list-header a{padding:1px 4px;border-radius:8px;color:var(--pt-text);text-decoration:none}
 .pt-list-header a::after{content:"↗";margin-left:4px}
-@media(min-width:761px){.pt-list-header a{margin-left:-3px}}
+.pt-list-header a{margin-left:-3px}
 .pt-list-header a:hover{background:var(--pt-back-hover-bg)}
 .pt-list-card{overflow:hidden;border-radius:10px;background:var(--pt-surface);box-shadow:var(--pt-list-ring)}
-.pt-list-card>header{box-sizing:border-box;height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px}
-.pt-list-card>header h3{margin:0;padding-bottom:2px;color:var(--pt-text);font-size:13px;font-weight:450;line-height:normal}
+.pt-list-card>header{box-sizing:border-box;height:60px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px}
+.pt-list-card>header h3{margin:0;padding-bottom:2.5px;color:var(--pt-text);font-size:13px;font-weight:500;line-height:normal}
 .pt-list-card>header button{box-sizing:border-box;height:32px;display:inline-flex;align-items:center;gap:6px;padding:0 12px 0 10px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--pt-text-2);font-family:inherit;font-size:13px;font-weight:500;line-height:normal}
 .pt-list-card>header button svg{width:16px;height:16px;flex:none}
+.pt-list-card>header .pt-list-add{width:24px;height:24px;justify-content:center;gap:0;padding:0 2px;border-radius:9999px;color:var(--pt-section-icon)}
+.pt-list-card>header .pt-list-add svg{width:14px;height:14px}
 .pt-list-card>header button:hover{background:var(--pt-list-button-hover-bg);color:var(--pt-text)}
-.pt-list-row{position:relative;box-sizing:border-box;height:64px;display:grid;grid-template-columns:44px minmax(0,1fr) 24px;align-items:center;padding:0 16px;border-top:.5px solid var(--pt-border)}
+.pt-list-row{position:relative;box-sizing:border-box;height:64px;display:grid;grid-template-columns:44px minmax(0,1fr) 24px;align-items:center;padding:0 16px;box-shadow:inset 0 .5px 0 var(--pt-border)}
 .pt-list-row:hover{background:var(--pt-row-hover-bg)}
 .pt-row-link{position:absolute;z-index:1;inset:0;padding:0;border:0;background:transparent}
-.pt-row-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:6px;background:color-mix(in srgb,var(--pt-icon-color) var(--pt-icon-alpha),transparent)}
+.pt-row-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:6px;background:color-mix(in srgb,var(--pt-icon-color) var(--pt-icon-alpha),transparent)}
 .pt-row-icon svg{width:16px;height:16px}
 .pt-row-text{display:flex;min-width:0;flex-direction:column}
-.pt-row-text strong{overflow:hidden;color:var(--pt-text);font-size:13px;font-weight:500;line-height:16px;text-overflow:ellipsis;white-space:nowrap}
-.pt-row-text small{color:var(--pt-text-muted);font-size:12px;line-height:16px}
+.pt-row-text strong{overflow:hidden;color:var(--pt-text);font-size:13px;font-weight:500;line-height:normal;text-overflow:ellipsis;white-space:nowrap}
+.pt-row-text small{margin-top:2px;color:var(--pt-text-muted);font-size:12px;line-height:normal}
 .pt-row-menu-trigger{position:relative;z-index:2;box-sizing:border-box;width:24px;height:24px;display:grid;place-items:center;padding:0;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--pt-section-icon)}
 .pt-row-menu-trigger svg{width:14px;height:14px}
+@media(hover:hover){.pt-row-menu-trigger{opacity:0;transition:background-color .15s,color .15s,opacity .15s}.pt-list-row:hover .pt-row-menu-trigger,.pt-row-menu-trigger:focus-visible,.pt-row-menu-trigger[data-state=open]{opacity:1}}
 .pt-row-menu-trigger:hover,.pt-row-menu-trigger[data-state=open]{background:var(--pt-section-hover-bg);color:var(--pt-text)}
 .pt-not-found{padding:48px;color:var(--pt-text-muted);text-align:center}
 
@@ -196,14 +199,16 @@ html:root body .property-command-surface.pt-picker .property-command-icon:has(.p
 
 @media (max-width:760px){
   .pt-list-page{width:100%}
-  .pt-list-header{margin-bottom:20px;padding:0 8px}
+  .pt-list-header{margin-bottom:24px;padding:0 16px}
+  .pt-list-header p{line-height:18px}
+  .pt-list-card>header{height:50px;padding:10.6667px}
+  .pt-list-row{padding:0 10.6667px;grid-template-columns:40px minmax(0,1fr) 24px}
   .pt-editor{padding-top:36px}
   .pt-back{left:-14px;top:-6px}
   .pt-editor-inner{width:100%}
   .pt-title{margin-bottom:24px}
   .pt-pills .pt-pill:not(.pt-pill--team){width:24px;justify-content:center;padding:0 2px}
   .pt-pills .pt-pill:not(.pt-pill--team)>span:not([class]){display:none}
-  .pt-pill--team{gap:5px}
   .pt-footer{height:32px;flex-wrap:nowrap;justify-content:flex-start}
 }
 @media (prefers-reduced-motion:reduce){
@@ -215,3 +220,11 @@ html:root body .property-command-surface.pt-picker .property-command-icon:has(.p
 .pt-list-row.is-inherited{cursor:default}
 .pt-list-row.is-inherited:hover{background:transparent}
 .pt-row-text small b{font-weight:inherit}
+
+/* On the template pages the phone header's menu button is 28px (measured), not the 32px of the other settings pages. */
+@media(max-width:760px){
+  html:root .settings-app .settings-main:has(.pt-list-page,.pt-editor) .settings-mobile-menu{width:28px;height:28px;flex-basis:28px}
+}
+
+/* With templates listed the header carries the icon-only add button and the count sits 1.25px above centre (measured). */
+html:root .settings-app .settings-main .pt-list-card>header:has(.pt-list-add) h3{padding-bottom:2.5px}

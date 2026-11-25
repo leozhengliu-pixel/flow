@@ -4,6 +4,7 @@
  * Merged into zhCN by translations.ts (fills gaps only).
  */
 export const projectTemplatesZhCN: Record<string, string> = {
+  "{count} project templates": "{count} 个项目模板",
   "1 dependency": "1 个依赖项",
   "{count} dependencies": "{count} 个依赖项",
   "1 initiative": "1 个目标",
