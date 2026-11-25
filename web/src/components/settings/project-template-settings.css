@@ -10,10 +10,11 @@
 .pt-list-header a{margin-left:-3px}
 .pt-list-header a:hover{background:var(--pt-back-hover-bg)}
 .pt-list-card{overflow:hidden;border-radius:10px;background:var(--pt-surface);box-shadow:var(--pt-list-ring)}
-.pt-list-card>header{box-sizing:border-box;height:60px;border-bottom:.5px solid var(--pt-header-line);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px}
+.pt-list-card>header{box-sizing:border-box;height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px}
 .pt-list-card>header h3{margin:0;padding-bottom:2px;color:var(--pt-text);font-size:13px;font-weight:500;line-height:normal}
 .pt-list-card>header button{box-sizing:border-box;height:32px;display:inline-flex;align-items:center;gap:6px;padding:0 12px 0 10px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--pt-text-2);font-family:inherit;font-size:13px;font-weight:500;line-height:normal}
 .pt-list-card>header button svg{width:16px;height:16px;flex:none}
+.pt-list-card>header:has(.pt-list-add){height:60px;border-bottom:.5px solid var(--pt-header-line)}
 .pt-list-card>header .pt-list-add{width:24px;height:24px;justify-content:center;gap:0;padding:0 2px;border-radius:9999px;color:var(--pt-section-icon)}
 .pt-list-card>header .pt-list-add svg{width:14px;height:14px}
 .pt-list-card>header button:hover{background:var(--pt-list-button-hover-bg);color:var(--pt-text)}
@@ -206,7 +207,7 @@ html:root body .property-command-surface.pt-picker .property-command-icon:has(.p
   .pt-list-page{width:100%}
   .pt-list-header{margin-bottom:24px;padding:0 16px}
   .pt-list-header p{line-height:18px}
-  .pt-list-card>header{height:50px;padding:10.6667px}
+  .pt-list-card>header,.pt-list-card>header:has(.pt-list-add){height:50px;padding:10.6667px}
   .pt-row-text{margin-right:12px}
   .pt-list-row{padding:16px 10.6667px;grid-template-columns:40px minmax(0,1fr) 24px}
   .pt-editor{padding-top:36px}
