@@ -40,8 +40,8 @@ describe('InitiativeLabelsPicker', () => {
       expect(shortcut?.querySelectorAll('kbd')).toHaveLength(2)
       expect(shortcut?.querySelector('kbd:first-child')).toHaveTextContent('N')
       expect(shortcut?.querySelector('kbd:last-child')).toHaveTextContent('L')
-      expect(shortcut?.querySelector('span')).toHaveAttribute('data-i18n-ignore', 'true')
-      expect(shortcut?.querySelector('span')).toHaveTextContent('then')
+      // The word between the keys follows the interface language.
+      expect(shortcut?.querySelector('span')).toHaveTextContent('然后')
 
       await user.click(await within(dialog).findByRole('option', { name: 'Launch' }))
       expect(onUpdate).toHaveBeenCalledWith({ labelIds: ['label-1'] })

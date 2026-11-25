@@ -38,6 +38,11 @@ export const projectTemplatesZhCN: Record<string, string> = {
   "Set team…": "设置团队…",
   "Template actions": "模板操作",
   "Change {label}": "更改{label}",
+  // Property menu names ("Change {label}") translate their label too.
+  "Members": "成员",
+  "Cycle": "周期",
+  "Assignee": "负责人",
+  "Template": "模板",
   "No matching actions": "没有匹配的操作",
   "then": "然后",
   "Users from the project teams": "项目团队中的用户",

@@ -282,7 +282,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}><Tooltip.Root open={Boolean(tooltipContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false); else { setActiveTrigger(undefined); setOpenLabelGroupId(undefined); setOpenSubmenuId(undefined) } }}>
     {menuTrigger}
     <Popover.Portal>
-      <Popover.Content ref={setTreeSurface} data-flow-motion="floating" className={`property-command-surface property-command-${kind}${labelGroupId ? ' is-label-group' : ''}${tree ? ' is-tree' : ''}${tree === 'check' ? ' is-tree-check' : ''}${surfaceClassName ? ` ${surfaceClassName}` : ''}`} role="dialog" aria-label={t('Change {label}').replace('{label}', () => label)} align={align} alignOffset={alignOffset} side={side} sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
+      <Popover.Content ref={setTreeSurface} data-flow-motion="floating" className={`property-command-surface property-command-${kind}${labelGroupId ? ' is-label-group' : ''}${tree ? ' is-tree' : ''}${tree === 'check' ? ' is-tree-check' : ''}${surfaceClassName ? ` ${surfaceClassName}` : ''}`} role="dialog" aria-label={t('Change {label}').replace('{label}', () => t(label))} align={align} alignOffset={alignOffset} side={side} sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
         {content}
       </Popover.Content>
     </Popover.Portal>
