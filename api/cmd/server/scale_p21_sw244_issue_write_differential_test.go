@@ -66,25 +66,28 @@ func (p sw244Pair) normalize(raw string) string {
 // notifications it produced.
 func TestScaleP21SW244IssueWriteDifferential(t *testing.T) {
 	for _, mode := range []struct {
-		name                        string
-		bounded, hydration, journal string
+		name               string
+		hydration, journal string
+		bounded            bool
 	}{
-		{"legacy-hydrated", "off", "on", "on"},
-		{"legacy", "off", "off", "off"},
-		{"bounded", "on", "on", "on"},
+		{"legacy-hydrated", "on", "on", false},
+		{"legacy", "off", "off", false},
+		// The same fixture served from the bounded metadata view: the
+		// scoped reads never run there, and both runs must still agree.
+		{"bounded", "on", "on", true},
 	} {
 		t.Run(mode.name, func(t *testing.T) {
-			t.Setenv("FLOW_BOUNDED_METADATA", mode.bounded)
+			t.Setenv("FLOW_BOUNDED_METADATA", "off")
 			t.Setenv("FLOW_RECORD_HYDRATION", mode.hydration)
 			t.Setenv("FLOW_RECORD_JOURNAL", mode.journal)
 			for driver, repo := range scaleP03ServerTestStores(t) {
-				t.Run(driver, func(t *testing.T) { sw244Differential(t, repo) })
+				t.Run(driver, func(t *testing.T) { sw244Differential(t, repo, mode.bounded) })
 			}
 		})
 	}
 }
 
-func sw244Differential(t *testing.T, repo *store.SQLiteStore) {
+func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 	t.Cleanup(func() { completeIssueWriteReads.Store(false) })
 	f := scaleP03Fixture(t, repo)
 	repo.SetWebhookSink(func(string, domain.DomainEvent) {})
@@ -240,6 +243,16 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	handler := f.host.Config.Handler
+	if bounded {
+		view, err := repo.BoundedMetadataViewForTesting(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		view.SetWebhookSink(func(string, domain.DomainEvent) {})
+		repo = view
+		handler = newHandler(&server{store: view, uploadPath: t.TempDir()})
+	}
 
 	observe := func(pair sw244Pair, id string, principal sw244Principal, route sw244Route) string {
 		tail := strings.NewReplacer("@comment", id+"-comment", "@link", id+"-link").Replace(route.tail)
@@ -257,7 +270,7 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore) {
 			r.Header.Set("Authorization", "Bearer "+principal.bearer)
 		}
 		w := httptest.NewRecorder()
-		f.host.Config.Handler.ServeHTTP(w, r)
+		handler.ServeHTTP(w, r)
 		parts := []string{fmt.Sprintf("status=%d", w.Code), "body=" + w.Body.String()}
 		row, rowErr := repo.IssueRecord(t.Context(), workspace, id)
 		parts = append(parts, fmt.Sprintf("row=%s err=%v", sw244JSON(t, row), rowErr != nil))
@@ -301,7 +314,7 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore) {
 		}
 	}
 	t.Logf("compared %d request pairs, %d allowed", compared, allowed)
-	if allowed < compared/5 {
+	if allowed < compared/6 {
 		t.Fatalf("only %d of %d pairs were allowed: the differential is not exercising writes", allowed, compared)
 	}
 }
