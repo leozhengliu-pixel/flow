@@ -78,7 +78,8 @@ describe('comment application mentions',()=>{
       await user.click(await screen.findByRole('button', { name: 'Attach images, files, or videos' }))
       await waitFor(() => expect(onUpload).toHaveBeenCalled())
       expect(onAttach).not.toHaveBeenCalled()
-      expect(await screen.findByRole('img', { name: 'pic.png' })).toHaveAttribute('src', '/uploads/pic.png')
+      // An uploaded picture has no alt text (the viewer then shows no caption), so it is found by its class.
+      await waitFor(() => expect(document.querySelector('img.description-image')).toHaveAttribute('src', '/uploads/pic.png'))
     } finally {
       vi.restoreAllMocks()
     }
