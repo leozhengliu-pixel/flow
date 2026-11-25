@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	// The container image is built FROM scratch without a zoneinfo database;
 	// team timezones in the file (and members' browser timezones) are checked
@@ -54,11 +55,37 @@ type File struct {
 	// Applied and Overridden list the variables LoadFileFromArgs set from the
 	// file and the ones it left because the environment sets them.
 	Applied, Overridden []string
+	// Settings are the server settings that exist only in the file.
+	Settings FileSettings
+}
+
+// FileSettings are server settings configured only in the configuration
+// file: they have no environment variable, so the environment can neither
+// set nor override them. Every new server setting goes here; the older ones
+// keep their variables. A zero value is unset (Load applies the default).
+type FileSettings struct {
+	// UploadMaxBytes is server.storage.uploadMaxBytes (Config.UploadMaxBytes).
+	UploadMaxBytes int64
+}
+
+// loadedFileSettings are the file-only settings of the file LoadFileFromArgs
+// read last; Load takes them from here, as it takes the other file settings
+// from the environment LoadFileFromArgs filled.
+var loadedFileSettings atomic.Pointer[FileSettings]
+
+func useFileSettings(settings FileSettings) { loadedFileSettings.Store(&settings) }
+
+func fileSettings() FileSettings {
+	if settings := loadedFileSettings.Load(); settings != nil {
+		return *settings
+	}
+	return FileSettings{}
 }
 
 // LoadFileFromArgs reads the configuration file named by --config PATH
-// (or --config=PATH) in args, or else by FLOW_CONFIG_FILE, and applies its
-// environment values. Without either it returns an empty File.
+// (or --config=PATH) in args, or else by FLOW_CONFIG_FILE, applies its
+// environment values and keeps its file-only settings for Load. Without
+// either it returns an empty File.
 func LoadFileFromArgs(args []string) (*File, error) {
 	path, err := configPathFromArgs(args)
 	if err != nil {
@@ -77,6 +104,7 @@ func LoadFileFromArgs(args []string) (*File, error) {
 	if err := file.ApplyDefaultLanguage(os.LookupEnv); err != nil {
 		return nil, err
 	}
+	useFileSettings(file.Settings)
 	return file, nil
 }
 
@@ -247,6 +275,12 @@ func envInt(env string, min, max int64) *field {
 func envDuration(env string) *field { return &field{kind: kindDuration, env: env} }
 func envList(env string) *field     { return &field{kind: kindList, env: env} }
 
+// fileInt is a whole number that only the file sets (FileSettings): no
+// environment variable carries it.
+func fileInt(min, max int64, apply func(*FileSettings, int64)) *field {
+	return &field{kind: kindInt, min: min, max: max, limited: true, apply: func(f *File, value any) { apply(&f.Settings, value.(int64)) }}
+}
+
 func defaultString(apply func(*domain.CreationDefaults, string), enum ...string) *field {
 	return &field{kind: kindString, enum: enum, apply: func(f *File, value any) { apply(&f.Defaults, value.(string)) }}
 }
@@ -414,6 +448,8 @@ var fileSchema = map[string]*field{
 		"storage": section(map[string]*field{
 			"driver":    envString("FLOW_STORAGE_DRIVER", "local", "s3"),
 			"localPath": envString("FLOW_STORAGE_LOCAL_PATH"),
+			// File only (FileSettings): no environment variable.
+			"uploadMaxBytes": fileInt(MinUploadMaxBytes, min(MaxUploadMaxBytes, maxPlatformInt), func(s *FileSettings, value int64) { s.UploadMaxBytes = value }),
 			"s3": section(map[string]*field{
 				"bucket":          envString("FLOW_S3_BUCKET"),
 				"region":          envString("FLOW_S3_REGION"),

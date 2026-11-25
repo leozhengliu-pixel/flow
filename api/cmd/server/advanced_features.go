@@ -1367,47 +1367,44 @@ func (s *server) deleteCustomerRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) createCustomerRequestAttachment(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, (20<<20)+(1<<20))
-	if err := r.ParseMultipartForm(20 << 20); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid attachment")
+	limit := uploadLimit()
+	form, err := openUploadForm(w, r, limit)
+	if err != nil {
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
-	file, header, err := r.FormFile("file")
+	file, err := form.File()
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "file is required")
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
 	defer file.Close()
+	filename, contentType := file.FileName(), file.Header.Get("Content-Type")
 	requestID := r.PathValue("id")
 	attachmentID := idgen.New("customer_request_attachment_")
-	safeName := attachmentID + "_" + filepath.Base(header.Filename)
+	safeName := attachmentID + "_" + filepath.Base(filename)
 	storage, err := s.storage()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not store attachment")
 		return
 	}
-	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), header.Filename, file)
+	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), filename, file)
 	if policyErr != nil {
 		writeError(w, http.StatusForbidden, policyErr.Error())
 		return
 	}
-	size, copyErr := storage.Put(r.Context(), safeName, io.LimitReader(upload, (20<<20)+1), header.Header.Get("Content-Type"))
-	if copyErr != nil || size > 20<<20 {
-		_ = storage.Delete(r.Context(), safeName)
-		if size > 20<<20 {
-			writeError(w, http.StatusRequestEntityTooLarge, "attachment exceeds 20 MB")
-		} else {
-			writeError(w, http.StatusInternalServerError, "upload failed")
-		}
+	size, err := form.Store(r.Context(), storage, safeName, upload, contentType, limit)
+	if err != nil {
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
 	var attachment domain.Attachment
-	err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "customer_request.attachment_created", requestID, map[string]string{"name": header.Filename}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "customerRequests", ID: requestID}}}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "customer_request.attachment_created", requestID, map[string]string{"name": filename}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "customerRequests", ID: requestID}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.ID == requestID })
 		if index < 0 {
 			return errNotFound
 		}
-		attachment = domain.Attachment{ID: attachmentID, Title: header.Filename, URL: "/uploads/" + safeName, ContentType: header.Header.Get("Content-Type"), Size: size, CreatedAt: time.Now().UTC(), Creator: data.Viewer}
+		attachment = domain.Attachment{ID: attachmentID, Title: filename, URL: "/uploads/" + safeName, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC(), Creator: data.Viewer}
 		data.CustomerRequests[index].Attachments = append(data.CustomerRequests[index].Attachments, attachment)
 		data.CustomerRequests[index].UpdatedAt = attachment.CreatedAt
 		appendAudit(data, "attachment_created", "customer_request", requestID, map[string]any{"attachmentId": attachment.ID})

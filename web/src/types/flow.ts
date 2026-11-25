@@ -1369,6 +1369,8 @@ export interface ProjectTemplateIssue {
   labelIds: UUID[];
   milestoneId?: UUID;
   parentId?: UUID;
+  /** Points copied onto the created issue when its team uses estimates and the value is on the team's scale. */
+  estimate?: number;
 }
 export interface ProjectTemplate {
   id: UUID;
@@ -2696,6 +2698,8 @@ export interface BootstrapData {
   trashRetentionDays?: number;
   /** The deployment's first-class chat platform (FLOW_CHAT_PLATFORM); Slack when absent. */
   chatPlatform?: "slack" | "lark" | "feishu";
+  /** The largest file one upload stores, in bytes (server.storage.uploadMaxBytes in the config file). */
+  uploadMaxBytes?: number;
   issueCollectionPaged?: boolean;
   issueCollectionRevision?: number;
   issueHistoryCursors?: Record<string, { commentsCursor?: string; activitiesCursor?: string }>;

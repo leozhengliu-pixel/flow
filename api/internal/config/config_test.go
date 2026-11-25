@@ -2,6 +2,8 @@ package config
 
 import (
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -107,6 +109,72 @@ func TestWorkspaceRegionSelectorConfig(t *testing.T) {
 	t.Setenv("FLOW_WORKSPACE_DEFAULT_REGION", "invalid")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_WORKSPACE_DEFAULT_REGION") {
 		t.Fatalf("invalid default region error = %v", err)
+	}
+}
+
+// The upload limit is a config-file-only setting: the file sets it, the
+// environment cannot.
+func TestUploadMaxBytesConfig(t *testing.T) {
+	t.Setenv(ConfigFileEnv, "")
+	t.Cleanup(func() { useFileSettings(FileSettings{}) })
+	loadWithFile := func(content string) (Config, error) {
+		t.Helper()
+		args := []string{}
+		if content != "" {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			args = []string{"--config", path}
+		}
+		if _, err := LoadFileFromArgs(args); err != nil {
+			return Config{}, err
+		}
+		return Load()
+	}
+
+	// No file: the default.
+	if loaded, err := loadWithFile(""); err != nil || loaded.UploadMaxBytes != 100<<20 || DefaultUploadMaxBytes != 104857600 {
+		t.Fatalf("default upload limit = %d err=%v, want 100 MiB", loaded.UploadMaxBytes, err)
+	}
+	// A file without the key: the default.
+	if loaded, err := loadWithFile("server:\n  log:\n    level: info\n"); err != nil || loaded.UploadMaxBytes != 100<<20 {
+		t.Fatalf("file without the key: limit=%d err=%v", loaded.UploadMaxBytes, err)
+	}
+	for value, want := range map[string]int64{"1048576": 1 << 20, "262144000": 250 << 20, "10737418240": 10 << 30} {
+		if loaded, err := loadWithFile("server:\n  storage:\n    uploadMaxBytes: " + value + "\n"); err != nil || loaded.UploadMaxBytes != want {
+			t.Fatalf("uploadMaxBytes %s: limit=%d err=%v, want %d", value, loaded.UploadMaxBytes, err, want)
+		}
+	}
+
+	// The environment has no effect, with or without the file's value.
+	t.Setenv("FLOW_UPLOAD_MAX_BYTES", "5242880")
+	if loaded, err := loadWithFile("server:\n  storage:\n    uploadMaxBytes: 262144000\n"); err != nil || loaded.UploadMaxBytes != 250<<20 {
+		t.Fatalf("environment overrode the file: limit=%d err=%v", loaded.UploadMaxBytes, err)
+	}
+	if loaded, err := loadWithFile(""); err != nil || loaded.UploadMaxBytes != 100<<20 {
+		t.Fatalf("environment set the limit: limit=%d err=%v", loaded.UploadMaxBytes, err)
+	}
+	t.Setenv("FLOW_UPLOAD_MAX_BYTES", "not a number")
+	if loaded, err := loadWithFile(""); err != nil || loaded.UploadMaxBytes != 100<<20 {
+		t.Fatalf("an invalid environment value was read: limit=%d err=%v", loaded.UploadMaxBytes, err)
+	}
+
+	// Invalid file values are refused, naming the key and its line.
+	for value, want := range map[string]string{
+		"0": "must be between 1048576 and", "1048575": "must be between 1048576 and", "10737418241": "must be between 1048576 and",
+		"-1": "must be between", "100MB": "must be a whole number", "1e8": "must be a whole number", "abc": "must be a whole number", `"262144000"`: "must be a whole number",
+	} {
+		_, err := loadWithFile("server:\n  storage:\n    uploadMaxBytes: " + value + "\n")
+		if err == nil || !strings.Contains(err.Error(), "config.yaml:3: server.storage.uploadMaxBytes: "+want) {
+			t.Fatalf("uploadMaxBytes %s accepted: %v", value, err)
+		}
+	}
+
+	// Validate still bounds the value however it was set.
+	invalid := Config{UploadMaxBytes: 1024}
+	if err := invalid.validateUploadMaxBytes(); err == nil || !strings.Contains(err.Error(), "server.storage.uploadMaxBytes") {
+		t.Fatalf("out of bounds limit accepted: %v", err)
 	}
 }
 

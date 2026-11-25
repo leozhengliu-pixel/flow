@@ -20,7 +20,7 @@ value of each one the file sets (flow.config.fileEnv).
   {{- with $v.assets.fallbackUrls }}
   FLOW_ASSET_FALLBACK_URL: {{ join "," . | quote }}
   {{- end }}
-  {{- if $v.config.file }}
+  {{- if include "flow.config.file" . }}
   # The YAML configuration file; variables marked "# config.file" carry its value.
   FLOW_CONFIG_FILE: /etc/flow/config.yaml
   {{- else if $v.config.fileConfigMap.name }}

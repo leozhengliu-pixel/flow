@@ -42542,7 +42542,7 @@
             "type": "string"
           },
           "size": {
-            "description": "Size is the exact byte length of the file (at most 20 MB).",
+            "description": "Size is the exact byte length of the file, at most the upload limit (`server.storage.uploadMaxBytes` in the config file, 100 MB by default).",
             "format": "int64",
             "type": "integer"
           }

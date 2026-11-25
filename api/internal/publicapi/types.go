@@ -84,7 +84,8 @@ type Organization struct {
 type FileUploadInput struct {
 	ContentType string `json:"contentType"`
 	Filename    string `json:"filename"`
-	// Size is the exact byte length of the file (at most 20 MB).
+	// Size is the exact byte length of the file, at most the upload limit
+	// (`server.storage.uploadMaxBytes` in the config file, 100 MB by default).
 	Size int64 `json:"size"`
 }
 

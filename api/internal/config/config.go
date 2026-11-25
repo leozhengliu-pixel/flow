@@ -36,12 +36,16 @@ type Config struct {
 	// ContentStoragePrefix is the object key prefix for offloaded database
 	// content when FLOW_STORAGE_DRIVER=s3 (FLOW_S3_CONTENT_PREFIX).
 	ContentStoragePrefix string
-	Auth                 AuthConfig
-	Agent                AgentConfig
-	TTS                  TTSConfig
-	WebSearch            WebSearchConfig
-	Telemetry            TelemetryConfig
-	Retention            RetentionConfig
+	// UploadMaxBytes is the largest file one upload stores, on every upload
+	// path. Only the config file sets it (server.storage.uploadMaxBytes, see
+	// FileSettings); DefaultUploadMaxBytes when the file does not.
+	UploadMaxBytes int64
+	Auth           AuthConfig
+	Agent          AgentConfig
+	TTS            TTSConfig
+	WebSearch      WebSearchConfig
+	Telemetry      TelemetryConfig
+	Retention      RetentionConfig
 	// AuditLogIP is how the audit log keeps client addresses
 	// (FLOW_AUDIT_LOG_IP): truncated (default; IPv4 /24, IPv6 /48), full or
 	// off.
@@ -89,6 +93,15 @@ type AssetsConfig struct {
 	// missing file is fetched from <url>/assets/<name> (FLOW_ASSET_FALLBACK_URL).
 	FallbackURLs []string
 }
+
+// Bounds of Config.UploadMaxBytes (server.storage.uploadMaxBytes): 100 MiB by
+// default, at least 1 MiB and at most 10 GiB. Uploads stream into object
+// storage, so the limit does not change how much memory a request holds.
+const (
+	DefaultUploadMaxBytes int64 = 100 << 20
+	MinUploadMaxBytes     int64 = 1 << 20
+	MaxUploadMaxBytes     int64 = 10 << 30
+)
 
 // DefaultAssetSharedKeepReleases is AssetsConfig.SharedKeepReleases' default.
 const DefaultAssetSharedKeepReleases = 5
@@ -312,6 +325,7 @@ func Load() (Config, error) {
 			},
 		},
 		ContentStoragePrefix: value("FLOW_S3_CONTENT_PREFIX", "content"),
+		UploadMaxBytes:       uploadMaxBytes(fileSettings()),
 		Storage: objectstore.Config{
 			Driver:          value("FLOW_STORAGE_DRIVER", "local"),
 			LocalPath:       value("FLOW_STORAGE_LOCAL_PATH", value("FLOW_UPLOAD_PATH", "data/uploads")),
@@ -472,6 +486,9 @@ func (c Config) Validate() error {
 	}
 	if redisMode != "disabled" && driver == "sqlite" {
 		return fmt.Errorf("Redis multi-instance coordination requires PostgreSQL or MySQL; SQLite is single-instance only")
+	}
+	if err := c.validateUploadMaxBytes(); err != nil {
+		return err
 	}
 	storage := strings.ToLower(c.Storage.Driver)
 	if storage != "local" && storage != "s3" {
@@ -698,6 +715,25 @@ func integer(name string, fallback int) int {
 		return fallback
 	}
 	return int(value)
+}
+
+// validateUploadMaxBytes bounds the upload limit; the file parser refuses an
+// out-of-bounds value first, so this guards a Config built another way.
+func (c Config) validateUploadMaxBytes() error {
+	if c.UploadMaxBytes < MinUploadMaxBytes || c.UploadMaxBytes > MaxUploadMaxBytes {
+		return fmt.Errorf("server.storage.uploadMaxBytes must be a whole number of bytes between %d (1 MiB) and %d (10 GiB)", MinUploadMaxBytes, MaxUploadMaxBytes)
+	}
+	return nil
+}
+
+// uploadMaxBytes is the config file's upload limit, or the default when the
+// file does not set it. No environment variable is read: the parser already
+// refused a value that is not a whole number in bounds, with its line.
+func uploadMaxBytes(settings FileSettings) int64 {
+	if settings.UploadMaxBytes != 0 {
+		return settings.UploadMaxBytes
+	}
+	return DefaultUploadMaxBytes
 }
 
 // integer64 is integer for values that may exceed 32 bits (byte sizes on

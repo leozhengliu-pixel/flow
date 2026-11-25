@@ -17,6 +17,7 @@ import { AgentInlineFile } from './agent-inline-file'
 import { AgentInlineImage } from './agent-inline-image'
 import { AgentInlineVideo } from './agent-inline-video'
 import { toast } from '@/lib/toast'
+import { withUploadLimit } from '@/lib/upload-limit'
 import embedStyles from '@/components/editor/embeds/embed.module.css'
 import type { EmbedSource } from '@/components/editor/embeds/embed-providers'
 import { formattingMarkdown, planPaste } from './agent-paste'
@@ -381,7 +382,8 @@ export function AgentMentionInput({
     const run = () => {
       setBlocks(current => current.map(entry => entry.el === block ? { ...entry, failed: false } : entry))
       void item.produce().then(ready => {
-        if (ready.size > agentUploadLimit(ready)) throw new Error(t(agentUploadLimit(ready) > 2 * 1024 * 1024 ? "Files over 20 MB can't be attached" : "Files over 2 MB can't be attached"))
+        const limit = agentUploadLimit(ready)
+        if (ready.size > limit) throw new Error(withUploadLimit(t("Files over {size} can't be attached"), limit))
         return onUploadFile!(ready)
       }).then(upload => {
         block.dataset.src = upload.url

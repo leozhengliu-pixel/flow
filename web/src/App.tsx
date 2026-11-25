@@ -182,6 +182,7 @@ import {
 import { holdSnapshotWrites, rejectSnapshotWrites, releaseSnapshotWrites } from '@/lib/snapshot-write-gate';
 import { rememberChatPlatform } from '@/lib/chat-platform';
 import { rememberTrashRetention } from '@/lib/trash-retention';
+import { rememberUploadLimit } from '@/lib/upload-limit';
 import { fetchWorkspacePreferences, listLoops } from '@/lib/api';
 import { getAgentSession, listAgentSessions, listAgentSkills } from '@/lib/api';
 import type { AgentSession, ReleasePipeline } from "@/types/flow";
@@ -791,6 +792,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
       const restored = await loadLocalWorkspace(account, workspaceKey, signal);
       if (restored) {
         rememberChatPlatform(restored);
+        rememberUploadLimit(restored);
         return rememberTrashRetention(restored);
       }
     }
@@ -860,6 +862,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
     if (startedFromStore.current && dataRef.current) {
       rememberChatPlatform(dataRef.current);
       rememberTrashRetention(dataRef.current);
+      rememberUploadLimit(dataRef.current);
       localStoreShadow.confirm(dataRef.current);
       return;
     }
@@ -893,6 +896,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
           localCheckpointRef.current = localStoreCursor(resumed.checkpoint);
           rememberChatPlatform(next);
           rememberTrashRetention(next);
+          rememberUploadLimit(next);
           localStoreShadow.confirm(next);
           setData(next);
         }

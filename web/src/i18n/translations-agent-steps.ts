@@ -27,6 +27,10 @@ export const agentStepsZhCN: Record<string, string> = {
   "This chat is no longer available.": "此对话已不可用。",
   // A saved agent session whose replies could not be read for now (the server was busy or unreachable).
   "Couldn't load the agent's replies right now. Try again in a moment.": "暂时无法加载 Agent 的回复，请稍后重试。",
+  // A person's follow-up (or retry request) in an agent session that did not reach the server, and the action that sends it again.
+  "Couldn't send your follow-up.": "无法发送你的后续消息。",
+  "Couldn't ask the agent to try again.": "无法让 Agent 重试。",
+  "Resend": "重新发送",
   // Chat tool labels: running and done.
   "Looking at issues…": "正在查看事项…",
   "Looked at issues": "已查看事项",

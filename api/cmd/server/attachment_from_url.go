@@ -16,8 +16,6 @@ import (
 	"flow/api/internal/store"
 )
 
-const maxAttachmentFromURLBytes = 20 << 20
-
 // attachmentFetchClient downloads user-supplied URLs. Every dial (including
 // redirect hops) must resolve to a public address, so the endpoint can't be
 // used to reach loopback, private networks or cloud metadata services.
@@ -87,7 +85,10 @@ func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request)
 		filename = "upload"
 	}
 	filename = filepath.Base(filename)
-	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), filename, io.LimitReader(resp.Body, maxAttachmentFromURLBytes+1))
+	// The file streams into storage and follows the upload limit; the fetch
+	// client's 30 second timeout still bounds how long one fetch may take.
+	limit := uploadLimit()
+	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), filename, io.LimitReader(resp.Body, limit+1))
 	if policyErr != nil {
 		writeError(w, http.StatusForbidden, policyErr.Error())
 		return
@@ -105,9 +106,9 @@ func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "upload failed")
 		return
 	}
-	if size > maxAttachmentFromURLBytes {
+	if size > limit {
 		_ = storage.Delete(r.Context(), safeName)
-		writeError(w, http.StatusRequestEntityTooLarge, "attachment exceeds 20 MB")
+		writeError(w, http.StatusRequestEntityTooLarge, "attachment exceeds "+uploadLimitText(limit))
 		return
 	}
 	var attachment domain.Attachment

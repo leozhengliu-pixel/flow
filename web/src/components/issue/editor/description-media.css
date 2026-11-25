@@ -1,0 +1,23 @@
+.description-file-node.is-audio { margin: 22px 0 0; padding: 0 0 4px; border: 0; background: none; box-shadow: none; }
+.description-file-node.is-audio .description-audio { margin: 0; }
+.description-file-node.is-uploading .description-file-toolbar { display: none; }
+.description-audio-card { box-sizing: border-box; padding: 6px; border: .5px solid var(--description-file-border); border-radius: 6px; background: var(--description-file-bg); box-shadow: var(--description-file-shadow); }
+.description-audio-row { display: flex; height: 24px; align-items: center; gap: 6px; color: var(--description-file-toolbar-fg-hover); }
+.description-audio-row button { display: grid; flex: none; width: 24px; height: 24px; place-items: center; padding: 0; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: inherit; cursor: default; }
+.description-audio-row button:hover { background: var(--description-file-toolbar-hover-bg); }
+.description-audio-row time { flex: none; color: var(--description-file-name); font: 450 12px / normal var(--font); font-variant-numeric: tabular-nums; }
+.description-audio-seek { position: relative; flex: 1; height: 24px; }
+.description-audio-seek span { position: absolute; top: 10px; left: 0; height: 4px; border-radius: 9999px; background: var(--description-file-name); }
+.description-audio-track { right: 0; opacity: .1; }
+.description-audio-buffer { right: 0; opacity: .2; }
+.description-audio-played { opacity: .5; }
+.description-audio-seek .description-audio-thumb { top: 6px; width: 2px; height: 12px; opacity: 1; }
+.description-audio-seek input { position: absolute; inset: 0; width: 100%; height: 24px; margin: 0; opacity: 0; cursor: default; }
+.description-audio-row .description-audio-rate { width: 48px; border: .5px solid var(--description-file-border); border-radius: 8px; font: 500 12px / normal var(--font); }
+.description-audio-caption { display: flex; gap: 4px; margin-top: 8px; color: var(--description-file-meta); font: 450 11px / normal var(--font); }
+.description-audio-caption .description-audio-dot { color: var(--description-file-icon); }
+.description-file-uploading { display: flex; flex: none; align-items: center; height: 16px; padding-right: 6px; color: var(--description-file-toolbar-fg-hover); font: 450 13px / normal var(--font); }
+.description-file-uploading-rule { width: 1px; height: 16px; margin-right: 12px; background: var(--description-uploading-rule); }
+.description-file-uploading > svg, .description-file-uploading > span:not(.description-file-uploading-rule) { flex: none; }
+.description-file-uploading > :nth-child(2) { margin-right: 8px; }
+.description-file-uploading-label { opacity: .8; }

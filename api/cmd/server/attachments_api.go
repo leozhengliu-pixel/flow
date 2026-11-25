@@ -159,10 +159,10 @@ func (s *server) saveLinkAttachment(ctx context.Context, r *http.Request, worksp
 			return nil
 		}
 		parsed, _ := url.Parse(input.URL)
-		attachment := domain.Attachment{ID: idgen.New("attachment_"), IssueID: target.ID, Title: parsed.Host, URL: input.URL, ContentType: "text/uri-list", CreatedAt: now, UpdatedAt: &now, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), IconURL: defaultIcon}
+		attachment := domain.Attachment{ID: idgen.New("attachment_"), IssueID: target.ID, Title: defaultLinkTitle(parsed), URL: input.URL, ContentType: "text/uri-list", CreatedAt: now, UpdatedAt: &now, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), IconURL: defaultIcon}
 		applyLinkAttachmentInput(&attachment, input)
 		if attachment.Title == "" {
-			attachment.Title = parsed.Host
+			attachment.Title = defaultLinkTitle(parsed)
 		}
 		target.Attachments = append(target.Attachments, attachment)
 		appendActivity(data, target.ID, "issue.link_created", data.Viewer, issueLinkActivityMetadata(attachment))
@@ -179,11 +179,7 @@ func (s *server) updateLinkAttachment(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	if input.URL != "" {
-		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "url cannot be changed; create a new attachment instead")
-		return
-	}
-	if err := validateLinkAttachmentInput(&input, false); err != nil {
+	if err := validateLinkAttachmentInput(&input, input.URL != ""); err != nil {
 		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, err.Error())
 		return
 	}
@@ -205,6 +201,16 @@ func (s *server) updateLinkAttachment(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC()
 		// Metadata maps are edited in place, so compare against a snapshot.
 		before := jsonSnapshot(target.Attachments[index])
+		if input.URL != "" && input.URL != target.Attachments[index].URL {
+			// Only a link has an address to edit: an uploaded file's URL is its stored object.
+			if target.Attachments[index].ContentType != "text/uri-list" {
+				return fmt.Errorf("%w: only a link attachment's url can be changed", errInvalid)
+			}
+			if slices.ContainsFunc(target.Attachments, func(item domain.Attachment) bool { return item.URL == input.URL }) {
+				return fmt.Errorf("%w: this issue already has an attachment with that url", errConflict)
+			}
+			target.Attachments[index].URL = input.URL
+		}
 		applyLinkAttachmentInput(&target.Attachments[index], input)
 		saved = target.Attachments[index]
 		if unchangedJSON(before, saved) {

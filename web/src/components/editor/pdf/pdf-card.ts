@@ -1,25 +1,23 @@
-import { deleteIcon, downloadIcon, linkIcon, viewIcon } from '@/components/issue/editor/image-extension'
-import { createGlyph, PRINT_GLYPH } from './pdf-icons'
+import { downloadIcon, linkIcon, viewIcon } from '@/components/issue/editor/image-extension'
 import { destroyPdfDocument, loadPdfDocument } from './pdf-document'
 import { pdfText } from './pdf-file-actions'
 
 const PDF_PREVIEW_MAX_BYTES = 20 * 1024 * 1024
+const PDF_PREVIEW_MAX_HEIGHT = 480
 
 type ToolbarActions = {
   view: () => void
   download: () => void
   copyLink: () => void
-  print: () => void
-  remove: () => void
 }
 
 /**
- * The toolbar on a PDF card (measured against the reference app): View PDF, Download, Copy link, Print, a hairline and
- * Delete in a 143x30 pill at the end of the card's header row. It shows while the card is hovered, selected or holds
- * keyboard focus. Delete is hidden by CSS when the editor is read-only (comments, history). Tooltips come from the
- * app-wide title tooltips (`data-tooltip-text`), which leave the node view's DOM alone.
+ * The actions on a file card (measured against the design reference): Copy link and Download, plus Full screen on a
+ * PDF, in a pill at the end of the card's header row. It shows while the card is hovered, selected or holds keyboard
+ * focus. Delete lives in the card's context menu. Tooltips come from the app-wide title tooltips
+ * (`data-tooltip-text`), which leave the node view's DOM alone.
  */
-export function createPdfToolbar(actions: ToolbarActions) {
+export function createFileToolbar(actions: ToolbarActions) {
   const dom = document.createElement('div')
   dom.className = 'description-file-toolbar'
   dom.setAttribute('role', 'toolbar')
@@ -40,31 +38,24 @@ export function createPdfToolbar(actions: ToolbarActions) {
     dom.append(button)
     return button
   }
-  add('View PDF', viewIcon(), actions.view)
-  add('Download', downloadIcon(), actions.download)
   add('Copy link', linkIcon(), actions.copyLink)
-  add('Print', createGlyph(PRINT_GLYPH), actions.print)
-  const separator = document.createElement('span')
-  separator.className = 'description-file-toolbar-separator description-file-toolbar-delete'
-  separator.setAttribute('role', 'separator')
-  separator.setAttribute('aria-orientation', 'vertical')
-  dom.append(separator)
-  add('Delete', deleteIcon(), actions.remove, 'description-file-toolbar-delete')
+  add('Download', downloadIcon(), actions.download)
+  const view = add('Full screen', viewIcon(), actions.view, 'description-file-toolbar-view')
   const localize = () => {
     for (const { button, label } of buttons) {
       const text = pdfText(label)
       button.setAttribute('aria-label', text)
       button.setAttribute('data-tooltip-text', text)
     }
-    dom.setAttribute('aria-label', pdfText('PDF actions'))
+    dom.setAttribute('aria-label', pdfText('File actions'))
   }
   localize()
-  return { dom, localize }
+  return { dom, localize, setPdf(pdf: boolean) { view.hidden = !pdf } }
 }
 
 /**
- * The strip under a PDF card: the first page rendered to a canvas (PDF.js, loaded on demand) at the card's width,
- * clipped to a 480px box. The canvas ignores the pointer, so a click on the strip only selects the card.
+ * The strip under a PDF card: the first page rendered to a canvas (PDF.js, loaded on demand) at its own size (or the
+ * card's width when that is smaller), in a strip up to 480px tall. The canvas ignores the pointer, so a click on the strip only selects the card.
  */
 export function createPdfPreview() {
   const dom = document.createElement('div')
@@ -100,19 +91,26 @@ export function createPdfPreview() {
 
   const draw = async (mine: number) => {
     const loaded = document_
-    const width = Math.floor(page.clientWidth)
+    // The strip has 8px of padding: the page is as wide as what is left, but never larger than the file's own size (96dpi).
+    const available = dom.getBoundingClientRect().width - 16
+    const width = Math.floor(available)
     if (!loaded || width < 1 || width === renderedWidth) return
     renderedWidth = width
     try {
       const first = await loaded.getPage(1)
       if (mine !== token) return
       const natural = first.getViewport({ scale: 1 })
-      const scale = width / natural.width
       const density = Math.max(1, Math.min(window.devicePixelRatio || 1, 3))
-      const viewport = first.getViewport({ scale: scale * density })
+      const own = Math.floor((natural.width * 96 * density) / 72) / density
+      const cssWidth = Math.min(available, own)
+      const cssHeight = (cssWidth * natural.height) / natural.width
+      const viewport = first.getViewport({ scale: (cssWidth / natural.width) * density })
       canvas.width = Math.floor(viewport.width)
       canvas.height = Math.floor(viewport.height)
-      canvas.style.aspectRatio = `${natural.width} / ${natural.height}`
+      page.style.width = `${cssWidth}px`
+      page.style.height = `${cssHeight}px`
+      // The strip is as tall as the page plus its padding, up to 480px; a longer page is clipped.
+      dom.style.height = `${Math.min(PDF_PREVIEW_MAX_HEIGHT, Math.ceil(cssHeight + 16))}px`
       renderTask?.cancel()
       const task = first.render({ canvas, viewport })
       renderTask = task
@@ -133,6 +131,9 @@ export function createPdfPreview() {
       token += 1
       const mine = token
       releaseDocument()
+      dom.style.height = ''
+      page.style.width = ''
+      page.style.height = ''
       dom.dataset.state = src ? 'loading' : 'empty'
       if (!src || size > PDF_PREVIEW_MAX_BYTES || typeof fetch !== 'function') return
       controller = new AbortController()
@@ -142,7 +143,7 @@ export function createPdfPreview() {
         // The card may still be laid out (or detached) when the file arrives: render once it has a width, and again when it changes.
         if (typeof ResizeObserver === 'function') {
           observer = new ResizeObserver(() => { void draw(mine) })
-          observer.observe(page)
+          observer.observe(dom)
         }
         void draw(mine)
       }).catch(() => { if (mine === token) dom.dataset.state = 'error' })

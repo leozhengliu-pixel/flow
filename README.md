@@ -148,6 +148,9 @@ be inspected without registry credentials.
 ## Configuration
 
 Flow reads configuration from environment variables passed to the API process.
+Newer settings exist only in the YAML config file (`FLOW_CONFIG_FILE`), such
+as the upload limit (`server.storage.uploadMaxBytes` in the config file, 100 MB
+by default); see [docs/configuration.md](docs/configuration.md).
 
 | Variable | Default | Description |
 | --- | --- | --- |

@@ -345,6 +345,12 @@ storage:
   # local | s3. local keeps uploads (and coding snapshot archives) on the
   # data volume; s3 is required for more than one replica.
   driver: local
+  # Largest file one upload stores, in bytes. A config-file-only setting: the
+  # chart renders it into config.yaml as server.storage.uploadMaxBytes (a
+  # value config.file sets wins; not with config.fileConfigMap). Empty keeps
+  # Flow's default of 104857600 (100 MiB). An ingress in front of Flow must
+  # accept request bodies this large.
+  uploadMaxBytes: ""
   persistence:
     enabled: true
     existingClaim: ""

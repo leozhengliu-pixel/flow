@@ -300,6 +300,19 @@ func TestConfigFileIntegerBoundsFitThePlatform(t *testing.T) {
 	}
 }
 
+func TestConfigFileUploadMaxBytes(t *testing.T) {
+	// A file-only setting: it lands in Settings and sets no variable.
+	file := mustParse(t, "server:\n  storage:\n    uploadMaxBytes: 262144000\n")
+	if file.Settings.UploadMaxBytes != 250<<20 || len(file.Env) != 0 {
+		t.Fatalf("settings = %+v env = %v", file.Settings, file.Env)
+	}
+	for _, value := range []string{"1024", "100MB", "-5"} {
+		if _, err := parse(t, "server:\n  storage:\n    uploadMaxBytes: "+value+"\n"); err == nil || !strings.Contains(err.Error(), "uploadMaxBytes") {
+			t.Fatalf("uploadMaxBytes %s accepted: %v", value, err)
+		}
+	}
+}
+
 func TestLoadFileFromArgsAndEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

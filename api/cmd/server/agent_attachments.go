@@ -6,9 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -28,8 +30,6 @@ import (
 const (
 	agentAttachmentMax      = 8
 	agentAttachmentMaxBytes = 2 << 20
-	// Composer uploads: images are shrunk by the browser first; any other file may be larger.
-	agentUploadMaxBytes = 20 << 20
 	// Images given to the model per request, newest first; older ones are named only, to bound each turn's cost.
 	agentAttachmentImages = 8
 )
@@ -290,59 +290,60 @@ func (s *server) uploadAgentFile(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAgent(w) {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, agentUploadMaxBytes+(1<<20))
-	if err := r.ParseMultipartForm(1 << 20); err != nil {
-		writeError(w, http.StatusRequestEntityTooLarge, "files must be 20 MB or smaller")
-		return
+	// Composer files follow the deployment's upload limit (server.storage.uploadMaxBytes in the config file) like every other upload; images
+	// stay at 2 MB, since the composer shrinks them first and each one goes to the model.
+	formLimit := uploadLimit()
+	form, err := openUploadForm(w, r, formLimit)
+	var file *multipart.Part
+	if err == nil {
+		file, err = form.File()
 	}
-	if r.MultipartForm != nil {
-		defer r.MultipartForm.RemoveAll()
-	}
-	file, header, err := r.FormFile("file")
-	if err != nil {
+	if errors.Is(err, errUploadFileMissing) {
 		writeError(w, http.StatusBadRequest, "file is required")
 		return
 	}
+	if err != nil {
+		writeError(w, http.StatusRequestEntityTooLarge, "files must be "+uploadLimitText(formLimit)+" or smaller")
+		return
+	}
 	defer file.Close()
-	name := strings.TrimSpace(filepath.Base(strings.TrimSpace(header.Filename)))
+	name := strings.TrimSpace(filepath.Base(strings.TrimSpace(file.FileName())))
 	if name == "" || name == "." || name == "/" {
 		name = "file"
 	}
-	declared, _, _ := mime.ParseMediaType(header.Header.Get("Content-Type"))
+	declared, _, _ := mime.ParseMediaType(file.Header.Get("Content-Type"))
 	// Like the reference app, only the declared MIME type decides: a typeless .wav is an ordinary file.
 	if strings.HasPrefix(strings.ToLower(declared), "audio/") {
 		writeError(w, http.StatusBadRequest, "audio files cannot be attached")
 		return
 	}
+	var body io.Reader = file
 	contentType := strings.ToLower(declared)
 	if contentType == "" || contentType == "application/octet-stream" {
 		contentType = firstNonEmpty(mime.TypeByExtension(strings.ToLower(filepath.Ext(name))), "application/octet-stream")
 		if contentType == "application/octet-stream" {
 			preview := make([]byte, 512)
-			n, _ := io.ReadFull(file, preview)
-			if _, err := file.Seek(0, io.SeekStart); err != nil {
+			n, err := io.ReadFull(file, preview)
+			if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 				writeError(w, http.StatusBadRequest, "could not read file")
 				return
 			}
+			body = io.MultiReader(bytes.NewReader(preview[:n]), file)
 			if sniffed, _, _ := mime.ParseMediaType(http.DetectContentType(preview[:n])); sniffed != "" && sniffed != "text/plain" {
 				contentType = sniffed
 			}
 		}
 	}
-	limit := int64(agentUploadMaxBytes)
+	limit := formLimit
 	if loopAttachmentImageType(contentType) != "" {
-		limit = agentAttachmentMaxBytes
-	}
-	if header.Size > limit {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("this file must be %d MB or smaller", limit>>20))
-		return
+		limit = min(limit, agentAttachmentMaxBytes)
 	}
 	storage, err := s.storage()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage unavailable")
 		return
 	}
-	upload, err := s.checkUploadPolicy(workspaceKey(r), name, file)
+	upload, err := s.checkUploadPolicy(workspaceKey(r), name, body)
 	if err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
@@ -353,10 +354,13 @@ func (s *server) uploadAgentFile(w http.ResponseWriter, r *http.Request) {
 		safe = "file"
 	}
 	key := fmt.Sprintf("agent_upload_%s_%s_%s", agentUploadOwner(authUser(r).ID), idgen.Stamp(), safe)
-	size, err := storage.Put(r.Context(), key, io.LimitReader(upload, limit+1), contentType)
-	if err != nil || size > limit {
-		_ = storage.Delete(context.WithoutCancel(r.Context()), key)
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("this file must be %d MB or smaller", limit>>20))
+	size, err := form.Store(r.Context(), storage, key, upload, contentType, limit)
+	if errors.Is(err, errUploadForm) || errors.Is(err, errUploadRequest) {
+		writeError(w, http.StatusRequestEntityTooLarge, "files must be "+uploadLimitText(formLimit)+" or smaller")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "this file must be "+uploadLimitText(limit)+" or smaller")
 		return
 	}
 	writeJSON(w, http.StatusCreated, domain.AgentMessageAttachment{Name: name, ContentType: contentType, Size: size, URL: "/uploads/" + key})

@@ -1673,6 +1673,8 @@ type ProjectTemplateIssue struct {
 	LabelIDs    []string `json:"labelIds,omitempty"`
 	MilestoneID string   `json:"milestoneId,omitempty"`
 	ParentID    string   `json:"parentId,omitempty"`
+	// Estimate is copied onto the created issue when its team uses estimates and the value is on the team's scale.
+	Estimate *float64 `json:"estimate,omitempty"`
 }
 
 type TemplateMilestone struct {
@@ -3108,6 +3110,9 @@ type Bootstrap struct {
 	// ChatPlatform is set on bootstrap responses only: the deployment's
 	// first-class chat platform (FLOW_CHAT_PLATFORM).
 	ChatPlatform string `json:"chatPlatform,omitempty" enum:"slack,lark,feishu"`
+	// UploadMaxBytes is set on bootstrap responses only: the largest file an
+	// upload stores (server.storage.uploadMaxBytes in the config file).
+	UploadMaxBytes int64 `json:"uploadMaxBytes,omitempty"`
 }
 
 type ProviderJob struct {

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ArrowRight, ArrowUp, FileText, Paperclip } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { uploadLimitBytes, withUploadLimit } from "@/lib/upload-limit";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AttachmentRemoveButton } from "@/components/ui/attachment-remove-button";
 import { createLoop, uploadLoopAttachment } from "@/lib/api";
@@ -15,8 +16,6 @@ import { GridLoader } from '@/components/ui/grid-loader'
 
 type Entry = { kind: "scratch" } | { kind: "prompt"; prompt: string; attachmentIds: string[] } | { kind: "template"; template: LoopTemplate };
 
-/** Server limit for prompt attachments (loops-api-contract.md → Attachments). */
-const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const MAX_ATTACHMENTS = 8;
 type PendingAttachment = { key: string; name: string; contentType: string; uploaded?: LoopAttachment };
 
@@ -49,9 +48,11 @@ export function LoopCreateHub({
 
   const attach = (files: File[]) => {
     const room = MAX_ATTACHMENTS - attachments.length;
-    const tooLarge = files.filter((file) => file.size > MAX_ATTACHMENT_BYTES);
-    if (tooLarge.length) toast.error(t("Files must be 20 MB or smaller"));
-    const accepted = files.filter((file) => file.size <= MAX_ATTACHMENT_BYTES).slice(0, Math.max(0, room));
+    // Prompt attachments follow the server's upload limit (server.storage.uploadMaxBytes in the config file; loops-api-contract.md → Attachments).
+    const limit = uploadLimitBytes();
+    const tooLarge = files.filter((file) => file.size > limit);
+    if (tooLarge.length) toast.error(withUploadLimit(t("Files must be {size} or smaller"), limit));
+    const accepted = files.filter((file) => file.size <= limit).slice(0, Math.max(0, room));
     for (const file of accepted) {
       const key = `${file.name}-${file.lastModified}-${Math.random().toString(36).slice(2)}`;
       setAttachments((items) => [...items, { key, name: file.name, contentType: file.type }]);

@@ -386,6 +386,25 @@ type: Opaque
 stringData:
   FLOW_GOOGLE_OAUTH_CLIENT_SECRET: "google-secret-value"
 ---
+# Source: flow/templates/configmap-file.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flow-config
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+data:
+  config.yaml: |
+    server:
+      storage:
+        uploadMaxBytes: 262144000
+---
 # Source: flow/templates/configmap.yaml
 apiVersion: v1
 kind: ConfigMap
@@ -408,6 +427,8 @@ data:
   FLOW_ASSET_SHARED_PATH: /app/assets-shared
   FLOW_ASSET_SHARED_KEEP_RELEASES: "8"
   FLOW_ASSET_FALLBACK_URL: "https://assets.example.com/flow,http://flow-blue.flow-blue.svc:8080"
+  # The YAML configuration file; variables marked "# config.file" carry its value.
+  FLOW_CONFIG_FILE: /etc/flow/config.yaml
   FLOW_LOG_LEVEL: "info"
   FLOW_LOG_FORMAT: "json"
   FLOW_DATABASE_DRIVER: "postgres"
@@ -817,6 +838,7 @@ spec:
       annotations:
         checksum/config: 4fd7c3acc34fc71d469e553a81ac32ed765ae0bd298d61566305cc309ecc3ddd
         checksum/secret: 8045f7c2ff8fa950c997664b41cb9b101437262f87a59a1b715715201e3b2141
+        checksum/config-file: d3c783d8054df89f2673ee9d57c431780219fc7be04835d6e4c1e2eeb23b2b53
     spec:
       serviceAccountName: flow
       # The kubernetes sandbox provider uses the in-cluster ServiceAccount token.
@@ -919,6 +941,9 @@ spec:
               mountPath: /app/data
             - name: tmp
               mountPath: /tmp
+            - name: config-file
+              mountPath: /etc/flow
+              readOnly: true
             - name: assets-shared
               mountPath: /app/assets-shared
             - name: github-app-key
@@ -933,6 +958,12 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 1Gi
+        - name: config-file
+          configMap:
+            name: flow-config
+            items:
+              - key: config.yaml
+                path: config.yaml
         - name: assets-shared
           persistentVolumeClaim:
             claimName: flow-web-assets

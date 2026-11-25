@@ -1,15 +1,15 @@
 import { useCallback, useMemo, type ReactNode } from 'react'
 import { activityTargetFromHash } from '@/components/activity/activity-highlight'
 import { findAttachmentsByURL, uploadAttachment, uploadAttachmentFromURL } from '@/lib/api'
+import { formatUploadLimit, uploadLimitBytes } from '@/lib/upload-limit'
 import type { Attachment } from '@/types/flow'
 import { ClientEditorContext, type ClientEditorProviderValue } from './client-editor-context'
-
-const DEFAULT_MAX_UPLOAD_BYTES = 20 << 20
 
 export type ClientEditorProviderProps = {
   children: ReactNode
   /** Host issue id for attachment uploads (issue description / comment composers). */
   issueId?: string
+  /** Defaults to the server's upload limit (server.storage.uploadMaxBytes in the config file, from the bootstrap). */
   maxUploadBytes?: number
   onUploadFile?: (file: File, options?: { embed?: boolean }) => Promise<Attachment | string | void>
   onUploadFromUrl?: (url: string, options?: { title?: string; embed?: boolean }) => Promise<Attachment | string | void>
@@ -30,13 +30,13 @@ function parseUpdateHash<K extends 'project-update' | 'initiative-update'>(hash:
 export function ClientEditorProvider({
   children,
   issueId,
-  maxUploadBytes = DEFAULT_MAX_UPLOAD_BYTES,
+  maxUploadBytes = uploadLimitBytes(),
   onUploadFile,
   onUploadFromUrl,
 }: ClientEditorProviderProps) {
   const checkUploadSize = useCallback((file: File) => {
     if (file.size > maxUploadBytes) {
-      return { ok: false, message: `File exceeds ${Math.round(maxUploadBytes / (1024 * 1024))} MB limit` }
+      return { ok: false, message: `File exceeds ${formatUploadLimit(maxUploadBytes)} limit` }
     }
     return { ok: true }
   }, [maxUploadBytes])

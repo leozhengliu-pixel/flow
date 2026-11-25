@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -19,44 +18,38 @@ import (
 // /uploads URL passes the attachment visibility check for everyone who can see
 // the document, and the returned URL is embedded directly into the content.
 func (s *server) createDocumentAttachment(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, (20<<20)+(1<<20))
-	if err := r.ParseMultipartForm(20 << 20); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid attachment")
+	limit := uploadLimit()
+	form, err := openUploadForm(w, r, limit)
+	if err != nil {
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
-	if r.MultipartForm != nil {
-		defer r.MultipartForm.RemoveAll()
-	}
-	file, header, err := r.FormFile("file")
+	file, err := form.File()
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "file is required")
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
 	defer file.Close()
+	filename, contentType := file.FileName(), file.Header.Get("Content-Type")
 	documentID := r.PathValue("id")
 	attachmentID := "document_attachment_" + newCollaborationID()
-	objectKey := attachmentID + "_" + filepath.Base(header.Filename)
+	objectKey := attachmentID + "_" + filepath.Base(filename)
 	storage, err := s.storage()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage unavailable")
 		return
 	}
-	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), header.Filename, file)
+	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), filename, file)
 	if policyErr != nil {
 		writeError(w, http.StatusForbidden, policyErr.Error())
 		return
 	}
-	size, err := storage.Put(r.Context(), objectKey, io.LimitReader(upload, (20<<20)+1), header.Header.Get("Content-Type"))
-	if err != nil || size > 20<<20 {
-		_ = storage.Delete(r.Context(), objectKey)
-		if err == nil {
-			writeError(w, http.StatusRequestEntityTooLarge, "attachment exceeds 20 MB")
-		} else {
-			writeError(w, http.StatusInternalServerError, "upload failed")
-		}
+	size, err := form.Store(r.Context(), storage, objectKey, upload, contentType, limit)
+	if err != nil {
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
-	attachment := domain.Attachment{ID: attachmentID, Title: header.Filename, URL: "/uploads/" + objectKey, ContentType: header.Header.Get("Content-Type"), Size: size, CreatedAt: time.Now().UTC()}
+	attachment := domain.Attachment{ID: attachmentID, Title: filename, URL: "/uploads/" + objectKey, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC()}
 	attachment, err = s.recordDocumentAttachment(r.Context(), workspaceKey(r), documentID, attachment)
 	if err != nil {
 		_ = storage.Delete(r.Context(), objectKey)

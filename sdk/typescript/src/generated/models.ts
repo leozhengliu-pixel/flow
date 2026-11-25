@@ -1098,7 +1098,7 @@ export interface FileUploadHeader {
 export interface FileUploadInput {
   contentType: string
   filename: string
-  /** Size is the exact byte length of the file (at most 20 MB). */
+  /** Size is the exact byte length of the file, at most the upload limit (`server.storage.uploadMaxBytes` in the config file, 100 MB by default). */
   size: number
 }
 

@@ -1,0 +1,6 @@
+# server.storage.uploadMaxBytes takes plain bytes; a size with a unit is refused.
+config:
+  file:
+    server:
+      storage:
+        uploadMaxBytes: 100MB

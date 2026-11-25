@@ -26,8 +26,9 @@ import (
 // with limits on the archive, on each decompressed entry and on the XML read.
 
 const (
-	// agentReadFileMaxBytes is the largest file read_file opens (the composer's upload limit).
-	agentReadFileMaxBytes = agentUploadMaxBytes
+	// agentReadFileMaxBytes is the largest file read_file opens. It reads the whole file into memory to extract its
+	// text, so it keeps its own 20 MB bound instead of following the upload limit (server.storage.uploadMaxBytes in the config file).
+	agentReadFileMaxBytes = 20 << 20
 	// agentReadTextMax caps the text one read_file call returns.
 	agentReadTextMax = 100 << 10
 	agentReadMaxRows = 3000

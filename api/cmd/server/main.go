@@ -232,6 +232,7 @@ func main() {
 	}
 	registerInternalErrorEndpoint(applicationConfig.Storage.Endpoint)
 	trashRetention = applicationConfig.Retention.Trash
+	uploadMaxBytes.Store(applicationConfig.UploadMaxBytes)
 	workspaceDeletionGrace = applicationConfig.Retention.WorkspaceDeletionGrace
 	repository.SetChangeLogMinRows(applicationConfig.Retention.ChangeLogMinRows)
 	redisCoordinator, err := coordination.Open(context.Background(), applicationConfig.Redis)
@@ -1352,6 +1353,7 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	delete(data.Settings, "providerJobs")
 	data.TrashRetentionDays = trashRetentionDays()
 	data.ChatPlatform = chatPlatform()
+	data.UploadMaxBytes = uploadLimit()
 	availability, _ := data.Settings["calendarAvailability"].(map[string]any)
 	for i := range data.Users {
 		if raw, ok := availability[data.Users[i].ID].(string); ok {
@@ -5641,54 +5643,48 @@ func (s *server) deleteRelation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, (20<<20)+(1<<20))
-	if err := r.ParseMultipartForm(20 << 20); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid attachment")
+	limit := uploadLimit()
+	form, err := openUploadForm(w, r, limit)
+	if err != nil {
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
-	if r.MultipartForm != nil {
-		defer r.MultipartForm.RemoveAll()
-	}
-	file, header, err := r.FormFile("file")
+	file, err := form.File()
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "file is required")
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
 	defer file.Close()
+	filename, contentType := file.FileName(), file.Header.Get("Content-Type")
 	id := r.PathValue("id")
 	attachmentID := idgen.New("attachment_")
-	safeName := attachmentID + "_" + filepath.Base(header.Filename)
+	safeName := attachmentID + "_" + filepath.Base(filename)
 	storage, err := s.storage()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage unavailable")
 		return
 	}
-	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), header.Filename, file)
+	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), filename, file)
 	if policyErr != nil {
 		writeError(w, http.StatusForbidden, policyErr.Error())
 		return
 	}
-	size, copyErr := storage.Put(r.Context(), safeName, io.LimitReader(upload, (20<<20)+1), header.Header.Get("Content-Type"))
-	if copyErr != nil {
-		_ = storage.Delete(r.Context(), safeName)
-		writeError(w, http.StatusInternalServerError, "upload failed")
+	size, err := form.Store(r.Context(), storage, safeName, upload, contentType, limit)
+	if err != nil {
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
-	if size > 20<<20 {
-		_ = storage.Delete(r.Context(), safeName)
-		writeError(w, http.StatusRequestEntityTooLarge, "attachment exceeds 20 MB")
-		return
-	}
+	embed := uploadEmbedEnabled(form.Value("embed"))
 	var attachment domain.Attachment
-	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(s.issueAttachmentContext(r.Context()), id), workspaceKey(r), "attachment.created", id, map[string]string{"name": header.Filename}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(s.issueAttachmentContext(r.Context()), id), workspaceKey(r), "attachment.created", id, map[string]string{"name": filename}, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
 		}
-		attachment = domain.Attachment{ID: attachmentID, IssueID: id, Title: header.Filename, URL: "/uploads/" + safeName, ContentType: header.Header.Get("Content-Type"), Size: size, CreatedAt: time.Now().UTC(), Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
+		attachment = domain.Attachment{ID: attachmentID, IssueID: id, Title: filename, URL: "/uploads/" + safeName, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC(), Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		issue.Attachments = append(issue.Attachments, attachment)
 		appendActivity(data, id, "attachment.created", data.Viewer, issueLinkActivityMetadata(attachment))
-		if formEmbedEnabled(r) {
+		if embed {
 			return applyIssueAttachmentEmbed(data, issue, attachment)
 		}
 		return nil
@@ -5712,7 +5708,7 @@ func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	title := strings.TrimSpace(input.Title)
 	if title == "" {
-		title = parsed.Host
+		title = defaultLinkTitle(parsed)
 	}
 	var attachment domain.Attachment
 	ctx := store.WithIssueRecordMutations(s.issueAttachmentContext(r.Context()), id)

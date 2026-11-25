@@ -1,7 +1,6 @@
 package main
 
 import (
-	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -9,8 +8,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func formEmbedEnabled(r *http.Request) bool {
-	switch strings.ToLower(strings.TrimSpace(r.FormValue("embed"))) {
+// uploadEmbedEnabled reads an upload's embed field: the file is embedded
+// unless it is 0, false, no or off.
+func uploadEmbedEnabled(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "0", "false", "no", "off":
 		return false
 	default:

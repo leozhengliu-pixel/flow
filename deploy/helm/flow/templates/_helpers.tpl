@@ -275,6 +275,10 @@ seccompProfile:
 {{- if and .file .fileConfigMap.name -}}
 {{- fail "set config.file or config.fileConfigMap.name, not both" -}}
 {{- end -}}
+{{- if and .fileConfigMap.name $v.storage.uploadMaxBytes -}}
+{{- /* storage.uploadMaxBytes is rendered into the chart's config file, which config.fileConfigMap replaces. */ -}}
+{{- fail "storage.uploadMaxBytes cannot be combined with config.fileConfigMap.name: set server.storage.uploadMaxBytes in that file instead" -}}
+{{- end -}}
 {{- if .file -}}
 {{- /* Secrets never go into the config file's ConfigMap (Flow also refuses them at startup). */ -}}
 {{- range $line := regexFindAll "(?m)^\\s*(- )?[A-Za-z0-9_.-]+\\s*:" (toYaml .file) -1 -}}

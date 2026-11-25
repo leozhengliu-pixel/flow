@@ -73,6 +73,9 @@ docker compose up -d --build
 
 ## 常用配置
 
+较新的设置只能在 YAML 配置文件（`FLOW_CONFIG_FILE`）中设置，例如上传大小上限（配置文件中的
+`server.storage.uploadMaxBytes`，默认 100 MB），详见 [部署配置](docs/configuration.md)。
+
 | 环境变量 | 默认值 | 用途 |
 | --- | --- | --- |
 | `FLOW_DATABASE_DRIVER` | `sqlite` | `sqlite`、`postgres` 或 `mysql`。 |
