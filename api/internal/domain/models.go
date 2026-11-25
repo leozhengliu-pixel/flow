@@ -1664,10 +1664,12 @@ type ProjectTemplate struct {
 // project. MilestoneID names one of the template's milestones and ParentID
 // another issue of the same template (a sub-issue).
 type ProjectTemplateIssue struct {
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Description string   `json:"description,omitempty"`
-	TeamID      string   `json:"teamId,omitempty"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	TeamID      string `json:"teamId,omitempty"`
+	// StateID is the workflow status the created issue starts in; empty keeps the team's default status.
+	StateID     string   `json:"stateId,omitempty"`
 	Priority    int      `json:"priority"`
 	AssigneeID  string   `json:"assigneeId,omitempty"`
 	LabelIDs    []string `json:"labelIds,omitempty"`

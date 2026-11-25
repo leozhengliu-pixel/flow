@@ -302,3 +302,41 @@ func TestProjectTemplateIssueEstimateFollowsTeamScale(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectTemplateIssueStateIsValidatedAndApplied(t *testing.T) {
+	fixture := newProjectTemplateFixture(t)
+	var progress string
+	for _, state := range fixture.bootstrap.States {
+		if state.Type == "started" && !state.Reserved && (state.TeamID == "" || state.TeamID == fixture.teamA.ID) {
+			progress = state.ID
+		}
+	}
+	if progress == "" {
+		t.Fatal("no started status for the team")
+	}
+	// A status the team does not have is rejected; a known one round-trips and is applied to the created issue.
+	requestJSON[map[string]any](t, fixture.handler, http.MethodPost, "/api/project-templates", map[string]any{"name": "Bad state", "issues": []map[string]any{{"title": "A", "teamId": fixture.teamA.ID, "stateId": "state_does_not_exist"}}}, http.StatusBadRequest)
+	template := requestJSON[domain.ProjectTemplate](t, fixture.handler, http.MethodPost, "/api/project-templates", map[string]any{
+		"name": "With status", "projectName": "With status project", "teamIds": []string{fixture.teamA.ID},
+		"issues": []map[string]any{
+			{"id": "started", "title": "Starts in progress", "teamId": fixture.teamA.ID, "stateId": progress},
+			{"id": "default", "title": "Starts in default", "teamId": fixture.teamA.ID},
+		},
+	}, http.StatusCreated)
+	if template.Issues[0].StateID != progress || template.Issues[1].StateID != "" {
+		t.Fatalf("template issue statuses did not round-trip: %#v", template.Issues)
+	}
+	project := requestJSON[domain.Project](t, fixture.handler, http.MethodPost, "/api/projects", map[string]any{"templateId": template.ID}, http.StatusCreated)
+	created := map[string]domain.Issue{}
+	for _, issue := range fixture.stored(t).Issues {
+		if issue.Project != nil && issue.Project.ID == project.ID {
+			created[issue.Title] = issue
+		}
+	}
+	if got := created["Starts in progress"].State.ID; got != progress {
+		t.Fatalf("template issue status was not applied: got %q want %q", got, progress)
+	}
+	if got := created["Starts in default"].State.Type; got == "started" {
+		t.Fatalf("an issue without a status must keep the team default, got %q", got)
+	}
+}
