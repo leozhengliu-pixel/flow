@@ -11,7 +11,8 @@ import { documentPath } from '@/lib/app-routes'
 import { formatRelativeTime } from '@/lib/relative-time'
 import type { Attachment, FlowDocument } from '@/types/flow'
 import type { IssueOptionsActions } from '@/components/issue/issue-options-menu'
-import { LinkBrandIcon, defaultLinkTitle, linkBrand } from './link-brand'
+import { LinkBrandIcon } from './link-brand-icon'
+import { defaultLinkTitle, linkBrand } from '@/lib/link-brand'
 import './issue-resources.css'
 
 const safeHost = (value: string) => { try { return new URL(value).hostname } catch { return 'Link' } }
