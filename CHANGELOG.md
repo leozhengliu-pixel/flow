@@ -8,6 +8,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 - **Default change.** Bounded metadata, record hydration, the record journal, and Sync V2 now default to `on` on MySQL and PostgreSQL. Startup repairs journal coverage and completes the metadata catalog. SQLite keeps these features `off` by default until a follow-up release. Explicit settings apply on every database. Default starts on MySQL without trigger authority serve legacy metadata and realtime. See the [upgrade and rollback runbook](docs/bounded-metadata-activation.md).
+- CI runs long triage, loop, workflow and large-row comparisons on separate shards and gives large fixture purges their own deadline.
 - Realtime projections wait briefly for shared memory during bursts, so viewers can receive updates as capacity frees up.
 - Loops can quote text from authorized Word attachments and inspect JPGs with an image-capable model. Unreadable files and unavailable image input are reported per attachment so the audit can continue.
 - The keyboard skip link moves focus to the page content even when the page is still loading.

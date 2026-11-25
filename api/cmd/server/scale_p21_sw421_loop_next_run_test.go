@@ -59,6 +59,15 @@ func scaleP21SW421Peak(source *store.SQLiteStore) func() int {
 // rows the literal writer refuses, named time zones, duplicates, a missing
 // loop and peers that commit to the loop row before the stamp.
 func TestScaleP21SW421LoopNextRunDifferential(t *testing.T) {
+	scaleP21SW421LoopNextRun(t, false)
+}
+
+func TestScaleP21SW421LoopNextRunReloadedDifferential(t *testing.T) {
+	scaleP21SW421LoopNextRun(t, true)
+}
+
+func scaleP21SW421LoopNextRun(t *testing.T, reload bool) {
+	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -203,135 +212,133 @@ func TestScaleP21SW421LoopNextRunDifferential(t *testing.T) {
 		}
 	}
 	for _, spec := range cases {
-		for _, reload := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/reload=%t", spec.name, reload), func(t *testing.T) {
-				if spec.sqlite && config.Driver != "sqlite" {
-					t.Skip("canonical row rewrites use SQLite placeholders; the other cases cover the configured database")
+		t.Run(fmt.Sprintf("%s/reload=%t", spec.name, reload), func(t *testing.T) {
+			if spec.sqlite && config.Driver != "sqlite" {
+				t.Skip("canonical row rewrites use SQLite placeholders; the other cases cover the configured database")
+			}
+			var want string
+			for _, source := range []*store.SQLiteStore{repo, probe} {
+				bounded := source.BoundedMetadataEnabled()
+				if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
+					t.Fatal(err)
 				}
-				var want string
-				for _, source := range []*store.SQLiteStore{repo, probe} {
-					bounded := source.BoundedMetadataEnabled()
+				if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "loops", "loopVersions"), workspace, "scale_p21.sw421_reset", "", nil, func(data *domain.Bootstrap) error {
+					data.Loops = []domain.Loop{loop(other), loop(target)}
+					data.LoopVersions = nil
+					if spec.seed != nil {
+						spec.seed(data)
+					}
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+				if spec.raw > 0 {
+					rewrite(t, func(item *domain.Loop) { item.Instructions = scaleP21SW421Body("over the literal maximum", spec.raw) })
+				}
+				if reload || spec.raw > 0 {
 					if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 						t.Fatal(err)
 					}
-					if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "loops", "loopVersions"), workspace, "scale_p21.sw421_reset", "", nil, func(data *domain.Bootstrap) error {
-						data.Loops = []domain.Loop{loop(other), loop(target)}
-						data.LoopVersions = nil
-						if spec.seed != nil {
-							spec.seed(data)
-						}
-						return nil
-					}); err != nil {
-						t.Fatal(err)
+				}
+				if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+					t.Fatal(err)
+				}
+				if spec.peer != nil {
+					rewrite(t, spec.peer)
+				}
+				prior := map[any]bool{}
+				for _, event := range query(t, `SELECT id FROM domain_events WHERE workspace_id=?`, f.data.Workspace.ID) {
+					prior[event[0]] = true
+				}
+				var hooks []domain.DomainEvent
+				var live []domain.RealtimeEvent
+				source.SetWebhookSink(func(_ string, event domain.DomainEvent) { hooks = append(hooks, event) })
+				source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { live = append(live, event) })
+				decodes := source.WorkspaceMetadataDecodes()
+				// setLoopNextRun logs its error; the store call returns it.
+				service := &server{store: source}
+				loopID := firstNonEmpty(spec.loopID, target)
+				stamp := func(data *domain.Bootstrap) error {
+					item := loopByID(data, loopID)
+					if item == nil {
+						return errNotFound
 					}
-					if spec.raw > 0 {
-						rewrite(t, func(item *domain.Loop) { item.Instructions = scaleP21SW421Body("over the literal maximum", spec.raw) })
-					}
-					if reload || spec.raw > 0 {
-						if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
-							t.Fatal(err)
-						}
-					}
-					if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
-						t.Fatal(err)
-					}
-					if spec.peer != nil {
-						rewrite(t, spec.peer)
-					}
-					prior := map[any]bool{}
-					for _, event := range query(t, `SELECT id FROM domain_events WHERE workspace_id=?`, f.data.Workspace.ID) {
-						prior[event[0]] = true
-					}
-					var hooks []domain.DomainEvent
-					var live []domain.RealtimeEvent
-					source.SetWebhookSink(func(_ string, event domain.DomainEvent) { hooks = append(hooks, event) })
-					source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { live = append(live, event) })
-					decodes := source.WorkspaceMetadataDecodes()
-					// setLoopNextRun logs its error; the store call returns it.
-					service := &server{store: source}
-					loopID := firstNonEmpty(spec.loopID, target)
-					stamp := func(data *domain.Bootstrap) error {
-						item := loopByID(data, loopID)
-						if item == nil {
-							return errNotFound
-						}
-						item.NextRunAt = &spec.next
-						return nil
-					}
-					var stampErr error
-					stopPeak := scaleP21SW421Peak(source)
-					switch {
-					case !spec.refused && !spec.missing && spec.peer == nil:
-						// The server entry point (it logs its error).
-						service.setLoopNextRun(workspace, loopID, spec.next)
-					case bounded:
-						stampErr = source.MutateLoopNextRun(context.Background(), workspace, loopID, stamp)
-					default:
-						stampErr = source.MutateWorkspace(store.WithMetadataFields(context.Background(), "loops"), workspace, "loop.scheduled", loopID, nil, stamp)
-					}
-					peak := stopPeak()
-					t.Logf("%s reload=%t bounded=%t err=%v peak_work=%d", spec.name, reload, bounded, stampErr, peak)
-					source.SetWebhookSink(nil)
-					source.SetRealtimeSink(nil)
-					var events [][]any
-					for _, event := range query(t, `SELECT event_type,aggregate_id,payload,previous_values,id FROM domain_events WHERE workspace_id=? ORDER BY created_at,id`, f.data.Workspace.ID) {
-						if !prior[event[4]] {
-							events = append(events, event[:4])
-						}
-					}
-					var published []any
-					for _, event := range hooks {
-						published = append(published, []any{event.Type, event.AggregateID, event.ActorID, event.Payload, event.PreviousValues, event.Snapshot})
-					}
-					for _, event := range live {
-						published = append(published, []any{event.Type, event.AggregateID, event.ActorID, event.ClientID, event.Payload})
-					}
-					errText := ""
-					if stampErr != nil {
-						errText = stampErr.Error()
-					}
-					encoded, err := json.Marshal(map[string]any{
-						"error":  errText,
-						"rows":   query(t, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('loops','loopVersions') ORDER BY field,collection_order,record_key`, workspace),
-						"search": query(t, `SELECT field,record_key,content FROM metadata_search_documents WHERE workspace_key=? AND field='loops' ORDER BY field,record_key`, workspace),
-						"root":   query(t, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace),
-						"events": events, "published": published,
-					})
-					if err != nil {
-						t.Fatal(err)
-					}
-					got := scaleP21TriageClock.ReplaceAllStringFunc(string(encoded), func(clock string) string {
-						if parsed, err := time.Parse(time.RFC3339Nano, clock); err == nil && parsed.After(at.Add(48*time.Hour)) && !parsed.Equal(next) && !parsed.Equal(spec.next) {
-							return "<clock>"
-						}
-						return clock
-					})
-					switch {
-					case spec.refused && !errors.Is(stampErr, store.ErrTransactionWriteBudget):
-						t.Fatalf("bounded=%t over-limit stamp err=%v, want the transaction write budget", bounded, stampErr)
-					case spec.missing && !errors.Is(stampErr, errNotFound):
-						t.Fatalf("bounded=%t missing loop err=%v", bounded, stampErr)
-					case !spec.refused && !spec.missing && stampErr != nil:
-						t.Fatalf("bounded=%t stamp failed: %v", bounded, stampErr)
-					}
-					if !bounded {
-						if !spec.refused && !spec.missing && spec.name != "unchanged-next-run" && len(events) != 1 {
-							t.Fatalf("literal stamp wrote %d events", len(events))
-						}
-						want = got
-						continue
-					}
-					if used := source.MetadataWorkUsedForTesting(); used != 0 {
-						t.Fatalf("bounded stamp retained %d work bytes", used)
-					}
-					if source.WorkspaceMetadataDecodes() != decodes {
-						t.Fatal("bounded stamp decoded complete workspace metadata")
-					}
-					if got != want {
-						t.Fatalf("bounded loop.scheduled stamp differs from the literal stamp\n%s", scaleP21SW260FirstDiff(want, got))
+					item.NextRunAt = &spec.next
+					return nil
+				}
+				var stampErr error
+				stopPeak := scaleP21SW421Peak(source)
+				switch {
+				case !spec.refused && !spec.missing && spec.peer == nil:
+					// The server entry point (it logs its error).
+					service.setLoopNextRun(workspace, loopID, spec.next)
+				case bounded:
+					stampErr = source.MutateLoopNextRun(context.Background(), workspace, loopID, stamp)
+				default:
+					stampErr = source.MutateWorkspace(store.WithMetadataFields(context.Background(), "loops"), workspace, "loop.scheduled", loopID, nil, stamp)
+				}
+				peak := stopPeak()
+				t.Logf("%s reload=%t bounded=%t err=%v peak_work=%d", spec.name, reload, bounded, stampErr, peak)
+				source.SetWebhookSink(nil)
+				source.SetRealtimeSink(nil)
+				var events [][]any
+				for _, event := range query(t, `SELECT event_type,aggregate_id,payload,previous_values,id FROM domain_events WHERE workspace_id=? ORDER BY created_at,id`, f.data.Workspace.ID) {
+					if !prior[event[4]] {
+						events = append(events, event[:4])
 					}
 				}
-			})
-		}
+				var published []any
+				for _, event := range hooks {
+					published = append(published, []any{event.Type, event.AggregateID, event.ActorID, event.Payload, event.PreviousValues, event.Snapshot})
+				}
+				for _, event := range live {
+					published = append(published, []any{event.Type, event.AggregateID, event.ActorID, event.ClientID, event.Payload})
+				}
+				errText := ""
+				if stampErr != nil {
+					errText = stampErr.Error()
+				}
+				encoded, err := json.Marshal(map[string]any{
+					"error":  errText,
+					"rows":   query(t, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('loops','loopVersions') ORDER BY field,collection_order,record_key`, workspace),
+					"search": query(t, `SELECT field,record_key,content FROM metadata_search_documents WHERE workspace_key=? AND field='loops' ORDER BY field,record_key`, workspace),
+					"root":   query(t, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace),
+					"events": events, "published": published,
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := scaleP21TriageClock.ReplaceAllStringFunc(string(encoded), func(clock string) string {
+					if parsed, err := time.Parse(time.RFC3339Nano, clock); err == nil && parsed.After(at.Add(48*time.Hour)) && !parsed.Equal(next) && !parsed.Equal(spec.next) {
+						return "<clock>"
+					}
+					return clock
+				})
+				switch {
+				case spec.refused && !errors.Is(stampErr, store.ErrTransactionWriteBudget):
+					t.Fatalf("bounded=%t over-limit stamp err=%v, want the transaction write budget", bounded, stampErr)
+				case spec.missing && !errors.Is(stampErr, errNotFound):
+					t.Fatalf("bounded=%t missing loop err=%v", bounded, stampErr)
+				case !spec.refused && !spec.missing && stampErr != nil:
+					t.Fatalf("bounded=%t stamp failed: %v", bounded, stampErr)
+				}
+				if !bounded {
+					if !spec.refused && !spec.missing && spec.name != "unchanged-next-run" && len(events) != 1 {
+						t.Fatalf("literal stamp wrote %d events", len(events))
+					}
+					want = got
+					continue
+				}
+				if used := source.MetadataWorkUsedForTesting(); used != 0 {
+					t.Fatalf("bounded stamp retained %d work bytes", used)
+				}
+				if source.WorkspaceMetadataDecodes() != decodes {
+					t.Fatal("bounded stamp decoded complete workspace metadata")
+				}
+				if got != want {
+					t.Fatalf("bounded loop.scheduled stamp differs from the literal stamp\n%s", scaleP21SW260FirstDiff(want, got))
+				}
+			}
+		})
 	}
 }

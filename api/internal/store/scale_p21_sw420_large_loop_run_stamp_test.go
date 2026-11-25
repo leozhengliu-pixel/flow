@@ -100,22 +100,26 @@ func scaleP21SW420PeerLoop(t *testing.T, f scaleP09Fixture, workspace, id string
 }
 
 func TestScaleP21SW420LargeLoopRunStampDifferential(t *testing.T) {
-	scaleP21SW420LargeLoopRunStamps(t, 0)
+	scaleP21SW420LargeLoopRunStamps(t, 0, false, true)
 }
 
 func TestScaleP21SW420LargeLoopRunStampDifferentialPart2(t *testing.T) {
-	scaleP21SW420LargeLoopRunStamps(t, 1)
+	scaleP21SW420LargeLoopRunStamps(t, 1, false)
+}
+
+func TestScaleP21SW420LargeLoopRunStampDifferentialPart2Reloaded(t *testing.T) {
+	scaleP21SW420LargeLoopRunStamps(t, 1, true)
 }
 
 func TestScaleP21SW420LargeLoopRunStampDifferentialPart3(t *testing.T) {
-	scaleP21SW420LargeLoopRunStamps(t, 2)
+	scaleP21SW420LargeLoopRunStamps(t, 2, false, true)
 }
 
 func TestScaleP21SW420LargeLoopRunStampDifferentialPart4(t *testing.T) {
-	scaleP21SW420LargeLoopRunStamps(t, 3)
+	scaleP21SW420LargeLoopRunStamps(t, 3, false, true)
 }
 
-func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int) {
+func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
@@ -269,7 +273,7 @@ func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int) {
 		if index%4 != part {
 			continue
 		}
-		for _, reload := range []bool{false, true} {
+		for _, reload := range reloads {
 			t.Run(fmt.Sprintf("%s/reload=%t", spec.name, reload), func(t *testing.T) {
 				var want string
 				var wantVersion domain.LoopVersion

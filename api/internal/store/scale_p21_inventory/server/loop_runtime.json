@@ -59,7 +59,7 @@
     "setLoopNextRun": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Bounded mode calls the closed MutateLoopNextRun stamp (the first loop's NextRunAt only, a large loop row through the large-row kernels) with the unchanged callback; the original off MutateWorkspace context/callback remain literal. TestScaleP21SW421LoopNextRunDifferential compares actual setLoopNextRun stamps with the literal stamp byte for byte warm and reloaded for small, named time zone, unchanged, 300 KiB, 4 MiB and 15 MiB loops and duplicate occurrences (the scoped writer this replaces refused from 256 KiB); TestScaleP21HotLoopTickScheduleStamps still proves due/uninitialized/future/draft stamps, webhook previous values and realtime enrichment with a colliding nested document object and zero bounded full decodes.",
+      "reason": "Bounded mode calls the closed MutateLoopNextRun stamp (the first loop's NextRunAt only, a large loop row through the large-row kernels) with the unchanged callback; the original off MutateWorkspace context/callback remain literal. TestScaleP21SW421LoopNextRunDifferential and TestScaleP21SW421LoopNextRunReloadedDifferential compare actual setLoopNextRun stamps with the literal stamp byte for byte warm and reloaded for small, named time zone, unchanged, 300 KiB, 4 MiB and 15 MiB loops and duplicate occurrences (the scoped writer this replaces refused from 256 KiB); TestScaleP21HotLoopTickScheduleStamps still proves due/uninitialized/future/draft stamps, webhook previous values and realtime enrichment with a colliding nested document object and zero bounded full decodes.",
       "accessors": [
         "Bootstrap",
         "MutateLoopNextRun",
