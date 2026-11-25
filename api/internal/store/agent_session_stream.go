@@ -17,6 +17,11 @@ type agentSessionLifecycleWriteKey struct{}
 
 // Each part borrows an admitted spool or fixed input. Bodies remain on disk;
 // maps contain only object keys and byte ranges.
+// legacySessionJSONMaxBytes bounds one message read by legacySessionJSONBytes:
+// its allowance (32 bytes of work per input byte plus 128 KiB) must fit the
+// metadata work budget.
+const legacySessionJSONMaxBytes = int64(metadataWorkBytes-(128<<10)) / 32
+
 type legacySessionJSONPart struct {
 	input io.ReaderAt
 	start int64
@@ -42,7 +47,7 @@ func legacySessionJSONBytes(ctx context.Context, owner *ResourceRead, part legac
 	// One selected message is the unit of recursive legacy JSON merging.
 	// This allowance owns raw fragments, decoded maps/lists, merge copies
 	// and returned encoder bytes together; callers release it per message.
-	if part.size < 0 || uint64(part.size) > (metadataWorkBytes-(128<<10))/32 {
+	if part.size < 0 || part.size > legacySessionJSONMaxBytes {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(part.size)*32+128<<10); err != nil {
