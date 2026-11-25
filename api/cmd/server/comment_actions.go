@@ -399,11 +399,28 @@ func (s *server) resolveCommentAction(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, result)
 }
 
+// defaultLinkTitle names a link the way the design reference does when nobody gave it a title: a GitHub issue or pull
+// request is "owner/repo#number", a Figma file is "Figma", a Slack message is "Message from Slack" and any other
+// page is its host.
+func defaultLinkTitle(parsed *url.URL) string {
+	host := strings.TrimPrefix(strings.ToLower(parsed.Hostname()), "www.")
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	switch {
+	case host == "github.com" && len(parts) >= 4 && (parts[2] == "issues" || parts[2] == "pull") && parts[3] != "":
+		return parts[0] + "/" + parts[1] + "#" + parts[3]
+	case host == "figma.com":
+		return "Figma"
+	case (host == "slack.com" || strings.HasSuffix(host, ".slack.com")) && len(parts) >= 1 && parts[0] == "archives":
+		return "Message from Slack"
+	}
+	return parsed.Host
+}
+
 func appendIssueLink(data *domain.Bootstrap, issue *domain.Issue, input domain.IssueLinkInput) domain.Attachment {
 	parsed, _ := url.ParseRequestURI(strings.TrimSpace(input.URL))
 	title := strings.TrimSpace(input.Title)
 	if title == "" {
-		title = parsed.Host
+		title = defaultLinkTitle(parsed)
 	}
 	attachment := domain.Attachment{ID: idgen.New("link_"), IssueID: issue.ID, Title: title, URL: parsed.String(), ContentType: "text/uri-list", CreatedAt: time.Now().UTC(), Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 	issue.Attachments = append(issue.Attachments, attachment)

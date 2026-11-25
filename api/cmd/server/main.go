@@ -5505,7 +5505,7 @@ func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	title := strings.TrimSpace(input.Title)
 	if title == "" {
-		title = parsed.Host
+		title = defaultLinkTitle(parsed)
 	}
 	var attachment domain.Attachment
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.link_created", id, input, func(data *domain.Bootstrap) error {

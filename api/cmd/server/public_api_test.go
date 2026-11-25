@@ -709,3 +709,22 @@ func TestAuditLogFiltersAndPagination(t *testing.T) {
 		t.Fatalf("types = %#v", types)
 	}
 }
+
+func TestDefaultLinkTitle(t *testing.T) {
+	for link, want := range map[string]string{
+		"https://github.com/facebook/react/issues/1":      "facebook/react#1",
+		"https://github.com/facebook/react/pull/42/files": "facebook/react#42",
+		"https://github.com/facebook/react":               "github.com",
+		"https://www.figma.com/design/abc/File-name":      "Figma",
+		"https://acme.slack.com/archives/C1/p123":         "Message from Slack",
+		"https://example.com/docs":                        "example.com",
+	} {
+		parsed, err := url.Parse(link)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := defaultLinkTitle(parsed); got != want {
+			t.Errorf("defaultLinkTitle(%s) = %q, want %q", link, got, want)
+		}
+	}
+}

@@ -159,10 +159,10 @@ func (s *server) saveLinkAttachment(ctx context.Context, r *http.Request, worksp
 			return nil
 		}
 		parsed, _ := url.Parse(input.URL)
-		attachment := domain.Attachment{ID: idgen.New("attachment_"), IssueID: target.ID, Title: parsed.Host, URL: input.URL, ContentType: "text/uri-list", CreatedAt: now, UpdatedAt: &now, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), IconURL: defaultIcon}
+		attachment := domain.Attachment{ID: idgen.New("attachment_"), IssueID: target.ID, Title: defaultLinkTitle(parsed), URL: input.URL, ContentType: "text/uri-list", CreatedAt: now, UpdatedAt: &now, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), IconURL: defaultIcon}
 		applyLinkAttachmentInput(&attachment, input)
 		if attachment.Title == "" {
-			attachment.Title = parsed.Host
+			attachment.Title = defaultLinkTitle(parsed)
 		}
 		target.Attachments = append(target.Attachments, attachment)
 		appendActivity(data, target.ID, "issue.link_created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title, "url": attachment.URL})
