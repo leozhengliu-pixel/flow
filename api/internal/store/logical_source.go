@@ -108,7 +108,7 @@ type metadataLogicalStorage struct {
 	// patches is odd while a patch of flushed bytes is in flight and changes
 	// with each one; a block read that overlapped one is never served.
 	patches atomic.Int64
-	// Frame memo (scale_p21_logical_frame_memo.go): verbatim copies by
+	// Frame memo (logical_frame_memo.go): verbatim copies by
 	// offset and child headers of scanned collections.
 	memoMu  sync.Mutex
 	copies  []metadataLogicalCopy
@@ -118,7 +118,7 @@ type metadataLogicalStorage struct {
 	userIndexes map[int64]metadataLogicalUserIndex
 
 	// borrows are the ranges whose bytes other storages hold
-	// (scale_p21_logical_borrowed_range.go), replaced whole under pendingMu;
+	// (logical_borrowed_range.go), replaced whole under pendingMu;
 	// lenders are those storages, each retained once.
 	borrows atomic.Pointer[[]metadataLogicalBorrow]
 	lenders []*metadataLogicalStorage
@@ -135,7 +135,7 @@ type metadataLogicalNode struct {
 	generic      bool
 	genericRange bool
 	// window holds the bytes of an enclosing node read in one piece when it
-	// was materialized (scale_p21_logical_read_window.go); nil reads the
+	// was materialized (logical_read_window.go); nil reads the
 	// storage.
 	window *metadataLogicalWindow
 }
@@ -154,7 +154,7 @@ type metadataLogicalBuilder struct {
 	unavailable bool
 	// collectionIndex collects the child headers of the collection
 	// between BeginCollection and EndCollection (written child indexes,
-	// scale_p21_logical_written_index.go).
+	// logical_written_index.go).
 	collectionIndex *writtenChildIndex
 	path            [metadataLogicalDepth]metadataLogicalAncestor
 	buffer          [32 << 10]byte

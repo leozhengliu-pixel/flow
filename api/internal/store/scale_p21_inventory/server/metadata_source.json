@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p12_metadata_source.go",
+  "source": "server/metadata_source.go",
   "unmigrated": 0,
   "consumers": {
     "buildPulseEventSource": {

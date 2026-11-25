@@ -176,7 +176,7 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 		return node, err
 	}
 	// The child headers of a slice or array this writes, kept as its child
-	// index once it is complete (scale_p21_logical_written_index.go).
+	// index once it is complete (logical_written_index.go).
 	var headers *writtenChildIndex
 	defer func() {
 		if err == nil {

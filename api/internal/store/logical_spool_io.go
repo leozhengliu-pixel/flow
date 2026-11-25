@@ -70,7 +70,7 @@ import (
 // blocks and nearly every header read was a pread (the load rig at scale 1).
 // Shared by every storage of a workspace, twelve still suffice: a header scan
 // keeps one block live (large collections are walked in cursor chunks and
-// nodes read in one piece, scale_p21_logical_read_window.go), and with a miss
+// nodes read in one piece, logical_read_window.go), and with a miss
 // reserving its slot, 16 concurrent scans of different storages read 1.04x
 // the blocks they would with a cache each (1.14x for 16 scans that also
 // compare against a second storage; 32 scans: 1.14x and 1.39x). Before the
@@ -322,7 +322,7 @@ func (s *metadataLogicalStorage) ReadAt(p []byte, offset int64) (int, error) {
 		return 0, errMetadataLogicalNegativeOffset
 	}
 	if borrows := s.borrows.Load(); borrows != nil {
-		// Ranges another storage holds (scale_p21_logical_borrowed_range.go).
+		// Ranges another storage holds (logical_borrowed_range.go).
 		return s.readBorrowedAt(p, offset, *borrows)
 	}
 	return s.readOwnAt(p, offset)

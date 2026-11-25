@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_logical_workspace.go",
+  "source": "store/logical_workspace.go",
   "unmigrated": 0,
   "consumers": {
     "readMetadataLogicalWorkspaceAdmitted": {

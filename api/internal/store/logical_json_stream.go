@@ -123,7 +123,7 @@ func (s *logicalJSONStream) write(value webhookJSONValue, depth int) error {
 	}
 	// Like a decode, the encoding reads a node as many small frame fields:
 	// one read of a node of at most a window serves it and every node nested
-	// in it (scale_p21_logical_read_window.go).
+	// in it (logical_read_window.go).
 	value.node = value.node.windowed()
 	node := value.node
 	if node.typ == nil {

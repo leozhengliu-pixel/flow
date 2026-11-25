@@ -67,7 +67,7 @@ func TestScaleP21SW504WorkflowWriterKernelBoundary(t *testing.T) {
 		// write lock. The kernel then commits a streamed scoped delta.
 		"bounded_views_personal.go:MutateSavedViewRecords",
 		// Integration delivery is the only caller that supplies an ordinal factory.
-		"scale_p21_metadata_ordinal_profile.go:mutateMetadataOrdinalProfile",
+		"metadata_ordinal_profile.go:mutateMetadataOrdinalProfile",
 		// The public scoped adapter supplies the declared record scope and no factory.
 		"scale_p21_scoped_access.go:MutateWorkspaceScopedWithAggregate",
 	}) {

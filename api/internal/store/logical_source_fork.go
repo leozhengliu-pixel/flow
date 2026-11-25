@@ -125,7 +125,7 @@ func (r *metadataLogicalCopyRun) flush() error {
 	}
 	size := r.to - r.from
 	// A large range of a settled storage is borrowed, not copied
-	// (scale_p21_logical_borrowed_range.go).
+	// (logical_borrowed_range.go).
 	if borrowed, err := r.b.borrowRange(r.source, r.from, size); err != nil {
 		return err
 	} else if !borrowed {

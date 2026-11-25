@@ -169,7 +169,7 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 		storePath := filepath.Join("..", "..", "internal", "store")
 		for _, item := range []struct{ file, receiver string }{
 			{"owned_metadata_read.go", "*InstalledMetadataRead"},
-			{"scale_p21_json_output_read.go", "*MetadataJSONRead"},
+			{"json_output_read.go", "*MetadataJSONRead"},
 			{"scale_p21_collaboration_document_read.go", "*CollaborationDocumentRead"},
 		} {
 			function := scaleP21SW305Function(t, filepath.Join(storePath, item.file), item.receiver, "Context")

@@ -225,9 +225,9 @@ func pulseLegacySourcesBoundary(function *ast.FuncDecl, ownedMethod string) (leg
 
 func TestScaleP21PulseLegacySourcesBoundary(t *testing.T) {
 	sites := map[string]string{
-		"internal/store/scale_p21_hot_pulse_read.go:beginPulseRead":     "BeginInstalledMetadataRead",
-		"cmd/server/realtime_entity_payloads.go:pagedPulseSourceEvent":  "BeginPulseRead",
-		"cmd/server/scale_p12_metadata_source.go:buildPulseEventSource": "BeginPulseSourceRead",
+		"internal/store/scale_p21_hot_pulse_read.go:beginPulseRead":    "BeginInstalledMetadataRead",
+		"cmd/server/realtime_entity_payloads.go:pagedPulseSourceEvent": "BeginPulseRead",
+		"cmd/server/metadata_source.go:buildPulseEventSource":          "BeginPulseSourceRead",
 	}
 	seen := map[string]bool{}
 	root := filepath.Clean("../..")

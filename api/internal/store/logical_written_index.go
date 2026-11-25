@@ -10,7 +10,7 @@ import (
 //
 // A large collection's walk reads its child headers one by one from the
 // spool unless the storage keeps the collection's child index
-// (scale_p21_logical_frame_memo.go), which a first walk stores. Every write
+// (logical_frame_memo.go), which a first walk stores. Every write
 // derives several short-lived images (a snapshot clone, the event source, the
 // display and actor images, the publication candidate) whose large
 // collections are fresh copies in fresh storages, each walked once or twice
