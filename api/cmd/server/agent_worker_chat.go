@@ -682,6 +682,10 @@ func (c *workerChatReply) save(ctx context.Context, stored domain.AgentMessage, 
 		}
 		message.Status, message.UpdatedAt, message.Content = agentMessageStreaming, &now, agentLiveText(message.Parts)
 	}
+	// A part whose text (or a call whose result) the draft wrote over a body
+	// that was not loaded must not keep that body's reference: both writers
+	// install this native value, and a reader would load the old body over it.
+	message = store.WithoutReplacedAgentBodyRefs(message)
 	mutationCtx := c.ctx(ctx)
 	if draft.activity != nil {
 		// Scoped to agentSessions alone, the mutation would drop the activity.

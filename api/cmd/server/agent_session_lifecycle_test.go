@@ -508,8 +508,32 @@ func scaleP21SW198ConcurrentCAS(t *testing.T, f scaleP21IssueUpdateFixture, relo
 				// image. Load that image in the literal arm as its oracle.
 				scaleP21SW198ReloadSource(t, f, service.store)
 			}
+			state := scaleP21SW198StateFor(t, f, service.store)
+			// The saves write the part text and the call result inline over
+			// bodies that were not loaded. Whether a losing save's conflict
+			// refresh replaces the winner's installed record with its SQL
+			// decoding depends on the interleaving; both images must drop
+			// those references, or a reader would load the old bodies.
+			var sessions []domain.AgentSession
+			if err := json.Unmarshal(state.Native["agentSessions"], &sessions); err != nil {
+				t.Fatal(err)
+			}
+			for _, session := range sessions {
+				for _, message := range session.Messages {
+					for _, part := range message.Parts {
+						if _, stale := part.Offloaded["text"]; stale && part.Text != "" {
+							t.Fatalf("%s: installed part %s keeps the reference of its replaced text", source, part.ID)
+						}
+						if part.ToolCall != nil && len(part.ToolCall.Result) > 0 {
+							if _, stale := part.ToolCall.Offloaded["result"]; stale {
+								t.Fatalf("%s: installed call %s keeps the reference of its replaced result", source, part.ToolCall.ID)
+							}
+						}
+					}
+				}
+			}
 			w := httptest.NewRecorder()
-			if err := json.NewEncoder(w).Encode(scaleP21SW198StateFor(t, f, service.store)); err != nil {
+			if err := json.NewEncoder(w).Encode(state); err != nil {
 				t.Fatal(err)
 			}
 			return w

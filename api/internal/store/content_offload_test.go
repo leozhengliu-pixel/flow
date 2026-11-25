@@ -559,3 +559,120 @@ func TestStoredFormIsStableAndInlinesBack(t *testing.T) {
 		t.Fatalf("inlined document differs\n got %.300s\nwant %.300s", gotJSON, wantJSON)
 	}
 }
+
+// A writer's native value must match what the row stores: references of
+// fields written inline again are dropped, references of fields still not
+// loaded are kept, and the input message is not modified.
+func TestWithoutReplacedAgentBodyRefsMatchesStoredForm(t *testing.T) {
+	ref := func(key string) domain.ContentRef { return domain.ContentRef{Key: key, Size: 42, Summary: "old"} }
+	message := domain.AgentMessage{
+		ID: "reply", Role: "assistant", Content: "new reply",
+		Offloaded: domain.OffloadedContent{"content": ref("old-content")},
+		Parts: []domain.AgentMessagePart{
+			{ID: "replaced", Type: "text", Text: "new text", Offloaded: domain.OffloadedContent{"text": ref("old-text")}},
+			{ID: "unloaded", Type: "text", Offloaded: domain.OffloadedContent{"text": ref("still-offloaded")}},
+			{ID: "call", Type: "toolCall", ToolCall: &domain.AgentToolCall{ID: "call", Result: json.RawMessage(`{"ok":true}`),
+				Offloaded: domain.OffloadedContent{"result": ref("old-result")}}},
+			{ID: "null-call", Type: "toolCall", ToolCall: &domain.AgentToolCall{ID: "null-call", Result: json.RawMessage(`null`),
+				Offloaded: domain.OffloadedContent{"result": ref("null-result")}}},
+		},
+	}
+	original, err := json.Marshal(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleaned := WithoutReplacedAgentBodyRefs(message)
+	if after, _ := json.Marshal(message); !bytes.Equal(after, original) {
+		t.Fatal("the input message was modified")
+	}
+	if cleaned.Offloaded != nil || cleaned.Parts[0].Offloaded != nil || cleaned.Parts[2].ToolCall.Offloaded != nil {
+		t.Fatalf("replaced references kept: %+v", cleaned)
+	}
+	if _, ok := cleaned.Parts[1].Offloaded["text"]; !ok {
+		t.Fatal("the reference of a text that is not loaded was dropped")
+	}
+	if _, ok := cleaned.Parts[3].ToolCall.Offloaded["result"]; !ok {
+		t.Fatal("the reference of a null result was dropped")
+	}
+	offload := &contentOffload{agentBytes: 1 << 20}
+	stored := func(message domain.AgentMessage) string {
+		raw, err := json.Marshal(domain.AgentSession{ID: "session", Messages: []domain.AgentMessage{message}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		form, blobs, err := offload.storedForm("agentSessions", raw)
+		if err != nil || len(blobs) != 0 {
+			t.Fatal("stored form", err, len(blobs))
+		}
+		// A re-encoded record orders its keys; compare the values.
+		var value any
+		if err := json.Unmarshal(form, &value); err != nil {
+			t.Fatal(err)
+		}
+		canonical, _ := json.Marshal(value)
+		return string(canonical)
+	}
+	if got, want := stored(cleaned), stored(message); got != want {
+		t.Fatalf("cleaned message stores differently:\n%s\n%s", got, want)
+	}
+	if !strings.Contains(stored(message), "still-offloaded") || strings.Contains(stored(message), "old-text") {
+		t.Fatal("the stored form no longer drops only replaced references")
+	}
+	user := domain.AgentMessage{ID: "user", Role: "user", Content: "question", Offloaded: domain.OffloadedContent{"content": ref("user")}}
+	if got := WithoutReplacedAgentBodyRefs(user); len(got.Offloaded) != 1 {
+		t.Fatal("a user message is not offloaded and keeps its fields")
+	}
+}
+
+// A row the offload stored form re-encoded (sorted keys) is the stored form
+// of the same session installed from it (field order, nothing to drop): a
+// conflict refresh must not take the key order for another server's commit.
+func TestInstalledSessionRowStoredIgnoresKeyOrder(t *testing.T) {
+	repo := scaleP21SW198StreamStore(t)
+	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
+	session := domain.AgentSession{ID: "session", UserID: "owner", Title: "Chat", CreatedAt: at, UpdatedAt: at, Messages: []domain.AgentMessage{{
+		ID: "reply", Role: "assistant", Content: "reply", CreatedAt: at, Status: "streaming",
+		Parts: []domain.AgentMessagePart{{ID: "text", Type: "text", Text: "new text", Offloaded: domain.OffloadedContent{"text": {Key: "old", Size: 3}}}},
+	}}}
+	raw, err := json.Marshal(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, _, err := (&contentOffload{agentBytes: 1 << 20}).storedForm("agentSessions", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.Messages[0] = WithoutReplacedAgentBodyRefs(session.Messages[0])
+	installed, err := json.Marshal(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(row, installed) {
+		t.Fatal("the fixture needs a row whose keys the stored form re-encoded")
+	}
+	part := func(value []byte) legacySessionJSONPart {
+		return legacySessionJSONPart{bytes.NewReader(value), 0, int64(len(value))}
+	}
+	check := func(installed, row []byte) bool {
+		owner := &ResourceRead{store: repo}
+		defer owner.Close()
+		stored, err := legacyInstalledRecordValueStored(t.Context(), owner, "agentSessions", session.ID, part(installed), part(row))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return stored
+	}
+	if !check(installed, row) {
+		t.Fatal("the same session in another key order counts as another server's commit")
+	}
+	changed := bytes.Replace(row, []byte(`"new text"`), []byte(`"peer text"`), 1)
+	if check(installed, changed) {
+		t.Fatal("a peer's changed text counts as this server's stored form")
+	}
+	if check(installed, append(slices.Clone(row), bytes.Repeat([]byte(" "), MetadataRecordPageMaxBytes)...)) {
+		t.Fatal("a large row is not conservatively another server's commit")
+	}
+	if repo.MetadataWorkUsedForTesting() != 0 {
+		t.Fatal("the comparison leaked metadata work")
+	}
+}

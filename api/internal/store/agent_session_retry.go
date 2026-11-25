@@ -1,10 +1,12 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 )
 
@@ -238,5 +240,46 @@ func legacySessionInstalledRowStored(ctx context.Context, owner *ResourceRead, t
 	if err != nil {
 		return false, err
 	}
-	return legacySessionObjectsEqual(ctx, owner, rowFields, storedFields)
+	equal, err := legacySessionObjectsEqual(ctx, owner, rowFields, storedFields)
+	if err != nil || equal {
+		return equal, err
+	}
+	return legacyInstalledRecordValueStored(ctx, owner, field, key, legacySessionSpoolPart(stored), legacySessionSpoolPart(row))
+}
+
+// legacyInstalledRecordValueStored compares a small row with the installed
+// record's stored form as the literal rebase does (mergeWithStoredRecord's
+// unchanged case): both decoded as the record type and normalized. The bytes
+// alone are not the record: the offload stored form re-encodes a session
+// whose body references it drops with sorted keys, while the same session
+// decoded from that row and installed (an earlier conflict refresh) encodes
+// in field order and stores as is. Byte inequality there is no evidence of
+// another server's commit; treating it as one reloaded the whole generation
+// from SQL after this server's own write (installedGenerationBehind). A
+// larger record stays conservatively not stored.
+func legacyInstalledRecordValueStored(ctx context.Context, owner *ResourceRead, name, key string, installed, row legacySessionJSONPart) (bool, error) {
+	if installed.size > MetadataRecordPageMaxBytes || row.size > MetadataRecordPageMaxBytes {
+		return false, nil
+	}
+	field, kind, ok := metadataRecordType(name)
+	if !ok {
+		return false, nil
+	}
+	work := &ResourceRead{store: owner.store}
+	defer work.Close()
+	var normalized [2][]byte
+	for index, part := range []legacySessionJSONPart{installed, row} {
+		raw, err := legacySessionJSONBytes(ctx, work, part)
+		if err != nil {
+			return false, err
+		}
+		value, err := decodeMetadataRecord(kind, raw, reflect.Value{})
+		if err != nil {
+			return false, nil
+		}
+		if normalized[index], err = normalizedMetadataRecord(field, key, value); err != nil {
+			return false, err
+		}
+	}
+	return bytes.Equal(normalized[0], normalized[1]), nil
 }

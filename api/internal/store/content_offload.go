@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -807,6 +808,59 @@ func AgentSessionHasOffloaded(session domain.AgentSession) bool {
 		}
 	}
 	return false
+}
+
+// WithoutReplacedAgentBodyRefs returns message without the references of its
+// offloaded fields that hold a value again (a reply text or tool result
+// written inline over a body that was not loaded), as its stored form drops
+// them (offloadTranscript). A writer's native value must not keep such a
+// reference: the installed copy would differ from its row until something
+// reloads the record, and LoadAgentSessionBodies would put the old body back
+// over the new value. References of fields still empty are kept. Changed
+// parts, tool calls and maps are copied; message's own are not modified.
+func WithoutReplacedAgentBodyRefs(message domain.AgentMessage) domain.AgentMessage {
+	if message.Role != "assistant" {
+		// Only assistant transcripts are offloaded (offloadTranscript).
+		return message
+	}
+	without := func(refs domain.OffloadedContent, name string) domain.OffloadedContent {
+		left := maps.Clone(refs)
+		delete(left, name)
+		if len(left) == 0 {
+			return nil
+		}
+		return left
+	}
+	if _, ok := message.Offloaded["content"]; ok && message.Content != "" {
+		message.Offloaded = without(message.Offloaded, "content")
+	}
+	copied := false
+	for index, part := range message.Parts {
+		_, text := part.Offloaded["text"]
+		text = text && part.Text != ""
+		result := false
+		if part.ToolCall != nil {
+			_, result = part.ToolCall.Offloaded["result"]
+			result = result && !emptyJSONValue(part.ToolCall.Result)
+		}
+		if !text && !result {
+			continue
+		}
+		if !copied {
+			message.Parts = slices.Clone(message.Parts)
+			copied = true
+		}
+		if text {
+			part.Offloaded = without(part.Offloaded, "text")
+		}
+		if result {
+			call := *part.ToolCall
+			call.Offloaded = without(call.Offloaded, "result")
+			part.ToolCall = &call
+		}
+		message.Parts[index] = part
+	}
+	return message
 }
 
 // fetch returns the bodies for keys that exist.
