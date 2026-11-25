@@ -101,7 +101,7 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 .pt-section{box-sizing:border-box;border:.5px solid var(--pt-section-border);border-radius:12px;background:var(--pt-section-bg);color:var(--pt-section-fg)}
 .pt-section-header{box-sizing:border-box;height:44px;display:flex;align-items:center;justify-content:space-between;padding:6px 11px 6px 14px}
 .pt-section-title{box-sizing:border-box;height:32px;display:flex;align-items:center;gap:6px;padding:6px;border:0;border-radius:9999px;background:transparent;color:var(--pt-section-fg);font-family:inherit;font-size:13px;font-weight:500;line-height:normal}
-.pt-section-count{height:13px;padding:0 1.3px;border-radius:4px;color:var(--pt-section-icon);font-size:11px;font-weight:450;line-height:13px}
+.pt-section-count{font-variant-numeric:tabular-nums;height:13px;padding:0;border-radius:4px;color:var(--pt-section-icon);font-size:11px;font-weight:450;line-height:13px}
 .pt-section-title svg{width:16px;height:16px;flex:none;color:var(--pt-section-fg);transition:transform .15s}
 .pt-section-title svg.is-open{transform:rotate(90deg)}
 .pt-icon-button{box-sizing:border-box;width:24px;height:24px;flex:none;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--pt-section-fg);transition:background-color .15s,color .15s}
@@ -109,7 +109,7 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 .pt-add-button-pill{width:auto;display:flex;align-items:center;gap:6px;padding:0 8px 0 6px;font-size:12px;font-weight:500;line-height:normal;color:var(--pt-section-icon)}
 .pt-add-button-pill svg{width:14px;height:14px}
 .pt-section-end{display:flex;align-items:center}
-.pt-section-total{display:flex;align-items:center;gap:4px;margin-right:10px;color:var(--pt-section-icon);font-size:12px;font-weight:450;line-height:normal}
+.pt-section-total{font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:4px;margin-right:10px;color:var(--pt-section-icon);font-size:12px;font-weight:450;line-height:normal}
 .pt-section-total svg{width:14px;height:14px}
 .pt-icon-button:hover,.pt-icon-button[data-state=open]{background:var(--pt-section-hover-bg);color:var(--pt-section-hover-fg)}
 .pt-icon-button:hover svg,.pt-icon-button[data-state=open] svg{color:var(--pt-section-hover-fg)}
