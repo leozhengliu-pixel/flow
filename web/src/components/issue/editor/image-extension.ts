@@ -7,7 +7,8 @@ import { openLightbox, type LightboxItem } from '@/components/editor/lightbox-br
 import { importTextFile, isTextImportFile } from '@/components/editor/markdown-paste'
 import { directiveUrlKey, encodeDirectiveUrl } from '@/lib/directive-url'
 
-export type DescriptionImageUpload = (file: File) => Promise<string>
+/** Stores a file and gives its URL; `onProgress` receives the share sent (0 to 1). */
+export type DescriptionImageUpload = (file: File, onProgress?: (fraction: number) => void) => Promise<string>
 export type DescriptionImageComment = (selection: { text: string; from: number; to: number; src: string }) => void
 
 declare module '@tiptap/core' {

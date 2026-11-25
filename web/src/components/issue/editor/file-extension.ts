@@ -8,10 +8,11 @@ import { copyFileLink, copyPdfLink, downloadPdf, isPdfFile } from '@/components/
 import { createFileToolbar, createPdfPreview } from '@/components/editor/pdf/pdf-card'
 import { deleteIcon, downloadIcon, linkIcon, openDescriptionMenu } from './image-extension'
 import { DescriptionAudio, DescriptionUploading, DescriptionVideoPlayer } from './description-media'
+import { clearUploadProgress, reportUploadProgress } from '@/lib/upload-progress'
 import { mountReact } from './mount-react'
 import { encodeDirectiveUrl } from '@/lib/directive-url'
 
-type DescriptionImageUpload = (file: File) => Promise<string>
+type DescriptionImageUpload = (file: File, onProgress?: (fraction: number) => void) => Promise<string>
 
 /** Every PDF in the document, in order: the viewer's next / previous buttons step through them. */
 function pdfSiblings(editor: Editor) {
@@ -126,7 +127,7 @@ export const DescriptionFile = Node.create({
         audioHost.hidden = !audio
         if (audio) audioMount.render(createElement(DescriptionAudio, { src: href, name: title, size: attrs.size == null ? null : Number(attrs.size) }))
         uploadingHost.hidden = !uploading
-        if (uploading) uploadingMount.render(createElement(DescriptionUploading))
+        if (uploading) uploadingMount.render(createElement(DescriptionUploading, { src: href }))
         toolbar.dom.hidden = uploading
         dom.classList.toggle('is-pdf', pdf)
         dom.classList.toggle('has-preview', pdf && showPreview && !uploading)
@@ -279,11 +280,12 @@ function persistSrc(view: EditorView, type: string, placeholder: string, file: F
       }
     })
     if (tr.docChanged) view.dispatch(tr)
+    clearUploadProgress(placeholder)
     URL.revokeObjectURL(placeholder)
   }
   if (!upload) return
   // The node keeps the URL in its directive form, the same src a reload parses back from the Markdown.
-  return upload(file).then(url => apply(encodeDirectiveUrl(url))).catch(error => { apply(null); toast.error(error instanceof Error && error.message ? error.message : `Could not upload ${file.name}`) })
+  return upload(file, fraction => reportUploadProgress(placeholder, fraction)).then(url => apply(encodeDirectiveUrl(url))).catch(error => { apply(null); toast.error(error instanceof Error && error.message ? error.message : `Could not upload ${file.name}`) })
 }
 
 const FILE_PATH = 'M6.75 1V6.75C6.75 7.5297 7.34489 8.17045 8.10554 8.24313L8.25 8.25H14V13C14 14.1046 13.1046 15 12 15H4C2.89543 15 2 14.1046 2 13V3C2 1.89543 2.89543 1 4 1H6.75ZM8 1L14 7.03022H9C8.44772 7.03022 8 6.5825 8 6.03022V1Z'

@@ -3334,10 +3334,12 @@ export function deleteRelation(
   });
 }
 
+/** An attachment upload: `embed: false` keeps it out of the description; `onProgress` receives the share sent (0 to 1). */
+export type AttachmentUploadOptions = { embed?: boolean; onProgress?: (fraction: number) => void };
 export function uploadAttachment(
   issueId: string,
   file: File,
-  options?: { embed?: boolean },
+  options?: AttachmentUploadOptions,
 ): Promise<Attachment> {
   const body = new FormData();
   body.append("file", file);
@@ -3347,6 +3349,7 @@ export function uploadAttachment(
   return request(`/api/issues/${issueId}/attachments`, {
     method: "POST",
     body,
+    onUploadProgress: options?.onProgress,
   });
 }
 export function uploadAttachmentFromURL(
