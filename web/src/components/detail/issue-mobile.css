@@ -145,8 +145,6 @@
   .issue-view .issue-activity-timeline .comment-thread .comment-card > header { height: 18px; min-height: 18px; flex-wrap: nowrap; }
   .issue-view .issue-activity-timeline .comment-thread .comment-card { padding: 14px 12px 12px; }
   .issue-view .issue-activity-timeline .comment-thread .comment-body { margin-top: 8px; }
-  /* The thread card runs to the same 6.5px from the screen edge as on the left: the column's 10px right padding is taken back. */
-  .issue-view .issue-activity-timeline .comment-thread { margin-right: -18px; }
 }
 
 @media (max-width: 767px) and (hover: none) and (pointer: coarse) {

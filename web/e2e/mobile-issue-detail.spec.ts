@@ -360,8 +360,8 @@ test('comment composer and attachment remain usable on a small phone', async ({ 
   const upload = await request.post(`/api/issues/${child.id}/attachments`, { headers: { 'X-Workspace-Key': workspaceKey }, multipart: { embed: '0', file: { name: '[mobile] notes.txt', mimeType: 'text/plain', buffer: Buffer.from('[mobile] Issue detail attachment') } } })
   expect(upload.ok()).toBe(true)
   await openIssue(page, child.identifier)
-  await expect(page.locator('.attachment-card')).toHaveCount(1)
-  await expect(page.locator('.attachment-card a').last()).toContainText('[mobile] notes.txt')
+  // A finished upload lists in Resources, like the design reference; the attachment grid only holds uploads in progress.
+  await expect(page.locator('.res-row').filter({ hasText: '[mobile] notes.txt' })).toHaveCount(1)
   const composer = page.locator('.issue-comment-form > .composer')
   await composer.scrollIntoViewIfNeeded()
   await composer.getByRole('textbox').fill('[mobile] A phone-sized comment with a long token: ' + 'x'.repeat(100))
