@@ -61,12 +61,17 @@
 }
 .flow-lightbox-cluster button:not(.flow-lightbox-zoom):hover:not(:disabled) { background: var(--theme-surface-hover); }
 .flow-lightbox-cluster button:disabled { opacity: .6; cursor: default; }
+.flow-lightbox-cluster button svg { color: var(--lightbox-icon); }
+.flow-lightbox-cluster button:hover:not(:disabled) svg { color: var(--text); }
 .flow-lightbox-separator { width: 1px; height: 16px; background: var(--pdf-viewer-separator-end); }
 /* Next / previous picture: one pill of two buttons around a hairline; a disabled end stays at 60%. */
 .flow-lightbox-pill { display: flex; align-items: center; }
 .flow-lightbox-cluster .flow-lightbox-pill button:not(.flow-lightbox-zoom) { border: 0; }
 .flow-lightbox-cluster .flow-lightbox-pill button:first-child:not(.flow-lightbox-zoom) { border-radius: 9999px 0 0 9999px; }
 .flow-lightbox-cluster .flow-lightbox-pill button:last-child:not(.flow-lightbox-zoom) { border-radius: 0 9999px 9999px 0; }
+/* The arrows sit off the buttons' centres, as the design reference draws them: next 1px right, previous 3px left. */
+.flow-lightbox-pill button:first-child svg { margin-left: 2px; }
+.flow-lightbox-pill button:last-child svg { margin-right: 6px; }
 .flow-lightbox-cluster .flow-lightbox-pill-rule { width: .5px; height: 20px; margin: 4px 0; }
 .flow-lightbox-caption {
   position: absolute;

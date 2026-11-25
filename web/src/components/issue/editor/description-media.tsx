@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useSyncExternalStore } from 'react'
 import { Download, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { AgentInlineVideo } from '@/components/agent/agent-inline-video'
-import { GridLoader } from '@/components/ui/grid-loader'
 import { useOptionalTranslate } from '@/i18n/i18n'
 import { formatFileSize } from '@/lib/format-file-size'
+import { isUploadInFlight, readUploadProgress, subscribeUploadProgress } from '@/lib/upload-progress'
 import { downloadPdf } from '@/components/editor/pdf/pdf-file-actions'
 import './description-media.css'
 
@@ -55,9 +55,27 @@ export function DescriptionAudio({ src, name, size }: { src: string; name: strin
   )
 }
 
-/** The progress strip of a file still uploading (a dot grid and "Uploading…" after a hairline). */
-export function DescriptionUploading() {
-  return <div className="description-file-uploading"><span className="description-file-uploading-rule"/><GridLoader size={16}/><span className="description-file-uploading-label">Uploading…</span></div>
+const DOT_COLUMNS = 5
+const DOT_PITCH = 3.5
+const DOTS = Array.from({ length: DOT_COLUMNS * DOT_COLUMNS }, (_, index) => ({ cx: 1 + (index % DOT_COLUMNS) * DOT_PITCH, cy: 1 + Math.floor(index / DOT_COLUMNS) * DOT_PITCH }))
+
+/** A 5 by 5 grid of dots that fills left to right, top to bottom, as the file is sent; the newest dot blinks. */
+export function UploadDots({ fraction }: { fraction: number }) {
+  const t = useOptionalTranslate()
+  const lit = Math.floor(fraction * DOTS.length)
+  return <svg aria-label={t('Progress {percent}%').replace('{percent}', () => String(Math.round(fraction * 100)))} className="description-upload-dots" height={16} role="img" viewBox="0 0 16 16" width={16}>
+    {DOTS.map((dot, index) => <circle className={index === lit - 1 ? 'description-upload-dot-pulse' : undefined} cx={dot.cx} cy={dot.cy} fill="currentColor" key={index} opacity={index < lit ? 1 : 0.3} r={1}/>)}
+  </svg>
+}
+
+/** The progress strip of a file still uploading (a dot grid and "Uploading…" after a hairline); `src` names the upload. */
+export function DescriptionUploading({ src, onRemove }: { src: string; onRemove?: () => void }) {
+  const t = useOptionalTranslate()
+  const fraction = useSyncExternalStore(listener => subscribeUploadProgress(src, listener), () => readUploadProgress(src))
+  const running = useSyncExternalStore(listener => subscribeUploadProgress(src, listener), () => isUploadInFlight(src))
+  // A placeholder that no upload in this page is feeding was saved by a page that closed (or lost its connection) mid-upload.
+  if (!running) return <div className="description-file-uploading" data-stale><span className="description-file-uploading-rule"/><span className="description-file-uploading-label">{t("Upload didn't complete")}</span>{onRemove && <button className="description-file-uploading-remove" onClick={event => { event.preventDefault(); event.stopPropagation(); onRemove() }} type="button">{t('Remove')}</button>}</div>
+  return <div className="description-file-uploading"><span className="description-file-uploading-rule"/><UploadDots fraction={fraction}/><span className="description-file-uploading-label">Uploading…</span></div>
 }
 
 export function DescriptionVideoPlayer({ src, name }: { src: string; name: string }) {

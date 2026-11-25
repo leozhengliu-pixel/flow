@@ -11,7 +11,7 @@ import { DetailPane } from '@/components/detail/detail-pane'
 import { NoProjectIcon, PriorityIcon, TeamIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
 import { useI18n } from '@/i18n/i18n'
-import { batchNotifications, updateInboxNotification, updateUserSettings } from '@/lib/api'
+import { batchNotifications, updateInboxNotification, updateUserSettings, type AttachmentUploadOptions } from '@/lib/api'
 import { inboxUnread } from '@/lib/inbox-unread'
 import {
   InitiativeOverviewInboxView,
@@ -106,7 +106,7 @@ export interface InboxAppPageProps {
   onEditComment: (issue: Issue, commentId: string, body: string, bodyData?: Record<string, unknown>) => Promise<void>
   onDeleteComment: (issue: Issue, commentId: string) => Promise<void>
   onReactComment: (issue: Issue, commentId: string, emoji: string) => Promise<void>
-  onUploadAttachment: (issue: Issue, file: File, options?: { embed?: boolean }) => Promise<Attachment | void>
+  onUploadAttachment: (issue: Issue, file: File, options?: AttachmentUploadOptions) => Promise<Attachment | void>
   onDeleteAttachment: (issue: Issue, attachmentId: string) => Promise<void>
   onCopyIssueLink?: (issue: Issue) => Promise<void> | void
   onOpenSidebar?: () => void

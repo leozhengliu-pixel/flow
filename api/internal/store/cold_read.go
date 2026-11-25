@@ -40,8 +40,15 @@ func (s *SQLiteStore) decodeColdMetadataRead(ctx context.Context, sources map[st
 		// Each workspace's owned copy of its decoded generation
 		// (cold_decode_cache.go).
 		r := s.coldParent.metadataResidency
+		var fields []string
+		if scoped, _ := ctx.Value(coldLoopContractReadKey{}).(bool); scoped {
+			// The contract callback reads its rows from SQL. Its private
+			// facade needs workspace identity, the locally installed rows it
+			// updates, and the inputs to webhookNeeded.
+			fields = []string{"loops", "loopVersions", "webhooks", "integrationConnections"}
+		}
 		for workspace, source := range sources {
-			data, err := r.decodeColdImage(ctx, workspace, source, nil)
+			data, err := r.decodeColdImage(ctx, workspace, source, fields)
 			if err != nil {
 				return err
 			}

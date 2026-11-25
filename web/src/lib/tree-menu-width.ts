@@ -40,10 +40,25 @@ export function measureNaturalWidth(element: HTMLElement): number {
 }
 
 /** Pins `element` to the integer width a hugging tree menu takes; returns the width applied. */
-export function fitTreeMenu(element: HTMLElement, limit?: number): number | undefined {
+export function fitTreeMenu(element: HTMLElement, limit?: number, nearest = false): number | undefined {
+  if (nearest) element.style.width = ''
   const natural = measureNaturalWidth(element)
   if (!natural) return undefined
-  const width = treeMenuWidth([natural - TREE_MENU_BORDER], limit)
-  if (width !== undefined) element.style.minWidth = `${width}px`
+  // `nearest`: the project template editor's menus round to the nearest pixel instead of up.
+  const width = nearest ? Math.min(Math.max(Math.round(Math.min(natural, TREE_MENU_MAX_WIDTH)), TREE_MENU_MIN_WIDTH), limit ?? TREE_MENU_MAX_WIDTH) : treeMenuWidth([natural - TREE_MENU_BORDER], limit)
+  if (width !== undefined) {
+    element.style.minWidth = `${width}px`
+    if (nearest) element.style.width = `${width}px`
+  }
+  return width
+}
+
+/** Pins a hugging (non-tree) menu to its nearest whole-pixel width, never below its CSS minimum; returns the width applied. */
+export function fitRoundedMenu(element: HTMLElement): number | undefined {
+  element.style.width = ''
+  const natural = measureNaturalWidth(element)
+  if (!natural) return undefined
+  const width = Math.max(Math.round(natural), Number.parseFloat(getComputedStyle(element).minWidth) || 0)
+  element.style.width = `${width}px`
   return width
 }

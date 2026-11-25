@@ -5330,6 +5330,8 @@ Object.assign(zhCN, {
   "Web search is enabled for this loop, but no web search provider is configured on this server.":
     "此循环已启用网页搜索，但服务器未配置网页搜索服务。",
   "Uploading…": "正在上传…",
+  "Progress {percent}%": "进度 {percent}%",
+  "Upload didn't complete": "上传未完成",
   "Files must be {size} or smaller": "文件不能超过 {size}",
   "Waiting for uploads to finish": "正在等待上传完成",
   "Web search isn't configured for this workspace.": "此工作区尚未配置网页搜索。",

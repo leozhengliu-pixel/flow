@@ -10,6 +10,10 @@ import (
 	"flow/api/internal/domain"
 )
 
+// ErrIssueAuthorizationPolicyChanged asks the caller to rebuild the SQLite
+// session's issue query after its standalone policy snapshot became stale.
+var ErrIssueAuthorizationPolicyChanged = errors.New("issue authorization policy changed during read")
+
 // CurrentCommentActionSettings preserves AccountCollections' current installed
 // source and contextless timing. Its selected output belongs to this read.
 func (r *IssueWriteAuthorizationRead) CurrentCommentActionSettings(ctx context.Context, userID string) (domain.UserSettings, bool, error) {
@@ -185,7 +189,10 @@ func (r *IssueWriteAuthorizationRead) loadPolicy(ctx context.Context, userID str
 			if err != nil {
 				return err
 			}
-			if current != epoch {
+			if current != epoch && (key != nil || s.sessionPolicyEpoch(ctx, stamp.workspaceID, epoch) == "") {
+				if key == nil && s.dialect == "sqlite" {
+					return errors.Join(ErrAuthForbidden, ErrResourceAccessChanged, ErrIssueAuthorizationPolicyChanged)
+				}
 				return errors.Join(ErrAuthForbidden, ErrResourceAccessChanged)
 			}
 		}

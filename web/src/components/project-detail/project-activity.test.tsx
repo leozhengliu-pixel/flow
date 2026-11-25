@@ -273,7 +273,8 @@ describe('ProjectActivity', () => {
     const image = new File([new Uint8Array([137, 80, 78, 71])], 'diagram.png', { type: 'image/png' })
     await userEvent.upload(composer.querySelector<HTMLInputElement>('input[type="file"]')!, image)
     await waitFor(() => expect(apiMocks.uploadProjectCommentAttachment).toHaveBeenCalledWith(props.project.id, image))
-    await waitFor(() => expect(screen.getByRole('img', { name: 'diagram.png' })).toHaveAttribute('src', '/uploads/media-1_diagram.png'))
+    // Uploaded pictures carry no alt text (like the design reference), so find the picture by its source.
+    await waitFor(() => expect(composer.querySelector('img[src="/uploads/media-1_diagram.png"]')).toBeInTheDocument())
     // Comment-mode files are embedded in the body, not queued as update attachments.
     expect(composer.querySelector('.project-activity__files')).toBeNull()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Comment' })).toBeEnabled())

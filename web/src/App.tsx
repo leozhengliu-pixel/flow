@@ -117,6 +117,7 @@ import {
   deleteProjectUpdateAttachment,
   uploadInitiativeUpdateAttachment,
   uploadAttachment,
+  type AttachmentUploadOptions,
   ApiError,
   fetchPagedBootstrap,
   getDocument,
@@ -2499,7 +2500,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
     );
     await refreshActivity();
   };
-  const addAttachment = async (file: File, options?: { embed?: boolean }) => {
+  const addAttachment = async (file: File, options?: AttachmentUploadOptions) => {
     if (!selectedIssue) return;
     const attachment = await run(
       () => uploadAttachment(selectedIssue.id, file, options),
@@ -2996,7 +2997,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
     );
     await refreshActivity();
   };
-  const uploadInboxAttachment = async (issue: Issue, file: File, options?: { embed?: boolean }) => {
+  const uploadInboxAttachment = async (issue: Issue, file: File, options?: AttachmentUploadOptions) => {
     const attachment = await run(
       () => uploadAttachment(issue.id, file, options),
       "Could not upload attachment",

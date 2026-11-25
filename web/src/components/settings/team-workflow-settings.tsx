@@ -2548,6 +2548,8 @@ function TemplatesSettings({
     project: data.projectTemplates.filter((item) => item.visibility === "teams" && scopeIds.has(projectTemplateTeam(item) ?? "")),
     document: data.documentTemplates.filter((item) => scopeIds.has(item.teamId ?? "")),
   };
+  // Workspace templates and the ones owned by this team (or its parents) can be the default; the block shows only when there are some.
+  const defaultProjectTemplates = data.projectTemplates.filter((item) => item.visibility !== "teams" || scopeIds.has(projectTemplateTeam(item) ?? ""));
   // The URL (templates/{kind}/new | templates/{kind}/{id}/edit) owns the full-page editor
   // (see teamTemplateEditorPage) so it survives reloads and can be linked to.
   const openEditor = (kind: TemplateKind, template: AnyTemplate | null) =>
@@ -2623,16 +2625,17 @@ function TemplatesSettings({
           }}
         />
       </section>
-      <TeamSection compact title="Default project template" description="Pre-select a template when creating a project for this team">
-        {templateSelect(
-          "Projects created",
-          settings.defaultProjectTemplateId,
-          // Workspace templates and the ones owned by this team (or its parents) can be the default.
-          data.projectTemplates.filter((item) => item.visibility !== "teams" || scopeIds.has(projectTemplateTeam(item) ?? "")),
-          (id) => void save({ defaultProjectTemplateId: id }),
-          "None",
-        )}
-      </TeamSection>
+      {defaultProjectTemplates.length > 0 && (
+        <TeamSection compact title="Default project template" description="Pre-select a template when creating a project for this team">
+          {templateSelect(
+            "Projects created",
+            settings.defaultProjectTemplateId,
+            defaultProjectTemplates,
+            (id) => void save({ defaultProjectTemplateId: id }),
+            "None",
+          )}
+        </TeamSection>
+      )}
       <section className="tpl-section tpl-team-section">
         <h3>{t("Document templates")}</h3>
         <TemplateListCard

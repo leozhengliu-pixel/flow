@@ -22,6 +22,8 @@ import (
 func TestScaleP21SW591SQLiteSnapshotPool(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	t.Setenv("FLOW_SQLITE_SNAPSHOT_POOL", "on")
+	t.Setenv("FLOW_SQLITE_SNAPSHOT_CONNS", "2")
 	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "pool.db")
 	open := func(bounded bool) *SQLiteStore {
@@ -38,8 +40,8 @@ func TestScaleP21SW591SQLiteSnapshotPool(t *testing.T) {
 		return repo
 	}
 	legacy := open(false)
-	if legacy.db.snapshots != nil {
-		t.Fatal("SW591 flag-off store opened a snapshot pool")
+	if legacy.db.snapshots != nil || legacy.db.sqliteReads != nil {
+		t.Fatal("SW591 flag-off store opened an extra read pool")
 	}
 	user, token, err := legacy.Register(ctx, "SW591 owner", idgen.New("sw591-")+"@example.test", "sw591-fixture-password")
 	if err != nil {
@@ -86,6 +88,7 @@ func TestScaleP21SW591SQLiteSnapshotPool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer writer.Rollback()
 	if _, err := writer.ExecContext(ctx, `UPDATE workspace_states SET updated_at=updated_at WHERE workspace_key=?`, workspace); err != nil {
 		t.Fatal(err)
 	}
@@ -131,9 +134,23 @@ func TestScaleP21SW591SQLiteSnapshotPool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer reader.Rollback()
 	var during int
 	if err := reader.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field='labels'`, workspace).Scan(&during); err != nil {
 		t.Fatal(err)
+	}
+	// A live point read has its own connection even if the snapshot pool
+	// and writer are both busy. It must not see the uncommitted deletion.
+	secondReader, err := repo.db.BeginTx(ctx, metadataReadOptions(repo.dialect))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer secondReader.Rollback()
+	pointCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	var point int
+	if err := repo.db.QueryRowContext(pointCtx, `SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field='labels'`, workspace).Scan(&point); err != nil || point != before {
+		t.Fatalf("live point read during mutation: labels=%d want=%d err=%v", point, before, err)
 	}
 	if err := writer.Rollback(); err != nil {
 		t.Fatal(err)

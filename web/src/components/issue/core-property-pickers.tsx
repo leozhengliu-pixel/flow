@@ -111,7 +111,7 @@ export function PersonHoverPreview({ person, projectName, workspaceName }: { per
   </div>
 }
 
-export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, emptyOptionShortcut, emptyOptionEnd, emptyOptionIcon, emptyTriggerLabel, hoverClassName, hoverContent, icon, label, multiple = false, onChange, optionHoverClassName, optionHoverContent, people, searchPlaceholder, searchShortcut, selectedId, selectedIds = [], showUnselectedGroupWhenEmpty = false, surfaceClassName, trigger, triggerClassName, unselectedGroupLabel, value, embedded = false, side, alignOffset, extraOptions = [], hideSearch = false, numberedOptions = false, open, onOpenChange, tooltip, tooltipShortcut }: {
+export function PersonPicker({ menuProps, ariaLabel, closeOnSelect, emptyOptionLabel, emptyOptionShortcut, emptyOptionEnd, emptyOptionIcon, emptyTriggerLabel, hoverClassName, hoverContent, icon, label, multiple = false, onChange, optionHoverClassName, optionHoverContent, people, searchPlaceholder, searchShortcut, selectedId, selectedIds = [], showUnselectedGroupWhenEmpty = false, surfaceClassName, trigger, triggerClassName, unselectedGroupLabel, value, embedded = false, side, alignOffset, extraOptions = [], hideSearch = false, numberedOptions = false, open, onOpenChange, tooltip, tooltipShortcut }: {
   ariaLabel: string
   closeOnSelect?: boolean
   hideSearch?: boolean
@@ -149,6 +149,8 @@ export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, empty
   onOpenChange?: (open: boolean) => void
   tooltip?: string
   tooltipShortcut?: string
+  /** Opt-in menu behaviour for the project template editor's pickers. */
+  menuProps?: { roundWidth?: boolean; highlightOnOpen?: boolean; phonePopover?: boolean }
 }) {
   const { t } = useI18n()
   useUserPreferences()
@@ -188,6 +190,7 @@ export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, empty
     ...extraOptions,
   ]
   return <PropertyMenu
+    {...menuProps}
     open={open}
     onOpenChange={onOpenChange}
     tooltip={tooltip}

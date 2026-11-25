@@ -12,6 +12,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -36,6 +37,15 @@ type oauthPerfFixture struct {
 func newOAuthPerfFixture(t testing.TB, directorySize int, poison bool) *oauthPerfFixture {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "oauth-http.db")
+	boundedSetting := os.Getenv("FLOW_BOUNDED_METADATA")
+	requestedBounded := false
+	switch strings.ToLower(strings.TrimSpace(boundedSetting)) {
+	case "1", "true", "on":
+		requestedBounded = true
+	}
+	if requestedBounded {
+		t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	}
 	repo, err := store.OpenSQLiteTestFixture(path)
 	if err != nil {
 		t.Fatal(err)
@@ -45,20 +55,66 @@ func newOAuthPerfFixture(t testing.TB, directorySize int, poison bool) *oauthPer
 			_ = repo.Close()
 		}
 	})
-	service := &server{store: repo, uploadPath: t.TempDir()}
-	// This fixture reopens the store and measures only the OAuth HTTP chain.
-	// Background schedulers must not retain the old store or affect allocations.
-	service.workflowSchedulerStarted.Store(true)
-	service.deliverySchedulerStarted.Store(true)
 	initialMetadata, ok := repo.WorkspaceMetadata("test-workspace")
 	if !ok {
 		t.Fatal("fixture workspace is missing")
 	}
 	initialProjectCount := len(initialMetadata.Projects)
-	host := httptest.NewServer(newHandler(service))
-	t.Cleanup(host.Close)
+	fixture := &oauthPerfFixture{}
+	fixture.db, err = sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = fixture.db.Close() })
+	tx, err := fixture.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	for i := 0; i < directorySize; i++ {
+		id := fmt.Sprintf("oauth-unrelated-project-%d", i)
+		project, _ := json.Marshal(map[string]any{"id": id, "name": id, "description": strings.Repeat("x", 1024)})
+		if _, err = tx.Exec(`INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES('test-workspace','projects',?,?,?)`, id, i+10000, project); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if requestedBounded {
+		// External fixture writes must be covered before bounded startup.
+		report, err := repo.PrepareBoundedMetadata(t.Context())
+		if err != nil || !report.Ready {
+			t.Fatalf("bounded metadata coverage is incomplete after fixture writes: ready=%t, err=%v", report.Ready, err)
+		}
+	}
+	if requestedBounded || !poison {
+		if err = repo.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if requestedBounded {
+			t.Setenv("FLOW_BOUNDED_METADATA", boundedSetting)
+		}
+		repo, err = store.OpenSQLiteTestFixture(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !poison {
+		// Prove the large directory is visible to the store as well as in SQL.
+		metadata, found := repo.WorkspaceMetadataFields("test-workspace", "projects")
+		if !found || len(metadata.Projects) != initialProjectCount+directorySize {
+			t.Fatalf("live project directory not hydrated: got=%d want=%d", len(metadata.Projects), initialProjectCount+directorySize)
+		}
+	}
+	service := &server{store: repo, uploadPath: t.TempDir()}
+	service.workflowSchedulerStarted.Store(true)
+	service.deliverySchedulerStarted.Store(true)
+	fixture.host = httptest.NewServer(newHandler(service))
+	t.Cleanup(fixture.host.Close)
 	jar, _ := cookiejar.New(nil)
-	fixture := &oauthPerfFixture{host: host, client: &http.Client{Jar: jar, Timeout: 20 * time.Second}, verifier: strings.Repeat("v", 48)}
+	fixture.client = &http.Client{Jar: jar, Timeout: 20 * time.Second}
+	fixture.verifier = strings.Repeat("v", 48)
 	digest := sha256.Sum256([]byte(fixture.verifier))
 	fixture.challenge = base64.RawURLEncoding.EncodeToString(digest[:])
 	if _, err = fixture.json(http.MethodPost, "/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK); err != nil {
@@ -71,56 +127,25 @@ func newOAuthPerfFixture(t testing.TB, directorySize int, poison bool) *oauthPer
 	if err = json.Unmarshal(raw, &fixture.registration); err != nil {
 		t.Fatal(err)
 	}
-	fixture.db, err = sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = fixture.db.Close() })
-	tx, err := fixture.db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < directorySize; i++ {
-		id := fmt.Sprintf("oauth-unrelated-project-%d", i)
-		project, _ := json.Marshal(map[string]any{"id": id, "name": id, "description": strings.Repeat("x", 1024)})
-		if poison && i == 0 {
-			project = []byte(`{"id":17,"name":"unrelated project must not be decoded"}`)
-		}
-		if _, err = tx.Exec(`INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES('test-workspace','projects',?,?,?)`, id, i+10000, project); err != nil {
-			_ = tx.Rollback()
-			t.Fatal(err)
-		}
-	}
 	if poison {
-		if _, err = tx.Exec(`UPDATE issue_records SET data='{"id":17,"title":"unrelated issue must not be decoded"}'`); err != nil {
-			_ = tx.Rollback()
-			t.Fatal(err)
-		}
-		if _, err = tx.Exec(`INSERT INTO workspace_content_records(workspace_key,kind,resource_id,id,created_at,data) VALUES('test-workspace','comment','unrelated','oauth-poison-comment','2026-09-11T00:00:00Z','{"id":17,"body":"unrelated comment must not be decoded"}')`); err != nil {
-			_ = tx.Rollback()
-			t.Fatal(err)
-		}
-	}
-	if err = tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	if !poison {
-		// Populate the live cache as well as SQL: an external INSERT alone would
-		// leave WorkspaceMetadata cloning the small pre-insert directory and make
-		// the allocation-growth regression falsely pass.
-		if err = repo.Close(); err != nil {
-			t.Fatal(err)
-		}
-		repo, err = store.OpenSQLiteTestFixture(path)
+		// Corrupt unrelated bodies after startup so the test isolates the
+		// OAuth reads and writes from the coverage repair and fixture loader.
+		tx, err := fixture.db.Begin()
 		if err != nil {
 			t.Fatal(err)
 		}
-		service.store = repo
-		repo.SetRealtimeSink(service.publishRealtime)
-		repo.SetWebhookSink(service.dispatchWebhookEvent)
-		metadata, found := repo.WorkspaceMetadata("test-workspace")
-		if !found || len(metadata.Projects) != initialProjectCount+directorySize {
-			t.Fatalf("live project directory not hydrated: got=%d want=%d", len(metadata.Projects), initialProjectCount+directorySize)
+		defer tx.Rollback()
+		for _, query := range []string{
+			`UPDATE workspace_metadata_records SET data='{"id":17,"name":"unrelated project must not be decoded"}' WHERE workspace_key='test-workspace' AND field='projects' AND record_key='oauth-unrelated-project-0'`,
+			`UPDATE issue_records SET data='{"id":17,"title":"unrelated issue must not be decoded"}'`,
+			`INSERT INTO workspace_content_records(workspace_key,kind,resource_id,id,created_at,data) VALUES('test-workspace','comment','unrelated','oauth-poison-comment','2026-09-11T00:00:00Z','{"id":17,"body":"unrelated comment must not be decoded"}')`,
+		} {
+			if _, err := tx.Exec(query); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
 		}
 	}
 	// Any compatibility whole-workspace rewrite fails even if malformed JSON

@@ -312,11 +312,20 @@ func (s *SQLiteStore) BeginIssueBootstrapRead(ctx context.Context, workspace, us
 		if err := tx.Rollback(); err != nil {
 			return nil, err
 		}
-		if err := s.ValidateAccess(ctx, read.access); err != nil {
-			return nil, accessChangedDuringRead(err)
+		if err := read.validateAccess(ctx); err != nil {
+			return nil, err
 		}
 	}
 	return read, ctx.Err()
+}
+
+func (r *IssueBootstrapRead) validateAccess(ctx context.Context) error {
+	s := r.owner.store
+	err := s.ValidateAccess(ctx, r.access)
+	if errors.Is(err, ErrAuthForbidden) && s.SessionAccessEpoch(ctx, r.access) != "" {
+		return nil
+	}
+	return accessChangedDuringRead(err)
 }
 
 func (r *IssueBootstrapRead) favoriteWork(ctx context.Context) error {
@@ -351,8 +360,8 @@ func (r *IssueBootstrapRead) Prepare(ctx context.Context) error {
 	// paged accessor does. A separate live read also cannot use its sole SQL
 	// connection while that caller still owns the transaction.
 	if r.principal != "" && !r.borrowed {
-		if err := r.owner.store.ValidateAccess(ctx, r.access); err != nil {
-			return accessChangedDuringRead(err)
+		if err := r.validateAccess(ctx); err != nil {
+			return err
 		}
 	}
 	if r.resident {

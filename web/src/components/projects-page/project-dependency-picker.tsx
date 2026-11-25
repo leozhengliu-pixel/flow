@@ -123,6 +123,8 @@ export function ProjectDependencyPicker({
   const triggerContents = dependencyTriggerContents(value, projectById, t)
   const triggerButton = trigger ?? <button aria-expanded={open} aria-haspopup="dialog" aria-label={t(ariaLabel)} className={triggerClassName ?? 'project-dependency-picker__trigger'} data-state={open ? 'open' : 'closed'} disabled={disabled} role="combobox" type="button">{triggerContents}</button>
   const hasSelection = value.length > 0
+  // Without another project there is nothing to depend on: the menu lists no actions.
+  const noProjects = options.length === 0 && !hasSelection
 
   const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
   const menuTrigger = value.length ? <Tooltip.Trigger asChild>{popoverTrigger}</Tooltip.Trigger> : popoverTrigger
@@ -160,8 +162,9 @@ export function ProjectDependencyPicker({
         <div aria-label={t('Dependencies')} className="project-dependency-picker__root-list" role="listbox">
           {selectedFor('blocked_by').length > 0 && <SelectedSection label="Blocked by" onToggle={project => toggle(project.id, 'blocked_by')} projects={selectedFor('blocked_by')} renderPreview={renderPreview} previewSide={directory.enabled && phone ? 'bottom' : undefined}/>}
           {selectedFor('blocks').length > 0 && <SelectedSection label="Blocking" onToggle={project => toggle(project.id, 'blocks')} projects={selectedFor('blocks')} renderPreview={renderPreview} previewSide={directory.enabled && phone ? 'bottom' : undefined}/>}
-          <div className="project-dependency-picker__group-label" role="group">{t('Add dependency')}</div>
-          {visibleDirections.map(item => <DirectionPicker
+          {noProjects && <div className="project-dependency-picker__no-actions" role="option" aria-disabled="true">{t('No matching actions')}</div>}
+          {!noProjects && <div className="project-dependency-picker__group-label" role="group">{t('Add dependency')}</div>}
+          {!noProjects && visibleDirections.map(item => <DirectionPicker
             active={direction === item.type}
             closeOnSelect={closeOnSelect}
             direction={item.type}
@@ -179,7 +182,7 @@ export function ProjectDependencyPicker({
             renderPreview={renderPreview}
             value={value}
           />)}
-          {!visibleDirections.length && <div className="project-dependency-picker__empty">{t('No results')}</div>}
+          {!noProjects && !visibleDirections.length && <div className="project-dependency-picker__empty">{t('No results')}</div>}
         </div>
       </Popover.Content>
     </Popover.Portal>

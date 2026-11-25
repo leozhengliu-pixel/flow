@@ -287,13 +287,15 @@ func removeTeamLabels(data *domain.Bootstrap, teamID string) {
 			moved := data.Labels[last]
 			data.Labels[index] = moved
 			if moved.Scope != "" {
-				refs := data.LabelIndex[moved.Scope]
+				// A new list: the old one may belong to an installed snapshot.
+				refs := slices.Clone(data.LabelIndex[moved.Scope])
 				for j, ref := range refs {
 					if ref == last {
 						refs[j] = index
 						break
 					}
 				}
+				data.LabelIndex[moved.Scope] = refs
 			}
 		}
 		data.Labels = data.Labels[:last]
@@ -301,8 +303,9 @@ func removeTeamLabels(data *domain.Bootstrap, teamID string) {
 	delete(data.LabelIndex, teamID)
 }
 
+// removeID returns a new list: items may belong to an installed snapshot.
 func removeID(items []string, target string) []string {
-	kept := items[:0]
+	kept := make([]string, 0, len(items))
 	for _, item := range items {
 		if item != target {
 			kept = append(kept, item)

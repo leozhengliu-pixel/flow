@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 )
@@ -40,8 +41,16 @@ func (d *sqlDatabase) Close() error {
 		d.journalStop()
 	}
 	d.journalWorkers.Wait()
+	return d.closePools()
+}
+
+func (d *sqlDatabase) closePools() error {
+	var snapshotErr, readErr error
 	if d.snapshots != nil {
-		_ = d.snapshots.Close()
+		snapshotErr = d.snapshots.Close()
 	}
-	return d.DB.Close()
+	if d.sqliteReads != nil {
+		readErr = d.sqliteReads.Close()
+	}
+	return errors.Join(snapshotErr, readErr, d.DB.Close())
 }

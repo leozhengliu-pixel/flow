@@ -85,9 +85,14 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 /** `quiet` keeps a failed speculative call from raising the authentication-policy event. */
-export type ApiRequestInit = RequestInit & { quiet?: boolean; onResponse?: (response: Response) => void }
+export type ApiRequestInit = RequestInit & {
+  quiet?: boolean
+  onResponse?: (response: Response) => void
+  /** The share of the request body sent so far (0 to 1); an upload that reports it goes out as an XMLHttpRequest. */
+  onUploadProgress?: (fraction: number) => void
+}
 
-export function apiFetch(url: string, { quiet, onResponse, ...init }: ApiRequestInit = {}) {
+export function apiFetch(url: string, { quiet, onResponse, onUploadProgress, ...init }: ApiRequestInit = {}) {
   if (import.meta.env.VITE_PAGED_ISSUES === 'true') url = url.replace(/^\/api\/issues(?=\/|\?|$)/, '/api/issue-records')
   const workspaceKey = currentWorkspaceKey()
   const headers = new Headers(init.headers)
@@ -95,7 +100,7 @@ export function apiFetch(url: string, { quiet, onResponse, ...init }: ApiRequest
   headers.set('X-Client-ID', realtimeClientId())
   // A write for a workspace shown from an unconfirmed local snapshot waits for the fresh bootstrap.
   const gate = snapshotWriteGate(init.method, url, headers.get('X-Workspace-Key'))
-  const fetchResponse = () => send(url, init, headers, quiet, workspaceKey).then(response => {
+  const fetchResponse = () => send(url, init, headers, quiet, workspaceKey, onUploadProgress).then(response => {
     onResponse?.(response)
     const clearing = invalidateLocalStoreResponse(url, response, headers.get('X-Workspace-Key') ?? '')
     if (clearing) return clearing.then(() => response)
@@ -104,8 +109,30 @@ export function apiFetch(url: string, { quiet, onResponse, ...init }: ApiRequest
   return gate ? gate.then(fetchResponse) : fetchResponse()
 }
 
-function send(url: string, init: RequestInit, headers: Headers, quiet: boolean | undefined, workspaceKey: string) {
-	return fetch(url, { ...init, headers, credentials: 'same-origin' }).then(async response => {
+/** fetch has no upload progress, so a body that reports it is sent with XMLHttpRequest and answered as a Response. */
+function sendWithProgress(url: string, init: RequestInit, headers: Headers, onProgress: (fraction: number) => void) {
+  return new Promise<Response>((resolve, reject) => {
+    const request = new XMLHttpRequest()
+    const abort = () => request.abort()
+    request.open((init.method ?? 'GET').toUpperCase(), url)
+    headers.forEach((value, name) => request.setRequestHeader(name, value))
+    request.upload.onprogress = event => { if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total) }
+    request.onload = () => {
+      init.signal?.removeEventListener('abort', abort)
+      const status = request.status
+      resolve(new Response(status === 204 || status === 205 ? null : request.responseText, { status, headers: { 'Content-Type': request.getResponseHeader('Content-Type') ?? 'application/json' } }))
+    }
+    request.onerror = () => { init.signal?.removeEventListener('abort', abort); reject(new TypeError('Network request failed')) }
+    request.onabort = () => reject(init.signal?.reason ?? new DOMException('Aborted', 'AbortError'))
+    if (init.signal?.aborted) return reject(init.signal.reason ?? new DOMException('Aborted', 'AbortError'))
+    init.signal?.addEventListener('abort', abort, { once: true })
+    request.send(init.body as XMLHttpRequestBodyInit | null | undefined)
+  })
+}
+
+function send(url: string, init: RequestInit, headers: Headers, quiet: boolean | undefined, workspaceKey: string, onUploadProgress?: (fraction: number) => void) {
+	const sent = onUploadProgress && typeof XMLHttpRequest !== 'undefined' ? sendWithProgress(url, init, headers, onUploadProgress) : fetch(url, { ...init, headers, credentials: 'same-origin' })
+	return sent.then(async response => {
     if(response.status===403 && !quiet) {
       const payload=await response.clone().json().catch(()=>null)
       if(payload?.code==='mfa_required'||payload?.code==='authentication_method_required') window.dispatchEvent(new CustomEvent('flow:authentication-policy',{detail:{code:payload.code,workspaceKey:headers.get('X-Workspace-Key') ?? workspaceKey}}))

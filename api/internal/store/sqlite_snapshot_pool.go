@@ -22,8 +22,9 @@ import (
 // Read-only transactions (sql.TxOptions.ReadOnly: metadataReadOptions and
 // the other read snapshots) therefore run on a separate pool of
 // FLOW_SQLITE_SNAPSHOT_CONNS (default 2) connections to the same file, with
-// the same connection settings. In WAL mode (the store's journal mode) a
-// read transaction sees exactly the commits made before its first read, on
+// the same connection settings. One additional connection serves standalone
+// SELECTs, such as live authorization, independently of those snapshots.
+// In WAL mode a read transaction sees the commits made before its first read, on
 // whichever connection: the same snapshot it saw on the main connection,
 // only no longer excluding other statements while it runs. Writes stay on
 // the main connection, one at a time. The pool is used only for a
@@ -57,6 +58,19 @@ func (d *sqlDatabase) openSQLiteSnapshotPool(sqlDriver, dsn, path string, mainCo
 		pool.Close()
 		return err
 	}
+	reads, err := sql.Open(sqlDriver, dsn+"&_pragma=query_only(1)")
+	if err != nil {
+		pool.Close()
+		return err
+	}
+	reads.SetMaxOpenConns(1)
+	reads.SetMaxIdleConns(1)
+	if err := reads.PingContext(ctx); err != nil {
+		reads.Close()
+		pool.Close()
+		return err
+	}
 	d.snapshots = pool
+	d.sqliteReads = reads
 	return nil
 }

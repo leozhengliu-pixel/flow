@@ -379,7 +379,14 @@ func TestScaleP21SW139BootstrapLoopTextScratchBound(t *testing.T) {
 				input.name, small, large)
 			continue
 		}
-		if large > 64<<10 || large > small+16<<10 {
+		// TotalAlloc is process-wide. Under -race the shard's other goroutines
+		// add tens of KiB between samples, so the race build only checks that
+		// scratch stays far below the 12MiB input; normal builds keep 16KiB.
+		limit, slack := uint64(64<<10), uint64(16<<10)
+		if raceDetector {
+			limit, slack = 256<<10, 256<<10
+		}
+		if large > limit || large > small+slack {
 			t.Fatal("loop instruction size changed sanitizer scratch", input.name, small, large)
 		}
 		t.Logf("%s: 3KiB text allocations=%d; 12MiB text allocations=%d; required loop output count=1", input.name, small, large)

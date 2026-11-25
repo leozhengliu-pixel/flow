@@ -1364,6 +1364,8 @@ export interface ProjectTemplateIssue {
   title: string;
   description?: string;
   teamId?: UUID;
+  /** Workflow status the created issue starts in; the team's default when unset. */
+  stateId?: UUID;
   priority: number;
   assigneeId?: UUID;
   labelIds: UUID[];

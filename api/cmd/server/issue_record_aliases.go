@@ -52,7 +52,14 @@ func (s *server) issueRecordAuthorizationData(r *http.Request) (domain.Bootstrap
 		cached.data = domain.Bootstrap{}
 		return data, nil
 	}
+	ctx := r.Context()
 	data, err := s.buildIssueRecordAuthorizationData(r)
+	for attempt := 1; attempt < 3 && errors.Is(err, store.ErrIssueAuthorizationPolicyChanged) && ctx.Err() == nil; attempt++ {
+		// The failed read closed before transferring its output. Rebuild the
+		// SQL visibility filter as well as the policy on the next attempt.
+		*r = *r.WithContext(context.WithValue(ctx, issueRequestAccessKey{}, nil))
+		data, err = s.buildIssueRecordAuthorizationData(r)
+	}
 	noteAuthorizationBusy(r, err)
 	if err == nil {
 		cached := &issueRecordAuthorization{path: r.URL.Path, workspace: workspaceKey(r), userID: userID, data: data}

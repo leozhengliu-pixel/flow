@@ -37,6 +37,7 @@ import { ProjectGlyph } from "@/components/views/project-glyph";
 import { Toggle } from "@/components/ui/toggle";
 import { confirmTemplateAction } from "./template-confirm";
 import { TRIAGE_STATUS } from "@/components/triage/triage-model";
+import { orderTeamTree } from "@/components/projects-page/project-teams";
 import { FlowGlyph } from "@/components/ui/menu-glyphs";
 import { ScopedFlowTooltip } from "@/components/ui/tooltip";
 import type {
@@ -785,7 +786,7 @@ export function TemplatePropertyPills({
 }) {
   const { t } = useI18n();
   const team = data.teams.find((item) => item.id === teamId);
-  const states = teamId ? teamWorkflowStates(data, teamId) : [];
+  const states = teamId ? teamWorkflowStates(data, teamId).filter((item) => !item.reserved) : [];
   const state = states.find((item) => item.id === stateId);
   // A triage team's backlog intake reads as "Triage", as in the composer and the reference app's template editor.
   const shownState = state && data.teamSettings?.[teamId]?.triageEnabled && state.type === "backlog" ? TRIAGE_STATUS : state;
@@ -807,10 +808,11 @@ export function TemplatePropertyPills({
         icon={team ? <TeamIcon team={team} size={14} /> : <TemplateGlyph name="team" size={14} />}
         triggerClassName={pillClass(Boolean(team))}
         surfaceClassName="tpl-picker tpl-team-menu"
-        hideSearch
+        searchShortcut="⌘ ⇧ M"
+        tree
         options={[
           { id: "", label: t("No default team"), groupLabel: t("Teams"), icon: <TemplateGlyph name="team" /> },
-          ...activeTeams.map((item) => ({ id: item.id, label: item.name, end: item.key, groupLabel: t("Your teams"), icon: <span className="tpl-team-option-icon"><TeamIcon team={item} size={14} /></span>, i18nIgnore: true })),
+          ...orderTeamTree(activeTeams, (id) => data.teamSettings?.[id]?.parentTeamId || undefined).map(({ team: item, depth }) => ({ id: item.id, label: item.name, end: item.key, groupLabel: t("Your teams"), indent: depth, icon: <span className="tpl-team-option-icon"><TeamIcon team={item} size={14} /></span>, i18nIgnore: true })),
         ]}
         onChange={onTeam}
       />
@@ -821,12 +823,13 @@ export function TemplatePropertyPills({
           label={t("Status")}
           ariaLabel={t("Change status")}
           searchPlaceholder={t("Change status…")}
+          searchShortcut="S"
           value={shownState ? t(shownState.name) : t("Status")}
           valueIsEntityName={Boolean(shownState && shownState !== TRIAGE_STATUS)}
           selectedId={stateId ?? ""}
           icon={shownState ? <StatusIcon state={shownState} size={14} /> : <TemplateGlyph name="backlog" size={14} />}
           triggerClassName={pillClass(Boolean(state))}
-          options={states.map((item, index) => ({ id: item.id, label: item.name, color: item.color, icon: <StatusIcon state={item} />, shortcut: index < 9 ? String(index + 1) : undefined, i18nIgnore: true }))}
+          options={states.map((item, index) => ({ id: item.id, label: item.name, color: item.color, icon: <StatusIcon state={item} size={14} />, shortcut: index < 9 ? String(index + 1) : undefined, i18nIgnore: true }))}
           onChange={onState}
         />
       )}
@@ -836,6 +839,7 @@ export function TemplatePropertyPills({
         label={t("Priority")}
         ariaLabel={priority ? t("Change priority") : t("Change priority. No priority is selected")}
         searchPlaceholder={t("Set priority to…")}
+        searchShortcut="P"
         value={priority ? t(PRIORITY_NAMES[priority]) : t("Priority")}
         selectedId={String(priority)}
         icon={priority ? <PriorityIcon priority={priority} size={14} /> : <NoPriorityGlyph />}
@@ -849,14 +853,15 @@ export function TemplatePropertyPills({
         label={t("Assignee")}
         ariaLabel={assignee ? t("Change assignee") : t("Change assignee. Currently no one is assigned.")}
         searchPlaceholder={t("Assign to…")}
+        searchShortcut="A"
         value={assignee?.displayName ?? t("Assignee")}
         valueIsEntityName={Boolean(assignee)}
         selectedId={assigneeId}
         icon={assignee ? <Avatar id={assignee.id} name={assignee.displayName} /> : <TemplateGlyph name="noAssignee" size={14} />}
         triggerClassName={pillClass(Boolean(assignee))}
         options={[
-          { id: "", label: t("No assignee"), icon: <NoAssigneeIcon /> },
-          ...data.users.filter((user) => user.active !== false).map((user) => ({ id: user.id, label: user.displayName, keywords: user.email, icon: <Avatar id={user.id} name={user.displayName} />, i18nIgnore: true })),
+          { id: "", label: t("No assignee"), icon: <NoAssigneeIcon />, shortcut: "0" },
+          ...data.users.filter((user) => user.active !== false).map((user, index) => ({ id: user.id, label: user.displayName, keywords: user.email, icon: <Avatar id={user.id} name={user.displayName} />, shortcut: String(index + 1), i18nIgnore: true })),
         ]}
         onChange={onAssignee}
       />

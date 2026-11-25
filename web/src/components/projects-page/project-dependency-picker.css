@@ -254,3 +254,6 @@
 }
 /* "Blocked by…" / "Blocking…" glyphs use the dependency red, like the reference menu. */
 .project-dependency-picker__direction > svg.project-dependency-picker__direction-glyph { color: var(--project-dependency-icon); }
+
+/* No other project to depend on: one muted row, left aligned. */
+.project-dependency-picker__no-actions { align-items: center; box-sizing: border-box; color: var(--pk-faint); display: flex; font: 450 13px/normal var(--font); height: 34px; margin-bottom: 1px; padding: 6px 14px 0; }

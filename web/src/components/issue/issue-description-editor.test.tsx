@@ -63,7 +63,8 @@ describe('real Tiptap description collaboration', () => {
     const file = new File([new Uint8Array([137, 80, 78, 71])], 'shot.png', { type: 'image/png' })
     insertImageFiles(editor!.view, [file], upload)
     await waitFor(() => expect(upload).toHaveBeenCalledWith(file))
-    await waitFor(() => expect(screen.getByRole('img', { name: 'shot.png' })).toHaveAttribute('src', 'https://flow.test/uploads/shot.png'))
+    // An uploaded picture has no alt text (the viewer then shows no caption), so it is found by its class.
+    await waitFor(() => expect(document.querySelector('img.description-image')).toHaveAttribute('src', 'https://flow.test/uploads/shot.png'))
   })
 
   it('opens an image context menu with copy, download, crop, comment, and delete', async () => {

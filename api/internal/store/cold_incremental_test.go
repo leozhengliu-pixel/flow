@@ -710,13 +710,18 @@ func TestColdIncrementalPublicationLabelCounts(t *testing.T) {
 	plans := func() map[string][2]int64 { return ColdPublishFieldPlansForTesting() }
 	labelsRebuilt := func(before map[string][2]int64) int64 { return plans()["labels"][1] - before["labels"][1] }
 	projectsPatched := func(before map[string][2]int64) int64 { return plans()["projects"][0] - before["projects"][0] }
-	// The first project write learns every project's labels.
+	// The first project write can prove the counts stayed the same from the
+	// exact installed image, before any project labels are cached.
+	before := plans()
 	coldIncrementalRun(t, view, workspace, "project.updated", func(data *domain.Bootstrap) error {
 		data.Projects[3].Description = "first"
 		return nil
 	})
 	coldIncrementalAssertExact(t, f, view, workspace, "first project write")
-	before := plans()
+	if labelsRebuilt(before) != 0 || projectsPatched(before) != 1 {
+		t.Fatalf("first project write: labels rebuilt %d, projects patched %d", labelsRebuilt(before), projectsPatched(before))
+	}
+	before = plans()
 	coldIncrementalRun(t, view, workspace, "project.updated", func(data *domain.Bootstrap) error {
 		data.Projects[5].Description = "labels kept"
 		return nil
@@ -753,6 +758,34 @@ func TestColdIncrementalPublicationLabelCounts(t *testing.T) {
 	coldIncrementalAssertExact(t, f, view, workspace, "archived")
 	if labelsRebuilt(before) != 1 {
 		t.Fatalf("archived: labels rebuilt %d", labelsRebuilt(before))
+	}
+}
+
+func TestColdIncrementalPublicationRebuildUsersPatchProjects(t *testing.T) {
+	f, view, workspace := coldIncrementalFixture(t)
+	before := ColdPublishFieldPlansForTesting()
+	coldIncrementalRun(t, view, workspace, "project.updated", func(data *domain.Bootstrap) error {
+		at := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+		for i := range len(data.Users) + 2 {
+			id := fmt.Sprintf("ci-new-user-%d", i)
+			data.Users = append(data.Users, domain.User{ID: id, DisplayName: "Current"})
+			settings, preferences := defaultUserSettings(id), defaultNotificationPreferences(id)
+			settings.UpdatedAt, preferences.UpdatedAt = at, at
+			data.UserSettings[id], data.NotificationPreferences[id] = settings, preferences
+		}
+		data.Projects[5].Creator = &domain.User{ID: "ci-new-user-0", DisplayName: "Old"}
+		return nil
+	})
+	got := coldIncrementalAssertExact(t, f, view, workspace, "many new users")
+	if creator := got.Projects[5].Creator; creator == nil || creator.DisplayName != "Current" {
+		t.Fatalf("project creator = %#v, want refreshed user", creator)
+	}
+	after := ColdPublishFieldPlansForTesting()
+	if after["users"][1]-before["users"][1] != 1 ||
+		after["projects"][0]-before["projects"][0] != 1 ||
+		after["projects"][1] != before["projects"][1] ||
+		after["labels"][1] != before["labels"][1] {
+		t.Fatalf("want users rebuilt and projects patched with labels unchanged, before %v, after %v", before, after)
 	}
 }
 

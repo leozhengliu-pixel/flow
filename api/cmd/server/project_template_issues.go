@@ -35,6 +35,7 @@ func normalizeProjectTemplateIssues(data *domain.Bootstrap, template *domain.Pro
 		issue.TeamID = strings.TrimSpace(issue.TeamID)
 		issue.AssigneeID = strings.TrimSpace(issue.AssigneeID)
 		issue.MilestoneID = strings.TrimSpace(issue.MilestoneID)
+		issue.StateID = strings.TrimSpace(issue.StateID)
 		issue.ParentID = strings.TrimSpace(issue.ParentID)
 		if issue.Title == "" || issue.Priority < 0 || issue.Priority > 4 {
 			return nil, errInvalid
@@ -51,6 +52,16 @@ func normalizeProjectTemplateIssues(data *domain.Bootstrap, template *domain.Pro
 		}
 		if issue.AssigneeID != "" && userByID(data, issue.AssigneeID) == nil {
 			return nil, errInvalid
+		}
+		if issue.StateID != "" {
+			// Without a team of its own the issue lands in a project team chosen at creation, so any known status passes.
+			known := slices.ContainsFunc(data.States, func(state domain.WorkflowState) bool { return state.ID == issue.StateID })
+			if issue.TeamID != "" {
+				known = stateForTeam(data, issue.TeamID, issue.StateID) != nil
+			}
+			if !known {
+				return nil, fmt.Errorf("%w: unknown workflow status", errInvalid)
+			}
 		}
 		if issue.Estimate != nil {
 			if math.IsNaN(*issue.Estimate) || math.IsInf(*issue.Estimate, 0) || *issue.Estimate < 0 {
@@ -229,7 +240,13 @@ func createProjectTemplateIssues(data *domain.Bootstrap, template domain.Project
 			return nil, fmt.Errorf("%w: no active team for template issues", errInvalid)
 		}
 		settings := teamSettings(data, team.ID)
-		state := stateForTeam(data, team.ID, settings.DefaultStateID)
+		var state *domain.WorkflowState
+		if item.StateID != "" {
+			state = stateForTeam(data, team.ID, item.StateID)
+		}
+		if state == nil {
+			state = stateForTeam(data, team.ID, settings.DefaultStateID)
+		}
 		if state == nil {
 			states := statesForTeam(data, team.ID)
 			if len(states) == 0 {

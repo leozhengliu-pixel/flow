@@ -12,11 +12,19 @@ import { formatRelativeTime } from '@/lib/relative-time'
 import type { Attachment, FlowDocument } from '@/types/flow'
 import type { IssueOptionsActions } from '@/components/issue/issue-options-menu'
 import { LinkBrandIcon } from './link-brand-icon'
+import { FlowUrlIcon } from '@/components/issue/flow-header-icons'
 import { defaultLinkTitle, linkBrand } from '@/lib/link-brand'
 import './issue-resources.css'
 
 const safeHost = (value: string) => { try { return new URL(value).hostname } catch { return 'Link' } }
 const caret = <svg aria-hidden="true" fill="currentColor" viewBox="0 0 16 16"><path d="M10.6239 6.75194C10.8183 6.41861 10.5779 6 10.192 6H5.80802C5.42212 6 5.18169 6.41861 5.37613 6.75194L7.56811 10.5096C7.76105 10.8404 8.23895 10.8404 8.43189 10.5096L10.6239 6.75194Z"/></svg>
+
+/** A site's favicon; an icon that cannot be loaded gives way to the generic link glyph. */
+function LinkFavicon({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return <FlowUrlIcon className="res-link-glyph"/>
+  return <img alt="" height={16} onError={() => setFailed(true)} referrerPolicy="no-referrer" src={src} width={16}/>
+}
 
 /** The issue's Resources section (the design reference's layout): a collapsible header with an add button, then one row per linked document or link. */
 export function IssueResources({ documents, links, files = [], workspaceKey, issueKey, actions, onDeleteLink, onEditLink, readOnly = false }: { documents: FlowDocument[]; links: Attachment[]; files?: Attachment[]; workspaceKey: string; issueKey: string; actions?: IssueOptionsActions; onDeleteLink: (id: string) => Promise<void>; onEditLink?: (id: string, input: { url: string; title: string }) => Promise<void>; /** The viewer may only read: no add button, no Edit… or Remove. */ readOnly?: boolean }) {
@@ -62,7 +70,7 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
         const isFile = link.contentType !== 'text/uri-list'
         const when = link.createdAt ? formatRelativeTime(link.createdAt, locale, nowMs) : ''
         return <a className="res-row" href={link.url} key={link.id} rel="noreferrer" target="_blank">
-          <span className="res-icon" data-brand={!isFile ? linkBrand(link.url) ?? undefined : undefined}>{isFile && link.contentType.startsWith('image/') ? <img alt="" height={16} src={link.url} width={16}/> : isFile ? <File size={16}/> : linkBrand(link.url) ? <LinkBrandIcon brand={linkBrand(link.url)!}/> : link.iconUrl ? <img alt="" height={16} referrerPolicy="no-referrer" src={link.iconUrl} width={16}/> : <Link2 size={16}/>}</span>
+          <span className="res-icon" data-brand={!isFile ? linkBrand(link.url) ?? undefined : undefined}>{isFile && link.contentType.startsWith('image/') ? <img alt="" height={16} src={link.url} width={16}/> : isFile ? <File size={16}/> : linkBrand(link.url) ? <LinkBrandIcon brand={linkBrand(link.url)!}/> : link.iconUrl ? <LinkFavicon src={link.iconUrl}/> : <FlowUrlIcon className="res-link-glyph"/>}</span>
           <span className="res-title" data-i18n-ignore>{(!link.title || link.title === safeHost(link.url)) && !isFile ? defaultLinkTitle(link.url) : link.title || safeHost(link.url)}</span>
           {(link.subtitle || isFile) && <span className="res-subtitle" data-i18n-ignore>{link.subtitle || formatFileSize(link.size)}</span>}
           <span className="res-meta"><span className="res-time">{when}</span>
@@ -84,12 +92,12 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
     </div>}
     <Dialog.Root open={linkOpen} onOpenChange={closeDialog}>
       <Dialog.Portal>
-        <Dialog.Overlay className="modal-overlay" data-flow-motion="backdrop"/>
-        <Dialog.Content className="res-dialog" data-flow-motion="dialog" onOpenAutoFocus={event => { event.preventDefault(); const input = (editing ? titleInput : urlInput).current; input?.focus(); input?.setSelectionRange(input.value.length, input.value.length) }}>
+        <Dialog.Overlay className="res-dialog-overlay" data-flow-motion="backdrop"/>
+        <Dialog.Content className="res-dialog" data-flow-motion="dialog" onOpenAutoFocus={event => { event.preventDefault(); const input = (editing ? titleInput : urlInput).current; input?.focus(); input?.setSelectionRange(input.value.length, input.value.length); }}>
           <form onSubmit={event => { event.preventDefault(); void addLink() }}>
-            <Dialog.Title className="res-dialog-title">{editing && linkBrand(editing.url) ? <LinkBrandIcon brand={linkBrand(editing.url)!}/> : <Link2 size={16}/>}<span>{editing ? t('Edit link') : t('Add link to {issue}').replace('{issue}', () => issueKey)}</span></Dialog.Title>
-            <label><span>{t('URL')}</span><input ref={urlInput} onChange={event => setUrl(event.target.value)} placeholder="https://…" type="url" value={url}/></label>
-            <label><span>{t('Title')} <em>{t('(optional)')}</em></span><input ref={titleInput} onChange={event => setTitle(event.target.value)} value={title}/></label>
+            <Dialog.Title className="res-dialog-title">{editing && linkBrand(editing.url) ? <LinkBrandIcon brand={linkBrand(editing.url)!}/> : <FlowUrlIcon/>}<span>{editing ? t('Edit link') : t('Add link to {issue}').replace('{issue}', () => issueKey)}</span></Dialog.Title>
+            <div className="res-field"><label htmlFor="res-link-url"><span>{t('URL')}</span></label><input disabled={Boolean(editing)} id="res-link-url" ref={urlInput} onChange={event => setUrl(event.target.value)} placeholder="https://…" type="url" value={url}/></div>
+            <div className="res-field"><label htmlFor="res-link-title"><span>{t('Title')}</span><em>{t('(optional)')}</em></label><input id="res-link-title" ref={titleInput} onFocus={event => { const input = event.currentTarget; if (editing) queueMicrotask(() => input.setSelectionRange(input.value.length, input.value.length)) }} onChange={event => setTitle(event.target.value)} value={title}/></div>
             <footer><Dialog.Close asChild><button type="button">{t('Cancel')}</button></Dialog.Close><button className="primary" disabled={!url.trim() || saving} type="submit">{editing ? t(saving ? 'Saving…' : 'Save') : t(saving ? 'Adding…' : 'Add link')}</button></footer>
           </form>
         </Dialog.Content>
