@@ -14,11 +14,12 @@ func TestMetadataFeatureDefaultsByDatabaseDriver(t *testing.T) {
 		name, driver string
 		defaultOn    bool
 	}{
-		{"implicit SQLite", "", false},
-		{"SQLite", "sqlite", false},
+		{"implicit SQLite", "", true},
+		{"SQLite", "sqlite", true},
 		{"MySQL", "mysql", true},
 		{"PostgreSQL", "postgres", true},
 		{"PostgreSQL alias", " PostgreSQL ", true},
+		{"unsupported driver", "unknown", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, mode := range []string{"unset", "", "on", "off"} {
@@ -64,8 +65,8 @@ func TestImplicitBoundedMetadataRespectsDisabledDependencies(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "")
 	t.Setenv("FLOW_METADATA_CATALOG", "")
-	if boundedMetadataRequested("sqlite") {
-		t.Fatal("enabling dependencies alone must not enable bounded metadata on SQLite")
+	if !boundedMetadataRequested("sqlite") {
+		t.Fatal("enabling dependencies alone did not enable bounded metadata on SQLite")
 	}
 	for flag, mode := range map[string]string{
 		"FLOW_RECORD_HYDRATION": "off",

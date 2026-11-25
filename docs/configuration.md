@@ -342,7 +342,7 @@ server:
   # Any other non-secret FLOW_* or OTEL_* variable by name.
   env:
     FLOW_CODING_MAX_SESSIONS: "20"
-    # MySQL and PostgreSQL prepare bounded metadata by default. SQLite stays off.
+    # SQLite, MySQL, and PostgreSQL prepare bounded metadata by default.
     # FLOW_BOUNDED_METADATA: "off"          # Opt out of bounded metadata residency.
 
 # Defaults for objects Flow creates. They apply when the object is created
@@ -715,11 +715,11 @@ automatically at startup for all three drivers.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `FLOW_BOUNDED_METADATA` | `on` on MySQL and PostgreSQL, `off` on SQLite | Uses bounded metadata residency with hydration, journal coverage, and a complete catalog. Set `off` to use legacy reads and writes. |
-| `FLOW_RECORD_HYDRATION` | `on` on MySQL and PostgreSQL, `off` on SQLite | Loads selected metadata records for scoped reads and writes. |
-| `FLOW_RECORD_JOURNAL` | `on` on MySQL and PostgreSQL, `off` on SQLite | Captures record changes and authorization epochs. Default starts without MySQL trigger authority fall back to legacy metadata and sync. Set `off` consistently across replicas because it removes database triggers. |
+| `FLOW_BOUNDED_METADATA` | `on` on SQLite, MySQL, and PostgreSQL | Uses bounded metadata residency with hydration, journal coverage, and a complete catalog. Set `off` to use legacy reads and writes. |
+| `FLOW_RECORD_HYDRATION` | `on` on SQLite, MySQL, and PostgreSQL | Loads selected metadata records for scoped reads and writes. |
+| `FLOW_RECORD_JOURNAL` | `on` on SQLite, MySQL, and PostgreSQL | Captures record changes and authorization epochs. A MySQL start without trigger authority falls back to legacy metadata and sync until trigger creation succeeds. Set `off` consistently across replicas because it removes database triggers. |
 | `FLOW_METADATA_CATALOG` | Automatic with bounded metadata | Completes journal repair and missing catalog checkpoints at startup. `off` skips this work. `shadow` explicitly starts a backfill worker with bounded metadata off. |
-| `FLOW_SYNC_V2` | `on` on MySQL and PostgreSQL, `off` on SQLite | Enables negotiated sync v2 when the journal covers the workspace. |
+| `FLOW_SYNC_V2` | `on` on SQLite, MySQL, and PostgreSQL | Enables negotiated sync v2 when the journal covers the workspace. |
 | `FLOW_SYNC_MANIFEST` | `off` | Opt-in sync capability manifests. The accepted bounded load profile leaves this off. |
 | `FLOW_INDEXED_READS` | `off` | Opt-in permission-bound indexed reads when coverage is ready. The accepted bounded load profile leaves this off. |
 | `FLOW_RECORD_PEER_SYNC` | `off` | Uses the existing Redis event envelopes. Compact journal peer sync changes the cross-replica protocol and requires a fleet-wide switch. |

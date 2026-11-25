@@ -157,6 +157,7 @@ by default); see [docs/configuration.md](docs/configuration.md).
 | `FLOW_DATABASE_DRIVER` | `sqlite` | `sqlite`, `postgres`, or `mysql`. |
 | `FLOW_DATABASE_PATH` | `data/flow.db` | SQLite database path. |
 | `FLOW_DATABASE_URL` | unset | PostgreSQL/MySQL connection URL. |
+| `FLOW_BOUNDED_METADATA` | `on` | Bounded metadata, record hydration, the record journal, and Sync V2 default to `on` for SQLite, PostgreSQL, and MySQL. Set `off` to use legacy reads and writes. |
 | `FLOW_WORKSPACE_STATE_MAX_BYTES` | `67108864` | Maximum serialized state size for one workspace. |
 | `FLOW_REDIS_MODE` | `disabled` | `disabled`, `standalone`, or `cluster`; PostgreSQL/MySQL is required when enabled. |
 | `FLOW_REDIS_URL` | unset | Redis connection URL; alternatively use `FLOW_REDIS_ADDRS`. |

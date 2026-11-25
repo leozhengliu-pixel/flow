@@ -14,8 +14,8 @@ services:
       FLOW_DATABASE_CONN_MAX_LIFETIME: ${FLOW_DATABASE_CONN_MAX_LIFETIME:-30m}
       FLOW_WORKSPACE_STATE_MAX_BYTES: ${FLOW_WORKSPACE_STATE_MAX_BYTES:-67108864}
       FLOW_DATABASE_MAX_TRANSACTION_BYTES: ${FLOW_DATABASE_MAX_TRANSACTION_BYTES:-33554432}
-      # Empty values inherit the database defaults: on for MySQL and PostgreSQL,
-      # off for SQLite. Bounded startup repairs the journal and prepares the catalog.
+      # Empty values inherit the database default: on for SQLite, MySQL and
+      # PostgreSQL. Bounded startup repairs the journal and prepares the catalog.
       FLOW_BOUNDED_METADATA: ${FLOW_BOUNDED_METADATA:-}
       FLOW_RECORD_HYDRATION: ${FLOW_RECORD_HYDRATION:-}
       FLOW_RECORD_JOURNAL: ${FLOW_RECORD_JOURNAL:-}

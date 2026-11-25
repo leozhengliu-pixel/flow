@@ -380,8 +380,8 @@ func TestScaleP15RecordMutationPreservesUnloadedRevisionBodies(t *testing.T) {
 
 func TestScaleP15HydrationDefaultAndOptOut(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "")
-	if RecordHydrationEnabled(t.Context()) {
-		t.Fatal("unset hydration should be disabled on SQLite")
+	if !RecordHydrationEnabled(t.Context()) {
+		t.Fatal("unset hydration should be enabled on SQLite")
 	}
 	for _, value := range []string{"off", "0", "false", "unknown", "shadow"} {
 		t.Setenv("FLOW_RECORD_HYDRATION", value)

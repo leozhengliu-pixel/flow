@@ -21,8 +21,10 @@ func metadataFeatureSetting(setting, driver string) string {
 	if value := strings.ToLower(strings.TrimSpace(os.Getenv(setting))); value != "" {
 		return value
 	}
+	// All supported database drivers use the same defaults. Explicit
+	// environment settings are handled above and still take precedence.
 	switch normalizeDatabaseDriver(driver) {
-	case "mysql", "postgres":
+	case "sqlite", "mysql", "postgres":
 		return "on"
 	default:
 		return "off"

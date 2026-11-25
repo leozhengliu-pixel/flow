@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -33,24 +32,16 @@ func metadataUpgradeServer(t *testing.T, repo *store.SQLiteStore) *server {
 }
 
 func TestDefaultMetadataUpgrade(t *testing.T) {
-	testMetadataUpgrade(t, false)
+	testMetadataUpgrade(t)
 }
 
-func TestSQLiteMetadataOptInUpgrade(t *testing.T) {
-	if driver := os.Getenv("FLOW_TEST_DATABASE_DRIVER"); driver != "" && driver != "sqlite" {
-		t.Skip("SQLite opt-in check")
-	}
-	testMetadataUpgrade(t, true)
-}
-
-func testMetadataUpgrade(t *testing.T, optIn bool) {
+func testMetadataUpgrade(t *testing.T) {
 	t.Helper()
 	for _, flag := range metadataUpgradeFlags {
 		t.Setenv(flag, "off")
 	}
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("s", 32))))
 	config := metadataPrepareDatabase(t)
-	wantPrepared := config.Driver != "sqlite" || optIn
 	config.FixtureProfile, config.FixturePassword = "test", "test-password"
 	old, err := store.OpenDatabase(config)
 	if err != nil {
@@ -103,6 +94,7 @@ func testMetadataUpgrade(t *testing.T, optIn bool) {
 	create("/api/issue-records/"+issue+"/comments", map[string]any{"body": "Existing issue comment"})
 	create("/api/projects/"+project+"/comments", map[string]any{"body": "Existing project comment"})
 	create("/api/documents/"+document+"/comments", map[string]any{"body": "Existing document comment"})
+	call(before, http.MethodPut, "/api/documents/"+document+"/permissions", `{"permissions":[{"subjectType":"workspace","role":"editor"}]}`, http.StatusOK)
 	call(before, http.MethodPatch, "/api/account/settings", `{"homeView":"inbox"}`, http.StatusOK)
 	call(before, http.MethodPatch, "/api/notification-preferences", `{"emailFormat":"immediate"}`, http.StatusOK)
 	if status, err := old.MetadataCatalogStatus(t.Context(), sweep.workspace, "projects"); err != nil || status.Complete {
@@ -159,6 +151,13 @@ func testMetadataUpgrade(t *testing.T, optIn bool) {
 			if !strings.Contains(want[i].Body, `"emailFormat":"immediate"`) {
 				t.Fatal("legacy notification preference did not survive reload")
 			}
+		default:
+			if strings.Contains(path, "/comments") && !strings.Contains(want[i].Body, "Existing ") {
+				t.Fatalf("legacy comments read %q lost its body", path)
+			}
+			if strings.HasSuffix(path, "/permissions") && !strings.Contains(want[i].Body, `"role":"editor"`) {
+				t.Fatalf("legacy permissions read %q lost its grant", path)
+			}
 		}
 	}
 	if err := old.Close(); err != nil {
@@ -167,11 +166,6 @@ func testMetadataUpgrade(t *testing.T, optIn bool) {
 	old = nil
 	for _, flag := range metadataUpgradeFlags {
 		unsetScaleActivateAEnv(t, flag)
-	}
-	if optIn {
-		for _, flag := range []string{"FLOW_BOUNDED_METADATA", "FLOW_RECORD_HYDRATION", "FLOW_RECORD_JOURNAL", "FLOW_SYNC_V2"} {
-			t.Setenv(flag, "on")
-		}
 	}
 
 	// The first replica prepares the original database when enabled. The
@@ -204,22 +198,19 @@ func testMetadataUpgrade(t *testing.T, optIn bool) {
 	if t.Failed() {
 		t.FailNow()
 	}
+	syncAfter := ""
 	for _, repo := range replicas {
-		if repo.BoundedMetadataEnabled() != wantPrepared || repo.RecordJournalReady() != wantPrepared {
+		if !repo.BoundedMetadataEnabled() || !repo.RecordJournalReady() {
 			t.Fatal("startup chose the wrong metadata or journal mode")
 		}
-		if wantPrepared {
-			catalogs, err := repo.MetadataCatalogCompleteness(t.Context())
-			if err != nil || len(catalogs) == 0 {
-				t.Fatalf("catalog incomplete after startup: %v", err)
+		catalogs, err := repo.MetadataCatalogCompleteness(t.Context())
+		if err != nil || len(catalogs) == 0 {
+			t.Fatalf("catalog incomplete after startup: %v", err)
+		}
+		for _, catalog := range catalogs {
+			if catalog.Incomplete != 0 {
+				t.Errorf("catalog has %d incomplete collections after startup", catalog.Incomplete)
 			}
-			for _, catalog := range catalogs {
-				if catalog.Incomplete != 0 {
-					t.Errorf("catalog has %d incomplete collections after startup", catalog.Incomplete)
-				}
-			}
-		} else if status, err := repo.MetadataCatalogStatus(t.Context(), sweep.workspace, "projects"); err != nil || status.Complete {
-			t.Fatalf("SQLite defaults unexpectedly prepared the catalog: %v", err)
 		}
 		after := handler(repo)
 		for i, path := range paths {
@@ -230,11 +221,14 @@ func testMetadataUpgrade(t *testing.T, optIn bool) {
 			}
 		}
 		call(after, http.MethodGet, "/api/sync/manifest", "", http.StatusNotFound)
-		syncStatus := http.StatusNotFound
-		if wantPrepared {
-			syncStatus = http.StatusOK
+		syncPage := call(after, http.MethodGet, "/api/sync/changes?after=0", "", http.StatusOK)
+		var syncResult syncV2ChangesResponse
+		if err := json.Unmarshal(syncPage.Body.Bytes(), &syncResult); err != nil || syncResult.Head == "" {
+			t.Fatalf("upgraded Sync V2 read has no head: %s", syncPage.Body)
 		}
-		call(after, http.MethodGet, "/api/sync/changes?after=0", "", syncStatus)
+		if syncAfter == "" {
+			syncAfter = syncResult.Head
+		}
 	}
 
 	// The surviving data is writable through the same APIs and a second
@@ -254,6 +248,39 @@ func testMetadataUpgrade(t *testing.T, optIn bool) {
 			t.Fatal(err)
 		}
 		call(write, http.MethodPatch, edit.path, string(raw), http.StatusOK)
+	}
+	syncPage := call(write, http.MethodGet, "/api/sync/changes?after="+url.QueryEscape(syncAfter), "", http.StatusOK)
+	var syncResult syncV2ChangesResponse
+	if err := json.Unmarshal(syncPage.Body.Bytes(), &syncResult); err != nil || syncResult.Head == "" || len(syncResult.Transactions) == 0 {
+		t.Fatalf("Sync V2 did not return upgraded writes: %s", syncPage.Body)
+	}
+	expectedSyncKeys := map[syncV2Key]bool{
+		{Kind: "projects", ID: project}:   false,
+		{Kind: "documents", ID: document}: false,
+	}
+	issueSyncSeen := false
+	for _, transaction := range syncResult.Transactions {
+		for _, upsert := range transaction.Upserts {
+			if _, ok := expectedSyncKeys[upsert.Key]; ok {
+				expectedSyncKeys[upsert.Key] = true
+			}
+			if upsert.Key == (syncV2Key{Kind: "issues", ID: issue}) {
+				issueSyncSeen = true
+			}
+		}
+		for _, invalidation := range transaction.Invalidations {
+			if invalidation == "issues" {
+				issueSyncSeen = true
+			}
+		}
+	}
+	if !issueSyncSeen {
+		t.Errorf("Sync V2 omitted upgraded issue %s", issue)
+	}
+	for key, seen := range expectedSyncKeys {
+		if !seen {
+			t.Errorf("Sync V2 omitted upgraded %s/%s", key.Kind, key.ID)
+		}
 	}
 	if err := reader.ReloadWorkspace(t.Context(), sweep.workspace); err != nil {
 		t.Fatal("second replica could not load the updated workspace")
