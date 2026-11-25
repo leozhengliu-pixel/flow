@@ -232,32 +232,7 @@ func scaleP21SW440Run(t *testing.T, name string, actions func(*domain.TriageInte
 		if actions != nil {
 			setup = scaleP21SW400Actions(f, actions)
 		}
-		// Seed the teams and action settings once. Each mode restores the
-		// same complete preimage plus the side tables outside Bootstrap.
-		f.prepare(scaleP21IssueUpdateCase{setup: setup, issue: f.triage.ID})(t)
-		// The seed advances the sequence past the bulk issue numbers so
-		// later team moves can assign identifiers without collisions.
-		f.sequence = f.currentSequence(t)
-		workspace := f.data.Workspace.URLKey
-		full, ok := f.repository.BootstrapFor(workspace)
-		if !ok {
-			t.Fatal("workspace missing")
-		}
-		var err error
-		if f.baseline, err = json.Marshal(full); err != nil {
-			t.Fatal(err)
-		}
-		f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
-			f.resetSequenceAndAliases(t)
-			f.exec(t, `DELETE FROM document_collaboration_updates WHERE workspace_key=?`, workspace)
-		}
-		defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
-		oracle, err := store.OpenDatabase(f.reader.config)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = oracle.Close() })
-		f.reloadOracle = oracle
+		f.prepareTriageReset(t, f.prepare(scaleP21IssueUpdateCase{setup: setup, issue: f.triage.ID}))
 		started := time.Now().UTC()
 		outcomes := f.differential(t, name, func(service *server) *httptest.ResponseRecorder {
 			bounded := service.store.BoundedMetadataEnabled()
@@ -317,10 +292,9 @@ func TestScaleP21SW441ThousandIssueTriageConflictingWrite(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f, ids := scaleP21SW440Setup(t, scaleP21SW440Size(t))
-	f.scaleP21TriageWriterFixture.prepare = scaleP21SW441Attach(f, f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID, setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
+	f.prepareTriageReset(t, scaleP21SW441Attach(f, f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID, setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
 		settings.TeamAction, settings.LabelAction = "auto", "auto"
-	})}))
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	})})))
 	started := time.Now().UTC()
 	// The other server is the canonical store: the legacy source is that
 	// store, which sees the write before its generation (the legacy order).
@@ -357,26 +331,36 @@ func TestScaleP21SW441ThousandIssueTriageConflictingWrite(t *testing.T) {
 // every row, the installed image and the sinks equal a run that did nothing.
 // Just above the peak it succeeds and equals legacy.
 func TestScaleP21SW442ThousandIssueTriageBudgetCeiling(t *testing.T) {
-	scaleP21SW442BudgetCeiling(t, "warm")
+	scaleP21SW442BudgetCeiling(t, "warm", false)
 }
 
 func TestScaleP21SW442ThousandIssueTriageReloadedBudgetCeiling(t *testing.T) {
-	scaleP21SW442BudgetCeiling(t, "reloaded")
+	scaleP21SW442BudgetCeiling(t, "reloaded", false)
 }
 
-func scaleP21SW442BudgetCeiling(t *testing.T, source string) {
+func TestScaleP21SW442ThousandIssueTriageBudgetRefusal(t *testing.T) {
+	scaleP21SW442BudgetCeiling(t, "warm", true)
+}
+
+func TestScaleP21SW442ThousandIssueTriageReloadedBudgetRefusal(t *testing.T) {
+	scaleP21SW442BudgetCeiling(t, "reloaded", true)
+}
+
+func scaleP21SW442BudgetCeiling(t *testing.T, source string, below bool) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f, ids := scaleP21SW440Setup(t, scaleP21SW440Size(t))
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID, setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
+	f.prepareTriageReset(t, f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID, setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
 		settings.TeamAction, settings.LabelAction = "auto", "auto"
-	})})
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	})}))
 	generate := f.sw440Generate(t, ids)
-	legacy, started := f.run(t, "legacy", generate)
-	expected := scaleP21IssueUpdateNormalize(t, legacy, started)
+	var expected string
+	if !below {
+		legacy, started := f.run(t, "legacy", generate)
+		expected = scaleP21IssueUpdateNormalize(t, legacy, started)
+	}
 	peak := 0
 	got, started := f.run(t, source, func(service *server) *httptest.ResponseRecorder {
 		service.store.MetadataWorkPeakForTesting()
@@ -384,29 +368,35 @@ func scaleP21SW442BudgetCeiling(t *testing.T, source string) {
 		peak = service.store.MetadataWorkPeakForTesting()
 		return w
 	})
-	if normalized := scaleP21IssueUpdateNormalize(t, got, started); normalized != expected {
-		t.Fatalf("%s changed: %s", source, scaleP21M2Diff(expected, normalized))
-	}
 	t.Logf("%s: bounded peak work %.1f MB of %d MB", source, float64(peak)/(1<<20), 256)
-	idle, idleStarted := f.run(t, source, func(*server) *httptest.ResponseRecorder { return nil })
-	for _, limit := range []int{peak - 64<<10, peak + 64<<10} {
-		got, started := f.run(t, source, func(service *server) *httptest.ResponseRecorder {
+	runAtLimit := func(limit int) (scaleP21IssueUpdateOutcome, time.Time) {
+		return f.run(t, source, func(service *server) *httptest.ResponseRecorder {
 			restore := service.store.SetMetadataWorkLimitForTesting(limit)
 			defer restore()
 			return generate(service)
 		})
-		if limit > peak {
-			if normalized := scaleP21IssueUpdateNormalize(t, got, started); normalized != expected {
-				t.Fatalf("%s at %d bytes changed: %s", source, limit, scaleP21M2Diff(expected, normalized))
-			}
-			continue
+	}
+	if !below {
+		if normalized := scaleP21IssueUpdateNormalize(t, got, started); normalized != expected {
+			t.Fatalf("%s changed: %s", source, scaleP21M2Diff(expected, normalized))
 		}
-		if got.Code != http.StatusInternalServerError || !strings.Contains(string(got.Body), store.ErrMetadataWorkBudget.Error()) {
-			t.Fatalf("%s below the peak: %d %s", source, got.Code, got.Body)
+		limit := peak + 64<<10
+		got, started := runAtLimit(limit)
+		if normalized := scaleP21IssueUpdateNormalize(t, got, started); normalized != expected {
+			t.Fatalf("%s at %d bytes changed: %s", source, limit, scaleP21M2Diff(expected, normalized))
 		}
-		got.Code, got.Body = 0, nil
-		if want, normalized := scaleP21IssueUpdateNormalize(t, idle, idleStarted), scaleP21IssueUpdateNormalize(t, got, started); normalized != want {
-			t.Fatalf("%s below the peak published or wrote: %s", source, scaleP21M2Diff(want, normalized))
-		}
+		return
+	}
+	if got.Code != http.StatusOK {
+		t.Fatalf("%s calibration status %d: %.300s", source, got.Code, got.Body)
+	}
+	idle, idleStarted := f.run(t, source, func(*server) *httptest.ResponseRecorder { return nil })
+	got, started = runAtLimit(peak - 64<<10)
+	if got.Code != http.StatusInternalServerError || !strings.Contains(string(got.Body), store.ErrMetadataWorkBudget.Error()) {
+		t.Fatalf("%s below the peak: %d %s", source, got.Code, got.Body)
+	}
+	got.Code, got.Body = 0, nil
+	if want, normalized := scaleP21IssueUpdateNormalize(t, idle, idleStarted), scaleP21IssueUpdateNormalize(t, got, started); normalized != want {
+		t.Fatalf("%s below the peak published or wrote: %s", source, scaleP21M2Diff(want, normalized))
 	}
 }
