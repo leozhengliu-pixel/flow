@@ -521,7 +521,10 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 				if input.CycleID != nil && *input.CycleID != "" {
 					cycleIDs = []string{*input.CycleID}
 				}
-				metadata, err = s.store.LegacyIssueWriteAuthorization(r.Context(), query.Workspace, authUser(r).ID, projectIDs, cycleIDs)
+				err = store.ErrLegacyIssueAuthorizationUnscoped
+				if !completeIssueWriteReads.Load() {
+					metadata, err = s.store.LegacyIssueWriteAuthorization(r.Context(), query.Workspace, authUser(r).ID, projectIDs, cycleIDs)
+				}
 				if errors.Is(err, store.ErrLegacyIssueAuthorizationUnscoped) {
 					if err = acquireIssueAuthorizationProjection(r); err == nil {
 						metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)

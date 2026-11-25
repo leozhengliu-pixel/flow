@@ -133,7 +133,7 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 // directory) and bodies that select further issues keep the complete
 // projection under the projection gate.
 func legacyIssueWriteScope(r *http.Request) (projectIDs, cycleIDs []string, ok bool) {
-	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || completeIssueWriteReads.Load() {
 		return nil, nil, false
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
@@ -161,6 +161,12 @@ func legacyIssueWriteScope(r *http.Request) (projectIDs, cycleIDs []string, ok b
 	}
 	return projectIDs, cycleIDs, true
 }
+
+// completeIssueWriteReads restores the complete reads single-issue writes
+// made before issue #244 (authorization, the issue update's checks and the
+// triage switch), for the differential that compares both paths. Production
+// never sets it.
+var completeIssueWriteReads atomic.Bool
 
 // acquireIssueAuthorizationProjection takes the request's projection slot
 // before an issue authorization builds the complete projection. Reads are

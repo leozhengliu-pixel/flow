@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"runtime"
-	"runtime/pprof"
 	"slices"
 	"strings"
 	"testing"
@@ -20,38 +19,41 @@ import (
 type sw244Route struct {
 	name, method, tail, body string
 	status                   int
+	// scoped: neither authorization nor the handler copies an unrelated
+	// project, so allocation stays flat as projects are added.
+	scoped bool
 }
 
 func sw244Routes(stateID, assigneeID string) []sw244Route {
 	return []sw244Route{
-		{"comment", "POST", "/comments", `{"body":"A plain comment"}`, 201},
-		{"priority", "PATCH", "", `{"priority":2}`, 200},
-		{"state", "PATCH", "", fmt.Sprintf(`{"stateId":%q}`, stateID), 200},
-		{"assignee", "PATCH", "", fmt.Sprintf(`{"assigneeId":%q}`, assigneeID), 200},
-		{"title", "PATCH", "", `{"title":"Changed title"}`, 200},
-		{"delete", "DELETE", "", "", 204},
-		{"share", "POST", "/share", "", 200},
-		{"unshare", "DELETE", "/share", "", 204},
-		{"replace-permissions", "PUT", "/permissions", `{"permissions":[{"subjectType":"workspace","role":"viewer"}]}`, 200},
-		{"edit-permission", "PATCH", "/permissions/sw244-permission", `{"role":"commenter"}`, 200},
-		{"delete-permission", "DELETE", "/permissions/sw244-permission", "", 204},
-		{"issue-reaction", "POST", "/reactions", `{"emoji":"thumbsup"}`, 200},
-		{"edit-comment", "PATCH", "/comments/@comment", `{"body":"Edited comment"}`, 200},
-		{"delete-comment", "DELETE", "/comments/@comment", "", 204},
-		{"comment-reaction", "POST", "/comments/@comment/reactions", `{"emoji":"thumbsup"}`, 200},
-		{"subscribe", "PUT", "/comments/@comment/subscription", `{"state":"subscribed"}`, 200},
-		{"unsubscribe", "DELETE", "/comments/@comment/subscription", "", 204},
-		{"delete-relation", "DELETE", "/relations/missing", "", 404},
-		{"link", "POST", "/links", `{"title":"Example","url":"https://example.test/"}`, 201},
-		{"delete-attachment", "DELETE", "/attachments/sw244-link", "", 204},
-		{"reminder", "POST", "/reminders", fmt.Sprintf(`{"remindAt":%q}`, time.Now().Add(time.Hour).UTC().Format(time.RFC3339)), 201},
-		{"loop-run", "POST", "/loop-runs", `{"prompt":"Review the issue"}`, 201},
-		{"releases", "PUT", "/releases", `{"releaseIds":["sw244-release"]}`, 200},
-		{"resolve-action", "POST", "/comment-actions/missing", `{"status":"dismissed"}`, 403},
-		{"refresh-suggestions", "POST", "/suggestions/refresh", "", 400},
-		{"accept-suggestion", "POST", "/suggestions/missing/accept", "", 404},
-		{"dismiss-suggestion", "POST", "/suggestions/missing/dismiss", "", 404},
-		{"read-actions", "GET", "/comment-actions", "", 200},
+		{"comment", "POST", "/comments", `{"body":"A plain comment"}`, 201, true},
+		{"priority", "PATCH", "", `{"priority":2}`, 200, false},
+		{"state", "PATCH", "", fmt.Sprintf(`{"stateId":%q}`, stateID), 200, false},
+		{"assignee", "PATCH", "", fmt.Sprintf(`{"assigneeId":%q}`, assigneeID), 200, false},
+		{"title", "PATCH", "", `{"title":"Changed title"}`, 200, false},
+		{"delete", "DELETE", "", "", 204, false},
+		{"share", "POST", "/share", "", 200, false},
+		{"unshare", "DELETE", "/share", "", 204, false},
+		{"replace-permissions", "PUT", "/permissions", `{"permissions":[{"subjectType":"workspace","role":"viewer"}]}`, 200, false},
+		{"edit-permission", "PATCH", "/permissions/sw244-permission", `{"role":"commenter"}`, 200, false},
+		{"delete-permission", "DELETE", "/permissions/sw244-permission", "", 204, false},
+		{"issue-reaction", "POST", "/reactions", `{"emoji":"thumbsup"}`, 200, false},
+		{"edit-comment", "PATCH", "/comments/@comment", `{"body":"Edited comment"}`, 200, true},
+		{"delete-comment", "DELETE", "/comments/@comment", "", 204, true},
+		{"comment-reaction", "POST", "/comments/@comment/reactions", `{"emoji":"thumbsup"}`, 200, true},
+		{"subscribe", "PUT", "/comments/@comment/subscription", `{"state":"subscribed"}`, 200, true},
+		{"unsubscribe", "DELETE", "/comments/@comment/subscription", "", 204, true},
+		{"delete-relation", "DELETE", "/relations/missing", "", 404, false},
+		{"link", "POST", "/links", `{"title":"Example","url":"https://example.test/"}`, 201, false},
+		{"delete-attachment", "DELETE", "/attachments/sw244-link", "", 204, false},
+		{"reminder", "POST", "/reminders", fmt.Sprintf(`{"remindAt":%q}`, time.Now().Add(time.Hour).UTC().Format(time.RFC3339)), 201, false},
+		{"loop-run", "POST", "/loop-runs", `{"prompt":"Review the issue"}`, 201, false},
+		{"releases", "PUT", "/releases", `{"releaseIds":["sw244-release"]}`, 200, false},
+		{"resolve-action", "POST", "/comment-actions/missing", `{"status":"dismissed"}`, 403, false},
+		{"refresh-suggestions", "POST", "/suggestions/refresh", "", 400, false},
+		{"accept-suggestion", "POST", "/suggestions/missing/accept", "", 404, false},
+		{"dismiss-suggestion", "POST", "/suggestions/missing/dismiss", "", 404, false},
+		{"read-actions", "GET", "/comment-actions", "", 200, true},
 	}
 }
 
@@ -94,8 +96,16 @@ func TestScaleP21SW244IssueWriteAllocations(t *testing.T) {
 	}
 	handler, cookies := f.host.Config.Handler, f.admin.Jar.Cookies(base)
 	const samples = 7
-	var before []uint64
-	for _, projects := range []int{0, 100} {
+	// Three phases on the same fixture: no projects; 100 unrelated projects
+	// without progress history; the same projects with 400 points in each of
+	// their five histories (200,000 points).
+	type phase struct {
+		name             string
+		projects, points int
+	}
+	phases := []phase{{"empty", 0, 0}, {"projects", 100, 0}, {"histories", 100, 400}}
+	measured := map[string][]uint64{}
+	for phaseIndex, current := range phases {
 		var stateID string
 		err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw244_seed", "", nil, func(data *domain.Bootstrap) error {
 			settings := data.TeamSettings[team.ID]
@@ -104,22 +114,24 @@ func TestScaleP21SW244IssueWriteAllocations(t *testing.T) {
 			data.WorkspaceSettings.FeatureFlags = map[string]bool{"releases": true, "loops": true, "triage-intelligence": true}
 			data.Releases = []domain.Release{{ID: "sw244-release", Name: "Release"}}
 			stateID = data.States[1].ID
-			data.Projects = make([]domain.Project, projects)
+			data.Projects = make([]domain.Project, current.projects)
 			for i := range data.Projects {
 				project := &data.Projects[i]
 				project.ID, project.Name, project.TeamIDs = fmt.Sprintf("sw244-project-%03d", i), "Unrelated project", []string{team.ID}
 				for _, series := range []*[]domain.ProjectProgressHistoryPoint{
 					&project.IssueCountHistory, &project.ScopeHistory, &project.CompletedScopeHistory, &project.InProgressScopeHistory, &project.ProgressHistory,
 				} {
-					*series = make([]domain.ProjectProgressHistoryPoint, 400)
+					if current.points > 0 {
+						*series = make([]domain.ProjectProgressHistoryPoint, current.points)
+					}
 				}
 			}
 			for route := range sw244Routes(stateID, owner.ID) {
 				for sample := range samples {
-					id := fmt.Sprintf("sw244-%d-%d-%d", projects, route, sample)
+					id := fmt.Sprintf("sw244-%d-%d-%d", phaseIndex, route, sample)
 					stamp := time.Now().UTC()
 					data.Issues = append(data.Issues, domain.Issue{
-						ID: id, Identifier: fmt.Sprintf("SW244-%d", 10000*projects+100*route+sample+1),
+						ID: id, Identifier: fmt.Sprintf("SW244-%d", 10000*phaseIndex+100*route+sample+1),
 						Title: "Initial title", Team: team, Creator: owner, State: data.States[0],
 						Version: 1, CreatedAt: stamp, UpdatedAt: stamp,
 						Attachments: []domain.Attachment{{ID: "sw244-link", IssueID: id, URL: "https://example.test/"}},
@@ -133,32 +145,18 @@ func TestScaleP21SW244IssueWriteAllocations(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// The test measures one authenticated HTTP request on a fresh issue
-		// each time. Seeding, fixture cleanup and garbage collection are outside
-		// the allocation samples. Use bytes, independent of SQL latency.
+		// One authenticated HTTP request on a fresh issue per sample. Seeding
+		// and garbage collection are outside the samples; bytes, not time.
 		for index, route := range sw244Routes(stateID, owner.ID) {
 			var bytes [samples]uint64
 			admitted := f.service.projectionGate.served.Load()
 			for sample := range samples {
-				id := fmt.Sprintf("sw244-%d-%d-%d", projects, index, sample)
+				id := fmt.Sprintf("sw244-%d-%d-%d", phaseIndex, index, sample)
 				var from, to runtime.MemStats
-				profile := projects > 0 && sample == 0 && os.Getenv("FLOW_SW244_PROFILE") == route.name
-				if profile {
-					runtime.MemProfileRate = 4096
-					runtime.GC()
-					f, _ := os.Create(os.Getenv("FLOW_SW244_PROFILE_DIR") + "/base.pprof")
-					_ = pprof.Lookup("allocs").WriteTo(f, 0)
-					_ = f.Close()
-				}
+				runtime.GC()
 				runtime.ReadMemStats(&from)
 				response := sw244Send(handler, workspace, cookies, "", route, id)
 				runtime.ReadMemStats(&to)
-				if profile {
-					runtime.GC()
-					f, _ := os.Create(os.Getenv("FLOW_SW244_PROFILE_DIR") + "/after.pprof")
-					_ = pprof.Lookup("allocs").WriteTo(f, 0)
-					_ = f.Close()
-				}
 				bytes[sample] = to.TotalAlloc - from.TotalAlloc
 				if response.Code != route.status {
 					t.Errorf("%s: HTTP %d, want %d (%s)", route.name, response.Code, route.status, response.Body.String())
@@ -166,13 +164,25 @@ func TestScaleP21SW244IssueWriteAllocations(t *testing.T) {
 			}
 			slices.Sort(bytes[:])
 			median := bytes[samples/2]
-			uses := f.service.projectionGate.served.Load() - admitted
-			t.Logf("%-20s projects=%3d bytes/op=%9d admissions=%d", route.name, projects, median, uses)
-			if projects == 0 {
-				before = append(before, median)
-			} else if os.Getenv("FLOW_SW244_BASELINE") != "1" && median > before[index]+64<<10 {
-				t.Errorf("%s allocated %d extra bytes with unrelated projects and histories", route.name, median-before[index])
-			}
+			measured[route.name] = append(measured[route.name], median)
+			t.Logf("%-20s %-9s bytes/op=%10d admissions=%d", route.name, current.name, median, f.service.projectionGate.served.Load()-admitted)
+		}
+	}
+	if os.Getenv("FLOW_SW244_BASELINE") == "1" {
+		return
+	}
+	// A copy of the histories is 28 MiB here; the slack absorbs allocator
+	// and map growth noise between phases.
+	const slack, historySlack = 64 << 10, 256 << 10
+	for _, route := range sw244Routes("", "") {
+		empty, projects, histories := measured[route.name][0], measured[route.name][1], measured[route.name][2]
+		// No route copies the unrelated progress histories.
+		if histories > projects+historySlack {
+			t.Errorf("%s allocated %d more bytes once unrelated projects had progress histories", route.name, histories-projects)
+		}
+		// Scoped routes copy no unrelated project at all.
+		if route.scoped && histories > empty+slack {
+			t.Errorf("%s allocated %d more bytes with 100 unrelated projects", route.name, histories-empty)
 		}
 	}
 }
