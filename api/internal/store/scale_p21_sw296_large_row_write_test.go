@@ -615,34 +615,50 @@ func scaleP21SW296Cases() []scaleP21SW296Case {
 }
 
 func TestScaleP21SW296LargeRowWriteDifferential(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 0)
+	scaleP21SW296LargeRowWrites(t, 0, false)
+}
+
+func TestScaleP21SW296LargeRowWriteDifferentialPart1Reloaded(t *testing.T) {
+	scaleP21SW296LargeRowWrites(t, 0, true)
 }
 
 func TestScaleP21SW296LargeRowWriteDifferentialPart2(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 1)
+	scaleP21SW296LargeRowWrites(t, 1, false, true)
 }
 
 func TestScaleP21SW296LargeRowWriteDifferentialPart3(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 2)
+	scaleP21SW296LargeRowWrites(t, 2, false)
+}
+
+func TestScaleP21SW296LargeRowWriteDifferentialPart3Reloaded(t *testing.T) {
+	scaleP21SW296LargeRowWrites(t, 2, true)
 }
 
 func TestScaleP21SW296LargeRowWriteDifferentialPart4(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 3)
+	scaleP21SW296LargeRowWrites(t, 3, false)
+}
+
+func TestScaleP21SW296LargeRowWriteDifferentialPart4Reloaded(t *testing.T) {
+	scaleP21SW296LargeRowWrites(t, 3, true)
 }
 
 func TestScaleP21SW296LargeRowWriteDifferentialPart5(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 4)
+	scaleP21SW296LargeRowWrites(t, 4, false, true)
 }
 
 func TestScaleP21SW296LargeRowWriteDifferentialReleaseAdd(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 5)
+	scaleP21SW296LargeRowWrites(t, 5, false, true)
 }
 
 func TestScaleP21SW296LargeRowWriteDifferentialReleaseRemove(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 6)
+	scaleP21SW296LargeRowWrites(t, 6, false, true)
 }
 
-func scaleP21SW296LargeRowWrites(t *testing.T, part int) {
+func TestScaleP21SW296LargeRowWriteDifferentialDocumentTitle(t *testing.T) {
+	scaleP21SW296LargeRowWrites(t, 7, false, true)
+}
+
+func scaleP21SW296LargeRowWrites(t *testing.T, part int, reloads ...bool) {
 	t.Helper()
 	f, view := scaleP21SW78Fixture(t)
 	f.db.SetMaxOpenConns(4)
@@ -658,11 +674,14 @@ func scaleP21SW296LargeRowWrites(t *testing.T, part int) {
 			shard = 5
 		case "release-removed":
 			shard = 6
+		case "document-title-at-max":
+			// The largest offloaded document dominates the race shard.
+			shard = 7
 		}
 		if shard != part {
 			continue
 		}
-		for _, reload := range []bool{false, true} {
+		for _, reload := range reloads {
 			t.Run(fmt.Sprintf("%s/reload=%t", test.name, reload), func(t *testing.T) {
 				scaleP21SW296Run(t, f, view, test, reload)
 			})

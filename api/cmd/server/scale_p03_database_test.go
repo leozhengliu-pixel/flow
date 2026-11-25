@@ -68,26 +68,34 @@ func scaleP03TrackResources(t *testing.T, repo *store.SQLiteStore) *scaleP03Fixt
 	t.Helper()
 	resources := &scaleP03FixtureResources{repo: repo}
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		ctx = workspaceFixtureContext(ctx)
-		ctx, finish := beginMetadataOutputReads(ctx)
-		defer finish()
+		run := func(timeout time.Duration, cleanup func(context.Context) error) error {
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			ctx = workspaceFixtureContext(ctx)
+			ctx, finish := beginMetadataOutputReads(ctx)
+			defer finish()
+			return cleanup(ctx)
+		}
 		for _, app := range resources.appUsers {
-			if err := scaleP03RetryWrite(ctx, func() error { return repo.ErasePersonFromWorkspace(ctx, app.workspace, app.id) }); err != nil {
+			if err := run(time.Minute, func(ctx context.Context) error {
+				return scaleP03RetryWrite(ctx, func() error { return repo.ErasePersonFromWorkspace(ctx, app.workspace, app.id) })
+			}); err != nil {
 				t.Errorf("clean up owned application membership: %v", err)
 			}
-			if err := repo.EraseAccount(ctx, app.id); err != nil {
+			if err := run(time.Minute, func(ctx context.Context) error { return repo.EraseAccount(ctx, app.id) }); err != nil {
 				t.Errorf("clean up owned application account: %v", err)
 			}
 		}
 		for i := len(resources.workspaces) - 1; i >= 0; i-- {
-			if err := repo.DeleteWorkspace(ctx, resources.workspaces[i]); err != nil {
-				t.Errorf("clean up owned workspace %s: %v", resources.workspaces[i], err)
+			workspace := resources.workspaces[i]
+			// Large fixtures purge many batches under -race. Account cleanup
+			// still has its own deadline, even when a workspace purge fails.
+			if err := run(5*time.Minute, func(ctx context.Context) error { return repo.DeleteWorkspace(ctx, workspace) }); err != nil {
+				t.Errorf("clean up owned workspace %s: %v", workspace, err)
 			}
 		}
 		for _, user := range resources.users {
-			if err := repo.EraseAccount(ctx, user.ID); err != nil {
+			if err := run(time.Minute, func(ctx context.Context) error { return repo.EraseAccount(ctx, user.ID) }); err != nil {
 				t.Errorf("clean up owned account %s: %v", user.ID, err)
 			}
 		}
