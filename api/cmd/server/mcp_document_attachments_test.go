@@ -47,7 +47,7 @@ func (f *documentAttachmentFixture) member(t *testing.T, email string) (domain.U
 		t.Fatal(err)
 	}
 	secret := "member-key-" + session.User.ID
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "api_key.created", "key-"+session.User.ID, nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "api_key.created", "key-"+session.User.ID, nil, func(data *domain.Bootstrap) error {
 		data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "key-" + session.User.ID, SecretHash: secretHash(secret), CreatorID: session.User.ID, Scopes: []string{"read", "write"}, CreatedAt: time.Now().UTC()})
 		return nil
 	}); err != nil {
@@ -283,7 +283,7 @@ func TestMCPDocumentAttachmentUploadFlow(t *testing.T) {
 	f.refused(t, admin, "prepare_attachment_upload", map[string]any{"document": documentID, "filename": "big.bin", "contentType": "application/octet-stream", "size": 10<<30 + 1}, "Invalid arguments")
 	f.refused(t, admin, "prepare_attachment_upload", map[string]any{"document": documentID, "filename": "a.txt", "contentType": "not a type", "size": 1}, "valid media type")
 	f.refused(t, admin, "prepare_attachment_upload", map[string]any{"document": "missing-document", "filename": "a.txt", "contentType": "text/plain", "size": 1}, "not found")
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.RestrictFileUploads, data.WorkspaceSettings.AllowedFileExtensions = true, []string{"json"}
 		return nil
 	}); err != nil {

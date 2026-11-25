@@ -73,7 +73,7 @@ func TestLegacyLoopsReadInCurrentShape(t *testing.T) {
 	srv, handler := newLoopTestServer(t, &fakeLoopProvider{})
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	legacy := domain.Loop{ID: "loop_legacy", Name: "Legacy", Level: "workspace", TriggerType: "issue", TriggerConfig: map[string]any{"action": "created or updated", "filter": true, "filterField": "priority", "filterOperator": "isNot", "filterValue": "Urgent"}, Instructions: "Do things. Then more.", TeamAccess: "allPublic", Enabled: true, OwnerID: bootstrap.Viewer.ID, Creator: bootstrap.Viewer, CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := srv.store.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "loop.created", legacy.ID, nil, func(data *domain.Bootstrap) error {
+	if err := srv.store.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "loop.created", legacy.ID, nil, func(data *domain.Bootstrap) error {
 		data.Loops = append(data.Loops, legacy)
 		return nil
 	}); err != nil {

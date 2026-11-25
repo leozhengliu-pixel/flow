@@ -29,7 +29,7 @@ func TestIdentityRoleMappingSupportsClaimsAndDefaults(t *testing.T) {
 func TestSCIMProvisioningSupportsExternalIdentifiersWithoutEmail(t *testing.T) {
 	handler, repository := enterpriseTestServer(t)
 	seed, _ := repository.BootstrapFor("test-workspace")
-	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "scim.test.configured", "workspace", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "scim.test.configured", "workspace", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.SCIMRoleMapping = map[string]string{"employee": "guest"}
 		data.WorkspaceSettings.SCIMTeamGroupMapping = map[string]string{seed.Teams[0].ID: "engineering"}
 		data.WorkspaceSettings.SCIMDefaultRole = "member"
@@ -137,7 +137,7 @@ func TestSCIMRoleGroupsUseWorkspaceSettingsWithoutBrowserSession(t *testing.T) {
 	defer httpServer.Close()
 	admin := authClient(t)
 	authRequest[domain.AuthSession](t, admin, http.MethodPost, httpServer.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)
-	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "scim.test.authenticated", "workspace", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "scim.test.authenticated", "workspace", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.SCIMRoleGroups = map[string]string{"owner": "Owners"}
 		return nil
 	}); err != nil {
@@ -400,7 +400,7 @@ func TestSCIMEntraProvisioningSequence(t *testing.T) {
 func TestSCIMOktaProvisioningSequence(t *testing.T) {
 	f := newSCIMFixture(t)
 	teamID := f.seed.Teams[0].ID
-	if err := f.repository.MutateWorkspace(t.Context(), "test-workspace", "scim.test.team", "workspace", nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "scim.test.team", "workspace", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.SCIMTeamGroupMapping = map[string]string{teamID: "Okta Engineering"}
 		return nil
 	}); err != nil {

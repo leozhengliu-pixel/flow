@@ -106,6 +106,11 @@ func (s *server) executeChatGroupRequest(ctx context.Context, workspace string, 
 	if err != nil || !binding.RequestsEnabled() {
 		return nil, fmt.Errorf("Nothing was filed: %s", chatActionErrorText("chat_requests_disabled", language))
 	}
+	if s.store.BoundedMetadataEnabled() {
+		var closeOutputs func()
+		ctx, closeOutputs = beginIndependentMetadataOutputReads(ctx)
+		defer closeOutputs()
+	}
 	ctx = withChatIdentityAuthentication(ctx, identity)
 	var metadata domain.Bootstrap
 	if err := s.chatAuthorizedWorkflowHeaders(ctx, record.WorkspaceKey, identity.UserID, &metadata); err != nil {

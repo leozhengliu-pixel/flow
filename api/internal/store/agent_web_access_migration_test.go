@@ -30,7 +30,7 @@ func TestAgentWebAccessMigration(t *testing.T) {
 		{name: "already explicit", enableEvent: true, settings: func(s *domain.WorkspaceSettings) { s.AgentWebAccess = &on; s.UpdatedAt = enabledAt.Add(time.Hour) }, want: &on},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := WithColdWork(context.Background(), "seed legacy workspace settings")
 			path := filepath.Join(t.TempDir(), "flow.db")
 			repo, err := OpenSQLiteTestFixture(path)
 			if err != nil {

@@ -25,7 +25,7 @@ func TestTeamSettingsCascadeRollsBackOnCallbackError(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	ctx := context.Background()
+	ctx := WithColdWork(context.Background(), "team cascade fixture")
 	key := repo.Bootstrap().Workspace.URLKey
 	retired := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	day := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)

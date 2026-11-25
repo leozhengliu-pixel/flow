@@ -2,8 +2,9 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -12,11 +13,16 @@ import (
 
 const recordJournalIdentitySchemaVersion = 29
 const recordJournalSchemaVersion = 33
+const sqliteJournalContentKeysVersion = 34
+
+var errRecordJournalTriggerPermission = errors.New("record journal trigger permission denied")
 
 // Triggers capture keys, never canonical bodies. The transaction token is
 // connection-local on external databases. SQLite has one writer, so its
 // token row is set with the first write and cleared before commit.
 func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
+	mode := recordJournalMode(s.dialect)
+	legacyOnDenied := s.dialect == "mysql" && (mode == "shadow" || strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")) == "")
 	applied, err := s.migrationApplied(ctx, recordJournalSchemaVersion)
 	if err != nil {
 		return err
@@ -84,7 +90,7 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	}
 	// Off removes canonical-table triggers. Disable authority before DDL so
 	// enabled peers fail closed until the next bounded repair completes.
-	if recordJournalMode() == "off" {
+	if mode == "off" {
 		if _, err := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET enabled=0 WHERE id=1`); err != nil {
 			return err
 		}
@@ -105,6 +111,9 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 		}
 		enabled = 0
 		if err := s.dropRecordJournalTriggers(ctx, capturing != 0); err != nil {
+			if legacyOnDenied && isMySQLSearchPermissionError(err) {
+				return errRecordJournalTriggerPermission
+			}
 			return err
 		}
 	}
@@ -121,31 +130,38 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	}
 	for index, spec := range recordJournalTriggerSpecs(s.dialect) {
 		if err := s.installRecordJournalTrigger(ctx, spec); err != nil {
-			// Restricted MySQL accounts may lack CREATE TRIGGER. Existing
-			// business writes still work in shadow; journal consumers fail
-			// closed and ResolveAccess keeps its live-policy compatibility path.
-			if s.dialect == "mysql" && isMySQLSearchPermissionError(err) && recordJournalMode() != "on" {
+			if legacyOnDenied && isMySQLSearchPermissionError(err) {
 				if capturing == 0 && index == 0 {
 					if _, resetErr := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET capturing=0 WHERE id=1`); resetErr != nil {
 						return resetErr
 					}
 				}
-				slog.Warn("record journal unavailable: trigger permission required", "error", err)
-				return nil
+				return errRecordJournalTriggerPermission
 			}
 			return fmt.Errorf("record journal trigger %s: %w", spec.name, err)
 		}
 	}
 	if s.dialect == "sqlite" {
+		if err := s.migrateSQLiteRecordJournalContentKeys(ctx); err != nil {
+			return err
+		}
 		if err := s.ensureSQLiteRecordJournalFlush(ctx); err != nil {
 			return err
 		}
 	}
 	if enabled == 0 {
 		generation = idgen.New("rjg")
-		// Startup does not scan bodies. Existing workspaces stay unavailable
-		// until their versions and summaries are repaired in bounded batches.
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO record_journal_coverage(workspace_key,phase,last_field,last_key) SELECT workspace_key,0,'','' FROM workspace_states WHERE 1=1 ON CONFLICT(workspace_key) DO UPDATE SET phase=0,last_field='',last_key=''`); err != nil {
+		// An installation without versions can seed them without bumping
+		// retained versions or reconciling tombstones from an earlier epoch.
+		// Only use that walk when a separate catalog pass will build summaries.
+		initialPhase := 0
+		if s.db.boundedCatalog.Load() {
+			initialPhase = journalActivationSeed
+		}
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO record_journal_coverage(workspace_key,phase,last_field,last_key)
+			SELECT w.workspace_key,CASE WHEN EXISTS(SELECT 1 FROM record_versions v WHERE v.workspace_key=w.workspace_key) THEN 0 ELSE ? END,'',''
+			FROM workspace_states w WHERE 1=1
+			ON CONFLICT(workspace_key) DO UPDATE SET phase=excluded.phase,last_field='',last_key=''`, initialPhase); err != nil {
 			return err
 		}
 		if _, err := s.db.ExecContext(ctx, `UPDATE metadata_catalog_collections SET last_record_key='',started=0,phase=0,omissions=0,digest='',revision=''`); err != nil {
@@ -184,6 +200,34 @@ func (s *SQLiteStore) recordJournalMigration(ctx context.Context) error {
 		_, err = s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?) ON CONFLICT(version) DO NOTHING`, recordJournalSchemaVersion, "authorization epochs ignore pulse delivery cursors", time.Now().UTC().Format(time.RFC3339Nano))
 	}
 	return err
+}
+
+func (s *SQLiteStore) migrateSQLiteRecordJournalContentKeys(ctx context.Context) error {
+	applied, err := s.migrationApplied(ctx, sqliteJournalContentKeysVersion)
+	if err != nil || applied {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, spec := range recordJournalTriggerSpecs("sqlite") {
+		if spec.table != "workspace_content_records" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `DROP TRIGGER IF EXISTS `+spec.name); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, sqliteRecordJournalTriggerSQL(spec, "AFTER")); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)`,
+		sqliteJournalContentKeysVersion, "SQLite journal content keys from legacy rows", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteStore) dropRecordJournalTriggers(ctx context.Context, installed bool) error {
@@ -403,6 +447,14 @@ func recordJournalTriggerSpecs(dialect string) []recordJournalTrigger {
 	return specs
 }
 
+func sqliteRecordJournalTriggerSQL(spec recordJournalTrigger, timing string) string {
+	when := ""
+	if spec.condition != "" {
+		when = " WHEN " + spec.condition
+	}
+	return `CREATE TRIGGER IF NOT EXISTS ` + spec.name + ` ` + timing + ` ` + spec.event + ` ON ` + spec.table + when + ` BEGIN ` + spec.body + ` END`
+}
+
 func (s *SQLiteStore) installRecordJournalTrigger(ctx context.Context, spec recordJournalTrigger) error {
 	timing := "AFTER"
 	if spec.table == "auth_users" && spec.event == "DELETE" {
@@ -411,11 +463,7 @@ func (s *SQLiteStore) installRecordJournalTrigger(ctx context.Context, spec reco
 	var query string
 	switch s.dialect {
 	case "sqlite":
-		when := ""
-		if spec.condition != "" {
-			when = " WHEN " + spec.condition
-		}
-		query = `CREATE TRIGGER IF NOT EXISTS ` + spec.name + ` ` + timing + ` ` + spec.event + ` ON ` + spec.table + when + ` BEGIN ` + spec.body + ` END`
+		query = sqliteRecordJournalTriggerSQL(spec, timing)
 	case "mysql":
 		var count int
 		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema=DATABASE() AND trigger_name=?`, spec.name).Scan(&count); err != nil || count > 0 {

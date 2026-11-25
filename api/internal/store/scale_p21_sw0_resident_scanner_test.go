@@ -31,6 +31,7 @@ func (r *scaleP21SW0ResidentScannerReader) QueryContext(ctx context.Context, que
 func scaleP21SW0ResidentScannerFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, *sqlTx) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	f := scaleP09Database(t)
 	f.db.SetMaxOpenConns(1)

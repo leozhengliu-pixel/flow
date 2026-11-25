@@ -16,6 +16,7 @@ import (
 // write that changes the projects installs a new copy, and the next event
 // builds a new index from it.
 func TestPulseRulesAreSharedPerWorkspaceCopy(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off") // Only the legacy realtime path shares this index.
 	repo := pulseTestRepo(t)
 	hub := newRealtimeHub()
 	snapshot, _ := repo.PulseSources("test-workspace")
@@ -24,7 +25,7 @@ func TestPulseRulesAreSharedPerWorkspaceCopy(t *testing.T) {
 	if hub.pulseRulesFor("test-workspace", again) != first {
 		t.Fatal("an unchanged workspace copy built a second index")
 	}
-	if err := repo.MutateWorkspace(t.Context(), "test-workspace", "project.updated", "project_team", map[string]string{"name": "Renamed"}, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "project.updated", "project_team", map[string]string{"name": "Renamed"}, func(data *domain.Bootstrap) error {
 		for index := range data.Projects {
 			if data.Projects[index].ID == "project_team" {
 				data.Projects[index].Name = "Renamed"

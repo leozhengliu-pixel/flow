@@ -116,6 +116,8 @@ func normalizeCodingHarness(value string) string {
 // builtinAgentUserID is the workspace's built-in Flow agent user ("" when
 // it is not installed).
 func (s *server) builtinAgentUserID(ctx context.Context, workspace string) string {
+	ctx, finish := beginMetadataOutputReads(ctx)
+	defer finish()
 	applications, err := s.store.ListApplications(ctx, workspace)
 	if err != nil {
 		return ""
@@ -374,6 +376,7 @@ func (n *codingTriggerNotifier) ApprovalRequested(ctx context.Context, session d
 // issue's team (every workspace member when there is no team). The id is
 // deterministic, so a retry does not notify twice.
 func (n *codingTriggerNotifier) notifyApprovers(ctx context.Context, session domain.CodingSession, request coding.TriggerStartRequest, source string) error {
+	ctx = store.WithColdWork(ctx, "coding approval notifications")
 	now := time.Now()
 	title := firstNonEmpty(session.DisplayTitle, request.Title, "Coding session")
 	return n.s.store.MutateWorkspace(ctx, session.WorkspaceKey, "coding.approval_requested", session.ID, map[string]any{"sessionId": session.ID}, func(data *domain.Bootstrap) error {

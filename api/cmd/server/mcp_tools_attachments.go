@@ -315,7 +315,7 @@ func (s *server) attachMCPFile(ctx context.Context, actor mcpActor, target mcpAt
 }
 
 func (s *server) attachStoredObject(ctx context.Context, actor mcpActor, issueID string, attachment domain.Attachment, embed bool) (domain.Attachment, error) {
-	ctx = store.WithIssueRecordMutations(ctx, issueID)
+	ctx = s.issueAttachmentContext(store.WithIssueRecordMutations(ctx, issueID))
 	attachment.IssueID = issueID
 	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "attachment.created", issueID, nil, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, issueID)

@@ -108,7 +108,7 @@ func TestAgentChatSavedApprovalStillResolves(t *testing.T) {
 	held := []domain.AgentToolCall{agentTestCall("del_1", "delete_issue", map[string]any{"id": first.ID}), agentTestCall("del_2", "delete_issue", map[string]any{"id": second.ID})}
 	approval := &domain.AgentApproval{Kind: "delete", Targets: []domain.AgentApprovalTarget{{Kind: "issue", ID: first.ID, Label: first.Identifier}, {Kind: "issue", ID: second.ID, Label: second.Identifier}}, Calls: held}
 	questionID := session.Messages[1].ID + "_approval_0"
-	if err := srv.store.MutateWorkspace(t.Context(), data.Workspace.URLKey, "agent.message_completed", session.ID, nil, func(data *domain.Bootstrap) error {
+	if err := srv.store.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "agent.message_completed", session.ID, nil, func(data *domain.Bootstrap) error {
 		current, err := ownedAgentSession(data, session.ID)
 		if err != nil {
 			return err

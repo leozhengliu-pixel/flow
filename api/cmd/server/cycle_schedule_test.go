@@ -145,7 +145,7 @@ func TestStartCycleTodayKeepsItsEnd(t *testing.T) {
 // expireCurrentCycle advances a fixture to the day after its current cycle ended.
 func expireCurrentCycle(t *testing.T, repository *store.SQLiteStore, workspace, teamID string) {
 	t.Helper()
-	if err := repository.MutateWorkspace(t.Context(), workspace, "test.cycle_elapsed", teamID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "test.cycle_elapsed", teamID, nil, func(data *domain.Bootstrap) error {
 		cycle := currentCycle(data, teamID)
 		if cycle == nil {
 			return errNotFound

@@ -83,7 +83,7 @@ func TestChatIdentityRechecksCurrentWorkspaceAuthenticationPolicy(t *testing.T) 
 	s := &server{store: repository, uploadPath: t.TempDir()}
 	data := repository.Bootstrap()
 	identity := domain.ChatIdentity{UserID: data.Viewer.ID, AuthProvider: "password", AuthenticatedAt: time.Now().UTC()}
-	if err := repository.MutateWorkspace(context.Background(), data.Workspace.URLKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), data.Workspace.URLKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.RequireTwoFactor = true
 		data.WorkspaceSettings.DisableAdminBypass = true
 		return nil
@@ -100,7 +100,7 @@ func TestChatIdentityRechecksCurrentWorkspaceAuthenticationPolicy(t *testing.T) 
 	if err := s.chatAuthorizedMutation(ctx, data.Workspace.URLKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, nil); err != nil {
 		t.Fatalf("valid consent evidence was rejected: %v", err)
 	}
-	if err := repository.MutateWorkspace(context.Background(), data.Workspace.URLKey, "identity_provider.updated", "provider_enforced", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), data.Workspace.URLKey, "identity_provider.updated", "provider_enforced", nil, func(data *domain.Bootstrap) error {
 		data.IdentityProviders = append(data.IdentityProviders, domain.IdentityProvider{ID: "provider_enforced", Enabled: true, Enforced: true, Issuer: "https://login.example.test"})
 		return nil
 	}); err != nil {
@@ -119,7 +119,7 @@ func TestChatIdentityExpiresWithWorkspaceSessionDuration(t *testing.T) {
 	defer repository.Close()
 	s := &server{store: repository, uploadPath: t.TempDir()}
 	data := repository.Bootstrap()
-	if err := repository.MutateWorkspace(context.Background(), data.Workspace.URLKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), data.Workspace.URLKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.SessionDurationDays = 7
 		return nil
 	}); err != nil {
@@ -140,7 +140,7 @@ func TestChatIdentityExpiresWithWorkspaceSessionDuration(t *testing.T) {
 			t.Fatalf("%s binding was not asked to reconnect: %v", name, err)
 		}
 	}
-	if err := repository.MutateWorkspace(context.Background(), data.Workspace.URLKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), data.Workspace.URLKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.RequireTwoFactor = true
 		data.WorkspaceSettings.DisableAdminBypass = true
 		return nil
@@ -172,7 +172,7 @@ func TestChatNotificationsResumeAfterTheirCursorFallsOutOfRetention(t *testing.T
 	if err := repository.InitializeChatDomainCursor(ctx, workspace); err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.MutateWorkspace(ctx, workspace, "integration.updated", "chat", nil, func(*domain.Bootstrap) error { return nil }); err != nil {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "integration.updated", "chat", nil, func(*domain.Bootstrap) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	database, err := sql.Open("sqlite", databasePath)

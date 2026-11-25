@@ -17,7 +17,7 @@ import (
 // (including its cold-route facade); the flags then change nothing.
 func (s *server) projectRecordAuthorizationMetadata(r *http.Request, workspace, userID string) (domain.Bootstrap, error, bool) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if s.store.BoundedMetadataEnabled() || len(parts) < 2 || parts[0] != "api" || parts[1] != "projects" && parts[1] != "initiatives" || r.Method == http.MethodGet || r.Method == http.MethodHead || !projectRecordMutationsEnabled(strings.TrimSuffix(parts[1], "s")) {
+	if s.store.BoundedMetadataEnabled() || len(parts) < 2 || parts[0] != "api" || parts[1] != "projects" && parts[1] != "initiatives" || r.Method == http.MethodGet || r.Method == http.MethodHead || !projectRecordMutationsEnabled(r.Context(), strings.TrimSuffix(parts[1], "s")) {
 		return domain.Bootstrap{}, nil, false
 	}
 	var data domain.Bootstrap

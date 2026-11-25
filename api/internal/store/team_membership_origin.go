@@ -101,6 +101,17 @@ func WithTeamMembershipWriteHookForTesting(ctx context.Context, hook func()) con
 // dry run and the list of changes (including parent-team memberships added
 // because the user joined a sub-team) for the audit log.
 func (s *SQLiteStore) ChangeTeamMembership(ctx context.Context, request TeamMembershipChangeRequest) (TeamMembershipChangeResult, error) {
+	if s.BoundedMetadataEnabled() && !request.Member && !request.DryRun {
+		// Admit the legacy issue cleanup before committing a removal, and
+		// before taking teamMembershipMu. Its batches borrow the same slot.
+		var result TeamMembershipChangeResult
+		err := s.withColdMetadataRead(WithColdWork(ctx, "team member cleanup"), func(ctx context.Context, _ *SQLiteStore) error {
+			var err error
+			result, err = s.changeTeamMembership(ctx, request)
+			return err
+		})
+		return result, err
+	}
 	if !request.RetryConcurrentWrites || !request.Member || request.DryRun {
 		return s.changeTeamMembership(ctx, request)
 	}

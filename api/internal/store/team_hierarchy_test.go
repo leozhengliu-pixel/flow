@@ -14,7 +14,7 @@ func TestTeamHierarchyMembershipAndPrivateBoundary(t *testing.T) {
 	}
 	defer repository.Close()
 	data := repository.Bootstrap()
-	ctx := t.Context()
+	ctx := WithColdWork(t.Context(), "team hierarchy fixture")
 	root := domain.Team{ID: "private-root", Private: true}
 	child := domain.Team{ID: "public-child"}
 	grandchild := domain.Team{ID: "grandchild"}

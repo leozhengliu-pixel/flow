@@ -76,7 +76,7 @@ func TestReviewMergeMarksAgentSessionsMerged(t *testing.T) {
 
 	// Manual status change on a local review.
 	viaPatch, pending := delegate("Agent patch work"), delegate("Agent still working")
-	if err := s.store.MutateWorkspace(t.Context(), workspace, "review.local_fixture", "", nil, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "review.local_fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Reviews[len(data.Reviews)-1].Provider, data.Reviews[len(data.Reviews)-1].Status = "", "open"
 		return nil
 	}); err != nil {

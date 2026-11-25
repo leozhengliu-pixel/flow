@@ -85,9 +85,13 @@ func TestRecentProjectUsesItsAuthorizedDirectoryRatherThanIssueQueryMetadata(t *
 	body, _ := json.Marshal(map[string]string{"type": "project", "id": project.ID})
 	r := httptest.NewRequest("POST", "/api/recent?workspace="+data.Workspace.URLKey, bytes.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
-	r = r.WithContext(context.WithValue(r.Context(), authUserContextKey{}, data.Viewer))
+	ctx, scope := store.WithColdScope(r.Context(), "POST /api/recent")
+	defer scope.Close()
+	r = r.WithContext(context.WithValue(ctx, authUserContextKey{}, data.Viewer))
 	s := &server{store: repository}
 	w := httptest.NewRecorder()
+	r, closeRead := beginRequestResourceReads(r)
+	defer closeRead()
 	s.recordRecentResource(w, r)
 	if w.Code != 204 {
 		t.Fatalf("recent project rejected after policy-only query projection: %d %s", w.Code, w.Body.String())

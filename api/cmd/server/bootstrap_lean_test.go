@@ -32,7 +32,10 @@ func getWithHeaders(t *testing.T, target, token string, headers map[string]strin
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
-	raw, _ := io.ReadAll(response.Body)
+	raw, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("GET %s status %d: %s", target, response.StatusCode, raw)
 	}

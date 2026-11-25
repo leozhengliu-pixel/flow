@@ -109,7 +109,9 @@ func TestApplicationMachineTokensUseAppIdentityAndPublicTeams(t *testing.T) {
 	applicationBearerRequest(t, host, token.Token, "POST", "/api/issues", `{"title":"Forbidden","teamId":"`+private.ID+`"}`, 403)
 	applicationBearerRequest(t, host, token.Token, "GET", "/api/oauth-applications", "", 401)
 	applicationBearerRequest(t, host, token.Token, "POST", "/api/api-keys", `{"name":"Escalate"}`, 403)
-	items, err := s.store.ListApplications(t.Context(), data.Workspace.URLKey)
+	ctx, finish := beginMetadataOutputReads(t.Context())
+	defer finish()
+	items, err := s.store.ListApplications(ctx, data.Workspace.URLKey)
 	if err != nil || len(items) != 1 || !items[0].AllPublicTeams {
 		t.Fatal("no installed application", err)
 	}

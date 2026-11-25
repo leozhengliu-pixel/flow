@@ -32,8 +32,9 @@ func localStoreDisabled() bool {
 	}
 }
 
-func localStoreAllowed(workspace string) bool {
-	return workspace != "" && !localStoreDisabled() && syncV2Enabled() && syncFlagEnabled("FLOW_SYNC_MANIFEST") && syncFlagEnabled("FLOW_INDEXED_READS")
+func (s *server) localStoreAllowed(workspace string) bool {
+	return workspace != "" && !localStoreDisabled() && s.store.SyncV2Enabled() &&
+		syncFlagEnabled("FLOW_SYNC_MANIFEST") && syncFlagEnabled("FLOW_INDEXED_READS")
 }
 
 func localStoreBrowserViewer(r *http.Request) string {
@@ -45,7 +46,7 @@ func localStoreBrowserViewer(r *http.Request) string {
 
 func (s *server) localStoreAuthority(r *http.Request, workspace string) (localStoreStamp, bool) {
 	viewer := localStoreBrowserViewer(r)
-	if viewer == "" || !localStoreAllowed(workspace) {
+	if viewer == "" || !s.localStoreAllowed(workspace) {
 		return localStoreStamp{}, false
 	}
 	if _, ready := s.syncV2Journal(); !ready {
@@ -119,7 +120,7 @@ func (s *server) localStoreChanges(w http.ResponseWriter, r *http.Request) bool 
 		return true
 	}
 	journal, ready := s.syncV2Journal()
-	if !ready || !localStoreAllowed(workspaceKey(r)) {
+	if !ready || !s.localStoreAllowed(workspaceKey(r)) {
 		http.NotFound(w, r)
 		return true
 	}

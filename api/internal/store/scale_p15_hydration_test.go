@@ -17,6 +17,7 @@ import (
 )
 
 func TestScaleP15UnloadedMutationKeepsStoredValues(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	repo, _ := scaleP04OwnedStore(t)
 	initial := repo.Bootstrap()
@@ -130,7 +131,7 @@ func TestScaleP15HydratesOnlyDeclaredRecords(t *testing.T) {
 	repo, _ := scaleP04OwnedStore(t)
 	initial := repo.Bootstrap()
 	workspace := initial.Workspace.URLKey
-	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: "p15-small", Name: "Small"}, domain.Project{ID: "p15-huge", Description: strings.Repeat("x", 3<<20)})
 		data.Settings["p15-empty"] = []any{}
 		return nil
@@ -377,10 +378,14 @@ func TestScaleP15RecordMutationPreservesUnloadedRevisionBodies(t *testing.T) {
 	}
 }
 
-func TestScaleP15HydrationDefaultIsOff(t *testing.T) {
-	for _, value := range []string{"", "off", "0", "false", "unknown", "shadow"} {
+func TestScaleP15HydrationDefaultAndOptOut(t *testing.T) {
+	t.Setenv("FLOW_RECORD_HYDRATION", "")
+	if RecordHydrationEnabled(t.Context()) {
+		t.Fatal("unset hydration should be disabled on SQLite")
+	}
+	for _, value := range []string{"off", "0", "false", "unknown", "shadow"} {
 		t.Setenv("FLOW_RECORD_HYDRATION", value)
-		if RecordHydrationEnabled() {
+		if RecordHydrationEnabled(t.Context()) {
 			t.Fatalf("hydration unexpectedly enabled for %q", value)
 		}
 	}
@@ -434,7 +439,7 @@ func TestScaleP15DecodedContainersAreBudgeted(t *testing.T) {
 	for i := range items {
 		items[i] = map[string]any{}
 	}
-	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Settings["p15-containers"] = items
 		return nil
 	}); err != nil {

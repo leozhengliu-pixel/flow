@@ -32,7 +32,7 @@ func TestScaleP21SW575SyncReadRetriesChangedAccessMetadata(t *testing.T) {
 			prefix := idgen.New("sw575-")
 			open := prefix + "open"
 			public := f.data.Teams[0].ID
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw575_seed", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p21.sw575_seed", "", nil, func(data *domain.Bootstrap) error {
 				data.Projects = []domain.Project{
 					{ID: open, Name: "Open", TeamIDs: []string{public}, Status: data.ProjectStatuses[0]},
 					{ID: prefix + "other", Name: "Other", TeamIDs: []string{public}, Status: data.ProjectStatuses[0]},
@@ -52,7 +52,7 @@ func TestScaleP21SW575SyncReadRetriesChangedAccessMetadata(t *testing.T) {
 			change := func(label string) time.Time {
 				minute++
 				at := base.Add(time.Duration(minute) * time.Minute)
-				if err := repo.MutateWorkspace(context.Background(), workspace, "scale_p21.sw575_update", "", nil, func(data *domain.Bootstrap) error {
+				if err := repo.MutateWorkspace(workspaceFixtureContext(context.Background()), workspace, "scale_p21.sw575_update", "", nil, func(data *domain.Bootstrap) error {
 					if data.ProjectUpdates == nil {
 						data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
 					}

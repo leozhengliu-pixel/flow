@@ -1827,15 +1827,18 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
   }))), []);
   const localBaselineCursor = localCheckpointRef.current?.workspaceKey === data?.workspace.urlKey && localCheckpointRef.current?.viewerId === data?.viewer.id ? localCheckpointRef.current?.cursor : undefined;
   const localRealtimeScope = !snapshotUnconfirmed && renderedStartup ? localSliceScope(data) : undefined;
+  // Resource-window manifests carry the domain-event head for legacy wakeups.
+  const resourceWindowCursor = syncClient?.manifest.capabilities.includes('resource-windows') ? syncClient.manifest.head : undefined;
+  const journalRealtime = Boolean(syncClient) && resourceWindowCursor === undefined;
   const realtime = useWorkspaceRealtime({
     // The stream starts once a bootstrap confirmed the workspace, resuming from the cursor it left off at; a
     // cached snapshot is never patched by replayed events.
     workspaceKey: snapshotUnconfirmed || !renderedStartup ? undefined : data?.workspace.urlKey,
     viewerId: snapshotUnconfirmed || !renderedStartup ? undefined : data?.viewer.id,
     snapshot: data,
-    syncV2: Boolean(syncClient),
-    syncCursor: syncClient?.manifest.head,
-    baselineCursor: localBaselineCursor,
+    syncV2: journalRealtime,
+    syncCursor: journalRealtime ? syncClient?.manifest.head : undefined,
+    baselineCursor: resourceWindowCursor ?? localBaselineCursor,
     localWorkspaceId: localRealtimeScope?.workspaceId,
     onStoreOwner: localStoreShadow.owner,
     onReplayError: error => toast.error(translateTitle(error.status === 409 ? 'Issue changed in another session' : 'Could not update issue')),

@@ -767,7 +767,7 @@ func (s *server) disconnectChatIntegration(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	if err == nil {
-		err = s.store.MutateWorkspace(store.WithMetadataFields(r.Context(), "integrationConnections"), workspaceKey(r), "integration.disconnected", record.ConnectionID, nil, func(data *domain.Bootstrap) error {
+		err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.disconnected", record.ConnectionID, nil, store.MetadataRecordScope{Fields: []string{"integrationConnections"}}, func(data *domain.Bootstrap) error {
 			data.IntegrationConnections = slices.DeleteFunc(data.IntegrationConnections, func(c domain.IntegrationConnection) bool { return c.Provider == r.PathValue("provider") })
 			return nil
 		})

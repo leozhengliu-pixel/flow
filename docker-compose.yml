@@ -14,6 +14,14 @@ services:
       FLOW_DATABASE_CONN_MAX_LIFETIME: ${FLOW_DATABASE_CONN_MAX_LIFETIME:-30m}
       FLOW_WORKSPACE_STATE_MAX_BYTES: ${FLOW_WORKSPACE_STATE_MAX_BYTES:-67108864}
       FLOW_DATABASE_MAX_TRANSACTION_BYTES: ${FLOW_DATABASE_MAX_TRANSACTION_BYTES:-33554432}
+      # Empty values inherit the database defaults: on for MySQL and PostgreSQL,
+      # off for SQLite. Bounded startup repairs the journal and prepares the catalog.
+      FLOW_BOUNDED_METADATA: ${FLOW_BOUNDED_METADATA:-}
+      FLOW_RECORD_HYDRATION: ${FLOW_RECORD_HYDRATION:-}
+      FLOW_RECORD_JOURNAL: ${FLOW_RECORD_JOURNAL:-}
+      FLOW_METADATA_CATALOG: ${FLOW_METADATA_CATALOG:-}
+      FLOW_SYNC_V2: ${FLOW_SYNC_V2:-}
+      FLOW_METADATA_MEMORY_BYTES: ${FLOW_METADATA_MEMORY_BYTES:-}
       FLOW_REDIS_MODE: ${FLOW_REDIS_MODE:-disabled}
       FLOW_REDIS_URL: ${FLOW_REDIS_URL:-}
       FLOW_REDIS_ADDRS: ${FLOW_REDIS_ADDRS:-}
@@ -160,6 +168,8 @@ services:
   mysql:
     image: mysql:8.4
     profiles: ["mysql"]
+    # Allow the application migration role to create journal triggers.
+    command: ["--log-bin-trust-function-creators=1"]
     environment:
       MYSQL_USER: ${MYSQL_USER:-flow}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-flow}

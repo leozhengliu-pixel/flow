@@ -75,7 +75,7 @@ func TestScaleP03PermissionDifferential(t *testing.T) {
 			retired := "p03-retired-" + suffix
 			archived := "p03-archived-" + suffix
 			now := time.Now().UTC()
-			err := repo.MutateWorkspace(ctx, workspace, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
+			err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.Teams = append(data.Teams, domain.Team{ID: public, Key: "P3O"}, domain.Team{ID: private, Key: "P3P", Private: true}, domain.Team{ID: child, Key: "P3C"}, domain.Team{ID: retired, Key: "P3R", RetiredAt: &now}, domain.Team{ID: archived, Key: "P3A", ArchivedAt: &now})
 				data.TeamSettings[public] = domain.TeamSettings{TeamID: public, Access: "public"}
 				data.TeamSettings[private] = domain.TeamSettings{TeamID: private, Access: "private"}
@@ -136,7 +136,7 @@ func TestScaleP03PermissionDifferential(t *testing.T) {
 			emptyScopes := scaleP03Key(t, f, []string{}, nil)
 			selected := scaleP03Key(t, f, []string{"read"}, []string{public})
 			empty := "p03-selected-empty-" + suffix
-			if err := repo.MutateWorkspace(ctx, workspace, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "p03-selected-empty", Name: "P03 persisted selected empty", SecretHash: secretHash(empty), CreatorID: f.data.Viewer.ID, Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}})
 				return nil
 			}); err != nil {
@@ -256,6 +256,9 @@ func TestScaleP03FlagAndNarrowRoutes(t *testing.T) {
 }
 
 func TestScaleP03RequestAuthorizationMatchesLegacyDuringRevocation(t *testing.T) {
+	// This compares the legacy projection's handoff with record access.
+	// The bounded point authorization instead checks access at the read.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, repo := range scaleP03ServerTestStores(t) {
 		for _, mode := range []string{"off", "on"} {
 			t.Run(name+"/"+mode, func(t *testing.T) {
@@ -263,7 +266,7 @@ func TestScaleP03RequestAuthorizationMatchesLegacyDuringRevocation(t *testing.T)
 				f := scaleP03Fixture(t, repo)
 				workspace := f.data.Workspace.URLKey
 				ctx := context.Background()
-				err := repo.MutateWorkspace(ctx, workspace, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
+				err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
 					data.Teams = append(data.Teams, domain.Team{ID: "p03-revoke", Private: true})
 					data.TeamSettings["p03-revoke"] = domain.TeamSettings{TeamID: "p03-revoke", Access: "private"}
 					data.Projects = append(data.Projects, domain.Project{ID: "p03-revoke", TeamIDs: []string{"p03-revoke"}})
@@ -277,6 +280,8 @@ func TestScaleP03RequestAuthorizationMatchesLegacyDuringRevocation(t *testing.T)
 				r.SetPathValue("id", "p03-revoke")
 				r = r.WithContext(context.WithValue(r.Context(), authUserContextKey{}, user))
 				r.Header.Set("X-Workspace-Key", workspace)
+				r, release := beginRequestResourceReads(r)
+				defer release()
 				if !f.service.resourceAllowed(r, workspace, user.ID) {
 					t.Fatal("initial membership denied")
 				}

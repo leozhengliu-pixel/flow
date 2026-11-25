@@ -28,7 +28,7 @@ func TestScaleP19EnableTransferMeasurement(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = repo.Close() })
 	f := scaleP03Fixture(t, repo)
-	err = repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects, data.Initiatives = nil, nil
 		now := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 		for i := range 23210 {

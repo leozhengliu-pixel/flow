@@ -97,7 +97,7 @@ func TestAgentRepliesInDocumentThreadNotifyOncePerThread(t *testing.T) {
 		t.Fatalf("mention did not start a document session: %+v", tasks)
 	}
 	// The second member takes part in the thread with a reply.
-	err := s.store.MutateWorkspace(documentContentScope(t.Context(), doc.ID), data.Workspace.URLKey, "document.comment_created", doc.ID, nil, func(next *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(workspaceFixtureContext(documentContentScope(t.Context(), doc.ID)), data.Workspace.URLKey, "document.comment_created", doc.ID, nil, func(next *domain.Bootstrap) error {
 		next.Comments[doc.ID] = append(next.Comments[doc.ID], domain.Comment{ID: "document_comment_reply_other", Version: 1, Body: "+1", ParentID: &comment.ID, User: *userByID(next, other), Reactions: map[string][]string{}, CreatedAt: time.Now().UTC()})
 		return nil
 	})
@@ -128,7 +128,7 @@ func TestAgentRepliesInProjectThreadNotifyOncePerThread(t *testing.T) {
 	if len(tasks) != 1 || tasks[0].CommentID != comment.ID {
 		t.Fatalf("mention did not start a project session: %+v", tasks)
 	}
-	err := s.store.MutateWorkspace(t.Context(), data.Workspace.URLKey, "project.commented", project.ID, nil, func(next *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "project.commented", project.ID, nil, func(next *domain.Bootstrap) error {
 		target, err := fullProjectByID(next, project.ID)
 		if err != nil {
 			return err

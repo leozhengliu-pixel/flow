@@ -19,7 +19,7 @@ func cycleSettingsDefaultsScenario(t *testing.T, workspace string, create func()
 	repo := create()
 	legacy := domain.CycleSettings{Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2}
 	explicit := domain.CycleSettings{Enabled: true, DurationWeeks: 3, StartsOn: 2, UpcomingCount: 1, Capacity: 0, AutoCreate: false}
-	if err := repo.MutateWorkspace(ctx, workspace, "test.cycle_settings_seeded", "", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "test.cycle_settings_seeded", "", nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, domain.Team{ID: "team_legacy_cycles", Key: "LEG", Name: "Legacy"}, domain.Team{ID: "team_explicit_cycles", Key: "EXP", Name: "Explicit"})
 		next.TeamSettings["team_legacy_cycles"] = next.TeamSettings[next.Teams[0].ID]
 		next.TeamSettings["team_explicit_cycles"] = next.TeamSettings[next.Teams[0].ID]

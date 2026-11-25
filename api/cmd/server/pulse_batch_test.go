@@ -30,7 +30,7 @@ func TestPulseTickCountsPerVisibilityInOneWrite(t *testing.T) {
 	private := authRequest[domain.Team](t, admin, "POST", host.URL+"/api/workspaces/"+key+"/teams", map[string]any{"name": "Private", "key": "PRV", "private": true}, "", http.StatusCreated)
 
 	now := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
-	err = repo.MutateWorkspace(t.Context(), key, "test.pulse", "", nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), key, "test.pulse", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule = "daily"
 		data.WorkspaceSettings.FeatureFlags["pulse"] = true
 		for id, settings := range data.TeamSettings {
@@ -46,9 +46,14 @@ func TestPulseTickCountsPerVisibilityInOneWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, err := repo.ViewerVisibilityKeys(t.Context(), key)
-	if err != nil || keys["usr_admin"] == keys["usr_member"] {
-		t.Fatalf("visibility keys = %v (%v), want admin and member apart", keys, err)
+	visibility, err := repo.BeginViewerVisibilityKeysRead(t.Context(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	distinct := visibility.Keys["usr_admin"] != visibility.Keys["usr_member"]
+	visibility.Close()
+	if !distinct {
+		t.Fatal("admin and member share a visibility group")
 	}
 	events := func() int {
 		count := 0

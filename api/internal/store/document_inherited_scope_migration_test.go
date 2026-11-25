@@ -49,7 +49,7 @@ func seedDocumentScopeFixture(t *testing.T, repo *SQLiteStore, workspace string)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.MutateWorkspace(ctx, workspace, "document.created", "doc_scope_issue", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "document.created", "doc_scope_issue", nil, func(next *domain.Bootstrap) error {
 		if !slices.ContainsFunc(next.Teams, func(team domain.Team) bool { return team.ID == fixture.otherTeam }) {
 			next.Teams = append(next.Teams, domain.Team{ID: fixture.otherTeam, Key: "SCP", Name: "Scope private", Private: true})
 		}

@@ -23,7 +23,7 @@ func scaleP03SmallReadFixture(t *testing.T, repo *store.SQLiteStore, scale int) 
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: "p03-target", Name: "Small target", TeamIDs: []string{data.Teams[0].ID}, Description: "Small body"})
 		data.Initiatives = append(data.Initiatives, domain.Initiative{ID: "p03-initiative", Name: "Small initiative", ProjectIDs: []string{"p03-target"}, Creator: data.Viewer})
 		body := strings.Repeat("x", scale*8<<10)

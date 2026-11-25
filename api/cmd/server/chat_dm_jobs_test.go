@@ -56,6 +56,8 @@ func recoverPeerChatDMJob(t *testing.T, s *server, workspace string) domain.Chat
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
+	ctx, closeReads := beginMetadataOutputReads(ctx)
+	defer closeReads()
 	l := &chatDMReplyLease{s: s, ctx: ctx, cancel: cancel, job: jobs[0]}
 	if err := json.Unmarshal(jobs[0].Payload, &l.payload); err != nil {
 		t.Fatal(err)
@@ -158,7 +160,7 @@ func TestPeerChatDMConcurrentThreadMessagesHaveOneAnswer(t *testing.T) {
 	defer once.Do(func() { close(release) })
 	// Seed one existing Agent thread without starting a reply.
 	sessionID := "agent_peer_dm_thread"
-	err := peers.stores[0].MutateWorkspace(t.Context(), f.record.WorkspaceKey, "agent.session_created", sessionID, nil, func(data *domain.Bootstrap) error {
+	err := peers.stores[0].MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "agent.session_created", sessionID, nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, domain.AgentSession{ID: sessionID, SlugID: "peer-dm", UserID: f.identity.UserID, Origin: "feishu", Location: "page", Title: "Peer DM", Messages: []domain.AgentMessage{}, CreatedAt: time.Now(), UpdatedAt: time.Now()})
 		return nil
 	})
@@ -179,7 +181,9 @@ func TestPeerChatDMConcurrentThreadMessagesHaveOneAnswer(t *testing.T) {
 			values["content"], _ = json.Marshal(string(content))
 			command := chatInboundCommand{Kind: "dm_message", OpenID: f.identity.OpenID, ChatID: chatDMTestChat, MessageID: []string{"om_peer_a", "om_peer_b"}[index], Values: values}
 			job := domain.ChatJob{DedupKey: command.MessageID}
-			errs <- s.chatDMMessage(t.Context(), f.record, job, command)
+			ctx, closeReads := beginMetadataOutputReads(t.Context())
+			defer closeReads()
+			errs <- s.chatDMMessage(ctx, f.record, job, command)
 		}()
 	}
 	for range 2 {

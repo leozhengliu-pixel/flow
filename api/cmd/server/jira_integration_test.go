@@ -59,7 +59,7 @@ func TestJiraOAuthConfigAndSyncLinkLifecycle(t *testing.T) {
 	if teamID == "" {
 		t.Fatal("expected fixture team")
 	}
-	err = repository.MutateWorkspace(t.Context(), "test-workspace", "jira.fixture_connected", connection.ID, nil, func(data *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "jira.fixture_connected", connection.ID, nil, func(data *domain.Bootstrap) error {
 		for i := range data.IntegrationConnections {
 			if data.IntegrationConnections[i].ID == connection.ID {
 				now := data.IntegrationConnections[i].UpdatedAt

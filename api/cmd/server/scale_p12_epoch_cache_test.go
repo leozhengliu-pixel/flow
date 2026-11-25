@@ -224,7 +224,7 @@ func TestScaleP12EpochCacheRetainsKeyExpiry(t *testing.T) {
 		f := newScaleP12Fixture(t, repo)
 		principal := f.principals[5]
 		deadline := time.Now().Add(5 * time.Second)
-		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p12.key_expiry", "", nil, func(data *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "scale_p12.key_expiry", "", nil, func(data *domain.Bootstrap) error {
 			for i := range data.APIKeys {
 				if data.APIKeys[i].ID == principal.key.ID {
 					data.APIKeys[i].ExpiresAt = &deadline
@@ -366,7 +366,7 @@ func TestScaleP12EpochCacheRejectsCredentialScopeEdits(t *testing.T) {
 		}
 		defer frame.Close()
 		var restricted domain.APIKey
-		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p12.key_scope", "", nil, func(data *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "scale_p12.key_scope", "", nil, func(data *domain.Bootstrap) error {
 			for i := range data.APIKeys {
 				if data.APIKeys[i].ID == principal.key.ID {
 					data.APIKeys[i].TeamRestriction = "selected"
@@ -397,7 +397,7 @@ func TestScaleP12EpochDeliveryIgnoresAnOlderPageSnapshot(t *testing.T) {
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
 		request := f.principals[4].request(f.data.Workspace.URLKey)
-		ctx, release, err := repo.BeginWorkspaceRead(request.Context(), f.data.Workspace.URLKey)
+		ctx, release, err := repo.BeginWorkspaceRead(workspaceFixtureContext(request.Context()), f.data.Workspace.URLKey)
 		if err != nil {
 			t.Fatal(err)
 		}

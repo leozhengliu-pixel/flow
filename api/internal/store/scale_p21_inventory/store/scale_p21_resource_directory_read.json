@@ -9,7 +9,7 @@
       "accessors": ["BeginInstalledMetadataRead"],
       "temperature": "hot",
       "temperatureReason": "Owned source/policy/header/output primitive for the five public resource connections.",
-      "callers": ["server/server.listBoundedResourceConnection", "server/server.getIssueLabelRecord"]
+      "callers": ["server/server.tryBoundedResourceConnection", "server/server.getIssueLabelRecord"]
     }
   }
 }

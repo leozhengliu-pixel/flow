@@ -113,15 +113,22 @@ var metadataResidencyFields = sync.OnceValue(func() map[string]string {
 	return fields
 })
 
-func boundedMetadataRequested() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_BOUNDED_METADATA"))) {
-	case "1", "true", "on":
-		return true
+func boundedMetadataRequested(driver string) bool {
+	const setting = "FLOW_BOUNDED_METADATA"
+	if !metadataFeatureEnabled(setting, driver) {
+		return false
 	}
-	return false
+	// A manual opt-in still goes through the startup guard. Implicit
+	// activation leaves explicitly disabled dependencies and shadows alone.
+	return strings.TrimSpace(os.Getenv(setting)) != "" ||
+		recordHydrationEnabled(driver) && recordJournalMode(driver) == "on" && !boundedMetadataShadowIncompatible()
 }
 
-func validateBoundedMetadataCoverage() error {
+func boundedMetadataShadowIncompatible() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_PEER_SYNC")), "shadow") || metadataCatalogShadowEnabled()
+}
+
+func validateBoundedMetadataCoverage(driver string) error {
 	if _, err := metadataConsumerReviews(); err != nil {
 		return fmt.Errorf("%w: %w", ErrBoundedMetadataCoverage, err)
 	}
@@ -145,11 +152,11 @@ func validateBoundedMetadataCoverage() error {
 	if err := boundedcrdt.CheckRuntime(); err != nil {
 		return fmt.Errorf("%w: %w", ErrBoundedMetadataCoverage, err)
 	}
-	if !RecordHydrationEnabled() || recordJournalMode() != "on" {
+	if !recordHydrationEnabled(driver) || recordJournalMode(driver) != "on" {
 		return fmt.Errorf("%w: record hydration and the record journal must both be on", ErrBoundedMetadataCoverage)
 	}
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_PEER_SYNC")), "shadow") {
-		return fmt.Errorf("%w: complete-snapshot peer shadow requires bounded metadata off", ErrBoundedMetadataCoverage)
+	if boundedMetadataShadowIncompatible() {
+		return fmt.Errorf("%w: peer sync and catalog shadow modes require bounded metadata off", ErrBoundedMetadataCoverage)
 	}
 	return nil
 }

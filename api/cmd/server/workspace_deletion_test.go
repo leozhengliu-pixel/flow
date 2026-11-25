@@ -51,7 +51,7 @@ func TestScheduledWorkspaceDeletionPurgesAfterTheGracePeriod(t *testing.T) {
 	f := newWorkspaceDeletionFixture(t)
 	key := f.workspace.URLKey
 	// A provider credential sealed for one of the workspace's integrations.
-	if err := f.repository.MutateWorkspace(ctx, key, "integration.connected", "integration_gl", nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(ctx), key, "integration.connected", "integration_gl", nil, func(data *domain.Bootstrap) error {
 		data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: "integration_gl", Provider: "gitlab", Status: "connected", Config: map[string]string{}, Scopes: []string{}, Channels: []string{}})
 		return nil
 	}); err != nil {

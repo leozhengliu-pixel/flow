@@ -342,13 +342,14 @@ func (r *metadataLogicalRecovery) readCanonical() error {
 	if err := r.tx.QueryRowContext(r.ctx, `SELECT COALESCE(MAX(`+headerSize+`),0) FROM workspace_metadata_records WHERE workspace_key=?`+restrict, append([]any{r.workspace}, restrictArgs...)...).Scan(&maxHeader); err != nil {
 		return err
 	}
-	// Both queries share the existing repeatable-read snapshot. Charge the
-	// largest actual header before the driver can allocate its strings.
-	if _, _, err := r.recordWork(maxHeader); err != nil {
+	// Stream small bodies with their headers. The driver only sees one
+	// bounded row at a time and larger bodies still use the chunked read.
+	inlineBytes := min(int64(32<<10), max(int64(metadataLogicalRecoveryRecordBytes)-maxHeader, 0))
+	if _, _, err := r.recordWork(maxHeader + inlineBytes); err != nil {
 		return err
 	}
-	rows, err := r.tx.QueryContext(r.ctx, `SELECT CASE WHEN `+headerSize+`<=? THEN field ELSE NULL END,CASE WHEN `+headerSize+`<=? THEN record_key ELSE NULL END,collection_order,`+bodyLength+`,`+physical+` FROM workspace_metadata_records WHERE workspace_key=?`+restrict+` ORDER BY field,record_key`,
-		append([]any{metadataLogicalRecoveryRecordBytes, metadataLogicalRecoveryRecordBytes, r.workspace}, restrictArgs...)...)
+	rows, err := r.tx.QueryContext(r.ctx, `SELECT CASE WHEN `+headerSize+`<=? THEN field ELSE NULL END,CASE WHEN `+headerSize+`<=? THEN record_key ELSE NULL END,collection_order,`+bodyLength+`,`+physical+`,CASE WHEN `+bodyLength+` BETWEEN 1 AND ? THEN data END FROM workspace_metadata_records WHERE workspace_key=?`+restrict+` ORDER BY field,record_key`,
+		append([]any{metadataLogicalRecoveryRecordBytes, metadataLogicalRecoveryRecordBytes, inlineBytes, r.workspace}, restrictArgs...)...)
 	if err != nil {
 		return err
 	}
@@ -357,7 +358,8 @@ func (r *metadataLogicalRecovery) readCanonical() error {
 		var field, key sql.NullString
 		var position, size int64
 		var physical int
-		if err := rows.Scan(&field, &key, &position, &size, &physical); err != nil {
+		var data []byte
+		if err := rows.Scan(&field, &key, &position, &size, &physical, &data); err != nil {
 			rows.Close()
 			return err
 		}
@@ -365,9 +367,17 @@ func (r *metadataLogicalRecovery) readCanonical() error {
 			rows.Close()
 			return ErrMetadataWorkBudget
 		}
+		if data != nil && int64(len(data)) != size {
+			rows.Close()
+			return io.ErrUnexpectedEOF
+		}
+		if (field.String == "documents" || field.String == "trash") && bytes.Contains(data, documentMarkerBytes) {
+			// Resolve revision markers in the per-record path.
+			data = nil
+		}
 		sequence++
-		if _, err := r.stage.exec(r.ctx, int64(len(field.String)+len(key.String)+128), `INSERT INTO canonical(seq,field,key,physical,position,size) VALUES(?,?,?,?,?,?)`,
-			sequence, field.String, []byte(key.String), physical, position, size); err != nil {
+		if _, err := r.stage.exec(r.ctx, int64(len(field.String)+len(key.String)+len(data)+128), `INSERT INTO canonical(seq,field,key,physical,position,size,data) VALUES(?,?,?,?,?,?,?)`,
+			sequence, field.String, []byte(key.String), physical, position, size, data); err != nil {
 			rows.Close()
 			return err
 		}
@@ -387,9 +397,9 @@ func (r *metadataLogicalRecovery) readCanonical() error {
 		var key []byte
 		var size, position, sequence int64
 		var physical int
-		query, args := `SELECT seq,field,key,physical,size,position FROM canonical ORDER BY field,position,key,seq LIMIT 1`, []any{}
+		query, args := `SELECT seq,field,key,physical,size,position FROM canonical WHERE data IS NULL ORDER BY field,position,key,seq LIMIT 1`, []any{}
 		if started {
-			query, args = `SELECT seq,field,key,physical,size,position FROM canonical WHERE (field,position,key,seq)>(?,?,CAST(? AS BLOB),?) ORDER BY field,position,key,seq LIMIT 1`,
+			query, args = `SELECT seq,field,key,physical,size,position FROM canonical WHERE data IS NULL AND (field,position,key,seq)>(?,?,CAST(? AS BLOB),?) ORDER BY field,position,key,seq LIMIT 1`,
 				[]any{previousField, previousPosition, string(previousKey), previousSequence}
 		}
 		err := r.stage.db.QueryRowContext(r.ctx, query, args...).Scan(&sequence, &field, &key, &physical, &size, &position)

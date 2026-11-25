@@ -40,7 +40,7 @@ func newEntityPayloadFixture(t *testing.T, seed func(data *domain.Bootstrap, pri
 	}
 	authRequest[any](t, admin, "PUT", host.URL+"/api/workspaces/"+key+"/teams/"+private.ID+"/members/"+insider.ID, map[string]any{"member": true, "role": "member"}, "", http.StatusNoContent)
 	if seed != nil {
-		if err := repo.MutateWorkspace(context.Background(), key, "test.entity_payloads", "", nil, func(data *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(context.Background()), key, "test.entity_payloads", "", nil, func(data *domain.Bootstrap) error {
 			seed(data, private.ID)
 			return nil
 		}); err != nil {

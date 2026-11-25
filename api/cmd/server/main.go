@@ -153,6 +153,8 @@ type server struct {
 	auditLogIP     string
 }
 
+var recordLoadRigMetadataMode = func(bool) {}
+
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
 		os.Exit(runHealthcheck())
@@ -166,9 +168,7 @@ func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "audit-verify" {
 		os.Exit(runAuditVerifyCommand(os.Args[2:]))
 	}
-	// Operators prepare a database for FLOW_BOUNDED_METADATA=on (journal
-	// repair and metadata catalog, docs/bounded-metadata.md) with
-	// `server metadata-prepare`.
+	// Optional foreground journal and catalog maintenance.
 	if len(os.Args) >= 2 && os.Args[1] == "metadata-prepare" {
 		os.Exit(runMetadataPrepareCommand(os.Args[2:]))
 	}
@@ -221,6 +221,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	recordLoadRigMetadataMode(repository.BoundedMetadataEnabled())
 	// Deferred first so it runs after repository.Close has released every
 	// installed spool file: the per-process spool directory goes last.
 	defer func() { _ = store.RemoveMetadataSpoolDirectory() }()
@@ -317,7 +318,7 @@ func main() {
 	}); err != nil {
 		log.Fatal(err)
 	}
-	// With bounded metadata on, operators see the catalog state per workspace
+	// With bounded metadata on, operators see the aggregate catalog state
 	// once and the COLD path counters periodically (FLOW_BOUNDED_METADATA_STATS_INTERVAL).
 	if s.store.BoundedMetadataEnabled() {
 		s.store.LogMetadataCatalogCompleteness(store.WithColdWork(shutdownSignal, "catalog-report"))
@@ -332,7 +333,7 @@ func main() {
 	go s.runCoding(store.WithColdWork(shutdownSignal, "coding"))
 	go s.runApplicationAgentWorker(store.WithColdWork(shutdownSignal, "application-agent-worker"))
 	go s.runRecurringIssueScheduler(shutdownSignal)
-	go s.runReviewImportScheduler(store.WithColdWork(shutdownSignal, "review-import-scheduler"))
+	go s.runReviewImportScheduler(shutdownSignal)
 	go s.runPersonalConnectionScheduler(shutdownSignal)
 	go s.runStorageMaintenance(store.WithColdWork(shutdownSignal, "storage-maintenance"), applicationConfig.Retention.DomainEvents)
 	go s.resealStoredSecrets(shutdownSignal)
@@ -2389,6 +2390,7 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 
 // purgeTeam permanently deletes a team and everything it owns.
 func (s *server) purgeTeam(ctx context.Context, workspaceKey, teamID string) error {
+	ctx = store.WithColdWork(ctx, "purge team")
 	err := s.store.MutateWorkspace(ctx, workspaceKey, "team.deleted", teamID, nil, func(data *domain.Bootstrap) error {
 		err := store.ApplyTeamDeletion(data, teamID)
 		if errors.Is(err, store.ErrTeamNotFound) {
@@ -3711,7 +3713,13 @@ func (s *server) updateInitiative(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Initiative
-	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "edit", id, input, &updated, &input), workspaceKey(r), favoriteMutationEvent("initiative.updated", input), id, input, func(data *domain.Bootstrap) error {
+	ctx := r.Context()
+	// An initiative edit can reconcile reciprocal project links even when
+	// projectIds is omitted. The bounded point writer cannot own that cascade.
+	if !s.store.BoundedMetadataEnabled() {
+		ctx = projectRecordScope(ctx, "initiative", "edit", id, input, &updated, &input)
+	}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), favoriteMutationEvent("initiative.updated", input), id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -5703,7 +5711,8 @@ func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
 		title = parsed.Host
 	}
 	var attachment domain.Attachment
-	err = s.store.MutateWorkspace(s.issueAttachmentContext(r.Context()), workspaceKey(r), "issue.link_created", id, input, func(data *domain.Bootstrap) error {
+	ctx := store.WithIssueRecordMutations(s.issueAttachmentContext(r.Context()), id)
+	err = s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.link_created", id, input, func(data *domain.Bootstrap) error {
 		issue, issueErr := issueByID(data, id)
 		if issueErr != nil {
 			return issueErr

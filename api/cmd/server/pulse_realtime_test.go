@@ -91,7 +91,7 @@ func TestPagedRealtimeDeliversPulseEventsByProjectVisibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	authRequest[any](t, admin, "PUT", host.URL+"/api/workspaces/"+key+"/teams/"+private.ID+"/members/"+insider.ID, map[string]any{"member": true, "role": "member"}, "", http.StatusNoContent)
-	err := repo.MutateWorkspace(context.Background(), key, "test.pulse", "", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(context.Background()), key, "test.pulse", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: "project_private", Name: "Private project", SlugID: "private-project", TeamIDs: []string{private.ID}, MemberIDs: []string{}, Status: data.Projects[0].Status})
 		data.Initiatives = append(data.Initiatives, domain.Initiative{ID: "initiative_private", Name: "Private initiative", LeadTeamID: private.ID, ProjectIDs: []string{"project_private"}, ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}})
 		return nil

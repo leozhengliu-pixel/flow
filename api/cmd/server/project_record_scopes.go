@@ -11,14 +11,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func projectRecordMutationsEnabled(kind string) bool {
+func projectRecordMutationsEnabled(ctx context.Context, kind string) bool {
 	flag := "FLOW_PROJECT_RECORD_MUTATIONS"
 	if kind == "initiative" {
 		flag = "FLOW_INITIATIVE_RECORD_MUTATIONS"
 	}
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(flag))) {
 	case "1", "true", "on":
-		return store.RecordHydrationEnabled()
+		return store.RecordHydrationEnabled(ctx)
 	}
 	return false
 }
@@ -144,7 +144,7 @@ func projectRecordRequirements(kind, operation, id string, input any) store.Meta
 }
 
 func projectRecordScope(ctx context.Context, kind, operation, id string, input any, results ...any) context.Context {
-	if !projectRecordMutationsEnabled(kind) {
+	if !projectRecordMutationsEnabled(ctx, kind) {
 		return ctx
 	}
 	// Reminders keep the full issue/content path: it refreshes counts used
@@ -225,7 +225,7 @@ func projectRecordScope(ctx context.Context, kind, operation, id string, input a
 // uploads and object deletion still happen once, outside the transaction.
 func projectRecordHandler(kind, operation string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !projectRecordMutationsEnabled(kind) {
+		if !projectRecordMutationsEnabled(r.Context(), kind) {
 			next(w, r)
 			return
 		}

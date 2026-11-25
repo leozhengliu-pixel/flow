@@ -19,7 +19,7 @@ func TestPasskeyMetadataLifecycle(t *testing.T) {
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	owner := bootstrap.Viewer.ID
-	err = repository.MutateWorkspace(t.Context(), "test-workspace", "passkey.test_seed", "pk-test", nil, func(data *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "passkey.test_seed", "pk-test", nil, func(data *domain.Bootstrap) error {
 		data.Passkeys = []domain.Passkey{{ID: "pk-test", UserID: owner, Name: "MacBook", CredentialJSON: `{"private":"never-return"}`, CreatedAt: time.Now().UTC()}}
 		return nil
 	})

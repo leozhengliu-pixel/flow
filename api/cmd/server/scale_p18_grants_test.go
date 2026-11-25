@@ -14,7 +14,7 @@ func TestScaleP18GuestGrantAndRevocation(t *testing.T) {
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := scaleP03Fixture(t, repo)
 		workspace, private := f.data.Workspace.URLKey, "p18-granted-private"
-		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
 			data.Teams = append(data.Teams, domain.Team{ID: private, Key: "P18G", Private: true})
 			data.TeamSettings[private] = domain.TeamSettings{TeamID: private, Access: "private"}
 			return nil
@@ -54,7 +54,7 @@ func TestScaleP18QueuedKeyRechecksCurrentScope(t *testing.T) {
 	repo, actor, ctx := scaleP18Fixture(t)
 	s := &server{store: repo}
 	key := domain.APIKey{ID: "p18-retained-key", SecretHash: secretHash(idgen.New("p18-token-")), CreatorID: actor.User.ID, Scopes: []string{"read"}}
-	if err := repo.MutateWorkspace(ctx, actor.WorkspaceKey, "api_key.created", key.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "api_key.created", key.ID, nil, func(data *domain.Bootstrap) error {
 		data.APIKeys = append(data.APIKeys, key)
 		data.Projects = append(data.Projects, domain.Project{ID: "p18-key-project", TeamIDs: []string{data.Teams[0].ID}})
 		return nil
@@ -66,7 +66,7 @@ func TestScaleP18QueuedKeyRechecksCurrentScope(t *testing.T) {
 	if _, err := s.callFlowTool(ctx, actor, "list_projects", nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.MutateWorkspace(ctx, actor.WorkspaceKey, "api_key.updated", key.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "api_key.updated", key.ID, nil, func(data *domain.Bootstrap) error {
 		for i := range data.APIKeys {
 			if data.APIKeys[i].ID == key.ID {
 				data.APIKeys[i].TeamRestriction, data.APIKeys[i].TeamIDs = "selected", []string{}
@@ -80,7 +80,7 @@ func TestScaleP18QueuedKeyRechecksCurrentScope(t *testing.T) {
 	if err != nil || len(page.(map[string]any)["items"].([]domain.Project)) != 0 {
 		t.Fatalf("retained credential widened the current scope: %v", err)
 	}
-	if err := repo.MutateWorkspace(ctx, actor.WorkspaceKey, "api_key.revoked", key.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "api_key.revoked", key.ID, nil, func(data *domain.Bootstrap) error {
 		for i := range data.APIKeys {
 			if data.APIKeys[i].ID == key.ID {
 				now := time.Now().UTC()

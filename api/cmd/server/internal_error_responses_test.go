@@ -182,7 +182,7 @@ func newDatabaseFailureFixture(t *testing.T) *databaseFailureFixture {
 	}
 	t.Cleanup(func() { repo.Close() })
 	f := &databaseFailureFixture{repo: repo, data: repo.Bootstrap(), secret: "database-failure-local-only"}
-	if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "api_key.created", "failure-key", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "api_key.created", "failure-key", nil, func(data *domain.Bootstrap) error {
 		data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "failure-key", SecretHash: secretHash(f.secret), CreatorID: data.Viewer.ID, Scopes: []string{"read", "write"}, CreatedAt: time.Now().UTC()})
 		return nil
 	}); err != nil {

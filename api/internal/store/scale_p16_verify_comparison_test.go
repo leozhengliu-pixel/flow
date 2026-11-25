@@ -19,7 +19,7 @@ func TestScaleP16EqualCollectionsKeepGeneratedReferenceBindings(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			for _, mode := range []string{"off", "on"} {
 				t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", mode)
-				if got := compareMutationCallbacks(result(test.left), result(test.right), nil) != ""; got != test.different {
+				if got := compareMutationCallbacks(t.Context(), result(test.left), result(test.right), nil) != ""; got != test.different {
 					t.Fatalf("%s: alias difference=%t, want %t", mode, got, test.different)
 				}
 			}

@@ -3,13 +3,31 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 
 	"flow/api/internal/domain"
 )
 
+// RetainIssueScanResult holds the budget for a row kept after the walk's
+// callback returns. Release it when the caller discards or writes the row.
+func (s *SQLiteStore) RetainIssueScanResult(ctx context.Context, issue domain.Issue) (func(), error) {
+	if !s.BoundedMetadataEnabled() {
+		return func() {}, nil
+	}
+	cost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(issue), 0)
+	if err != nil {
+		return nil, err
+	}
+	_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(cost))
+	return release, err
+}
+
 // Compatibility predicates that cannot yet use an index are evaluated a row
 // at a time. The caller retains only its bounded result, never the workspace.
 func (s *SQLiteStore) WalkIssueRecords(ctx context.Context, q IssueRecordQuery, visit func(domain.Issue) error) error {
+	if s.BoundedMetadataEnabled() {
+		return s.walkBoundedBootstrapIssueRows(ctx, q, false, true, visit)
+	}
 	reader, metadata, ok := s.workspaceReadSource(ctx, q.Workspace)
 	if !ok {
 		return ErrAuthForbidden

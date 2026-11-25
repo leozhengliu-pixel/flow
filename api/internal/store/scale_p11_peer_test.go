@@ -17,6 +17,8 @@ import (
 
 func scaleP11Stores(t *testing.T) (*SQLiteStore, *SQLiteStore, string) {
 	t.Helper()
+	// The original peer installer updates a decoded workspace.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	config := DatabaseConfig{Driver: os.Getenv("FLOW_TEST_DATABASE_DRIVER"), URL: os.Getenv("FLOW_TEST_DATABASE_URL"), MaxOpenConns: 4}
 	if (config.Driver == "") != (config.URL == "") {

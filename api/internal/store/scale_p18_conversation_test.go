@@ -12,6 +12,7 @@ import (
 )
 
 func TestScaleP18ConversationTargetsAndRecovery(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repo, _ := scaleP04OwnedStore(t)
 	data := repo.Bootstrap()
 	workspace, owner := data.Workspace.URLKey, data.Viewer.ID
@@ -68,7 +69,7 @@ func TestScaleP18ConversationScopePreservesUnloadedContexts(t *testing.T) {
 	repo, _ := scaleP04OwnedStore(t)
 	data := repo.Bootstrap()
 	workspace := data.Workspace.URLKey
-	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p18.seeded", "", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p18.seeded", "", nil, func(next *domain.Bootstrap) error {
 		next.AIConversations = []domain.AIConversation{{ID: "p18-target", UserID: data.Viewer.ID, Context: map[string]any{"keep": "target"}}, {ID: "p18-unrelated", UserID: data.Viewer.ID, Context: map[string]any{"keep": strings.Repeat("long context ", 10000)}}}
 		return nil
 	}); err != nil {

@@ -64,7 +64,7 @@ func TestCustomerMergeAndDeleteRefusedWhenManualEditsOff(t *testing.T) {
 	source := requestJSON[domain.Customer](t, handler, http.MethodPost, "/api/customers", map[string]any{"name": "Acme Old"}, http.StatusCreated)
 	target := requestJSON[domain.Customer](t, handler, http.MethodPost, "/api/customers", map[string]any{"name": "Acme"}, http.StatusCreated)
 	workspace := repository.Bootstrap().Workspace.URLKey
-	if err := repository.MutateWorkspace(t.Context(), workspace, "test.customer_settings", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "test.customer_settings", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.FeatureSettings.CustomerManualEdits = false
 		return nil
 	}); err != nil {

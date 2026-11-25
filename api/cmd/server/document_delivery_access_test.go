@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -18,6 +17,7 @@ import (
 func TestDocumentNotificationDeliveryRechecksAccess(t *testing.T) {
 	for _, bounded := range []string{"off", "on"} {
 		t.Run("bounded metadata "+bounded, func(t *testing.T) {
+			t.Setenv("FLOW_BOUNDED_METADATA", bounded)
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
 			t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
@@ -26,14 +26,11 @@ func TestDocumentNotificationDeliveryRechecksAccess(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer repository.Close()
-			serving := repository
-			if bounded == "on" {
-				if serving, err = repository.BoundedMetadataViewForTesting(context.Background()); err != nil {
-					t.Fatal(err)
-				}
+			if repository.BoundedMetadataEnabled() != (bounded == "on") {
+				t.Fatal("store did not start in the requested metadata mode")
 			}
 			mailer, sink := newSinkMailer(t)
-			service := &server{store: serving, uploadPath: t.TempDir(), mailer: mailer}
+			service := &server{store: repository, uploadPath: t.TempDir(), mailer: mailer}
 			host := httptest.NewServer(newHandler(service))
 			defer host.Close()
 			const workspace = "test-workspace"
@@ -69,11 +66,14 @@ func TestDocumentNotificationDeliveryRechecksAccess(t *testing.T) {
 			// Alice's notices are due as immediate mail now (a backlog the dispatcher
 			// meets after the access is gone); Bob's wait in the digest.
 			sink.take()
-			all, err := repository.NotificationDeliveries(t.Context(), workspace, []string{"pending", "delivering", "delivered", "failed", "digest"}, time.Now().UTC().Add(72*time.Hour))
+			statuses := []string{"pending", "delivering", "delivered", "failed", "digest"}
+			dueAt := time.Now().UTC().Add(72 * time.Hour)
+			all, err := repository.BeginDueNotificationDeliveryRead(t.Context(), workspace, statuses, dueAt)
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, delivery := range all.NotificationDeliveries {
+			defer all.Close()
+			for _, delivery := range all.Deliveries {
 				if delivery.RecipientID != aliceUser.ID || delivery.Channel != "email" {
 					continue
 				}
@@ -84,6 +84,7 @@ func TestDocumentNotificationDeliveryRechecksAccess(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			all.Close()
 			service.dispatchNotificationEmails(t.Context(), workspace)
 			service.dispatchNotificationDigests(t.Context(), workspace, time.Now().UTC().Add(72*time.Hour))
 			var mails []parsedMail
@@ -107,12 +108,13 @@ func TestDocumentNotificationDeliveryRechecksAccess(t *testing.T) {
 			if len(mails) != 2 {
 				t.Fatalf("recipients with access got %d mails about the open document, want 2 (immediate and digest)", len(mails))
 			}
-			deliveries, err := repository.NotificationDeliveries(t.Context(), workspace, []string{"pending", "delivering", "delivered", "failed", "digest"}, time.Now().UTC().Add(72*time.Hour))
+			deliveries, err := repository.BeginDueNotificationDeliveryRead(t.Context(), workspace, statuses, dueAt)
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer deliveries.Close()
 			notifications := repository.Bootstrap().Notifications
-			for _, delivery := range deliveries.NotificationDeliveries {
+			for _, delivery := range deliveries.Deliveries {
 				for _, notification := range notifications {
 					if notification.ID != delivery.NotificationID || delivery.Channel != "email" {
 						continue

@@ -19,7 +19,7 @@ func TestScaleP17QueuedAndReplayedDocumentRevocation(t *testing.T) {
 		f := scaleP03Fixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		member, user := scaleP03Join(t, f, "P17 revoked", idgen.New("p17-revoked-")+"@example.test", "member")
-		if err := repo.MutateWorkspace(t.Context(), workspace, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
 			data.Documents = append(data.Documents, domain.Document{ID: "p17-revoked", SlugID: "p17-revoked", Title: "p17-hidden-title", Content: "p17-hidden-body", Creator: data.Viewer, Permissions: []domain.DocumentPermission{{ID: "p17-owner", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner"}, {ID: "p17-grant", SubjectType: "user", SubjectID: user.ID, Role: "editor"}}})
 			return nil
 		}); err != nil {

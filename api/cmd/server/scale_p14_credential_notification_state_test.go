@@ -40,6 +40,8 @@ func TestScaleP14CredentialScopedNotificationState(t *testing.T) {
 			{"unrestricted", "all", nil, 3},
 		} {
 			t.Run(actor+"/"+spec.name, func(t *testing.T) {
+				ctx, finish := beginMetadataOutputReads(t.Context())
+				defer finish()
 				secret, key := apiKeyScopeCredential(t, f, actor, spec.restriction, spec.teams, []string{"read", "initiative:read"})
 				principal := key.SubjectID()
 				ids := []string{"scope-notification", "scope-hidden-notification", "scope-notification-child"}
@@ -47,7 +49,7 @@ func TestScaleP14CredentialScopedNotificationState(t *testing.T) {
 					for i := range ids {
 						ids[i] += "-" + principal
 					}
-					if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p14.app_notifications", "", nil, func(data *domain.Bootstrap) error {
+					if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p14.app_notifications", "", nil, func(data *domain.Bootstrap) error {
 						now := time.Now().UTC()
 						for i, issue := range []string{"scope-issue", "scope-hidden-issue", "scope-child"} {
 							data.Notifications = append(data.Notifications, domain.Notification{ID: ids[i], RecipientID: principal, IssueID: issue, SourceType: "issue", SourceID: issue, CreatedAt: now, UpdatedAt: now})
@@ -70,7 +72,9 @@ func TestScaleP14CredentialScopedNotificationState(t *testing.T) {
 				// Authenticate queues a metadata telemetry write. Let it commit
 				// before constructing the separate queued-event access fixture.
 				for deadline := time.Now().Add(3 * time.Second); ; {
-					current, err := repo.AuthenticateAPIKeyRecord(t.Context(), workspace, secretHash(secret), nil)
+					ctx, finish := beginMetadataOutputReads(t.Context())
+					current, err := repo.AuthenticateAPIKeyRecord(ctx, workspace, secretHash(secret), nil)
+					finish()
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -82,7 +86,7 @@ func TestScaleP14CredentialScopedNotificationState(t *testing.T) {
 					}
 					time.Sleep(5 * time.Millisecond)
 				}
-				access, err := repo.ResolveAccess(t.Context(), workspace, principal, &key)
+				access, err := repo.ResolveAccess(ctx, workspace, principal, &key)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -92,8 +96,8 @@ func TestScaleP14CredentialScopedNotificationState(t *testing.T) {
 				}
 				source.ChangedIDs = ids
 				var queries []string
-				ctx := store.WithSQLStatementObserver(t.Context(), func(query string) { queries = append(queries, query) })
-				projected, visible, err := f.service.projectNotificationState(ctx, access, f.data.Workspace.ID, principal, source)
+				observed := store.WithSQLStatementObserver(ctx, func(query string) { queries = append(queries, query) })
+				projected, visible, err := f.service.projectNotificationState(observed, access, f.data.Workspace.ID, principal, source)
 				if err != nil || !visible || projected.UnreadCount != spec.want || projected.Invalidated {
 					t.Fatalf("scoped push=%+v visible=%v error=%v", projected, visible, err)
 				}
@@ -113,7 +117,7 @@ func TestScaleP14CredentialScopedNotificationState(t *testing.T) {
 				}
 				if spec.restriction != "all" {
 					source.ChangedIDs = []string{"removed-notification"}
-					projected, visible, err = f.service.projectNotificationState(t.Context(), access, f.data.Workspace.ID, principal, source)
+					projected, visible, err = f.service.projectNotificationState(ctx, access, f.data.Workspace.ID, principal, source)
 					if err != nil || !visible || !projected.Invalidated || len(projected.ChangedIDs) != 0 || projected.UnreadCount != spec.want {
 						t.Fatalf("removed notification push=%+v visible=%v error=%v", projected, visible, err)
 					}
@@ -144,7 +148,7 @@ func TestScaleP14CountReauthenticatesAfterMetadataDrift(t *testing.T) {
 				if strings.Contains(query, "FROM api_key_lookup locator") {
 					authentications++
 				}
-				if strings.HasPrefix(query, "SELECT data,created_at,id FROM workspace_content_records") {
+				if strings.Contains(query, " FROM workspace_content_records WHERE ") && strings.Contains(query, "ORDER BY created_at DESC,id DESC") {
 					pageRead = true
 				}
 				epochRead := strings.HasPrefix(query, "SELECT workspace_id,(SELECT COALESCE(SUM(revision)") || strings.HasPrefix(query, "SELECT COALESCE((SELECT epoch FROM workspace_authz_epochs")
@@ -155,7 +159,7 @@ func TestScaleP14CountReauthenticatesAfterMetadataDrift(t *testing.T) {
 				write, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 				defer cancel()
 				before, beforeErr := repo.AuthzEpoch(write, f.data.Workspace.ID)
-				if err := repo.MutateWorkspace(store.ContextWithActor(write, f.data.Viewer), workspace, "scale_p14.credential_changed", key.ID, nil, func(data *domain.Bootstrap) error {
+				if err := repo.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(write, f.data.Viewer)), workspace, "scale_p14.credential_changed", key.ID, nil, func(data *domain.Bootstrap) error {
 					for i := range data.APIKeys {
 						if data.APIKeys[i].ID != key.ID {
 							continue
@@ -176,7 +180,7 @@ func TestScaleP14CountReauthenticatesAfterMetadataDrift(t *testing.T) {
 				after, afterErr := repo.AuthzEpoch(write, f.data.Workspace.ID)
 				unchangedAuthority = beforeErr == nil && afterErr == nil && before == after
 			})
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p14.notice", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p14.notice", "", nil, func(data *domain.Bootstrap) error {
 				now := time.Now().UTC()
 				data.Notifications = append(data.Notifications, domain.Notification{ID: idgen.New("p14-race-"), RecipientID: f.data.Viewer.ID, SourceType: "team", SourceID: team, CreatedAt: now, UpdatedAt: now})
 				return nil

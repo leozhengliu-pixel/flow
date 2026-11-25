@@ -259,6 +259,11 @@ config:
   appUrl: "http://flow.example.com"
   logLevel: info
   logFormat: json
+  # Bounded metadata, hydration, the journal, and Sync V2 default to "on"
+  # on MySQL and PostgreSQL and "off" on SQLite. Bounded startup prepares
+  # the catalog. Use config.env to override the defaults. See the upgrade and
+  # rollback steps in docs/bounded-metadata-activation.md before changing fleet flags.
+  # Peer journal sync, the result cache, and local-store rollout are opt-in.
   env: {}
   # The YAML configuration file (docs/configuration.md, "Configuration file";
   # a full example is examples/config.yaml in this chart). It is rendered as
@@ -384,6 +389,7 @@ postgresql:
 
 mysql:
   enabled: false
+  # Bundled MySQL allows the application migration role to create journal triggers.
   image: mysql:8.4
   auth:
     username: flow

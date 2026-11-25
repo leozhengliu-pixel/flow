@@ -203,7 +203,7 @@ func TestWorkspaceKeyRepairMigration(t *testing.T) {
 		{ID: "m1", Role: "user", Content: "Hi", CreatedAt: now},
 		{ID: "m2", Role: "assistant", Content: reply, CreatedAt: now},
 	}}
-	if err := repo.MutateWorkspace(ctx, "test-workspace", "agent.session_created", session.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "rename fixture"), "test-workspace", "agent.session_created", session.ID, nil, func(next *domain.Bootstrap) error {
 		next.AgentSessions = append(next.AgentSessions, session)
 		return nil
 	}); err != nil {
@@ -283,7 +283,7 @@ func TestOffloadedContentSweepRecoversBodiesUnderAPreviousKey(t *testing.T) {
 	session := domain.AgentSession{ID: "agent_session_sweep", SlugID: "sweep", UserID: "usr_admin", Title: "Chat", Location: "agent", IssueIDs: []string{}, SkillIDs: []string{}, CreatedAt: now, UpdatedAt: now, Messages: []domain.AgentMessage{
 		{ID: "m1", Role: "assistant", Content: strings.Repeat("Swept but recovered. ", 400), CreatedAt: now},
 	}}
-	if err := repo.MutateWorkspace(ctx, "test-workspace", "agent.session_created", session.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "rename fixture"), "test-workspace", "agent.session_created", session.ID, nil, func(next *domain.Bootstrap) error {
 		next.AgentSessions = append(next.AgentSessions, session)
 		return nil
 	}); err != nil {

@@ -44,6 +44,13 @@ func TestScaleP12JournalFallbackKeepsDeliveryAndFreshPermissions(t *testing.T) {
 				t.Cleanup(stop)
 			}
 			event := domain.RealtimeEvent{ID: "p12-journal-fallback", Type: "issue.updated", AggregateID: f.secret.ID, Payload: json.RawMessage(`{}`)}
+			t.Setenv("FLOW_SYNC_V2", "")
+			legacy, handled, err := peer.sharedEventFrame(request, event)
+			legacy.Close()
+			if handled || err != nil {
+				t.Fatal("default realtime delivery used shared projection without a journal")
+			}
+			t.Setenv("FLOW_SYNC_V2", "on")
 			scaleP12EqualEvent(t, peer, request, event)
 			frame, handled, err := peer.sharedEventFrame(request, event)
 			defer frame.Close()

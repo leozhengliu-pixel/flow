@@ -15,6 +15,7 @@ type chatBootstrapHeadersKind uint8
 const (
 	chatDMHeaders chatBootstrapHeadersKind = iota + 1
 	chatWorkflowHeaders
+	chatPreviewMetadata
 )
 
 // This typed contract supplies the fields consumed by DM forms, project
@@ -34,7 +35,7 @@ func (s *server) chatAuthorizedWorkflowHeaders(ctx context.Context, workspace, u
 }
 
 func (s *server) chatBootstrapHeaders(w http.ResponseWriter, r *http.Request, result *domain.Bootstrap, kind chatBootstrapHeadersKind) error {
-	if kind != chatDMHeaders && kind != chatWorkflowHeaders {
+	if kind != chatDMHeaders && kind != chatWorkflowHeaders && kind != chatPreviewMetadata {
 		return store.ErrBoundedMetadataCoverage
 	}
 	read, ok := s.beginIssueRecordsBootstrapRead(w, r)
@@ -46,10 +47,11 @@ func (s *server) chatBootstrapHeaders(w http.ResponseWriter, r *http.Request, re
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
-	var data domain.Bootstrap
-	if kind == chatDMHeaders {
+	data := read.Data
+	switch kind {
+	case chatDMHeaders:
 		data = chatBootstrapHeaderProjection(read.Data)
-	} else {
+	case chatWorkflowHeaders:
 		data = chatWorkflowBootstrapHeaderProjection(read.Data)
 	}
 	if err := read.TransferOutput(r.Context()); err != nil {

@@ -44,6 +44,7 @@ func TestTeamResourceWritesSkipIssueAndDiscussionRecords(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	repairFixtureJournal(t, repo)
 
 	base := host.URL + "/api/teams/" + team
 	pinned := authRequest[domain.TeamPinnedResource](t, admin, "POST", base+"/resources", map[string]any{"resourceType": "document", "resourceId": document.ID, "title": "Runbook"}, key, http.StatusCreated)
@@ -92,7 +93,7 @@ func TestTeamResourcesAvoidIssueAndDiscussionHydration(t *testing.T) {
 			// member display name. Exercise a real non-admin visibility projection.
 			authRequest[domain.WorkspaceMember](t, admin, "PATCH", host.URL+"/api/workspaces/"+key+"/members/usr_member", map[string]string{"role": "member"}, "", http.StatusOK)
 			private := authRequest[domain.Team](t, admin, "POST", host.URL+"/api/workspaces/"+key+"/teams", map[string]any{"name": "Private", "key": "PRV", "private": true}, "", http.StatusCreated)
-			err = repo.MutateWorkspace(t.Context(), key, "test.resources", team, nil, func(data *domain.Bootstrap) error {
+			err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), key, "test.resources", team, nil, func(data *domain.Bootstrap) error {
 				data.Documents = nil
 				data.TeamResourceSections = []domain.TeamResourceSection{{ID: "private-section", TeamID: private.ID, Name: "Private section"}}
 				data.TeamPinnedResources = []domain.TeamPinnedResource{{ID: "private-link", TeamID: private.ID, Title: "Private link", ResourceType: "link", URL: "https://example.test/private"}}
@@ -117,6 +118,7 @@ func TestTeamResourcesAvoidIssueAndDiscussionHydration(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			repairFixtureJournal(t, repo)
 			if _, ok := repo.BootstrapForContext(t.Context(), key); ok {
 				t.Fatal("poisoned fixture did not block full hydration")
 			}
@@ -136,10 +138,15 @@ func TestTeamResourcesAvoidIssueAndDiscussionHydration(t *testing.T) {
 				authRequest[teamResourcesRead](t, client, "GET", endpoint, nil, "", http.StatusOK)
 			}
 			authRequest[any](t, member, "GET", host.URL+"/api/teams/"+private.ID+"/resources", nil, key, http.StatusForbidden)
+			authRequest[any](t, member, "POST", host.URL+"/api/teams/"+private.ID+"/resources", map[string]any{
+				"resourceType": "link", "url": "https://example.test/denied", "title": "Denied",
+			}, key, http.StatusForbidden)
 			authRequest[any](t, authClient(t), "GET", endpoint, nil, key, http.StatusUnauthorized)
 			// Explicitly exercise the authorization-to-handler handoff: only
 			// team resources, not a workspace snapshot, should be retained.
 			r := httptest.NewRequest("GET", "/api/teams/"+team+"/resources", nil)
+			r, closeRead := beginRequestResourceReads(r)
+			defer closeRead()
 			if !s.resourceAllowed(r, key, initial.Viewer.ID) {
 				t.Fatal("resource authorization failed")
 			}

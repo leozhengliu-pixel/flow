@@ -81,7 +81,7 @@ func connectorToolName(policyID, tool string) string {
 // setTestConnectors enables MCP connectors in the fixture workspace and replaces its connectors.
 func setTestConnectors(t *testing.T, repository *store.SQLiteStore, policies ...applicationPolicy) {
 	t.Helper()
-	if err := repository.MutateWorkspace(t.Context(), repository.Bootstrap().Workspace.URLKey, "application_policy.updated", "code", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(store.WithColdWork(t.Context(), "connector fixture"), repository.Bootstrap().Workspace.URLKey, "application_policy.updated", "code", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.MCPConnectorsEnabled = true
 		setApplicationPolicies(data, policies)
 		return nil
@@ -276,7 +276,7 @@ func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 	}
 	setConnectors := func(policies ...applicationPolicy) {
 		t.Helper()
-		if err := s.store.MutateWorkspace(t.Context(), data.Workspace.URLKey, "application_policy.updated", "code", nil, func(data *domain.Bootstrap) error {
+		if err := s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "application_policy.updated", "code", nil, func(data *domain.Bootstrap) error {
 			data.WorkspaceSettings.MCPConnectorsEnabled = true
 			setApplicationPolicies(data, policies)
 			return nil

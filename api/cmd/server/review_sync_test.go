@@ -201,7 +201,7 @@ func newReviewSyncServer(t *testing.T, apiURL string, number int) (http.Handler,
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { repository.Close() })
-	err = repository.MutateWorkspace(t.Context(), "test-workspace", "review.sync_fixture", "", nil, func(data *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "review.sync_fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Reviews[0].Provider, data.Reviews[0].RepositoryOwner, data.Reviews[0].RepositoryName, data.Reviews[0].Number = "github", "jiaozongben", "flow-coding-test", number
 		data.Reviews[0].ExternalID = "1"
 		data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: "github-review-sync", Provider: "github", Name: "GitHub", Status: "connected", OAuthAuthorized: true,
@@ -426,7 +426,7 @@ func TestReviewWriteBackPermissionErrorKeepsLocalChange(t *testing.T) {
 
 func TestReviewWriteBackWithoutCredentialsFailsVisibly(t *testing.T) {
 	handler, repository := newReviewSyncServer(t, "http://127.0.0.1:1", 7)
-	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "review.sync_fixture", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "review.sync_fixture", "", nil, func(data *domain.Bootstrap) error {
 		for index := range data.IntegrationConnections {
 			data.IntegrationConnections[index].OAuthAuthorized = false
 		}
@@ -577,7 +577,7 @@ func TestReviewSyncFromGitLabMergeRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
-	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "review.sync_fixture", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "review.sync_fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Reviews[0].Provider, data.Reviews[0].RepositoryOwner, data.Reviews[0].RepositoryName, data.Reviews[0].Number = "gitlab", "group", "app", 3
 		data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: "gitlab-review-sync", Provider: "gitlab", Name: "GitLab", Status: "connected", OAuthAuthorized: true,
 			Config: map[string]string{"apiUrl": upstream.URL + "/api/v4"}, Scopes: []string{}, Channels: []string{}})

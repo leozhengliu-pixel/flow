@@ -63,7 +63,7 @@ func TestPulseSummaryAndAudioHonourWorkspaceAIPolicy(t *testing.T) {
 			provider, calls := fakeSummaryProvider(t, func(string) (int, string) {
 				return http.StatusOK, `{"summaries":[{"index":1,"updateId":"summary_update","summary":"AI text"}]}`
 			})
-			err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "workspaceSettings"), "test-workspace", "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
+			err := repo.MutateWorkspace(store.WithMetadataFields(workspaceFixtureContext(t.Context()), "workspaceSettings"), "test-workspace", "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
 				policy(&data.WorkspaceSettings)
 				return nil
 			})
@@ -96,7 +96,7 @@ func TestPulseCachedAISummaryIsNotServedAfterAIIsTurnedOff(t *testing.T) {
 	if summary := requestJSON[domain.PulseSummary](t, handler, http.MethodGet, "/api/pulse/summaries/"+id, nil, http.StatusOK); !summary.AI {
 		t.Fatalf("AI summary = %#v", summary)
 	}
-	err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "workspaceSettings"), "test-workspace", "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(store.WithMetadataFields(workspaceFixtureContext(t.Context()), "workspaceSettings"), "test-workspace", "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.HIPAACompliance = true
 		return nil
 	})
@@ -190,7 +190,7 @@ func TestPulseSummaryRetriesAfterTransientProviderFailure(t *testing.T) {
 		t.Fatalf("summary within the backoff = %#v (calls %d)", summary, calls.Load())
 	}
 	// Once the retry time passed, the next open asks the provider again.
-	err := repo.MutateWorkspace(context.Background(), "test-workspace", "test.notification", "", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "test.notification", "", nil, func(data *domain.Bootstrap) error {
 		for index := range data.Notifications {
 			if data.Notifications[index].ID == id && data.Notifications[index].PulseSummary != nil {
 				past := time.Now().UTC().Add(-time.Minute)
@@ -220,6 +220,8 @@ func TestPulseSummaryHonoursAPIKeyTeamRestriction(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api/pulse/summaries/"+id, nil)
 	request.SetPathValue("id", id)
 	request = request.WithContext(context.WithValue(request.Context(), apiKeyContextKey{}, domain.APIKey{ID: "key", TeamRestriction: "selected", TeamIDs: []string{"team_elsewhere"}}))
+	request, finish := beginRequestResourceReads(request)
+	defer finish()
 	summary, err := s.loadPulseSummary(request)
 	if err != nil {
 		t.Fatal(err)

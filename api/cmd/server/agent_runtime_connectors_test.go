@@ -148,7 +148,7 @@ func TestWorkerRunConnectorToolsForTheActingUserOnly(t *testing.T) {
 	}
 
 	// Connectors turned off for the workspace: the next call is refused.
-	if err := f.s.store.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "settings.updated", "mcp", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "settings.updated", "mcp", nil, func(data *domain.Bootstrap) error {
 		off := false
 		data.WorkspaceSettings.MCPConnectors = &off
 		return nil

@@ -193,7 +193,7 @@ func newTriageAIFixture(t *testing.T, reply func() string) *triageAIFixture {
 	if backlog < 0 {
 		t.Fatal("test workspace has no backlog state")
 	}
-	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.triage_ai_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(store.WithColdWork(t.Context(), "triage fixture"), bootstrap.Workspace.URLKey, "test.triage_ai_setup", team.ID, nil, func(data *domain.Bootstrap) error {
 		settings := teamSettings(data, team.ID)
 		settings.TriageEnabled = true
 		data.TeamSettings[team.ID] = settings

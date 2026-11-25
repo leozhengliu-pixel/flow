@@ -43,7 +43,7 @@ func TestMCPInvalidSecondaryOperationsDoNotPartiallyWrite(t *testing.T) {
 
 func TestMCPIssuePropertyRoundTripAndFilters(t *testing.T) {
 	f := newMCPContractFixture(t)
-	app, err := f.repository.InstallApplication(t.Context(), f.data.Workspace.URLKey, domain.ApplicationInstallation{ClientID: "contract-agent", Name: "Contract agent", Active: true, InstalledBy: f.data.Viewer.ID, TeamIDs: []string{f.data.Teams[0].ID}, Scopes: []string{"read", "app:assignable"}}, "")
+	app, err := f.repository.InstallApplication(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, domain.ApplicationInstallation{ClientID: "contract-agent", Name: "Contract agent", Active: true, InstalledBy: f.data.Viewer.ID, TeamIDs: []string{f.data.Teams[0].ID}, Scopes: []string{"read", "app:assignable"}}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

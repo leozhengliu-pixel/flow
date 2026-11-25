@@ -103,6 +103,8 @@ func TestColdProjectionMemoryConcurrency(t *testing.T) {
 }
 
 func TestScaleP07RecordReadsBypassSaturatedProjectionGate(t *testing.T) {
+	// The legacy point readers bypass the legacy full projection gate.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	f := scaleP07Fixture(t)
 	t.Setenv("FLOW_RECORD_ACCESS", "on")
 	gate := f.service.projectionGate

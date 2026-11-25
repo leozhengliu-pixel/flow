@@ -516,6 +516,11 @@ func (s *server) builtinRunRequest(r *http.Request, task domain.AgentTask) (*htt
 // blocker), and the thread gets the action and the session's state. Mentions and replies are left to the worker:
 // they share the delegation's session (issueCodingIdempotencyKey) only when the issue is delegated.
 func (s *server) ensureWorkerRunCoding(r *http.Request, run store.AgentRun) {
+	if s.store.BoundedMetadataEnabled() {
+		var finish func()
+		r, finish = beginRequestResourceReads(r)
+		defer finish()
+	}
 	task, err := s.store.AgentTask(r.Context(), run.WorkspaceKey, run.SessionID)
 	if err != nil || task.Trigger != "delegation" || task.CodingSessionID != "" || s.workerRunGuardFinished(r.Context(), run) {
 		return

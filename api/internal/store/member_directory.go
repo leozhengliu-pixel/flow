@@ -39,7 +39,7 @@ func (s *SQLiteStore) syncMemberDirectory(ctx context.Context, workspaceKey stri
 	for _, user := range missing {
 		ids = append(ids, user.ID)
 	}
-	ctx = WithMetadataFields(WithoutIssueRecordMutations(context.WithoutCancel(ctx)), "users")
+	ctx = WithColdWork(WithMetadataFields(WithoutIssueRecordMutations(context.WithoutCancel(ctx)), "users"), "member directory sync")
 	// The callback's users may already hold the joining member as the
 	// request's actor (mutations add their actor), so it never reports
 	// "no change": the write is what persists them.

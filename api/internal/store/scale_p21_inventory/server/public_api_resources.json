@@ -176,14 +176,14 @@
         "GET /api/workflow-states (server/public_api_routes.go:16)"
       ]
     },
-    "listBoundedResourceConnection": {
+    "tryBoundedResourceConnection": {
       "owner": "P21",
       "status": "reviewed",
       "reason": "Typed five-family producer applies existing credential/preferences/coarse/filter/search semantics to real source headers and retains at most one admitted page of sort keys. Global compact policy preserves duplicate counts and references; internal ordinal tags never enter filter/search/sort or derived names. Per-header, per-search-body/scratch and per-output ownership is independent, page leases clear before detached transport, and trailing live validation precedes successful completion. 4670 exact HTTP cases passed; primitive and encoder ownership passed persistent SQLite twice and targeted race.",
       "accessors": ["BeginResourceDirectoryRead"],
       "temperature": "hot",
       "temperatureReason": "Bounded representation's public project, milestone, initiative, document and issue-label connections.",
-      "callers": ["server/server.listProjectsConnection", "server/server.listProjectMilestonesConnection", "server/server.listInitiativesConnection", "server/server.listDocumentsConnection", "server/server.listIssueLabelsConnection"]
+      "callers": ["server/server.listBoundedResourceConnection"]
     },
     "publicMetadata": {
       "owner": "P21",

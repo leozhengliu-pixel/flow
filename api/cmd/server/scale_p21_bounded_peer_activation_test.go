@@ -51,7 +51,7 @@ func TestScaleP21BoundedPeerActivation(t *testing.T) {
 	writer, peer := open(), open()
 	receiver := &server{store: peer, realtime: newRealtimeHub()}
 	if !writer.BoundedMetadataEnabled() || !peer.BoundedMetadataEnabled() ||
-		receiver.recordPeerSyncMode() != "on" || !syncV2Enabled() {
+		receiver.recordPeerSyncMode() != "on" || !receiver.store.SyncV2Enabled() {
 		t.Fatal("replicas did not activate the full flag set")
 	}
 	if err := receiver.syncPeerWorkspace(t.Context(), workspace); err != nil {

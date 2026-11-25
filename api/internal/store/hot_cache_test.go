@@ -82,6 +82,7 @@ func TestHotCacheIssueQueryInvalidation(t *testing.T) {
 }
 
 func TestHotCacheProjectDirectoryUsesSnapshot(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repo, err := OpenSQLiteTestFixture(t.TempDir() + "/projects.db")
 	if err != nil {
 		t.Fatal(err)
@@ -111,6 +112,8 @@ func TestHotCacheDisabledStoreStillReads(t *testing.T) {
 
 func openCachedStore(t *testing.T) *SQLiteStore {
 	t.Helper()
+	// These tests exercise the legacy shared result cache with a coordinator.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repo, err := OpenSQLiteTestFixture(t.TempDir() + "/cache.db")
 	if err != nil {
 		t.Fatal(err)

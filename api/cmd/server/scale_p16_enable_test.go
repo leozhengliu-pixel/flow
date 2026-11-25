@@ -32,7 +32,7 @@ func scaleP16CascadeFixture(t *testing.T, db *scaleP04Database) (string, string,
 	data, _ := db.repo.BootstrapFor(db.key)
 	projectID, initiativeID := data.Projects[0].ID, "p16-cascade-initiative"
 	teamID := data.Teams[0].ID
-	if err := db.repo.MutateWorkspace(t.Context(), db.key, "scale_p16.seed", "", nil, func(data *domain.Bootstrap) error {
+	if err := db.repo.MutateWorkspace(workspaceFixtureContext(t.Context()), db.key, "scale_p16.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: "p16-move-team", Name: "Move", Key: "P16M"})
 		data.Initiatives = append(data.Initiatives, domain.Initiative{ID: initiativeID, Name: "Cascade", LeadTeamID: teamID, ProjectIDs: []string{projectID}})
 		for i := range 70 {
@@ -396,7 +396,7 @@ func TestScaleP16TeamMoveWithEarlierValidationRecord(t *testing.T) {
 	db := newScaleP04Database(t)
 	data, _ := db.repo.BootstrapFor(db.key)
 	ctx := store.ContextWithActor(t.Context(), db.users[0])
-	if err := db.repo.MutateWorkspace(ctx, db.key, "scale_p16.seed", "", nil, func(data *domain.Bootstrap) error {
+	if err := db.repo.MutateWorkspace(workspaceFixtureContext(ctx), db.key, "scale_p16.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: "p16-move-private", Key: "P16MV", Name: "Private", Private: true})
 		data.TeamSettings["p16-move-private"] = domain.TeamSettings{TeamID: "p16-move-private", Access: "private"}
 		data.Projects = append(data.Projects, domain.Project{ID: "p16-last-project", Name: "Last", TeamIDs: []string{data.Teams[0].ID}})

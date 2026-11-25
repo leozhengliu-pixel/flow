@@ -87,7 +87,7 @@ func TestLoopPublishedVersionsAndRestore(t *testing.T) {
 
 	// Loops published before versions existed get a v1, stored on first run.
 	legacy := domain.Loop{ID: "loop_legacy_v", Name: "Legacy", Status: "published", Level: "workspace", TriggerType: "schedule", TriggerConfig: map[string]any{"interval": 1, "unit": "day", "time": "10:00"}, Instructions: "Old.", TeamAccess: "allPublic", Enabled: true, OwnerID: bootstrap.Viewer.ID, Creator: bootstrap.Viewer, CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := srv.store.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "loop.created", legacy.ID, nil, func(data *domain.Bootstrap) error {
+	if err := srv.store.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "loop.created", legacy.ID, nil, func(data *domain.Bootstrap) error {
 		data.Loops = append(data.Loops, legacy)
 		return nil
 	}); err != nil {

@@ -178,7 +178,7 @@ func testIssueActivityRulesPersistAcrossStores(t *testing.T) {
 					var firstID string
 					for index, change := range test.edits {
 						if change.kind == "comment" {
-							err := writer.MutateWorkspace(WithIssueRecordMutations(t.Context(), issue.ID), workspace, "comment.created", issue.ID, nil, func(data *domain.Bootstrap) error {
+							err := writer.MutateWorkspace(WithIssueRecordMutations(WithColdWork(t.Context(), "workspace fixture"), issue.ID), workspace, "comment.created", issue.ID, nil, func(data *domain.Bootstrap) error {
 								data.Comments[issue.ID] = append(data.Comments[issue.ID], domain.Comment{ID: "comment_" + issue.ID, Body: "Interrupt", User: data.Viewer, CreatedAt: issue.CreatedAt.Add(change.at)})
 								return nil
 							})

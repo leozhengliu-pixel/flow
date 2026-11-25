@@ -63,7 +63,7 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 	t.Setenv("FLOW_INTEGRATION_GITHUB_AUTHORIZATION_URL", upstream.URL+"/login/oauth/authorize")
 	t.Setenv("FLOW_INTEGRATION_GITHUB_TOKEN_URL", upstream.URL+"/login/oauth/access_token")
 	t.Setenv("FLOW_INTEGRATION_GITHUB_API_URL", upstream.URL)
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.contract", "", nil, func(d *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.contract", "", nil, func(d *domain.Bootstrap) error {
 		d.Reviews[0].URL = upstream.URL + "/" + d.Reviews[0].RepositoryOwner + "/" + d.Reviews[0].RepositoryName + "/pull/" + strconv.Itoa(d.Reviews[0].Number)
 		d.Documents = append(d.Documents, domain.Document{ID: "contract-doc", Title: "Contract document", Content: "Detailed content", Creator: d.Viewer, TeamIDs: []string{d.Teams[0].ID}})
 		d.ReleasePipelines = append(d.ReleasePipelines, domain.ReleasePipeline{ID: "contract-pipeline", Name: "Contract pipeline", Type: "scheduled", TeamIDs: []string{d.Teams[0].ID}, Stages: []string{"Planned"}, StageStatuses: map[string]string{"Planned": "planned"}})
@@ -244,7 +244,7 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 	call("archive_agent_session", map[string]any{"id": "mention_sdk"})
 	// Comment actions: read a persisted proposal, then accept it through the SDK.
 	proposalIssue := created["id"].(string)
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.contract", proposalIssue, nil, func(d *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.contract", proposalIssue, nil, func(d *domain.Bootstrap) error {
 		settings := d.UserSettings[d.Viewer.ID]
 		settings.AgentEnabled = true
 		d.UserSettings[d.Viewer.ID] = settings
@@ -286,6 +286,8 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 
 func TestMCPUploadOwnershipRetryExpiryAndConcurrency(t *testing.T) {
 	repo, actor, ctx := newMCPToolTestContext(t)
+	ctx, closeReads := beginMetadataOutputReads(ctx)
+	defer closeReads()
 	s := &server{store: repo, uploadPath: t.TempDir()}
 	data := repo.Bootstrap()
 	body := "upload content"
@@ -380,7 +382,7 @@ func TestMCPScopedReviewAndLabelIsolation(t *testing.T) {
 	actor.APIKey.TeamIDs = []string{data.Teams[0].ID}
 	actor.APIKey.TeamRestriction = "selected"
 	ctx = context.WithValue(ctx, apiKeyContextKey{}, actor.APIKey)
-	if err := repo.MutateWorkspace(ctx, actor.WorkspaceKey, "test.reviews", "", nil, func(d *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "test.reviews", "", nil, func(d *domain.Bootstrap) error {
 		d.Reviews[0].Events = append(d.Reviews[0].Events, domain.ReviewEvent{ID: "visible-thread", Type: "commented", Actor: actor.User})
 		d.Reviews = append(d.Reviews, domain.CodeReview{ID: "unlinked-review", Events: []domain.ReviewEvent{{ID: "hidden-thread", Type: "commented", Actor: actor.User}}})
 		return nil
@@ -388,6 +390,8 @@ func TestMCPScopedReviewAndLabelIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := &server{store: repo}
+	ctx, finish := beginMetadataOutputReads(workspaceFixtureContext(ctx))
+	defer finish()
 	visible, err := s.mcpWorkspaceData(ctx, actor)
 	if err != nil {
 		t.Fatal(err)

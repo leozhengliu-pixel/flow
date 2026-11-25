@@ -12,6 +12,7 @@ import (
 )
 
 func TestScaleP17SelectedWritesPreserveOmittedRecordsAndOrder(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORD_VERIFY", "off")
 	repo, _ := scaleP04OwnedStore(t)
@@ -71,6 +72,7 @@ func TestScaleP17SelectedWritesPreserveOmittedRecordsAndOrder(t *testing.T) {
 }
 
 func TestScaleP17DirectoryBodyGrowthDoesNotIncreaseAllocations(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	repo, _ := scaleP04OwnedStore(t)
 	initial := repo.Bootstrap()
@@ -136,11 +138,11 @@ func TestScaleP17DifferentialOracleChecksSideEffects(t *testing.T) {
 	b, _, _ := runVerifiedCallback(&full, nil, nil, nil, callback)
 	a.Data.Documents = b.Data.Documents
 	protected, _ := json.Marshal(before)
-	if path := compareMutationCallbacks(a, b, protected); !strings.Contains(path, "subscriptions") {
+	if path := compareMutationCallbacks(t.Context(), a, b, protected); !strings.Contains(path, "subscriptions") {
 		t.Fatalf("oracle missed an association side effect: %s", path)
 	}
 	a.Data.Subscriptions = b.Data.Subscriptions
-	if path := compareMutationCallbacks(a, b, protected); path != "" || !reflect.DeepEqual(a.Data, b.Data) {
+	if path := compareMutationCallbacks(t.Context(), a, b, protected); path != "" || !reflect.DeepEqual(a.Data, b.Data) {
 		t.Fatalf("oracle rejected equivalent data: %s", path)
 	}
 }
@@ -165,6 +167,7 @@ func TestScaleP17StaleReferencesAndAmbiguousRecordsKeepCanonicalInput(t *testing
 }
 
 func TestScaleP17CanonicalReadDoesNotDecodeOtherPayloads(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	repo, _ := scaleP04OwnedStore(t)
 	initial := repo.Bootstrap()

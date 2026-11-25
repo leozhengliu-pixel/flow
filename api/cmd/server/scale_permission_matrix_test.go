@@ -140,7 +140,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 	guest, guestUser := scaleP01Join(t, owned, base, workspace, admin, "P01 guest", "guest", public.ID)
 	outsider, _ := scaleP01Join(t, owned, base, workspace, admin, "P01 outsider", "member", public.ID)
 	projectID, hiddenID, childID := "p01-shared-"+suffix, "p01-hidden-"+suffix, "p01-child-"+suffix
-	if err := repo.MutateWorkspace(store.ContextWithActor(t.Context(), data.Viewer), workspace, "test.p01_fixture", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(t.Context(), data.Viewer)), workspace, "test.p01_fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects,
 			domain.Project{ID: hiddenID, SlugID: "hidden-000000000001", Name: "P01 hidden", TeamIDs: []string{private.ID}},
 			domain.Project{ID: childID, SlugID: "child-000000000003", Name: "P01 inherited", TeamIDs: []string{child.ID}},
@@ -174,7 +174,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 		if spec.name == "selected-empty" {
 			// Creation rejects this state; persisted keys can reach it after
 			// their selected teams disappear. It must remain deny-all.
-			if err := repo.MutateWorkspace(t.Context(), workspace, "api_key.updated", key.Key.ID, nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "api_key.updated", key.Key.ID, nil, func(data *domain.Bootstrap) error {
 				for i := range data.APIKeys {
 					if data.APIKeys[i].ID == key.Key.ID {
 						data.APIKeys[i].TeamIDs = []string{}
@@ -202,8 +202,11 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 			// contract, so it remains a visibility oracle only.
 			code, raw = scaleP01PermissionRead(t, viewer, base, workspace, "/api/projects?first=100")
 			var listed connection[json.RawMessage]
-			if code != http.StatusOK || json.Unmarshal(raw, &listed) != nil {
-				t.Fatal("project list unavailable")
+			if code != http.StatusOK {
+				t.Fatalf("project list status=%d", code)
+			}
+			if err := json.Unmarshal(raw, &listed); err != nil || listed.Nodes == nil {
+				t.Fatal("project list did not return a connection")
 			}
 			for _, target := range []struct {
 				id      string
@@ -292,7 +295,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 		t.Fatal("inherited project not visible before revocation")
 	}
 	head := authRequest[changesResponse](t, member, "GET", base+"/api/realtime/changes?since=0", nil, workspace, http.StatusOK).Head
-	if err := repo.MutateWorkspace(store.ContextWithActor(t.Context(), data.Viewer), workspace, "project.updated", childID, map[string]string{"name": "queued change"}, func(data *domain.Bootstrap) error { return nil }); err != nil {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(t.Context(), data.Viewer)), workspace, "project.updated", childID, map[string]string{"name": "queued change"}, func(data *domain.Bootstrap) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	authRequest[any](t, admin, "DELETE", base+"/api/teams/"+private.ID+"/members/"+memberUser.ID, nil, workspace, http.StatusOK)

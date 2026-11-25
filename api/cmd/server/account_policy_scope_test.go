@@ -51,7 +51,7 @@ func newPolicyScopeFixture(t *testing.T) policyScopeFixture {
 
 func (f policyScopeFixture) mutate(t *testing.T, change func(*domain.Bootstrap)) {
 	t.Helper()
-	if err := f.repository.MutateWorkspace(t.Context(), "test-workspace", "test.policy", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(store.WithColdWork(t.Context(), "policy fixture"), "test-workspace", "test.policy", "", nil, func(data *domain.Bootstrap) error {
 		change(data)
 		return nil
 	}); err != nil {
@@ -181,7 +181,7 @@ func TestSessionPolicyAnswersMatchOnBoundedMetadata(t *testing.T) {
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := scaleP21M2Setup(t, repo)
 		workspace := f.data.Workspace.URLKey
-		if err := repo.MutateWorkspace(t.Context(), workspace, "test.policy", "", nil, func(data *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(store.WithColdWork(t.Context(), "workspace fixture"), workspace, "test.policy", "", nil, func(data *domain.Bootstrap) error {
 			data.WorkspaceSettings.DisableAdminBypass = true
 			data.IdentityProviders = []domain.IdentityProvider{{ID: "idp", Issuer: "https://sso.example.test", Enabled: true, Enforced: true}}
 			return nil

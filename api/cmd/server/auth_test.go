@@ -303,7 +303,7 @@ func TestReleaseAuthorizationAndFeatureGate(t *testing.T) {
 	pipelineTrashID := adminBootstrap.Trash[trashIndex].ID
 	authRequest[any](t, member, http.MethodPost, server.URL+"/api/trash/"+pipelineTrashID+"/restore", nil, "test-workspace", http.StatusForbidden)
 
-	err = repository.MutateWorkspace(context.Background(), "test-workspace", "test.releases_disabled", "workspace", nil, func(data *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "test.releases_disabled", "workspace", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.FeatureFlags["releases"] = false
 		return nil
 	})
@@ -317,7 +317,7 @@ func TestReleaseAuthorizationAndFeatureGate(t *testing.T) {
 	authRequest[any](t, admin, http.MethodPut, server.URL+"/api/issues/"+publicIssue.ID+"/releases", map[string]any{"releaseIds": []string{publicRelease.ID}}, "test-workspace", http.StatusForbidden)
 	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/release-pipelines/"+publicPipeline.ID+"/access-key", nil, "test-workspace", http.StatusForbidden)
 	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/trash/"+pipelineTrashID+"/restore", nil, "test-workspace", http.StatusForbidden)
-	err = repository.MutateWorkspace(context.Background(), "test-workspace", "test.dashboards_disabled", "workspace", nil, func(data *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "test.dashboards_disabled", "workspace", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.FeatureFlags["dashboards"] = false
 		return nil
 	})

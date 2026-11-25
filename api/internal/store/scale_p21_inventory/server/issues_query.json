@@ -1,0 +1,12 @@
+{
+  "source": "server/issues_query.go",
+  "unmigrated": 0,
+  "consumers": {
+    "listIssues": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The filtered issue scan admits a page at a time from one SQL snapshot. The retained results and response encoding are admitted separately through the end of the response.",
+      "accessors": ["BeginMetadataJSONRead"]
+    }
+  }
+}

@@ -197,7 +197,7 @@ func TestSCIMValueLimits(t *testing.T) {
 func TestNULTextReachesTheStore(t *testing.T) {
 	for name, repo := range textLimitStores(t) {
 		t.Run(name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := WithColdWork(t.Context(), "text limits fixture")
 			data := repo.Bootstrap()
 			workspace := data.Workspace.URLKey
 			issueID := data.Issues[0].ID

@@ -29,7 +29,11 @@ func TestIssueRecordTransactionsPreserveScopeAndRollback(t *testing.T) {
 	repo.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { realtime = append(realtime, event) })
 	create := func(id string, parent *string) domain.Issue {
 		t.Helper()
-		err := repo.MutateWorkspaceWithAggregate(WithIssueRecordMutations(ctx), workspace, "issue.created", map[string]any{"parentId": parent}, func(data *domain.Bootstrap) (string, error) {
+		owner := &ResourceRead{store: repo}
+		defer owner.Close()
+		createCtx := WithIssueRecordMutations(owner.metadataOutputContext(ctx))
+		input := domain.IssueCreateInput{TeamID: base.Team.ID, ParentID: parent}
+		err := repo.MutateWorkspaceWithAggregate(createCtx, workspace, "issue.created", input, func(data *domain.Bootstrap) (string, error) {
 			for _, existing := range data.Issues {
 				if existing.ID == base.ID {
 					t.Fatal("create hydrated an unrelated issue")
@@ -104,7 +108,7 @@ func TestIssueRecordTransactionsPreserveScopeAndRollback(t *testing.T) {
 	if err != nil || saved.Title != updated.Title || saved.Version != updated.Version {
 		t.Fatal("rejected mutation changed persisted state")
 	}
-	err = repo.MutateWorkspace(WithIssueRecordMutations(ctx, child.ID), workspace, "comment.updated", child.ID, nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(WithIssueRecordMutations(ctx, child.ID), "workspace fixture"), workspace, "comment.updated", child.ID, nil, func(data *domain.Bootstrap) error {
 		if slices.ContainsFunc(data.Issues, func(v domain.Issue) bool { return v.ID == base.ID }) {
 			t.Fatal("comment mutation hydrated unrelated issue")
 		}
@@ -122,7 +126,7 @@ func TestIssueRecordTransactionsPreserveScopeAndRollback(t *testing.T) {
 	if err != nil || len(parentComments) != 1 || parentComments[0].Body != "Original" || len(history) != 2 {
 		t.Fatal("scoped comment mutation damaged other content")
 	}
-	err = repo.MutateWorkspace(WithIssueRecordMutations(ctx, parent.ID), workspace, "issue.deleted", parent.ID, nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(WithIssueRecordMutations(ctx, parent.ID), "workspace fixture"), workspace, "issue.deleted", parent.ID, nil, func(data *domain.Bootstrap) error {
 		data.Issues = slices.DeleteFunc(data.Issues, func(v domain.Issue) bool { return v.ID == parent.ID })
 		for i := range data.Issues {
 			if data.Issues[i].ID == child.ID {
@@ -174,7 +178,7 @@ func TestNotificationDeliveryTransactionsSelectDueRowsAndRollback(t *testing.T) 
 	issue := data.Issues[0]
 	now := time.Now().UTC()
 	past, future := now.Add(-time.Hour), now.Add(time.Hour)
-	err = repo.MutateWorkspace(ctx, key, "notification.created", "delivery-test", nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), key, "notification.created", "delivery-test", nil, func(data *domain.Bootstrap) error {
 		data.Notifications = append(data.Notifications, domain.Notification{ID: "due-notification", IssueID: issue.ID, RecipientID: data.Viewer.ID, Actor: data.Viewer, CreatedAt: past, UpdatedAt: past})
 		data.NotificationDeliveries = append(data.NotificationDeliveries, domain.NotificationDelivery{ID: "due", NotificationID: "due-notification", Channel: "email", Status: "failed", NextAttemptAt: &past, CreatedAt: past}, domain.NotificationDelivery{ID: "future", NotificationID: "due-notification", Channel: "email", Status: "failed", NextAttemptAt: &future, CreatedAt: past})
 		return nil
@@ -185,7 +189,15 @@ func TestNotificationDeliveryTransactionsSelectDueRowsAndRollback(t *testing.T) 
 	if !repo.HasNotificationDeliveries(ctx, key) {
 		t.Fatal("delivery availability ignored row storage")
 	}
-	snapshot, err := repo.NotificationDeliverySnapshot(ctx, key, []string{"failed"}, now)
+	readSnapshot := func(status string) (domain.Bootstrap, error) {
+		read, err := repo.BeginNotificationDeliveryContextRead(ctx, key, []string{status}, now)
+		if err != nil {
+			return domain.Bootstrap{}, err
+		}
+		t.Cleanup(read.Close)
+		return read.Data, nil
+	}
+	snapshot, err := readSnapshot("failed")
 	if err != nil || len(snapshot.NotificationDeliveries) != 1 || snapshot.NotificationDeliveries[0].ID != "due" || len(snapshot.Issues) != 1 || snapshot.Issues[0].ID != issue.ID {
 		t.Fatalf("due selection: %+v %v", snapshot.NotificationDeliveries, err)
 	}
@@ -194,7 +206,7 @@ func TestNotificationDeliveryTransactionsSelectDueRowsAndRollback(t *testing.T) 
 	if !errors.Is(err, rejected) {
 		t.Fatal(err)
 	}
-	snapshot, err = repo.NotificationDeliverySnapshot(ctx, key, []string{"failed"}, now)
+	snapshot, err = readSnapshot("failed")
 	if err != nil || len(snapshot.NotificationDeliveries) != 1 {
 		t.Fatal("failed delivery mutation was not rolled back")
 	}
@@ -207,7 +219,7 @@ func TestNotificationDeliveryTransactionsSelectDueRowsAndRollback(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err = repo.NotificationDeliverySnapshot(ctx, key, []string{"sent"}, now)
+	snapshot, err = readSnapshot("sent")
 	if err != nil || len(snapshot.NotificationDeliveries) != 1 || snapshot.NotificationDeliveries[0].Attempts != 1 || snapshot.NotificationDeliveries[0].DeliveredAt == nil {
 		t.Fatal("delivery result was not persisted")
 	}

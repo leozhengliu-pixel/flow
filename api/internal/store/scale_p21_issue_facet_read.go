@@ -536,7 +536,7 @@ func (r *IssueFacetRead) visitSQL(ctx context.Context, emit func(domain.Issue) e
 				size += selected[end].size
 				end++
 			}
-			if err := r.owner.store.visitBootstrapIssueWalkBatch(ctx, r.tx, r.workspace, selected[start:end], size, refs, false, emit); err != nil {
+			if err := r.owner.store.visitBootstrapIssueWalkBatch(ctx, r.tx, r.workspace, selected[start:end], size, refs, false, false, emit); err != nil {
 				return err
 			}
 			start = end

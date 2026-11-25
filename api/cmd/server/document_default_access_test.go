@@ -33,7 +33,7 @@ func TestDocumentDefaultAccessMigrationRoles(t *testing.T) {
 	}
 	ownerOnly := []domain.DocumentPermission{{ID: "document_permission_owner", DocumentID: "doc_owner_only", SubjectType: "user", SubjectID: creator.ID, Role: "owner", CreatedAt: created, UpdatedAt: created}}
 	teamViewer := []domain.DocumentPermission{{ID: "document_permission_team_" + team, DocumentID: "doc_team_viewer", SubjectType: "team", SubjectID: team, Role: "viewer", CreatedAt: created, UpdatedAt: created}}
-	if err := repository.MutateWorkspace(context.Background(), "test-workspace", "document.created", "doc_owner_only", nil, func(next *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "document.created", "doc_owner_only", nil, func(next *domain.Bootstrap) error {
 		next.Documents = append(next.Documents,
 			document("doc_owner_only", []string{team}, ownerOnly),
 			document("doc_team_viewer", []string{team}, teamViewer),
