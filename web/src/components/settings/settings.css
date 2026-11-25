@@ -1,6 +1,6 @@
 .settings-app{position:fixed;inset:0;display:grid;grid-template-columns:244px minmax(0,1fr);background:var(--bg-sidebar);color:var(--theme-text-primary);font-family:"Inter Variable","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px;letter-spacing:0;overflow:hidden}
 .settings-sidebar{height:100vh;display:flex;flex-direction:column;padding:12px 12px 0;background:var(--bg-sidebar);overflow:hidden}.settings-back{height:32px;display:flex;align-items:center;gap:8px;margin:0 0 12px 4px;padding:0 8px;border:0;background:transparent;color:var(--muted);font:500 13px inherit}.settings-back:hover{color:var(--text)}
-.settings-search{position:relative;flex:0 0 29px;display:flex;align-items:center;margin-bottom:17px}.settings-search>svg{position:absolute;left:10px;color:var(--faint);pointer-events:none}.settings-search input{width:100%;height:29px;padding:0 30px;border:.5px solid var(--border);border-radius:8px;outline:0;background:var(--theme-surface-2);color:var(--text);font:13px inherit}.settings-search input::placeholder{color:var(--faint)}.settings-search:focus-within input{border-color:var(--border-strong);background:var(--theme-surface-2)}.settings-search button{position:absolute;right:4px;width:24px;height:24px;display:grid;place-items:center;border:0;background:transparent;color:var(--faint)}
+.settings-search{position:relative;flex:0 0 29px;display:flex;align-items:center;margin-bottom:17px}.settings-search>svg{position:absolute;left:10px;color:var(--faint);pointer-events:none}.settings-search input{width:100%;height:29px;padding:0 30px;border:.5px solid var(--border);border-radius:8px;outline:none;outline-offset:-1px;transition:border-color .15s;background:var(--theme-surface-2);color:var(--text);font:13px inherit}.settings-search input::placeholder{color:var(--faint)}.settings-search:focus-within input{border-color:var(--border-strong);background:var(--theme-surface-2)}.settings-search button{position:absolute;right:4px;width:24px;height:24px;display:grid;place-items:center;border:0;background:transparent;color:var(--faint)}
 .settings-search-results{display:flex;flex-direction:column;gap:5px;padding-bottom:24px}
 :is(.settings-search input,.settings-sidebar nav button):focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-inset)}
 .settings-back:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
@@ -84,7 +84,7 @@
 :root[data-theme="light"] .settings-search input{border-color:var(--border);background:var(--theme-surface-2);color:var(--text);box-shadow:0 1px 2px #0000000a}
 :root[data-theme="light"] .settings-search>svg{color:var(--sidebar-nav-fg)}
 :root[data-theme="light"] .settings-search button{color:var(--faint)}
-:root[data-theme="light"] .settings-search:focus-within input{border-color:var(--border-strong);background:white}
+:root[data-theme="light"] .settings-search:focus-within input{border-color:var(--set-search-border);background:white}
 :root[data-theme="light"] .settings-sidebar nav h2{color:var(--muted)}
 :root[data-theme="light"] .settings-sidebar nav button{color:var(--theme-text-primary)}
 :root[data-theme="light"] .settings-sidebar nav button:hover{background:var(--bg-hover);color:lch(9.444% 0 282)}

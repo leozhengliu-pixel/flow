@@ -961,7 +961,7 @@ function SectionHeader({
   label: string;
   count: number;
   open: boolean;
-  onToggle: () => void;
+  onToggle?: () => void;
   onAdd?: () => void;
   addLabel?: string;
 }) {
@@ -974,8 +974,9 @@ function SectionHeader({
         {count > 0 && <TemplateGlyph name="caret" className={open ? "is-open" : undefined} />}
       </button>
       {onAdd && (
-        <button type="button" className="pt-icon-button" aria-label={t(addLabel ?? "Add")} onClick={onAdd}>
+        <button type="button" className="pt-icon-button pt-add-button-pill" aria-label={t(addLabel ?? "Add")} onClick={onAdd}>
           <FlowGlyph name="plus" width={14} height={14} />
+          <span>{t("Add")}</span>
         </button>
       )}
     </header>
@@ -1204,7 +1205,12 @@ function IssuesSection({
       />
     );
   }
-  if (!issues.length) return null;
+  if (!issues.length)
+    return (
+      <div className="pt-section pt-issues pt-issues--empty">
+        <SectionHeader label={t("Issues")} count={0} open={false} onAdd={() => onComposer({})} addLabel="Add issue" />
+      </div>
+    );
   return (
     <div className="pt-section pt-issues">
       <SectionHeader label={t("Issues")} count={issues.length} open={open} onToggle={() => setOpen((value) => !value)} />

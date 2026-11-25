@@ -67,6 +67,16 @@ describe('project template editor', () => {
     expect(within(footer).getByRole('button', { name: 'Create' })).toBeInTheDocument()
   })
 
+  it('shows an empty Issues section next to Milestones, each with a labelled Add button', async () => {
+    const user = userEvent.setup()
+    render(settings(fixture(), 'new'))
+    const sections = [...document.querySelectorAll('.pt-section-slot > .pt-section')] as HTMLElement[]
+    expect(sections.map(section => section.querySelector('.pt-section-title')?.textContent)).toEqual(['Milestones', 'Issues'])
+    for (const section of sections) expect(within(section).getByText('Add')).toBeInTheDocument()
+    await user.click(within(sections[1]).getByRole('button', { name: 'Add issue' }))
+    expect(screen.getByRole('textbox', { name: 'Issue title' })).toBeInTheDocument()
+  })
+
   it('adds, edits and removes milestones in the milestone composer', async () => {
     const user = userEvent.setup()
     render(settings(fixture(), 'new'))
@@ -91,7 +101,7 @@ describe('project template editor', () => {
   it('creates template issues from the Issues pill, with create-more', async () => {
     const user = userEvent.setup()
     render(settings(fixture(), 'new'))
-    await user.click(screen.getByRole('button', { name: 'Add issue' }))
+    await user.click(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' }))
     expect(screen.getByText('Create issue')).toBeInTheDocument()
     await user.click(screen.getByRole('switch'))
     await user.type(screen.getByRole('textbox', { name: 'Issue title' }), 'Kickoff{Enter}')
@@ -114,7 +124,7 @@ describe('project template editor', () => {
     await user.click(screen.getByRole('button', { name: 'Add' }))
     await user.type(screen.getByRole('textbox', { name: 'Milestone name' }), 'Alpha')
     await user.click(screen.getByRole('button', { name: 'Add milestone' }))
-    await user.click(screen.getByRole('button', { name: 'Add issue' }))
+    await user.click(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' }))
     await user.type(screen.getByRole('textbox', { name: 'Issue title' }), 'Kickoff{Enter}')
     await user.click(screen.getByRole('button', { name: 'Template visibility' }))
     await user.click(await screen.findByRole('menuitem', { name: /Test team/ }))
