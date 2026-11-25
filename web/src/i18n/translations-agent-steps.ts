@@ -25,6 +25,8 @@ export const agentStepsZhCN: Record<string, string> = {
   // Chat notices: a chat that could not be read, or one that is gone (deleted, or no longer the viewer's).
   "Couldn't load this chat.": "无法加载此对话。",
   "This chat is no longer available.": "此对话已不可用。",
+  // A saved agent session whose replies could not be read for now (the server was busy or unreachable).
+  "Couldn't load the agent's replies right now. Try again in a moment.": "暂时无法加载 Agent 的回复，请稍后重试。",
   // Chat tool labels: running and done.
   "Looking at issues…": "正在查看事项…",
   "Looked at issues": "已查看事项",
