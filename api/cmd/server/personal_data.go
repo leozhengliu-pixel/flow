@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"slices"
@@ -582,8 +583,8 @@ func (s *server) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	// its actor in the directory, which must not bring the name back.
 	ctx := store.ContextWithActor(context.WithoutCancel(r.Context()), domain.DeletedUserIdentity(user.ID))
 	if err := s.eraseAccount(ctx, user.ID); err != nil {
-		log.Printf("account deletion %s: %v", user.ID, err)
-		respondMutation(w, err, http.StatusNoContent, nil)
+		slog.WarnContext(ctx, "account deletion failed", "cause", requestErrorCode(err))
+		respondMutationWithFallback(w, err, http.StatusNoContent, nil, internalErrorMessage)
 		return
 	}
 	clearSessionCookie(w, r)
@@ -644,7 +645,7 @@ func (s *server) eraseAccount(ctx context.Context, userID string) error {
 	}
 	for _, key := range keys {
 		if err := s.erasePersonInWorkspace(ctx, key, userID); err != nil {
-			return fmt.Errorf("workspace %s: %w", key, err)
+			return fmt.Errorf("workspace erasure: %w", err)
 		}
 	}
 	connections, err := s.store.ListPersonalConnections(ctx, userID)
@@ -877,8 +878,8 @@ func (s *server) eraseMember(w http.ResponseWriter, r *http.Request) {
 		err = s.erasePersonInWorkspace(context.WithoutCancel(r.Context()), key, userID)
 	}
 	if err != nil {
-		log.Printf("member erasure %s in %s: %v", userID, key, err)
-		respondMutation(w, err, http.StatusOK, nil)
+		slog.WarnContext(r.Context(), "member erasure failed", "cause", requestErrorCode(err))
+		respondMutationWithFallback(w, err, http.StatusOK, nil, internalErrorMessage)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"userId": userID, "scope": scope})

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -97,7 +97,7 @@ func (s *server) inviteLinkPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.LoadMissingWorkspaces(r.Context()); err != nil {
-		log.Printf("load workspaces created on other servers: %v", err)
+		slog.WarnContext(r.Context(), "load workspaces created on other servers", "cause", requestErrorCode(err))
 	}
 	for _, key := range s.store.WorkspaceKeys() {
 		data, ok := s.store.BootstrapFor(key)
@@ -156,7 +156,7 @@ func (s *server) joinOrganization(w http.ResponseWriter, r *http.Request) {
 	}
 	// A workspace created on another server a moment ago holds the link too.
 	if err := s.store.LoadMissingWorkspaces(r.Context()); err != nil {
-		log.Printf("load workspaces created on other servers: %v", err)
+		slog.WarnContext(r.Context(), "load workspaces created on other servers", "cause", requestErrorCode(err))
 	}
 	for _, key := range s.store.WorkspaceKeys() {
 		// An account whose personal data was erased from the workspace cannot

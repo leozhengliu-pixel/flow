@@ -21,9 +21,8 @@
     "listCommentActions": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "The bounded branch composes the proven optional issue validation headers, current actor settings and independently owned raw action/validation selectors; its original off body remains literal. SW153 compares the actual alias route across five principal classes and four credentials plus status/version/filter/raw-generation cases, preserving accepted-action bypass, duplicates, other target users, initialized empty output and the earlier issue handoff versus fresh raw validation source. SW152/SW154 separately prove warm/reloaded/unknown source fidelity, cancellation, quotas, ownership, persistent SQLite twice and race. No action executes here; generation and resolve retain separate guards.",
+      "reason": "The bounded branch composes the proven optional issue validation headers, current actor settings and independently owned raw action and validation selectors. Legacy reads take the issue authorization handoff and select the issue's actions and referenced validators from the installed workspace. The development HEAD bootstrap fallback uses the shared projection budget. The issue #240 differential covers authorization and response parity across modes and measures allocation as unrelated metadata grows. SW153 compares the actual alias route across principal and credential classes plus status, version, filter and raw-generation cases. SW152/SW154 separately prove warm/reloaded/unknown source fidelity, cancellation, quotas, ownership, persistent SQLite twice and race.",
       "accessors": [
-        "WorkspaceMetadata",
         "workspaceData"
       ],
       "temperature": "hot",

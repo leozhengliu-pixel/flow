@@ -1222,7 +1222,10 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		noteAuthorizationBusy(r, err)
 		return err == nil && status == "active" && role != "guest"
 	}
-	if r.URL.Path == "/api/workspace/preferences" {
+	legacyListRead := (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
+		(r.URL.Path == "/api/reviews" || r.URL.Path == "/api/search/filter-suggestions")
+	if r.URL.Path == "/api/workspace/preferences" || !s.store.BoundedMetadataEnabled() && (draftRecordWriteRequest(r) || legacyListRead) {
+		// The handlers decide resource visibility from their own projection.
 		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
 		if !ok {
 			return false
@@ -1329,12 +1332,18 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	var data domain.Bootstrap
 	var ok bool
 	var err error
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if selected, readErr, handled := s.projectRecordAuthorizationMetadata(r, workspace, userID); handled {
 		data, err, ok = selected, readErr, readErr == nil
 	} else if selected, readErr, handled := s.documentAuthorizationMetadata(r, workspace, userID); handled {
 		data, err, ok = selected, readErr, readErr == nil
 	} else if isIssueRecordsRequest(r) {
 		data, err = s.issueRecordAuthorizationData(r)
+		ok = err == nil
+	} else if !s.store.BoundedMetadataEnabled() && r.Method == http.MethodPost && len(parts) == 4 && parts[1] == "teams" && parts[3] == "recurring-issues" {
+		// Creation validates its targets after decoding. Authorization here
+		// needs only the viewer's team settings access.
+		data, err = s.store.LegacyIssueViewerPolicy(r.Context(), workspace, userID)
 		ok = err == nil
 	} else {
 		// With bounded metadata, the reviewed readers decide every shape that
@@ -1360,7 +1369,6 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		noteAuthorizationBusy(r, err)
 		return false
 	}
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	documentCommentWrite := len(parts) >= 5 && parts[1] == "documents" && parts[3] == "comments" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete)
 	if r.Method == http.MethodPatch && len(parts) == 3 && parts[1] == "documents" && s.store.BoundedMetadataEnabled() {
 		// The update handler refuses an edit this viewer cannot make before it

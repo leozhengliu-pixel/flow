@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -251,7 +250,7 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 		if err := owner.reserve(ctx, uint64(encoding)+64<<10); err != nil {
 			return true, err
 		}
-		encoded, err := json.Marshal(value.Interface())
+		encoded, err := marshalMetadataRecord(value.Interface())
 		if err != nil {
 			return true, err
 		}
@@ -288,9 +287,9 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 	}
 	stored, err := decodeMetadataRecord(kind, resolved, reflect.Value{})
 	if err != nil {
-		return true, fmt.Errorf("rebase %s record %s: %w", name, row.id, err)
+		return true, fmt.Errorf("rebase %s record: %w", name, err)
 	}
-	theirs, err := json.Marshal(stored.Interface())
+	theirs, err := marshalMetadataRecord(stored.Interface())
 	if err != nil {
 		return true, err
 	}

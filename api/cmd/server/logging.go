@@ -14,10 +14,18 @@ import (
 
 type requestIDKey struct{}
 type serverRequestIDKey struct{}
+type requestLoggerKey struct{}
 
 func serverRequestIDFrom(ctx context.Context) string {
 	id, _ := ctx.Value(serverRequestIDKey{}).(string)
 	return id
+}
+
+func requestLoggerFrom(ctx context.Context) *slog.Logger {
+	if logger, ok := ctx.Value(requestLoggerKey{}).(*slog.Logger); ok {
+		return logger
+	}
+	return slog.Default()
 }
 
 func initLogging() {
@@ -62,6 +70,8 @@ func requestLog(mux *http.ServeMux, next http.Handler) http.Handler {
 		w.Header().Set("X-Request-ID", requestID)
 		ctx := context.WithValue(r.Context(), requestIDKey{}, requestID)
 		ctx = context.WithValue(ctx, serverRequestIDKey{}, serverRequestID)
+		logger := slog.With("request_id", serverRequestID)
+		ctx = context.WithValue(ctx, requestLoggerKey{}, logger)
 		started := time.Now()
 		next.ServeHTTP(w, r.WithContext(ctx))
 		// Match a method-qualified registration, since authentication may
@@ -73,7 +83,7 @@ func requestLog(mux *http.ServeMux, next http.Handler) http.Handler {
 				route = pattern
 			}
 		}
-		slog.InfoContext(ctx, "http request", "request_id", serverRequestID, "route", route, "status", "completed", "duration_ms", time.Since(started).Seconds()*1000)
+		logger.InfoContext(ctx, "http request", "route", route, "status", "completed", "duration_ms", time.Since(started).Seconds()*1000)
 	})
 }
 

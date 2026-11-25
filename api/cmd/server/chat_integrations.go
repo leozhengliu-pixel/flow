@@ -291,6 +291,11 @@ func (s *server) chatSettingsMetadata(r *http.Request) (domain.Bootstrap, error)
 		data.ViewerRole = "admin"
 		return data, nil
 	}
+	if !s.store.BoundedMetadataEnabled() && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+		if data, ok := takePagedMetadata(r, workspaceKey(r), authUser(r).ID); ok {
+			return data, nil
+		}
+	}
 	return s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
 }
 func (s *server) chatSession(w http.ResponseWriter, r *http.Request, admin bool) (domain.Bootstrap, bool) {
