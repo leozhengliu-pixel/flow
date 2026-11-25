@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p20_resource_reads.go",
+  "source": "server/resource_reads.go",
   "unmigrated": 0,
   "consumers": {
     "scaleP20DocumentMetadata": {

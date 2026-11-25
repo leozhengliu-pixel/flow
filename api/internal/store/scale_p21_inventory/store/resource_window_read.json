@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_resource_window_read.go",
+  "source": "store/resource_window_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginResourceWindowRead": {
@@ -9,7 +9,7 @@
       "accessors": ["resident-state"],
       "temperature": "hot",
       "temperatureReason": "Shared source for P20 manifest, resource and member windows.",
-      "callers": ["store/scale_p20_resource_reads.go:ResourceWindowMetadata"]
+      "callers": ["store/resource_reads.go:ResourceWindowMetadata"]
     }
   }
 }

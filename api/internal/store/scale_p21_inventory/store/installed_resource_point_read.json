@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_installed_resource_point_read.go",
+  "source": "store/installed_resource_point_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginProjectedInstalledResourcePointRead": {

@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p17_document_directory.go",
+  "source": "store/document_directory.go",
   "unmigrated": 0,
   "consumers": {
     "DocumentDirectoryMetadata": {

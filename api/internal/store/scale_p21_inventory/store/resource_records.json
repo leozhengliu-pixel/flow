@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p03_resource_records.go",
+  "source": "store/resource_records.go",
   "unmigrated": 0,
   "consumers": {
     "resourceReadCompatibility": {

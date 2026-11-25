@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p17_document_list.go",
+  "source": "server/document_list.go",
   "unmigrated": 0,
   "consumers": {
     "serveBoundedDocumentDirectoryList": {

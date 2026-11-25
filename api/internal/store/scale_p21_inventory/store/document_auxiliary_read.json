@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_document_auxiliary_read.go",
+  "source": "store/document_auxiliary_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginDocumentAuxiliaryRead": {

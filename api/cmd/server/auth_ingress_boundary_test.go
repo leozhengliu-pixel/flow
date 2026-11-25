@@ -162,7 +162,7 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 			!strings.Contains(text, "defer release()") {
 			t.Fatal("authentication or containing output lifetime changed")
 		}
-		scope := scaleP21SW305Function(t, "scale_p21_request_resource_read.go", "", "beginRequestResourceReads")
+		scope := scaleP21SW305Function(t, "request_resource_read.go", "", "beginRequestResourceReads")
 		if !scaleP21SW305HasStatement(t, scope, "return r.WithContext(ctx), scope.close") {
 			t.Fatal("request scope no longer closes its containing outputs")
 		}
@@ -170,7 +170,7 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 		for _, item := range []struct{ file, receiver string }{
 			{"owned_metadata_read.go", "*InstalledMetadataRead"},
 			{"json_output_read.go", "*MetadataJSONRead"},
-			{"scale_p21_collaboration_document_read.go", "*CollaborationDocumentRead"},
+			{"collaboration_document_read.go", "*CollaborationDocumentRead"},
 		} {
 			function := scaleP21SW305Function(t, filepath.Join(storePath, item.file), item.receiver, "Context")
 			if strings.Contains(scaleP21SW305Text(t, function.Body), "workspaceReadKey") {

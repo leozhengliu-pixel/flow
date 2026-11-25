@@ -8969,7 +8969,7 @@
           }
         },
         "x-flow-internal": true,
-        "x-flow-source": "scale_p20_resource_reads.go"
+        "x-flow-source": "resource_reads.go"
       }
     },
     "/api/documents/{id}/permissions": {
@@ -27068,7 +27068,7 @@
           }
         },
         "x-flow-internal": true,
-        "x-flow-source": "scale_p20_resource_reads.go"
+        "x-flow-source": "resource_reads.go"
       }
     },
     "/api/resource-windows/trash": {
@@ -27093,7 +27093,7 @@
           }
         },
         "x-flow-internal": true,
-        "x-flow-source": "scale_p20_resource_reads.go"
+        "x-flow-source": "resource_reads.go"
       }
     },
     "/api/reviews": {

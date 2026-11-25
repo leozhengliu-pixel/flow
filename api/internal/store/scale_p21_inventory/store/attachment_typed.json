@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw16_attachment_typed.go",
+  "source": "store/attachment_typed.go",
   "unmigrated": 0,
   "consumers": {
     "scaleP21SW16MigrateTypedAttachmentIndex": {

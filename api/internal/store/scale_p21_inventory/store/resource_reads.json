@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p20_resource_reads.go",
+  "source": "store/resource_reads.go",
   "unmigrated": 0,
   "consumers": {
     "ResourceWindowMetadata": {

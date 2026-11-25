@@ -282,8 +282,8 @@ func TestScaleP21SW282DocumentAuthorizationWrapperBoundaries(t *testing.T) {
 		"SelectedDocumentMetadata": {
 			"cmd/server/document_record_scopes.go server.documentAuthorizationMetadata call off",
 			"cmd/server/record_authorization.go server.projectRecordAuthorizationMetadata call off",
-			"cmd/server/scale_p20_resource_reads.go server.scaleP20DocumentMetadata call off",
-			"internal/store/scale_p21_document_read.go SQLiteStore.BeginDocumentRead call off",
+			"cmd/server/resource_reads.go server.scaleP20DocumentMetadata call off",
+			"internal/store/document_read.go SQLiteStore.BeginDocumentRead call off",
 		},
 		"TrashRecordHeader": {
 			"cmd/server/trash_record_scopes.go server.documentTrashAuthorizationHeaders call off",

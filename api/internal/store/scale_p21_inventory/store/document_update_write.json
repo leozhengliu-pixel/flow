@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_document_update_write.go",
+  "source": "store/document_update_write.go",
   "unmigrated": 0,
   "consumers": {
     "mutateBoundedDocumentUpdate": {
