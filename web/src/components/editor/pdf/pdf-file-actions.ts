@@ -21,6 +21,16 @@ export async function copyPdfLink(src: string) {
   }
 }
 
+/** Copies the absolute URL of any file and confirms with a toast. */
+export async function copyFileLink(src: string) {
+  try {
+    await navigator.clipboard.writeText(absoluteFileUrl(src))
+    toast.info(pdfText('URL copied to clipboard'))
+  } catch {
+    toast.error(pdfText('Could not copy to clipboard'))
+  }
+}
+
 export function downloadPdf(src: string, name: string) {
   const anchor = document.createElement('a')
   anchor.href = src

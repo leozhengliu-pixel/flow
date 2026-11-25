@@ -17,4 +17,6 @@ export const pdfViewerZhCN: Record<string, string> = {
   "Zoom in": "放大",
   "Previous page": "上一页",
   "Next page": "下一页",
+  "Next file": "下一个文件",
+  "Previous file": "上一个文件",
 };

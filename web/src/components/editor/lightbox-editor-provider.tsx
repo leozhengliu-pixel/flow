@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { ArrowDown, ArrowUp, Clipboard, Download, Link2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Clipboard, Crop, Download, Link2, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { copyImage, copyText, downloadImage } from './lightbox-actions'
 
@@ -33,6 +33,20 @@ export type LightboxEditorProviderProps = {
 }
 
 type Session = { items: LightboxItem[]; index: number }
+
+/**
+ * The picture is shown as large as the stage allows, and a small one grows until it fills half the stage in one
+ * direction (the design reference does the same), so a 120px icon is not left floating in an empty window.
+ */
+function fitImage(image: HTMLImageElement, stage: HTMLElement | null) {
+  if (!stage || !image.naturalWidth || !image.naturalHeight) return
+  const width = stage.clientWidth
+  const height = stage.clientHeight
+  if (!width || !height) return
+  const scale = Math.max(Math.min(1, width / image.naturalWidth, height / image.naturalHeight), Math.min(width / 2 / image.naturalWidth, height / 2 / image.naturalHeight))
+  image.style.width = `${image.naturalWidth * scale}px`
+  image.style.height = `${image.naturalHeight * scale}px`
+}
 
 /** The percentage of the image's own size it is shown at. */
 function zoomOf(image: HTMLImageElement) {
@@ -126,6 +140,18 @@ function LightboxEditorProviderInner({
   }, [editorInstanceRef, indexRef])
 
   useEffect(() => {
+    if (!session) return
+    const refit = () => {
+      const image = imageRef.current
+      if (!image) return
+      fitImage(image, stageRef.current)
+      setZoom(zoomOf(image))
+    }
+    window.addEventListener('resize', refit)
+    return () => window.removeEventListener('resize', refit)
+  }, [session])
+
+  useEffect(() => {
     registerLightboxOpener(open)
     return () => registerLightboxOpener(null)
   }, [open])
@@ -213,17 +239,19 @@ function LightboxEditorProviderInner({
           <div className="flow-lightbox-bar">
             <span className="flow-lightbox-cluster start"><button className="flow-lightbox-zoom" onClick={() => setZoomed(false)} type="button">{zoom * (zoomed ? 2 : 1)}%</button></span>
             <span className="flow-lightbox-cluster end">
-              <button aria-label="Download" onClick={() => downloadImage(active)} type="button"><Download size={14}/></button>
+              {active.crop && <>
+                <button aria-label="Crop image" onClick={() => { const crop = active.crop; close(); crop?.() }} type="button"><Crop size={14}/></button>
+                <span aria-hidden className="flow-lightbox-separator"/>
+              </>}
               <button aria-label="Copy image" onClick={() => void copyImage(active)} type="button"><Clipboard size={14}/></button>
               <button aria-label="Copy link" onClick={() => void copyText(active.src)} type="button"><Link2 size={14}/></button>
-              {session.items.length > 1 && (
-                <>
-                  <span aria-hidden className="flow-lightbox-separator"/>
-                  <button aria-label="Next" disabled={session.index >= session.items.length - 1} onClick={() => setIndex(session.index + 1)} type="button"><ArrowDown size={14}/></button>
-                  <button aria-label="Previous" disabled={session.index === 0} onClick={() => setIndex(session.index - 1)} type="button"><ArrowUp size={14}/></button>
-                </>
-              )}
+              <button aria-label="Download" onClick={() => downloadImage(active)} type="button"><Download size={14}/></button>
               <span aria-hidden className="flow-lightbox-separator"/>
+              <span className="flow-lightbox-pill">
+                <button aria-label="Next" disabled={session.index >= session.items.length - 1} onClick={() => setIndex(session.index + 1)} type="button"><ArrowDown size={14}/></button>
+                <span aria-hidden className="flow-lightbox-pill-rule"/>
+                <button aria-label="Previous" disabled={session.index === 0} onClick={() => setIndex(session.index - 1)} type="button"><ArrowUp size={14}/></button>
+              </span>
               <button aria-label="Close" className="flow-lightbox-close" onClick={close} type="button"><X size={14}/></button>
             </span>
           </div>
@@ -232,7 +260,7 @@ function LightboxEditorProviderInner({
               alt={active.alt ?? ''}
               data-zoomed={zoomed}
               onClick={event => { event.stopPropagation(); setZoomed(value => !value); setPan({ x: 0, y: 0 }) }}
-              onLoad={event => { setZoom(zoomOf(event.currentTarget)); flyIn(event.currentTarget) }}
+              onLoad={event => { fitImage(event.currentTarget, stageRef.current); setZoom(zoomOf(event.currentTarget)); flyIn(event.currentTarget) }}
               ref={imageRef}
               src={active.src}
               style={zoomed ? { transform: `translate(${pan.x}px, ${pan.y}px) scale(2)` } : undefined}

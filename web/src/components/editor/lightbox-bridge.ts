@@ -4,6 +4,8 @@ export type LightboxItem = {
   src: string
   alt?: string
   title?: string
+  /** Set when the viewer may crop this picture (the document is editable): the viewer closes, then this runs. */
+  crop?: () => void
 }
 
 type OpenHandler = (items: LightboxItem[], index?: number) => void

@@ -268,13 +268,12 @@ describe('embedded surface parity (floating chat panel, thread cards, reactions,
     expect(css).toContain('--reaction-active-bg:#e7e8f2')
   })
 
-  it('lays an image block out 22px from its neighbours with a 14px-icon toolbar split by a hairline', () => {
+  it('lays an image block out as wide as the column, 22px from its neighbours, with a 14px-icon toolbar', () => {
     const css = flat(read('../issue/issue-description-editor.css'))
-    expect(css).toMatch(/\.description-image-node \{ width: min\(785px, calc\(100% \+ 16px\)\); margin: 22px 0; \}/)
+    expect(css).toMatch(/\.description-image-node \{ width: 100%; margin: 22px 0 0; \}/)
     expect(css).toMatch(/\.description-image-toolbar \{[^}]*top: 10px;[^}]*right: 10px;/)
     expect(css).toMatch(/\.description-image-toolbar svg \{ width: 14px; height: 14px; \}/)
-    expect(css).toContain('.description-image-toolbar button:nth-child(5)::before')
-    expect(css).toMatch(/outline: 2px solid var\(--description-selected-outline\);\s*outline-offset: 0;/)
+    expect(css).toMatch(/outline: 2px solid var\(--description-file-selected-outline\);\s*outline-offset: 1px;/)
   })
 
   it('shows the lightbox on a solid page with a zoom label, copy / link actions and the caption', () => {
