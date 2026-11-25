@@ -41,8 +41,9 @@
   color: var(--theme-text-primary);
 }
 
-/* An image block is the column plus 16px (at most 785px) wide with the image centered in it, 22px from the blocks around it. */
-.description-image-node { width: min(785px, calc(100% + 16px)); margin: 22px 0; }
+/* An image block is as wide as the column with the image centered in it and 22px above it (6px as the first block). */
+.description-image-node { width: 100%; margin: 22px 0 0; }
+.ProseMirror > .description-image-node:first-child { margin-top: 6px; }
 .description-image-frame { position: relative; display: block; width: fit-content; max-width: 100%; margin: 0 auto; }
 .description-image {
   display: block;
@@ -57,7 +58,7 @@
   position: absolute;
   top: 10px;
   right: 10px;
-  display: none;
+  display: flex;
   align-items: center;
   gap: 0;
   height: 31px;
@@ -67,33 +68,54 @@
   background: var(--description-media-toolbar-bg);
   box-shadow: var(--description-toolbar-shadow);
   backdrop-filter: saturate(1.8) blur(20px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .04s ease-out allow-discrete, pointer-events .04s ease-out allow-discrete;
 }
 .description-image-frame:hover .description-image-toolbar,
-.description-image-frame:focus-within .description-image-toolbar { display: flex; }
+.description-image-frame:focus-within .description-image-toolbar,
+.description-image-node.ProseMirror-selectednode .description-image-toolbar { opacity: 1; pointer-events: auto; }
 .description-image-toolbar button {
   width: 26px;
   height: 26px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-radius: 9999px;
   background: transparent;
-  color: var(--description-media-toolbar-fg);
+  color: var(--description-image-toolbar-fg);
   padding: 6px;
 }
 .description-image-toolbar svg { width: 14px; height: 14px; }
-/* A hairline sets the comment and delete actions apart from the four that act on the image itself. */
-.description-image-toolbar button:nth-child(5) { position: relative; margin-left: 9px; }
-.description-image-toolbar button:nth-child(5)::before {
-  content: "";
+.description-image-toolbar button:hover { background: var(--description-image-toolbar-hover); color: var(--description-image-toolbar-fg-hover); }
+/* Crop mode: a movable box with four corner handles over the image, and Cancel / Crop beneath it. */
+.description-image-crop { position: absolute; inset: 0; z-index: 2; border-radius: 6px; overflow: hidden; touch-action: none; }
+.description-image-crop-box {
   position: absolute;
-  top: 4px;
-  left: -4.5px;
-  width: .5px;
-  height: 18px;
-  background: var(--description-toolbar-separator);
+  box-sizing: border-box;
+  border: 1.5px solid var(--description-file-selected-outline);
+  box-shadow: 0 0 0 9999px var(--description-media-backdrop);
+  cursor: move;
 }
-.description-image-toolbar button:hover { background: var(--description-media-toolbar-hover); }
+.description-image-crop-handle { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: var(--description-media-toolbar-bg); border: 1.5px solid var(--description-file-selected-outline); box-sizing: border-box; }
+.description-image-crop-handle[data-corner="nw"] { top: -6px; left: -6px; cursor: nwse-resize; }
+.description-image-crop-handle[data-corner="ne"] { top: -6px; right: -6px; cursor: nesw-resize; }
+.description-image-crop-handle[data-corner="sw"] { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.description-image-crop-handle[data-corner="se"] { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.description-image-frame.is-cropping .description-image-toolbar { opacity: 0; pointer-events: none; }
+.description-image-crop-actions { position: absolute; top: calc(100% + 8px); left: 50%; z-index: 3; display: flex; gap: 6px; transform: translateX(-50%); }
+.description-image-crop-actions button {
+  height: 26px;
+  padding: 0 12px;
+  border: .5px solid var(--description-media-toolbar-border);
+  border-radius: 9999px;
+  background: var(--description-media-toolbar-bg);
+  color: var(--description-media-toolbar-fg);
+  font: 450 12px / 1 var(--font);
+  backdrop-filter: saturate(1.8) blur(20px);
+}
+.description-image-crop-actions button:hover { background: var(--description-image-toolbar-hover); }
 .description-image-lightbox {
   position: fixed;
   inset: 0;
@@ -111,22 +133,21 @@
   object-fit: contain;
 }
 .description-image-node.ProseMirror-selectednode .description-image-frame {
-  outline: 2px solid var(--description-selected-outline);
-  outline-offset: 0;
+  outline: 2px solid var(--description-file-selected-outline);
+  outline-offset: 1px;
   border-radius: 6px;
 }
 .description-image-menu {
   position: fixed;
   z-index: 1500;
-  min-width: 148px;
   overflow: hidden;
-  padding: 4px 0;
-  border: .5px solid var(--description-menu-border);
+  padding: 4.5px 0 4px;
+  border: .5px solid var(--description-attachment-menu-border);
   border-radius: 10px;
-  background: var(--theme-surface-2);
-  box-shadow: var(--shadow-control);
-  color: var(--theme-text-primary);
-  font: 450 13px / 19.5px var(--font);
+  background: var(--description-attachment-menu-bg);
+  box-shadow: var(--description-attachment-menu-shadow);
+  color: var(--description-attachment-menu-label);
+  font: 400 13px / 19.5px var(--font);
 }
 .description-image-menu button {
   box-sizing: border-box;
@@ -140,7 +161,7 @@
   border-radius: 0;
   background: transparent;
   color: inherit;
-  font: 450 13px / 19.5px var(--font);
+  font: inherit;
   text-align: left;
   white-space: nowrap;
   cursor: default;
@@ -150,23 +171,26 @@
   background: var(--theme-surface-hover);
   outline: 0;
 }
+.description-image-menu-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 0; }
+.description-image-menu-icon { display: block; width: 16px; height: 16px; flex: none; }
 .description-image-menu svg {
+  display: block;
   width: 16px;
   height: 16px;
-  flex: none;
-  color: var(--action-menu-muted);
+  color: var(--description-attachment-menu-icon);
 }
+.description-image-menu-label { display: block; color: var(--description-attachment-menu-label); font-size: 13px; font-weight: 450; line-height: normal; }
 .description-image-menu-separator {
   height: .5px;
-  margin: 4px 0;
-  background: var(--description-menu-separator);
+  margin: 5px 0;
+  background: var(--description-attachment-menu-rule);
 }
 
 .description-file-node {
   position: relative;
   display: block;
   box-sizing: border-box;
-  margin: 12px 0;
+  margin: 22px 0 0;
   padding: 6px;
   border: .5px solid var(--description-file-border);
   border-radius: 6px;
@@ -174,6 +198,7 @@
   box-shadow: var(--description-file-shadow);
   cursor: default;
 }
+.ProseMirror > .description-file-node:first-child { margin-top: 6px; }
 .description-file-node.ProseMirror-selectednode {
   outline: 2px solid var(--description-file-selected-outline);
   outline-offset: 1px;
@@ -182,8 +207,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 2px 4px;
 }
-.description-file-node.has-preview .description-file-row { padding-bottom: 6px; }
+.description-file-node.has-preview .description-file-row { padding-bottom: 8px; }
 .description-file-preview {
   height: 480px;
   box-sizing: border-box;
@@ -192,17 +218,20 @@
   border-radius: 4px;
   background: var(--description-file-preview-bg);
 }
+/* JS sizes the page to the first page of the file (its own size, or the strip's width when that is smaller). */
 .description-file-preview-page {
+  width: 100%;
   height: 100%;
+  margin: 0 auto;
   overflow: hidden;
   border-radius: 2px;
   background: var(--description-file-preview-page);
+  box-shadow: var(--description-file-shadow);
 }
-/* The first page is drawn at the card's width (639px in a 668px card), so the strip clips it like the reference. */
 .description-file-preview-canvas {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   pointer-events: none;
 }
 .description-file-preview:not([data-state="ready"]) .description-file-preview-canvas { opacity: 0; }
@@ -212,29 +241,33 @@
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
   color: var(--description-file-name);
   text-decoration: none;
 }
 .description-file-icon {
+  box-sizing: border-box;
   width: 32px;
   height: 34px;
   flex: none;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  padding-left: 7px;
   color: var(--description-file-icon);
 }
 .description-file-icon svg { width: 16px; height: 16px; flex: none; }
 .description-file-copy {
   min-width: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   height: 38px;
   margin-top: -4px;
 }
 .description-file-name {
   display: block;
+  width: 100%;
   overflow: hidden;
   color: var(--description-file-name);
   font-size: 15px;
@@ -249,52 +282,31 @@
   color: var(--description-file-meta);
   font-size: 11px;
   font-weight: 450;
-  line-height: 13px;
+  line-height: normal;
 }
 .description-file-meta[hidden] { display: none; }
-.description-file-node .description-file-download {
-  width: 28px;
-  height: 28px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 9999px;
-  background: transparent;
-  padding: 0;
-  color: var(--description-file-download-fg);
-  opacity: 0;
-  text-decoration: none;
-  cursor: default;
-}
-.description-file-node .description-file-download svg { width: 14px; height: 14px; }
-.description-file-node:hover .description-file-download,
-.description-file-node.ProseMirror-selectednode .description-file-download,
-.description-file-node .description-file-download:focus-visible { opacity: 1; }
-.description-file-node .description-file-download:hover { background: var(--description-file-download-hover); }
-.description-file-node.is-pdf .description-file-download { display: none; }
 
-/* PDF card toolbar: a 143x30 pill (2px padding, 26px buttons with 14px glyphs) at the end of the header row. */
+/* The actions pill at the end of the header row: 2px padding, 26px buttons with 14px glyphs. */
 .description-file-toolbar {
-  display: none;
-  flex: none;
+  display: flex;
+  flex: 0 1 auto;
   align-items: center;
-  height: 30px;
   box-sizing: border-box;
   padding: 2px;
-  margin-right: 3px;
   border-radius: 9999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .04s ease-out allow-discrete, pointer-events .04s ease-out allow-discrete;
 }
-.description-file-toolbar[hidden] { display: none; }
-.description-file-node:hover .description-file-toolbar:not([hidden]),
-.description-file-node.ProseMirror-selectednode .description-file-toolbar:not([hidden]),
-.description-file-node:focus-within .description-file-toolbar:not([hidden]) { display: flex; }
+.description-file-node:hover .description-file-toolbar,
+.description-file-node.ProseMirror-selectednode .description-file-toolbar,
+.description-file-node:focus-within .description-file-toolbar { opacity: 1; pointer-events: auto; }
 .description-file-toolbar button {
   width: 26px;
   height: 26px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 6px;
   border: 0;
   border-radius: 9999px;
@@ -302,17 +314,10 @@
   color: var(--description-file-toolbar-fg);
   cursor: default;
 }
+.description-file-toolbar button[hidden] { display: none; }
 .description-file-toolbar svg { width: 14px; height: 14px; }
 .description-file-toolbar button:hover,
 .description-file-toolbar button:focus-visible { background: var(--description-file-toolbar-hover-bg); color: var(--description-file-toolbar-fg-hover); }
-.description-file-toolbar-separator {
-  width: 1px;
-  height: 18px;
-  margin: 0 4px;
-  background: var(--description-file-toolbar-separator);
-}
-/* Read-only renderers (comments, history) keep the view / download / link / print actions and drop Delete. */
-.ProseMirror[contenteditable="false"] .description-file-toolbar-delete { display: none; }
 
 .description-video-node { margin: 0 0 12px; width: fit-content; max-width: 100%; }
 .description-video {

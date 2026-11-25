@@ -73,12 +73,10 @@ export const DescriptionImage = Node.create({
       const toolbar = document.createElement('div')
       toolbar.className = 'description-image-toolbar'
       toolbar.append(
-        iconButton('View image', viewIcon(), () => actions().view()),
-        iconButton('Download', downloadIcon(), () => void actions().download()),
-        iconButton('Copy image', copyIcon(), () => void actions().copyImage()),
-        iconButton('Copy link', linkIcon(), () => void actions().copyLink()),
+        iconButton('Copy image', copyImageIcon(), () => void actions().copyImage()),
+        iconButton('Crop image', cropIcon(), () => actions().crop(frame)),
+        iconButton('Full screen', viewIcon(), () => actions().view()),
         iconButton('Add comment', commentIcon(), () => actions().comment()),
-        iconButton('Delete', deleteIcon(), () => actions().remove()),
       )
       img.addEventListener('click', event => {
         event.preventDefault()
@@ -89,7 +87,7 @@ export const DescriptionImage = Node.create({
         event.stopPropagation()
         const pos = getPos()
         if (typeof pos === 'number') editor.chain().focus().setNodeSelection(pos).run()
-        openImageContextMenu(event.clientX, event.clientY, actions())
+        openImageContextMenu(event.clientX, event.clientY, actions(), frame)
       })
       frame.append(img, toolbar)
       dom.append(frame)
@@ -210,18 +208,24 @@ function applyImageAttrs(img: HTMLImageElement, attrs: Record<string, unknown>) 
   img.src = String(attrs.src ?? '')
   img.alt = String(attrs.alt ?? '')
   if (attrs.width) img.width = Number(attrs.width)
+  else img.removeAttribute('width')
   if (attrs.height) img.height = Number(attrs.height)
+  else img.removeAttribute('height')
   const applySize = () => {
     if (!img.naturalWidth) return
     if (!img.getAttribute('width')) img.width = img.naturalWidth
     if (!img.getAttribute('height')) img.height = img.naturalHeight
-    img.style.maxWidth = `min(100%, ${img.naturalWidth * 2}px)`
-    // Never wider than the column: a large image in a narrow panel (description history, previews) scales down.
-    img.style.minWidth = `min(${img.naturalWidth}px, 100%)`
+    // An image is never taller than 600px (its width follows the aspect ratio) and never wider than the column:
+    // a large image in a narrow panel (description history, previews) scales down.
+    const widest = Math.min(img.naturalWidth, (IMAGE_MAX_HEIGHT * img.naturalWidth) / img.naturalHeight)
+    img.style.maxWidth = `min(100%, ${widest}px)`
+    img.style.minWidth = `min(${widest}px, 100%)`
   }
   if (img.complete) applySize()
   else img.addEventListener('load', applySize, { once: true })
 }
+
+const IMAGE_MAX_HEIGHT = 600
 
 function imageActions(editor: Editor, getPos: () => number | undefined, img: HTMLImageElement) {
   const range = () => {
@@ -243,6 +247,7 @@ function imageActions(editor: Editor, getPos: () => number | undefined, img: HTM
     download: () => downloadImage(img.src, img.alt || 'image'),
     copyImage: () => copyImage(img.src),
     copyLink: () => navigator.clipboard.writeText(imageHref(img.src)),
+    crop: (frame: HTMLElement) => startCrop(editor, getPos, img, frame),
     comment: () => {
       const selection = range()
       if (!selection) return
@@ -256,7 +261,24 @@ function imageActions(editor: Editor, getPos: () => number | undefined, img: HTM
   }
 }
 
-function openImageContextMenu(x: number, y: number, actions: ReturnType<typeof imageActions>) {
+function openImageContextMenu(x: number, y: number, actions: ReturnType<typeof imageActions>, frame: HTMLElement) {
+  openDescriptionMenu(x, y, [
+    { label: 'Copy image', icon: copyImageIcon(), run: () => void actions.copyImage() },
+    { label: 'Copy link', icon: linkIcon(), run: () => void actions.copyLink() },
+    { label: 'Download', icon: downloadIcon(), run: () => void actions.download() },
+    'separator',
+    { label: 'Crop image', icon: cropIcon(), run: () => actions.crop(frame) },
+    'separator',
+    { label: 'Add comment', icon: commentIcon(), run: actions.comment },
+    'separator',
+    { label: 'Delete', icon: deleteIcon(), run: actions.remove },
+  ])
+}
+
+export type DescriptionMenuEntry = { label: string; icon: SVGSVGElement; run: () => void } | 'separator'
+
+/** The context menu of an image or file card (the design reference's layout): icon + label rows, hairlines between groups. */
+export function openDescriptionMenu(x: number, y: number, entries: DescriptionMenuEntry[]) {
   closeImageContextMenu()
   const menu = document.createElement('div')
   menu.className = 'description-image-menu'
@@ -265,25 +287,31 @@ function openImageContextMenu(x: number, y: number, actions: ReturnType<typeof i
     const button = document.createElement('button')
     button.type = 'button'
     button.setAttribute('role', 'menuitem')
-    button.append(icon, document.createTextNode(label))
+    const row = document.createElement('span')
+    row.className = 'description-image-menu-item'
+    const glyph = document.createElement('span')
+    glyph.className = 'description-image-menu-icon'
+    glyph.append(icon)
+    const text = document.createElement('span')
+    text.className = 'description-image-menu-label'
+    text.textContent = label
+    row.append(glyph, text)
+    button.append(row)
+    button.setAttribute('aria-label', label)
     button.addEventListener('click', () => {
       closeImageContextMenu()
       run()
     })
     return button
   }
-  const separator = document.createElement('div')
-  separator.className = 'description-image-menu-separator'
-  separator.setAttribute('role', 'separator')
-  menu.append(
-    item('View image', viewIcon(), actions.view),
-    item('Download', downloadIcon(), () => void actions.download()),
-    item('Copy image', copyIcon(), () => void actions.copyImage()),
-    item('Copy link', linkIcon(), () => void actions.copyLink()),
-    separator,
-    item('Add comment', commentIcon(), actions.comment),
-    item('Delete', deleteIcon(), actions.remove),
-  )
+  const rule = () => {
+    const line = document.createElement('div')
+    line.className = 'description-image-menu-separator'
+    line.setAttribute('role', 'separator')
+    return line
+  }
+  const rows = entries.filter((entry, index) => entry !== 'separator' || (index > 0 && index < entries.length - 1 && entries[index - 1] !== 'separator' && entries[index + 1] !== undefined))
+  menu.append(...rows.map(entry => entry === 'separator' ? rule() : item(entry.label, entry.icon, entry.run)))
   document.body.append(menu)
   const width = menu.offsetWidth
   const height = menu.offsetHeight
@@ -349,6 +377,12 @@ export function copyIcon() {
 export function linkIcon() {
   return filledIcon('<path d="M9.30558 10.206C9.57224 10.4726 9.59447 10.8912 9.37225 11.1831L9.30558 11.2594L6.84751 13.7175C5.58692 14.9781 3.54311 14.9781 2.28252 13.7175C1.0654 12.5004 1.02344 10.5531 2.15661 9.28564L2.28252 9.15251L4.74059 6.69443C5.0315 6.40353 5.50315 6.40353 5.79405 6.69443C6.06071 6.9611 6.08294 7.37963 5.86072 7.67161L5.79405 7.74789L3.33598 10.206C2.6572 10.8847 2.6572 11.9853 3.33598 12.664C3.98082 13.3089 5.00628 13.3411 5.68918 12.7608L5.79405 12.664L8.25212 10.206C8.54303 9.91506 9.01468 9.91506 9.30558 10.206ZM9.82982 6.17019C10.1207 6.46109 10.1207 6.93274 9.82982 7.22365L7.34921 9.70427C7.0583 9.99518 6.58665 9.99518 6.29575 9.70427C6.00484 9.41337 6.00484 8.94172 6.29575 8.65081L8.77637 6.17019C9.06727 5.87928 9.53892 5.87928 9.82982 6.17019ZM13.7175 2.2825C14.9346 3.49962 14.9766 5.44688 13.8434 6.71436L13.7175 6.84749L11.2594 9.30557C10.9685 9.59647 10.4969 9.59647 10.206 9.30557C9.93931 9.03891 9.91709 8.62037 10.1393 8.32839L10.206 8.25211L12.664 5.79403C13.3428 5.11525 13.3428 4.01474 12.664 3.33596C12.0192 2.69112 10.9938 2.65888 10.3109 3.23923L10.206 3.33596L7.74791 5.79403C7.457 6.08494 6.98535 6.08494 6.69445 5.79403C6.42779 5.52737 6.40556 5.10883 6.62778 4.81686L6.69445 4.74057L9.15252 2.2825C10.4131 1.02191 12.4569 1.02191 13.7175 2.2825Z"/>')
 }
+export function copyImageIcon() {
+  return filledIcon('<path d="M11.75 15.077a3.25 3.25 0 0 0 3.25-3.25v-4.5a3.25 3.25 0 0 0-3.25-3.25h-4.5A3.25 3.25 0 0 0 4 7.327v4.5a3.25 3.25 0 0 0 3.25 3.25h4.5Zm1.75-3.25a1.75 1.75 0 0 1-1.75 1.75h-4.5a1.75 1.75 0 0 1-1.75-1.75v-4.5c0-.967.784-1.75 1.75-1.75h4.5c.966 0 1.75.783 1.75 1.75v4.5Z"/><path d="M10.957 1.941c.487.451.062 1.136-.602 1.136-.244 0-.472-.106-.678-.235a1.742 1.742 0 0 0-.927-.265h-4.5c-.477 0-.91.19-1.225.5H3v.025c-.31.316-.5.748-.5 1.225v4.5c0 .34.097.658.265.927.13.206.235.434.235.677 0 .665-.685 1.09-1.136.603A3.239 3.239 0 0 1 1 8.827v-4.5a3.25 3.25 0 0 1 3.25-3.25h4.5c.852 0 1.627.328 2.207.864Z"/>')
+}
+export function cropIcon() {
+  return filledIcon('<path d="M2.25 11V1C2.25 0.585786 2.58579 0.25 3 0.25C3.41421 0.25 3.75 0.585786 3.75 1V11C3.75 11.6904 4.30964 12.25 5 12.25H15C15.4142 12.25 15.75 12.5858 15.75 13C15.75 13.4142 15.4142 13.75 15 13.75H5C3.48122 13.75 2.25 12.5188 2.25 11Z"/><path d="M2.5 2.25C2.91421 2.25 3.25 2.58579 3.25 3C3.25 3.41421 2.91421 3.75 2.5 3.75H1C0.585786 3.75 0.25 3.41421 0.25 3C0.25 2.58579 0.585786 2.25 1 2.25H2.5Z"/><path d="M13.75 14.5C13.75 14.9142 13.4142 15.25 13 15.25C12.5858 15.25 12.25 14.9142 12.25 14.5V13C12.25 12.5858 12.5858 12.25 13 12.25C13.4142 12.25 13.75 12.5858 13.75 13V14.5Z"/><path d="M13.75 5V10H12.25V5C12.25 4.30964 11.6904 3.75 11 3.75H6V2.25H11C12.5188 2.25 13.75 3.48122 13.75 5Z"/>')
+}
 function commentIcon() {
   return filledIcon('<path d="M10.75 14.5576C10.75 14.9718 11.0858 15.3076 11.5 15.3076C11.9142 15.3076 12.25 14.9718 12.25 14.5576V12.5576H14.25C14.6642 12.5576 15 12.2218 15 11.8076C15 11.3934 14.6642 11.0576 14.25 11.0576H12.25V9.05762C12.25 8.64341 11.9142 8.30762 11.5 8.30762C11.0858 8.30762 10.75 8.64341 10.75 9.05762V11.0576H8.75C8.33579 11.0576 8 11.3934 8 11.8076C8 12.2218 8.33579 12.5576 8.75 12.5576H10.75V14.5576Z"/><path d="M13.3775 6.80762C13.1401 5.67391 12.578 4.86209 11.8688 4.28759C10.8792 3.48587 9.486 3.05762 8 3.05762C6.30594 3.05762 4.9352 3.49835 4.01455 4.27103C3.13416 5.00992 2.5 6.18862 2.5 8.05762C2.5 9.16174 2.75464 10.018 3.14105 10.6797C3.68197 11.489 3.36513 12.3299 3.25987 12.586C3.18733 12.7624 3.09968 12.9296 3.04096 13.0411L3.01094 13.098C2.95814 13.198 2.9202 13.2699 2.88441 13.3453L2.87483 13.3657C3.11737 13.5453 3.43758 13.5828 3.97549 13.4433C4.28137 13.3639 4.57095 13.2468 4.86788 13.1242L4.895 13.113C5.01891 13.0618 5.18568 12.9929 5.33284 12.9436C5.41258 12.917 5.54224 12.8766 5.69294 12.852C5.78288 12.8373 6.05757 12.7944 6.3882 12.8807C6.42534 12.8891 6.46261 12.8973 6.5 12.9051C6.91095 12.9913 7.26196 13.2464 7.26196 13.6672C7.26196 14.0881 6.92082 14.4292 6.5 14.4292V14.4318C6.34375 14.4092 6.33347 14.4022 6.23623 14.3823C6.16278 14.3673 6.0896 14.3514 6.01674 14.3344C5.93992 14.3045 5.73556 14.3889 5.44698 14.5079C4.5721 14.869 2.92323 15.5495 1.70812 14.3344C1.02304 13.6493 1.38868 12.9574 1.68711 12.3926C1.88052 12.0266 2.04571 11.714 1.87837 11.4913C1.32592 10.5695 1 9.42951 1 8.05762C1 3.5628 4.13401 1.55762 8 1.55762C11.0799 1.55762 14.1578 3.10916 14.854 6.54198C14.8773 6.65673 14.8982 6.69433 14.8982 6.78156C14.8982 7.25541 14.5622 7.572 14.1827 7.572C13.7659 7.572 13.4766 7.18182 13.379 6.80762H13.3775Z"/>')
 }
@@ -412,4 +446,108 @@ export function openDescriptionLightbox(src: string, alt = '', siblings?: { src:
     document.removeEventListener('keydown', onKey)
   })
   document.body.append(overlay)
+}
+
+type CropRect = { x: number; y: number; w: number; h: number }
+
+/**
+ * Crop mode: a draggable, resizable box over the image with Cancel and Crop actions. Applying draws the box to a
+ * canvas, uploads the result through the description's image upload and swaps the node's source for the new file.
+ */
+function startCrop(editor: Editor, getPos: () => number | undefined, img: HTMLImageElement, frame: HTMLElement) {
+  if (frame.querySelector('.description-image-crop')) return
+  const upload = editor.storage.image.upload
+  if (!upload || !img.naturalWidth) return
+  const make = (className: string, tag = 'div') => {
+    const node = document.createElement(tag)
+    node.className = className
+    return node
+  }
+  const overlay = make('description-image-crop')
+  const box = make('description-image-crop-box')
+  const corners = (['nw', 'ne', 'sw', 'se'] as const).map(name => {
+    const handle = make('description-image-crop-handle')
+    handle.dataset.corner = name
+    box.append(handle)
+    return handle
+  })
+  const actions = make('description-image-crop-actions')
+  const cancel = make('description-image-crop-cancel', 'button') as HTMLButtonElement
+  cancel.type = 'button'
+  cancel.textContent = 'Cancel'
+  const apply = make('description-image-crop-apply', 'button') as HTMLButtonElement
+  apply.type = 'button'
+  apply.textContent = 'Crop'
+  actions.append(cancel, apply)
+  overlay.append(box)
+  frame.append(overlay, actions)
+  frame.classList.add('is-cropping')
+  let rect: CropRect = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }
+  const min = 0.05
+  const paint = () => {
+    box.style.left = `${rect.x * 100}%`
+    box.style.top = `${rect.y * 100}%`
+    box.style.width = `${rect.w * 100}%`
+    box.style.height = `${rect.h * 100}%`
+  }
+  paint()
+  const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
+  const drag = (event: PointerEvent, corner: string | null) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const bounds = overlay.getBoundingClientRect()
+    const start = { ...rect }
+    const originX = event.clientX
+    const originY = event.clientY
+    const move = (next: PointerEvent) => {
+      const dx = (next.clientX - originX) / bounds.width
+      const dy = (next.clientY - originY) / bounds.height
+      if (!corner) {
+        rect = { ...start, x: clamp(start.x + dx, 0, 1 - start.w), y: clamp(start.y + dy, 0, 1 - start.h) }
+      } else {
+        let { x, y, w, h } = start
+        if (corner.includes('w')) { const nx = clamp(x + dx, 0, x + w - min); w += x - nx; x = nx } else w = clamp(w + dx, min, 1 - x)
+        if (corner.includes('n')) { const ny = clamp(y + dy, 0, y + h - min); h += y - ny; y = ny } else h = clamp(h + dy, min, 1 - y)
+        rect = { x, y, w, h }
+      }
+      paint()
+    }
+    const end = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+  }
+  box.addEventListener('pointerdown', event => drag(event, null))
+  for (const handle of corners) handle.addEventListener('pointerdown', event => drag(event, handle.dataset.corner ?? null))
+  const close = () => {
+    overlay.remove()
+    actions.remove()
+    frame.classList.remove('is-cropping')
+  }
+  cancel.addEventListener('click', event => { event.stopPropagation(); close() })
+  apply.addEventListener('click', async event => {
+    event.stopPropagation()
+    apply.disabled = true
+    try {
+      const sx = Math.round(rect.x * img.naturalWidth)
+      const sy = Math.round(rect.y * img.naturalHeight)
+      const sw = Math.max(1, Math.round(rect.w * img.naturalWidth))
+      const sh = Math.max(1, Math.round(rect.h * img.naturalHeight))
+      const canvas = document.createElement('canvas')
+      canvas.width = sw
+      canvas.height = sh
+      canvas.getContext('2d')?.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh)
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+      if (!blob) throw new Error('crop')
+      const name = (img.alt || 'image').replace(/\.[a-z0-9]+$/i, '')
+      const url = await upload(new File([blob], `${name}.png`, { type: 'image/png' }))
+      const pos = getPos()
+      const node = typeof pos === 'number' ? editor.state.doc.nodeAt(pos) : null
+      if (typeof pos === 'number' && node) editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: url, width: null, height: null }))
+    } finally {
+      close()
+    }
+  })
 }

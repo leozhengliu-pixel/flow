@@ -58,7 +58,7 @@ describe('description embeds', () => {
     expect(cards[0].querySelector('.description-file-name')?.textContent).toBe('spec.md')
     expect(cards[0].querySelector('.description-file-meta')?.textContent).toBe('9.13 KB')
     expect(cards[1].querySelector('.description-file-meta')?.textContent).toBe('193 B')
-    expect(cards[0].querySelector('.description-file-download')?.getAttribute('aria-label')).toBe('Download')
+    expect([...cards[0].querySelectorAll('.description-file-toolbar button')].map(button => button.getAttribute('aria-label'))).toEqual(['Copy link', 'Download', 'Full screen'])
     expect(cards[0].querySelector('.description-file-remove')).toBeNull()
     expect(cards[0].querySelector('a')).toBeNull()
     expect(cards[0].querySelector('.description-file-preview')).toBeNull()
@@ -69,7 +69,7 @@ describe('description embeds', () => {
     host.remove()
   })
 
-  it('gives a PDF card the reference toolbar (view, download, copy link, print, delete) and no other file', () => {
+  it('gives every file card Copy link and Download, and a PDF card Full screen as well', () => {
     const host = document.createElement('div')
     document.body.append(host)
     editor = new Editor({
@@ -79,18 +79,14 @@ describe('description embeds', () => {
       contentType: 'markdown',
     })
     const cards = host.querySelectorAll('.description-file-node')
-    const labels = (card: Element) => [...card.querySelectorAll('.description-file-toolbar button')].map(button => button.getAttribute('aria-label'))
-    expect(labels(cards[1])).toEqual(['View PDF', 'Download', 'Copy link', 'Print', 'Delete'])
-    expect(cards[1].querySelector('.description-file-toolbar')?.hasAttribute('hidden')).toBe(false)
-    expect(cards[1].querySelector('.description-file-toolbar button')?.getAttribute('data-tooltip-text')).toBe('View PDF')
-    expect(cards[1].querySelector('.description-file-toolbar-separator')).not.toBeNull()
-    expect(cards[0].querySelector('.description-file-toolbar')?.hasAttribute('hidden')).toBe(true)
-    expect(cards[0].querySelector('.description-file-download')?.hasAttribute('hidden')).toBe(false)
-    expect(cards[1].querySelector('.description-file-download')?.hasAttribute('hidden')).toBe(true)
+    const visible = (card: Element) => [...card.querySelectorAll<HTMLButtonElement>('.description-file-toolbar button')].filter(button => !button.hidden).map(button => button.getAttribute('aria-label'))
+    expect(visible(cards[1])).toEqual(['Copy link', 'Download', 'Full screen'])
+    expect(visible(cards[0])).toEqual(['Copy link', 'Download'])
+    expect(cards[1].querySelector('.description-file-toolbar button')?.getAttribute('data-tooltip-text')).toBe('Copy link')
     host.remove()
   })
 
-  it('deletes a PDF card from its toolbar as one undoable step and omits the preview strip when configured', () => {
+  it('deletes a PDF card from its context menu as one undoable step and omits the preview strip when configured', () => {
     const host = document.createElement('div')
     document.body.append(host)
     editor = new Editor({
@@ -101,7 +97,8 @@ describe('description embeds', () => {
     })
     expect(host.querySelector('.description-file-preview')).toBeNull()
     expect(host.querySelector('.description-file-node')?.classList.contains('has-preview')).toBe(false)
-    const remove = [...host.querySelectorAll<HTMLButtonElement>('.description-file-toolbar button')].find(button => button.getAttribute('aria-label') === 'Delete')
+    host.querySelector('.description-file-node')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }))
+    const remove = [...document.querySelectorAll<HTMLButtonElement>('.description-image-menu button')].find(button => button.getAttribute('aria-label') === 'Delete')
     remove?.click()
     expect(host.querySelector('.description-file-node')).toBeNull()
     expect(editor.getJSON().content?.some(node => node.type === 'file')).toBe(false)

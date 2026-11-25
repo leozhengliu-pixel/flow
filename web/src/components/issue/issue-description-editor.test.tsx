@@ -66,7 +66,7 @@ describe('real Tiptap description collaboration', () => {
     await waitFor(() => expect(screen.getByRole('img', { name: 'shot.png' })).toHaveAttribute('src', 'https://flow.test/uploads/shot.png'))
   })
 
-  it('opens a image context menu with view, copy, comment, and delete', async () => {
+  it('opens an image context menu with copy, download, crop, comment, and delete', async () => {
     const comment = vi.fn()
     URL.createObjectURL = vi.fn(() => 'blob:flow-image')
     URL.revokeObjectURL = vi.fn()
@@ -74,7 +74,7 @@ describe('real Tiptap description collaboration', () => {
     render(<IssueDescriptionEditor value={'![shot](https://flow.test/uploads/shot.png)'} editorRef={value => { editor = value }} selectionActions={{ onComment: comment }}/>)
     await waitFor(() => expect(editor).not.toBeNull())
     fireEvent.contextMenu(screen.getByRole('img', { name: 'shot' }))
-    expect(screen.getByRole('menuitem', { name: 'View image' })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: 'Crop image' })).toBeVisible()
     expect(screen.getByRole('menuitem', { name: 'Download' })).toBeVisible()
     expect(screen.getByRole('menuitem', { name: 'Copy image' })).toBeVisible()
     expect(screen.getByRole('menuitem', { name: 'Copy link' })).toBeVisible()
@@ -84,12 +84,11 @@ describe('real Tiptap description collaboration', () => {
     expect(comment).toHaveBeenCalledWith(expect.objectContaining({ text: 'shot', src: 'https://flow.test/uploads/shot.png' }))
   })
 
-  it('views and deletes a description image from the context menu', async () => {
+  it('views an image from its Full screen action and deletes it from the context menu', async () => {
     let editor: Editor | null = null
     render(<IssueDescriptionEditor value={'![shot](https://flow.test/uploads/shot.png)'} editorRef={value => { editor = value }}/>)
     await waitFor(() => expect(editor).not.toBeNull())
-    fireEvent.contextMenu(screen.getByRole('img', { name: 'shot' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'View image' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen' }))
     expect(screen.getByRole('dialog', { name: 'View image' })).toBeVisible()
     fireEvent.click(screen.getByRole('dialog', { name: 'View image' }))
     expect(screen.queryByRole('dialog', { name: 'View image' })).not.toBeInTheDocument()
