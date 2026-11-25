@@ -421,6 +421,7 @@ data:
   FLOW_S3_ENDPOINT: ""
   FLOW_S3_PATH_STYLE: "false"
   FLOW_S3_PREFIX: "uploads"
+  FLOW_UPLOAD_MAX_BYTES: "262144000"
   FLOW_AUTH_EMAIL_ENABLED: "false"
   FLOW_AUTH_OIDC_ENABLED: "true"
   FLOW_GOOGLE_OAUTH_CLIENT_ID: "google-client.apps.example.com"

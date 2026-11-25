@@ -52,6 +52,7 @@ redis:
     key: FLOW_REDIS_PASSWORD
 storage:
   driver: s3
+  uploadMaxBytes: 262144000
   persistence:
     enabled: false
   s3:

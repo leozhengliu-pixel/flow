@@ -69,6 +69,9 @@ value of each one the file sets (flow.config.fileEnv).
   FLOW_S3_PATH_STYLE: {{ $v.storage.s3.pathStyle | quote }}
   FLOW_S3_PREFIX: {{ $v.storage.s3.prefix | quote }}
   {{- end }}
+  {{- with $v.storage.uploadMaxBytes }}
+  FLOW_UPLOAD_MAX_BYTES: {{ include "flow.config.envValue" . | quote }}
+  {{- end }}
   {{- range $key, $value := $v.config.env }}
   {{ $key }}: {{ $value | toString | quote }}
   {{- end }}

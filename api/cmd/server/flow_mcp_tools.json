@@ -628,7 +628,7 @@
         "document": { "type": "string", "description": "Document ID or slug to attach the file to (instead of `issue`)" },
         "filename": { "type": "string", "description": "Filename for the upload, e.g. screenshot.png" },
         "issue": { "type": "string", "description": "Issue ID or identifier (e.g., ENG-123) to attach the file to (instead of `document`)" },
-        "size": { "type": "integer", "minimum": 0, "maximum": 20971520, "description": "Exact file size in bytes. Must be at most 20 MiB." },
+        "size": { "type": "integer", "minimum": 0, "maximum": 10737418240, "description": "Exact file size in bytes. Must be at most the deployment's upload limit (100 MiB unless the operator changed it)." },
         "subtitle": { "type": "string", "maxLength": 512, "description": "Suggested attachment subtitle for the finalize step" },
         "title": { "type": "string", "maxLength": 512, "description": "Suggested attachment title for the finalize step" }
       }

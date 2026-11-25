@@ -4,7 +4,7 @@ export const agentRuntimeZhCN: Record<string, string> = {
   "Attachments": "附件",
   "A message can carry up to 8 files, 10 MB in all": "每条消息最多 8 个附件，总计不超过 10 MB",
   "A message can carry up to 8 files": "每条消息最多 8 个附件",
-  "Files over 20 MB can't be attached": "超过 20 MB 的文件无法添加为附件",
+  "Files over {size} can't be attached": "超过 {size} 的文件无法添加为附件",
   "View PDF": "查看 PDF",
   "Print": "打印",
   "Download": "下载",

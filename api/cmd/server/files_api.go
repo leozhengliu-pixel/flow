@@ -41,7 +41,6 @@ import (
 // `X-Flow-File-Urls-Expire-In: <seconds>` (alias `Public-File-Urls-Expire-In`).
 
 const (
-	maxUploadBytes        = 20 << 20
 	fileUploadTTL         = 15 * time.Minute
 	maxSignedURLLifetime  = 7 * 24 * time.Hour
 	fileSigningSecretName = "file-urls"
@@ -51,6 +50,16 @@ const (
 var fileUploadNow = func() time.Time { return time.Now().UTC() }
 
 var fileUploadQuota = store.FileUploadQuota{PerUser: 32, PerWorkspaceBytes: 256 << 20}
+
+// fileUploadQuotaNow is fileUploadQuota with room for at least four pending
+// uploads of the largest size the upload limit allows.
+func fileUploadQuotaNow() store.FileUploadQuota {
+	quota := fileUploadQuota
+	if quota.PerWorkspaceBytes > 0 {
+		quota.PerWorkspaceBytes = max(quota.PerWorkspaceBytes, 4*uploadLimit())
+	}
+	return quota
+}
 
 type fileUploadInput = publicapi.FileUploadInput
 
@@ -113,8 +122,8 @@ func (s *server) createFileUpload(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "contentType must be a valid media type")
 		return
 	}
-	if input.Size < 0 || input.Size > maxUploadBytes {
-		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "size must be between 0 and 20 MB")
+	if limit := uploadLimit(); input.Size < 0 || input.Size > limit {
+		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "size must be between 0 and "+uploadLimitText(limit))
 		return
 	}
 	workspace := workspaceKey(r)
@@ -154,7 +163,7 @@ func (s *server) prepareFileUpload(ctx context.Context, upload store.FileUpload,
 	now := fileUploadNow()
 	upload.ID = secretHash(token)
 	upload.ExpiresAt = now.Add(fileUploadTTL)
-	if err := s.store.CreateFileUpload(ctx, upload, fileUploadQuota, now); err != nil {
+	if err := s.store.CreateFileUpload(ctx, upload, fileUploadQuotaNow(), now); err != nil {
 		return fileUploadPayload{}, err
 	}
 	baseURL = strings.TrimRight(baseURL, "/")
@@ -203,7 +212,8 @@ func (s *server) receiveFileUpload(w http.ResponseWriter, r *http.Request, token
 			_ = s.store.FinishFileUpload(context.WithoutCancel(r.Context()), id, false, 0, fileUploadNow())
 		}
 	}()
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes+1)
+	limit := uploadLimit()
+	r.Body = http.MaxBytesReader(w, r.Body, limit+1)
 	storage, err := s.storage()
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "storage unavailable")
@@ -215,7 +225,7 @@ func (s *server) receiveFileUpload(w http.ResponseWriter, r *http.Request, token
 		return
 	}
 	size, err := storage.Put(r.Context(), upload.ObjectKey, body, upload.ContentType)
-	if err != nil || size > maxUploadBytes || size != upload.ExpectedSize {
+	if err != nil || size > limit || size != upload.ExpectedSize {
 		_ = storage.Delete(context.WithoutCancel(r.Context()), upload.ObjectKey)
 		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "uploaded size does not match the prepared upload")
 		return

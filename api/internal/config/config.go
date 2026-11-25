@@ -36,12 +36,15 @@ type Config struct {
 	// ContentStoragePrefix is the object key prefix for offloaded database
 	// content when FLOW_STORAGE_DRIVER=s3 (FLOW_S3_CONTENT_PREFIX).
 	ContentStoragePrefix string
-	Auth                 AuthConfig
-	Agent                AgentConfig
-	TTS                  TTSConfig
-	WebSearch            WebSearchConfig
-	Telemetry            TelemetryConfig
-	Retention            RetentionConfig
+	// UploadMaxBytes is the largest file one upload stores, on every upload
+	// path (FLOW_UPLOAD_MAX_BYTES, DefaultUploadMaxBytes when unset).
+	UploadMaxBytes int64
+	Auth           AuthConfig
+	Agent          AgentConfig
+	TTS            TTSConfig
+	WebSearch      WebSearchConfig
+	Telemetry      TelemetryConfig
+	Retention      RetentionConfig
 	// AuditLogIP is how the audit log keeps client addresses
 	// (FLOW_AUDIT_LOG_IP): truncated (default; IPv4 /24, IPv6 /48), full or
 	// off.
@@ -89,6 +92,15 @@ type AssetsConfig struct {
 	// missing file is fetched from <url>/assets/<name> (FLOW_ASSET_FALLBACK_URL).
 	FallbackURLs []string
 }
+
+// Bounds of Config.UploadMaxBytes (FLOW_UPLOAD_MAX_BYTES): 100 MiB by
+// default, at least 1 MiB and at most 10 GiB. Uploads stream into object
+// storage, so the limit does not change how much memory a request holds.
+const (
+	DefaultUploadMaxBytes int64 = 100 << 20
+	MinUploadMaxBytes     int64 = 1 << 20
+	MaxUploadMaxBytes     int64 = 10 << 30
+)
 
 // DefaultAssetSharedKeepReleases is AssetsConfig.SharedKeepReleases' default.
 const DefaultAssetSharedKeepReleases = 5
@@ -312,6 +324,7 @@ func Load() (Config, error) {
 			},
 		},
 		ContentStoragePrefix: value("FLOW_S3_CONTENT_PREFIX", "content"),
+		UploadMaxBytes:       byteSize("FLOW_UPLOAD_MAX_BYTES", DefaultUploadMaxBytes),
 		Storage: objectstore.Config{
 			Driver:          value("FLOW_STORAGE_DRIVER", "local"),
 			LocalPath:       value("FLOW_STORAGE_LOCAL_PATH", value("FLOW_UPLOAD_PATH", "data/uploads")),
@@ -472,6 +485,9 @@ func (c Config) Validate() error {
 	}
 	if redisMode != "disabled" && driver == "sqlite" {
 		return fmt.Errorf("Redis multi-instance coordination requires PostgreSQL or MySQL; SQLite is single-instance only")
+	}
+	if c.UploadMaxBytes < MinUploadMaxBytes || c.UploadMaxBytes > MaxUploadMaxBytes {
+		return fmt.Errorf("FLOW_UPLOAD_MAX_BYTES must be a whole number of bytes between %d (1 MiB) and %d (10 GiB)", MinUploadMaxBytes, MaxUploadMaxBytes)
 	}
 	storage := strings.ToLower(c.Storage.Driver)
 	if storage != "local" && storage != "s3" {
@@ -698,6 +714,21 @@ func integer(name string, fallback int) int {
 		return fallback
 	}
 	return int(value)
+}
+
+// byteSize reads a byte count that must be a plain whole number: unlike
+// integer, a value that does not parse is not replaced by the fallback but
+// read as -1, which Validate refuses, so a typo stops startup.
+func byteSize(name string, fallback int64) int64 {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return -1
+	}
+	return value
 }
 
 // integer64 is integer for values that may exceed 32 bits (byte sizes on

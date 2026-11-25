@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { AgentFileAttachment } from "@/types/flow";
 import { toast } from "@/lib/toast";
+import { uploadLimitBytes } from "@/lib/upload-limit";
 
 /** Files attached to an agent composer (Agent page, loop run replies). */
 
@@ -25,8 +26,6 @@ export function addAgentAttachments(current: File[], picked: FileList | File[] |
 /** What a file becomes in the composer: an inline image, video or file card; audio is ignored. */
 export type AgentFileKind = "image" | "video" | "audio" | "file";
 export const AGENT_INLINE_IMAGE_TYPES = /^image\/(png|jpeg|gif|webp|svg\+xml)$/;
-/** Images (after shrinking) stay under 2 MB; every other uploaded file may be up to 20 MB. */
-export const AGENT_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 export const AGENT_UPLOAD_MAX_ITEMS = 8;
 
 /** Audio is ignored by MIME type alone, like the reference app: a file with an empty type becomes a file card. */
@@ -37,9 +36,13 @@ export function agentFileKind(file: Pick<File, "type">): AgentFileKind {
   return "file";
 }
 
-/** The most bytes an upload of this file may have: 2 MB for png/jpeg/gif/webp images, 20 MB for the rest. */
+/**
+ * The most bytes an upload of this file may have: 2 MB for png/jpeg/gif/webp images (shrunk first), the server's upload
+ * limit (FLOW_UPLOAD_MAX_BYTES, 100 MB by default) for the rest.
+ */
 export function agentUploadLimit(file: Pick<File, "type">) {
-  return /^image\/(png|jpeg|gif|webp)$/.test(file.type) ? AGENT_ATTACHMENT_MAX_BYTES : AGENT_UPLOAD_MAX_BYTES;
+  const limit = uploadLimitBytes();
+  return /^image\/(png|jpeg|gif|webp)$/.test(file.type) ? Math.min(AGENT_ATTACHMENT_MAX_BYTES, limit) : limit;
 }
 
 // Models downscale images to about this size anyway, so a larger screenshot loses nothing by shrinking first.

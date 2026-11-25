@@ -1098,7 +1098,7 @@ export interface FileUploadHeader {
 export interface FileUploadInput {
   contentType: string
   filename: string
-  /** Size is the exact byte length of the file (at most 20 MB). */
+  /** Size is the exact byte length of the file (at most the server's upload limit, FLOW_UPLOAD_MAX_BYTES: 100 MB by default). */
   size: number
 }
 

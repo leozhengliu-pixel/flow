@@ -110,6 +110,26 @@ func TestWorkspaceRegionSelectorConfig(t *testing.T) {
 	}
 }
 
+func TestUploadMaxBytesConfig(t *testing.T) {
+	t.Setenv("FLOW_UPLOAD_MAX_BYTES", "")
+	loaded, err := Load()
+	if err != nil || loaded.UploadMaxBytes != 100<<20 || DefaultUploadMaxBytes != 104857600 {
+		t.Fatalf("default upload limit = %d err=%v, want 100 MiB", loaded.UploadMaxBytes, err)
+	}
+	for value, want := range map[string]int64{"1048576": 1 << 20, " 262144000 ": 250 << 20, "10737418240": 10 << 30} {
+		t.Setenv("FLOW_UPLOAD_MAX_BYTES", value)
+		if loaded, err := Load(); err != nil || loaded.UploadMaxBytes != want {
+			t.Fatalf("FLOW_UPLOAD_MAX_BYTES=%q: limit=%d err=%v, want %d", value, loaded.UploadMaxBytes, err, want)
+		}
+	}
+	for _, value := range []string{"0", "-1", "1048575", "10737418241", "100MB", "1e8", "abc", "99999999999999999999"} {
+		t.Setenv("FLOW_UPLOAD_MAX_BYTES", value)
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_UPLOAD_MAX_BYTES must be a whole number of bytes between 1048576") {
+			t.Fatalf("FLOW_UPLOAD_MAX_BYTES=%q accepted: %v", value, err)
+		}
+	}
+}
+
 func TestWorkspaceTutorialConfig(t *testing.T) {
 	for value, want := range map[string]bool{"": true, "on": true, "true": true, "off": false, "OFF": false, "false": false, "0": false} {
 		t.Setenv("FLOW_WORKSPACE_TUTORIAL", value)

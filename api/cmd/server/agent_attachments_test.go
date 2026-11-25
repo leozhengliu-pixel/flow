@@ -245,6 +245,8 @@ func TestAgentChatPastedImagesReachTheModel(t *testing.T) {
 }
 
 func TestAgentChatUploadsAnyFileButAudio(t *testing.T) {
+	// Composer files follow the upload limit; a small configured one keeps the oversized file small.
+	withUploadLimit(t, 3<<20)
 	provider := &fakeLoopProvider{}
 	srv, handler := newLoopTestServer(t, provider)
 	host := httptest.NewServer(handler)
@@ -285,8 +287,11 @@ func TestAgentChatUploadsAnyFileButAudio(t *testing.T) {
 	if code, _ := upload("song.flac", "application/octet-stream", []byte("fLaC")); code != http.StatusCreated {
 		t.Fatalf("typeless audio upload = %d", code)
 	}
-	if code, _ := upload("big.zip", "application/zip", make([]byte, agentUploadMaxBytes+1)); code == http.StatusCreated {
-		t.Fatal("a file over 20 MB was accepted")
+	if code, _ := upload("big.zip", "application/zip", make([]byte, 3<<20+1)); code == http.StatusCreated {
+		t.Fatal("a file over the upload limit was accepted")
+	}
+	if code, zip := upload("limit.zip", "application/zip", make([]byte, 3<<20)); code != http.StatusCreated || zip.Size != 3<<20 {
+		t.Fatalf("a file at the upload limit = %d %#v", code, zip)
 	}
 	if code, _ := upload("big.png", "image/png", make([]byte, agentAttachmentMaxBytes+1)); code == http.StatusCreated {
 		t.Fatal("an image over 2 MB was accepted")

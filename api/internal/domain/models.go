@@ -3108,6 +3108,9 @@ type Bootstrap struct {
 	// ChatPlatform is set on bootstrap responses only: the deployment's
 	// first-class chat platform (FLOW_CHAT_PLATFORM).
 	ChatPlatform string `json:"chatPlatform,omitempty" enum:"slack,lark,feishu"`
+	// UploadMaxBytes is set on bootstrap responses only: the largest file an
+	// upload stores (FLOW_UPLOAD_MAX_BYTES).
+	UploadMaxBytes int64 `json:"uploadMaxBytes,omitempty"`
 }
 
 type ProviderJob struct {

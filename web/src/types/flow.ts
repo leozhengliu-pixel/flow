@@ -2696,6 +2696,8 @@ export interface BootstrapData {
   trashRetentionDays?: number;
   /** The deployment's first-class chat platform (FLOW_CHAT_PLATFORM); Slack when absent. */
   chatPlatform?: "slack" | "lark" | "feishu";
+  /** The largest file one upload stores, in bytes (FLOW_UPLOAD_MAX_BYTES). */
+  uploadMaxBytes?: number;
   issueCollectionPaged?: boolean;
   issueCollectionRevision?: number;
   issueHistoryCursors?: Record<string, { commentsCursor?: string; activitiesCursor?: string }>;

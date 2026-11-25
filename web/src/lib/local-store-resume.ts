@@ -25,7 +25,7 @@ export function localStoreRoute(route: AppRoute) {
 }
 
 const directoryFields = [
-  'workspace', 'viewer', 'viewerRole', 'chatPlatform', 'trashRetentionDays', 'workspaceSettings', 'userSettings',
+  'workspace', 'viewer', 'viewerRole', 'chatPlatform', 'trashRetentionDays', 'uploadMaxBytes', 'workspaceSettings', 'userSettings',
   'users', 'members', 'teamMembers', 'teams', 'teamSettings', 'teamParents', 'states', 'labels', 'labelGroups',
   'projects', 'projectStatuses', 'projectDisplayDefault', 'initiatives', 'cycles', 'cycleSettings', 'customers',
   'customerStatuses', 'customerTiers', 'savedViews', 'favorites', 'favoriteFolders', 'subscriptions',

@@ -5330,7 +5330,7 @@ Object.assign(zhCN, {
   "Web search is enabled for this loop, but no web search provider is configured on this server.":
     "此循环已启用网页搜索，但服务器未配置网页搜索服务。",
   "Uploading…": "正在上传…",
-  "Files must be 20 MB or smaller": "文件不能超过 20 MB",
+  "Files must be {size} or smaller": "文件不能超过 {size}",
   "Waiting for uploads to finish": "正在等待上传完成",
   "Web search isn't configured for this workspace.": "此工作区尚未配置网页搜索。",
   "Trusted sources for inbound content are managed in": "入站内容的可信来源在此处管理：",

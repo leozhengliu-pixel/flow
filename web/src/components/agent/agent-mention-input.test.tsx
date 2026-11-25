@@ -131,7 +131,8 @@ describe('AgentMentionInput', () => {
     expect(box.querySelector('[data-agent-block]')).not.toBeNull()
     await waitFor(() => expect(box.querySelector('[data-agent-block]')).toBeNull())
     const huge = new File(['x'], 'big.zip', { type: 'application/zip' })
-    Object.defineProperty(huge, 'size', { value: 21 * 1024 * 1024 })
+    // Over the server's default upload limit (100 MB, FLOW_UPLOAD_MAX_BYTES).
+    Object.defineProperty(huge, 'size', { value: 100 * 1024 * 1024 + 1 })
     onUploadFile.mockClear()
     fireEvent.paste(box, { clipboardData: { files: [huge], getData: () => '' } })
     await waitFor(() => expect(box.querySelector('[data-agent-block]')).toBeNull())

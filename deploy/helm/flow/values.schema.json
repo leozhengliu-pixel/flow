@@ -405,6 +405,19 @@
             "s3"
           ]
         },
+        "uploadMaxBytes": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1048576,
+              "maximum": 10737418240
+            },
+            {
+              "type": "string",
+              "pattern": "^[0-9]*$"
+            }
+          ]
+        },
         "persistence": {
           "type": "object",
           "properties": {

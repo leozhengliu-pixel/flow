@@ -279,7 +279,8 @@ func TestMCPDocumentAttachmentUploadFlow(t *testing.T) {
 		args["issue"], args["document"] = f.data.Issues[0].ID, documentID
 		f.refused(t, admin, name, args, "pass exactly one of `issue`")
 	}
-	f.refused(t, admin, "prepare_attachment_upload", map[string]any{"document": documentID, "filename": "big.bin", "contentType": "application/octet-stream", "size": maxUploadBytes + 1}, "Invalid arguments")
+	f.refused(t, admin, "prepare_attachment_upload", map[string]any{"document": documentID, "filename": "big.bin", "contentType": "application/octet-stream", "size": uploadLimit() + 1}, "Flow attachments must be 100 MB or smaller")
+	f.refused(t, admin, "prepare_attachment_upload", map[string]any{"document": documentID, "filename": "big.bin", "contentType": "application/octet-stream", "size": 10<<30 + 1}, "Invalid arguments")
 	f.refused(t, admin, "prepare_attachment_upload", map[string]any{"document": documentID, "filename": "a.txt", "contentType": "not a type", "size": 1}, "valid media type")
 	f.refused(t, admin, "prepare_attachment_upload", map[string]any{"document": "missing-document", "filename": "a.txt", "contentType": "text/plain", "size": 1}, "not found")
 	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {

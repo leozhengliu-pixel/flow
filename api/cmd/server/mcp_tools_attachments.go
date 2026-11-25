@@ -118,6 +118,11 @@ func mcpUploadContentType(filename, contentType string) (string, error) {
 	return contentType, nil
 }
 
+// mcpInlineAttachmentMaxBytes bounds create_attachment's base64 content: it
+// arrives inside one JSON request and is decoded in memory, so it keeps 20 MB
+// whatever the upload limit; prepare_attachment_upload streams larger files.
+const mcpInlineAttachmentMaxBytes = 20 << 20
+
 // MCP uploads share the durable REST upload records (files_api.go), so the
 // PUT and the finalizing tool call may reach different API instances.
 func (s *server) prepareMCPAttachmentUpload(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
@@ -126,8 +131,8 @@ func (s *server) prepareMCPAttachmentUpload(ctx context.Context, actor mcpActor,
 		return nil, err
 	}
 	size := int64(intArg(args, "size", 0))
-	if size < 0 || size > maxUploadBytes {
-		return nil, fmt.Errorf("Flow attachments must be 20 MB or smaller")
+	if limit := uploadLimit(); size < 0 || size > limit {
+		return nil, fmt.Errorf("Flow attachments must be %s or smaller", uploadLimitText(limit))
 	}
 	filename := cleanUploadFilename(stringArg(args, "filename"))
 	if filename == "" {
@@ -244,8 +249,8 @@ func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data d
 	if expected := intArg(args, "size", 0); hasNumberArg(args, "size") && expected != len(content) {
 		return nil, fmt.Errorf("attachment size mismatch")
 	}
-	if len(content) > maxUploadBytes {
-		return nil, fmt.Errorf("Flow attachments must be 20 MB or smaller")
+	if limit := min(uploadLimit(), mcpInlineAttachmentMaxBytes); int64(len(content)) > limit {
+		return nil, fmt.Errorf("Flow attachments sent inline must be %s or smaller; upload larger files with prepare_attachment_upload", uploadLimitText(limit))
 	}
 	filename, contentType := stringArg(args, "filename"), stringArg(args, "contentType")
 	key := fmt.Sprintf("mcp_%s_%s", idgen.Stamp(), filepath.Base(filename))

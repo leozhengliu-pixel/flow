@@ -38,6 +38,7 @@ FLOW_S3_REGION: storage.s3.region
 FLOW_S3_ENDPOINT: storage.s3.endpoint
 FLOW_S3_PATH_STYLE: storage.s3.pathStyle
 FLOW_S3_PREFIX: storage.s3.prefix
+FLOW_UPLOAD_MAX_BYTES: storage.uploadMaxBytes
 FLOW_TRUSTED_PRIVATE_ENDPOINTS: outbound.trustedPrivateEndpoints
 FLOW_TRUSTED_PRIVATE_NETWORKS: outbound.trustedPrivateNetworks
 FLOW_TRUST_PROXY_HEADERS: proxy.trustHeaders

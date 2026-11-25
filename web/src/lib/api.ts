@@ -115,6 +115,7 @@ import type {
 } from "@/types/flow";
 import type { ApplicationInstallation } from "@/lib/application-agents";
 import { rememberTrashRetention } from "@/lib/trash-retention";
+import { rememberUploadLimit } from "@/lib/upload-limit";
 import { rememberChatPlatform } from "@/lib/chat-platform-cache";
 import { markSuspendedMembersInactive } from "@/lib/people";
 import { decodeBase64Url, encodeBase64Url } from "@/lib/webauthn";
@@ -442,7 +443,7 @@ export function fetchBootstrap(workspaceKey?: string, projection?: BootstrapProj
   return request<BootstrapData>(
     "/api/bootstrap",
     { headers, signal, quiet, onResponse: shadow?.observe },
-  ).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform).then(data => shadow?.record(data) ?? data);
+  ).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberUploadLimit).then(rememberChatPlatform).then(data => shadow?.record(data) ?? data);
 }
 
 export function fetchPagedBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
@@ -451,7 +452,7 @@ export function fetchPagedBootstrap(workspaceKey?: string, projection?: Bootstra
   if (projection) headers['X-Flow-Projection'] = projection
   // The server bounds concurrent metadata loads and answers a crowd with 503 + Retry-After.
   const shadow = captureLocalStoreBootstrap(headers, projection)
-  return requestRetryingBusy<BootstrapData>('/api/issue-records/bootstrap', {headers, signal, quiet, onResponse: shadow?.observe}).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform).then(data => shadow?.record(data) ?? data)
+  return requestRetryingBusy<BootstrapData>('/api/issue-records/bootstrap', {headers, signal, quiet, onResponse: shadow?.observe}).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberUploadLimit).then(rememberChatPlatform).then(data => shadow?.record(data) ?? data)
 }
 export type IssueQueryInput = {
   q?: string;

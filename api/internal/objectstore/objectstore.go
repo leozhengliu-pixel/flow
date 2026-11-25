@@ -14,6 +14,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type Config struct {
@@ -178,13 +179,72 @@ func (s *s3Store) objectKey(key string) string {
 	return s.prefix + "/" + key
 }
 
+// s3PartSize is how much of an object Put holds in memory at a time: an
+// object up to this size is one PutObject, a larger one a multipart upload of
+// parts this size (S3 needs at least 5 MiB for every part but the last; 10,000
+// parts of 8 MiB hold well over the 10 GiB upload limit).
+var s3PartSize = 8 << 20
+
+// Put streams the reader into the object, holding one part in memory at a
+// time, so the memory an upload takes does not grow with the object's size.
+// A failure to read the caller's reader is reported as it is, a storage
+// failure as an *Error; either way no object or unfinished upload is left.
 func (s *s3Store) Put(ctx context.Context, key string, reader io.Reader, contentType string) (int64, error) {
-	content, err := io.ReadAll(reader)
-	if err != nil {
+	buffer := make([]byte, s3PartSize)
+	n, err := io.ReadFull(reader, buffer)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return 0, err
 	}
-	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(s.objectKey(key)), Body: bytes.NewReader(content), ContentLength: aws.Int64(int64(len(content))), ContentType: optionalString(contentType)})
-	return int64(len(content)), storageError("put", err)
+	if n < len(buffer) {
+		_, err = s.client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(s.objectKey(key)), Body: bytes.NewReader(buffer[:n]), ContentLength: aws.Int64(int64(n)), ContentType: optionalString(contentType)})
+		return int64(n), storageError("put", err)
+	}
+	return s.putMultipart(ctx, key, reader, contentType, buffer)
+}
+
+// putMultipart uploads an object larger than one part: buffer holds the first
+// part, the rest is read from reader one part at a time.
+func (s *s3Store) putMultipart(ctx context.Context, key string, reader io.Reader, contentType string, buffer []byte) (int64, error) {
+	objectKey := s.objectKey(key)
+	// Like the SDK's upload manager: unless the client sends checksums only
+	// where required (AWS_REQUEST_CHECKSUM_CALCULATION=when_required, for
+	// stores without them), the upload declares CRC32 and every part carries
+	// it, so S3 can check the parts it assembles.
+	algorithm := types.ChecksumAlgorithmCrc32
+	if s.client.Options().RequestChecksumCalculation == aws.RequestChecksumCalculationWhenRequired {
+		algorithm = ""
+	}
+	created, err := s.client.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{Bucket: aws.String(s.bucket), Key: aws.String(objectKey), ContentType: optionalString(contentType), ChecksumAlgorithm: algorithm})
+	if err != nil {
+		return 0, storageError("put", err)
+	}
+	abort := func() {
+		_, _ = s.client.AbortMultipartUpload(context.WithoutCancel(ctx), &s3.AbortMultipartUploadInput{Bucket: aws.String(s.bucket), Key: aws.String(objectKey), UploadId: created.UploadId})
+	}
+	var parts []types.CompletedPart
+	var size int64
+	n := len(buffer)
+	for number := int32(1); n > 0; number++ {
+		uploaded, err := s.client.UploadPart(ctx, &s3.UploadPartInput{Bucket: aws.String(s.bucket), Key: aws.String(objectKey), UploadId: created.UploadId, PartNumber: aws.Int32(number), Body: bytes.NewReader(buffer[:n]), ContentLength: aws.Int64(int64(n)), ChecksumAlgorithm: algorithm})
+		if err != nil {
+			abort()
+			return size, storageError("put", err)
+		}
+		parts = append(parts, types.CompletedPart{PartNumber: aws.Int32(number), ETag: uploaded.ETag, ChecksumCRC32: uploaded.ChecksumCRC32})
+		size += int64(n)
+		var readErr error
+		n, readErr = io.ReadFull(reader, buffer)
+		if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+			abort()
+			return size, readErr
+		}
+	}
+	_, err = s.client.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{Bucket: aws.String(s.bucket), Key: aws.String(objectKey), UploadId: created.UploadId, MultipartUpload: &types.CompletedMultipartUpload{Parts: parts}})
+	if err != nil {
+		abort()
+		return size, storageError("put", err)
+	}
+	return size, nil
 }
 
 func (s *s3Store) Open(ctx context.Context, key string) (io.ReadCloser, string, int64, error) {

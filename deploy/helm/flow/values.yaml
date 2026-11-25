@@ -340,6 +340,10 @@ storage:
   # local | s3. local keeps uploads (and coding snapshot archives) on the
   # data volume; s3 is required for more than one replica.
   driver: local
+  # Largest file one upload stores, in bytes (FLOW_UPLOAD_MAX_BYTES). Empty
+  # keeps Flow's default of 104857600 (100 MiB). An ingress in front of Flow
+  # must accept request bodies this large.
+  uploadMaxBytes: ""
   persistence:
     enabled: true
     existingClaim: ""

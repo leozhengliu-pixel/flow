@@ -22,7 +22,6 @@ import (
 // message — images as image inputs, text files as extracted text.
 
 const (
-	loopAttachmentMaxBytes    = 20 << 20
 	loopAttachmentUnusedTTL   = 24 * time.Hour
 	loopAttachmentImageBytes  = 5 << 20
 	loopAttachmentImages      = 4
@@ -32,17 +31,15 @@ const (
 )
 
 func (s *server) uploadLoopAttachment(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, loopAttachmentMaxBytes+(1<<20))
-	if err := r.ParseMultipartForm(loopAttachmentMaxBytes); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid attachment")
+	limit := uploadLimit()
+	form, err := openUploadForm(w, r, limit)
+	if err != nil {
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
-	if r.MultipartForm != nil {
-		defer r.MultipartForm.RemoveAll()
-	}
-	file, header, err := r.FormFile("file")
+	file, err := form.File()
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "file is required")
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
 	defer file.Close()
@@ -51,32 +48,27 @@ func (s *server) uploadLoopAttachment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "storage unavailable")
 		return
 	}
-	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), header.Filename, file)
+	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), file.FileName(), file)
 	if policyErr != nil {
 		writeError(w, http.StatusForbidden, policyErr.Error())
 		return
 	}
 	now := time.Now().UTC()
 	attachmentID := idgen.New("loop_attachment_")
-	name := filepath.Base(strings.TrimSpace(header.Filename))
+	name := filepath.Base(strings.TrimSpace(file.FileName()))
 	if name == "." || name == "/" || name == "" {
 		name = "attachment"
 	}
 	objectKey := attachmentID + "_" + name
-	contentType := header.Header.Get("Content-Type")
+	contentType := file.Header.Get("Content-Type")
 	if contentType == "" || contentType == "application/octet-stream" {
 		if guessed := mime.TypeByExtension(strings.ToLower(filepath.Ext(name))); guessed != "" {
 			contentType = guessed
 		}
 	}
-	size, err := storage.Put(r.Context(), objectKey, io.LimitReader(upload, loopAttachmentMaxBytes+1), contentType)
-	if err != nil || size > loopAttachmentMaxBytes {
-		_ = storage.Delete(r.Context(), objectKey)
-		if err == nil {
-			writeError(w, http.StatusRequestEntityTooLarge, "attachment exceeds 20 MB")
-		} else {
-			writeError(w, http.StatusInternalServerError, "upload failed")
-		}
+	size, err := form.Store(r.Context(), storage, objectKey, upload, contentType, limit)
+	if err != nil {
+		writeAttachmentUploadError(w, err, limit)
 		return
 	}
 	attachment := domain.LoopAttachment{ID: attachmentID, Name: name, ContentType: contentType, Size: size, URL: "/uploads/" + objectKey, CreatedAt: now}

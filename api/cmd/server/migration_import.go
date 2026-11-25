@@ -836,12 +836,16 @@ func linearArchiveIssue(ctx context.Context, client *linearMigrationClient, id s
 
 const migrationAttachmentFetchTimeout = 30 * time.Second
 
+// migrationAttachmentMaxBytes bounds one attachment the migration copies.
+const migrationAttachmentMaxBytes = 20 << 20
+
 func linearCopyAttachment(ctx context.Context, client *linearMigrationClient, attachment domain.Attachment) (string, error) {
 	// The source URL is member-controlled data in the bundle, so it is fetched
 	// like an attachment imported from a URL: http(s) only, no userinfo, every
 	// connection and redirect hop checked by the outbound policy (public
-	// addresses only), the same 20 MiB cap. The copy is sequential, one
-	// attachment at a time.
+	// addresses only). The copy is read into memory, so it keeps its own
+	// 20 MiB cap (migrationAttachmentMaxBytes) instead of the upload limit.
+	// The copy is sequential, one attachment at a time.
 	parsed, err := parseFetchURL(strings.TrimSpace(attachment.URL))
 	if err != nil {
 		return "", err
@@ -861,14 +865,14 @@ func linearCopyAttachment(ctx context.Context, client *linearMigrationClient, at
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return "", fmt.Errorf("source returned HTTP %d", response.StatusCode)
 	}
-	if response.ContentLength > maxAttachmentFromURLBytes {
+	if response.ContentLength > migrationAttachmentMaxBytes {
 		return "", errors.New("source attachment exceeds 20 MB")
 	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, maxAttachmentFromURLBytes+1))
+	data, err := io.ReadAll(io.LimitReader(response.Body, migrationAttachmentMaxBytes+1))
 	if err != nil {
 		return "", err
 	}
-	if len(data) > maxAttachmentFromURLBytes {
+	if len(data) > migrationAttachmentMaxBytes {
 		return "", errors.New("source attachment exceeds 20 MB")
 	}
 	contentType := attachment.ContentType

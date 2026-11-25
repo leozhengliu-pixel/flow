@@ -584,6 +584,7 @@ server:
 | `storage.s3.prefix` | `FLOW_S3_PREFIX` | text |
 | `storage.s3.region` | `FLOW_S3_REGION` | text |
 | `storage.s3.validateOnStart` | `FLOW_S3_VALIDATE_ON_START` | boolean |
+| `storage.uploadMaxBytes` | `FLOW_UPLOAD_MAX_BYTES` | number: 1048576 to 10737418240 |
 | `telemetry.enabled` | `FLOW_TELEMETRY_ENABLED` | boolean |
 | `telemetry.endpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT` | text |
 | `telemetry.environment` | `FLOW_ENVIRONMENT` | text |
@@ -1366,10 +1367,43 @@ backend.
 | `FLOW_S3_PREFIX` | `uploads` | Key prefix inside the bucket. |
 | `FLOW_S3_CONTENT_PREFIX` | `content` | Key prefix for database content kept in object storage (see [Database growth](#database-growth)). |
 | `FLOW_S3_VALIDATE_ON_START` | `true` | Fail startup when the bucket or credentials cannot be accessed. |
+| `FLOW_UPLOAD_MAX_BYTES` | `104857600` (100 MiB) | Largest file one upload stores. See [Upload size limit](#upload-size-limit). |
 
 The standard `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`,
 `AWS_REGION`, `AWS_S3_BUCKET_NAME`, and `AWS_S3_ENDPOINT_URL` names are also
 accepted. Flow-specific names take precedence.
+
+### Upload size limit
+
+`FLOW_UPLOAD_MAX_BYTES` is the largest file Flow stores from one upload, in
+plain bytes (`104857600`; forms such as `100MB` are refused). The default is
+100 MiB. Startup fails unless the value is a whole number between `1048576`
+(1 MiB) and `10737418240` (10 GiB). In the configuration file it is
+`server.storage.uploadMaxBytes`; with the Helm chart, set
+`storage.uploadMaxBytes`.
+
+The one limit applies to every upload: issue, document, comment, project and
+initiative update, customer request and loop attachments, files added in the
+Agent composer, prepared uploads (`POST /api/files` and the MCP
+`prepare_attachment_upload` tool) and files attached from a URL. A larger file
+is refused with `413` ("attachment exceeds 100 MB") or, for a prepared upload,
+`400`, and nothing is kept in storage. The web app reads the limit from the
+bootstrap (`uploadMaxBytes`) and refuses larger files before sending them.
+
+Uploads stream into object storage, so the limit does not change how much
+memory a request holds: local storage writes the file as it arrives, and S3
+receives files over 8 MiB as a multipart upload, one 8 MiB part at a time.
+
+Some limits stay fixed because their content is read into memory: images in
+the Agent composer (2 MB), file content sent inline to the MCP
+`create_attachment` tool (20 MB), files the Agent's `read_file` tool reads
+(20 MB), workspace logos and application icons (5 MB), attachments copied
+by a migration (20 MB) and CSV or JSON imports (20 MB).
+
+A reverse proxy in front of Flow must accept request bodies of the same size
+(for example `client_max_body_size` in nginx, or the
+`nginx.ingress.kubernetes.io/proxy-body-size` annotation on an ingress-nginx
+Ingress) and allow the time a large upload takes.
 
 ## Secrets at rest
 

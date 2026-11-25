@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"net/http"
 	"path/filepath"
 	"slices"
@@ -13,41 +12,38 @@ import (
 
 func (s *server) createPulseUpdateAttachment(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, (20<<20)+(1<<20))
-		if err := r.ParseMultipartForm(20 << 20); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid attachment")
+		limit := uploadLimit()
+		form, err := openUploadForm(w, r, limit)
+		if err != nil {
+			writeAttachmentUploadError(w, err, limit)
 			return
 		}
-		file, header, err := r.FormFile("file")
+		file, err := form.File()
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "file is required")
+			writeAttachmentUploadError(w, err, limit)
 			return
 		}
 		defer file.Close()
+		filename, contentType := file.FileName(), file.Header.Get("Content-Type")
 		parentID, updateID := r.PathValue("id"), r.PathValue("updateId")
 		attachmentID := "update_attachment_" + newCollaborationID()
-		objectKey := attachmentID + "_" + filepath.Base(header.Filename)
+		objectKey := attachmentID + "_" + filepath.Base(filename)
 		storage, err := s.storage()
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "storage unavailable")
 			return
 		}
-		upload, policyErr := s.checkUploadPolicy(workspaceKey(r), header.Filename, file)
+		upload, policyErr := s.checkUploadPolicy(workspaceKey(r), filename, file)
 		if policyErr != nil {
 			writeError(w, http.StatusForbidden, policyErr.Error())
 			return
 		}
-		size, err := storage.Put(r.Context(), objectKey, io.LimitReader(upload, (20<<20)+1), header.Header.Get("Content-Type"))
-		if err != nil || size > 20<<20 {
-			_ = storage.Delete(r.Context(), objectKey)
-			if size > 20<<20 {
-				writeError(w, http.StatusRequestEntityTooLarge, "attachment exceeds 20 MB")
-			} else {
-				writeError(w, http.StatusInternalServerError, "upload failed")
-			}
+		size, err := form.Store(r.Context(), storage, objectKey, upload, contentType, limit)
+		if err != nil {
+			writeAttachmentUploadError(w, err, limit)
 			return
 		}
-		attachment := domain.Attachment{ID: attachmentID, Title: header.Filename, URL: "/uploads/" + objectKey, ContentType: header.Header.Get("Content-Type"), Size: size, CreatedAt: time.Now().UTC()}
+		attachment := domain.Attachment{ID: attachmentID, Title: filename, URL: "/uploads/" + objectKey, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC()}
 		var result any
 		err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), kind+".update_attachment_created", parentID, map[string]string{"updateId": updateID, "attachmentId": attachmentID}, func(data *domain.Bootstrap) error {
 			attachment.Creator = data.Viewer

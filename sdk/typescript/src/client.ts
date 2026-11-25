@@ -617,7 +617,7 @@ export class FlowClient {
   // Files
   // -------------------------------------------------------------------------
 
-  /** Step 1 of an upload: reserves an upload URL (write scope; `size` must be exact, at most 20 MB). */
+  /** Step 1 of an upload: reserves an upload URL (write scope; `size` must be exact, at most the server's upload limit: 100 MB by default). */
   prepareFileUpload(input: FileUploadInput, options?: RequestOptions): Promise<FileUpload> {
     return this.api.postFiles({ body: input }, options)
   }

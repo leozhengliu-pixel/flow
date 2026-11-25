@@ -412,8 +412,9 @@ var fileSchema = map[string]*field{
 			}),
 		}),
 		"storage": section(map[string]*field{
-			"driver":    envString("FLOW_STORAGE_DRIVER", "local", "s3"),
-			"localPath": envString("FLOW_STORAGE_LOCAL_PATH"),
+			"driver":         envString("FLOW_STORAGE_DRIVER", "local", "s3"),
+			"localPath":      envString("FLOW_STORAGE_LOCAL_PATH"),
+			"uploadMaxBytes": envInt("FLOW_UPLOAD_MAX_BYTES", MinUploadMaxBytes, min(MaxUploadMaxBytes, maxPlatformInt)),
 			"s3": section(map[string]*field{
 				"bucket":          envString("FLOW_S3_BUCKET"),
 				"region":          envString("FLOW_S3_REGION"),
