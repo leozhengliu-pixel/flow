@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Fix API memory exhaustion when commenting on or editing issues in workspaces with many projects. Single-issue writes in legacy metadata mode authorize against the viewer's policy and the records the request names instead of copying the whole workspace, snapshots share project progress histories instead of copying them, and the remaining full-workspace authorization reads wait for the shared projection budget.
 - Reduce memory used by legacy comment-action reads and avoid duplicate workspace projections for drafts, recurring issues, bulk issue moves, settings lists, resource preferences, the feed, reviews, and search suggestions.
 - CI runs long triage, loop, workflow and large-row comparisons on separate shards and gives large fixture purges their own deadline.
 - Realtime projections wait briefly for shared memory during bursts, so viewers can receive updates as capacity frees up.
