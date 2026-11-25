@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
-import { ExternalLink, File, FileText, Link2, Plus, Trash2 } from 'lucide-react'
+import { ExternalLink, File, FileText, Link2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { formatFileSize } from '@/lib/format-file-size'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -17,7 +17,7 @@ const safeHost = (value: string) => { try { return new URL(value).hostname } cat
 const caret = <svg aria-hidden="true" fill="currentColor" viewBox="0 0 16 16"><path d="M10.6239 6.75194C10.8183 6.41861 10.5779 6 10.192 6H5.80802C5.42212 6 5.18169 6.41861 5.37613 6.75194L7.56811 10.5096C7.76105 10.8404 8.23895 10.8404 8.43189 10.5096L10.6239 6.75194Z"/></svg>
 
 /** The issue's Resources section (the design reference's layout): a collapsible header with an add button, then one row per linked document or link. */
-export function IssueResources({ documents, links, files = [], workspaceKey, issueKey, actions, onDeleteLink }: { documents: FlowDocument[]; links: Attachment[]; files?: Attachment[]; workspaceKey: string; issueKey: string; actions?: IssueOptionsActions; onDeleteLink: (id: string) => Promise<void> }) {
+export function IssueResources({ documents, links, files = [], workspaceKey, issueKey, actions, onDeleteLink, onEditLink }: { documents: FlowDocument[]; links: Attachment[]; files?: Attachment[]; workspaceKey: string; issueKey: string; actions?: IssueOptionsActions; onDeleteLink: (id: string) => Promise<void>; onEditLink?: (id: string, input: { url: string; title: string }) => Promise<void> }) {
   const { t, locale } = useI18n()
   const nowMs = useCurrentTimeMs()
   const [collapsed, setCollapsed] = useState(false)
@@ -26,10 +26,18 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
   const [url, setUrl] = useState('')
   const [title, setTitle] = useState('')
   const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState<Attachment | null>(null)
+  const openEdit = (link: Attachment) => { setEditing(link); setUrl(link.url); setTitle(link.title); setLinkOpen(true) }
+  const closeDialog = (open: boolean) => { setLinkOpen(open); if (!open) { setEditing(null); setUrl(''); setTitle('') } }
   const addLink = async () => {
-    if (!actions || !url.trim()) return
+    if (!url.trim()) return
     setSaving(true)
-    try { await actions.addLink({ url: url.trim(), title: title.trim() || undefined }); setUrl(''); setTitle(''); setLinkOpen(false) } finally { setSaving(false) }
+    try {
+      if (editing) await onEditLink?.(editing.id, { url: url.trim(), title: title.trim() })
+      else if (actions) await actions.addLink({ url: url.trim(), title: title.trim() || undefined })
+      else return
+      closeDialog(false)
+    } finally { setSaving(false) }
   }
   return <section className="res-section">
     <header className="res-header">
@@ -40,7 +48,7 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
         <Popover.Trigger asChild><button aria-label={t('Add resource to issue')} className="res-add" type="button"><Plus size={14}/></button></Popover.Trigger>
         <Popover.Portal><Popover.Content align="end" className="issue-resource-menu" data-flow-motion="floating" sideOffset={4}>
           <button disabled={!actions} onClick={() => { setMenuOpen(false); void actions?.addDocument() }} type="button"><FileText/>{t('Create document')}</button>
-          <button disabled={!actions} onClick={() => { setMenuOpen(false); setLinkOpen(true) }} type="button"><Link2/>{t('Add link')}</button>
+          <button disabled={!actions} onClick={() => { setMenuOpen(false); closeDialog(true) }} type="button"><Link2/>{t('Add link')}</button>
         </Popover.Content></Popover.Portal>
       </Popover.Root>
     </header>
@@ -60,6 +68,7 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onSelect={() => window.open(link.url, '_blank', 'noopener,noreferrer')}><ExternalLink size={16}/>{t('Open link')}</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(link.url)}><Link2 size={16}/>{t('Copy link')}</DropdownMenuItem>
+                  {!isFile && onEditLink && <DropdownMenuItem onSelect={() => openEdit(link)}><Pencil size={16}/>{t('Edit…')}</DropdownMenuItem>}
                   <DropdownMenuSeparator/>
                   <DropdownMenuItem onSelect={() => void onDeleteLink(link.id)}><Trash2 size={16}/>{t('Remove')}</DropdownMenuItem>
                 </DropdownMenuContent>
@@ -69,15 +78,15 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
         </a>
       })}
     </div>}
-    <Dialog.Root open={linkOpen} onOpenChange={setLinkOpen}>
+    <Dialog.Root open={linkOpen} onOpenChange={closeDialog}>
       <Dialog.Portal>
         <Dialog.Overlay className="modal-overlay" data-flow-motion="backdrop"/>
         <Dialog.Content className="res-dialog" data-flow-motion="dialog">
           <form onSubmit={event => { event.preventDefault(); void addLink() }}>
-            <Dialog.Title className="res-dialog-title"><Link2 size={16}/><span>{t('Add link to {issue}').replace('{issue}', issueKey)}</span></Dialog.Title>
+            <Dialog.Title className="res-dialog-title"><Link2 size={16}/><span>{editing ? t('Edit link') : t('Add link to {issue}').replace('{issue}', issueKey)}</span></Dialog.Title>
             <label><span>{t('URL')}</span><input autoFocus onChange={event => setUrl(event.target.value)} placeholder="https://…" type="url" value={url}/></label>
             <label><span>{t('Title')} <em>{t('(optional)')}</em></span><input onChange={event => setTitle(event.target.value)} value={title}/></label>
-            <footer><Dialog.Close asChild><button type="button">{t('Cancel')}</button></Dialog.Close><button className="primary" disabled={!url.trim() || saving} type="submit">{t(saving ? 'Adding…' : 'Add link')}</button></footer>
+            <footer><Dialog.Close asChild><button type="button">{t('Cancel')}</button></Dialog.Close><button className="primary" disabled={!url.trim() || saving} type="submit">{editing ? t(saving ? 'Saving…' : 'Save') : t(saving ? 'Adding…' : 'Add link')}</button></footer>
           </form>
         </Dialog.Content>
       </Dialog.Portal>

@@ -564,6 +564,14 @@ func TestLinkAttachmentUpsertLookupAndSignedHeader(t *testing.T) {
 	if patched.Title != "Ticket #7" || patched.Subtitle != "Solved" {
 		t.Fatalf("patched = %#v", patched)
 	}
+	moved := authRequest[domain.Attachment](t, f.admin, http.MethodPatch, base+"/api/issues/"+issue.ID+"/attachments/"+created.ID, map[string]any{"url": "https://support.example.com/tickets/8", "title": "Ticket 8"}, "test-workspace", http.StatusOK)
+	if moved.ID != created.ID || moved.URL != "https://support.example.com/tickets/8" || moved.Title != "Ticket 8" {
+		t.Fatalf("url edit = %#v", moved)
+	}
+	other := authRequest[domain.Attachment](t, f.admin, http.MethodPost, base+"/api/issues/"+issue.ID+"/link-attachments", map[string]any{"url": "https://support.example.com/tickets/9"}, "test-workspace", http.StatusCreated)
+	authRequest[map[string]any](t, f.admin, http.MethodPatch, base+"/api/issues/"+issue.ID+"/attachments/"+other.ID, map[string]any{"url": moved.URL}, "test-workspace", http.StatusConflict)
+	authRequest[map[string]any](t, f.admin, http.MethodPatch, base+"/api/issues/"+issue.ID+"/attachments/"+other.ID, map[string]any{"url": "ftp://example.com/x"}, "test-workspace", http.StatusBadRequest)
+	authRequest[domain.Attachment](t, f.admin, http.MethodPatch, base+"/api/issues/"+issue.ID+"/attachments/"+moved.ID, map[string]any{"url": "https://support.example.com/tickets/7", "title": "Ticket #7"}, "test-workspace", http.StatusOK)
 	byIssue := authRequest[connection[domain.Attachment]](t, f.admin, http.MethodGet, base+"/api/attachments?issueId="+issue.ID, nil, "test-workspace", http.StatusOK)
 	if !slices.ContainsFunc(byIssue.Nodes, func(a domain.Attachment) bool { return a.ID == created.ID }) {
 		t.Fatalf("by issue = %#v", byIssue)

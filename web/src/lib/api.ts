@@ -2981,6 +2981,13 @@ export function createIssueLink(
 ): Promise<Attachment> {
   return request(`/api/issues/${issueId}/links`, jsonRequest("POST", input));
 }
+export function updateIssueLinkAttachment(
+  issueId: string,
+  attachmentId: string,
+  input: { url?: string; title?: string },
+): Promise<Attachment> {
+  return request(`/api/issues/${issueId}/attachments/${attachmentId}`, jsonRequest("PATCH", input));
+}
 export function createIssueReminder(
   issueId: string,
   remindAt: string,

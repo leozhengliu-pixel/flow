@@ -4,7 +4,7 @@ import { issueCustomerRowData } from '@/components/issue-explorer/customer-filte
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { IssueAgentTasks, IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
 import { useDescriptionSelectionActions } from './description-selection-actions'
-import { fetchIssueRecord, setThreadSubscription } from '@/lib/api'
+import { fetchIssueRecord, setThreadSubscription, updateIssueLinkAttachment } from '@/lib/api'
 import { reloadIssueAfterRevocation } from '@/lib/issue-access-reload'
 import { toast } from '@/lib/toast'
 import { FlowTooltip } from '@/components/ui/tooltip'
@@ -216,7 +216,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         {subOpen&&<SubIssueEditor key={subEditorKey} parent={issue} data={data} onCancel={()=>setSubOpen(false)} onCreate={async input=>{await onCreateSubIssue(input);setSubEditorKey(key=>key+1)}}/>}
         {!desktopLayout&&!(inTriage&&data.workspaceSettings.featureFlags?.['triage-intelligence'])&&<SimilarIssues issue={issue} issues={data.issues} workspaceKey={data.workspace.urlKey} onOpen={openIssue} onMarkDuplicate={target=>void onRelation('duplicate',target.id)}/>}
         {linkedReviews.length>0&&<IssueCodeReviews actions={issueOptionsActions} reviews={linkedReviews}/>}
-        {(linkedDocuments.length>0||linkedResources.length>0||fileAttachments.length>0)&&<IssueResources documents={linkedDocuments} files={fileAttachments} issueKey={issue.identifier} links={linkedResources} workspaceKey={data.workspace.urlKey} actions={issueOptionsActions} onDeleteLink={onDeleteAttachment}/>}
+        {(linkedDocuments.length>0||linkedResources.length>0||fileAttachments.length>0)&&<IssueResources documents={linkedDocuments} files={fileAttachments} issueKey={issue.identifier} links={linkedResources} workspaceKey={data.workspace.urlKey} actions={issueOptionsActions} onDeleteLink={onDeleteAttachment} onEditLink={issue.archivedAt?undefined:async(id,input)=>{const saved=await updateIssueLinkAttachment(issue.id,id,input);onIssueUpdated?.({...issue,attachments:issue.attachments.map(item=>item.id===id?saved:item)})}}/>}
         {data.workspaceSettings.featureFlags['customer-requests'] !== false && <IssueCustomerNeedsSection data={data} issueId={issue.id} requests={[...localCustomerRequests, ...customerRequests]} onLocalCreated={request=>setLocalCustomerRequests(current=>[request,...current.filter(item=>item.id!==request.id)])}/>}
         {/* Finished files are listed in Resources (the design reference has no separate grid); this strip shows only an upload in progress or failed. */}
         <IssueAttachments attachments={[]} upload={uploadState} onRetry={upload} onDelete={onDeleteAttachment}/>
