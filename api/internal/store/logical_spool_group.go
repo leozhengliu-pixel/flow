@@ -45,7 +45,7 @@ type metadataLogicalSpoolGroup struct {
 
 // metadataLogicalBlockCache holds the cached blocks of a group's storages,
 // each tagged with the storage it was read from, and the spare buffers of
-// blocks that left their slots (scale_p21_logical_spool_io.go, invariant 4).
+// blocks that left their slots (logical_spool_io.go, invariant 4).
 // blocks (cached blocks and slots a block read has taken) and spare together
 // never hold more than metadataLogicalReadSlots buffers, so the cache stays
 // within the group's charge; released is set when the group's last storage

@@ -86,7 +86,7 @@ type metadataLogicalStorage struct {
 	diskDemand    *atomic.Int64
 	genericStore  *SQLiteStore
 	// group is the lineage this storage was written in
-	// (scale_p21_logical_spool_group.go): it holds the descriptor charge and
+	// (logical_spool_group.go): it holds the descriptor charge and
 	// the read cache. writeCharge is the write buffer a storage that joined
 	// a group holds until it settles; resident is what its settled in-memory
 	// spool takes of the group's allowance.
@@ -95,7 +95,7 @@ type metadataLogicalStorage struct {
 	resident    int64
 	settled     bool
 	ownCache    atomic.Pointer[metadataLogicalBlockCache]
-	// Spool I/O (scale_p21_logical_spool_io.go, invariants there): file is
+	// Spool I/O (logical_spool_io.go, invariants there): file is
 	// created lazily in directory and holds [0, flushed); pending holds later
 	// appends; the group's blocks cache small reads of flushed bytes.
 	directory string
@@ -174,7 +174,7 @@ func newMetadataLogicalBuilder(ctx context.Context) (*metadataLogicalBuilder, er
 
 // newMetadataLogicalBuilderIn starts a builder whose storages join group: a
 // generation derived from an installed source writes in that source's group
-// and takes no descriptor charge of its own (scale_p21_logical_spool_group.go).
+// and takes no descriptor charge of its own (logical_spool_group.go).
 // A nil group starts a new one.
 func newMetadataLogicalBuilderIn(ctx context.Context, group *metadataLogicalSpoolGroup) (*metadataLogicalBuilder, error) {
 	storage, err := newMetadataLogicalStorage(ctx, group)

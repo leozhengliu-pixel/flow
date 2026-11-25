@@ -59,7 +59,7 @@ import (
 //     set before the cached blocks are dropped and checked under mu).
 //
 // The cache is shared by the storages of one spool group (one workspace's
-// installed lineage, scale_p21_logical_spool_group.go); each block names the
+// installed lineage, logical_spool_group.go); each block names the
 // storage it was read from. Cached blocks and spare buffers together never
 // exceed the slots, and the group's last release drops both. The cache
 // (96 KiB) and the group's resident allowance (32 KiB) make up its descriptor
@@ -200,7 +200,7 @@ func (s *metadataLogicalStorage) append(data []byte) error {
 // settle ends a builder's appends: a spool with a file writes its buffer out
 // and returns its memory; a spool that never outgrew its buffer stays in
 // memory, trimmed to its bytes, while its group's resident allowance admits
-// it, and is written to its file otherwise (scale_p21_logical_spool_group.go).
+// it, and is written to its file otherwise (logical_spool_group.go).
 // A settled storage returns the write buffer it joined its group with.
 // Settling again does nothing.
 func (s *metadataLogicalStorage) settle() error {

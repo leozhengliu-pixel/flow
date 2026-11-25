@@ -5,7 +5,7 @@ package store
 // Materializing a node (a record, a struct, a slice of small values) reads
 // it as many small frame fields: 16-byte headers, 8-byte scalars and short
 // strings, nested as deep as the value. Each went through the storage's
-// shared block cache (scale_p21_logical_spool_io.go), whose four slots a
+// shared block cache (logical_spool_io.go), whose four slots a
 // nested decode (one cursor per level) or a few concurrent decodes of one
 // installed storage evicted in turn: a COLD decode or a whole-workspace
 // reload spent most of its time in pread system calls for blocks it had just

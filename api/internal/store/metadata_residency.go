@@ -67,7 +67,7 @@ func metadataBudgetBytes(name string, fallback int64) int64 {
 // metadataLogicalDescriptorCap is the process-wide budget of installed
 // logical sources: every resident workspace holds one spool group charged
 // metadataLogicalDescriptorBytes (its read cache and write buffer), shared by
-// every generation of its source (scale_p21_logical_spool_group.go).
+// every generation of its source (logical_spool_group.go).
 func metadataLogicalDescriptorCap() int64 {
 	return metadataBudgetBytes("FLOW_METADATA_SOURCE_BYTES", metadataMemoryShare(1, 32))
 }
