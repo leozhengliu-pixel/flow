@@ -63,6 +63,7 @@ import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import type { IssueOptionsActions } from '@/components/issue/issue-options-menu'
 import { IssueResources } from './issue-resources'
+import { viewerCanEditIssue } from '@/lib/issue-edit-access'
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
 import { useI18n } from '@/i18n/i18n'
 import { Toggle } from '@/components/ui/toggle'
@@ -93,6 +94,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const desktopLayout=useDesktopLayout()
   const inTriage=isIssueInTriage(issue,data.teamSettings)
   const viewRef=useRef<HTMLElement>(null)
+  const canEditIssue=viewerCanEditIssue(issue,data)
   const openProperty=(property:string)=>{const trigger=[...viewRef.current?.querySelectorAll<HTMLButtonElement>(`button[data-property="${property}"]`)??[]].find(button=>button.getClientRects().length>0);trigger?.click()}
   const copyShortcut=(value:string)=>{void navigator.clipboard.writeText(value).then(()=>toast.success(t('Copied to clipboard'))).catch(()=>toast.error(t('Could not write to clipboard')))}
   useFlowHotkeys({
@@ -186,7 +188,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         {triageView&&<TriageIntelligenceSuggestions issue={issue} data={data} inTriage={inTriage} onIssueUpdated={onIssueUpdated}/>}
         <IssueDescriptionEditor
           editorRef={editor=>{descriptionEditor.current=editor}}
-          readOnly={Boolean(issue.archivedAt)}
+          readOnly={Boolean(issue.archivedAt)||!canEditIssue}
           selectionActions={issue.archivedAt?undefined:descriptionSelection.actions}
           loading={issue.isSummary}
           users={data.users}
@@ -216,7 +218,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         {subOpen&&<SubIssueEditor key={subEditorKey} parent={issue} data={data} onCancel={()=>setSubOpen(false)} onCreate={async input=>{await onCreateSubIssue(input);setSubEditorKey(key=>key+1)}}/>}
         {!desktopLayout&&!(inTriage&&data.workspaceSettings.featureFlags?.['triage-intelligence'])&&<SimilarIssues issue={issue} issues={data.issues} workspaceKey={data.workspace.urlKey} onOpen={openIssue} onMarkDuplicate={target=>void onRelation('duplicate',target.id)}/>}
         {linkedReviews.length>0&&<IssueCodeReviews actions={issueOptionsActions} reviews={linkedReviews}/>}
-        {(linkedDocuments.length>0||linkedResources.length>0||fileAttachments.length>0)&&<IssueResources documents={linkedDocuments} files={fileAttachments} issueKey={issue.identifier} links={linkedResources} workspaceKey={data.workspace.urlKey} actions={issueOptionsActions} onDeleteLink={onDeleteAttachment} onEditLink={issue.archivedAt?undefined:async(id,input)=>{const saved=await updateIssueLinkAttachment(issue.id,id,input);onIssueUpdated?.({...issue,attachments:issue.attachments.map(item=>item.id===id?saved:item)})}}/>}
+        {(linkedDocuments.length>0||linkedResources.length>0||fileAttachments.length>0)&&<IssueResources documents={linkedDocuments} files={fileAttachments} issueKey={issue.identifier} links={linkedResources} workspaceKey={data.workspace.urlKey} actions={issueOptionsActions} onDeleteLink={onDeleteAttachment} readOnly={!canEditIssue} onEditLink={issue.archivedAt||!canEditIssue?undefined:async(id,input)=>{const saved=await updateIssueLinkAttachment(issue.id,id,input);onIssueUpdated?.({...issue,attachments:issue.attachments.map(item=>item.id===id?saved:item)})}}/>}
         {data.workspaceSettings.featureFlags['customer-requests'] !== false && <IssueCustomerNeedsSection data={data} issueId={issue.id} requests={[...localCustomerRequests, ...customerRequests]} onLocalCreated={request=>setLocalCustomerRequests(current=>[request,...current.filter(item=>item.id!==request.id)])}/>}
         {/* Finished files are listed in Resources (the design reference has no separate grid); this strip shows only an upload in progress or failed. */}
         <IssueAttachments attachments={[]} upload={uploadState} onRetry={upload} onDelete={onDeleteAttachment}/>
