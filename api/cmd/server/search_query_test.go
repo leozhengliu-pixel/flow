@@ -190,7 +190,7 @@ func TestSearchProjectLeadStatusAndUncachedRoute(t *testing.T) {
 	data := repo.Bootstrap()
 	handler := newHandler(&server{store: repo, authDisabled: true})
 	project := domain.Project{ID: "search-project", SlugID: "measured-project-route", Name: "Cobaltneedle", Lead: &data.Viewer, Status: domain.ProjectStatus{ID: "ps-started", Name: "In progress", Type: "started"}, TeamIDs: []string{data.Teams[0].ID}}
-	if err := repo.MutateWorkspace(context.Background(), data.Workspace.URLKey, "project.created", project.ID, nil, func(next *domain.Bootstrap) error { next.Projects = append(next.Projects, project); return nil }); err != nil {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "project.created", project.ID, nil, func(next *domain.Bootstrap) error { next.Projects = append(next.Projects, project); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	for _, endpoint := range []string{"/api/search", "/api/search/semantic"} {
@@ -303,7 +303,7 @@ func TestSearchAndMCPKeepIdenticalAPIKeyTeamBoundaries(t *testing.T) {
 	hidden.Identifier = "SCOPED-2"
 	hidden.Title = "Scopedneedle hidden"
 	hidden.Team = domain.Team{ID: "restricted-search-team", Name: "Restricted", Key: "RST"}
-	if err := repo.MutateWorkspace(ctx, actor.WorkspaceKey, "team.created", hidden.Team.ID, nil, func(next *domain.Bootstrap) error { next.Teams = append(next.Teams, hidden.Team); return nil }); err != nil {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "team.created", hidden.Team.ID, nil, func(next *domain.Bootstrap) error { next.Teams = append(next.Teams, hidden.Team); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.ImportIssues(ctx, actor.WorkspaceKey, []domain.Issue{visible, hidden}); err != nil {

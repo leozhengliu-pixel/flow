@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -18,10 +17,10 @@ func TestProjectDirectoryPagesAndStripsDetailPayloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	ctx := context.Background()
+	ctx := scaleP21ResourceOutputContext(t)
 	data := repo.Bootstrap()
 	teamID := data.Teams[0].ID
-	if err := repo.MutateWorkspace(WithoutIssueRecordMutations(ctx), data.Workspace.URLKey, "projects.seeded", "query-test", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(WithoutIssueRecordMutations(ctx), "workspace fixture"), data.Workspace.URLKey, "projects.seeded", "query-test", nil, func(next *domain.Bootstrap) error {
 		next.Projects = nil
 		for index := 0; index < 205; index++ {
 			project := domain.Project{

@@ -68,7 +68,11 @@ func peerStoreSets(t *testing.T) map[string][2]*SQLiteStore {
 // issue-record transaction, as POST /api/issues does.
 func createPeerIssue(t *testing.T, repo *SQLiteStore, workspace, id string, template domain.Issue) domain.Issue {
 	t.Helper()
-	err := repo.MutateWorkspaceWithAggregate(WithIssueRecordMutations(t.Context()), workspace, "issue.created", map[string]any{}, func(data *domain.Bootstrap) (string, error) {
+	ctx := WithIssueRecordMutations(scaleP21ResourceOutputContext(t))
+	input := domain.IssueCreateInput{
+		TeamID: template.Team.ID, Title: template.Title, Description: template.Description,
+	}
+	err := repo.MutateWorkspaceWithAggregate(ctx, workspace, "issue.created", input, func(data *domain.Bootstrap) (string, error) {
 		issue := template
 		issue.ID, issue.Identifier, issue.Number = id, "PEER-"+id, data.NextIssueNumber
 		issue.Version, issue.ParentID, issue.SubIssueIDs, issue.ArchivedAt = 1, nil, []string{}, nil
@@ -159,9 +163,9 @@ func TestArchiveAuditKeepsAnIssueCreatedOnAnotherServer(t *testing.T) {
 			workspace, template := peerWorkspace(t, second)
 			before := countIssueRows(t, second, workspace)
 			taskID := fmt.Sprintf("mention_audit_%d", time.Now().UnixNano())
-			ctx := WithMetadataFields(t.Context(), "auditLog")
+			ctx := WithMetadataFields(WithColdWork(t.Context(), "archive audit"), "auditLog")
 			release, wait := pausedMutation(t, func(callback func(*domain.Bootstrap) error) error {
-				return first.MutateWorkspace(ctx, workspace, "audit.agent_session", taskID, map[string]any{"action": "agent_session.archived"}, callback)
+				return first.MutateWorkspaceScoped(ctx, workspace, "audit.agent_session", taskID, map[string]any{"action": "agent_session.archived"}, MetadataRecordScope{}, callback)
 			}, func(data *domain.Bootstrap) error {
 				if data.Issues != nil || data.Comments != nil || data.Activities != nil {
 					t.Errorf("archive audit loaded issue content: issues=%d comments=%d", len(data.Issues), len(data.Comments))
@@ -202,14 +206,14 @@ func TestArchiveAuditWriteVolumeDoesNotGrowWithWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	ctx := t.Context()
+	ctx := WithColdWork(t.Context(), "archive audit")
 	data := repo.Bootstrap()
 	workspace := data.Workspace.URLKey
 	writes := auditWrites(t, repo)
 	audit := func(id string) map[string]int {
 		t.Helper()
 		writes()
-		if err := repo.MutateWorkspace(WithMetadataFields(ctx, "auditLog"), workspace, "audit.agent_session", id, map[string]any{"action": "agent_session.archived"}, func(next *domain.Bootstrap) error {
+		if err := repo.MutateWorkspaceScoped(WithMetadataFields(ctx, "auditLog"), workspace, "audit.agent_session", id, map[string]any{"action": "agent_session.archived"}, MetadataRecordScope{}, func(next *domain.Bootstrap) error {
 			if next.Issues != nil || next.Comments != nil || next.Activities != nil || next.Notifications != nil {
 				t.Error("archive audit loaded issue content")
 			}

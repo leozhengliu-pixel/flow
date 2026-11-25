@@ -43,7 +43,7 @@ func testTriageSuggestionsWithLongTargetIds(t *testing.T, repo *store.SQLiteStor
 	// An imported project keeps its source id; an over-long one must still be
 	// indexed without failing the write.
 	importedProject := "project_import_" + suffix + "_" + strings.Repeat("0123456789abcdef", 12)
-	if err := repo.MutateWorkspace(t.Context(), workspace, "test.triage_long_ids_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "test.triage_long_ids_setup", team.ID, nil, func(data *domain.Bootstrap) error {
 		settings := teamSettings(data, team.ID)
 		settings.TriageEnabled = true
 		data.TeamSettings[team.ID] = settings
@@ -73,7 +73,7 @@ func testTriageSuggestionsWithLongTargetIds(t *testing.T, repo *store.SQLiteStor
 	requestJSON[[]domain.IssueSuggestion](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/suggestions/refresh", nil, http.StatusOK)
 
 	now := time.Now().UTC()
-	if err := repo.MutateWorkspace(store.WithIssueRecordMutations(t.Context(), issue.ID), workspace, "test.triage_long_ids", issue.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "test.triage_long_ids", issue.ID, nil, func(data *domain.Bootstrap) error {
 		target, err := issueByID(data, issue.ID)
 		if err != nil {
 			return err

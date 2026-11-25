@@ -36,7 +36,7 @@ func TestAgentSessionReadState(t *testing.T) {
 	later := session.LastReadAt.Add(time.Minute)
 	setUpdated := func(id string, at time.Time) {
 		t.Helper()
-		if err := repository.MutateWorkspace(context.Background(), workspace, "agent.message_completed", id, nil, func(data *domain.Bootstrap) error {
+		if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), workspace, "agent.message_completed", id, nil, func(data *domain.Bootstrap) error {
 			for index := range data.AgentSessions {
 				if data.AgentSessions[index].ID == id {
 					data.AgentSessions[index].UpdatedAt = at
@@ -78,7 +78,7 @@ func TestAgentSessionReadState(t *testing.T) {
 	// Another person's chat can't be marked read (or even found).
 	foreignID := "agent_session_foreign"
 	foreignUpdated := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
-	if err := repository.MutateWorkspace(context.Background(), workspace, "agent.session_created", foreignID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), workspace, "agent.session_created", foreignID, nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, domain.AgentSession{ID: foreignID, SlugID: "foreign", UserID: "someone-else", Title: "Private", Location: "page", IssueIDs: []string{}, SkillIDs: []string{}, Messages: []domain.AgentMessage{}, CreatedAt: foreignUpdated, UpdatedAt: foreignUpdated})
 		return nil
 	}); err != nil {

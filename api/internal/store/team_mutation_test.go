@@ -28,7 +28,7 @@ func bulkTeamSettings(id string) domain.TeamSettings {
 // mutation path so tests can measure the scoped team path at scale.
 func seedBulkTeams(tb testing.TB, repo *SQLiteStore, teams int) string {
 	tb.Helper()
-	ctx := context.Background()
+	ctx := WithColdWork(context.Background(), "bulk team fixture")
 	data := repo.Bootstrap()
 	key := data.Workspace.URLKey
 	baseStates := make([]domain.WorkflowState, 0, len(data.States))
@@ -53,7 +53,7 @@ func seedBulkTeams(tb testing.TB, repo *SQLiteStore, teams int) string {
 			states = append(states, clone)
 		}
 	}
-	err := repo.MutateWorkspace(ctx, key, "alm.org_teams_imported", "seed", nil, func(next *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(WithColdWork(ctx, "team fixture"), key, "alm.org_teams_imported", "seed", nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, extraTeams...)
 		for id, value := range settings {
 			next.TeamSettings[id] = value
@@ -72,7 +72,7 @@ func seedBulkTeams(tb testing.TB, repo *SQLiteStore, teams int) string {
 
 func createScopedTeam(t *testing.T, repo *SQLiteStore, workspace, id string) {
 	t.Helper()
-	err := repo.MutateWorkspace(context.Background(), workspace, "team.created", id, nil, func(next *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), workspace, "team.created", id, nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, domain.Team{ID: id, Name: id, Key: id})
 		next.TeamSettings[id] = bulkTeamSettings(id)
 		return nil
@@ -84,7 +84,7 @@ func createScopedTeam(t *testing.T, repo *SQLiteStore, workspace, id string) {
 
 func patchTeamParent(t *testing.T, repo *SQLiteStore, workspace, teamID, parentID string) {
 	t.Helper()
-	err := repo.MutateWorkspace(context.Background(), workspace, "team.settings_updated", teamID, map[string]string{"parentTeamId": parentID}, func(next *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), workspace, "team.settings_updated", teamID, map[string]string{"parentTeamId": parentID}, func(next *domain.Bootstrap) error {
 		settings := next.TeamSettings[teamID]
 		settings.ParentTeamID = parentID
 		next.TeamSettings[teamID] = settings
@@ -128,7 +128,7 @@ func TestTeamSettingsFieldMutationWritesOneRecord(t *testing.T) {
 	key := seedBulkTeams(t, repo, 120)
 	child := "bulk-team-00000"
 	writes := auditWrites(t, repo)
-	err = repo.MutateWorkspace(context.Background(), key, "team.settings_updated", child, map[string]string{"timezone": "Asia/Shanghai"}, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), key, "team.settings_updated", child, map[string]string{"timezone": "Asia/Shanghai"}, func(next *domain.Bootstrap) error {
 		settings := next.TeamSettings[child]
 		settings.Timezone = "Asia/Shanghai"
 		next.TeamSettings[child] = settings
@@ -158,7 +158,7 @@ func TestTeamSettingsNoopDoesNotWrite(t *testing.T) {
 	child := "bulk-team-00000"
 	current := repo.Bootstrap().TeamSettings[child].Timezone
 	writes := auditWrites(t, repo)
-	err = repo.MutateWorkspace(context.Background(), key, "team.settings_updated", child, map[string]string{"timezone": current}, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), key, "team.settings_updated", child, map[string]string{"timezone": current}, func(next *domain.Bootstrap) error {
 		settings := next.TeamSettings[child]
 		settings.Timezone = current
 		next.TeamSettings[child] = settings
@@ -187,7 +187,7 @@ func TestTeamSettingsParentMutationWritesOneRecordAndSyncsAncestors(t *testing.T
 		t.Fatal(err)
 	}
 	writes := auditWrites(t, repo)
-	err = repo.MutateWorkspace(ctx, key, "team.settings_updated", child, map[string]string{"parentTeamId": parent}, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(ctx, "team fixture"), key, "team.settings_updated", child, map[string]string{"parentTeamId": parent}, func(next *domain.Bootstrap) error {
 		settings := next.TeamSettings[child]
 		settings.ParentTeamID = parent
 		next.TeamSettings[child] = settings
@@ -270,6 +270,7 @@ func TestTeamMetadataMutationKeepsSnapshotAndStorageInSync(t *testing.T) {
 	defer repo.Close()
 	ctx := context.Background()
 	key := seedBulkTeams(t, repo, 120)
+	ctx = WithColdWork(ctx, "team fixture")
 	err = repo.MutateWorkspace(ctx, key, "team.created", "sync-team", nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, domain.Team{ID: "sync-team", Name: "sync-team", Key: "SCP"})
 		settings := bulkTeamSettings("sync-team")
@@ -324,7 +325,7 @@ func TestTeamMetadataMutationRollsBackOnCallbackError(t *testing.T) {
 	ctx := context.Background()
 	key := seedBulkTeams(t, repo, 40)
 	before, _ := repo.WorkspaceMetadata(key)
-	err = repo.MutateWorkspace(ctx, key, "team.created", "rolled-back", nil, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(ctx, "team fixture"), key, "team.created", "rolled-back", nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, domain.Team{ID: "rolled-back", Name: "Rolled back", Key: "RBK"})
 		next.TeamSettings["rolled-back"] = bulkTeamSettings("rolled-back")
 		return errors.New("abort")
@@ -406,6 +407,9 @@ func TestTeamMetadataWriteCountStaysConstantAsWorkspaceGrows(t *testing.T) {
 }
 
 func TestTeamCreateAllocsDoNotScaleWithTeamCount(t *testing.T) {
+	// This budget is for mutateTeamMetadata's installed legacy collection.
+	// The production bounded writer has its own team creation differential.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	if testing.Short() {
 		t.Skip("seeds thousands of teams")
 	}
@@ -453,7 +457,7 @@ func importOrgTeamBatch(t *testing.T, repo *SQLiteStore, workspace, prefix strin
 			baseStates = append(baseStates, state)
 		}
 	}
-	err := repo.MutateWorkspace(context.Background(), workspace, "alm.org_teams_imported", prefix, map[string]int{"count": n}, func(next *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), workspace, "alm.org_teams_imported", prefix, map[string]int{"count": n}, func(next *domain.Bootstrap) error {
 		for i := 0; i < n; i++ {
 			id := fmt.Sprintf("%s-%02d", prefix, i)
 			next.Teams = append(next.Teams, domain.Team{ID: id, Name: id, Key: fmt.Sprintf("IM%02d", i), ExternalSource: "hr:org:node:" + id})
@@ -519,6 +523,8 @@ func TestOrgTeamImportWriteCountStaysConstantAsWorkspaceGrows(t *testing.T) {
 }
 
 func TestOrgTeamImportStaysFastWithLargeCatalog(t *testing.T) {
+	// Measure the legacy scoped importer with an already decoded catalog.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "import-hotpath.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -545,7 +551,7 @@ func TestUserAndProjectImportWritesOnlyAppendedRecords(t *testing.T) {
 	defer repo.Close()
 	key := seedBulkTeams(t, repo, 40)
 	writes := auditWrites(t, repo)
-	err = repo.MutateWorkspace(context.Background(), key, "alm.users_imported", "users", nil, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), key, "alm.users_imported", "users", nil, func(next *domain.Bootstrap) error {
 		for i := 0; i < 8; i++ {
 			id := fmt.Sprintf("imported-user-%d", i)
 			next.Users = append(next.Users, domain.User{ID: id, Name: id, DisplayName: id, Email: id + "@example.test", Active: true})
@@ -558,7 +564,7 @@ func TestUserAndProjectImportWritesOnlyAppendedRecords(t *testing.T) {
 	if changes := writes(); changes["workspace_metadata_records"] != 8 || changes["workspace_states"] != 0 {
 		t.Fatalf("user import amplified writes: %+v", changes)
 	}
-	err = repo.MutateWorkspace(context.Background(), key, "alm.projects_imported", "projects", nil, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), key, "alm.projects_imported", "projects", nil, func(next *domain.Bootstrap) error {
 		for i := 0; i < 5; i++ {
 			id := fmt.Sprintf("imported-project-%d", i)
 			next.Projects = append(next.Projects, domain.Project{ID: id, Name: id})
@@ -592,7 +598,7 @@ func TestOrgTeamImportPersistsRenameAndPrivacy(t *testing.T) {
 	key := seedBulkTeams(t, repo, 40)
 	id := "bulk-team-00000"
 	writes := auditWrites(t, repo)
-	err = repo.MutateWorkspace(context.Background(), key, "alm.org_teams_imported", "rename", nil, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), key, "alm.org_teams_imported", "rename", nil, func(next *domain.Bootstrap) error {
 		for i := range next.Teams {
 			if next.Teams[i].ID != id {
 				continue
@@ -633,7 +639,7 @@ func TestOrgTeamImportUpdateWriteCountStaysConstantAsWorkspaceGrows(t *testing.T
 	key := seedBulkTeams(t, repo, 60)
 	rename := func(id, name string) {
 		t.Helper()
-		if err := repo.MutateWorkspace(context.Background(), key, "alm.org_teams_imported", "rename", nil, func(next *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), key, "alm.org_teams_imported", "rename", nil, func(next *domain.Bootstrap) error {
 			for i := range next.Teams {
 				if next.Teams[i].ID == id {
 					next.Teams[i].Name = name
@@ -671,7 +677,7 @@ func TestOrgTeamImportNoopDoesNotWrite(t *testing.T) {
 	current := repo.Bootstrap()
 	index := domain.TeamIndex(&current, id)
 	writes := auditWrites(t, repo)
-	err = repo.MutateWorkspace(context.Background(), key, "alm.org_teams_imported", "noop", nil, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), key, "alm.org_teams_imported", "noop", nil, func(next *domain.Bootstrap) error {
 		next.Teams[index].Name = current.Teams[index].Name
 		next.TeamSettings[id] = current.TeamSettings[id]
 		return nil
@@ -691,14 +697,14 @@ func TestUserAndProjectImportPersistsUpdates(t *testing.T) {
 	}
 	defer repo.Close()
 	key := seedBulkTeams(t, repo, 20)
-	err = repo.MutateWorkspace(context.Background(), key, "alm.users_imported", "users", nil, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), key, "alm.users_imported", "users", nil, func(next *domain.Bootstrap) error {
 		next.Users = append(next.Users, domain.User{ID: "imported-user", Name: "imported-user", DisplayName: "Imported", Email: "imported@example.test", Active: true})
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = repo.MutateWorkspace(context.Background(), key, "alm.projects_imported", "projects", nil, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), key, "alm.projects_imported", "projects", nil, func(next *domain.Bootstrap) error {
 		next.Projects = append(next.Projects, domain.Project{ID: "imported-project", Name: "Imported project", Description: "Original"})
 		return nil
 	})
@@ -706,7 +712,7 @@ func TestUserAndProjectImportPersistsUpdates(t *testing.T) {
 		t.Fatal(err)
 	}
 	writes := auditWrites(t, repo)
-	err = repo.MutateWorkspace(context.Background(), key, "alm.users_imported", "users", nil, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "user import fixture"), key, "alm.users_imported", "users", nil, func(next *domain.Bootstrap) error {
 		for i := range next.Users {
 			if next.Users[i].ID == "imported-user" {
 				next.Users[i].DisplayName = "Updated user"
@@ -722,7 +728,7 @@ func TestUserAndProjectImportPersistsUpdates(t *testing.T) {
 	if changes := writes(); changes["workspace_metadata_records"] != 1 || changes["workspace_states"] != 0 {
 		t.Fatalf("user update amplified writes: %+v", changes)
 	}
-	err = repo.MutateWorkspace(context.Background(), key, "alm.projects_imported", "projects", nil, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "project import fixture"), key, "alm.projects_imported", "projects", nil, func(next *domain.Bootstrap) error {
 		for i := range next.Projects {
 			if next.Projects[i].ID == "imported-project" {
 				next.Projects[i].Name = "Updated ALM project project-000"
@@ -756,7 +762,7 @@ func TestUserAndProjectImportPersistsUpdates(t *testing.T) {
 
 func deleteScopedTeam(t *testing.T, repo *SQLiteStore, workspace, teamID string) {
 	t.Helper()
-	err := repo.MutateWorkspace(context.Background(), workspace, "team.deleted", teamID, nil, func(next *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), workspace, "team.deleted", teamID, nil, func(next *domain.Bootstrap) error {
 		return ApplyTeamDeletion(next, teamID)
 	})
 	if err != nil {
@@ -864,7 +870,7 @@ func TestTeamSettingsListOnlyMutationsPersist(t *testing.T) {
 	connectors := []domain.TeamAgentConnector{{ID: "conn_1", Name: "Docs", URL: "https://mcp.example.com", Enabled: true}}
 	mutate := func(change func(*domain.TeamSettings)) domain.TeamSettings {
 		t.Helper()
-		err := repo.MutateWorkspace(context.Background(), key, "team.settings_updated", child, nil, func(next *domain.Bootstrap) error {
+		err := repo.MutateWorkspace(WithColdWork(t.Context(), "team fixture"), key, "team.settings_updated", child, nil, func(next *domain.Bootstrap) error {
 			settings := next.TeamSettings[child]
 			change(&settings)
 			next.TeamSettings[child] = settings

@@ -671,7 +671,7 @@ func TestCustomerUpsertExternalIDsAndNeeds(t *testing.T) {
 
 func TestAuditLogFiltersAndPagination(t *testing.T) {
 	f := newPlatformFixture(t, nil)
-	if err := f.repository.MutateWorkspace(context.Background(), "test-workspace", "test.audit", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "test.audit", "", nil, func(data *domain.Bootstrap) error {
 		data.AuditLog = nil
 		for index := 0; index < 5; index++ {
 			appendAudit(data, "created", "customer", "customer_"+strconv.Itoa(index), map[string]any{"ip": "10.0.0." + strconv.Itoa(index%2)})

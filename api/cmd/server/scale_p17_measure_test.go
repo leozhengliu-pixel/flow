@@ -24,7 +24,7 @@ func TestScaleP17Measurements(t *testing.T) {
 	}
 	db := newScaleP04Database(t)
 	ctx := store.ContextWithActor(context.Background(), db.users[0])
-	err := db.repo.MutateWorkspace(ctx, db.key, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
+	err := db.repo.MutateWorkspace(workspaceFixtureContext(ctx), db.key, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
 		for i := range 32 {
 			doc := domain.Document{ID: fmt.Sprintf("p17-document-%d", i), SlugID: fmt.Sprintf("p17-slug-%d", i), Title: "P17 measurement", Content: strings.Repeat("document body ", 4096), Creator: data.Viewer, Version: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 			data.Documents = append(data.Documents, doc)

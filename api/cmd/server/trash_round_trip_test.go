@@ -19,6 +19,9 @@ import (
 func TestTrashRoundTripRestoresLinks(t *testing.T) {
 	for _, forceFull := range []bool{false, true} {
 		t.Run(fmt.Sprintf("full=%v", forceFull), func(t *testing.T) {
+			if forceFull {
+				t.Setenv("FLOW_BOUNDED_METADATA", "off")
+			}
 			restore := store.ForceFullMutationsForTesting(forceFull)
 			defer restore()
 			runTrashRoundTrip(t)

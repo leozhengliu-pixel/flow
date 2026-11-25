@@ -195,7 +195,7 @@ func TestMCPNotificationsAndReminders(t *testing.T) {
 	f := newMCPContractFixture(t)
 	issue := f.data.Issues[0]
 	now := time.Now().UTC()
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.notifications", issue.ID, nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.notifications", issue.ID, nil, func(data *domain.Bootstrap) error {
 		data.Notifications = append(data.Notifications,
 			domain.Notification{ID: "inbox-unread", RecipientID: data.Viewer.ID, Type: "issueComment", SourceType: "issue", SourceID: issue.ID, IssueID: issue.ID, Actor: data.Viewer, Category: "comments", CreatedAt: now, UpdatedAt: now},
 			domain.Notification{ID: "inbox-read", RecipientID: data.Viewer.ID, Type: "issueAssignedToYou", SourceType: "issue", SourceID: issue.ID, IssueID: issue.ID, Actor: data.Viewer, Category: "assignments", ReadAt: &now, CreatedAt: now.Add(-time.Minute), UpdatedAt: now},
@@ -253,7 +253,7 @@ func TestMCPViewsTemplatesAndCustomersRespectVisibility(t *testing.T) {
 	f := newMCPContractFixture(t)
 	team := f.data.Teams[0]
 	now := time.Now().UTC()
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.catalog", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.catalog", "", nil, func(data *domain.Bootstrap) error {
 		data.SavedViews = append(data.SavedViews,
 			domain.SavedView{ID: "view-team", Name: "Team bugs", Resource: "issues", Scope: "team", TeamID: team.ID, View: "list", Filters: json.RawMessage(`{"labels":["Bug"]}`), CreatedAt: now, UpdatedAt: now},
 			domain.SavedView{ID: "view-mine", Name: "My focus", Resource: "issues", Scope: "personal", OwnerID: data.Viewer.ID, View: "list", CreatedAt: now, UpdatedAt: now},
@@ -323,7 +323,7 @@ func TestMCPSaveDraftCreatesPrivateComposerDrafts(t *testing.T) {
 	if message := mcpToolError(t, f, "save_draft", map[string]any{"type": "projectUpdate", "body": "No project"}); !strings.Contains(message, "project is required") {
 		t.Fatalf("project update draft without project: %s", message)
 	}
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.draft", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.draft", "", nil, func(data *domain.Bootstrap) error {
 		data.Drafts = append(data.Drafts, domain.Draft{ID: "draft-other", UserID: "another-user", Type: "issue", Title: "Theirs"})
 		return nil
 	}); err != nil {
@@ -370,7 +370,7 @@ func TestMCPFlowReadToolsHonorTeamRestrictedKeys(t *testing.T) {
 	data := repository.Bootstrap()
 	issue := data.Issues[0]
 	now := time.Now().UTC()
-	if err := repository.MutateWorkspace(ctx, actor.WorkspaceKey, "test.notifications", issue.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "test.notifications", issue.ID, nil, func(next *domain.Bootstrap) error {
 		next.Notifications = append(next.Notifications, domain.Notification{ID: "restricted-inbox", RecipientID: next.Viewer.ID, Type: "issueComment", SourceType: "issue", SourceID: issue.ID, IssueID: issue.ID, Actor: next.Viewer, CreatedAt: now, UpdatedAt: now})
 		return nil
 	}); err != nil {

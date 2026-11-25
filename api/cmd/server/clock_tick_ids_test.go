@@ -26,7 +26,7 @@ func TestClockTickIDsStayDistinct(t *testing.T) {
 
 	t.Run("webhook disabled twice in one second", func(t *testing.T) {
 		const webhookID = "webhook-twice-disabled"
-		if err := repository.MutateWorkspace(t.Context(), workspace, "test.webhook", webhookID, nil, func(next *domain.Bootstrap) error {
+		if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "test.webhook", webhookID, nil, func(next *domain.Bootstrap) error {
 			next.Webhooks = append(next.Webhooks, domain.Webhook{ID: webhookID, Name: "Flaky", URL: "https://hooks.example.test/flaky", Enabled: true, CreatorID: next.Viewer.ID})
 			return nil
 		}); err != nil {
@@ -36,7 +36,7 @@ func TestClockTickIDsStayDistinct(t *testing.T) {
 		service.disableFailingWebhook(workspace, webhookID, now)
 		// Disabling an already disabled webhook notifies nobody.
 		service.disableFailingWebhook(workspace, webhookID, now)
-		if err := repository.MutateWorkspace(t.Context(), workspace, "test.webhook", webhookID, nil, func(next *domain.Bootstrap) error {
+		if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "test.webhook", webhookID, nil, func(next *domain.Bootstrap) error {
 			index := slices.IndexFunc(next.Webhooks, func(item domain.Webhook) bool { return item.ID == webhookID })
 			next.Webhooks[index].Enabled = true
 			return nil

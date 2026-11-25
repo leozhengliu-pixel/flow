@@ -220,7 +220,7 @@ func newGitHubReviewFixture(t *testing.T) *gitHubReviewFixture {
 	seedIntegrationOAuthTokens(t, repository, "test-workspace", "github", "workspace-token", "")
 	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
 	f := &gitHubReviewFixture{t: t, github: github, handler: newHandler(s), repo: repository, viewer: repository.Account().Viewer, server: s}
-	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "test.review", "", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test.review", "", nil, func(data *domain.Bootstrap) error {
 		data.IntegrationConnections = []domain.IntegrationConnection{{ID: "github", Provider: "github", OAuthAuthorized: true, Status: "connected", Config: map[string]string{"apiUrl": github.URL, "organization": "owner"}}}
 		review := data.Reviews[0]
 		review.ID, review.SlugID, review.Provider, review.RepositoryOwner, review.RepositoryName, review.Number, review.Status = "review_gh", "github-5", "github", "owner", "repo", 5, "open"

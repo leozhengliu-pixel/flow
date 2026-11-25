@@ -331,19 +331,14 @@ func (tx *sqlTx) noteNotificationRow(row contentRecordRow, previous []byte, exis
 }
 
 func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
-	bounded := boundedMetadataRequested()
+	driver := normalizeDatabaseDriver(config.Driver)
+	bounded := boundedMetadataRequested(driver)
 	if bounded {
-		if err := validateBoundedMetadataCoverage(); err != nil {
+		if err := validateBoundedMetadataCoverage(driver); err != nil {
 			return nil, err
 		}
 	}
-	driver := strings.ToLower(strings.TrimSpace(config.Driver))
-	if driver == "" {
-		driver = "sqlite"
-	}
-	if driver == "postgresql" {
-		driver = "postgres"
-	}
+	prepare := metadataCatalogAutoEnabled(bounded)
 	var sqlDriver, dsn, sqlitePath string
 	switch driver {
 	case "sqlite":
@@ -451,10 +446,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		maxTransactionBytes = 32 << 20
 	}
 	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes, content: newContentOffload(config), searchMaxChars: max(config.SearchIndexMaxChars, 0)}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
-	if bounded {
-		applyMetadataMemoryPlan()
-		s.metadataResidency = newMetadataResidency()
+	if bounded || prepare {
 		s.db.boundedCatalog.Store(true)
+	}
+	if bounded {
 		if driver == "sqlite" {
 			if err := s.db.openSQLiteSnapshotPool(sqlDriver, dsn, sqlitePath, maxOpen); err != nil {
 				db.Close()
@@ -468,6 +463,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	s.lifecycle, s.stopLifecycle = context.WithCancel(context.Background())
 	// Startup runs schema checks, loads workspace metadata and applies
 	// idempotent data migrations. Stage timings are logged for slow opens.
+	var admitAfterMigrations bool
 	stages := []struct {
 		name string
 		run  func(context.Context) error
@@ -482,7 +478,18 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureSCIMSchema", s.ensureSCIMSchema},
 		{"ensureWorkspaceMetadataRecords", s.ensureWorkspaceMetadataRecords},
 		{"ensureMetadataCatalog", s.ensureMetadataCatalog},
-		{"ensureRecordJournal", s.ensureRecordJournal},
+		{"ensureRecordJournal", func(ctx context.Context) error {
+			err := s.ensureRecordJournal(ctx)
+			if !errors.Is(err, errRecordJournalTriggerPermission) {
+				return err
+			}
+			// Journal readiness stays false for this replica. Skip bounded
+			// admission and use the existing metadata and realtime paths.
+			bounded, prepare = false, false
+			s.db.boundedCatalog.Store(false)
+			slog.Warn("MySQL record journal trigger permission denied. Using legacy metadata and sync")
+			return nil
+		}},
 		{"ensureApplicationAgents", s.ensureApplicationAgents},
 		{"ensureAuditStreamSecrets", s.ensureAuditStreamSecrets},
 		{"ensureAuditEvents", s.ensureAuditEvents},
@@ -501,7 +508,30 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureOffloadedContent", s.ensureOffloadedContent},
 		{"ensureWorkspaceDeletionReceipts", s.ensureWorkspaceDeletionReceipts},
 		{"ensureWorkspaceKeyRenames", s.ensureWorkspaceKeyRenames},
-		{"loadOrSeed", s.loadOrSeed},
+		{"loadOrSeed", func(ctx context.Context) error {
+			if bounded && prepare {
+				pending, err := s.dataMigrationsPending(ctx)
+				if err != nil {
+					return err
+				}
+				if !pending {
+					var hasLegacyRuns int
+					if err := s.db.QueryRowContext(ctx, `SELECT CASE WHEN EXISTS(
+						SELECT 1 FROM workspace_metadata_records WHERE field='loopRuns'
+					) THEN 1 ELSE 0 END`).Scan(&hasLegacyRuns); err != nil {
+						return err
+					}
+					pending = hasLegacyRuns != 0
+				}
+				if pending {
+					// Historical migrations can read the complete installed
+					// metadata copy. Admit bounded metadata after they run.
+					admitAfterMigrations = true
+					return s.loadOrSeed(ctx)
+				}
+			}
+			return s.loadStartupMetadata(ctx, bounded, prepare)
+		}},
 		{"seedWorkspaceOwners", func(ctx context.Context) error {
 			if strings.EqualFold(strings.TrimSpace(config.FixtureProfile), "test") {
 				return s.ensureAuthTestFixture(ctx)
@@ -524,8 +554,16 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"migrateCustomerFilterIndex", s.migrateCustomerFilterIndex},
 		{"migrateReleaseIssueIndex", s.migrateReleaseIssueIndex},
 		{"migrateLoopRunRecords", s.migrateLoopRunRecords},
-		{"dataMigrations", s.runDataMigrations},
+		{"dataMigrations", func(ctx context.Context) error {
+			return s.runDataMigrations(WithColdWork(ctx, "data migrations"))
+		}},
 		{"backfillAllProjectProgress", s.backfillAllProjectProgress},
+		{"admitMetadata", func(ctx context.Context) error {
+			if admitAfterMigrations {
+				return s.loadStartupMetadata(ctx, bounded, prepare)
+			}
+			return nil
+		}},
 	}
 	s.startupLock, s.startupLockTimeout = openStartupLock, config.MigrationLockTimeout
 	opened := time.Now()
@@ -533,8 +571,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	for _, stage := range stages {
 		began := time.Now()
 		if err := stage.run(context.Background()); err != nil {
-			s.stopLifecycle()
-			db.Close()
+			_ = s.Close()
 			return nil, err
 		}
 		if elapsed := time.Since(began); elapsed >= 50*time.Millisecond {
@@ -639,7 +676,7 @@ func (d *sqlDatabase) ExecContext(ctx context.Context, query string, args ...any
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return nil, errors.New("cannot write inside a workspace read snapshot")
 	}
-	if d.journalReady.Load() && recordJournalMode() != "off" && journalWriteStatement(query) {
+	if d.journalReady.Load() && recordJournalMode(d.dialect) != "off" && journalWriteStatement(query) {
 		tx, err := d.BeginTx(ctx, nil)
 		if err != nil {
 			return nil, err

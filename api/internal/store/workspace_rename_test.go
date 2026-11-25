@@ -39,7 +39,7 @@ func renameFixture(t *testing.T) (*SQLiteStore, *memoryObjects, domain.AgentSess
 		{ID: "message_user", Role: "user", Content: "Summarise", CreatedAt: now},
 		{ID: "message_reply", Role: "assistant", Content: reply, CreatedAt: now},
 	}}
-	if err := repo.MutateWorkspace(ctx, "test-workspace", "agent.session_created", session.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "rename fixture"), "test-workspace", "agent.session_created", session.ID, nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, session)
 		data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: "integration_rename", Provider: "gitlab", Name: "GitLab", Status: "connected"})
 		return nil
@@ -131,20 +131,7 @@ func TestWorkspaceRenameMovesEveryKeyedRowAndObject(t *testing.T) {
 		}
 	}
 	// The offloaded reply reads under the new key, from objects named after it.
-	loaded, _ := repo.WorkspaceMetadataFields(newKey, "agentSessions")
-	var stored domain.AgentSession
-	for _, item := range loaded.AgentSessions {
-		if item.ID == session.ID {
-			stored = item
-		}
-	}
-	full, err := repo.LoadAgentSessionBodies(ctx, newKey, stored)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if full.Messages[1].Content != reply {
-		t.Fatalf("offloaded reply after the rename = %.80q", full.Messages[1].Content)
-	}
+	checkRenamedAgentReply(t, repo, newKey, session.ID, reply)
 	for key := range objects.objects {
 		if strings.HasPrefix(key, oldKey+"/") {
 			t.Errorf("object %s is still named after the old key", key)
@@ -228,16 +215,7 @@ func TestWorkspaceRenameRoundTrip(t *testing.T) {
 		}
 		data = updated
 	}
-	loaded, _ := repo.WorkspaceMetadataFields("test-workspace", "agentSessions")
-	for _, item := range loaded.AgentSessions {
-		if item.ID != session.ID {
-			continue
-		}
-		full, err := repo.LoadAgentSessionBodies(ctx, "test-workspace", item)
-		if err != nil || full.Messages[1].Content != reply {
-			t.Fatalf("reply after renaming back: %.60q (%v)", full.Messages[1].Content, err)
-		}
-	}
+	checkRenamedAgentReply(t, repo, "test-workspace", session.ID, reply)
 	var leftover int
 	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM metadata_blobs WHERE workspace_key='round-trip'`).Scan(&leftover); err != nil || leftover != 0 {
 		t.Fatalf("bodies left under the intermediate key: %d (%v)", leftover, err)
@@ -245,5 +223,22 @@ func TestWorkspaceRenameRoundTrip(t *testing.T) {
 	raw, _ := json.Marshal(data.Workspace)
 	if !strings.Contains(string(raw), `"urlKey":"test-workspace"`) {
 		t.Fatalf("workspace after the round trip: %s", raw)
+	}
+}
+
+func checkRenamedAgentReply(t *testing.T, repo *SQLiteStore, workspace, sessionID, reply string) {
+	t.Helper()
+	var raw []byte
+	if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records
+		WHERE workspace_key=? AND field='agentSessions' AND record_key=?`, workspace, sessionID).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	var session domain.AgentSession
+	if err := json.Unmarshal(raw, &session); err != nil {
+		t.Fatal(err)
+	}
+	full, err := repo.LoadAgentSessionBodies(t.Context(), workspace, session)
+	if err != nil || len(full.Messages) != 2 || full.Messages[1].Content != reply {
+		t.Fatalf("offloaded reply missing after workspace rename: %v", err)
 	}
 }

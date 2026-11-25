@@ -68,6 +68,7 @@ func scaleP21SW163Collect(t *testing.T, repo *SQLiteStore, ctx context.Context, 
 }
 
 func TestScaleP21SW163BootstrapContentSQLOrder(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	fixture, view, workspace := scaleP21SW163Fixture(t)
 	for index := range 181 {
 		resource := fmt.Sprintf("resource-%02d-%s", index%7, []string{"A", "a", "共享"}[index%3])

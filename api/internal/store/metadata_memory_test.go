@@ -17,6 +17,8 @@ func TestMetadataMemoryPlan(t *testing.T) {
 	}{
 		{"host", 0, 16 * gib, 0, 16 * gib / 100 * 70, "physical memory"},
 		{"container", 4 * gib, 16 * gib, 0, 4 * gib / 100 * 70, "cgroup"},
+		{"one GiB container", gib, 16 * gib, 0, gib - gib/5, "cgroup"},
+		{"two GiB container", 2 * gib, 16 * gib, 0, 2 * gib / 100 * 70, "cgroup"},
 		{"small container", gib / 2, 16 * gib, 0, gib/2 - gib/2/5, "cgroup"},
 		{"runtime limit", 4 * gib, 16 * gib, 2 * gib, 2 * gib, "GOMEMLIMIT"},
 		{"unknown", 0, 0, 0, gib, "floor"},

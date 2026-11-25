@@ -40,7 +40,7 @@ func TestOffloadedBodiesLoadWhereTheyAreServed(t *testing.T) {
 			{ID: "part_text", Type: "text", Text: reply},
 		}},
 	}}
-	if err := repository.MutateWorkspace(ctx, "test-workspace", "test.seed", "seed", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), "test-workspace", "test.seed", "seed", nil, func(data *domain.Bootstrap) error {
 		data.Documents = append(data.Documents, document)
 		data.AgentSessions = append(data.AgentSessions, session, domain.AgentSession{ID: "agent_session_small", SlugID: "small", UserID: viewer.ID, Title: "Small", Location: "page", IssueIDs: []string{}, SkillIDs: []string{}, CreatedAt: now, UpdatedAt: now, Messages: []domain.AgentMessage{{ID: "message_small", Role: "user", Content: "Hi", CreatedAt: now}}})
 		return nil

@@ -14,6 +14,7 @@ import (
 // writes that merely copy the workspace), concurrent readers share one
 // rebuild, and indexes of workspaces the store no longer holds are dropped.
 func TestPulseIndexCacheRebuildsOnlyOnUpdateChanges(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -35,7 +36,7 @@ func TestPulseIndexCacheRebuildsOnlyOnUpdateChanges(t *testing.T) {
 	}
 	builds := repo.PulseIndexBuilds()
 	// A full metadata write that copies every collection but changes no update.
-	if err := repo.MutateWorkspace(t.Context(), workspace, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.FiscalMonth = "March"
 		return nil
 	}); err != nil {

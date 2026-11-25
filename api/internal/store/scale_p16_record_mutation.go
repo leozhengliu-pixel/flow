@@ -25,7 +25,7 @@ func WithProjectRecordSelection(ctx context.Context, selectScope ProjectRecordSe
 
 func projectRecordSelectionEnabled(ctx context.Context) bool {
 	_, ok := ctx.Value(projectRecordSelectionKey{}).(ProjectRecordSelector)
-	return ok && RecordHydrationEnabled() && !fullMutationsForced.Load() && !metadataRecordVerificationEnabled(ctx)
+	return ok && RecordHydrationEnabled(ctx) && !fullMutationsForced.Load() && !metadataRecordVerificationEnabled(ctx)
 }
 
 func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspace, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
@@ -348,7 +348,10 @@ func scaleP16WriteChanges(ctx context.Context, tx *sqlTx, workspace string, refs
 			change.order = order
 		} else if planned, ok := metadataAppendOrdinal(ctx, key); ok {
 			change.order = planned
-		} else if !updateMetadataField(change.field) {
+		} else if field, ok := metadataFieldByName(change.field); ok && reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type.Kind() == reflect.Slice {
+			// The splitter already assigns map keys and nested updates their
+			// canonical ordinals. Allocate a collection position only for an
+			// inserted element in a top-level array.
 			bound, offset := "MAX", 1
 			if change.field == "trash" || change.field == "favorites" {
 				bound, offset = "MIN", -1

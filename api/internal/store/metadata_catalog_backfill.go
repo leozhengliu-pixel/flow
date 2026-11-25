@@ -28,6 +28,45 @@ type metadataCatalogCheckpoint struct {
 	omissions              int64
 }
 
+// Load short rows from the same snapshot in one network round trip. The sum
+// of their measured byte lengths is capped; larger rows still stream.
+func prefetchCatalogRecords(ctx context.Context, tx *sqlTx, workspace, kind string, batch []metadataCatalogRow) (map[string][]byte, error) {
+	var bytes int64
+	keys := make(map[string]int64)
+	ids := make([]string, 0, len(batch))
+	for _, row := range batch {
+		if row.bodyBytes <= 0 || row.bodyBytes > 32<<10 || bytes+row.bodyBytes > metadataCatalogBatchBytes {
+			continue
+		}
+		keys[row.key.ID] = row.bodyBytes
+		ids = append(ids, row.key.ID)
+		bytes += row.bodyBytes
+	}
+	if len(ids) < 2 {
+		return nil, nil
+	}
+	clause, args := bindList("record_key", ids)
+	rows, err := tx.QueryContext(ctx, `SELECT record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+
+		clause, append([]any{workspace, kind}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string][]byte, len(ids))
+	for rows.Next() {
+		var id string
+		var raw []byte
+		if err := rows.Scan(&id, &raw); err != nil {
+			return nil, err
+		}
+		if int64(len(raw)) != keys[id] {
+			return nil, ErrConcurrentWrite
+		}
+		result[id] = raw
+	}
+	return result, rows.Err()
+}
+
 func readMetadataCatalogCheckpoint(ctx context.Context, tx *sqlTx, workspace, kind string) (metadataCatalogCheckpoint, error) {
 	var point metadataCatalogCheckpoint
 	err := tx.QueryRowContext(ctx, `SELECT last_record_key,started,phase,omissions,digest,revision FROM metadata_catalog_collections WHERE workspace_key=? AND field=?`, workspace, kind).Scan(&point.last, &point.started, &point.phase, &point.omissions, &point.digest, &point.revision)
@@ -90,20 +129,30 @@ func (s *SQLiteStore) BackfillMetadataCatalog(ctx context.Context, workspace, ki
 	// Byte lengths: SQLite's LENGTH counts characters of a TEXT value, and
 	// older writers stored some canonical rows as TEXT. The canonical reader
 	// streams bytes, so a character count cut a non-ASCII row short.
-	table, columns := "workspace_metadata_records", "record_key,collection_order,"+metadataByteLength(s.dialect, "data")
+	table, columns := "workspace_metadata_records", "record_key,collection_order,"+metadataByteLength(s.dialect, "data")+",1"
 	if position.phase == 1 {
-		table, columns = "metadata_catalog", "record_key,collection_order,"+metadataByteLength(s.dialect, "summary")
+		present := "0"
+		if !missingWorkspace {
+			present = `CASE WHEN EXISTS(SELECT 1 FROM workspace_metadata_records m
+				WHERE m.workspace_key=metadata_catalog.workspace_key AND m.field=metadata_catalog.field AND m.record_key=metadata_catalog.record_key) THEN 1 ELSE 0 END`
+		}
+		table, columns = "metadata_catalog", "record_key,collection_order,"+metadataByteLength(s.dialect, "summary")+","+present
 	}
 	rows, err := read.QueryContext(ctx, `SELECT `+columns+` FROM `+table+` WHERE `+where+` ORDER BY record_key LIMIT 128`, args...)
 	if err != nil {
 		return progress, err
 	}
 	batch := make([]metadataCatalogRow, 0, MetadataCatalogBackfillBatch)
+	pruned := map[string]bool{}
 	for rows.Next() {
+		var present int
 		row := metadataCatalogRow{key: RecordKey{Kind: kind}}
-		if err := rows.Scan(&row.key.ID, &row.order, &row.bodyBytes); err != nil {
+		if err := rows.Scan(&row.key.ID, &row.order, &row.bodyBytes, &present); err != nil {
 			rows.Close()
 			return progress, err
+		}
+		if present == 0 {
+			pruned[row.key.ID] = true
 		}
 		batch = append(batch, row)
 	}
@@ -112,11 +161,29 @@ func (s *SQLiteStore) BackfillMetadataCatalog(ctx context.Context, workspace, ki
 	if err != nil {
 		return progress, err
 	}
+	var shortRecords map[string][]byte
+	if position.phase == 0 && s.dialect != "sqlite" {
+		shortRecords, err = prefetchCatalogRecords(ctx, read, workspace, kind, batch)
+		if err != nil {
+			return progress, err
+		}
+	}
 	prepared, removed := []metadataCatalogRow{}, []RecordKey{}
 	preparedBytes, writeBytes := 0, 0
 	for _, target := range batch {
 		if position.phase == 0 {
-			row, err := s.projectCanonicalMetadata(ctx, read, workspace, target.key, target.bodyBytes)
+			var row metadataCatalogRow
+			var err error
+			if raw, ok := shortRecords[target.key.ID]; ok {
+				// Feed the same parser and capture limits from the snapshot's
+				// prefetched bytes, retaining its logical chunk boundaries.
+				row, err = projectCatalogRecord(ctx, &canonicalMetadataReader{
+					ctx: ctx, tx: read, workspace: workspace, key: target.key, size: target.bodyBytes,
+					pageBytes: MetadataRecordPageMaxBytes, readAhead: raw,
+				})
+			} else {
+				row, err = s.projectCanonicalMetadata(ctx, read, workspace, target.key, target.bodyBytes)
+			}
 			if err != nil {
 				return progress, err
 			}
@@ -139,13 +206,7 @@ func (s *SQLiteStore) BackfillMetadataCatalog(ctx context.Context, workspace, ki
 				break
 			}
 			preparedBytes += int(target.bodyBytes)
-			var exists int
-			if !missingWorkspace {
-				if err := read.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, kind, target.key.ID).Scan(&exists); err != nil {
-					return progress, err
-				}
-			}
-			if exists == 0 {
+			if pruned[target.key.ID] {
 				removed = append(removed, target.key)
 				progress.Pruned++
 			}
@@ -203,10 +264,8 @@ func (s *SQLiteStore) BackfillMetadataCatalog(ctx context.Context, workspace, ki
 	if current != before {
 		return MetadataCatalogProgress{}, ErrConcurrentWrite
 	}
-	for _, row := range prepared {
-		if err := writeMetadataCatalogRow(ctx, tx, workspace, row); err != nil {
-			return progress, err
-		}
+	if err := writeMetadataCatalogBatch(ctx, tx, workspace, kind, prepared); err != nil {
+		return progress, err
 	}
 	for _, key := range removed {
 		for _, table := range []string{"metadata_catalog_relations", "metadata_catalog"} {
@@ -231,17 +290,86 @@ func (s *SQLiteStore) BackfillMetadataCatalog(ctx context.Context, workspace, ki
 	return progress, nil
 }
 
+const metadataCatalogInsert = `INSERT INTO metadata_catalog(workspace_key,field,record_key,collection_order,version,body_bytes,summary,omitted,created_at,updated_at,archived) VALUES`
+const metadataCatalogUpsert = ` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,version=excluded.version,body_bytes=excluded.body_bytes,summary=excluded.summary,omitted=excluded.omitted,created_at=excluded.created_at,updated_at=excluded.updated_at,archived=excluded.archived`
+
+func metadataCatalogValues(workspace string, row metadataCatalogRow) []any {
+	omitted := 0
+	if row.omitted {
+		omitted = 1
+	}
+	return []any{workspace, row.key.Kind, row.key.ID, row.order, row.version, row.bodyBytes, row.summary, omitted, row.created, row.updated, row.archived}
+}
+
+// Backfill owns the collection checkpoint and bounds the total batch bytes.
+// Group statements to avoid several network round trips for every record.
+func writeMetadataCatalogBatch(ctx context.Context, tx *sqlTx, workspace, kind string, rows []metadataCatalogRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(rows))
+	values := make([]any, 0, len(rows)*11)
+	for _, row := range rows {
+		ids = append(ids, row.key.ID)
+		values = append(values, metadataCatalogValues(workspace, row)...)
+	}
+	clause, keys := bindList("record_key", ids)
+	args := append([]any{workspace, kind}, keys...)
+	if journalDatabaseReady(tx) {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO record_versions(workspace_key,field,record_key,version,deleted)
+			SELECT workspace_key,field,record_key,1,0 FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause+
+			` ON CONFLICT(workspace_key,field,record_key) DO NOTHING`, args...); err != nil {
+			return err
+		}
+	}
+	tuples := strings.TrimSuffix(strings.Repeat("(?,?,?,?,?,?,?,?,?,?,?),", len(rows)), ",")
+	if _, err := tx.ExecContext(ctx, metadataCatalogInsert+tuples+metadataCatalogUpsert, values...); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM metadata_catalog_relations WHERE workspace_key=? AND field=? AND `+clause, args...); err != nil {
+		return err
+	}
+	const relationBatch = 128
+	var relations []any
+	flush := func() error {
+		if len(relations) == 0 {
+			return nil
+		}
+		tuples := strings.TrimSuffix(strings.Repeat("(?,?,?,?,?,?),", len(relations)/6), ",")
+		_, err := tx.ExecContext(ctx, metadataCatalogRelationInsert+tuples+metadataCatalogRelationConflict, relations...)
+		relations = relations[:0]
+		return err
+	}
+	for _, row := range rows {
+		for relation, entries := range metadataCatalogRelations(row.summary) {
+			seen := map[string]bool{}
+			for _, value := range entries {
+				if seen[value] {
+					continue
+				}
+				seen[value] = true
+				relations = append(relations, workspace, kind, row.key.ID, relation, metadataFingerprint([]byte(value)), value)
+				if len(relations) == relationBatch*6 {
+					if err := flush(); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return flush()
+}
+
+const metadataCatalogRelationInsert = `INSERT INTO metadata_catalog_relations(workspace_key,field,record_key,relation,value_hash,value) VALUES`
+const metadataCatalogRelationConflict = ` ON CONFLICT(workspace_key,field,record_key,relation,value_hash) DO NOTHING`
+
 func writeMetadataCatalogRow(ctx context.Context, tx *sqlTx, workspace string, row metadataCatalogRow) error {
 	if journalDatabaseReady(tx) {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO record_versions(workspace_key,field,record_key,version,deleted) SELECT workspace_key,field,record_key,1,0 FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=? ON CONFLICT(workspace_key,field,record_key) DO NOTHING`, workspace, row.key.Kind, row.key.ID); err != nil {
 			return err
 		}
 	}
-	omitted := 0
-	if row.omitted {
-		omitted = 1
-	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO metadata_catalog(workspace_key,field,record_key,collection_order,version,body_bytes,summary,omitted,created_at,updated_at,archived) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,version=excluded.version,body_bytes=excluded.body_bytes,summary=excluded.summary,omitted=excluded.omitted,created_at=excluded.created_at,updated_at=excluded.updated_at,archived=excluded.archived`, workspace, row.key.Kind, row.key.ID, row.order, row.version, row.bodyBytes, row.summary, omitted, row.created, row.updated, row.archived)
+	_, err := tx.ExecContext(ctx, metadataCatalogInsert+`(?,?,?,?,?,?,?,?,?,?,?)`+metadataCatalogUpsert, metadataCatalogValues(workspace, row)...)
 	if err != nil {
 		return err
 	}
@@ -255,7 +383,7 @@ func writeMetadataCatalogRow(ctx context.Context, tx *sqlTx, workspace string, r
 				continue
 			}
 			seen[value] = true
-			if _, err := tx.ExecContext(ctx, `INSERT INTO metadata_catalog_relations(workspace_key,field,record_key,relation,value_hash,value) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key,relation,value_hash) DO NOTHING`, workspace, row.key.Kind, row.key.ID, relation, metadataFingerprint([]byte(value)), value); err != nil {
+			if _, err := tx.ExecContext(ctx, metadataCatalogRelationInsert+`(?,?,?,?,?,?)`+metadataCatalogRelationConflict, workspace, row.key.Kind, row.key.ID, relation, metadataFingerprint([]byte(value)), value); err != nil {
 				return err
 			}
 		}

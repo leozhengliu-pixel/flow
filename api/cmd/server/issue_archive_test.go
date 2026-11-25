@@ -61,6 +61,8 @@ func TestArchivedIssueContentRequiresSeparateRestoration(t *testing.T) {
 				t.Fatalf("rejected edit changed the archive: %+v", saved)
 			}
 			request := httptest.NewRequest(http.MethodGet, "/api/issues/"+issue.ID+"?workspace=test-workspace", nil)
+			request, finish := beginRequestResourceReads(request)
+			defer finish()
 			if _, visible, editable, err := s.socketIssue(request, issue.ID); err != nil || !visible || editable {
 				t.Fatalf("archived description socket: visible=%v editable=%v err=%v", visible, editable, err)
 			}

@@ -163,7 +163,7 @@ func TestBackfillUploadOwners(t *testing.T) {
 	}
 	addLegacyApp := func(key, id, logo string) {
 		t.Helper()
-		if err := s.store.MutateWorkspace(ctx, key, "oauth_application.created", id, nil, func(current *domain.Bootstrap) error {
+		if err := s.store.MutateWorkspace(workspaceFixtureContext(ctx), key, "oauth_application.created", id, nil, func(current *domain.Bootstrap) error {
 			current.OAuthApplications = append(current.OAuthApplications, domain.OAuthApplication{ID: id, Name: id, ClientID: "flow_client_" + id, LogoURL: logo, CreatorID: current.Viewer.ID, RedirectURIs: []string{}, Scopes: []string{"read"}})
 			return nil
 		}); err != nil {

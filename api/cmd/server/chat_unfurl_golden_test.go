@@ -30,7 +30,7 @@ func chatPreviewCases(t *testing.T, f *chatWorkflowFixture) []chatPreviewCase {
 	at := time.Date(2026, 11, 2, 9, 15, 0, 0, time.UTC)
 	due := "2026-11-20"
 	target := "2026-12-15"
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.preview_links", issue.ID, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "test.preview_links", issue.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Users {
 			if data.Users[index].ID == data.Viewer.ID {
 				data.Users[index].DisplayName = "王小明"
@@ -88,7 +88,7 @@ func chatPreviewCases(t *testing.T, f *chatWorkflowFixture) []chatPreviewCase {
 
 func (f *chatWorkflowFixture) setViewerLanguage(t *testing.T, language, zone string) {
 	t.Helper()
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.preview_language", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "test.preview_language", "", nil, func(data *domain.Bootstrap) error {
 		settings := data.UserSettings[f.identity.UserID]
 		settings.UserID, settings.Language, settings.Timezone = f.identity.UserID, language, zone
 		data.UserSettings[f.identity.UserID] = settings
@@ -170,7 +170,7 @@ func TestChatLinkPreviewRefreshOnChange(t *testing.T) {
 	if w := f.callback(t, envelope, time.Now(), true); w.Code != http.StatusOK {
 		t.Fatalf("preview: %d", w.Code)
 	}
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "issue.updated", issue.ID, nil, func(data *domain.Bootstrap) error { return nil }); err != nil {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "issue.updated", issue.ID, nil, func(data *domain.Bootstrap) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	f.syncEvents(t)
@@ -179,7 +179,7 @@ func TestChatLinkPreviewRefreshOnChange(t *testing.T) {
 	}
 	// A change to an item nobody previewed asks for nothing.
 	other := f.s.store.Bootstrap().Issues[1]
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "issue.updated", other.ID, nil, func(data *domain.Bootstrap) error { return nil }); err != nil {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "issue.updated", other.ID, nil, func(data *domain.Bootstrap) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	f.syncEvents(t)

@@ -14,7 +14,7 @@ import (
 // that was never edited since: a body, no versions.
 func ageDocumentWithoutHistory(t *testing.T, f *mcpContractFixture, id string, at time.Time) {
 	t.Helper()
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.aged", id, nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.aged", id, nil, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -30,7 +30,7 @@ func ageDocumentWithoutHistory(t *testing.T, f *mcpContractFixture, id string, a
 func ageStoredDocument(t *testing.T, repository *store.SQLiteStore, id string, at time.Time, revisions []domain.DocumentRevision) {
 	t.Helper()
 	workspace := repository.Bootstrap().Workspace.URLKey
-	if err := repository.MutateWorkspace(context.Background(), workspace, "test.aged", id, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), workspace, "test.aged", id, nil, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -137,7 +137,7 @@ func TestImportDocumentRevision(t *testing.T) {
 	// The production case: the edit happened before the baseline fix, so the
 	// only version is the post-edit state.
 	edited := weekAgo.Add(time.Hour)
-	if err := repository.MutateWorkspace(context.Background(), repository.Bootstrap().Workspace.URLKey, "test.lost_baseline", created.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), repository.Bootstrap().Workspace.URLKey, "test.lost_baseline", created.ID, nil, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, created.ID)
 		if err == nil {
 			document.Content, document.UpdatedAt, document.Version = "Updated text", edited, 1

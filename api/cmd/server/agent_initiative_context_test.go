@@ -52,7 +52,7 @@ func TestAgentSessionInitiativeContextReachesThePrompt(t *testing.T) {
 		t.Skip("fixture has no projects")
 	}
 	target := "2026-12-31"
-	err = repository.MutateWorkspace(context.Background(), "test-workspace", "test.initiative", "", nil, func(data *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "test.initiative", "", nil, func(data *domain.Bootstrap) error {
 		project := &data.Projects[0]
 		project.Name, project.Progress = "Checkout rebuild", 0.4
 		data.Projects = append(data.Projects, domain.Project{ID: "project_side", Name: "Side quest", SlugID: "side-quest", Status: project.Status, Initiatives: []string{"initiative_ctx"}, MemberIDs: []string{}, TeamIDs: []string{}})
@@ -119,7 +119,7 @@ func TestAgentSessionRejectsInitiativesTheViewerCannotSee(t *testing.T) {
 	authRequest[domain.AuthSession](t, admin, "POST", host.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)
 	authRequest[domain.WorkspaceMember](t, admin, "PATCH", host.URL+"/api/workspaces/"+key+"/members/usr_member", map[string]string{"role": "member"}, "", http.StatusOK)
 	private := authRequest[domain.Team](t, admin, "POST", host.URL+"/api/workspaces/"+key+"/teams", map[string]any{"name": "Private", "key": "PRV", "private": true}, "", http.StatusCreated)
-	err = repository.MutateWorkspace(context.Background(), key, "test.initiative", "", nil, func(data *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(workspaceFixtureContext(context.Background()), key, "test.initiative", "", nil, func(data *domain.Bootstrap) error {
 		data.Initiatives = append(data.Initiatives, domain.Initiative{ID: "initiative_private", Name: "Secret plan", SlugID: "secret-plan", Status: "Active", LeadTeamID: private.ID, ProjectIDs: []string{}, ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
 		return nil
 	})

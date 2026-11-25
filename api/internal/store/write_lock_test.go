@@ -13,6 +13,8 @@ import (
 // transaction run: snapshot readers and the post-write sinks must not queue
 // behind it, other writers must, and the result is visible once it returns.
 func TestCopyOnWriteMutationDoesNotBlockReaders(t *testing.T) {
+	// This exercises the legacy installed-copy lock.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +32,14 @@ func TestCopyOnWriteMutationDoesNotBlockReaders(t *testing.T) {
 			return nil
 		})
 	}()
-	<-inside
+	select {
+	case <-inside:
+	case err := <-done:
+		t.Fatalf("writer exited before the callback: %v", err)
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("writer did not start its callback")
+	}
 	read := make(chan string, 1)
 	go func() {
 		data, _ := repo.WorkspaceMetadataFields(workspace, "workspaceSettings", "users")

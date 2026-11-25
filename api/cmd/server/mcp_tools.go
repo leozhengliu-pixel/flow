@@ -52,6 +52,14 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 }
 
 func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
+	// Tools also run outside HTTP routing, including in background agent
+	// work. Compatibility tools must be allowed to borrow a COLD view.
+	ctx = store.WithColdWork(ctx, "flow tool")
+	if s.store.BoundedMetadataEnabled() {
+		var finish func()
+		ctx, finish = beginMetadataOutputReads(ctx)
+		defer finish()
+	}
 	if internalRecordsEnabled(internalToolRecordFamily(name)) {
 		var err error
 		if actor.APIKey.ID != "" && actor.APIKey.SecretHash != "" {

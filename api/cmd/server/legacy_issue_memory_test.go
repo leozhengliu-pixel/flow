@@ -22,6 +22,8 @@ import (
 )
 
 func TestLegacyWritesAndRealtimeDoNotReadUnrelatedIssues(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_SYNC_V2", "off")
 	path := filepath.Join(t.TempDir(), "bounded.db")
 	repo, err := store.OpenSQLiteTestFixture(path)
 	if err != nil {
@@ -105,6 +107,7 @@ func TestLegacyIssueMemoryAt75675Rows(t *testing.T) {
 	if os.Getenv("FLOW_TEST_ISSUE_MEMORY") != "1" && !preferencesOnly {
 		t.Skip("opt-in memory regression")
 	}
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	var repo *store.SQLiteStore
 	var err error
 	if dsn := os.Getenv("FLOW_TEST_MEMORY_MYSQL_DSN"); dsn != "" {

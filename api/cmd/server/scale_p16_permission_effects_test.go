@@ -55,7 +55,7 @@ func (p *scaleP16PermissionProbe) reset(t *testing.T) {
 	if err := json.Unmarshal(p.baseline, &data); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.repo.MutateWorkspace(t.Context(), p.workspace, "scale_p16.reset", "", nil, func(next *domain.Bootstrap) error {
+	if err := p.repo.MutateWorkspace(workspaceFixtureContext(t.Context()), p.workspace, "scale_p16.reset", "", nil, func(next *domain.Bootstrap) error {
 		next.Projects, next.Initiatives, next.Favorites = data.Projects, data.Initiatives, data.Favorites
 		return nil
 	}); err != nil {
@@ -72,7 +72,7 @@ func (p *scaleP16PermissionProbe) reset(t *testing.T) {
 	}
 }
 
-func (p *scaleP16PermissionProbe) result(t *testing.T) string {
+func (p *scaleP16PermissionProbe) result(t *testing.T) map[string]string {
 	t.Helper()
 	data, _ := p.repo.BootstrapFor(p.workspace)
 	entries, err := p.repo.ListAuditEntries(t.Context(), p.workspaceID, store.AuditQuery{Limit: 100})
@@ -86,9 +86,17 @@ func (p *scaleP16PermissionProbe) result(t *testing.T) string {
 		}
 		audit = append(audit, []any{entry.ActorType, entry.ActorID, entry.Actor, entry.Action, entry.ResourceType, entry.ResourceID, entry.Result, entry.Metadata})
 	}
-	raw, err := json.Marshal([]any{data.Projects, data.Initiatives, data.Favorites, data.Notifications, data.NotificationDeliveries, audit, p.events, p.webhooks})
-	if err != nil {
-		t.Fatal(err)
+	result := make(map[string]string, 8)
+	for name, value := range map[string]any{
+		"projects": data.Projects, "initiatives": data.Initiatives, "favorites": data.Favorites,
+		"notifications": data.Notifications, "deliveries": data.NotificationDeliveries,
+		"audit": audit, "realtime": p.events, "webhooks": p.webhooks,
+	} {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result[name] = scaleP04Normalize(raw)
 	}
-	return scaleP04Normalize(raw)
+	return result
 }

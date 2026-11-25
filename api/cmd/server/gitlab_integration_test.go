@@ -194,7 +194,7 @@ func TestGitLabTokenLifecycleStoresEncryptedTokenRotatesAndDisconnects(t *testin
 	}
 
 	// The minute sweep renews tokens whose rotation time has passed.
-	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "test.rotation_due", connected.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test.rotation_due", connected.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.IntegrationConnections {
 			if data.IntegrationConnections[index].ID == connected.ID {
 				data.IntegrationConnections[index].Config["nextRotationAt"] = time.Now().UTC().Add(-time.Minute).Format(time.RFC3339)

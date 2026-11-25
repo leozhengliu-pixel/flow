@@ -111,7 +111,7 @@ func TestLoopStatusUpdateScopeAndExistingUpdateTarget(t *testing.T) {
 	data := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	home := data.Teams[0]
 	other := domain.Team{ID: "team_other", Name: "Other", Key: "OTH"}
-	if err := srv.store.MutateWorkspace(context.Background(), data.Workspace.URLKey, "test.teams", other.ID, nil, func(data *domain.Bootstrap) error { data.Teams = append(data.Teams, other); return nil }); err != nil {
+	if err := srv.store.MutateWorkspace(workspaceFixtureContext(context.Background()), data.Workspace.URLKey, "test.teams", other.ID, nil, func(data *domain.Bootstrap) error { data.Teams = append(data.Teams, other); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	foreign := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{"name": "Foreign project", "teamIds": []string{other.ID}}, http.StatusCreated)

@@ -63,6 +63,7 @@ spec:
       containers:
         - name: mysql
           image: {{ $my.image | quote }}
+          args: ["--log-bin-trust-function-creators=1"]
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

@@ -28,7 +28,6 @@ package main
 
 import (
 	"cmp"
-	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -39,7 +38,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -74,6 +72,13 @@ func TestLoadRigSeed(t *testing.T) {
 	}
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	upgrade := os.Getenv("FLOW_LOADRIG_UPGRADE_SEED") == "1"
+	if upgrade {
+		writer = "legacy"
+		for _, flag := range []string{"FLOW_RECORD_HYDRATION", "FLOW_RECORD_JOURNAL", "FLOW_METADATA_CATALOG", "FLOW_SYNC_V2", "FLOW_SYNC_MANIFEST", "FLOW_INDEXED_READS"} {
+			t.Setenv(flag, "off")
+		}
+	}
 	report := map[string]any{"scale": scale, "driver": config.Driver, "writer": writer, "started": time.Now().UTC()}
 	phases := map[string]float64{}
 	problems := []string{}
@@ -100,6 +105,11 @@ func TestLoadRigSeed(t *testing.T) {
 		}
 	})
 	service := &server{store: repo, uploadPath: t.TempDir()}
+	// Seed the same data in every arm without racing scheduled writes. The
+	// actual replicas start their workers before the measured window.
+	service.workflowSchedulerStarted.Store(true)
+	service.deliverySchedulerStarted.Store(true)
+	service.loopReconcilerStarted.Store(true)
 	host := httptest.NewServer(newHandler(service))
 	admin := peerAdmin(t, host.URL)
 	ws := fixture.Workspace
@@ -289,46 +299,39 @@ func TestLoadRigSeed(t *testing.T) {
 		}
 	}
 	timed("http-edits", func() {
-		var wait sync.WaitGroup
-		var mu sync.Mutex
-		jobs := make(chan int)
-		for range 4 {
-			wait.Add(1)
-			go func() {
-				defer wait.Done()
-				for i := range jobs {
-					index := (i * 7919) % issueCount
-					if index%25 == 0 { // archived issues refuse edits
-						index = (index + 1) % issueCount
-					}
-					ref := world.ref(index)
-					var err error
-					for attempt := 0; attempt < 3; attempt++ {
-						var status int
-						if status, err = loadRigCall(ctx, admin, http.MethodPatch, host.URL+"/api/issue-records/"+ref.ID, ws, map[string]any{"priority": 1 + i%4}, nil); err == nil {
-							status, err = loadRigCall(ctx, admin, http.MethodPost, host.URL+"/api/issue-records/"+ref.ID+"/comments", ws, map[string]any{"body": fmt.Sprintf("Seed follow-up %d", i)}, nil)
-						}
-						if status != http.StatusConflict {
-							break
-						}
-					}
-					if err != nil {
-						mu.Lock()
-						note("seed edit: %v", err)
-						mu.Unlock()
-					}
+		edit := func(method, path string, body map[string]any) (int, error) {
+			var status int
+			var err error
+			for range 3 {
+				status, err = loadRigCall(ctx, admin, method, host.URL+path, ws, body, nil)
+				if err == nil || status != http.StatusConflict {
+					break
 				}
-			}()
+				if reloadErr := repo.ReloadWorkspace(ctx, ws); reloadErr != nil {
+					return status, reloadErr
+				}
+			}
+			return status, err
 		}
+		// Keep both seeds deterministic when the writer validates the
+		// workspace revision. The measured window drives concurrent edits.
 		for i := range httpEdits {
-			jobs <- i
+			index := (i * 7919) % issueCount
+			if index%25 == 0 { // archived issues refuse edits
+				index = (index + 1) % issueCount
+			}
+			path := "/api/issue-records/" + world.ref(index).ID
+			status, err := edit(http.MethodPatch, path, map[string]any{"priority": 1 + i%4})
+			if err == nil {
+				status, err = edit(http.MethodPost, path+"/comments", map[string]any{"body": fmt.Sprintf("Seed follow-up %d", i)})
+			}
+			if err != nil {
+				note("seed edit failed (HTTP status %d)", status)
+			}
 		}
-		close(jobs)
-		wait.Wait()
 	})
 	fixture.Words = []string{"payment", "webhook", "search", "import", "cycle", "milestone", "attachment", "inbox", "comment", "notification", "Load"}
 	host.Close()
-	_ = service.stopDeliveryScheduler(context.Background())
 	completeCatalog := func(name string) {
 		timed(name, func() {
 			collections, err := repo.CompleteLoadRigMetadataCatalog(ctx)
@@ -338,9 +341,9 @@ func TestLoadRigSeed(t *testing.T) {
 			t.Logf("metadata catalog complete over %d collections", collections)
 		})
 	}
-	// A bounded store starts only on a complete metadata catalog (in
-	// production: FLOW_METADATA_CATALOG=shadow on the flag-off replicas).
-	completeCatalog("catalog-legacy")
+	if !upgrade {
+		completeCatalog("catalog-legacy")
+	}
 	if err := repo.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +389,9 @@ func TestLoadRigSeed(t *testing.T) {
 			t.Fatalf("seed metadata: %v", err)
 		}
 	})
-	completeCatalog("catalog-" + writer)
+	if !upgrade {
+		completeCatalog("catalog-" + writer)
+	}
 	syntheticDocuments := int(math.Ceil(float64(spec.Documents) * scale))
 	for i := range syntheticDocuments {
 		fixture.Documents = append(fixture.Documents, loadRigRef{ID: fmt.Sprintf("lt-doc-%04d", i), TeamID: teamIDs[i%len(teamIDs)]})

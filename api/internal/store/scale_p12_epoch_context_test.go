@@ -6,6 +6,7 @@ import (
 )
 
 func TestScaleP12LiveEventContextRejectsTheSoleHeldConnection(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, fixture := range scaleP03Stores(t) {
 		s := fixture.SQLiteStore

@@ -87,7 +87,7 @@ func testIssueAttributeFieldWidthMigration(t *testing.T, dialect string, open fu
 	workspace := repository.Bootstrap().Workspace.URLKey
 	issueID := repository.Bootstrap().Issues[0].ID
 	setSuggestions := func(labels ...string) error {
-		return repository.MutateWorkspace(WithIssueRecordMutations(ctx, issueID), workspace, "test.issue_attribute_width", issueID, nil, func(data *domain.Bootstrap) error {
+		return repository.MutateWorkspace(WithColdWork(WithIssueRecordMutations(ctx, issueID), "workspace fixture"), workspace, "test.issue_attribute_width", issueID, nil, func(data *domain.Bootstrap) error {
 			index := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == issueID })
 			data.Issues[index].SuggestedLabelIDs = labels
 			data.Issues[index].Version++

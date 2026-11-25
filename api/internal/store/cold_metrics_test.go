@@ -143,7 +143,7 @@ func TestColdMetricsCatalogReport(t *testing.T) {
 	}
 	s.metadataResidency = &metadataResidency{}
 	s.LogMetadataCatalogCompleteness(t.Context())
-	if line := buf.String(); !strings.Contains(line, "workspace="+workspace) || !strings.Contains(line, "complete=false") || !strings.Contains(line, "incompleteCollections=1") {
+	if line := buf.String(); strings.Contains(line, workspace) || !strings.Contains(line, "complete=false") || !strings.Contains(line, "incompleteCollections=1") {
 		t.Fatalf("incomplete line = %q", line)
 	}
 	scaleP05Finish(t, s, workspace, "labels")

@@ -90,7 +90,7 @@ func writeRealtimePolicyResources(t *testing.T, fixture realtimePolicyFixture) r
 	authRequest[domain.Team](t, fixture.admin, http.MethodPatch, base+"/api/workspaces/"+key+"/teams/"+fixture.private.ID, map[string]any{"name": "Private team renamed"}, "", http.StatusOK)
 	ids.webhook, ids.customer, ids.pipeline, ids.sla = "webhook_policy", "customer_policy", "pipeline_policy", "sla_policy"
 	write := func(eventType, aggregate string, change func(data *domain.Bootstrap)) {
-		if err := fixture.repo.MutateWorkspace(context.Background(), key, eventType, aggregate, map[string]any{"name": "input"}, func(data *domain.Bootstrap) error {
+		if err := fixture.repo.MutateWorkspace(workspaceFixtureContext(context.Background()), key, eventType, aggregate, map[string]any{"name": "input"}, func(data *domain.Bootstrap) error {
 			change(data)
 			return nil
 		}); err != nil {

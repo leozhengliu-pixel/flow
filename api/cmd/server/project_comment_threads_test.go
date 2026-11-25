@@ -52,7 +52,7 @@ func TestProjectCommentThreadSubscriptionAndResolve(t *testing.T) {
 	// Anyone may resolve a thread, even one another member started; resolving
 	// from a reply resolves the thread root.
 	foreign := "project_comment_foreign"
-	if err := repository.MutateWorkspace(t.Context(), "", "project.commented", project.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "", "project.commented", project.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Projects {
 			if data.Projects[index].ID == project.ID {
 				data.Projects[index].Comments = append(data.Projects[index].Comments, domain.Comment{ID: foreign, Version: 1, Body: "Theirs", Reactions: map[string][]string{}, User: domain.User{ID: "usr_other", Name: "Other"}})

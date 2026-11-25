@@ -51,10 +51,13 @@ func boundedIssueAttachmentEvent(ctx context.Context, event string) bool {
 	if !issueAttachmentMutation(ctx) || IsIssueDiscussionMutation(ctx) {
 		return false
 	}
+	if event == "issue.link_created" {
+		return !issueAttachmentUpsertMutation(ctx)
+	}
 	if UsesIssueRecordMutations(ctx) {
 		return event == "attachment.created" || event == "attachment.updated"
 	}
-	return !issueAttachmentUpsertMutation(ctx) && event == "issue.link_created"
+	return false
 }
 
 func (s *SQLiteStore) mutateBoundedIssueReaction(ctx context.Context, workspace, event string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {

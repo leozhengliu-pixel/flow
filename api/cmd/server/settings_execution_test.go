@@ -26,7 +26,7 @@ func TestOAuthRequiresAdminApprovalAndRevokesExistingToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	if err := repo.MutateWorkspace(t.Context(), "test-workspace", "workspace_preferences.updated", "workspace", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "workspace_preferences.updated", "workspace", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.ReviewThirdPartyApplications = true
 		return nil
 	}); err != nil {
@@ -71,7 +71,7 @@ func TestOAuthRequiresAdminApprovalAndRevokesExistingToken(t *testing.T) {
 		t.Fatalf("revoked app still accepted: %d", response.StatusCode)
 	}
 	postOAuthForm[map[string]any](t, app.URL+"/oauth/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tokens.RefreshToken}, "client_id": {registered.ClientID}}, 400)
-	if err := repo.MutateWorkspace(t.Context(), "test-workspace", "workspace_preferences.updated", "workspace", nil, func(data *domain.Bootstrap) error { data.WorkspaceSettings.RequireTwoFactor = true; return nil }); err != nil {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "workspace_preferences.updated", "workspace", nil, func(data *domain.Bootstrap) error { data.WorkspaceSettings.RequireTwoFactor = true; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	blocked := authRequest[map[string]string](t, client, "POST", app.URL+"/api/oauth/authorization-request", input, "", 403)
@@ -194,7 +194,7 @@ func TestUnauthorizedApprovalAttemptDoesNotConsumePendingDecision(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	err = repo.MutateWorkspace(t.Context(), "test-workspace", "agent.session_created", "session", nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "agent.session_created", "session", nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, domain.AgentSession{ID: "session", UserID: data.Viewer.ID})
 		return nil
 	})
@@ -279,7 +279,7 @@ func TestMCPConnectorDiscoveryExecutionAndRevocation(t *testing.T) {
 			s := server{store: repo, authDisabled: true}
 			s.agent.ToolsEnabled = true
 			s.agent.WriteTools = true
-			err = repo.MutateWorkspace(t.Context(), "test-workspace", "application_policy.updated", "connector", nil, func(data *domain.Bootstrap) error {
+			err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "application_policy.updated", "connector", nil, func(data *domain.Bootstrap) error {
 				data.WorkspaceSettings.MCPConnectorsEnabled = true
 				data.WorkspaceSettings.AllowedMCPConnectors = "approved"
 				setApplicationPolicies(data, []applicationPolicy{{ID: "connector", Kind: "mcp", Name: "Local fixture", URL: upstream.URL, Status: "approved", OwnerID: data.Viewer.ID}})
@@ -299,7 +299,7 @@ func TestMCPConnectorDiscoveryExecutionAndRevocation(t *testing.T) {
 			if err != nil || !strings.Contains(string(result), "found") {
 				t.Fatalf("execution: %s %v", result, err)
 			}
-			err = repo.MutateWorkspace(t.Context(), "test-workspace", "application_policy.updated", "connector", nil, func(data *domain.Bootstrap) error { data.WorkspaceSettings.SetMCPConnectors(false); return nil })
+			err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "application_policy.updated", "connector", nil, func(data *domain.Bootstrap) error { data.WorkspaceSettings.SetMCPConnectors(false); return nil })
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -347,7 +347,7 @@ func TestPulseScheduleCreatesOneSummaryWithoutReplacingHistory(t *testing.T) {
 	now := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
 	before := repo.Bootstrap()
 	userID := before.Viewer.ID
-	err = repo.MutateWorkspace(t.Context(), "test-workspace", "test.pulse", userID, nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test.pulse", userID, nil, func(data *domain.Bootstrap) error {
 		for id, settings := range data.UserSettings {
 			settings.PulseSchedule = "never"
 			data.UserSettings[id] = settings

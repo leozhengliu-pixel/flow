@@ -119,7 +119,8 @@ func TestMetadataPrepareCommandReadiesBoundedStart(t *testing.T) {
 	}
 
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	// The flag-on start refuses before the preparation.
+	// An explicit bounded start with automatic preparation disabled still
+	// refuses incomplete coverage.
 	t.Setenv("FLOW_BOUNDED_METADATA", "on")
 	if bounded, err := store.OpenDatabase(config); err == nil {
 		_ = bounded.Close()

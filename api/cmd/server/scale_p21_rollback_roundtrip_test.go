@@ -888,6 +888,7 @@ func TestScaleP21RollbackRoundTrip(t *testing.T) {
 // and serve the late writes).
 func TestScaleP21RollbackReopenWithoutCatalogCompletion(t *testing.T) {
 	rtEnv(t)
+	t.Setenv("FLOW_METADATA_CATALOG", "off")
 	late := func(t *testing.T, path string) {
 		t.Helper()
 		st := rtOpen(t, path, false)
@@ -979,8 +980,10 @@ func TestScaleP21RollbackReopenWithoutCatalogCompletion(t *testing.T) {
 		late(t, path)
 		t.Setenv("FLOW_RECORD_JOURNAL", "on")
 		refused, served := reopen(t, path)
-		if !errors.Is(refused, store.ErrBoundedMetadataCoverage) || served {
-			t.Fatalf("writes made with the record journal off must be refused when the flag turns on: refused=%v served=%v", refused, served)
+		// Installed SQLite triggers capture legacy writes even when the
+		// writer's journal is off. Reopening must serve the late records.
+		if refused != nil || !served {
+			t.Fatalf("writes captured with the journal off were lost on reopen: refused=%v served=%v", refused, served)
 		}
 	})
 }

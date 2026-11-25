@@ -20,7 +20,12 @@ func projectEditCallback(id string, input domain.ProjectMutationInput, updated *
 		if err != nil {
 			return err
 		}
-		before, relationsBefore := *project, projectRelationsOf(data, id)
+		before := *project
+		var relationsBefore []domain.ProjectRelation
+		editsRelations := input.DependencyIDs != nil || input.DependencyRelations != nil
+		if editsRelations {
+			relationsBefore = projectRelationsOf(data, id)
+		}
 		if input.Description != nil && *input.Description != project.Description {
 			project.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: idgen.New("project_description_revision_"), ProjectID: id, Description: project.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, project.DescriptionRevisions...)
 		}
@@ -28,7 +33,7 @@ func projectEditCallback(id string, input domain.ProjectMutationInput, updated *
 		if err := applyProjectUpdate(data, project, input); err != nil {
 			return err
 		}
-		if unchangedEdit(before, *project) && unchangedEdit(relationsBefore, projectRelationsOf(data, id)) {
+		if unchangedEdit(before, *project) && (!editsRelations || unchangedEdit(relationsBefore, projectRelationsOf(data, id))) {
 			*updated = before
 			return store.ErrNoMutation
 		}
@@ -60,10 +65,16 @@ func boundedProjectEditScope(id string, input domain.ProjectMutationInput) (stor
 		return store.MetadataRecordScope{}, false
 	}
 	scope := projectRecordRequirements("project", "edit", id, input)
-	if len(input.Initiatives) == 0 && len(input.Customers) == 0 {
-		// applyProjectUpdate reads the workspace settings (its feature
-		// flags) only to refuse initiatives or customers.
-		scope.Fields = slices.DeleteFunc(scope.Fields, func(field string) bool { return field == "workspaceSettings" })
-	}
+	// Only dependency edits need the relation collection. Reading it for
+	// a title or archive edit can exceed the record-page limit.
+	scope.Fields = slices.DeleteFunc(scope.Fields, func(field string) bool {
+		switch field {
+		case "workspaceSettings":
+			return len(input.Initiatives) == 0 && len(input.Customers) == 0
+		case "projectRelations":
+			return input.DependencyIDs == nil && input.DependencyRelations == nil
+		}
+		return false
+	})
 	return scope, true
 }

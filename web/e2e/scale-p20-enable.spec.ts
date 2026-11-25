@@ -75,9 +75,13 @@ for (const width of [1440, 390]) {
         expect(raw, `${name}: flag-on raw pixels differ from flag-off`).toBe(0)
       }
       try {
+        const stream = page.waitForRequest(request => new URL(request.url()).pathname === '/api/realtime/events')
         await pair('document', `document/${doc.slugId}`, async page => {
           await expect(page.locator('.document-page')).toContainText('The saved current body.', { timeout: 15_000 })
         })
+        const streamParams = new URL((await stream).url()).searchParams
+        expect(streamParams.has('sync')).toBe(false)
+        expect(streamParams.get('since')).toMatch(/^\d+$/)
         await pair('owner-focus', `document/${doc.slugId}`, async page => {
           await expect(page.locator('.document-page')).toContainText('The saved current body.')
           await page.locator('.document-edited').click()

@@ -24,7 +24,7 @@ func workflowDeletionFixture(t testing.TB, affected int) (*SQLiteStore, domain.W
 	data := repo.Bootstrap()
 	old := domain.WorkflowState{ID: "state-delete", Name: "Remove", TeamID: data.Teams[0].ID, Type: "started"}
 	next := domain.WorkflowState{ID: "state-replace", Name: "Replacement", TeamID: old.TeamID, Type: "unstarted"}
-	if err := repo.MutateWorkspace(context.Background(), data.Workspace.URLKey, "workflow_state.created", old.ID, nil, func(metadata *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(context.Background(), "workflow fixture"), data.Workspace.URLKey, "workflow_state.created", old.ID, nil, func(metadata *domain.Bootstrap) error {
 		metadata.States = append(metadata.States, old, next)
 		return nil
 	}); err != nil {
@@ -164,7 +164,7 @@ func TestWorkflowDeletionMaintainsLifecycleDates(t *testing.T) {
 		t.Run(targetType, func(t *testing.T) {
 			repo, old, replacement := workflowDeletionFixture(t, 2)
 			replacement.Type = targetType
-			if err := repo.MutateWorkspace(t.Context(), "test-workspace", "workflow_state.updated", replacement.ID, nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workflow fixture"), "test-workspace", "workflow_state.updated", replacement.ID, nil, func(data *domain.Bootstrap) error {
 				for i := range data.States {
 					if data.States[i].ID == replacement.ID {
 						data.States[i] = replacement

@@ -206,9 +206,7 @@ func TestOAuthApplicationIconChain(t *testing.T) {
 	if stored, ok := s.store.OAuthApplicationClient(app.ClientID); !ok || stored.ClientID != app.ClientID {
 		t.Fatal("application client lost")
 	}
-	if current := s.store.Bootstrap().OAuthApplications; !slices.ContainsFunc(current, func(item domain.OAuthApplication) bool {
-		return item.ID == app.ID && item.ClientSecret == app.ClientSecret
-	}) {
+	if secret, ok := s.store.OAuthApplicationSecret(workspace, app.ID); !ok || secret != app.ClientSecret {
 		t.Fatal("client secret changed with the logo")
 	}
 	installations = authRequest[[]domain.ApplicationInstallation](t, admin, "GET", host.URL+"/api/application-installations", nil, workspace, 200)

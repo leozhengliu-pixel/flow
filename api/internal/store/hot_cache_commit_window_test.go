@@ -17,6 +17,7 @@ import (
 // writing transaction moved on, not only by what the writer invalidates
 // after commit.
 func TestHotCacheNeverServesDataOlderThanACommittedWrite(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			ctx := t.Context()

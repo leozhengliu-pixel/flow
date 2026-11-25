@@ -29,7 +29,7 @@ func TestReloadNeverReplacesTheCopyAWriteInstalledMeanwhile(t *testing.T) {
 	for name, pair := range peerStoreSets(t) {
 		for kind, reload := range reloads {
 			t.Run(name+"/"+kind, func(t *testing.T) {
-				ctx := t.Context()
+				ctx := WithColdWork(t.Context(), "reload fixture")
 				repo := pair[1]
 				workspace, _ := peerWorkspace(t, repo)
 				// Let the writer commit while the reload still holds a read
@@ -99,10 +99,7 @@ func TestReloadNeverReplacesTheCopyAWriteInstalledMeanwhile(t *testing.T) {
 					t.Fatal(err)
 				}
 				data, _ := repo.WorkspaceMetadata(workspace)
-				stored, err := repo.loadWorkspaceState(ctx, workspace)
-				if err != nil {
-					t.Fatal(err)
-				}
+				stored := storedState(t, repo, workspace)
 				for source, copy := range map[string]domain.Bootstrap{"database/cache": stored, "memory": data} {
 					index := slices.IndexFunc(copy.AgentSessions, func(item domain.AgentSession) bool { return item.ID == sessionID })
 					if index < 0 {

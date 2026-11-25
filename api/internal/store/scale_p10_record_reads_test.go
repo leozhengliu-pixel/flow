@@ -22,6 +22,10 @@ func scaleP10CursorKey(t *testing.T) {
 }
 
 func TestScaleP10RecordPermissionDifferential(t *testing.T) {
+	// Compare the shadow adapter against the legacy policy and verify that
+	// a shadow-only catalog cannot back public reads.
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_METADATA_CATALOG", "off")
 	scaleP10CursorKey(t)
 	for name, fixture := range scaleP03Stores(t) {
 		t.Run(name, func(t *testing.T) {
@@ -371,7 +375,7 @@ func TestScaleP10RecordPageAllocationBudget(t *testing.T) {
 	scaleP10CursorKey(t)
 	for _, fixture := range scaleP03Stores(t) {
 		s, base := fixture.SQLiteStore, fixture.data
-		if err := s.MutateWorkspace(t.Context(), base.Workspace.URLKey, "scale_p10.fixture", "", nil, func(data *domain.Bootstrap) error {
+		if err := s.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), base.Workspace.URLKey, "scale_p10.fixture", "", nil, func(data *domain.Bootstrap) error {
 			data.Projects = nil
 			for i := range 105 {
 				data.Projects = append(data.Projects, domain.Project{ID: fmt.Sprintf("p10-%03d", i), Name: fmt.Sprintf("Project %03d", i), Summary: "Directory row", TeamIDs: []string{data.Teams[0].ID}})

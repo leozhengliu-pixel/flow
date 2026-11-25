@@ -36,7 +36,7 @@ func TestPreferenceLifecycleNeverHydratesIssueOrDiscussionCollections(t *testing
 	privateTeam := authRequest[domain.Team](t, admin, "POST", host.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Private preferences", "key": "PRV", "private": true}, "test-workspace", 201)
 	privateIssue := authRequest[domain.Issue](t, admin, "POST", host.URL+"/api/issues", map[string]any{"title": "Private issue", "teamId": privateTeam.ID}, "test-workspace", 201)
 	privateProject := authRequest[domain.Project](t, admin, "POST", host.URL+"/api/projects", map[string]any{"name": "Private project", "teamIds": []string{privateTeam.ID}}, "test-workspace", 201)
-	if err := repo.MutateWorkspace(context.Background(), "test-workspace", "test.preferences", "", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "test.preferences", "", nil, func(next *domain.Bootstrap) error {
 		next.Notifications = append(next.Notifications, domain.Notification{ID: "preference-notification", RecipientID: data.Viewer.ID, IssueID: data.Issues[0].ID, CreatedAt: time.Now().UTC()})
 		next.Reviews = append(next.Reviews, domain.CodeReview{ID: "preference-review", SlugID: "preference-review", Title: "Preference review", IssueIDs: []string{data.Issues[0].ID}})
 		next.ReleasePipelines = append(next.ReleasePipelines, domain.ReleasePipeline{ID: "preference-pipeline", TeamIDs: []string{data.Issues[0].Team.ID}})
@@ -58,6 +58,7 @@ func TestPreferenceLifecycleNeverHydratesIssueOrDiscussionCollections(t *testing
 	if _, err := db.Exec(`UPDATE workspace_content_records SET data=? WHERE kind IN ('comment','activity')`, []byte("invalid-discussion-json")); err != nil {
 		t.Fatal(err)
 	}
+	repairFixtureJournal(t, repo)
 	folder := authRequest[domain.FavoriteFolder](t, admin, "POST", host.URL+"/api/favorite-folders", map[string]string{"name": "Planning"}, "test-workspace", 201)
 	authRequest[any](t, member, "PATCH", host.URL+"/api/favorite-folders/"+folder.ID, map[string]string{"name": "Forbidden"}, "test-workspace", 404)
 	authRequest[any](t, member, "DELETE", host.URL+"/api/favorite-folders/"+folder.ID, nil, "test-workspace", 404)

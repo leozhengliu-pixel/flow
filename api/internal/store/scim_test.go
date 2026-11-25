@@ -243,7 +243,7 @@ func TestSCIMRemovedMembershipAndManagedMarker(t *testing.T) {
 
 func checkSCIMRemovedMembership(t *testing.T, repository *SQLiteStore, workspaceID string) {
 	t.Helper()
-	ctx := t.Context()
+	ctx := WithColdWork(t.Context(), "SCIM fixture")
 	_, workspaceKey, _ := repository.workspaceByID(workspaceID)
 	user, err := repository.CreateSCIMUser(ctx, workspaceID, SCIMUserInput{ExternalID: "ext-rm", UserName: "rm@example.test", Active: true})
 	if err != nil {

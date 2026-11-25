@@ -138,7 +138,7 @@ func TestGitLabCodingOAuthTokenRefresh(t *testing.T) {
 	t.Setenv("FLOW_INTEGRATION_GITLAB_CLIENT_ID", "client")
 	t.Setenv("FLOW_INTEGRATION_GITLAB_HOST", "https://gitlab.example.com")
 	expired := time.Now().UTC().Add(time.Minute)
-	err := repository.MutateWorkspace(context.Background(), "test-workspace", "integration.connected", "gl", nil, func(data *domain.Bootstrap) error {
+	err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "integration.connected", "gl", nil, func(data *domain.Bootstrap) error {
 		data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: "integration_gitlab_oauth", Provider: "gitlab", Status: "connected", Config: map[string]string{"mode": "oauth"}, OAuthAuthorized: true, OAuthExpiresAt: &expired, Scopes: []string{"api"}, Channels: []string{}})
 		return nil
 	})

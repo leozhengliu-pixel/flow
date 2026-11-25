@@ -133,7 +133,7 @@ func TestMetadataPersistsOnlyChangedEntitiesAndPreservesReloadOrder(t *testing.T
 		t.Fatal(err)
 	}
 	defer func() { repo.Close() }()
-	ctx := context.Background()
+	ctx := WithColdWork(t.Context(), "write amplification fixture")
 	data := repo.Bootstrap()
 	key := data.Workspace.URLKey
 	if err := repo.MutateWorkspace(ctx, key, "project.created", "large-metadata", nil, func(data *domain.Bootstrap) error {
@@ -164,8 +164,10 @@ func TestMetadataPersistsOnlyChangedEntitiesAndPreservesReloadOrder(t *testing.T
 	if changes["workspace_metadata_records"] != 1 || changes["workspace_states"] != 0 || changes["workspace_content_records"] != 0 || changes["issue_records"] != 0 {
 		t.Fatalf("project edit amplified: %+v", changes)
 	}
-	if err := repo.MutateWorkspace(ctx, key, "project.update.created", "new", nil, func(data *domain.Bootstrap) error {
-		data.ProjectUpdates["project-000"] = append([]domain.ProjectUpdate{{ID: "new", Body: "New update", CreatedAt: time.Now().UTC()}}, data.ProjectUpdates["project-000"]...)
+	projectID := "project-000"
+	updateCtx := WithMutationScope(ctx, MutationScope{Resources: []string{projectID}})
+	if err := repo.MutateWorkspace(updateCtx, key, "project.update_created", projectID, nil, func(data *domain.Bootstrap) error {
+		data.ProjectUpdates[projectID] = append([]domain.ProjectUpdate{{ID: "new", ProjectID: projectID, Body: "New update", CreatedAt: time.Now().UTC()}}, data.ProjectUpdates[projectID]...)
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -219,7 +221,7 @@ func TestReleaseFavoriteMutationDoesNotScanOrRewriteUnrelatedMetadata(t *testing
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	ctx := context.Background()
+	ctx := WithColdWork(t.Context(), "write amplification fixture")
 	data := repo.Bootstrap()
 	workspace := data.Workspace.URLKey
 	for index := range 5000 {
@@ -256,6 +258,7 @@ func TestReleaseFavoriteMutationDoesNotScanOrRewriteUnrelatedMetadata(t *testing
 }
 
 func TestLegacyPrependDoesNotRenumberExistingIssueRows(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -370,7 +373,7 @@ func TestMetadataRawObjectRoundTrip(t *testing.T) {
 		values[fmt.Sprintf("field-%03d", i)] = map[string]any{"visible": i%2 == 0, "width": i + 1}
 	}
 	raw, _ := json.Marshal(values)
-	err = repo.MutateWorkspace(t.Context(), key, "project_display_default.updated", "defaults", nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "write amplification fixture"), key, "project_display_default.updated", "defaults", nil, func(data *domain.Bootstrap) error {
 		data.ProjectDisplayDefault = raw
 		return nil
 	})
@@ -420,11 +423,11 @@ func TestDisplayChangesDoNotRewriteReferencedIssuesOrComments(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { repo.Close() }()
-	ctx := context.Background()
+	ctx := WithColdWork(t.Context(), "write amplification fixture")
 	data := repo.Bootstrap()
 	key := data.Workspace.URLKey
 	issue := data.Issues[0]
-	if err := repo.MutateWorkspace(ctx, key, "comment.created", "display-comment", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(ctx, key, "test.seed_comment", issue.ID, nil, func(data *domain.Bootstrap) error {
 		data.Comments[issue.ID] = append(data.Comments[issue.ID], domain.Comment{ID: "display-comment", Body: "Preserved body", User: issue.Creator, CreatedAt: time.Now().UTC()})
 		return nil
 	}); err != nil {
@@ -542,6 +545,10 @@ func TestUnchangedIssueRecordCallbackDoesNotWrite(t *testing.T) {
 func TestDiscussionWritesPreserveUnrelatedMetadataWithoutRewritingIt(t *testing.T) {
 	for _, path := range []string{"issue", "scoped"} {
 		t.Run(path, func(t *testing.T) {
+			if path == "scoped" {
+				// Exercise the compatibility MutationScope writer instead of the issue point writer.
+				t.Setenv("FLOW_BOUNDED_METADATA", "off")
+			}
 			repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "discussion.db"))
 			if err != nil {
 				t.Fatal(err)
@@ -549,7 +556,7 @@ func TestDiscussionWritesPreserveUnrelatedMetadataWithoutRewritingIt(t *testing.
 			defer repo.Close()
 			base := repo.Bootstrap()
 			workspace, issue := base.Workspace.URLKey, base.Issues[0]
-			if err := repo.MutateWorkspace(t.Context(), workspace, "test.seed_metadata", issue.ID, nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(WithColdWork(t.Context(), "write amplification fixture"), workspace, "test.seed_metadata", issue.ID, nil, func(data *domain.Bootstrap) error {
 				for i := range 20 {
 					id := fmt.Sprintf("discussion-metadata-%d", i)
 					data.IssueSLAs = append(data.IssueSLAs, domain.IssueSLA{ID: id, IssueID: issue.ID})
@@ -571,6 +578,10 @@ func TestDiscussionWritesPreserveUnrelatedMetadataWithoutRewritingIt(t *testing.
 			if path == "scoped" {
 				ctx = WithMutationScope(WithoutIssueRecordMutations(ctx), MutationScope{IssueIDs: []string{issue.ID}})
 			}
+			ctx = WithMetadataOutputOwner(ctx, func(close func()) bool {
+				t.Cleanup(close)
+				return true
+			})
 			if err := repo.MutateWorkspace(ctx, workspace, "comment.created", issue.ID, nil, func(data *domain.Bootstrap) error {
 				data.Comments[issue.ID] = append(data.Comments[issue.ID], domain.Comment{ID: "isolated-comment", Body: "Only this comment changes", CreatedAt: time.Now().UTC()})
 				return nil

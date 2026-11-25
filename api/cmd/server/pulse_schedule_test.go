@@ -29,7 +29,7 @@ func TestPulseSummariesReachInvitedMembersWhoNeverWrote(t *testing.T) {
 	}
 	// Keep the member out of the metadata user list, as on a server where
 	// they never made a scoped write.
-	err = repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "users", "projects"), "test-workspace", "workspace.agent_guidance_updated", "", nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(store.WithMetadataFields(t.Context(), "users", "projects")), "test-workspace", "workspace.agent_guidance_updated", "", nil, func(data *domain.Bootstrap) error {
 		data.Users = slices.DeleteFunc(data.Users, func(user domain.User) bool { return user.ID == invited.ID })
 		for index := range data.Projects {
 			if data.Projects[index].ID == "project_aut" {
@@ -72,7 +72,7 @@ func TestPulseDailyToWeeklySwitchDropsNothing(t *testing.T) {
 	if cursor := pulseCursors(&settings)["usr_admin"]; !cursor.Equal(time.Date(2026, 9, 16, 6, 0, 0, 0, time.UTC)) {
 		t.Fatalf("daily cursor = %v", cursor)
 	}
-	err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "userSettings"), "test-workspace", "user_settings.updated", "usr_admin", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(store.WithMetadataFields(t.Context(), "userSettings")), "test-workspace", "user_settings.updated", "usr_admin", nil, func(data *domain.Bootstrap) error {
 		value := data.UserSettings["usr_admin"]
 		value.UserID, value.PulseSchedule = "usr_admin", "weekly"
 		data.UserSettings["usr_admin"] = value
@@ -314,7 +314,7 @@ func TestInitiativeProjectUpdatesSubscription(t *testing.T) {
 	repo := pulseTestRepo(t)
 	handler := newHandler(&server{store: repo, uploadPath: t.TempDir(), authDisabled: true})
 	now := time.Now().UTC()
-	err := repo.MutateWorkspace(t.Context(), "test-workspace", "test.pulse", "", nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test.pulse", "", nil, func(data *domain.Bootstrap) error {
 		status := data.Projects[0].Status
 		data.Projects = append(data.Projects,
 			domain.Project{ID: "p_listed", Name: "Listed", TeamIDs: []string{"team_test"}, MemberIDs: []string{}, Status: status},
@@ -386,7 +386,7 @@ func TestInitiativeProjectUpdatesSubscription(t *testing.T) {
 
 func addPulseInitiativeUpdate(t *testing.T, repo *store.SQLiteStore, initiativeID string, at time.Time) {
 	t.Helper()
-	err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "initiativeUpdates"), "test-workspace", "initiative.update_updated", initiativeID, nil, func(data *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(workspaceFixtureContext(store.WithMetadataFields(t.Context(), "initiativeUpdates")), "test-workspace", "initiative.update_updated", initiativeID, nil, func(data *domain.Bootstrap) error {
 		data.InitiativeUpdates[initiativeID] = append([]domain.InitiativeUpdate{{ID: "initiative_update_" + initiativeID, InitiativeID: initiativeID, Body: "Initiative", Health: "onTrack", CreatedAt: at, User: domain.User{ID: "usr_writer", Name: "Writer"}, Comments: []domain.Comment{}, Reactions: map[string][]string{}}}, data.InitiativeUpdates[initiativeID]...)
 		return nil
 	})

@@ -61,9 +61,9 @@ func TestScaleP15JSONByteDifferential(t *testing.T) {
 				overrides = append(overrides, override)
 			}
 			t.Setenv("FLOW_RECORD_HYDRATION", "off")
-			writeBootstrapWithFields(old, data, nil, overrides...)
+			writeBootstrapWithFields(t.Context(), old, data, nil, overrides...)
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
-			writeBootstrapWithFields(got, data, nil, overrides...)
+			writeBootstrapWithFields(t.Context(), got, data, nil, overrides...)
 			if !bytes.Equal(old.Body.Bytes(), got.Body.Bytes()) {
 				t.Fatalf("legacy field bytes differ\n got %.800s\nwant %.800s", got.Body.Bytes(), old.Body.Bytes())
 			}

@@ -206,6 +206,10 @@ var issueCandidateReferenceFields = func() map[reflect.Type][]string {
 }()
 
 func (s *SQLiteStore) resolveIssueCandidateReferences(ctx context.Context, workspace string, held *ResourceRead, issues []domain.Issue) error {
+	return s.resolveIssueCandidateReferencesInSnapshot(ctx, nil, workspace, held, issues)
+}
+
+func (s *SQLiteStore) resolveIssueCandidateReferencesInSnapshot(ctx context.Context, tx *sqlTx, workspace string, held *ResourceRead, issues []domain.Issue) error {
 	var ids []string
 	seen := map[string]bool{}
 	add := func(id string) error {
@@ -244,7 +248,7 @@ func (s *SQLiteStore) resolveIssueCandidateReferences(ctx context.Context, works
 	}
 	refs := newIssueReferences(domain.Bootstrap{})
 	for start := 0; start < len(ids); start += 250 {
-		if err := s.issueCandidateReferenceBatch(ctx, workspace, held, &refs, ids[start:min(start+250, len(ids))]); err != nil {
+		if err := s.issueCandidateReferenceBatch(ctx, tx, workspace, held, &refs, ids[start:min(start+250, len(ids))]); err != nil {
 			return err
 		}
 	}
@@ -261,12 +265,15 @@ type issueCandidateReferenceRow struct {
 	blob       int
 }
 
-func (s *SQLiteStore) issueCandidateReferenceBatch(ctx context.Context, workspace string, held *ResourceRead, refs *issueReferences, ids []string) error {
-	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
-	if err != nil {
-		return err
+func (s *SQLiteStore) issueCandidateReferenceBatch(ctx context.Context, tx *sqlTx, workspace string, held *ResourceRead, refs *issueReferences, ids []string) error {
+	if tx == nil {
+		var err error
+		tx, err = s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
 	}
-	defer tx.Rollback()
 	wire := &ResourceRead{store: s}
 	defer wire.Close()
 	length := wire.byteLength

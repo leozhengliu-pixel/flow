@@ -41,7 +41,7 @@ func newCodingAccessFixture(t *testing.T) *codingAccessFixture {
 	for _, user := range []string{"usr_admin", "usr_member"} {
 		secret := "coding-access-" + user
 		key := domain.APIKey{ID: "key_" + user, SecretHash: secretHash(secret), CreatorID: user, Scopes: []string{"read", "write"}, CreatedAt: time.Now().UTC()}
-		if err := s.store.MutateWorkspace(t.Context(), data.Workspace.URLKey, "api_key.created", key.ID, nil, func(data *domain.Bootstrap) error {
+		if err := s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "api_key.created", key.ID, nil, func(data *domain.Bootstrap) error {
 			data.APIKeys = append(data.APIKeys, key)
 			return nil
 		}); err != nil {

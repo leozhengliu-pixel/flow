@@ -17,6 +17,9 @@ func TestMergeLabelsRepointsResourcesAndDeletesSources(t *testing.T) {
 			name = "full"
 		}
 		t.Run(name, func(t *testing.T) {
+			if forceFull {
+				t.Setenv("FLOW_BOUNDED_METADATA", "off")
+			}
 			restore := store.ForceFullMutationsForTesting(forceFull)
 			defer restore()
 			repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))

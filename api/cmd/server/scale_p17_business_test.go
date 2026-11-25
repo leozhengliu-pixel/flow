@@ -28,7 +28,7 @@ func TestScaleP17DocumentBusinessDifferential(t *testing.T) {
 			project := requestJSON[domain.Project](t, handler, "POST", "/api/projects", map[string]any{"name": "P17 project", "teamIds": []string{"team_test"}}, http.StatusCreated)
 			body := strings.Repeat("P17 body & history <tag> \\ \"\n", 12000)
 			document := requestJSON[domain.Document](t, handler, "POST", "/api/documents", map[string]any{"title": "P17 original", "content": body, "projectIds": []string{project.ID}, "subscriberIds": []string{db.users[0].ID, db.users[1].ID}}, http.StatusCreated)
-			if err := db.repo.MutateWorkspace(t.Context(), db.key, "p17.preferences", "", nil, func(data *domain.Bootstrap) error {
+			if err := db.repo.MutateWorkspace(workspaceFixtureContext(t.Context()), db.key, "p17.preferences", "", nil, func(data *domain.Bootstrap) error {
 				preferences := defaultPreferences(db.users[1].ID)
 				preferences.Email.Enabled, preferences.Desktop.Enabled = true, true
 				data.NotificationPreferences[db.users[1].ID] = preferences

@@ -13,7 +13,7 @@ import (
 
 func (f *chatPermissionFixture) addProjects(projects ...domain.Project) {
 	f.t.Helper()
-	if err := f.s.store.MutateWorkspace(f.t.Context(), "test-workspace", "project.created", projects[0].ID, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(f.t.Context()), "test-workspace", "project.created", projects[0].ID, nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, projects...)
 		return nil
 	}); err != nil {
@@ -35,7 +35,7 @@ func TestChatBindingProjectSetsLimitScopeAndDeliveries(t *testing.T) {
 	f.authorizeTenant(provider)
 	base := "/api/integrations/" + provider + "/chat"
 	now := time.Now().UTC()
-	if err := f.s.store.MutateWorkspace(t.Context(), "test-workspace", "team.created", "team_set_other", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "team.created", "team_set_other", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: "team_set_other", Name: "Other", Key: "OTH", Color: "#111111", CreatedAt: &now})
 		return nil
 	}); err != nil {

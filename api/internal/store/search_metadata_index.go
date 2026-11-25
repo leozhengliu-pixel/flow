@@ -164,6 +164,13 @@ func (s *SQLiteStore) ensureMetadataSearchIndex(ctx context.Context) error {
 // see mysqlMetadataSearchPageContent), so an unchanged document is not
 // rewritten on every start.
 func (s *SQLiteStore) writeMetadataSearchPage(ctx context.Context, workspace, field string, keys []string) error {
+	if s.dialect == "mysql" {
+		var err error
+		keys, err = s.repairShortMySQLSearchDocuments(ctx, workspace, field, keys)
+		if err != nil || len(keys) == 0 {
+			return err
+		}
+	}
 	where, args := bindList("record_key", keys)
 	args = append([]any{workspace, field}, args...)
 	if s.dialect == "mysql" {
@@ -173,12 +180,9 @@ func (s *SQLiteStore) writeMetadataSearchPage(ctx context.Context, workspace, fi
 		}
 		defer release()
 		mine, _ := bindList("m.record_key", keys)
-		// The documents' keys are text and the records' bytes, so the join
-		// on record_key uses no index: without the documents' own page
-		// bounds, MySQL evaluated the content comparison (every JSON value
-		// of the record) for each record of the page against each document
-		// of the field (minutes for a page of projects). The bounds are
-		// implied by the join.
+		// Walk the index document keys, then look up each canonical row
+		// directly. Casting the outer text key retains exact byte identity
+		// and keeps the canonical binary primary key usable.
 		theirs, _ := bindList("idx.record_key", keys)
 		updateArgs := append(append(append(append([]any{}, contentArgs...), args...), args...), contentArgs...)
 		tx, err := s.db.BeginTx(ctx, nil)
@@ -186,7 +190,7 @@ func (s *SQLiteStore) writeMetadataSearchPage(ctx context.Context, workspace, fi
 			return err
 		}
 		defer tx.Rollback()
-		if err := writeSearchIndexRepair(ctx, tx, workspace, `UPDATE metadata_search_documents idx JOIN workspace_metadata_records m ON m.workspace_key=idx.workspace_key AND m.field=idx.field AND m.record_key=idx.record_key SET idx.content=`+content+` WHERE m.workspace_key=? AND m.field=? AND `+mine+` AND idx.workspace_key=? AND idx.field=? AND `+theirs+` AND idx.content<>`+content, updateArgs...); err != nil {
+		if err := writeSearchIndexRepair(ctx, tx, workspace, `UPDATE metadata_search_documents idx STRAIGHT_JOIN workspace_metadata_records m ON m.workspace_key=idx.workspace_key AND m.field=idx.field AND m.record_key=CAST(idx.record_key AS BINARY) SET idx.content=`+content+` WHERE m.workspace_key=? AND m.field=? AND `+mine+` AND idx.workspace_key=? AND idx.field=? AND `+theirs+` AND idx.content<>`+content, updateArgs...); err != nil {
 			return err
 		}
 		// The upsert stays for a document written meanwhile; without a
@@ -209,6 +213,96 @@ func (s *SQLiteStore) writeMetadataSearchPage(ctx context.Context, workspace, fi
 		return err
 	}
 	return tx.Commit()
+}
+
+// Parse ordinary rows once in Go, using the same projection as live writes.
+// Large records still use SQL so a large description cannot exhaust memory.
+func (s *SQLiteStore) repairShortMySQLSearchDocuments(ctx context.Context, workspace, field string, keys []string) ([]string, error) {
+	const maxBody = 32 << 10
+	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, maxBody*(len(keys)*6+32))
+	if errors.Is(err, ErrMetadataWorkBudget) {
+		return keys, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	where, args := bindList("record_key", keys)
+	// Hold the canonical rows until the index changes commit, just like the
+	// trigger. A concurrent edit must not be overwritten with an old body.
+	rows, err := tx.QueryContext(ctx, `SELECT record_key,CASE WHEN LENGTH(data)<=? THEN data END
+		FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+where+` ORDER BY record_key FOR UPDATE`,
+		append([]any{maxBody, workspace, field}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	var large []string
+	projected := make(map[string]string, len(keys))
+	for rows.Next() {
+		var key string
+		var body []byte
+		if err := rows.Scan(&key, &body); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if body == nil {
+			large = append(large, key)
+			continue
+		}
+		projected[key] = capSearchText(metadataSearchText(body), s.db.searchMaxChars)
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return nil, err
+	}
+	if len(projected) == 0 {
+		return large, tx.Commit()
+	}
+
+	rows, err = tx.QueryContext(ctx, `SELECT record_key,LOWER(SHA2(content,256)) FROM metadata_search_documents
+		WHERE workspace_key=? AND field=? AND `+where, append([]any{workspace, field}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	different := make(map[string]bool, len(projected))
+	for rows.Next() {
+		var key, digest string
+		if err := rows.Scan(&key, &digest); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if body, ok := projected[key]; ok && digest != metadataFingerprint([]byte(body)) {
+			different[key] = true
+		} else {
+			delete(projected, key)
+		}
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return nil, err
+	}
+	for _, key := range keys {
+		body, ok := projected[key]
+		if !ok {
+			continue
+		}
+		if different[key] {
+			// Update existing documents in place to preserve InnoDB's
+			// FULLTEXT entries. Keep the index column's comparison rules.
+			err = writeSearchIndexRepair(ctx, tx, workspace, `UPDATE metadata_search_documents SET content=?
+				WHERE workspace_key=? AND field=? AND record_key=? AND content<>?`, body, workspace, field, key, body)
+		} else {
+			err = writeSearchIndexRepair(ctx, tx, workspace, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content)
+				VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`, workspace, field, key, body)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return large, tx.Commit()
 }
 
 func writeSearchIndexRepair(ctx context.Context, tx *sqlTx, workspace, statement string, args ...any) error {
@@ -378,7 +472,7 @@ func (s *SQLiteStore) migrateMetadataSearchIndex(ctx context.Context) error {
 				}
 			}
 			// Remove rows left behind by records deleted before this repair ran.
-			if _, err := s.db.ExecContext(ctx, `DELETE FROM metadata_search_documents WHERE workspace_key=? AND field=? AND NOT EXISTS (SELECT 1 FROM workspace_metadata_records m WHERE m.workspace_key=metadata_search_documents.workspace_key AND m.field=metadata_search_documents.field AND m.record_key=metadata_search_documents.record_key)`, workspace, kind.field); err != nil {
+			if err := s.pruneMetadataSearchDocuments(ctx, workspace, kind.field); err != nil {
 				return err
 			}
 			if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET completed=1 WHERE workspace_key=? AND field=?`, workspace, kind.field); err != nil {
@@ -397,4 +491,15 @@ func (s *SQLiteStore) migrateMetadataSearchIndex(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (s *SQLiteStore) pruneMetadataSearchDocuments(ctx context.Context, workspace, field string) error {
+	recordKey := "metadata_search_documents.record_key"
+	if s.dialect == "mysql" {
+		recordKey = "CAST(" + recordKey + " AS BINARY)"
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM metadata_search_documents WHERE workspace_key=? AND field=?
+		AND NOT EXISTS (SELECT 1 FROM workspace_metadata_records m WHERE m.workspace_key=? AND m.field=? AND m.record_key=`+
+		recordKey+`)`, workspace, field, workspace, field)
+	return err
 }

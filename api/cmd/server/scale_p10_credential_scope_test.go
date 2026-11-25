@@ -123,7 +123,9 @@ func TestScaleP10SyncManifestViewerCredentialScope(t *testing.T) {
 		f := apiKeyScopeFixture(t, fixture)
 		for _, teams := range [][]string{{"scope-public"}, {}} {
 			_, key := apiKeyScopeCredential(t, f, "app", "selected", teams, []string{"read"})
-			access, err := fixture.ResolveAccess(t.Context(), f.data.Workspace.URLKey, key.SubjectID(), &key)
+			ctx, finish := beginMetadataOutputReads(t.Context())
+			t.Cleanup(finish)
+			access, err := fixture.ResolveAccess(ctx, f.data.Workspace.URLKey, key.SubjectID(), &key)
 			if err != nil {
 				t.Fatal(err)
 			}

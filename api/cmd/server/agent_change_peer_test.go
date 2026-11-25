@@ -29,7 +29,7 @@ func TestPeerAgentChangeUndoRunsOnceAcrossServers(t *testing.T) {
 	}
 	userID, projectID := data.Users[userIndex].ID, data.Projects[0].ID
 	sessionID, messageID := "agent_peer_undo_session", "agent_peer_undo_reply"
-	err := repository.MutateWorkspace(context.Background(), workspace, "agent.session_created", sessionID, nil, func(next *domain.Bootstrap) error {
+	err := repository.MutateWorkspace(workspaceFixtureContext(context.Background()), workspace, "agent.session_created", sessionID, nil, func(next *domain.Bootstrap) error {
 		next.Projects = slices.Clone(next.Projects)
 		index := slices.IndexFunc(next.Projects, func(project domain.Project) bool { return project.ID == projectID })
 		next.Projects[index].Description = "Agent plan"

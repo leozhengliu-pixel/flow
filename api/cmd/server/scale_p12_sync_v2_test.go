@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -124,7 +123,7 @@ func TestScaleP12DeltaHasAtomicBudgetAndOversizeInvalidation(t *testing.T) {
 			t.Fatal(err)
 		}
 		record := store.RecordDelta{Key: store.RecordKey{Kind: "issues", ID: issue.ID}, Version: strconv.FormatInt(issue.Version, 10)}
-		if os.Getenv("FLOW_RECORD_JOURNAL") == "on" {
+		if repo.RecordJournalReady() {
 			version, deleted, err := repo.RecordVersion(t.Context(), f.data.Workspace.URLKey, record.Key)
 			if err != nil || deleted || version == "" {
 				t.Fatalf("fixture has no committed record version: %s %t %v", version, deleted, err)
@@ -185,7 +184,7 @@ func TestScaleP12RevokeWhileDeltaReadAndDurableReplay(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "issue.updated", f.secret.ID, map[string]string{"title": "Private replay"}, func(*domain.Bootstrap) error { return nil }); err != nil {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "issue.updated", f.secret.ID, map[string]string{"title": "Private replay"}, func(*domain.Bootstrap) error { return nil }); err != nil {
 			t.Fatal(err)
 		}
 		access, err := repo.ResolveEventAccess(t.Context(), f.data.Workspace.URLKey, principal.user.ID, nil)

@@ -20,7 +20,7 @@ func TestScaleP17DevelopmentReadUsesTheDefaultWorkspace(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "on")
 	db := newScaleP04Database(t)
-	if err := db.repo.MutateWorkspace(t.Context(), db.key, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
+	if err := db.repo.MutateWorkspace(workspaceFixtureContext(t.Context()), db.key, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Documents = append(data.Documents, domain.Document{ID: "p17-default", Title: "Default workspace", Creator: data.Viewer})
 		return nil
 	}); err != nil {
@@ -29,6 +29,8 @@ func TestScaleP17DevelopmentReadUsesTheDefaultWorkspace(t *testing.T) {
 	service := &server{store: db.repo, authDisabled: true}
 	r := httptest.NewRequest("GET", "/api/documents/p17-default", nil)
 	r.SetPathValue("id", "p17-default")
+	r, release := beginRequestResourceReads(r)
+	defer release()
 	w := httptest.NewRecorder()
 	service.getDocument(w, r)
 	if w.Code != http.StatusOK {

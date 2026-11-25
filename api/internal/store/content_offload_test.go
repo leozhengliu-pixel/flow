@@ -106,13 +106,12 @@ func TestDocumentRevisionBodiesAreStoredOutsideTheRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	document := offloadTestDocument(time.Now().UTC().Truncate(time.Second))
-	if err := s.MutateWorkspace(ctx, "test-workspace", "document.created", document.ID, nil, func(data *domain.Bootstrap) error {
+	if err := s.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "document.created", document.ID, nil, func(data *domain.Bootstrap) error {
 		data.Documents = append(data.Documents, document)
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	want := documentJSON(t, s, document.ID)
 	row := storedMetadataRow(t, s, "documents", document.ID)
 	// The newest revision refers to the document; the long older ones are
 	// offloaded; the short one stays inline. The document itself is untouched.
@@ -126,7 +125,7 @@ func TestDocumentRevisionBodiesAreStoredOutsideTheRecord(t *testing.T) {
 		t.Fatalf("stored bodies = %d, want 2", got)
 	}
 	// Rewriting the document stores no new bodies.
-	if err := s.MutateWorkspace(ctx, "test-workspace", "document.updated", document.ID, nil, func(data *domain.Bootstrap) error {
+	if err := s.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "document.updated", document.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Documents {
 			if data.Documents[index].ID == document.ID {
 				data.Documents[index].Title = "Plan v2"
@@ -139,7 +138,7 @@ func TestDocumentRevisionBodiesAreStoredOutsideTheRecord(t *testing.T) {
 	if got := countBlobs(t, s); got != 2 {
 		t.Fatalf("stored bodies after an edit = %d, want 2", got)
 	}
-	want = documentJSON(t, s, document.ID)
+	want := loadedDocumentJSON(t, s, document.ID)
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +162,7 @@ func TestDocumentRevisionBodiesAreStoredOutsideTheRecord(t *testing.T) {
 		t.Fatalf("unexpected loaded versions: %+v", loaded.Revisions[1])
 	}
 	// Writing the document while its versions are not loaded keeps them.
-	if err := reopened.MutateWorkspace(ctx, "test-workspace", "document.updated", document.ID, nil, func(data *domain.Bootstrap) error {
+	if err := reopened.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "document.updated", document.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Documents {
 			if data.Documents[index].ID == document.ID {
 				data.Documents[index].Title = "Plan v3"
@@ -220,13 +219,14 @@ func TestDeletedDocumentsInTheTrashShareRevisionBodies(t *testing.T) {
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	document := offloadTestDocument(now)
-	if err := s.MutateWorkspace(ctx, "test-workspace", "document.created", document.ID, nil, func(data *domain.Bootstrap) error {
+	if err := s.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "document.created", document.ID, nil, func(data *domain.Bootstrap) error {
 		data.Documents = append(data.Documents, document)
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MutateWorkspace(ctx, "test-workspace", "document.deleted", document.ID, nil, func(data *domain.Bootstrap) error {
+	want := loadedDocumentJSON(t, s, document.ID)
+	if err := s.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "document.deleted", document.ID, nil, func(data *domain.Bootstrap) error {
 		payload, _ := json.Marshal(data.Documents[len(data.Documents)-1])
 		data.Documents = data.Documents[:len(data.Documents)-1]
 		data.Trash = append([]domain.TrashEntry{{ID: "trash_offload", ResourceType: "document", ResourceID: document.ID, Title: document.Title, Payload: payload, DeletedAt: now, ExpiresAt: now.AddDate(0, 0, 30)}}, data.Trash...)
@@ -241,8 +241,6 @@ func TestDeletedDocumentsInTheTrashShareRevisionBodies(t *testing.T) {
 	if got := countBlobs(t, s); got != 2 {
 		t.Fatalf("stored bodies = %d, want the document's 2", got)
 	}
-	trash, _ := s.WorkspaceMetadataFields("test-workspace", "trash")
-	want, _ := json.Marshal(trash.Trash[0])
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -251,8 +249,8 @@ func TestDeletedDocumentsInTheTrashShareRevisionBodies(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	trash, _ = reopened.WorkspaceMetadataFields("test-workspace", "trash")
-	var restored, before domain.Document
+	trash, _ := reopened.WorkspaceMetadataFields("test-workspace", "trash")
+	var restored domain.Document
 	if err := json.Unmarshal(trash.Trash[0].Payload, &restored); err != nil {
 		t.Fatal(err)
 	}
@@ -263,13 +261,9 @@ func TestDeletedDocumentsInTheTrashShareRevisionBodies(t *testing.T) {
 	if err := reopened.LoadDocumentRevisionBodies(ctx, "test-workspace", restored.Revisions); err != nil {
 		t.Fatal(err)
 	}
-	var entry domain.TrashEntry
-	_ = json.Unmarshal(want, &entry)
-	_ = json.Unmarshal(entry.Payload, &before)
 	got, _ := json.Marshal(restored)
-	expected, _ := json.Marshal(before)
-	if string(got) != string(expected) {
-		t.Fatalf("restorable document differs\n got %.300s\nwant %.300s", got, expected)
+	if string(got) != want {
+		t.Fatal("restorable document differs from the document before deletion")
 	}
 }
 
@@ -288,7 +282,7 @@ func TestOffloadMigrationRewritesLegacyRecordsInBatches(t *testing.T) {
 		document.Permissions[0].DocumentID = id
 		documents = append(documents, document)
 	}
-	if err := s.MutateWorkspace(ctx, "test-workspace", "document.created", "documents", nil, func(data *domain.Bootstrap) error {
+	if err := s.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "document.created", "documents", nil, func(data *domain.Bootstrap) error {
 		data.Documents = append(data.Documents, documents...)
 		return nil
 	}); err != nil {
@@ -352,14 +346,14 @@ func TestSweepDeletesBodiesNoRecordRefersTo(t *testing.T) {
 	}
 	defer s.Close()
 	document := offloadTestDocument(time.Now().UTC().Truncate(time.Second))
-	if err := s.MutateWorkspace(ctx, "test-workspace", "document.created", document.ID, nil, func(data *domain.Bootstrap) error {
+	if err := s.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "document.created", document.ID, nil, func(data *domain.Bootstrap) error {
 		data.Documents = append(data.Documents, document)
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// Drop the oldest long revision (as the 100-version cap does).
-	if err := s.MutateWorkspace(ctx, "test-workspace", "document.updated", document.ID, nil, func(data *domain.Bootstrap) error {
+	if err := s.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "document.updated", document.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Documents {
 			if data.Documents[index].ID == document.ID {
 				data.Documents[index].Revisions = data.Documents[index].Revisions[:2]
@@ -393,7 +387,7 @@ func TestSweepKeepsBodiesReferencedAgain(t *testing.T) {
 	defer s.Close()
 	document := offloadTestDocument(time.Now().UTC().Truncate(time.Second))
 	add := func() {
-		if err := s.MutateWorkspace(ctx, "test-workspace", "document.created", document.ID, nil, func(data *domain.Bootstrap) error {
+		if err := s.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "document.created", document.ID, nil, func(data *domain.Bootstrap) error {
 			data.Documents = append(data.Documents, document)
 			return nil
 		}); err != nil {
@@ -401,7 +395,7 @@ func TestSweepKeepsBodiesReferencedAgain(t *testing.T) {
 		}
 	}
 	add()
-	if err := s.MutateWorkspace(ctx, "test-workspace", "document.deleted", document.ID, nil, func(data *domain.Bootstrap) error {
+	if err := s.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "document.deleted", document.ID, nil, func(data *domain.Bootstrap) error {
 		data.Documents = data.Documents[:len(data.Documents)-1]
 		return nil
 	}); err != nil {
@@ -441,7 +435,7 @@ func TestAgentTranscriptsOffloadLargeParts(t *testing.T) {
 			{ID: "part_text", Type: "text", Text: reply},
 		}},
 	}}
-	if err := s.MutateWorkspace(ctx, "test-workspace", "agent.session_created", session.ID, nil, func(data *domain.Bootstrap) error {
+	if err := s.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "agent.session_created", session.ID, nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, session)
 		return nil
 	}); err != nil {
@@ -464,7 +458,11 @@ func TestAgentTranscriptsOffloadLargeParts(t *testing.T) {
 		t.Fatalf("bodies = %d (inline %d), objects = %d; want 2 in object storage", stored, inline, len(objects.objects))
 	}
 	loaded, _ := s.WorkspaceMetadataFields("test-workspace", "agentSessions")
-	want, _ := json.Marshal(loaded.AgentSessions[len(loaded.AgentSessions)-1])
+	original, err := s.LoadAgentSessionBodies(ctx, "test-workspace", loaded.AgentSessions[len(loaded.AgentSessions)-1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := json.Marshal(original)
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -486,7 +484,7 @@ func TestAgentTranscriptsOffloadLargeParts(t *testing.T) {
 		t.Fatal("the transcript was loaded with the workspace")
 	}
 	// An edit while the transcript is not loaded keeps it.
-	if err := reopened.MutateWorkspace(ctx, "test-workspace", "agent.session_read", session.ID, nil, func(data *domain.Bootstrap) error {
+	if err := reopened.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), "test-workspace", "agent.session_read", session.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.AgentSessions {
 			if data.AgentSessions[index].ID == session.ID {
 				data.AgentSessions[index].Title = "Renamed chat"

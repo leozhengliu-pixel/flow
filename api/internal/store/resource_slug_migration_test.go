@@ -27,7 +27,7 @@ func TestResourceSlugMigration(t *testing.T) {
 	initiative := func(id, name, slugID string) domain.Initiative {
 		return domain.Initiative{ID: id, Name: name, SlugID: slugID, CreatedAt: at, UpdatedAt: at}
 	}
-	if err := repo.MutateWorkspace(ctx, accessWorkspace, "test.seeded", "workspace", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), accessWorkspace, "test.seeded", "workspace", nil, func(next *domain.Bootstrap) error {
 		next.Projects = append(next.Projects,
 			project("project_dup_a", "QA spike: resp export revamp", "qa-spike-resp-export-revamp"),
 			project("project_dup_b", "QA spike: resp export revamp", "qa-spike-resp-export-revamp"),
@@ -53,7 +53,7 @@ func TestResourceSlugMigration(t *testing.T) {
 
 	snapshot := func(repo *SQLiteStore) ([]domain.Project, []domain.Initiative) {
 		t.Helper()
-		data, ok := repo.storedWorkspace(accessWorkspace)
+		data, ok := repo.WorkspaceMetadata(accessWorkspace)
 		if !ok {
 			t.Fatal("workspace missing")
 		}

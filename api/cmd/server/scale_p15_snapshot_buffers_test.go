@@ -17,7 +17,7 @@ func TestScaleP15ReusedBootstrapPermissionDifferential(t *testing.T) {
 			f := scaleP03Fixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			member, _ := scaleP03Join(t, f, "Snapshot member", idgen.New("p15-reuse-")+"@example.test", "member")
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p15.reuse_seed", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p15.reuse_seed", "", nil, func(data *domain.Bootstrap) error {
 				data.Teams = append(data.Teams, domain.Team{ID: "p15-reuse-public", Key: "P15R"}, domain.Team{ID: "p15-reuse-private", Key: "P15S", Private: true})
 				data.TeamSettings["p15-reuse-public"] = domain.TeamSettings{TeamID: "p15-reuse-public", Access: "public"}
 				data.TeamSettings["p15-reuse-private"] = domain.TeamSettings{TeamID: "p15-reuse-private", Access: "private"}

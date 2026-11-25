@@ -83,7 +83,6 @@ func (s *server) generalBootstrapBounded(w http.ResponseWriter, r *http.Request)
 	} else {
 		w.Header().Set("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
 	}
-	read.Data = data
 	s.writeGeneralBootstrapBounded(w, r, data, read)
 }
 
@@ -200,6 +199,21 @@ func (s *server) writeGeneralBootstrapBounded(w http.ResponseWriter, r *http.Req
 		}
 	}
 	lean := leanBootstrapRequested(r)
+	var outlines map[string]int
+	if !lean {
+		if err := reserve(4096); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		outlines = map[string]int{}
+		for index, issue := range data.Issues {
+			if err := entry(issue.ID, 512); err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+			outlines[issue.ID] = index
+		}
+	}
 	field := func(field string, buffer *bufio.Writer, encoder *json.Encoder) (bool, error) {
 		if lean {
 			switch field {
@@ -224,16 +238,6 @@ func (s *server) writeGeneralBootstrapBounded(w http.ResponseWriter, r *http.Req
 		if field == "issues" {
 			buffer.WriteByte('[')
 			count := 0
-			if err := reserve(4096); err != nil {
-				return true, err
-			}
-			outlines := map[string]int{}
-			for index, issue := range data.Issues {
-				if err := entry(issue.ID, 512); err != nil {
-					return true, err
-				}
-				outlines[issue.ID] = index
-			}
 			err := read.WalkIssueRecords(ctx, store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Archived: "all"}, func(issue domain.Issue) error {
 				index, ok := outlines[issue.ID]
 				if !ok {
@@ -402,11 +406,19 @@ func (s *server) writeGeneralBootstrapBounded(w http.ResponseWriter, r *http.Req
 			return rewriteHydratedURLSource(ctx, source, source.Size(), dst, signing)
 		}
 	}
+	// The field writer uses the retained outline and streams the bodies from
+	// SQL. Binding a second copy of the outline would charge it twice.
+	read.Data = data
+	read.Data.Issues = nil
+	if err := read.Prepare(ctx); err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	prepareHydratedBootstrapSpool(w, data)
 	if err := read.WriteJSONWithFields(ctx, w, field, rewrite); err != nil {
-		log.Printf("encode bounded general bootstrap: %v", err)
+		log.Print("encode bounded general bootstrap: stream failed")
 		panic(http.ErrAbortHandler)
 	}
 }

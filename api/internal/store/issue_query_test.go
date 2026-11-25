@@ -7,11 +7,52 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"flow/api/internal/domain"
 )
+
+func TestBoundedIssueScanIgnoresUnrelatedProjectBodies(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "on")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	ctx := t.Context()
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	if !repo.BoundedMetadataEnabled() {
+		t.Fatal("expected bounded metadata")
+	}
+	data := repo.Bootstrap()
+	workspace := data.Workspace.URLKey
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "test.issue_scan", "", nil, func(data *domain.Bootstrap) error {
+		data.Projects = append(data.Projects, domain.Project{
+			ID: "unrelated-project", Name: "Unrelated project", Description: strings.Repeat("a", 3<<20),
+		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	visited := 0
+	query := IssueRecordQuery{Workspace: workspace, Archived: "all"}
+	err = repo.WalkIssueRecords(ctx, query, func(issue domain.Issue) error {
+		visited++
+		if issue.Team.Name == "" || issue.State.Name == "" {
+			t.Error("issue scan did not resolve its display references")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if visited != len(data.Issues) || visited == 0 {
+		t.Fatalf("visited %d issues, expected %d", visited, len(data.Issues))
+	}
+}
 
 func TestIssueRecordsMigrateAndPageWithoutWorkspaceArray(t *testing.T) {
 	ctx := context.Background()
@@ -400,7 +441,7 @@ func TestReleaseScopedIssueRecords(t *testing.T) {
 	if err := repository.ImportIssues(ctx, workspace, []domain.Issue{completed, unstarted, started, archived, outside, hidden}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.MutateWorkspace(ctx, workspace, "release.created", "release-1", nil, func(next *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "release.created", "release-1", nil, func(next *domain.Bootstrap) error {
 		next.Releases = append(next.Releases, domain.Release{
 			ID: "release-1", SlugID: "v1", Name: "v1.0.0", IssueIDs: []string{
 				completed.ID, unstarted.ID, started.ID, archived.ID, hidden.ID, "deleted-issue",
@@ -486,7 +527,7 @@ func TestReleaseScopedIssueRecords(t *testing.T) {
 		t.Fatalf("release groups scanned workspace: %v %#v", err, groups)
 	}
 
-	if err := repository.MutateWorkspace(ctx, workspace, "release.updated", "release-1", nil, func(next *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "release.updated", "release-1", nil, func(next *domain.Bootstrap) error {
 		index := slices.IndexFunc(next.Releases, func(item domain.Release) bool { return item.ID == "release-1" })
 		next.Releases[index].IssueIDs = []string{started.ID}
 		return nil

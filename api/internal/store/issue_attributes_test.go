@@ -147,7 +147,7 @@ func TestMetadataMutationNeverHydratesOrRewritesIssuePayloads(t *testing.T) {
 	if _, err := repository.db.ExecContext(ctx, `UPDATE issue_records SET data=? WHERE workspace_key=? AND id=?`, []byte("not-json"), workspace, id); err != nil {
 		t.Fatal(err)
 	}
-	err = repository.MutateWorkspace(ctx, workspace, "view.created", "view", nil, func(next *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "view.created", "view", nil, func(next *domain.Bootstrap) error {
 		if len(next.Issues) != 0 || len(next.Comments) != 0 {
 			t.Fatal("metadata callback received complete collections")
 		}

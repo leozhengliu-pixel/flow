@@ -281,7 +281,8 @@ func (s *server) refreshGitLabOAuthConnection(ctx context.Context, workspaceKey,
 		return "", domain.IntegrationConnection{}, err
 	}
 	var result domain.IntegrationConnection
-	err = s.store.MutateWorkspace(ctx, workspaceKey, "integration.oauth_refreshed", snapshot.ID, map[string]string{"provider": "gitlab", "source": "coding"}, func(data *domain.Bootstrap) error {
+	scope := store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: snapshot.ID}}}
+	err = s.store.MutateWorkspaceScoped(ctx, workspaceKey, "integration.oauth_refreshed", snapshot.ID, map[string]string{"provider": "gitlab", "source": "coding"}, scope, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
 			return item.ID == snapshot.ID && item.Provider == "gitlab"
 		})

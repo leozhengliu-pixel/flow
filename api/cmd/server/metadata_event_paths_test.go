@@ -25,6 +25,9 @@ func TestMetadataEventHandlerFullPathParity(t *testing.T) {
 			name = "full"
 		}
 		t.Run(name, func(t *testing.T) {
+			if full {
+				t.Setenv("FLOW_BOUNDED_METADATA", "off")
+			}
 			restore := store.ForceFullMutationsForTesting(full)
 			defer restore()
 			t.Run("feedback", TestAgentMessageAndSessionFeedback)
@@ -120,7 +123,7 @@ func testMetadataSyncDecisions(t *testing.T) {
 	}
 	defer repo.Close()
 	data := repo.Bootstrap()
-	err = repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "oauth_application.created", "metadata_app", nil, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "oauth_application.created", "metadata_app", nil, func(next *domain.Bootstrap) error {
 		next.OAuthApplications = append(next.OAuthApplications, domain.OAuthApplication{ID: "metadata_app", Name: "Metadata"})
 		next.OAuthSyncGroupRequests = []domain.OAuthSyncGroupRequest{{ID: "metadata_sync", ApplicationID: "metadata_app", Status: "pending"}}
 		return nil
@@ -149,7 +152,7 @@ func testMetadataUnchangedHandlers(t *testing.T) {
 	defer repo.Close()
 	data := repo.Bootstrap()
 	at := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
-	err = repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "agent.session_created", "metadata_noop", nil, func(next *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "agent.session_created", "metadata_noop", nil, func(next *domain.Bootstrap) error {
 		next.AgentSessions = []domain.AgentSession{{ID: "metadata_noop", UserID: next.Viewer.ID, Messages: []domain.AgentMessage{{ID: "reply", Role: "assistant", Feedback: &domain.AgentFeedback{Rating: "positive", Comment: "Useful", UpdatedAt: at}}}}}
 		next.EmailIntakeAddresses = []domain.EmailIntakeAddress{{ID: "metadata_intake", TeamID: data.Teams[0].ID, SenderName: "Helpdesk", UpdatedAt: at}}
 		return nil

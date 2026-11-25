@@ -41,12 +41,13 @@ func writeStreamedJSONFields(ctx context.Context, w http.ResponseWriter, status 
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	if store.RecordHydrationEnabled() {
+	hydrated := store.RecordHydrationEnabled(ctx)
+	if hydrated {
 		prepareHydratedBootstrapSpool(w, value)
 	}
 	buffer := bufio.NewWriterSize(w, 64<<10)
 	var err error
-	if encode != nil && store.RecordHydrationEnabled() {
+	if encode != nil && hydrated {
 		err = encodeHydratedStructFields(ctx, buffer, v, plan, 0, encode)
 	} else {
 		err = encodeStreamedStruct(ctx, buffer, v, plan)
@@ -149,7 +150,7 @@ func isEmptyJSONValue(v reflect.Value) bool {
 }
 
 func encodeStreamedStruct(ctx context.Context, buffer *bufio.Writer, v reflect.Value, plan []streamField) error {
-	if store.RecordHydrationEnabled() {
+	if store.RecordHydrationEnabled(ctx) {
 		return encodeHydratedStruct(ctx, buffer, v, plan, 0)
 	}
 	buffer.WriteByte('{')

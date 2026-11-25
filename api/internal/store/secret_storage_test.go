@@ -200,7 +200,7 @@ func TestIntegrationOAuthTokensRotateWithCompareAndSwap(t *testing.T) {
 // previous values copied them.
 func legacyIntegrationFixture(t *testing.T, repo *SQLiteStore, workspace string) (connectionID string) {
 	t.Helper()
-	ctx := t.Context()
+	ctx := WithColdWork(t.Context(), "legacy integration fixture")
 	connectionID = "integration_slack_legacy"
 	if err := repo.MutateWorkspace(ctx, workspace, "integration.connected", connectionID, nil, func(data *domain.Bootstrap) error {
 		data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: connectionID, Provider: "slack", Name: "Slack", Status: "connected", Config: map[string]string{}, Scopes: []string{}, Channels: []string{}})
@@ -260,7 +260,7 @@ func legacyTokenCopies(t *testing.T, repo *SQLiteStore, workspace string) int {
 func TestIntegrationOAuthTokenMigrationEncryptsAndScrubs(t *testing.T) {
 	t.Setenv(connectorSecretKeyEnv, testSecretKey(6))
 	repo := openSecretTestStore(t)
-	ctx := t.Context()
+	ctx := WithColdWork(t.Context(), "data migrations")
 	workspace := repo.Bootstrap().Workspace.URLKey
 	connectionID := legacyIntegrationFixture(t, repo, workspace)
 	if copies := legacyTokenCopies(t, repo, workspace); copies != 2 {
@@ -276,39 +276,30 @@ func TestIntegrationOAuthTokenMigrationEncryptsAndScrubs(t *testing.T) {
 	}
 	tokens, found, err := repo.IntegrationOAuthTokens(ctx, workspace, connectionID)
 	if err != nil || !found || tokens.AccessToken != "xoxb-legacy-access" || tokens.RefreshToken != "legacy-refresh" {
-		t.Fatalf("migrated tokens: %+v %v %v", tokens, found, err)
+		t.Fatalf("migrated tokens missing or incorrect: found=%v err=%v", found, err)
 	}
 	var sealed []byte
 	if err := repo.db.QueryRowContext(ctx, `SELECT ciphertext FROM connector_secrets WHERE id=?`, IntegrationOAuthSecretID(workspace, connectionID)).Scan(&sealed); err != nil || bytes.Contains(sealed, []byte("xoxb")) {
 		t.Fatalf("tokens not encrypted: %v", err)
 	}
-	data, _ := repo.WorkspaceMetadata(workspace)
-	for _, connection := range data.IntegrationConnections {
-		if connection.ID == connectionID && (!connection.OAuthAuthorized || connection.Status != "connected") {
-			t.Fatalf("migrated connection: %+v", connection)
-		}
-	}
 	// The scrubbed event keeps its other previous values.
 	var previous string
 	if err := repo.db.QueryRowContext(ctx, `SELECT previous_values FROM domain_events WHERE id='evt_legacy_token'`).Scan(&previous); err != nil || !strings.Contains(previous, `"lastError":"timeout"`) || strings.Contains(previous, "xoxb") {
-		t.Fatalf("scrubbed previous values: %s %v", previous, err)
+		t.Fatalf("event values were not scrubbed correctly: %v", err)
 	}
-	// After a reload the connection still reads its tokens.
-	reloaded, err := repo.loadWorkspaceState(ctx, workspace)
-	if err != nil {
+	if err := repo.ReloadWorkspace(ctx, workspace); err != nil {
 		t.Fatal(err)
 	}
-	for _, connection := range reloaded.IntegrationConnections {
-		if connection.ID == connectionID && !connection.OAuthAuthorized {
-			t.Fatalf("reloaded connection lost its authorization: %+v", connection)
-		}
+	connection := migratedIntegrationConnection(t, repo, workspace, connectionID)
+	if !connection.OAuthAuthorized || connection.Status != "connected" {
+		t.Fatal("reloaded connection lost its authorization")
 	}
 }
 
 func TestIntegrationOAuthTokenMigrationWithoutKeyDropsTokens(t *testing.T) {
 	t.Setenv(connectorSecretKeyEnv, "")
 	repo := openSecretTestStore(t)
-	ctx := t.Context()
+	ctx := WithColdWork(t.Context(), "data migrations")
 	workspace := repo.Bootstrap().Workspace.URLKey
 	connectionID := legacyIntegrationFixture(t, repo, workspace)
 	if err := repo.migrateIntegrationOAuthTokens(ctx); err != nil {
@@ -321,10 +312,26 @@ func TestIntegrationOAuthTokenMigrationWithoutKeyDropsTokens(t *testing.T) {
 	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM connector_secrets`).Scan(&secrets); err != nil || secrets != 0 {
 		t.Fatalf("secrets stored without a key: %d %v", secrets, err)
 	}
-	data, _ := repo.WorkspaceMetadata(workspace)
+	if err := repo.ReloadWorkspace(ctx, workspace); err != nil {
+		t.Fatal(err)
+	}
+	connection := migratedIntegrationConnection(t, repo, workspace, connectionID)
+	if connection.OAuthAuthorized || connection.Status != "error" || connection.LastError != IntegrationOAuthKeyMissingError {
+		t.Fatal("reloaded connection did not require reauthorization")
+	}
+}
+
+func migratedIntegrationConnection(t *testing.T, repo *SQLiteStore, workspace, id string) domain.IntegrationConnection {
+	t.Helper()
+	data, ok := repo.WorkspaceMetadata(workspace)
+	if !ok {
+		t.Fatal("workspace metadata missing after reload")
+	}
 	for _, connection := range data.IntegrationConnections {
-		if connection.ID == connectionID && (connection.OAuthAuthorized || connection.Status != "error" || connection.LastError != IntegrationOAuthKeyMissingError) {
-			t.Fatalf("connection without key: %+v", connection)
+		if connection.ID == id {
+			return connection
 		}
 	}
+	t.Fatal("connection missing after reload")
+	return domain.IntegrationConnection{}
 }

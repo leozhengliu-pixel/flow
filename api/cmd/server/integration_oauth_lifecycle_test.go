@@ -224,7 +224,7 @@ func TestIntegrationDeliverySignsAndRetries(t *testing.T) {
 	}
 	// Manual retry is allowed before the scheduled backoff and must retain the
 	// same idempotency key while incrementing attempts.
-	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "test.retry_due", delivery.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test.retry_due", delivery.ID, nil, func(data *domain.Bootstrap) error {
 		for i := range data.IntegrationDeliveries {
 			if data.IntegrationDeliveries[i].ID == delivery.ID {
 				data.IntegrationDeliveries[i].NextAttemptAt = ptrTime(time.Now().Add(-time.Minute))

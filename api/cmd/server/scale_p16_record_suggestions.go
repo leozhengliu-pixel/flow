@@ -13,7 +13,7 @@ import (
 
 func (s *server) pruneProjectRecordSuggestions(ctx context.Context, workspace, id string) {
 	stale := func(item domain.IssueSuggestion) bool { return item.Type == "project" && item.SuggestedProjectID == id }
-	if !projectRecordMutationsEnabled("project") {
+	if !projectRecordMutationsEnabled(s.store.ContextWithDatabaseFeatures(ctx), "project") {
 		s.pruneIssueSuggestionTargets(ctx, workspace, stale)
 		return
 	}

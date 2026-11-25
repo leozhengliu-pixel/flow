@@ -187,12 +187,13 @@ func (s *SQLiteStore) BeginGeneralBootstrapRead(ctx context.Context, workspace, 
 		if err != nil {
 			return err
 		}
-		if cost > (metadataWorkBytes-4096)/8 {
+		if cost > (metadataWorkBytes-1024)/3 {
 			return ErrMetadataWorkBudget
 		}
-		// The returned outline and its reference overlays survive every row's
-		// temporary admission, plus the later permission and wire projections.
-		if err := read.owner.reserve(snapshot, cost*8+4096); err != nil {
+		// Native cost already includes twice the struct and descendant sizes.
+		// Retain room for append growth and the viewer and credential
+		// projections. Body walks reserve their own rows separately.
+		if err := read.owner.reserve(snapshot, cost*3+1024); err != nil {
 			return err
 		}
 		read.Data.Issues = append(read.Data.Issues, issue)

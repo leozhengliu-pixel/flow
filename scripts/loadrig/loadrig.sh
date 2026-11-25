@@ -4,7 +4,7 @@
 #
 #   scripts/loadrig/loadrig.sh build                      build bin/flow-server and bin/loadrig.test (-tags loadtest)
 #   scripts/loadrig/loadrig.sh seed  <sqlite|pg2|mysql2>   seed one workspace (SCALE=1, 10, ...) and keep it as the seed copy
-#   scripts/loadrig/loadrig.sh start <sqlite|pg2|mysql2> <on|off> start the replicas on a fresh copy of the seed
+#   scripts/loadrig/loadrig.sh start <sqlite|pg2|mysql2> <default|on|off> start the replicas on a fresh copy of the seed
 #   scripts/loadrig/loadrig.sh drive <label>               drive the started replicas (VUS, DURATION, ...)
 #   scripts/loadrig/loadrig.sh stop                        stop the replicas (by PID)
 #   scripts/loadrig/loadrig.sh pair  <sqlite|pg2|mysql2>   start off, drive, stop, start on, drive, stop, compare
@@ -15,14 +15,15 @@
 # coordination (container loadrig-redis when the redis:7-alpine image is present, else an in-memory Redis process);
 # mysql2 = two replicas on MySQL 8.4 (container loadrig-mysql from the local mysql:8.4 image, 1.5 GiB) with the same
 # Redis coordination. Each start copies the seed database into a fresh run database inside the container.
-# Both flag states run with FLOW_RECORD_HYDRATION=on, FLOW_RECORD_JOURNAL=on and FLOW_SYNC_V2=on; "on" adds
-# FLOW_BOUNDED_METADATA=on, which starts once every HOT consumer is migrated (COLD ones run on the COLD facade).
+# The historical on/off profiles pin hydration, journaling and sync v2.
+# The default profile leaves feature flags unset in the replica environment.
 #
 # Settings (environment): LOADRIG_HOME (~/.flow-local/live/loadrig), LOADRIG_PORT_BASE (47610), SCALE (1), VUS (10), DURATION (60s), WARMUP (5s),
 # LOADRIG_API_PORT (port base, +1 for the second replica), LOADRIG_METRIC_PORT (port base+10), THINK (300ms), STREAMS (VUS/2), MIX (op=weight,...: only the listed ops run; a leading "default," keeps the other default weights), MODEL (fake|proxy|off; fake = local fake model, proxy = the
 # shared 127.0.0.1:8787 proxy, deepseek-v4.1-flash), AGENT_EVERY (20s), AGENT_MAX (0 = no cap; proxy defaults to 6),
 # FLOW_LOADRIG_SEARCH_QUERY (optional fixed search URL query), FLOW_LOADRIG_SYNC_REPLAY_AFTER (optional fixed cursor for single-transaction sync reads),
 # FLOW_LOADRIG_ROTATE_READS (on rotates reads across replicas),
+# LOADRIG_UPGRADE_SEED (1 creates the seed with the old defaults and no catalog coverage),
 # GOMAXPROCS_REPLICA (4), GOMEMLIMIT_REPLICA (1536MiB), MAX_LOAD (20: refuse to start above this load average),
 # LOADRIG_MYSQL_MEMORY (1536m, Docker's memory limit for MySQL), LOADRIG_CONTAINER_PREFIX (loadrig),
 # KEEP (1 keeps data after smoke), LOADRIG_ALLOW_PULL (1 allows pulling a missing image), EXTRA_ENV ("NAME=value ..."
@@ -246,7 +247,7 @@ cmd_seed() {
   mkdir -p "$DATA/$topology-out"; rm -f "$DATA/$topology-out/fixture.json"
   log "seeding $topology at scale $scale"
   # shellcheck disable=SC2046
-  (cd "$HOME_DIR" && env $(db_env "$topology" seed) FLOW_LOADRIG_SEED=1 FLOW_LOADRIG_OUT="$DATA/$topology-out" FLOW_LOADRIG_SCALE="$scale" \
+  (cd "$HOME_DIR" && env $(db_env "$topology" seed) FLOW_LOADRIG_SEED=1 FLOW_LOADRIG_UPGRADE_SEED="${LOADRIG_UPGRADE_SEED:-0}" FLOW_LOADRIG_OUT="$DATA/$topology-out" FLOW_LOADRIG_SCALE="$scale" \
     FLOW_RECORD_HYDRATION=on FLOW_RECORD_JOURNAL=on FLOW_SYNC_V2=on FLOW_WORKSPACE_TUTORIAL=off \
     GOMAXPROCS="${GOMAXPROCS_SEED:-4}" GOMEMLIMIT="${GOMEMLIMIT_SEED:-3GiB}" \
     "$BIN/loadrig.test" -test.run '^TestLoadRigSeed$' -test.v -test.timeout 4h) 2>&1 | tee "$REPORTS/seed-$topology.log" | grep -E '^(=== RUN|--- |\s+loadrig_seed_test.go|PASS|FAIL|ok|panic)' | cut -c1-300 >&2 || true
@@ -258,7 +259,15 @@ cmd_seed() {
 # ---- Replicas -------------------------------------------------------------------------------------------------------
 cmd_start() {
   local topology="$1" flag="$2" replicas=1
-  [ "$flag" = on ] || [ "$flag" = off ] || die "flag must be on or off"
+  local feature_env=()
+  case "$flag" in
+    on|off)
+      feature_env=(FLOW_RECORD_HYDRATION=on FLOW_RECORD_JOURNAL=on FLOW_SYNC_V2=on
+        FLOW_RECORD_SPOOL_MAX_BYTES=268435456 FLOW_WORKSPACE_TUTORIAL=off "FLOW_BOUNDED_METADATA=$flag")
+      ;;
+    default) ;;
+    *) die "flag must be default, on or off" ;;
+  esac
   ensure_built
   check_load
   [ -f "$DATA/$topology-out/fixture.json" ] || die "seed $topology first"
@@ -285,10 +294,9 @@ cmd_start() {
     mkdir -p "$RUN/uploads"
     # shellcheck disable=SC2046
     env $(db_env "$topology" run) $redis_env $(model_env) \
-      FLOW_HTTP_ADDR="127.0.0.1:$port" FLOW_APP_URL="http://127.0.0.1:$port" FLOW_STORAGE_LOCAL_PATH="$RUN/uploads" FLOW_WORKSPACE_TUTORIAL=off \
-      FLOW_RECORD_HYDRATION=on FLOW_RECORD_JOURNAL=on FLOW_SYNC_V2=on FLOW_RECORD_SPOOL_MAX_BYTES=268435456 \
-      FLOW_BOUNDED_METADATA="$flag" FLOW_LOADRIG_METRICS_ADDR="127.0.0.1:$mport" \
-      GOMAXPROCS="${GOMAXPROCS_REPLICA:-4}" GOMEMLIMIT="${GOMEMLIMIT_REPLICA:-1536MiB}" ${EXTRA_ENV:-} \
+      FLOW_HTTP_ADDR="127.0.0.1:$port" FLOW_APP_URL="http://127.0.0.1:$port" FLOW_STORAGE_LOCAL_PATH="$RUN/uploads" \
+      ${feature_env[@]+"${feature_env[@]}"} FLOW_LOADRIG_METRICS_ADDR="127.0.0.1:$mport" \
+      GOMAXPROCS="${GOMAXPROCS_REPLICA:-4}" GOMEMLIMIT="${GOMEMLIMIT_REPLICA-1536MiB}" ${EXTRA_ENV:-} \
       "$BIN/flow-server" >"$RUN/replica-$index.log" 2>&1 &
     echo $! > "$RUN/replica-$index.pid"
     bases="$bases${bases:+,}http://127.0.0.1:$port"; metrics="$metrics${metrics:+,}http://127.0.0.1:$mport"; pids="$pids${pids:+,}$(cat "$RUN/replica-$index.pid")"
@@ -382,7 +390,7 @@ cmd_smoke() {
 case "${1:-help}" in
   build) cmd_build ;;
   seed) cmd_seed "${2:?topology}" ;;
-  start) cmd_start "${2:?topology}" "${3:?flag on|off}" ;;
+  start) cmd_start "${2:?topology}" "${3:?flag default|on|off}" ;;
   drive) cmd_drive "${2:?label}" ;;
   stop) cmd_stop; stop_pid "$RUN/model.pid" ;;
   pair) cmd_pair "${2:?topology}" ;;

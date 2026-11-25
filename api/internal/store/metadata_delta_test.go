@@ -88,9 +88,11 @@ func TestWorkspaceMetadataDeltaMatchesFullWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	const workspace = "test-workspace"
-	seed.mu.RLock()
-	base := collectionMetadata(seed.workspaces[workspace])
-	seed.mu.RUnlock()
+	full, ok := seed.BootstrapFor(workspace)
+	if !ok {
+		t.Fatal("workspace fixture missing")
+	}
+	base := collectionMetadata(full)
 	if err := seed.Close(); err != nil {
 		t.Fatal(err)
 	}

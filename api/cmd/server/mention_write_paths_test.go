@@ -65,14 +65,16 @@ func TestMCPWritesStoreReferencesAsMentions(t *testing.T) {
 	supplied := map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph", "content": []any{map[string]any{"type": "text", "text": "Editor body " + issue.Identifier}}}}}
 	// Internal callers (the agent runtime) may pass the editor document themselves.
 	actor := mcpActor{WorkspaceKey: f.data.Workspace.URLKey, User: f.data.Viewer, APIKey: domain.APIKey{Scopes: []string{"read", "write"}}}
-	workspace, err := f.service.mcpWorkspaceData(t.Context(), actor)
+	ctx, finish := beginMetadataOutputReads(workspaceFixtureContext(t.Context()))
+	defer finish()
+	workspace, err := f.service.mcpWorkspaceData(ctx, actor)
 	if err == nil {
-		err = f.service.hydrateMCPIssueArguments(t.Context(), actor, &workspace, map[string]any{"id": issue.ID})
+		err = f.service.hydrateMCPIssueArguments(ctx, actor, &workspace, map[string]any{"id": issue.ID})
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := f.service.mutateAnyComment(t.Context(), actor, workspace, issue.ID, "Editor body "+issue.Identifier, supplied, "create")
+	result, err := f.service.mutateAnyComment(ctx, actor, workspace, issue.ID, "Editor body "+issue.Identifier, supplied, "create")
 	if err != nil {
 		t.Fatal(err)
 	}

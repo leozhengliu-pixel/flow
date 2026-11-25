@@ -4,7 +4,11 @@ func recordJournalContentKeySQL(dialect, resource, id string) string {
 	key := "json_array(" + resource + "," + id + ")"
 	character := func(n string) string { return "char(" + n + ")" }
 	escape := func(value string) string { return "(char(92)||'" + value + "')" }
-	if dialect == "postgres" {
+	if dialect == "sqlite" {
+		// Older rows may hold their string IDs as BLOBs. The journal uses
+		// the same logical string keys as the Go record readers.
+		key = "json_array(CAST(" + resource + " AS TEXT),CAST(" + id + " AS TEXT))"
+	} else if dialect == "postgres" {
 		key = "('['||to_json(" + resource + ")::text||','||to_json(" + id + ")::text||']')"
 		character = func(n string) string { return "chr(" + n + ")" }
 		escape = func(value string) string { return "(chr(92)||'" + value + "')" }
