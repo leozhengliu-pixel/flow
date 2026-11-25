@@ -21,11 +21,13 @@ import (
 
 func openCycleSettingsStore(t *testing.T, path string, bounded bool) *store.SQLiteStore {
 	t.Helper()
+	mode := "off"
 	if bounded {
-		t.Setenv("FLOW_BOUNDED_METADATA", "on")
-	} else {
-		t.Setenv("FLOW_BOUNDED_METADATA", "off")
+		mode = "on"
 	}
+	t.Setenv("FLOW_BOUNDED_METADATA", mode)
+	t.Setenv("FLOW_RECORD_HYDRATION", mode)
+	t.Setenv("FLOW_RECORD_JOURNAL", mode)
 	repo, err := store.OpenSQLite(path)
 	if err != nil {
 		t.Fatal(err)

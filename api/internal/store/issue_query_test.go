@@ -15,6 +15,9 @@ import (
 )
 
 func TestBoundedIssueScanIgnoresUnrelatedProjectBodies(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "on")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	ctx := t.Context()
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
