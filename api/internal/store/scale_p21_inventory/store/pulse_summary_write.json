@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_pulse_summary_write.go",
+  "source": "store/pulse_summary_write.go",
   "unmigrated": 0,
   "consumers": {
     "CommitPulseSummaries": {

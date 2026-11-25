@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_notification_visibility.go",
+  "source": "store/notification_visibility.go",
   "unmigrated": 0,
   "consumers": {
     "BeginNotificationVisibilityRead": {

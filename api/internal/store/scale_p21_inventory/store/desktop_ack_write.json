@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_desktop_ack_write.go",
+  "source": "store/desktop_ack_write.go",
   "unmigrated": 0,
   "consumers": {
     "mutateBoundedDesktopAck": {

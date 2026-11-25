@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_delivery_context.go",
+  "source": "store/delivery_context.go",
   "unmigrated": 0,
   "consumers": {
     "BeginNotificationDeliveryContextRead": {

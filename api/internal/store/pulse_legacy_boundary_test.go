@@ -24,9 +24,9 @@ func TestScaleP21PulseLegacyFeedBoundary(t *testing.T) {
 	// exact mode dispatch. Both legacy initiative-card callers and the sole
 	// pulseWorkspaceKey caller dispatch through their owned alternatives.
 	invariants := map[string]string{
-		"internal/store/scale_p21_hot_pulse_read.go:beginPulseRead":              "7df1f6eda31eeffa86aaf14811dd4a3a68e2145b3fcccfd45df38c012c942e29",
-		"internal/store/scale_p21_hot_pulse_read.go:Close":                       "36570cd11e1f9b0e932d050c0918140f1350180bc862677e65ab1ea4d9b518d6",
-		"internal/store/scale_p21_hot_pulse_read.go:LoadFeed":                    "666a5ed3c46d87228920afd1e211fe1bcd3c927a025d85c0f1dc33ada8da6b51",
+		"internal/store/hot_pulse_read.go:beginPulseRead":                        "7df1f6eda31eeffa86aaf14811dd4a3a68e2145b3fcccfd45df38c012c942e29",
+		"internal/store/hot_pulse_read.go:Close":                                 "36570cd11e1f9b0e932d050c0918140f1350180bc862677e65ab1ea4d9b518d6",
+		"internal/store/hot_pulse_read.go:LoadFeed":                              "666a5ed3c46d87228920afd1e211fe1bcd3c927a025d85c0f1dc33ada8da6b51",
 		"cmd/server/chat_update_cards.go:chatSendProjectUpdate":                  "d28aa38e558a4d26ea1d132d1ba9d9f8384880aa6d46fe119d18ea6f3b344c88",
 		"cmd/server/chat_update_cards.go:chatInitiativeUpdateCard":               "71b3b2396957a4d7ab45ade2cf7ce5480b0dae047ae75f561594e11f97405914",
 		"cmd/server/chat_notifications.go:chatSendInitiativeUpdate":              "3f8b870208c7296b70f403efe9851661276c0e876de6dcd976454a1e7949b654",
@@ -35,18 +35,18 @@ func TestScaleP21PulseLegacyFeedBoundary(t *testing.T) {
 		"cmd/server/pulse_summary.go:pulseSummaryWorkspaceKey":                   "95f75daa4d71fd722cee98e5f46999d431fdbde65f32c90849030907b7581bf1",
 	}
 	sites := map[string]bool{
-		"internal/store/scale_p21_hot_pulse_read.go:beginPulseRead": false,
-		"internal/store/scale_p21_hot_pulse_read.go:LoadFeed":       true,
-		"cmd/server/chat_update_cards.go:chatSendProjectUpdate":     true,
-		"cmd/server/chat_update_cards.go:chatInitiativeUpdateCard":  true,
-		"cmd/server/pulse_summary.go:pulseWorkspaceKey":             true,
-		"cmd/server/pulse_summary.go:pulseSummaryUpdates":           false,
-		"cmd/server/pulse_summary.go:pulseSummaryNotification":      false,
-		"cmd/server/pulse_summary.go:loadPulseSummary":              false,
-		"cmd/server/pulse_feed.go:pulseRequestContext":              false,
-		"cmd/server/main.go:createProjectUpdate":                    false,
-		"cmd/server/chat_unfurl.go:chatLinkPreviewFor":              false,
-		"cmd/server/webhook_children.go:webhookChildEntity":         false,
+		"internal/store/hot_pulse_read.go:beginPulseRead":          false,
+		"internal/store/hot_pulse_read.go:LoadFeed":                true,
+		"cmd/server/chat_update_cards.go:chatSendProjectUpdate":    true,
+		"cmd/server/chat_update_cards.go:chatInitiativeUpdateCard": true,
+		"cmd/server/pulse_summary.go:pulseWorkspaceKey":            true,
+		"cmd/server/pulse_summary.go:pulseSummaryUpdates":          false,
+		"cmd/server/pulse_summary.go:pulseSummaryNotification":     false,
+		"cmd/server/pulse_summary.go:loadPulseSummary":             false,
+		"cmd/server/pulse_feed.go:pulseRequestContext":             false,
+		"cmd/server/main.go:createProjectUpdate":                   false,
+		"cmd/server/chat_unfurl.go:chatLinkPreviewFor":             false,
+		"cmd/server/webhook_children.go:webhookChildEntity":        false,
 	}
 	helperCallers := map[string]map[string]bool{
 		"chatInitiativeUpdateCard": {
@@ -113,7 +113,7 @@ func TestScaleP21PulseLegacyFeedBoundary(t *testing.T) {
 			ast.Inspect(declaration, func(node ast.Node) bool {
 				if literal, ok := node.(*ast.CompositeLit); ok && deliveryBoundaryTypeName(literal.Type) == "PulseRead" {
 					literals++
-					if name != "internal/store/scale_p21_hot_pulse_read.go:beginPulseRead" {
+					if name != "internal/store/hot_pulse_read.go:beginPulseRead" {
 						t.Errorf("%s: unreviewed PulseRead constructor", name)
 					}
 				}
@@ -146,7 +146,7 @@ func TestScaleP21PulseLegacyFeedBoundary(t *testing.T) {
 				exceptional, reviewed := sites[name]
 				call, direct := parents[method].(*ast.CallExpr)
 				receiver := deliveryBoundaryStoreReceiver(method.X)
-				if name == "internal/store/scale_p21_hot_pulse_read.go:LoadFeed" {
+				if name == "internal/store/hot_pulse_read.go:LoadFeed" {
 					owner, ok := method.X.(*ast.SelectorExpr)
 					receiver = ok && owner.Sel.Name == "store" && deliveryBoundaryTypeName(owner.X) == "r"
 				}
@@ -225,7 +225,7 @@ func pulseLegacySourcesBoundary(function *ast.FuncDecl, ownedMethod string) (leg
 
 func TestScaleP21PulseLegacySourcesBoundary(t *testing.T) {
 	sites := map[string]string{
-		"internal/store/scale_p21_hot_pulse_read.go:beginPulseRead":    "BeginInstalledMetadataRead",
+		"internal/store/hot_pulse_read.go:beginPulseRead":              "BeginInstalledMetadataRead",
 		"cmd/server/realtime_entity_payloads.go:pagedPulseSourceEvent": "BeginPulseRead",
 		"cmd/server/metadata_source.go:buildPulseEventSource":          "BeginPulseSourceRead",
 	}

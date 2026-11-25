@@ -24,12 +24,12 @@ type deliveryBoundarySpec struct {
 }
 
 var deliveryBoundarySites = map[string]deliveryBoundarySpec{
-	"store/scale_p21_delivery_context.go:BeginNotificationDeliveryContextRead":   {legacy: []string{"NotificationDeliverySnapshot"}, owned: []string{"BeginDueNotificationDeliveryRead"}},
-	"store/scale_p21_sw15_notification_read.go:BeginDueNotificationDeliveryRead": {legacy: []string{"NotificationDeliveries"}},
-	"server/chat_personal_notifications.go:dispatchChatNotifications":            {legacy: []string{"NotificationDeliveries"}, owned: []string{"BeginDueNotificationDeliveryRead"}},
-	"server/delivery_scheduler.go:prepareDueNotificationDeliveries":              {legacy: []string{"NotificationDeliveries"}, owned: []string{"BeginDueNotificationDeliveryRead"}},
-	"server/notification_settings.go:dispatchNotificationDigests":                {legacy: []string{"NotificationDeliverySnapshot"}, owned: []string{"BeginNotificationDeliveryContextRead"}},
-	"server/notifications_workflow.go:dispatchNotificationEmails":                {legacy: []string{"NotificationDeliverySnapshot", "NotificationDeliveries"}, owned: []string{"BeginDueNotificationDeliveryRead", "BeginNotificationDeliveryContextRead"}, alias: true},
+	"store/delivery_context.go:BeginNotificationDeliveryContextRead":  {legacy: []string{"NotificationDeliverySnapshot"}, owned: []string{"BeginDueNotificationDeliveryRead"}},
+	"store/notification_read.go:BeginDueNotificationDeliveryRead":     {legacy: []string{"NotificationDeliveries"}},
+	"server/chat_personal_notifications.go:dispatchChatNotifications": {legacy: []string{"NotificationDeliveries"}, owned: []string{"BeginDueNotificationDeliveryRead"}},
+	"server/delivery_scheduler.go:prepareDueNotificationDeliveries":   {legacy: []string{"NotificationDeliveries"}, owned: []string{"BeginDueNotificationDeliveryRead"}},
+	"server/notification_settings.go:dispatchNotificationDigests":     {legacy: []string{"NotificationDeliverySnapshot"}, owned: []string{"BeginNotificationDeliveryContextRead"}},
+	"server/notifications_workflow.go:dispatchNotificationEmails":     {legacy: []string{"NotificationDeliverySnapshot", "NotificationDeliveries"}, owned: []string{"BeginDueNotificationDeliveryRead", "BeginNotificationDeliveryContextRead"}, alias: true},
 }
 
 type deliveryBoundaryCatalog struct {

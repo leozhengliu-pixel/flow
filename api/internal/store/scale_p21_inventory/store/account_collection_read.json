@@ -9,7 +9,7 @@
       "accessors": ["BeginInstalledMetadataRead"],
       "temperature": "hot",
       "temperatureReason": "Shared selected account settings reader.",
-      "callers": ["server/scale_p21_account_collection_settings.go:requestAccountSettings"]
+      "callers": ["server/account_collection_settings.go:requestAccountSettings"]
     }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_hot_pulse_read.go",
+  "source": "store/hot_pulse_read.go",
   "unmigrated": 0,
   "consumers": {
     "beginPulseRead": {
