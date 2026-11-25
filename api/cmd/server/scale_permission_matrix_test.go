@@ -202,8 +202,11 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 			// contract, so it remains a visibility oracle only.
 			code, raw = scaleP01PermissionRead(t, viewer, base, workspace, "/api/projects?first=100")
 			var listed connection[json.RawMessage]
-			if code != http.StatusOK || json.Unmarshal(raw, &listed) != nil {
-				t.Fatal("project list unavailable")
+			if code != http.StatusOK {
+				t.Fatalf("project list status=%d", code)
+			}
+			if err := json.Unmarshal(raw, &listed); err != nil || listed.Nodes == nil {
+				t.Fatal("project list did not return a connection")
 			}
 			for _, target := range []struct {
 				id      string
