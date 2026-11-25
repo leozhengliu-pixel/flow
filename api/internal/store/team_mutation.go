@@ -143,7 +143,9 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		ctx, copyWrite := s.watchMetadataWriteFrom(ctx, workspaceKey, base, baseKnown)
 		domain.EnsureTeamDirectory(&current)
 		next := current
+		detachTeamMutationCollections(eventType, &next)
 		snap := snapshotTeamMutation(eventType, mutationAggregateID(ctx), &next)
+		detachTeamMutationRecords(&next, &snap)
 		originalViewerRole, originalViewer := next.ViewerRole, next.Viewer
 		if actor, ok := actorFromContext(ctx); ok {
 			role, err := s.mutationWorkspaceRole(ctx, next.Workspace.ID, actor.ID)
@@ -305,7 +307,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			err = apply()
 		}
 		if err != nil {
-			// The write edits the copy in place and rolls it back on
+			// The write edits its detached copy and rolls it back on
 			// failure; the next write reloads it rather than trust that.
 			s.mu.Lock()
 			s.forgetCopyRevisionLocked(workspaceKey)
@@ -341,6 +343,110 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		sink(workspaceKey, domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: realtimePayload, CreatedAt: event.CreatedAt})
 	}
 	return nil
+}
+
+// detachTeamMutationCollections gives a team write's working copy its own
+// top-level maps and slices for everything the write (its callback, the
+// actor upkeep, the directory indexes and the rollback) may change in place.
+// Readers keep the installed snapshot after releasing mu (workspaceByID,
+// BootstrapFor), so an in-place write to an installed map or element races
+// them (a fatal concurrent map read and write) and shows them a change that
+// may yet be rolled back. Appends past an installed length stay shared: no
+// installed copy exposes those slots, and every shrink below happens on a
+// detached slice. Collections a write type only appends to are not copied.
+func detachTeamMutationCollections(eventType string, next *domain.Bootstrap) {
+	next.Teams = slices.Clone(next.Teams)
+	next.Users = slices.Clone(next.Users)
+	next.TeamSettings = maps.Clone(next.TeamSettings)
+	next.CycleSettings = maps.Clone(next.CycleSettings)
+	next.TeamByID = maps.Clone(next.TeamByID)
+	next.TeamByKey = maps.Clone(next.TeamByKey)
+	next.TeamChildren = maps.Clone(next.TeamChildren)
+	next.LabelIndex = maps.Clone(next.LabelIndex)
+	switch eventType {
+	case "team.settings_updated":
+		// Cascades rewrite the scope's statuses, labels, templates and
+		// cycles in place (and the rollback rebuilds the cycles' array).
+		next.States = slices.Clone(next.States)
+		next.Labels = slices.Clone(next.Labels)
+		next.IssueTemplates = slices.Clone(next.IssueTemplates)
+		next.Cycles = slices.Clone(next.Cycles)
+	case "team.deleted":
+		// ApplyTeamDeletion swaps the dropped rows out of these slices.
+		next.States = slices.Clone(next.States)
+		next.Labels = slices.Clone(next.Labels)
+		next.IssueTemplates = slices.Clone(next.IssueTemplates)
+		next.Cycles = slices.Clone(next.Cycles)
+		next.TeamResourceSections = slices.Clone(next.TeamResourceSections)
+		next.TeamPinnedResources = slices.Clone(next.TeamPinnedResources)
+		next.TeamMembers = slices.Clone(next.TeamMembers)
+		next.Favorites = slices.Clone(next.Favorites)
+		next.Subscriptions = slices.Clone(next.Subscriptions)
+		next.Projects = slices.Clone(next.Projects)
+		next.ReleasePipelines = slices.Clone(next.ReleasePipelines)
+	case "alm.projects_imported":
+		next.Projects = slices.Clone(next.Projects)
+	}
+}
+
+// detachTeamMutationRecords deep-copies, in the detached collections, the
+// records the snapshot keeps for rollback: the callback may edit their
+// nested maps and lists (a team's Slack channels, a template's labels),
+// which the shallow collection copies still share with the installed
+// snapshot.
+func detachTeamMutationRecords(next *domain.Bootstrap, snap *teamMutationSnapshot) {
+	if snap.oldTeams != nil {
+		next.Teams = cloneSnapshotValue(reflect.ValueOf(next.Teams)).Interface().([]domain.Team)
+	} else if snap.teamIndex >= 0 && snap.teamIndex < len(next.Teams) {
+		next.Teams[snap.teamIndex] = cloneSnapshotValue(reflect.ValueOf(next.Teams[snap.teamIndex])).Interface().(domain.Team)
+	}
+	// The snapshot clone drops json:"-" fields; the request-scoped Via
+	// attribution of a user (alone among these records) is kept as it was.
+	if snap.oldUsers != nil {
+		for i, user := range next.Users {
+			next.Users[i] = cloneSnapshotValue(reflect.ValueOf(user)).Interface().(domain.User)
+			next.Users[i].Via = user.Via
+		}
+	}
+	if snap.oldProjects != nil {
+		for i, project := range next.Projects {
+			next.Projects[i] = cloneSnapshotValue(reflect.ValueOf(project)).Interface().(domain.Project)
+			if project.Lead != nil {
+				next.Projects[i].Lead.Via = project.Lead.Via
+			}
+		}
+	}
+	detachSettings := func(id string) {
+		if settings, ok := next.TeamSettings[id]; ok {
+			next.TeamSettings[id] = cloneMutationTeamSettings(settings)
+		}
+	}
+	if snap.hadSettings {
+		detachSettings(snap.hintID)
+	}
+	for id := range snap.scopeSettings {
+		detachSettings(id)
+	}
+	for id := range snap.oldImportSettings {
+		detachSettings(id)
+	}
+	for index := range snap.oldLabels {
+		if index >= 0 && index < len(next.Labels) {
+			next.Labels[index] = cloneSnapshotValue(reflect.ValueOf(next.Labels[index])).Interface().(domain.IssueLabel)
+		}
+	}
+	for index := range snap.oldTemplates {
+		if index >= 0 && index < len(next.IssueTemplates) {
+			via := next.IssueTemplates[index].Creator.Via
+			next.IssueTemplates[index] = cloneSnapshotValue(reflect.ValueOf(next.IssueTemplates[index])).Interface().(domain.IssueTemplate)
+			next.IssueTemplates[index].Creator.Via = via
+		}
+	}
+	for index := range snap.oldCycles {
+		if index >= 0 && index < len(next.Cycles) {
+			next.Cycles[index] = cloneSnapshotValue(reflect.ValueOf(next.Cycles[index])).Interface().(domain.Cycle)
+		}
+	}
 }
 
 func snapshotTeamMutation(eventType, hintID string, data *domain.Bootstrap) teamMutationSnapshot {
