@@ -1024,7 +1024,8 @@ function MilestonesSection({
         count={milestones.length}
         open={open}
         onToggle={() => setOpen((value) => !value)}
-        onAdd={milestones.length ? undefined : () => onComposer({})}
+        onAdd={() => onComposer({})}
+        addLabel="Add milestone"
       />
       {open &&
         milestones.map((item) => (
@@ -1043,14 +1044,6 @@ function MilestonesSection({
             </button>
           </div>
         ))}
-      {milestones.length > 0 && (
-        <div className="pt-section-footer">
-          <button type="button" className="pt-add-button" aria-label={t("Add milestone")} onClick={() => onComposer({})}>
-            <FlowGlyph name="plus" width={14} height={14} />
-            <span>{t("Add milestone")}</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -1216,7 +1209,7 @@ function IssuesSection({
     );
   return (
     <div className="pt-section pt-issues">
-      <SectionHeader label={t("Issues")} count={issues.length} open={open} onToggle={() => setOpen((value) => !value)} />
+      <SectionHeader label={t("Issues")} count={issues.length} open={open} onToggle={() => setOpen((value) => !value)} onAdd={() => onComposer({})} addLabel="Add issue" />
       {open &&
         issueOrder(issues).map(({ issue, depth }) => (
           <IssueRow
@@ -1231,12 +1224,6 @@ function IssuesSection({
             onUpdate={(patch) => update(issue.id, patch)}
           />
         ))}
-      <div className="pt-section-footer">
-        <button type="button" className="pt-add-button" aria-label={t("Add issue")} onClick={() => onComposer({})}>
-          <FlowGlyph name="plus" width={14} height={14} />
-          <span>{t("Add issue")}</span>
-        </button>
-      </div>
     </div>
   );
 }

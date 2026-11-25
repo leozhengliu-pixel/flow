@@ -80,7 +80,7 @@ describe('project template editor', () => {
   it('adds, edits and removes milestones in the milestone composer', async () => {
     const user = userEvent.setup()
     render(settings(fixture(), 'new'))
-    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(screen.getByRole('button', { name: 'Add milestone' }))
     expect(screen.getByText('Create milestone')).toBeInTheDocument()
     await user.type(screen.getByRole('textbox', { name: 'Milestone name' }), 'Alpha milestone')
     await user.click(screen.getByRole('button', { name: 'Add milestone' }))
@@ -139,7 +139,7 @@ describe('project template editor', () => {
     render(settings(fixture(), 'new', undefined, onReload))
     await user.type(screen.getByPlaceholderText('Add a descriptive name…'), 'QA template')
     await user.type(screen.getByPlaceholderText('Project name'), 'QA project')
-    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(screen.getByRole('button', { name: 'Add milestone' }))
     await user.type(screen.getByRole('textbox', { name: 'Milestone name' }), 'Alpha')
     await user.click(screen.getByRole('button', { name: 'Add milestone' }))
     await user.click(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' }))

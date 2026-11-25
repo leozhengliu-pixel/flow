@@ -203,6 +203,7 @@ html:root body .property-command-surface.pt-picker .property-command-icon:has(.p
   .pt-list-header{margin-bottom:24px;padding:0 16px}
   .pt-list-header p{line-height:18px}
   .pt-list-card>header{height:50px;padding:10.6667px}
+  .pt-row-text{margin-right:12px}
   .pt-list-row{padding:16px 10.6667px;grid-template-columns:40px minmax(0,1fr) 24px}
   .pt-editor{padding-top:36px}
   .pt-back{left:-14px;top:-6px}
