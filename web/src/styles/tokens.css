@@ -943,7 +943,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Settings › Projects › Templates (project template list + editor), measured from the reference app. */
 :root{
   --pt-text:#ffffff;--pt-text-label:#e3e4e6;--pt-text-2:#e4e5e7;--pt-text-muted:#959597;--pt-placeholder:#5c5d5f;
-  --pt-surface:#1a1a1b;--pt-border:#29292c;--pt-border-focus:#29292c;--pt-card-border:#343538;--pt-row-sep:#2c2d2f;--pt-header-line:#2c2d2f;--pt-composer-pill-bg:#1b1c1d;--pt-shadow:0 .5px 1px 1px #0000004d;
+  --pt-surface:#1a1a1b;--pt-border:#29292c;--pt-border-focus:#29292c;--pt-card-border:#343538;--pt-row-sep:#2d2d2e;--pt-header-line:#2d2d2e;--pt-composer-pill-bg:#1b1c1d;--pt-shadow:0 .5px 1px 1px #0000004d;
   --pt-list-ring:0 0 0 .5px #ffffff14,0 .5px 1px 1px #0000004d;--pt-row-hover-bg:#1f1f21;--pt-list-button-hover-bg:#2b2b2d;
   --pt-icon-tile:#c1c1c6;--pt-icon-alpha:18%;--pt-icon-a:.175;--pt-icon-color:#bec2c8;
   --pt-pill-bg:#232325;--pt-pill-fg:#98999c;--pt-pill-hover-bg:#28282a;

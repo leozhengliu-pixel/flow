@@ -1468,14 +1468,21 @@ function IssueComposer({
     onCancel();
   };
   const pill = (isSet: boolean) => `pt-pill pt-pill--composer${isSet ? " is-set" : ""}`;
+  const editStateTeamId = value.teamId || data.teams[0]?.id || "";
+  const editState = issue ? (data.states.find((state) => state.id === data.teamSettings?.[editStateTeamId]?.defaultStateId) ?? data.states.find((state) => state.teamId === editStateTeamId && state.type === "backlog")) : undefined;
   return (
-    <div className="pt-section pt-composer pt-issue-composer" onKeyDown={(event) => composerKeys(event, submit, () => void cancel())}>
+    <div className={`pt-section pt-composer pt-issue-composer${issue ? " pt-issue-composer--edit" : ""}`} onKeyDown={(event) => composerKeys(event, submit, () => void cancel())}>
       <header className="pt-composer-header">
         <span>{t(issue ? "Edit issue" : "Create issue")}</span>
       </header>
       <div className="pt-composer-body">
         <div className="pt-issue-fields">
           <div className="pt-issue-title-field">
+            {editState && (
+              <span className="pt-issue-status" aria-hidden="true">
+                <StatusIcon state={editState} size={14} />
+              </span>
+            )}
             <input
               ref={titleRef}
               autoComplete="off"
@@ -1542,22 +1549,6 @@ function IssueComposer({
               options={userOptions(data, t("No assignee"))}
               onChange={(id) => patch({ assigneeId: id })}
             />
-            <PropertyMenu
-              compact
-              label={t("Estimate")}
-              ariaLabel={t("Set estimate")}
-              searchPlaceholder={t("Set estimate…")}
-              value={value.estimate ? estimateLabel(value.estimate, estimateType) : t("Estimate")}
-              selectedId={value.estimate ? String(value.estimate) : "0"}
-              triggerClassName={pill(Boolean(value.estimate))}
-              icon={<EstimateIcon size={14} />}
-              options={
-                teamUsesEstimates(estimateSettings)
-                  ? estimatePickerOptions(estimateSettings).map((option) => ({ id: option.value < 0 ? "0" : option.id, label: t(option.label), icon: <EstimateValueIcon value={option.value} />, i18nIgnore: option.value >= 0 }))
-                  : [{ id: "0", label: t("Estimates are not enabled for this team"), icon: <EstimateIcon none /> }]
-              }
-              onChange={(id) => patch({ estimate: Number(id) || undefined })}
-            />
             {milestones.length > 0 && (
               <PropertyMenu
                 compact
@@ -1576,6 +1567,22 @@ function IssueComposer({
                 onChange={(id) => patch({ milestoneId: id })}
               />
             )}
+            <PropertyMenu
+              compact
+              label={t("Estimate")}
+              ariaLabel={t("Set estimate")}
+              searchPlaceholder={t("Set estimate…")}
+              value={value.estimate ? estimateLabel(value.estimate, estimateType) : t("Estimate")}
+              selectedId={value.estimate ? String(value.estimate) : "0"}
+              triggerClassName={pill(Boolean(value.estimate))}
+              icon={<EstimateIcon size={14} />}
+              options={
+                teamUsesEstimates(estimateSettings)
+                  ? estimatePickerOptions(estimateSettings).map((option) => ({ id: option.value < 0 ? "0" : option.id, label: t(option.label), icon: <EstimateValueIcon value={option.value} />, i18nIgnore: option.value >= 0 }))
+                  : [{ id: "0", label: t("Estimates are not enabled for this team"), icon: <EstimateIcon none /> }]
+              }
+              onChange={(id) => patch({ estimate: Number(id) || undefined })}
+            />
             <PropertyMenu
               compact
               multiple
@@ -1603,10 +1610,12 @@ function IssueComposer({
               <TemplateGlyph name="attach" size={14} />
             </button>
             <div className="pt-composer-submit">
-              <label className="pt-create-more" aria-label={t("Create more issues")}>
-                <input type="checkbox" role="switch" checked={createMore} disabled={Boolean(issue)} onChange={(event) => setCreateMore(event.target.checked)} />
-                <span>{t("Create more")}</span>
-              </label>
+              {!issue && (
+                <label className="pt-create-more" aria-label={t("Create more issues")}>
+                  <input type="checkbox" role="switch" checked={createMore} onChange={(event) => setCreateMore(event.target.checked)} />
+                  <span>{t("Create more")}</span>
+                </label>
+              )}
               <button type="button" className="pt-small-button" aria-label={t("Discard changes")} onClick={() => void cancel()}>
                 {t("Cancel")}
               </button>

@@ -18,7 +18,7 @@
 .pt-list-card>header .pt-list-add svg{width:14px;height:14px}
 .pt-list-card>header button:hover{background:var(--pt-list-button-hover-bg);color:var(--pt-text)}
 .pt-list-row{position:relative;box-sizing:border-box;min-height:64px;display:grid;grid-template-columns:44px minmax(0,1fr) 24px;align-items:center;padding:16px}
-.pt-list-row+.pt-list-row::before{content:"";position:absolute;top:0;left:16px;right:16px;height:.5px;background:var(--pt-row-sep)}
+.pt-list-row+.pt-list-row::before{content:"";position:absolute;top:-.5px;left:16px;right:16px;height:.5px;background:var(--pt-row-sep)}
 .pt-list-row:hover{background:var(--pt-row-hover-bg)}
 .pt-row-link{position:absolute;z-index:1;inset:0;padding:0;border:0;background:transparent}
 .pt-row-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:6px;background:color-mix(in srgb,var(--pt-icon-color) var(--pt-icon-alpha),transparent)}
@@ -146,7 +146,7 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 .pt-milestone-description .mention-text-field,.pt-issue-description .mention-text-field{color:var(--pt-section-fg)}
 .pt-composer-actions{height:24px;display:flex;align-items:center;justify-content:flex-end;gap:12px}
 .pt-issue-composer .pt-composer-body{display:flex;flex-direction:column;gap:24px;padding:0 20px 12px}
-.pt-issue-title-field{padding-top:5px}
+.pt-issue-title-field{padding:5px 4px 0 0}
 .pt-issue-description{min-height:100px;--mention-field-min-height:100px}
 .pt-composer-toolbar{display:flex;flex-direction:column;align-items:stretch;gap:12px}
 .pt-composer-pills{display:flex;flex-wrap:wrap;gap:6px}
@@ -237,3 +237,9 @@ html:root .settings-app .settings-main .pt-list-card>header:has(.pt-list-add) h3
 
 .pt-template-menu [role=menuitem]{font-weight:400}
 .pt-template-menu{min-width:313px}
+
+/* Editing a template issue shows its status glyph before the title (measured). */
+.pt-issue-composer--edit .pt-issue-title-field{display:flex;align-items:center;gap:4px;height:24px;margin-left:-5px;padding:0 5px 0 0}
+.pt-issue-composer--edit .pt-issue-title-field input{flex:1;min-width:0}
+.pt-issue-composer--edit .pt-issue-description{margin:0 1px 0 -1px}
+.pt-issue-composer--edit .pt-issue-description .mention-text-field .issue-description-root .description-editor{padding-left:24px}
