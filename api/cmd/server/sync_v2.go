@@ -261,6 +261,12 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 			if ok {
 				break
 			}
+			if attempt < syncChangesAttempts && syncChangesRetryableRace(err) {
+				// A policy write can retire the source and its epoch in the
+				// same transaction. Resolve fresh access before treating a
+				// transient stale projection as unavailable.
+				continue
+			}
 			if attempt > 1 {
 				slog.WarnContext(r.Context(), "sync changes projected again", "request_id", requestIDFrom(r.Context()), "attempts", attempt)
 			}
@@ -291,7 +297,7 @@ func (s *server) syncChangesResyncAfterRace(r *http.Request, access store.EventA
 }
 
 func (s *server) syncChangesResyncAfterPolicyRace(r *http.Request, access store.EventAccess, journal committedChangeReader, after string, err error) (syncV2ChangesResponse, bool) {
-	if !errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, errRealtimeProjectionStale) && !errors.Is(err, store.ErrResourceAccessChanged) {
+	if !syncChangesPolicyRace(err) {
 		return syncV2ChangesResponse{}, false
 	}
 	ctx, err := s.store.LiveEventContext(r.Context())
@@ -303,6 +309,17 @@ func (s *server) syncChangesResyncAfterPolicyRace(r *http.Request, access store.
 		return syncV2ChangesResponse{}, false
 	}
 	return s.syncChangesResetPage(ctx, current, journal, after, false)
+}
+
+func syncChangesRetryableRace(err error) bool {
+	return errors.Is(err, errRealtimeProjectionStale) ||
+		errors.Is(err, store.ErrResourceAccessChanged)
+}
+
+func syncChangesPolicyRace(err error) bool {
+	return errors.Is(err, store.ErrAuthForbidden) ||
+		errors.Is(err, errRealtimeProjectionStale) ||
+		errors.Is(err, store.ErrResourceAccessChanged)
 }
 
 func (s *server) syncChangesResetPage(ctx context.Context, access store.EventAccess, journal committedChangeReader, after string, allowCredentialChurn bool) (syncV2ChangesResponse, bool) {

@@ -550,6 +550,7 @@ func (s *SQLiteStore) decodeColdWorkspace(ctx context.Context, workspace string,
 }
 
 type coldLegacyWriteKey struct{}
+type coldLoopContractReadKey struct{}
 
 // A COLD legacy write can hold a decoded facade while its first attempt waits
 // for another replica's workspace lock. That lock attempt is side-effect free
@@ -593,6 +594,10 @@ func coldLegacyWrite(ctx context.Context) bool {
 // metadata writer does). Events, webhooks and realtime publications are the
 // legacy writer's own.
 func (s *SQLiteStore) coldLegacyMutation(ctx context.Context, workspace, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	if s.dialect == "sqlite" && eventType == "loop.output_contract" && !fullMutationsForced.Load() &&
+		!projectRecordSelectionEnabled(ctx) && ctx.Value(coldMetadataReadKey{}) == nil {
+		ctx = context.WithValue(ctx, coldLoopContractReadKey{}, true)
+	}
 	return s.coldLegacyWrite(ctx, workspace, func(ctx context.Context, facade *SQLiteStore) error {
 		return facade.dispatchMutation(ctx, workspace, eventType, payload, mutate)
 	})

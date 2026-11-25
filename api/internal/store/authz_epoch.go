@@ -49,17 +49,21 @@ func (s *SQLiteStore) sessionPolicyEpoch(ctx context.Context, workspaceID, authz
 	if s.dialect != "sqlite" || !s.db.journalReady.Load() {
 		return ""
 	}
+	if snapshot, held := ctx.Value(workspaceReadKey{}).(workspaceRead); held && snapshot.database == s.db {
+		return ""
+	}
+	return readSQLiteSessionPolicyEpoch(ctx, s.db, workspaceID, authzEpoch)
+}
+
+func readSQLiteSessionPolicyEpoch(ctx context.Context, reader metadataRowReader, workspaceID, authzEpoch string) string {
 	previousGeneration, value, ok := strings.Cut(authzEpoch, ":")
 	previous, err := strconv.ParseInt(value, 10, 64)
 	if !ok || err != nil || previous < 0 {
 		return ""
 	}
-	if snapshot, held := ctx.Value(workspaceReadKey{}).(workspaceRead); held && snapshot.database == s.db {
-		return ""
-	}
 	var generation string
 	var epoch, policyEpoch, capturedEpoch int64
-	err = s.db.QueryRowContext(ctx, `SELECT m.generation,COALESCE(a.epoch,0),COALESCE(a.policy_epoch,0),COALESCE(a.captured_epoch,0)
+	err = reader.QueryRowContext(ctx, `SELECT m.generation,COALESCE(a.epoch,0),COALESCE(a.policy_epoch,0),COALESCE(a.captured_epoch,0)
 		FROM workspace_states w CROSS JOIN record_journal_mode m
 		LEFT JOIN workspace_authz_epochs a ON a.workspace_id=w.workspace_id
 		WHERE w.workspace_id=? AND m.id=1 AND m.enabled=1`, workspaceID).Scan(&generation, &epoch, &policyEpoch, &capturedEpoch)

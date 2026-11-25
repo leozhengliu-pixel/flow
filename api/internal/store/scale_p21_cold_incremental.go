@@ -933,7 +933,7 @@ func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace 
 	// when every changed project uses the same labels as before, it does not.
 	countNeutral := false
 	if change := changes["projects"]; change != nil && !change.root && !change.manifest {
-		neutral, err := labels.unchanged(ctx, tx, before, after, change.keys)
+		neutral, err := labels.unchanged(ctx, tx, installed, before, after, change.keys)
 		if err != nil {
 			return nil, err
 		}
@@ -975,6 +975,18 @@ func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace 
 	for name := range viaUsers {
 		if affected[name] && !coldPublishOnlyUsersChanged(name, changes) {
 			// Another dependency changed: rebuilt (or patched) as before.
+			delete(viaUsers, name)
+			continue
+		}
+		_, field, _ := metadataLogicalField(name)
+		empty := "[]"
+		if field.Type.Kind() == reflect.Map {
+			empty = "{}"
+		}
+		if !coldPublishRootEmpty(after.occurrences[name], empty) {
+			// The row scan cannot prove that inline records keep their
+			// display references after the directory changes.
+			affected[name] = true
 			delete(viaUsers, name)
 			continue
 		}
@@ -1063,6 +1075,15 @@ func (s *SQLiteStore) coldPublishPatchable(name string, installed *metadataLogic
 			return false
 		}
 	}
+	rows, current := len(before.records[name]), len(after.records[name])
+	// Empty collections take the normalizer's default branch. Rebuilding
+	// also costs less when most of the rows need to be rewritten.
+	return rows != 0 && current != 0 && keys*2 <= current+1 && coldPublishPatchShape(name, installed, before)
+}
+
+// coldPublishPatchShape proves the installed collection contains only
+// canonical rows, independently of whether a full rewrite would be cheaper.
+func coldPublishPatchShape(name string, installed *metadataLogicalSource, before *coldPublishState) bool {
 	index, field, ok := metadataLogicalField(name)
 	if !ok {
 		return false
@@ -1083,17 +1104,8 @@ func (s *SQLiteStore) coldPublishPatchable(name string, installed *metadataLogic
 	default:
 		return false
 	}
-	rows, current := len(before.records[name]), len(after.records[name])
-	if rows == 0 || current == 0 || keys*2 > current+1 {
-		// Empty collections take the normalizer's default branch; a field
-		// mostly rewritten is rebuilt.
-		return false
-	}
 	node := installed.fields[index]
-	if node.typ != field.Type || node.blocked || node.generic {
-		return false
-	}
-	return true
+	return node.typ == field.Type && !node.blocked && !node.generic
 }
 
 // coldPublishUserReaders look users up by the IDs their items hold
@@ -1134,13 +1146,14 @@ func coldPublishOnlyUsersChanged(name string, changes map[string]*coldPublishCha
 
 // coldPublishUserChange describes a change of user rows alone (nil when users
 // did not change that way): no root occurrence or manifest change, users
-// patchable, each changed row's key is the ID of its user before (the
+// entirely canonical, each changed row's key is the ID of its user before (the
 // installed item) and after (the stored row), and each ID is plain enough to
 // be found in a stored row's bytes (coldPublishUsers.referenced).
 func (s *SQLiteStore) coldPublishUserChange(ctx context.Context, tx *sqlTx, workspace string, installed *metadataLogicalSource, before, after *coldPublishState, changes map[string]*coldPublishChange) (*coldPublishUsers, error) {
 	change := changes["users"]
+	oldRows, newRows := before.records["users"], after.records["users"]
 	if change == nil || change.root || change.manifest || len(change.keys) == 0 ||
-		!s.coldPublishPatchable("users", installed, before, after, changes, "", len(change.keys)) {
+		len(oldRows) == 0 || len(newRows) == 0 || !coldPublishPatchShape("users", installed, before) {
 		return nil, nil
 	}
 	users := &coldPublishUsers{runes: map[rune]bool{}, bodyOnly: true}
@@ -1152,8 +1165,8 @@ func (s *SQLiteStore) coldPublishUserChange(ctx context.Context, tx *sqlTx, work
 		for _, r := range key {
 			users.runes[r] = true
 		}
-		_, inBefore := before.records["users"][key]
-		record, inAfter := after.records["users"][key]
+		_, inBefore := oldRows[key]
+		record, inAfter := newRows[key]
 		users.bodyOnly = users.bodyOnly && inBefore && inAfter
 		if !inAfter {
 			continue
@@ -1178,7 +1191,7 @@ func (s *SQLiteStore) coldPublishUserChange(ctx context.Context, tx *sqlTx, work
 	}); err != nil {
 		return nil, err
 	}
-	order := coldPublishRecoveryOrder(before.records["users"], false)
+	order := coldPublishRecoveryOrder(oldRows, false)
 	if len(items) != len(order) {
 		return nil, nil
 	}
@@ -1608,8 +1621,13 @@ func (s *SQLiteStore) patchColdPublicationField(ctx context.Context, b *metadata
 		for index, key := range before {
 			position[key] = index
 		}
+		run := metadataLogicalCopyRun{b: b}
+		defer run.abandon()
 		for _, key := range plan.order[name] {
 			if changed[key] {
+				if err := run.flush(); err != nil {
+					return err
+				}
 				value, ok := normalized[key]
 				if !ok {
 					return coldPublishInexact("missing normalized row")
@@ -1632,13 +1650,25 @@ func (s *SQLiteStore) patchColdPublicationField(ctx context.Context, b *metadata
 			} else if !match {
 				return coldPublishInexact("installed item key")
 			}
-			copied, err := b.copyNode(item)
+			copied, batched, err := run.add(item)
 			if err != nil {
 				return err
+			}
+			if !batched {
+				if err := run.flush(); err != nil {
+					return err
+				}
+				copied, err = b.copyNode(item)
+				if err != nil {
+					return err
+				}
 			}
 			b.cost += copied.cost + uint64(item.typ.Size())*2
 			b.unavailable = b.unavailable || copied.unavailable
 			b.count++
+		}
+		if err := run.flush(); err != nil {
+			return err
 		}
 		return b.EndCollection()
 	}
@@ -1791,20 +1821,68 @@ func (u *coldLabelUses) use(ctx context.Context, tx *sqlTx, after *coldPublishSt
 	return project, nil
 }
 
-// unchanged reports whether the changed project rows keys use the same labels
-// before and after (a row's before use is known only from the cache).
-func (u *coldLabelUses) unchanged(ctx context.Context, tx *sqlTx, before, after *coldPublishState, keys []string) (bool, error) {
+// unchanged reports whether the changed project rows use the same labels
+// before and after. Use the exact installed collection for a cache miss if
+// its rows can be matched to the old canonical records.
+func (u *coldLabelUses) unchanged(ctx context.Context, tx *sqlTx, installed *metadataLogicalSource, before, after *coldPublishState, keys []string) (bool, error) {
+	previousUses := map[string][]string{}
+	var missing int
 	for _, key := range keys {
-		var previous, current []string
-		if record, ok := before.records["projects"][key]; ok {
-			u.cache.mu.Lock()
-			cached, known := u.cache.uses[key]
-			u.cache.mu.Unlock()
-			if !known || cached.version != record.version {
-				return false, nil
-			}
-			previous = coldLabelUseOf(cached.project)
+		record, ok := before.records["projects"][key]
+		if !ok {
+			previousUses[key] = nil
+			continue
 		}
+		u.cache.mu.Lock()
+		cached, known := u.cache.uses[key]
+		u.cache.mu.Unlock()
+		if known && cached.version == record.version {
+			previousUses[key] = coldLabelUseOf(cached.project)
+		} else {
+			missing++
+		}
+	}
+	if missing != 0 && coldPublishPatchShape("projects", installed, before) {
+		index, _, _ := metadataLogicalField("projects")
+		order := coldPublishRecoveryOrder(before.records["projects"], false)
+		owner := &ResourceRead{store: u.store}
+		defer owner.Close()
+		// Recovery preserves project IDs, label IDs and archive state through
+		// normalization, in canonical row order.
+		count := 0
+		err := installed.fields[index].Children(ctx, func(ordinal reflect.Value, item metadataLogicalNode) error {
+			position := int(ordinal.Int())
+			count++
+			if position >= len(order) {
+				return nil
+			}
+			key := order[position]
+			if _, changed := slices.BinarySearch(keys, key); !changed {
+				return nil
+			}
+			if _, known := previousUses[key]; known {
+				return nil
+			}
+			raw, err := owner.projectNode(ctx, item, "ID", "LabelIDs", "ArchivedAt")
+			if err != nil {
+				return err
+			}
+			project := raw.Interface().(domain.Project)
+			if project.ID == key {
+				previousUses[key] = coldLabelUseOf(project)
+			}
+			return nil
+		})
+		if err != nil || count != len(order) {
+			return false, err
+		}
+	}
+	for _, key := range keys {
+		previous, known := previousUses[key]
+		if !known {
+			return false, nil
+		}
+		var current []string
 		if _, ok := after.records["projects"][key]; ok {
 			project, err := u.use(ctx, tx, after, key)
 			if err != nil {
