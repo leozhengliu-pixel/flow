@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw17_search_migration.go",
+  "source": "store/search_migration.go",
   "unmigrated": 0,
   "consumers": {
     "sw17MigrateMetadataSearchIndexBounded": {
