@@ -1,8 +1,7 @@
-import { Check, ChevronDown, ExternalLink, FileText, GitPullRequest, Link2, Plus, Repeat2, RotateCw, X } from 'lucide-react'
+import { Check, ChevronDown, ExternalLink, GitPullRequest, Link2, Plus, Repeat2, RotateCw, X } from 'lucide-react'
 import { CustomerRevenueRowChip, CustomersRowChip } from '@/components/customer/customer-row-properties'
 import { issueCustomerRowData } from '@/components/issue-explorer/customer-filter'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { DocumentGlyph } from '@/components/documents/document-icon'
 import { IssueAgentTasks, IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
 import { useDescriptionSelectionActions } from './description-selection-actions'
 import { fetchIssueRecord, setThreadSubscription } from '@/lib/api'
@@ -11,8 +10,7 @@ import { toast } from '@/lib/toast'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
-import * as Dialog from '@radix-ui/react-dialog'
-import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Comment, Cycle, DeployPreview, FlowDocument, Issue, IssueLabel, IssueRelationType, IssueUpdateInput, Presence, Project, ProjectMilestone } from '@/types/flow'
+import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Comment, Cycle, DeployPreview, Issue, IssueLabel, IssueRelationType, IssueUpdateInput, Presence, Project, ProjectMilestone } from '@/types/flow'
 import { Button } from '@/components/ui/button'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import { PagedActivityTimeline } from '@/components/activity/paged-activity-timeline'
@@ -64,7 +62,7 @@ import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import type { IssueOptionsActions } from '@/components/issue/issue-options-menu'
-import { documentPath } from '@/lib/app-routes'
+import { IssueResources } from './issue-resources'
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
 import { useI18n } from '@/i18n/i18n'
 import { Toggle } from '@/components/ui/toggle'
@@ -218,7 +216,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         {subOpen&&<SubIssueEditor key={subEditorKey} parent={issue} data={data} onCancel={()=>setSubOpen(false)} onCreate={async input=>{await onCreateSubIssue(input);setSubEditorKey(key=>key+1)}}/>}
         {!desktopLayout&&!(inTriage&&data.workspaceSettings.featureFlags?.['triage-intelligence'])&&<SimilarIssues issue={issue} issues={data.issues} workspaceKey={data.workspace.urlKey} onOpen={openIssue} onMarkDuplicate={target=>void onRelation('duplicate',target.id)}/>}
         {linkedReviews.length>0&&<IssueCodeReviews actions={issueOptionsActions} reviews={linkedReviews}/>}
-        {(linkedDocuments.length>0||linkedResources.length>0)&&<IssueResources documents={linkedDocuments} links={linkedResources} workspaceKey={data.workspace.urlKey} actions={issueOptionsActions} onDeleteLink={onDeleteAttachment}/>}
+        {(linkedDocuments.length>0||linkedResources.length>0)&&<IssueResources documents={linkedDocuments} issueKey={issue.identifier} links={linkedResources} workspaceKey={data.workspace.urlKey} actions={issueOptionsActions} onDeleteLink={onDeleteAttachment}/>}
         {data.workspaceSettings.featureFlags['customer-requests'] !== false && <IssueCustomerNeedsSection data={data} issueId={issue.id} requests={[...localCustomerRequests, ...customerRequests]} onLocalCreated={request=>setLocalCustomerRequests(current=>[request,...current.filter(item=>item.id!==request.id)])}/>}
         <IssueAttachments attachments={fileAttachments} upload={uploadState} onRetry={upload} onDelete={onDeleteAttachment}/>
         {descriptionSelection.panels}
@@ -291,14 +289,6 @@ function IssueTeamProperty({issue,data,onUpdate}:{issue:Issue;data:BootstrapData
 }
 function PropertyGroup({title,children}:{title:string;children:React.ReactNode}){return <section className="property-group"><h4>{title}</h4>{children}</section>}
 function IssueParentContext({parent,issues,workspaceKey,onOpen}:{parent:Issue;issues:Issue[];workspaceKey:string;onOpen:()=>void}){const children=parent.subIssueIds.map(id=>issues.find(issue=>issue.id===id)).filter((issue):issue is Issue=>Boolean(issue)&&!issue!.archivedAt),completed=children.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length;return <div className="issue-parent-context"><span>Sub-issue of</span><a href={`/${workspaceKey}/issue/${parent.identifier}`} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();onOpen()}}><StatusIcon state={parent.state} size={14}/><strong data-i18n-ignore>{parent.identifier}</strong><span data-i18n-ignore>{parent.title}</span></a>{children.length>0&&<button aria-label={`Open sub-issues of ${parent.identifier}`} onClick={onOpen}><SubIssueProgressRing completed={completed} total={children.length}/><span>{completed}/{children.length}</span></button>}</div>}
-function IssueResources({documents,links,workspaceKey,actions,onDeleteLink}:{documents:FlowDocument[];links:Attachment[];workspaceKey:string;actions?:IssueOptionsActions;onDeleteLink:(id:string)=>Promise<void>}){
-  const[collapsed,setCollapsed]=useState(false),[menuOpen,setMenuOpen]=useState(false),[linkOpen,setLinkOpen]=useState(false),[url,setUrl]=useState(''),[title,setTitle]=useState(''),[saving,setSaving]=useState(false)
-  const addLink=async()=>{if(!actions||!url.trim())return;setSaving(true);try{await actions.addLink({url:url.trim(),title:title.trim()||undefined});setUrl('');setTitle('');setLinkOpen(false)}finally{setSaving(false)}}
-  return <section className="issue-detail-section issue-resources"><header><button className="issue-section-collapse" aria-label={collapsed?'Expand resources section':'Collapse resources section'} aria-expanded={!collapsed} onClick={()=>setCollapsed(value=>!value)}><ChevronDown/><span>Resources</span></button><span>{documents.length+links.length}</span><span/><Popover.Root open={menuOpen} onOpenChange={setMenuOpen}><Popover.Trigger asChild><button className="issue-section-add" aria-label="Add resource to issue"><Plus/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" className="issue-resource-menu" align="end" sideOffset={4}><button onClick={()=>{setMenuOpen(false);void actions?.addDocument()}} disabled={!actions}><FileText/>Create document</button><button onClick={()=>{setMenuOpen(false);setLinkOpen(true)}} disabled={!actions}><Link2/>Add link</button></Popover.Content></Popover.Portal></Popover.Root></header>{!collapsed&&<>{documents.map(document=><a className="linked-issue issue-resource-row" href={documentPath(workspaceKey,document)} key={document.id}><DocumentGlyph document={document}/><span>Document</span><strong data-i18n-ignore>{document.title}</strong></a>)}{links.map(link=><a className="linked-issue issue-resource-row" href={link.url} target="_blank" rel="noreferrer" key={link.id}><Link2 size={14}/><span>{safeHost(link.url)}</span><strong data-i18n-ignore>{link.title}</strong><button aria-label={`Delete resource ${link.title}`} onClick={event=>{event.preventDefault();event.stopPropagation();void onDeleteLink(link.id)}}><X/></button></a>)}</>}
-    <Dialog.Root open={linkOpen} onOpenChange={setLinkOpen}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="modal-overlay"/><Dialog.Content data-flow-motion="dialog" className="issue-link-dialog"><Dialog.Title>Add link</Dialog.Title><label>URL<input autoFocus type="url" value={url} placeholder="https://" onChange={event=>setUrl(event.target.value)}/></label><label>Title<input value={title} placeholder="Optional" onChange={event=>setTitle(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&url.trim())void addLink()}}/></label><footer><Dialog.Close asChild><button>Cancel</button></Dialog.Close><button className="primary" disabled={!url.trim()||saving} onClick={()=>void addLink()}>{saving?'Adding…':'Add link'}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
-  </section>
-}
-function safeHost(value:string){try{return new URL(value).hostname}catch{return 'Link'}}
 
 function IssueCustomerNeedsSection({ data, issueId, requests, onLocalCreated }: {
   data: BootstrapData

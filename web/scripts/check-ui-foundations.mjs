@@ -16,7 +16,7 @@ const [font, foundations, tokens, cycles, projects, teamOverview, documents, doc
   readFile(`${root}/src/components/team-overview/team-overview-page.tsx`, 'utf8'),
   readFile(`${root}/src/components/team-overview/team-documents.tsx`, 'utf8'),
   readFile(`${root}/src/components/team-overview/team-documents.css`, 'utf8'),
-  readFile(`${root}/src/components/detail/detail-pane.tsx`, 'utf8'),
+  Promise.all([readFile(`${root}/src/components/detail/detail-pane.tsx`, 'utf8'), readFile(`${root}/src/components/detail/issue-resources.tsx`, 'utf8')]).then(parts => parts.join('\n')),
   readFile(`${root}/src/components/project-detail/project-overview.tsx`, 'utf8'),
   readFile(`${root}/src/components/initiatives/initiative-resources.tsx`, 'utf8'),
   readFile(`${root}/src/components/releases/release-detail-page.tsx`, 'utf8'),

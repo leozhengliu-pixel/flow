@@ -13,6 +13,7 @@ export const agentRuntimeZhCN: Record<string, string> = {
   "Crop image": "裁剪图片",
   "Crop": "裁剪",
   "Full screen": "全屏",
+  "Add link to {issue}": "向 {issue} 添加链接",
   "Media player": "媒体播放器",
   "Seek slider": "进度条",
   "Add comment": "添加评论",

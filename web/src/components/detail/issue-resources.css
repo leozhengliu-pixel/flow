@@ -1,0 +1,36 @@
+/* The issue's Resources section and its Add link dialog, as the design reference draws them. */
+.res-section { width: calc(100% + 6px); margin: 18px 0 0 -6px; }
+.res-header { display: flex; height: 44px; align-items: center; justify-content: space-between; padding: 0 8px 0 0; }
+.res-collapse { display: flex; height: 24px; align-items: center; gap: 3px; padding: 0 12px 0 6px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--res-icon); font: 500 12px / normal var(--font); cursor: default; }
+.res-collapse > span:last-child { color: var(--res-label); }
+.res-caret { display: grid; width: 14px; height: 14px; place-items: center; }
+.res-caret svg { width: 14px; height: 14px; }
+.res-caret[data-collapsed] svg { transform: rotate(-90deg); }
+.res-add { display: grid; width: 28px; height: 28px; place-items: center; padding: 0; border: .5px solid var(--res-add-border); border-radius: 9999px; background: var(--res-add-bg); color: var(--res-icon); box-shadow: var(--res-add-shadow); cursor: default; }
+.res-rows { display: flex; flex-direction: column; gap: 1px; margin-top: 1px; }
+.res-row { display: flex; height: 36px; align-items: center; gap: 8px; padding: 0 10px 0 8px; border-radius: 8px; color: var(--res-title); font: 500 13px / 24px var(--font); text-decoration: none; }
+.res-row:hover, .res-row:focus-visible { background: var(--res-row-hover); }
+.res-icon { display: grid; width: 16px; height: 16px; flex: none; place-items: center; color: var(--res-icon); }
+.res-icon svg { width: 16px; height: 16px; }
+.res-icon img { border-radius: 8px; }
+.res-title { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.res-subtitle { min-width: 0; flex: 1; overflow: hidden; color: var(--res-label); font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
+.res-meta { display: flex; flex: none; align-items: center; margin-left: auto; }
+.res-time { color: var(--res-label); font: 450 13px / normal var(--font); }
+.res-menu-slot { width: 0; height: 24px; overflow: hidden; }
+.res-row:hover .res-menu-slot, .res-row:focus-within .res-menu-slot, .res-menu-slot:has([data-state="open"]) { width: 24px; margin-left: 4px; }
+.res-menu { display: grid; width: 24px; height: 24px; place-items: center; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--res-icon); cursor: default; }
+.res-menu svg { width: 14px; height: 14px; }
+.res-dialog { position: fixed; z-index: 1000; top: 50%; left: 50%; box-sizing: border-box; width: min(540px, calc(100vw - 32px)); transform: translate(-50%, -50%); border: .5px solid var(--res-dialog-border); border-radius: 12px; background: var(--res-dialog-bg); box-shadow: var(--res-dialog-shadow); color: var(--res-dialog-fg); }
+.res-dialog form { display: flex; flex-direction: column; gap: 16px; padding: 32px; }
+.res-dialog-title { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--res-title); font: 600 15px / 23px var(--font); }
+.res-dialog-title svg { color: var(--res-icon); }
+.res-dialog label { display: flex; flex-direction: column; gap: 4px; }
+.res-dialog label > span { height: 24px; color: var(--res-dialog-fg); font: 500 13px / 24px var(--font); }
+.res-dialog label em { color: var(--res-dialog-hint); font: 450 12px / normal var(--font); }
+.res-dialog input { box-sizing: border-box; height: 32px; padding: 6px 12px; border: .5px solid var(--res-dialog-field-border); border-radius: 8px; background: var(--res-dialog-field-bg); color: var(--res-title); font: 400 13px / normal var(--font); outline: 0; }
+.res-dialog input:focus { border-color: var(--res-dialog-focus); }
+.res-dialog footer { display: flex; justify-content: flex-end; gap: 16px; }
+.res-dialog footer button { height: 32px; padding: 0 12px; border: .5px solid transparent; border-radius: 9999px; background: var(--res-cancel-bg); color: var(--res-dialog-fg); font: 500 13px / normal var(--font); cursor: default; }
+.res-dialog footer .primary { background: var(--res-primary-bg); color: var(--res-primary-fg); box-shadow: var(--res-primary-shadow); }
+.res-dialog footer button:disabled { opacity: .6; }
