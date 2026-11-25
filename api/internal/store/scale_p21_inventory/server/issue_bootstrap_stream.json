@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_issue_bootstrap_stream.go",
+  "source": "server/issue_bootstrap_stream.go",
   "unmigrated": 0,
   "consumers": {
     "issueRecordsBootstrapBounded": {

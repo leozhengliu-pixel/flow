@@ -60,11 +60,11 @@ func scaleP21SW305HasStatement(t *testing.T, function *ast.FuncDecl, expected st
 func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 	t.Run("production-snapshot-producer-callset", func(t *testing.T) {
 		expected := map[string]int{
-			"main.go:bootstrap:BeginWorkspaceRead":                                             1,
-			"advanced_features.go:downloadExport:BeginWorkspaceRead":                           1,
-			"personal_data.go:writeWorkspacePersonalData:BeginWorkspaceRead":                   1,
-			"notification_state.go:scopedNotificationState:BeginWorkspaceRead":                 1,
-			"scale_p21_general_bootstrap.go:generalBootstrapBounded:BeginGeneralBootstrapRead": 1,
+			"main.go:bootstrap:BeginWorkspaceRead":                                   1,
+			"advanced_features.go:downloadExport:BeginWorkspaceRead":                 1,
+			"personal_data.go:writeWorkspacePersonalData:BeginWorkspaceRead":         1,
+			"notification_state.go:scopedNotificationState:BeginWorkspaceRead":       1,
+			"general_bootstrap.go:generalBootstrapBounded:BeginGeneralBootstrapRead": 1,
 		}
 		actual := map[string]int{}
 		functions := map[string][]*ast.FuncDecl{}

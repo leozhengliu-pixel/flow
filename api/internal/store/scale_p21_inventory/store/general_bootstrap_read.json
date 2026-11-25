@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_general_bootstrap_read.go",
+  "source": "store/general_bootstrap_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginGeneralBootstrapRead": {

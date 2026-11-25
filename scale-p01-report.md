@@ -269,7 +269,7 @@ and the required `CHANGELOG.md` entry. New files are all named for P01:
 
 - `api/cmd/server/scale_external_load_test.go`
 - `api/cmd/server/scale_permission_matrix_test.go`
-- `api/cmd/server/scale_p01_browser_acks_test.go`
+- `api/cmd/server/browser_acks_test.go`
 - `api/cmd/server/scale_p01_fixture_test.go`
 - `api/cmd/server/scale_p01_histogram_test.go`
 - `api/cmd/server/scale_p01_late_commit_test.go`

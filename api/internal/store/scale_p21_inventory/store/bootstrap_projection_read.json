@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_bootstrap_projection_read.go",
+  "source": "store/bootstrap_projection_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginIssueBootstrapRead": {

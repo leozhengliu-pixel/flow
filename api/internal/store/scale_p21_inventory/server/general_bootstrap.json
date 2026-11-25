@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_general_bootstrap.go",
+  "source": "server/general_bootstrap.go",
   "unmigrated": 0,
   "consumers": {
     "generalBootstrapBounded": {
