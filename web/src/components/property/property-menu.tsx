@@ -11,7 +11,7 @@ import { usePropertyCommand } from './use-property-command'
 import { groupOptionSections } from '@/lib/group-options'
 import { matchesSearch } from '@/lib/search-match'
 import { treeGuideLevels } from '@/lib/team-hierarchy'
-import { fitTreeMenu } from '@/lib/tree-menu-width'
+import { fitRoundedMenu, fitTreeMenu } from '@/lib/tree-menu-width'
 import { readLabelUsage, recordLabelUsage } from '@/lib/label-usage'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import type { LabelResourceType } from '@/types/flow'
@@ -79,7 +79,7 @@ export interface PropertyOptionSubmenu {
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project-labels' | 'project' | 'milestone'
 
-export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, createOptionLabel, searchPlaceholder, searchShortcut, showGroupHeadings = true, groupHeading, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, tree = false, phoneSurfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, hoverPlacement = 'left', valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false, tooltip, tooltipShortcut, menuContext, disabled = false }: {
+export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, createOptionLabel, searchPlaceholder, searchShortcut, showGroupHeadings = true, groupHeading, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, tree = false, roundWidth = false, highlightOnOpen = true, triggerBadge, phonePopover = false, phoneSurfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, hoverPlacement = 'left', valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false, tooltip, tooltipShortcut, menuContext, disabled = false }: {
   label: string
   disabled?: boolean
   value?: string
@@ -112,6 +112,14 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
    *  The menu hugs its widest row (integer width, 175px to 401px). `'check'`: every row reserves the trailing tick column
    *  of the selected team (Team property, create-issue team). */
   tree?: boolean | 'check'
+  /** Pins the menu to the whole-pixel width of its widest row (the hugging pickers of the project template editor). */
+  roundWidth?: boolean
+  /** On a phone the menu stays a popover under its trigger instead of the bottom sheet (the settings pages' pickers). */
+  phonePopover?: boolean
+  /** Compact triggers: extra content after the value (a count the phone layout shows instead of the value). */
+  triggerBadge?: ReactNode
+  /** `false`: opening highlights no row, not even a selected one (the multi-select pickers of the project template editor). */
+  highlightOnOpen?: boolean
   phoneSurfaceClassName?: string
   side?: 'top' | 'right' | 'bottom' | 'left'
   align?: 'start' | 'center' | 'end'
@@ -151,7 +159,16 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   // A team tree hugs its widest row at a whole-pixel width; refit when the rows change.
   const [treeSurface, setTreeSurface] = useState<HTMLDivElement | null>(null)
   const treeRowsKey = tree ? menuOptions.map(option => `${option.id}:${option.label}`).join('|') : ''
-  useLayoutEffect(() => { if (tree && treeSurface) fitTreeMenu(treeSurface) }, [tree, treeSurface, treeRowsKey])
+  useLayoutEffect(() => {
+    if (!tree || !treeSurface) return
+    fitTreeMenu(treeSurface, undefined, roundWidth)
+    // Refit once the web font has loaded: rows measured in the fallback face are narrower.
+    let current = true
+    void document.fonts?.ready.then(() => { if (current && treeSurface.isConnected) fitTreeMenu(treeSurface, undefined, roundWidth) })
+    return () => { current = false }
+  }, [tree, treeSurface, treeRowsKey, roundWidth])
+  const roundRowsKey = roundWidth ? menuOptions.map(option => `${option.id}:${option.label}`).join('|') : ''
+  useLayoutEffect(() => { if (roundWidth && !tree && treeSurface) fitRoundedMenu(treeSurface) }, [roundWidth, tree, treeSurface, roundRowsKey])
   const selected = multiple || selectedIds.length ? selectedIds : [selectedId ?? options.find(option => option.label === value)?.id ?? '']
   const selectionKey = JSON.stringify(selected)
   const selectedSet = useMemo(() => new Set<string>(JSON.parse(selectionKey)), [selectionKey])
@@ -164,7 +181,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const kind = explicitKind ?? (multiple && label === 'Labels' ? 'labels' : label === 'Project' ? 'project' : 'standard')
   const orderedOptions = useMemo(() => kind === 'labels' ? menuOptions.map(option => option.groupLabel ? { ...option, keywords: `${option.keywords ?? ''} ${option.groupLabel}` } : option) : multiple ? [...menuOptions.filter(option => selectedSet.has(option.id)), ...menuOptions.filter(option => !selectedSet.has(option.id))] : menuOptions, [menuOptions, multiple, kind, selectedSet])
   const { inputRef: commandInputRef, ...command } = usePropertyCommand({
-    highlightOnOpen: kind !== 'labels',
+    highlightOnOpen: kind !== 'labels' && highlightOnOpen,
     autoFocus: kind !== 'project-labels',
     closeOnSelect: closeOnSelect ?? !multiple,
     keepSelectedVisible,
@@ -231,7 +248,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     // Keep the gap traversable, but close even when a pointer jumps beyond Radix's grace polygon in one event.
     if (event.clientX < Math.min(trigger.left, card.left) || event.clientX > Math.max(trigger.right, card.right) || event.clientY < Math.min(trigger.top, card.top) || event.clientY > Math.max(trigger.bottom, card.bottom)) setHoverOpen(false)
   }}>
-        {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span data-i18n-ignore={valueIsEntityName || undefined}>{value || label}</span></> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value" data-i18n-ignore={valueIsEntityName || undefined}>{value || `Add ${label.toLowerCase()}`}</span></>)}
+        {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span data-i18n-ignore={valueIsEntityName || undefined}>{value || label}</span>{triggerBadge}</> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value" data-i18n-ignore={valueIsEntityName || undefined}>{value || `Add ${label.toLowerCase()}`}</span></>)}
       </button>
   const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
   const plainTooltip = !hoverContent && Boolean(tooltip)
@@ -255,7 +272,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
           </div>}
         </div>
   if (embedded) return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}>{content}</Tooltip.Provider>
-  if (phone) return <>{customTrigger
+  if (phone && !phonePopover) return <>{customTrigger
     ? customTrigger({ open, activeTrigger, openMenu: triggerId => { setActiveTrigger(triggerId); setOpen(true) } })
     : <span className="phone-property-trigger" onClick={() => { if (!disabled) setOpen(true) }}>{triggerButton}</span>}
     <PhoneMenu heading={menuContext ? t(menuContext) : sheetRecord ? <><span className="phone-menu-context-key">{sheetRecord.key} ⋅</span> {sheetRecord.title}</> : true} open={open} onOpenChange={setOpen} label={sheetLabel} className={`property-command-surface property-command-${kind}${phoneSurfaceClassName ? ` ${phoneSurfaceClassName}` : ''}`}>

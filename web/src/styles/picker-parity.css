@@ -53,6 +53,7 @@ html:root body .project-label-search kbd {
   background: transparent;
   color: var(--pk-muted);
   font: 400 11px/1.1 var(--font);
+  font-feature-settings: "cv08", "zero";
 }
 html:root body .property-command-surface .property-command-search-shortcut > span,
 html:root body .project-label-search .property-command-search-shortcut > span {
@@ -154,6 +155,8 @@ html:root body .property-command-surface .property-command-options [role=option]
   background: transparent;
   color: var(--pk-muted);
   font: 500 11px/1.1 var(--font);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "cv08", "zero";
   text-align: right;
 }
 html:root body .property-command-surface .property-command-group {
@@ -1235,7 +1238,8 @@ html:root body .sub-issue-title-editor:not(#_) .ProseMirror { color: var(--pk-te
 :root { --pk-check-locked: var(--pk-faint); }
 html:root body .property-command-surface.project-teams-menu:not(#_) {
   box-sizing: border-box;
-  width: 252px;
+  /* 252px at least; a wider row (a sub-team listed after its selected parent) widens the menu up to 360px. */
+  width: max-content;
   min-width: 252px;
   max-width: min(360px, calc(100vw - 20px));
   /* The sidebar menu class sets its own light border and shadow: the picker keeps the shared surface tokens. */
@@ -1277,6 +1281,8 @@ html:root body .property-command-surface:is(.project-teams-menu, .property-comma
 }
 .project-teams-menu__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-teams-menu__key { flex: none; color: var(--pk-faint); font: 450 13px/normal var(--font); }
+.project-teams-menu__path { flex: none; color: var(--pk-muted); }
+.project-teams-menu__path-chevron { flex: none; align-self: center; color: var(--pk-faint); }
 .project-teams-menu__badge {
   box-sizing: border-box;
   height: 18px;
@@ -1320,7 +1326,8 @@ html:root body .property-command-surface.project-teams-menu:not(#_) .property-co
      the elbow starts at row x + 22.25. The selected team ends in a 16px tick 14px from the edge; rows without a tick
      keep 18px. The menu hugs its rows (175px at least). */
 html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:has(.property-command-checkbox) {
-  grid-template-columns: 16px calc(16px + var(--option-indent, 0) * 24px) minmax(0, 1fr) auto;
+  /* A trailing item (lead caret) takes an implicit auto column; rows without one keep no empty column and its gap. */
+  grid-template-columns: 16px calc(16px + var(--option-indent, 0) * 24px) minmax(0, 1fr);
 }
 html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:has(.property-command-checkbox) .property-command-icon { justify-self: end; }
 html:root body .property-command-options [role=option] > .property-command-tree-elbow {

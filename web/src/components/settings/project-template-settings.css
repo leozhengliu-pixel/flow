@@ -78,6 +78,7 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 .pt-pill:hover,.pt-pill[data-state=open]{background:var(--pt-pill-hover-bg)}
 .pt-pill:hover::after,.pt-pill[data-state=open]::after{box-shadow:var(--pt-ring-hover)}
 .pt-pill>svg,.pt-pill>.avatar,.pt-pill>.pt-label-dot,.pt-pill>.pt-pill-milestone{flex:none;width:14px;height:14px}
+.pt-pill-count{display:none;color:var(--pt-text-2)}
 .pt-pill>.avatar{font-size:6px}
 .pt-pill>span:not([class]){min-width:0;overflow:hidden;text-overflow:ellipsis}
 .pt-pill.is-set>span:not([class]){color:var(--pt-text-2)}
@@ -125,6 +126,9 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 /* Issue rows */
 .pt-issue-row{height:42.5px}
 .pt-issue-status{width:24px;height:24px;flex:none;display:grid;place-items:center}
+.pt-pill.pt-issue-status{padding:0;background:transparent}
+.pt-pill.pt-issue-status::after{display:none}
+.pt-pill.pt-issue-status>span{display:none}
 .pt-issue-title{min-width:0;height:36px;flex:1;display:flex;align-items:center;padding:0 12px 0 4px;border:0;background:transparent;color:var(--pt-section-fg);font-family:inherit;font-size:13px;font-weight:500;line-height:normal;text-align:left}
 .pt-issue-title>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pt-team-chip{box-sizing:border-box;height:24px;flex:none;display:inline-flex;align-items:center;gap:6px;padding:0 9px 0 8px;border:.5px solid var(--pt-chip-border);border-radius:48px;background:var(--pt-chip-bg);color:var(--pt-composer-fg);font-family:inherit;font-size:12px;font-weight:450;line-height:normal;white-space:nowrap}
@@ -182,15 +186,26 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 
 /* Pickers opened from the pills (project property picker surfaces, refined) */
 html:root body .property-command-surface.pt-picker{border-width:.5px}
-html:root body .property-command-surface.pt-picker .property-command-search-shortcut{gap:3px;margin-top:-1px}
+html:root body .property-command-surface.pt-picker .property-command-search-shortcut{gap:3px}
 html:root body .property-command-surface.pt-picker .property-command-search-shortcut kbd{line-height:1.1}
-html:root body .property-command-surface.pt-picker .property-command-search-shortcut>span{font-size:10px;font-weight:450;line-height:23px}
+html:root body .property-command-surface.pt-picker .property-command-search-shortcut>span{margin-top:.9px;font-size:10px;font-weight:450;line-height:11px}
 html:root body .property-command-surface.pt-picker .property-command-options [role=option]>kbd{line-height:1.1}
 html:root body .property-command-surface.pt-picker .property-command-options [role=option]:has(.property-command-check){color:var(--pk-text-strong)}
 
 html:root body .property-command-surface.pt-picker .property-command-options:has(>.property-command-section:first-child>.property-command-group:first-child){padding-top:0}
-html:root body .property-command-surface.pt-picker:not(.is-members) .property-command-options [role=option]:has(.property-command-checkbox){grid-template-columns:14px auto minmax(0,1fr) auto}
-html:root body .property-command-surface.pt-picker.is-members .property-command-options [role=option] .property-command-icon{margin-left:1px}
+html:root body .property-command-surface.pt-picker .property-command-options [role=option]:has(.property-command-checkbox){grid-template-columns:14px auto minmax(0,1fr)}
+/* The members and initiatives pickers hug their rows (the project sidebar's fixed widths do not apply). */
+html:root body .property-command-surface.pt-picker.is-members.is-members:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone){min-width:175px}
+html:root body .property-command-surface.pt-picker.is-initiatives{width:max-content;min-width:175px}
+html:root body .property-command-surface.pt-picker .project-label-search{box-sizing:border-box;height:36.5px;border-bottom-color:var(--pk-divider)}
+html:root body .property-command-surface.pt-picker .project-teams-menu__name{color:var(--pk-text-strong)}
+/* Priority menu glyphs are monochrome (urgent included): muted, strong on the highlighted row. */
+html:root body .property-command-surface .property-command-options [role=option] svg.pt-priority-option{color:var(--pk-muted)}
+html:root body .property-command-surface .property-command-options [role=option][aria-selected=true] svg.pt-priority-option{color:var(--pk-text-strong)}
+/* Multi-select checkboxes: a 14px box with a 1px outline, the accent fill checked. */
+html:root body .property-command-surface.pt-picker .property-command-options [role=option] .property-command-checkbox:not(.is-locked){width:14px;height:14px;margin-left:1px;border:1px solid var(--pk-check-off)}
+html:root body .property-command-surface.pt-picker .property-command-options [role=option][aria-checked=true] .property-command-checkbox:not(.is-locked){border-color:var(--pk-check-on);background:var(--pk-check-on);color:var(--pk-check-mark)}
+html:root body .property-command-surface.pt-picker .property-command-options [role=option] .property-command-check{margin-right:1px}
 html:root body .property-command-surface.pt-picker .property-command-icon:has(.pt-team-avatar){width:18px;height:18px}
 .pt-option-detail{margin-left:8px;color:var(--pk-muted)}
 
@@ -214,7 +229,8 @@ html:root body .property-command-surface.pt-picker .property-command-icon:has(.p
   .pt-back{left:-14px;top:-6px}
   .pt-editor-inner{width:100%}
   .pt-title{margin-bottom:24px}
-  .pt-pills .pt-pill:not(.pt-pill--team){width:24px;justify-content:center;padding:0 2px}
+  .pt-pills .pt-pill:not(.pt-pill--team):not(.has-count){width:24px;justify-content:center;padding:0 2px}
+  .pt-pills .pt-pill>.pt-pill-count{display:inline}
   .pt-pills .pt-pill:not(.pt-pill--team)>span:not([class]){display:none}
   .pt-footer{height:32px;flex-wrap:nowrap;justify-content:flex-start}
 }
@@ -242,5 +258,6 @@ html:root .settings-app .settings-main .pt-list-card>header:has(.pt-list-add) h3
 /* Editing a template issue shows its status glyph before the title (measured). */
 .pt-issue-composer--edit .pt-issue-title-field{display:flex;align-items:center;gap:4px;height:24px;margin-left:-5px;padding:0 5px 0 0}
 .pt-issue-composer--edit .pt-issue-title-field input{flex:1;min-width:0}
+.pt-issue-composer--create .pt-issue-title-field{margin-top:2px}
 .pt-issue-composer--edit .pt-issue-description{margin:0 1px 0 -1px}
 .pt-issue-composer--edit .pt-issue-description .mention-text-field .issue-description-root .description-editor{padding-left:24px}
