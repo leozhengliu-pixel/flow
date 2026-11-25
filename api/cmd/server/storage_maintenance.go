@@ -120,7 +120,7 @@ func (s *server) maintainStorage(ctx context.Context, now time.Time, eventRetent
 	}
 	if report, err := s.store.AdoptRenamedWorkspaceRows(ctx, since); err != nil {
 		if ctx.Err() == nil {
-			log.Printf("Previous workspace keys: %v", err)
+			log.Printf("Previous workspace keys: adoption failed (cause=%s)", requestErrorCode(err))
 		}
 	} else {
 		s.renamedKeysAdopted.Store(true)
