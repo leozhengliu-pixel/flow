@@ -215,6 +215,8 @@ func TestScaleP12RevokeWhileDeltaReadAndDurableReplay(t *testing.T) {
 }
 
 func TestScaleP12OldServerAndRollbackWireFallback(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)

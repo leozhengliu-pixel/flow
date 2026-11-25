@@ -14,6 +14,7 @@ import (
 const recordJournalIdentitySchemaVersion = 29
 const recordJournalSchemaVersion = 33
 const sqliteJournalContentKeysVersion = 34
+const sqliteRecordJournalPolicyEpochVersion = 35
 
 var errRecordJournalTriggerPermission = errors.New("record journal trigger permission denied")
 
@@ -103,6 +104,9 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 		if _, err := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET capturing=0 WHERE id=1`); err != nil {
 			return err
 		}
+		if err := s.migrateSQLiteRecordJournalPolicyEpoch(ctx, false); err != nil {
+			return err
+		}
 		return s.recordJournalMigration(ctx)
 	}
 	if !applied {
@@ -125,6 +129,9 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	}
 	if s.dialect == "sqlite" {
 		if err := s.ensureSQLiteRecordJournalInline(ctx); err != nil {
+			return err
+		}
+		if err := s.migrateSQLiteRecordJournalPolicyEpoch(ctx, capturing != 0 && applied); err != nil {
 			return err
 		}
 	}
@@ -230,6 +237,52 @@ func (s *SQLiteStore) migrateSQLiteRecordJournalContentKeys(ctx context.Context)
 	return tx.Commit()
 }
 
+func (s *SQLiteStore) migrateSQLiteRecordJournalPolicyEpoch(ctx context.Context, capturing bool) error {
+	if s.dialect != "sqlite" {
+		return nil
+	}
+	applied, err := s.migrationApplied(ctx, sqliteRecordJournalPolicyEpochVersion)
+	if err != nil || applied {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE workspace_authz_epochs ADD COLUMN policy_epoch BIGINT NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE workspace_authz_epochs ADD COLUMN captured_epoch BIGINT NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE workspace_authz_epochs SET policy_epoch=epoch,captured_epoch=epoch`); err != nil {
+		return err
+	}
+	if capturing {
+		for _, spec := range recordJournalTriggerSpecs("sqlite") {
+			if !strings.Contains(spec.body, "workspace_authz_epochs") {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `DROP TRIGGER IF EXISTS `+spec.name); err != nil {
+				return err
+			}
+			timing := "AFTER"
+			if spec.table == "auth_users" && spec.event == "DELETE" {
+				timing = "BEFORE"
+			}
+			if _, err := tx.ExecContext(ctx, sqliteRecordJournalTriggerSQL(spec, timing)); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)`,
+		sqliteRecordJournalPolicyEpochVersion, "SQLite workspace policy epochs", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *SQLiteStore) dropRecordJournalTriggers(ctx context.Context, installed bool) error {
 	for _, spec := range recordJournalTriggerSpecs(s.dialect) {
 		if s.dialect == "mysql" {
@@ -282,6 +335,9 @@ func recordJournalTriggerSpecs(dialect string) []recordJournalTrigger {
 		return rewriteSQL(q, dialect) + ";"
 	}
 	epoch := func(workspaceID string) string {
+		if dialect == "sqlite" {
+			return sqliteRecordJournalEpochSQL(workspaceID, "1", ` WHERE `+workspaceID+`<>''`)
+		}
 		return rewriteSQL(`INSERT INTO workspace_authz_epochs(workspace_id,epoch) SELECT `+workspaceID+`,1 WHERE `+workspaceID+`<>'' ON CONFLICT(workspace_id) DO UPDATE SET epoch=workspace_authz_epochs.epoch+1`, dialect) + ";"
 	}
 	dirty := func(workspace, field, id, source string) string {
@@ -331,6 +387,9 @@ func recordJournalTriggerSpecs(dialect string) []recordJournalTrigger {
 				// A BEFORE trigger captures the memberships before deletion.
 				q := `INSERT INTO workspace_authz_epochs(workspace_id,epoch) SELECT workspace_id,1 FROM workspace_memberships WHERE user_id=` + row + `.id AND 1=1 ON CONFLICT(workspace_id) DO UPDATE SET epoch=workspace_authz_epochs.epoch+1`
 				spec.body = rewriteSQL(q, dialect) + ";"
+				if dialect == "sqlite" {
+					spec.body = sqliteRecordJournalEpochSQL("workspace_id", "1", ` FROM workspace_memberships WHERE user_id=`+row+`.id`)
+				}
 				q = `INSERT INTO record_journal_dirty(tx_id,workspace_key,field,record_key,source) SELECT ` + token + `,w.workspace_key,'@authz',` + row + `.id,'auth_users' FROM workspace_states w JOIN workspace_memberships m ON m.workspace_id=w.workspace_id WHERE m.user_id=` + row + `.id AND 1=1 ON CONFLICT(tx_id,workspace_key,field,record_key) DO UPDATE SET source=excluded.source`
 				spec.body += rewriteSQL(q, dialect) + ";"
 			case "workspace_memberships", "team_memberships":
@@ -389,7 +448,11 @@ func recordJournalTriggerSpecs(dialect string) []recordJournalTrigger {
 					spec.body += bump
 				}
 				if table == "workspace_states" {
-					spec.body += epoch(row + ".workspace_id")
+					if dialect == "sqlite" && event == "UPDATE" {
+						spec.body += sqliteRecordJournalEpochSQL(row+".workspace_id", "1", ` WHERE `+sqliteRecordJournalRootEpochSQL())
+					} else {
+						spec.body += epoch(row + ".workspace_id")
+					}
 					if event == "DELETE" {
 						// The ID owns the epoch across a rename. Do not recreate
 						// a version under the retired URL key after it was moved.
@@ -418,11 +481,18 @@ func recordJournalTriggerSpecs(dialect string) []recordJournalTrigger {
 						}
 						condition += ` AND (` + row + `.field NOT IN ('apiKeys','oauthAuthorizations') OR ` + without("NEW", "lastUsedAt") + `<>` + without("OLD", "lastUsedAt") + `)`
 						condition += ` AND (` + row + `.field<>'teamSettings' OR ` + without("NEW", "timezone") + `<>` + without("OLD", "timezone") + `)`
+						if dialect == "sqlite" {
+							condition += ` AND (` + sqliteRecordJournalEditEpochSQL() + `)`
+						}
 					} else {
 						condition += ` AND NOT ` + pulseCursor(row)
 					}
 					if dialect == "sqlite" {
-						spec.body += `INSERT INTO workspace_authz_epochs(workspace_id,epoch) SELECT ` + workspaceID(workspace) + `,1 WHERE ` + condition + ` ON CONFLICT(workspace_id) DO UPDATE SET epoch=workspace_authz_epochs.epoch+1;`
+						policy := row + `.field NOT IN ('apiKeys','oauthAuthorizations')`
+						if event == "UPDATE" {
+							policy = `(` + policy + ` OR NEW.field<>OLD.field OR NEW.workspace_key<>OLD.workspace_key)`
+						}
+						spec.body += sqliteRecordJournalEpochSQL(workspaceID(workspace), policy, ` WHERE `+condition)
 					} else {
 						spec.body += `IF ` + condition + ` THEN ` + epoch(workspaceID(workspace)) + ` END IF;`
 					}
@@ -445,6 +515,52 @@ func recordJournalTriggerSpecs(dialect string) []recordJournalTrigger {
 		}
 	}
 	return specs
+}
+
+func sqliteRecordJournalEpochSQL(workspaceID, policyChange, where string) string {
+	return `INSERT INTO workspace_authz_epochs(workspace_id,epoch,captured_epoch,policy_epoch) SELECT ` + workspaceID + `,1,1,` + policyChange + where +
+		` ON CONFLICT(workspace_id) DO UPDATE SET epoch=epoch+1,captured_epoch=epoch+1,
+		 policy_epoch=CASE WHEN excluded.policy_epoch<>0 THEN epoch+1 WHEN captured_epoch<>epoch THEN epoch ELSE policy_epoch END;`
+}
+
+func sqliteRecordJournalRootEpochSQL() string {
+	return `CASE
+		WHEN OLD.workspace_key<>NEW.workspace_key OR OLD.workspace_id<>NEW.workspace_id THEN 1
+		WHEN length(OLD.data)>65536 OR length(NEW.data)>65536 THEN 1
+		WHEN NOT json_valid(CAST(OLD.data AS TEXT)) OR NOT json_valid(CAST(NEW.data AS TEXT)) THEN 1
+		WHEN COALESCE(json_type(CAST(OLD.data AS TEXT),'$._flowCollections'),'object')<>'object' THEN 1
+		WHEN COALESCE(json_type(CAST(NEW.data AS TEXT),'$._flowCollections'),'object')<>'object' THEN 1
+		WHEN json_remove(CAST(OLD.data AS TEXT),'$._flowCollections') IS NOT json_remove(CAST(NEW.data AS TEXT),'$._flowCollections') THEN 1
+		ELSE EXISTS (
+			SELECT key,value FROM json_each(CAST(OLD.data AS TEXT),'$._flowCollections')
+			EXCEPT SELECT key,value FROM json_each(CAST(NEW.data AS TEXT),'$._flowCollections')
+		) OR EXISTS (
+			SELECT 1 FROM (
+				SELECT key,value FROM json_each(CAST(NEW.data AS TEXT),'$._flowCollections')
+				EXCEPT SELECT key,value FROM json_each(CAST(OLD.data AS TEXT),'$._flowCollections')
+			) AS new_shape LEFT JOIN json_each(CAST(NEW.data AS TEXT)) AS member ON member.key=new_shape.key
+			WHERE new_shape.value IS NULL OR new_shape.value NOT IN ('array','map')
+				OR (member.type<>'null' AND (member.type NOT IN ('object','array') OR member.value NOT IN ('{}','[]')))
+				OR EXISTS (SELECT 1 FROM workspace_metadata_records
+					WHERE workspace_key=NEW.workspace_key AND field=new_shape.key)
+		) END`
+}
+
+func sqliteRecordJournalEditEpochSQL() string {
+	without := func(fields ...string) string {
+		paths := ",'$." + strings.Join(fields, "','$.") + "'"
+		return `json_remove(CAST(NEW.data AS TEXT)` + paths + `) IS NOT json_remove(CAST(OLD.data AS TEXT)` + paths + `)`
+	}
+	return `CASE
+		WHEN NEW.workspace_key<>OLD.workspace_key OR NEW.field<>OLD.field OR NEW.record_key<>OLD.record_key THEN 1
+		WHEN NEW.field NOT IN ('projects','documents') THEN 1
+		WHEN length(NEW.data)>524288 OR length(OLD.data)>524288 THEN 1
+		WHEN NOT json_valid(CAST(NEW.data AS TEXT)) OR NOT json_valid(CAST(OLD.data AS TEXT)) THEN 1
+		WHEN NEW.collection_order<>OLD.collection_order THEN 1
+		WHEN NEW.field='projects' THEN ` + without("summary", "description", "descriptionRevisions", "updatedAt") + `
+		WHEN json_extract(CAST(NEW.data AS TEXT), '$.title') IS NOT json_extract(CAST(OLD.data AS TEXT), '$.title') THEN ` +
+		without("title", "slugId", "previousSlugIds", "content", "contentState", "contentData", "revisions", "version", "contentVersion", "updatedAt") + `
+		ELSE ` + without("title", "content", "contentState", "contentData", "revisions", "version", "contentVersion", "updatedAt") + ` END`
 }
 
 func sqliteRecordJournalTriggerSQL(spec recordJournalTrigger, timing string) string {

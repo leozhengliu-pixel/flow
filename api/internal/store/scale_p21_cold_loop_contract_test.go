@@ -53,6 +53,29 @@ func scaleP21ColdLoopChange(data *domain.Bootstrap, stamp time.Time) {
 	}
 }
 
+func TestScaleP21ColdLoopContractDecodesOnlyUsedFields(t *testing.T) {
+	_, view, workspace, loopID := scaleP21ColdLoopFixture(t)
+	if view.dialect != "sqlite" {
+		t.Skip("SQLite facade projection")
+	}
+	t.Setenv("FLOW_COLD_DECODE_CACHE_BYTES", "0")
+	ctx := WithColdWork(withMutationAggregateID(t.Context(), loopID), "loop-output-contract")
+	before := ColdDecodeCacheStatsForTesting()["fieldDecodes"]
+	err := view.MutateWorkspaceWithAggregate(ctx, workspace, "loop.output_contract", nil, func(data *domain.Bootstrap) (string, error) {
+		if fields := ColdDecodeCacheStatsForTesting()["fieldDecodes"] - before; fields != 5 {
+			t.Errorf("loop contract facade decoded %d fields, want workspace and four loop or webhook fields", fields)
+		}
+		if len(data.Loops) != 1 || len(data.LoopVersions) != 2 {
+			t.Fatal("loop contract callback did not read the selected canonical rows")
+		}
+		scaleP21ColdLoopChange(data, time.Now().UTC())
+		return loopID, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestScaleP21ColdLoopContractDispatchDifferential(t *testing.T) {
 	for _, offset := range []int{0, 345 * 60} {
 		t.Run(fmt.Sprintf("offset-%d", offset), func(t *testing.T) {

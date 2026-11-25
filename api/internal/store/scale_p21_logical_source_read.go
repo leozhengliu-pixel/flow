@@ -54,14 +54,12 @@ func (c *metadataLogicalCursor) byte() (byte, error) {
 
 func (c *metadataLogicalCursor) child(t reflect.Type) (metadataLogicalNode, error) {
 	start := c.offset
-	size, err := c.uint()
-	if err != nil {
+	var header [16]byte
+	if err := c.read(header[:]); err != nil {
 		return metadataLogicalNode{}, err
 	}
-	cost, err := c.uint()
-	if err != nil {
-		return metadataLogicalNode{}, err
-	}
+	size := binary.LittleEndian.Uint64(header[:8])
+	cost := binary.LittleEndian.Uint64(header[8:])
 	if size < 16 || size > uint64(c.node.offset+c.node.size-start) {
 		return metadataLogicalNode{}, io.ErrUnexpectedEOF
 	}

@@ -59,9 +59,22 @@ func TestScaleP21SW592LogicalReadWindow(t *testing.T) {
 		if _, err := c.uint(); err != nil {
 			t.Fatal(err)
 		}
+		direct := c
+		direct.node.window = nil
+		calls := metadataLogicalSpoolReadCalls.Load()
+		directChild, err := direct.child(node.typ.Elem())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reads := metadataLogicalSpoolReadCalls.Load() - calls; reads != 1 {
+			t.Fatalf("reading a child header without a window took %d spool reads, want 1", reads)
+		}
 		child, err := c.child(node.typ.Elem())
 		if err != nil {
 			t.Fatal(err)
+		}
+		if child.size != directChild.size || child.cost != directChild.cost || child.offset != directChild.offset {
+			t.Fatal("windowed and direct child header reads differ")
 		}
 		if child.window != windowed.window {
 			t.Fatal("SW592 a child of a windowed node does not share its window")

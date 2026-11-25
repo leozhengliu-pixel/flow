@@ -197,6 +197,25 @@ func (s *SQLiteStore) ResolveEventAccess(ctx context.Context, workspace, princip
 	return s.ResolveEventAccessFromSource(ctx, source, principal, key)
 }
 
+// RefreshEventResetAccess proves that a SQLite session can request a new
+// baseline after an authorization epoch change. The fingerprint covers
+// workspace and team access. It does not authorize reuse of projected data.
+func (s *SQLiteStore) RefreshEventResetAccess(ctx context.Context, previous EventAccess) (EventAccess, error) {
+	if s.dialect != "sqlite" || !s.db.journalReady.Load() || previous.checkBinding(s) != nil || !previous.MatchesCredential(nil) {
+		return EventAccess{}, ErrAuthForbidden
+	}
+	current, err := s.ResolveEventAccess(ctx, previous.WorkspaceKey(), previous.PrincipalID, nil)
+	if err != nil {
+		return EventAccess{}, err
+	}
+	fingerprint := previous.PermissionFingerprint()
+	if current.AuthzEpoch == previous.AuthzEpoch || current.version == previous.version ||
+		fingerprint == "" || current.PermissionFingerprint() != fingerprint {
+		return EventAccess{}, ErrAuthForbidden
+	}
+	return current, nil
+}
+
 func (s *SQLiteStore) ResolveEventAccessFromSource(ctx context.Context, source *EventPolicySource, principal string, key *domain.APIKey) (EventAccess, error) {
 	if source == nil || source.store != s || principal == "" {
 		return EventAccess{}, ErrAuthForbidden

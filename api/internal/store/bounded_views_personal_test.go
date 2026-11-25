@@ -216,6 +216,67 @@ func TestBoundedSavedViewRejectsStaleAuthorization(t *testing.T) {
 	}
 }
 
+func TestBoundedSavedViewSQLiteCredentialChurn(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := scaleP09Database(t)
+	if f.dialect != "sqlite" {
+		t.Skip("SQLite policy epoch")
+	}
+	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
+	actor := f.data.Viewer
+	ctx := ContextWithActor(t.Context(), actor)
+	view, err := f.BoundedMetadataViewForWorkspacesForTesting(ctx, workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer view.releaseMetadataLogicalSources()
+	authorize := func(key *domain.APIKey) *SavedViewAuthorization {
+		t.Helper()
+		access, err := view.ResolveAccess(ctx, workspace, actor.ID, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return NewSavedViewAuthorization(access, "", nil)
+	}
+	session, bearer := authorize(nil), authorize(&domain.APIKey{ID: "p3-existing-key"})
+	if _, err := f.db.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data)
+		VALUES(?,'apiKeys','p3-unrelated-key',0,'{"id":"p3-unrelated-key"}')`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.ExecContext(ctx, `DELETE FROM workspace_metadata_records
+		WHERE workspace_key=? AND field='apiKeys' AND record_key='p3-unrelated-key'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	if current := view.SessionAccessEpoch(ctx, session.Access); current == "" || current == session.Access.AuthzEpoch {
+		t.Fatal("fixture did not advance the epoch through credential writes")
+	}
+	create := func(proof *SavedViewAuthorization, id string, allowed bool) error {
+		t.Helper()
+		return view.MutateSavedViewRecords(ctx, workspace, "view.created", "", domain.SavedViewMutationInput{}, proof, func(data *domain.Bootstrap) (string, error) {
+			if !allowed {
+				t.Error("saved view callback ran with stale authorization")
+			}
+			data.SavedViews = append(data.SavedViews, domain.SavedView{ID: id, OwnerID: actor.ID, Scope: "personal"})
+			return id, nil
+		})
+	}
+	if err := create(bearer, "p3-stale-bearer", false); !errors.Is(err, ErrResourceAccessChanged) {
+		t.Fatalf("stale bearer proof returned %v", err)
+	}
+	if err := create(session, "p3-session-view", true); err != nil {
+		t.Fatalf("credential churn invalidated a session saved-view write: %v", err)
+	}
+	session = authorize(nil)
+	if _, err := f.db.ExecContext(ctx, `UPDATE workspace_memberships SET role='guest' WHERE workspace_id=? AND user_id=?`, workspaceID, actor.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := create(session, "p3-stale-session", false); !errors.Is(err, ErrResourceAccessChanged) {
+		t.Fatalf("stale session proof after membership change returned %v", err)
+	}
+}
+
 func TestBoundedSavedViewTypedShareHeaders(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")

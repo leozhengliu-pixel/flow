@@ -347,10 +347,15 @@ func (w *savedViewWrite) validateAccess(ctx context.Context, s *SQLiteStore, tx 
 		return nil
 	}
 	epoch, err := readAuthzEpoch(ctx, tx, workspaceID)
-	if err == nil && epoch != access.AuthzEpoch {
-		return ErrResourceAccessChanged
+	if err != nil || epoch == access.AuthzEpoch {
+		return err
 	}
-	return err
+	// Check the policy on the same transaction that owns the view inputs.
+	if s.dialect == "sqlite" && access.policy.key == nil &&
+		readSQLiteSessionPolicyEpoch(ctx, tx, workspaceID, access.AuthzEpoch) == epoch {
+		return nil
+	}
+	return ErrResourceAccessChanged
 }
 
 // BeginSharedSavedViewRead owns the first matching token and the exact
@@ -371,6 +376,9 @@ func (s *SQLiteStore) BeginSharedSavedViewRead(ctx context.Context, workspace, t
 }
 
 func (s *SQLiteStore) reloadSavedViewSource(ctx context.Context, workspace string) error {
+	if s.dialect == "sqlite" {
+		return s.ReloadWorkspace(ctx, workspace)
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	return s.reloadResidentWorkspace(ctx, workspace)
