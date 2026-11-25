@@ -454,11 +454,11 @@ func scaleP21SW125AccountCalls(file *ast.File) []scaleP21SW125AccountCall {
 
 func TestScaleP21SW125AccountProductionCallset(t *testing.T) {
 	expected := map[string]int{
-		"cmd/server/auth.go:authenticate":                           1,
-		"cmd/server/auth.go:authSession":                            1,
-		"cmd/server/main.go:accountBootstrap":                       1,
-		"cmd/server/oauth_mcp_auth.go:oauthRequestUser":             1,
-		"internal/store/scale_p21_account_read.go:BeginAccountRead": 1,
+		"cmd/server/auth.go:authenticate":                 1,
+		"cmd/server/auth.go:authSession":                  1,
+		"cmd/server/main.go:accountBootstrap":             1,
+		"cmd/server/oauth_mcp_auth.go:oauthRequestUser":   1,
+		"internal/store/account_read.go:BeginAccountRead": 1,
 	}
 	actual := map[string]int{}
 	err := filepath.WalkDir("../..", func(path string, entry fs.DirEntry, err error) error {

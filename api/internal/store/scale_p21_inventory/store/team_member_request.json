@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_team_member_request.go",
+  "source": "store/team_member_request.go",
   "unmigrated": 0,
   "consumers": {
     "BeginTeamMemberRequestRead": {

@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_account_read.go",
+  "source": "store/account_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginAccountRead": {
@@ -18,7 +18,7 @@
       "accessors": ["resident-state"],
       "temperature": "hot",
       "temperatureReason": "Shared admission for owned account responses.",
-      "callers": ["store/scale_p21_account_read.go:BeginAccountRead"]
+      "callers": ["store/account_read.go:BeginAccountRead"]
     }
   }
 }

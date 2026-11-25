@@ -61,7 +61,7 @@ legacy_array_reorder.go:writeArrayReorderRow
 legacy_record_base.go:persistIssues
 metadata_sql_stage_accounting.go:statementQuery
 scale_p21_project_update_parent_map.go:writeProjectUpdateScheduleParent
-scale_p21_user_settings_write.go:mutateBoundedUserSettingsRecord
+user_settings_write.go:mutateBoundedUserSettingsRecord
 scale_p21_webhook_failure_write.go:RecordWebhookDeliveryFailure
 scim.go:CreateSCIMUser
 scim.go:DeprovisionSCIMUser

@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_account_collection_read.go",
+  "source": "store/account_collection_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginAccountCollectionRead": {

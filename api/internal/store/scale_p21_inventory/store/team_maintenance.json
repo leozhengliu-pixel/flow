@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_team_maintenance.go",
+  "source": "store/team_maintenance.go",
   "unmigrated": 0,
   "consumers": {
     "BeginTeamMaintenanceRead": {

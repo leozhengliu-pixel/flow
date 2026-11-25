@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw22_team_read.go",
+  "source": "store/team_read.go",
   "unmigrated": 0,
   "consumers": {
     "TeamRecordForWorkspace": {

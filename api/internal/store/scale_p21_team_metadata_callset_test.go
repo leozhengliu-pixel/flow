@@ -185,7 +185,7 @@ func TestScaleP21TeamMetadataCallset(t *testing.T) {
 		// Consumers of published events.
 		"cmd/server/realtime_event_policy.go:":                                1,
 		"cmd/server/application_webhooks.go:applicationWebhookLifecycleEvent": 4,
-		"internal/store/scale_p21_team_create_write.go:CreateTeamRecords":     1,
+		"internal/store/team_create_write.go:CreateTeamRecords":               1,
 		"internal/store/metadata_mutation.go:metadataOnlyMutation":            3,
 		"internal/store/hot_cache.go:hotCacheTouch":                           4,
 		"internal/store/sqlite.go:persistWorkspaceTx":                         1,

@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_team_create_write.go",
+  "source": "store/team_create_write.go",
   "unmigrated": 0,
   "consumers": {
     "CreateTeamRecords": {
@@ -12,7 +12,7 @@
       "temperature": "hot",
       "temperatureReason": "Bounded team creation writer of POST /api/workspaces/{workspaceKey}/teams.",
       "callers": [
-        "server/scale_p21_team_create.go:createTeamRecords"
+        "server/team_create.go:createTeamRecords"
       ]
     }
   }

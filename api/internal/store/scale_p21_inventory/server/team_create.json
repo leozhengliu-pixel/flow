@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_team_create.go",
+  "source": "server/team_create.go",
   "unmigrated": 0,
   "consumers": {
     "createTeamRecords": {

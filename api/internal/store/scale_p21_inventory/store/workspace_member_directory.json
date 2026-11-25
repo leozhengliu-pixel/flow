@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_member_directory.go",
+  "source": "store/workspace_member_directory.go",
   "unmigrated": 0,
   "consumers": {
     "BeginMemberDirectoryRead": {

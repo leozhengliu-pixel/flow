@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_team_settings_read.go",
+  "source": "store/team_settings_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginTeamSettingsRead": {
@@ -12,7 +12,7 @@
       "temperature": "hot",
       "temperatureReason": "Backs the HOT team settings read.",
       "callers": [
-        "server/scale_p21_team_settings_read.go:getTeamSettingsBounded"
+        "server/team_settings_read.go:getTeamSettingsBounded"
       ]
     }
   }

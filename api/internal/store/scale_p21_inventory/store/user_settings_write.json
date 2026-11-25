@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_user_settings_write.go",
+  "source": "store/user_settings_write.go",
   "unmigrated": 0,
   "consumers": {
     "MutateUserSettings": {

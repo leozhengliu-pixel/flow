@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw26_workspace_keys.go",
+  "source": "store/workspace_keys.go",
   "unmigrated": 0,
   "consumers": {
     "seedWorkspaceKeyRenamesBounded": {
