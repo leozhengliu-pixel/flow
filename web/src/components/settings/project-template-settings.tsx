@@ -224,7 +224,7 @@ export function ProjectTemplateListCard({
           <div className={`pt-list-row${parent ? " is-inherited" : ""}`} key={item.id}>
             {!parent && <button type="button" aria-label={item.name} className="pt-row-link" onClick={() => onOpen(item)} />}
             <span className="pt-row-icon" style={{ "--pt-icon-color": item.color || DEFAULT_COLOR } as CSSProperties}>
-              <ViewGlyph color={item.color || DEFAULT_COLOR} icon={normalizeProjectIcon(item.icon)} />
+              <ViewGlyph color={item.color && item.color !== DEFAULT_COLOR ? item.color : "var(--pt-pill-fg)"} icon={normalizeProjectIcon(item.icon)} />
             </span>
             <span className="pt-row-text">
               <strong data-i18n-ignore>{item.name}</strong>

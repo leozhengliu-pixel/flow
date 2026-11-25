@@ -20,7 +20,6 @@
 .pt-list-card>header button:hover{background:var(--pt-list-button-hover-bg);color:var(--pt-text)}
 .pt-list-row{position:relative;box-sizing:border-box;min-height:64px;display:grid;grid-template-columns:44px minmax(0,1fr) 24px;align-items:center;padding:16px}
 .pt-list-row+.pt-list-row::before{content:"";position:absolute;top:-.5px;left:16px;right:16px;height:.5px;background:var(--pt-row-sep)}
-.pt-list-row:hover{background:var(--pt-row-hover-bg)}
 .pt-row-link{position:absolute;z-index:1;inset:0;padding:0;border:0;background:transparent}
 .pt-row-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:6px;background:color-mix(in srgb,var(--pt-icon-color) var(--pt-icon-alpha),transparent)}
 .pt-row-icon svg{width:16px;height:16px}
