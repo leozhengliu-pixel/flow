@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -172,20 +171,36 @@ func scaleP21SW400Actions(f scaleP21IssueUpdateFixture, edit func(*domain.Triage
 	}
 }
 
-// Shard the priority cases separately. Move and transform share a shard.
+// Keep the batch cases and the expensive auto-action sources independently shardable.
 func TestScaleP21SW400ThousandIssueBatchTriageDifferential(t *testing.T) {
-	scaleP21SW400Run(t, "priority-suggest")
+	scaleP21SW400Run(t, "priority-suggest", "warm", "reloaded")
 }
 
 func TestScaleP21SW400ThousandIssueBatchTriageAutoDifferential(t *testing.T) {
-	scaleP21SW400Run(t, "priority-auto")
+	scaleP21SW400Run(t, "priority-auto", "warm")
+}
+
+func TestScaleP21SW400ThousandIssueBatchTriageAutoReloadedDifferential(t *testing.T) {
+	scaleP21SW400Run(t, "priority-auto", "reloaded")
 }
 
 func TestScaleP21SW400ThousandIssueBatchTriageMoveDifferential(t *testing.T) {
-	scaleP21SW400Run(t, "team-auto-move", "batch-move-into-triage-team")
+	scaleP21SW400Run(t, "team-auto-move", "warm")
 }
 
-func scaleP21SW400Run(t *testing.T, names ...string) {
+func TestScaleP21SW400ThousandIssueBatchTriageMoveReloadedDifferential(t *testing.T) {
+	scaleP21SW400Run(t, "team-auto-move", "reloaded")
+}
+
+func TestScaleP21SW400ThousandIssueBatchTriageMoveIntoTriageDifferential(t *testing.T) {
+	scaleP21SW400Run(t, "batch-move-into-triage-team", "warm")
+}
+
+func TestScaleP21SW400ThousandIssueBatchTriageMoveIntoTriageReloadedDifferential(t *testing.T) {
+	scaleP21SW400Run(t, "batch-move-into-triage-team", "reloaded")
+}
+
+func scaleP21SW400Run(t *testing.T, name string, sources ...string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
@@ -193,12 +208,6 @@ func scaleP21SW400Run(t *testing.T, names ...string) {
 	f := scaleP21IssueUpdateSetup(t)
 	ids := scaleP21SW400Bulk(t, f, 1000)
 	owner := f.data.Viewer
-	ran := 0
-	defer func() {
-		if ran != len(names) {
-			t.Fatal("SW400 ran", ran, "of the named cases", names)
-		}
-	}()
 	for _, test := range []struct {
 		name   string
 		setup  func(*testing.T)
@@ -216,16 +225,14 @@ func scaleP21SW400Run(t *testing.T, names ...string) {
 		}), update: map[string]any{"priority": 1}, moved: 100},
 		{name: "batch-move-into-triage-team", update: map[string]any{"teamId": scaleP21SW400Team}},
 	} {
-		if !slices.Contains(names, test.name) {
+		if test.name != name {
 			continue
 		}
-		ran++
 		t.Run(test.name, func(t *testing.T) {
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{setup: test.setup, issue: f.triage.ID})
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.prepareTriageReset(t, f.prepare(scaleP21IssueUpdateCase{setup: test.setup, issue: f.triage.ID}))
 			var logged []string
 			started := time.Now().UTC()
-			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
+			outcomes := f.differentialSources(t, test.name, append([]string{"legacy"}, sources...), func(service *server) *httptest.ResponseRecorder {
 				var buffer bytes.Buffer
 				writer, flags := log.Writer(), log.Flags()
 				log.SetOutput(&buffer)
@@ -293,7 +300,9 @@ func scaleP21SW400Run(t *testing.T, names ...string) {
 				}
 			}
 		})
+		return
 	}
+	t.Fatal("unknown SW400 case", name)
 }
 
 // The same 1000-issue batch with triage off over issues that already carry

@@ -66,7 +66,7 @@ func (f scaleP21IssueUpdateFixture) sw460Run(t *testing.T, source string, peer f
 	service.store.SetRealtimeSink(realtime)
 	f.repository.SetRealtimeSink(realtime)
 	prior := map[any]bool{}
-	for _, event := range f.state(t).Events {
+	for _, event := range f.events(t) {
 		prior[event[0]] = true
 	}
 	if w := call(service); w != nil {
@@ -88,14 +88,7 @@ func (f scaleP21IssueUpdateFixture) sw460Run(t *testing.T, source string, peer f
 			service.store.WorkspaceMetadataDecodes(), service.store.MetadataWorkUsedForTesting())
 	}
 	got.Installed = f.installed(t, service.store)
-	reloaded, err := store.OpenDatabase(f.reader.config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got.Reloaded = f.installed(t, reloaded)
-	if err := reloaded.Close(); err != nil {
-		t.Fatal(err)
-	}
+	got.Reloaded = f.reloaded(t)
 	nul := strings.NewReplacer(`\u0000`, "")
 	if installed, reloaded := nul.Replace(string(got.Installed)), nul.Replace(string(got.Reloaded)); fresh && installed != reloaded {
 		t.Fatalf("%s: installed image differs from the SQL reload: %s", source, scaleP21M2Diff(installed, reloaded))
@@ -107,10 +100,17 @@ func (f scaleP21IssueUpdateFixture) sw460Run(t *testing.T, source string, peer f
 // first byte for byte (stamps and clocks of the call normalized).
 func (f scaleP21IssueUpdateFixture) sw460Differential(t *testing.T, sources []string, peer func(*testing.T), call func(*server) *httptest.ResponseRecorder, fresh bool) []scaleP21IssueUpdateOutcome {
 	t.Helper()
+	return scaleP21SW460Compare(t, sources, fresh, func(source string) (scaleP21IssueUpdateOutcome, time.Time) {
+		return f.sw460Run(t, source, peer, call, fresh)
+	})
+}
+
+func scaleP21SW460Compare(t *testing.T, sources []string, fresh bool, run func(string) (scaleP21IssueUpdateOutcome, time.Time)) []scaleP21IssueUpdateOutcome {
+	t.Helper()
 	var normalized []string
 	var outcomes []scaleP21IssueUpdateOutcome
 	for _, source := range sources {
-		got, started := f.sw460Run(t, source, peer, call, fresh)
+		got, started := run(source)
 		outcomes = append(outcomes, got)
 		compared := got
 		if fresh {
@@ -186,82 +186,161 @@ func scaleP21SW461Existing(t *testing.T) int {
 	return 20000
 }
 
-// scaleP21SW461Seed adds existing suggestions to the SW440 baseline: a
+// scaleP21SW461Suggestions adds existing suggestions to the SW440 baseline: a
 // dismissed suggestion of every tenth scoped issue first (generation moves it
 // behind the regenerated ones), then existing suggestions of two issues outside
 // the scope, active and dismissed, of the size real generations store.
-func scaleP21SW461Seed(t *testing.T, f *scaleP21IssueUpdateFixture, ids []string, existing int) {
-	t.Helper()
+func scaleP21SW461Suggestions(data *domain.Bootstrap, ids []string, existing int) ([]domain.IssueSuggestion, error) {
 	at := time.Date(2026, 1, 5, 6, 7, 8, 0, time.UTC)
-	dismissed := 0
-	// Batches stay inside the legacy transaction write budget.
-	for batch := 0; batch == 0 || batch < existing; batch += 10000 {
-		if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw461_suggestions", "", nil, func(data *domain.Bootstrap) error {
-			var head []domain.IssueSuggestion
-			if batch == 0 {
-				for index, id := range ids {
-					if index%10 == 0 {
-						head = append(head, domain.IssueSuggestion{ID: fmt.Sprintf("sw461-dismissed-%04d", index), IssueID: id, Type: "label", State: "dismissed",
-							SuggestedLabelID: "sw461-label", StateChangedAt: at, CreatedAt: at, UpdatedAt: at,
-							Metadata: map[string]any{"rank": 1, "reasons": []string{"Dismissed earlier"}, "score": 0.5}})
-					}
-				}
-				dismissed = len(head)
-			} else {
-				head = append(head, data.IssueSuggestions[:dismissed+batch]...)
-			}
-			// Other issues: outside every generation scope.
-			scoped := map[string]bool{}
-			for _, id := range ids {
-				scoped[id] = true
-			}
-			var others []string
-			for _, issue := range data.Issues {
-				if !scoped[issue.ID] && len(others) < 2 {
-					others = append(others, issue.ID)
-				}
-			}
-			if len(others) != 2 {
-				return fmt.Errorf("sw461 needs two issues outside the scope, found %v", others)
-			}
-			for index := batch; index < min(batch+10000, existing); index++ {
-				state := "active"
-				if index%4 == 3 {
-					state = "dismissed"
-				}
-				head = append(head, domain.IssueSuggestion{ID: fmt.Sprintf("sw461-existing-%06d", index), IssueID: others[index%2], Type: "relatedIssue", State: state,
-					SuggestedIssueID: fmt.Sprintf("sw400-bulk-%04d", index%len(ids)), StateChangedAt: at, CreatedAt: at, UpdatedAt: at,
-					Metadata: map[string]any{"rank": index%5 + 1, "reasons": []string{"Similar title", fmt.Sprintf("Shares %d words", index%7+2)}, "score": 0.25 + float64(index%50)/100}})
-			}
-			if batch != 0 {
-				data.IssueSuggestions = append(head, data.IssueSuggestions[dismissed+batch:]...)
-				return nil
-			}
-			// The list is stored one row per suggestion, as generations
-			// keep it: the fixture's repeated suggestion IDs (which keep the
-			// field inline in the root document) keep only their first
-			// occurrence.
-			seen := map[string]bool{}
-			for _, item := range data.IssueSuggestions {
-				if !seen[item.ID] {
-					seen[item.ID] = true
-					head = append(head, item)
-				}
-			}
-			data.IssueSuggestions = head
-			return nil
-		}); err != nil {
-			t.Fatal(err)
+	scoped := map[string]bool{}
+	suggestions := make([]domain.IssueSuggestion, 0, (len(ids)+9)/10+existing+len(data.IssueSuggestions))
+	for index, id := range ids {
+		scoped[id] = true
+		if index%10 == 0 {
+			suggestions = append(suggestions, domain.IssueSuggestion{ID: fmt.Sprintf("sw461-dismissed-%04d", index), IssueID: id, Type: "label", State: "dismissed",
+				SuggestedLabelID: "sw461-label", StateChangedAt: at, CreatedAt: at, UpdatedAt: at,
+				Metadata: map[string]any{"rank": 1, "reasons": []string{"Dismissed earlier"}, "score": 0.5}})
 		}
 	}
-	full, ok := f.repository.BootstrapFor(f.data.Workspace.URLKey)
+	var others []string
+	for _, issue := range data.Issues {
+		if !scoped[issue.ID] && len(others) < 2 {
+			others = append(others, issue.ID)
+		}
+	}
+	if len(others) != 2 {
+		return nil, fmt.Errorf("sw461 needs two issues outside the scope, found %v", others)
+	}
+	for index := range existing {
+		state := "active"
+		if index%4 == 3 {
+			state = "dismissed"
+		}
+		suggestions = append(suggestions, domain.IssueSuggestion{ID: fmt.Sprintf("sw461-existing-%06d", index), IssueID: others[index%2], Type: "relatedIssue", State: state,
+			SuggestedIssueID: fmt.Sprintf("sw400-bulk-%04d", index%len(ids)), StateChangedAt: at, CreatedAt: at, UpdatedAt: at,
+			Metadata: map[string]any{"rank": index%5 + 1, "reasons": []string{"Similar title", fmt.Sprintf("Shares %d words", index%7+2)}, "score": 0.25 + float64(index%50)/100}})
+	}
+	return append(suggestions, scaleP21SW461Unique(data.IssueSuggestions)...), nil
+}
+
+// Repeated IDs keep the field inline. Keep the first occurrence so the
+// seeded list is one canonical row per suggestion.
+func scaleP21SW461Unique(list []domain.IssueSuggestion) []domain.IssueSuggestion {
+	seen := map[string]bool{}
+	unique := make([]domain.IssueSuggestion, 0, len(list))
+	for _, item := range list {
+		if !seen[item.ID] {
+			seen[item.ID] = true
+			unique = append(unique, item)
+		}
+	}
+	return unique
+}
+
+func scaleP21SW461Seed(t *testing.T, f *scaleP21IssueUpdateFixture, ids []string, existing int) {
+	t.Helper()
+	ctx, workspace := t.Context(), f.data.Workspace.URLKey
+	if err := f.repository.MutateWorkspace(ctx, workspace, "scale_p21.sw461_suggestions", "", nil, func(data *domain.Bootstrap) error {
+		data.IssueSuggestions = scaleP21SW461Unique(data.IssueSuggestions)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	full, ok := f.repository.BootstrapFor(workspace)
 	if !ok {
 		t.Fatal("workspace missing")
 	}
-	var err error
-	if f.baseline, err = json.Marshal(full); err != nil {
+	suggestions, err := scaleP21SW461Suggestions(&full, ids, existing)
+	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Seed the exact order cheaply. The requests still have to persist and
+	// publish the full reorder through the production writers.
+	f.reader.query(t, `SELECT 1 FROM workspace_states WHERE workspace_key=?`, workspace).Close()
+	dialect := f.reader.config.Driver
+	if dialect == "postgresql" {
+		dialect = "postgres"
+	}
+	db := scaleDB{DB: f.reader.reader, driver: dialect}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, db.rebind(`DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='issueSuggestions'`), workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, err := result.RowsAffected(); err != nil || count != int64(len(full.IssueSuggestions)) {
+		t.Fatalf("suggestion seed is not record-backed: deleted %d of %d rows: %v", count, len(full.IssueSuggestions), err)
+	}
+	const batchSize = 200
+	for start := 0; start < len(suggestions); start += batchSize {
+		batch := suggestions[start:min(start+batchSize, len(suggestions))]
+		args := make([]any, 0, 4*len(batch))
+		for index, item := range batch {
+			raw, err := json.Marshal(item)
+			if err != nil {
+				t.Fatal(err)
+			}
+			args = append(args, workspace, item.ID, start+index, store.StripJSONNUL(raw))
+		}
+		query := `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES ` +
+			strings.Repeat(`(?,'issueSuggestions',?,?,?),`, len(batch)-1) + `(?,'issueSuggestions',?,?,?)`
+		if _, err := tx.ExecContext(ctx, db.rebind(query), args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.repository.ForgetInstalledMetadataRevisionForTesting(workspace); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.repository.ReloadWorkspace(ctx, workspace); err != nil {
+		t.Fatal(err)
+	}
+	full, ok = f.repository.BootstrapFor(workspace)
+	if !ok || len(full.IssueSuggestions) != len(suggestions) {
+		t.Fatalf("suggestion seed reloaded %d of %d rows", len(full.IssueSuggestions), len(suggestions))
+	}
+}
+
+// sw461Copy prepares an independent SQLite preimage for the bounded run.
+// Resetting a database after the legacy request would renumber 20,000 rows
+// a second time just to restore the starting order.
+func (f scaleP21IssueUpdateFixture) sw461Copy(t *testing.T) scaleP21IssueUpdateFixture {
+	t.Helper()
+	writer := *f.scaleP21TriageWriterFixture
+	f.scaleP21TriageWriterFixture = &writer
+	config := writer.reader.config
+	config.Path = teamCascadeCopy(t, config.Path)
+	repo, err := store.OpenDatabase(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := repo.Close(); err != nil {
+			t.Errorf("close SW461 fixture copy: %v", err)
+		}
+	})
+	f.reader = &scaleP04Database{config: config}
+	t.Cleanup(func() {
+		if f.reader.reader != nil {
+			if err := f.reader.reader.Close(); err != nil {
+				t.Errorf("close SW461 fixture reader: %v", err)
+			}
+		}
+	})
+	f.repository = repo
+	f.probe, err = repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.reloadOracle = nil
+	f.scaleP21TriageWriterFixture.prepare = f.resetTriageSideTables
+	return f
 }
 
 // A workspace with many existing suggestions: triage generation over one
@@ -270,36 +349,50 @@ func scaleP21SW461Seed(t *testing.T, f *scaleP21IssueUpdateFixture, ids []string
 // list. From an empty 256 MB work budget the bounded writer equals legacy
 // byte for byte (warm and SQL-reloaded: response, every suggestion row with
 // its collection order, issue, history and document rows, events, sinks and
-// the installed image). With FLOW_SW461_MEASURE=1 the bounded warm run only
-// logs its peak work under an unlimited budget (the ceiling measurement), with
+// the installed image). Each bounded source has its own legacy oracle so
+// the CI planner can shard the comparisons. With FLOW_SW461_MEASURE=1 only
+// the bounded source runs, logging its peak work under an unlimited budget. With
 // FLOW_SW461_MEASURE=budget its status under the 256 MB budget.
 func TestScaleP21SW461TriageSuggestionListReorderDifferential(t *testing.T) {
-	scaleP21SW461Reorder(t, false)
+	scaleP21SW461Reorder(t, false, "warm")
+}
+
+func TestScaleP21SW461TriageSuggestionListReorderReloadedDifferential(t *testing.T) {
+	scaleP21SW461Reorder(t, false, "reloaded")
 }
 
 func TestScaleP21SW461TriageSuggestionListReorderBulkDifferential(t *testing.T) {
-	scaleP21SW461Reorder(t, true)
+	scaleP21SW461Reorder(t, true, "warm")
 }
 
-func scaleP21SW461Reorder(t *testing.T, bulk bool) {
+func TestScaleP21SW461TriageSuggestionListReorderBulkReloadedDifferential(t *testing.T) {
+	scaleP21SW461Reorder(t, true, "reloaded")
+}
+
+func scaleP21SW461Reorder(t *testing.T, bulk bool, source string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f, ids := scaleP21SW440Setup(t, scaleP21SW440Size(t))
 	existing := scaleP21SW461Existing(t)
-	scaleP21SW461Seed(t, &f, ids, existing)
 	measure := os.Getenv("FLOW_SW461_MEASURE") != ""
 	scope := ids[:1]
 	if bulk {
 		scope = ids
 	}
 	t.Run(fmt.Sprintf("scope-%d", len(scope)), func(t *testing.T) {
-		f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID})
-		defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+		began := time.Now()
+		scaleP21SW461Seed(t, &f, ids, existing)
+		t.Logf("suggestion seed took %s", time.Since(began))
+		f.prepareTriageReset(t, f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID}))
 		generate := f.sw440Generate(t, scope)
 		peak := 0
 		call := func(service *server) *httptest.ResponseRecorder {
+			began := time.Now()
+			defer func() {
+				t.Logf("bounded=%t generation took %s", service.store.BoundedMetadataEnabled(), time.Since(began))
+			}()
 			if !service.store.BoundedMetadataEnabled() {
 				return generate(service)
 			}
@@ -314,12 +407,26 @@ func scaleP21SW461Reorder(t *testing.T, bulk bool) {
 		}
 		noPeer := func(*testing.T) {}
 		if measure {
-			got, _ := f.sw460Run(t, "warm", noPeer, call, true)
+			got, _ := f.sw460Run(t, source, noPeer, call, true)
 			t.Logf("%d existing suggestions, %d scoped issues: status %d, bounded peak work %.1f MB", existing, len(scope), got.Code, float64(peak)/(1<<20))
 			return
 		}
-		outcomes := f.sw460Differential(t, []string{"legacy", "warm", "reloaded"}, noPeer, call, true)
-		t.Logf("%d existing suggestions, %d scoped issues: bounded peak work %.1f MB of 256 MB", existing, len(scope), float64(peak)/(1<<20))
+		bounded := f
+		// Only copy the per-test SQLite file. A configured database can
+		// contain other workspaces, so restore just the owned rows there.
+		if os.Getenv("FLOW_TEST_DATABASE_DRIVER") == "" {
+			began := time.Now()
+			bounded = f.sw461Copy(t)
+			t.Logf("bounded preimage copy took %s", time.Since(began))
+		}
+		outcomes := scaleP21SW460Compare(t, []string{"legacy", source}, true, func(mode string) (scaleP21IssueUpdateOutcome, time.Time) {
+			fixture := f
+			if mode != "legacy" {
+				fixture = bounded
+			}
+			return fixture.sw460Run(t, mode, noPeer, call, true)
+		})
+		t.Logf("%d existing suggestions, %d scoped issues: %s bounded peak work %.1f MB of 256 MB", existing, len(scope), source, float64(peak)/(1<<20))
 		legacy := outcomes[0]
 		if legacy.Code != http.StatusOK || len(legacy.State.Events) != 1 {
 			t.Fatalf("legacy status %d with %d events: %.300s", legacy.Code, len(legacy.State.Events), legacy.Body)
@@ -361,7 +468,24 @@ func TestScaleP21SW462TriageSuggestionReorderOverPeerRows(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f, ids := scaleP21SW440Setup(t, 100)
-	scaleP21SW461Seed(t, &f, ids, 400)
+	workspace := f.data.Workspace.URLKey
+	// The peer case observes the installed legacy image before it reloads
+	// from SQL, so seed it through the writer to keep the literal values.
+	if err := f.repository.MutateWorkspace(t.Context(), workspace, "scale_p21.sw461_suggestions", "", nil, func(data *domain.Bootstrap) error {
+		suggestions, err := scaleP21SW461Suggestions(data, ids, 400)
+		data.IssueSuggestions = suggestions
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	full, ok := f.repository.BootstrapFor(workspace)
+	if !ok {
+		t.Fatal("workspace missing")
+	}
+	var err error
+	if f.baseline, err = json.Marshal(full); err != nil {
+		t.Fatal(err)
+	}
 	f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID})
 	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
 	at := time.Date(2026, 1, 6, 7, 8, 9, 0, time.UTC)
