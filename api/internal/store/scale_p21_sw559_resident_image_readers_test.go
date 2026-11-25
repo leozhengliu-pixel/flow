@@ -136,10 +136,16 @@ func scaleP21SW559Load(t *testing.T) *scaleP21SW559Analysis {
 	source := importer.ForCompiler(fset, "source", nil)
 	domainFiles := scaleP21SW559Parse(t, fset, "../domain")
 	domainConfig := types.Config{Importer: scaleP21SW559Importer{source: source}, Error: func(error) {}}
-	domainPkg, _ := domainConfig.Check("flow/api/internal/domain", fset, domainFiles, info)
+	domainPkg, domainErr := domainConfig.Check("flow/api/internal/domain", fset, domainFiles, info)
+	if domainPkg == nil {
+		t.Fatalf("domain package type-check failed: %v", domainErr)
+	}
 	storeFiles := scaleP21SW559Parse(t, fset, ".")
 	storeConfig := types.Config{Importer: scaleP21SW559Importer{domain: domainPkg, source: source}, Error: func(error) {}}
-	storePkg, _ := storeConfig.Check("flow/api/internal/store", fset, storeFiles, info)
+	storePkg, storeErr := storeConfig.Check("flow/api/internal/store", fset, storeFiles, info)
+	if storePkg == nil {
+		t.Fatalf("store package type-check failed: %v", storeErr)
+	}
 	bootstrap, _ := domainPkg.Scope().Lookup("Bootstrap").Type().(*types.Named)
 	if bootstrap == nil {
 		t.Fatal("domain.Bootstrap did not type-check")
@@ -928,11 +934,10 @@ func TestScaleP21SW559ResidentImageReadersDetect(t *testing.T) {
 		"store/SQLiteStore.legacyAuditLogPending":            "AuditLog",
 		"store/SQLiteStore.projectProgressPending":           "Projects",
 	}
-	guarded, unguarded := scaleP21SW559Load(t), scaleP21SW559Load(t)
-	unguarded.noGuards = true
-	reached := guarded.reachable()
+	analysis := scaleP21SW559Load(t)
+	reached := analysis.reachable()
 	seen := map[string]bool{}
-	for _, fn := range guarded.sorted() {
+	for _, fn := range analysis.sorted() {
 		if _, ok := want[fn.key]; !ok || fn.pkg != "store" {
 			continue
 		}
@@ -940,13 +945,17 @@ func TestScaleP21SW559ResidentImageReadersDetect(t *testing.T) {
 		if !reached[fn.obj] {
 			t.Errorf("%s is not reachable", fn.key)
 		}
-		if fields := guarded.analyze(fn.obj, 0).fields; len(fields) != 0 {
+		if fields := analysis.analyze(fn.obj, 0).fields; len(fields) != 0 {
 			t.Errorf("SW559 fixed reader %s still reads %v from the image", fn.key, fields)
 		}
 	}
-	for _, fn := range unguarded.sorted() {
+	// Reuse the parsed/type-checked graph so the detector does not retain two
+	// full store analyses at once.
+	analysis.memo = map[scaleP21SW559Context]*scaleP21SW559Result{}
+	analysis.noGuards = true
+	for _, fn := range analysis.sorted() {
 		if field, ok := want[fn.key]; ok && fn.pkg == "store" {
-			if _, read := unguarded.analyze(fn.obj, 0).fields[field]; !read {
+			if _, read := analysis.analyze(fn.obj, 0).fields[field]; !read {
 				t.Errorf("SW559 walk without guards does not see %s read %s", fn.key, field)
 			}
 		}
