@@ -15,6 +15,8 @@ import (
 
 type issueRecordAuthorizationContext struct{}
 
+var errIssueAuthorizationProjectionRefused = errors.New("issue authorization projection refused")
+
 func issueRecordQueryOnly(r *http.Request) bool {
 	if pagedRealtimeRequest(r) {
 		return true
@@ -77,8 +79,19 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 	if err != nil {
 		return metadata, err
 	}
+	commentActionRead := false
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		_, commentActionRead = scaleP21EscapedRouteParts(r, "/api/issue-records/{id}/comment-actions")
+	}
 	if !s.authDisabled {
-		metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+		if commentActionRead {
+			metadata, err = s.store.LegacyIssueViewerPolicy(r.Context(), query.Workspace, authUser(r).ID)
+		} else {
+			if r.Method == http.MethodPost && r.URL.Path == "/api/issue-records/batch" && !acquireProjectionWaiting(r) {
+				return metadata, r.Context().Err()
+			}
+			metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+		}
 		if err != nil {
 			return metadata, err
 		}
@@ -90,6 +103,10 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 		}
 		filterBootstrapForAPIKey(&metadata, r)
 	}
+	return s.issueRecordAuthorizationRows(r, metadata, query, commentActionRead)
+}
+
+func (s *server) issueRecordAuthorizationRows(r *http.Request, metadata domain.Bootstrap, query store.IssueRecordQuery, commentActionRead bool) (domain.Bootstrap, error) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	ids := []string{}
 	if len(parts) > 2 {
@@ -104,6 +121,7 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 			}
 		}
 	}
+	pathIDs := len(ids)
 	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 		var input map[string]json.RawMessage
 		if peekRequestJSON(r, &input) {
@@ -123,6 +141,15 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 	query.Archived = "all"
 	if len(ids) > 1000 {
 		return metadata, store.ErrIssueQuery
+	}
+	// The legacy release filter clones the workspace metadata, and a JSON
+	// body can expand the issue selection beyond the path. Keep those query
+	// semantics under the shared projection budget.
+	if commentActionRead && (len(query.ReleaseIDs) != 0 || len(ids) > pathIDs) && !acquireProjection(r) {
+		if err := r.Context().Err(); err != nil {
+			return metadata, err
+		}
+		return metadata, errIssueAuthorizationProjectionRefused
 	}
 	query.Limit = 500
 	query.Cursor = ""
@@ -220,7 +247,9 @@ func (s *server) issueRecordAlias(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data, err := s.issueRecordAuthorizationData(r)
 		if err != nil {
-			issueRecordsError(w, err)
+			if !errors.Is(err, errIssueAuthorizationProjectionRefused) || !writeProjectionRefusal(w, r) {
+				issueRecordsError(w, err)
+			}
 			return
 		}
 		ids := []string{}

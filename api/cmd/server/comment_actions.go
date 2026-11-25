@@ -314,6 +314,14 @@ func (s *server) listCommentActions(w http.ResponseWriter, r *http.Request) {
 		s.listCommentActionsBounded(w, r)
 		return
 	}
+	// The unrewritten HEAD alias can reach the legacy bootstrap fallback in
+	// development mode. The issue-record routes already carry scoped inputs.
+	if _, handedOff := r.Context().Value(issueRecordAuthorizationContext{}).(domain.Bootstrap); !handedOff && !acquireProjection(r) {
+		if !writeProjectionRefusal(w, r) {
+			writeRequestCanceled(w, r.Context().Err())
+		}
+		return
+	}
 	data := s.workspaceData(r)
 	data.Viewer = requestActor(s, r)
 	if _, settings, ok := s.accountCollections(r.Context(), data.Workspace.URLKey, data.Viewer.ID, false); ok && settings.UserID != "" {
@@ -326,11 +334,8 @@ func (s *server) listCommentActions(w http.ResponseWriter, r *http.Request) {
 	}
 	result := []domain.CommentAction{}
 	if s.commentActionsAllowed(data, *issue) {
-		raw, _ := s.store.WorkspaceMetadata(data.Workspace.URLKey)
+		raw := s.store.CommentActionReadMetadata(data.Workspace.URLKey, issue.ID, issue.Team.ID)
 		for _, a := range raw.CommentActions {
-			if a.IssueID != issue.ID || a.Status == "dismissed" {
-				continue
-			}
 			comment, err := s.store.ResourceComment(r.Context(), data.Workspace.URLKey, issue.ID, a.CommentID)
 			if err != nil || a.Status == "pending" && comment.Version != a.CommentVersion {
 				continue

@@ -34,7 +34,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"snapshot_clone.go":                           "eed939fd6798a8ade89c9f80a12040f1f5e285dc212e521ad2c38e04fcbc6063",
 		"../../cmd/server/advanced_features.go":       "cf26c25b133fe761ff8ec08bebd3b2d0417b6733356d6f676f76c391fde148e7",
 		"../../cmd/server/loop_settings.go":           "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
-		"../../cmd/server/main.go":                    "1b0ff91c7868fcf670de985b425a5a2365fd91a2cf72f6180a26ad3fb5ff0e2a",
+		"../../cmd/server/main.go":                    "3a9b2ab59e7ba6304e81cd3c1aafd76dc93ff9c37070366938a062e3d5dd85e8",
 		"../../cmd/server/notification_state.go":      "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
 		"../../cmd/server/personal_data.go":           "d30dbae86ef9e448e685808c4292cdcf76c719cfc68f9aa1023f7dd15e100c40",
 		"../../cmd/server/scale_p21_cold_dispatch.go": "78f6979c7b6492f603c4b1a452786f590b800139ea08d371bc3bc8054ba3e597",
@@ -115,6 +115,9 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/oauth_authorized_applications.go": "8a0e9bec2c8ea317de40e3e4872b8587a6930369391d9e70fa7b895c38c94e9a",
 		// The issue read owns a SQL transaction and the policy it uses.
 		"issue_read_snapshot.go": "13cae7fbe50f86fd6f36302adfeb909a0277ea3af6a0b03c3330b974d27c3414",
+		// Borrows policy from the same database and workspace, then returns
+		// an owned copy of the viewer and team settings required by the route.
+		"legacy_comment_action_read.go": "894774ef15c193373601031cd2b5aa670334b39d0bbec90754a9c91a3c722372",
 	}
 	want := map[string]int{
 		"authz_epoch.go:AuthzEpoch:clear":                                             1,

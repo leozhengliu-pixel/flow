@@ -5,6 +5,19 @@ import (
 	"strings"
 )
 
+// These legacy reads can use the paged projection handed off by authorization.
+func legacyPagedMetadataReadRequest(r *http.Request) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	switch r.URL.Path {
+	case "/api/feed", "/api/identity-providers", "/api/integrations", "/api/issue-templates":
+		return true
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	return len(parts) == 4 && parts[0] == "api" && parts[1] == "teams" && parts[3] == "templates"
+}
+
 func metadataReadRequest(r *http.Request) bool {
 	p := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(p) < 2 {

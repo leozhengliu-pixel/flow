@@ -1527,6 +1527,12 @@ func (s *server) filterSuggestions(w http.ResponseWriter, r *http.Request) {
 		s.boundedFilterSuggestions(w, r)
 		return
 	}
+	if !acquireProjection(r) {
+		if !writeProjectionRefusal(w, r) {
+			writeRequestCanceled(w, r.Context().Err())
+		}
+		return
+	}
 	data := s.workspaceData(r)
 	query := normalizeSearch(r.URL.Query().Get("q"))
 	field := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("field")))
