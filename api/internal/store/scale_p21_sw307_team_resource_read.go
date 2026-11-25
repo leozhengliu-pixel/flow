@@ -47,6 +47,7 @@ func (s *SQLiteStore) BeginTeamResourceAuthorizationRead(ctx context.Context, wo
 	if err != nil {
 		return nil, err
 	}
+	teamAccessReadHook()
 	// Keep the literal independent installed-directory lookup, including its
 	// default-workspace choice and exact-ID-before-key precedence.
 	teamID := s.ResolveTeamID(workspace, ref)
@@ -137,7 +138,7 @@ func (s *SQLiteStore) BeginTeamResourceAuthorizationRead(ctx context.Context, wo
 			return read.Data.TeamPinnedResources[i].Position < read.Data.TeamPinnedResources[j].Position
 		})
 	}
-	if err := s.ValidateAccess(ctx, access); err != nil {
+	if err := s.validateTeamAccess(ctx, access); err != nil {
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {

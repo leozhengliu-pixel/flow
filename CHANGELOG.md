@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- With bounded metadata, team settings, team membership and team resource requests no longer fail with 403 "This resource is outside your teams" when an unrelated write (such as API key usage tracking) lands mid-request. Flow checks access again, and still refuses members removed from the team, demoted admins and revoked keys.
 - CI runs long triage, loop, workflow and large-row comparisons on separate shards and gives large fixture purges their own deadline.
 - Realtime projections wait briefly for shared memory during bursts, so viewers can receive updates as capacity frees up.
 - Loops can quote text from authorized Word attachments and inspect JPGs with an image-capable model. Unreadable files and unavailable image input are reported per attachment so the audit can continue.
