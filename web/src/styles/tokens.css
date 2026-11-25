@@ -1026,6 +1026,9 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --agent-media-controls-active-fg: #fff;
   --agent-media-controls-muted: rgba(255, 255, 255, .55);
   --agent-media-track: rgba(255, 255, 255, .25);
+  --agent-media-volume-bg: rgba(0, 0, 0, .55);
+  --agent-media-volume-ring: rgba(255, 255, 255, .14);
+  --agent-media-volume-fill: rgba(255, 255, 255, .55);
   --agent-media-option-text: #111;
   --agent-composer-scrollbar-light: lch(64.94 1.25 282);
 }

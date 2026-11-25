@@ -50,6 +50,30 @@
   cursor: pointer;
 }
 .bar button:hover { background: var(--agent-media-controls-hover); color: var(--agent-media-controls-active-fg); }
+.volume { position: relative; display: flex; flex: none; }
+/* Rises 12px above the mute button, centred on it: 32 x 80 with a 4 x 56 track. The transparent padding below keeps it open while the pointer travels up to it. */
+.volumePopover {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  box-sizing: border-box;
+  display: none;
+  width: 32px;
+  height: 80px;
+  padding: 12px 0;
+  transform: translateX(-50%);
+  border-radius: 6px;
+  color: var(--agent-media-controls-fg);
+  outline: 0;
+  touch-action: none;
+}
+.volumePopover::before { content: ""; position: absolute; inset: 0; border-radius: 6px; background: var(--agent-media-volume-bg); box-shadow: inset 0 0 0 .5px var(--agent-media-volume-ring); }
+.volumePopover::after { content: ""; position: absolute; top: 100%; left: -8px; width: 48px; height: 20px; }
+.volume:hover .volumePopover,
+.volume:focus-within .volumePopover { display: block; }
+.volumeTrack { position: relative; width: 4px; height: 100%; margin: 0 auto; border-radius: 9999px; background: var(--agent-media-track); cursor: pointer; }
+.volumeFill { position: absolute; right: 0; bottom: 0; left: 0; border-radius: 9999px; background: var(--agent-media-volume-fill); }
+.volumeThumb { position: absolute; left: -2px; width: 8px; height: 8px; border-radius: 9999px; background: var(--agent-media-controls-active-fg); }
 .time { display: flex; min-width: 0; flex: 1; align-items: center; gap: 8px; padding: 0 4px; }
 .clock { flex: none; color: var(--agent-media-controls-muted); font: 500 12px / 16px var(--font); font-variant-numeric: tabular-nums; }
 .seek {

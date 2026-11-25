@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { ArrowDown, ArrowUp } from 'lucide-react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { canvasDensity, destroyPdfDocument, loadPdfDocument, needsTiles, PDF_POINT_TO_CSS, PDF_ZOOM_LEVELS, planTileRegion, regionCovers, type PageRegion } from './pdf-document'
 import { copyPdfLink, downloadPdf, pdfText, printPdf } from './pdf-file-actions'
@@ -17,7 +18,7 @@ function setScrollTop(element: HTMLElement, top: number) {
   element.scrollTop = top
 }
 
-export function PdfViewerDialog({ src, title, insets, onClose }: { src: string; title: string; insets?: Insets; onClose: () => void }) {
+export function PdfViewerDialog({ src, title, insets, onClose, onNext, onPrevious, stepper = false }: { src: string; title: string; insets?: Insets; onClose: () => void; onNext?: () => void; onPrevious?: () => void; stepper?: boolean }) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [sizes, setSizes] = useState<PageSize[]>([])
@@ -151,16 +152,23 @@ export function PdfViewerDialog({ src, title, insets, onClose }: { src: string; 
         <ViewerButton disabled={zoomIndex === 0} label={label('Zoom out')} onClick={() => changeZoom(-1)}><Glyph paths={ZOOM_OUT_GLYPH}/></ViewerButton>
         <span className="pdf-viewer-label pdf-viewer-zoom" data-i18n-ignore>{zoom}%</span>
         <ViewerButton disabled={zoomIndex === PDF_ZOOM_LEVELS.length - 1} label={label('Zoom in')} onClick={() => changeZoom(1)}><Glyph paths={ZOOM_IN_GLYPH}/></ViewerButton>
-        <span aria-hidden className="pdf-viewer-separator pdf-viewer-separator-start"/>
-        <ViewerButton disabled={current <= 1} label={label('Previous page')} onClick={() => goTo(current - 1)}><Glyph paths={PREVIOUS_GLYPH}/></ViewerButton>
-        <span aria-live="polite" className="pdf-viewer-label pdf-viewer-indicator" data-i18n-ignore>{pageLabel(count ? current : 0, count)}</span>
-        <ViewerButton disabled={!count || current >= count} label={label('Next page')} onClick={() => goTo(current + 1)}><Glyph paths={NEXT_GLYPH}/></ViewerButton>
+        {count > 1 && <>
+          <span aria-hidden className="pdf-viewer-separator pdf-viewer-separator-start"/>
+          <ViewerButton disabled={current <= 1} label={label('Previous page')} onClick={() => goTo(current - 1)}><Glyph paths={PREVIOUS_GLYPH}/></ViewerButton>
+          <span aria-live="polite" className="pdf-viewer-label pdf-viewer-indicator" data-i18n-ignore>{pageLabel(count ? current : 0, count)}</span>
+          <ViewerButton disabled={!count || current >= count} label={label('Next page')} onClick={() => goTo(current + 1)}><Glyph paths={NEXT_GLYPH}/></ViewerButton>
+        </>}
       </div>
       <div className="pdf-viewer-group">
         <ViewerButton label={label('Download')} onClick={() => downloadPdf(src, title)}><ElementGlyph make={downloadIcon}/></ViewerButton>
         <ViewerButton label={label('Copy link')} onClick={() => void copyPdfLink(src)}><ElementGlyph make={linkIcon}/></ViewerButton>
         <ViewerButton label={label('Print')} onClick={() => void printPdf(src)}><Glyph paths={PRINT_GLYPH}/></ViewerButton>
         <span aria-hidden className="pdf-viewer-separator pdf-viewer-separator-end"/>
+        {stepper && <span className="pdf-viewer-pill">
+          <ViewerButton disabled={!onNext} label={label('Next file')} onClick={() => onNext?.()}><ArrowGlyph down/></ViewerButton>
+          <span aria-hidden className="pdf-viewer-pill-rule"/>
+          <ViewerButton disabled={!onPrevious} label={label('Previous file')} onClick={() => onPrevious?.()}><ArrowGlyph/></ViewerButton>
+        </span>}
         <ViewerButton label={label('Close')} onClick={onClose} tooltip={false}><Glyph paths={CLOSE_GLYPH}/></ViewerButton>
       </div>
     </div>
@@ -181,6 +189,11 @@ export function PdfViewerDialog({ src, title, insets, onClose }: { src: string; 
       })}
     </div>
   </div>
+}
+
+/** The arrow of the next / previous file buttons (shared with the image viewer's). */
+function ArrowGlyph({ down = false }: { down?: boolean }) {
+  return down ? <ArrowDown size={14}/> : <ArrowUp size={14}/>
 }
 
 function pageLabel(current: number, count: number) {

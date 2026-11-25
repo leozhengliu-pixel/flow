@@ -1,5 +1,5 @@
 import { createElement } from 'react'
-import { Node, mergeAttributes } from '@tiptap/core'
+import { Node, mergeAttributes, type Editor } from '@tiptap/core'
 import type { EditorView } from '@tiptap/pm/view'
 import { toast } from '@/lib/toast'
 import { formatFileSize } from '@/lib/format-file-size'
@@ -11,6 +11,17 @@ import { DescriptionAudio, DescriptionUploading, DescriptionVideoPlayer } from '
 import { mountReact } from './mount-react'
 
 type DescriptionImageUpload = (file: File) => Promise<string>
+
+/** Every PDF in the document, in order: the viewer's next / previous buttons step through them. */
+function pdfSiblings(editor: Editor) {
+  const found: { src: string; title: string }[] = []
+  editor.state.doc.descendants(node => {
+    if (node.type.name === 'file' && node.attrs.src && !String(node.attrs.src).startsWith('blob:') && isPdfFile(String(node.attrs.contentType ?? ''), String(node.attrs.title ?? ''))) {
+      found.push({ src: String(node.attrs.src), title: String(node.attrs.title || 'File') })
+    }
+  })
+  return found
+}
 
 export const DescriptionFile = Node.create({
   name: 'file',
@@ -68,7 +79,7 @@ export const DescriptionFile = Node.create({
       }
       const copyLink = () => { if (pdf) void copyPdfLink(href); else void copyFileLink(href) }
       const toolbar = createFileToolbar({
-        view: () => openPdfViewer({ src: href, title: fileName }),
+        view: () => openPdfViewer({ src: href, title: fileName, siblings: pdfSiblings(editor) }),
         download: () => downloadPdf(href, fileName),
         copyLink,
       })

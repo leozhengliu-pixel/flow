@@ -3,6 +3,8 @@
 export type PdfViewerRequest = {
   src: string
   title: string
+  /** Every PDF of the page the file sits in, in order (the viewer's next / previous buttons step through them). */
+  siblings?: { src: string; title: string }[]
 }
 
 type OpenHandler = (request: PdfViewerRequest) => void

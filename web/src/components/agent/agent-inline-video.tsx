@@ -32,6 +32,7 @@ export function AgentInlineVideo({ src, name, editable = false, uploading = fals
   const [duration, setDuration] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [muted, setMuted] = useState(false)
+  const [volume, setVolume] = useState(1)
   const [rate, setRate] = useState(1)
   const [fullscreen, setFullscreen] = useState(false)
   const pipSupported = typeof document !== 'undefined' && document.pictureInPictureEnabled !== false
@@ -81,7 +82,7 @@ export function AgentInlineVideo({ src, name, editable = false, uploading = fals
         onPlay={() => setPlaying(true)}
         onRateChange={event => setRate(event.currentTarget.playbackRate)}
         onTimeUpdate={event => setTime(event.currentTarget.currentTime)}
-        onVolumeChange={event => setMuted(event.currentTarget.muted)}
+        onVolumeChange={event => { setMuted(event.currentTarget.muted); setVolume(event.currentTarget.volume) }}
         playsInline
         preload="metadata"
         ref={videoRef}
@@ -90,7 +91,10 @@ export function AgentInlineVideo({ src, name, editable = false, uploading = fals
       />
       {!uploading && <div className={styles.bar} role="toolbar" aria-label={t('Video controls')}>
         <PlayerButton label={playing ? 'Pause' : 'Play'} icon={playing ? <Pause aria-hidden fill="currentColor" size={16}/> : <Play aria-hidden fill="currentColor" size={16}/>} run={toggle}/>
-        <PlayerButton label={muted ? 'Unmute' : 'Mute'} icon={muted ? <VolumeX aria-hidden size={16}/> : <Volume2 aria-hidden size={16}/>} run={mute}/>
+        <div className={styles.volume}>
+          <PlayerButton label={muted ? 'Unmute' : 'Mute'} icon={muted ? <VolumeX aria-hidden size={16}/> : <Volume2 aria-hidden size={16}/>} run={mute}/>
+          <VolumeSlider label={t('Volume')} level={muted ? 0 : volume} onChange={level => { const video = videoRef.current; if (!video) return; video.volume = level; video.muted = level === 0 }}/>
+        </div>
         <div className={styles.time}>
           <span className={styles.clock}>{clock(time, hairline)}</span>
           <input
@@ -114,6 +118,26 @@ export function AgentInlineVideo({ src, name, editable = false, uploading = fals
         <PlayerButton label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} icon={hairline ? <ToolbarIcon make={viewIcon}/> : fullscreen ? <Minimize aria-hidden size={16}/> : <Maximize aria-hidden size={16}/>} run={toggleFullscreen}/>
       </div>}
       {editable && !uploading && <span className={styles.toolbar}><PlayerButton label="Delete" icon={<ToolbarIcon make={deleteIcon}/>} run={() => onRemove?.()}/></span>}
+    </div>
+  )
+}
+
+/** The vertical volume control that rises above the mute button while it is hovered or focused: drag or click the track. */
+function VolumeSlider({ label, level, onChange }: { label: string; level: number; onChange: (level: number) => void }) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const set = (clientY: number) => {
+    const rect = trackRef.current?.getBoundingClientRect()
+    if (rect?.height) onChange(Math.max(0, Math.min(1, 1 - (clientY - rect.top) / rect.height)))
+  }
+  return (
+    <div aria-label={label} aria-orientation="vertical" aria-valuemax={100} aria-valuemin={0} aria-valuenow={Math.round(level * 100)} className={styles.volumePopover} onKeyDown={event => {
+      const step = event.key === 'ArrowUp' || event.key === 'ArrowRight' ? .1 : event.key === 'ArrowDown' || event.key === 'ArrowLeft' ? -.1 : 0
+      if (step) { event.preventDefault(); onChange(Math.max(0, Math.min(1, level + step))) }
+    }} onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); set(event.clientY) }} onPointerMove={event => { if (event.buttons) set(event.clientY) }} role="slider" tabIndex={0}>
+      <div className={styles.volumeTrack} ref={trackRef}>
+        <span className={styles.volumeFill} style={{ height: `${level * 100}%` }}/>
+        <span className={styles.volumeThumb} style={{ bottom: `calc(${level * 100}% - 4px)` }}/>
+      </div>
     </div>
   )
 }

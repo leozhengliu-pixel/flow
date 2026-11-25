@@ -54,7 +54,8 @@
 .pdf-viewer-button svg { width: 14px; height: 14px; }
 .pdf-viewer-glyph { display: grid; place-items: center; }
 .pdf-viewer-label { color: var(--pdf-viewer-muted); font: 450 13px/16px var(--font); white-space: nowrap; }
-.pdf-viewer-zoom { box-sizing: border-box; min-width: 46px; padding: 4px; text-align: center; line-height: 16px; }
+.pdf-viewer-label { font-variant-numeric: tabular-nums; }
+.pdf-viewer-zoom { box-sizing: border-box; padding: 4px; text-align: center; line-height: 16px; }
 .pdf-viewer-separator { width: 1px; height: 16px; flex: none; background: var(--pdf-viewer-separator); }
 /* Zoom and page controls sit flush against their labels; the hairline between them has 6px on each side. */
 .pdf-viewer-group-start { gap: 0; }
@@ -94,3 +95,10 @@
   font: 450 13px/16px var(--font);
   pointer-events: none;
 }
+/* Next / previous file: one pill of two buttons around a hairline; a disabled end stays at 60%. */
+.pdf-viewer-pill { display: flex; align-items: center; flex: none; }
+.pdf-viewer-pill .pdf-viewer-button { border: 0; }
+.pdf-viewer-pill .pdf-viewer-button:first-child { border-radius: 9999px 0 0 9999px; }
+.pdf-viewer-pill .pdf-viewer-button:last-child { border-radius: 0 9999px 9999px 0; }
+.pdf-viewer-pill .pdf-viewer-button:disabled { opacity: .6; }
+.pdf-viewer-pill-rule { width: .5px; height: 20px; margin: 4px 0; }

@@ -3,7 +3,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 import { toast } from '@/lib/toast'
 import { insertEmbedFiles } from './file-extension'
-import { openLightbox } from '@/components/editor/lightbox-bridge'
+import { openLightbox, type LightboxItem } from '@/components/editor/lightbox-bridge'
 import { importTextFile, isTextImportFile } from '@/components/editor/markdown-paste'
 
 export type DescriptionImageUpload = (file: File) => Promise<string>
@@ -241,10 +241,19 @@ function imageActions(editor: Editor, getPos: () => number | undefined, img: HTM
   }
   return {
     view: () => {
-      const siblings: { src: string; alt?: string }[] = []
-      editor.state.doc.descendants(node => {
+      const siblings: LightboxItem[] = []
+      editor.state.doc.descendants((node, pos) => {
         if (node.type.name === 'image' && node.attrs.src) {
-          siblings.push({ src: String(node.attrs.src), alt: String(node.attrs.alt ?? '') })
+          const item: LightboxItem = { src: String(node.attrs.src), alt: String(node.attrs.alt ?? '') }
+          // Cropping rewrites the image, so it needs edit access like the hover toolbar's Crop does.
+          if (editor.isEditable) {
+            item.crop = () => {
+              const dom = editor.view.nodeDOM(pos)
+              const picture = dom instanceof HTMLElement ? dom.querySelector('img') : null
+              if (picture instanceof HTMLImageElement) startCrop(editor, () => pos, picture, dom as HTMLElement)
+            }
+          }
+          siblings.push(item)
         }
       })
       openDescriptionLightbox(img.src, img.alt, siblings.length ? siblings : undefined)
@@ -428,7 +437,7 @@ async function downloadImage(src: string, name: string) {
   URL.revokeObjectURL(href)
 }
 
-export function openDescriptionLightbox(src: string, alt = '', siblings?: { src: string; alt?: string }[]) {
+export function openDescriptionLightbox(src: string, alt = '', siblings?: LightboxItem[]) {
   // Prefer React LightboxEditorProvider portal when mounted (LS-0382).
   const items = siblings?.length ? siblings : [{ src, alt }]
   const index = Math.max(0, items.findIndex(item => item.src === src))

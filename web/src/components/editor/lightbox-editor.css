@@ -37,13 +37,14 @@
 .flow-lightbox-zoom {
   height: 28px;
   padding: 0 10px;
-  border: 0;
+  border: .5px solid transparent;
   background: transparent;
   text-align: center;
   border-radius: 9999px;
   color: var(--text);
-  font: 450 12px / 28px var(--font);
-  cursor: pointer;
+  font: 500 13px / normal var(--font);
+  font-variant-numeric: tabular-nums;
+  cursor: default;
 }
 .flow-lightbox-zoom:hover { background: var(--theme-surface-hover); }
 .flow-lightbox-cluster button:not(.flow-lightbox-zoom) {
@@ -51,16 +52,22 @@
   height: 28px;
   display: grid;
   place-items: center;
-  padding: 0;
-  border: 0;
+  padding: 0 2px;
+  border: .5px solid transparent;
   border-radius: 9999px;
   background: transparent;
   color: var(--text);
-  cursor: pointer;
+  cursor: default;
 }
 .flow-lightbox-cluster button:not(.flow-lightbox-zoom):hover:not(:disabled) { background: var(--theme-surface-hover); }
 .flow-lightbox-cluster button:disabled { opacity: .6; cursor: default; }
-.flow-lightbox-separator { width: .5px; height: 18px; background: var(--document-popover-border); }
+.flow-lightbox-separator { width: 1px; height: 16px; background: var(--pdf-viewer-separator-end); }
+/* Next / previous picture: one pill of two buttons around a hairline; a disabled end stays at 60%. */
+.flow-lightbox-pill { display: flex; align-items: center; }
+.flow-lightbox-cluster .flow-lightbox-pill button:not(.flow-lightbox-zoom) { border: 0; }
+.flow-lightbox-cluster .flow-lightbox-pill button:first-child:not(.flow-lightbox-zoom) { border-radius: 9999px 0 0 9999px; }
+.flow-lightbox-cluster .flow-lightbox-pill button:last-child:not(.flow-lightbox-zoom) { border-radius: 0 9999px 9999px 0; }
+.flow-lightbox-cluster .flow-lightbox-pill-rule { width: .5px; height: 20px; margin: 4px 0; }
 .flow-lightbox-caption {
   position: absolute;
   bottom: 4px;
@@ -164,7 +171,7 @@
   color: inherit;
   font-size: 16px;
   line-height: 1;
-  cursor: pointer;
+  cursor: default;
   opacity: .7;
 }
 .flow-comment-popover-close:hover { opacity: 1; }
