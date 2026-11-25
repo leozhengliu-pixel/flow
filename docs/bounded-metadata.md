@@ -34,12 +34,12 @@ table runs COLD.
 
 | Variable | Needed for the flag | Notes |
 | --- | --- | --- |
-| `FLOW_BOUNDED_METADATA` | - | Defaults to `on` on MySQL and PostgreSQL when hydration and journaling are on and shadow modes are off. SQLite defaults to `off`. |
-| `FLOW_RECORD_HYDRATION` | must be on | Defaults to `on` on MySQL and PostgreSQL and `off` on SQLite. Bounded record scopes keep unloaded values. |
-| `FLOW_RECORD_JOURNAL` | must be on | Defaults to `on` on MySQL and PostgreSQL and `off` on SQLite. The explicit modes are `off`, `shadow` and `on`. |
+| `FLOW_BOUNDED_METADATA` | - | Defaults to `on` on SQLite, MySQL, and PostgreSQL when hydration and journaling are on and shadow modes are off. |
+| `FLOW_RECORD_HYDRATION` | must be on | Defaults to `on` on SQLite, MySQL, and PostgreSQL. Bounded record scopes keep unloaded values. |
+| `FLOW_RECORD_JOURNAL` | must be on | Defaults to `on` on SQLite, MySQL, and PostgreSQL. The explicit modes are `off`, `shadow` and `on`. |
 | `FLOW_RECORD_PEER_SYNC` | must **not** be `shadow` | `off` (default) and `on` are accepted. |
 | `FLOW_METADATA_CATALOG` | complete catalog | Unset repairs the record journal and completes missing catalog checkpoints before bounded admission. |
-| `FLOW_SYNC_V2` | optional | Defaults to `on` on MySQL and PostgreSQL and `off` on SQLite. It needs a ready record journal. |
+| `FLOW_SYNC_V2` | optional | Defaults to `on` on SQLite, MySQL, and PostgreSQL. It needs a ready record journal. |
 | `FLOW_RECORD_SPOOL_MAX_BYTES` | optional | Process-wide byte budget for temporary files used by record hydration. Default `268435456` (256 MiB). `0` streams directly. A negative or invalid value falls back to the default. The load rig sets the default explicitly. |
 
 `FLOW_METADATA_DIR` appears only in tests; it is not an operator setting.
@@ -99,9 +99,8 @@ workspace publishes one workspace invalidation to its clients.
 `server metadata-prepare` runs the journal repair over every workspace that
 needs it, then the catalog over every collection, once and at full speed, and
 exits. Give it the same configuration as the server (environment or
-`--config`). The command needs the journal in `on` or `shadow` mode. MySQL
-and PostgreSQL can use the unset journal default. Set the journal mode
-explicitly on SQLite. The command opens the database with bounded metadata
+`--config`). The command needs the journal in `on` or `shadow` mode. All
+supported databases can use the unset journal default. The command opens the database with bounded metadata
 and the catalog worker disabled.
 It uses the same bounded, checkpointed transactions as the worker, so it is
 safe to run while flag-off replicas serve the database, it can be interrupted
