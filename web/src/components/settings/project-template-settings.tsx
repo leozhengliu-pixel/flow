@@ -1146,7 +1146,7 @@ function MilestoneComposer({
 
 function composerKeys(event: KeyboardEvent<HTMLElement>, submit: () => void, cancel: () => void) {
   // Keys typed in a picker menu (a portal outside the composer) belong to the menu: Escape closes only the menu.
-  if (event.key === "Escape" && !event.currentTarget.contains(event.target as Node)) return;
+  if (event.key === "Escape" && (!event.currentTarget.contains(event.target as Node) || document.querySelector('.property-command-surface[data-state="open"], [role="menu"][data-state="open"]'))) return;
   if (event.key === "Escape") {
     event.preventDefault();
     event.stopPropagation();

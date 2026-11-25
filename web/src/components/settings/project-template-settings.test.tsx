@@ -256,3 +256,33 @@ describe('project template list', () => {
     expect(onReload).toHaveBeenCalled()
   })
 })
+
+describe('project template issue composer status', () => {
+  it('lists the team statuses without reserved ones, keeps the composer open on Escape and saves the chosen status', async () => {
+    const user = userEvent.setup()
+    const base = fixture()
+    const teamId = base.teams[0].id
+    const states = [
+      { id: 's-backlog', name: 'Backlog', type: 'backlog', color: '#bec2c8', position: 0, teamId },
+      { id: 's-progress', name: 'In Progress', type: 'started', color: '#f2c94c', position: 1, teamId },
+      { id: 's-duplicate', name: 'Duplicate', type: 'canceled', color: '#95a2b3', position: 2, teamId, reserved: true },
+    ]
+    render(settings({ ...base, states } as unknown as BootstrapData, 'new'))
+    await user.type(screen.getByPlaceholderText('Add a descriptive name…'), 'With status')
+    await user.type(screen.getByPlaceholderText('Project name'), 'With status project')
+    await user.click(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' }))
+    await user.type(screen.getByRole('textbox', { name: 'Issue title' }), 'Starts in progress')
+    await user.click(screen.getByRole('combobox', { name: 'Change status. Backlog is selected' }))
+    const names = (await screen.findAllByRole('option')).map(option => option.textContent ?? '')
+    expect(names.some(name => name.startsWith('Backlog'))).toBe(true)
+    expect(names.some(name => name.startsWith('Duplicate'))).toBe(false)
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('textbox', { name: 'Issue title' })).toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'Change status. Backlog is selected' }))
+    await user.click((await screen.findAllByRole('option')).find(option => /^In Progress/.test(option.textContent ?? '')) as HTMLElement)
+    await user.click(within(document.querySelector('.pt-issue-composer') as HTMLElement).getByRole('button', { name: 'Add issue' }))
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(api.createProjectTemplate).toHaveBeenCalled())
+    expect(api.createProjectTemplate.mock.calls[0][0].issues[0]).toMatchObject({ title: 'Starts in progress', stateId: 's-progress' })
+  })
+})

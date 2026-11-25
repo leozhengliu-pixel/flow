@@ -337,13 +337,15 @@ html:root .settings-app .settings-main .team-description-block + .team-descripti
     --tpl-button-fg: var(--set-control-text);
   }
   html:root .settings-app .settings-main[data-settings-page="team"] .tpl-list-card { width: 100%; }
-  html:root .settings-app .settings-main[data-settings-page="team"] .tpl-list-card-header { height: auto; min-height: 57.33px; padding: 10.6667px; }
+  html:root .settings-app .settings-main[data-settings-page="team"] .tpl-list-card:has(.tpl-list-row) .tpl-list-card-header { height: auto; min-height: 57.33px; padding: 10.6667px; }
+  html:root .settings-app .settings-main[data-settings-page="team"] .tpl-list-card:not(:has(.tpl-list-row)) .tpl-list-card-header { height: auto; min-height: 53.33px; padding: 10.6667px; }
   html:root .settings-app .settings-main[data-settings-page="team"] .tpl-team-description a { border: 0 none; }
   html:root .settings-app .settings-main[data-settings-page="team"] .tpl-section { margin-top: 24px; }
   html:root .settings-app .settings-main[data-settings-page="team"] .settings-content:has(.tpl-team-description) { --pt-surface: var(--set-card); --pt-list-ring: var(--set-card-shadow); --pt-text: var(--set-text); --pt-text-2: var(--set-control-text); }
-  html:root .settings-app .settings-main[data-settings-page="team"] .pt-list-card > header { height: auto; min-height: 57.33px; padding: 10.6667px; }
-  html:root .settings-app .settings-main[data-settings-page="team"] .pt-list-card > header button,
-  html:root .settings-app .settings-main[data-settings-page="team"] .tpl-list-card-header .tpl-ghost-button { height: 36px; }
+  html:root .settings-app .settings-main[data-settings-page="team"] .pt-list-card:has(.pt-list-row) > header { height: auto; min-height: 57.33px; padding: 10.6667px; }
+  html:root .settings-app .settings-main[data-settings-page="team"] .pt-list-card:not(:has(.pt-list-row)) > header { height: auto; min-height: 53.33px; padding: 10.6667px; }
+  html:root .settings-app .settings-main[data-settings-page="team"] .pt-list-card:has(.pt-list-row) > header button,
+  html:root .settings-app .settings-main[data-settings-page="team"] .tpl-list-card:has(.tpl-list-row) .tpl-list-card-header .tpl-ghost-button { height: 36px; }
   html:root .settings-app .settings-main[data-settings-page="team"] .tpl-section,
   html:root .settings-app .settings-main[data-settings-page="team"] .tpl-team-section,
   html:root .settings-app .settings-main[data-settings-page="team"] .pt-list-card { width: 100%; }

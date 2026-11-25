@@ -199,6 +199,9 @@ html:root body .property-command-surface.pt-picker.is-members.is-members:not(.pr
 html:root body .property-command-surface.pt-picker.is-initiatives{width:max-content;min-width:175px}
 html:root body .property-command-surface.pt-picker .project-label-search{box-sizing:border-box;height:36.5px;border-bottom-color:var(--pk-divider)}
 html:root body .property-command-surface.pt-picker .project-teams-menu__name{color:var(--pk-text-strong)}
+/* The hint row's text is the faint colour (its glyph stays muted), and a row never clips its name inside a pixel-rounded menu. */
+html:root body .property-command-surface.pt-picker .property-command-create-hint>span{color:var(--pk-faint)}
+html:root body .property-command-surface.pt-picker .property-command-options [role=option] .property-command-label{overflow:visible}
 /* Priority menu glyphs are monochrome (urgent included): muted, strong on the highlighted row. */
 html:root body .property-command-surface .property-command-options [role=option] svg.pt-priority-option{color:var(--pk-muted)}
 html:root body .property-command-surface .property-command-options [role=option][aria-selected=true] svg.pt-priority-option{color:var(--pk-text-strong)}
