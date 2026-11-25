@@ -5,7 +5,7 @@
     "buildIssueRecordAuthorizationData": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Legacy comment-action reads use scoped viewer and team policy with the same issue and ancestor query. Release filters and additional issue IDs from a body use the shared projection budget, as does the legacy batch authorization projection. Bounded child, permission and comment-action routes retain their proven reader. The remaining bounded routes use boundedIssueRecordAuthorizationMetadata and own the issue headers, first-page ancestors, comment author and authorization inputs until output. TestScaleP21SW187IssueRecordAuthorizationDifferential compares legacy/warm/reloaded authorization decisions and exact consumed headers for 24 route/input cases x 20 M principals/credentials (960 pairs), including update/batch destinations, private/inherited grants, old identifiers, release pipeline scope, cross-workspace refusal, large unrelated bodies, development mode, cancellation, missing output ownership and unconsumed cache release.",
+      "reason": "Legacy single-issue writes (issue #244) authorize against LegacyIssueWriteAuthorization: the viewer projection of the workspace, team and viewer policy plus only the projects and cycles the body names, then the same issue and ancestor query. Legacy comment-action reads use scoped viewer and team policy with the same query. The remaining legacy complete projections (issue creation, batch, release edits, reads, bodies naming further issues, and stores without an installed workspace) are charged to the shared projection gate before they are built. Bounded child, permission and comment-action routes retain their proven reader. The remaining bounded routes use boundedIssueRecordAuthorizationMetadata and own the issue headers, first-page ancestors, comment author and authorization inputs until output. TestScaleP21SW244IssueWriteDifferential compares scoped and complete reads for 25 routes x 9 principals x 5 issue shapes in legacy, hydrated and bounded-view modes; TestScaleP21SW244IssueWriteAllocations measures allocation as unrelated projects and histories grow. TestScaleP21SW187IssueRecordAuthorizationDifferential compares legacy/warm/reloaded authorization decisions and exact consumed headers for 24 route/input cases x 20 M principals/credentials (960 pairs).",
       "accessors": [
         "Bootstrap",
         "PagedWorkspaceMetadata"
@@ -16,6 +16,19 @@
         "resourceAllowed -> issueRecordAuthorizationData",
         "issueRecordAlias -> issueRecordAuthorizationData",
         "POST/PATCH /api/issue-records/*"
+      ]
+    },
+    "completeIssueRecordProjection": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "A handler on a scoped legacy single-issue write that still reads workspaceData gets the projection it read before: the viewer's complete projection with the authorized issue rows and comment, built once on first read under the shared projection gate. The issue #244 differential compares both paths.",
+      "accessors": [
+        "PagedWorkspaceMetadata"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Only handlers that read workspaceData after a scoped issue write authorization, such as the issue permission routes.",
+      "callers": [
+        "workspaceDataWithError -> completeIssueRecordProjection"
       ]
     }
   }

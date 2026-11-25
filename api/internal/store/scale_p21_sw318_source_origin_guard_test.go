@@ -31,10 +31,10 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"auth.go":                                     "ebf4155c13b06f088ef0cd452d12112b5a032c4411a8955a89bac54273895f44",
 		"team_default_favorites.go":                   "8ba62b09173955d3f412bba9820ba6292e3ee06fec852571c691e5a62e49e657",
 		"scale_p15_snapshot_buffers.go":               "55e0d8d461ffd547d4d4fd9329cf9fda23259a0fef08da7e6ba42a0d51c88f7f",
-		"snapshot_clone.go":                           "eed939fd6798a8ade89c9f80a12040f1f5e285dc212e521ad2c38e04fcbc6063",
+		"snapshot_clone.go":                           "4a6d61a5291c12c71aa737f952c137a51d5dbd5ccbdf72fbce5af5fed755b166",
 		"../../cmd/server/advanced_features.go":       "cf26c25b133fe761ff8ec08bebd3b2d0417b6733356d6f676f76c391fde148e7",
 		"../../cmd/server/loop_settings.go":           "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
-		"../../cmd/server/main.go":                    "3a9b2ab59e7ba6304e81cd3c1aafd76dc93ff9c37070366938a062e3d5dd85e8",
+		"../../cmd/server/main.go":                    "6f55ed4f17e9e1331d6e6f6b0f8cebddafce09e205ce5b37d11e8c5a18d76dbc",
 		"../../cmd/server/notification_state.go":      "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
 		"../../cmd/server/personal_data.go":           "d30dbae86ef9e448e685808c4292cdcf76c719cfc68f9aa1023f7dd15e100c40",
 		"../../cmd/server/scale_p21_cold_dispatch.go": "78f6979c7b6492f603c4b1a452786f590b800139ea08d371bc3bc8054ba3e597",
@@ -118,6 +118,9 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// Borrows policy from the same database and workspace, then returns
 		// an owned copy of the viewer and team settings required by the route.
 		"legacy_comment_action_read.go": "894774ef15c193373601031cd2b5aa670334b39d0bbec90754a9c91a3c722372",
+		// Borrows one issue write's policy inputs from the same database and
+		// workspace and returns an owned copy of only the named records.
+		"legacy_issue_write_authorization.go": "d41b19518097270d1a0e4dd7adcbcd23afb033ebbffc203843d2860147f88223",
 	}
 	want := map[string]int{
 		"authz_epoch.go:AuthzEpoch:clear":                                             1,
