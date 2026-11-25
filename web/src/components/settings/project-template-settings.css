@@ -37,9 +37,10 @@
 .pt-editor-inner{width:750px;margin:0 auto}
 .pt-title{box-sizing:border-box;height:32px;display:flex;align-items:center;gap:4px;margin-bottom:32px;padding:0 16px}
 .pt-title h1{flex:1;min-width:0;margin:0;text-indent:-1.44px;color:var(--pt-text);font-size:24px;font-weight:500;line-height:32px;letter-spacing:-.16px}
-.pt-title-menu{box-sizing:border-box;width:28px;height:28px;display:grid;place-items:center;padding:0;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--pt-text-muted)}
-.pt-title-menu svg{width:16px;height:16px}
+.pt-title-menu{box-sizing:border-box;width:24px;height:24px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--pt-text-label)}
+.pt-title-menu svg{width:14px;height:14px;color:var(--pt-text-muted)}
 .pt-title-menu:hover,.pt-title-menu[data-state=open]{background:var(--pt-back-hover-bg);color:var(--pt-text)}
+.pt-title-menu:hover svg,.pt-title-menu[data-state=open] svg{color:var(--pt-text)}
 .pt-fields{display:flex;flex-direction:column;gap:24px}
 
 .pt-name{display:flex;flex-direction:column;gap:8px}
@@ -62,7 +63,8 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 .pt-pills{display:flex;flex-wrap:wrap;gap:6px 8px}
 .pt-description{margin-top:15px;padding-top:24px;border-top:.5px solid var(--pt-divider);--mention-field-min-height:150px}
 .pt-description .mention-text-field .issue-description-root .description-editor{min-height:150px;color:var(--pt-text-2);font-size:15px;font-weight:450;line-height:24px;letter-spacing:-.1px;font-variation-settings:normal;font-feature-settings:"calt";font-variant-ligatures:normal}
-.pt-description .mention-text-field .issue-description-root .description-editor p{font-variation-settings:normal;font-feature-settings:"calt";font-variant-ligatures:normal}
+.pt-description .mention-text-field .issue-description-root .description-editor p{margin:0;font-variation-settings:normal;font-feature-settings:"calt";font-variant-ligatures:normal}
+.pt-description .mention-text-field .issue-description-root .description-editor p+p{margin-top:16px}
 .pt-description .mention-text-field{color:var(--pt-text-2)}
 .pt-editor .mention-text-field .issue-description-root .description-editor p.is-editor-empty:first-child::before{color:var(--pt-placeholder)}
 
