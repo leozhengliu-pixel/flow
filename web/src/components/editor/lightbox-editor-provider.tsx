@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { ArrowDown, ArrowUp, Clipboard, Crop, Download, Link2, X } from 'lucide-react'
+import { LightboxCloseIcon, LightboxCopyIcon, LightboxCropIcon, LightboxDownloadIcon, LightboxLinkIcon, LightboxNextIcon, LightboxPreviousIcon } from './lightbox-icons'
 import { createPortal } from 'react-dom'
 import { copyImage, copyText, downloadImage } from './lightbox-actions'
 
@@ -240,19 +240,19 @@ function LightboxEditorProviderInner({
             <span className="flow-lightbox-cluster start"><button className="flow-lightbox-zoom" onClick={() => setZoomed(false)} type="button">{zoom * (zoomed ? 2 : 1)}%</button></span>
             <span className="flow-lightbox-cluster end">
               {active.crop && <>
-                <button aria-label="Crop image" onClick={() => { const crop = active.crop; close(); crop?.() }} type="button"><Crop size={14}/></button>
+                <button aria-label="Crop image" onClick={() => { const crop = active.crop; close(); crop?.() }} type="button"><LightboxCropIcon/></button>
                 <span aria-hidden className="flow-lightbox-separator"/>
               </>}
-              <button aria-label="Copy image" onClick={() => void copyImage(active)} type="button"><Clipboard size={14}/></button>
-              <button aria-label="Copy link" onClick={() => void copyText(active.src)} type="button"><Link2 size={14}/></button>
-              <button aria-label="Download" onClick={() => downloadImage(active)} type="button"><Download size={14}/></button>
+              <button aria-label="Copy image" onClick={() => void copyImage(active)} type="button"><LightboxCopyIcon/></button>
+              <button aria-label="Copy link" onClick={() => void copyText(active.src)} type="button"><LightboxLinkIcon/></button>
+              <button aria-label="Download" onClick={() => downloadImage(active)} type="button"><LightboxDownloadIcon/></button>
               <span aria-hidden className="flow-lightbox-separator"/>
               <span className="flow-lightbox-pill">
-                <button aria-label="Next" disabled={session.index >= session.items.length - 1} onClick={() => setIndex(session.index + 1)} type="button"><ArrowDown size={14}/></button>
+                <button aria-label="Next" disabled={session.index >= session.items.length - 1} onClick={() => setIndex(session.index + 1)} type="button"><LightboxNextIcon/></button>
                 <span aria-hidden className="flow-lightbox-pill-rule"/>
-                <button aria-label="Previous" disabled={session.index === 0} onClick={() => setIndex(session.index - 1)} type="button"><ArrowUp size={14}/></button>
+                <button aria-label="Previous" disabled={session.index === 0} onClick={() => setIndex(session.index - 1)} type="button"><LightboxPreviousIcon/></button>
               </span>
-              <button aria-label="Close" className="flow-lightbox-close" onClick={close} type="button"><X size={14}/></button>
+              <button aria-label="Close" className="flow-lightbox-close" onClick={close} type="button"><LightboxCloseIcon/></button>
             </span>
           </div>
           <div className="flow-lightbox-stage" onWheel={event => { if (zoomed) panBy(event.deltaX, event.deltaY) }} ref={stageRef}>

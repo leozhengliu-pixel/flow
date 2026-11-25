@@ -26,16 +26,21 @@
 .res-dialog { position: fixed; z-index: 1000; top: 33.333%; left: 50%; box-sizing: border-box; width: min(540px, calc(100vw - 32px)); transform: translate(-50%, -33.333%); border: .5px solid var(--res-dialog-border); border-radius: 12px; background: var(--res-dialog-bg); box-shadow: var(--res-dialog-shadow); color: var(--res-dialog-fg); }
 .res-dialog form { display: flex; flex-direction: column; gap: 16px; padding: 32px; }
 .res-dialog-title { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--res-dialog-strong); font: 600 15px / 23px var(--font); }
-.res-dialog-title svg { color: var(--res-icon); }
-.res-dialog label { display: flex; flex-direction: column; gap: 4px; }
-.res-dialog label > span { height: 24px; color: var(--res-dialog-fg); font: 500 13px / 24px var(--font); }
-.res-dialog label em { color: var(--res-dialog-hint); font: 450 12px / normal var(--font); }
-.res-dialog input { box-sizing: border-box; height: 32px; padding: 6px 12px; border: .5px solid var(--res-dialog-field-border); border-radius: 8px; background: var(--res-dialog-field-bg); color: var(--res-dialog-strong); font: 400 13px / normal var(--font); outline: 0; }
-.res-dialog input:focus { border-color: var(--res-dialog-focus); }
+.res-dialog-title svg { color: var(--res-dialog-hint); }
+.res-dialog-overlay { position: fixed; z-index: 999; inset: 0; background: var(--res-dialog-overlay); }
+.res-field label { display: block; margin: 0 0 4px; color: var(--res-dialog-fg); font: 400 16px / 24px var(--font); }
+.res-field label > span { font: 500 13px / normal var(--font); }
+.res-field label em { margin-left: 4px; color: var(--res-dialog-hint); font: 450 12px / normal var(--font); }
+.res-dialog input { box-sizing: border-box; width: 100%; height: 32px; padding: 6px 12px; border: .5px solid var(--res-dialog-field-border); border-radius: 8px; background: var(--res-dialog-field-bg); color: var(--res-dialog-strong); font: 400 13px / normal var(--font); outline: 0; }
+.res-dialog input:focus { outline: 1px solid var(--res-dialog-focus); outline-offset: -1px; }
+.res-dialog input:disabled { color: var(--res-dialog-hint); cursor: default; opacity: 1; }
 .res-dialog footer { display: flex; justify-content: flex-end; gap: 16px; }
 .res-dialog footer button { height: 32px; padding: 0 12px; border: .5px solid transparent; border-radius: 9999px; background: var(--res-cancel-bg); color: var(--res-dialog-fg); font: 500 13px / normal var(--font); cursor: default; }
 .res-dialog footer .primary { background: var(--res-primary-bg); color: var(--res-primary-fg); box-shadow: var(--res-primary-shadow); }
+.res-dialog footer button:hover:not(:disabled) { background: var(--res-cancel-hover); }
+.res-dialog footer .primary:hover:not(:disabled) { background: var(--res-primary-hover); }
 .res-dialog footer button:disabled { opacity: .6; }
+@media (max-width: 767px) { .res-field label em { display: block; margin: 4px 0 8px; font: 450 12px / 1.4 var(--font); } }
 /* The + menu: 174px wide, two 32px rows between 6px of padding, a 12px surface. */
 .issue-resource-menu { z-index: 700; box-sizing: border-box; padding: 6px; border: .5px solid var(--res-menu-border); border-radius: 12px; outline: 0; background: var(--res-menu-bg); box-shadow: var(--res-menu-shadow); color: var(--res-menu-fg); animation: floating-surface-in .19s cubic-bezier(.16, 1, .3, 1); }
 .issue-resource-menu > button { display: flex; width: 100%; height: 32px; align-items: center; gap: 8px; padding: 0 12px 0 8px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: 450 13px / normal var(--font); text-align: left; cursor: default; }
