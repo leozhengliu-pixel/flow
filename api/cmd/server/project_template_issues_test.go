@@ -267,3 +267,37 @@ func TestCreateProjectFromTemplateCreatesIssuesOnFullMutationPath(t *testing.T) 
 	defer restore()
 	TestCreateProjectFromTemplateCreatesIssuesAndDependencies(t)
 }
+
+func TestProjectTemplateIssueEstimateFollowsTeamScale(t *testing.T) {
+	fixture := newProjectTemplateFixture(t)
+	requestJSON[domain.TeamSettings](t, fixture.handler, http.MethodPatch, "/api/teams/"+fixture.teamB.ID+"/settings", map[string]any{"estimateType": "fibonacci"}, http.StatusOK)
+	// An invalid estimate is rejected; the field round-trips through the template.
+	requestJSON[map[string]any](t, fixture.handler, http.MethodPost, "/api/project-templates", map[string]any{"name": "Bad estimate", "issues": []map[string]any{{"title": "A", "estimate": -3}}}, http.StatusBadRequest)
+	template := requestJSON[domain.ProjectTemplate](t, fixture.handler, http.MethodPost, "/api/project-templates", map[string]any{
+		"name": "Estimated", "projectName": "Estimated project", "teamIds": []string{fixture.teamA.ID},
+		"issues": []map[string]any{
+			{"id": "scaled", "title": "On scale", "teamId": fixture.teamB.ID, "estimate": 5},
+			{"id": "off", "title": "Off scale", "teamId": fixture.teamB.ID, "estimate": 4},
+			{"id": "unused", "title": "Team without estimates", "teamId": fixture.teamA.ID, "estimate": 3},
+			{"id": "none", "title": "No estimate", "teamId": fixture.teamB.ID},
+		},
+	}, http.StatusCreated)
+	if template.Issues[0].Estimate == nil || *template.Issues[0].Estimate != 5 || template.Issues[3].Estimate != nil {
+		t.Fatalf("template issue estimates did not round-trip: %#v", template.Issues)
+	}
+	project := requestJSON[domain.Project](t, fixture.handler, http.MethodPost, "/api/projects", map[string]any{"templateId": template.ID}, http.StatusCreated)
+	created := map[string]domain.Issue{}
+	for _, issue := range fixture.stored(t).Issues {
+		if issue.Project != nil && issue.Project.ID == project.ID {
+			created[issue.Title] = issue
+		}
+	}
+	if got := created["On scale"].Estimate; got == nil || *got != 5 {
+		t.Fatalf("estimate on the team's scale was not copied: %v", got)
+	}
+	for _, title := range []string{"Off scale", "Team without estimates", "No estimate"} {
+		if got := created[title].Estimate; got != nil {
+			t.Fatalf("%q should not receive an estimate, got %v", title, *got)
+		}
+	}
+}
