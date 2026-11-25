@@ -10,20 +10,21 @@
 .pt-list-header a{margin-left:-3px}
 .pt-list-header a:hover{background:var(--pt-back-hover-bg)}
 .pt-list-card{overflow:hidden;border-radius:10px;background:var(--pt-surface);box-shadow:var(--pt-list-ring)}
-.pt-list-card>header{box-sizing:border-box;height:60px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px}
-.pt-list-card>header h3{margin:0;padding-bottom:2.5px;color:var(--pt-text);font-size:13px;font-weight:500;line-height:normal}
+.pt-list-card>header{box-sizing:border-box;height:60px;border-bottom:.5px solid var(--pt-header-line);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px}
+.pt-list-card>header h3{margin:0;padding-bottom:2px;color:var(--pt-text);font-size:13px;font-weight:500;line-height:normal}
 .pt-list-card>header button{box-sizing:border-box;height:32px;display:inline-flex;align-items:center;gap:6px;padding:0 12px 0 10px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--pt-text-2);font-family:inherit;font-size:13px;font-weight:500;line-height:normal}
 .pt-list-card>header button svg{width:16px;height:16px;flex:none}
 .pt-list-card>header .pt-list-add{width:24px;height:24px;justify-content:center;gap:0;padding:0 2px;border-radius:9999px;color:var(--pt-section-icon)}
 .pt-list-card>header .pt-list-add svg{width:14px;height:14px}
 .pt-list-card>header button:hover{background:var(--pt-list-button-hover-bg);color:var(--pt-text)}
-.pt-list-row{position:relative;box-sizing:border-box;height:64px;display:grid;grid-template-columns:44px minmax(0,1fr) 24px;align-items:center;padding:0 16px;box-shadow:inset 0 .5px 0 var(--pt-border)}
+.pt-list-row{position:relative;box-sizing:border-box;min-height:64px;display:grid;grid-template-columns:44px minmax(0,1fr) 24px;align-items:center;padding:16px}
+.pt-list-row+.pt-list-row::before{content:"";position:absolute;top:0;left:16px;right:16px;height:.5px;background:var(--pt-row-sep)}
 .pt-list-row:hover{background:var(--pt-row-hover-bg)}
 .pt-row-link{position:absolute;z-index:1;inset:0;padding:0;border:0;background:transparent}
 .pt-row-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:6px;background:color-mix(in srgb,var(--pt-icon-color) var(--pt-icon-alpha),transparent)}
 .pt-row-icon svg{width:16px;height:16px}
 .pt-row-text{display:flex;min-width:0;flex-direction:column}
-.pt-row-text strong{overflow:hidden;color:var(--pt-text);font-size:13px;font-weight:500;line-height:normal;text-overflow:ellipsis;white-space:nowrap}
+.pt-row-text strong{color:var(--pt-text);font-size:13px;font-weight:500;line-height:normal;overflow-wrap:anywhere}
 .pt-row-text small{margin-top:2px;color:var(--pt-text-muted);font-size:12px;line-height:normal}
 .pt-row-menu-trigger{position:relative;z-index:2;box-sizing:border-box;width:24px;height:24px;display:grid;place-items:center;padding:0;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--pt-section-icon)}
 .pt-row-menu-trigger svg{width:14px;height:14px}
@@ -202,7 +203,7 @@ html:root body .property-command-surface.pt-picker .property-command-icon:has(.p
   .pt-list-header{margin-bottom:24px;padding:0 16px}
   .pt-list-header p{line-height:18px}
   .pt-list-card>header{height:50px;padding:10.6667px}
-  .pt-list-row{padding:0 10.6667px;grid-template-columns:40px minmax(0,1fr) 24px}
+  .pt-list-row{padding:16px 10.6667px;grid-template-columns:40px minmax(0,1fr) 24px}
   .pt-editor{padding-top:36px}
   .pt-back{left:-14px;top:-6px}
   .pt-editor-inner{width:100%}
@@ -227,4 +228,7 @@ html:root body .property-command-surface.pt-picker .property-command-icon:has(.p
 }
 
 /* With templates listed the header carries the icon-only add button and the count sits 1.25px above centre (measured). */
-html:root .settings-app .settings-main .pt-list-card>header:has(.pt-list-add) h3{padding-bottom:2.5px}
+html:root .settings-app .settings-main .pt-list-card>header:has(.pt-list-add) h3{padding-bottom:2px}
+
+.pt-template-menu [role=menuitem]{font-weight:400}
+.pt-template-menu{min-width:313px}

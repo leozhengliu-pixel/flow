@@ -250,8 +250,9 @@ export function ProjectTemplateListCard({
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
                   <FlowDropdownMenuContent label={t("Template actions")} align="end" className="pt-template-menu">
-                    <FlowMenuItem icon={<FlowGlyph name="edit" />} label="Edit" onSelect={() => onOpen(item)} />
+                    <FlowMenuItem icon={<FlowGlyph name="edit" />} label="Edit…" onSelect={() => onOpen(item)} />
                     <FlowMenuItem icon={<TemplateGlyph name="duplicate" />} label="Duplicate…" onSelect={() => onDuplicate(item)} />
+                    <FlowMenuSeparator />
                     <FlowMenuItem
                       icon={<FlowGlyph name="copy" />}
                       label="Copy URL to create project from template"
