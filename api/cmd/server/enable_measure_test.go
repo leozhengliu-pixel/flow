@@ -14,7 +14,7 @@ import (
 )
 
 // The transfer fixture is opt-in; normal and shared-database runs use the
-// smaller differential fixtures in scale_p19_enable_test.go.
+// smaller differential fixtures in coverage_enable_test.go.
 func TestScaleP19EnableTransferMeasurement(t *testing.T) {
 	if os.Getenv("FLOW_SCALE_P19_MEASURE") == "" {
 		t.Skip("set FLOW_SCALE_P19_MEASURE to measure the 23,210-project fixture")

@@ -111,7 +111,7 @@
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
-        "No production callers; exported immediate administrative deletion API used by test cleanup (for example scale_p01_database_test.go:41); production scheduled deletion uses separate purge flow"
+        "No production callers; exported immediate administrative deletion API used by test cleanup (for example database_test.go:41); production scheduled deletion uses separate purge flow"
       ]
     },
     "Mutate": {

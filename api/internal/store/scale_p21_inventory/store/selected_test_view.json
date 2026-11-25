@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_selected_test_view.go",
+  "source": "store/selected_test_view.go",
   "unmigrated": 0,
   "consumers": {
     "BoundedMetadataViewForWorkspacesForTesting": {

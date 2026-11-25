@@ -270,16 +270,16 @@ and the required `CHANGELOG.md` entry. New files are all named for P01:
 - `api/cmd/server/scale_external_load_test.go`
 - `api/cmd/server/scale_permission_matrix_test.go`
 - `api/cmd/server/browser_acks_test.go`
-- `api/cmd/server/scale_p01_fixture_test.go`
-- `api/cmd/server/scale_p01_histogram_test.go`
-- `api/cmd/server/scale_p01_late_commit_test.go`
-- `api/cmd/server/scale_p01_measurement_test.go`
-- `api/cmd/server/scale_p01_runner_test.go`
+- `api/cmd/server/fixture_test.go`
+- `api/cmd/server/histogram_test.go`
+- `api/cmd/server/late_commit_test.go`
+- `api/cmd/server/measurement_test.go`
+- `api/cmd/server/runner_test.go`
 - `api/cmd/server/write_test.go`
-- `api/internal/store/scale_p01_load_test.go`
+- `api/internal/store/load_test.go`
 - `api/internal/store/permission_test.go`
-- `api/internal/store/scale_p01_probe.go`
-- `api/internal/store/scale_p01_seed.go`
+- `api/internal/store/load_probe.go`
+- `api/internal/store/load_seed.go`
 - `scale-p01-report.md`
 
 New tests: `TestScaleP01PrincipalCounts`, `TestScaleP01MetadataScales`,

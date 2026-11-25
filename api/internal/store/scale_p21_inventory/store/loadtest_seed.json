@@ -13,7 +13,7 @@
       "temperature": "hot",
       "temperatureReason": "Observed in the single classification profile (cpu, heap; setup-only); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
-        "No production callers; TestLoadUsers/scaleP01SeedFixture load-test setup -> SeedSyntheticMetadata (memory_load_test.go:171, scale_p01_fixture_test.go:205)"
+        "No production callers; TestLoadUsers/scaleP01SeedFixture load-test setup -> SeedSyntheticMetadata (memory_load_test.go:171, fixture_test.go:205)"
       ]
     },
     "WorkspaceStateBytes": {
@@ -26,7 +26,7 @@
       "temperature": "hot",
       "temperatureReason": "Observed in the single classification profile (cpu; setup-only); promoted from static COLD. No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
-        "No production callers; TestLoadUsers/scaleP01SeedFixture load-test measurement -> WorkspaceStateBytes (memory_load_test.go:178, scale_p01_fixture_test.go:214)"
+        "No production callers; TestLoadUsers/scaleP01SeedFixture load-test measurement -> WorkspaceStateBytes (memory_load_test.go:178, fixture_test.go:214)"
       ]
     }
   }

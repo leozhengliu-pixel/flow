@@ -55,7 +55,7 @@ oauth_refresh_replay.go:revokeOAuthAccessFamily
 oauth_token_exchange.go:ExchangeOAuthGrant
 personal_data.go:EraseAccount
 personal_data.go:ErasePersonFromWorkspace
-scale_p01_seed.go:SeedScaleP01Principals
+load_seed.go:SeedScaleP01Principals
 agent_session_sync.go:syncAgentSessionLifecycleCollection
 legacy_array_reorder.go:writeArrayReorderRow
 legacy_record_base.go:persistIssues

@@ -418,7 +418,7 @@ var scaleP21SW550BackgroundWork = map[string]string{
 // TestScaleP21SW550BackgroundColdWork fails on a goroutine root that reaches a
 // legacy consumer and is not named in scaleP21SW550BackgroundWork, and on a
 // named root that no longer does. The context each root runs on is proven
-// by SW557 (scale_p21_sw557_background_cold_context_test.go).
+// by SW557 (background_cold_context_test.go).
 func TestScaleP21SW550BackgroundColdWork(t *testing.T) {
 	roots := scaleP21SW550BackgroundRoots(t)
 	for root, path := range roots {

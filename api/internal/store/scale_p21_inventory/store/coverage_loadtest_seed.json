@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_loadtest_seed.go",
+  "source": "store/coverage_loadtest_seed.go",
   "unmigrated": 0,
   "consumers": {
     "seedSyntheticBatchBounded": {

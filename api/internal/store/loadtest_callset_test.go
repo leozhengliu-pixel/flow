@@ -21,13 +21,13 @@ import (
 func TestScaleP21SW277LoadFixtureCallset(t *testing.T) {
 	declared := map[string]string{
 		"SeedSyntheticMetadata": "loadtest_seed.go", "WorkspaceStateBytes": "loadtest_seed.go",
-		"seedSyntheticBatchBounded": "scale_p21_loadtest_seed.go", "workspaceStateBytesBounded": "scale_p21_loadtest_seed.go",
-		"seedSyntheticRecords": "scale_p21_loadtest_seed.go", "SeedScaleP01Principals": "scale_p01_seed.go",
+		"seedSyntheticBatchBounded": "coverage_loadtest_seed.go", "workspaceStateBytesBounded": "coverage_loadtest_seed.go",
+		"seedSyntheticRecords": "coverage_loadtest_seed.go", "SeedScaleP01Principals": "load_seed.go",
 	}
 	allowed := map[string]bool{
-		"loadtest_seed.go:SeedSyntheticMetadata->seedSyntheticBatchBounded":          true,
-		"loadtest_seed.go:WorkspaceStateBytes->workspaceStateBytesBounded":           true,
-		"scale_p21_loadtest_seed.go:seedSyntheticBatchBounded->seedSyntheticRecords": true,
+		"loadtest_seed.go:SeedSyntheticMetadata->seedSyntheticBatchBounded":         true,
+		"loadtest_seed.go:WorkspaceStateBytes->workspaceStateBytesBounded":          true,
+		"coverage_loadtest_seed.go:seedSyntheticBatchBounded->seedSyntheticRecords": true,
 	}
 	tagged := func(path string) bool {
 		raw, err := os.ReadFile(path)
