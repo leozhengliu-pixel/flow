@@ -164,6 +164,7 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 .pt-small-button{box-sizing:border-box;height:24px;display:inline-flex;align-items:center;padding:0 8px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--pt-section-fg);font-family:inherit;font-size:12px;font-weight:500;line-height:normal;white-space:nowrap;transition:background-color .15s}
 .pt-small-button:hover{background:var(--pt-section-hover-bg)}
 .pt-small-button--primary{background:var(--pt-primary-small);color:var(--pt-primary-fg);box-shadow:var(--pt-primary-shadow)}
+.pt-small-button--primary[aria-disabled=true]{background:var(--pt-primary-small-empty)}
 .pt-small-button--primary:hover{background:var(--pt-primary-hover)}
 
 /* Footer */

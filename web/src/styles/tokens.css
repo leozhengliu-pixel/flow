@@ -952,7 +952,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --pt-divider:#48494c;
   --pt-section-bg:#1c1c1d;--pt-section-border:#2c2d2f;--pt-section-fg:#e3e4e6;--pt-section-icon:#959597;--pt-section-hover-bg:#28282a;--pt-section-hover-fg:#ffffff;
   --pt-composer-fg:#959597;--pt-composer-title:#959597;--pt-chip-bg:#232325;--pt-chip-border:#3a3b3e;--pt-assignee-fg:#6f7073;
-  --pt-primary:#5e6ad2;--pt-primary-small:#6975e2;--pt-primary-hover:#6c78e0;--pt-primary-fg:#fffeff;--pt-primary-shadow:0 .5px 1px 1px #0000004d;
+  --pt-primary:#5e6ad2;--pt-primary-small:#5e6ad2;--pt-primary-small-empty:#6975e2;--pt-primary-hover:#6c78e0;--pt-primary-fg:#fffeff;--pt-primary-shadow:0 .5px 1px 1px #0000004d;
   --pt-toggle-off:#6f6f70;--pt-toggle-knob:#fffeff;
 }
 :root[data-theme="light"]{
@@ -966,7 +966,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --pt-divider:#d8d8d8;
   --pt-section-bg:#fbfbfb;--pt-section-border:#dedede;--pt-section-fg:#2f2f30;--pt-section-icon:#5b5b5c;--pt-section-hover-bg:#ececec;--pt-section-hover-fg:#1b1b1b;
   --pt-composer-fg:#5b5b5c;--pt-composer-title:#2f2f30;--pt-chip-bg:#f5f5f5;--pt-chip-border:#cfcfcf;--pt-assignee-fg:#9a9a9c;
-  --pt-primary:#6d78d5;--pt-primary-small:#5e6ac1;--pt-primary-hover:#6975e2;--pt-primary-fg:#fffeff;--pt-primary-shadow:0 3px 6px -2px #00000005,0 1px 1px #0000000a;
+  --pt-primary:#6d78d5;--pt-primary-small:#6d78d5;--pt-primary-small-empty:#5e6ac1;--pt-primary-hover:#6975e2;--pt-primary-fg:#fffeff;--pt-primary-shadow:0 3px 6px -2px #00000005,0 1px 1px #0000000a;
   --pt-toggle-off:#c5c5c5;--pt-toggle-knob:#fffeff;
 }
 .pt-identity{--pt-icon-tile-bg:lch(from var(--pt-icon-tile) l c h / var(--pt-icon-a))}
