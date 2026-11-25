@@ -57,7 +57,7 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 .pt-card-body{padding:8px 6px}
 .pt-card-head{display:flex;flex-direction:column;gap:6px;margin:0 12px}
 .pt-identity{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
-.pt-identity .pt-icon-trigger{box-sizing:border-box;width:28px;height:28px;display:grid;place-items:center;padding:0;border:0;border-radius:4px;background:lch(from var(--pt-icon-tile) l c h / var(--pt-icon-a));box-shadow:none}
+.pt-identity .pt-icon-trigger{box-sizing:border-box;width:28px;height:28px;display:grid;place-items:center;padding:0;border:0;border-radius:4px;background:var(--pt-icon-tile-bg);box-shadow:none}
 .pt-identity .pt-icon-trigger svg{width:16px;height:16px;flex:none}
 .pt-identity input,.pt-summary input,.pt-issue-title-field input,.pt-milestone-name input{display:block;box-sizing:border-box;width:100%;margin:0;padding:0;border:0;outline:0;background:transparent;font-family:inherit}
 .pt-project-name{height:32px;font-variation-settings:"opsz" 32;font-feature-settings:"calt";text-rendering:optimizelegibility;color:var(--pt-text);font-size:24px;font-weight:600;line-height:32px;letter-spacing:-.16px}

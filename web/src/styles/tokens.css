@@ -969,6 +969,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --pt-primary:#6d78d5;--pt-primary-small:#5e6ac1;--pt-primary-hover:#6975e2;--pt-primary-fg:#fffeff;--pt-primary-shadow:0 3px 6px -2px #00000005,0 1px 1px #0000000a;
   --pt-toggle-off:#c5c5c5;--pt-toggle-knob:#fffeff;
 }
+.pt-identity{--pt-icon-tile-bg:lch(from var(--pt-icon-tile) l c h / var(--pt-icon-a))}
 /* Template icon tiles: the reference app tints the icon's own colour (lch, alpha per theme); hover shifts lightness and chroma. */
 .tpl-icon-tint{--tpl-icon-bg:lch(from var(--view-color,var(--tpl-icon-fill)) l c h / var(--tpl-icon-alpha));--tpl-icon-hover-bg:lch(from var(--view-color,var(--tpl-icon-fill)) calc(l + var(--tpl-icon-hover-l)) calc(c + var(--tpl-icon-hover-c)) h / var(--tpl-icon-alpha))}
 /* Colour picker (components/ui/color-swatch-picker): the reference app tints it by elevation — popover over the page, popover over a settings card, and the icon picker surface. On light surfaces it darkens bright swatches to L 67.969 over a page and L 70.313 over a settings card (--color-swatch-card-*). */
