@@ -122,6 +122,7 @@ func seedMetadataEvents(data *domain.Bootstrap) {
 }
 
 func TestAuditedMetadataEventsAvoidIssueHydration(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off") // Check the compatibility dispatcher's metadata-only path.
 	for _, test := range metadataEventCases() {
 		t.Run(test.event, func(t *testing.T) {
 			repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "metadata.db"))
@@ -153,6 +154,7 @@ func TestAuditedMetadataEventsAvoidIssueHydration(t *testing.T) {
 }
 
 func TestAuditedMetadataEventsMatchFullPath(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off") // Compare the two compatibility callback paths.
 	seed, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "seed.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -182,7 +184,7 @@ func TestAuditedMetadataEventsMatchFullPath(t *testing.T) {
 				repo.SetWebhookSink(func(_ string, event domain.DomainEvent) { got.hook = event })
 				repo.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { got.realtime = event })
 				restore := ForceFullMutationsForTesting(full)
-				err = repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, test.event, test.aggregate, map[string]string{"fixture": "metadata"}, func(next *domain.Bootstrap) error { test.apply(next); return nil })
+				err = repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), data.Workspace.URLKey, test.event, test.aggregate, map[string]string{"fixture": "metadata"}, func(next *domain.Bootstrap) error { test.apply(next); return nil })
 				restore()
 				if err != nil {
 					t.Fatal(err)
@@ -220,7 +222,7 @@ func TestAuditedMetadataEventsMatchFullPath(t *testing.T) {
 					t.Fatal(err)
 				}
 				restore = ForceFullMutationsForTesting(full)
-				err = repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, test.event, test.aggregate, nil, func(*domain.Bootstrap) error { return ErrNoMutation })
+				err = repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), data.Workspace.URLKey, test.event, test.aggregate, nil, func(*domain.Bootstrap) error { return ErrNoMutation })
 				restore()
 				if err != nil || len(writes()) != 0 {
 					t.Fatalf("no-op wrote rows: %v", err)
@@ -228,7 +230,7 @@ func TestAuditedMetadataEventsMatchFullPath(t *testing.T) {
 				// Callback errors retain identity and never publish or write.
 				sentinel := errors.New("callback failure")
 				restore = ForceFullMutationsForTesting(full)
-				err = repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, test.event, test.aggregate, nil, func(*domain.Bootstrap) error { return sentinel })
+				err = repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), data.Workspace.URLKey, test.event, test.aggregate, nil, func(*domain.Bootstrap) error { return sentinel })
 				restore()
 				if !errors.Is(err, sentinel) || len(writes()) != 0 {
 					t.Fatalf("callback error=%v", err)
@@ -243,6 +245,7 @@ func TestAuditedMetadataEventsMatchFullPath(t *testing.T) {
 }
 
 func TestIssueCountCallbacksKeepLoadedIssues(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off") // Observe the compatibility dispatcher's full callback.
 	for _, event := range []string{"workspace_invitation.accepted", "workspace_invite_link.joined"} {
 		t.Run(event, func(t *testing.T) {
 			repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "count.db"))

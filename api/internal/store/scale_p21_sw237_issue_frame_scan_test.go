@@ -188,6 +188,7 @@ func TestScaleP21SW237IssueFrameScanOracleAndPhysicalOrder(t *testing.T) {
 
 func TestScaleP21SW237IssueImageUsesStreamedRawReceipts(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	f := scaleP09Database(t)
 	records := []scaleP21SW237Row{
 		{physical: "physical-first", raw: []byte(` {"id":"embedded-other","description":"first","labels":null} `), order: 0},

@@ -400,9 +400,9 @@ func TestScaleP09OffRestoresLegacyWrites(t *testing.T) {
 	if _, err := f.ReadCommittedChanges(t.Context(), f.data.Workspace.ID, after, 100, 4096); !errors.Is(err, ErrRecordJournalUnavailable) {
 		t.Fatalf("disabled journal served changes: %v", err)
 	}
-	for input, want := range map[string]string{"": "off", "unknown": "off", "on": "on", "shadow": "shadow", "off": "off"} {
+	for input, want := range map[string]string{"unknown": "off", "on": "on", "shadow": "shadow", "off": "off"} {
 		t.Setenv("FLOW_RECORD_JOURNAL", input)
-		if got := recordJournalMode(); got != want {
+		if got := recordJournalMode(f.dialect); got != want {
 			t.Fatalf("mode %q = %q, want %q", input, got, want)
 		}
 	}

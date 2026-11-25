@@ -611,6 +611,8 @@ func (s *server) runWorkflow(ctx context.Context, key, id, trigger, resourceType
 	}
 	var err error
 	if s.store.BoundedMetadataEnabled() {
+		ctx, finish := beginMetadataOutputReads(ctx)
+		defer finish()
 		err = s.store.MutateWorkflowRun(ctx, key, id, resourceType, resourceID, map[string]string{"trigger": trigger}, mutate)
 	} else {
 		err = s.store.MutateWorkspace(ctx, key, "workflow_run.executed", id, map[string]string{"trigger": trigger}, mutate)

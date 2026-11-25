@@ -130,7 +130,7 @@ func TestBoundedRolloutCatalogTextRowsAndSkips(t *testing.T) {
 
 	// The pass normalises the row, completes every collection it can and
 	// reports the one it cannot instead of stopping.
-	report, err := repo.metadataCatalogPass(t.Context(), false)
+	report, err := repo.metadataCatalogPass(t.Context(), catalogRevisit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestBoundedRolloutCatalogTextRowsAndSkips(t *testing.T) {
 	if incomplete[workspace] != 0 || incomplete[other] != 1 {
 		t.Fatalf("completeness %v, want only the broken collection incomplete", incomplete)
 	}
-	// The worker logs the skip, finishes its pass and keeps running; it
+	// The worker counts the skip, finishes its pass and keeps running; it
 	// stops only when cancelled.
 	logs := captureSlog(t)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -181,7 +181,7 @@ func TestBoundedRolloutCatalogTextRowsAndSkips(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	line := logs.String()
-	if !strings.Contains(line, "level=WARN msg=\"metadata catalog: collection skipped\" workspace="+other) || !strings.Contains(line, "level=WARN msg=\"metadata catalog pass finished\"") || !strings.Contains(line, "skipped=1") {
+	if !strings.Contains(line, "level=WARN msg=\"metadata catalog pass finished\"") || !strings.Contains(line, "skipped=1") || strings.Contains(line, other) {
 		t.Fatalf("worker log:\n%s", line)
 	}
 	select {
@@ -198,7 +198,7 @@ func TestBoundedRolloutCatalogTextRowsAndSkips(t *testing.T) {
 	if _, err := repo.db.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='agentSessions' AND record_key='agent_session_broken'`, other); err != nil {
 		t.Fatal(err)
 	}
-	report, err = repo.metadataCatalogPass(t.Context(), false)
+	report, err = repo.metadataCatalogPass(t.Context(), catalogRevisit)
 	if err != nil || len(report.Skipped) != 0 || report.Normalized != 0 || report.Completed != report.Collections {
 		t.Fatalf("pass after the fix: %+v %v", report, err)
 	}
@@ -348,7 +348,7 @@ func TestBoundedRolloutFastCatalogEqualsStepwise(t *testing.T) {
 	}
 	stepwise, slow := dump(filepath.Join(dir, "stepwise.db"), func(repo *SQLiteStore) error { return repo.CompleteMetadataCatalogForTesting(t.Context()) })
 	pass, fast := dump(filepath.Join(dir, "pass.db"), func(repo *SQLiteStore) error {
-		report, err := repo.metadataCatalogPass(t.Context(), false)
+		report, err := repo.metadataCatalogPass(t.Context(), catalogRevisit)
 		if err == nil && (len(report.Skipped) != 0 || report.Completed != report.Collections) {
 			err = fmt.Errorf("pass %+v", report)
 		}

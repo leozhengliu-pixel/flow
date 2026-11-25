@@ -127,9 +127,10 @@ func TestErasedMemberCannotRejoinTheWorkspace(t *testing.T) {
 	if erased, err := repository.ErasedFromWorkspace(ctx, data.Workspace.ID, user.ID); err != nil || !erased {
 		t.Fatalf("erased = %v %v", erased, err)
 	}
-	former, err := repository.FormerMembers(ctx, "test-workspace")
-	if err != nil || !former[user.ID] {
-		t.Fatalf("not a former member: %v %v", former, err)
+	former, err := repository.BeginFormerMembersRead(ctx, "test-workspace")
+	defer former.Close()
+	if err != nil || !former.Members()[user.ID] {
+		t.Fatalf("erased member missing from former members: %v", err)
 	}
 	if err := repository.EnsureWorkspaceMembership(ctx, data.Workspace.ID, user.ID); !errors.Is(err, ErrErasedFromWorkspace) {
 		t.Fatalf("rejoin = %v", err)

@@ -23,7 +23,7 @@ func TestNotificationBatchKeepsContentRecordsReadable(t *testing.T) {
 	data := repo.Bootstrap()
 	workspace, viewer := data.Workspace.URLKey, data.Viewer.ID
 	now := time.Now().UTC()
-	err = repo.MutateWorkspace(t.Context(), workspace, "test.notifications", "", nil, func(d *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "test.notifications", "", nil, func(d *domain.Bootstrap) error {
 		d.Notifications = append(d.Notifications,
 			domain.Notification{ID: "notification_blob_a", RecipientID: viewer, Type: "issueComment", SourceType: "issue", SourceID: "issue_x", Actor: d.Viewer, CreatedAt: now, UpdatedAt: now},
 			domain.Notification{ID: "notification_blob_b", RecipientID: viewer, Type: "issueComment", SourceType: "issue", SourceID: "issue_y", Actor: d.Viewer, CreatedAt: now, UpdatedAt: now},

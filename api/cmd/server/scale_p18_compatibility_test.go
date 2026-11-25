@@ -17,7 +17,7 @@ func TestScaleP18ToolFamilyCompatibility(t *testing.T) {
 	repo, actor, ctx := scaleP18Fixture(t)
 	service := &server{store: repo}
 	var project domain.Project
-	if err := repo.MutateWorkspace(ctx, actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
 		project = domain.Project{ID: "p18-project", Name: "P18 target", SlugID: "new-p18", PreviousSlugIDs: []string{"old-p18"}, TeamIDs: []string{data.Teams[0].ID}, Description: "Body search target", Milestones: []domain.ProjectMilestone{{ID: "p18-milestone", Name: "Complete milestone", Description: "Full milestone history"}}}
 		data.Projects = append(data.Projects, project)
 		data.Projects = append(data.Projects, domain.Project{ID: "p18-name-first", Name: "p18-ambiguous", TeamIDs: project.TeamIDs}, domain.Project{ID: "p18-ambiguous", Name: "Other project", TeamIDs: project.TeamIDs})
@@ -80,7 +80,7 @@ func TestScaleP18ChatAuthorizationOnlyPreservesPolicy(t *testing.T) {
 			t.Fatal("internal call escaped the route allowlist")
 		}
 	}
-	if err := repo.MutateWorkspace(ctx, actor.WorkspaceKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.RequireTwoFactor, data.WorkspaceSettings.DisableAdminBypass = true, true
 		return nil
 	}); err != nil {
@@ -99,7 +99,7 @@ func TestScaleP18DelegationAndCrossWorkspace(t *testing.T) {
 		f := scaleP03Fixture(t, repo)
 		_, requester := scaleP03Join(t, f, "P18 requester", idgen.New("p18-requester-")+"@example.test", "member", f.data.Teams[0].ID)
 		private := "p18-private"
-		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
 			data.Teams = append(data.Teams, domain.Team{ID: private, Key: "P18P", Private: true})
 			data.TeamSettings[private] = domain.TeamSettings{TeamID: private, Access: "private"}
 			data.Projects = append(data.Projects, domain.Project{ID: "p18-private-project", TeamIDs: []string{private}}, domain.Project{ID: "p18-public-project", Name: "Keep this title", TeamIDs: []string{data.Teams[0].ID}})

@@ -30,7 +30,8 @@ func seedIssueDelete(t *testing.T, x *sw530Sweep) {
 	if err := x.legacy.store.SetTeamMembership(t.Context(), workspaceID, x.ids["private-team"], inherited.ID, "owner", true); err != nil {
 		t.Fatal(err)
 	}
-	x.membership["team_memberships"] = x.rows(t, `SELECT * FROM team_memberships WHERE workspace_id=?`, workspaceID)
+	table := sw530Table{"team_memberships", "workspace_id"}
+	x.sidecars[table] = x.sidecarRows(t, table)
 	at := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
 	if err := x.legacy.store.MutateWorkspace(t.Context(), x.workspace, "issue-delete.fixture", "", nil, func(data *domain.Bootstrap) error {
 		team := func(name string) domain.Team {
@@ -324,7 +325,8 @@ func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 			}
 			source.handler = issueDeleteDevHandler(t, x, source.store)
 		}
-		x.membership["workspace_memberships"] = x.rows(t, `SELECT * FROM workspace_memberships WHERE workspace_id=?`, x.fx.f.data.Workspace.ID)
+		table := sw530Table{"workspace_memberships", "workspace_id"}
+		x.sidecars[table] = x.sidecarRows(t, table)
 		reloadIssueDeleteBaseline(t, x)
 		for _, tc := range []struct {
 			name, ref, query string

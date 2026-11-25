@@ -8,6 +8,9 @@ import (
 )
 
 func TestScaleP03CredentialReadDetectsMetadataDrift(t *testing.T) {
+	// Without a journal, the legacy metadata stamp is the authority.
+	t.Setenv("FLOW_RECORD_JOURNAL", "off")
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for name, repo := range scaleP03Stores(t) {
 		t.Run(name, func(t *testing.T) {
 			workspace, principal := repo.data.Workspace.URLKey, repo.data.Viewer.ID

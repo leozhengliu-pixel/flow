@@ -132,7 +132,7 @@ func (s *SQLiteStore) LoadRigDatabaseBytes(ctx context.Context) int64 {
 // canonical record (validateResidentBackfill), so a skipped collection fails
 // the rig here.
 func (s *SQLiteStore) CompleteLoadRigMetadataCatalog(ctx context.Context) (int, error) {
-	report, err := s.metadataCatalogPass(ctx, false)
+	report, err := s.metadataCatalogPass(ctx, catalogRevisit)
 	if err != nil {
 		return report.Collections, err
 	}

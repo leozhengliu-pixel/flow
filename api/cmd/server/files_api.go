@@ -693,12 +693,13 @@ var (
 // signedFileURLs rewrites /uploads/ URLs inside successful JSON responses to
 // signed URLs when the client asks for them with the expire-in header.
 func (s *server) signedFileURLs(next http.Handler) http.Handler {
-	return boundHydratedLegacyDownloads(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if store.RecordHydrationEnabled() && s.realtime != nil {
+	downloads := boundHydratedLegacyDownloads(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hydrated := store.RecordHydrationEnabled(r.Context())
+		if hydrated && s.realtime != nil {
 			r = r.WithContext(context.WithValue(r.Context(), legacyTransportBudgetKey{}, s.realtime.budget))
 		}
 		lifetime, requested := requestedFileURLLifetime(r)
-		if store.RecordHydrationEnabled() && !requested && r.Method == http.MethodGet && r.URL.Path == "/api/issue-records/bootstrap" {
+		if hydrated && !requested && r.Method == http.MethodGet && r.URL.Path == "/api/issue-records/bootstrap" {
 			serveDetachedLegacyJSON(w, r, next)
 			return
 		}
@@ -708,7 +709,7 @@ func (s *server) signedFileURLs(next http.Handler) http.Handler {
 		}
 		r, authority := s.beginFileSigning(r)
 		defer authority.close()
-		if store.RecordHydrationEnabled() {
+		if hydrated {
 			s.signedFileURLsStream(w, r, next, lifetime, authority)
 			return
 		}
@@ -727,6 +728,13 @@ func (s *server) signedFileURLs(next http.Handler) http.Handler {
 		w.WriteHeader(writer.status)
 		_, _ = w.Write(body)
 	}), s.hydratedLegacySnapshotReservation)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := s.store.ContextWithDatabaseFeatures(r.Context())
+		if ctx != r.Context() {
+			r = r.WithContext(ctx)
+		}
+		downloads.ServeHTTP(w, r)
+	})
 }
 
 func logSigningFailure(ctx context.Context, err error) {

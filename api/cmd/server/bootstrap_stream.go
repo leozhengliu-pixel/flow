@@ -39,7 +39,7 @@ func serializeLegacyBootstrap(next http.Handler, shared ...chan struct{}) http.H
 		_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Minute))
 		defer controller.SetWriteDeadline(time.Time{})
 		if r.Context().Err() == nil {
-			if store.RecordHydrationEnabled() {
+			if store.RecordHydrationEnabled(r.Context()) {
 				serveDetachedLegacyJSON(w, r, next)
 			} else {
 				next.ServeHTTP(w, r)
@@ -52,12 +52,12 @@ func serializeLegacyBootstrap(next http.Handler, shared ...chan struct{}) http.H
 // collections one entity at a time instead of creating another snapshot-sized
 // JSON buffer alongside the decoded workspace.
 func writeBootstrapJSON(w http.ResponseWriter, data domain.Bootstrap) {
-	writeBootstrapWithFields(w, data, nil)
+	writeBootstrapWithFields(context.Background(), w, data, nil)
 }
 
-func writeBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stream func(string, *bufio.Writer, *json.Encoder) (bool, error), overrides ...map[string]json.RawMessage) {
-	if store.RecordHydrationEnabled() {
-		writeHydratedBootstrapWithFields(w, data, stream, overrides...)
+func writeBootstrapWithFields(ctx context.Context, w http.ResponseWriter, data domain.Bootstrap, stream func(string, *bufio.Writer, *json.Encoder) (bool, error), overrides ...map[string]json.RawMessage) {
+	if store.RecordHydrationEnabled(ctx) {
+		writeHydratedBootstrapWithFields(ctx, w, data, stream, overrides...)
 		return
 	}
 	metadata := data
@@ -248,7 +248,7 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 		}
 	}
 	lean := leanBootstrapRequested(r)
-	writeBootstrapWithFields(w, data, func(field string, buffer *bufio.Writer, encoder *json.Encoder) (bool, error) {
+	writeBootstrapWithFields(r.Context(), w, data, func(field string, buffer *bufio.Writer, encoder *json.Encoder) (bool, error) {
 		if lean {
 			switch field {
 			case "issues":
@@ -546,7 +546,7 @@ func encodeBootstrapArray[T any](w io.Writer, encoder *json.Encoder, items []T, 
 }
 
 func encodeBootstrapValue(ctx context.Context, buffer *bufio.Writer, encoder *json.Encoder, value any) error {
-	if !store.RecordHydrationEnabled() {
+	if !store.RecordHydrationEnabled(ctx) {
 		return encoder.Encode(value)
 	}
 	if err := encodeHydratedJSON(ctx, buffer, reflect.ValueOf(value), 0); err != nil {
@@ -557,8 +557,8 @@ func encodeBootstrapValue(ctx context.Context, buffer *bufio.Writer, encoder *js
 
 // Preserve the legacy field ordering and newlines while visiting each field
 // directly. Marshaling metadata first duplicates every project and document.
-func writeHydratedBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stream func(string, *bufio.Writer, *json.Encoder) (bool, error), overrides ...map[string]json.RawMessage) {
-	ctx := hydratedSigningContext(context.Background(), w)
+func writeHydratedBootstrapWithFields(ctx context.Context, w http.ResponseWriter, data domain.Bootstrap, stream func(string, *bufio.Writer, *json.Encoder) (bool, error), overrides ...map[string]json.RawMessage) {
+	ctx = hydratedSigningContext(ctx, w)
 	value := reflect.ValueOf(data)
 	fields := map[string]streamField{}
 	keys := []string{}

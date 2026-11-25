@@ -71,6 +71,9 @@ func scaleP03TrackResources(t *testing.T, repo *store.SQLiteStore) *scaleP03Fixt
 		run := func(timeout time.Duration, cleanup func(context.Context) error) error {
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
+			ctx = workspaceFixtureContext(ctx)
+			ctx, finish := beginMetadataOutputReads(ctx)
+			defer finish()
 			return cleanup(ctx)
 		}
 		for _, app := range resources.appUsers {

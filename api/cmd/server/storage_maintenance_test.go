@@ -40,7 +40,7 @@ func TestStorageMaintenancePurgesTrashPastTheRetentionWindow(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	if err := repository.MutateWorkspace(ctx, "test-workspace", "test.trash", "trash", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), "test-workspace", "test.trash", "trash", nil, func(data *domain.Bootstrap) error {
 		for index := range data.Trash {
 			if data.Trash[index].ID == entry.ID {
 				// Deleted ten days ago under the old 30-day window.
@@ -90,7 +90,7 @@ func TestRealtimeCursorFromBeforeRetentionAsksForResync(t *testing.T) {
 		lastEvent = event.ID
 		s.realtime.publish(workspace, event)
 	})
-	if err := repository.MutateWorkspace(ctx, "test-workspace", "label.created", "label_old", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), "test-workspace", "label.created", "label_old", nil, func(data *domain.Bootstrap) error {
 		data.Labels = append(data.Labels, domain.IssueLabel{ID: "label_old", Name: "Old"})
 		return nil
 	}); err != nil {

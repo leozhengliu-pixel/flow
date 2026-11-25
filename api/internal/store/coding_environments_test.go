@@ -518,7 +518,7 @@ func TestMigrateLegacyCodingEnvironments(t *testing.T) {
 		{ID: "env_bad", Name: "Broken", Repository: "not a repo"},
 		{ID: "", Name: "No id", Repository: "acme/api"},
 	}
-	if err := repository.MutateWorkspace(ctx, workspace, "test.legacy_coding_environments", "x", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "test.legacy_coding_environments", "x", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.CodingAgentSettings.Environments = legacy
 		return nil
 	}); err != nil {
@@ -551,6 +551,9 @@ func TestMigrateLegacyCodingEnvironments(t *testing.T) {
 	}
 	if byID["legacy-acme-api-4"].Repository != "acme/api" {
 		t.Fatalf("generated id: %+v", byID)
+	}
+	if err := repository.ReloadWorkspace(ctx, workspace); err != nil {
+		t.Fatal(err)
 	}
 	data, _ := repository.WorkspaceMetadata(workspace)
 	if len(data.WorkspaceSettings.CodingAgentSettings.Environments) != 0 {

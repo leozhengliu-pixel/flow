@@ -38,7 +38,7 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 			f := scaleP03Fixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			private, child := idgen.New("p14-private-"), idgen.New("p14-child-")
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p14.seeded", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p14.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.Teams = append(data.Teams, domain.Team{ID: private, Key: "P14", Private: true}, domain.Team{ID: child, Key: "P14C"})
 				data.TeamSettings[private] = domain.TeamSettings{TeamID: private, Access: "private"}
 				data.TeamSettings[child] = domain.TeamSettings{TeamID: child, Access: "public", ParentTeamID: private}
@@ -69,7 +69,7 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 			unrestricted := scaleP03Key(t, f, []string{"read"}, nil)
 			selected := scaleP03Key(t, f, []string{"read"}, []string{private})
 			empty := idgen.New("p14-empty-")
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p14.seeded", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p14.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: idgen.New("p14-key-"), SecretHash: secretHash(empty), CreatorID: f.data.Viewer.ID, Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}})
 				now := time.Now().UTC()
 				for _, p := range principals {

@@ -112,7 +112,7 @@ func TestAuditLogRecordsAccountAndCredentialEvents(t *testing.T) {
 	authRequest[any](t, f.admin, http.MethodPost, f.host.URL+"/api/account/change-password", map[string]string{"currentPassword": "test-password", "newPassword": "another-pass"}, "test-workspace", http.StatusOK)
 	authRequest[any](t, f.admin, http.MethodDelete, f.host.URL+"/api/account/sessions/others", nil, "test-workspace", http.StatusNoContent)
 
-	if err := f.repository.MutateWorkspace(ctx, "test-workspace", "test.export_ready", "export_audit", nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(ctx), "test-workspace", "test.export_ready", "export_audit", nil, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		data.ExportJobs = append(data.ExportJobs, domain.ExportJob{ID: "export_audit", UserID: admin.ID, Format: "csv", Status: "completed", Filename: "issues.csv", CreatedAt: now, CompletedAt: &now})
 		return nil

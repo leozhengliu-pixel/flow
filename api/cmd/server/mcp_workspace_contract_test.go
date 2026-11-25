@@ -21,7 +21,7 @@ func (f *mcpContractFixture) addMCPKey(t *testing.T, id, creatorID string, scope
 	if teamIDs != nil {
 		key.TeamRestriction, key.TeamIDs = "selected", teamIDs
 	}
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "api_key.created", id, nil, func(data *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "api_key.created", id, nil, func(data *domain.Bootstrap) error {
 		data.APIKeys = append(data.APIKeys, key)
 		return nil
 	}); err != nil {
@@ -491,7 +491,7 @@ func TestMCPUpdateNotification(t *testing.T) {
 	f := newMCPContractFixture(t)
 	now := time.Now().UTC()
 	issue := f.data.Issues[0]
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.notifications", issue.ID, nil, func(next *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.notifications", issue.ID, nil, func(next *domain.Bootstrap) error {
 		next.Notifications = append(next.Notifications, []domain.Notification{
 			{ID: "inbox-one", RecipientID: "usr_admin", Type: "issueComment", SourceType: "issue", SourceID: issue.ID, IssueID: issue.ID, Actor: next.Viewer, CreatedAt: now, UpdatedAt: now},
 			{ID: "inbox-two", RecipientID: "usr_admin", Type: "issueComment", SourceType: "issue", SourceID: issue.ID, IssueID: issue.ID, Actor: next.Viewer, CreatedAt: now, UpdatedAt: now},

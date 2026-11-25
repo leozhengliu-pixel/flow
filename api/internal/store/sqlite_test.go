@@ -23,7 +23,8 @@ func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	store.SetWebhookSink(func(string, domain.DomainEvent) {})
-	if err := store.MutateWorkspace(context.Background(), "test-workspace", "webhook.created", "webhook_test", nil, func(data *domain.Bootstrap) error {
+	ctx := WithColdWork(t.Context(), "persistence fixture")
+	if err := store.MutateWorkspace(ctx, "test-workspace", "webhook.created", "webhook_test", nil, func(data *domain.Bootstrap) error {
 		data.Webhooks = append(data.Webhooks, domain.Webhook{ID: "webhook_test", URL: "http://localhost", Enabled: true})
 		return nil
 	}); err != nil {
@@ -31,7 +32,7 @@ func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
 	}
 
 	const issueID = "issue_test"
-	err = store.MutateWithAggregate(context.Background(), "issue.created", map[string]string{"title": "Persist me"}, func(data *domain.Bootstrap) (string, error) {
+	err = store.MutateWithAggregate(ctx, "issue.created", map[string]string{"title": "Persist me"}, func(data *domain.Bootstrap) (string, error) {
 		issue := data.Issues[0]
 		issue.ID = issueID
 		issue.Identifier = "TST-999"
@@ -42,7 +43,7 @@ func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.MutateWorkspace(context.Background(), "test-workspace", "issue.updated", issueID, map[string]string{"title": "Updated"}, func(data *domain.Bootstrap) error {
+	if err := store.MutateWorkspace(ctx, "test-workspace", "issue.updated", issueID, map[string]string{"title": "Updated"}, func(data *domain.Bootstrap) error {
 		for index := range data.Issues {
 			if data.Issues[index].ID == issueID {
 				data.Issues[index].Title = "Updated"
@@ -115,7 +116,7 @@ func TestProjectProgressHistoriesPersistAndRefreshOnIssueMutation(t *testing.T) 
 		t.Fatalf("project progress history was not generated: %#v", seed.Projects)
 	}
 	issueID := seed.Issues[0].ID
-	err = store.MutateWorkspace(context.Background(), "test-workspace", "issue.updated", issueID, nil, func(data *domain.Bootstrap) error {
+	err = store.MutateWorkspace(WithColdWork(t.Context(), "progress fixture"), "test-workspace", "issue.updated", issueID, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == issueID })
 		if index < 0 {
 			return errors.New("issue not found")
@@ -242,10 +243,13 @@ func TestSchemaMigrationsAreVersionedAndIdempotent(t *testing.T) {
 	// Includes the data migrations run after load (incl. the coding environments move,
 	// track K, the inherited document scope, the cycle capacity overrides, the cycle settings defaults (1013), the member directory, the workspace
 	// initials colour, the integration OAuth tokens move (1025), the audit log table move (1030) and the repair of rows left under previous
-	// workspace keys (1040), the creator owner grant on documents stored without one (1041)
-	// and the SQLite workspace policy epoch (35)).
-	if count != 48 {
-		t.Fatalf("schema migration count = %d, want 48", count)
+	// workspace keys (1040) and the creator owner grant on documents stored without one (1041)).
+	want := 47
+	if recordJournalMode("sqlite") != "off" {
+		want++ // The SQLite content-key repair only runs with journal triggers.
+	}
+	if count != want {
+		t.Fatalf("schema migration count = %d, want %d", count, want)
 	}
 	if err := repository.Close(); err != nil {
 		t.Fatal(err)
@@ -258,8 +262,8 @@ func TestSchemaMigrationsAreVersionedAndIdempotent(t *testing.T) {
 	if err := reopened.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 48 {
-		t.Fatalf("schema migration count after reopen = %d, want 48", count)
+	if count != want {
+		t.Fatalf("schema migration count after reopen = %d, want %d", count, want)
 	}
 }
 
@@ -292,13 +296,14 @@ func TestCoordinatedStoresReloadBeforeMutation(t *testing.T) {
 
 	data := first.Bootstrap()
 	issueID := data.Issues[0].ID
-	if err := first.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.title", issueID, nil, func(next *domain.Bootstrap) error {
+	ctx := WithColdWork(t.Context(), "coordination fixture")
+	if err := first.MutateWorkspace(ctx, data.Workspace.URLKey, "test.title", issueID, nil, func(next *domain.Bootstrap) error {
 		next.Issues[0].Title = "coordinated title"
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := second.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.priority", issueID, nil, func(next *domain.Bootstrap) error {
+	if err := second.MutateWorkspace(ctx, data.Workspace.URLKey, "test.priority", issueID, nil, func(next *domain.Bootstrap) error {
 		next.Issues[0].Priority = 1
 		return nil
 	}); err != nil {
@@ -358,7 +363,7 @@ func TestSQLiteStoreWorkspaceLifecycleAndIsolation(t *testing.T) {
 	if created.UserSettings == nil || created.NotificationPreferences == nil || created.Reviews == nil || created.Drafts == nil || created.AgentSkills == nil || created.CustomEmojis == nil {
 		t.Fatalf("new workspace returned nullable frontend collections: %#v", created)
 	}
-	err = repository.MutateWorkspace(context.Background(), "design-systems", "issue.created", "workspace_test_issue", nil, func(data *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(WithColdWork(t.Context(), "workspace lifecycle fixture"), "design-systems", "issue.created", "workspace_test_issue", nil, func(data *domain.Bootstrap) error {
 		issue := domain.Issue{ID: "workspace_test_issue", Identifier: data.Teams[0].Key + "-1", Number: 1, Title: "Isolated issue", Team: data.Teams[0], State: data.States[1], Creator: data.Viewer}
 		data.Issues = append(data.Issues, issue)
 		return nil
@@ -419,7 +424,8 @@ func TestBootstrapForUserProjectsTeamStatesAndPrivateNotificationData(t *testing
 	otherUserID := seed.Users[1].ID
 	teamID := seed.Teams[0].ID
 
-	err = store.MutateWorkspace(context.Background(), "test-workspace", "test.bootstrap_projection", teamID, nil, func(data *domain.Bootstrap) error {
+	ctx := WithColdWork(t.Context(), "bootstrap projection fixture")
+	err = store.MutateWorkspace(ctx, "test-workspace", "test.bootstrap_projection", teamID, nil, func(data *domain.Bootstrap) error {
 		teamStates := make([]domain.WorkflowState, 0, len(data.States))
 		for index, state := range data.States {
 			state.ID = "team_state_" + state.ID
@@ -446,7 +452,7 @@ func TestBootstrapForUserProjectsTeamStatesAndPrivateNotificationData(t *testing
 		t.Fatal(err)
 	}
 
-	projected, ok, err := store.BootstrapForUser(context.Background(), "test-workspace", viewerID)
+	projected, ok, err := store.BootstrapForUser(ctx, "test-workspace", viewerID)
 	if err != nil || !ok {
 		t.Fatalf("bootstrap projection failed: ok=%v err=%v", ok, err)
 	}

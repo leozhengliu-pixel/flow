@@ -75,10 +75,10 @@ func scaleP03Stores(t *testing.T) map[string]scaleP03StoreFixture {
 func TestScaleP03AccessContextRevocationAndOwnership(t *testing.T) {
 	for name, repo := range scaleP03Stores(t) {
 		t.Run(name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := scaleP21ResourceOutputContext(t)
 			base := repo.data
 			workspace, principal := base.Workspace.URLKey, base.Viewer.ID
-			err := repo.MutateWorkspace(ctx, workspace, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
+			err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.Teams = append(data.Teams, domain.Team{ID: "p03-private", Private: true})
 				data.TeamSettings["p03-private"] = domain.TeamSettings{TeamID: "p03-private", Access: "private"}
 				data.Projects = append(data.Projects, domain.Project{ID: "p03-private-project", TeamIDs: []string{"p03-private"}, Comments: []domain.Comment{{ID: "c", Body: "unchanged", Reactions: map[string][]string{"like": {principal}}}}})

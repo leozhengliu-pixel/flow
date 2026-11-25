@@ -183,7 +183,7 @@ func TestWorkerChatRunConnectorElicitation(t *testing.T) {
 	setTestConnectors(t, f.s.store, applicationPolicy{ID: "deploy", Kind: "mcp", Name: "Deploy", URL: upstream.URL, Status: "approved", Shared: true})
 	workspace, viewer := f.data.Workspace.URLKey, f.data.Viewer.ID
 	sessionID := "agent_session_elicit"
-	if err := f.s.store.MutateWorkspace(t.Context(), workspace, "agent.session_created", sessionID, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "agent.session_created", sessionID, nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions = append(data.AgentSessions, domain.AgentSession{ID: sessionID, UserID: viewer})
 		return nil
 	}); err != nil {

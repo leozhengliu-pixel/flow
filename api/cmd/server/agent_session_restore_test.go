@@ -69,7 +69,7 @@ func TestAgentSessionSoftDeleteRestoreAndPurge(t *testing.T) {
 	requestJSON[any](t, handler, http.MethodDelete, path, nil, http.StatusNoContent)
 	setOwner := func(owner string) {
 		t.Helper()
-		if err := srv.store.MutateWorkspace(context.Background(), workspace, "agent.session_updated", id, nil, func(data *domain.Bootstrap) error {
+		if err := srv.store.MutateWorkspace(workspaceFixtureContext(context.Background()), workspace, "agent.session_updated", id, nil, func(data *domain.Bootstrap) error {
 			data.AgentSessions[0].UserID = owner
 			return nil
 		}); err != nil {

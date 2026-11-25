@@ -17,6 +17,7 @@ import (
 )
 
 func TestScaleP21BoundedActivationFailsBeforeOpeningDatabase(t *testing.T) {
+	t.Setenv("FLOW_RECORD_HYDRATION", "off")
 	for _, flag := range []string{"on", "true", "1"} {
 		t.Run(flag, func(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", flag)

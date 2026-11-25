@@ -22,7 +22,7 @@ func TestScaleP17PermissionDifferential(t *testing.T) {
 			f := scaleP03Fixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p17.seed", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p17.seed", "", nil, func(data *domain.Bootstrap) error {
 				data.Teams = append(data.Teams, domain.Team{ID: "p17-public", Key: "P17O"}, domain.Team{ID: "p17-private", Key: "P17P", Private: true}, domain.Team{ID: "p17-child", Key: "P17C"})
 				data.TeamSettings["p17-public"] = domain.TeamSettings{TeamID: "p17-public", Access: "public"}
 				data.TeamSettings["p17-private"] = domain.TeamSettings{TeamID: "p17-private", Access: "private"}
@@ -41,7 +41,7 @@ func TestScaleP17PermissionDifferential(t *testing.T) {
 			unrestricted := scaleP03Key(t, f, []string{"read", "write"}, nil)
 			selected := scaleP03Key(t, f, []string{"read", "write"}, []string{"p17-public"})
 			empty := idgen.New("p17-empty-")
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p17.seed", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p17.seed", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "p17-empty", SecretHash: secretHash(empty), CreatorID: data.Viewer.ID, Scopes: []string{"read", "write"}, TeamRestriction: "selected", TeamIDs: []string{}})
 				data.Projects = append(data.Projects, domain.Project{ID: "p17-child-project", Name: "P17 inherited project", TeamIDs: []string{"p17-child"}})
 				for i, teams := range [][]string{{"p17-public"}, {"p17-private"}, {}, {"p17-private"}} {

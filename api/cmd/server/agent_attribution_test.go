@@ -51,7 +51,9 @@ func (f agentAttributionFixture) chat(name string, args map[string]any) json.Raw
 // started by the signed-in person on issue.
 func (f agentAttributionFixture) thread(issueID, name string, args map[string]any) json.RawMessage {
 	f.t.Helper()
-	current, err := f.s.store.ApplicationByUser(f.t.Context(), f.app.UserID)
+	ctx, finish := beginMetadataOutputReads(f.t.Context())
+	defer finish()
+	current, err := f.s.store.ApplicationByUser(ctx, f.app.UserID)
 	if err != nil {
 		f.t.Fatal(err)
 	}

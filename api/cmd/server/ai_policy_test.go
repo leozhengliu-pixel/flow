@@ -95,7 +95,7 @@ func applyAIPolicy(t *testing.T, repo *store.SQLiteStore, workspace string, poli
 	if policy == nil {
 		return
 	}
-	if err := repo.MutateWorkspace(t.Context(), workspace, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(store.WithColdWork(t.Context(), "AI policy fixture"), workspace, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
 		policy(&data.WorkspaceSettings)
 		return nil
 	}); err != nil {

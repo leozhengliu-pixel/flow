@@ -20,7 +20,7 @@ func TestMCPCommentsReadPersistedPages(t *testing.T) {
 	repository, actor, ctx := newMCPToolTestContext(t)
 	data := repository.Bootstrap()
 	issue := data.Issues[0]
-	if err := repository.MutateWorkspace(ctx, actor.WorkspaceKey, "test.comments", issue.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "test.comments", issue.ID, nil, func(next *domain.Bootstrap) error {
 		next.Comments[issue.ID] = nil
 		for i := 0; i < 75; i++ {
 			next.Comments[issue.ID] = append(next.Comments[issue.ID], domain.Comment{ID: fmt.Sprintf("paged-comment-%03d", i), Body: "Persisted comment", User: actor.User, CreatedAt: time.Unix(int64(i+1), 0).UTC()})
@@ -63,7 +63,7 @@ func TestMCPCommentsReadPersistedPages(t *testing.T) {
 func TestMCPHTTPProtocolLifecycle(t *testing.T) {
 	repository, actor, _ := newMCPToolTestContext(t)
 	const secret = "flow_test_mcp_secret"
-	if err := repository.MutateWorkspace(t.Context(), actor.WorkspaceKey, "test.api_key", "mcp-key", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), actor.WorkspaceKey, "test.api_key", "mcp-key", nil, func(data *domain.Bootstrap) error {
 		data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "mcp-key", Name: "MCP test", SecretHash: secretHash(secret), CreatorID: actor.User.ID, Scopes: []string{"read", "write"}, CreatedAt: data.Workspace.CreatedAt})
 		return nil
 	}); err != nil {
@@ -305,7 +305,7 @@ func TestMCPCommentUpdateClearsStaleBodyData(t *testing.T) {
 			map[string]any{"type": "paragraph", "content": []any{map[string]any{"type": "text", "text": "Old rich text"}}},
 		},
 	}
-	if err := repository.MutateWorkspace(ctx, actor.WorkspaceKey, "test.comment", issue.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "test.comment", issue.ID, nil, func(next *domain.Bootstrap) error {
 		next.Comments[issue.ID] = append(next.Comments[issue.ID], domain.Comment{
 			ID: "comment-stale", Version: 1, Body: "Old rich text", BodyData: stale, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: actor.User,
 		})
@@ -354,7 +354,7 @@ func TestMCPCommentUpdateKeepsProvidedBodyData(t *testing.T) {
 	repository, actor, ctx := newMCPToolTestContext(t)
 	data := repository.Bootstrap()
 	issue := data.Issues[0]
-	if err := repository.MutateWorkspace(ctx, actor.WorkspaceKey, "test.comment", issue.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "test.comment", issue.ID, nil, func(next *domain.Bootstrap) error {
 		next.Comments[issue.ID] = append(next.Comments[issue.ID], domain.Comment{
 			ID: "comment-rich", Version: 1, Body: "Old rich text", BodyData: map[string]any{"type": "doc", "content": []any{}}, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: actor.User,
 		})

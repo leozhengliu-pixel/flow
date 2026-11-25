@@ -41,7 +41,7 @@ func stageAudit(data *domain.Bootstrap, action string, metadata map[string]any) 
 // chained) and never to the workspace document; a failed or empty mutation
 // records nothing.
 func TestAuditEntriesCommitWithTheirMutation(t *testing.T) {
-	ctx := context.Background()
+	ctx := WithColdWork(t.Context(), "audit mutation callbacks")
 	repo, _ := openAuditTestStore(t)
 	workspaceID := auditTestWorkspaceID(t, repo)
 	request := AuditRequest{IP: "203.0.113.0", UserAgent: "Chrome on macOS", UserID: "", ActorType: AuditActorAPIKey, ActorID: "api_key_1"}
@@ -259,7 +259,6 @@ func TestLegacyAuditLogMigration(t *testing.T) {
 		if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		}
-		repo.installWorkspace(accessWorkspace, after, false)
 	}
 	writeLegacy(repo, legacy)
 	if _, err := repo.db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version=?`, auditLegacyMigrationVersion); err != nil {
@@ -287,6 +286,9 @@ func TestLegacyAuditLogMigration(t *testing.T) {
 	// An older server writing to the document again during an upgrade: the
 	// next pass moves only what is new.
 	writeLegacy(repo, append([]domain.AuditLogEntry{{ID: "audit_late", Action: "deleted", ResourceType: "project", ResourceID: "p1", CreatedAt: base.Add(2 * time.Hour)}}, legacy...))
+	if err := repo.ReloadWorkspace(ctx, accessWorkspace); err != nil {
+		t.Fatal(err)
+	}
 	if err := repo.MigrateLegacyAuditLog(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -312,8 +314,7 @@ func TestRecordAccountAudit(t *testing.T) {
 	ctx := context.Background()
 	repo, _ := openAuditTestStore(t)
 	workspaceID := auditTestWorkspaceID(t, repo)
-	data, _ := repo.storedWorkspace(accessWorkspace)
-	user := data.Users[0]
+	user := repo.Bootstrap().Viewer
 	if err := repo.RecordAccountAudit(ctx, "", user.Email, domain.AuditLogEntry{Action: "sign_in_failed", ResourceType: "account", Result: AuditResultFailure}); err != nil {
 		t.Fatal(err)
 	}

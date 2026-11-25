@@ -267,7 +267,7 @@ func TestScaleP15BProductionMiddlewareSignsWithoutSpool(t *testing.T) {
 			f := scaleP03Fixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			prefix := strings.Repeat("body x ", 32<<10) + " ![image]("
-			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p15b.seed", "", nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p15b.seed", "", nil, func(data *domain.Bootstrap) error {
 				data.Projects = append(data.Projects, domain.Project{ID: "p15b-signed", Name: "Signed", TeamIDs: []string{f.data.Teams[0].ID}, Description: prefix + "/uploads/p15b.png)", CommentAttachments: []domain.Attachment{{ID: "p15b-attachment", URL: "/uploads/p15b.png", Title: "p15b.png"}}})
 				return nil
 			}); err != nil {

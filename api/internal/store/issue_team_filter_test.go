@@ -46,7 +46,7 @@ func testTeamFilterQueries(t *testing.T, repo *SQLiteStore, data domain.Bootstra
 	ctx := context.Background()
 	parent, other := data.Teams[0], domain.Team{ID: "team-filter-unrelated", Key: "TFO", Name: "Unrelated"}
 	child := domain.Team{ID: "team-filter-child", Key: "TFC", Name: "Child"}
-	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "team.created", child.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), data.Workspace.URLKey, "test.team_filter_fixture", child.ID, nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, child, other)
 		next.TeamSettings[child.ID] = domain.TeamSettings{TeamID: child.ID, ParentTeamID: parent.ID}
 		return nil
@@ -62,7 +62,7 @@ func testTeamFilterQueries(t *testing.T, repo *SQLiteStore, data domain.Bootstra
 	if err := repo.ImportIssues(ctx, data.Workspace.URLKey, issues); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "project.created", "team-filter-projects", nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), data.Workspace.URLKey, "test.team_filter_fixture", "team-filter-projects", nil, func(next *domain.Bootstrap) error {
 		for _, issue := range issues {
 			next.Projects = append(next.Projects, domain.Project{ID: issue.ID + "-project", Name: "TeamFilterNeedle", TeamIDs: []string{issue.Team.ID}})
 		}

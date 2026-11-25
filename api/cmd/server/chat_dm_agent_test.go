@@ -725,7 +725,7 @@ func TestChatDirectMessageRedactsSensitiveContent(t *testing.T) {
 		t.Fatal("the chat in Flow lost the answer")
 	}
 	// A workspace that keeps content out of chat apps answers nothing.
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "workspace_settings.updated", "hipaa", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "workspace_settings.updated", "hipaa", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.HIPAACompliance = true
 		return nil
 	}); err != nil {
@@ -834,7 +834,11 @@ func TestChatDirectMessageCardReportsTheWriteLedger(t *testing.T) {
 	})
 	f.text(t, "om_user_1", "Rename NOPE-404 to Renamed")
 	chatDMReplies.Wait()
-	answer := f.sessions(t)[0].Messages[1]
+	sessions := f.sessions(t)
+	if len(sessions) != 1 || len(sessions[0].Messages) < 2 {
+		t.Fatal("chat reply did not persist the conversation")
+	}
+	answer := sessions[0].Messages[1]
 	card := f.lastUpdate(f.sent()[0].ID)
 	if answer.Content == "I renamed the issue." || !strings.Contains(answer.Content, agentSummaryHeading) {
 		t.Fatalf("the ledger did not report the failed write: %q", answer.Content)

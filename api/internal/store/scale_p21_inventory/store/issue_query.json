@@ -2,6 +2,12 @@
   "source": "store/issue_query.go",
   "unmigrated": 0,
   "consumers": {
+    "releaseAssociatedIssueIDs": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Without a legacy view, bounded issue queries read the releases field through the scoped metadata accessor. The release ID and slug matching and the resulting issue scope stay the same.",
+      "accessors": ["WorkspaceMetadataFieldsScoped"]
+    },
     "PagedWorkspaceMetadata": {
       "owner": "P21",
       "status": "reviewed",

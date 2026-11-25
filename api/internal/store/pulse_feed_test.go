@@ -11,6 +11,7 @@ import (
 )
 
 func TestPulseFeedIndexOrdersRecentAndPopularAndRebuildsAfterWrites(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)

@@ -850,6 +850,7 @@ func (s *server) restoreAgentSession(w http.ResponseWriter, r *http.Request) {
 // purgeDeletedAgentSessions permanently removes chats deleted before cutoff,
 // with the files sent in them.
 func (s *server) purgeDeletedAgentSessions(ctx context.Context, key string, cutoff time.Time) (int, error) {
+	ctx = store.WithColdWork(ctx, "purge agent sessions")
 	data, ok := s.store.WorkspaceMetadataFields(key, "agentSessions")
 	if !ok {
 		return 0, nil

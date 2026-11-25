@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type chatThreadCall struct {
@@ -311,7 +312,10 @@ func TestChatIssueThreadSyncsCommentsBothWaysWithoutEchoes(t *testing.T) {
 
 func (f *chatWorkflowFixture) editComment(t *testing.T, issueID, commentID, body string) {
 	t.Helper()
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "comment.updated", issueID, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
+	ctx, finish := beginMetadataOutputReads(t.Context())
+	defer finish()
+	ctx = store.WithIssueDiscussionMutation(workspaceFixtureContext(ctx), issueID, commentID)
+	if err := f.s.store.MutateWorkspace(ctx, f.record.WorkspaceKey, "comment.updated", issueID, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
 		for index := range data.Comments[issueID] {
 			if data.Comments[issueID][index].ID == commentID {
 				now := time.Now().UTC()
@@ -327,7 +331,10 @@ func (f *chatWorkflowFixture) editComment(t *testing.T, issueID, commentID, body
 
 func (f *chatWorkflowFixture) deleteComment(t *testing.T, issueID, commentID string) {
 	t.Helper()
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "comment.deleted", issueID, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
+	ctx, finish := beginMetadataOutputReads(t.Context())
+	defer finish()
+	ctx = store.WithIssueDiscussionMutation(workspaceFixtureContext(ctx), issueID, commentID)
+	if err := f.s.store.MutateWorkspace(ctx, f.record.WorkspaceKey, "comment.deleted", issueID, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
 		data.Comments[issueID] = slices.DeleteFunc(data.Comments[issueID], func(comment domain.Comment) bool { return comment.ID == commentID })
 		return nil
 	}); err != nil {

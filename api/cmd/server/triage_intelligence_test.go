@@ -46,7 +46,7 @@ func TestTriageIntelligenceSuggestionsAndActions(t *testing.T) {
 		t.Fatal("test workspace has no backlog state")
 	}
 	backlogStateID := bootstrap.States[backlogState].ID
-	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.triage_intelligence_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.triage_intelligence_setup", team.ID, nil, func(data *domain.Bootstrap) error {
 		settings := teamSettings(data, team.ID)
 		settings.TriageEnabled = true
 		data.TeamSettings[team.ID] = settings
@@ -191,7 +191,7 @@ func TestTriageIntelligenceAutoAppliesSettings(t *testing.T) {
 		t.Fatal("test workspace has no backlog state")
 	}
 	backlogStateID := bootstrap.States[backlogState].ID
-	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.triage_auto_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.triage_auto_setup", team.ID, nil, func(data *domain.Bootstrap) error {
 		settings := teamSettings(data, team.ID)
 		settings.TriageEnabled = true
 		data.TeamSettings[team.ID] = settings
@@ -227,7 +227,7 @@ func TestTriageIntelligenceRegeneratesWhenIssueReturnsToTriage(t *testing.T) {
 		t.Fatal("test workspace needs backlog and unstarted states")
 	}
 	backlogStateID := bootstrap.States[backlogState].ID
-	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.triage_return_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.triage_return_setup", team.ID, nil, func(data *domain.Bootstrap) error {
 		settings := teamSettings(data, team.ID)
 		settings.TriageEnabled = true
 		data.TeamSettings[team.ID] = settings
@@ -281,7 +281,7 @@ func TestRefreshTriageSuggestionsPersistsIssueBookkeeping(t *testing.T) {
 	if backlogState < 0 {
 		t.Fatal("test workspace has no backlog state")
 	}
-	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.refresh_triage_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.refresh_triage_setup", team.ID, nil, func(data *domain.Bootstrap) error {
 		settings := teamSettings(data, team.ID)
 		settings.TriageEnabled = true
 		data.TeamSettings[team.ID] = settings
@@ -420,7 +420,7 @@ func TestTriageIntelligenceBatchKeepsScopedCandidateRows(t *testing.T) {
 	if backlogStateID == "" || startedStateID == "" {
 		t.Fatal("test workspace lacks backlog or started states")
 	}
-	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.triage_batch_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.triage_batch_setup", team.ID, nil, func(data *domain.Bootstrap) error {
 		settings := teamSettings(data, team.ID)
 		settings.TriageEnabled = true
 		data.TeamSettings[team.ID] = settings

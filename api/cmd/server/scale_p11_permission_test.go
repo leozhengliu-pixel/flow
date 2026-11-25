@@ -29,7 +29,7 @@ func TestScaleP11PermissionDifferentialAndQueuedRevocation(t *testing.T) {
 			suffix := idgen.New("p11-")
 			public, private, child := "p11-public", "p11-private", "p11-child"
 			ctx := store.ContextWithActor(t.Context(), f.data.Viewer)
-			if err := f.repository.MutateWorkspace(ctx, workspace, "test.p11_matrix", "", nil, func(data *domain.Bootstrap) error {
+			if err := f.repository.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "test.p11_matrix", "", nil, func(data *domain.Bootstrap) error {
 				data.Teams = append(data.Teams, domain.Team{ID: public, Key: "P11A"}, domain.Team{ID: private, Key: "P11B", Private: true}, domain.Team{ID: child, Key: "P11C"})
 				data.TeamSettings[public] = domain.TeamSettings{TeamID: public, Access: "public"}
 				data.TeamSettings[private] = domain.TeamSettings{TeamID: private, Access: "private"}
@@ -50,18 +50,13 @@ func TestScaleP11PermissionDifferentialAndQueuedRevocation(t *testing.T) {
 			member, memberUser := scaleP03Join(t, f, "P11 member", suffix+"-member@example.test", "member", public, private)
 			guest, guestUser := scaleP03Join(t, f, "P11 guest", suffix+"-guest@example.test", "guest", public)
 			outsider, _ := scaleP03Join(t, f, "P11 outsider", suffix+"-outsider@example.test", "member", public)
-			// Persist personal defaults once. Their existing lazy defaults
-			// contain time.Now(), which differs between two legacy reloads.
-			for _, client := range []*http.Client{f.admin, outsideAdmin, member, guest, outsider} {
-				authRequest[domain.UserSettings](t, client, "PATCH", f.host.URL+"/api/account/settings", map[string]string{"timezone": "Etc/UTC"}, workspace, http.StatusOK)
-				authRequest[domain.NotificationPreferences](t, client, "PATCH", f.host.URL+"/api/notification-preferences", map[string]string{"emailFormat": "immediate"}, workspace, http.StatusOK)
-			}
+			seedDifferentialPreferences(t, f.repository, workspace, f.resources.users)
 			issue := authRequest[domain.Issue](t, f.admin, "POST", f.host.URL+"/api/issue-records", map[string]any{"title": "P11 grant", "teamId": private, "projectId": "p11-secret"}, workspace, http.StatusCreated)
 			authRequest[[]domain.IssuePermission](t, f.admin, "PUT", f.host.URL+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": guestUser.ID, "role": "viewer"}}}, workspace, http.StatusOK)
 			unrestricted := scaleP03Key(t, f, []string{"read"}, nil)
 			selected := scaleP03Key(t, f, []string{"read"}, []string{public})
 			empty := idgen.New("p11-selected-empty-")
-			if err := f.repository.MutateWorkspace(ctx, workspace, "test.p11_matrix", "", nil, func(data *domain.Bootstrap) error {
+			if err := f.repository.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "test.p11_matrix", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "p11-empty", Name: "P11 empty", SecretHash: secretHash(empty), CreatorID: data.Viewer.ID, Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}})
 				return nil
 			}); err != nil {
@@ -82,7 +77,7 @@ func TestScaleP11PermissionDifferentialAndQueuedRevocation(t *testing.T) {
 			}
 			// No notification or Redis counter bump follows the remaining writes.
 			f.repository.SetRealtimeSink(nil)
-			if err := f.repository.MutateWorkspace(ctx, workspace, "project.updated", "p11-open", map[string]string{"name": "P11 durable rename"}, func(data *domain.Bootstrap) error {
+			if err := f.repository.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "project.updated", "p11-open", map[string]string{"name": "P11 durable rename"}, func(data *domain.Bootstrap) error {
 				for i := range data.Projects {
 					if data.Projects[i].ID == "p11-open" {
 						data.Projects[i].Name = "P11 durable rename"
@@ -164,7 +159,7 @@ func TestScaleP11PermissionDifferentialAndQueuedRevocation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := f.repository.MutateWorkspace(ctx, workspace, "project.updated", "p11-inherited", map[string]string{"name": "queued"}, func(data *domain.Bootstrap) error { return nil }); err != nil {
+			if err := f.repository.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "project.updated", "p11-inherited", map[string]string{"name": "queued"}, func(data *domain.Bootstrap) error { return nil }); err != nil {
 				t.Fatal(err)
 			}
 			if err := f.repository.SetTeamMembership(ctx, workspaceID, private, memberUser.ID, "member", false); err != nil {
@@ -216,7 +211,9 @@ func scaleP11HTTPPeers(t *testing.T) (peerServers, store.DatabaseConfig) {
 
 func scaleP11WarmCredential(t *testing.T, repo *store.SQLiteStore, workspace, secret string) {
 	t.Helper()
-	auth, err := repo.AuthenticateAPIKeyRecord(t.Context(), workspace, secretHash(secret), applicationApproved)
+	ctx, finish := beginMetadataOutputReads(t.Context())
+	defer finish()
+	auth, err := repo.AuthenticateAPIKeyRecord(ctx, workspace, secretHash(secret), applicationApproved)
 	if err != nil {
 		t.Fatal(err)
 	}

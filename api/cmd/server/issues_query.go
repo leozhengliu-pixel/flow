@@ -96,6 +96,12 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 		return compareQueryIssues(a, b, query.Get("sort"), query.Get("direction"))
 	}
 	result := &boundedIssueHeap{compare: compare}
+	retained := map[string]func(){}
+	defer func() {
+		for _, release := range retained {
+			release()
+		}
+	}()
 	total, remaining := 0, 0
 	scope.Filter = store.IssueFilter{}
 	scope.Text = ""
@@ -121,11 +127,22 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 		remaining++
+		if len(result.items) == limit && compare(issue, result.items[0]) >= 0 {
+			return nil
+		}
+		release, err := s.store.RetainIssueScanResult(ctx, issue)
+		if err != nil {
+			return err
+		}
+		retained[issue.ID] = release
 		if len(result.items) < limit {
 			heap.Push(result, issue)
-		} else if compare(issue, result.items[0]) < 0 {
+		} else {
+			replaced := result.items[0].ID
 			result.items[0] = issue
 			heap.Fix(result, 0)
+			retained[replaced]()
+			delete(retained, replaced)
 		}
 		return nil
 	})
@@ -148,6 +165,18 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 		last = domain.Issue{ID: last.ID, Title: last.Title, Priority: last.Priority, SortOrder: last.SortOrder, CreatedAt: last.CreatedAt, UpdatedAt: last.UpdatedAt}
 		raw, _ := json.Marshal(last)
 		response.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
+	}
+	if s.store.BoundedMetadataEnabled() {
+		output, err := s.store.BeginMetadataJSONRead(ctx)
+		if err != nil {
+			issueRecordsErrorFor(w, r, err)
+			return
+		}
+		defer output.Close()
+		if err := output.ReserveEncoding(ctx, response); err != nil {
+			issueRecordsErrorFor(w, r, err)
+			return
+		}
 	}
 	writeJSON(w, 200, response)
 }

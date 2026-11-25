@@ -149,9 +149,11 @@ func (s *server) startTriageIntelligenceRun(ctx context.Context, actor mcpActor,
 		case <-runCtx.Done():
 			return
 		}
+		runCtx, release := beginIndependentMetadataOutputReads(runCtx)
+		defer release()
 		_, _, err := s.runTriageIntelligence(runCtx, actor, issueID, triageRunOptions{useAI: true, reason: reason, eventType: "issue.suggestions_generated"})
 		if err != nil && !errors.Is(err, store.ErrNoMutation) && !errors.Is(err, errInvalid) {
-			log.Printf("generate triage intelligence issue=%s: %v", issueID, err)
+			log.Print("generate triage intelligence: run failed")
 		}
 	}()
 	return true

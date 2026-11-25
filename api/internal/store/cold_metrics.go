@@ -278,24 +278,25 @@ func (s *SQLiteStore) MetadataCatalogCompleteness(ctx context.Context) ([]Metada
 	return result, rows.Err()
 }
 
-// LogMetadataCatalogCompleteness logs, with bounded metadata on, one line per
-// workspace: whether its catalog is complete and how many collections are
-// not. Flag off it logs nothing. A failed count is logged and skipped.
+// LogMetadataCatalogCompleteness logs aggregate counts for bounded startup.
 func (s *SQLiteStore) LogMetadataCatalogCompleteness(ctx context.Context) {
 	if !s.BoundedMetadataEnabled() {
 		return
 	}
 	catalogs, err := s.MetadataCatalogCompleteness(ctx)
 	if err != nil && err != sql.ErrNoRows {
-		slog.Warn("bounded metadata: catalog completeness unavailable", "error", err)
+		slog.Warn("bounded metadata: catalog completeness unavailable")
 		return
 	}
+	collections, incomplete := 0, 0
 	for _, c := range catalogs {
-		if c.Incomplete == 0 {
-			slog.Info("bounded metadata: catalog", "workspace", c.Workspace, "complete", true, "collections", c.Collections, "incompleteCollections", 0)
-			continue
-		}
-		slog.Warn("bounded metadata: catalog", "workspace", c.Workspace, "complete", false, "collections", c.Collections, "incompleteCollections", c.Incomplete,
-			"hint", fmt.Sprintf("%d collections still need the catalog backfill", c.Incomplete))
+		collections += c.Collections
+		incomplete += c.Incomplete
 	}
+	level := slog.LevelInfo
+	if incomplete > 0 {
+		level = slog.LevelWarn
+	}
+	slog.Log(ctx, level, "bounded metadata: catalog", "complete", incomplete == 0,
+		"workspaces", len(catalogs), "collections", collections, "incompleteCollections", incomplete)
 }

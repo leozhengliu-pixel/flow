@@ -10,7 +10,7 @@ import (
 // The legacy storage sweep runs hourly. Journal retention checks its byte
 // budget every minute, independently, using bounded pruning transactions.
 func (s *SQLiteStore) startRecordJournalMaintenance() {
-	if !s.db.journalReady.Load() || recordJournalMode() == "off" {
+	if !s.db.journalReady.Load() || recordJournalMode(s.dialect) == "off" {
 		return
 	}
 	ctx, cancel := context.WithCancel(s.WorkerContext())

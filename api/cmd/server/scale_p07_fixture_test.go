@@ -29,7 +29,7 @@ func scaleP07ExternalFixture(t *testing.T, driver, databaseURL string) *mcpContr
 	authRequest[domain.Initiative](t, admin, http.MethodPost, host.URL+"/api/initiatives", map[string]any{"name": "P07 initiative"}, data.Workspace.URLKey, http.StatusCreated)
 	secret := idgen.New("p07-local-")
 	keyID := idgen.New("p07-key-")
-	if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "apiKeys"), data.Workspace.URLKey, "api_key.created", keyID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(store.WithMetadataFields(workspaceFixtureContext(t.Context()), "apiKeys"), data.Workspace.URLKey, "api_key.created", keyID, nil, func(next *domain.Bootstrap) error {
 		next.APIKeys = append(next.APIKeys, domain.APIKey{ID: keyID, SecretHash: secretHash(secret), CreatorID: data.Viewer.ID, Scopes: []string{"read", "write"}, CreatedAt: time.Now().UTC()})
 		return nil
 	}); err != nil {

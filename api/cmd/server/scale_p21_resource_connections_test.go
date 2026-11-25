@@ -31,6 +31,109 @@ func resourceConnectionHandler(service *server, kind string) http.HandlerFunc {
 	}
 }
 
+func TestScaleP21ProjectConnectionDuringAPIKeyUse(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	for _, repo := range scaleP03ServerTestStores(t) {
+		f := scaleP03Fixture(t, repo)
+		workspace := f.data.Workspace.URLKey
+		authRequest[domain.Project](t, f.admin, http.MethodPost, f.host.URL+"/api/projects", map[string]any{
+			"name": "Project connection", "teamIds": []string{f.data.Teams[0].ID},
+		}, workspace, http.StatusCreated)
+		for _, scenario := range []struct {
+			name      string
+			stamp     int
+			spool     string
+			revokeKey bool
+		}{
+			{"before-selection", 1, "10485760", false},
+			{"during-encoding", 2, "0", false},
+			{"revoked", 2, "10485760", true},
+		} {
+			t.Run(scenario.name, func(t *testing.T) {
+				t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", scenario.spool)
+				created := authRequest[struct {
+					Key    domain.APIKey
+					Secret string
+				}](t, f.admin, http.MethodPost, f.host.URL+"/api/api-keys", map[string]any{
+					"name": "Project read " + scenario.name, "scopes": []string{"read"}, "teamRestriction": "all",
+				}, workspace, http.StatusCreated)
+				probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
+				if err != nil {
+					t.Fatal(err)
+				}
+				serve := func(source *store.SQLiteStore, ctx context.Context) *httptest.ResponseRecorder {
+					ctx = context.WithValue(ctx, authUserContextKey{}, f.data.Viewer)
+					ctx = context.WithValue(ctx, apiKeyContextKey{}, created.Key)
+					r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/projects?first=100", nil)
+					r.Header.Set("X-Workspace-Key", workspace)
+					r.Header.Set("Authorization", "Bearer "+created.Secret)
+					w := httptest.NewRecorder()
+					(&server{store: source}).listProjectsConnection(w, r)
+					return w
+				}
+				epoch, err := repo.AuthzEpoch(t.Context(), f.data.Workspace.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				stamps := 0
+				ctx := store.WithSQLStatementObserver(t.Context(), func(query string) {
+					if !strings.Contains(query, "FROM workspace_states WHERE workspace_key=?") || !strings.Contains(query, "SUM(revision)") {
+						return
+					}
+					stamps++
+					if stamps != scenario.stamp {
+						return
+					}
+					// Commit after the directory pins its snapshot, before
+					// the live revision check runs.
+					if scenario.revokeKey {
+						authRequest[struct{}](t, f.admin, http.MethodDelete, f.host.URL+"/api/api-keys/"+created.Key.ID, nil, workspace, http.StatusNoContent)
+						return
+					}
+					ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+					defer cancel()
+					if err := repo.RecordAPIKeyUse(ctx, workspace, created.Key.ID, ""); err != nil {
+						t.Fatal("queue key telemetry", err)
+					}
+					for {
+						live, err := repo.APIKeyAuthenticationByID(ctx, workspace, created.Key.ID, applicationApproved)
+						if err != nil {
+							t.Fatal("check key telemetry", err)
+						}
+						if live.Key.LastUsedAt != nil {
+							return
+						}
+						select {
+						case <-ctx.Done():
+							t.Fatal("key telemetry did not commit")
+						case <-time.After(time.Millisecond):
+						}
+					}
+				})
+				got := serve(probe, ctx)
+				if stamps < scenario.stamp || probe.MetadataWorkUsedForTesting() != 0 {
+					t.Fatal("connection missed the revision change or retained work")
+				}
+				if scenario.revokeKey {
+					if got.Code != http.StatusForbidden || bytes.Contains(got.Body.Bytes(), []byte(`"nodes"`)) {
+						t.Fatalf("revoked key received a connection or unexpected status=%d", got.Code)
+					}
+					return
+				}
+				want := serve(repo, t.Context())
+				if current, err := repo.AuthzEpoch(t.Context(), f.data.Workspace.ID); err != nil || current != epoch {
+					t.Fatal("key telemetry advanced authorization", err)
+				}
+				if got.Code != http.StatusOK || want.Code != http.StatusOK || !bytes.Equal(got.Body.Bytes(), want.Body.Bytes()) {
+					t.Fatalf("project connection differs after telemetry, bounded status=%d legacy status=%d revision checks=%d", got.Code, want.Code, stamps)
+				}
+			})
+		}
+	}
+}
+
 func TestScaleP21ResourceConnectionsHTTPTable(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")

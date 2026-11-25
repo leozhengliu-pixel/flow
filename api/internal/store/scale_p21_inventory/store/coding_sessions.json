@@ -1,0 +1,12 @@
+{
+  "source": "store/coding_sessions.go",
+  "unmigrated": 0,
+  "consumers": {
+    "endedCodingAnchor": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Keeps the installation read alive through the anchor's workspace and team checks and returns only the independently loaded task.",
+      "accessors": ["BeginApplicationAccessRead"]
+    }
+  }
+}

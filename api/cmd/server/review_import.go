@@ -395,6 +395,7 @@ func (s *server) runReviewImport(ctx context.Context, workspace, trigger string)
 	if settings.Mode != "on" || s.store == nil {
 		return reviewImportResult{}, errReviewImportOff
 	}
+	ctx = store.WithColdWork(ctx, "review import")
 	record, config, _, err := s.loadReviewImport(ctx, workspace)
 	if err != nil {
 		return reviewImportResult{}, err

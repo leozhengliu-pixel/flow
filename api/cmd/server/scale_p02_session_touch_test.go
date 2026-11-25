@@ -95,12 +95,7 @@ func testScaleP02SessionTouchPermissionDifferential(t *testing.T, repo *store.SQ
 	outsider, _ := fixture.join(t, "P02 outsider", "member", publicTeam)
 	outsideAdmin, _ := fixture.join(t, "P02 outside admin", "admin", publicTeam)
 	guest, guestUser := fixture.join(t, "P02 guest", "guest", publicTeam)
-	// Persist new viewers' defaults: synthesized preferences carry the current
-	// time on every read, independently of session activity.
-	for _, client := range []*http.Client{member, outsider, outsideAdmin, guest} {
-		authRequest[domain.UserSettings](t, client, "PATCH", base+"/api/account/settings", map[string]any{"language": "en-US"}, workspace, http.StatusOK)
-		authRequest[domain.NotificationPreferences](t, client, "PATCH", base+"/api/notification-preferences", map[string]any{"emailFormat": "immediate"}, workspace, http.StatusOK)
-	}
+	seedDifferentialPreferences(t, repo, workspace, fixture.users)
 	public := authRequest[domain.Issue](t, admin, "POST", base+"/api/issue-records", map[string]any{"title": "P02 public", "teamId": publicTeam}, workspace, http.StatusCreated)
 	hidden := authRequest[domain.Issue](t, admin, "POST", base+"/api/issue-records", map[string]any{"title": "P02 hidden", "teamId": private.ID}, workspace, http.StatusCreated)
 	shared := authRequest[domain.Issue](t, admin, "POST", base+"/api/issue-records", map[string]any{"title": "P02 shared", "teamId": private.ID}, workspace, http.StatusCreated)
@@ -110,7 +105,7 @@ func testScaleP02SessionTouchPermissionDifferential(t *testing.T, repo *store.SQ
 	authRequest[domain.Project](t, admin, "PATCH", base+"/api/projects/"+project.ID, map[string]string{"name": "P02 new slug"}, workspace, http.StatusOK)
 	other := authRequest[domain.Bootstrap](t, admin, "POST", base+"/api/workspaces", map[string]string{"name": "P02 other", "urlKey": "p02-other-" + suffix}, "", http.StatusCreated)
 	fixture.workspaces = append(fixture.workspaces, other.Workspace.URLKey)
-	if err := repo.MutateWorkspace(t.Context(), workspace, "issue.updated", public.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "issue.updated", public.ID, nil, func(data *domain.Bootstrap) error {
 		for i := range data.Issues {
 			if data.Issues[i].ID == public.ID {
 				data.Issues[i].SubIssueIDs = append(data.Issues[i].SubIssueIDs, hidden.ID)
@@ -138,7 +133,7 @@ func testScaleP02SessionTouchPermissionDifferential(t *testing.T, repo *store.SQ
 		if item.name == "selected-empty" {
 			// Existing credentials can lose all selected teams. Creation of an
 			// empty selection is rejected by the HTTP API, so seed that state.
-			if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "apiKeys"), workspace, "api_key.updated", key.Key.ID, nil, func(data *domain.Bootstrap) error {
+			if err := repo.MutateWorkspace(store.WithMetadataFields(workspaceFixtureContext(t.Context()), "apiKeys"), workspace, "api_key.updated", key.Key.ID, nil, func(data *domain.Bootstrap) error {
 				for i := range data.APIKeys {
 					if data.APIKeys[i].ID == key.Key.ID {
 						data.APIKeys[i].TeamIDs = []string{}

@@ -75,7 +75,7 @@ func TestScaleP11AtomicPageAndStaleVersionFallback(t *testing.T) {
 	f := scaleP11NewFixture(t, 2)
 	c := f.service.remoteEvents.consumer(f.workspace)
 	before := scaleP11Name(t, f)
-	if err := f.writer.MutateWorkspace(t.Context(), f.workspace, "test.p11_atomic", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.writer.MutateWorkspace(workspaceFixtureContext(t.Context()), f.workspace, "test.p11_atomic", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects[0].Name = "both records committed"
 		data.Projects[1].Description = strings.Repeat("x", 300<<10)
 		return nil
@@ -145,7 +145,7 @@ func TestScaleP11CommitChild(t *testing.T) {
 	}
 	// No realtime sink is registered. The parent kills this process after the
 	// SQL commit and before it can publish, close the store, or run cleanups.
-	if err := repo.MutateWorkspace(t.Context(), os.Getenv("FLOW_P11_WORKSPACE"), "project.updated", "p11-project-0", map[string]string{"name": "committed before kill"}, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), os.Getenv("FLOW_P11_WORKSPACE"), "project.updated", "p11-project-0", map[string]string{"name": "committed before kill"}, func(data *domain.Bootstrap) error {
 		data.Projects[0].Name = "committed before kill"
 		return nil
 	}); err != nil {

@@ -19,7 +19,7 @@ func applicationCredentialFixture(t *testing.T) (*SQLiteStore, domain.Bootstrap,
 	t.Cleanup(func() { repo.Close() })
 	data := repo.Bootstrap()
 	app := domain.OAuthApplication{ID: "automation", ClientID: "flow_client_automation", ClientSecret: "client-secret", Name: "Automation", CreatorID: data.Viewer.ID, Scopes: []string{"read", "write", "app:mentionable", "app:assignable"}, SupportsClientCredentials: true}
-	if err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "oauth_application.created", app.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), data.Workspace.URLKey, "oauth_application.created", app.ID, nil, func(next *domain.Bootstrap) error {
 		next.OAuthApplications = append(next.OAuthApplications, app)
 		return nil
 	}); err != nil {
@@ -44,9 +44,9 @@ func TestApplicationClientCredentialsSeparateSubjectAndIssuer(t *testing.T) {
 	if key.SubjectID() == data.Viewer.ID || key.IssuedByUserID != data.Viewer.ID || key.Actor != "app" {
 		t.Fatalf("invalid actor: %+v", key)
 	}
-	auth, err := repo.AuthenticateAPIKeyRecord(t.Context(), data.Workspace.URLKey, key.SecretHash, nil)
+	auth, err := repo.AuthenticateAPIKeyRecord(scaleP21ResourceOutputContext(t), data.Workspace.URLKey, key.SecretHash, nil)
 	if err != nil || !auth.User.App || auth.Role != "app" || auth.Key.TeamRestriction != "selected" {
-		t.Fatalf("application principal: %+v %v", auth, err)
+		t.Fatalf("application principal was not scoped: %v", err)
 	}
 	second := issueFixtureApplicationCredential(t, repo, data, app, "second")
 	if second.SubjectID() != key.SubjectID() {
@@ -57,23 +57,24 @@ func TestApplicationClientCredentialsSeparateSubjectAndIssuer(t *testing.T) {
 func TestApplicationCredentialsFollowLiveAccessAndRemainRevokedAfterResume(t *testing.T) {
 	repo, data, app := applicationCredentialFixture(t)
 	key := issueFixtureApplicationCredential(t, repo, data, app, "first")
-	installation, err := repo.ApplicationByUser(t.Context(), key.SubjectID())
+	ctx := scaleP21ResourceOutputContext(t)
+	installation, err := repo.ApplicationByUser(ctx, key.SubjectID())
 	if err != nil {
 		t.Fatal(err)
 	}
 	newTeam := domain.Team{ID: "new-public", Name: "Public", Key: "PUB"}
 	privateTeam := domain.Team{ID: "new-private", Name: "Private", Key: "PRI", Private: true}
 	privateChild := domain.Team{ID: "private-child", Name: "Child", Key: "CHD"}
-	if err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "team.created", newTeam.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), data.Workspace.URLKey, "team.created", newTeam.ID, nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, newTeam, privateTeam, privateChild)
 		next.TeamSettings[privateChild.ID] = domain.TeamSettings{TeamID: privateChild.ID, ParentTeamID: privateTeam.ID}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	auth, err := repo.AuthenticateAPIKeyRecord(t.Context(), "", key.SecretHash, nil)
+	auth, err := repo.AuthenticateAPIKeyRecord(ctx, "", key.SecretHash, nil)
 	if err != nil || !slices.Contains(auth.Key.TeamIDs, newTeam.ID) || slices.Contains(auth.Key.TeamIDs, privateTeam.ID) || slices.Contains(auth.Key.TeamIDs, privateChild.ID) {
-		t.Fatalf("public team policy: %+v %v", auth.Key, err)
+		t.Fatalf("public team policy differed: %v", err)
 	}
 	installation.AllPublicTeams = false
 	installation.TeamIDs = []string{data.Teams[0].ID}
@@ -81,7 +82,7 @@ func TestApplicationCredentialsFollowLiveAccessAndRemainRevokedAfterResume(t *te
 	if _, err := repo.InstallApplication(t.Context(), data.Workspace.URLKey, installation, ""); err != nil {
 		t.Fatal(err)
 	}
-	auth, err = repo.AuthenticateAPIKeyRecord(t.Context(), "", key.SecretHash, nil)
+	auth, err = repo.AuthenticateAPIKeyRecord(ctx, "", key.SecretHash, nil)
 	if err != nil || len(auth.Key.TeamIDs) != 1 {
 		t.Fatal("old token ignored narrowed team access", err)
 	}
@@ -93,7 +94,7 @@ func TestApplicationCredentialsFollowLiveAccessAndRemainRevokedAfterResume(t *te
 	if _, err := repo.InstallApplication(t.Context(), data.Workspace.URLKey, installation, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.AuthenticateAPIKeyRecord(t.Context(), "", key.SecretHash, nil); !errors.Is(err, ErrAuthForbidden) {
+	if _, err := repo.AuthenticateAPIKeyRecord(ctx, "", key.SecretHash, nil); !errors.Is(err, ErrAuthForbidden) {
 		t.Fatal("suspended token resurrected", err)
 	}
 }
@@ -110,7 +111,7 @@ func TestApplicationCredentialLimitsAndRotation(t *testing.T) {
 			t.Fatal("invalid credential accepted", err)
 		}
 	}
-	if err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "oauth_application.updated", app.ID, nil, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), data.Workspace.URLKey, "oauth_application.updated", app.ID, nil, func(next *domain.Bootstrap) error {
 		for index := range next.OAuthApplications {
 			if next.OAuthApplications[index].ID == app.ID {
 				next.OAuthApplications[index].ClientSecret = "rotated"
@@ -120,7 +121,7 @@ func TestApplicationCredentialLimitsAndRotation(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.AuthenticateAPIKeyRecord(t.Context(), "", key.SecretHash, nil); !errors.Is(err, ErrAuthForbidden) {
+	if _, err := repo.AuthenticateAPIKeyRecord(scaleP21ResourceOutputContext(t), "", key.SecretHash, nil); !errors.Is(err, ErrAuthForbidden) {
 		t.Fatal("secret rotation did not invalidate machine token", err)
 	}
 }
@@ -134,7 +135,7 @@ func TestApplicationCredentialIssuanceIsAtomic(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected database failure")
 	}
-	items, err := repo.ListApplications(t.Context(), data.Workspace.URLKey)
+	items, err := repo.ListApplications(scaleP21ResourceOutputContext(t), data.Workspace.URLKey)
 	if err != nil || len(items) != 0 {
 		t.Fatal("failed transaction left an installed principal", err)
 	}

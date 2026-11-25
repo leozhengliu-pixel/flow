@@ -41,6 +41,14 @@ const metadataCatalogRevisitPause = 25 * time.Millisecond
 // keeps losing its checkpoint to concurrent writers.
 const metadataCatalogCASRetries = 1024
 
+type metadataCatalogPassMode int
+
+const (
+	catalogRevisit metadataCatalogPassMode = iota
+	catalogGentleRevisit
+	catalogRepairOnly
+)
+
 // metadataCatalogPass runs the catalog backfill over every collection of
 // every workspace once. Every step is the same bounded, checkpointed
 // transaction pair (BackfillMetadataCatalog), so live writers and other
@@ -51,7 +59,7 @@ const metadataCatalogCASRetries = 1024
 // logged, reported and skipped; the pass goes on with the next collection.
 // Only a cancelled context or a failure to find the next collection ends the
 // pass early.
-func (s *SQLiteStore) metadataCatalogPass(ctx context.Context, gentleRevisit bool) (report MetadataCatalogPassReport, err error) {
+func (s *SQLiteStore) metadataCatalogPass(ctx context.Context, mode metadataCatalogPassMode) (report MetadataCatalogPassReport, err error) {
 	report.Skipped = []MetadataCatalogSkip{}
 	began := time.Now()
 	defer func() { report.Duration = time.Since(began) }()
@@ -70,15 +78,13 @@ func (s *SQLiteStore) metadataCatalogPass(ctx context.Context, gentleRevisit boo
 		cursor = next
 		workspace, kind := next.Workspace, next.Field
 		report.Collections++
-		normalized, complete, err := s.completeMetadataCatalogCollection(ctx, workspace, kind, gentleRevisit)
+		normalized, complete, err := s.completeMetadataCatalogCollection(ctx, workspace, kind, mode)
 		report.Normalized += normalized
 		if ctx.Err() != nil {
 			return report, ctx.Err()
 		}
 		if err != nil {
 			report.Skipped = append(report.Skipped, MetadataCatalogSkip{Workspace: workspace, Field: kind, Error: err.Error()})
-			slog.Warn("metadata catalog: collection skipped", "workspace", workspace, "field", kind, "error", err.Error(),
-				"hint", "the collection stays incomplete; fix or remove the row, the next pass retries it")
 			continue
 		}
 		if complete {
@@ -87,13 +93,16 @@ func (s *SQLiteStore) metadataCatalogPass(ctx context.Context, gentleRevisit boo
 	}
 }
 
-func (s *SQLiteStore) completeMetadataCatalogCollection(ctx context.Context, workspace, kind string, gentleRevisit bool) (normalized int, complete bool, err error) {
+func (s *SQLiteStore) completeMetadataCatalogCollection(ctx context.Context, workspace, kind string, mode metadataCatalogPassMode) (normalized int, complete bool, err error) {
 	status, err := s.MetadataCatalogStatus(ctx, workspace, kind)
 	if err != nil {
 		return 0, false, err
 	}
-	gentle := gentleRevisit && status.Complete
+	gentle := mode == catalogGentleRevisit && status.Complete
 	if status.Complete {
+		if mode == catalogRepairOnly {
+			return 0, true, nil
+		}
 		// Revisit: writes after the previous pass may have changed it.
 		if err := s.ResetMetadataCatalogBackfill(ctx, workspace, kind); err != nil {
 			return 0, false, err
@@ -115,6 +124,9 @@ func (s *SQLiteStore) completeMetadataCatalogCollection(ctx context.Context, wor
 			return normalized, false, err
 		} else if progress.Complete {
 			return normalized, true, nil
+		}
+		if mode == catalogRepairOnly && err == nil {
+			continue
 		}
 		pause := time.Since(began) / 4
 		if gentle {
@@ -181,7 +193,6 @@ func (s *SQLiteStore) normalizeMetadataRecordStorage(ctx context.Context, worksp
 			return normalized, err
 		}
 		normalized += changed
-		slog.Info("metadata catalog: canonical rows stored as text rewritten as blobs", "workspace", workspace, "field", kind, "rows", changed)
 	}
 }
 
@@ -228,7 +239,7 @@ func (s *SQLiteStore) RunMetadataCatalogBackfill(ctx context.Context) error {
 					"incomplete", len(repair.Incomplete), "duration", repair.Duration.Round(time.Millisecond).String())
 			}
 		}
-		report, err := s.metadataCatalogPass(ctx, true)
+		report, err := s.metadataCatalogPass(ctx, catalogGentleRevisit)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

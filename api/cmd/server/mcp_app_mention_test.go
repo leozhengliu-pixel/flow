@@ -34,6 +34,8 @@ func newMCPMentionFixture(t *testing.T) *mcpMentionFixture {
 // install registers an OAuth application with a fake webhook receiver and installs it.
 func (f *mcpMentionFixture) install(t *testing.T, name string, scopes []string, active bool, teamIDs []string) mcpMentionApp {
 	t.Helper()
+	ctx, finish := beginMetadataOutputReads(t.Context())
+	defer finish()
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	app := requestJSON[domain.OAuthApplication](t, f.handler, http.MethodPost, "/api/oauth-applications?workspace=test-workspace", map[string]any{
 		"name": name, "redirectUris": []string{"https://bot.example/callback"}, "scopes": []string{"read", "write", "app:assignable", "app:mentionable"},
@@ -47,7 +49,7 @@ func (f *mcpMentionFixture) install(t *testing.T, name string, scopes []string, 
 		"clientId": app.ClientID, "teamIds": teamIDs, "scopes": scopes, "active": active,
 	}, http.StatusOK).Application
 	f.s.reconcileApplicationWebhooks(context.Background(), "test-workspace")
-	user, err := f.s.store.UserByID(t.Context(), installed.UserID)
+	user, err := f.s.store.UserByID(ctx, installed.UserID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,12 +76,14 @@ func (f *mcpMentionFixture) comment(t *testing.T, actor mcpActor, args map[strin
 // sessions counts the sessions started for app and delivers each, returning how many webhooks arrived.
 func (f *mcpMentionFixture) sessions(t *testing.T, app mcpMentionApp) (int, int) {
 	t.Helper()
-	tasks, err := f.s.store.ListAgentTasks(t.Context(), "test-workspace", f.issue.ID, app.id)
+	ctx, finish := beginMetadataOutputReads(t.Context())
+	defer finish()
+	tasks, err := f.s.store.ListAgentTasks(ctx, "test-workspace", f.issue.ID, app.id)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, task := range tasks {
-		f.s.deliverApplicationTask(t.Context(), task)
+		f.s.deliverApplicationTask(ctx, task)
 	}
 	return len(tasks), app.receiver.count()
 }

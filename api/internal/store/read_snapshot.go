@@ -19,6 +19,7 @@ type workspaceRead struct {
 // Keep metadata, outlines, and streamed bodies in the same SQL read snapshot.
 // The caller must release it when writing finishes or the request is cancelled.
 func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) (context.Context, func(), error) {
+	ctx = s.ContextWithDatabaseFeatures(ctx)
 	scope, scoped := metadataRecordScopeFromContext(ctx)
 	if s.metadataResidency != nil && !scoped && coldCapable(ctx) {
 		// COLD: the legacy snapshot, decoded from SQL in its transaction.

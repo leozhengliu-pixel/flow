@@ -140,7 +140,7 @@ func TestScaleP16RecordReloadScopeIsolation(t *testing.T) {
 	repo, _ := scaleP04OwnedStore(t)
 	fixture := repo.Bootstrap()
 	workspace, target := fixture.Workspace.URLKey, fixture.Projects[0].ID
-	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p16.reload_seed", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p16.reload_seed", "", nil, func(data *domain.Bootstrap) error {
 		for range 70 {
 			data.Projects = append(data.Projects, domain.Project{ID: idgen.New("p16-reload-"), Description: "Keep this record"})
 		}

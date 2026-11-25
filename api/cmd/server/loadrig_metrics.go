@@ -50,9 +50,13 @@ type loadRigProcessMetrics struct {
 	LinuxMemory                 map[string]uint64 `json:"linuxMemory,omitempty"`
 }
 
-var loadRigGates atomic.Pointer[[2]*metadataReadGate]
+var (
+	loadRigGates           atomic.Pointer[[2]*metadataReadGate]
+	loadRigBoundedMetadata atomic.Bool
+)
 
 func init() {
+	recordLoadRigMetadataMode = loadRigBoundedMetadata.Store
 	addr := os.Getenv("FLOW_LOADRIG_METRICS_ADDR")
 	if addr == "" {
 		return
@@ -165,7 +169,7 @@ func loadRigSnapshot() loadRigProcessMetrics {
 		NumGC: memory.NumGC, PauseTotalNanos: memory.PauseTotalNs, Goroutines: runtime.NumGoroutine(), MaxRSSBytes: maxRSS,
 		CPUUserSeconds:              float64(usage.Utime.Sec) + float64(usage.Utime.Usec)/1e6,
 		CPUSystemSeconds:            float64(usage.Stime.Sec) + float64(usage.Stime.Usec)/1e6,
-		BoundedMetadata:             os.Getenv("FLOW_BOUNDED_METADATA") == "on",
+		BoundedMetadata:             loadRigBoundedMetadata.Load(),
 		Counters:                    counters,
 		GOMAXPROCS:                  runtime.GOMAXPROCS(0),
 		MemoryLimitConfiguredString: os.Getenv("GOMEMLIMIT"),

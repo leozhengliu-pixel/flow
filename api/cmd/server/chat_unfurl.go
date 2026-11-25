@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Link previews. When a Flow link is posted, the platform asks the app for a
@@ -87,6 +88,8 @@ func (s *server) chatLinkPreviewConfigured(ctx context.Context, record domain.Ch
 
 // writeChatLinkPreview answers an authenticated url.preview.get callback.
 func (s *server) writeChatLinkPreview(ctx context.Context, w http.ResponseWriter, record domain.ChatIntegrationRecord, plaintext []byte) {
+	ctx, closeReads := beginMetadataOutputReads(ctx)
+	defer closeReads()
 	s.chatNoteLinkPreview(ctx, record)
 	var callback chatPreviewCallback
 	if json.Unmarshal(plaintext, &callback) != nil {
@@ -382,6 +385,8 @@ func (viewer chatPreviewViewer) time(at time.Time) string {
 // chatLinkPreview is the url.preview.get answer for one viewer; {} leaves
 // the link unexpanded.
 func (s *server) chatLinkPreview(ctx context.Context, record domain.ChatIntegrationRecord, tenantKey, openID, rawURL, chatID string) map[string]any {
+	ctx, closeReads := beginMetadataOutputReads(ctx)
+	defer closeReads()
 	preview, _, _ := s.chatLinkPreviewFor(ctx, record, tenantKey, openID, rawURL, chatID)
 	return preview
 }
@@ -417,7 +422,7 @@ func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatInteg
 		return chatPreviewAnswer(viewer.language, chatPreviewContent{title: name, link: base}), "", nil
 	case "issue", "comment":
 		var issue domain.Issue
-		if s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(target.id), nil, &issue) != nil || issue.ID == "" {
+		if s.chatAuthorizedPointRead(ctx, record.WorkspaceKey, identity.UserID, "/api/issue-records/"+url.PathEscape(target.id), &issue) != nil || issue.ID == "" {
 			return neutral, "", nil
 		}
 		scope := s.chatPreviewScope(ctx, record, data, chatID)
@@ -436,6 +441,9 @@ func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatInteg
 		return chatPreviewAnswer(viewer.language, content), "issue:" + issue.ID, nil
 	}
 	var metadata domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		ctx = context.WithValue(ctx, chatBootstrapHeadersKey{}, chatPreviewMetadata)
+	}
 	if s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata) != nil {
 		return neutral, "", nil
 	}
@@ -509,8 +517,19 @@ func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatInteg
 			return chatPreviewAnswer(viewer.language, content), "initiative:" + initiative.ID, nil
 		}
 	case "document":
-		document, err := documentByID(&metadata, target.id)
-		if err != nil || documentRole(s, metadata, *document) == "none" {
+		documentData := metadata
+		if s.store.BoundedMetadataEnabled() {
+			read, err := s.store.BeginDocumentRead(ctx, record.WorkspaceKey, identity.UserID, nil, store.DocumentReadRequest{
+				Ref: target.id, ReadOnly: true, SkipProjects: true, ProjectionFallback: true,
+			})
+			if err != nil {
+				return neutral, "", nil
+			}
+			defer read.Close()
+			documentData = read.Data
+		}
+		document, err := documentByID(&documentData, target.id)
+		if err != nil || documentRole(s, documentData, *document) == "none" {
 			return neutral, "", nil
 		}
 		teams := append(append(slices.Clone(document.TeamIDs), document.InheritedTeamIDs...), document.IssueTeamID)
@@ -518,8 +537,7 @@ func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatInteg
 		if !current.teams(teams...) {
 			return neutral, "", nil
 		}
-		// A document shared with specific people is not shown to a group.
-		if !current.personal && len(document.Permissions) > 0 && !slices.ContainsFunc(document.Permissions, func(permission domain.DocumentPermission) bool { return permission.SubjectType == "workspace" }) {
+		if !current.personal && !chatDocumentGroupGrant(*document) {
 			return neutral, "", nil
 		}
 		return chatPreviewAnswer(viewer.language, chatDocumentPreview(viewer, data, *document, base)), "document:" + document.ID, nil
@@ -565,6 +583,21 @@ func (s *server) chatLinkPreviewFor(ctx context.Context, record domain.ChatInteg
 		}
 	}
 	return neutral, "", nil
+}
+
+func chatDocumentGroupGrant(document domain.Document) bool {
+	if len(document.Permissions) == 0 || slices.ContainsFunc(document.Permissions, func(permission domain.DocumentPermission) bool {
+		return permission.SubjectType == "workspace"
+	}) {
+		return true
+	}
+	// Team members can read team documents with only the automatic creator
+	// grant. The caller has already checked the group's entire team scope.
+	if len(document.TeamIDs) == 0 || len(document.Permissions) != 1 {
+		return false
+	}
+	grant := document.Permissions[0]
+	return grant.ID == "document_permission_"+document.Creator.ID && grant.SubjectType == "user" && grant.SubjectID == document.Creator.ID && grant.Role == "owner"
 }
 
 func chatIssuePreview(viewer chatPreviewViewer, issue domain.Issue, base string) chatPreviewContent {

@@ -860,8 +860,6 @@ var scaleP21SW559Reviewed = map[string]struct{ fields, reason string }{
 		"Its only caller (team_member.cleaned_up) names a team, which the resident team directory resolves; the other collections are the generic entity fallback."},
 	"store/SQLiteStore.resourceReadCompatibility": {"Initiatives Projects",
 		"The skeleton never matches the cached-copy fast path, so the record is normalized from SQL as one written after the copy is (bounded readers pass their owned read first)."},
-	"store/SQLiteStore.updateWorkspace": {"IntegrationConnections LabelIndex Labels Settings Users whole",
-		"Bounded, UpdateWorkspace runs it on a COLD facade (coldLegacyWrite); its routes are COLD (route temperature table), so the live store never runs it bounded."},
 }
 
 func TestScaleP21SW559ResidentImageReaders(t *testing.T) {

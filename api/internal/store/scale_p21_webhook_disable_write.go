@@ -481,7 +481,7 @@ func webhookDisablePersistInputs(w *webhookFailureWriteWork, source *metadataLog
 // MutateFailingWebhookDisable is restricted to the server's disable callback.
 // Its content appends, audit and first native webhook update share one commit.
 func (s *SQLiteStore) MutateFailingWebhookDisable(ctx context.Context, workspace, webhookID string, mutate func(*domain.Bootstrap) error) error {
-	if !s.BoundedMetadataEnabled() || !RecordHydrationEnabled() || mutate == nil {
+	if !s.BoundedMetadataEnabled() || !recordHydrationEnabled(s.dialect) || mutate == nil {
 		return ErrBoundedMetadataCoverage
 	}
 	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)

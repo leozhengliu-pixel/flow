@@ -21,12 +21,10 @@ const (
 	syncV2DeltaBytes = 256 << 10
 )
 
-func syncV2Enabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_SYNC_V2"))) {
-	case "on", "1", "true":
-		return true
-	}
-	return false
+func (s *server) syncV2RealtimeEnabled() bool {
+	// Default starts without capture keep the legacy realtime path.
+	return s.store.SyncV2Enabled() && (strings.TrimSpace(os.Getenv("FLOW_SYNC_V2")) != "" ||
+		s.store.RecordJournalEnabled() && s.store.RealtimeEpochsReady())
 }
 
 type committedChangeReader interface {
@@ -35,16 +33,12 @@ type committedChangeReader interface {
 
 func (s *server) syncV2Journal() (committedChangeReader, bool) {
 	journal, ok := any(s.store).(committedChangeReader)
-	return journal, ok && syncV2Enabled() && strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")), "on")
-}
-
-func syncV2SummaryRequest(r *http.Request) bool {
-	return syncV2Enabled() && (r.Header.Get("X-Flow-Sync") == "summary" || r.URL.Query().Get("sync") == "2")
+	return journal, ok && s.store.SyncV2Enabled() && s.store.RecordJournalEnabled() && s.store.RecordJournalReady()
 }
 
 func (s *server) negotiatedSummaryRequest(r *http.Request) bool {
 	_, ready := s.syncV2Journal()
-	return ready && syncV2SummaryRequest(r)
+	return ready && (r.Header.Get("X-Flow-Sync") == "summary" || r.URL.Query().Get("sync") == "2")
 }
 
 type syncV2Key struct {
@@ -673,7 +667,7 @@ func (s *server) projectCommittedChange(r *http.Request, access store.EventAcces
 		if err != nil {
 			return tx, err
 		}
-		if strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")), "on") {
+		if s.store.RecordJournalEnabled() && s.store.RecordJournalReady() {
 			var deleted bool
 			version, deleted, err = s.store.RecordVersion(r.Context(), workspaceKey(r), record.Key)
 			if err != nil {

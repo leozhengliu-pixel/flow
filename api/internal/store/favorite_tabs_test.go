@@ -45,7 +45,7 @@ func testFavoriteTabsPersistAcrossReopen(t *testing.T, config DatabaseConfig) {
 		if favorite.Tab != "" {
 			payload["tab"] = favorite.Tab
 		}
-		if err := repo.MutateWorkspace(ctx, workspace, "favorite.added", pipelineID, payload, func(next *domain.Bootstrap) error {
+		if err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "favorite.added", pipelineID, payload, func(next *domain.Bootstrap) error {
 			next.Favorites = append(next.Favorites, favorite)
 			return nil
 		}); err != nil {
@@ -58,7 +58,7 @@ func testFavoriteTabsPersistAcrossReopen(t *testing.T, config DatabaseConfig) {
 	add(root)
 	add(releases)
 	add(changelog)
-	if err := repo.MutateWorkspace(ctx, workspace, "favorite.removed", pipelineID, map[string]string{"type": "release_pipeline", "tab": "changelog"}, func(next *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "favorite.removed", pipelineID, map[string]string{"type": "release_pipeline", "tab": "changelog"}, func(next *domain.Bootstrap) error {
 		next.Favorites = slices.DeleteFunc(next.Favorites, func(item domain.Favorite) bool { return item.ID == changelog.ID })
 		return nil
 	}); err != nil {
@@ -86,7 +86,7 @@ func testFavoriteTabsPersistAcrossReopen(t *testing.T, config DatabaseConfig) {
 	if len(got) != len(want) || got[root.ID] != "" || got[releases.ID] != "releases" {
 		t.Fatalf("persisted pipeline favorites = %v, want %v", got, want)
 	}
-	if err := reopened.MutateWorkspace(ctx, workspace, "favorite.removed", pipelineID, map[string]string{"type": "release_pipeline"}, func(next *domain.Bootstrap) error {
+	if err := reopened.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "favorite.removed", pipelineID, map[string]string{"type": "release_pipeline"}, func(next *domain.Bootstrap) error {
 		next.Favorites = slices.DeleteFunc(next.Favorites, func(item domain.Favorite) bool { return item.ResourceID == pipelineID })
 		return nil
 	}); err != nil {

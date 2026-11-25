@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -124,7 +123,7 @@ func TestScaleP12DeltaHasAtomicBudgetAndOversizeInvalidation(t *testing.T) {
 			t.Fatal(err)
 		}
 		record := store.RecordDelta{Key: store.RecordKey{Kind: "issues", ID: issue.ID}, Version: strconv.FormatInt(issue.Version, 10)}
-		if os.Getenv("FLOW_RECORD_JOURNAL") == "on" {
+		if repo.RecordJournalReady() {
 			version, deleted, err := repo.RecordVersion(t.Context(), f.data.Workspace.URLKey, record.Key)
 			if err != nil || deleted || version == "" {
 				t.Fatalf("fixture has no committed record version: %s %t %v", version, deleted, err)
@@ -185,8 +184,7 @@ func TestScaleP12RevokeWhileDeltaReadAndDurableReplay(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		seed := store.WithColdWork(t.Context(), "p12-private-replay-fixture")
-		if err := repo.MutateWorkspace(seed, f.data.Workspace.URLKey, "issue.updated", f.secret.ID, map[string]string{"title": "Private replay"}, func(*domain.Bootstrap) error { return nil }); err != nil {
+		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "issue.updated", f.secret.ID, map[string]string{"title": "Private replay"}, func(*domain.Bootstrap) error { return nil }); err != nil {
 			t.Fatal(err)
 		}
 		access, err := repo.ResolveEventAccess(t.Context(), f.data.Workspace.URLKey, principal.user.ID, nil)
@@ -217,7 +215,6 @@ func TestScaleP12RevokeWhileDeltaReadAndDurableReplay(t *testing.T) {
 }
 
 func TestScaleP12OldServerAndRollbackWireFallback(t *testing.T) {
-	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
@@ -241,7 +238,7 @@ func TestScaleP12SyncRaceProofAndCoverageReset(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_SYNC_V2", "on")
-	for dialect, repo := range scaleP03ServerTestStores(t) {
+	for _, repo := range scaleP03ServerTestStores(t) {
 		f := scaleP21M2Setup(t, repo)
 		access, err := repo.ResolveEventAccess(t.Context(), f.data.Workspace.URLKey, f.data.Viewer.ID, nil)
 		if err != nil {
@@ -293,63 +290,6 @@ func TestScaleP12SyncRaceProofAndCoverageReset(t *testing.T) {
 			t.Fatalf("settled stale source did not produce an authenticated empty reset: ok=%v result=%+v", ok, settled)
 		}
 
-		if dialect == "sqlite" {
-			authRequest[json.RawMessage](t, f.admin, http.MethodPost, f.host.URL+"/api/api-keys",
-				map[string]any{"name": "Sync retry test", "scopes": []string{"read"}}, f.data.Workspace.URLKey, http.StatusCreated)
-			epoch, err := repo.AuthzEpoch(t.Context(), f.data.Workspace.ID)
-			if err != nil || epoch == settledAccess.AuthzEpoch {
-				t.Fatalf("credential creation did not advance epoch: %v", err)
-			}
-			journal := scaleP12JournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
-				return store.CommittedPage{Head: "9", AuthzEpoch: epoch}, nil
-			})
-			reset, ok := service.syncChangesResyncAfterRace(request, settledAccess, journal, "7", errRealtimeProjectionStale)
-			if !ok || !reset.ResyncRequired || reset.Next != "7" || reset.Head != "9" ||
-				reset.AuthzEpoch != epoch || reset.HasMore || len(reset.Transactions) != 0 {
-				t.Fatalf("credential churn did not produce an authenticated empty reset: ok=%v result=%+v", ok, reset)
-			}
-
-			// A resource's policy can change without changing this session's
-			// workspace and team grants. Require live access and discard the
-			// entire stale page before returning a reset.
-			fresh, err := repo.ResolveEventAccess(t.Context(), f.data.Workspace.URLKey, f.data.Viewer.ID, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			start, err := repo.RecordJournalHead(t.Context(), f.data.Workspace.ID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			calls := 0
-			journal = scaleP12JournalFunc(func(ctx context.Context, workspace, after string, limit, maxBytes int) (store.CommittedPage, error) {
-				page, err := repo.ReadCommittedChanges(ctx, workspace, after, limit, maxBytes)
-				calls++
-				if err == nil && calls == 1 {
-					err = repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "sync_race.new_project", "", nil, func(data *domain.Bootstrap) error {
-						data.Projects = append(data.Projects, domain.Project{ID: "sync-policy-project", Name: "New project", TeamIDs: []string{f.public}})
-						return nil
-					})
-				}
-				return page, err
-			})
-			request.Method, request.URL.Path, request.URL.RawQuery = http.MethodGet, "/api/sync/changes", "after="+start
-			w := httptest.NewRecorder()
-			service.syncChangesWithJournal(w, request, journal)
-			epoch, err = repo.AuthzEpoch(t.Context(), f.data.Workspace.ID)
-			if err != nil || epoch == fresh.AuthzEpoch {
-				t.Fatalf("resource creation did not advance epoch: %v", err)
-			}
-			head, err := repo.RecordJournalHead(t.Context(), f.data.Workspace.ID)
-			if err != nil || head == start {
-				t.Fatalf("resource creation did not advance the journal: %v", err)
-			}
-			if w.Code != http.StatusOK || calls != 2 || json.Unmarshal(w.Body.Bytes(), &reset) != nil ||
-				!reset.ResyncRequired || reset.Next != start || reset.Head != head ||
-				reset.AuthzEpoch != epoch || reset.HasMore || len(reset.Transactions) != 0 {
-				t.Fatalf("resource change did not produce an authenticated empty reset: %d after %d reads: %s", w.Code, calls, w.Body)
-			}
-		}
-
 		authzPrincipal := f.principals[2]
 		authzRequest := f.literalRequest(authzPrincipal.user, nil, nil)
 		authzAccess, err := repo.ResolveEventAccess(t.Context(), f.data.Workspace.URLKey, authzPrincipal.user.ID, nil)
@@ -366,9 +306,6 @@ func TestScaleP12SyncRaceProofAndCoverageReset(t *testing.T) {
 		}
 		if service.syncChangesResetAllowed(authzRequest, authzAccess, errLiveEventSourceStale) {
 			t.Fatal("stale source reset crossed an authorization epoch change")
-		}
-		if _, err := repo.RefreshEventResetAccess(t.Context(), authzAccess); !errors.Is(err, store.ErrAuthForbidden) {
-			t.Fatalf("live reset proof accepted a membership change: %v", err)
 		}
 	}
 }

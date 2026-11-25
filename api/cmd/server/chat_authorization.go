@@ -160,7 +160,7 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 		}
 		inProcess = true
 		handler = func(w http.ResponseWriter, r *http.Request) {
-			if result == nil && internalRecordsEnabled("FLOW_INTERNAL_CHAT_RECORDS") {
+			if result == nil && (s.store.BoundedMetadataEnabled() || internalRecordsEnabled("FLOW_INTERNAL_CHAT_RECORDS")) {
 				// Workspace/session/resource policy was checked by the same
 				// middleware; a consent check does not need a metadata copy.
 				w.WriteHeader(http.StatusOK)
@@ -204,6 +204,10 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 		}
 		w.owned = output
 		r = r.WithContext(output.ctx)
+	} else if s.store.BoundedMetadataEnabled() && (!inProcess || result == nil) {
+		var release func()
+		r, release = beginRequestResourceReads(r)
+		defer release()
 	}
 	if s.authorizeWorkspaceRequest(w, r, user) {
 		if key := store.ChatMutationKey(ctx); key != "" && method == http.MethodPatch {

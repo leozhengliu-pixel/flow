@@ -41,7 +41,7 @@ func TestWorkspaceRenameKeepsCredentialsAndHarnessState(t *testing.T) {
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	oldKey, newKey := bootstrap.Workspace.URLKey, "renamed-space"
 	member := bootstrap.Viewer.ID
-	if err := repository.MutateWorkspace(ctx, oldKey, "integration.connected", "integration_gl", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(ctx), oldKey, "integration.connected", "integration_gl", nil, func(data *domain.Bootstrap) error {
 		data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: "integration_gl", Provider: "gitlab", Status: "connected", Config: map[string]string{}, Scopes: []string{}, Channels: []string{}})
 		setApplicationPolicies(data, []applicationPolicy{{ID: "connector_mcp", Name: "MCP", Kind: "mcp", OwnerID: member, Status: "approved"}})
 		return nil

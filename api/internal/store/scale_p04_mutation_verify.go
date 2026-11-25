@@ -182,7 +182,7 @@ func (s *SQLiteStore) compareMutationCallback(ctx context.Context, tx *sqlTx, ki
 	if record {
 		comparison = narrowMutationComparisons.Add(1)
 	}
-	path := compareMutationCallbacks(first, second, protected)
+	path := compareMutationCallbacks(ctx, first, second, protected)
 	if path != "" {
 		if record {
 			narrowMutationDifferences.Add(1)
@@ -280,8 +280,8 @@ func normalizedMutationResult(result mutationCallbackResult, protected []byte) a
 	return walk(value, "")
 }
 
-func compareMutationCallbacks(narrow, full mutationCallbackResult, protected []byte) string {
-	narrow, full, protected = scaleP16BoundVerificationComparison(narrow, full, protected)
+func compareMutationCallbacks(ctx context.Context, narrow, full mutationCallbackResult, protected []byte) string {
+	narrow, full, protected = scaleP16BoundVerificationComparison(ctx, narrow, full, protected)
 	a, b := normalizedMutationResult(narrow, protected), normalizedMutationResult(full, protected)
 	var difference func(any, any, string) string
 	difference = func(a, b any, path string) string {

@@ -11,14 +11,21 @@ import (
 )
 
 func scaleP21SW307TeamResourceAuthorizationRequest(r *http.Request) (string, bool) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		return "", false
+	var patterns []string
+	switch r.Method {
+	case http.MethodGet, http.MethodHead:
+		patterns = []string{"/api/teams/{id}/resources"}
+	case http.MethodPost:
+		patterns = []string{"/api/teams/{id}/resources", "/api/teams/{id}/resource-sections"}
+	case http.MethodPatch, http.MethodDelete:
+		patterns = []string{"/api/teams/{id}/resources/{resourceId}", "/api/teams/{id}/resource-sections/{sectionId}"}
 	}
-	parts, selected := scaleP21EscapedRouteParts(r, "/api/teams/{id}/resources")
-	if !selected || len(parts) < 3 {
-		return "", false
+	for _, pattern := range patterns {
+		if parts, selected := scaleP21EscapedRouteParts(r, pattern); selected && len(parts) >= 3 {
+			return parts[2], true
+		}
 	}
-	return parts[2], true
+	return "", false
 }
 
 func (s *server) boundedTeamResourceAuthorization(r *http.Request, workspace, userID string) (allowed, handled bool) {

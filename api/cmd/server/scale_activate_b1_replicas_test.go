@@ -140,7 +140,7 @@ func scaleActivateB1MixedBinaryRollback(t *testing.T, consumers bool) {
 	for _, flag := range []string{"FLOW_RECORD_JOURNAL", "FLOW_RECORD_PEER_SYNC", "FLOW_SYNC_V2", "FLOW_SYNC_MANIFEST", "FLOW_INDEXED_READS"} {
 		t.Setenv(flag, "off")
 	}
-	if service.recordPeerSyncMode() != "off" || syncV2Enabled() {
+	if service.recordPeerSyncMode() != "off" || service.store.SyncV2Enabled() {
 		t.Fatal("explicit rollback did not restore legacy coordination")
 	}
 	rolledBack := authRequest[domain.Document](t, f.admin, http.MethodGet, host.URL+"/api/documents/"+document.ID, nil, workspace, http.StatusOK)

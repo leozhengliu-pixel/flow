@@ -86,7 +86,9 @@ func TestTrashPurgeDeletesTheAttachmentFilesOfPurgedIssues(t *testing.T) {
 	name := strings.TrimPrefix(attachment.URL, "/uploads/")
 	sharedName := strings.TrimPrefix(shared.URL, "/uploads/")
 	// The second issue links the same upload (an attachment copied by URL).
-	if err := repository.MutateWorkspace(store.WithIssueRecordMutations(ctx, kept.ID), "test-workspace", "attachment.created", kept.ID, nil, func(data *domain.Bootstrap) error {
+	writeCtx, closeWrite := beginMetadataOutputReads(store.ContextWithIssueAttachmentMutation(store.WithIssueRecordMutations(ctx, kept.ID)))
+	defer closeWrite()
+	if err := repository.MutateWorkspace(writeCtx, "test-workspace", "attachment.created", kept.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Issues {
 			if data.Issues[index].ID == kept.ID {
 				data.Issues[index].Attachments = append(data.Issues[index].Attachments, domain.Attachment{ID: "attachment_copy", IssueID: kept.ID, Title: "shared.txt", URL: shared.URL, CreatedAt: time.Now().UTC()})

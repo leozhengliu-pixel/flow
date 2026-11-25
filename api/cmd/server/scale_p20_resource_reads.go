@@ -79,7 +79,7 @@ func (s *server) scaleP20Manifest(w http.ResponseWriter, r *http.Request) bool {
 	if !scaleP20SyncRequest(r) {
 		return false
 	}
-	if !syncFlagEnabled("FLOW_SYNC_MANIFEST") || !syncFlagEnabled("FLOW_INDEXED_READS") || !store.RecordHydrationEnabled() {
+	if !syncFlagEnabled("FLOW_SYNC_MANIFEST") || !syncFlagEnabled("FLOW_INDEXED_READS") || !store.RecordHydrationEnabled(r.Context()) {
 		writeError(w, http.StatusNotFound, "not found")
 		return true
 	}

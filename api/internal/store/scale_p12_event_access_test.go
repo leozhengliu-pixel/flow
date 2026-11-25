@@ -49,7 +49,7 @@ func TestScaleP12SourceReferencesDoNotFetchProjectBodies(t *testing.T) {
 		s := fixture.SQLiteStore
 		workspace := fixture.data.Workspace.URLKey
 		body := strings.Repeat("body", 1<<19)
-		if err := s.MutateWorkspace(t.Context(), workspace, "scale_p12.reference", "", nil, func(data *domain.Bootstrap) error {
+		if err := s.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p12.reference", "", nil, func(data *domain.Bootstrap) error {
 			data.Projects = append(data.Projects, domain.Project{ID: "p12-reference", Name: "Referenced", Icon: "icon", Color: "color", Description: body})
 			return nil
 		}); err != nil {
@@ -81,7 +81,7 @@ func TestScaleP12CommentsNeverReturnAPartialReplacement(t *testing.T) {
 	for _, fixture := range scaleP03Stores(t) {
 		s := fixture.SQLiteStore
 		workspace := fixture.data.Workspace.URLKey
-		if err := s.MutateWorkspace(t.Context(), workspace, "scale_p12.comments", "document", nil, func(data *domain.Bootstrap) error {
+		if err := s.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p12.comments", "document", nil, func(data *domain.Bootstrap) error {
 			if data.Comments == nil {
 				data.Comments = map[string][]domain.Comment{}
 			}

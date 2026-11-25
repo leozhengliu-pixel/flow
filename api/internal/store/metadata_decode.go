@@ -18,7 +18,7 @@ import (
 // rebuild a second giant JSON blob just to parse it again during startup/reload.
 func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace string, raw []byte, reader metadataReader) (domain.Bootstrap, error) {
 	var data domain.Bootstrap
-	scope, scoped := metadataRecordScopeFromContext(ctx)
+	scope, scoped := metadataRecordScopeFromContext(s.ContextWithDatabaseFeatures(ctx))
 	if s.metadataResidency != nil && !scoped {
 		return data, fmt.Errorf("%w: unscoped workspace decode", ErrBoundedMetadataCoverage)
 	}

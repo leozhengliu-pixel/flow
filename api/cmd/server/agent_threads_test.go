@@ -51,7 +51,7 @@ func TestAgentRepliesNotifyThreadOncePerThread(t *testing.T) {
 		t.Fatal("fixture has no second member")
 	}
 	// The second member takes part in the thread with a reply.
-	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(t.Context(), issue.ID), data.Workspace.URLKey, "comment.created", issue.ID, nil, func(next *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(workspaceFixtureContext(store.WithIssueRecordMutations(t.Context(), issue.ID)), data.Workspace.URLKey, "comment.created", issue.ID, nil, func(next *domain.Bootstrap) error {
 		next.Comments[issue.ID] = append(next.Comments[issue.ID], domain.Comment{ID: "comment_reply_other", Version: 1, Body: "+1", ParentID: &comment.ID, User: *userByID(next, other), Reactions: map[string][]string{}, CreatedAt: time.Now().UTC()})
 		return nil
 	})

@@ -20,7 +20,7 @@ func TestMemberDirectoryMigrationAddsJoinedMembers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
+	ctx := WithColdWork(context.Background(), "member directory fixture")
 	key := repo.WorkspaceKeys()[0]
 	data, _ := repo.storedWorkspace(key)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -37,7 +37,7 @@ func TestMemberDirectoryMigrationAddsJoinedMembers(t *testing.T) {
 		}
 	}
 	inDirectory := func(repo *SQLiteStore) []string {
-		current, _ := repo.storedWorkspace(key)
+		current := storedState(t, repo, key)
 		ids := []string{}
 		for _, user := range current.Users {
 			if slices.Contains([]string{"usr_directory_joined", "usr_directory_suspended", "usr_directory_guest"}, user.ID) {
@@ -60,7 +60,7 @@ func TestMemberDirectoryMigrationAddsJoinedMembers(t *testing.T) {
 	if added, err := repo.syncMemberDirectory(ctx, key); err != nil || added != 0 {
 		t.Fatalf("a second pass added %d (%v)", added, err)
 	}
-	current, _ := repo.storedWorkspace(key)
+	current := storedState(t, repo, key)
 	joined := current.Users[slices.IndexFunc(current.Users, func(user domain.User) bool { return user.ID == "usr_directory_joined" })]
 	if joined.Email != "directory-joined@example.com" || !joined.Active {
 		t.Fatalf("directory entry: %+v", joined)

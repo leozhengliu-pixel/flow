@@ -126,21 +126,24 @@ func TestCustomerExclusionsArchiveAndRestoreRequests(t *testing.T) {
 	if err := mutateTestWorkspace(t, repository, func(data *domain.Bootstrap) {
 		for index := range data.CustomerRequests {
 			if data.CustomerRequests[index].ID == request.ID {
-				data.CustomerRequests[index].Creator.Email = "jane@support.initech.example"
+				data.CustomerRequests[index].Creator = domain.User{Name: "Jane", Email: "jane@support.initech.example"}
 			}
 		}
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if got := customerRequestByID(t, handler, request.ID); got.Creator.Email != "jane@support.initech.example" {
+		t.Fatal("request sender fixture was not persisted")
+	}
 	requestJSON[domain.WorkspaceSettings](t, handler, http.MethodPatch, "/api/workspace/preferences", map[string]any{"featureSettings": map[string]any{"customerExcludedDomains": []string{" Initech.example "}}}, http.StatusOK)
 	got := customerRequestByID(t, handler, request.ID)
 	if got.ArchivedAt == nil || got.ArchivedByExclusion != "initech.example" {
-		t.Fatalf("excluding the sender's domain should archive the request, got %#v", got)
+		t.Fatal("excluding the sender's domain should archive the request")
 	}
 	requestJSON[domain.WorkspaceSettings](t, handler, http.MethodPatch, "/api/workspace/preferences", map[string]any{"featureSettings": map[string]any{"customerExcludedDomains": []string{}}}, http.StatusOK)
 	got = customerRequestByID(t, handler, request.ID)
 	if got.ArchivedAt != nil || got.ArchivedByExclusion != "" {
-		t.Fatalf("removing the exclusion should restore the request, got %#v", got)
+		t.Fatal("removing the exclusion should restore the request")
 	}
 	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/workspace/preferences", map[string]any{"featureSettings": map[string]any{"customerRevenueCurrency": "XYZ"}}, http.StatusBadRequest)
 	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/workspace/preferences", map[string]any{"featureSettings": map[string]any{"customerRevenueFormat": "weekly"}}, http.StatusBadRequest)
@@ -177,7 +180,7 @@ func TestApplyCustomerExclusionChangesKeepsOtherRequests(t *testing.T) {
 
 func mutateTestWorkspace(t *testing.T, repository *store.SQLiteStore, mutate func(*domain.Bootstrap)) error {
 	t.Helper()
-	return repository.Mutate(t.Context(), "test.fixture_updated", "fixture", nil, func(data *domain.Bootstrap) error {
+	return repository.Mutate(workspaceFixtureContext(t.Context()), "test.fixture_updated", "fixture", nil, func(data *domain.Bootstrap) error {
 		mutate(data)
 		return nil
 	})

@@ -13,7 +13,7 @@ func customerFilterFixture(t *testing.T) (*SQLiteStore, IssueRecordQuery) {
 	t.Helper()
 	repo, q, _ := issuePointReadFixture(t)
 	q.Access = nil
-	if err := repo.MutateWorkspace(t.Context(), q.Workspace, "test.customers", "", nil, func(d *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), q.Workspace, "test.customers", "", nil, func(d *domain.Bootstrap) error {
 		d.Customers = []domain.Customer{{ID: "c1", OwnerID: "owner", Status: "active", Tier: "gold", AnnualRevenue: 1000, Size: 12}, {ID: "c2", Status: "trial", Tier: "silver"}}
 		now := time.Now()
 		d.CustomerRequests = []domain.CustomerRequest{
@@ -122,13 +122,13 @@ func TestCustomerIndexLifecycleMigrationAndRollback(t *testing.T) {
 		}
 		return page.Items
 	}
-	if err := repo.MutateWorkspace(t.Context(), q.Workspace, "test.customer.update", "c2", nil, func(d *domain.Bootstrap) error { d.Customers[1].AnnualRevenue = 100; return nil }); err != nil {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), q.Workspace, "test.customer.update", "c2", nil, func(d *domain.Bootstrap) error { d.Customers[1].AnnualRevenue = 100; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	if len(query("customer-revenue:any")) != 2 {
 		t.Fatal("customer edit left stale index")
 	}
-	if err := repo.MutateWorkspace(t.Context(), q.Workspace, "test.request.archive", "r4", nil, func(d *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), q.Workspace, "test.request.archive", "r4", nil, func(d *domain.Bootstrap) error {
 		now := time.Now()
 		d.CustomerRequests[3].ArchivedAt = &now
 		return nil
@@ -138,7 +138,7 @@ func TestCustomerIndexLifecycleMigrationAndRollback(t *testing.T) {
 	if len(query("customer:c2")) != 1 {
 		t.Fatal("archived request still matched")
 	}
-	if err := repo.MutateWorkspace(t.Context(), q.Workspace, "test.request.rollback", "", nil, func(d *domain.Bootstrap) error { d.CustomerRequests = nil; return errors.New("abort") }); err == nil {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), q.Workspace, "test.request.rollback", "", nil, func(d *domain.Bootstrap) error { d.CustomerRequests = nil; return errors.New("abort") }); err == nil {
 		t.Fatal("failed mutation committed")
 	}
 	if len(query("customer:c1")) != 1 {
@@ -158,7 +158,7 @@ func TestCustomerIndexLifecycleMigrationAndRollback(t *testing.T) {
 	if len(query("customer:c1")) != 1 {
 		t.Fatal("migration did not restore index")
 	}
-	if err := repo.MutateWorkspace(t.Context(), q.Workspace, "test.customer.delete", "c1", nil, func(d *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), q.Workspace, "test.customer.delete", "c1", nil, func(d *domain.Bootstrap) error {
 		d.Customers = slices.DeleteFunc(d.Customers, func(c domain.Customer) bool { return c.ID == "c1" })
 		return nil
 	}); err != nil {
@@ -325,7 +325,7 @@ func TestProjectCustomerSummariesAndFilters(t *testing.T) {
 			t.Fatalf("invalid values accepted: %v", values)
 		}
 	}
-	page, err := repo.QueryProjectDirectory(t.Context(), ProjectRecordQuery{Workspace: q.Workspace, Admin: true, Limit: 100, Filters: []ProjectDirectoryFilter{{Field: "customers", Operator: "is", Values: []string{"customer:c1"}}}, CustomerSummaries: summaries})
+	page, err := repo.QueryProjectDirectory(scaleP21ResourceOutputContext(t), ProjectRecordQuery{Workspace: q.Workspace, Admin: true, Limit: 100, Filters: []ProjectDirectoryFilter{{Field: "customers", Operator: "is", Values: []string{"customer:c1"}}}, CustomerSummaries: summaries})
 	if err != nil {
 		t.Fatal(err)
 	}

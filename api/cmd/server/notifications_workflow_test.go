@@ -85,7 +85,7 @@ func TestNotificationPreferencesAndBatchCleanupAPI(t *testing.T) {
 	requestJSON[any](t, handler, http.MethodPost, "/api/notifications/batch", map[string]any{"action": "markRead"}, http.StatusBadRequest)
 	bootstrap := repository.Bootstrap()
 	foreignID := "notification_foreign_recipient"
-	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.foreign_notification", foreignID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), bootstrap.Workspace.URLKey, "test.foreign_notification", foreignID, nil, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		data.Notifications = append(data.Notifications, domain.Notification{ID: foreignID, RecipientID: "user_outside_viewer", Type: "comment", SourceType: "issue", SourceID: data.Issues[0].ID, IssueID: data.Issues[0].ID, Actor: data.Users[0], Category: "comments", CreatedAt: now, UpdatedAt: now})
 		return nil

@@ -37,7 +37,7 @@ func scaleP17SideEffects(t *testing.T, mode string) mutationScriptResult {
 	db := newScaleP04Database(t)
 	handler := db.handler(t, true)
 	initial, _ := db.repo.BootstrapFor(db.key)
-	if err := db.repo.MutateWorkspace(t.Context(), db.key, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
+	if err := db.repo.MutateWorkspace(workspaceFixtureContext(t.Context()), db.key, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Webhooks = append(data.Webhooks, domain.Webhook{ID: "p17-webhook", Name: "P17", URL: "https://example.test/p17", Enabled: true, ResourceTypes: []string{"Document"}})
 		preferences := defaultPreferences(db.users[1].ID)
 		preferences.Email.Enabled, preferences.Desktop.Enabled = true, true

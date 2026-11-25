@@ -90,7 +90,7 @@ func testIssueActivityPATCHBurstAndGrace(t *testing.T) {
 	if got := history(); len(got) != 0 {
 		t.Fatalf("creator grace produced history: %+v", got)
 	}
-	err = repo.MutateWorkspace(store.WithIssueRecordMutations(t.Context(), issue.ID), data.Workspace.URLKey, "issue.updated", issue.ID, nil, func(current *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "issue.updated", issue.ID, nil, func(current *domain.Bootstrap) error {
 		target, err := issueByID(current, issue.ID)
 		if err != nil {
 			return err
@@ -172,7 +172,7 @@ func testIssueActivityRelationsAndLinks(t *testing.T) {
 		return requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": title, "teamId": data.Teams[0].ID}, http.StatusCreated)
 	}
 	issue, target := create("Activity source"), create("Activity target")
-	if err := repo.MutateWorkspace(store.WithIssueRecordMutations(t.Context(), target.ID), data.Workspace.URLKey, "issue.activity_seeded", target.ID, nil, func(current *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "issue.activity_seeded", target.ID, nil, func(current *domain.Bootstrap) error {
 		current.Activities[target.ID] = append(current.Activities[target.ID], domain.ActivityEvent{
 			ID: "preserved-cycle-head", Type: "issue.updated", Actor: current.Viewer, CreatedAt: time.Now().UTC(),
 			Metadata: domain.ActivityMetadata{"cycleBefore": "previous-history-cycle", "cycle": "current-history-cycle"},

@@ -198,7 +198,7 @@ func TestScaleP21SW90ProjectDirectoryCurrentAndProjected(t *testing.T) {
 	// A pre-projected handoff deliberately owns a different generation.
 	f := scaleP09Database(t)
 	workspace := f.data.Workspace.URLKey
-	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw90_projected_seed", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.MutateWorkspace(WithColdWork(t.Context(), "project directory fixture"), workspace, "scale_p21.sw90_projected_seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = []domain.Project{{ID: "selected", Name: "Installed", Summary: "Installed summary", TeamIDs: nil, Milestones: []domain.ProjectMilestone{{ID: "milestone", Name: "Retained", Description: "Ignored"}}}}
 		return nil
 	}); err != nil {

@@ -1,18 +1,13 @@
 {
   "source": "server/chat_dm_jobs.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "chatDMInterruptSavedReply": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The lifecycle writer owns the selected session, message, and newly appended activity.",
       "accessors": [
-        "Bootstrap",
-        "MutateWorkspace"
-      ],
-      "temperature": "cold",
-      "temperatureReason": "Admin/configuration, manual retry, or interactive integration/AI operation; not a normal active-user request or unconditional delivery/pulse/realtime tick probe.",
-      "callers": [
-        "server/chat_dm_jobs.go:processChatDMReplyJob -> chatDMInterruptSavedReply"
+        "MutateAgentSessionLifecycle"
       ]
     },
     "chatDMResumeWorkerReply": {

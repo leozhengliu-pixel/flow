@@ -36,7 +36,7 @@ async function stop(child: ChildProcess) {
 export const test = workspaceTest.extend<object, { scaleP13URL: string }>({
   scaleP13URL: [async ({ browserName }, provide) => {
     const web = path.resolve(import.meta.dirname, '..')
-    const root = '/tmp/codex-scale-p13'
+    const root = process.env.FLOW_SCALE_P13_ARTIFACTS ?? '/tmp/codex-scale-p13'
     mkdirSync(root, { recursive: true })
     const scratch = mkdtempSync(path.join(root, `browser-${browserName}-`))
     let binary = process.env.FLOW_SECURITY_API_BIN ?? process.env.FLOW_E2E_API_BIN

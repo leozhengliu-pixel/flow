@@ -24,7 +24,13 @@ import (
 func TestTeamAdministrationFastPathsMatchFullPath(t *testing.T) {
 	for _, auth := range []bool{true, false} {
 		fast := runTeamAdministrationScript(t, auth, false)
-		full := runTeamAdministrationScript(t, auth, true)
+		var full mutationScriptResult
+		if !t.Run("legacy", func(t *testing.T) {
+			t.Setenv("FLOW_BOUNDED_METADATA", "off")
+			full = runTeamAdministrationScript(t, auth, true)
+		}) {
+			continue
+		}
 		if len(fast.events) < 8 {
 			t.Fatalf("auth=%v: captured %d realtime events; the sinks are not wired", auth, len(fast.events))
 		}

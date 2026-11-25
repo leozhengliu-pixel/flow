@@ -14,8 +14,8 @@ import (
 	"flow/api/internal/store"
 )
 
-func documentRecordMode(name string) string {
-	if !store.RecordHydrationEnabled() {
+func documentRecordMode(ctx context.Context, name string) string {
+	if !store.RecordHydrationEnabled(ctx) {
 		return "off"
 	}
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
@@ -31,21 +31,21 @@ var documentRecordPolicyFields = []string{"users", "teams", "teamSettings", "tea
 var documentRecordReadFields = []string{"teams", "teamSettings", "teamParents", "workspaceSettings", "favorites"}
 
 func documentRecordScope(ctx context.Context, id string) context.Context {
-	mode := documentRecordMode("FLOW_DOCUMENT_RECORDS")
+	mode := documentRecordMode(ctx, "FLOW_DOCUMENT_RECORDS")
 	if mode == "off" {
 		return ctx
 	}
 	return store.WithDocumentRecordSelection(ctx, mode, func(data domain.Bootstrap, event string, payload any) (store.MetadataRecordScope, bool) {
 		// Deletion creates a trash record; the trash family is independently
 		// gated so either family can return to its canonical implementation.
-		if event == "document.deleted" && documentRecordMode("FLOW_TRASH_RECORDS") == "off" {
+		if event == "document.deleted" && documentRecordMode(ctx, "FLOW_TRASH_RECORDS") == "off" {
 			return store.MetadataRecordScope{}, false
 		}
 		if document, err := documentByID(&data, id); err == nil {
 			scope := documentRecordRequirements(data, *document, payload)
 			return scope, true
 		}
-		if event == "document.restored" && documentRecordMode("FLOW_TRASH_RECORDS") != "off" {
+		if event == "document.restored" && documentRecordMode(ctx, "FLOW_TRASH_RECORDS") != "off" {
 			return documentTrashRequirements(data, id, false)
 		}
 		return store.MetadataRecordScope{}, false
@@ -129,6 +129,10 @@ func (s *server) documentAuthorizationMetadata(r *http.Request, workspace, userI
 		if len(parts) > 2 {
 			request.Ref = parts[2]
 		}
+		if len(parts) == 3 && r.Method == http.MethodPatch {
+			request.AuthorizationOnly = true
+			request.Trash = false
+		}
 		if r.Method == http.MethodPatch {
 			var input documentInput
 			if peekRequestJSON(r, &input) && input.ProjectIDs != nil {
@@ -159,7 +163,7 @@ func (s *server) documentAuthorizationMetadata(r *http.Request, workspace, userI
 			return read.Data, nil, true
 		}
 	}
-	mode := documentRecordMode("FLOW_DOCUMENT_RECORDS")
+	mode := documentRecordMode(r.Context(), "FLOW_DOCUMENT_RECORDS")
 	// A bounded document record request returned above; the arbitrary
 	// selector below serves only the flag-off record mode.
 	if mode == "off" || !documentRecordRequest(r) || s.store.BoundedMetadataEnabled() {
@@ -210,7 +214,7 @@ func documentRecordCredential(r *http.Request) *domain.APIKey {
 }
 
 func (s *server) documentWorkspaceData(r *http.Request) domain.Bootstrap {
-	if !s.store.BoundedMetadataEnabled() && documentRecordMode("FLOW_DOCUMENT_RECORDS") != "on" {
+	if !s.store.BoundedMetadataEnabled() && documentRecordMode(r.Context(), "FLOW_DOCUMENT_RECORDS") != "on" {
 		return s.workspaceData(r)
 	}
 	userID := authUser(r).ID

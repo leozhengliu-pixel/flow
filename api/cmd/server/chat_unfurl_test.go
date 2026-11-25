@@ -55,7 +55,7 @@ func TestChatLinkPreviewFollowsViewerPermissionsAndGroupScope(t *testing.T) {
 	issue := data.Issues[0]
 	base := "https://flow.example.test/" + f.record.WorkspaceKey
 	issueLink := base + "/issue/" + issue.Identifier + "/some-title"
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.preview", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "test.preview", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		data.Documents = append(data.Documents, domain.Document{ID: "doc_preview", SlugID: "spec-0123456789ab", Title: "Export spec", Content: "# Plan\n\nShip the **export** fix", Creator: data.Viewer, TeamIDs: []string{issue.Team.ID}, ProjectIDs: []string{}, SubscriberIDs: []string{}, Revisions: []domain.DocumentRevision{}, CreatedAt: now, UpdatedAt: now})
 		data.Initiatives = append(data.Initiatives, domain.Initiative{ID: "initiative_preview", SlugID: "growth-0123456789ab", Name: "Growth", Summary: "Grow the base", Status: "active", LeadTeamID: issue.Team.ID})
@@ -98,7 +98,7 @@ func TestChatLinkPreviewFollowsViewerPermissionsAndGroupScope(t *testing.T) {
 
 	// The team becomes private: only the member's own context and a group
 	// bound to the team with its owner's authorization expand it.
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "team.updated", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "team.updated", issue.Team.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Teams {
 			if data.Teams[index].ID == issue.Team.ID {
 				data.Teams[index].Private = true
@@ -161,7 +161,7 @@ func TestChatLinkPreviewFollowsViewerPermissionsAndGroupScope(t *testing.T) {
 	}
 
 	// Sensitive data protection: nothing expands.
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "workspace.settings_updated", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.HIPAACompliance = true
 		return nil
 	}); err != nil {

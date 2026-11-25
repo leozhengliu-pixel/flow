@@ -78,7 +78,7 @@ func TestReviewWriteBackRefusedMemberFailsThenRetrySucceeds(t *testing.T) {
 	updated := requestJSON[domain.CodeReview](t, f.handler, http.MethodPost, base+"/comments?workspace=test-workspace", map[string]any{"body": "Thread"}, http.StatusCreated)
 	thread := lastReviewEvent(updated)
 	// The thread is on a line, so it resolves on GitLab.
-	if err := f.repo.MutateWorkspace(t.Context(), "test-workspace", "test.thread_path", review.ID, nil, func(data *domain.Bootstrap) error {
+	if err := f.repo.MutateWorkspace(workspaceFixtureContext(t.Context()), "test-workspace", "test.thread_path", review.ID, nil, func(data *domain.Bootstrap) error {
 		index := reviewIndex(*data, review.ID)
 		for i := range data.Reviews[index].Events {
 			if data.Reviews[index].Events[i].ID == thread.ID {

@@ -73,7 +73,7 @@ func TestCommentActionsSettingAndGenerationGates(t *testing.T) {
 			case "writeTools":
 				s.agent.WriteTools = false
 			case "workspace":
-				if err := s.store.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.disabled", "", nil, func(d *domain.Bootstrap) error { d.WorkspaceSettings.FeatureFlags["ai"] = false; return nil }); err != nil {
+				if err := s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "test.disabled", "", nil, func(d *domain.Bootstrap) error { d.WorkspaceSettings.FeatureFlags["ai"] = false; return nil }); err != nil {
 					t.Fatal(err)
 				}
 			case "noPermission":
@@ -141,7 +141,7 @@ func TestCommentActionsGenerateAcceptDismissAndActivity(t *testing.T) {
 	second.Status = "pending"
 	priority := 2
 	second.Arguments.Priority = &priority
-	if err := s.store.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.proposal", issue.ID, nil, func(d *domain.Bootstrap) error { d.CommentActions = append(d.CommentActions, second); return nil }); err != nil {
+	if err := s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "test.proposal", issue.ID, nil, func(d *domain.Bootstrap) error { d.CommentActions = append(d.CommentActions, second); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	path = "/api/issues/" + issue.ID + "/comment-actions/" + second.ID
@@ -173,7 +173,7 @@ func TestCommentActionsTwoEditorsAcceptOnce(t *testing.T) {
 	issue = ageIssueForActivityTest(t, f.repository, outcomeWorkspace, issue)
 	priority := 1
 	a := domain.CommentAction{ID: "race_action", IssueID: issue.ID, CommentID: "race_comment", TargetUserID: issue.Creator.ID, Status: "pending", Action: "priority", Arguments: domain.CommentActionArguments{Priority: &priority}, CreatedAt: time.Now().UTC()}
-	if err := f.repository.MutateWorkspace(t.Context(), outcomeWorkspace, "test.proposal", issue.ID, nil, func(d *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), outcomeWorkspace, "test.proposal", issue.ID, nil, func(d *domain.Bootstrap) error {
 		d.CommentActions = append(d.CommentActions, a)
 		d.Comments[issue.ID] = append(d.Comments[issue.ID], domain.Comment{ID: a.CommentID, Body: "Make this urgent", User: issue.Creator, CreatedAt: time.Now().UTC()})
 		return nil
@@ -279,7 +279,7 @@ func TestCommentActionsApplySupportedMutations(t *testing.T) {
 				a.Arguments.URL = "https://example.test/design"
 				a.Arguments.Title = "Design"
 			}
-			if err := s.store.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.proposal", issue.ID, nil, func(d *domain.Bootstrap) error { d.CommentActions = append(d.CommentActions, a); return nil }); err != nil {
+			if err := s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "test.proposal", issue.ID, nil, func(d *domain.Bootstrap) error { d.CommentActions = append(d.CommentActions, a); return nil }); err != nil {
 				t.Fatal(err)
 			}
 			result := requestJSON[domain.CommentActionResult](t, h, "POST", "/api/issues/"+issue.ID+"/comment-actions/"+a.ID, domain.CommentActionResolveInput{Status: "accepted"}, 200)

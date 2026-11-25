@@ -215,6 +215,14 @@ func writeAuthCheckFailure(w http.ResponseWriter, err error) bool {
 }
 
 func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKey, string, error) {
+	user, key, workspace, err := s.apiKeyForRequest(r)
+	if err == nil {
+		_ = s.store.RecordAPIKeyUse(r.Context(), workspace, key.ID, key.AuthorizationID)
+	}
+	return user, key, workspace, err
+}
+
+func (s *server) apiKeyForRequest(r *http.Request) (domain.User, *domain.APIKey, string, error) {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
 		return domain.User{}, nil, "", store.ErrAuthInvalid
@@ -227,7 +235,6 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 	if !apiKeyAllowsRequest(r, auth.Key) {
 		return domain.User{}, nil, "", store.ErrAuthForbidden
 	}
-	_ = s.store.RecordAPIKeyUse(r.Context(), auth.Workspace.URLKey, auth.Key.ID, auth.Key.AuthorizationID)
 	return auth.User, &auth.Key, auth.Workspace.URLKey, nil
 }
 

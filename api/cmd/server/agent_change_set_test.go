@@ -279,7 +279,7 @@ func TestAgentChangeSetOnlyTheChatOwnerCanUndo(t *testing.T) {
 	})
 	session, reply := runAgentChangeChat(t, handler, "Write a doc")
 	// Hand the chat to another member: the viewer can no longer see it, so they cannot undo its writes.
-	err := repository.MutateWorkspace(t.Context(), "", "agent.session_moved", session.ID, nil, func(data *domain.Bootstrap) error {
+	err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), "", "agent.session_moved", session.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.AgentSessions {
 			if data.AgentSessions[index].ID == session.ID {
 				data.AgentSessions[index].UserID = "someone_else"

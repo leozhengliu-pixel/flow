@@ -18,11 +18,15 @@ func TestApplicationInstallationAndScopedPrincipal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, err := s.UserByID(t.Context(), a.UserID)
+	ctx := WithMetadataOutputOwner(t.Context(), func(close func()) bool {
+		t.Cleanup(close)
+		return true
+	})
+	u, err := s.UserByID(ctx, a.UserID)
 	if err != nil || !u.App || !u.CanDelegateTo(d.Teams[0].ID) || u.CanDelegateTo("other") {
 		t.Fatalf("principal: %+v %v", u, err)
 	}
-	members, err := s.ListMembers(t.Context(), d.Workspace.ID)
+	members, err := s.ListMembers(ctx, d.Workspace.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +45,7 @@ func TestApplicationInstallationAndScopedPrincipal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, err = s.UserByID(t.Context(), a.UserID)
+	u, err = s.UserByID(ctx, a.UserID)
 	if err != nil || u.Active {
 		t.Fatal("application suspension failed")
 	}
@@ -70,7 +74,11 @@ func TestApplicationOAuthGrantUsesApplicationActor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth, err := s.AuthenticateAPIKeyRecord(t.Context(), d.Workspace.URLKey, "hash", nil)
+	ctx := WithMetadataOutputOwner(t.Context(), func(close func()) bool {
+		t.Cleanup(close)
+		return true
+	})
+	auth, err := s.AuthenticateAPIKeyRecord(ctx, d.Workspace.URLKey, "hash", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

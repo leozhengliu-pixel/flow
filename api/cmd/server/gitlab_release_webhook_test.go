@@ -319,7 +319,7 @@ func TestGitLabReleaseHookOutOfScopeIssuesAreUnknown(t *testing.T) {
 	open, secret := base, base
 	open.ID, open.Identifier, open.Team = "hook-open-issue", "HKO-1", openTeam
 	secret.ID, secret.Identifier, secret.Team = "hook-closed-issue", "HKC-1", closedTeam
-	if err := e.repository.MutateWorkspace(t.Context(), e.bootstrap.Workspace.URLKey, "gitlab_hook_scope.seed", "", nil, func(data *domain.Bootstrap) error {
+	if err := e.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), e.bootstrap.Workspace.URLKey, "gitlab_hook_scope.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, closedTeam)
 		data.TeamSettings[closedTeam.ID] = domain.TeamSettings{TeamID: closedTeam.ID, Access: "private"}
 		data.Issues = append(data.Issues, open, secret)

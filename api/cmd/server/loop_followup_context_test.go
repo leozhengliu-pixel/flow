@@ -164,7 +164,7 @@ func TestLoopRunCountsIssuesWithinItsTeams(t *testing.T) {
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	home := bootstrap.Teams[0]
 	other := domain.Team{ID: "team_other", Key: "OTH", Name: "Other"}
-	if err := srv.store.MutateWorkspace(context.Background(), "test-workspace", "test.teams", other.ID, nil, func(next *domain.Bootstrap) error {
+	if err := srv.store.MutateWorkspace(workspaceFixtureContext(context.Background()), "test-workspace", "test.teams", other.ID, nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, other)
 		return nil
 	}); err != nil {

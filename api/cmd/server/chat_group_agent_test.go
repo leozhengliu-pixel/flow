@@ -242,7 +242,7 @@ func TestChatGroupApprovalOnlyTheAskerCanAnswer(t *testing.T) {
 // is posted in the group.
 func TestChatGroupMentionInAProtectedWorkspaceStaysPrivate(t *testing.T) {
 	f := newChatDMFixture(t, func(int, string) string { return chatDMTextTurn("unexpected") })
-	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "workspace_settings.updated", "hipaa", nil, func(data *domain.Bootstrap) error {
+	if err := f.s.store.MutateWorkspace(workspaceFixtureContext(t.Context()), f.record.WorkspaceKey, "workspace_settings.updated", "hipaa", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.HIPAACompliance = true
 		return nil
 	}); err != nil {

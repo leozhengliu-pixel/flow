@@ -72,7 +72,7 @@ func testDocumentLargeEditAcrossWritePaths(t *testing.T, repo *store.SQLiteStore
 	defer repo.SetWebhookSink(nil)
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	webhookID := "large-document-webhook-" + suffix
-	if err := repo.MutateWorkspace(ctx, workspace, "webhook.created", webhookID, nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "webhook.created", webhookID, nil, func(data *domain.Bootstrap) error {
 		data.Webhooks = append(data.Webhooks, domain.Webhook{ID: webhookID, Name: "Large documents", URL: "https://hooks.example.test/large-document", Enabled: true, ResourceTypes: []string{"Document"}})
 		return nil
 	}); err != nil {

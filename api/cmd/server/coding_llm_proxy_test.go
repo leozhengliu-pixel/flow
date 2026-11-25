@@ -173,7 +173,7 @@ func TestCommitSigningKeyStoresMaterialForCodingSessions(t *testing.T) {
 	}
 	// "Require signed commits" resolves to the stored key.
 	workspace := "" // the test fixture's default workspace
-	if err := s.store.MutateWorkspace(context.Background(), workspace, "test", userID, nil, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspace(workspaceFixtureContext(context.Background()), workspace, "test", userID, nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.CodingAgentSettings.CommitSigningEnabled = true
 		return nil
 	}); err != nil {

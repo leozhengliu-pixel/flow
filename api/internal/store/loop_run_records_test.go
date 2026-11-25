@@ -196,7 +196,7 @@ func TestLoopRunsMigrateFromWorkspaceMetadata(t *testing.T) {
 		{ID: "loop_run_508", LoopID: "loop_weekly", Status: "running", Trigger: "manual", StartedAt: started.Add(2 * time.Minute), Output: "Listing projects"},
 		{ID: "loop_run_507", LoopID: "loop_weekly", Status: "completed", Trigger: "manual", StartedAt: started, FinishedAt: &finished, Output: "Posted updates", Feedback: []domain.LoopRunFeedback{{UserID: "usr_admin", Rating: "up", At: finished}}},
 	}
-	if err := repository.MutateWorkspace(context.Background(), "test-workspace", "loop.run_started", "loop_weekly", nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(WithColdWork(context.Background(), "workspace fixture"), "test-workspace", "loop.run_started", "loop_weekly", nil, func(data *domain.Bootstrap) error {
 		data.LoopRuns = legacy
 		return nil
 	}); err != nil {

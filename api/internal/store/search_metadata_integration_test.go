@@ -27,7 +27,7 @@ func TestExternalMetadataSearchIndexLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
+	ctx := WithColdWork(context.Background(), "search integration fixture")
 	workspace := "search-index-integration"
 	_ = repo.DeleteWorkspace(ctx, workspace)
 	data, err := repo.CreateWorkspace(ctx, "Search index test", workspace, "us")
@@ -48,6 +48,10 @@ func TestExternalMetadataSearchIndexLifecycle(t *testing.T) {
 		repo.Close()
 		t.Fatalf("insert index missing: %+v %v", result.Projects, err)
 	}
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_documents SET content='stale'
+		WHERE workspace_key=? AND field='projects' AND record_key=?`, workspace, project.ID); err != nil {
+		t.Fatal(err)
+	}
 	if err := repo.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -56,6 +60,10 @@ func TestExternalMetadataSearchIndexLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Close()
+	result, err = repo.SearchMetadata(ctx, data, q)
+	if err != nil || len(result.Projects) != 1 {
+		t.Fatalf("startup failed to repair an existing search document: %v", err)
+	}
 	project.Name = "ChangedNeedle"
 	if err := repo.MutateWorkspace(ctx, workspace, "search.integration", project.ID, nil, func(next *domain.Bootstrap) error {
 		for i := range next.Projects {
@@ -127,7 +135,7 @@ func TestExternalMetadataSearchCacheDifferential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, err := repo.metadataCatalogPass(ctx, false)
+	report, err := repo.metadataCatalogPass(ctx, catalogRevisit)
 	if err != nil || len(report.Skipped) != 0 {
 		t.Fatalf("catalog preparation: %v, skipped: %v", err, report.Skipped)
 	}

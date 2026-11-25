@@ -33,6 +33,10 @@ func disableBackgroundWorkersForTest(s *server) {
 	s.agentLiveSweepStarted.Store(true)
 }
 
+func workspaceFixtureContext(ctx context.Context) context.Context {
+	return store.WithColdWork(ctx, "workspace fixture")
+}
+
 func TestWorkspaceSettingsPersistence(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
@@ -751,7 +755,7 @@ func TestIssueOptionsPersistence(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	err = repository.MutateWorkspace(context.Background(), bootstrap.Workspace.URLKey, "test.issue_delete_dependencies", issue.ID, nil, func(data *domain.Bootstrap) error {
+	err = repository.MutateWorkspace(workspaceFixtureContext(context.Background()), bootstrap.Workspace.URLKey, "test.issue_delete_dependencies", issue.ID, nil, func(data *domain.Bootstrap) error {
 		data.NotificationDeliveries = append(data.NotificationDeliveries, domain.NotificationDelivery{ID: "delivery-delete-test", NotificationID: reminder.ID, RecipientID: data.Viewer.ID, Channel: "desktop", Status: "pending", CreatedAt: now, UpdatedAt: now})
 		data.Favorites = append(data.Favorites, domain.Favorite{ID: "favorite-delete-test", UserID: data.Viewer.ID, ResourceType: "issue", ResourceID: issue.ID, CreatedAt: now})
 		data.Subscriptions = append(data.Subscriptions, domain.Subscription{ID: "subscription-delete-test", UserID: data.Viewer.ID, ResourceType: "issue", ResourceID: issue.ID, CreatedAt: now})

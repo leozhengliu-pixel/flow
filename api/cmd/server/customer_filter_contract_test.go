@@ -12,7 +12,7 @@ import (
 
 func TestCustomerFilterHTTPGroupedPagination(t *testing.T) {
 	f := newMCPContractFixture(t)
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.customers", "", nil, func(d *domain.Bootstrap) error {
+	if err := f.repository.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "test.customers", "", nil, func(d *domain.Bootstrap) error {
 		d.Customers = []domain.Customer{{ID: "customer-contract", Name: "Customer", AnnualRevenue: 100}}
 		d.CustomerRequests = []domain.CustomerRequest{{ID: "customer-request-1", IssueID: d.Issues[0].ID, CustomerID: "customer-contract"}, {ID: "customer-request-2", IssueID: d.Issues[1].ID, CustomerID: "customer-contract"}}
 		return nil

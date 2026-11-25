@@ -29,7 +29,7 @@ func TestProjectUpdateReminderLifecycle(t *testing.T) {
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	project := bootstrap.Projects[0]
 	requestJSON[map[string]any](t, handler, http.MethodPut, "/api/project-update-settings", map[string]any{"cadenceDays": 1}, http.StatusOK)
-	if err := repository.MutateWorkspace(context.Background(), bootstrap.Workspace.URLKey, "test.project_aged", project.ID, nil, func(data *domain.Bootstrap) error {
+	if err := repository.MutateWorkspace(store.WithColdWork(context.Background(), "workspace fixture"), bootstrap.Workspace.URLKey, "test.project_aged", project.ID, nil, func(data *domain.Bootstrap) error {
 		for index := range data.Projects {
 			if data.Projects[index].ID == project.ID {
 				data.Projects[index].CreatedAt = time.Now().UTC().Add(-72 * time.Hour)
@@ -251,7 +251,20 @@ func TestDocumentPermissionsAndPresenceEndpoints(t *testing.T) {
 			t.Fatalf("moving the document did not move its team access: %#v", moved.Permissions)
 		}
 	}
-	requestJSON[[]domain.DocumentPermission](t, handler, http.MethodPut, "/api/documents/"+document.ID+"/permissions", map[string]any{"permissions": []map[string]any{{"subjectType": "workspace", "role": "viewer"}}}, http.StatusOK)
+	permissionPath := "/api/documents/" + document.ID + "/permissions"
+	recipient := bootstrap.Users[1].ID
+	grants := requestJSON[[]domain.DocumentPermission](t, handler, http.MethodPut, permissionPath, map[string]any{"permissions": []map[string]any{
+		{"subjectType": "workspace", "role": "viewer"},
+		{"subjectType": "user", "subjectId": recipient, "role": "commenter"},
+	}}, http.StatusOK)
+	if !slices.ContainsFunc(grants, func(grant domain.DocumentPermission) bool {
+		return grant.SubjectID == recipient && grant.Role == "commenter"
+	}) {
+		t.Fatal("document permissions did not retain the user grant")
+	}
+	requestJSON[any](t, handler, http.MethodPut, permissionPath, map[string]any{"permissions": []map[string]any{
+		{"subjectType": "user", "subjectId": "unknown-user", "role": "viewer"},
+	}}, http.StatusBadRequest)
 	comments := requestJSON[[]domain.Comment](t, handler, http.MethodGet, "/api/documents/"+document.ID+"/comments", nil, http.StatusOK)
 	if comments == nil {
 		t.Fatal("document comments endpoint returned null")

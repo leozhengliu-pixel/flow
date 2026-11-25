@@ -311,6 +311,9 @@ func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) 
 // workspace again (metadata_copy_revision.go).
 func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) error {
 	if s.metadataResidency != nil {
+		if err := s.repairJournalBeforeReload(ctx, workspaceKey); err != nil {
+			return err
+		}
 		installed, raced := s.reloadKnownPublication(ctx, workspaceKey)
 		if installed {
 			return nil
@@ -379,14 +382,35 @@ func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) 
 // metadata revision are kept without decoding them again.
 func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 	if s.metadataResidency != nil {
-		ctx, release, err := s.metadataResidency.work.acquire(ctx, metadataPolicyBytes+2<<20)
-		if err != nil {
+		reload := func() error {
+			ctx, release, err := s.metadataResidency.work.acquire(ctx, metadataPolicyBytes+2<<20)
+			if err != nil {
+				return err
+			}
+			defer release()
+			s.writeMu.Lock()
+			defer s.writeMu.Unlock()
+			return s.loadResidentWorkspaces(ctx)
+		}
+		err := reload()
+		if !errors.Is(err, ErrBoundedMetadataCoverage) || s.startupLock == nil {
 			return err
 		}
-		defer release()
-		s.writeMu.Lock()
-		defer s.writeMu.Unlock()
-		return s.loadResidentWorkspaces(ctx)
+		// A legacy peer can create a whole workspace without catalog
+		// checkpoints. Repair it outside the read snapshot and write lock.
+		if err := s.WithStartupLock(ctx, "metadata reload repair", func(ctx context.Context) error {
+			ready, err := s.prepareStartupMetadata(ctx)
+			if err != nil || !ready {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return ErrBoundedMetadataCoverage
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		return reload()
 	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -1180,6 +1204,9 @@ func normalize(data *domain.Bootstrap) {
 		}
 		if settings.Access == "" {
 			settings.Access = "public"
+			if team.Private {
+				settings.Access = "private"
+			}
 		}
 		if settings.MembershipRestriction == "" {
 			settings.MembershipRestriction = "open"
@@ -1617,6 +1644,7 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 }
 
 func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) (err error) {
+	ctx = s.ContextWithDatabaseFeatures(ctx)
 	if scope, scoped := metadataRecordScopeFromContext(ctx); scoped && (s.metadataResidency != nil || !projectRecordSelectionEnabled(ctx)) {
 		if err := validateMetadataRecordScope(scope); err != nil {
 			return err
@@ -2429,13 +2457,20 @@ func (s *SQLiteStore) createWorkspaceLocked(ctx context.Context, name, urlKey, r
 }
 
 func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, workspace domain.Workspace) (domain.Bootstrap, error) {
-	if s.metadataResidency != nil && coldCapable(ctx) {
+	if s.metadataResidency != nil {
 		// COLD: the literal legacy update on the COLD facade, which answers
 		// and writes the complete workspace (scale_p21_default_cold.go). A
 		// rename also publishes the new key and drops the old one (SW555).
 		next := workspace.URLKey
 		if next == "" {
 			next = workspaceKey
+		}
+		if next != workspaceKey && s.metadataResidency.requireCoverage {
+			// A legacy replica can leave journal work and a newer canonical
+			// image at the old key. Reconcile both before moving the rows.
+			if err := s.ReloadWorkspace(ctx, workspaceKey); err != nil {
+				return domain.Bootstrap{}, err
+			}
 		}
 		var updated domain.Bootstrap
 		err := s.coldLegacyWrite(ctx, workspaceKey, func(ctx context.Context, facade *SQLiteStore) error {
@@ -2444,6 +2479,14 @@ func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, 
 			return err
 		}, next)
 		if err == nil {
+			if next != workspaceKey && !s.HasWorkspace(next) {
+				// Legacy work can also commit between the refresh and move.
+				// The rename has committed, so repair before serving the new
+				// key without turning a deferred install into a failed write.
+				if err := s.ReloadWorkspace(context.WithoutCancel(ctx), next); err != nil {
+					slog.Warn("bounded metadata: renamed workspace refresh deferred")
+				}
+			}
 			s.setLastWorkspaceKey(next)
 		}
 		return updated, err
@@ -2496,6 +2539,14 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	}
 	renaming := workspace.URLKey != workspaceKey
 	if renaming {
+		if s.coldWrite != nil {
+			// The COLD facade was admitted before the shared write lock.
+			// An old replica's write can have advanced SQL since then.
+			if err := s.refreshWorkspaceCopy(ctx, workspaceKey); err != nil {
+				return domain.Bootstrap{}, err
+			}
+			data, _ = s.storedWorkspace(workspaceKey)
+		}
 		if _, exists := s.storedWorkspace(workspace.URLKey); exists {
 			return domain.Bootstrap{}, ErrWorkspaceKeyTaken
 		}
@@ -2599,6 +2650,7 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 }
 
 func (s *SQLiteStore) ScheduleWorkspaceDeletion(ctx context.Context, workspaceKey string) (domain.Workspace, error) {
+	ctx = WithColdWork(ctx, "schedule workspace deletion")
 	var updated domain.Workspace
 	err := s.MutateWorkspace(ctx, workspaceKey, "workspace.deletion_scheduled", workspaceKey, nil, func(data *domain.Bootstrap) error {
 		if data.Workspace.DeletionRequestedAt != nil {
@@ -2616,6 +2668,7 @@ func (s *SQLiteStore) ScheduleWorkspaceDeletion(ctx context.Context, workspaceKe
 // CancelWorkspaceDeletion keeps a workspace scheduled for deletion. Once the
 // permanent purge started it returns ErrWorkspacePurging.
 func (s *SQLiteStore) CancelWorkspaceDeletion(ctx context.Context, workspaceKey string) (domain.Workspace, error) {
+	ctx = WithColdWork(ctx, "cancel workspace deletion")
 	var updated domain.Workspace
 	err := s.withDeletionLock(ctx, workspaceKey, func() error {
 		if data, ok := s.BootstrapFor(workspaceKey); ok {

@@ -42,7 +42,7 @@ func documentTrashRequirements(data domain.Bootstrap, ref string, entryID bool) 
 // residency, so the header is never found there: the restore authorization is
 // the literal one, exactly as with FLOW_TRASH_RECORDS off.
 func (s *server) documentTrashAuthorizationHeaders(r *http.Request, workspace string) ([]domain.TrashEntry, bool) {
-	if s.store.BoundedMetadataEnabled() || documentRecordMode("FLOW_TRASH_RECORDS") != "on" {
+	if s.store.BoundedMetadataEnabled() || documentRecordMode(r.Context(), "FLOW_TRASH_RECORDS") != "on" {
 		return nil, false
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
@@ -58,7 +58,7 @@ func (s *server) documentTrashAuthorizationHeaders(r *http.Request, workspace st
 
 func trashRecordRestoreScope(ctx context.Context, id string) context.Context {
 	ctx = trashRestoreScope(ctx, id)
-	mode := documentRecordMode("FLOW_TRASH_RECORDS")
+	mode := documentRecordMode(ctx, "FLOW_TRASH_RECORDS")
 	if mode == "off" {
 		return ctx
 	}

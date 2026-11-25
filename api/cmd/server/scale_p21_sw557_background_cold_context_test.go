@@ -57,6 +57,8 @@ var scaleP21SW557Reviewed = map[string]string{
 		"Its only store needs are createRecurringOccurrence (issue.created with store.ContextWithRecurringOccurrenceWrite: mutateBoundedRecurringOccurrence) " +
 		"and normalizeRecurringIssueTimingBounded (issue.updated with store.ContextWithIssueRecurrenceTimingMutation: mutateBoundedIssueRecurrenceTiming), " +
 		"each with its own metadata output owner; both are selected before the COLD fallback in dispatchMutation.",
+	"server/main -> server/server.runReviewImportScheduler: background context.Background()": "The ticker scans due leases in SQL. " +
+		"runReviewImport wraps the per-workspace context with store.WithColdWork before executing an import.",
 	"server/server.mcpResolveDeletion -> server/server.invokeMCPRoute: unknown function literal value": "The deletion's run closure is invoked by deleteMCPResource " +
 		"with the MCP tool call's context: the /mcp routes run COLD and their tools COLD per operation (SW550, SW556).",
 	"server/server.mcpResolveSkillDeletion -> server/server.invokeMCPRoute: unknown function literal value": "The deletion's run closure is invoked by deleteMCPResource " +
@@ -70,14 +72,14 @@ var scaleP21SW557Reviewed = map[string]string{
 	"server/server.startCommentActionsBounded -> server/server.generateCommentActions: background context.Background()": "The comment-action generator " +
 		"outlives its request. Its writes select the bounded proposal writer (store.ContextWithCommentActionProposal with IsIssueDiscussionMutation: " +
 		"mutateBoundedCommentActionProposal) and its read is BeginIssueBootstrapRead's bounded projection.",
+	"store/OpenDatabase -> store/SQLiteStore.dataMigrationsPending: unknown function literal value": "Startup reads migration versions from SQL " +
+		"under the schema lock. runDataMigrations later invokes the registered callbacks with WithColdWork.",
 }
 
 // scaleP21SW557OpenStage is the review of an OpenDatabase stage or data
 // migration referenced as a value (stage.run / migration.apply).
-const scaleP21SW557OpenStage = "OpenDatabase runs it on context.Background() before the store serves. A bounded open first loads the resident image " +
-	"(loadResidentWorkspaces), which refuses a database whose canonical records or catalog are incomplete, so every legacy layout this pass " +
-	"migrates is already migrated; TestScaleP21SW557BoundedStartupMatchesLegacy opens copies of one database flag off and flag on (with a workspace " +
-	"created flag on) and finds identical rows in every table."
+const scaleP21SW557OpenStage = "OpenDatabase runs it before the store serves under the schema lock. Pending data migrations can use the legacy image " +
+	"before admission. The resident loader requires complete coverage. TestScaleP21SW557BoundedStartupMatchesLegacy checks the persisted rows across startup modes."
 
 // scaleP21SW557Callbacks names every function that reaches a COLD consumer or
 // store need, takes a context and is referenced as a value no traced call
@@ -91,7 +93,6 @@ var scaleP21SW557Callbacks = map[string]string{
 	"store/SQLiteStore.migrateWorkspaceMetadataRecords": scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateIssueListProjection":      scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateLoopRunRecords":           scaleP21SW557OpenStage,
-	"store/SQLiteStore.runDataMigrations":               scaleP21SW557OpenStage,
 	"store/SQLiteStore.backfillAllProjectProgress":      scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateDocumentDefaultAccess":    scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateDocumentInheritedScope":   scaleP21SW557OpenStage,

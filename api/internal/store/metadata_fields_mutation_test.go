@@ -21,7 +21,7 @@ func TestFieldScopedMetadataMutationKeepsOtherFields(t *testing.T) {
 	workspace := repo.Bootstrap().Workspace.URLKey
 	before, _ := repo.WorkspaceMetadata(workspace)
 	ctx := WithMetadataFields(context.Background(), "settings")
-	err = repo.MutateWorkspace(ctx, workspace, "pulse.summary_scheduled", "usr_admin", nil, func(data *domain.Bootstrap) error {
+	err = repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "pulse.summary_scheduled", "usr_admin", nil, func(data *domain.Bootstrap) error {
 		if len(data.Teams) != 0 || len(data.Projects) != 0 {
 			t.Errorf("callback saw unlisted fields: %d teams, %d projects", len(data.Teams), len(data.Projects))
 		}
