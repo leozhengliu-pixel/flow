@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_default_cold.go",
+  "source": "store/default_cold.go",
   "unmigrated": 0,
   "consumers": {
     "Close": {
@@ -9,7 +9,7 @@
       "accessors": ["workspaces"],
       "temperature": "cold",
       "temperatureReason": "COLD request-scope cleanup for the default legacy route path.",
-      "callers": ["server/scale_p21_cold_authorization.go:withColdMetadataRouteMux"]
+      "callers": ["server/cold_authorization.go:withColdMetadataRouteMux"]
     },
     "decodeColdWorkspace": {
       "owner": "P21",
@@ -18,7 +18,7 @@
       "accessors": ["workspaces"],
       "temperature": "cold",
       "temperatureReason": "Default COLD routing (owner decision 2026-11-14): with bounded metadata on, a route not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD scope.",
-      "callers": ["store/scale_p21_default_cold.go:coldAccessorView"]
+      "callers": ["store/default_cold.go:coldAccessorView"]
     },
     "syncColdLegacyWriteLocked": {
       "owner": "P21",
@@ -27,7 +27,7 @@
       "accessors": ["workspaces"],
       "temperature": "cold",
       "temperatureReason": "Default COLD routing (owner decision 2026-11-14): with bounded metadata on, a route not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD scope.",
-      "callers": ["store/scale_p21_default_cold.go:coldLegacyWrite"]
+      "callers": ["store/default_cold.go:coldLegacyWrite"]
     },
     "coldAccessorViewKept": {
       "owner": "P21",
@@ -36,7 +36,7 @@
       "accessors": ["workspaces"],
       "temperature": "cold",
       "temperatureReason": "Default COLD routing (owner decision 2026-11-14): with bounded metadata on, a route not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD scope. The legacy accessors it serves are COLD; proven-bounded routes never reach them (SW530/SW550).",
-      "callers": ["store/issue_records.go:WorkspaceMetadataForRead", "store/sqlite.go:BootstrapForContext", "store/auth.go:BootstrapForUser", "store/metadata_delta.go:WorkspaceMetadataFields", "store/issue_query.go:PagedWorkspaceMetadata", "store/scale_p21_default_cold.go:ColdRequestView"]
+      "callers": ["store/issue_records.go:WorkspaceMetadataForRead", "store/sqlite.go:BootstrapForContext", "store/auth.go:BootstrapForUser", "store/metadata_delta.go:WorkspaceMetadataFields", "store/issue_query.go:PagedWorkspaceMetadata", "store/default_cold.go:ColdRequestView"]
     },
     "dropResidentWorkspace": {
       "owner": "P21",
@@ -45,7 +45,7 @@
       "accessors": ["workspaces"],
       "temperature": "cold",
       "temperatureReason": "Default COLD routing (owner decision 2026-11-14): with bounded metadata on, a route not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD scope. The legacy accessors it serves are COLD; proven-bounded routes never reach them (SW530/SW550).",
-      "callers": ["store/scale_p21_default_cold.go:publishColdLegacyWriteLocked"]
+      "callers": ["store/default_cold.go:publishColdLegacyWriteLocked"]
     },
     "setLastWorkspaceKey": {
       "owner": "P21",

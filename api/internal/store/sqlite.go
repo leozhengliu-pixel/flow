@@ -1764,7 +1764,7 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 		}
 		if coldCapable(ctx) && !residentRecordWriterReady(ctx, eventType) {
 			// No migrated writer serves this COLD write: run the literal
-			// legacy dispatch on the COLD facade (scale_p21_default_cold.go).
+			// legacy dispatch on the COLD facade (default_cold.go).
 			return s.coldLegacyMutation(ctx, workspaceKey, eventType, payload, mutate)
 		}
 		return s.mutateResidentRecords(ctx, workspaceKey, eventType, payload, mutate)
@@ -2459,7 +2459,7 @@ func (s *SQLiteStore) createWorkspaceLocked(ctx context.Context, name, urlKey, r
 func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, workspace domain.Workspace) (domain.Bootstrap, error) {
 	if s.metadataResidency != nil {
 		// COLD: the literal legacy update on the COLD facade, which answers
-		// and writes the complete workspace (scale_p21_default_cold.go). A
+		// and writes the complete workspace (default_cold.go). A
 		// rename also publishes the new key and drops the old one (SW555).
 		next := workspace.URLKey
 		if next == "" {

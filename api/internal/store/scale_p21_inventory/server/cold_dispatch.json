@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_cold_dispatch.go",
+  "source": "server/cold_dispatch.go",
   "unmigrated": 0,
   "consumers": {
     "withColdMetadataRequest": {

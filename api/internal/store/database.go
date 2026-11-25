@@ -67,7 +67,7 @@ type sqlDatabase struct {
 	// indexes everything.
 	searchMaxChars int
 	// snapshots, on SQLite with bounded metadata on, is a pool of separate
-	// connections for read-only transactions (scale_p21_sqlite_snapshot_pool.go);
+	// connections for read-only transactions (sqlite_snapshot_pool.go);
 	// nil uses the main pool.
 	snapshots *sql.DB
 	// commitHooks lets tests pause a transaction around its commit

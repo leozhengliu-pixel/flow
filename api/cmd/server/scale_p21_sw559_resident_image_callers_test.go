@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// SW559 (store/scale_p21_sw559_resident_image_readers_test.go) reviews the
+// SW559 (store/resident_image_readers_test.go) reviews the
 // store accessors that read a non-resident field of the installed image. A
 // few are legacy accessors left reading the image because every server call
 // of them runs with bounded metadata off; this pins that: each call (or

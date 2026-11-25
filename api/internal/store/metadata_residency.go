@@ -176,7 +176,7 @@ type metadataResidency struct {
 	coldOnce                 sync.Once
 	coldSlot                 chan struct{}
 	// coldImages: decoded images of installed generations reused by COLD
-	// facades and legacy views (scale_p21_cold_decode_cache.go).
+	// facades and legacy views (cold_decode_cache.go).
 	coldImages coldDecodeCache
 	// residentBuilds serializes the image builds of shared resident readers
 	// per workspace (resident_generation.go).

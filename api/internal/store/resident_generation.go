@@ -15,7 +15,7 @@ import (
 // The resident decoded generation (bounded metadata on; design in
 // docs/bounded-metadata-performance.md).
 //
-// The decoded-image cache of the COLD path (scale_p21_cold_decode_cache.go)
+// The decoded-image cache of the COLD path (cold_decode_cache.go)
 // keeps, per workspace, the decoded image of the installed generation and
 // builds the image of a later generation incrementally (only frames whose
 // origin changed are decoded again). COLD facades receive deep copies of it.

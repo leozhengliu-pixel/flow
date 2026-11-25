@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p19_metadata.go",
+  "source": "store/query_window_metadata.go",
   "unmigrated": 0,
   "consumers": {
     "scaleP19MetadataAt": {

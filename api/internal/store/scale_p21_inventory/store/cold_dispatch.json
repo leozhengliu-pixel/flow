@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_cold_dispatch.go",
+  "source": "store/cold_dispatch.go",
   "unmigrated": 0,
   "consumers": {
     "WithColdMetadataRead": {
@@ -9,7 +9,7 @@
       "accessors": ["WithColdMetadataRead", "withColdMetadataRead"],
       "temperature": "cold",
       "temperatureReason": "Factory reachable only through registered COLD admission.",
-      "callers": ["server/scale_p21_cold_dispatch.go:withColdMetadataRequest"]
+      "callers": ["server/cold_dispatch.go:withColdMetadataRequest"]
     },
     "WithColdMetadataMutation": {
       "owner": "P21",
@@ -18,7 +18,7 @@
       "accessors": ["WithColdMetadataMutation", "withColdMutationStore"],
       "temperature": "cold",
       "temperatureReason": "Writer factory admitted only for registered COLD consumers and integrated dispatch families.",
-      "callers": ["server/scale_p21_cold_dispatch.go:withColdMetadataRequest"]
+      "callers": ["server/cold_dispatch.go:withColdMetadataRequest"]
     }
   }
 }

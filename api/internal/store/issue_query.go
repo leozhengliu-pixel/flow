@@ -110,7 +110,7 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 	pinned = pinned && snapshot.database == s.db && (workspace == "" || workspace == snapshot.workspace)
 	if !pinned && coldCapable(ctx) {
 		// A COLD request's projection is the legacy one, from the legacy
-		// view of the installed workspace (scale_p21_default_cold.go).
+		// view of the installed workspace (default_cold.go).
 		// An owned point read already supplied its policy and transaction.
 		if view, release, handled := s.coldProjectionView(ctx, "PagedWorkspaceMetadata", workspace); handled {
 			defer release()

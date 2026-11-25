@@ -10,7 +10,7 @@ import (
 // the resident skeleton. WorkspaceMetadata, BootstrapFor and a field-only
 // read of a non-resident field answer the complete installed image from a
 // legacy view of the installed logical source (default COLD routing,
-// scale_p21_default_cold.go), on a test view and on a production store
+// default_cold.go), on a test view and on a production store
 // (coverage required) alike, and report the read to the observer (SW530 and
 // SW550 fail a proven-bounded route that makes one). A resident field-only
 // read, the registered COLD facade and the flag-off store answer as before.

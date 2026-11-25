@@ -417,7 +417,7 @@ func (s *SQLiteStore) coldAccessorViewKept(ctx context.Context, accessor, worksp
 	none := func() {}
 	lane := r.accessorLane()
 	if r.waitLegacyViewLane(ctx, lane, accessor) != nil {
-		// Cancelled, or refused (scale_p21_legacy_view_lane.go).
+		// Cancelled, or refused (legacy_view_lane.go).
 		return nil, none, true
 	}
 	release = func() { <-lane }
@@ -626,7 +626,7 @@ func (s *SQLiteStore) coldLegacyWrite(ctx context.Context, workspace string, run
 			s.metadataResidency.mu.Unlock()
 			// base: the inputs the installed generation is exact at when the
 			// write takes the lock, so the publication can apply only what the
-			// write changed (scale_p21_cold_incremental.go).
+			// write changed (cold_incremental.go).
 			var base *coldPublishBase
 			facade.writeMu.onLock = func() {
 				locked = time.Now()
@@ -762,7 +762,7 @@ func (s *SQLiteStore) syncColdLegacyWriteLocked(ctx context.Context, workspace s
 
 // publishColdLegacyWriteLocked publishes the parent's installed image of
 // workspace after a COLD legacy write committed: from base and the records
-// the write changed when that is shown exact (scale_p21_cold_incremental.go),
+// the write changed when that is shown exact (cold_incremental.go),
 // else reloaded from SQL. The caller holds the parent's write lock.
 // reloadResidentWorkspace keeps an image whose stamp already matches SQL.
 func (s *SQLiteStore) publishColdLegacyWriteLocked(ctx context.Context, workspace string, logical bool, base *coldPublishBase) (incremental bool) {

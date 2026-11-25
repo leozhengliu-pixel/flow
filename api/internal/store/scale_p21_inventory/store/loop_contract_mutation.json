@@ -5,7 +5,7 @@
     "mutateLoopContract": {
       "owner": "P21",
       "status": "reviewed",
-      "coldDispatch": "store/scale_p21_default_cold.go:coldLegacyMutation",
+      "coldDispatch": "store/default_cold.go:coldLegacyMutation",
       "reason": "Flag off the dedicated loop contract writer is unchanged. Bounded, the parent dispatch never selects it (its bounded branch returns first); a loop.output_contract write reaches it only on a COLD facade: a COLD request or COLD work through coldLegacyMutation, or the registered withColdMutation. On the facade it refreshes to the parent's latest installed generation under the shared write lock, locks the loop and its versions, and prepares and installs the facade's exact image (prepareColdFullWrite/installColdFullWriteLocked), so its storedWorkspace/Bootstrap reads are the facade's complete legacy view. TestScaleP21ColdLoopContractDispatchDifferential (callback inputs, rows, events, publications, installed source) and TestScaleP21ColdWritersLoopContractStore (the server's storeLoopContract, legacy vs warm vs SQL-reloaded) compare it with the legacy writer.",
       "accessors": [
         "Bootstrap",

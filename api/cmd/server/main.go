@@ -56,7 +56,7 @@ type server struct {
 	// projectionGate bounds resource requests that build the viewer's projection (projection_gate.go).
 	projectionGate *metadataReadGate
 	// coldProjectionGate bounds COLD requests' projections apart from HOT
-	// ones (scale_p21_cold_authorization.go).
+	// ones (cold_authorization.go).
 	coldProjectionGate     *metadataReadGate
 	coldProjectionGateOnce sync.Once
 	// coding is the coding-session runtime (coding_runtime.go).

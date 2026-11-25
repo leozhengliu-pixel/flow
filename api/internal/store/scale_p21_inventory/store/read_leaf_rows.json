@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_read_leaf_rows.go",
+  "source": "store/read_leaf_rows.go",
   "unmigrated": 0,
   "consumers": {
     "readLeafBegin": {

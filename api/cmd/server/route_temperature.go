@@ -3,7 +3,7 @@
 package main
 
 // scaleP21RouteTemperature is the HOT/COLD decision of every registered
-// route with bounded metadata on (scale_p21_sw550_default_cold_test.go): "hot"
+// route with bounded metadata on (route_temperature_guard_test.go): "hot"
 // for a route proven bounded, else "cold" with the first legacy consumer a
 // flag-on path from its handler reaches. A pattern missing here runs COLD.
 var scaleP21RouteTemperature = map[string]string{

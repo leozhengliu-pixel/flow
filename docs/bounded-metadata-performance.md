@@ -33,7 +33,7 @@ documents, 40 members; spool about 127 MB):
 | HOT reads, 2 replicas | p95 1.3-2.9 s | p95 0.9-1.0 s | Flag-off loses here: every peer event makes it reload the whole workspace. |
 
 What already worked: the decoded-image cache for COLD facades
-(`scale_p21_cold_decode_cache.go`): spending up to 256 MiB on decoded images
+(`cold_decode_cache.go`): spending up to 256 MiB on decoded images
 cut MySQL COLD writes from about 1.1 s to 0.3 s p50.
 
 The root causes are the same everywhere:

@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_cold_read.go",
+  "source": "store/cold_read.go",
   "unmigrated": 0,
   "consumers": {
     "decodeColdMetadataRead": {
@@ -9,7 +9,7 @@
       "accessors": ["workspaces"],
       "temperature": "cold",
       "temperatureReason": "Full native materialization is restricted to the private COLD executor.",
-      "callers": ["store/scale_p21_cold_read.go:withColdMetadataRead", "store/scale_p21_cold_read.go:refreshColdMetadataRead"]
+      "callers": ["store/cold_read.go:withColdMetadataRead", "store/cold_read.go:refreshColdMetadataRead"]
     },
     "refreshColdMetadataRead": {
       "owner": "P21",
@@ -36,7 +36,7 @@
       "accessors": ["workspaces"],
       "temperature": "cold",
       "temperatureReason": "Only the private full-hydration COLD read executor uses this registry pin.",
-      "callers": ["store/scale_p21_cold_read.go:withColdMetadataRead"]
+      "callers": ["store/cold_read.go:withColdMetadataRead"]
     }
   }
 }

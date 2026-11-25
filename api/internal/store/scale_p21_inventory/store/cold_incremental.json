@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_cold_incremental.go",
+  "source": "store/cold_incremental.go",
   "unmigrated": 0,
   "consumers": {
     "buildColdPublication": {

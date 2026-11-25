@@ -178,7 +178,7 @@ func scaleP21SW550Source(t *testing.T, table map[string]string) []byte {
 package main
 
 // scaleP21RouteTemperature is the HOT/COLD decision of every registered
-// route with bounded metadata on (scale_p21_sw550_default_cold_test.go): "hot"
+// route with bounded metadata on (route_temperature_guard_test.go): "hot"
 // for a route proven bounded, else "cold" with the first legacy consumer a
 // flag-on path from its handler reaches. A pattern missing here runs COLD.
 var scaleP21RouteTemperature = map[string]string{
@@ -390,7 +390,7 @@ func scaleP21SW550BackgroundRoots(t *testing.T) map[string]string {
 // scaleP21SW550BackgroundWork names every goroutine root (a go statement)
 // whose flag-on walk reaches a legacy consumer, with how its COLD needs run
 // with bounded metadata on. Legacy whole-workspace reads are served from the
-// legacy view whatever the context (scale_p21_default_cold.go); a write no
+// legacy view whatever the context (default_cold.go); a write no
 // migrated writer serves, a legacy projection and a legacy snapshot need a
 // COLD context: a request's COLD scope (inherited by work the request leaves
 // running, then per operation) or store.WithColdWork (per operation).

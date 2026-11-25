@@ -114,14 +114,14 @@ func TestScaleP21SW90ProjectDirectoryLegacyBoundary(t *testing.T) {
 	// from bypassing the public dispatch while keeping snapshot sites intact.
 	want := map[string]map[string]int{
 		"projectSnapshot": {
-			"project_query.go:queryProjectDirectoryLegacy":              1,
-			"scale_p10_directory_reads.go:queryProjectDirectoryAdapter": 1,
+			"project_query.go:queryProjectDirectoryLegacy":    1,
+			"directory_reads.go:queryProjectDirectoryAdapter": 1,
 		},
 		"queryProjectDirectoryAdapter": {
 			"project_query.go:QueryProjectDirectory": 1,
 		},
 		"queryProjectDirectoryLegacy": {
-			"scale_p10_directory_reads.go:queryProjectDirectoryAdapter": 4,
+			"directory_reads.go:queryProjectDirectoryAdapter": 4,
 		},
 	}
 	got := map[string]map[string]int{}

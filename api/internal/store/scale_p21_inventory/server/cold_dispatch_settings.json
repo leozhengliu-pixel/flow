@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_cold_dispatch_settings.go",
+  "source": "server/cold_dispatch_settings.go",
   "unmigrated": 0,
   "consumers": {
     "createProjectStatusWithStore": {

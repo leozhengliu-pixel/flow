@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_cold_dispatch_api_keys.go",
+  "source": "server/cold_dispatch_api_keys.go",
   "unmigrated": 0,
   "consumers": {
     "coldWorkspaceData": {
@@ -16,8 +16,8 @@
       "temperature": "cold",
       "temperatureReason": "Literal callback body of the registered COLD API key / MCP settings routes.",
       "callers": [
-        "server/scale_p21_cold_dispatch_api_keys.go:listOAuthApplicationsWithStore",
-        "server/scale_p21_cold_dispatch_api_keys.go:getOAuthApplicationWithStore"
+        "server/cold_dispatch_api_keys.go:listOAuthApplicationsWithStore",
+        "server/cold_dispatch_api_keys.go:getOAuthApplicationWithStore"
       ]
     },
     "listAPIKeysWithStore": {

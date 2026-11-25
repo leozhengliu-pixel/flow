@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p17_record_selection.go",
+  "source": "store/record_selection.go",
   "unmigrated": 0,
   "consumers": {
     "SelectedDocumentMetadata": {

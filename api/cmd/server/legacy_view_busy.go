@@ -11,7 +11,7 @@ import (
 
 // With bounded metadata on, a request's legacy accessor whose wait for the
 // replica's legacy-view lane is refused (queue full or
-// FLOW_COLD_QUEUE_TIMEOUT; see store/scale_p21_legacy_view_lane.go) answers
+// FLOW_COLD_QUEUE_TIMEOUT; see store/legacy_view_lane.go) answers
 // "no workspace", because its signature carries no error. The handler then
 // answers that (403, 404 or an error) although the workspace is only busy.
 // withLegacyViewBusy turns such an error answer into 503 + Retry-After, as

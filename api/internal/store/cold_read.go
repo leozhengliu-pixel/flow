@@ -38,7 +38,7 @@ func (s *SQLiteStore) withColdMetadataRead(ctx context.Context, run func(context
 func (s *SQLiteStore) decodeColdMetadataRead(ctx context.Context, sources map[string]*metadataLogicalSource) error {
 	if s.coldParent != nil && s.coldParent.metadataResidency != nil {
 		// Each workspace's owned copy of its decoded generation
-		// (scale_p21_cold_decode_cache.go).
+		// (cold_decode_cache.go).
 		r := s.coldParent.metadataResidency
 		for workspace, source := range sources {
 			data, err := r.decodeColdImage(ctx, workspace, source, nil)

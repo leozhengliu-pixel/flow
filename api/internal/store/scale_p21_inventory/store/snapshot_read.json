@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_p19_snapshot_read.go",
+  "source": "store/snapshot_read.go",
   "unmigrated": 0,
   "consumers": {
     "p19SnapshotAt": {

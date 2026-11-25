@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_cold_read_owner.go",
+  "source": "store/cold_read_owner.go",
   "unmigrated": 0,
   "consumers": {
     "Close": {
@@ -9,7 +9,7 @@
       "accessors": ["workspaces"],
       "temperature": "cold",
       "temperatureReason": "Owned cleanup is restricted to an explicitly admitted legacy COLD facade.",
-      "callers": ["store/scale_p21_cold_read_owner.go:BeginColdMetadataRead"]
+      "callers": ["store/cold_read_owner.go:BeginColdMetadataRead"]
     },
     "BeginColdMetadataRead": {
       "owner": "P21",
@@ -18,7 +18,7 @@
       "accessors": ["BeginColdMetadataRead", "beginColdMetadataRead"],
       "temperature": "cold",
       "temperatureReason": "Only registered COLD boundaries may construct the full native facade.",
-      "callers": ["server/scale_p21_cold_authorization.go:legacyColdAuthorizationRepository"]
+      "callers": ["server/cold_authorization.go:legacyColdAuthorizationRepository"]
     }
   }
 }

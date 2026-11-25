@@ -997,7 +997,7 @@ func (s *SQLiteStore) reloadResidentWorkspaceLogical(ctx context.Context, worksp
 		return err
 	}
 	// The inputs the reloaded generation is exact at: the next reload or
-	// COLD publication derives from it (scale_p21_cold_incremental.go).
+	// COLD publication derives from it (cold_incremental.go).
 	state := s.coldPublishReloadState(ctx, tx, workspace, source)
 	if err := tx.Commit(); err != nil {
 		return err

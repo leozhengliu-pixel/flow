@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_owned_metadata_read.go",
+  "source": "store/owned_metadata_read.go",
   "unmigrated": 0,
   "consumers": {
     "APIKeyNameExists": {
@@ -10,8 +10,8 @@
       "temperature": "hot",
       "temperatureReason": "Scoped API-key create and update validation runs on the bounded route path.",
       "callers": [
-        "server/scale_p21_cold_dispatch_api_keys.go:createAPIKeyWithStore",
-        "server/scale_p21_cold_dispatch_api_keys.go:updateAPIKeyWithStore"
+        "server/cold_dispatch_api_keys.go:createAPIKeyWithStore",
+        "server/cold_dispatch_api_keys.go:updateAPIKeyWithStore"
       ]
     },
     "BeginInstalledMetadataRead": {

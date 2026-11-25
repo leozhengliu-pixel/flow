@@ -18,7 +18,7 @@ type coldAuthorizationMuxKey struct{}
 // Default COLD routing: with bounded metadata on, every request whose route
 // is not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD
 // scope for its whole lifetime, authentication included. Its COLD needs take
-// the replica's COLD slot per operation only (store/scale_p21_default_cold.go)
+// the replica's COLD slot per operation only (store/default_cold.go)
 // and its projections take the COLD projection gate in place of the
 // projection gate, so a COLD request never holds a slot a HOT request waits
 // for; a proven-bounded route never opens a scope.
@@ -30,7 +30,7 @@ func (s *server) withColdMetadataRouteMux(mux *http.ServeMux, next http.Handler)
 		}
 		ctx := context.WithValue(r.Context(), coldAuthorizationMuxKey{}, mux)
 		// A refused legacy-view wait answers 503 + Retry-After
-		// (scale_p21_legacy_view_busy.go).
+		// (legacy_view_busy.go).
 		var endRequest func()
 		ctx, w, endRequest = withLegacyViewBusy(ctx, w)
 		defer endRequest()

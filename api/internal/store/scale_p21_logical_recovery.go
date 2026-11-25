@@ -67,7 +67,7 @@ func (s *SQLiteStore) readRawMetadataLogicalSourceRoot(ctx context.Context, tx *
 // hold their zero value, except a field of supplied, which holds that value
 // instead of its recovery. A recovered field is exactly the one a complete
 // recovery produces: each field reads only its own root occurrences and
-// canonical rows (an incremental COLD publication, scale_p21_cold_incremental.go).
+// canonical rows (an incremental COLD publication, cold_incremental.go).
 func (s *SQLiteStore) readRawMetadataLogicalSourcePart(ctx context.Context, tx *sqlTx, workspace string, validateRoot bool, part map[string]bool, supplied map[string]reflect.Value) (_ *metadataLogicalSource, err error) {
 	ctx = s.metadataLogicalScratchContext(ctx, workspace)
 	read, err := s.metadataRootCursorInSnapshot(ctx, tx, workspace)

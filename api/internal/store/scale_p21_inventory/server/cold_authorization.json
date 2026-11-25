@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_cold_authorization.go",
+  "source": "server/cold_authorization.go",
   "unmigrated": 0,
   "consumers": {
     "legacyColdAuthorizationRepository": {
