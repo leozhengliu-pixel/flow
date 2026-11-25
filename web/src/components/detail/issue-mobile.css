@@ -139,6 +139,8 @@
   .issue-view .comment-card__actions { opacity: 1; padding-left: 4px; gap: 0; }
   .issue-view .comment-card__actions button { width: 32px; height: 32px; }
   .issue-view .issue-activity-timeline .comment-thread .comment-card > header { height: auto; min-height: 22px; flex-wrap: wrap; }
+  /* The thread card runs to the same 6.5px from the screen edge as on the left: the column's 10px right padding is taken back. */
+  .issue-view .issue-activity-timeline .comment-thread { margin-right: -18px; }
   .issue-view .issue-activity-timeline .comment-thread .comment-card { padding: 12px; }
 }
 
