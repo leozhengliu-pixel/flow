@@ -57,7 +57,7 @@ export function DescriptionAudio({ src, name, size }: { src: string; name: strin
 
 /** The progress strip of a file still uploading (a dot grid and "Uploading…" after a hairline). */
 export function DescriptionUploading() {
-  return <div className="description-file-uploading"><span className="description-file-uploading-rule"/><GridLoader size={16}/><span>Uploading…</span></div>
+  return <div className="description-file-uploading"><span className="description-file-uploading-rule"/><GridLoader size={16}/><span className="description-file-uploading-label">Uploading…</span></div>
 }
 
 export function DescriptionVideoPlayer({ src, name }: { src: string; name: string }) {

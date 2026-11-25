@@ -16,7 +16,8 @@
 .description-audio-row .description-audio-rate { width: 48px; border: .5px solid var(--description-file-border); border-radius: 8px; font: 500 12px / normal var(--font); }
 .description-audio-caption { display: flex; gap: 4px; margin-top: 8px; color: var(--description-file-meta); font: 450 11px / normal var(--font); }
 .description-audio-caption .description-audio-dot { color: var(--description-file-icon); }
-.description-file-uploading { display: flex; flex: none; align-items: center; height: 16px; color: var(--description-file-toolbar-fg-hover); font: 450 13px / normal var(--font); }
+.description-file-uploading { display: flex; flex: none; align-items: center; height: 16px; padding-right: 6px; color: var(--description-file-toolbar-fg-hover); font: 450 13px / normal var(--font); }
 .description-file-uploading-rule { width: 1px; height: 16px; margin-right: 12px; background: var(--description-uploading-rule); }
 .description-file-uploading > svg, .description-file-uploading > span:not(.description-file-uploading-rule) { flex: none; }
 .description-file-uploading > :nth-child(2) { margin-right: 8px; }
+.description-file-uploading-label { opacity: .8; }
