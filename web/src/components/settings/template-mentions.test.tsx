@@ -125,7 +125,8 @@ describe('project template description and milestones', () => {
     const user = userEvent.setup()
     render(projectSettings(withTemplates(mentionFixture()), 'new'))
     await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Launch')
-    await user.click(screen.getByRole('button', { name: 'Add' }))
+    // The Milestones header's "+ Add" pill is named for its section.
+    await user.click(screen.getByRole('button', { name: 'Add milestone' }))
     await user.type(await screen.findByRole('textbox', { name: 'Milestone name' }), 'Beta')
     const box = screen.getByRole('textbox', { name: 'Milestone description template' })
     await user.click(box)

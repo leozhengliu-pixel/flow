@@ -87,7 +87,7 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
         <Dialog.Overlay className="modal-overlay" data-flow-motion="backdrop"/>
         <Dialog.Content className="res-dialog" data-flow-motion="dialog" onOpenAutoFocus={event => { event.preventDefault(); const input = (editing ? titleInput : urlInput).current; input?.focus(); input?.setSelectionRange(input.value.length, input.value.length) }}>
           <form onSubmit={event => { event.preventDefault(); void addLink() }}>
-            <Dialog.Title className="res-dialog-title">{editing && linkBrand(editing.url) ? <LinkBrandIcon brand={linkBrand(editing.url)!}/> : <Link2 size={16}/>}<span>{editing ? t('Edit link') : t('Add link to {issue}').replace('{issue}', issueKey)}</span></Dialog.Title>
+            <Dialog.Title className="res-dialog-title">{editing && linkBrand(editing.url) ? <LinkBrandIcon brand={linkBrand(editing.url)!}/> : <Link2 size={16}/>}<span>{editing ? t('Edit link') : t('Add link to {issue}').replace('{issue}', () => issueKey)}</span></Dialog.Title>
             <label><span>{t('URL')}</span><input ref={urlInput} onChange={event => setUrl(event.target.value)} placeholder="https://…" type="url" value={url}/></label>
             <label><span>{t('Title')} <em>{t('(optional)')}</em></span><input ref={titleInput} onChange={event => setTitle(event.target.value)} value={title}/></label>
             <footer><Dialog.Close asChild><button type="button">{t('Cancel')}</button></Dialog.Close><button className="primary" disabled={!url.trim() || saving} type="submit">{editing ? t(saving ? 'Saving…' : 'Save') : t(saving ? 'Adding…' : 'Add link')}</button></footer>
