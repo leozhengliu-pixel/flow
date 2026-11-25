@@ -224,6 +224,15 @@ func scaleP21SW219Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 }
 
 func TestScaleP21SW219WorkflowRetryStreamDifferential(t *testing.T) {
+	scaleP21SW219WorkflowRetryStream(t, false)
+}
+
+func TestScaleP21SW219WorkflowRetryStreamPeerDifferential(t *testing.T) {
+	scaleP21SW219WorkflowRetryStream(t, true)
+}
+
+func scaleP21SW219WorkflowRetryStream(t *testing.T, peerCases bool) {
+	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -250,6 +259,9 @@ func TestScaleP21SW219WorkflowRetryStreamDifferential(t *testing.T) {
 		{"inline-duplicate", nil, false, true},
 		{"inline-empty-id", nil, false, true},
 	} {
+		if (test.peer != nil || test.deleted) != peerCases {
+			continue
+		}
 		t.Run(test.name, func(t *testing.T) {
 			before := cloneBootstrap(fixture.data)
 			before.WorkflowRuns = []domain.WorkflowRun{base}
@@ -301,6 +313,9 @@ func TestScaleP21SW219WorkflowRetryStreamDifferential(t *testing.T) {
 				t.Fatal("workflow stream leaked")
 			}
 		})
+	}
+	if peerCases {
+		return
 	}
 	for _, phase := range []string{"read", "write"} {
 		t.Run("cancel-"+phase, func(t *testing.T) {

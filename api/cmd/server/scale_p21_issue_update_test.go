@@ -137,6 +137,36 @@ func (f scaleP21IssueUpdateFixture) prepare(test scaleP21IssueUpdateCase) func(*
 	}
 }
 
+// prepareTriageReset saves a complete case preimage so each source can restore
+// it without repeating the team, issue and action settings writes.
+func (f *scaleP21IssueUpdateFixture) prepareTriageReset(t *testing.T, prepare func(*testing.T)) {
+	t.Helper()
+	oracle, err := store.OpenDatabase(f.reader.config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = oracle.Close() })
+	f.reloadOracle = oracle
+
+	prepare(t)
+	f.sequence = f.currentSequence(t)
+	workspace := f.data.Workspace.URLKey
+	full, ok := f.repository.BootstrapFor(workspace)
+	if !ok {
+		t.Fatal("workspace missing")
+	}
+	if f.baseline, err = json.Marshal(full); err != nil {
+		t.Fatal(err)
+	}
+	f.scaleP21TriageWriterFixture.prepare = f.resetTriageSideTables
+}
+
+func (f scaleP21IssueUpdateFixture) resetTriageSideTables(t *testing.T) {
+	t.Helper()
+	f.resetSequenceAndAliases(t)
+	f.exec(t, `DELETE FROM document_collaboration_updates WHERE workspace_key=?`, f.data.Workspace.URLKey)
+}
+
 func (f scaleP21IssueUpdateFixture) patch(service *server, user domain.User, key *domain.APIKey, id string, body any, cancelled bool) *httptest.ResponseRecorder {
 	raw, _ := json.Marshal(body)
 	r := httptest.NewRequest(http.MethodPatch, "/api/issue-records/"+id, bytes.NewReader(raw))
@@ -278,9 +308,14 @@ func scaleP21IssueUpdateSorted(t *testing.T, items []json.RawMessage, started ti
 
 func (f scaleP21IssueUpdateFixture) differential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []scaleP21IssueUpdateOutcome {
 	t.Helper()
+	return f.differentialSources(t, name, []string{"legacy", "warm", "reloaded"}, call)
+}
+
+func (f scaleP21IssueUpdateFixture) differentialSources(t *testing.T, name string, sources []string, call func(*server) *httptest.ResponseRecorder) []scaleP21IssueUpdateOutcome {
+	t.Helper()
 	var normalized []string
 	var outcomes []scaleP21IssueUpdateOutcome
-	for _, source := range []string{"legacy", "warm", "reloaded"} {
+	for _, source := range sources {
 		got, started := f.run(t, source, call)
 		outcomes = append(outcomes, got)
 		normalized = append(normalized, scaleP21IssueUpdateNormalize(t, got, started))
