@@ -37,15 +37,17 @@ func NarrowMutationVerificationCounts() (comparisons, differences uint64) {
 	return narrowMutationComparisons.Load(), narrowMutationDifferences.Load()
 }
 
+// verifyNarrowMutationInputs is on in production only when requested and on
+// in tests unless a test turns it off explicitly, for example to measure the
+// production allocation of a write.
 func verifyNarrowMutationInputs() bool {
-	if testing.Testing() {
-		return true
-	}
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_NARROW_MUTATION_VERIFY"))) {
 	case "1", "true", "on":
 		return true
+	case "0", "false", "off":
+		return false
 	}
-	return false
+	return testing.Testing()
 }
 
 type mutationCallbackResult struct {
