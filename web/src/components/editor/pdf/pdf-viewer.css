@@ -102,3 +102,5 @@
 .pdf-viewer-pill .pdf-viewer-button:last-child { border-radius: 0 9999px 9999px 0; }
 .pdf-viewer-pill .pdf-viewer-button:disabled { opacity: .6; }
 .pdf-viewer-pill-rule { width: .5px; height: 20px; margin: 4px 0; }
+/* The right-hand group (download, link, print, next / previous file, close) is drawn in the page's text colour, the zoom and page controls in the viewer's own. */
+.pdf-viewer-group:not(.pdf-viewer-group-start) .pdf-viewer-button { color: var(--text); }
