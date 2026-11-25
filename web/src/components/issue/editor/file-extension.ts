@@ -8,7 +8,7 @@ import { copyFileLink, copyPdfLink, downloadPdf, isPdfFile } from '@/components/
 import { createFileToolbar, createPdfPreview } from '@/components/editor/pdf/pdf-card'
 import { deleteIcon, downloadIcon, linkIcon, openDescriptionMenu } from './image-extension'
 import { DescriptionAudio, DescriptionUploading, DescriptionVideoPlayer } from './description-media'
-import { clearUploadProgress, reportUploadProgress } from '@/lib/upload-progress'
+import { clearUploadProgress, markUploadStarted, reportUploadProgress } from '@/lib/upload-progress'
 import { mountReact } from './mount-react'
 import { encodeDirectiveUrl } from '@/lib/directive-url'
 
@@ -127,7 +127,7 @@ export const DescriptionFile = Node.create({
         audioHost.hidden = !audio
         if (audio) audioMount.render(createElement(DescriptionAudio, { src: href, name: title, size: attrs.size == null ? null : Number(attrs.size) }))
         uploadingHost.hidden = !uploading
-        if (uploading) uploadingMount.render(createElement(DescriptionUploading, { src: href }))
+        if (uploading) uploadingMount.render(createElement(DescriptionUploading, { src: href, onRemove: editor.isEditable ? remove : undefined }))
         toolbar.dom.hidden = uploading
         dom.classList.toggle('is-pdf', pdf)
         dom.classList.toggle('has-preview', pdf && showPreview && !uploading)
@@ -259,6 +259,7 @@ function insertAtom(view: EditorView, type: 'file' | 'video', attrs: Record<stri
   const nodeType = view.state.schema.nodes[type]
   if (!nodeType) return null
   const node = nodeType.create(attrs)
+  if (upload) markUploadStarted(String(attrs.src))
   const tr = pos == null ? view.state.tr.replaceSelectionWith(node) : view.state.tr.insert(pos, node)
   view.dispatch(tr.scrollIntoView())
   void persistSrc(view, type, String(attrs.src), file, upload)

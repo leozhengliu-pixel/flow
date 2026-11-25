@@ -190,7 +190,7 @@ export function insertImageFiles(view: EditorView, files: File[], upload?: Descr
   let insertPos = pos
   for (const file of files) {
     const placeholder = URL.createObjectURL(file)
-    const node = view.state.schema.nodes.image.create({ src: placeholder, alt: file.name })
+    const node = view.state.schema.nodes.image.create({ src: placeholder, alt: '' })
     if (insertPos == null) {
       view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView())
       insertPos = view.state.selection.from

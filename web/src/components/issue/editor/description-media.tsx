@@ -3,7 +3,7 @@ import { Download, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { AgentInlineVideo } from '@/components/agent/agent-inline-video'
 import { useOptionalTranslate } from '@/i18n/i18n'
 import { formatFileSize } from '@/lib/format-file-size'
-import { readUploadProgress, subscribeUploadProgress } from '@/lib/upload-progress'
+import { isUploadInFlight, readUploadProgress, subscribeUploadProgress } from '@/lib/upload-progress'
 import { downloadPdf } from '@/components/editor/pdf/pdf-file-actions'
 import './description-media.css'
 
@@ -69,8 +69,12 @@ export function UploadDots({ fraction }: { fraction: number }) {
 }
 
 /** The progress strip of a file still uploading (a dot grid and "Uploading…" after a hairline); `src` names the upload. */
-export function DescriptionUploading({ src }: { src: string }) {
+export function DescriptionUploading({ src, onRemove }: { src: string; onRemove?: () => void }) {
+  const t = useOptionalTranslate()
   const fraction = useSyncExternalStore(listener => subscribeUploadProgress(src, listener), () => readUploadProgress(src))
+  const running = useSyncExternalStore(listener => subscribeUploadProgress(src, listener), () => isUploadInFlight(src))
+  // A placeholder that no upload in this page is feeding was saved by a page that closed (or lost its connection) mid-upload.
+  if (!running) return <div className="description-file-uploading" data-stale><span className="description-file-uploading-rule"/><span className="description-file-uploading-label">{t("Upload didn't complete")}</span>{onRemove && <button className="description-file-uploading-remove" onClick={event => { event.preventDefault(); event.stopPropagation(); onRemove() }} type="button">{t('Remove')}</button>}</div>
   return <div className="description-file-uploading"><span className="description-file-uploading-rule"/><UploadDots fraction={fraction}/><span className="description-file-uploading-label">Uploading…</span></div>
 }
 

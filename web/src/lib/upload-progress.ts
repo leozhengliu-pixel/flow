@@ -7,7 +7,20 @@ export function reportUploadProgress(key: string, fraction: number) {
   listeners.get(key)?.forEach(listener => listener())
 }
 
+/** Placeholders whose upload is running in this page; a placeholder saved with a document that is not here is left over from an upload that never finished. */
+const inFlight = new Set<string>()
+
+export function markUploadStarted(key: string) {
+  inFlight.add(key)
+  listeners.get(key)?.forEach(listener => listener())
+}
+
+export function isUploadInFlight(key: string) {
+  return inFlight.has(key)
+}
+
 export function clearUploadProgress(key: string) {
+  inFlight.delete(key)
   fractions.delete(key)
   listeners.get(key)?.forEach(listener => listener())
 }
