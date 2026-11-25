@@ -96,7 +96,7 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 		return compareQueryIssues(a, b, query.Get("sort"), query.Get("direction"))
 	}
 	result := &boundedIssueHeap{compare: compare}
-	retained := make(map[string]func(), limit)
+	retained := map[string]func(){}
 	defer func() {
 		for _, release := range retained {
 			release()
