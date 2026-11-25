@@ -2563,12 +2563,13 @@ function TemplatesSettings({
     value: string | undefined,
     options: AnyTemplate[],
     onChange: (id: string) => void,
+    noneLabel = "No template",
   ) => (
     <SelectRow
       title={title}
       value={value || NO_TEMPLATE}
       options={[NO_TEMPLATE, ...options.map((item) => item.id)]}
-      labels={{ [NO_TEMPLATE]: "No template", ...Object.fromEntries(options.map((item) => [item.id, item.name])) }}
+      labels={{ [NO_TEMPLATE]: noneLabel, ...Object.fromEntries(options.map((item) => [item.id, item.name])) }}
       entityOptions={options.map((item) => item.id)}
       onChange={(next) => onChange(next === NO_TEMPLATE ? "" : next)}
     />
@@ -2622,16 +2623,16 @@ function TemplatesSettings({
           }}
         />
       </section>
-      {templatesByKind.project.length > 0 && (
-        <TeamSection title="Default project template" description="Pre-select a template when creating a project for this team">
-          {templateSelect(
-            "Projects created",
-            settings.defaultProjectTemplateId,
-            templatesByKind.project,
-            (id) => void save({ defaultProjectTemplateId: id }),
-          )}
-        </TeamSection>
-      )}
+      <TeamSection compact title="Default project template" description="Pre-select a template when creating a project for this team">
+        {templateSelect(
+          "Projects created",
+          settings.defaultProjectTemplateId,
+          // Workspace templates and the ones owned by this team (or its parents) can be the default.
+          data.projectTemplates.filter((item) => item.visibility !== "teams" || scopeIds.has(projectTemplateTeam(item) ?? "")),
+          (id) => void save({ defaultProjectTemplateId: id }),
+          "None",
+        )}
+      </TeamSection>
       <section className="tpl-section tpl-team-section">
         <h3>{t("Document templates")}</h3>
         <TemplateListCard
@@ -3446,6 +3447,7 @@ function TeamSection({
   description,
   action,
   disabled,
+  compact,
   children,
 }: {
   title?: string;
@@ -3453,6 +3455,8 @@ function TeamSection({
   action?: React.ReactNode;
   /** Switched off by a setting above it (the reference dims the section: disabled fieldset, small title). */
   disabled?: boolean;
+  /** Small title like a disabled section, without dimming it (the default project template block). */
+  compact?: boolean;
   children: React.ReactNode;
 }) {
   const { t } = useI18n();
@@ -3472,6 +3476,8 @@ function TeamSection({
     <fieldset className="team-section-disabled" disabled>
       {section}
     </fieldset>
+  ) : compact ? (
+    <div className="team-section-compact">{section}</div>
   ) : (
     section
   );

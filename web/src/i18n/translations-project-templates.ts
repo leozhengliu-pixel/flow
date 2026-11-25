@@ -4,6 +4,10 @@
  * Merged into zhCN by translations.ts (fills gaps only).
  */
 export const projectTemplatesZhCN: Record<string, string> = {
+  "{count} project templates": "{count} 个项目模板",
+  "Set estimate": "设置预估",
+  "Set estimate…": "设置预估…",
+  "Estimates are not enabled for this team": "此团队未启用预估",
   "1 dependency": "1 个依赖项",
   "{count} dependencies": "{count} 个依赖项",
   "1 initiative": "1 个目标",

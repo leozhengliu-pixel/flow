@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -50,6 +51,11 @@ func normalizeProjectTemplateIssues(data *domain.Bootstrap, template *domain.Pro
 		}
 		if issue.AssigneeID != "" && userByID(data, issue.AssigneeID) == nil {
 			return nil, errInvalid
+		}
+		if issue.Estimate != nil {
+			if math.IsNaN(*issue.Estimate) || math.IsInf(*issue.Estimate, 0) || *issue.Estimate < 0 {
+				return nil, fmt.Errorf("%w: invalid estimate", errInvalid)
+			}
 		}
 		issue.LabelIDs = normalizedStrings(issue.LabelIDs)
 		labels := labelsByIDForResource(data, issue.LabelIDs, "issue")
@@ -256,6 +262,10 @@ func createProjectTemplateIssues(data *domain.Bootstrap, template domain.Project
 		if item.AssigneeID != "" {
 			issue.Assignee = userByID(data, item.AssigneeID)
 		}
+		if item.Estimate != nil && templateEstimateOnTeamScale(settings, *item.Estimate) {
+			estimate := *item.Estimate
+			issue.Estimate = &estimate
+		}
 		if milestoneID := milestoneIDs[item.MilestoneID]; item.MilestoneID != "" && milestoneID != "" {
 			issue.ProjectMilestoneID = stringPointer(milestoneID)
 		}
@@ -278,4 +288,32 @@ func createProjectTemplateIssues(data *domain.Bootstrap, template domain.Project
 		appendActivity(data, issue.ID, "issue.created", data.Viewer, map[string]string{"stateId": issue.State.ID, "state": issue.State.Name})
 	}
 	return created, nil
+}
+
+// templateEstimateOnTeamScale reports whether the team uses estimates and the value is one of its scale's points,
+// mirroring the web estimate scales (base values, optional zero, optional extended values).
+func templateEstimateOnTeamScale(settings domain.TeamSettings, value float64) bool {
+	base := map[string][]float64{
+		"exponential": {1, 2, 4, 8, 16},
+		"fibonacci":   {1, 2, 3, 5, 8},
+		"flow":        {1, 2, 3, 4, 5},
+		"tShirt":      {1, 2, 3, 5, 8},
+	}
+	extended := map[string][]float64{
+		"exponential": {32, 64},
+		"fibonacci":   {13, 21},
+		"flow":        {6, 7},
+		"tShirt":      {13, 21},
+	}
+	scale, ok := base[settings.EstimateType]
+	if !ok {
+		return false
+	}
+	if settings.EstimateAllowZero && value == 0 {
+		return true
+	}
+	if slices.Contains(scale, value) {
+		return true
+	}
+	return settings.EstimateExtended && slices.Contains(extended[settings.EstimateType], value)
 }

@@ -1673,6 +1673,8 @@ type ProjectTemplateIssue struct {
 	LabelIDs    []string `json:"labelIds,omitempty"`
 	MilestoneID string   `json:"milestoneId,omitempty"`
 	ParentID    string   `json:"parentId,omitempty"`
+	// Estimate is copied onto the created issue when its team uses estimates and the value is on the team's scale.
+	Estimate *float64 `json:"estimate,omitempty"`
 }
 
 type TemplateMilestone struct {

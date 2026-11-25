@@ -31,6 +31,7 @@ html:root .settings-app .settings-search input {
   background: var(--set-search-bg);
   box-shadow: var(--set-search-shadow);
   font: 500 13px var(--font);
+  font-feature-settings: "calt" 0;
 }
 /* The nav scrolls edge to edge with a thin scrollbar that reserves its gutter,
    so items stay 210px wide (12px inset + 10px gutter) like the reference. */

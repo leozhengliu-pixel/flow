@@ -25,7 +25,7 @@
   html:root .settings-app .settings-search { margin: 0 12px; }
   .settings-search > svg { color: var(--sidebar-nav-fg); }
   .settings-members-group + .settings-member-directory-row { margin-top: 2px; }
-  html:root .settings-app .settings-search input { color: var(--set-text); }
+  html:root .settings-app .settings-search input { color: var(--set-nav-active); }
   html:root .settings-app .settings-search input::placeholder { color: var(--set-nav); opacity: 1; }
   html:root .settings-app .settings-sidebar nav { margin: 0; padding-top: 29px; }
   html:root .settings-app .settings-sidebar nav h2 { height: 15.5px; line-height: 15.5px; }

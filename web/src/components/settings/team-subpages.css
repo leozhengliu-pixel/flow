@@ -71,6 +71,13 @@ html:root .settings-app .settings-main .team-section-disabled > .settings-sectio
   font: 500 13px/normal var(--font);
 }
 html:root .settings-app .settings-main .team-section-disabled > .settings-section > h3 + .settings-section-description { margin-top: -8px; }
+/* The default project template block: the disabled section's small title, at full strength. */
+html:root .settings-app .settings-main .team-section-compact { min-width: 0; margin: 12px 0 0; padding: 12px 0 1px; }
+html:root .settings-app .settings-main .team-section-compact > .settings-section { margin-bottom: 0; }
+html:root .settings-app .settings-main .settings-section:has(+ .team-section-compact) { margin-bottom: 24px; }
+html:root .settings-app .settings-main .team-section-compact .settings-section-description { margin-bottom: 13px; }
+html:root .settings-app .settings-main .team-section-compact > .settings-section > h3 { min-height: 15.5px; height: 15.5px; margin: 0 16px 12px; color: var(--set-group-title); font: 500 13px/normal var(--font); }
+html:root .settings-app .settings-main .team-section-compact > .settings-section > h3 + .settings-section-description { margin-top: -8px; }
 html:root .settings-app .settings-main .team-connect-link { gap: 6px; }
 html:root .settings-app .settings-main .settings-row:has(.team-connect-link) { min-height: 66px; }
 html:root .settings-app .settings-main .settings-row:has(.settings-row-icon):has(.team-connect-link) { min-height: 64px; }

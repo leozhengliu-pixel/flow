@@ -67,10 +67,20 @@ describe('project template editor', () => {
     expect(within(footer).getByRole('button', { name: 'Create' })).toBeInTheDocument()
   })
 
+  it('shows an empty Issues section next to Milestones, each with a labelled Add button', async () => {
+    const user = userEvent.setup()
+    render(settings(fixture(), 'new'))
+    const sections = [...document.querySelectorAll('.pt-section-slot > .pt-section')] as HTMLElement[]
+    expect(sections.map(section => section.querySelector('.pt-section-title')?.textContent)).toEqual(['Milestones', 'Issues'])
+    for (const section of sections) expect(within(section).getByText('Add')).toBeInTheDocument()
+    await user.click(within(sections[1]).getByRole('button', { name: 'Add issue' }))
+    expect(screen.getByRole('textbox', { name: 'Issue title' })).toBeInTheDocument()
+  })
+
   it('adds, edits and removes milestones in the milestone composer', async () => {
     const user = userEvent.setup()
     render(settings(fixture(), 'new'))
-    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(screen.getByRole('button', { name: 'Add milestone' }))
     expect(screen.getByText('Create milestone')).toBeInTheDocument()
     await user.type(screen.getByRole('textbox', { name: 'Milestone name' }), 'Alpha milestone')
     await user.click(screen.getByRole('button', { name: 'Add milestone' }))
@@ -91,7 +101,7 @@ describe('project template editor', () => {
   it('creates template issues from the Issues pill, with create-more', async () => {
     const user = userEvent.setup()
     render(settings(fixture(), 'new'))
-    await user.click(screen.getByRole('button', { name: 'Add issue' }))
+    await user.click(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' }))
     expect(screen.getByText('Create issue')).toBeInTheDocument()
     await user.click(screen.getByRole('switch'))
     await user.type(screen.getByRole('textbox', { name: 'Issue title' }), 'Kickoff{Enter}')
@@ -105,16 +115,34 @@ describe('project template editor', () => {
     expect(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' })).toHaveTextContent('2 issues')
   })
 
+  it('sets an estimate on a template issue from the team scale and saves it', async () => {
+    const user = userEvent.setup()
+    const base = fixture()
+    const data = { ...base, teamSettings: { ...base.teamSettings, [base.teams[0].id]: { ...base.teamSettings?.[base.teams[0].id], estimateType: 'fibonacci' } } } as BootstrapData
+    render(settings(data, 'new'))
+    await user.type(screen.getByPlaceholderText('Add a descriptive name…'), 'Estimated')
+    await user.type(screen.getByPlaceholderText('Project name'), 'Estimated project')
+    await user.click(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' }))
+    expect(screen.getByRole('combobox', { name: 'Set estimate' })).toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Issue title' }), 'Sized issue')
+    await user.click(screen.getByRole('combobox', { name: 'Set estimate' }))
+    await user.click((await screen.findAllByRole('option')).find(option => /^5/.test(option.textContent ?? '')) as HTMLElement)
+    await user.click(within(document.querySelector('.pt-issue-composer') as HTMLElement).getByRole('button', { name: 'Add issue' }))
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(api.createProjectTemplate).toHaveBeenCalled())
+    expect(api.createProjectTemplate.mock.calls[0][0].issues[0]).toMatchObject({ title: 'Sized issue', estimate: 5 })
+  })
+
   it('saves every preset, milestones, issues, dependencies and the team visibility', async () => {
     const user = userEvent.setup()
     const onReload = vi.fn(async () => {})
     render(settings(fixture(), 'new', undefined, onReload))
     await user.type(screen.getByPlaceholderText('Add a descriptive name…'), 'QA template')
     await user.type(screen.getByPlaceholderText('Project name'), 'QA project')
-    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(screen.getByRole('button', { name: 'Add milestone' }))
     await user.type(screen.getByRole('textbox', { name: 'Milestone name' }), 'Alpha')
     await user.click(screen.getByRole('button', { name: 'Add milestone' }))
-    await user.click(screen.getByRole('button', { name: 'Add issue' }))
+    await user.click(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' }))
     await user.type(screen.getByRole('textbox', { name: 'Issue title' }), 'Kickoff{Enter}')
     await user.click(screen.getByRole('button', { name: 'Template visibility' }))
     await user.click(await screen.findByRole('menuitem', { name: /Test team/ }))
@@ -189,7 +217,7 @@ describe('project template editor', () => {
     expect(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' })).toHaveTextContent('2 issues')
     const rows = [...document.querySelectorAll('.pt-issue-row')] as HTMLElement[]
     expect(rows.map(row => row.querySelector('.pt-issue-title')?.textContent)).toEqual(['Kickoff', 'Child'])
-    expect(rows[1].style.paddingLeft).toBe('40px')
+    expect(rows[1].style.paddingLeft).toBe('39px')
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
   })
 
