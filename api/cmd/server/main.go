@@ -5711,6 +5711,8 @@ func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
 		title = defaultLinkTitle(parsed)
 	}
 	var attachment domain.Attachment
+	// The site's favicon is fetched before the workspace is locked: a slow site must not hold a write.
+	icon := linkFaviconDataURL(r.Context(), parsed)
 	ctx := store.WithIssueRecordMutations(s.issueAttachmentContext(r.Context()), id)
 	err = s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.link_created", id, input, func(data *domain.Bootstrap) error {
 		issue, issueErr := issueByID(data, id)
@@ -5718,6 +5720,10 @@ func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
 			return issueErr
 		}
 		attachment = appendIssueLink(data, issue, domain.IssueLinkInput{Title: title, URL: parsed.String()})
+		if icon != "" {
+			issue.Attachments[len(issue.Attachments)-1].IconURL = icon
+			attachment.IconURL = icon
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusCreated, attachment)

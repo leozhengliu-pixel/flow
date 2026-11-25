@@ -13,6 +13,7 @@
 .res-icon { display: grid; width: 16px; height: 16px; flex: none; place-items: center; color: var(--res-icon); }
 .res-icon svg { width: 16px; height: 16px; }
 .res-icon img { border-radius: 8px; }
+.res-icon .res-link-glyph { color: var(--res-label); }
 .res-icon[data-brand="github"] { color: var(--res-label); }
 .res-title { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .res-subtitle { min-width: 0; flex: 1; overflow: hidden; color: var(--res-label); font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
