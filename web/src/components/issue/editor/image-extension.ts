@@ -251,8 +251,11 @@ function imageActions(editor: Editor, getPos: () => number | undefined, img: HTM
   return {
     view: () => {
       const siblings: LightboxItem[] = []
+      const own = getPos()
+      let current: number | undefined
       editor.state.doc.descendants((node, pos) => {
         if (node.type.name === 'image' && node.attrs.src) {
+          if (pos === own) current = siblings.length
           const item: LightboxItem = { src: String(node.attrs.src), alt: String(node.attrs.alt ?? '') }
           // Cropping rewrites the image, so it needs edit access like the hover toolbar's Crop does.
           if (editor.isEditable) {
@@ -265,7 +268,7 @@ function imageActions(editor: Editor, getPos: () => number | undefined, img: HTM
           siblings.push(item)
         }
       })
-      openDescriptionLightbox(img.src, img.alt, siblings.length ? siblings : undefined)
+      openDescriptionLightbox(img.src, img.alt, siblings.length ? siblings : undefined, current)
     },
     download: () => downloadImage(img.src, img.alt || 'image'),
     copyImage: () => copyImage(img.src),
@@ -446,10 +449,11 @@ async function downloadImage(src: string, name: string) {
   URL.revokeObjectURL(href)
 }
 
-export function openDescriptionLightbox(src: string, alt = '', siblings?: LightboxItem[]) {
+export function openDescriptionLightbox(src: string, alt = '', siblings?: LightboxItem[], at?: number) {
   // Prefer React LightboxEditorProvider portal when mounted (LS-0382).
   const items = siblings?.length ? siblings : [{ src, alt }]
-  const index = Math.max(0, items.findIndex(item => item.src === src))
+  // A picture's document position names it; its src may be relative while the element's is absolute.
+  const index = at ?? Math.max(0, items.findIndex(item => item.src === src))
   if (openLightbox(items, index === -1 ? 0 : index)) return
   document.querySelector('.description-image-lightbox')?.remove()
   const overlay = document.createElement('div')
