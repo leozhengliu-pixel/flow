@@ -4,11 +4,13 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, ty
 import { toast } from "@/lib/toast";
 import {
   createProjectTemplate,
+  createWorkspaceLabel,
   deleteProjectTemplate,
   updateProjectTemplate,
 } from "@/lib/api";
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from "@/lib/labels";
 import { useI18n } from "@/i18n/i18n";
+import { teamDefaultState, teamWorkflowStates } from "@/lib/team-workflow";
 import { estimateLabel, estimatePickerOptions, teamUsesEstimates } from "@/lib/estimates";
 import { EstimateIcon, EstimateValueIcon } from "@/components/issue/estimate-icon";
 import { MentionTextField } from "@/components/editor/mention-text-field";
@@ -560,6 +562,7 @@ function ProjectTemplateEditor({
                       draft={draft}
                       set={set}
                       onAddIssue={() => openIssueComposer({})}
+                      onReload={onReload}
                     />
                   </div>
                   <div className="pt-description">
@@ -646,7 +649,7 @@ function priorityOptions(t: (value: string) => string): PropertyOption[] {
   return PRIORITIES.map((label, index) => ({
     id: String(index),
     label: t(label),
-    icon: index === 0 ? <NoPriorityGlyph size={16} /> : <PriorityIcon priority={index} size={16} />,
+    icon: index === 0 ? <NoPriorityGlyph size={16} /> : <PriorityIcon className="pt-priority-option" priority={index} size={16} style={{ color: undefined }} />,
     shortcut: String(index),
   }));
 }
@@ -726,11 +729,13 @@ function TemplatePills({
   draft,
   set,
   onAddIssue,
+  onReload,
 }: {
   data: BootstrapData;
   draft: Draft;
   set: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
   onAddIssue: () => void;
+  onReload: () => Promise<void>;
 }) {
   const { t } = useI18n();
   const status = data.projectStatuses.find((item) => item.id === draft.statusId);
@@ -747,6 +752,7 @@ function TemplatePills({
   return (
     <>
       <PropertyMenu
+        phonePopover
         compact
         label={t("Status")}
         ariaLabel={t("Change project status")}
@@ -768,6 +774,7 @@ function TemplatePills({
         onChange={(id) => set("statusId", id)}
       />
       <PropertyMenu
+        phonePopover
         compact
         label={t("Priority")}
         ariaLabel={t("Change project priority")}
@@ -795,6 +802,7 @@ function TemplatePills({
         unselectedGroupLabel="Users from the project teams"
         showUnselectedGroupWhenEmpty
         surfaceClassName="pt-picker project-details-sidebar__property-menu is-lead"
+        menuProps={{ phonePopover: true }}
         triggerClassName={pill(Boolean(lead))}
         trigger={
           <>
@@ -815,13 +823,15 @@ function TemplatePills({
         searchShortcut="P, then M"
         selectedIds={draft.memberIds}
         surfaceClassName="pt-picker project-details-sidebar__property-menu is-members"
-        triggerClassName={pill(members.length > 0)}
+        menuProps={{ highlightOnOpen: false, roundWidth: true, phonePopover: true }}
+        triggerClassName={pill(members.length > 0, members.length > 0 ? "has-count" : "")}
         trigger={
           <>
             {members[0] ? <UserAvatar className="avatar" name={members[0].displayName} avatarUrl={members[0].avatarUrl} userId={members[0].id} /> : <FlowGlyph name="members" width={14} height={14} />}
             <span data-i18n-ignore={members.length === 1 ? "" : undefined}>
               {members.length === 1 ? members[0].displayName : members.length ? countLabel(t, members.length, "1 member", "{count} members") : t("Members")}
             </span>
+            {members.length > 0 && <span className="pt-pill-count" aria-hidden="true">{members.length}</span>}
           </>
         }
         onChange={(id) => set("memberIds", toggleId(draft.memberIds, id))}
@@ -831,6 +841,7 @@ function TemplatePills({
         fallbackLabel={t("Team")}
         searchShortcut="P, then T"
         surfaceClassName="pt-picker project-details-sidebar__property-menu is-standard"
+        menuProps={{ highlightOnOpen: false, phonePopover: true, roundWidth: true }}
         teamIds={draft.teamIds}
         teams={data.teams.filter((item) => !item.archivedAt).map((item) => ({ id: item.id, name: item.name, key: item.key, color: item.color, icon: item.icon || "Team", parentId: data.teamSettings?.[item.id]?.parentTeamId || undefined }))}
         triggerClassName={pill(false, "pt-pill--team")}
@@ -838,6 +849,7 @@ function TemplatePills({
         onChange={(teamIds) => set("teamIds", teamIds)}
       />
       <PropertyMenu
+        phonePopover
         compact
         multiple
         label={t("Initiatives")}
@@ -846,10 +858,13 @@ function TemplatePills({
         searchPlaceholder={t("Change initiatives…")}
         searchShortcut="P, then N"
         surfaceClassName="pt-picker project-details-sidebar__property-menu is-initiatives"
+        highlightOnOpen={false}
+        roundWidth
         value={initiatives.length === 1 ? initiatives[0].name : initiatives.length ? countLabel(t, initiatives.length, "1 initiative", "{count} initiatives") : t("Initiatives")}
         valueIsEntityName={initiatives.length === 1}
         selectedIds={draft.initiativeIds}
-        triggerClassName={pill(initiatives.length > 0)}
+        triggerClassName={pill(initiatives.length > 0, initiatives.length > 0 ? "has-count" : "")}
+        triggerBadge={initiatives.length > 0 ? <span className="pt-pill-count" aria-hidden="true">{initiatives.length}</span> : undefined}
         icon={<TemplateGlyph name="initiative" size={14} />}
         options={data.initiatives.map((item) => ({
           id: item.id,
@@ -861,6 +876,7 @@ function TemplatePills({
         onChange={(id) => set("initiativeIds", toggleId(draft.initiativeIds, id))}
       />
       <PropertyMenu
+        phonePopover
         compact
         multiple
         kind="project-labels"
@@ -868,14 +884,20 @@ function TemplatePills({
         ariaLabel={t("Change labels")}
         searchPlaceholder={t("Add labels…")}
         searchShortcut="P, then L"
-        surfaceClassName="pt-picker project-details-sidebar__property-menu is-labels"
+        surfaceClassName="pt-picker is-labels"
         value={labels.length === 1 ? labels[0].label : labels.length ? countLabel(t, labels.length, "1 label", "{count} labels") : t("Labels")}
         valueIsEntityName={labels.length === 1}
         selectedIds={draft.labelIds}
-        triggerClassName={pill(labels.length > 0)}
+        triggerClassName={pill(labels.length > 0, labels.length > 0 ? "has-count" : "")}
+        triggerBadge={labels.length > 0 ? <span className="pt-pill-count" aria-hidden="true">{labels.length}</span> : undefined}
         icon={labels.length === 1 ? <span className="pt-label-dot" style={{ background: labels[0].color }} /> : <FlowGlyph name="labels" width={14} height={14} />}
         options={projectLabels}
         onChange={(id) => set("labelIds", toggleGroupedLabelIds(draft.labelIds, id, projectLabels))}
+        onCreate={async (name, groupId) => {
+          const label = await createWorkspaceLabel({ name, resourceType: "project", groupId });
+          await onReload();
+          set("labelIds", [...draft.labelIds, label.id]);
+        }}
       />
       <ProjectDependencyPicker
         projects={data.projects
@@ -1123,6 +1145,8 @@ function MilestoneComposer({
 }
 
 function composerKeys(event: KeyboardEvent<HTMLElement>, submit: () => void, cancel: () => void) {
+  // Keys typed in a picker menu (a portal outside the composer) belong to the menu: Escape closes only the menu.
+  if (event.key === "Escape" && (!event.currentTarget.contains(event.target as Node) || document.querySelector('.property-command-surface[data-state="open"], [role="menu"][data-state="open"]'))) return;
   if (event.key === "Escape") {
     event.preventDefault();
     event.stopPropagation();
@@ -1281,6 +1305,7 @@ function IssueRow({
         <span data-i18n-ignore>{issue.title}</span>
       </button>
       <PropertyMenu
+        phonePopover
         compact
         label={t("Team")}
         ariaLabel={t("Set team")}
@@ -1295,6 +1320,7 @@ function IssueRow({
       />
       <div className="pt-issue-actions">
         <PropertyMenu
+          phonePopover
           compact
           label={t("Assignee")}
           ariaLabel={t("Assign to…")}
@@ -1413,6 +1439,7 @@ function IssueComposer({
     title: issue?.title ?? "",
     description: issue?.description ?? "",
     teamId: issue?.teamId ?? defaultTeamId ?? "",
+    stateId: issue?.stateId ?? "",
     priority: issue?.priority ?? 0,
     assigneeId: issue?.assigneeId ?? "",
     labelIds: issue?.labelIds ?? [],
@@ -1444,6 +1471,7 @@ function IssueComposer({
         title: value.title.trim(),
         description: value.description.trim() || undefined,
         teamId: value.teamId || undefined,
+        stateId: value.stateId || undefined,
         priority: value.priority,
         assigneeId: value.assigneeId || undefined,
         labelIds: value.labelIds,
@@ -1468,20 +1496,34 @@ function IssueComposer({
     onCancel();
   };
   const pill = (isSet: boolean) => `pt-pill pt-pill--composer${isSet ? " is-set" : ""}`;
-  const editStateTeamId = value.teamId || data.teams[0]?.id || "";
-  const editState = issue ? (data.states.find((state) => state.id === data.teamSettings?.[editStateTeamId]?.defaultStateId) ?? data.states.find((state) => state.teamId === editStateTeamId && state.type === "backlog")) : undefined;
+  const stateTeamId = value.teamId || data.teams[0]?.id || "";
+  const workflow = { states: data.states, teamSettings: data.teamSettings };
+  const states = teamWorkflowStates(workflow, stateTeamId).filter((item) => !item.reserved);
+  const state = states.find((item) => item.id === value.stateId) ?? teamDefaultState(workflow, stateTeamId, states);
   return (
-    <div className={`pt-section pt-composer pt-issue-composer${issue ? " pt-issue-composer--edit" : ""}`} onKeyDown={(event) => composerKeys(event, submit, () => void cancel())}>
+    <div className={`pt-section pt-composer pt-issue-composer pt-issue-composer--edit${issue ? "" : " pt-issue-composer--create"}`} onKeyDown={(event) => composerKeys(event, submit, () => void cancel())}>
       <header className="pt-composer-header">
         <span>{t(issue ? "Edit issue" : "Create issue")}</span>
       </header>
       <div className="pt-composer-body">
         <div className="pt-issue-fields">
           <div className="pt-issue-title-field">
-            {editState && (
-              <span className="pt-issue-status" aria-hidden="true">
-                <StatusIcon state={editState} size={14} />
-              </span>
+            {state && (
+              <PropertyMenu
+                phonePopover
+                compact
+                label={t("Status")}
+                ariaLabel={t("Change status. {status} is selected").replace("{status}", () => state.name)}
+                searchPlaceholder={t("Change status…")}
+                searchShortcut="S"
+                value={state.name}
+                valueIsEntityName
+                selectedId={state.id}
+                triggerClassName="pt-pill pt-pill--composer pt-issue-status"
+                icon={<StatusIcon state={state} size={14} />}
+                options={states.map((item, index) => ({ id: item.id, label: item.name, icon: <StatusIcon state={item} size={14} />, shortcut: String(index + 1), i18nIgnore: true }))}
+                onChange={(id) => patch({ stateId: id })}
+              />
             )}
             <input
               ref={titleRef}
@@ -1512,6 +1554,7 @@ function IssueComposer({
         <div className="pt-composer-toolbar">
           <div className="pt-composer-pills">
             <PropertyMenu
+              phonePopover
               compact
               label={t("Team")}
               ariaLabel={t("Set team")}
@@ -1522,9 +1565,10 @@ function IssueComposer({
               triggerClassName={pill(Boolean(team))}
               icon={team ? <TeamIcon team={team} size={14} /> : <FlowGlyph name="leadTeam" width={14} height={14} />}
               options={teamOptions(data)}
-              onChange={(id) => patch({ teamId: id, labelIds: [] })}
+              onChange={(id) => patch({ teamId: id, stateId: "", labelIds: [] })}
             />
             <PropertyMenu
+              phonePopover
               compact
               label={t("Priority")}
               ariaLabel={t("Change priority")}
@@ -1537,6 +1581,7 @@ function IssueComposer({
               onChange={(id) => patch({ priority: Number(id) })}
             />
             <PropertyMenu
+              phonePopover
               compact
               label={t("Assignee")}
               ariaLabel={t("Change assignee")}
@@ -1551,6 +1596,7 @@ function IssueComposer({
             />
             {milestones.length > 0 && (
               <PropertyMenu
+                phonePopover
                 compact
                 label={t("Milestone")}
                 ariaLabel={t("Set milestone")}
@@ -1568,6 +1614,7 @@ function IssueComposer({
               />
             )}
             <PropertyMenu
+              phonePopover
               compact
               label={t("Estimate")}
               ariaLabel={t("Set estimate")}
@@ -1584,6 +1631,7 @@ function IssueComposer({
               onChange={(id) => patch({ estimate: Number(id) || undefined })}
             />
             <PropertyMenu
+              phonePopover
               compact
               multiple
               kind="labels"

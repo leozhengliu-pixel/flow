@@ -16,11 +16,11 @@ function orderedTeams(teams: ProjectTeamChoice[], teamIds: string[], parentOf: (
   return { selected: orderTeamTree(selected, parentOf), others: orderTeamTree(sortTeamSiblings(teams.filter(team => !teamIds.includes(team.id))), parentOf), lead: selected[0] }
 }
 
-function teamRowLabel(team: ProjectTeamChoice, leadText?: string): ReactNode {
-  return <><span className="project-teams-menu__name" data-i18n-ignore>{team.name}</span>{leadText ? <span className="project-teams-menu__badge">{leadText}</span> : team.key ? <span className="project-teams-menu__key" data-i18n-ignore>{team.key}</span> : null}</>
+function teamRowLabel(team: ProjectTeamChoice, leadText?: string, parentName?: string): ReactNode {
+  return <>{parentName && <><span className="project-teams-menu__path" data-i18n-ignore>{parentName}</span><svg className="project-teams-menu__path-chevron" width="5" height="9" viewBox="0 0 5 9" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M.75.75 4.25 4.5.75 8.25"/></svg></>}<span className="project-teams-menu__name" data-i18n-ignore>{team.name}</span>{leadText ? <span className="project-teams-menu__badge">{leadText}</span> : team.key ? <span className="project-teams-menu__key" data-i18n-ignore>{team.key}</span> : null}</>
 }
 
-export function ProjectTeamsPicker({ teams, teamIds, onChange, fallbackLabel = 'Team', side, align, alignOffset, triggerClassName, surfaceClassName, ariaLabel = 'Change project teams', triggerIconSize = 16, tooltip, tooltipShortcut, searchShortcut, open, onOpenChange, triggerIconClassName }: {
+export function ProjectTeamsPicker({ menuProps, teams, teamIds, onChange, fallbackLabel = 'Team', side, align, alignOffset, triggerClassName, surfaceClassName, ariaLabel = 'Change project teams', triggerIconSize = 16, tooltip, tooltipShortcut, searchShortcut, open, onOpenChange, triggerIconClassName }: {
   teams: ProjectTeamChoice[]
   teamIds: string[]
   /** Receives the project's new ordered team ids (lead team first). */
@@ -34,6 +34,8 @@ export function ProjectTeamsPicker({ teams, teamIds, onChange, fallbackLabel = '
   ariaLabel?: string
   triggerIconSize?: number
   triggerIconClassName?: string
+  /** Opt-in menu behaviour for the project template editor. */
+  menuProps?: { roundWidth?: boolean; highlightOnOpen?: boolean; phonePopover?: boolean }
   tooltip?: string
   tooltipShortcut?: string
   searchShortcut?: string
@@ -65,13 +67,18 @@ export function ProjectTeamsPicker({ teams, teamIds, onChange, fallbackLabel = '
   }
   const options: PropertyOption[] = [
     ...selected.map(({ team, depth }) => withHover(team, team.id === lead?.id && multiple ? toOption(team, { labelContent: teamRowLabel(team, t('Lead')), submenu: leadSubmenu, indent: depth }) : toOption(team, { indent: depth }))),
-    ...others.map(({ team, depth }) => withHover(team, toOption(team, { groupId: 'your-teams', groupLabel: 'Your teams', indent: depth }))),
+    ...others.map(({ team, depth }) => {
+      // A sub-team of a selected team is listed with its parent's name before it.
+      const parentName = selected.find(row => row.team.id === parents.get(team.id))?.team.name
+      return withHover(team, toOption(team, { groupId: 'your-teams', groupLabel: 'Your teams', indent: depth, ...(parentName ? { labelContent: teamRowLabel(team, undefined, parentName) } : {}) }))
+    }),
   ]
   return <PropertyMenu
+    {...menuProps}
     compact
     multiple
     closeOnSelect
-    label="Teams"
+    label={t("Teams")}
     ariaLabel={ariaLabel}
     value={label}
     valueIsEntityName={Boolean(lead)}
