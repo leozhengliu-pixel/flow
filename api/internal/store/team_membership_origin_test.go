@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -142,6 +143,63 @@ func TestOriginScopedRemovalDryRunAndOwnerProtection(t *testing.T) {
 	}
 	if _, err := repository.ChangeTeamMembership(ctx, TeamMembershipChangeRequest{WorkspaceID: data.Workspace.ID, TeamID: teamID, UserID: manual.ID, Member: true, Origin: "scim-ish"}); !errors.Is(err, ErrInvalidTeamMemberOrigin) {
 		t.Fatalf("invalid origin error = %v", err)
+	}
+}
+
+func TestTeamMemberCleanupWithBoundedMetadata(t *testing.T) {
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	path := filepath.Join(t.TempDir(), "team-cleanup.db")
+	legacy, err := OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer legacy.Close()
+
+	ctx := t.Context()
+	data := legacy.Bootstrap()
+	workspace, team := data.Workspace, data.Teams[0]
+	user := originTestMember(t, legacy, data, "Leaving member")
+	if err := legacy.SetTeamMembership(ctx, workspace.ID, team.ID, user.ID, "member", true); err != nil {
+		t.Fatal(err)
+	}
+	issue := domain.Issue{
+		ID: "team-cleanup-issue", Identifier: team.Key + "-100", Title: "Assigned and subscribed",
+		Team: team, Assignee: &user, SubscriberIDs: []string{data.Viewer.ID, user.ID},
+	}
+	if err := legacy.MutateWorkspace(ctx, workspace.URLKey, "issue.created", issue.ID, nil, func(next *domain.Bootstrap) error {
+		next.Users = append(next.Users, user)
+		next.Issues = append(next.Issues, issue)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assigned, err := legacy.IssueRecord(ctx, workspace.URLKey, issue.ID)
+	if err != nil || assigned.Assignee == nil || assigned.Assignee.ID != user.ID || !slices.Contains(assigned.SubscriberIDs, user.ID) {
+		t.Fatal("fixture is missing the member's assignment or subscription", err)
+	}
+
+	t.Setenv("FLOW_BOUNDED_METADATA", "on")
+	bounded, err := OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bounded.Close()
+	if !bounded.BoundedMetadataEnabled() {
+		t.Fatal("expected a bounded store")
+	}
+	change := TeamMembershipChangeRequest{WorkspaceID: workspace.ID, TeamID: team.ID, UserID: user.ID}
+	result, err := bounded.ChangeTeamMembership(ctx, change)
+	if err != nil || len(result.Changes) != 1 || result.Changes[0].Action != domain.TeamMemberRemoved {
+		t.Fatal("team removal or issue cleanup failed", err)
+	}
+	cleaned, err := bounded.IssueRecord(ctx, workspace.URLKey, issue.ID)
+	if err != nil || cleaned.Assignee != nil || !slices.Equal(cleaned.SubscriberIDs, []string{data.Viewer.ID}) {
+		t.Fatal("cleanup left the departed member's assignment or changed other subscribers", err)
+	}
+	if err := checkRecordJournalCoverage(ctx, bounded.db, workspace.URLKey); err != nil {
+		t.Fatal("cleanup lost journal coverage", err)
 	}
 }
 

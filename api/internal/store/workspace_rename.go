@@ -928,47 +928,99 @@ func (s *SQLiteStore) AdoptRenamedWorkspaceRows(ctx context.Context, since time.
 	return report, nil
 }
 
-// adoptWorkspaceKey moves the rows under oldKey to the workspace's current
-// key, under the catalog lock so no rename or create runs meanwhile.
+// adoptWorkspaceKey resolves both keys from SQL under the catalog lock. The
+// replica running maintenance may have missed the rename's publication.
 func (s *SQLiteStore) adoptWorkspaceKey(ctx context.Context, workspaceID, oldKey string, plans []workspaceKeyTablePlan) (int64, error) {
 	var moved int64
 	run := func() error {
-		_, current, ok := s.workspaceByID(workspaceID)
-		if !ok || current == oldKey || s.HasWorkspace(oldKey) {
+		const currentKeySQL = `SELECT workspace_key FROM workspace_states WHERE workspace_id=?
+			AND NOT EXISTS(SELECT 1 FROM workspace_states WHERE workspace_key=?)`
+		var current string
+		err := s.db.QueryRowContext(ctx, currentKeySQL, workspaceID, oldKey).Scan(&current)
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
-		data, ok := s.WorkspaceMetadata(current)
-		if !ok {
-			return nil
-		}
-		// Rows, credentials and objects all move; a key that holds none of
-		// them makes an empty transaction.
-		move, err := s.prepareWorkspaceKeyMove(ctx, data, oldKey, current, true, plans)
 		if err != nil {
 			return err
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
+		if err := s.ReloadWorkspace(ctx, current); err != nil {
 			return err
 		}
-		moved, err = s.applyWorkspaceKeyMove(ctx, tx, move)
-		if err == nil {
-			err = tx.Commit()
-		}
-		_ = tx.Rollback()
-		s.finishWorkspaceKeyMove(ctx, move, err == nil)
-		if err != nil {
-			moved = 0
+		moved, err = s.adoptWorkspaceRows(ctx, workspaceID, oldKey, current, plans)
+		if err != nil || moved == 0 {
 			return err
 		}
-		if moved > 0 {
-			slog.Info("moved rows written under a previous workspace key", "workspace_id", workspaceID, "rows", moved)
+		slog.Info("moved rows written under a previous workspace key", "rows", moved)
+		if s.metadataResidency != nil {
+			// Old writers may have left captured journal keys. Repair them
+			// under the current key before reading the installed image again.
+			return s.ReloadWorkspace(ctx, current)
 		}
 		return nil
 	}
 	if s.coordinator == nil {
-		return moved, run()
+		err := run()
+		return moved, err
 	}
 	err := s.coordinator.WithWorkspaceLock(ctx, "__workspace_catalog__", run)
 	return moved, err
+}
+
+func (s *SQLiteStore) adoptWorkspaceRows(ctx context.Context, workspaceID, oldKey, current string, plans []workspaceKeyTablePlan) (int64, error) {
+	data, ok := s.WorkspaceMetadataFields(current, "users", "integrationConnections", "settings")
+	if !ok || data.Workspace.ID != workspaceID {
+		return 0, ErrBoundedMetadataCoverage
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	move, err := s.prepareWorkspaceKeyMove(ctx, data, oldKey, current, true, plans)
+	if err != nil {
+		return 0, err
+	}
+	committed := false
+	defer func() { s.finishWorkspaceKeyMove(ctx, move, committed) }()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	// Recheck identity and key reuse in the transaction. The row lock also
+	// guards against a concurrent rename by a replica without a coordinator.
+	lock := ""
+	if s.dialect != "sqlite" {
+		lock = " FOR UPDATE"
+	}
+	var present int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM workspace_states WHERE workspace_key=? AND workspace_id=?
+		AND NOT EXISTS(SELECT 1 FROM workspace_states WHERE workspace_key=?)`+lock, current, workspaceID, oldKey).Scan(&present)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	moved, err := s.applyWorkspaceKeyMove(ctx, tx, move)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	committed = true
+	if s.HasWorkspace(oldKey) {
+		if s.metadataResidency != nil {
+			s.dropResidentWorkspace(oldKey)
+		} else {
+			s.mu.Lock()
+			delete(s.workspaces, oldKey)
+			s.forgetCopyRevisionLocked(oldKey)
+			s.mu.Unlock()
+		}
+		s.mu.Lock()
+		if s.lastWorkspaceKey == oldKey {
+			s.lastWorkspaceKey = current
+		}
+		s.mu.Unlock()
+	}
+	return moved, nil
 }

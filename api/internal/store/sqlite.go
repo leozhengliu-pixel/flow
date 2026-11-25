@@ -2483,6 +2483,13 @@ func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, 
 		if next == "" {
 			next = workspaceKey
 		}
+		if next != workspaceKey && s.metadataResidency.requireCoverage {
+			// A legacy replica can leave journal work and a newer canonical
+			// image at the old key. Reconcile both before moving the rows.
+			if err := s.ReloadWorkspace(ctx, workspaceKey); err != nil {
+				return domain.Bootstrap{}, err
+			}
+		}
 		var updated domain.Bootstrap
 		err := s.coldLegacyWrite(ctx, workspaceKey, func(ctx context.Context, facade *SQLiteStore) error {
 			var err error
@@ -2490,6 +2497,14 @@ func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, 
 			return err
 		}, next)
 		if err == nil {
+			if next != workspaceKey && !s.HasWorkspace(next) {
+				// Legacy work can also commit between the refresh and move.
+				// The rename has committed, so repair before serving the new
+				// key without turning a deferred install into a failed write.
+				if err := s.ReloadWorkspace(context.WithoutCancel(ctx), next); err != nil {
+					slog.Warn("bounded metadata: renamed workspace refresh deferred")
+				}
+			}
 			s.setLastWorkspaceKey(next)
 		}
 		return updated, err
@@ -2542,6 +2557,14 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	}
 	renaming := workspace.URLKey != workspaceKey
 	if renaming {
+		if s.coldWrite != nil {
+			// The COLD facade was admitted before the shared write lock.
+			// An old replica's write can have advanced SQL since then.
+			if err := s.refreshWorkspaceCopy(ctx, workspaceKey); err != nil {
+				return domain.Bootstrap{}, err
+			}
+			data, _ = s.storedWorkspace(workspaceKey)
+		}
 		if _, exists := s.storedWorkspace(workspace.URLKey); exists {
 			return domain.Bootstrap{}, ErrWorkspaceKeyTaken
 		}
