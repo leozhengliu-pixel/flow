@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -192,12 +191,10 @@ func writeSyncError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "Sync cursor changed; reload the manifest")
 	case isRetryableBusy(err):
 		retryAfter, _ := retryableBusy(err)
-		slog.Warn("sync records busy", "error", err)
+		slog.Warn("sync records busy", "cause", requestErrorCode(err))
 		(&metadataReadGate{}).busy(w, retryAfter)
 	default:
-		// The response stays generic; the cause (an unready collection, a
-		// coverage gap or a database error) is logged for diagnosis.
-		slog.Warn("sync records unavailable", "error", err, "error_type", fmt.Sprintf("%T", err))
+		slog.Warn("sync records unavailable", "cause", requestErrorCode(err))
 		writeError(w, http.StatusServiceUnavailable, "Sync records are not ready; use the legacy read endpoint")
 	}
 }

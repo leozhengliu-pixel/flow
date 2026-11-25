@@ -372,7 +372,7 @@ func (s *SQLiteStore) writeStreamedMetadataRootPatch(ctx context.Context, tx *sq
 	// As the delta writer's root, NUL is dropped (PostgreSQL refuses \u0000).
 	stripped := &jsonNULStripWriter{dst: written}
 	out := bufio.NewWriterSize(stripped, metadataRecordChunkBytes)
-	names := make([]string, 0, len(root.fields)+len(patch))
+	var names []string
 	for name := range root.fields {
 		if raw, replaced := patch[name]; replaced && raw == nil {
 			continue
@@ -423,6 +423,9 @@ func (s *SQLiteStore) writeStreamedMetadataRootPatch(ctx context.Context, tx *sq
 	}
 	if err := stripped.Finish(); err != nil {
 		return err
+	}
+	if written.size < 0 || written.size > (metadataWorkBytes-(64<<10))/3 {
+		return ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(written.size)*3+64<<10); err != nil {
 		return err

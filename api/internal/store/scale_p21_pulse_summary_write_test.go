@@ -199,6 +199,40 @@ func scaleP21PulseSummaryCursor(t *testing.T, repo *SQLiteStore, workspace strin
 	return raw
 }
 
+func TestWritePulseSummaryRowsAcrossBatches(t *testing.T) {
+	f := scaleP09Database(t)
+	tx, err := f.db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	const count = contentRecordWriteBatchSize/2 + 1
+	notifications := make([]domain.Notification, 0, count)
+	deliveries := make([]domain.NotificationDelivery, 0, count)
+	for _, candidate := range scaleP21PulseSummaryCandidates("batch", count, true) {
+		notifications = append(notifications, *candidate.Notification)
+		deliveries = append(deliveries, domain.NotificationDelivery{
+			ID: "delivery_" + candidate.Notification.ID, NotificationID: candidate.Notification.ID,
+			RecipientID: candidate.UserID, Channel: "desktop", Status: "pending",
+			CreatedAt: candidate.Notification.CreatedAt, UpdatedAt: candidate.Notification.UpdatedAt,
+		})
+	}
+	workspace := f.data.Workspace.URLKey
+	if err := writePulseSummaryRows(t.Context(), tx, workspace, notifications, deliveries); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"notification", "delivery"} {
+		var got int
+		err := tx.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM workspace_content_records WHERE workspace_key=? AND kind=?`, workspace, kind).Scan(&got)
+		if err != nil || got != count {
+			t.Fatalf("%s rows = %d, want %d (err %v)", kind, got, count, err)
+		}
+	}
+	if len(tx.signals) != count {
+		t.Fatalf("notification signals = %d, want %d", len(tx.signals), count)
+	}
+}
+
 func TestScaleP21PulseSummaryWriterDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")

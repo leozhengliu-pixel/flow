@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -298,7 +299,7 @@ func (s *server) applyRemoteEvents(workspace string) {
 		}
 		cancel()
 		if err != nil {
-			log.Printf("Peer apply workspace=%s: %v", workspace, err)
+			slog.Warn("peer apply failed", "cause", requestErrorCode(err))
 			s.peerResync(workspace, "peer-apply-failed")
 		}
 	}
@@ -352,7 +353,7 @@ func (s *server) applyLegacyRemoteEvents(workspace string) {
 			// Publishing would let subscribers here fetch the stale copy as if
 			// it had the change; the next applied batch reloads it, and the
 			// resync makes them refetch then.
-			log.Printf("Redis reload workspace=%s events=%d: %v", workspace, len(batch), err)
+			slog.Warn("Redis reload failed", "events", len(batch), "cause", requestErrorCode(err))
 			diagnoseRealtimeResync("legacy-reload-failed")
 			s.realtime.publish(workspace, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()})
 			continue

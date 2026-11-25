@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Metadata errors and the affected API logs omit credential and request values. Metadata writes and seed batches check allocation sizes before reserving memory.
 - Realtime projections wait briefly for shared memory during bursts, so viewers can receive updates as capacity frees up.
 - Loops can quote text from authorized Word attachments and inspect JPGs with an image-capable model. Unreadable files and unavailable image input are reported per attachment so the audit can continue.
 - The keyboard skip link moves focus to the page content even when the page is still loading.

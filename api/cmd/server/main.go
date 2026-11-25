@@ -7451,6 +7451,10 @@ func optionalQueryBool(w http.ResponseWriter, r *http.Request, key string) (*boo
 	return &parsed, true
 }
 func respondMutation(w http.ResponseWriter, err error, success int, value any) {
+	respondMutationWithFallback(w, err, success, value, "")
+}
+
+func respondMutationWithFallback(w http.ResponseWriter, err error, success int, value any, fallback string) {
 	if writeStoreBusy(w, err) {
 		// COLD slot, workspace lock or metadata work budget: retryable.
 		return
@@ -7508,7 +7512,10 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		if fallback == "" {
+			fallback = err.Error()
+		}
+		writeError(w, http.StatusInternalServerError, fallback)
 		return
 	}
 	if value != nil {

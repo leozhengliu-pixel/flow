@@ -109,7 +109,7 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 			if err := ctx.Err(); err != nil {
 				return row, err
 			}
-			return row, fmt.Errorf("metadata %s/%s: invalid canonical JSON", key.Kind, key.ID)
+			return row, fmt.Errorf("metadata %s: invalid canonical JSON", key.Kind)
 		}
 	}
 	r.boundedCapture = false
@@ -132,7 +132,7 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 		ArchivedAt *time.Time `json:"archivedAt"`
 	}
 	if err := json.Unmarshal(row.summary, &dates); err != nil {
-		return row, fmt.Errorf("metadata %s/%s: invalid canonical timestamps", key.Kind, key.ID)
+		return row, fmt.Errorf("metadata %s: invalid canonical timestamps", key.Kind)
 	}
 	row.created = dates.CreatedAt.UTC().Format(issueRecordTimestamp)
 	row.updated = dates.UpdatedAt.UTC().Format(issueRecordTimestamp)
