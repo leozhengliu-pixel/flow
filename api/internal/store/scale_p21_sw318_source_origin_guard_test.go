@@ -100,8 +100,8 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"scale_p21_resource_read.go":                                    "5ca09910f1c137dfd89587667b24c63996fb802783b8e5e6a6f50a0b6a7e9d5c",
 		"scale_p21_sw16_former_members.go":                              "b9cc69d0ce8e48f062ab38f6bf9d617baaa2c47aa9ff89dc1f9bc78f72f5e716",
 		"scale_p21_sw21_sync_requests.go":                               "813f93f5de089ba2a7ebdc0985ee9d434adf1494fd49068afda17fad6d1c8295",
-		"scale_p21_sw307_team_resource_read.go":                         "e91a2ec9e65996dc2e2ca07c7ebfb8e618bf3274c29679cd0fda488f6bb675c8",
-		"scale_p21_team_member_request.go":                              "0360800099462666455efdb0d7b09147467ad20fa5d2dce88a6d20aee0e25c5d",
+		"scale_p21_sw307_team_resource_read.go":                         "c7600edbc7ef258ec5e983cd510812facb4ca9533a6e0125edcc41783fc10bc8",
+		"scale_p21_team_member_request.go":                              "131cbc4c25f0dc1a5c3d222f9427e21fb350efcf62880559a6310af2e11fc7ac",
 		"scale_p21_triage_suggestion_read.go":                           "83681e09dfbf29ea6c4888607bac7d7e97a37605bd1f7ef904f1f6941e65477f",
 		// Issue deletion borrows its own write transaction for policy and issue headers.
 		"bounded_issue_lifecycle.go": "9d33443fd44941047790c547c61d5a1c1925ad8dd8af0e32bfd778f790aa395a",

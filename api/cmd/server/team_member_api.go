@@ -396,32 +396,57 @@ func (s *server) teamForMemberRequest(w http.ResponseWriter, r *http.Request) (d
 		handoff, _ := r.Context().Value(pagedMetadataHandoffKey{}).(*pagedMetadataHandoff)
 		handedOff := !s.authDisabled && handoff != nil && handoff.workspace == workspace && handoff.userID == authUser(r).ID && !handoff.taken.Load()
 		if !handedOff {
-			var access *store.AccessContext
-			var err error
-			if !s.authDisabled {
-				if !acquireProjection(r) {
-					if retryAfter, refused := projectionRefused(r); refused {
-						writeProjectionBusy(w, retryAfter)
-					}
-					return domain.Bootstrap{}, domain.Team{}, nil, false
+			if !s.authDisabled && !acquireProjection(r) {
+				if retryAfter, refused := projectionRefused(r); refused {
+					writeProjectionBusy(w, retryAfter)
 				}
-				var credential *domain.APIKey
-				if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
-					credential = &key
-				}
-				current, resolveErr := s.store.ResolveAccess(r.Context(), workspace, authUser(r).ID, credential)
-				if errors.Is(resolveErr, sql.ErrNoRows) {
-					resolveErr = store.ErrAuthForbidden
-				}
-				err = resolveErr
-				if err == nil {
-					access = &current
-				}
+				return domain.Bootstrap{}, domain.Team{}, nil, false
 			}
 			var read *store.TeamMemberRequestRead
 			found := false
-			if err == nil {
-				read, found, err = s.store.BeginTeamMemberRequestRead(r.Context(), workspace, r.PathValue("id"), access, s.authDisabled && r.Method == http.MethodGet)
+			var err error
+			for attempt := 0; ; attempt++ {
+				var access *store.AccessContext
+				var credential *domain.APIKey
+				if !s.authDisabled {
+					if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+						credential = &key
+					}
+					current, resolveErr := s.store.ResolveAccess(r.Context(), workspace, authUser(r).ID, credential)
+					if errors.Is(resolveErr, sql.ErrNoRows) {
+						resolveErr = store.ErrAuthForbidden
+					}
+					err = resolveErr
+					if err == nil {
+						access = &current
+					}
+				}
+				if err == nil {
+					read, found, err = s.store.BeginTeamMemberRequestRead(r.Context(), workspace, r.PathValue("id"), access, s.authDisabled && r.Method == http.MethodGet)
+				}
+				// A concurrent write retired the resolved access, as in
+				// boundedTeamRowAuthorization: resolve it again, which
+				// refuses a real revocation.
+				if s.authDisabled || !errors.Is(err, store.ErrResourceAccessChanged) {
+					break
+				}
+				if attempt == 2 {
+					noteAuthorizationBusy(r, err)
+					if !writeProjectionRefusal(w, r) {
+						writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+					}
+					return domain.Bootstrap{}, domain.Team{}, nil, false
+				}
+				if credential != nil {
+					user, current, selectedWorkspace, authErr := s.authenticateAPIKey(r)
+					if current == nil || user.ID != authUser(r).ID || selectedWorkspace != workspace || !apiKeyAllowsRequest(r, *current) {
+						if !writeAuthCheckFailure(w, authErr) {
+							writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+						}
+						return domain.Bootstrap{}, domain.Team{}, nil, false
+					}
+					*r = *r.WithContext(context.WithValue(r.Context(), apiKeyContextKey{}, *current))
+				}
 			}
 			if err == nil && !found {
 				if s.authDisabled {
