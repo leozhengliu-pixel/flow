@@ -59,7 +59,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"metadata_record_scope.go":                                      "25885e1106e0b8ee8dbc2b9f2f24d94c0d9764c99dfd644fe5a32165e21647b8",
 		"read_snapshot.go":                                              "5485d56062abc1d044da880b2ef6351828732ce1fc99b201fec20905a71fa12a",
 		"resource_access.go":                                            "460e374d1cf4a0915d8887aa408d68a6bb79f6ae267c3ebfff2d1d298977de64",
-		"scale_p11_peer_state.go":                                       "aabfdf46597e6f84410c9eb70367cc7d3bde01ac0dcd3510b761d8c7feaa173e",
+		"record_peer_state.go":                                          "aabfdf46597e6f84410c9eb70367cc7d3bde01ac0dcd3510b761d8c7feaa173e",
 		"epoch_access.go":                                               "3a90a16ace7b653f6269cef736dd758162ea758d5e754508dc3d3804f771903a",
 		"query_window_metadata.go":                                      "0d847695e8a6dae32226bd778b04736af3e5759416b9ca6e43f2b9cd847aa411",
 		"record_selection.go":                                           "e6f3312be20c5716b6dcf65ec96b540e579261f2cf43469b83f43dc57cde36ee",

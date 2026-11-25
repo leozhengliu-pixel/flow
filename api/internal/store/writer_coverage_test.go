@@ -100,8 +100,8 @@ metadata_catalog_backfill.go:BackfillMetadataCatalog
 oauth_token_exchange.go:ExchangeOAuthGrant
 personal_data.go:DeleteAgentSessionRuns
 record_journal.go:maintainRecordSummary
-scale_p09_journal_schema.go:recordJournalTriggerSpecs
-scale_p09_journal_repair.go:pruneOrphanRecordCatalog
+journal_schema.go:recordJournalTriggerSpecs
+journal_repair.go:pruneOrphanRecordCatalog
 scale_p21_legacy_progress_image.go:build
 legacy_record_base.go:persistIssues
 secret_reseal.go:resealTextSecrets

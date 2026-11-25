@@ -6,7 +6,7 @@ import "context"
 // canonical records has a completed catalog checkpoint
 // (validateResidentBackfill). Only the catalog backfill creates checkpoints;
 // the journal flush maintains the rows of collections that already have one
-// (record_journal.go, scale_p09_journal_flush.go). A collection whose first
+// (record_journal.go, journal_flush.go). A collection whose first
 // record is written after the backfill pass (the first workflow run, API key,
 // favorite, ...) therefore had catalog rows but no checkpoint, and every
 // later reload of its workspace (a COLD write's publication, a peer change,

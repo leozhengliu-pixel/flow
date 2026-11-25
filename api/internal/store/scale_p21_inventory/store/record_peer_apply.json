@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p11_peer_apply.go",
+  "source": "store/record_peer_apply.go",
   "unmigrated": 0,
   "consumers": {
     "ApplyCommittedPage": {
