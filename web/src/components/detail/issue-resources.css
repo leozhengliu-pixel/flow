@@ -24,12 +24,12 @@
 .res-menu svg { width: 14px; height: 14px; }
 .res-dialog { position: fixed; z-index: 1000; top: 33.333%; left: 50%; box-sizing: border-box; width: min(540px, calc(100vw - 32px)); transform: translate(-50%, -33.333%); border: .5px solid var(--res-dialog-border); border-radius: 12px; background: var(--res-dialog-bg); box-shadow: var(--res-dialog-shadow); color: var(--res-dialog-fg); }
 .res-dialog form { display: flex; flex-direction: column; gap: 16px; padding: 32px; }
-.res-dialog-title { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--res-title); font: 600 15px / 23px var(--font); }
+.res-dialog-title { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--res-dialog-strong); font: 600 15px / 23px var(--font); }
 .res-dialog-title svg { color: var(--res-icon); }
 .res-dialog label { display: flex; flex-direction: column; gap: 4px; }
 .res-dialog label > span { height: 24px; color: var(--res-dialog-fg); font: 500 13px / 24px var(--font); }
 .res-dialog label em { color: var(--res-dialog-hint); font: 450 12px / normal var(--font); }
-.res-dialog input { box-sizing: border-box; height: 32px; padding: 6px 12px; border: .5px solid var(--res-dialog-field-border); border-radius: 8px; background: var(--res-dialog-field-bg); color: var(--res-title); font: 400 13px / normal var(--font); outline: 0; }
+.res-dialog input { box-sizing: border-box; height: 32px; padding: 6px 12px; border: .5px solid var(--res-dialog-field-border); border-radius: 8px; background: var(--res-dialog-field-bg); color: var(--res-dialog-strong); font: 400 13px / normal var(--font); outline: 0; }
 .res-dialog input:focus { border-color: var(--res-dialog-focus); }
 .res-dialog footer { display: flex; justify-content: flex-end; gap: 16px; }
 .res-dialog footer button { height: 32px; padding: 0 12px; border: .5px solid transparent; border-radius: 9999px; background: var(--res-cancel-bg); color: var(--res-dialog-fg); font: 500 13px / normal var(--font); cursor: default; }
