@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -111,11 +112,13 @@ func TestScaleP21ActivationIssueDeleteStaleAuthorization(t *testing.T) {
 	checked, resume := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	var readPolicy bool
+	var epochChecks atomic.Int32
 	readCtx := store.WithSQLStatementObserver(ctx, func(query string) {
 		if strings.Contains(query, " FROM workspace_states CROSS JOIN record_journal_mode") {
 			readPolicy = true
 		}
 		if readPolicy && strings.HasPrefix(query, "SELECT COALESCE((SELECT epoch FROM workspace_authz_epochs") {
+			epochChecks.Add(1)
 			once.Do(func() {
 				close(checked)
 				select {
@@ -160,6 +163,17 @@ func TestScaleP21ActivationIssueDeleteStaleAuthorization(t *testing.T) {
 	}
 	close(resume)
 	<-done
+	if scaleP03DatabaseConfig(t).Driver == "sqlite" {
+		// A SQLite cookie session rebuilds its authorization when the policy
+		// epoch moves, so the deletion commits only after a fresh live check.
+		if w.Code != http.StatusNoContent || loadErrorsEventCount(t, peers[0].service.store, "issue.deleted") != before+1 {
+			t.Fatalf("re-authorized issue deletion returned %d, want 204 with one event", w.Code)
+		}
+		if epochChecks.Load() < 2 {
+			t.Fatal("issue deletion committed without re-checking the policy epoch")
+		}
+		return
+	}
 	if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "2" {
 		t.Fatalf("stale issue authorization returned %d, want 503 with Retry-After", w.Code)
 	}
