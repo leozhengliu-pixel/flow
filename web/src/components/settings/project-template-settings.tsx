@@ -1,5 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 
 import { toast } from "@/lib/toast";
 import {
@@ -15,6 +15,7 @@ import { MentionTextField } from "@/components/editor/mention-text-field";
 import {
   ProjectStatusIcon,
   PriorityIcon,
+  StatusIcon,
   TeamIcon,
 } from "@/components/issue/issue-icons";
 import { PersonPicker } from "@/components/issue/core-property-pickers";
@@ -960,6 +961,7 @@ function SectionHeader({
   onToggle,
   onAdd,
   addLabel,
+  trailing,
 }: {
   label: string;
   count: number;
@@ -967,6 +969,7 @@ function SectionHeader({
   onToggle?: () => void;
   onAdd?: () => void;
   addLabel?: string;
+  trailing?: ReactNode;
 }) {
   const { t } = useI18n();
   return (
@@ -976,12 +979,15 @@ function SectionHeader({
         {count > 0 && <span className="pt-section-count">{count}</span>}
         {count > 0 && <TemplateGlyph name="caret" className={open ? "is-open" : undefined} />}
       </button>
-      {onAdd && (
-        <button type="button" className="pt-icon-button pt-add-button-pill" aria-label={t(addLabel ?? "Add")} onClick={onAdd}>
-          <FlowGlyph name="plus" width={14} height={14} />
-          <span>{t("Add")}</span>
-        </button>
-      )}
+      <div className="pt-section-end">
+        {trailing}
+        {onAdd && (
+          <button type="button" className="pt-icon-button pt-add-button-pill" aria-label={t(addLabel ?? "Add")} onClick={onAdd}>
+            <FlowGlyph name="plus" width={14} height={14} />
+            <span>{t("Add")}</span>
+          </button>
+        )}
+      </div>
     </header>
   );
 }
@@ -1183,6 +1189,11 @@ function IssuesSection({
   const [open, setOpen] = useState(true);
   const update = (id: string, patch: Partial<ProjectTemplateIssue>) =>
     onChange(issues.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  // Total points across issues whose team uses estimates; unestimated issues count as 1 (as the reference shows).
+  const estimateTotal = issues.reduce((sum, item) => {
+    const settings = data.teamSettings?.[item.teamId || data.teams[0]?.id || ""];
+    return teamUsesEstimates(settings) ? sum + (item.estimate ?? 1) : sum;
+  }, 0);
   if (composer) {
     const editing = composer.id ? issues.find((item) => item.id === composer.id) : undefined;
     return (
@@ -1209,7 +1220,7 @@ function IssuesSection({
     );
   return (
     <div className="pt-section pt-issues">
-      <SectionHeader label={t("Issues")} count={issues.length} open={open} onToggle={() => setOpen((value) => !value)} onAdd={() => onComposer({})} addLabel="Add issue" />
+      <SectionHeader label={t("Issues")} count={issues.length} open={open} onToggle={() => setOpen((value) => !value)} onAdd={() => onComposer({})} addLabel="Add issue" trailing={estimateTotal > 0 ? <span className="pt-section-total" aria-label={`Estimate ${estimateTotal}`}><EstimateIcon size={14} />{estimateTotal}</span> : undefined} />
       {open &&
         issueOrder(issues).map(({ issue, depth }) => (
           <IssueRow
@@ -1257,8 +1268,15 @@ function IssueRow({
     icon: index === 0 ? <NoPriorityGlyph /> : <PriorityIcon priority={index} size={16} />,
     shortcut: String(index),
   }));
+  const stateTeamId = issue.teamId || data.teams[0]?.id || "";
+  const defaultState = data.states.find((state) => state.id === data.teamSettings?.[stateTeamId]?.defaultStateId) ?? data.states.find((state) => state.teamId === stateTeamId && state.type === "backlog");
   return (
-    <div className="pt-row pt-issue-row" style={depth ? { paddingLeft: 16 + depth * 24 } : undefined}>
+    <div className="pt-row pt-issue-row" style={depth ? { paddingLeft: 15 + depth * 24 } : undefined}>
+      {defaultState && (
+        <span className="pt-issue-status" aria-hidden="true">
+          <StatusIcon state={defaultState} size={14} />
+        </span>
+      )}
       <button type="button" className="pt-issue-title" onClick={onEdit}>
         <span data-i18n-ignore>{issue.title}</span>
       </button>
@@ -1267,7 +1285,7 @@ function IssueRow({
         label={t("Team")}
         ariaLabel={t("Set team")}
         searchPlaceholder={t("Set team…")}
-        value={team?.name ?? t("Team")}
+        value={team?.key ?? t("Team")}
         valueIsEntityName={Boolean(team)}
         selectedId={issue.teamId ?? ""}
         triggerClassName="pt-team-chip"

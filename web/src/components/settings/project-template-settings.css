@@ -94,8 +94,8 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 .pt-section-slot{padding:12px 0 1px}
 .pt-section-slot>.pt-section{margin:0 12px}
 .pt-issues-slot:empty{display:none}
-.pt-issues-slot>.pt-issues{margin-top:9px}
-.pt-issues-slot:has(>.pt-issues){padding-bottom:14.8px}
+.pt-issues-slot>.pt-issues{margin-top:0}
+.pt-issues-slot:has(>.pt-issues){padding-bottom:1px}
 .pt-issues-slot>.pt-issues--empty{margin-top:0}
 .pt-issues-slot:has(>.pt-issues--empty){padding-bottom:1px}
 .pt-section{box-sizing:border-box;border:.5px solid var(--pt-section-border);border-radius:12px;background:var(--pt-section-bg);color:var(--pt-section-fg)}
@@ -108,10 +108,13 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 .pt-icon-button svg{width:14px;height:14px;color:var(--pt-section-icon)}
 .pt-add-button-pill{width:auto;display:flex;align-items:center;gap:6px;padding:0 8px 0 6px;font-size:12px;font-weight:500;line-height:normal;color:var(--pt-section-icon)}
 .pt-add-button-pill svg{width:14px;height:14px}
+.pt-section-end{display:flex;align-items:center}
+.pt-section-total{display:flex;align-items:center;gap:4px;margin-right:10px;color:var(--pt-section-icon);font-size:12px;font-weight:450;line-height:normal}
+.pt-section-total svg{width:14px;height:14px}
 .pt-icon-button:hover,.pt-icon-button[data-state=open]{background:var(--pt-section-hover-bg);color:var(--pt-section-hover-fg)}
 .pt-icon-button:hover svg,.pt-icon-button[data-state=open] svg{color:var(--pt-section-hover-fg)}
-.pt-row{box-sizing:border-box;height:42px;display:flex;align-items:center;padding:3px 8px 3px 16px;border-bottom:.5px solid var(--pt-section-border)}
-.pt-row-main{min-width:0;height:100%;flex:1;display:flex;align-items:center;gap:8px;padding:0;border:0;background:transparent;color:var(--pt-section-fg);font-family:inherit;font-size:13px;font-weight:450;line-height:normal;text-align:left}
+.pt-row{box-sizing:border-box;height:42px;display:flex;align-items:center;padding:3px 15px;border-bottom:.5px solid var(--pt-section-border)}
+.pt-row-main{min-width:0;height:100%;flex:1;display:flex;align-items:center;gap:13px;padding:0;border:0;background:transparent;color:var(--pt-section-fg);font-family:inherit;font-size:13px;font-weight:450;line-height:normal;text-align:left}
 .pt-row-main>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pt-diamond{flex:none;color:var(--pt-section-icon)}
 .pt-section-footer{display:flex;justify-content:flex-end;padding:9px 6px}
@@ -121,6 +124,7 @@ html:root .pt-editor input::placeholder{color:var(--pt-placeholder);opacity:1}
 
 /* Issue rows */
 .pt-issue-row{height:42.5px}
+.pt-issue-status{width:24px;height:24px;flex:none;display:grid;place-items:center}
 .pt-issue-title{min-width:0;height:36px;flex:1;display:flex;align-items:center;padding:0 12px 0 4px;border:0;background:transparent;color:var(--pt-section-fg);font-family:inherit;font-size:13px;font-weight:500;line-height:normal;text-align:left}
 .pt-issue-title>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pt-team-chip{box-sizing:border-box;height:24px;flex:none;display:inline-flex;align-items:center;gap:6px;padding:0 9px 0 8px;border:.5px solid var(--pt-chip-border);border-radius:48px;background:var(--pt-chip-bg);color:var(--pt-composer-fg);font-family:inherit;font-size:12px;font-weight:450;line-height:normal;white-space:nowrap}

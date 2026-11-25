@@ -217,7 +217,7 @@ describe('project template editor', () => {
     expect(within(document.querySelector('.pt-pills') as HTMLElement).getByRole('button', { name: 'Add issue' })).toHaveTextContent('2 issues')
     const rows = [...document.querySelectorAll('.pt-issue-row')] as HTMLElement[]
     expect(rows.map(row => row.querySelector('.pt-issue-title')?.textContent)).toEqual(['Kickoff', 'Child'])
-    expect(rows[1].style.paddingLeft).toBe('40px')
+    expect(rows[1].style.paddingLeft).toBe('39px')
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
   })
 
