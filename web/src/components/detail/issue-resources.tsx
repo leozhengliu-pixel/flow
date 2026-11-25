@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { ExternalLink, File, FileText, Link2, Pencil, Plus, Trash2 } from 'lucide-react'
@@ -29,6 +29,8 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
   const [title, setTitle] = useState('')
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<Attachment | null>(null)
+  const urlInput = useRef<HTMLInputElement>(null)
+  const titleInput = useRef<HTMLInputElement>(null)
   const openEdit = (link: Attachment) => { setEditing(link); setUrl(link.url); setTitle(link.title); setLinkOpen(true) }
   const closeDialog = (open: boolean) => { setLinkOpen(open); if (!open) { setEditing(null); setUrl(''); setTitle('') } }
   const addLink = async () => {
@@ -70,7 +72,7 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onSelect={() => window.open(link.url, '_blank', 'noopener,noreferrer')}><ExternalLink size={16}/>{t('Open link')}</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(link.url)}><Link2 size={16}/>{t('Copy link')}</DropdownMenuItem>
-                  {!readOnly && !isFile && onEditLink && <DropdownMenuItem onSelect={() => openEdit(link)}><Pencil size={16}/>{t('Edit…')}</DropdownMenuItem>}
+                  {!readOnly && !isFile && onEditLink && <><DropdownMenuSeparator/><DropdownMenuItem onSelect={() => openEdit(link)}><Pencil size={16}/>{t('Edit…')}</DropdownMenuItem></>}
                   {!readOnly && <DropdownMenuSeparator/>}
                   {!readOnly && <DropdownMenuItem onSelect={() => void onDeleteLink(link.id)}><Trash2 size={16}/>{t('Remove')}</DropdownMenuItem>}
                 </DropdownMenuContent>
@@ -83,11 +85,11 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
     <Dialog.Root open={linkOpen} onOpenChange={closeDialog}>
       <Dialog.Portal>
         <Dialog.Overlay className="modal-overlay" data-flow-motion="backdrop"/>
-        <Dialog.Content className="res-dialog" data-flow-motion="dialog">
+        <Dialog.Content className="res-dialog" data-flow-motion="dialog" onOpenAutoFocus={event => { event.preventDefault(); const input = (editing ? titleInput : urlInput).current; input?.focus(); input?.setSelectionRange(input.value.length, input.value.length) }}>
           <form onSubmit={event => { event.preventDefault(); void addLink() }}>
-            <Dialog.Title className="res-dialog-title"><Link2 size={16}/><span>{editing ? t('Edit link') : t('Add link to {issue}').replace('{issue}', issueKey)}</span></Dialog.Title>
-            <label><span>{t('URL')}</span><input autoFocus onChange={event => setUrl(event.target.value)} placeholder="https://…" type="url" value={url}/></label>
-            <label><span>{t('Title')} <em>{t('(optional)')}</em></span><input onChange={event => setTitle(event.target.value)} value={title}/></label>
+            <Dialog.Title className="res-dialog-title">{editing && linkBrand(editing.url) ? <LinkBrandIcon brand={linkBrand(editing.url)!}/> : <Link2 size={16}/>}<span>{editing ? t('Edit link') : t('Add link to {issue}').replace('{issue}', issueKey)}</span></Dialog.Title>
+            <label><span>{t('URL')}</span><input ref={urlInput} onChange={event => setUrl(event.target.value)} placeholder="https://…" type="url" value={url}/></label>
+            <label><span>{t('Title')} <em>{t('(optional)')}</em></span><input ref={titleInput} onChange={event => setTitle(event.target.value)} value={title}/></label>
             <footer><Dialog.Close asChild><button type="button">{t('Cancel')}</button></Dialog.Close><button className="primary" disabled={!url.trim() || saving} type="submit">{editing ? t(saving ? 'Saving…' : 'Save') : t(saving ? 'Adding…' : 'Add link')}</button></footer>
           </form>
         </Dialog.Content>
