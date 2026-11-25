@@ -10,7 +10,7 @@ import { AGENT_TASK_ACTIVITY_EVENT, archiveApplicationTask, deleteApplicationAct
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import { AgentAnswerText, AgentChoicePills } from './agent-answer'
-import { AGENT_REPLIES_UNAVAILABLE, AgentErrorDetail } from './agent-error-detail'
+import { AGENT_FOLLOW_UP_NOT_SENT, AGENT_REPLIES_UNAVAILABLE, AGENT_RETRY_NOT_SENT, AgentErrorDetail } from './agent-error-detail'
 import { isConnectivityError } from '@/lib/api-client'
 import { agentApprovalChoices, agentApprovalMarkdown } from './agent-approval-model'
 import { AgentCommentGlyph } from './agent-comment-glyph'
@@ -125,6 +125,9 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
   const busyRef = useRef(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
+  // A send that did not reach the server (a follow-up, a choice, an approval or a retry) and what Resend sends again.
+  // composer: the follow-up was typed and is still in the composer; editing it clears this, and Send sends the edit.
+  const [sendFailure, setSendFailure] = useState<{ type: 'prompt' | 'canceled' | 'retry'; body: string; approve?: boolean; error: string; composer: boolean }>()
   const [session, setSession] = useState(task)
   const [loadRevision, setLoadRevision] = useState(0)
   // The session's replies could not be read for now (the server was busy or unreachable).
@@ -175,11 +178,14 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
   }, [data.workspace.urlKey, task.id, task.version, loadRevision])
   const submit = async (type: 'prompt' | 'canceled' | 'retry', body = reply, approve?: boolean) => {
     if (busyRef.current) return
-    busyRef.current = true; setBusy(true); setError('')
+    busyRef.current = true; setBusy(true); setError(''); setSendFailure(undefined)
     try {
       const updated = await replyApplicationTask(data.workspace.urlKey, current, type, body, approve)
       setSession(updated); setReply(''); setReplying(false); onChanged()
-    } catch (error) { setError(error instanceof Error ? error.message : String(error)) }
+    } catch (error) {
+      // The follow-up was not sent (the agent did not fail): the composer keeps the text, and Resend sends it again.
+      setSendFailure({ type, body, approve, error: error instanceof Error ? error.message : String(error), composer: type === 'prompt' && body !== '' && body === reply.trim() })
+    }
     finally { busyRef.current = false; setBusy(false) }
   }
   const upload = async (file: File) => {
@@ -310,7 +316,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
         <form onSubmit={event => { event.preventDefault(); if (replyBody) void submit('prompt', replyBody) }} data-tooltip-elevated="">
           <div className="issue-agent-reply-input">
             <UserAvatar name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} className="avatar" userId={data.viewer.id}/>
-            <textarea autoFocus={replying} aria-label={t('Reply to agent')} placeholder={replyPlaceholder} value={reply} disabled={busy} onChange={event => setReply(event.target.value)} onKeyDown={event => {
+            <textarea autoFocus={replying} aria-label={t('Reply to agent')} placeholder={replyPlaceholder} value={reply} disabled={busy} onChange={event => { setReply(event.target.value); if (sendFailure?.composer) setSendFailure(undefined) }} onKeyDown={event => {
               if (event.key === 'Escape' && !reply.trim()) setReplying(false)
               if (commentShortcutMatches(event) && replyBody) { event.preventDefault(); void submit('prompt', replyBody) }
             }}/>
@@ -333,6 +339,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
     </div>
     {loadUnavailable && !error && <div className="issue-agent-thread-error" role="alert" data-state="unavailable"><AgentErrorDetail error={AGENT_REPLIES_UNAVAILABLE} onRetry={() => setLoadRevision(value => value + 1)}/></div>}
     {error && <div className="issue-agent-thread-error" role="alert"><AgentErrorDetail error={error} onRetry={() => setLoadRevision(value => value + 1)}/></div>}
+    {sendFailure && <div className="issue-agent-thread-error" role="alert" data-state="send-failed"><AgentErrorDetail error={sendFailure.type === 'retry' ? AGENT_RETRY_NOT_SENT : AGENT_FOLLOW_UP_NOT_SENT} detail={sendFailure.error} retryLabel={t('Resend')} onRetry={busy ? undefined : () => void submit(sendFailure.type, sendFailure.body, sendFailure.approve)}/></div>}
   </section>
 }
 
