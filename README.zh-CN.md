@@ -73,6 +73,9 @@ docker compose up -d --build
 
 ## 常用配置
 
+较新的设置只能在 YAML 配置文件（`FLOW_CONFIG_FILE`）中设置，例如上传大小上限（配置文件中的
+`server.storage.uploadMaxBytes`，默认 100 MB），详见 [部署配置](docs/configuration.md)。
+
 | 环境变量 | 默认值 | 用途 |
 | --- | --- | --- |
 | `FLOW_DATABASE_DRIVER` | `sqlite` | `sqlite`、`postgres` 或 `mysql`。 |
@@ -83,7 +86,6 @@ docker compose up -d --build
 | `FLOW_REDIS_URL` | 未设置 | Redis 连接 URL；也可使用 `FLOW_REDIS_ADDRS`。 |
 | `FLOW_STORAGE_DRIVER` | `local` | `local` 或 `s3`。 |
 | `FLOW_STORAGE_LOCAL_PATH` | `data/uploads` | 本地附件存储目录。 |
-| `FLOW_UPLOAD_MAX_BYTES` | `104857600` | 单次上传可保存的最大文件字节数（默认 100 MiB）。 |
 | `FLOW_APP_URL` | 未设置 | 账户邮件中使用的 Web 地址。 |
 | `FLOW_SMTP_HOST` | 未设置 | SMTP 主机。 |
 | `FLOW_SMTP_PORT` | `587` | SMTP 端口。 |

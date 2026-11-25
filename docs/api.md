@@ -361,7 +361,7 @@ the asset URL.
 
 ```bash
 # 1. Prepare (write scope). size must be exact; at most the upload limit
-#    (FLOW_UPLOAD_MAX_BYTES, 100 MB by default).
+#    (server.storage.uploadMaxBytes in the config file, 100 MB by default).
 curl -s "$FLOW_BASE_URL/api/files" -H "Authorization: Bearer $FLOW_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"filename":"screenshot.png","contentType":"image/png","size":48213}'

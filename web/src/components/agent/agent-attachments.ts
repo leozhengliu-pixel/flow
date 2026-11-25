@@ -38,7 +38,7 @@ export function agentFileKind(file: Pick<File, "type">): AgentFileKind {
 
 /**
  * The most bytes an upload of this file may have: 2 MB for png/jpeg/gif/webp images (shrunk first), the server's upload
- * limit (FLOW_UPLOAD_MAX_BYTES, 100 MB by default) for the rest.
+ * limit (server.storage.uploadMaxBytes in the config file, 100 MB by default) for the rest.
  */
 export function agentUploadLimit(file: Pick<File, "type">) {
   const limit = uploadLimitBytes();

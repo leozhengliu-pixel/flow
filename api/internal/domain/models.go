@@ -3109,7 +3109,7 @@ type Bootstrap struct {
 	// first-class chat platform (FLOW_CHAT_PLATFORM).
 	ChatPlatform string `json:"chatPlatform,omitempty" enum:"slack,lark,feishu"`
 	// UploadMaxBytes is set on bootstrap responses only: the largest file an
-	// upload stores (FLOW_UPLOAD_MAX_BYTES).
+	// upload stores (server.storage.uploadMaxBytes in the config file).
 	UploadMaxBytes int64 `json:"uploadMaxBytes,omitempty"`
 }
 

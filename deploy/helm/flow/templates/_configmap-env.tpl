@@ -20,7 +20,7 @@ value of each one the file sets (flow.config.fileEnv).
   {{- with $v.assets.fallbackUrls }}
   FLOW_ASSET_FALLBACK_URL: {{ join "," . | quote }}
   {{- end }}
-  {{- if $v.config.file }}
+  {{- if include "flow.config.file" . }}
   # The YAML configuration file; variables marked "# config.file" carry its value.
   FLOW_CONFIG_FILE: /etc/flow/config.yaml
   {{- else if $v.config.fileConfigMap.name }}
@@ -68,9 +68,6 @@ value of each one the file sets (flow.config.fileEnv).
   FLOW_S3_ENDPOINT: {{ $v.storage.s3.endpoint | quote }}
   FLOW_S3_PATH_STYLE: {{ $v.storage.s3.pathStyle | quote }}
   FLOW_S3_PREFIX: {{ $v.storage.s3.prefix | quote }}
-  {{- end }}
-  {{- with $v.storage.uploadMaxBytes }}
-  FLOW_UPLOAD_MAX_BYTES: {{ include "flow.config.envValue" . | quote }}
   {{- end }}
   {{- range $key, $value := $v.config.env }}
   {{ $key }}: {{ $value | toString | quote }}

@@ -15,11 +15,12 @@ import (
 	"flow/api/internal/objectstore"
 )
 
-// The upload limit (FLOW_UPLOAD_MAX_BYTES, 100 MiB by default) is the largest
-// file every upload path stores: issue, document, comment, Pulse update,
-// customer request and loop attachments, Agent composer files, prepared
-// REST and MCP uploads and files fetched from a URL. main sets it from the
-// configuration; while it is 0 the default applies.
+// The upload limit (server.storage.uploadMaxBytes in the config file, 100 MiB
+// by default; there is no environment variable) is the largest file every
+// upload path stores: issue, document, comment, Pulse update, customer
+// request and loop attachments, Agent composer files, prepared REST and MCP
+// uploads and files fetched from a URL. main sets it from the configuration;
+// while it is 0 the default applies.
 var uploadMaxBytes atomic.Int64
 
 func uploadLimit() int64 {

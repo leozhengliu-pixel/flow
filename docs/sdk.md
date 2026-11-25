@@ -294,8 +294,9 @@ await client.createComment({ issueId: 'ENG-123', body: `![screenshot](${upload.a
 
 The body can be a `Blob`/`File` (name and type are read from it), an
 `ArrayBuffer`, a typed array or `Buffer`, or a string (sent as UTF-8). The size
-is measured for you; uploads are limited to the server's upload limit
-(`FLOW_UPLOAD_MAX_BYTES`, 100 MB by default). `prepareFileUpload` does only
+is measured for you; uploads are limited to the upload limit
+(`server.storage.uploadMaxBytes` in the config file, 100 MB by default).
+`prepareFileUpload` does only
 the first step.
 
 Files are private. `downloadFile(url)` fetches one with your credentials and

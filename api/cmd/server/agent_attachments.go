@@ -290,7 +290,7 @@ func (s *server) uploadAgentFile(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAgent(w) {
 		return
 	}
-	// Composer files follow the deployment's upload limit (FLOW_UPLOAD_MAX_BYTES) like every other upload; images
+	// Composer files follow the deployment's upload limit (server.storage.uploadMaxBytes in the config file) like every other upload; images
 	// stay at 2 MB, since the composer shrinks them first and each one goes to the model.
 	formLimit := uploadLimit()
 	form, err := openUploadForm(w, r, formLimit)

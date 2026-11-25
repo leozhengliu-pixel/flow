@@ -1,5 +1,6 @@
-{{- /* The YAML configuration file (docs/configuration.md, "Configuration file"), mounted at /etc/flow. */ -}}
-{{- if .Values.config.file }}
+{{- /* The YAML configuration file (docs/configuration.md, "Configuration file"), mounted at /etc/flow: config.file plus the chart's file-only values (flow.config.file). */ -}}
+{{- $file := include "flow.config.file" . }}
+{{- if $file }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,5 +11,5 @@ metadata:
     {{- include "flow.selectorLabels" . | nindent 4 }}
 data:
   config.yaml: |
-    {{- toYaml .Values.config.file | nindent 4 }}
+    {{- $file | nindent 4 }}
 {{- end }}

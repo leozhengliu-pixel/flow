@@ -37,7 +37,8 @@ type Config struct {
 	// content when FLOW_STORAGE_DRIVER=s3 (FLOW_S3_CONTENT_PREFIX).
 	ContentStoragePrefix string
 	// UploadMaxBytes is the largest file one upload stores, on every upload
-	// path (FLOW_UPLOAD_MAX_BYTES, DefaultUploadMaxBytes when unset).
+	// path. Only the config file sets it (server.storage.uploadMaxBytes, see
+	// FileSettings); DefaultUploadMaxBytes when the file does not.
 	UploadMaxBytes int64
 	Auth           AuthConfig
 	Agent          AgentConfig
@@ -93,7 +94,7 @@ type AssetsConfig struct {
 	FallbackURLs []string
 }
 
-// Bounds of Config.UploadMaxBytes (FLOW_UPLOAD_MAX_BYTES): 100 MiB by
+// Bounds of Config.UploadMaxBytes (server.storage.uploadMaxBytes): 100 MiB by
 // default, at least 1 MiB and at most 10 GiB. Uploads stream into object
 // storage, so the limit does not change how much memory a request holds.
 const (
@@ -324,7 +325,7 @@ func Load() (Config, error) {
 			},
 		},
 		ContentStoragePrefix: value("FLOW_S3_CONTENT_PREFIX", "content"),
-		UploadMaxBytes:       byteSize("FLOW_UPLOAD_MAX_BYTES", DefaultUploadMaxBytes),
+		UploadMaxBytes:       uploadMaxBytes(fileSettings()),
 		Storage: objectstore.Config{
 			Driver:          value("FLOW_STORAGE_DRIVER", "local"),
 			LocalPath:       value("FLOW_STORAGE_LOCAL_PATH", value("FLOW_UPLOAD_PATH", "data/uploads")),
@@ -486,8 +487,8 @@ func (c Config) Validate() error {
 	if redisMode != "disabled" && driver == "sqlite" {
 		return fmt.Errorf("Redis multi-instance coordination requires PostgreSQL or MySQL; SQLite is single-instance only")
 	}
-	if c.UploadMaxBytes < MinUploadMaxBytes || c.UploadMaxBytes > MaxUploadMaxBytes {
-		return fmt.Errorf("FLOW_UPLOAD_MAX_BYTES must be a whole number of bytes between %d (1 MiB) and %d (10 GiB)", MinUploadMaxBytes, MaxUploadMaxBytes)
+	if err := c.validateUploadMaxBytes(); err != nil {
+		return err
 	}
 	storage := strings.ToLower(c.Storage.Driver)
 	if storage != "local" && storage != "s3" {
@@ -716,19 +717,23 @@ func integer(name string, fallback int) int {
 	return int(value)
 }
 
-// byteSize reads a byte count that must be a plain whole number: unlike
-// integer, a value that does not parse is not replaced by the fallback but
-// read as -1, which Validate refuses, so a typo stops startup.
-func byteSize(name string, fallback int64) int64 {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
-		return fallback
+// validateUploadMaxBytes bounds the upload limit; the file parser refuses an
+// out-of-bounds value first, so this guards a Config built another way.
+func (c Config) validateUploadMaxBytes() error {
+	if c.UploadMaxBytes < MinUploadMaxBytes || c.UploadMaxBytes > MaxUploadMaxBytes {
+		return fmt.Errorf("server.storage.uploadMaxBytes must be a whole number of bytes between %d (1 MiB) and %d (10 GiB)", MinUploadMaxBytes, MaxUploadMaxBytes)
 	}
-	value, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil {
-		return -1
+	return nil
+}
+
+// uploadMaxBytes is the config file's upload limit, or the default when the
+// file does not set it. No environment variable is read: the parser already
+// refused a value that is not a whole number in bounds, with its line.
+func uploadMaxBytes(settings FileSettings) int64 {
+	if settings.UploadMaxBytes != 0 {
+		return settings.UploadMaxBytes
 	}
-	return value
+	return DefaultUploadMaxBytes
 }
 
 // integer64 is integer for values that may exceed 32 bits (byte sizes on

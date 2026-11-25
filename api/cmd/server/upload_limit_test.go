@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-// withUploadLimit sets the upload limit (FLOW_UPLOAD_MAX_BYTES) for one test.
+// withUploadLimit sets the upload limit (server.storage.uploadMaxBytes in the config file) for one test.
 func withUploadLimit(t *testing.T, limit int64) {
 	t.Helper()
 	previous := uploadMaxBytes.Load()

@@ -9,7 +9,7 @@ export type ClientEditorProviderProps = {
   children: ReactNode
   /** Host issue id for attachment uploads (issue description / comment composers). */
   issueId?: string
-  /** Defaults to the server's upload limit (FLOW_UPLOAD_MAX_BYTES, from the bootstrap). */
+  /** Defaults to the server's upload limit (server.storage.uploadMaxBytes in the config file, from the bootstrap). */
   maxUploadBytes?: number
   onUploadFile?: (file: File, options?: { embed?: boolean }) => Promise<Attachment | string | void>
   onUploadFromUrl?: (url: string, options?: { title?: string; embed?: boolean }) => Promise<Attachment | string | void>

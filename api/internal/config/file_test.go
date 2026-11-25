@@ -301,9 +301,10 @@ func TestConfigFileIntegerBoundsFitThePlatform(t *testing.T) {
 }
 
 func TestConfigFileUploadMaxBytes(t *testing.T) {
+	// A file-only setting: it lands in Settings and sets no variable.
 	file := mustParse(t, "server:\n  storage:\n    uploadMaxBytes: 262144000\n")
-	if file.Env["FLOW_UPLOAD_MAX_BYTES"] != "262144000" || len(file.Env) != 1 {
-		t.Fatalf("env = %v", file.Env)
+	if file.Settings.UploadMaxBytes != 250<<20 || len(file.Env) != 0 {
+		t.Fatalf("settings = %+v env = %v", file.Settings, file.Env)
 	}
 	for _, value := range []string{"1024", "100MB", "-5"} {
 		if _, err := parse(t, "server:\n  storage:\n    uploadMaxBytes: "+value+"\n"); err == nil || !strings.Contains(err.Error(), "uploadMaxBytes") {

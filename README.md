@@ -148,6 +148,9 @@ be inspected without registry credentials.
 ## Configuration
 
 Flow reads configuration from environment variables passed to the API process.
+Newer settings exist only in the YAML config file (`FLOW_CONFIG_FILE`), such
+as the upload limit (`server.storage.uploadMaxBytes` in the config file, 100 MB
+by default); see [docs/configuration.md](docs/configuration.md).
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -159,7 +162,6 @@ Flow reads configuration from environment variables passed to the API process.
 | `FLOW_REDIS_URL` | unset | Redis connection URL; alternatively use `FLOW_REDIS_ADDRS`. |
 | `FLOW_STORAGE_DRIVER` | `local` | `local` or `s3`. |
 | `FLOW_STORAGE_LOCAL_PATH` | `data/uploads` | Local attachment storage directory. |
-| `FLOW_UPLOAD_MAX_BYTES` | `104857600` | Largest file one upload stores, in bytes (100 MiB by default). |
 | `FLOW_APP_URL` | unset | Public web origin used in account emails. |
 | `FLOW_SMTP_HOST` | unset | SMTP server hostname. |
 | `FLOW_SMTP_PORT` | `587` | SMTP server port. |

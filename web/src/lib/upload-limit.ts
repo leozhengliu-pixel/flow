@@ -1,6 +1,6 @@
 import type { BootstrapData } from '@/types/flow'
 
-/** The server's default upload limit (FLOW_UPLOAD_MAX_BYTES), used until a bootstrap says otherwise. */
+/** The server's default upload limit (server.storage.uploadMaxBytes in the config file), used until a bootstrap says otherwise. */
 const DEFAULT_UPLOAD_MAX_BYTES = 100 * 1024 * 1024
 
 let rememberedBytes: number | undefined
@@ -11,7 +11,7 @@ export function rememberUploadLimit<T extends Pick<BootstrapData, 'uploadMaxByte
   return data
 }
 
-/** The largest file the server stores from one upload (FLOW_UPLOAD_MAX_BYTES). */
+/** The largest file the server stores from one upload (server.storage.uploadMaxBytes in the config file). */
 export function uploadLimitBytes(data?: Pick<BootstrapData, 'uploadMaxBytes'> | null): number {
   const bytes = data?.uploadMaxBytes
   if (typeof bytes === 'number' && bytes > 0) return bytes

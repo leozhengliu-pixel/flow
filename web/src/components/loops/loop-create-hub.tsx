@@ -48,7 +48,7 @@ export function LoopCreateHub({
 
   const attach = (files: File[]) => {
     const room = MAX_ATTACHMENTS - attachments.length;
-    // Prompt attachments follow the server's upload limit (FLOW_UPLOAD_MAX_BYTES; loops-api-contract.md → Attachments).
+    // Prompt attachments follow the server's upload limit (server.storage.uploadMaxBytes in the config file; loops-api-contract.md → Attachments).
     const limit = uploadLimitBytes();
     const tooLarge = files.filter((file) => file.size > limit);
     if (tooLarge.length) toast.error(withUploadLimit(t("Files must be {size} or smaller"), limit));

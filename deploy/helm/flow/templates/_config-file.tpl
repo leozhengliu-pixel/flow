@@ -38,11 +38,34 @@ FLOW_S3_REGION: storage.s3.region
 FLOW_S3_ENDPOINT: storage.s3.endpoint
 FLOW_S3_PATH_STYLE: storage.s3.pathStyle
 FLOW_S3_PREFIX: storage.s3.prefix
-FLOW_UPLOAD_MAX_BYTES: storage.uploadMaxBytes
 FLOW_TRUSTED_PRIVATE_ENDPOINTS: outbound.trustedPrivateEndpoints
 FLOW_TRUSTED_PRIVATE_NETWORKS: outbound.trustedPrivateNetworks
 FLOW_TRUST_PROXY_HEADERS: proxy.trustHeaders
 FLOW_TRUSTED_PROXIES: proxy.trustedProxies
+{{- end -}}
+
+{{- /*
+flow.config.file: the configuration file the chart mounts, as YAML: config.file
+with the chart's values for file-only settings (settings without an
+environment variable) added under server:. A key config.file sets itself
+wins over the chart's value. Empty when there is no file to render.
+
+  storage.uploadMaxBytes -> server.storage.uploadMaxBytes
+*/ -}}
+{{- define "flow.config.file" -}}
+{{- $file := deepCopy (default dict .Values.config.file) -}}
+{{- with .Values.storage.uploadMaxBytes -}}
+{{- $server := default dict $file.server -}}
+{{- $storage := default dict $server.storage -}}
+{{- if not (hasKey $storage "uploadMaxBytes") -}}
+{{- $_ := set $storage "uploadMaxBytes" (int64 .) -}}
+{{- end -}}
+{{- $_ := set $server "storage" $storage -}}
+{{- $_ := set $file "server" $server -}}
+{{- end -}}
+{{- if $file -}}
+{{- toYaml $file -}}
+{{- end -}}
 {{- end -}}
 
 {{- /* Variables that follow from the Pod: variable -> key under server and what to do instead. */ -}}

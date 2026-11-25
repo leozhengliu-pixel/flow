@@ -372,8 +372,8 @@ Per-loop `trustedSourceKeys` keep working but should no longer be edited in the 
 
 ## Attachments for "Ask Flow to build the loop"
 
-1. Upload each file: `POST /api/loops/attachments` (multipart form, field `file`, max `FLOW_UPLOAD_MAX_BYTES` (100 MB by default), workspace upload policy
-   applies) → `201 LoopAttachment`.
+1. Upload each file: `POST /api/loops/attachments` (multipart form, field `file`, at most the upload limit (`server.storage.uploadMaxBytes` in the config file, 100 MB by
+   default), workspace upload policy applies) → `201 LoopAttachment`.
 2. Create the draft: `POST /api/loops` with `{prompt, attachmentIds: [...], level, teamId?}`. Only the caller's own,
    not-yet-used uploads are accepted (400 `unknown attachment` otherwise); they move onto `loop.attachments`.
    Unused uploads are removed after 24 h.
