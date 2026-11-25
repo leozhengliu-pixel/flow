@@ -74,7 +74,7 @@ export function ProjectLabelMenuContent({ options, selectedIds, groupId, onChoos
   return <div onKeyDown={onKeyDown}>
     <div className={`project-label-search${groupId && !query ? ' is-hidden' : ''}`}>
       <input ref={inputRef} aria-label={placeholder} aria-controls={listId} aria-activedescendant={active ? `${listId}-${active.id}` : undefined} value={query} placeholder={placeholder} onChange={event => { setQuery(event.target.value); setActiveId(undefined); setSubmenuId(undefined) }} autoComplete="off" spellCheck={false}/>
-      {!groupId && searchShortcut && <span className="property-command-search-shortcut"><kbd>P</kbd><span data-i18n-ignore>then</span><kbd>L</kbd></span>}
+      {!groupId && searchShortcut && <span className="property-command-search-shortcut"><kbd>P</kbd><span>{t('then')}</span><kbd>L</kbd></span>}
     </div>
     <div className="project-label-options" id={listId} ref={listRef} role="listbox" aria-label={placeholder} aria-multiselectable={!groupId}>
       {entries.map((entry, index) => <div key={entry.id}>

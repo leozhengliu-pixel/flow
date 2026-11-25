@@ -78,7 +78,7 @@ export function ProjectTeamsPicker({ menuProps, teams, teamIds, onChange, fallba
     compact
     multiple
     closeOnSelect
-    label="Teams"
+    label={t("Teams")}
     ariaLabel={ariaLabel}
     value={label}
     valueIsEntityName={Boolean(lead)}

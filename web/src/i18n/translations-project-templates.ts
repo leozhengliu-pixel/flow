@@ -37,6 +37,12 @@ export const projectTemplatesZhCN: Record<string, string> = {
   "Set project lead…": "设置项目负责人…",
   "Set team…": "设置团队…",
   "Template actions": "模板操作",
+  "Change {label}": "更改{label}",
+  "then": "然后",
+  "Users from the project teams": "项目团队中的用户",
+  "Issues created by team members": "团队成员创建的事项",
+  "Issues created by non-team members": "非团队成员创建的事项",
+  "Projects created": "创建的项目",
   "Template name is required": "请填写模板名称",
   "The URL contains the selected template.": "该链接包含所选模板。",
 };
