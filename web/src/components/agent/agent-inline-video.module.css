@@ -85,6 +85,7 @@
   cursor: pointer;
 }
 .rate option { color: var(--agent-media-option-text); }
+.frame[data-hairline] .rate { padding: 0 6px; text-align: center; text-align-last: center; appearance: none; }
 
 /* The composer's delete, on hover like the image block's toolbar. */
 .toolbar {

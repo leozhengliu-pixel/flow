@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Download, Maximize, Minimize, Pause, PictureInPicture2, Play, Volume2, VolumeX } from 'lucide-react'
 import { downloadImage } from '@/components/editor/lightbox-actions'
-import { deleteIcon } from '@/components/issue/editor/image-extension'
+import { deleteIcon, downloadIcon, viewIcon } from '@/components/issue/editor/image-extension'
 import { useOptionalTranslate } from '@/i18n/i18n'
 import { ToolbarIcon } from './agent-inline-image'
 import styles from './agent-inline-video.module.css'
 
 const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
 
-function clock(seconds: number) {
+function clock(seconds: number, pad2 = false) {
   const total = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0
   const pad = (value: number) => String(value).padStart(2, '0')
   const hours = Math.floor(total / 3600)
-  return hours ? `${hours}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}` : `${Math.floor(total / 60)}:${pad(total % 60)}`
+  return hours ? `${hours}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}` : `${pad2 ? pad(Math.floor(total / 60)) : Math.floor(total / 60)}:${pad(total % 60)}`
 }
 
 function PlayerButton({ label, icon, run }: { label: string; icon: ReactNode; run: () => void }) {
@@ -92,7 +92,7 @@ export function AgentInlineVideo({ src, name, editable = false, uploading = fals
         <PlayerButton label={playing ? 'Pause' : 'Play'} icon={playing ? <Pause aria-hidden fill="currentColor" size={16}/> : <Play aria-hidden fill="currentColor" size={16}/>} run={toggle}/>
         <PlayerButton label={muted ? 'Unmute' : 'Mute'} icon={muted ? <VolumeX aria-hidden size={16}/> : <Volume2 aria-hidden size={16}/>} run={mute}/>
         <div className={styles.time}>
-          <span className={styles.clock}>{clock(time)}</span>
+          <span className={styles.clock}>{clock(time, hairline)}</span>
           <input
             aria-label={t('Seek')}
             className={styles.seek}
@@ -104,14 +104,14 @@ export function AgentInlineVideo({ src, name, editable = false, uploading = fals
             type="range"
             value={Math.min(time, duration || 0)}
           />
-          <span className={styles.clock}>{clock(duration)}</span>
+          <span className={styles.clock}>{clock(duration, hairline)}</span>
         </div>
         <select aria-label={t('Playback speed')} className={styles.rate} onChange={event => { if (videoRef.current) videoRef.current.playbackRate = Number(event.target.value) }} value={rate}>
           {RATES.map(value => <option key={value} value={value}>{`${value}×`}</option>)}
         </select>
-        <PlayerButton label="Download" icon={<Download aria-hidden size={16}/>} run={() => downloadImage({ src, alt: name })}/>
+        <PlayerButton label="Download" icon={hairline ? <ToolbarIcon make={downloadIcon}/> : <Download aria-hidden size={16}/>} run={() => downloadImage({ src, alt: name })}/>
         {pipSupported && <PlayerButton label="Picture in picture" icon={<PictureInPicture2 aria-hidden size={16}/>} run={pip}/>}
-        <PlayerButton label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} icon={fullscreen ? <Minimize aria-hidden size={16}/> : <Maximize aria-hidden size={16}/>} run={toggleFullscreen}/>
+        <PlayerButton label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} icon={hairline ? <ToolbarIcon make={viewIcon}/> : fullscreen ? <Minimize aria-hidden size={16}/> : <Maximize aria-hidden size={16}/>} run={toggleFullscreen}/>
       </div>}
       {editable && !uploading && <span className={styles.toolbar}><PlayerButton label="Delete" icon={<ToolbarIcon make={deleteIcon}/>} run={() => onRemove?.()}/></span>}
     </div>

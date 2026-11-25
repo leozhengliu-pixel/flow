@@ -273,17 +273,18 @@ function openImageContextMenu(x: number, y: number, actions: ReturnType<typeof i
     { label: 'Add comment', icon: commentIcon(), run: actions.comment },
     'separator',
     { label: 'Delete', icon: deleteIcon(), run: actions.remove },
-  ])
+  ], 'image')
 }
 
 export type DescriptionMenuEntry = { label: string; icon: SVGSVGElement; run: () => void } | 'separator'
 
 /** The context menu of an image or file card (the design reference's layout): icon + label rows, hairlines between groups. */
-export function openDescriptionMenu(x: number, y: number, entries: DescriptionMenuEntry[]) {
+export function openDescriptionMenu(x: number, y: number, entries: DescriptionMenuEntry[], kind?: 'image') {
   closeImageContextMenu()
   const menu = document.createElement('div')
   menu.className = 'description-image-menu'
   menu.setAttribute('role', 'menu')
+  if (kind) menu.dataset.kind = kind
   const item = (label: string, icon: SVGSVGElement, run: () => void) => {
     const button = document.createElement('button')
     button.type = 'button'
