@@ -1,10 +1,14 @@
+import { createElement } from 'react'
 import { Node, mergeAttributes } from '@tiptap/core'
 import type { EditorView } from '@tiptap/pm/view'
+import { toast } from '@/lib/toast'
 import { formatFileSize } from '@/lib/format-file-size'
 import { openPdfViewer } from '@/components/editor/pdf/pdf-bridge'
 import { copyFileLink, copyPdfLink, downloadPdf, isPdfFile } from '@/components/editor/pdf/pdf-file-actions'
 import { createFileToolbar, createPdfPreview } from '@/components/editor/pdf/pdf-card'
 import { deleteIcon, downloadIcon, linkIcon, openDescriptionMenu } from './image-extension'
+import { DescriptionAudio, DescriptionUploading, DescriptionVideoPlayer } from './description-media'
+import { mountReact } from './mount-react'
 
 type DescriptionImageUpload = (file: File) => Promise<string>
 
@@ -70,8 +74,15 @@ export const DescriptionFile = Node.create({
       })
       const row = document.createElement('div')
       row.className = 'description-file-row'
-      row.append(link, toolbar.dom)
-      dom.append(row)
+      const uploadingHost = document.createElement('div')
+      uploadingHost.hidden = true
+      uploadingHost.style.display = 'contents'
+      const uploadingMount = mountReact(uploadingHost)
+      row.append(link, toolbar.dom, uploadingHost)
+      const audioHost = document.createElement('div')
+      audioHost.hidden = true
+      const audioMount = mountReact(audioHost)
+      dom.append(row, audioHost)
       dom.addEventListener('contextmenu', event => {
         event.preventDefault()
         event.stopPropagation()
@@ -95,11 +106,21 @@ export const DescriptionFile = Node.create({
         href = String(attrs.src ?? '')
         fileName = title
         pdf = isPdfFile(contentType, title)
+        const audio = contentType.startsWith('audio/')
+        const uploading = href.startsWith('blob:')
+        dom.classList.toggle('is-audio', audio)
+        dom.classList.toggle('is-uploading', uploading)
+        row.hidden = audio
+        audioHost.hidden = !audio
+        if (audio) audioMount.render(createElement(DescriptionAudio, { src: href, name: title, size: attrs.size == null ? null : Number(attrs.size) }))
+        uploadingHost.hidden = !uploading
+        if (uploading) uploadingMount.render(createElement(DescriptionUploading))
+        toolbar.dom.hidden = uploading
         dom.classList.toggle('is-pdf', pdf)
-        dom.classList.toggle('has-preview', pdf && showPreview)
+        dom.classList.toggle('has-preview', pdf && showPreview && !uploading)
         toolbar.setPdf(pdf)
         toolbar.localize()
-        if (pdf && showPreview) {
+        if (pdf && showPreview && !uploading) {
           if (!preview.dom.isConnected) dom.append(preview.dom)
           preview.show(href, Number(attrs.size) || 0)
         } else {
@@ -115,7 +136,7 @@ export const DescriptionFile = Node.create({
           apply(updated.attrs)
           return true
         },
-        destroy() { preview.destroy() },
+        destroy() { preview.destroy(); audioMount.unmount(); uploadingMount.unmount() },
       }
     }
   },
@@ -150,20 +171,30 @@ export const DescriptionVideo = Node.create({
     return ['video', mergeAttributes(HTMLAttributes, { class: 'description-video', controls: 'true' })]
   },
   addNodeView() {
-    return ({ node }) => {
+    return ({ node, editor, getPos }) => {
       const dom = document.createElement('div')
       dom.className = 'description-video-node'
       dom.contentEditable = 'false'
-      const video = document.createElement('video')
-      video.className = 'description-video'
-      video.controls = true
-      video.preload = 'none'
-      const apply = (attrs: Record<string, unknown>) => {
-        video.src = String(attrs.src ?? '')
-        video.title = String(attrs.title ?? '')
-      }
+      const host = document.createElement('div')
+      dom.append(host)
+      const mount = mountReact(host)
+      const apply = (attrs: Record<string, unknown>) => mount.render(createElement(DescriptionVideoPlayer, { src: String(attrs.src ?? ''), name: String(attrs.title ?? '') }))
       apply(node.attrs)
-      dom.append(video)
+      dom.addEventListener('contextmenu', event => {
+        event.preventDefault()
+        event.stopPropagation()
+        const pos = getPos()
+        if (typeof pos === 'number') editor.chain().focus().setNodeSelection(pos).run()
+        const src = String(node.attrs.src ?? '')
+        const stamp = Math.floor(dom.querySelector('video')?.currentTime ?? 0)
+        openDescriptionMenu(event.clientX, event.clientY, [
+          { label: 'Copy link', icon: linkIcon(), run: () => void copyFileLink(src) },
+          { label: 'Copy link at timestamp', icon: linkIcon(), run: () => void copyFileLink(`${src}#t=${stamp}`) },
+          { label: 'Download', icon: downloadIcon(), run: () => downloadPdf(src, String(node.attrs.title ?? 'video')) },
+          'separator',
+          ...(editor.isEditable ? [{ label: 'Delete', icon: deleteIcon(), run: () => { const at = getPos(); if (typeof at !== 'number') return; const target = editor.state.doc.nodeAt(at); if (target) editor.chain().focus().deleteRange({ from: at, to: at + target.nodeSize }).run() } }] : []),
+        ])
+      })
       return {
         dom,
         update(updated) {
@@ -171,6 +202,8 @@ export const DescriptionVideo = Node.create({
           apply(updated.attrs)
           return true
         },
+        stopEvent: () => true,
+        destroy() { mount.unmount() },
       }
     }
   },
@@ -236,7 +269,7 @@ function persistSrc(view: EditorView, type: string, placeholder: string, file: F
     URL.revokeObjectURL(placeholder)
   }
   if (!upload) return
-  return upload(file).then(url => apply(url)).catch(() => apply(null))
+  return upload(file).then(url => apply(url)).catch(error => { apply(null); toast.error(error instanceof Error && error.message ? error.message : `Could not upload ${file.name}`) })
 }
 
 const FILE_PATH = 'M6.75 1V6.75C6.75 7.5297 7.34489 8.17045 8.10554 8.24313L8.25 8.25H14V13C14 14.1046 13.1046 15 12 15H4C2.89543 15 2 14.1046 2 13V3C2 1.89543 2.89543 1 4 1H6.75ZM8 1L14 7.03022H9C8.44772 7.03022 8 6.5825 8 6.03022V1Z'

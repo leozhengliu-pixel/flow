@@ -86,6 +86,38 @@ describe('description embeds', () => {
     host.remove()
   })
 
+  it('offers Copy link and Download but no Delete on a read-only file card', () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    editor = new Editor({
+      element: host,
+      editable: false,
+      extensions: [StarterKit, Markdown, DescriptionFile],
+      content: '::file[spec.md](/uploads/asset_1.md){size="9351" type="text/markdown"}',
+      contentType: 'markdown',
+    })
+    host.querySelector('.description-file-node')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }))
+    const labels = [...document.querySelectorAll('.description-image-menu button')].map(button => button.getAttribute('aria-label'))
+    expect(labels).toEqual(['Copy link', 'Download'])
+    document.querySelector('.description-image-menu')?.remove()
+    host.remove()
+  })
+
+  it('shows an audio file as a player and a file still uploading with its progress strip', () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    editor = new Editor({
+      element: host,
+      extensions: [StarterKit, Markdown, DescriptionFile],
+      content: '::file[sound.mp3](/uploads/asset_3.mp3){size="32617" type="audio/mpeg"}\n\n::file[big.bin](blob:flow-upload){size="100" type="application/octet-stream"}',
+      contentType: 'markdown',
+    })
+    const cards = host.querySelectorAll('.description-file-node')
+    expect(cards[0].classList.contains('is-audio')).toBe(true)
+    expect(cards[1].classList.contains('is-uploading')).toBe(true)
+    host.remove()
+  })
+
   it('deletes a PDF card from its context menu as one undoable step and omits the preview strip when configured', () => {
     const host = document.createElement('div')
     document.body.append(host)

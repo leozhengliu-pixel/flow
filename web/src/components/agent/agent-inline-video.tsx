@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { Download, Maximize, Minimize, Pause, PictureInPicture2, Play, Volume2, VolumeX } from 'lucide-react'
 import { downloadImage } from '@/components/editor/lightbox-actions'
 import { deleteIcon } from '@/components/issue/editor/image-extension'
-import { useI18n } from '@/i18n/i18n'
+import { useOptionalTranslate } from '@/i18n/i18n'
 import { ToolbarIcon } from './agent-inline-image'
 import styles from './agent-inline-video.module.css'
 
@@ -16,7 +16,7 @@ function clock(seconds: number) {
 }
 
 function PlayerButton({ label, icon, run }: { label: string; icon: ReactNode; run: () => void }) {
-  const { t } = useI18n()
+  const t = useOptionalTranslate()
   return <button aria-label={t(label)} onClick={event => { event.preventDefault(); event.stopPropagation(); run() }} onMouseDown={event => event.preventDefault()} title={t(label)} type="button">{icon}</button>
 }
 
@@ -24,8 +24,8 @@ function PlayerButton({ label, icon, run }: { label: string; icon: ReactNode; ru
  * A video in the Agent composer or a sent message, as the reference app draws it: a framed player without the
  * browser's controls and a floating bar with play (k), mute (m), seek, speed, download, picture in picture (p) and fullscreen.
  */
-export function AgentInlineVideo({ src, name, editable = false, uploading = false, onRemove }: { src: string; name: string; editable?: boolean; uploading?: boolean; onRemove?: () => void }) {
-  const { t } = useI18n()
+export function AgentInlineVideo({ src, name, editable = false, uploading = false, hairline = false, onRemove }: { src: string; name: string; editable?: boolean; uploading?: boolean; hairline?: boolean; onRemove?: () => void }) {
+  const t = useOptionalTranslate()
   const frameRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const [time, setTime] = useState(0)
@@ -70,7 +70,7 @@ export function AgentInlineVideo({ src, name, editable = false, uploading = fals
   }
   const progress = duration ? Math.min(100, (time / duration) * 100) : 0
   return (
-    <div aria-label={name} className={styles.frame} data-editable={editable || undefined} data-uploading={uploading || undefined} onKeyDown={onKeyDown} ref={frameRef} role="group" tabIndex={uploading ? undefined : 0}>
+    <div aria-label={name} className={styles.frame} data-editable={editable || undefined} data-hairline={hairline || undefined} data-uploading={uploading || undefined} onKeyDown={onKeyDown} ref={frameRef} role="group" tabIndex={uploading ? undefined : 0}>
       <video
         className={styles.video}
         onClick={uploading ? undefined : toggle}

@@ -1,6 +1,7 @@
 import { Node, mergeAttributes, type Editor } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
+import { toast } from '@/lib/toast'
 import { insertEmbedFiles } from './file-extension'
 import { openLightbox } from '@/components/editor/lightbox-bridge'
 import { importTextFile, isTextImportFile } from '@/components/editor/markdown-paste'
@@ -201,7 +202,7 @@ function persistImage(view: EditorView, placeholder: string, file: File, upload?
     URL.revokeObjectURL(placeholder)
   }
   if (!upload) return
-  return upload(file).then(url => apply(url)).catch(() => apply(null))
+  return upload(file).then(url => apply(url)).catch(error => { apply(null); toast.error(error instanceof Error && error.message ? error.message : `Could not upload ${file.name}`) })
 }
 
 function applyImageAttrs(img: HTMLImageElement, attrs: Record<string, unknown>) {
@@ -450,64 +451,95 @@ export function openDescriptionLightbox(src: string, alt = '', siblings?: { src:
 
 type CropRect = { x: number; y: number; w: number; h: number }
 
+const CROP_HANDLES = [
+  { name: 'nw', cursor: 'nwse-resize', x: 0, y: 0 }, { name: 'n', cursor: 'ns-resize', x: .5, y: 0 }, { name: 'ne', cursor: 'nesw-resize', x: 1, y: 0 },
+  { name: 'e', cursor: 'ew-resize', x: 1, y: .5 }, { name: 'se', cursor: 'nwse-resize', x: 1, y: 1 }, { name: 's', cursor: 'ns-resize', x: .5, y: 1 },
+  { name: 'sw', cursor: 'nesw-resize', x: 0, y: 1 }, { name: 'w', cursor: 'ew-resize', x: 0, y: .5 },
+] as const
+
 /**
- * Crop mode: a draggable, resizable box over the image with Cancel and Crop actions. Applying draws the box to a
+ * Crop mode (the design reference's layout): a full-window dark view with the image centred, a crop box with a
+ * rule-of-thirds grid and eight handles, and Cancel / Save / close in the top-right corner. Save draws the box to a
  * canvas, uploads the result through the description's image upload and swaps the node's source for the new file.
  */
-function startCrop(editor: Editor, getPos: () => number | undefined, img: HTMLImageElement, frame: HTMLElement) {
-  if (frame.querySelector('.description-image-crop')) return
+function startCrop(editor: Editor, getPos: () => number | undefined, img: HTMLImageElement, _frame: HTMLElement) {
   const upload = editor.storage.image.upload
-  if (!upload || !img.naturalWidth) return
-  const make = (className: string, tag = 'div') => {
+  if (!upload || !img.naturalWidth || document.querySelector('.description-image-crop')) return
+  const make = <T extends keyof HTMLElementTagNameMap>(tag: T, className: string) => {
     const node = document.createElement(tag)
     node.className = className
     return node
   }
-  const overlay = make('description-image-crop')
-  const box = make('description-image-crop-box')
-  const corners = (['nw', 'ne', 'sw', 'se'] as const).map(name => {
-    const handle = make('description-image-crop-handle')
-    handle.dataset.corner = name
-    box.append(handle)
-    return handle
-  })
-  const actions = make('description-image-crop-actions')
-  const cancel = make('description-image-crop-cancel', 'button') as HTMLButtonElement
+  const overlay = make('div', 'description-image-crop')
+  overlay.setAttribute('role', 'dialog')
+  overlay.setAttribute('aria-label', 'Crop image')
+  const bar = make('div', 'description-image-crop-bar')
+  const cancel = make('button', 'description-image-crop-cancel')
   cancel.type = 'button'
   cancel.textContent = 'Cancel'
-  const apply = make('description-image-crop-apply', 'button') as HTMLButtonElement
-  apply.type = 'button'
-  apply.textContent = 'Crop'
-  actions.append(cancel, apply)
-  overlay.append(box)
-  frame.append(overlay, actions)
-  frame.classList.add('is-cropping')
-  let rect: CropRect = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }
-  const min = 0.05
+  const save = make('button', 'description-image-crop-save')
+  save.type = 'button'
+  save.textContent = 'Save'
+  save.disabled = true
+  const close = make('button', 'description-image-crop-close')
+  close.type = 'button'
+  close.setAttribute('aria-label', 'Close')
+  close.append(closeGlyph())
+  bar.append(cancel, save, close)
+  const stage = make('div', 'description-image-crop-stage')
+  const picture = make('img', 'description-image-crop-image')
+  picture.src = img.currentSrc || img.src
+  picture.alt = img.alt
+  picture.draggable = false
+  const box = make('div', 'description-image-crop-box')
+  const grid = ['v1', 'v2', 'h1', 'h2'].map(name => { const line = make('div', 'description-image-crop-line'); line.dataset.line = name; box.append(line); return line })
+  void grid
+  const handles = CROP_HANDLES.map(spec => {
+    const handle = make('button', 'description-image-crop-handle')
+    handle.type = 'button'
+    handle.tabIndex = -1
+    handle.setAttribute('aria-label', 'Resize crop')
+    handle.dataset.handle = spec.name
+    handle.style.cursor = spec.cursor
+    box.append(handle)
+    return { handle, spec }
+  })
+  stage.append(picture, box)
+  overlay.append(bar, stage)
+  // The image is shown at its own size, scaled down to fit the window.
+  const fit = Math.min(1, (window.innerWidth - 96) / img.naturalWidth, (window.innerHeight - 96) / img.naturalHeight)
+  stage.style.width = `${img.naturalWidth * fit}px`
+  stage.style.height = `${img.naturalHeight * fit}px`
+  document.body.append(overlay)
+  let rect: CropRect = { x: 0, y: 0, w: 1, h: 1 }
+  const min = 0.04
   const paint = () => {
     box.style.left = `${rect.x * 100}%`
     box.style.top = `${rect.y * 100}%`
     box.style.width = `${rect.w * 100}%`
     box.style.height = `${rect.h * 100}%`
+    save.disabled = rect.x === 0 && rect.y === 0 && rect.w === 1 && rect.h === 1
   }
   paint()
   const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
-  const drag = (event: PointerEvent, corner: string | null) => {
+  const drag = (event: PointerEvent, edge: string | null) => {
     event.preventDefault()
     event.stopPropagation()
-    const bounds = overlay.getBoundingClientRect()
+    const bounds = stage.getBoundingClientRect()
     const start = { ...rect }
     const originX = event.clientX
     const originY = event.clientY
     const move = (next: PointerEvent) => {
       const dx = (next.clientX - originX) / bounds.width
       const dy = (next.clientY - originY) / bounds.height
-      if (!corner) {
+      if (!edge) {
         rect = { ...start, x: clamp(start.x + dx, 0, 1 - start.w), y: clamp(start.y + dy, 0, 1 - start.h) }
       } else {
         let { x, y, w, h } = start
-        if (corner.includes('w')) { const nx = clamp(x + dx, 0, x + w - min); w += x - nx; x = nx } else w = clamp(w + dx, min, 1 - x)
-        if (corner.includes('n')) { const ny = clamp(y + dy, 0, y + h - min); h += y - ny; y = ny } else h = clamp(h + dy, min, 1 - y)
+        if (edge.includes('w')) { const nx = clamp(x + dx, 0, x + w - min); w += x - nx; x = nx }
+        if (edge.includes('e')) w = clamp(w + dx, min, 1 - x)
+        if (edge.includes('n')) { const ny = clamp(y + dy, 0, y + h - min); h += y - ny; y = ny }
+        if (edge.includes('s')) h = clamp(h + dy, min, 1 - y)
         rect = { x, y, w, h }
       }
       paint()
@@ -520,16 +552,17 @@ function startCrop(editor: Editor, getPos: () => number | undefined, img: HTMLIm
     window.addEventListener('pointerup', end)
   }
   box.addEventListener('pointerdown', event => drag(event, null))
-  for (const handle of corners) handle.addEventListener('pointerdown', event => drag(event, handle.dataset.corner ?? null))
-  const close = () => {
+  for (const { handle, spec } of handles) handle.addEventListener('pointerdown', event => drag(event, spec.name))
+  const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); finish() } }
+  const finish = () => {
+    window.removeEventListener('keydown', onKey, true)
     overlay.remove()
-    actions.remove()
-    frame.classList.remove('is-cropping')
   }
-  cancel.addEventListener('click', event => { event.stopPropagation(); close() })
-  apply.addEventListener('click', async event => {
-    event.stopPropagation()
-    apply.disabled = true
+  window.addEventListener('keydown', onKey, true)
+  cancel.addEventListener('click', finish)
+  close.addEventListener('click', finish)
+  save.addEventListener('click', async () => {
+    save.disabled = true
     try {
       const sx = Math.round(rect.x * img.naturalWidth)
       const sy = Math.round(rect.y * img.naturalHeight)
@@ -547,7 +580,11 @@ function startCrop(editor: Editor, getPos: () => number | undefined, img: HTMLIm
       const node = typeof pos === 'number' ? editor.state.doc.nodeAt(pos) : null
       if (typeof pos === 'number' && node) editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: url, width: null, height: null }))
     } finally {
-      close()
+      finish()
     }
   })
+}
+
+function closeGlyph() {
+  return filledIcon('<path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>')
 }

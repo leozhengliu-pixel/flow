@@ -13,6 +13,8 @@
 }
 :global(:root[data-theme="light"]) .frame { border-color: var(--agent-attachment-light-border); background: var(--agent-attachment-light-bg); }
 .frame[data-uploading] { opacity: .5; }
+.frame[data-hairline] { border-width: .5px; box-shadow: var(--description-file-shadow); }
+:global(:root[data-theme="light"]) .frame[data-hairline] { border-color: var(--description-file-border); background: var(--description-file-bg); }
 .video { display: block; width: 100%; height: auto; min-height: 96px; object-fit: contain; cursor: pointer; }
 .frame[data-uploading] .video { cursor: default; }
 .frame:fullscreen { display: flex; align-items: center; border: 0; border-radius: 0; background: var(--agent-media-fullscreen-bg); }
