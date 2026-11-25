@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p15_heap.go",
+  "source": "server/bootstrap_heap_budget.go",
   "unmigrated": 0,
   "consumers": {
     "hydratedLegacySnapshotReservation": {

@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p15_snapshot_reservation.go",
+  "source": "store/snapshot_reservation.go",
   "unmigrated": 0,
   "consumers": {
     "WorkspaceReadSnapshotReservation": {

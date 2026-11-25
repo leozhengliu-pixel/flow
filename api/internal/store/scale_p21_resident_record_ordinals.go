@@ -11,7 +11,7 @@ import (
 // Selecting records of a large collection by ID (Select) and forking a
 // generation that replaces some (Fork) read every record's ID from the
 // spool: one read per record, most of a project edit's time on the load
-// rig. The resident image of the generation (scale_p21_resident_generation.go)
+// rig. The resident image of the generation (resident_generation.go)
 // has every record decoded, so it knows at which ordinals each ID is stored.
 // A writer that holds the image passes it in its context
 // (withResidentRecordOrdinals); a walk over a collection whose frame is

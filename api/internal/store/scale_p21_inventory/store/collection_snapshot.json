@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_collection_snapshot.go",
+  "source": "store/collection_snapshot.go",
   "unmigrated": 0,
   "consumers": {
     "MetadataCollectionsInSnapshot": {

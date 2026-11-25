@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_installed_teams_wire.go",
+  "source": "store/installed_teams_wire.go",
   "unmigrated": 0,
   "consumers": {
     "BeginInstalledTeamsWireRead": {

@@ -179,7 +179,7 @@ type metadataResidency struct {
 	// facades and legacy views (scale_p21_cold_decode_cache.go).
 	coldImages coldDecodeCache
 	// residentBuilds serializes the image builds of shared resident readers
-	// per workspace (scale_p21_resident_generation.go).
+	// per workspace (resident_generation.go).
 	residentBuilds residentImageBuilds
 	reloadBuilds   residentImageBuilds
 }

@@ -144,7 +144,7 @@ type sqlTx struct {
 	metadataSQLStageOwners map[string]*metadataSQLWriteStage
 	// metadataWrites counts statements that may change rows (writes,
 	// savepoint rollbacks, the transaction's end). Scoped metadata read
-	// windows (scale_p21_collection_snapshot.go) are valid only while it
+	// windows (collection_snapshot.go) are valid only while it
 	// is unchanged.
 	metadataWrites uint64
 }

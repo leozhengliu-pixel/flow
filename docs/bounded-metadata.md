@@ -27,7 +27,7 @@ With the flag on, each replica:
   COLD routes run in a COLD scope with configurable concurrency per replica.
 
 The route table is generated into
-`api/cmd/server/scale_p21_route_temperature.go`. A route missing from the
+`api/cmd/server/route_temperature.go`. A route missing from the
 table runs COLD.
 
 ## Related settings

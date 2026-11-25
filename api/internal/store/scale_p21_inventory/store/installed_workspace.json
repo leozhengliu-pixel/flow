@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw0_installed_workspace.go",
+  "source": "store/installed_workspace.go",
   "unmigrated": 0,
   "consumers": {
     "installedWorkspaceIdentityCost": {

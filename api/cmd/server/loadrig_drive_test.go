@@ -51,7 +51,7 @@ type loadRigOp struct {
 }
 
 // The class and route pattern of every recorded request name; the pattern
-// names the route in the server's HOT/COLD table (scale_p21_route_temperature.go).
+// names the route in the server's HOT/COLD table (route_temperature.go).
 var loadRigRequests = map[string][2]string{
 	"issue.list":            {"hot-read", "GET /api/issue-records"},
 	"issue.detail":          {"hot-read", "GET /api/issue-records/{id}"},

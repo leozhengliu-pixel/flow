@@ -34,7 +34,7 @@ import (
 // with its pinned boundaries; every registered handler reference of the
 // pattern is a root.
 //
-// The decision is materialised in scale_p21_route_temperature.go, which the
+// The decision is materialised in route_temperature.go, which the
 // server reads at runtime (a pattern missing from it runs COLD). This test
 // recomputes the table from the sources and the inventory and fails on any
 // difference, so the table cannot drift: a handler that starts reaching an
@@ -204,7 +204,7 @@ var scaleP21RouteTemperature = map[string]string{
 	return formatted
 }
 
-const scaleP21SW550TableFile = "scale_p21_route_temperature.go"
+const scaleP21SW550TableFile = "route_temperature.go"
 
 func TestScaleP21SW550DefaultColdRouteTable(t *testing.T) {
 	table := scaleP21SW550Classify(t)

@@ -109,7 +109,7 @@ func TestScaleP21SW109LegacyReadReservationBoundary(t *testing.T) {
 
 func scaleP21SW109ReservationGuard(t *testing.T) {
 	t.Helper()
-	file, err := parser.ParseFile(token.NewFileSet(), "scale_p15_snapshot_reservation.go", nil, 0)
+	file, err := parser.ParseFile(token.NewFileSet(), "snapshot_reservation.go", nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
