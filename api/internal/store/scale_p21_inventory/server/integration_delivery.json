@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_integration_delivery.go",
+  "source": "server/integration_delivery.go",
   "unmigrated": 0,
   "consumers": {
     "processBoundedIntegrationDelivery": {

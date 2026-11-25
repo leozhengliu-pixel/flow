@@ -74,7 +74,7 @@ func TestScaleP21SW504WorkflowWriterKernelBoundary(t *testing.T) {
 		t.Fatal("shared scoped kernel gained a caller; recertify its profiles", callers["mutateWorkspaceScopedWithAggregate"])
 	}
 	for _, caller := range callers["mutateMetadataOrdinalProfile"] {
-		if !strings.HasPrefix(caller, "scale_p21_integration_delivery") {
+		if !strings.HasPrefix(caller, "integration_delivery") {
 			t.Fatal("ordinal kernel profile reached outside integration delivery", caller)
 		}
 	}

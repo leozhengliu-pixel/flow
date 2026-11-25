@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_chat_event_policy_read.go",
+  "source": "store/chat_event_policy_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginChatEventPolicyRead": {

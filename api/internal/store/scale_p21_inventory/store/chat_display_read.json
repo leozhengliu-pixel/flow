@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_chat_display_read.go",
+  "source": "store/chat_display_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginChatDisplayRead": {

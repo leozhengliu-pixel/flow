@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_webhook_json_read.go",
+  "source": "store/webhook_json_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginWebhookAggregateRead": {

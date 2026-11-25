@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_chat_card_metadata.go",
+  "source": "server/chat_card_metadata.go",
   "unmigrated": 0,
   "consumers": {
     "chatCardMetadata": {

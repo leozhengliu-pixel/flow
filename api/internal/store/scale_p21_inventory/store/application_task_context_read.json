@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_application_task_context_read.go",
+  "source": "store/application_task_context_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginApplicationTaskContextRead": {

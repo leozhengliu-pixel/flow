@@ -62,7 +62,7 @@ legacy_record_base.go:persistIssues
 metadata_sql_stage_accounting.go:statementQuery
 project_update_parent_map.go:writeProjectUpdateScheduleParent
 user_settings_write.go:mutateBoundedUserSettingsRecord
-scale_p21_webhook_failure_write.go:RecordWebhookDeliveryFailure
+webhook_failure_write.go:RecordWebhookDeliveryFailure
 scim.go:CreateSCIMUser
 scim.go:DeprovisionSCIMUser
 scim.go:SyncSCIMGroupTeamChanges

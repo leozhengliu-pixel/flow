@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw19_chat_policy.go",
+  "source": "store/chat_policy.go",
   "unmigrated": 0,
   "consumers": {
     "BeginChatTeamPolicyRead": {

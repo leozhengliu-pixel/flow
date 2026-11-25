@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw23_agent_web_access.go",
+  "source": "store/agent_web_access.go",
   "unmigrated": 0,
   "consumers": {
     "migrateWorkspaceAgentWebAccessBounded": {

@@ -142,13 +142,13 @@ func TestScaleP21SW102WebhookNeededLegacyBoundary(t *testing.T) {
 	dispatch := "sqlite.go:dispatchMutation"
 	want := map[string]map[string]int{
 		"webhookNeeded": {
-			"team_mutation.go:mutateTeamMetadata":                           1,
-			"loop_contract_mutation.go:mutateLoopContract":                  2,
-			"scoped_mutation.go:mutateScoped":                               1,
-			"sqlite.go:mutateFull":                                          2,
-			"scale_p21_legacy_webhook_needed.go:boundedLegacyWebhookNeeded": 1,
-			"issue_record_mutation.go:UpdateIssueRecord":                    1,
-			"scoped_record_mutation.go:mutateProjectRecordSelection":        1,
+			"team_mutation.go:mutateTeamMetadata":                    1,
+			"loop_contract_mutation.go:mutateLoopContract":           2,
+			"scoped_mutation.go:mutateScoped":                        1,
+			"sqlite.go:mutateFull":                                   2,
+			"legacy_webhook_needed.go:boundedLegacyWebhookNeeded":    1,
+			"issue_record_mutation.go:UpdateIssueRecord":             1,
+			"scoped_record_mutation.go:mutateProjectRecordSelection": 1,
 		},
 		"mutateTeamMetadata":           {dispatch: 1},
 		"mutateLoopContract":           {dispatch: 1},
@@ -226,7 +226,7 @@ func TestScaleP21SW102WebhookNeededLegacyBoundary(t *testing.T) {
 			}
 		}
 	}
-	wrapper := functions["scale_p21_legacy_webhook_needed.go:boundedLegacyWebhookNeeded"]
+	wrapper := functions["legacy_webhook_needed.go:boundedLegacyWebhookNeeded"]
 	if wrapper == nil || wrapper.Body == nil || len(wrapper.Body.List) == 0 {
 		t.Fatal("missing bounded webhook predicate wrapper")
 	}
@@ -235,7 +235,7 @@ func TestScaleP21SW102WebhookNeededLegacyBoundary(t *testing.T) {
 		len(off.Body.List) != 1 || scaleP21SW102Text(off.Body.List[0]) != "return s.webhookNeeded(ctx, workspace), nil" {
 		t.Fatal("bounded webhook predicate must keep the literal accessor only in its first off-mode return")
 	}
-	for _, position := range positions["scale_p21_legacy_webhook_needed.go:boundedLegacyWebhookNeeded"]["webhookNeeded"] {
+	for _, position := range positions["legacy_webhook_needed.go:boundedLegacyWebhookNeeded"]["webhookNeeded"] {
 		if position <= off.Body.Pos() || position >= off.Body.End() {
 			t.Fatal("legacy webhook predicate escaped its off-mode return")
 		}

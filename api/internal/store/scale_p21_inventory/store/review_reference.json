@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_review_reference.go",
+  "source": "store/review_reference.go",
   "unmigrated": 0,
   "consumers": {
     "InstalledReviewReferenceVisible": {

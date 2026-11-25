@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_chat_point_read.go",
+  "source": "server/chat_point_read.go",
   "unmigrated": 0,
   "consumers": {
     "chatAuthorizedPointRead": {

@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_application_access.go",
+  "source": "store/application_access.go",
   "unmigrated": 0,
   "consumers": {
     "sources": {

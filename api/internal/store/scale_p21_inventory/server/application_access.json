@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_application_access.go",
+  "source": "server/application_access.go",
   "unmigrated": 0,
   "consumers": {
     "applicationAccessRead": {

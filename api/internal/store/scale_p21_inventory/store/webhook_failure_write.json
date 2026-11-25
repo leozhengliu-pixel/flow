@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_webhook_failure_write.go",
+  "source": "store/webhook_failure_write.go",
   "unmigrated": 0,
   "consumers": {
     "RecordWebhookDeliveryFailure": {

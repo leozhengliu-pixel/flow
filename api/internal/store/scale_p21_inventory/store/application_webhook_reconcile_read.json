@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_application_webhook_reconcile_read.go",
+  "source": "store/application_webhook_reconcile_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginApplicationWebhookReconcileRead": {

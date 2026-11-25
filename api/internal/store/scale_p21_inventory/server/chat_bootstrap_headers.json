@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_chat_bootstrap_headers.go",
+  "source": "server/chat_bootstrap_headers.go",
   "unmigrated": 0,
   "consumers": {
     "chatAuthorizedBootstrapHeaders": {
