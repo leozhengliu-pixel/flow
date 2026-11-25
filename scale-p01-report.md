@@ -275,7 +275,7 @@ and the required `CHANGELOG.md` entry. New files are all named for P01:
 - `api/cmd/server/scale_p01_late_commit_test.go`
 - `api/cmd/server/scale_p01_measurement_test.go`
 - `api/cmd/server/scale_p01_runner_test.go`
-- `api/cmd/server/scale_p01_write_test.go`
+- `api/cmd/server/write_test.go`
 - `api/internal/store/scale_p01_load_test.go`
 - `api/internal/store/scale_p01_permission_test.go`
 - `api/internal/store/scale_p01_probe.go`

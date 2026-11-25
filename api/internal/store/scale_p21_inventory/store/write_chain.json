@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_write_chain.go",
+  "source": "store/write_chain.go",
   "unmigrated": 0,
   "consumers": {
     "refreshLogicalMetadataRecords": {
@@ -12,7 +12,7 @@
       "temperature": "hot",
       "temperatureReason": "Conflict refresh of bounded HOT writers (PATCH /api/issue-records/{id} retries).",
       "callers": [
-        "store/scale_p21_write_chain.go:refreshConflictedLogicalRecords"
+        "store/write_chain.go:refreshConflictedLogicalRecords"
       ]
     },
     "publishBoundedAPIKeyUse": {

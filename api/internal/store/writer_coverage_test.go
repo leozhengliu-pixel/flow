@@ -57,9 +57,9 @@ personal_data.go:EraseAccount
 personal_data.go:ErasePersonFromWorkspace
 scale_p01_seed.go:SeedScaleP01Principals
 scale_p21_agent_session_sync.go:syncAgentSessionLifecycleCollection
-scale_p21_legacy_array_reorder.go:writeArrayReorderRow
-scale_p21_legacy_record_base.go:persistIssues
-scale_p21_metadata_sql_stage_accounting.go:statementQuery
+legacy_array_reorder.go:writeArrayReorderRow
+legacy_record_base.go:persistIssues
+metadata_sql_stage_accounting.go:statementQuery
 scale_p21_project_update_parent_map.go:writeProjectUpdateScheduleParent
 scale_p21_user_settings_write.go:mutateBoundedUserSettingsRecord
 scale_p21_webhook_failure_write.go:RecordWebhookDeliveryFailure
@@ -103,7 +103,7 @@ record_journal.go:maintainRecordSummary
 scale_p09_journal_schema.go:recordJournalTriggerSpecs
 scale_p09_journal_repair.go:pruneOrphanRecordCatalog
 scale_p21_legacy_progress_image.go:build
-scale_p21_legacy_record_base.go:persistIssues
+legacy_record_base.go:persistIssues
 secret_reseal.go:resealTextSecrets
 team_deletion.go:deleteRowsByIDs
 workspace_purge.go:PurgeWorkspaceRows
@@ -213,7 +213,7 @@ func TestScaleP09WriterCoverage(t *testing.T) {
 		}
 	}
 	// These dynamic writers must continue through the transaction wrapper.
-	for _, path := range []string{"personal_data.go", "workspace_purge.go", "workspace_rename.go", "issue_index_delta.go", "issue_scope_mutation.go", "team_deletion.go", "scale_p21_legacy_record_base.go"} {
+	for _, path := range []string{"personal_data.go", "workspace_purge.go", "workspace_rename.go", "issue_index_delta.go", "issue_scope_mutation.go", "team_deletion.go", "legacy_record_base.go"} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

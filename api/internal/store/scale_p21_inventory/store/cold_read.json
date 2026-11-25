@@ -18,7 +18,7 @@
       "accessors": ["workspaces"],
       "temperature": "cold",
       "temperatureReason": "Only explicit COLD accessor and writer boundaries refresh their on-demand legacy facade.",
-      "callers": ["store/scale_p21_cold_write.go:refreshColdFullWriteLocked"]
+      "callers": ["store/cold_write.go:refreshColdFullWriteLocked"]
     },
     "withColdMetadataRead": {
       "owner": "P21",

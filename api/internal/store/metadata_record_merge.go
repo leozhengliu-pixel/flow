@@ -1307,7 +1307,7 @@ func lockStoredMetadataRecords(ctx context.Context, tx *sqlTx, workspace, field 
 func (s *SQLiteStore) RefreshMetadataRecord(ctx context.Context, workspace, field, key string) error {
 	if s.metadataResidency != nil {
 		// A bounded store refreshes the installed logical generation instead
-		// of patching its policy-only copy (scale_p21_write_chain.go).
+		// of patching its policy-only copy (write_chain.go).
 		return s.refreshConflictedLogicalRecords(ctx, workspace)(&metadataConflictError{keys: []metadataRecordKey{{field, key}}})
 	}
 	return s.refreshMetadataRecords(ctx, workspace, []metadataRecordKey{{field, key}})
@@ -1466,7 +1466,7 @@ func concurrentWriteBackoff(ctx context.Context, number int) error {
 func (s *SQLiteStore) refreshConflictedMetadata(ctx context.Context, workspace string) func(error) error {
 	if s.metadataResidency != nil {
 		// A bounded store refreshes the installed logical generation instead
-		// of patching its policy-only copy (scale_p21_write_chain.go).
+		// of patching its policy-only copy (write_chain.go).
 		return s.refreshConflictedLogicalRecords(ctx, workspace)
 	}
 	return func(err error) error {

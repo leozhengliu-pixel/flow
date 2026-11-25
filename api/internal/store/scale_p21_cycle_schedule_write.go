@@ -737,12 +737,12 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 	}
 	// An attempt the work budget refused for want of room (concurrent work
 	// held it) committed nothing: it runs again once the budget has room
-	// for it (scale_p21_work_retry.go).
+	// for it (work_retry.go).
 	deadline := time.Now().Add(time.Duration(metadataWorkRetryWait.Load()))
 	for {
 		attemptCtx, demand := withMetadataWorkDemand(ctx)
 		// A document edit is made from the resident image when it can be
-		// (scale_p21_resident_document_write.go); otherwise, and when it
+		// (resident_document_write.go); otherwise, and when it
 		// falls back, by the scoped writer below.
 		resident := false
 		if document, ok := profile.(*documentUpdateImageProfile); ok {

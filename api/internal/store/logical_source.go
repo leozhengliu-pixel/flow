@@ -114,7 +114,7 @@ type metadataLogicalStorage struct {
 	copies  []metadataLogicalCopy
 	indexes map[int64]metadataLogicalChildIndex
 	clones  map[int64]metadataLogicalCloneCheck
-	// userIndexes: the IDs of users frames (scale_p21_aggregate_user_index.go).
+	// userIndexes: the IDs of users frames (aggregate_user_index.go).
 	userIndexes map[int64]metadataLogicalUserIndex
 
 	// borrows are the ranges whose bytes other storages hold

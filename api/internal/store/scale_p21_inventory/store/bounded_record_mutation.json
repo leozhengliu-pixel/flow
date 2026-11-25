@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_record_mutation.go",
+  "source": "store/bounded_record_mutation.go",
   "unmigrated": 0,
   "consumers": {
     "mutateResidentRecords": {

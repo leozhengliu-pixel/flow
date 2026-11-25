@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_resident_write_verify.go",
+  "source": "store/resident_write_verify.go",
   "unmigrated": 0,
   "consumers": {
     "verify": {
@@ -9,7 +9,7 @@
       "accessors": ["mutateBoundedScopedImage"],
       "temperature": "hot",
       "temperatureReason": "Runs only in tests, beside each resident document edit.",
-      "callers": ["store/scale_p21_resident_document_write.go:writeResidentDocumentOnce"]
+      "callers": ["store/resident_document_write.go:writeResidentDocumentOnce"]
     }
   }
 }

@@ -119,7 +119,7 @@ type coldDecodedImage struct {
 	// image (resident_generation.go), measured once.
 	view residentViewSize
 	// display: whether the writers' display refresh changes nothing in
-	// the image (scale_p21_resident_document_write.go), checked once.
+	// the image (resident_document_write.go), checked once.
 	display residentDisplayChecks
 }
 

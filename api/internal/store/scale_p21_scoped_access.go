@@ -870,7 +870,7 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	if selection && viewWrite == nil {
 		// The installed generation's resident image, taken before the lock:
 		// the selection and the fork read the IDs only of the records it
-		// stores at the selected ordinals (scale_p21_resident_record_ordinals.go).
+		// stores at the selected ordinals (resident_record_ordinals.go).
 		ctx = s.withInstalledRecordOrdinals(ctx, workspace)
 	}
 	refresh := s.refreshConflictedLogicalMetadata(ctx, workspace)

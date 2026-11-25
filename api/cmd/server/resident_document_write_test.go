@@ -75,7 +75,7 @@ func scaleP21ResidentStats() (made, verified int64, fallbacks map[string]int64) 
 // once the installed generation is current, and every one of them is
 // verified against the scoped image writer (callback input, previous values,
 // realtime payload, stored rows and next generation identical; see
-// scale_p21_resident_write_verify.go). Title, content and archive edits,
+// resident_write_verify.go). Title, content and archive edits,
 // edits that rewrite a linked project's resource, and API key edits are
 // covered; the stored documents are the edits'.
 func TestScaleP21ResidentDocumentWrite(t *testing.T) {

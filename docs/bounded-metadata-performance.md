@@ -166,7 +166,7 @@ version check, the SQL write and the install.
 
 ### Document edits from the resident image (done)
 
-`scale_p21_resident_document_write.go`. The edit pins the installed
+`resident_document_write.go`. The edit pins the installed
 generation and its shared image, runs the callback on inputs taken from
 the image and derives everything else from the before and after values of
 the records it changes: the rows (rebased onto the stored rows as the

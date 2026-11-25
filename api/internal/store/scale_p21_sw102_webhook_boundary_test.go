@@ -148,7 +148,7 @@ func TestScaleP21SW102WebhookNeededLegacyBoundary(t *testing.T) {
 			"sqlite.go:mutateFull":                                          2,
 			"scale_p21_legacy_webhook_needed.go:boundedLegacyWebhookNeeded": 1,
 			"issue_record_mutation.go:UpdateIssueRecord":                    1,
-			"scale_p16_record_mutation.go:mutateProjectRecordSelection":     1,
+			"scoped_record_mutation.go:mutateProjectRecordSelection":        1,
 		},
 		"mutateTeamMetadata":           {dispatch: 1},
 		"mutateLoopContract":           {dispatch: 1},
