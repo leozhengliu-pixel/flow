@@ -77,7 +77,30 @@ type scaleP21IssueBatchCase struct {
 	update map[string]any
 	stop   bool
 	code   int
-	check  func(*testing.T, scaleP21IssueUpdateOutcome)
+	// fresh issues were created just before the batch, so an edit by their
+	// creator adds no history (the creation window); the others are aged.
+	fresh bool
+	check func(*testing.T, scaleP21IssueUpdateOutcome)
+}
+
+// scaleP21IssueBatchIssueAges pins the age of every reset issue. An edit by
+// an issue's creator within three minutes of its creation adds no activity
+// (store.RecordIssueActivity), and the fixture issues are created with the
+// wall clock at setup, so arms that run on either side of that moment (slow
+// race builds) would record different histories. Every arm now sees the
+// same side: aged issues an hour past the window, or fresh ones created at
+// the reset.
+func scaleP21IssueBatchIssueAges(fresh bool) func(*domain.Bootstrap) {
+	return func(data *domain.Bootstrap) {
+		now := time.Now().UTC()
+		for index := range data.Issues {
+			if fresh {
+				data.Issues[index].CreatedAt = now
+			} else {
+				data.Issues[index].CreatedAt = data.Issues[index].CreatedAt.Add(-time.Hour)
+			}
+		}
+	}
 }
 
 func (f scaleP21IssueUpdateFixture) runBatchCases(t *testing.T, cases []scaleP21IssueBatchCase) {
@@ -86,7 +109,8 @@ func (f scaleP21IssueUpdateFixture) runBatchCases(t *testing.T, cases []scaleP21
 		t.Run(test.name, func(t *testing.T) {
 			single := scaleP21IssueUpdateCase{opts: test.opts, edit: test.edit, setup: test.setup, issue: f.triage.ID}
 			f.scaleP21TriageWriterFixture.prepare = f.prepare(single)
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleP21TriageWriterFixture.editBaseline = scaleP21IssueBatchIssueAges(test.fresh)
+			defer func() { f.scaleP21TriageWriterFixture.prepare, f.scaleP21TriageWriterFixture.editBaseline = nil, nil }()
 			var before scaleP21IssueUpdateState
 			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 				if !service.store.BoundedMetadataEnabled() {
@@ -173,6 +197,23 @@ func TestScaleP21IssueBatchDifferential(t *testing.T) {
 			t.Fatalf("legacy SLA event numbering not observed in %d rows", len(rows))
 		}
 	}
+	// The admin created the hidden issue: moving it records history only
+	// outside the creation window; the owner's triage issue records it
+	// either way.
+	history := func(hidden bool) func(*testing.T, scaleP21IssueUpdateOutcome) {
+		return func(t *testing.T, outcome scaleP21IssueUpdateOutcome) {
+			recorded := map[string]bool{}
+			for _, row := range outcome.State.Content {
+				var activity domain.ActivityEvent
+				if row[0] == "activity" && json.Unmarshal([]byte(row[3].(string)), &activity) == nil && activity.Type == "issue.updated" {
+					recorded[row[1].(string)] = true
+				}
+			}
+			if recorded[f.hidden.ID] != hidden || !recorded[f.triage.ID] {
+				t.Fatalf("legacy history: hidden %v (want %v), triage %v", recorded[f.hidden.ID], hidden, recorded[f.triage.ID])
+			}
+		}
+	}
 	f.runBatchCases(t, []scaleP21IssueBatchCase{
 		{name: "priority-pair", edit: subscribe, user: owner, ids: pair, update: map[string]any{"priority": 2, "estimate": 3}, code: http.StatusOK},
 		{name: "duplicate-ids", user: owner, ids: []string{f.triage.ID, f.triage.ID}, update: map[string]any{"priority": 1}, code: http.StatusOK},
@@ -195,7 +236,8 @@ func TestScaleP21IssueBatchDifferential(t *testing.T) {
 		{name: "mixed-team-label-rolls-back", user: owner, ids: mixed, update: map[string]any{"labelIds": []string{"tm-l-bug"}}, code: http.StatusBadRequest},
 		{name: "mixed-team-priority", user: owner, ids: mixed, update: map[string]any{"priority": 4}, code: http.StatusOK},
 		{name: "move-pair-parent", opts: scaleP21TeamMoveOptions{project: "triage-p-public"}, edit: subscribe, user: owner, ids: pair, update: map[string]any{"teamId": "tm-parent"}, code: http.StatusOK},
-		{name: "move-mixed-sub-team", opts: scaleP21TeamMoveOptions{project: "tm-p-cross"}, edit: subscribe, user: admin, ids: mixed, update: map[string]any{"teamId": "tm-sub", "stateId": "tmp-started"}, code: 0},
+		{name: "move-mixed-sub-team", opts: scaleP21TeamMoveOptions{project: "tm-p-cross"}, edit: subscribe, user: admin, ids: mixed, update: map[string]any{"teamId": "tm-sub", "stateId": "tmp-started"}, code: http.StatusOK, check: history(true)},
+		{name: "move-mixed-sub-team-fresh", opts: scaleP21TeamMoveOptions{project: "tm-p-cross"}, edit: subscribe, user: admin, ids: mixed, update: map[string]any{"teamId": "tm-sub", "stateId": "tmp-started"}, fresh: true, code: http.StatusOK, check: history(false)},
 		{name: "move-triage-target", opts: scaleP21TeamMoveOptions{triageTarget: true}, edit: subscribe, user: owner, ids: pair, update: map[string]any{"teamId": "tm-triage"}, code: http.StatusOK},
 		{name: "move-into-private-by-member", edit: subscribe, user: admin, ids: pair, update: map[string]any{"teamId": f.private}, code: http.StatusOK},
 		{name: "move-into-private-by-outsider", user: owner, ids: pair, update: map[string]any{"teamId": f.private}, code: http.StatusForbidden},
@@ -236,7 +278,9 @@ func TestScaleP21IssueBatchConcurrent(t *testing.T) {
 	}
 	test := scaleP21IssueUpdateCase{issue: f.triage.ID, setup: triageOff, edit: func(issue *domain.Issue) { issue.SubscriberIDs = []string{member.ID} }}
 	f.scaleP21TriageWriterFixture.prepare = f.prepare(test)
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	// The owner moves issues it created: every run sees them aged.
+	f.scaleP21TriageWriterFixture.editBaseline = scaleP21IssueBatchIssueAges(false)
+	defer func() { f.scaleP21TriageWriterFixture.prepare, f.scaleP21TriageWriterFixture.editBaseline = nil, nil }()
 	first := func(service *server) *httptest.ResponseRecorder {
 		return f.batch(service, owner, nil, []string{f.triage.ID, f.visible.ID}, map[string]any{"teamId": "tm-parent"}, false)
 	}
