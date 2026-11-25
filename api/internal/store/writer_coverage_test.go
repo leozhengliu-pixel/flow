@@ -56,7 +56,7 @@ oauth_token_exchange.go:ExchangeOAuthGrant
 personal_data.go:EraseAccount
 personal_data.go:ErasePersonFromWorkspace
 scale_p01_seed.go:SeedScaleP01Principals
-scale_p21_agent_session_sync.go:syncAgentSessionLifecycleCollection
+agent_session_sync.go:syncAgentSessionLifecycleCollection
 legacy_array_reorder.go:writeArrayReorderRow
 legacy_record_base.go:persistIssues
 metadata_sql_stage_accounting.go:statementQuery

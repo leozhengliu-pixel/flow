@@ -279,7 +279,7 @@ func TestScaleP21SW503WorkflowSchedulerDispatchGuard(t *testing.T) {
 	if dispatches != 1 || dispatch == token.NoPos || literalLoop == token.NoPos || dispatch > literalLoop {
 		t.Fatal("bounded scheduler dispatch no longer precedes the literal snapshot loop")
 	}
-	copyFile, err := parser.ParseFile(set, "scale_p21_sw501_workflow_tick_close_test.go", nil, 0)
+	copyFile, err := parser.ParseFile(set, "workflow_tick_close_test.go", nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

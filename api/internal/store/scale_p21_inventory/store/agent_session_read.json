@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_agent_session_read.go",
+  "source": "store/agent_session_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginAgentSessionRead": {
@@ -18,7 +18,7 @@
       "accessors": ["BeginInstalledMetadataRead"],
       "temperature": "hot",
       "temperatureReason": "Independent output lifetime for selected AgentSessionRead headers and messages.",
-      "callers": ["store/scale_p21_agent_session_read.go:agentSessionHeader", "store/scale_p21_agent_session_read.go:FirstMessage"]
+      "callers": ["store/agent_session_read.go:agentSessionHeader", "store/agent_session_read.go:FirstMessage"]
     }
   }
 }

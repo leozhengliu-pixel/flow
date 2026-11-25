@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_recurrence_normalization_read.go",
+  "source": "store/recurrence_normalization_read.go",
   "unmigrated": 0,
   "consumers": {
     "Page": {
@@ -9,7 +9,7 @@
       "accessors": ["BeginInstalledMetadataRead"],
       "temperature": "hot",
       "temperatureReason": "Recurring ticker candidate timing preflight.",
-      "callers": ["server/scale_p21_recurrence_normalization.go:normalizeLegacyRecurringIssuesBounded"]
+      "callers": ["server/recurrence_normalization.go:normalizeLegacyRecurringIssuesBounded"]
     },
     "TeamTimezone": {
       "owner": "P21",
@@ -18,7 +18,7 @@
       "accessors": ["BeginInstalledMetadataRead"],
       "temperature": "hot",
       "temperatureReason": "Recurring ticker current-team timezone preflight.",
-      "callers": ["server/scale_p21_recurrence_normalization.go:normalizeLegacyRecurringIssuesBounded"]
+      "callers": ["server/recurrence_normalization.go:normalizeLegacyRecurringIssuesBounded"]
     }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_comment_action_writes.go",
+  "source": "server/comment_action_writes.go",
   "unmigrated": 0,
   "consumers": {
     "commentActionGenerationInputs": {
@@ -9,7 +9,7 @@
       "accessors": ["BeginInstalledWorkspaceIdentityRead", "BeginIssueBootstrapRead"],
       "temperature": "hot",
       "temperatureReason": "Background comment action generation inputs.",
-      "callers": ["server/scale_p21_comment_action_writes.go:generateCommentActionsBounded"]
+      "callers": ["server/comment_action_writes.go:generateCommentActionsBounded"]
     },
     "generateCommentActionsBounded": {
       "owner": "P21",

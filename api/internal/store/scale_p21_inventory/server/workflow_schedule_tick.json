@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_workflow_schedule_tick.go",
+  "source": "server/workflow_schedule_tick.go",
   "unmigrated": 0,
   "consumers": {
     "boundedWorkflowScheduleTick": {

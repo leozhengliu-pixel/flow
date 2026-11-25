@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_agent_session_lifecycle.go",
+  "source": "server/agent_session_lifecycle.go",
   "unmigrated": 0,
   "consumers": {
     "sweepAgentLiveWorkspace": {

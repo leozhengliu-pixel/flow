@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_comment_action_reads.go",
+  "source": "server/comment_action_reads.go",
   "unmigrated": 0,
   "consumers": {
     "commentActionReadInputs": {
@@ -9,7 +9,7 @@
       "accessors": ["BeginIssueWriteAuthorizationRead"],
       "temperature": "hot",
       "temperatureReason": "Shared issue comment-action list/start inputs.",
-      "callers": ["server/scale_p21_comment_action_reads.go:commentActionStartRead", "server/scale_p21_comment_action_reads.go:listCommentActionsBounded"]
+      "callers": ["server/comment_action_reads.go:commentActionStartRead", "server/comment_action_reads.go:listCommentActionsBounded"]
     },
     "commentActionReadSettings": {
       "owner": "P21",
@@ -18,7 +18,7 @@
       "accessors": ["BeginAccountCollectionRead"],
       "temperature": "hot",
       "temperatureReason": "Fresh actor preference check before comment-action reads/start.",
-      "callers": ["server/scale_p21_comment_action_reads.go:commentActionStartRead", "server/scale_p21_comment_action_reads.go:listCommentActionsBounded"]
+      "callers": ["server/comment_action_reads.go:commentActionStartRead", "server/comment_action_reads.go:listCommentActionsBounded"]
     },
     "listCommentActionsBounded": {
       "owner": "P21",

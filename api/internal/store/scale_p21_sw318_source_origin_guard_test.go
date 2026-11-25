@@ -20,9 +20,9 @@ import (
 func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 	contracts := map[string]string{
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
-		"scale_p21_workflow_run_write.go": "a1fba71672d01fae78447673c322c1d868ca26e39bbc3482969c0c6bb22a5994",
-		"issue_records.go":                "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
-		"issue_query.go":                  "9b712dcb9ab06d588f07a4f17f2a475088882bc7e82ff467dc1be62b690767c0",
+		"workflow_run_write.go": "a1fba71672d01fae78447673c322c1d868ca26e39bbc3482969c0c6bb22a5994",
+		"issue_records.go":      "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
+		"issue_query.go":        "9b712dcb9ab06d588f07a4f17f2a475088882bc7e82ff467dc1be62b690767c0",
 		// Bootstrap bodies reuse the outline's snapshot only for the same
 		// database and workspace; the IDs come from the authorized outline.
 		"issue_scan.go": "dd147c46e1bad9c304a87f9968b4944171159f97463b741d523d74dc9940d7ba",
@@ -40,7 +40,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/cold_dispatch.go":      "78f6979c7b6492f603c4b1a452786f590b800139ea08d371bc3bc8054ba3e597",
 		// Background comment-action generator: borrows the issue bootstrap
 		// projection for its own run; never reaches request authorization.
-		"../../cmd/server/scale_p21_comment_action_writes.go": "5765c0ab53a9346be3631aa48ab3d55c96204256e4ce63bdc5eb31db83983c39",
+		"../../cmd/server/comment_action_writes.go":           "5765c0ab53a9346be3631aa48ab3d55c96204256e4ce63bdc5eb31db83983c39",
 		"../../cmd/server/general_bootstrap.go":               "4cdd4223e122d14a7a22f6d1208871e1c50e57d1a4f9a44c685cf72df23a2873",
 		"../../cmd/server/issue_bootstrap_stream.go":          "3a3083bf9dae00c0978985561a01b1ffc2d83055d93bd87e4376b6374219651b",
 		"../../cmd/server/issue_create_targets.go":            "4797fc2981774f90cbd94a0f00a835e5391e323bc28d5e067692b0b426172523",
@@ -75,7 +75,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"bootstrap_projection_read.go":                        "27a82fd14f7ba9244cbe70fe286bfd1fc5b4de3f2d6d711cbb56df078912ee5b",
 		"collaboration_document_read.go":                      "d4839174c25808b899839955839d6cd2d9e4a74b5ac76d1158c8a0fb1fb8fae8",
 		"collection_snapshot.go":                              "e8d843ee5626ba45c1aa11009ddf1e6860289895367d581fd8552309dbaec1fa",
-		"scale_p21_cycle_schedule_write.go":                   "b46905598700071bba0d7344f42f1560652af77c980d84dfd02bbd219fc28c8a",
+		"cycle_schedule_write.go":                             "b46905598700071bba0d7344f42f1560652af77c980d84dfd02bbd219fc28c8a",
 		"delivery_context.go":                                 "89590bfc452c82e405c4ddd0727946bf6274794ce0c819576ed8da1d0271792a",
 		"desktop_ack_write.go":                                "caca6a6974572bf3205f7dcf5280b54dd7ad502f75b761967281665259b90682",
 		"document_auxiliary_read.go":                          "509970bec9f7e70a18b5054485374e46e441f5a03c31dfb491497ba16b570a6d",

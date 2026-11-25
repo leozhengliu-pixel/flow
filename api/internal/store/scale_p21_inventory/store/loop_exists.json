@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw23_loop_exists.go",
+  "source": "store/loop_exists.go",
   "unmigrated": 0,
   "consumers": {
     "LoopTeamKeyAllowed": {

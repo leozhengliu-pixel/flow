@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_comment_action_generation.go",
+  "source": "store/comment_action_generation.go",
   "unmigrated": 0,
   "consumers": {
     "InstalledViewerRole": {
@@ -9,7 +9,7 @@
       "accessors": ["BeginInstalledMetadataRead"],
       "temperature": "hot",
       "temperatureReason": "Development-mode comment action generation inputs.",
-      "callers": ["server/scale_p21_comment_action_writes.go:commentActionGenerationInputs"]
+      "callers": ["server/comment_action_writes.go:commentActionGenerationInputs"]
     }
   }
 }

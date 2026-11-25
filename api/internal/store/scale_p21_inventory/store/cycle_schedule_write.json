@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_cycle_schedule_write.go",
+  "source": "store/cycle_schedule_write.go",
   "unmigrated": 0,
   "consumers": {
     "mutateBoundedScopedImage": {
@@ -9,7 +9,7 @@
       "accessors": ["storedWorkspace", "mutateBoundedScopedImageFull"],
       "temperature": "hot",
       "temperatureReason": "Declared transaction for hot cycle maintenance.",
-      "callers": ["store/scale_p21_cycle_schedule_inputs.go:mutateBoundedCycleSchedule", "store/scale_p21_recurring_occurrence_write.go:mutateBoundedRecurringOccurrence"]
+      "callers": ["store/cycle_schedule_inputs.go:mutateBoundedCycleSchedule", "store/recurring_occurrence_write.go:mutateBoundedRecurringOccurrence"]
     },
     "mutateBoundedScopedImageFull": {
       "owner": "P21",
@@ -18,7 +18,7 @@
       "accessors": ["storedWorkspace"],
       "temperature": "hot",
       "temperatureReason": "Preserves the legacy full transaction when cycle maintenance exceeds the existing 20000-issue scoped limit.",
-      "callers": ["store/scale_p21_cycle_schedule_write.go:mutateBoundedScopedImage"]
+      "callers": ["store/cycle_schedule_write.go:mutateBoundedScopedImage"]
     }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_recurring_occurrence_write.go",
+  "source": "store/recurring_occurrence_write.go",
   "unmigrated": 0,
   "consumers": {
     "mutateBoundedRecurringOccurrence": {

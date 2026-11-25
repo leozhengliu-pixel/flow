@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_issue_recurrence_timing.go",
+  "source": "store/issue_recurrence_timing.go",
   "unmigrated": 0,
   "consumers": {
     "mutateBoundedIssueRecurrenceTiming": {

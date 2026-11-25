@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_workflow_schedule_read.go",
+  "source": "store/workflow_schedule_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginWorkflowScheduleRead": {
@@ -9,7 +9,7 @@
       "accessors": ["BeginInstalledMetadataRead"],
       "temperature": "hot",
       "temperatureReason": "Retained native definitions/runs generation for the 15-second workflow tick.",
-      "callers": ["server/scale_p21_workflow_schedule_tick.go:boundedWorkflowScheduleTick"]
+      "callers": ["server/workflow_schedule_tick.go:boundedWorkflowScheduleTick"]
     }
   }
 }

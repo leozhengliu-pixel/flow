@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_loop_schedule.go",
+  "source": "store/loop_schedule.go",
   "unmigrated": 0,
   "consumers": {
     "BeginLoopScheduleRead": {

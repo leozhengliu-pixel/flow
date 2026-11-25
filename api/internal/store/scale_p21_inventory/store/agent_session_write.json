@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_agent_session_write.go",
+  "source": "store/agent_session_write.go",
   "unmigrated": 0,
   "consumers": {
     "MutateAgentSessionLifecycle": {

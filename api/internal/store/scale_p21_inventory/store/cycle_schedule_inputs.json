@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_cycle_schedule_inputs.go",
+  "source": "store/cycle_schedule_inputs.go",
   "unmigrated": 0,
   "consumers": {
     "BeginCycleScheduleRead": {

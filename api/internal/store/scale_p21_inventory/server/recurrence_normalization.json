@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_recurrence_normalization.go",
+  "source": "server/recurrence_normalization.go",
   "unmigrated": 0,
   "consumers": {
     "normalizeLegacyRecurringIssuesBounded": {
@@ -18,7 +18,7 @@
       "accessors": ["MutateWorkspace"],
       "temperature": "hot",
       "temperatureReason": "Selected recurring timing mutation from the first scheduler pass.",
-      "callers": ["server/scale_p21_recurrence_normalization.go:normalizeLegacyRecurringIssuesBounded"]
+      "callers": ["server/recurrence_normalization.go:normalizeLegacyRecurringIssuesBounded"]
     }
   }
 }

@@ -52,8 +52,8 @@ func TestScaleP21SW504WorkflowWriterKernelBoundary(t *testing.T) {
 				if name == "mutateMetadataOrdinalProfile" || name == "mutateWorkspaceScopedWithAggregate" {
 					callers[name] = append(callers[name], path+":"+function.Name.Name)
 				}
-				if path == "scale_p21_workflow_run_write.go" || path == "scale_p21_workflow_run_point.go" ||
-					path == "scale_p21_workflow_run_inputs.go" || path == "scale_p21_workflow_schedule_read.go" {
+				if path == "workflow_run_write.go" || path == "workflow_run_point.go" ||
+					path == "workflow_run_inputs.go" || path == "workflow_schedule_read.go" {
 					workflowCalls = append(workflowCalls, name)
 				}
 				return true
