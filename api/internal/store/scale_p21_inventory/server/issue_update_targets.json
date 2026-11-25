@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_issue_update_targets.go",
+  "source": "server/issue_update_targets.go",
   "unmigrated": 0,
   "consumers": {
     "boundedIssueUpdatePresence": {

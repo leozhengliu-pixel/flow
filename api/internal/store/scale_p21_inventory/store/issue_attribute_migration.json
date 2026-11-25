@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw17_issue_attribute_migration.go",
+  "source": "store/issue_attribute_migration.go",
   "unmigrated": 0,
   "consumers": {
     "sw17MigrateIssueAttributesBounded": {

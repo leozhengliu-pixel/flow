@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_triage_suggestions.go",
+  "source": "server/triage_suggestions.go",
   "unmigrated": 0,
   "consumers": {
     "listIssueSuggestionsBounded": {
@@ -76,7 +76,7 @@
       "temperature": "hot",
       "temperatureReason": "Triage preview and AI context projection.",
       "callers": [
-        "server/scale_p21_triage_suggestions.go:triageAIWorkspaceBounded"
+        "server/triage_suggestions.go:triageAIWorkspaceBounded"
       ]
     },
     "triageAIWorkspaceBounded": {
@@ -90,7 +90,7 @@
       "temperature": "hot",
       "temperatureReason": "Triage preview and AI context projection.",
       "callers": [
-        "server/scale_p21_triage_suggestions.go:previewIssueSuggestionsBounded",
+        "server/triage_suggestions.go:previewIssueSuggestionsBounded",
         "server/triage_intelligence_ai.go:requestTriageAIPlan"
       ]
     },

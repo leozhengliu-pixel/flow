@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_issue_releases_write.go",
+  "source": "store/issue_releases_write.go",
   "unmigrated": 0,
   "consumers": {
     "mutateBoundedIssueReleases": {

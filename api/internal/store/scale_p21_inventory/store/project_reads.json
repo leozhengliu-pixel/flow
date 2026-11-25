@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p18_project_reads.go",
+  "source": "store/project_reads.go",
   "unmigrated": 3,
   "consumers": {
     "InternalProjectFilterMetadata": {

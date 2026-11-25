@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_project_directory_query.go",
+  "source": "store/project_directory_query.go",
   "unmigrated": 0,
   "consumers": {
     "BeginProjectDirectoryQueryWithAccess": {

@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p16_record_suggestions.go",
+  "source": "server/record_suggestions.go",
   "unmigrated": 1,
   "consumers": {
     "pruneProjectRecordSuggestions": {

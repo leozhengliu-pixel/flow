@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_label_directory.go",
+  "source": "server/label_directory.go",
   "unmigrated": 0,
   "consumers": {
     "readLabelsBounded": {
@@ -12,7 +12,7 @@
       "temperature": "hot",
       "temperatureReason": "Shared bounded label list for the HOT label settings reads.",
       "callers": [
-        "server/scale_p21_label_directory.go:listLabelsBounded"
+        "server/label_directory.go:listLabelsBounded"
       ]
     }
   }

@@ -188,7 +188,7 @@ var nonMetadataTableBuilders = map[string]bool{
 	"conflictingKeyRowsStatement": true,
 	"rewriteWorkspaceKeyJSON":     true,
 	// Only private bounded SQLite stage tables, never the canonical database.
-	"scale_p21_legacy_progress_image.go:build": true,
+	"legacy_progress_image.go:build": true,
 }
 
 // expectedWorkspaceArg is the index of the bound value naming the workspace a

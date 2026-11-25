@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_sw16_project_templates.go",
+  "source": "server/project_templates.go",
   "unmigrated": 0,
   "consumers": {
     "scaleP21SW16ListProjectTemplates": {

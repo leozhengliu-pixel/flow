@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_resource_relation_read.go",
+  "source": "store/resource_relation_read.go",
   "unmigrated": 0,
   "consumers": {
     "BeginResourceRelationRead": {

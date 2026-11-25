@@ -26,7 +26,7 @@
       "accessors": ["BeginMetadataJSONRead"],
       "temperature": "hot",
       "temperatureReason": "Shared constructor for normalized SQL ContentData in HOT canonical issue mutation/response processing.",
-      "callers": ["store/scale_p21_legacy_issue_canonical.go:legacyIssueCanonicalContentData"],
+      "callers": ["store/legacy_issue_canonical.go:legacyIssueCanonicalContentData"],
       "reason": "Accepts only declared standard generic JSON types at SQL/normalized boundaries. Separate input, generic decode and canonical encode owners cover their overlapping lifetimes; fixed-chunk frame writing transfers immutable bytes and native output cost before temporaries close. SW228/SW234/SW248 establish repeated/null/type/error behavior, supported large/deep success, exact frame-copy provenance and nested aggregate precedence; SW239/SW258/SW301/SW302 exercise actual retries and typed codecs. Production assertions passed twice against one persistent SQLite file, ownership and retry race continuations pass, and MySQL/PostgreSQL targeted repeats pass within their native JSON depth contracts. It does not convert arbitrary warm native values or custom marshalers, and does not certify unfinished workflow, document or delivery callers."
     }
   }

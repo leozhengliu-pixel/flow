@@ -1,5 +1,5 @@
 {
-  "source": "server/scale_p21_issue_create_targets.go",
+  "source": "server/issue_create_targets.go",
   "unmigrated": 0,
   "consumers": {
     "boundedIssueCreateDefaultTeam": {

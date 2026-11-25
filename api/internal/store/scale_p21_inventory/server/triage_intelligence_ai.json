@@ -42,7 +42,7 @@
       "temperatureReason": "Run body for Run again and background triage runs.",
       "callers": [
         "server/triage_intelligence_ai.go:runTriageIntelligence",
-        "server/scale_p21_triage_suggestions.go:runTriageIntelligenceBounded"
+        "server/triage_suggestions.go:runTriageIntelligenceBounded"
       ]
     }
   }

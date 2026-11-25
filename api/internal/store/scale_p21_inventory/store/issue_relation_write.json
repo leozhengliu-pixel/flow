@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_issue_relation_write.go",
+  "source": "store/issue_relation_write.go",
   "unmigrated": 0,
   "consumers": {
     "mutateBoundedIssueRelation": {

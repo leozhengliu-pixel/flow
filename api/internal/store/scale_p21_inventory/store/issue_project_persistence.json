@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_issue_project_persistence.go",
+  "source": "store/issue_project_persistence.go",
   "unmigrated": 0,
   "consumers": {
     "planIssueMetadataFields": {

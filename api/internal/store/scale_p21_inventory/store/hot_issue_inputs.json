@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_hot_issue_inputs.go",
+  "source": "store/hot_issue_inputs.go",
   "unmigrated": 0,
   "consumers": {
     "loadIssueSelectedInputs": {

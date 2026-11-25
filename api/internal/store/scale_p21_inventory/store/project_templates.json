@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_sw16_project_templates.go",
+  "source": "store/project_templates.go",
   "unmigrated": 0,
   "consumers": {
     "BeginProjectTemplatesRead": {
@@ -17,7 +17,7 @@
       "accessors": ["BeginInstalledMetadataRead"],
       "temperature": "hot",
       "temperatureReason": "Serves the HOT project-template list (GET /api/project-templates).",
-      "callers": ["store/scale_p21_sw16_project_templates.go:BeginProjectTemplatesRead"]
+      "callers": ["store/project_templates.go:BeginProjectTemplatesRead"]
     }
   }
 }

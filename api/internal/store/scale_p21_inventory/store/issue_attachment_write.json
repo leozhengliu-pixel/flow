@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_issue_attachment_write.go",
+  "source": "store/issue_attachment_write.go",
   "unmigrated": 0,
   "consumers": {
     "mutateBoundedIssueReaction": {

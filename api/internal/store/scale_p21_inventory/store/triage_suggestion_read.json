@@ -1,5 +1,5 @@
 {
-  "source": "store/scale_p21_triage_suggestion_read.go",
+  "source": "store/triage_suggestion_read.go",
   "unmigrated": 0,
   "consumers": {
     "ViewerProjectionScope": {
@@ -12,7 +12,7 @@
       "temperature": "hot",
       "temperatureReason": "Viewer projection scope for the polled triage suggestion list.",
       "callers": [
-        "server/scale_p21_triage_suggestions.go:listIssueSuggestionsBounded"
+        "server/triage_suggestions.go:listIssueSuggestionsBounded"
       ]
     },
     "projectedWorkspace": {
@@ -25,7 +25,7 @@
       "temperature": "hot",
       "temperatureReason": "Triage preview and AI context projection.",
       "callers": [
-        "server/scale_p21_triage_suggestions.go:mcpWorkspaceDataProjected"
+        "server/triage_suggestions.go:mcpWorkspaceDataProjected"
       ]
     },
     "ProjectedWorkspace": {
@@ -38,7 +38,7 @@
       "temperature": "hot",
       "temperatureReason": "Shared bounded directory and policy projection.",
       "callers": [
-        "server/scale_p21_triage_suggestions.go:mcpWorkspaceDataProjected"
+        "server/triage_suggestions.go:mcpWorkspaceDataProjected"
       ]
     },
     "ProjectedWorkspaceWithScope": {
@@ -51,7 +51,7 @@
       "temperature": "hot",
       "temperatureReason": "Issue creation reference validation.",
       "callers": [
-        "server/scale_p21_issue_create_targets.go:boundedIssueCreateTargets"
+        "server/issue_create_targets.go:boundedIssueCreateTargets"
       ]
     }
   }

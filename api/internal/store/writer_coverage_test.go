@@ -60,7 +60,7 @@ scale_p21_agent_session_sync.go:syncAgentSessionLifecycleCollection
 legacy_array_reorder.go:writeArrayReorderRow
 legacy_record_base.go:persistIssues
 metadata_sql_stage_accounting.go:statementQuery
-scale_p21_project_update_parent_map.go:writeProjectUpdateScheduleParent
+project_update_parent_map.go:writeProjectUpdateScheduleParent
 user_settings_write.go:mutateBoundedUserSettingsRecord
 scale_p21_webhook_failure_write.go:RecordWebhookDeliveryFailure
 scim.go:CreateSCIMUser
@@ -102,7 +102,7 @@ personal_data.go:DeleteAgentSessionRuns
 record_journal.go:maintainRecordSummary
 journal_schema.go:recordJournalTriggerSpecs
 journal_repair.go:pruneOrphanRecordCatalog
-scale_p21_legacy_progress_image.go:build
+legacy_progress_image.go:build
 legacy_record_base.go:persistIssues
 secret_reseal.go:resealTextSecrets
 team_deletion.go:deleteRowsByIDs

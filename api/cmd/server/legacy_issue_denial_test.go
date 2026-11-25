@@ -311,7 +311,7 @@ func TestScaleP21SW318LegacyIssueBoundary(t *testing.T) {
 		t.Fatal("missing production function", filename, name)
 		return nil
 	}
-	helper := function("scale_p21_sw318_legacy_issue_denial.go", "boundedEmptyLegacyIssueDenial")
+	helper := function("legacy_issue_denial.go", "boundedEmptyLegacyIssueDenial")
 	if len(helper.Body.List) != 3 ||
 		text(helper.Body.List[0]) != "if !s.store.BoundedMetadataEnabled() || !scaleP21SW318EmptyLegacyIssueRequest(r) || isIssueRecordsRequest(r) {\n\treturn false, false\n}" ||
 		text(helper.Body.List[1]) != "if s.store.BorrowedWorkspaceReadHasIssues(r.Context(), workspace) {\n\treturn false, false\n}" ||
