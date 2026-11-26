@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -303,6 +304,29 @@ func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged
 		request(http.MethodGet, route{path: "/api/issue-records/" + issue}, "", secrets.Secret, http.StatusOK)
 	}
 	assertKey()
+	// The key's lastUsedAt is written by the store's asynchronous use worker,
+	// which can land after the next read. Every later startup loads it from
+	// the database, so wait until the bootstrap shows it before taking the
+	// snapshot those startups are compared against.
+	type keyUse struct {
+		Name       string
+		LastUsedAt *time.Time
+	}
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		var data struct{ APIKeys []keyUse }
+		w := request(http.MethodGet, reads[0], "", "", http.StatusOK)
+		if json.Unmarshal(w.Body.Bytes(), &data) != nil {
+			t.Fatal("bootstrap did not return JSON")
+		}
+		if slices.ContainsFunc(data.APIKeys, func(key keyUse) bool {
+			return key.Name == "Restricted key" && key.LastUsedAt != nil
+		}) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("API key use was not recorded before the comparison snapshot")
+		}
+	}
 	reads = append(reads,
 		route{path: "/api/issue-records/" + issue},
 		route{path: "/api/comments?issueId=" + issue},
